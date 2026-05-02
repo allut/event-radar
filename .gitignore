@@ -1,0 +1,131 @@
+# =============================================================================
+# Event Radar — root .gitignore
+# Stack: FastAPI + SQLAlchemy + Alembic (backend/) + Vite/React (frontend/)
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Python / FastAPI / SQLAlchemy / Alembic
+# Note: keep backend/alembic/versions/*.py — migrations MUST be committed.
+# Only the *.pyc inside is ignored via the __pycache__ rule below.
+# -----------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.egg
+dist/
+build/
+wheels/
+
+# Virtualenvs
+.venv/
+venv/
+env/
+ENV/
+.python-version
+
+# Test / type / lint caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.pyre/
+.pytype/
+.tox/
+.nox/
+.hypothesis/
+
+# Coverage
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+.cache/
+
+# Pip
+pip-log.txt
+pip-delete-this-directory.txt
+
+# -----------------------------------------------------------------------------
+# Node / Vite / React (frontend/)
+# Lockfiles (package-lock.json, pnpm-lock.yaml) are intentionally NOT ignored.
+# -----------------------------------------------------------------------------
+node_modules/
+frontend/dist/
+frontend/build/
+.vite/
+
+# Vite convention: anything ending in .local is gitignored
+*.local
+
+.eslintcache
+.parcel-cache/
+.turbo/
+.next/
+.pnpm-store/
+
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# -----------------------------------------------------------------------------
+# Environment / secrets
+# Critical: Resend, Cerebras, Groq, Mistral keys, Neon DSN, magic-link signer
+# -----------------------------------------------------------------------------
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+secrets/
+*.secret
+
+# -----------------------------------------------------------------------------
+# Local databases / dumps (Neon is remote, but pg_dump output is common)
+# -----------------------------------------------------------------------------
+*.sqlite
+*.sqlite3
+*.db
+*.sql.gz
+dump.sql
+
+# -----------------------------------------------------------------------------
+# Logs / runtime
+# -----------------------------------------------------------------------------
+*.log
+logs/
+*.pid
+*.seed
+*.pid.lock
+
+# -----------------------------------------------------------------------------
+# OS / editor
+# -----------------------------------------------------------------------------
+.DS_Store
+Thumbs.db
+desktop.ini
+ehthumbs.db
+.idea/
+.vscode/
+!.vscode/extensions.json
+*.swp
+*.swo
+*~
+
+# -----------------------------------------------------------------------------
+# Project-specific
+# -----------------------------------------------------------------------------
+# Local cache of LLM dedup/classification responses for offline replay
+backend/.llm-cache/
+
+# Ad-hoc experiments
+backend/scratch/
+scratch/
+
+# Raw newsletter MIME dumps for testing Resend Inbound webhook locally
+inbound-mail-samples/
+*.ics.local
+
+# Claude Code per-user settings
+.claude/settings.local.json
