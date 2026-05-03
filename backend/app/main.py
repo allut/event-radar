@@ -2,11 +2,15 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from app.db import engine
+from app.db import AsyncSessionLocal, engine
+from app.seeds import seed_sources
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    async with AsyncSessionLocal() as db:
+        await seed_sources(db)
+        await db.commit()
     yield
     await engine.dispose()
 

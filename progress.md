@@ -9,9 +9,9 @@ Living log of execution against [`plan.md`](./plan.md). `plan.md` is the origina
 | Field | Value |
 |---|---|
 | Phase | Week 1 |
-| Plan day | Day 2 complete |
-| Week progress | 29% (Days 1–2 / 7) |
-| Current focus | Day 3: Fienta adapter |
+| Plan day | Day 3 complete |
+| Week progress | 43% (Days 1–3 / 7) |
+| Current focus | Day 4: JSON-LD adapter base class + Telliskivi/Kultuurikatel/Fotografiska |
 | Last updated | 2026-05-03 |
 
 ---
@@ -23,6 +23,7 @@ Grouped by plan-day. Format: `[YYYY-MM-DD] (Plan: Day N — <plan title>) — wh
 - `[2026-05-03]` (Pre-Day-1) — Repo bootstrapped: `plan.md` committed; added root `.gitignore` covering FastAPI + Vite/React stack, and seeded this `progress.md`.
 - `[2026-05-03]` (Plan: Day 1 — FastAPI scaffold) — `backend/` created: `app/config.py` (pydantic-settings, SECRET_KEY required), `app/db.py` (async SQLAlchemy 2 engine + session dep), `app/main.py` (FastAPI with `/health` + `/internal/tick`), `requirements.txt`, `.env.example`, `render.yaml` (web service + keepalive cron).
 - `[2026-05-03]` (Plan: Day 2 — DB migrations) — `alembic/` initialised with async `env.py`; migration `0001_init.py` creates all 13 v0 tables (users through daily_feeds) with citext extension, JSONB/ARRAY types, and all indexes from `plan.md`.
+- `[2026-05-03]` (Plan: Day 3 — Fienta adapter) — `app/ingestion/base.py`: `SourceAdapter` ABC + `NormalizedEvent` dataclass + pipeline orchestrator (fetch → raw_events → normalize → events(draft)); `app/ingestion/sources/fienta.py`: Fienta API adapter with per-organizer error isolation, free-event price=0 handling, savepoint-guarded slug collision recovery; `app/seeds.py`: idempotent source seed (8 placeholder Fienta organizer IDs for Sveta Baar, HALL, TMW, etc.); `app/main.py`: lifespan calls `seed_sources` on startup.
 
 ---
 
@@ -44,6 +45,16 @@ Format per entry:
   - **Fix:** Made `SECRET_KEY` a required pydantic-settings field (no default). App fails at startup if unset.
   - **Time lost:** Caught in review.
 
+- **Symptom:** `price_raw.get('min') or fallback` silently drops free events (price=0).
+  - **Root cause:** Python `or` treats 0 as falsy; would store `price_min=None` instead of 0 for free events.
+  - **Fix:** `_first_not_none()` helper using `next(v for v in vals if v is not None)`.
+  - **Time lost:** Caught in adversarial review, zero production impact.
+
+- **Symptom:** Single organizer 4xx/5xx aborts entire Fienta fetch batch.
+  - **Root cause:** `response.raise_for_status()` propagates unhandled inside the organizer loop.
+  - **Fix:** Per-organizer try/except on `httpx.HTTPStatusError` and `httpx.RequestError`; log warning and continue.
+  - **Time lost:** Caught in adversarial review.
+
 ---
 
 ## Decisions / deviations from plan
@@ -61,6 +72,14 @@ Anything that contradicts or extends `plan.md`. Format: *What changed → Why �
 - **2026-05-03 — `/internal/tick` endpoint has no shared-secret auth (deferred).**
   - *Why:* MVP scope; the endpoint only returns `{status: ok}` today. Will add `X-Internal-Token` header check before the endpoint triggers any scheduler jobs (Day 5).
   - *Plan section affected:* `plan.md` § Architecture, keepalive design.
+
+- **2026-05-03 — `IngestionRun` record lost if caller rolls back on error.**
+  - *Why:* `SourceAdapter.run()` sets `run.error` on exception then re-raises; if the caller's session is rolled back, the error record disappears. Documented in `run()` docstring. Proper fix (separate transaction for the run record) comes in Day 5 when the scheduler and admin endpoint are wired.
+  - *Plan section affected:* `plan.md` § Architecture, scheduler design.
+
+- **2026-05-03 — Fienta API pagination unhandled.**
+  - *Why:* Fienta API pagination field names unconfirmed without a live organizer ID. TODO comment added in `FientaAdapter.fetch_raw`. Will add pagination loop once API format is confirmed against a real organizer.
+  - *Plan section affected:* `plan.md` § Data sources, Fienta adapter.
 
 ---
 
