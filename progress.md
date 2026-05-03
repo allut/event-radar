@@ -8,10 +8,10 @@ Living log of execution against [`plan.md`](./plan.md). `plan.md` is the origina
 
 | Field | Value |
 |---|---|
-| Phase | Pre-Day-1 (repo scaffolding) |
-| Plan day | — |
-| Week progress | 0% |
-| Current focus | Repo bootstrap: `.gitignore`, `progress.md` |
+| Phase | Week 1 |
+| Plan day | Day 2 complete |
+| Week progress | 29% (Days 1–2 / 7) |
+| Current focus | Day 3: Fienta adapter |
 | Last updated | 2026-05-03 |
 
 ---
@@ -21,6 +21,8 @@ Living log of execution against [`plan.md`](./plan.md). `plan.md` is the origina
 Grouped by plan-day. Format: `[YYYY-MM-DD] (Plan: Day N — <plan title>) — what shipped`.
 
 - `[2026-05-03]` (Pre-Day-1) — Repo bootstrapped: `plan.md` committed; added root `.gitignore` covering FastAPI + Vite/React stack, and seeded this `progress.md`.
+- `[2026-05-03]` (Plan: Day 1 — FastAPI scaffold) — `backend/` created: `app/config.py` (pydantic-settings, SECRET_KEY required), `app/db.py` (async SQLAlchemy 2 engine + session dep), `app/main.py` (FastAPI with `/health` + `/internal/tick`), `requirements.txt`, `.env.example`, `render.yaml` (web service + keepalive cron).
+- `[2026-05-03]` (Plan: Day 2 — DB migrations) — `alembic/` initialised with async `env.py`; migration `0001_init.py` creates all 13 v0 tables (users through daily_feeds) with citext extension, JSONB/ARRAY types, and all indexes from `plan.md`.
 
 ---
 
@@ -32,7 +34,15 @@ Format per entry:
 - **Fix:** what was changed
 - **Time lost:** rough wall-clock
 
-_(none yet)_
+- **Symptom:** `daily_feeds.event_ids` typed as `ARRAY(Integer)` while `events.id` is `BigInteger`.
+  - **Root cause:** Copy-paste assumption that 32-bit integers suffice for IDs.
+  - **Fix:** Changed to `ARRAY(BigInteger)` in both ORM model and migration `0001_init.py`.
+  - **Time lost:** Caught in review, zero production impact.
+
+- **Symptom:** `SECRET_KEY` had a hardcoded default `"change-me-in-production"`.
+  - **Root cause:** Convenience default; magic-link forgery risk not considered.
+  - **Fix:** Made `SECRET_KEY` a required pydantic-settings field (no default). App fails at startup if unset.
+  - **Time lost:** Caught in review.
 
 ---
 
@@ -43,6 +53,14 @@ Anything that contradicts or extends `plan.md`. Format: *What changed → Why �
 - **2026-05-03 — Single root `.gitignore` instead of per-subdir (`backend/.gitignore` + `frontend/.gitignore`).**
   - *Why:* simpler for a solo dev; the backend/ and frontend/ trees are small and the rules don't conflict.
   - *Plan section affected:* none directly; revisit if backend/frontend ever split into separate repos.
+
+- **2026-05-03 — `SECRET_KEY` made required (no default) instead of having a dev-placeholder default.**
+  - *Why:* a known default allows magic-link token forgery if someone deploys without setting the env var. Failing fast at startup is safer.
+  - *Plan section affected:* `plan.md` § Auth — no conflict, actually enforces the "~50 LOC" magic-link design.
+
+- **2026-05-03 — `/internal/tick` endpoint has no shared-secret auth (deferred).**
+  - *Why:* MVP scope; the endpoint only returns `{status: ok}` today. Will add `X-Internal-Token` header check before the endpoint triggers any scheduler jobs (Day 5).
+  - *Plan section affected:* `plan.md` § Architecture, keepalive design.
 
 ---
 
