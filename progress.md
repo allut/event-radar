@@ -9,10 +9,10 @@ Living log of execution against [`plan.md`](./plan.md). `plan.md` is the origina
 | Field | Value |
 |---|---|
 | Phase | Week 1 |
-| Plan day | Day 3 complete |
+| Plan day | Day 3 complete + organizer sync automation |
 | Week progress | 43% (Days 1–3 / 7) |
 | Current focus | Day 4: JSON-LD adapter base class + Telliskivi/Kultuurikatel/Fotografiska |
-| Last updated | 2026-05-03 |
+| Last updated | 2026-05-04 |
 
 ---
 
@@ -24,6 +24,7 @@ Grouped by plan-day. Format: `[YYYY-MM-DD] (Plan: Day N — <plan title>) — wh
 - `[2026-05-03]` (Plan: Day 1 — FastAPI scaffold) — `backend/` created: `app/config.py` (pydantic-settings, SECRET_KEY required), `app/db.py` (async SQLAlchemy 2 engine + session dep), `app/main.py` (FastAPI with `/health` + `/internal/tick`), `requirements.txt`, `.env.example`, `render.yaml` (web service + keepalive cron).
 - `[2026-05-03]` (Plan: Day 2 — DB migrations) — `alembic/` initialised with async `env.py`; migration `0001_init.py` creates all 13 v0 tables (users through daily_feeds) with citext extension, JSONB/ARRAY types, and all indexes from `plan.md`.
 - `[2026-05-03]` (Plan: Day 3 — Fienta adapter) — `app/ingestion/base.py`: `SourceAdapter` ABC + `NormalizedEvent` dataclass + pipeline orchestrator (fetch → raw_events → normalize → events(draft)); `app/ingestion/sources/fienta.py`: Fienta API adapter with per-organizer error isolation, free-event price=0 handling, savepoint-guarded slug collision recovery; `app/seeds.py`: idempotent source seed (8 placeholder Fienta organizer IDs for Sveta Baar, HALL, TMW, etc.); `app/main.py`: lifespan calls `seed_sources` on startup.
+- `[2026-05-04]` (Plan: Day 3 follow-up — Organizer sync automation) — `app/ingestion/organizer_sync.py`: weekly sync job that checks each organizer for live events (flags stale, never auto-removes — seasonal venues preserved), discovers new Tallinn organizers via city=Tallinn scan (auto-adds if ≥3 events), persists via full `source.config` dict reassignment for SQLAlchemy JSONB detection; `app/main.py`: wired `AsyncIOScheduler` (APScheduler) into lifespan — runs `sync_fienta_organizers` every Sunday 03:00 Europe/Tallinn.
 
 ---
 

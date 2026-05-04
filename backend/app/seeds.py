@@ -1,38 +1,44 @@
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.models.models import Source
 
-# Placeholder organizer IDs — replace with real Fienta organizer IDs before going live.
-# Find each venue's ID from their Fienta organizer profile URL.
-_FIENTA_SOURCE = {
-    "slug": "fienta",
-    "kind": "api",
-    "enabled": True,
-    "config": {
-        "base_url": "https://fienta.com/api/v1/public/events",
-        "organizer_ids": [3349, 1946, 15, 2111, 17595, 1088, 2704, 8403, 8412, 12106],
-        "organizer_names": {
-            "3349": "Kanuti Gildi SAAL",
-            "1946": "Fotografiska Tallinn",
-            "15": "Von Krahli Teater",
-            "2111": "Kai kunstikeskus",
-            "17595": "Paavli Kultuurivabrik",
-            "1088": "Tallinn Fringe Festival",
-            "2704": "Kellerteater",
-            "8403": "MTÜ Uus Teater",
-            "8412": "EKSPEDITSIOON",
-            "12106": "Must Kast",
+
+def _fienta_source() -> dict:
+    return {
+        "slug": "fienta",
+        "kind": "api",
+        "enabled": True,
+        "config": {
+            "base_url": settings.FIENTA_BASE_URL,
+            "organizer_ids": settings.FIENTA_ORGANIZER_IDS,
+            "organizer_names": settings.FIENTA_ORGANIZER_NAMES,
         },
-    },
-}
+    }
 
 
 async def seed_sources(db: AsyncSession) -> None:
+    source = _fienta_source()
     existing = await db.scalar(
-        select(Source).where(Source.slug == _FIENTA_SOURCE["slug"])
+        select(Source).where(Source.slug == source["slug"])
     )
     if existing:
+        desired = source["config"]
+        db_cfg = existing.config or {}
+        # Union organizer IDs so auto-discovered IDs from organizer_sync are preserved.
+        # DB names take precedence — organizer_sync may have refreshed them.
+        merged_ids = sorted(set(desired["organizer_ids"]) | set(db_cfg.get("organizer_ids", [])))
+        merged_names = {**desired["organizer_names"], **db_cfg.get("organizer_names", {})}
+        merged = {
+            **db_cfg,
+            "base_url": desired["base_url"],
+            "organizer_ids": merged_ids,
+            "organizer_names": merged_names,
+        }
+        if merged != db_cfg:
+            existing.config = merged
+            await db.flush()
         return
-    db.add(Source(**_FIENTA_SOURCE))
+    db.add(Source(**source))
     await db.flush()

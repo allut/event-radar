@@ -5,9 +5,8 @@ from zoneinfo import ZoneInfo
 
 import httpx
 
+from app.config import settings
 from app.ingestion.base import NormalizedEvent, SourceAdapter
-
-FIENTA_BASE_URL = "https://fienta.com/api/v1/public/events"
 TALLINN_TZ = ZoneInfo("Europe/Tallinn")
 log = logging.getLogger(__name__)
 
@@ -33,7 +32,7 @@ class FientaAdapter(SourceAdapter):
             for org_id in organizer_ids:
                 try:
                     response = await client.get(
-                        FIENTA_BASE_URL,
+                        self.source.config.get("base_url", settings.FIENTA_BASE_URL),
                         params={"organizer": org_id},
                     )
                     response.raise_for_status()
