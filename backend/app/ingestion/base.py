@@ -53,6 +53,11 @@ class SourceAdapter(ABC):
     @abstractmethod
     def normalize(self, raw: dict[str, Any]) -> Optional[NormalizedEvent]: ...
 
+    def get_raw_external_id(self, raw: dict[str, Any]) -> Optional[str]:
+        """Extract the external ID to store on RawEvent. Override for non-'id' key sources."""
+        v = raw.get("id", "")
+        return str(v) if v else None
+
     async def run(self, db: AsyncSession) -> IngestionRun:
         """Execute full pipeline: fetch → raw_events → normalize → events(draft).
 
@@ -71,10 +76,9 @@ class SourceAdapter(ABC):
             seen_external_ids: set[str] = set()
 
             for raw in raw_items:
-                external_id = str(raw.get("id", ""))
                 raw_event = RawEvent(
                     source_id=self.source.id,
-                    external_id=external_id or None,
+                    external_id=self.get_raw_external_id(raw),
                     payload=raw,
                 )
                 db.add(raw_event)

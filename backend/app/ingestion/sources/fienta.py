@@ -8,7 +8,9 @@ import httpx
 
 from app.config import settings
 from app.ingestion.base import NormalizedEvent, SourceAdapter
+
 TALLINN_TZ = ZoneInfo("Europe/Tallinn")
+_MAX_PAGES = 50  # safety ceiling — Fienta organizers rarely exceed a few hundred events
 log = logging.getLogger(__name__)
 
 
@@ -16,14 +18,11 @@ def _first_not_none(*vals: Any) -> Any:
     return next((v for v in vals if v is not None), None)
 
 
-_MAX_PAGES = 50  # safety ceiling — Fienta organizers rarely exceed a few hundred events
-
-
 class FientaAdapter(SourceAdapter):
     """Fetches events from Fienta public API for all organizer IDs in source.config.
 
     source.config must contain:
-      organizer_ids: list[int]   — Fienta numeric organizer IDs
+      organizer_ids: list[int] — Fienta numeric organizer IDs
 
     Pagination: handles both link-based (`links.next`) and meta-based
     (`meta.current_page` / `meta.last_page`) pagination automatically.

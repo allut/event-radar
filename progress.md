@@ -9,9 +9,9 @@ Living log of execution against [`plan.md`](./plan.md). `plan.md` is the origina
 | Field | Value |
 |---|---|
 | Phase | Week 1 |
-| Plan day | Day 3 complete + organizer sync automation + Fienta pagination + test suite |
-| Week progress | 45% (Days 1–3 + extras / 7) |
-| Current focus | Day 4: JSON-LD adapter base class + Telliskivi/Kultuurikatel/Fotografiska |
+| Plan day | Day 4 complete |
+| Week progress | 57% (Days 1–4 / 7) |
+| Current focus | Day 5: APScheduler hourly ingest jobs + `/admin/ingest` endpoint |
 | Last updated | 2026-05-04 |
 
 ---
@@ -26,6 +26,7 @@ Grouped by plan-day. Format: `[YYYY-MM-DD] (Plan: Day N — <plan title>) — wh
 - `[2026-05-03]` (Plan: Day 3 — Fienta adapter) — `app/ingestion/base.py`: `SourceAdapter` ABC + `NormalizedEvent` dataclass + pipeline orchestrator (fetch → raw_events → normalize → events(draft)); `app/ingestion/sources/fienta.py`: Fienta API adapter with per-organizer error isolation, free-event price=0 handling, savepoint-guarded slug collision recovery; `app/seeds.py`: idempotent source seed (8 placeholder Fienta organizer IDs for Sveta Baar, HALL, TMW, etc.); `app/main.py`: lifespan calls `seed_sources` on startup.
 - `[2026-05-04]` (Plan: Day 3 follow-up — Organizer sync automation) — `app/ingestion/organizer_sync.py`: weekly sync job that checks each organizer for live events (flags stale, never auto-removes — seasonal venues preserved), discovers new Tallinn organizers via city=Tallinn scan (auto-adds if ≥3 events), persists via full `source.config` dict reassignment for SQLAlchemy JSONB detection; `app/main.py`: wired `AsyncIOScheduler` (APScheduler) into lifespan — runs `sync_fienta_organizers` every Sunday 03:00 Europe/Tallinn.
 - `[2026-05-04]` (Plan: Day 3 extension — Fienta pagination + tests) — `app/ingestion/sources/fienta.py`: unified pagination loop in `_fetch_organizer` handles all three Fienta response shapes (plain list, meta-based `{data, meta: {current_page, last_page}}`, link-based `{data, links: {next}}`); shared `_MAX_PAGES=50` budget prevents infinite loops across all styles; SSRF guard rejects `links.next` URLs pointing to a different hostname; `price_raw isinstance(dict)` guard so `"price": 0` (integer) falls through to top-level fields instead of being treated as empty dict. `backend/tests/ingestion/test_fienta.py`: 20 tests covering normalize() (11 cases: free events, integer price field, naive datetime, string venue, all required-field miss cases) and fetch_raw() / pagination (9 cases: plain list, meta 2-page, link-based 2-page, SSRF host mismatch guard, per-organizer error isolation, multi-org aggregation, meta ceiling, link ceiling). `backend/pytest.ini`: asyncio_mode=auto. `backend/tests/conftest.py`: sets `SECRET_KEY` env var before import-time settings validation.
+- `[2026-05-04]` (Plan: Day 4 — JSON-LD adapter base class + venue sources) — `app/ingestion/sources/jsonld.py`: `JsonLdAdapter` base class (BeautifulSoup `html.parser` extraction of `<script type="application/ld+json">` tags, full `_collect_events` recursion including `@graph` traversal); `normalize()` maps schema.org Event → `NormalizedEvent` with location/geo/offers/image handling for all common shapes (list, dict, nested); `get_raw_external_id` override stores event URL as `RawEvent.external_id` instead of empty string. Three concrete adapters (trivial subclasses using `source.config["url"]`): `TelliskiviAdapter`, `KultuurikateldAdapter`, `FotografiskaAdapter`. `app/seeds.py`: refactored into `_upsert_fienta` + `_upsert_simple`; seeds `telliskivi`, `kultuurikatel`, `fotografiska` source records with `kind=html_jsonld`. `app/ingestion/base.py`: added `get_raw_external_id(raw)` hook (default `raw.get("id")`). `requirements.txt`: added `beautifulsoup4>=4.12.0`. `tests/ingestion/test_jsonld.py`: 30 tests covering HTML extraction (9 cases), normalize() (17 cases), fetch_raw() (4 async cases).
 
 ---
 

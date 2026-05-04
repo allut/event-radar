@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.models.models import Source
+
 TALLINN_TZ = ZoneInfo("Europe/Tallinn")
 MIN_EVENTS_TO_ADD = 3   # organizer must appear ≥3 times in city=Tallinn results to be auto-added
 _NAME_MAX_LEN = 200

@@ -4,6 +4,27 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.models.models import Source
 
+_JSONLD_SOURCES = [
+    {
+        "slug": "telliskivi",
+        "kind": "html_jsonld",
+        "enabled": True,
+        "config": {"url": "https://telliskivi.cc/en/events/"},
+    },
+    {
+        "slug": "kultuurikatel",
+        "kind": "html_jsonld",
+        "enabled": True,
+        "config": {"url": "https://kultuurikatel.ee/en/events/"},
+    },
+    {
+        "slug": "fotografiska",
+        "kind": "html_jsonld",
+        "enabled": True,
+        "config": {"url": "https://tallinn.fotografiska.com/en/events"},
+    },
+]
+
 
 def _fienta_source() -> dict:
     return {
@@ -19,6 +40,12 @@ def _fienta_source() -> dict:
 
 
 async def seed_sources(db: AsyncSession) -> None:
+    await _upsert_fienta(db)
+    for source_def in _JSONLD_SOURCES:
+        await _upsert_simple(db, source_def)
+
+
+async def _upsert_fienta(db: AsyncSession) -> None:
     source = _fienta_source()
     existing = await db.scalar(
         select(Source).where(Source.slug == source["slug"])
@@ -41,4 +68,15 @@ async def seed_sources(db: AsyncSession) -> None:
             await db.flush()
         return
     db.add(Source(**source))
+    await db.flush()
+
+
+async def _upsert_simple(db: AsyncSession, source_def: dict) -> None:
+    """Insert a source record if it doesn't already exist; no-op on update."""
+    existing = await db.scalar(
+        select(Source).where(Source.slug == source_def["slug"])
+    )
+    if existing:
+        return
+    db.add(Source(**source_def))
     await db.flush()
