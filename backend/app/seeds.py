@@ -4,26 +4,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.models.models import Source
 
-_JSONLD_SOURCES = [
-    {
-        "slug": "telliskivi",
-        "kind": "html_jsonld",
-        "enabled": True,
-        "config": {"url": "https://telliskivi.cc/en/events/"},
-    },
-    {
-        "slug": "kultuurikatel",
-        "kind": "html_jsonld",
-        "enabled": True,
-        "config": {"url": "https://kultuurikatel.ee/en/events/"},
-    },
-    {
-        "slug": "fotografiska",
-        "kind": "html_jsonld",
-        "enabled": True,
-        "config": {"url": "https://tallinn.fotografiska.com/en/events"},
-    },
-]
+def _jsonld_sources() -> list[dict]:
+    return [
+        {"slug": "telliskivi",    "kind": "html_jsonld", "enabled": True, "config": {"url": settings.TELLISKIVI_URL}},
+        {"slug": "kultuurikatel", "kind": "html_jsonld", "enabled": True, "config": {"url": settings.KULTUURIKATEL_URL}},
+        {"slug": "fotografiska",  "kind": "html_jsonld", "enabled": True, "config": {"url": settings.FOTOGRAFISKA_URL}},
+    ]
 
 
 def _fienta_source() -> dict:
@@ -41,7 +27,7 @@ def _fienta_source() -> dict:
 
 async def seed_sources(db: AsyncSession) -> None:
     await _upsert_fienta(db)
-    for source_def in _JSONLD_SOURCES:
+    for source_def in _jsonld_sources():
         await _upsert_simple(db, source_def)
 
 
@@ -72,11 +58,15 @@ async def _upsert_fienta(db: AsyncSession) -> None:
 
 
 async def _upsert_simple(db: AsyncSession, source_def: dict) -> None:
-    """Insert a source record if it doesn't already exist; no-op on update."""
+    """Insert source if absent; update config['url'] if it changed (e.g. env override)."""
     existing = await db.scalar(
         select(Source).where(Source.slug == source_def["slug"])
     )
     if existing:
+        new_url = source_def.get("config", {}).get("url")
+        if new_url and (existing.config or {}).get("url") != new_url:
+            existing.config = {**(existing.config or {}), "url": new_url}
+            await db.flush()
         return
     db.add(Source(**source_def))
     await db.flush()

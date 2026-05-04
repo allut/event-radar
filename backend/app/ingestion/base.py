@@ -1,20 +1,82 @@
 import hashlib
+import http
 import logging
 import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Optional
-from zoneinfo import ZoneInfo
 
+import httpx
+from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.constants import (
+    EVENT_STATUS_DRAFT,
+    HTTP_RETRY_MAX_ATTEMPTS,
+    HTTP_RETRY_WAIT_MAX,
+    HTTP_RETRY_WAIT_MIN,
+    HTTP_RETRY_WAIT_MULTIPLIER,
+    INGESTION_ERROR_MAX_LEN,
+    SLUG_HASH_HEX_LEN,
+    SLUG_TITLE_MAX_LEN,
+    SOURCE_STATUS_ERROR,
+    SOURCE_STATUS_OK,
+    TALLINN_TZ,
+)
 from app.models.models import Event, EventSource, IngestionRun, RawEvent, Source
 
-TALLINN_TZ = ZoneInfo("Europe/Tallinn")
 log = logging.getLogger(__name__)
+
+
+_RETRYABLE_STATUS_CODES = frozenset({
+    http.HTTPStatus.TOO_MANY_REQUESTS,       # 429
+    http.HTTPStatus.BAD_GATEWAY,             # 502
+    http.HTTPStatus.SERVICE_UNAVAILABLE,     # 503
+    http.HTTPStatus.GATEWAY_TIMEOUT,         # 504
+})
+
+
+def _is_retryable(exc: BaseException) -> bool:
+    """Return True for transient HTTP failures worth retrying."""
+    if isinstance(exc, httpx.HTTPStatusError):
+        return exc.response.status_code in _RETRYABLE_STATUS_CODES
+    return isinstance(exc, httpx.RequestError)
+
+
+@retry(
+    retry=retry_if_exception(_is_retryable),
+    wait=wait_exponential(
+        multiplier=HTTP_RETRY_WAIT_MULTIPLIER,
+        min=HTTP_RETRY_WAIT_MIN,
+        max=HTTP_RETRY_WAIT_MAX,
+    ),
+    stop=stop_after_attempt(HTTP_RETRY_MAX_ATTEMPTS),
+    reraise=True,
+)
+async def _http_get(
+    client: httpx.AsyncClient,
+    url: str,
+    *,
+    params: dict | None = None,
+    headers: dict | None = None,
+) -> httpx.Response:
+    """Shared HTTP GET with exponential-backoff retry for transient failures."""
+    r = await client.get(url, params=params, headers=headers)
+    r.raise_for_status()
+    return r
+
+
+def _parse_dt(value: str) -> Optional[datetime]:
+    try:
+        dt = datetime.fromisoformat(value)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=TALLINN_TZ)
+        return dt
+    except (ValueError, TypeError):
+        return None
 
 
 @dataclass
@@ -38,9 +100,9 @@ class NormalizedEvent:
 def _make_slug(title: str, starts_at: datetime, external_id: str) -> str:
     safe = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")
     date_part = starts_at.strftime("%Y%m%d")
-    # 8-char hex (32-bit) keeps collision probability <0.1% up to ~10k events/run
-    h = hashlib.md5(external_id.encode(), usedforsecurity=False).hexdigest()[:8]
-    return f"{safe[:60]}-{date_part}-{h}"
+    # short hex keeps collision probability <0.1% up to ~10k events/run
+    h = hashlib.md5(external_id.encode(), usedforsecurity=False).hexdigest()[:SLUG_HASH_HEX_LEN]
+    return f"{safe[:SLUG_TITLE_MAX_LEN]}-{date_part}-{h}"
 
 
 class SourceAdapter(ABC):
@@ -120,7 +182,7 @@ class SourceAdapter(ABC):
                             price_min=normalized.price_min,
                             price_max=normalized.price_max,
                             currency=normalized.currency,
-                            status="draft",
+                            status=EVENT_STATUS_DRAFT,
                         )
                         db.add(event)
                         await db.flush()
@@ -144,11 +206,11 @@ class SourceAdapter(ABC):
             run.new_count = new_count
             run.finished_at = finished_at
             self.source.last_run_at = finished_at
-            self.source.last_status = "ok"
+            self.source.last_status = SOURCE_STATUS_OK
 
         except Exception as exc:
-            run.error = str(exc)[:500]
-            self.source.last_status = "error"
+            run.error = str(exc)[:INGESTION_ERROR_MAX_LEN]
+            self.source.last_status = SOURCE_STATUS_ERROR
             raise
 
         return run

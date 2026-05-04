@@ -76,6 +76,16 @@ LLM Router: Cerebras (primary) → Groq → Mistral (fallback chain)
 
 Magic-link email via `itsdangerous` tokens (~50 LOC, no third-party auth). Resend handles email delivery (3k/mo free tier). No sessions stored server-side — token is the credential.
 
+## Code Quality & Best Practices
+
+This project follows production best practices throughout:
+
+- **Constants** — all shared literals live in `app/constants.py` (timezone, HTTP settings, slug params, status strings, user defaults). Never duplicate constants across files.
+- **Retry logic** — all HTTP calls use `_http_get()` from `app/ingestion/base.py`, which wraps `httpx` with tenacity exponential-backoff retry (3 attempts, 2–30s backoff). Retryable: 429/502/503/504 and `RequestError`. Non-retryable: 4xx except 429.
+- **Error visibility** — HTTP failures in source adapters propagate to `SourceAdapter.run()` so `IngestionRun.error` and `source.last_status` are always set correctly. Never swallow exceptions in `fetch_raw()`.
+- **Taxonomy** — LLM classification uses the fixed 12-category / 10-vibe frozensets in `app/llm/taxonomy.py`. Use `validate_categories()` / `validate_vibes()` before persisting any LLM output.
+- **Migrations** — always chain migrations correctly (`down_revision = "PREV"`). Keep migrations small and reversible.
+
 ## Conventions
 
 - All datetimes are timezone-aware using `zoneinfo` (`Europe/Tallinn`). No UTC-naive datetimes anywhere.

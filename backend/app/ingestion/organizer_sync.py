@@ -1,6 +1,5 @@
 import logging
 from datetime import datetime
-from zoneinfo import ZoneInfo
 
 import httpx
 from sqlalchemy import select
@@ -8,11 +7,18 @@ from sqlalchemy.orm.attributes import flag_modified
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.constants import (
+    FIENTA_CITY_FILTER,
+    FIENTA_ORGANIZER_CHECK_LIMIT,
+    FIENTA_ORGANIZER_SCAN_LIMIT,
+    HTTP_TIMEOUT_SECONDS,
+    ORGANIZER_MIN_EVENTS_FOR_AUTO_ADD,
+    ORGANIZER_NAME_MAX_LEN,
+    TALLINN_TZ,
+)
+from app.ingestion.base import _http_get
 from app.models.models import Source
 
-TALLINN_TZ = ZoneInfo("Europe/Tallinn")
-MIN_EVENTS_TO_ADD = 3   # organizer must appear ≥3 times in city=Tallinn results to be auto-added
-_NAME_MAX_LEN = 200
 log = logging.getLogger(__name__)
 
 
@@ -36,12 +42,11 @@ async def sync_fienta_organizers(db: AsyncSession) -> dict:
     stale_ids: set[int] = set()
     added: list[tuple[int, str]] = []
 
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    async with httpx.AsyncClient(timeout=HTTP_TIMEOUT_SECONDS) as client:
         # Step 1 — check each current organizer is still returning events
         for org_id in current_ids:
             try:
-                resp = await client.get(settings.FIENTA_BASE_URL, params={"organizer": org_id, "limit": 5})
-                resp.raise_for_status()
+                resp = await _http_get(client, settings.FIENTA_BASE_URL, params={"organizer": org_id, "limit": FIENTA_ORGANIZER_CHECK_LIMIT})
                 events = resp.json().get("events", [])
                 if not events:
                     stale_ids.add(org_id)
@@ -52,13 +57,12 @@ async def sync_fienta_organizers(db: AsyncSession) -> dict:
             except httpx.HTTPError as exc:
                 log.warning("organizer_sync: check failed for organizer=%s: %s", org_id, exc)
 
-        # Step 2 — discover new Tallinn organizers from city=Tallinn scan
+        # Step 2 — discover new organizers via city filter scan
         try:
-            resp = await client.get(settings.FIENTA_BASE_URL, params={"city": "Tallinn", "limit": 1000})
-            resp.raise_for_status()
+            resp = await _http_get(client, settings.FIENTA_BASE_URL, params={"city": FIENTA_CITY_FILTER, "limit": FIENTA_ORGANIZER_SCAN_LIMIT})
             events = resp.json().get("events", [])
-            if len(events) == 1000:
-                log.warning("organizer_sync: city=Tallinn scan hit limit=1000 — results may be truncated")
+            if len(events) == FIENTA_ORGANIZER_SCAN_LIMIT:
+                log.warning("organizer_sync: city=%s scan hit limit=%d — results may be truncated", FIENTA_CITY_FILTER, FIENTA_ORGANIZER_SCAN_LIMIT)
             org_counts: dict[int, tuple[int, str]] = {}
             for event in events:
                 raw_oid = event.get("organizer_id")
@@ -68,12 +72,12 @@ async def sync_fienta_organizers(db: AsyncSession) -> dict:
                     oid = int(raw_oid)
                 except (ValueError, TypeError):
                     continue
-                name = str(event.get("organizer_name", ""))[:_NAME_MAX_LEN]
+                name = str(event.get("organizer_name", ""))[:ORGANIZER_NAME_MAX_LEN]
                 count, _ = org_counts.get(oid, (0, name))
                 org_counts[oid] = (count + 1, name)
 
             for oid, (count, name) in sorted(org_counts.items()):
-                if oid not in current_id_set and count >= MIN_EVENTS_TO_ADD:
+                if oid not in current_id_set and count >= ORGANIZER_MIN_EVENTS_FOR_AUTO_ADD:
                     current_ids.append(oid)
                     current_id_set.add(oid)
                     current_names[str(oid)] = name

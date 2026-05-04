@@ -20,6 +20,7 @@ from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.types import UserDefinedType
 
+from app.constants import DEFAULT_USER_CITY, DEFAULT_USER_LOCALE, EVENT_STATUS_DRAFT
 from app.db import Base
 
 
@@ -42,8 +43,8 @@ class User(Base):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     email: Mapped[str] = mapped_column(CIText(), nullable=False, unique=True)
-    locale: Mapped[str] = mapped_column(String(2), nullable=False, default="en")
-    home_city: Mapped[str] = mapped_column(String(100), nullable=False, default="Tallinn")
+    locale: Mapped[str] = mapped_column(String(2), nullable=False, default=DEFAULT_USER_LOCALE)
+    home_city: Mapped[str] = mapped_column(String(100), nullable=False, default=DEFAULT_USER_CITY)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
@@ -181,7 +182,7 @@ class Event(Base):
     price_min: Mapped[Optional[float]] = mapped_column(Numeric(10, 2), nullable=True)
     price_max: Mapped[Optional[float]] = mapped_column(Numeric(10, 2), nullable=True)
     currency: Mapped[Optional[str]] = mapped_column(String(3), nullable=True)
-    status: Mapped[str] = mapped_column(String(20), nullable=False, default="draft")
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default=EVENT_STATUS_DRAFT)
     dedup_group_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()

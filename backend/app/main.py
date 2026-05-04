@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import FastAPI
 
+from app.constants import TALLINN_TZ_NAME
 from app.db import AsyncSessionLocal, engine
 from app.ingestion.organizer_sync import sync_fienta_organizers
 from app.seeds import seed_sources
@@ -28,7 +29,7 @@ async def lifespan(app: FastAPI):
         await seed_sources(db)
         await db.commit()
 
-    scheduler = AsyncIOScheduler(timezone="Europe/Tallinn")
+    scheduler = AsyncIOScheduler(timezone=TALLINN_TZ_NAME)
     scheduler.add_job(
         _run_organizer_sync,
         trigger="cron",

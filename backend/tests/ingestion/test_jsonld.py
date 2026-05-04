@@ -1,9 +1,9 @@
 """Tests for JsonLdAdapter — _extract_jsonld_events, normalize(), and fetch_raw()."""
+import http
 import json
 import pytest
 from datetime import timezone
 from unittest.mock import MagicMock
-from zoneinfo import ZoneInfo
 
 import httpx
 
@@ -14,8 +14,7 @@ from app.ingestion.sources.jsonld import (
     _parse_offers,
 )
 from app.ingestion.base import NormalizedEvent
-
-TALLINN_TZ = ZoneInfo("Europe/Tallinn")
+from app.constants import TALLINN_TZ
 
 
 def _make_source(url="https://example.com/events"):
@@ -258,7 +257,7 @@ class TestFetchRaw:
         html = _html_with_events(event)
 
         async def handler(request):
-            return httpx.Response(200, html=html)
+            return httpx.Response(http.HTTPStatus.OK, html=html)
 
         adapter = JsonLdAdapter(_make_source("https://example.com/events"))
         # Patch the httpx.AsyncClient used inside fetch_raw
@@ -281,7 +280,7 @@ class TestFetchRaw:
         html = _html_with_events(org, event)
 
         async def handler(request):
-            return httpx.Response(200, html=html)
+            return httpx.Response(http.HTTPStatus.OK, html=html)
 
         adapter = JsonLdAdapter(_make_source("https://example.com/events"))
         from unittest.mock import patch
@@ -297,8 +296,9 @@ class TestFetchRaw:
 
     @pytest.mark.asyncio
     async def test_http_error_propagates(self):
+        """HTTP errors propagate so IngestionRun.error is recorded by base.py."""
         async def handler(request):
-            return httpx.Response(503)
+            return httpx.Response(http.HTTPStatus.NOT_FOUND)  # non-retryable — re-raises immediately
 
         adapter = JsonLdAdapter(_make_source("https://example.com/events"))
         from unittest.mock import patch
@@ -313,7 +313,7 @@ class TestFetchRaw:
     @pytest.mark.asyncio
     async def test_empty_page_returns_empty_list(self):
         async def handler(request):
-            return httpx.Response(200, html="<html><body>No events</body></html>")
+            return httpx.Response(http.HTTPStatus.OK, html="<html><body>No events</body></html>")
 
         adapter = JsonLdAdapter(_make_source("https://example.com/events"))
         from unittest.mock import patch

@@ -1,15 +1,13 @@
 import json
 import logging
-from datetime import datetime
 from typing import Any, Optional
-from zoneinfo import ZoneInfo
 
 import httpx
 from bs4 import BeautifulSoup
 
-from app.ingestion.base import NormalizedEvent, SourceAdapter
+from app.constants import DEFAULT_CURRENCY, HTTP_TIMEOUT_SECONDS, HTTP_USER_AGENT
+from app.ingestion.base import NormalizedEvent, SourceAdapter, _http_get, _parse_dt
 
-TALLINN_TZ = ZoneInfo("Europe/Tallinn")
 log = logging.getLogger(__name__)
 
 # All schema.org Event subtypes we consider valid
@@ -25,7 +23,7 @@ class JsonLdAdapter(SourceAdapter):
     """Fetches a listing page and extracts schema.org Event JSON-LD blocks.
 
     source.config must contain:
-      url: str  — the events listing page URL
+      url: str — the events listing page URL
 
     Subclass and override normalize() for site-specific quirks, or
     override fetch_raw() to add a CSS-selector fallback when JSON-LD is absent.
@@ -41,11 +39,12 @@ class JsonLdAdapter(SourceAdapter):
 
     async def fetch_raw(self) -> list[dict[str, Any]]:
         url = self.listing_url
-        async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
-            response = await client.get(
-                url, headers={"User-Agent": "EventRadarBot/1.0 (+https://eventradar.ee)"}
-            )
-            response.raise_for_status()
+        try:
+            async with httpx.AsyncClient(timeout=HTTP_TIMEOUT_SECONDS, follow_redirects=True) as client:
+                response = await _http_get(client, url, headers={"User-Agent": HTTP_USER_AGENT})
+        except (httpx.HTTPStatusError, httpx.RequestError) as exc:
+            log.error("jsonld fetch failed source=%s url=%s: %s", self.source.slug, url, exc)
+            raise
         events = _extract_jsonld_events(response.text)
         log.info("jsonld source=%s url=%s extracted=%d events", self.source.slug, url, len(events))
         return events
@@ -95,7 +94,7 @@ class JsonLdAdapter(SourceAdapter):
             image_url=image_url,
             price_min=price_min,
             price_max=price_max,
-            currency=str(currency) if currency else ("EUR" if has_price else None),
+            currency=str(currency) if currency else (DEFAULT_CURRENCY if has_price else None),
         )
 
 
@@ -195,16 +194,6 @@ def _parse_offers(
             currency = offer.get("priceCurrency") or None
 
     return price_min, price_max, currency
-
-
-def _parse_dt(value: str) -> Optional[datetime]:
-    try:
-        dt = datetime.fromisoformat(value)
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=TALLINN_TZ)
-        return dt
-    except (ValueError, TypeError):
-        return None
 
 
 def _to_float(value: Any) -> Optional[float]:

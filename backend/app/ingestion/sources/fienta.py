@@ -1,16 +1,13 @@
 import logging
-from datetime import datetime
 from typing import Any, Optional
 from urllib.parse import urlparse
-from zoneinfo import ZoneInfo
 
 import httpx
 
 from app.config import settings
-from app.ingestion.base import NormalizedEvent, SourceAdapter
+from app.constants import DEFAULT_CURRENCY, FIENTA_MAX_PAGES, HTTP_TIMEOUT_SECONDS
+from app.ingestion.base import NormalizedEvent, SourceAdapter, _http_get, _parse_dt
 
-TALLINN_TZ = ZoneInfo("Europe/Tallinn")
-_MAX_PAGES = 50  # safety ceiling — Fienta organizers rarely exceed a few hundred events
 log = logging.getLogger(__name__)
 
 
@@ -34,7 +31,7 @@ class FientaAdapter(SourceAdapter):
         base_url: str = self.source.config.get("base_url", settings.FIENTA_BASE_URL)
         all_events: list[dict[str, Any]] = []
 
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(timeout=HTTP_TIMEOUT_SECONDS) as client:
             for org_id in organizer_ids:
                 try:
                     all_events.extend(
@@ -50,10 +47,10 @@ class FientaAdapter(SourceAdapter):
     async def _fetch_organizer(
         self, client: httpx.AsyncClient, base_url: str, org_id: int
     ) -> list[dict[str, Any]]:
-        """Fetch all pages for a single organizer against a shared _MAX_PAGES budget."""
+        """Fetch all pages for a single organizer against a shared FIENTA_MAX_PAGES budget."""
         collected: list[dict[str, Any]] = []
         base_host = urlparse(base_url).hostname  # hostname only, excludes port
-        budget = _MAX_PAGES  # total requests allowed across all pagination styles
+        budget = FIENTA_MAX_PAGES  # total requests allowed across all pagination styles
 
         url: str = base_url
         params: dict[str, Any] | None = {"organizer": org_id}
@@ -62,8 +59,7 @@ class FientaAdapter(SourceAdapter):
         while url and budget > 0:
             # params=None preserves the URL's existing query string (e.g. links.next
             # already encodes all params); params=dict merges/replaces the query string.
-            response = await client.get(url, params=params)
-            response.raise_for_status()
+            response = await _http_get(client, url, params=params)
             budget -= 1
             data = response.json()
 
@@ -135,7 +131,7 @@ class FientaAdapter(SourceAdapter):
             currency_raw = raw.get("currency")
 
         has_price = price_min is not None or price_max is not None
-        currency = str(currency_raw) if currency_raw else ("EUR" if has_price else None)
+        currency = str(currency_raw) if currency_raw else (DEFAULT_CURRENCY if has_price else None)
 
         return NormalizedEvent(
             external_id=external_id,
@@ -151,13 +147,3 @@ class FientaAdapter(SourceAdapter):
             price_max=float(price_max) if price_max is not None else None,
             currency=currency,
         )
-
-
-def _parse_dt(value: str) -> Optional[datetime]:
-    try:
-        dt = datetime.fromisoformat(value)
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=TALLINN_TZ)
-        return dt
-    except (ValueError, TypeError):
-        return None

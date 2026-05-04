@@ -1,15 +1,14 @@
 """Tests for FientaAdapter — normalize() and fetch_raw() with pagination."""
+import http
 import pytest
 from datetime import datetime
 from unittest.mock import MagicMock, patch
-from zoneinfo import ZoneInfo
 
 import httpx
 
-from app.ingestion.sources.fienta import FientaAdapter, _MAX_PAGES
+from app.ingestion.sources.fienta import FientaAdapter
 from app.ingestion.base import NormalizedEvent
-
-TALLINN_TZ = ZoneInfo("Europe/Tallinn")
+from app.constants import FIENTA_MAX_PAGES, TALLINN_TZ
 
 
 def _make_source(organizer_ids=None, base_url=None):
@@ -146,7 +145,7 @@ class TestNormalize:
 # fetch_raw() + pagination — async tests using httpx mock transport
 # ---------------------------------------------------------------------------
 
-def _mock_response(json_data, status_code=200):
+def _mock_response(json_data, status_code=http.HTTPStatus.OK):
     return httpx.Response(status_code, json=json_data)
 
 
@@ -250,7 +249,7 @@ class TestFetchRaw:
         async def handler(request):
             org = request.url.params.get("organizer")
             if org == "99":
-                return httpx.Response(404)
+                return httpx.Response(http.HTTPStatus.NOT_FOUND)
             return _mock_response([{"id": "ok"}])
 
         transport = httpx.MockTransport(handler)
@@ -301,7 +300,7 @@ class TestFetchRaw:
                 client, "https://fienta.com/api/v1/public/events", 1
             )
 
-        assert request_count == _MAX_PAGES
+        assert request_count == FIENTA_MAX_PAGES
 
     @pytest.mark.asyncio
     async def test_links_pagination_ceiling(self):
@@ -322,4 +321,4 @@ class TestFetchRaw:
         async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
             await adapter._fetch_organizer(client, base, 1)
 
-        assert request_count == _MAX_PAGES
+        assert request_count == FIENTA_MAX_PAGES

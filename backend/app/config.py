@@ -9,6 +9,9 @@ class Settings(BaseSettings):
     APP_ENV: str = "development"
 
     FIENTA_BASE_URL: str = "https://fienta.com/api/v1/public/events"
+    TELLISKIVI_URL: str = "https://telliskivi.cc/en/events/"
+    KULTUURIKATEL_URL: str = "https://kultuurikatel.ee/en/events/"
+    FOTOGRAFISKA_URL: str = "https://tallinn.fotografiska.com/en/events"
     FIENTA_ORGANIZER_IDS: list[int] = [3349, 1946, 15, 2111, 17595, 1088, 2704, 8403, 8412, 12106]
     FIENTA_ORGANIZER_NAMES: dict[str, str] = {
         "3349": "Kanuti Gildi SAAL",
