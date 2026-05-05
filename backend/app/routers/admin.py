@@ -4,10 +4,13 @@ import secrets
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
+from sqlalchemy import select
 
 from app.config import settings
-from app.ingestion.jobs import ingest_all_enabled, ingest_source
+from app.db import AsyncSessionLocal
+from app.ingestion.jobs import dedup_pass, ingest_all_enabled, ingest_source
 from app.ingestion.registry import ADAPTER_REGISTRY
+from app.models.models import Event
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/admin")
@@ -62,3 +65,56 @@ async def admin_ingest_source(slug: str):
         log.exception("admin ingest failed for slug=%s", slug)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Ingestion failed; see server logs")
     return result
+
+
+@router.post("/dedup", dependencies=[Depends(_require_admin)])
+async def admin_dedup_run():
+    """Trigger a rule-based dedup pass over all non-cancelled events."""
+    try:
+        summary = await dedup_pass()
+    except Exception:
+        log.exception("admin dedup pass failed")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Dedup failed; see server logs")
+    return summary
+
+
+@router.get("/dedup/groups", dependencies=[Depends(_require_admin)])
+async def admin_dedup_groups():
+    """Return events grouped by dedup_group_id for manual eyeballing.
+
+    Only returns events that are part of a dedup group (dedup_group_id IS NOT NULL).
+    Sorted by group ID then event ID so each cluster appears together.
+    """
+    from app.constants import EVENT_STATUS_CANCELLED
+
+    async with AsyncSessionLocal() as db:
+        rows = (
+            await db.scalars(
+                select(Event)
+                .where(
+                    Event.dedup_group_id.is_not(None),
+                    Event.status != EVENT_STATUS_CANCELLED,
+                )
+                .order_by(Event.dedup_group_id, Event.id)
+            )
+        ).all()
+
+    groups: dict[int, list[dict]] = {}
+    for e in rows:
+        groups.setdefault(e.dedup_group_id, []).append({
+            "id": e.id,
+            "title": e.title_orig,
+            "starts_at": e.starts_at.isoformat(),
+            "venue": e.venue_name,
+            "status": e.status,
+            "url": e.url,
+        })
+
+    return {
+        "group_count": len(groups),
+        "event_count": len(rows),
+        "groups": [
+            {"dedup_group_id": gid, "events": members}
+            for gid, members in sorted(groups.items())
+        ],
+    }

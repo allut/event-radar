@@ -32,3 +32,9 @@ EVENT_STATUS_CANCELLED = "cancelled"
 DEFAULT_CURRENCY = "EUR"
 DEFAULT_USER_LOCALE = "en"
 DEFAULT_USER_CITY = "Tallinn"
+
+# Deduplication
+DEDUP_LOOKBACK_DAYS = 30   # only re-cluster events that started within this window
+TITLE_RATIO_THRESHOLD = 70  # rapidfuzz token_set_ratio threshold for title match
+VENUE_RATIO_THRESHOLD = 70  # rapidfuzz token_set_ratio threshold for venue match
+TIME_WINDOW_HOURS = 12      # max |Δstart| in hours for two events to be dedup candidates

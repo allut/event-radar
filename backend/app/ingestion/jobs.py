@@ -4,6 +4,7 @@ import logging
 from sqlalchemy import select
 
 from app.db import AsyncSessionLocal
+from app.dedup.rules import run_dedup_pass
 from app.ingestion.registry import ADAPTER_REGISTRY
 from app.models.models import Source
 
@@ -65,3 +66,17 @@ async def ingest_all_enabled(kind: str | None = None) -> list[dict]:
             results.append({"slug": source.slug, "error": str(exc)})
 
     return results
+
+
+async def dedup_pass() -> dict:
+    """Run rule-based deduplication over all non-cancelled events."""
+    async with AsyncSessionLocal() as db:
+        try:
+            summary = await run_dedup_pass(db)
+            await db.commit()
+            log.info("dedup pass complete: %s", summary)
+            return summary
+        except Exception:
+            await db.rollback()
+            log.exception("dedup pass failed")
+            raise

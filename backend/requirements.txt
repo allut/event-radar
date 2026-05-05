@@ -11,3 +11,4 @@ apscheduler>=3.10,<4
 greenlet>=3.0.0
 beautifulsoup4>=4.12.0
 tenacity>=9.0
+rapidfuzz>=3.0

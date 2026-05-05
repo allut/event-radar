@@ -8,7 +8,7 @@ from fastapi import FastAPI, HTTPException, Request, status
 from app.config import settings
 from app.constants import TALLINN_TZ_NAME
 from app.db import AsyncSessionLocal, engine
-from app.ingestion.jobs import ingest_all_enabled
+from app.ingestion.jobs import dedup_pass, ingest_all_enabled
 from app.ingestion.organizer_sync import sync_fienta_organizers
 from app.routers.admin import router as admin_router
 from app.seeds import seed_sources
@@ -33,6 +33,14 @@ async def _run_ingest_all() -> None:
         log.info("hourly ingest completed: %s", results)
     except Exception:
         log.exception("hourly ingest failed")
+
+
+async def _run_dedup_pass() -> None:
+    try:
+        summary = await dedup_pass()
+        log.info("dedup pass completed: %s", summary)
+    except Exception:
+        log.exception("dedup pass failed")
 
 
 @asynccontextmanager
@@ -63,8 +71,14 @@ async def lifespan(app: FastAPI):
         replace_existing=True,
     )
 
-    # Placeholders wired now so job IDs are stable; implementations added Day 9-13
-    # scheduler.add_job(dedup_pass, trigger="interval", hours=6, id="dedup_pass")
+    # Every 6h: dedup pass; classify_pending and build_daily_feeds wired Day 9-13
+    scheduler.add_job(
+        _run_dedup_pass,
+        trigger="interval",
+        hours=6,
+        id="dedup_pass",
+        replace_existing=True,
+    )
     # scheduler.add_job(classify_pending, trigger="interval", hours=6, id="classify_pending")
     # scheduler.add_job(build_daily_feeds, trigger="cron", hour=6, id="build_daily_feeds")
 
