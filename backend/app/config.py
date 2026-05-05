@@ -26,5 +26,10 @@ class Settings(BaseSettings):
         "12106": "Must Kast",
     }
 
+    # Admin / internal security
+    ADMIN_USERNAME: str = "admin"  # Basic-auth username for /admin/* endpoints
+    ADMIN_PASSWORD: str = ""       # Basic-auth password for /admin/* endpoints; empty = disabled (dev only)
+    INTERNAL_TOKEN: str = ""       # X-Internal-Token header for /internal/tick; empty = disabled (dev only)
+
 
 settings = Settings()
