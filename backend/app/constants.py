@@ -34,7 +34,22 @@ DEFAULT_USER_LOCALE = "en"
 DEFAULT_USER_CITY = "Tallinn"
 
 # Deduplication
-DEDUP_LOOKBACK_DAYS = 30   # only re-cluster events that started within this window
+DEDUP_LOOKBACK_DAYS = 30    # only re-cluster events that started within this window
 TITLE_RATIO_THRESHOLD = 70  # rapidfuzz token_set_ratio threshold for title match
 VENUE_RATIO_THRESHOLD = 70  # rapidfuzz token_set_ratio threshold for venue match
 TIME_WINDOW_HOURS = 12      # max |Δstart| in hours for two events to be dedup candidates
+
+# Resend email delivery
+RESEND_SEND_URL = "https://api.resend.com/emails"
+RESEND_FROM_ADDRESS = "Event Radar <noreply@eventradar.ee>"
+RESEND_TIMEOUT_SECONDS: float = 10.0
+RESEND_ERROR_SNIPPET_LEN = 200
+
+# Auth tokens
+AUTH_MAGIC_SALT = "magic-link-v1"
+AUTH_SESSION_SALT = "session-v1"
+SESSION_TTL_DAYS = 7
+
+# Persona weights
+PERSONA_PRIMARY_WEIGHT = 1.0
+PERSONA_SECONDARY_WEIGHT = 0.4

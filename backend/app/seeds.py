@@ -2,7 +2,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.models.models import Source
+from app.models.models import Persona, Source
 
 def _jsonld_sources() -> list[dict]:
     return [
@@ -10,6 +10,46 @@ def _jsonld_sources() -> list[dict]:
         {"slug": "kultuurikatel", "kind": "html_jsonld", "enabled": True, "config": {"url": settings.KULTUURIKATEL_URL}},
         {"slug": "fotografiska",  "kind": "html_jsonld", "enabled": True, "config": {"url": settings.FOTOGRAFISKA_URL}},
     ]
+
+
+def _persona_seeds() -> tuple[dict, ...]:
+    return (
+        {
+            "slug": "underground_clubber",
+            "display_name_en": "Underground Clubber",
+            "display_name_et": "Klubi fänn",
+            "display_name_ru": "Клубный завсегдатай",
+            "affinity_vector": settings.PERSONA_UNDERGROUND_CLUBBER_AFFINITY,
+        },
+        {
+            "slug": "networking_pro",
+            "display_name_en": "Networking Pro",
+            "display_name_et": "Võrgustiku professionaal",
+            "display_name_ru": "Нетворкинг-профессионал",
+            "affinity_vector": settings.PERSONA_NETWORKING_PRO_AFFINITY,
+        },
+        {
+            "slug": "weekend_hobbyist",
+            "display_name_en": "Weekend Hobbyist",
+            "display_name_et": "Nädalavahetuse hobifänn",
+            "display_name_ru": "Любитель выходного дня",
+            "affinity_vector": settings.PERSONA_WEEKEND_HOBBYIST_AFFINITY,
+        },
+        {
+            "slug": "culture_buff",
+            "display_name_en": "Culture Buff",
+            "display_name_et": "Kultuurihuviline",
+            "display_name_ru": "Культурный энтузиаст",
+            "affinity_vector": settings.PERSONA_CULTURE_BUFF_AFFINITY,
+        },
+        {
+            "slug": "family_explorer",
+            "display_name_en": "Family Explorer",
+            "display_name_et": "Perefänn",
+            "display_name_ru": "Семейный искатель приключений",
+            "affinity_vector": settings.PERSONA_FAMILY_EXPLORER_AFFINITY,
+        },
+    )
 
 
 def _fienta_source() -> dict:
@@ -29,6 +69,21 @@ async def seed_sources(db: AsyncSession) -> None:
     await _upsert_fienta(db)
     for source_def in _jsonld_sources():
         await _upsert_simple(db, source_def)
+
+
+async def seed_personas(db: AsyncSession) -> None:
+    """Idempotently insert the 5 v0 personas. Updates display names and affinity vectors if changed."""
+    for p in _persona_seeds():
+        existing = await db.scalar(select(Persona).where(Persona.slug == p["slug"]))
+        if existing:
+            existing.display_name_en = p["display_name_en"]
+            existing.display_name_et = p["display_name_et"]
+            existing.display_name_ru = p["display_name_ru"]
+            existing.affinity_vector = p["affinity_vector"]
+            await db.flush()
+        else:
+            db.add(Persona(**p))
+            await db.flush()
 
 
 async def _upsert_fienta(db: AsyncSession) -> None:

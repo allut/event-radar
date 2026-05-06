@@ -11,7 +11,9 @@ from app.db import AsyncSessionLocal, engine
 from app.ingestion.jobs import dedup_pass, ingest_all_enabled
 from app.ingestion.organizer_sync import sync_fienta_organizers
 from app.routers.admin import router as admin_router
-from app.seeds import seed_sources
+from app.routers.auth import router as auth_router
+from app.routers.onboarding import router as onboarding_router
+from app.seeds import seed_personas, seed_sources
 
 log = logging.getLogger(__name__)
 
@@ -47,6 +49,7 @@ async def _run_dedup_pass() -> None:
 async def lifespan(app: FastAPI):
     async with AsyncSessionLocal() as db:
         await seed_sources(db)
+        await seed_personas(db)
         await db.commit()
 
     scheduler = AsyncIOScheduler(timezone=TALLINN_TZ_NAME)
@@ -92,6 +95,8 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Event Radar API", version="0.1.0", lifespan=lifespan)
 app.include_router(admin_router)
+app.include_router(auth_router)
+app.include_router(onboarding_router)
 
 
 @app.get("/health")
