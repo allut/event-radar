@@ -1,4 +1,4 @@
-# Event Radar — MVP Implementation Plan
+﻿# Event Radar — MVP Implementation Plan
 
 ## Context
 
@@ -10,7 +10,7 @@ Confirmed decisions:
 - **Stack:** FastAPI + Vite/React SPA, Postgres on Neon free
 - **City:** Tallinn (one city, hyper-local)
 - **Auth:** magic-link email
-- **AI:** free-tier LLMs only (Cerebras → Groq → Mistral fallback chain)
+- **AI:** free-tier LLMs only (Groq → Cerebras → Mistral fallback chain)
 - **Differentiator:** persona-based onboarding + like/dislike learning
 - **Sources:** free APIs + ICS/RSS + newsletter parsing — **no UI scraping** of FB/Meetup/Eventbrite
 
@@ -42,7 +42,7 @@ Steady-state cost: **$0/mo** (optional $10/yr for an `.ee` domain).
                ▼                                  ▼
        ┌──────────────┐                  ┌────────────────┐
        │ Neon Postgres│                  │   LLM Router   │
-       │ (scale-to-0) │                  │ Cerebras→Groq→ │
+       │ (scale-to-0) │                  │ Groq→Cerebras→ │
        └──────────────┘                  │   Mistral      │
                                          └───────┬────────┘
                                                  ▼
@@ -67,8 +67,8 @@ Single-process design: APScheduler shares the FastAPI DB pool. **No Celery, no R
 | DB | **Neon free** (`eu-central-1`, 0.5 GB, 100 CU-h/mo, scale-to-zero) | Better than Supabase free which pauses projects after 7 days idle |
 | Auth | Self-hosted magic link (`itsdangerous` signed token + email) | No third-party auth lock-in; ~50 LOC |
 | Email | **Resend free** (3k/mo, 100/day) | Magic links + daily digest fits |
-| LLM primary | **Cerebras free** (1M tok/day, Llama 3.3 70B) | Best free token allowance in 2026 |
-| LLM fallback | **Groq free** (~1k req/day, Llama 3.3 70B) | Round-robin on 429 |
+| LLM primary | **Groq free** (14,400 req/day, `llama-3.3-70b-versatile`, Production) | 30 req/min burst; no sleep loop needed in batch jobs |
+| LLM secondary | **Cerebras free** (1M tok/day, `qwen-3-235b-a22b-instruct-2507`, Preview) | 1 req/min; Preview model — monitor for deprecation |
 | LLM batch | Mistral La Plateforme free (1B tok/mo, 2 RPM) | Overnight backfill only |
 | Scheduler | APScheduler `AsyncIOScheduler` embedded | + external Render Cron Job pinging `/internal/tick` every 15 min |
 | Backend host | **Render free Web Service** + free Render Cron Job keepalive | 750 hrs/mo covers 24/7 |
@@ -183,7 +183,7 @@ That's it for v0. No infinite scroll, no search, no calendar view — those add 
 **Checkpoint:** ≥200 canonical events in DB, no obvious duplicates, login works.
 
 **Week 2 — AI layer + frontend**
-- Day 8: LLM router (Cerebras→Groq→Mistral) with rate-limit awareness + `llm_calls` table
+- Day 8: LLM router (Groq→Cerebras→Mistral) with rate-limit awareness + `llm_calls` table
 - Day 9: LLM dedup tiebreaker layered on rule pre-filter
 - Day 10: LLM classifier (categories, vibes, why_go, quality, language); backfill all existing events
 - Day 11: Vite/React skeleton, login + onboarding pages, feed page wired to `/feed`
@@ -211,7 +211,7 @@ That's it for v0. No infinite scroll, no search, no calendar view — those add 
 - `C:\Users\Aleksei\event-radar\backend\app\main.py` — FastAPI app + APScheduler bootstrap
 - `C:\Users\Aleksei\event-radar\backend\app\ingestion\base.py` — `SourceAdapter` ABC; the unified RawEvent → NormalizedEvent → Event pipeline
 - `C:\Users\Aleksei\event-radar\backend\app\ingestion\sources\fienta.py` — first concrete adapter; template for the JSON-LD adapters
-- `C:\Users\Aleksei\event-radar\backend\app\ai\router.py` — provider chain (Cerebras → Groq → Mistral) with rate-limit awareness; classifier and dedup-tiebreaker prompts live next to it
+- `C:\Users\Aleksei\event-radar\backend\app\ai\router.py` — provider chain (Groq → Cerebras → Mistral) with rate-limit awareness; classifier and dedup-tiebreaker prompts live next to it
 - `C:\Users\Aleksei\event-radar\backend\app\ranking\score.py` — persona affinity + recency + feedback formula and the Daily 5 builder
 - `C:\Users\Aleksei\event-radar\backend\alembic/versions/0001_init.py` — first migration with all v0 tables
 - `C:\Users\Aleksei\event-radar\frontend\src\routes\Feed.tsx` — Daily 5 page (the product surface)
@@ -221,7 +221,7 @@ That's it for v0. No infinite scroll, no search, no calendar view — those add 
 ## Top 3 risks
 
 1. **Source coverage thinness.** Tallinn has no Songkick-grade aggregator; 5 sources may yield 50–100 events/week, not 500. *Mitigation:* hard investment in newsletter ingestion (Resend Inbound + LLM extractor) — uniquely captures niche/underground events. Add a "submit an event" form as a manual escape hatch.
-2. **Free LLM quota exhaustion during backfill.** Initial dedup + classification across hundreds of events can blow Cerebras's daily 1M-token budget in an afternoon. *Mitigation:* (a) cross-provider fallback, (b) cap prompts ≤600 tokens, (c) cache dedup decisions by content hash, (d) classify only canonical events (post-dedup), (e) push overnight backfill to Mistral's 1B tok/mo batch tier.
+2. **Free LLM quota exhaustion during backfill.** Initial dedup + classification across hundreds of events can exhaust Groq's 14,400 req/day or Cerebras's 1M-token budget quickly. *Mitigation:* (a) Groq→Cerebras→Mistral fallback chain, (b) cap prompts ≤600 tokens, (c) cache dedup decisions by content hash, (d) classify only canonical events (post-dedup), (e) push overnight backfill to Mistral's 1B tok/mo batch tier.
 3. **Render free-tier sleep killing scheduled jobs.** *Mitigation:* external Render Cron Job pings `/internal/tick` every 15 min as the actual scheduling trigger; APScheduler is the source of truth, the cron just nudges it. If traffic warrants, $7/mo Render Starter removes sleep without architecture changes.
 
 ---
@@ -233,5 +233,5 @@ That's it for v0. No infinite scroll, no search, no calendar view — those add 
 3. **Classification check:** pick 10 random `events`; verify `categories`/`vibes`/`why_go` make sense to a human; confirm Estonian-language events get `language_detected='et'` and Russian-language events get `language_detected='ru'`; verify why_go renders correctly in all three locales (`et`/`en`/`ru`).
 4. **Personalization check:** create 3 test users with different personas (clubber, professional, family); run the 06:00 Daily 5 builder; verify `daily_feeds` contents differ in expected directions; like one event, dislike another, manually invalidate score cache, confirm next feed shifts.
 5. **Auth flow:** request magic link → check Resend dashboard → click link → land on feed authenticated.
-6. **Free-tier sanity:** after 24 h of running, check Neon CU-hours used (<3 CU-h/day expected), Cerebras token spend (<200k/day expected), Resend send count.
+6. **Free-tier sanity:** after 24 h of running, check Neon CU-hours used (<3 CU-h/day expected), Groq req/day (<500 expected), Cerebras token spend if fallback was hit, Resend send count.
 7. **Cold-start test:** let Render free dyno sleep (no traffic 15+ min), then hit the feed; first paint should still be <2s after the cron-warmed Neon connection.

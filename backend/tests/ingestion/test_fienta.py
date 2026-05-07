@@ -6,9 +6,10 @@ from unittest.mock import MagicMock, patch
 
 import httpx
 
+from app.config import settings
+from app.constants import FIENTA_MAX_PAGES, TALLINN_TZ
 from app.ingestion.sources.fienta import FientaAdapter
 from app.ingestion.base import NormalizedEvent
-from app.constants import FIENTA_MAX_PAGES, TALLINN_TZ
 
 
 def _make_source(organizer_ids=None, base_url=None):
@@ -160,9 +161,7 @@ class TestFetchRaw:
 
         adapter = _adapter(organizer_ids=[42])
         async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-            result = await adapter._fetch_organizer(
-                client, "https://fienta.com/api/v1/public/events", 42
-            )
+            result = await adapter._fetch_organizer(client, settings.FIENTA_BASE_URL, 42)
 
         assert len(result) == 2
         assert result[0]["id"] == "1"
@@ -177,9 +176,7 @@ class TestFetchRaw:
 
         adapter = _adapter(organizer_ids=[1])
         async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-            result = await adapter._fetch_organizer(
-                client, "https://fienta.com/api/v1/public/events", 1
-            )
+            result = await adapter._fetch_organizer(client, settings.FIENTA_BASE_URL, 1)
 
         assert len(result) == 1
 
@@ -197,16 +194,14 @@ class TestFetchRaw:
 
         adapter = _adapter(organizer_ids=[1])
         async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-            result = await adapter._fetch_organizer(
-                client, "https://fienta.com/api/v1/public/events", 1
-            )
+            result = await adapter._fetch_organizer(client, settings.FIENTA_BASE_URL, 1)
 
         assert [e["id"] for e in result] == ["1", "2"]
 
     @pytest.mark.asyncio
     async def test_links_next_pagination(self):
         """Link-based pagination follows links.next until absent."""
-        base = "https://fienta.com/api/v1/public/events"
+        base = settings.FIENTA_BASE_URL
         page1 = {"data": [{"id": "A"}], "links": {"next": f"{base}?page=2"}}
         page2 = {"data": [{"id": "B"}], "links": {"next": None}}
 
@@ -229,7 +224,7 @@ class TestFetchRaw:
     @pytest.mark.asyncio
     async def test_links_next_host_mismatch_stops_pagination(self):
         """links.next pointing to a different host must not be followed (SSRF guard)."""
-        base = "https://fienta.com/api/v1/public/events"
+        base = settings.FIENTA_BASE_URL
         page1 = {"data": [{"id": "A"}], "links": {"next": "https://evil.internal/steal"}}
 
         async def handler(request):
@@ -282,7 +277,7 @@ class TestFetchRaw:
 
     @pytest.mark.asyncio
     async def test_meta_pagination_ceiling(self):
-        """Meta-based pagination stops at _MAX_PAGES even if last_page is huge."""
+        """Meta-based pagination stops at FIENTA_MAX_PAGES even if last_page is huge."""
         request_count = 0
 
         async def handler(request):
@@ -296,16 +291,14 @@ class TestFetchRaw:
 
         adapter = _adapter(organizer_ids=[1])
         async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-            await adapter._fetch_organizer(
-                client, "https://fienta.com/api/v1/public/events", 1
-            )
+            await adapter._fetch_organizer(client, settings.FIENTA_BASE_URL, 1)
 
         assert request_count == FIENTA_MAX_PAGES
 
     @pytest.mark.asyncio
     async def test_links_pagination_ceiling(self):
-        """Link-based pagination stops at _MAX_PAGES total requests per organizer."""
-        base = "https://fienta.com/api/v1/public/events"
+        """Link-based pagination stops at FIENTA_MAX_PAGES total requests per organizer."""
+        base = settings.FIENTA_BASE_URL
         request_count = 0
 
         async def handler(request):

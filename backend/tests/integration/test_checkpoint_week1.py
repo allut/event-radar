@@ -11,7 +11,6 @@ import pytest_asyncio
 
 from app.constants import DEFAULT_USER_LOCALE, DEFAULT_USER_CITY
 
-
 pytestmark = pytest.mark.integration
 
 

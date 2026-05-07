@@ -1,5 +1,4 @@
 import hashlib
-import http
 import logging
 import re
 from abc import ABC, abstractmethod
@@ -15,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.constants import (
     EVENT_STATUS_DRAFT,
+    HTTP_RETRYABLE_STATUS_CODES,
     HTTP_RETRY_MAX_ATTEMPTS,
     HTTP_RETRY_WAIT_MAX,
     HTTP_RETRY_WAIT_MIN,
@@ -31,18 +31,10 @@ from app.models.models import Event, EventSource, IngestionRun, RawEvent, Source
 log = logging.getLogger(__name__)
 
 
-_RETRYABLE_STATUS_CODES = frozenset({
-    http.HTTPStatus.TOO_MANY_REQUESTS,       # 429
-    http.HTTPStatus.BAD_GATEWAY,             # 502
-    http.HTTPStatus.SERVICE_UNAVAILABLE,     # 503
-    http.HTTPStatus.GATEWAY_TIMEOUT,         # 504
-})
-
-
 def _is_retryable(exc: BaseException) -> bool:
     """Return True for transient HTTP failures worth retrying."""
     if isinstance(exc, httpx.HTTPStatusError):
-        return exc.response.status_code in _RETRYABLE_STATUS_CODES
+        return exc.response.status_code in HTTP_RETRYABLE_STATUS_CODES
     return isinstance(exc, httpx.RequestError)
 
 

@@ -11,11 +11,11 @@ from datetime import datetime, timedelta, timezone
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
 from app.config import settings
-from app.constants import AUTH_MAGIC_SALT, AUTH_SESSION_SALT, SESSION_TTL_DAYS
+from app.constants import AUTH_MAGIC_SALT, AUTH_SESSION_SALT, SECONDS_PER_DAY, SECONDS_PER_MINUTE
 
 
 def magic_ttl_seconds() -> int:
-    return settings.MAGIC_LINK_TTL_MINUTES * 60
+    return settings.MAGIC_LINK_TTL_MINUTES * SECONDS_PER_MINUTE
 
 
 def _serializer() -> URLSafeTimedSerializer:
@@ -54,6 +54,6 @@ def verify_session_token(token: str) -> int:
     payload = _serializer().loads(
         token,
         salt=AUTH_SESSION_SALT,
-        max_age=SESSION_TTL_DAYS * 86400,
+        max_age=settings.SESSION_TTL_DAYS * SECONDS_PER_DAY,
     )
     return int(payload["uid"])

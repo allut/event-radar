@@ -80,3 +80,19 @@ async def dedup_pass() -> dict:
             await db.rollback()
             log.exception("dedup pass failed")
             raise
+
+
+async def classify_pending_job() -> dict:
+    """Classify canonical draft events via LLM (one batch per call)."""
+    from app.llm.classifier import classify_pending
+
+    async with AsyncSessionLocal() as db:
+        try:
+            summary = await classify_pending(db)
+            await db.commit()
+            log.info("classify_pending complete: %s", summary)
+            return summary
+        except Exception:
+            await db.rollback()
+            log.exception("classify_pending failed")
+            raise

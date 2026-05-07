@@ -8,7 +8,7 @@ from fastapi import FastAPI, HTTPException, Request, status
 from app.config import settings
 from app.constants import TALLINN_TZ_NAME
 from app.db import AsyncSessionLocal, engine
-from app.ingestion.jobs import dedup_pass, ingest_all_enabled
+from app.ingestion.jobs import classify_pending_job, dedup_pass, ingest_all_enabled
 from app.ingestion.organizer_sync import sync_fienta_organizers
 from app.routers.admin import router as admin_router
 from app.routers.auth import router as auth_router
@@ -45,6 +45,14 @@ async def _run_dedup_pass() -> None:
         log.exception("dedup pass failed")
 
 
+async def _run_classify_pending() -> None:
+    try:
+        summary = await classify_pending_job()
+        log.info("classify_pending completed: %s", summary)
+    except Exception:
+        log.exception("classify_pending failed")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     async with AsyncSessionLocal() as db:
@@ -74,7 +82,7 @@ async def lifespan(app: FastAPI):
         replace_existing=True,
     )
 
-    # Every 6h: dedup pass; classify_pending and build_daily_feeds wired Day 9-13
+    # Every 6h: dedup pass + classify pending
     scheduler.add_job(
         _run_dedup_pass,
         trigger="interval",
@@ -82,7 +90,13 @@ async def lifespan(app: FastAPI):
         id="dedup_pass",
         replace_existing=True,
     )
-    # scheduler.add_job(classify_pending, trigger="interval", hours=6, id="classify_pending")
+    scheduler.add_job(
+        _run_classify_pending,
+        trigger="interval",
+        hours=6,
+        id="classify_pending",
+        replace_existing=True,
+    )
     # scheduler.add_job(build_daily_feeds, trigger="cron", hour=6, id="build_daily_feeds")
 
     scheduler.start()

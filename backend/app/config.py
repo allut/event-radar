@@ -60,8 +60,15 @@ class Settings(BaseSettings):
 
     # Auth / email
     RESEND_API_KEY: str = ""       # Resend API key for transactional email; empty = log-only (dev)
+    RESEND_FROM_ADDRESS: str = "Event Radar <noreply@eventradar.ee>"
     FRONTEND_URL: str = "http://localhost:5173"  # Base URL for magic-link verification
     MAGIC_LINK_TTL_MINUTES: int = 15
+    SESSION_TTL_DAYS: int = 7
+
+    # LLM providers — empty key means that provider is skipped in the fallback chain
+    GROQ_API_KEY: str = ""
+    CEREBRAS_API_KEY: str = ""
+    MISTRAL_API_KEY: str = ""
 
 
 settings = Settings()
