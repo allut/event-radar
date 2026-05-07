@@ -8,7 +8,7 @@ from sqlalchemy import select
 
 from app.config import settings
 from app.db import AsyncSessionLocal
-from app.ingestion.jobs import dedup_pass, ingest_all_enabled, ingest_source
+from app.ingestion.jobs import classify_pending_job, dedup_pass, ingest_all_enabled, ingest_source
 from app.ingestion.registry import ADAPTER_REGISTRY
 from app.models.models import Event
 
@@ -118,6 +118,20 @@ async def admin_dedup_groups():
             for gid, members in sorted(groups.items())
         ],
     }
+
+
+@router.post("/classify", dependencies=[Depends(_require_admin)])
+async def admin_classify():
+    """Trigger LLM classification for one batch of unclassified canonical events."""
+    try:
+        summary = await classify_pending_job()
+    except Exception:
+        log.exception("admin classify failed")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Classification failed; see server logs",
+        )
+    return summary
 
 
 @router.get("/stats", dependencies=[Depends(_require_admin)])

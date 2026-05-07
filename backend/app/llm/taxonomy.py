@@ -1,13 +1,6 @@
-VALID_CATEGORIES: frozenset[str] = frozenset({
-    "music", "theater", "exhibitions", "workshops", "sports",
-    "food_drink", "networking", "literature", "family", "cinema",
-    "alternative", "nightlife",
-})
+from app.constants import VALID_CATEGORIES, VALID_VIBES
 
-VALID_VIBES: frozenset[str] = frozenset({
-    "trendy", "casual", "intimate", "high_energy", "educational",
-    "indie", "underground", "mainstream", "accessible", "niche",
-})
+__all__ = ["VALID_CATEGORIES", "VALID_VIBES", "validate_categories", "validate_vibes"]
 
 
 def validate_categories(cats: list[str]) -> tuple[bool, list[str]]:

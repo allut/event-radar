@@ -9,8 +9,8 @@ import httpx
 
 from app.config import settings
 from app.constants import (
+    MAGIC_LINK_EMAIL_HTML,
     RESEND_ERROR_SNIPPET_LEN,
-    RESEND_FROM_ADDRESS,
     RESEND_SEND_URL,
     RESEND_TIMEOUT_SECONDS,
 )
@@ -27,11 +27,9 @@ async def send_magic_link(to_email: str, magic_token: str) -> None:
         log.debug("Dev-only magic link URL: %s", verify_url)
         return
 
-    html = (
-        "<p>Click the link below to sign in to Event Radar. "
-        f"This link expires in {settings.MAGIC_LINK_TTL_MINUTES} minutes.</p>"
-        f'<p><a href="{verify_url}">Sign in to Event Radar</a></p>'
-        "<p>If you didn't request this, ignore this email.</p>"
+    html = MAGIC_LINK_EMAIL_HTML.format(
+        ttl_minutes=settings.MAGIC_LINK_TTL_MINUTES,
+        verify_url=verify_url,
     )
 
     async with httpx.AsyncClient(timeout=RESEND_TIMEOUT_SECONDS) as client:
@@ -39,7 +37,7 @@ async def send_magic_link(to_email: str, magic_token: str) -> None:
             RESEND_SEND_URL,
             headers={"Authorization": f"Bearer {settings.RESEND_API_KEY}"},
             json={
-                "from": RESEND_FROM_ADDRESS,
+                "from": settings.RESEND_FROM_ADDRESS,
                 "to": [to_email],
                 "subject": "Your Event Radar sign-in link",
                 "html": html,

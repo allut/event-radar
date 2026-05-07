@@ -35,7 +35,7 @@ FastAPI Backend (single process on Render free tier)
         ↓
 Neon Postgres (eu-central-1, free tier, pgvector available for v1.1)
         ↓
-LLM Router: Cerebras (primary) → Groq → Mistral (fallback chain)
+LLM Router: Groq (primary) → Cerebras → Mistral (fallback chain)
 ```
 
 **No Celery/Redis** — embedded APScheduler suffices for a single-process MVP.
@@ -67,8 +67,8 @@ LLM Router: Cerebras (primary) → Groq → Mistral (fallback chain)
 
 - **Hard cap:** ≤600 tokens per LLM call to avoid quota exhaustion.
 - **Dedup cache:** Cache decisions by content hash — never re-call LLM for identical pairs.
-- **Fallback order:** Cerebras (1M tok/day, Llama 3.3 70B) → Groq → Mistral (overnight batch, 1B tok/mo).
-- Cerebras handles Estonian well; test Estonian text paths explicitly.
+- **Fallback order:** Groq (primary, `llama-3.3-70b-versatile`, Production) → Cerebras (`qwen-3-235b-a22b-instruct-2507`, Preview — 1 req/min, monitor for deprecation) → Mistral (overnight batch, 1B tok/mo).
+- Groq's 30 req/min burst means no sleep loop needed in the classification batch job.
 
 ## Auth
 

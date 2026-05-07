@@ -18,7 +18,7 @@ from rapidfuzz.fuzz import token_set_ratio
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.constants import TITLE_RATIO_THRESHOLD, VENUE_RATIO_THRESHOLD, TIME_WINDOW_HOURS
+from app.constants import SECONDS_PER_HOUR, TIME_WINDOW_HOURS, TITLE_RATIO_THRESHOLD, VENUE_RATIO_THRESHOLD
 from app.models.models import Event
 
 log = logging.getLogger(__name__)
@@ -32,7 +32,7 @@ def _venue_compatible(a: str | None, b: str | None) -> bool:
 
 def is_candidate_pair(a: Event, b: Event) -> bool:
     """Return True when a and b pass all three rule-based criteria."""
-    if abs((a.starts_at - b.starts_at).total_seconds()) > TIME_WINDOW_HOURS * 3600:
+    if abs((a.starts_at - b.starts_at).total_seconds()) > TIME_WINDOW_HOURS * SECONDS_PER_HOUR:
         return False
     if token_set_ratio(a.title_orig.lower(), b.title_orig.lower()) < TITLE_RATIO_THRESHOLD:
         return False

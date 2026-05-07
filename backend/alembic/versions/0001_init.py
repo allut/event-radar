@@ -10,6 +10,8 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
+from app.constants import DEFAULT_USER_LOCALE, DEFAULT_USER_CITY
+
 revision = "0001"
 down_revision = None
 branch_labels = None
@@ -58,8 +60,8 @@ def upgrade() -> None:
         "users",
         sa.Column("id", sa.BigInteger(), nullable=False),
         sa.Column("email", sa.Text(), nullable=False),
-        sa.Column("locale", sa.String(2), nullable=False, server_default="en"),
-        sa.Column("home_city", sa.String(100), nullable=False, server_default="Tallinn"),
+        sa.Column("locale", sa.String(2), nullable=False, server_default=DEFAULT_USER_LOCALE),
+        sa.Column("home_city", sa.String(100), nullable=False, server_default=DEFAULT_USER_CITY),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),

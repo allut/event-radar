@@ -5,18 +5,10 @@ from typing import Any, Optional
 import httpx
 from bs4 import BeautifulSoup
 
-from app.constants import DEFAULT_CURRENCY, HTTP_TIMEOUT_SECONDS, HTTP_USER_AGENT
+from app.constants import DEFAULT_CURRENCY, HTTP_TIMEOUT_SECONDS, HTTP_USER_AGENT, JSONLD_EVENT_TYPES
 from app.ingestion.base import NormalizedEvent, SourceAdapter, _http_get, _parse_dt
 
 log = logging.getLogger(__name__)
-
-# All schema.org Event subtypes we consider valid
-_EVENT_TYPES = {
-    "Event", "MusicEvent", "TheaterEvent", "ExhibitionEvent",
-    "SocialEvent", "SportsEvent", "ChildrensEvent", "ComedyEvent",
-    "DanceEvent", "FestivalEvent", "LiteraryEvent", "ScreeningEvent",
-    "VisualArtsEvent",
-}
 
 
 class JsonLdAdapter(SourceAdapter):
@@ -139,7 +131,7 @@ def _collect_events(data: Any, out: list[dict[str, Any]]) -> None:
     event_type = data.get("@type", "")
     if isinstance(event_type, list):
         event_type = event_type[0] if event_type else ""
-    if event_type in _EVENT_TYPES:
+    if event_type in JSONLD_EVENT_TYPES:
         out.append(data)
     # @graph may wrap multiple typed nodes — recurse so nested @graph is handled
     graph = data.get("@graph")
