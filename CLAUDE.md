@@ -18,26 +18,20 @@ alembic upgrade head          # apply migrations
 uvicorn app.main:app --reload # dev server (port 8000)
 pytest                        # run all tests
 pytest tests/path/test_foo.py::TestClass::test_name  # single test
-
-# Frontend (Vite + React)
-cd frontend
-npm install
-npm run dev    # dev server (port 5173)
-npm run build  # production bundle
-npm run lint   # ESLint
 ```
+
+Frontend does not exist yet (planned: Vite + React SPA).
 
 ## Architecture
 
 ```
-Frontend (Vite/React SPA on Vercel/Cloudflare Pages)
-        ↓ REST
 FastAPI Backend (single process on Render free tier)
-  ├── Routers: /auth  /feed  /events  /feedback
+  ├── Routers: /auth  /admin  /onboarding  (feed/events/feedback — not yet wired)
   └── APScheduler (embedded, kept alive by Render Cron Job ping every 15 min)
-      ├── Hourly:   ingest_fienta, ingest_venues, ingest_newsletters
-      ├── 6-hourly: dedup_pass, classify_pending
-      └── Daily 06:00 EET: build_daily_feeds
+      ├── Weekly Sun 03:00: sync_fienta_organizers (auto-discover new organizers)
+      ├── Hourly:   ingest_all_enabled
+      ├── 6-hourly: dedup_pass
+      └── classify_pending + build_daily_feeds — not yet scheduled (Day 9–13)
         ↓
 Neon Postgres (eu-central-1, free tier, pgvector available for v1.1)
         ↓
@@ -57,13 +51,17 @@ LLM Router: Cerebras (primary) → Groq → Mistral (fallback chain)
 ## Key Database Tables
 
 - `users` — email (citext unique), locale (et|en|ru), home_city
+- `auth_magic_links` — token_hash (sha256), expires_at, used_at; one-use only
 - `personas` — 5 static personas with JSONB affinity vectors; display names in et/en/ru
+- `user_personas` — M2M join with weight (1.0 primary, 0.4 secondary)
 - `sources` — ingestion source registry
 - `raw_events` — source payload as JSONB
-- `events` — normalized: slug, title, description, start/end, venue, lat/lng, price, status (draft→classified→published|cancelled), dedup_group_id
-- `event_classifications` — categories[], vibes[], quality_score, why_go_bullets[3], model_used
+- `event_sources` — M2M: links events to source + external_id
+- `events` — normalized: slug, title_orig, description_orig, starts_at/ends_at, venue, lat/lng, price, status (draft→classified→published|cancelled), dedup_group_id
+- `event_classifications` — categories[], vibes[], quality_score, why_go_bullets[3], language_detected, model_used
 - `user_event_feedback` — like/dislike/bookmark/view/click_external signals
-- `daily_feeds` — user_id, feed_date, event_ids int[]
+- `user_event_scores` — cached ranking score per (user, event); unique constraint
+- `daily_feeds` — user_id, feed_date, event_ids BigInteger[]
 
 ## LLM Usage Constraints
 
@@ -75,6 +73,12 @@ LLM Router: Cerebras (primary) → Groq → Mistral (fallback chain)
 ## Auth
 
 Magic-link email via `itsdangerous` tokens (~50 LOC, no third-party auth). Resend handles email delivery (3k/mo free tier). No sessions stored server-side — token is the credential.
+
+Session tokens are issued after magic-link verification and passed as `X-Session-Token` header. TTL is 7 days (`SESSION_TTL_DAYS`).
+
+## Admin Endpoints
+
+`/admin/*` uses HTTP Basic auth (`ADMIN_PASSWORD` env var). In development with no password set, any credentials are accepted (logs a warning). In production, the env var is required — unset = 503.
 
 ## Code Quality & Best Practices
 
@@ -95,4 +99,4 @@ This project follows production best practices throughout:
 
 ## MVP Scope (do not cut)
 
-Deduplication, LLM classification, persona-based personalization, magic-link auth, Daily 5 builder. Everything else (extra venues, email digest, secondary persona blending, bookmarks) is cuttable if behind schedule.
+Deduplication, LLM classification, persona-based personalization (primary + secondary blend already implemented), magic-link auth, Daily 5 builder. Everything else (extra venues, email digest, bookmarks) is cuttable if behind schedule.

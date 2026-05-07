@@ -118,3 +118,33 @@ async def admin_dedup_groups():
             for gid, members in sorted(groups.items())
         ],
     }
+
+
+@router.get("/stats", dependencies=[Depends(_require_admin)])
+async def admin_stats():
+    """Aggregate counts used by checkpoint tests and manual monitoring."""
+    from sqlalchemy import func
+    from app.constants import EVENT_STATUS_CANCELLED
+    from app.models.models import Source
+
+    async with AsyncSessionLocal() as db:
+        total = (await db.scalar(
+            select(func.count(Event.id)).where(Event.status != EVENT_STATUS_CANCELLED)
+        )) or 0
+
+        canonical = (await db.scalar(
+            select(func.count(Event.id)).where(
+                Event.status != EVENT_STATUS_CANCELLED,
+                (Event.dedup_group_id.is_(None)) | (Event.dedup_group_id == Event.id),
+            )
+        )) or 0
+
+        sources_total = (await db.scalar(select(func.count(Source.id)))) or 0
+        sources_enabled = (await db.scalar(
+            select(func.count(Source.id)).where(Source.enabled.is_(True))
+        )) or 0
+
+    return {
+        "events": {"total": total, "canonical": canonical},
+        "sources": {"total": sources_total, "enabled": sources_enabled},
+    }
