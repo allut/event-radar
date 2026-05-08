@@ -8,11 +8,11 @@ Audit trail against [`plan.md`](./plan.md). `plan.md` is the original spec and s
 
 | Field | Value |
 |---|---|
-| Phase | Week 1 → Week 2 |
-| Plan day | Day 7 complete |
-| Week progress | 100% (Days 1–7) — Week 1 checkpoint reached |
-| Current focus | Day 8: LLM router (Cerebras→Groq→Mistral) |
-| Last updated | 2026-05-06 |
+| Phase | Week 2 |
+| Plan day | Days 8–10 complete |
+| Week progress | Days 1–10 done |
+| Current focus | Day 11–13: Daily 5 builder + ranking |
+| Last updated | 2026-05-08 |
 
 ---
 
@@ -76,6 +76,15 @@ Audit trail against [`plan.md`](./plan.md). `plan.md` is the original spec and s
 - `app/seeds.py` — `seed_personas()` upserts 5 personas with trilingual display names and affinity vectors
 - `requirements.txt` — added `email-validator>=2.0.0`
 - **Tests:** `tests/auth/test_auth.py` — 20 tests (token util: 10, routers: 7); 96/96 passing
+
+### Days 8–10 — LLM layer `2026-05-07–08`
+- `app/llm/router.py` — `llm_json(task, prompt, db)`: Groq (`llama-3.3-70b-versatile`) → Cerebras (`qwen-3-235b-a22b-instruct-2507`) → Mistral fallback chain; skips providers with missing API keys; SHA-256 `content_hash` cache against `llm_calls` table (identical prompts never re-sent); records every attempt (success and failure) for audit; raises `LLMError` if all providers fail
+- `app/llm/classifier.py` — `classify_pending(db)`: fetches canonical draft events in batches (`LLM_CLASSIFY_BATCH_SIZE`); builds classify prompt (title + venue + description, hard-truncated to `LLM_MAX_PROMPT_CHARS`); parses and validates response against fixed taxonomy; writes `EventClassification` + advances `event.status` to `classified`
+- `app/dedup/llm_tiebreaker.py` — `run_dedup_pass_llm(db)`: wraps rule-based `run_dedup_pass` with LLM tiebreaker; LLM called only on candidate pairs; merge confirmed when `{"same": true, "confidence": ≥ 0.7}`; `LLMError` and parse errors treated as "distinct" (fail-safe); cap of `LLM_DEDUP_MAX_CANDIDATE_PAIRS_PER_PASS` to bound token spend per run
+- `alembic/versions/0003_llm_calls.py` — `llm_calls` table: `task`, `event_id`, `content_hash`, `provider`, `model`, `prompt_tokens`, `completion_tokens`, `response_json` (JSONB); indexes on `content_hash` and `(task, created_at)`
+- `app/main.py` — `classify_pending` job wired to APScheduler every 6h (alongside dedup); `build_daily_feeds` still stub-commented
+- `app/constants.py` — all LLM prompt templates, token budgets, batch sizes, confidence thresholds, and provider config centralized; `LLM_PROVIDERS` ordered list drives router fallback
+- **Tests:** `tests/llm/test_router.py` — 14 unit tests (cache hit, provider fallback, 429 fall-through, `LLMError` on all-fail, all-providers-unavailable); `tests/llm/test_live.py` — 3 live integration tests (one per provider, `pytest -m live`, skip when API key absent); 112 total tests passing
 
 ---
 
