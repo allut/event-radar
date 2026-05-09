@@ -8,7 +8,7 @@ so a compromised DB row cannot be turned back into a valid token.
 import hashlib
 from datetime import datetime, timedelta, timezone
 
-from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
+from itsdangerous import URLSafeTimedSerializer
 
 from app.config import settings
 from app.constants import AUTH_MAGIC_SALT, AUTH_SESSION_SALT, SECONDS_PER_DAY, SECONDS_PER_MINUTE

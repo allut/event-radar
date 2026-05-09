@@ -10,8 +10,12 @@ from app.constants import TALLINN_TZ_NAME
 from app.db import AsyncSessionLocal, engine
 from app.ingestion.jobs import classify_pending_job, dedup_pass, ingest_all_enabled
 from app.ingestion.organizer_sync import sync_fienta_organizers
+from app.ranking.score import build_daily_feeds
 from app.routers.admin import router as admin_router
 from app.routers.auth import router as auth_router
+from app.routers.events import router as events_router
+from app.routers.feed import router as feed_router
+from app.routers.feedback import router as feedback_router
 from app.routers.onboarding import router as onboarding_router
 from app.seeds import seed_personas, seed_sources
 
@@ -51,6 +55,16 @@ async def _run_classify_pending() -> None:
         log.info("classify_pending completed: %s", summary)
     except Exception:
         log.exception("classify_pending failed")
+
+
+async def _run_build_daily_feeds() -> None:
+    async with AsyncSessionLocal() as db:
+        try:
+            summary = await build_daily_feeds(db)
+            log.info("build_daily_feeds completed: %s", summary)
+        except Exception:
+            await db.rollback()
+            log.exception("build_daily_feeds failed")
 
 
 @asynccontextmanager
@@ -97,7 +111,15 @@ async def lifespan(app: FastAPI):
         id="classify_pending",
         replace_existing=True,
     )
-    # scheduler.add_job(build_daily_feeds, trigger="cron", hour=6, id="build_daily_feeds")
+    # Daily 06:00 EET: build personalized feeds for all users
+    scheduler.add_job(
+        _run_build_daily_feeds,
+        trigger="cron",
+        hour=6,
+        minute=0,
+        id="build_daily_feeds",
+        replace_existing=True,
+    )
 
     scheduler.start()
     try:
@@ -110,6 +132,9 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Event Radar API", version="0.1.0", lifespan=lifespan)
 app.include_router(admin_router)
 app.include_router(auth_router)
+app.include_router(events_router)
+app.include_router(feed_router)
+app.include_router(feedback_router)
 app.include_router(onboarding_router)
 
 

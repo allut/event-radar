@@ -2,17 +2,11 @@
 import http
 import json
 import pytest
-from datetime import timezone
 from unittest.mock import MagicMock
 
 import httpx
 
-from app.ingestion.sources.jsonld import (
-    JsonLdAdapter,
-    _extract_jsonld_events,
-    _parse_location,
-    _parse_offers,
-)
+from app.ingestion.sources.jsonld import JsonLdAdapter, _extract_jsonld_events
 from app.ingestion.base import NormalizedEvent
 from app.constants import TALLINN_TZ
 

@@ -1,7 +1,6 @@
 """Tests for FientaAdapter — normalize() and fetch_raw() with pagination."""
 import http
 import pytest
-from datetime import datetime
 from unittest.mock import MagicMock, patch
 
 import httpx

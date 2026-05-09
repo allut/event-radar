@@ -9,10 +9,10 @@ Audit trail against [`plan.md`](./plan.md). `plan.md` is the original spec and s
 | Field | Value |
 |---|---|
 | Phase | Week 2 |
-| Plan day | Days 8–10 complete |
-| Week progress | Days 1–10 done |
-| Current focus | Day 11–13: Daily 5 builder + ranking |
-| Last updated | 2026-05-08 |
+| Plan day | Days 11–13 complete |
+| Week progress | Days 1–13 done |
+| Current focus | Day 14: Newsletter inbound webhook + LLM extractor |
+| Last updated | 2026-05-10 |
 
 ---
 
@@ -86,12 +86,32 @@ Audit trail against [`plan.md`](./plan.md). `plan.md` is the original spec and s
 - `app/constants.py` — all LLM prompt templates, token budgets, batch sizes, confidence thresholds, and provider config centralized; `LLM_PROVIDERS` ordered list drives router fallback
 - **Tests:** `tests/llm/test_router.py` — 14 unit tests (cache hit, provider fallback, 429 fall-through, `LLMError` on all-fail, all-providers-unavailable); `tests/llm/test_live.py` — 3 live integration tests (one per provider, `pytest -m live`, skip when API key absent); 112 total tests passing
 
+### Days 11–13 — Ranking + feed/feedback endpoints `2026-05-09–10`
+- `app/ranking/score.py` — pure scoring formula: `persona_affinity` (normalized dot-product), `recency_boost` (linear decay 21 days), `feedback_signal` (per-day 0.9^t decay, indirect category matching, hard-exclude via `_HARD_EXCLUDE` sentinel), `locality_bonus` (central Tallinn bounding box); `score_event` combines all five components; `_mmr_pick` MMR-lite diversity (max 2 per category); `build_daily_feeds` async job (upserts `daily_feeds` for all users)
+- `app/routers/feed.py` — `GET /feed` (today's Daily 5 for authenticated user, preserves feed ordering from `daily_feeds.event_ids`)
+- `app/routers/events.py` — `GET /events/{id}` (published-only; unauthenticated access; no internal metadata exposed)
+- `app/routers/feedback.py` — `POST /feedback` (like/dislike/bookmark/view/click_external; invalidates `user_event_scores` cache row)
+- `app/main.py` — wires three new routers + `build_daily_feeds` APScheduler job at 06:00 EET
+- `app/config.py` — persona affinity vectors rewritten to use only `VALID_CATEGORIES` / `VALID_VIBES` taxonomy keys
+- `app/seeds.py` — `_validate_affinity_vector()` validates persona affinity keys against taxonomy at startup
+- **Tests:** `tests/ranking/test_score.py` (38 tests) + `tests/routers/test_feed.py` (8 tests) + `tests/routers/test_feedback.py` (6 tests) — 155 total passing
+
+### Day 13 (addendum) — Time-slot affinity `2026-05-10`
+- `app/constants.py` — `VALID_TIMES` frozenset (`late_night`, `evening`, `daytime`, `morning`, `weekend`, `weekday`) + boundary hour constants
+- `app/ranking/score.py` — `_time_slots_for_event(starts_at)` derives 1–2 time slots from `event.starts_at` in Europe/Tallinn (hour bucket + weekday/weekend); `_affinity_for_vector` / `persona_affinity` extended with `time_slots` parameter; `score_event` derives and passes time slots; max_possible normalization includes `times` weights so adding them doesn't distort category/vibe discrimination
+- `app/config.py` — restored `times` sub-dict to 4 of 5 persona vectors (culture_buff omitted — attends any time); keys from `VALID_TIMES`
+- `app/seeds.py` — `_validate_affinity_vector()` now also checks `times` keys against `VALID_TIMES`
+- **Tests:** 12 new tests (`TestTimeSlotsForEvent`, time-aware `_affinity_for_vector` cases) — 151 total passing (excl. test_feed.py which has a stale `from backend.app…` import)
+
 ---
 
 ## Issues & fixes
 
 | Symptom | Root cause | Fix |
 |---|---|---|
+| Persona affinity vector scoring was flat for multi-match events | `_affinity_for_vector` clipped raw sum to [-1,1] instead of normalizing — events with 1 or 5 matching categories all scored identically | Normalized by `max_possible = sum(vector.values())` so score discriminates across match quality |
+| `GET /events/{id}` exposed draft/cancelled events + internal `dedup_group_id` | No status filter on public endpoint | Added `Event.status == published` filter; removed `dedup_group_id` from response |
+| Persona affinity vector keys didn't match taxonomy | Old vectors used `arts`, `tech`, `business` etc. not in `VALID_CATEGORIES` | Rewrote all 5 vectors to use only taxonomy keys; added `_validate_affinity_vector()` startup check in `seeds.py` |
 | `daily_feeds.event_ids` typed `ARRAY(Integer)` | Copy-paste; `events.id` is `BigInteger` | Changed to `ARRAY(BigInteger)` in ORM + migration |
 | `SECRET_KEY` had hardcoded default | Magic-link forgery risk if deployed without setting env var | Made required (no default); app fails at startup if unset |
 | `price_raw.get('min') or fallback` drops free events (price=0) | Python `or` treats 0 as falsy | `_first_not_none()` helper using `next(v for v in vals if v is not None)` |

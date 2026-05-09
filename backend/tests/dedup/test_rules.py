@@ -2,9 +2,7 @@
 from datetime import datetime, timedelta
 from unittest.mock import MagicMock
 
-import pytest
-
-from app.constants import DEDUP_LOOKBACK_DAYS, TALLINN_TZ, TITLE_RATIO_THRESHOLD, TIME_WINDOW_HOURS
+from app.constants import DEDUP_LOOKBACK_DAYS, TALLINN_TZ, TIME_WINDOW_HOURS
 from app.dedup.rules import (
     cluster_events,
     is_candidate_pair,

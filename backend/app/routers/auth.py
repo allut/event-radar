@@ -17,7 +17,6 @@ from app.auth.tokens import (
     verify_magic_token,
     verify_session_token,
 )
-from app.config import settings
 from app.db import get_db
 from app.models.models import AuthMagicLink, User
 

@@ -84,7 +84,7 @@ Session tokens are issued after magic-link verification and passed as `X-Session
 
 This project follows production best practices throughout:
 
-- **Constants** — all shared literals live in `app/constants.py` (timezone, HTTP settings, slug params, status strings, user defaults). Never duplicate constants across files.
+- **Constants** — all literals (numbers, strings, thresholds, weights, sentinel values) live in `app/constants.py`. This is the single source of truth for every named constant in the project: ranking weights, scoring thresholds, decay parameters, bounding-box coordinates, signal names, etc. Never define a constant near business logic — always add it to `app/constants.py` first, then import it. Never duplicate constants across files.
 - **Retry logic** — all HTTP calls use `_http_get()` from `app/ingestion/base.py`, which wraps `httpx` with tenacity exponential-backoff retry (3 attempts, 2–30s backoff). Retryable: 429/502/503/504 and `RequestError`. Non-retryable: 4xx except 429.
 - **Error visibility** — HTTP failures in source adapters propagate to `SourceAdapter.run()` so `IngestionRun.error` and `source.last_status` are always set correctly. Never swallow exceptions in `fetch_raw()`.
 - **Taxonomy** — LLM classification uses the fixed 12-category / 10-vibe frozensets in `app/llm/taxonomy.py`. Use `validate_categories()` / `validate_vibes()` before persisting any LLM output.

@@ -4,11 +4,11 @@ Uses AsyncMock to stub DB and email so no real DB is needed.
 """
 import http
 import hashlib
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from itsdangerous import BadSignature, SignatureExpired
+from itsdangerous import BadSignature
 
 from app.auth.tokens import (
     generate_magic_token,

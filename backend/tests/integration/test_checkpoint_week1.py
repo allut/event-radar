@@ -7,7 +7,6 @@ Run against a live server:
 """
 import http
 import pytest
-import pytest_asyncio
 
 from app.constants import DEFAULT_USER_LOCALE, DEFAULT_USER_CITY
 

@@ -1,0 +1,55 @@
+"""POST /feedback — record user feedback signals and invalidate cached scores."""
+from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
+from sqlalchemy import delete
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.constants import VALID_SIGNALS
+from app.db import get_db
+from app.models.models import Event, User, UserEventFeedback, UserEventScore
+from app.routers.auth import get_current_user
+
+router = APIRouter(prefix="/feedback", tags=["feedback"])
+
+
+class FeedbackBody(BaseModel):
+    event_id: int
+    signal: str
+
+
+@router.post("", status_code=status.HTTP_200_OK)
+async def record_feedback(
+    body: FeedbackBody,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Record a feedback signal for an event.
+    Invalidates the cached user_event_scores row so the next scoring pass is fresh.
+    """
+    if body.signal not in VALID_SIGNALS:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Invalid signal. Must be one of: {sorted(VALID_SIGNALS)}",
+        )
+
+    event = await db.get(Event, body.event_id)
+    if event is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
+
+    db.add(UserEventFeedback(
+        user_id=current_user.id,
+        event_id=body.event_id,
+        signal=body.signal,
+    ))
+
+    # Invalidate cached score — next build_daily_feeds will recompute from scratch
+    await db.execute(
+        delete(UserEventScore).where(
+            UserEventScore.user_id == current_user.id,
+            UserEventScore.event_id == body.event_id,
+        )
+    )
+
+    await db.commit()
+    return {"ok": True}

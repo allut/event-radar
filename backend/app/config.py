@@ -26,30 +26,31 @@ class Settings(BaseSettings):
         "12106": "Must Kast",
     }
 
-    # Persona affinity vectors — override in .env to retune without code changes
+    # Persona affinity vectors — keys must match VALID_CATEGORIES / VALID_VIBES / VALID_TIMES.
+    # Override in .env to retune without code changes.
     PERSONA_UNDERGROUND_CLUBBER_AFFINITY: dict = {
-        "categories": {"music": 1.0, "nightlife": 1.0, "arts": 0.4},
-        "vibes": {"edgy": 1.0, "alternative": 1.0, "local": 0.6},
+        "categories": {"music": 1.0, "nightlife": 1.0, "alternative": 0.6},
+        "vibes": {"underground": 1.0, "high_energy": 0.8, "indie": 0.6},
         "times": {"late_night": 1.0, "weekend": 0.8},
     }
     PERSONA_NETWORKING_PRO_AFFINITY: dict = {
-        "categories": {"business": 1.0, "tech": 1.0, "education": 0.6},
-        "vibes": {"professional": 1.0, "informative": 0.8},
+        "categories": {"networking": 1.0, "workshops": 0.5},
+        "vibes": {"trendy": 0.8, "accessible": 0.6, "educational": 0.5},
         "times": {"weekday": 0.8, "evening": 0.6},
     }
     PERSONA_WEEKEND_HOBBYIST_AFFINITY: dict = {
-        "categories": {"sports": 0.8, "crafts": 0.8, "food": 0.7, "outdoors": 0.7},
-        "vibes": {"casual": 1.0, "fun": 0.8, "social": 0.6},
+        "categories": {"sports": 0.8, "workshops": 0.7, "food_drink": 0.7},
+        "vibes": {"casual": 1.0, "accessible": 0.8},
         "times": {"weekend": 1.0, "daytime": 0.8},
     }
     PERSONA_CULTURE_BUFF_AFFINITY: dict = {
-        "categories": {"arts": 1.0, "theatre": 1.0, "film": 0.8, "exhibition": 0.9},
-        "vibes": {"intellectual": 1.0, "curated": 0.8, "inspiring": 0.7},
-        "times": {"any": 1.0},
+        "categories": {"theater": 1.0, "exhibitions": 1.0, "cinema": 0.8, "literature": 0.7},
+        "vibes": {"niche": 0.7, "indie": 0.6, "trendy": 0.5},
+        # No times preference — culture buff attends any time.
     }
     PERSONA_FAMILY_EXPLORER_AFFINITY: dict = {
-        "categories": {"family": 1.0, "outdoors": 0.8, "education": 0.6, "food": 0.5},
-        "vibes": {"family_friendly": 1.0, "fun": 0.8, "safe": 0.7},
+        "categories": {"family": 1.0, "workshops": 0.6, "sports": 0.4},
+        "vibes": {"accessible": 1.0, "casual": 0.7, "educational": 0.5},
         "times": {"daytime": 0.9, "weekend": 0.8},
     }
 

@@ -1,8 +1,15 @@
+import logging
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.constants import VALID_TIMES
+from app.llm.taxonomy import VALID_CATEGORIES, VALID_VIBES
 from app.models.models import Persona, Source
+
+log = logging.getLogger(__name__)
+
 
 def _jsonld_sources() -> list[dict]:
     return [
@@ -71,9 +78,23 @@ async def seed_sources(db: AsyncSession) -> None:
         await _upsert_simple(db, source_def)
 
 
+def _validate_affinity_vector(slug: str, vector: dict) -> None:
+    """Warn at startup if any persona affinity key is not in the taxonomy frozensets."""
+    unknown_cats = set(vector.get("categories", {}).keys()) - VALID_CATEGORIES
+    unknown_vibes = set(vector.get("vibes", {}).keys()) - VALID_VIBES
+    unknown_times = set(vector.get("times", {}).keys()) - VALID_TIMES
+    if unknown_cats:
+        log.warning("Persona %s: unknown category keys in affinity vector: %s", slug, unknown_cats)
+    if unknown_vibes:
+        log.warning("Persona %s: unknown vibe keys in affinity vector: %s", slug, unknown_vibes)
+    if unknown_times:
+        log.warning("Persona %s: unknown time keys in affinity vector: %s", slug, unknown_times)
+
+
 async def seed_personas(db: AsyncSession) -> None:
     """Idempotently insert the 5 v0 personas. Updates display names and affinity vectors if changed."""
     for p in _persona_seeds():
+        _validate_affinity_vector(p["slug"], p["affinity_vector"])
         existing = await db.scalar(select(Persona).where(Persona.slug == p["slug"]))
         if existing:
             existing.display_name_en = p["display_name_en"]

@@ -69,6 +69,29 @@ AUTH_SESSION_SALT = "session-v1"
 PERSONA_PRIMARY_WEIGHT: float = 1.0
 PERSONA_SECONDARY_WEIGHT: float = 0.4
 
+# Ranking / scoring
+DAILY_5_COUNT = 5
+DAILY_5_MAX_PER_CATEGORY = 2
+DAILY_5_LOOKAHEAD_DAYS = 14
+RECENCY_DECAY_DAYS = 21
+FEEDBACK_DECAY_BASE: float = 0.9         # per-day decay on feedback signal
+FEEDBACK_INDIRECT_WEIGHT: float = 0.5    # weight of category-matched indirect signal
+SCORE_HARD_EXCLUDE: float = -2.0         # sentinel: outside [-1,1] clamp, cannot be a valid score
+SCORE_WEIGHT_AFFINITY: float = 0.45
+SCORE_WEIGHT_RECENCY: float = 0.20
+SCORE_WEIGHT_FEEDBACK: float = 0.20
+SCORE_WEIGHT_QUALITY: float = 0.10
+SCORE_WEIGHT_LOCALITY: float = 0.05
+
+# Tallinn centre bounding box (~5 km radius) used for locality bonus
+TALLINN_CENTER_LAT: float = 59.437
+TALLINN_CENTER_LNG: float = 24.745
+TALLINN_LAT_DELTA: float = 0.05
+TALLINN_LNG_DELTA: float = 0.10
+
+# Feedback signals
+VALID_SIGNALS: frozenset[str] = frozenset({"like", "dislike", "bookmark", "view", "click_external"})
+
 # Taxonomy
 VALID_CATEGORIES: frozenset[str] = frozenset({
     "music", "theater", "exhibitions", "workshops", "sports",
@@ -80,6 +103,18 @@ VALID_VIBES: frozenset[str] = frozenset({
     "trendy", "casual", "intimate", "high_energy", "educational",
     "indie", "underground", "mainstream", "accessible", "niche",
 })
+
+# Time-of-day / day-of-week slots derived from event.starts_at (Europe/Tallinn).
+# An event can match multiple slots simultaneously (e.g. Saturday evening → weekend + evening).
+# late_night: 22:00–05:59  |  evening: 18:00–21:59  |  daytime: 10:00–17:59  |  morning: 06:00–09:59
+# weekend: Sat/Sun  |  weekday: Mon–Fri
+VALID_TIMES: frozenset[str] = frozenset({
+    "late_night", "evening", "daytime", "morning", "weekend", "weekday",
+})
+TIME_LATE_NIGHT_START = 22
+TIME_EVENING_START = 18
+TIME_DAYTIME_START = 10
+TIME_MORNING_START = 6
 
 # LLM
 LLM_MAX_PROMPT_CHARS = 1200                 # cap on event text passed to classification prompt
