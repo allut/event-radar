@@ -20,7 +20,7 @@ pytest                        # run all tests
 pytest tests/path/test_foo.py::TestClass::test_name  # single test
 ```
 
-Frontend does not exist yet (planned: Vite + React SPA).
+Frontend is a Vite + React SPA living in `frontend/`.
 
 ## Architecture
 
@@ -84,7 +84,9 @@ Session tokens are issued after magic-link verification and passed as `X-Session
 
 This project follows production best practices throughout:
 
-- **Constants** — all literals (numbers, strings, thresholds, weights, sentinel values) live in `app/constants.py`. This is the single source of truth for every named constant in the project: ranking weights, scoring thresholds, decay parameters, bounding-box coordinates, signal names, etc. Never define a constant near business logic — always add it to `app/constants.py` first, then import it. Never duplicate constants across files.
+- **Backend constants** — all literals (numbers, strings, thresholds, weights, sentinel values) live in `app/constants.py`. This is the single source of truth for every named constant in the project: ranking weights, scoring thresholds, decay parameters, bounding-box coordinates, signal names, etc. Never define a constant near business logic — always add it to `app/constants.py` first, then import it. Never duplicate constants across files.
+- **Frontend constants** — all magic values (numbers, strings, breakpoints, timeouts, limits) live in `frontend/src/constants.ts`. Apply the same discipline as the backend: never inline a literal near component logic — add it to `constants.ts` first, then import it. Never duplicate constants across components.
+- **CSS design tokens** — all design values (colors, spacing, typography, border-radius, shadows, z-indices, transitions) are defined as CSS custom properties on `:root` in `frontend/src/index.css`. Component stylesheets (`.module.css` files) consume only those variables — never hardcode raw values. This is the single source of truth for theming; changing a token in `index.css` propagates everywhere automatically.
 - **Retry logic** — all HTTP calls use `_http_get()` from `app/ingestion/base.py`, which wraps `httpx` with tenacity exponential-backoff retry (3 attempts, 2–30s backoff). Retryable: 429/502/503/504 and `RequestError`. Non-retryable: 4xx except 429.
 - **Error visibility** — HTTP failures in source adapters propagate to `SourceAdapter.run()` so `IngestionRun.error` and `source.last_status` are always set correctly. Never swallow exceptions in `fetch_raw()`.
 - **Taxonomy** — LLM classification uses the fixed 12-category / 10-vibe frozensets in `app/llm/taxonomy.py`. Use `validate_categories()` / `validate_vibes()` before persisting any LLM output.

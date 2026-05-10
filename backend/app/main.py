@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import FastAPI, HTTPException, Request, status
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.constants import TALLINN_TZ_NAME
@@ -130,6 +131,15 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Event Radar API", version="0.1.0", lifespan=lifespan)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.CORS_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 app.include_router(admin_router)
 app.include_router(auth_router)
 app.include_router(events_router)

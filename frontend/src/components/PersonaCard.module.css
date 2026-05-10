@@ -1,0 +1,123 @@
+.card {
+  position: relative;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  transition: border-color var(--transition), transform var(--transition), box-shadow var(--transition);
+  overflow: hidden;
+}
+
+.card:hover {
+  border-color: var(--accent-mid);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+}
+
+.card.primary {
+  border-color: var(--accent);
+  background: rgba(200, 146, 42, 0.06);
+  box-shadow: 0 0 0 1px var(--accent), 0 8px 32px rgba(200, 146, 42, 0.1);
+  transform: translateY(-2px);
+}
+
+.card.secondary {
+  border-color: var(--accent-border);
+  background: rgba(200, 146, 42, 0.03);
+}
+
+.mainBtn {
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  text-align: center;
+  cursor: pointer;
+  color: inherit;
+}
+
+.emoji {
+  font-size: 2rem;
+  display: block;
+  margin-bottom: 0.25rem;
+  transition: transform var(--transition);
+}
+
+.card:hover .emoji,
+.card.primary .emoji {
+  transform: scale(1.1);
+}
+
+.name {
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: var(--tracking-snug);
+  display: block;
+}
+
+.card.primary .name {
+  color: var(--accent-light);
+}
+
+.vibe {
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+  display: block;
+  line-height: 1.4;
+}
+
+.badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: var(--fs-2xs);
+  font-weight: 600;
+  letter-spacing: var(--tracking-wider);
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 100px;
+}
+
+.secondaryBtn {
+  width: 100%;
+  background: none;
+  border: none;
+  border-top: 1px solid var(--border);
+  padding: 0.4rem;
+  font-size: var(--fs-xs);
+  color: var(--text-dim);
+  letter-spacing: var(--tracking-wide);
+  transition: background var(--transition), color var(--transition);
+}
+
+.secondaryBtn:hover {
+  background: var(--accent-subtle);
+  color: var(--accent);
+}
+
+.secondaryBadge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: var(--accent-faint);
+  border: 1px solid rgba(200, 146, 42, 0.35);
+  color: var(--accent);
+  font-size: var(--fs-2xs);
+  font-weight: 600;
+  letter-spacing: var(--tracking-wide);
+  padding: 2px 8px;
+  border-radius: 100px;
+  cursor: pointer;
+  transition: background var(--transition);
+}
+
+.secondaryBadge:hover {
+  background: rgba(200, 146, 42, 0.25);
+}

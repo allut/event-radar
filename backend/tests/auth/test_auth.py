@@ -7,6 +7,8 @@ import hashlib
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from app.constants import DEFAULT_USER_CITY, DEFAULT_USER_LOCALE
+
 import pytest
 from itsdangerous import BadSignature
 
@@ -246,3 +248,50 @@ class TestGetCurrentUser:
         with pytest.raises(HTTPException) as exc_info:
             await get_current_user(authorization="Bearer garbage", db=mock_db)
         assert exc_info.value.status_code == http.HTTPStatus.UNAUTHORIZED
+
+
+class TestGetMe:
+    @pytest.mark.asyncio
+    async def test_has_personas_true_when_count_nonzero(self, mock_db):
+        from app.routers.auth import get_me
+
+        user = MagicMock()
+        user.id = 1
+        user.email = "a@b.com"
+        user.locale = DEFAULT_USER_LOCALE
+        user.home_city = DEFAULT_USER_CITY
+        user.created_at = datetime(2024, 1, 1, tzinfo=timezone.utc)
+        mock_db.scalar.return_value = 2
+
+        result = await get_me(current_user=user, db=mock_db)
+        assert result["has_personas"] is True
+
+    @pytest.mark.asyncio
+    async def test_has_personas_false_when_count_zero(self, mock_db):
+        from app.routers.auth import get_me
+
+        user = MagicMock()
+        user.id = 2
+        user.email = "c@d.com"
+        user.locale = "et"
+        user.home_city = DEFAULT_USER_CITY
+        user.created_at = datetime(2024, 1, 1, tzinfo=timezone.utc)
+        mock_db.scalar.return_value = 0
+
+        result = await get_me(current_user=user, db=mock_db)
+        assert result["has_personas"] is False
+
+    @pytest.mark.asyncio
+    async def test_has_personas_false_when_count_none(self, mock_db):
+        from app.routers.auth import get_me
+
+        user = MagicMock()
+        user.id = 3
+        user.email = "e@f.com"
+        user.locale = "ru"
+        user.home_city = DEFAULT_USER_CITY
+        user.created_at = datetime(2024, 1, 1, tzinfo=timezone.utc)
+        mock_db.scalar.return_value = None
+
+        result = await get_me(current_user=user, db=mock_db)
+        assert result["has_personas"] is False

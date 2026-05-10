@@ -9,9 +9,9 @@ Audit trail against [`plan.md`](./plan.md). `plan.md` is the original spec and s
 | Field | Value |
 |---|---|
 | Phase | Week 2 |
-| Plan day | Days 11–13 complete |
-| Week progress | Days 1–13 done |
-| Current focus | Day 14: Newsletter inbound webhook + LLM extractor |
+| Plan day | Day 11 frontend scaffold complete |
+| Week progress | Days 1–13 + Day 11 frontend done |
+| Current focus | Day 12: Event detail page + Day 14: Newsletter webhook |
 | Last updated | 2026-05-10 |
 
 ---
@@ -85,6 +85,21 @@ Audit trail against [`plan.md`](./plan.md). `plan.md` is the original spec and s
 - `app/main.py` — `classify_pending` job wired to APScheduler every 6h (alongside dedup); `build_daily_feeds` still stub-commented
 - `app/constants.py` — all LLM prompt templates, token budgets, batch sizes, confidence thresholds, and provider config centralized; `LLM_PROVIDERS` ordered list drives router fallback
 - **Tests:** `tests/llm/test_router.py` — 14 unit tests (cache hit, provider fallback, 429 fall-through, `LLMError` on all-fail, all-providers-unavailable); `tests/llm/test_live.py` — 3 live integration tests (one per provider, `pytest -m live`, skip when API key absent); 112 total tests passing
+
+### Day 11 (frontend) — Vite/React SPA scaffold `2026-05-10`
+- `frontend/` — Vite 5 + React 18 + TypeScript + TanStack Query v5 + React Router v6; no CSS framework (CSS Modules throughout)
+- `frontend/index.html` — Google Fonts preconnect: Cormorant Garamond (display/headings) + DM Sans (body); Baltic editorial dark theme
+- `frontend/vite.config.ts` — dev proxy: `/api/*` → `http://localhost:8000` (strips `/api` prefix); avoids CORS in dev
+- `frontend/src/lib/auth.ts` — `getToken/setToken/clearToken/isAuthenticated` + locale helpers; localStorage
+- `frontend/src/api/client.ts` — fetch wrapper: Bearer auth header, Content-Type only when body present, 401 → clearToken + redirect, throws `ApiError` on 4xx/5xx
+- `frontend/src/App.tsx` — `Protected` wrapper component; routes: `/login`, `/auth/verify`, `/onboarding` (protected), `/` (protected)
+- `frontend/src/routes/Login.tsx` + CSS — magic link form; idle/loading/success/error states; "Check your inbox" success card
+- `frontend/src/routes/AuthVerify.tsx` + CSS — reads `?token=` from URL; calls GET /auth/verify; stores session token; always redirects to `/onboarding` on success (MVP: no persona-check)
+- `frontend/src/routes/Onboarding.tsx` + CSS — 5 persona cards in 3-col grid; primary + optional secondary selection; locale pill toggle (en/et/ru); saves locale to localStorage; POSTs to /onboarding/persona
+- `frontend/src/routes/Feed.tsx` + CSS — GET /feed with TanStack Query; date header formatted per locale; ordered list of EventCards; empty state; logout button; invalidates feed query on feedback
+- `frontend/src/components/EventCard.tsx` + CSS — event card: gradient placeholder (category-keyed) when no image; Cormorant title; formatted time/venue; ◆ why_go bullets; like/dislike/bookmark (POST /feedback); active signal prevents duplicate POSTs; click_external on Tickets link
+- `frontend/src/components/PersonaCard.tsx` + CSS — primary (amber border+badge), secondary (muted amber), none states; separate primary/secondary click handlers
+- `backend/app/main.py` + `config.py` — `CORSMiddleware` added; `CORS_ORIGINS` list[str] setting (default: localhost:5173 + :4173); production note: set in Render env vars
 
 ### Days 11–13 — Ranking + feed/feedback endpoints `2026-05-09–10`
 - `app/ranking/score.py` — pure scoring formula: `persona_affinity` (normalized dot-product), `recency_boost` (linear decay 21 days), `feedback_signal` (per-day 0.9^t decay, indirect category matching, hard-exclude via `_HARD_EXCLUDE` sentinel), `locality_bonus` (central Tallinn bounding box); `score_event` combines all five components; `_mmr_pick` MMR-lite diversity (max 2 per category); `build_daily_feeds` async job (upserts `daily_feeds` for all users)

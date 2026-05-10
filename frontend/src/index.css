@@ -1,0 +1,104 @@
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --bg: #13161e;
+  --bg-raised: #191e2b;
+  --bg-card: #1c2230;
+  --bg-card-hover: #212840;
+  --accent: #c8922a;
+  --accent-light: #e8a838;
+  --accent-glow: rgba(200, 146, 42, 0.12);
+  --text: #e4dfd6;
+  --text-muted: #7a8ba3;
+  --text-dim: #3d4d65;
+  --border: #252c3d;
+  --border-subtle: #1c2333;
+  --success: #4cad7f;
+  --danger: #d95757;
+  --radius: 6px;
+  --transition: 200ms cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* Semantic alpha tokens — derived from primitives above */
+  --on-accent: #0f1119;
+  --bg-overlay: rgba(19, 22, 30, 0.85);      /* sticky topbars */
+  --bg-overlay-soft: rgba(19, 22, 30, 0.82); /* inline overlays (e.g. price chip) */
+  --spinner-border: rgba(15, 17, 25, 0.25);
+
+  --accent-hover-border: rgba(200, 146, 42, 0.2);
+  --accent-mid: rgba(200, 146, 42, 0.3);
+  --accent-subtle: rgba(200, 146, 42, 0.08);
+  --accent-faint: rgba(200, 146, 42, 0.15);
+  --accent-border: rgba(200, 146, 42, 0.4);
+
+  --success-faint: rgba(76, 173, 127, 0.15);
+  --success-border: rgba(76, 173, 127, 0.4);
+
+  --danger-subtle: rgba(217, 87, 87, 0.08);
+  --danger-faint: rgba(217, 87, 87, 0.15);
+  --danger-border: rgba(217, 87, 87, 0.4);
+
+  /* Typography */
+  --font-display: 'Cormorant Garamond', Georgia, serif;
+
+  --fs-2xs:  0.6875rem;  /* badge labels */
+  --fs-xs:   0.75rem;    /* footer, locale pills, price chips */
+  --fs-sm:   0.8125rem;  /* labels, venue, secondary text */
+  --fs-md:   0.875rem;   /* body-small, taglines, bullets */
+  --fs-base: 0.9375rem;  /* inputs, messages, primary body */
+  --fs-icon: 0.5rem;     /* decorative icon markers */
+
+  --tracking-tighter: -0.01em;  /* display headings (condensed) */
+  --tracking-snug:     0.01em;  /* button text, brand (subtle positive) */
+  --tracking-normal:   0.02em;  /* event time, links */
+  --tracking-wide:     0.04em;  /* form labels, price badges */
+  --tracking-wider:    0.06em;  /* uppercase pill labels */
+}
+
+html {
+  font-family: 'DM Sans', system-ui, sans-serif;
+  background-color: var(--bg);
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  min-height: 100vh;
+  background-image:
+    radial-gradient(ellipse 80% 50% at 20% 10%, rgba(200, 146, 42, 0.04) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 40% at 80% 90%, rgba(25, 30, 43, 0.6) 0%, transparent 60%);
+}
+
+#root {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+a:hover {
+  color: var(--accent-light);
+}
+
+button {
+  cursor: pointer;
+  font-family: inherit;
+}
+
+input, textarea {
+  font-family: inherit;
+}
+
+::selection {
+  background: var(--accent-mid);
+}

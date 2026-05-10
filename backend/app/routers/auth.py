@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from itsdangerous import BadSignature, SignatureExpired
 from pydantic import BaseModel, EmailStr
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.email import send_magic_link
@@ -18,7 +18,7 @@ from app.auth.tokens import (
     verify_session_token,
 )
 from app.db import get_db
-from app.models.models import AuthMagicLink, User
+from app.models.models import AuthMagicLink, User, UserPersona
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -185,12 +185,19 @@ async def verify_magic_link(
 
 
 @router.get("/me")
-async def get_me(current_user: User = Depends(get_current_user)):
+async def get_me(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
     """Return the currently authenticated user."""
+    count: int = await db.scalar(
+        select(func.count()).select_from(UserPersona).where(UserPersona.user_id == current_user.id)
+    ) or 0
     return {
         "id": current_user.id,
         "email": current_user.email,
         "locale": current_user.locale,
         "home_city": current_user.home_city,
         "created_at": current_user.created_at.isoformat(),
+        "has_personas": count > 0,
     }

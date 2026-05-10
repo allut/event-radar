@@ -61,7 +61,7 @@ class Settings(BaseSettings):
 
     # Auth / email
     RESEND_API_KEY: str = ""       # Resend API key for transactional email; empty = log-only (dev)
-    RESEND_FROM_ADDRESS: str = "Event Radar <noreply@eventradar.ee>"
+    RESEND_FROM_ADDRESS: str = "Event Radar <onboarding@resend.dev>"
     FRONTEND_URL: str = "http://localhost:5173"  # Base URL for magic-link verification
     MAGIC_LINK_TTL_MINUTES: int = 15
     SESSION_TTL_DAYS: int = 7
@@ -70,6 +70,10 @@ class Settings(BaseSettings):
     GROQ_API_KEY: str = ""
     CEREBRAS_API_KEY: str = ""
     MISTRAL_API_KEY: str = ""
+
+    # CORS — pydantic-settings parses a JSON array from the env var (e.g. '["https://eventradar.ee"]')
+    # In Render: set CORS_ORIGINS to your Vercel/CF Pages URL before deploying.
+    CORS_ORIGINS: list[str] = ["http://localhost:5173", "http://localhost:4173"]
 
 
 settings = Settings()

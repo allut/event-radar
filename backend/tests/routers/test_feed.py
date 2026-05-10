@@ -3,8 +3,7 @@ import http
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock
 
-from app.constants import DEFAULT_CURRENCY, DEFAULT_USER_LOCALE, DEFAULT_USER_CITY
-from backend.app.ranking.score import _CENTER_LAT, _CENTER_LNG
+from app.constants import DEFAULT_CURRENCY, DEFAULT_USER_LOCALE, DEFAULT_USER_CITY, TALLINN_CENTER_LAT, TALLINN_CENTER_LNG
 
 import pytest
 
@@ -40,8 +39,8 @@ def _make_event(event_id: int = 10):
     e.ends_at = None
     e.venue_name = "Test Venue"
     e.venue_address = "Test Street 1"
-    e.lat = _CENTER_LAT
-    e.lng = _CENTER_LNG
+    e.lat = TALLINN_CENTER_LAT
+    e.lng = TALLINN_CENTER_LNG
     e.url = "https://example.com"
     e.image_url = None
     e.price_min = None
