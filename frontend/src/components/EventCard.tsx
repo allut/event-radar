@@ -1,25 +1,22 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { api } from '../api/client';
 import { getLocale } from '../lib/auth';
-import {
-  CARD_ANIMATION_DELAY_STEP_MS,
-  CATEGORY_GRADIENTS,
-  EUR_SYMBOL,
-  FALLBACK_GRADIENT,
-  FREE_LABEL,
-  type Signal,
-  toLocaleCode,
-} from '../constants';
+import { CARD_ANIMATION_DELAY_STEP_MS, type Signal, toLocaleCode } from '../constants';
+import { categoryGradient, formatPrice, makeActiveClassMap } from '../utils';
 import styles from './EventCard.module.css';
 
 export interface EventData {
   id: number;
   slug: string;
   title: string;
+  description: string | null;
   starts_at: string;
   ends_at: string | null;
   venue_name: string | null;
   venue_address: string | null;
+  lat: number | null;
+  lng: number | null;
   url: string | null;
   image_url: string | null;
   price_min: number | null;
@@ -35,20 +32,6 @@ interface Props {
   event: EventData;
   index: number;
   onFeedbackSent?: () => void;
-}
-
-function categoryGradient(categories: string[]): string {
-  const key = categories[0]?.toLowerCase().replace(/\s+/g, '_') ?? '';
-  return CATEGORY_GRADIENTS[key] ?? FALLBACK_GRADIENT;
-}
-
-function formatPrice(min: number | null, max: number | null, currency: string | null): string | null {
-  if (min === null && max === null) return null;
-  const sym = currency === 'EUR' ? EUR_SYMBOL : currency ?? '';
-  if (min === 0) return FREE_LABEL;
-  if (min !== null && max !== null && min !== max) return `${sym}${min}–${sym}${max}`;
-  if (min !== null) return `${sym}${min}`;
-  return null;
 }
 
 function formatTime(iso: string): string {
@@ -69,11 +52,7 @@ interface FeedbackButtonProps {
   onPress: (signal: Signal) => void;
 }
 
-const ACTIVE_CLASS: Record<Signal, string> = {
-  like:     styles.activeLike,
-  dislike:  styles.activeDislike,
-  bookmark: styles.activeBookmark,
-};
+const ACTIVE_CLASS = makeActiveClassMap(styles);
 
 function FeedbackButton({ signal, icon, label, activeSignal, pending, onPress }: FeedbackButtonProps) {
   const activeClass = ACTIVE_CLASS[signal];
@@ -145,11 +124,9 @@ export default function EventCard({ event, index, onFeedbackSent }: Props) {
         </div>
 
         <h2 className={styles.title}>
-          {event.url ? (
-            <a href={event.url} target="_blank" rel="noopener noreferrer" className={styles.titleLink}>
-              {event.title}
-            </a>
-          ) : event.title}
+          <Link to={`/events/${event.id}`} className={styles.titleLink}>
+            {event.title}
+          </Link>
         </h2>
 
         {event.why_go.length > 0 && (

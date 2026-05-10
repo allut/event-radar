@@ -4,7 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.constants import VALID_TIMES
+from app.constants import NEWSLETTER_SOURCE_SLUG, VALID_TIMES
 from app.llm.taxonomy import VALID_CATEGORIES, VALID_VIBES
 from app.models.models import Persona, Source
 
@@ -76,6 +76,12 @@ async def seed_sources(db: AsyncSession) -> None:
     await _upsert_fienta(db)
     for source_def in _jsonld_sources():
         await _upsert_simple(db, source_def)
+    await _upsert_simple(db, {
+        "slug": NEWSLETTER_SOURCE_SLUG,
+        "kind": "inbound_email",
+        "enabled": True,
+        "config": {},
+    })
 
 
 def _validate_affinity_vector(slug: str, vector: dict) -> None:

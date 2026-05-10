@@ -9,9 +9,9 @@ Audit trail against [`plan.md`](./plan.md). `plan.md` is the original spec and s
 | Field | Value |
 |---|---|
 | Phase | Week 2 |
-| Plan day | Day 11 frontend scaffold complete |
-| Week progress | Days 1–13 + Day 11 frontend done |
-| Current focus | Day 12: Event detail page + Day 14: Newsletter webhook |
+| Plan day | Day 14 complete |
+| Week progress | Days 1–14 complete |
+| Current focus | Day 15: Settings page, locale toggle, unsubscribe |
 | Last updated | 2026-05-10 |
 
 ---
@@ -111,12 +111,28 @@ Audit trail against [`plan.md`](./plan.md). `plan.md` is the original spec and s
 - `app/seeds.py` — `_validate_affinity_vector()` validates persona affinity keys against taxonomy at startup
 - **Tests:** `tests/ranking/test_score.py` (38 tests) + `tests/routers/test_feed.py` (8 tests) + `tests/routers/test_feedback.py` (6 tests) — 155 total passing
 
+### Day 12 — Event detail page (frontend) `2026-05-10`
+- `frontend/src/routes/EventDetail.tsx` + CSS — full event detail page: hero image (or gradient), meta, title, venue block with map link, why-go bullets, full description, category/vibe tags, feedback buttons (like/dislike/bookmark), tickets CTA button; fires `click_external` signal on tickets click
+- `frontend/src/App.tsx` — added `/events/:id` protected route
+- `frontend/src/components/EventCard.tsx` — title now links to internal `/events/:id` (React Router `Link`); added `description`, `lat`, `lng` to `EventData` interface; "Tickets →" remains as external link
+
 ### Day 13 (addendum) — Time-slot affinity `2026-05-10`
 - `app/constants.py` — `VALID_TIMES` frozenset (`late_night`, `evening`, `daytime`, `morning`, `weekend`, `weekday`) + boundary hour constants
 - `app/ranking/score.py` — `_time_slots_for_event(starts_at)` derives 1–2 time slots from `event.starts_at` in Europe/Tallinn (hour bucket + weekday/weekend); `_affinity_for_vector` / `persona_affinity` extended with `time_slots` parameter; `score_event` derives and passes time slots; max_possible normalization includes `times` weights so adding them doesn't distort category/vibe discrimination
 - `app/config.py` — restored `times` sub-dict to 4 of 5 persona vectors (culture_buff omitted — attends any time); keys from `VALID_TIMES`
 - `app/seeds.py` — `_validate_affinity_vector()` now also checks `times` keys against `VALID_TIMES`
 - **Tests:** 12 new tests (`TestTimeSlotsForEvent`, time-aware `_affinity_for_vector` cases) — 151 total passing (excl. test_feed.py which has a stale `from backend.app…` import)
+
+### Day 14 — Newsletter inbound webhook + LLM extractor `2026-05-10`
+- `backend/alembic/versions/0004_raw_inbound_emails.py` — migration adds `raw_inbound_emails` table (id, received_at, from_addr, to_addr, subject, raw_payload JSONB, processed_at); index on `received_at`
+- `backend/app/models/models.py` — `RawInboundEmail` ORM model
+- `backend/app/routers/webhooks.py` — `POST /webhooks/inbound-mail`: stores raw email payload, fires background LLM extraction; optional `?secret=` query-param guard (timing-safe `hmac.compare_digest`); controlled by `RESEND_WEBHOOK_SECRET` env var
+- `backend/app/llm/newsletter_extractor.py` — `extract_events_from_email()`: calls LLM router with newsletter prompt, parses `{"events": [...]}` response, creates `RawEvent` rows linked to `newsletter_inbound` source; race-safe source upsert via `INSERT ... ON CONFLICT DO NOTHING`
+- `backend/app/constants.py` — `LLM_TASK_NEWSLETTER`, `NEWSLETTER_SOURCE_SLUG`, `NEWSLETTER_SUBJECT_MAX_LEN` (200), `NEWSLETTER_BODY_MAX_LEN` (1500), `NEWSLETTER_EXTRACT_PROMPT_TEMPLATE`
+- `backend/app/config.py` — `RESEND_WEBHOOK_SECRET` setting (empty = dev mode, no verification)
+- `backend/app/seeds.py` — seeds `newsletter_inbound` source row on startup
+- `backend/app/main.py` — wires `webhooks_router`
+- **Key fix (caught in review):** `llm_json` returns `tuple[dict, str]`, not a plain dict. Extractor correctly unpacks as `raw, _model = await llm_json(...)`. LLM `json_object` format always returns a dict, so prompt instructs `{"events": [...]}` shape.
 
 ---
 

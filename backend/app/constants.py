@@ -162,6 +162,31 @@ Rules:
 - "why_go" must have exactly 3 short bullets (max 15 words each).
 - Only use values from the allowed lists for categories and vibes."""
 
+# Newsletter inbound email extraction
+LLM_TASK_NEWSLETTER = "newsletter_extract"
+NEWSLETTER_SOURCE_SLUG = "newsletter_inbound"
+NEWSLETTER_SUBJECT_MAX_LEN = 200
+NEWSLETTER_BODY_MAX_LEN = 1500
+
+NEWSLETTER_EXTRACT_PROMPT_TEMPLATE = """\
+Extract all events from the email below. Only include events in or near Tallinn, Estonia.
+
+Subject: {subject}
+
+Body:
+{body}
+
+Respond with a JSON object with one key "events" containing an array of event objects. Each event must have:
+- title: string (required, event name)
+- starts_at: ISO 8601 datetime string like "2026-05-15T20:00:00+03:00" (null if unknown)
+- venue_name: string or null
+- url: string or null (ticketing or info URL)
+- description: string or null (1-2 sentence summary)
+- price_min: number or null (in EUR, 0 means free)
+
+If no events found, return {{"events": []}}.
+JSON only, no explanation."""
+
 # JSON-LD ingestion
 JSONLD_EVENT_TYPES: frozenset[str] = frozenset({
     "Event", "MusicEvent", "TheaterEvent", "ExhibitionEvent",

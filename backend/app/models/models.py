@@ -302,6 +302,28 @@ class DailyFeed(Base):
 
 
 # ---------------------------------------------------------------------------
+# Newsletter Inbound Email
+# ---------------------------------------------------------------------------
+
+
+class RawInboundEmail(Base):
+    __tablename__ = "raw_inbound_emails"
+    __table_args__ = (
+        Index("ix_raw_inbound_emails_received_at", "received_at"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    received_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    from_addr: Mapped[str] = mapped_column(Text, nullable=False, server_default="")
+    to_addr: Mapped[str] = mapped_column(Text, nullable=False, server_default="")
+    subject: Mapped[str] = mapped_column(Text, nullable=False, server_default="")
+    raw_payload: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    processed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+# ---------------------------------------------------------------------------
 # LLM Audit Log
 # ---------------------------------------------------------------------------
 

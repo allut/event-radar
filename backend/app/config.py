@@ -66,6 +66,9 @@ class Settings(BaseSettings):
     MAGIC_LINK_TTL_MINUTES: int = 15
     SESSION_TTL_DAYS: int = 7
 
+    # Webhooks — set to a random secret and pass it as ?secret=... in the Resend inbound webhook URL
+    RESEND_WEBHOOK_SECRET: str = ""  # empty = no verification (dev only)
+
     # LLM providers — empty key means that provider is skipped in the fallback chain
     GROQ_API_KEY: str = ""
     CEREBRAS_API_KEY: str = ""

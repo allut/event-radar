@@ -6,6 +6,7 @@ import Login from './routes/Login';
 import AuthVerify from './routes/AuthVerify';
 import Onboarding from './routes/Onboarding';
 import Feed from './routes/Feed';
+import EventDetail from './routes/EventDetail';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -32,6 +33,10 @@ export default function App() {
           <Route
             path="/"
             element={<Protected><Feed /></Protected>}
+          />
+          <Route
+            path="/events/:id"
+            element={<Protected><EventDetail /></Protected>}
           />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

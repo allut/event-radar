@@ -18,6 +18,7 @@ from app.routers.events import router as events_router
 from app.routers.feed import router as feed_router
 from app.routers.feedback import router as feedback_router
 from app.routers.onboarding import router as onboarding_router
+from app.routers.webhooks import router as webhooks_router
 from app.seeds import seed_personas, seed_sources
 
 log = logging.getLogger(__name__)
@@ -146,6 +147,7 @@ app.include_router(events_router)
 app.include_router(feed_router)
 app.include_router(feedback_router)
 app.include_router(onboarding_router)
+app.include_router(webhooks_router)
 
 
 @app.get("/health")
