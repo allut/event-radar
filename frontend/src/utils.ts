@@ -1,4 +1,4 @@
-import { CATEGORY_GRADIENTS, FALLBACK_GRADIENT, EUR_SYMBOL, FREE_LABEL, type Signal } from './constants';
+import { CATEGORY_GRADIENTS, FALLBACK_GRADIENT, EUR_SYMBOL, FREE_LABEL, type Signal, toLocaleCode } from './constants';
 
 export function categoryGradient(categories: string[]): string {
   const key = categories[0]?.toLowerCase().replace(/\s+/g, '_') ?? '';
@@ -19,6 +19,34 @@ const SIGNAL_TO_CLASS: Record<Signal, string> = {
   dislike: 'activeDislike',
   bookmark: 'activeBookmark',
 };
+
+export function formatEventTime(iso: string, locale: string): string {
+  const localeCode = toLocaleCode(locale);
+  const date = new Date(iso);
+  const weekday = date.toLocaleDateString(localeCode, { weekday: 'short' });
+  const day = date.toLocaleDateString(localeCode, { day: 'numeric', month: 'short' });
+  const time = date.toLocaleTimeString(localeCode, { hour: '2-digit', minute: '2-digit', hour12: false });
+  return `${weekday}, ${day} · ${time}`;
+}
+
+export function formatEventDateTime(iso: string, locale: string): string {
+  const localeCode = toLocaleCode(locale);
+  const date = new Date(iso);
+  const weekday = date.toLocaleDateString(localeCode, { weekday: 'long' });
+  const day = date.toLocaleDateString(localeCode, { day: 'numeric', month: 'long', year: 'numeric' });
+  const time = date.toLocaleTimeString(localeCode, { hour: '2-digit', minute: '2-digit', hour12: false });
+  return `${weekday}, ${day} · ${time}`;
+}
+
+export function formatTodayDate(locale: string): string {
+  const localeCode = toLocaleCode(locale);
+  return new Date().toLocaleDateString(localeCode, {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  });
+}
 
 export function makeActiveClassMap(styles: Record<string, string>): Record<Signal, string> {
   const result = {} as Record<Signal, string>;

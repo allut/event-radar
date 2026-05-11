@@ -50,6 +50,12 @@ export const PERSONAS: PersonaData[] = [
 // ─── Events / feedback ───────────────────────────────────────────────────────
 export type Signal = 'like' | 'dislike' | 'bookmark';
 
+export const SIGNAL_CONFIG: Record<Signal, { icon: string; label: string }> = {
+  like:     { icon: '👍', label: 'Like' },
+  dislike:  { icon: '👎', label: 'Dislike' },
+  bookmark: { icon: '🔖', label: 'Bookmark' },
+};
+
 export const EUR_SYMBOL = '€';
 export const FREE_LABEL = 'Free';
 

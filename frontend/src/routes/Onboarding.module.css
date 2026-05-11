@@ -23,11 +23,6 @@
   animation: breathe 3s ease-in-out infinite;
 }
 
-@keyframes breathe {
-  0%, 100% { opacity: 1; }
-  50%      { opacity: 0.4; }
-}
-
 .brand {
   font-family: var(--font-display);
   font-size: 1.3rem;
@@ -167,6 +162,3 @@
   animation: spin 0.65s linear infinite;
 }
 
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}

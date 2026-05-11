@@ -1,9 +1,9 @@
-import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api/client';
 import { getLocale } from '../lib/auth';
-import { CARD_ANIMATION_DELAY_STEP_MS, type Signal, toLocaleCode } from '../constants';
-import { categoryGradient, formatPrice, makeActiveClassMap } from '../utils';
+import { CARD_ANIMATION_DELAY_STEP_MS, SIGNAL_CONFIG, type Signal } from '../constants';
+import { categoryGradient, formatEventTime, formatPrice, makeActiveClassMap } from '../utils';
+import { useFeedback } from '../hooks/useFeedback';
 import styles from './EventCard.module.css';
 
 export interface EventData {
@@ -34,14 +34,6 @@ interface Props {
   onFeedbackSent?: () => void;
 }
 
-function formatTime(iso: string): string {
-  const localeCode = toLocaleCode(getLocale());
-  const date = new Date(iso);
-  const weekday = date.toLocaleDateString(localeCode, { weekday: 'short' });
-  const day = date.toLocaleDateString(localeCode, { day: 'numeric', month: 'short' });
-  const time = date.toLocaleTimeString(localeCode, { hour: '2-digit', minute: '2-digit', hour12: false });
-  return `${weekday}, ${day} · ${time}`;
-}
 
 interface FeedbackButtonProps {
   signal: Signal;
@@ -71,22 +63,7 @@ function FeedbackButton({ signal, icon, label, activeSignal, pending, onPress }:
 }
 
 export default function EventCard({ event, index, onFeedbackSent }: Props) {
-  const [activeSignal, setActiveSignal] = useState<Signal | null>(null);
-  const [pending, setPending] = useState(false);
-
-  async function sendFeedback(signal: Signal) {
-    if (pending || activeSignal === signal) return;
-    setPending(true);
-    try {
-      await api.post('/feedback', { event_id: event.id, signal });
-      setActiveSignal(signal);
-      onFeedbackSent?.();
-    } catch {
-      // Silently fail — feedback is best-effort
-    } finally {
-      setPending(false);
-    }
-  }
+  const { activeSignal, pending, sendFeedback } = useFeedback(event.id, onFeedbackSent);
 
   const price = formatPrice(event.price_min, event.price_max, event.currency);
 
@@ -117,7 +94,7 @@ export default function EventCard({ event, index, onFeedbackSent }: Props) {
 
       <div className={styles.body}>
         <div className={styles.meta}>
-          <time className={styles.time}>{formatTime(event.starts_at)}</time>
+          <time className={styles.time}>{formatEventTime(event.starts_at, getLocale())}</time>
           {event.venue_name && (
             <span className={styles.venue}>{event.venue_name}</span>
           )}
@@ -139,9 +116,9 @@ export default function EventCard({ event, index, onFeedbackSent }: Props) {
       </div>
 
       <div className={styles.actions}>
-        <FeedbackButton signal="like"     icon="👍" label="Like"     activeSignal={activeSignal} pending={pending} onPress={sendFeedback} />
-        <FeedbackButton signal="dislike"  icon="👎" label="Dislike"  activeSignal={activeSignal} pending={pending} onPress={sendFeedback} />
-        <FeedbackButton signal="bookmark" icon="🔖" label="Bookmark" activeSignal={activeSignal} pending={pending} onPress={sendFeedback} />
+        {(Object.entries(SIGNAL_CONFIG) as [Signal, { icon: string; label: string }][]).map(([signal, { icon, label }]) => (
+          <FeedbackButton key={signal} signal={signal} icon={icon} label={label} activeSignal={activeSignal} pending={pending} onPress={sendFeedback} />
+        ))}
         {event.url && (
           <a
             href={event.url}

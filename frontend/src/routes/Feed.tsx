@@ -4,6 +4,7 @@ import { api } from '../api/client';
 import { clearToken, getLocale } from '../lib/auth';
 import { toLocaleCode } from '../constants';
 import EventCard, { type EventData } from '../components/EventCard';
+import { formatTodayDate } from '../utils';
 import styles from './Feed.module.css';
 
 interface FeedResponse {
@@ -12,15 +13,6 @@ interface FeedResponse {
   built_at: string | null;
 }
 
-function formatFeedDate(locale: string): string {
-  const localeCode = toLocaleCode(locale);
-  return new Date().toLocaleDateString(localeCode, {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  });
-}
 
 export default function Feed() {
   const navigate = useNavigate();
@@ -75,13 +67,13 @@ export default function Feed() {
         <div className={styles.feedHeader}>
           <div>
             <h1 className={styles.heading}>Your Daily Five</h1>
-            <p className={styles.date}>{formatFeedDate(locale)}</p>
+            <p className={styles.date}>{formatTodayDate(locale)}</p>
           </div>
           {data?.built_at && (
             <p className={styles.builtAt}>
               Curated at{' '}
               {new Date(data.built_at).toLocaleTimeString(
-                locale === 'et' ? 'et-EE' : locale === 'ru' ? 'ru-RU' : 'en-GB',
+                toLocaleCode(locale),
                 { hour: '2-digit', minute: '2-digit' }
               )}
             </p>

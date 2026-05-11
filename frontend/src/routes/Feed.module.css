@@ -21,10 +21,6 @@
   animation: spin 0.7s linear infinite;
 }
 
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
 .errorMsg {
   color: var(--text-muted);
   font-size: var(--fs-base);
@@ -53,11 +49,6 @@
   font-size: 1.1rem;
   color: var(--accent);
   animation: breathe 3s ease-in-out infinite;
-}
-
-@keyframes breathe {
-  0%, 100% { opacity: 1; }
-  50%      { opacity: 0.4; }
 }
 
 .brand {

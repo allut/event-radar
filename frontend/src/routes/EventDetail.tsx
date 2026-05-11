@@ -1,25 +1,17 @@
-import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../api/client';
 import { getLocale } from '../lib/auth';
-import { toLocaleCode, type Signal } from '../constants';
-import { categoryGradient, formatPrice, makeActiveClassMap } from '../utils';
+import { toLocaleCode, type Signal, SIGNAL_CONFIG } from '../constants';
+import { categoryGradient, formatEventDateTime, formatPrice, makeActiveClassMap } from '../utils';
 import { type EventData } from '../components/EventCard';
+import { useFeedback } from '../hooks/useFeedback';
 import styles from './EventDetail.module.css';
 
 interface EventDetailData extends EventData {
   language: string | null;
 }
 
-function formatDateTime(iso: string, locale: string): string {
-  const localeCode = toLocaleCode(locale);
-  const date = new Date(iso);
-  const weekday = date.toLocaleDateString(localeCode, { weekday: 'long' });
-  const day = date.toLocaleDateString(localeCode, { day: 'numeric', month: 'long', year: 'numeric' });
-  const time = date.toLocaleTimeString(localeCode, { hour: '2-digit', minute: '2-digit', hour12: false });
-  return `${weekday}, ${day} · ${time}`;
-}
 
 const ACTIVE_CLASS = makeActiveClassMap(styles);
 
@@ -28,9 +20,6 @@ export default function EventDetail() {
   const navigate = useNavigate();
   const locale = getLocale();
 
-  const [activeSignal, setActiveSignal] = useState<Signal | null>(null);
-  const [pending, setPending] = useState(false);
-
   const { data, isLoading, isError } = useQuery({
     queryKey: ['event', id],
     queryFn: () => api.get<EventDetailData>(`/events/${id}`),
@@ -38,18 +27,7 @@ export default function EventDetail() {
     retry: false,
   });
 
-  async function sendFeedback(signal: Signal) {
-    if (pending || activeSignal === signal || !data) return;
-    setPending(true);
-    try {
-      await api.post('/feedback', { event_id: data.id, signal });
-      setActiveSignal(signal);
-    } catch {
-      // best-effort
-    } finally {
-      setPending(false);
-    }
-  }
+  const { activeSignal, pending, sendFeedback } = useFeedback(data?.id ?? 0);
 
   async function handleTicketsClick() {
     if (!data) return;
@@ -108,7 +86,7 @@ export default function EventDetail() {
 
         <div className={styles.content}>
           <div className={styles.meta}>
-            <time className={styles.time}>{formatDateTime(data.starts_at, locale)}</time>
+            <time className={styles.time}>{formatEventDateTime(data.starts_at, locale)}</time>
             {data.ends_at && (
               <span className={styles.ends}>
                 ends {new Date(data.ends_at).toLocaleTimeString(toLocaleCode(locale), { hour: '2-digit', minute: '2-digit', hour12: false })}
@@ -157,16 +135,16 @@ export default function EventDetail() {
 
           <div className={styles.actions}>
             <div className={styles.feedbackGroup}>
-              {(['like', 'dislike', 'bookmark'] as Signal[]).map(signal => (
+              {(Object.entries(SIGNAL_CONFIG) as [Signal, { icon: string; label: string }][]).map(([signal, { icon, label }]) => (
                 <button
                   key={signal}
                   className={[styles.action, activeSignal === signal ? ACTIVE_CLASS[signal] : ''].join(' ')}
                   onClick={() => sendFeedback(signal)}
                   disabled={pending}
-                  aria-label={signal.charAt(0).toUpperCase() + signal.slice(1)}
+                  aria-label={label}
                   aria-pressed={activeSignal === signal}
                 >
-                  {signal === 'like' ? '👍' : signal === 'dislike' ? '👎' : '🔖'}
+                  {icon}
                 </button>
               ))}
             </div>

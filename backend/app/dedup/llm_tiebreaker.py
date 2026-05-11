@@ -24,7 +24,7 @@ from app.constants import (
     TALLINN_TZ,
     TIME_WINDOW_HOURS,
 )
-from app.dedup.rules import _find, _union, is_candidate_pair
+from app.dedup.rules import _find, _union, build_cluster_assignments, is_candidate_pair
 from app.llm.router import LLMError, llm_json
 from app.models.models import Event
 
@@ -82,10 +82,10 @@ async def run_dedup_pass_llm(db: AsyncSession) -> dict:
     Returns a summary dict with ``total``, ``candidate_pairs``, ``llm_confirmed``,
     ``grouped``, ``groups``, ``updated`` keys.
     """
-    from datetime import timedelta
+    from datetime import datetime, timedelta
 
     cutoff = (
-        __import__("datetime").datetime.now(tz=TALLINN_TZ)
+        datetime.now(tz=TALLINN_TZ)
         - timedelta(days=DEDUP_LOOKBACK_DAYS)
         - timedelta(hours=TIME_WINDOW_HOURS)
     )
@@ -128,17 +128,7 @@ async def run_dedup_pass_llm(db: AsyncSession) -> dict:
                 _union(parent, events[i].id, events[j].id)
                 llm_confirmed += 1
 
-    # Build cluster assignments (group_id = min event_id in connected component)
-    roots: dict[int, list[int]] = {}
-    for eid in ids:
-        root = _find(parent, eid)
-        roots.setdefault(root, []).append(eid)
-
-    assignments: dict[int, int] = {}
-    for root, members in roots.items():
-        if len(members) > 1:
-            for eid in members:
-                assignments[eid] = root
+    assignments = build_cluster_assignments(parent, ids)
 
     updated = 0
     for event in events:

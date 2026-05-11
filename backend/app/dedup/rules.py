@@ -61,6 +61,20 @@ def _union(parent: dict[int, int], a: int, b: int) -> None:
             parent[ra] = rb
 
 
+def build_cluster_assignments(parent: dict[int, int], ids: list[int]) -> dict[int, int]:
+    """Resolve union-find roots → {event_id: group_id} for groups with ≥2 members."""
+    roots: dict[int, list[int]] = {}
+    for eid in ids:
+        root = _find(parent, eid)
+        roots.setdefault(root, []).append(eid)
+    assignments: dict[int, int] = {}
+    for root, members in roots.items():
+        if len(members) > 1:
+            for eid in members:
+                assignments[eid] = root
+    return assignments
+
+
 def cluster_events(events: list[Event]) -> dict[int, int]:
     """Return {event_id: dedup_group_id} for events that share a group.
 
@@ -83,19 +97,7 @@ def cluster_events(events: list[Event]) -> dict[int, int]:
     if pair_count:
         log.debug("dedup: found %d candidate pair(s) among %d events", pair_count, n)
 
-    # Collect only events that belong to a group (root has ≥2 members)
-    roots: dict[int, list[int]] = {}
-    for eid in ids:
-        root = _find(parent, eid)
-        roots.setdefault(root, []).append(eid)
-
-    result: dict[int, int] = {}
-    for root, members in roots.items():
-        if len(members) > 1:
-            for eid in members:
-                result[eid] = root
-
-    return result
+    return build_cluster_assignments(parent, ids)
 
 
 # ---------------------------------------------------------------------------
