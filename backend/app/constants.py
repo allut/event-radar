@@ -62,6 +62,11 @@ MAGIC_LINK_EMAIL_HTML = (
     "<p>If you didn't request this, ignore this email.</p>"
 )
 
+# Email digest
+DIGEST_EMAIL_SUBJECT_TEMPLATE = "Your Daily 5 — {date}"
+DIGEST_SEND_HOUR = 7  # 07:00 Europe/Tallinn, one hour after build_daily_feeds
+DIGEST_MAX_WHY_GO_BULLETS = 3
+
 # Auth tokens
 AUTH_MAGIC_SALT = "magic-link-v1"
 AUTH_SESSION_SALT = "session-v1"
@@ -216,3 +221,20 @@ LLM_PROVIDERS: list[dict[str, str]] = [
         "key_attr": "MISTRAL_API_KEY",
     },
 ]
+
+# Date formatting (lightweight, no locale lib dependency)
+MONTH_NAMES_EN = [
+    "", "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December",
+]
+MONTH_NAMES_ET = [
+    "", "jaanuar", "veebruar", "märts", "aprill", "mai", "juuni",
+    "juuli", "august", "september", "oktoober", "november", "detsember",
+]
+MONTH_NAMES_RU = [
+    "", "января", "февраля", "марта", "апреля", "мая", "июня",
+    "июля", "августа", "сентября", "октября", "ноября", "декабря",
+]
+DAY_NAMES_EN = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+DAY_NAMES_ET = ["esmaspäev", "teisipäev", "kolmapäev", "neljapäev", "reede", "laupäev", "pühapäev"]
+DAY_NAMES_RU = ["понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье"]

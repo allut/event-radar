@@ -7,8 +7,9 @@ from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.constants import TALLINN_TZ_NAME
+from app.constants import DIGEST_SEND_HOUR, TALLINN_TZ_NAME
 from app.db import AsyncSessionLocal, engine
+from app.email.digest import send_daily_digests
 from app.ingestion.jobs import classify_pending_job, dedup_pass, ingest_all_enabled
 from app.ingestion.organizer_sync import sync_fienta_organizers
 from app.ranking.score import build_daily_feeds
@@ -70,6 +71,15 @@ async def _run_build_daily_feeds() -> None:
             log.exception("build_daily_feeds failed")
 
 
+async def _run_send_daily_digests() -> None:
+    async with AsyncSessionLocal() as db:
+        try:
+            summary = await send_daily_digests(db)
+            log.info("send_daily_digests completed: %s", summary)
+        except Exception:
+            log.exception("send_daily_digests failed")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     async with AsyncSessionLocal() as db:
@@ -121,6 +131,15 @@ async def lifespan(app: FastAPI):
         hour=6,
         minute=0,
         id="build_daily_feeds",
+        replace_existing=True,
+    )
+    # Daily 07:00 EET: send digest emails to opted-in users (one hour after feeds are built)
+    scheduler.add_job(
+        _run_send_daily_digests,
+        trigger="cron",
+        hour=DIGEST_SEND_HOUR,
+        minute=0,
+        id="send_daily_digests",
         replace_existing=True,
     )
 

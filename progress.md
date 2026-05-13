@@ -9,9 +9,9 @@ Audit trail against [`plan.md`](./plan.md). `plan.md` is the original spec and s
 | Field | Value |
 |---|---|
 | Phase | Week 3 |
-| Plan day | Day 15 complete |
-| Week progress | Days 1–15 complete |
-| Current focus | Day 16: Email digest of Daily 5 (Resend HTML template) |
+| Plan day | Day 16 complete |
+| Week progress | Days 1–16 complete |
+| Current focus | Day 17: Ticketmaster adapter + 2 more JSON-LD venues |
 | Last updated | 2026-05-13 |
 
 ---
@@ -148,6 +148,14 @@ Audit trail against [`plan.md`](./plan.md). `plan.md` is the original spec and s
 - **Tests:** `tests/routers/test_settings.py` — 7 tests (get settings: 2, patch settings: 5) — 213 total passing
 - **Key fix (reviewer-caught):** locale optimistic update was writing to localStorage before server confirmed; now writes only in `onSuccess` and rolls back UI state (`setLocaleState(getLocale())`) in `onError`
 
+### Day 16 — Email digest of Daily 5 `2026-05-13`
+- `backend/app/email/digest.py` — `build_digest_html()`: assembles HTML email per user (event title linked to frontend, date/time in Europe/Tallinn, venue, why-go bullets, free/paid price); all user-sourced strings run through `html.escape()`; day names + month names locale-aware for `et`/`ru`/`en`
+- `backend/app/email/digest.py` — `send_digest_email()`: delivers via Resend API; raises `RuntimeError` on non-2xx so caller's sent/skipped counters stay accurate; no-op with WARNING log when `RESEND_API_KEY` unset
+- `backend/app/email/digest.py` — `send_daily_digests(db)`: queries users with `email_digest_opt_in=True`, loads today's `daily_feeds` rows, bulk-fetches events, sends one digest per user; returns summary dict
+- `backend/app/constants.py` — `DIGEST_EMAIL_SUBJECT_TEMPLATE`, `DIGEST_SEND_HOUR=7`, `DIGEST_MAX_WHY_GO_BULLETS=3`
+- `backend/app/main.py` — `_run_send_daily_digests()` wired to APScheduler daily 07:00 EET (one hour after `build_daily_feeds`)
+- **Tests:** `tests/email/test_digest.py` — 24 tests (date formatting: 6, time formatting: 3, HTML builder: 15) — 237 total passing
+
 ---
 
 ## Issues & fixes
@@ -163,6 +171,7 @@ Audit trail against [`plan.md`](./plan.md). `plan.md` is the original spec and s
 | `price_raw = raw.get("price") or {}` drops `"price": 0` integer | `0 or {}` evaluates to `{}` | Changed to `isinstance(price_raw, dict)` guard; integers fall through to top-level fields |
 | SSRF guard compared `netloc` (includes port) instead of `hostname` | `urlparse(url).netloc` returns `"fienta.com:8443"` on non-standard ports | Changed to `urlparse(url).hostname`; log level escalated to ERROR |
 | Single organizer 4xx/5xx aborted entire Fienta fetch | `raise_for_status()` propagated unhandled inside organizer loop | Per-organizer try/except on `HTTPStatusError` + `RequestError`; log warning + continue |
+| Onboarding persona selection auto-submitted on first click; no chance to pick secondary | `PersonaCard` buttons had no `type` attribute — inside `<form>` they defaulted to `type="submit"` | Added `type="button"` to all three buttons (`mainBtn`, `secondaryBtn`, `secondaryBadge`) in `PersonaCard.tsx` |
 
 ---
 
@@ -185,7 +194,7 @@ Deferred items — each tied back to `plan.md` so context isn't lost.
 - **pgvector cosine** — replace category-overlap heuristic in feedback scoring once Neon pgvector is enabled _(plan.md § Personalization, v1.1)_
 - **Ticketmaster Discovery API** (`countryCode=EE`) — headline concerts, scheduled Day 17 _(plan.md § Phased delivery)_
 - **Additional JSON-LD venues** — KUMU, Estonia theatre _(plan.md § Data sources, Stretch)_
-- **Email digest of Daily 5** — Resend HTML template, Day 16; first on the cut list _(plan.md § Phased delivery)_
+- **Email digest of Daily 5** — ✅ Done (Day 16)
 - **Secondary persona blending at 0.4 weight** — on the cut list; ship only if onboarding feels monodimensional in QA _(plan.md § Personalization)_
 - **Bookmarks** — UI + endpoint exist in v0 model; explicitly cuttable _(plan.md § Honest cuts)_
 - **Submit-an-event form** — manual escape hatch for source-coverage thinness _(plan.md § Top 3 risks, Risk #1)_

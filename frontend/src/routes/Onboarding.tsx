@@ -66,6 +66,7 @@ export default function Onboarding() {
           {LOCALES.map(({ code, label }) => (
             <button
               key={code}
+              type="button"
               className={[styles.localePill, locale === code ? styles.activeLocale : ''].join(' ')}
               onClick={() => setLocaleState(code)}
               aria-pressed={locale === code}

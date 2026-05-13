@@ -31,6 +31,7 @@ export default function PersonaCard({
       ].join(' ')}
     >
       <button
+        type="button"
         className={styles.mainBtn}
         onClick={onClickPrimary}
         aria-pressed={isPrimary}
@@ -43,6 +44,7 @@ export default function PersonaCard({
 
       {primaryTaken && isNone && (
         <button
+          type="button"
           className={styles.secondaryBtn}
           onClick={onClickSecondary}
           title="Set as secondary"
@@ -59,6 +61,7 @@ export default function PersonaCard({
 
       {isSecondary && (
         <button
+          type="button"
           className={styles.secondaryBadge}
           onClick={onClickSecondary}
           title="Remove secondary"
