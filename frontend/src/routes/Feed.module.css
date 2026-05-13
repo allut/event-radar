@@ -58,6 +58,24 @@
   color: var(--text);
 }
 
+.topActions {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+}
+
+.settingsLink {
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+  text-decoration: none;
+  letter-spacing: var(--tracking-normal);
+  transition: color var(--transition);
+}
+
+.settingsLink:hover {
+  color: var(--accent-light);
+}
+
 .logoutBtn {
   background: none;
   border: 1px solid var(--border);

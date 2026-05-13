@@ -8,11 +8,11 @@ Audit trail against [`plan.md`](./plan.md). `plan.md` is the original spec and s
 
 | Field | Value |
 |---|---|
-| Phase | Week 2 |
-| Plan day | Day 14 complete |
-| Week progress | Days 1–14 complete |
-| Current focus | Day 15: Settings page, locale toggle, unsubscribe |
-| Last updated | 2026-05-10 |
+| Phase | Week 3 |
+| Plan day | Day 15 complete |
+| Week progress | Days 1–15 complete |
+| Current focus | Day 16: Email digest of Daily 5 (Resend HTML template) |
+| Last updated | 2026-05-13 |
 
 ---
 
@@ -133,6 +133,20 @@ Audit trail against [`plan.md`](./plan.md). `plan.md` is the original spec and s
 - `backend/app/seeds.py` — seeds `newsletter_inbound` source row on startup
 - `backend/app/main.py` — wires `webhooks_router`
 - **Key fix (caught in review):** `llm_json` returns `tuple[dict, str]`, not a plain dict. Extractor correctly unpacks as `raw, _model = await llm_json(...)`. LLM `json_object` format always returns a dict, so prompt instructs `{"events": [...]}` shape.
+
+### Day 15 — Settings page, locale toggle, unsubscribe `2026-05-13`
+- `backend/alembic/versions/0005_add_email_digest_opt_in.py` — migration adds `email_digest_opt_in` boolean column to `users` (server_default=true)
+- `backend/app/models/models.py` — `email_digest_opt_in: Mapped[bool]` field added to `User`
+- `backend/app/constants.py` — `VALID_LOCALES: frozenset[str]` added as single source of truth for supported locales (`en`, `et`, `ru`)
+- `backend/app/routers/settings.py` — `GET /users/me` (profile + personas) and `PATCH /users/me` (update locale and/or `email_digest_opt_in`); locale validator uses `VALID_LOCALES` from constants
+- `backend/app/main.py` — wires `settings_router`
+- `frontend/src/api/client.ts` — adds `api.patch<T>()` method
+- `frontend/src/routes/Settings.tsx` + CSS — settings page: account email, language pill toggle (locale-only writes to localStorage on server confirmation, rolls back on error), persona display with "Change persona" link to `/onboarding`, email digest toggle; all mutations via `PATCH /users/me`
+- `frontend/src/routes/Feed.tsx` — Settings link added to topbar
+- `frontend/src/routes/Feed.module.css` — `.topActions`, `.settingsLink` classes for the topbar grouping
+- `frontend/src/App.tsx` — `/settings` protected route added
+- **Tests:** `tests/routers/test_settings.py` — 7 tests (get settings: 2, patch settings: 5) — 213 total passing
+- **Key fix (reviewer-caught):** locale optimistic update was writing to localStorage before server confirmed; now writes only in `onSuccess` and rolls back UI state (`setLocaleState(getLocale())`) in `onError`
 
 ---
 

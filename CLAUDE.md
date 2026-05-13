@@ -20,18 +20,25 @@ pytest                        # run all tests
 pytest tests/path/test_foo.py::TestClass::test_name  # single test
 ```
 
-Frontend is a Vite + React SPA living in `frontend/`.
+```bash
+# Frontend (Vite + React SPA)
+cd frontend
+npm install
+npm run dev        # dev server (port 5173)
+npm run build      # type-check + production build
+npm run type-check # TypeScript check only
+```
 
 ## Architecture
 
 ```
 FastAPI Backend (single process on Render free tier)
-  ├── Routers: /auth  /admin  /onboarding  (feed/events/feedback — not yet wired)
+  ├── Routers: /auth  /admin  /onboarding  /events  /feed  /feedback  /users/me  /webhooks
   └── APScheduler (embedded, kept alive by Render Cron Job ping every 15 min)
       ├── Weekly Sun 03:00: sync_fienta_organizers (auto-discover new organizers)
       ├── Hourly:   ingest_all_enabled
-      ├── 6-hourly: dedup_pass
-      └── classify_pending + build_daily_feeds — not yet scheduled (Day 9–13)
+      ├── 6-hourly: dedup_pass + classify_pending
+      └── Daily 06:00: build_daily_feeds
         ↓
 Neon Postgres (eu-central-1, free tier, pgvector available for v1.1)
         ↓

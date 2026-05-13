@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api/client';
 import { clearToken, getLocale } from '../lib/auth';
@@ -60,7 +60,10 @@ export default function Feed() {
           <span className={styles.radar} aria-hidden>◉</span>
           <span className={styles.brand}>Event Radar</span>
         </div>
-        <button className={styles.logoutBtn} onClick={handleLogout}>Sign out</button>
+        <div className={styles.topActions}>
+          <Link to="/settings" className={styles.settingsLink}>Settings</Link>
+          <button className={styles.logoutBtn} onClick={handleLogout}>Sign out</button>
+        </div>
       </header>
 
       <main className={styles.main}>

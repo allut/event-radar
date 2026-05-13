@@ -7,6 +7,7 @@ import AuthVerify from './routes/AuthVerify';
 import Onboarding from './routes/Onboarding';
 import Feed from './routes/Feed';
 import EventDetail from './routes/EventDetail';
+import Settings from './routes/Settings';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -37,6 +38,10 @@ export default function App() {
           <Route
             path="/events/:id"
             element={<Protected><EventDetail /></Protected>}
+          />
+          <Route
+            path="/settings"
+            element={<Protected><Settings /></Protected>}
           />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

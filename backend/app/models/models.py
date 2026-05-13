@@ -48,6 +48,7 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
+    email_digest_opt_in: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
 
     magic_links: Mapped[list["AuthMagicLink"]] = relationship(back_populates="user")
     user_personas: Mapped[list["UserPersona"]] = relationship(back_populates="user")

@@ -43,6 +43,7 @@ EVENT_STATUS_CANCELLED = "cancelled"
 DEFAULT_CURRENCY = "EUR"
 DEFAULT_USER_LOCALE = "en"
 DEFAULT_USER_CITY = "Tallinn"
+VALID_LOCALES: frozenset[str] = frozenset({"en", "et", "ru"})
 
 # Deduplication
 DEDUP_LOOKBACK_DAYS = 30    # only re-cluster events that started within this window

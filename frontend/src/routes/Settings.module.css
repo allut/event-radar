@@ -1,0 +1,301 @@
+.page {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.centered {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.spinner {
+  display: block;
+  width: 40px;
+  height: 40px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+.errorMsg {
+  color: var(--text-muted);
+  font-size: var(--fs-base);
+}
+
+/* ── Top bar ── */
+.topBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.125rem 2rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-overlay);
+  backdrop-filter: blur(8px);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.back {
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+  text-decoration: none;
+  letter-spacing: var(--tracking-normal);
+  transition: color var(--transition);
+  min-width: 5rem;
+}
+
+.back:hover {
+  color: var(--accent);
+}
+
+.logoWrap {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.radar {
+  font-size: 1.1rem;
+  color: var(--accent);
+}
+
+.brand {
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  font-weight: 600;
+  letter-spacing: var(--tracking-snug);
+  color: var(--text);
+}
+
+.topBarSpacer {
+  min-width: 5rem;
+}
+
+/* ── Main ── */
+.main {
+  flex: 1;
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 2.5rem 2rem 4rem;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 2.5rem;
+}
+
+/* ── Section ── */
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding-bottom: 2.5rem;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.section:last-of-type {
+  border-bottom: none;
+}
+
+.sectionTitle {
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+}
+
+.email {
+  font-size: var(--fs-base);
+  color: var(--text);
+}
+
+/* ── Locale pills ── */
+.localePills {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.localePill {
+  padding: 0.35rem 0.85rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: var(--tracking-wider);
+  cursor: pointer;
+  transition: all var(--transition);
+}
+
+.localePill:hover:not(:disabled) {
+  border-color: var(--accent-hover-border);
+  color: var(--text);
+}
+
+.activeLocale {
+  background: var(--accent-subtle);
+  border-color: var(--accent-border);
+  color: var(--accent-light);
+}
+
+.localePill:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── Persona ── */
+.personaDisplay {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.personaRow {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.personaEmoji {
+  font-size: 1.5rem;
+  line-height: 1;
+}
+
+.personaName {
+  font-size: var(--fs-base);
+  color: var(--text);
+}
+
+.personaBadge {
+  margin-left: 0.5rem;
+  padding: 0.1rem 0.45rem;
+  border-radius: 3px;
+  background: var(--accent-subtle);
+  border: 1px solid var(--accent-border);
+  color: var(--accent);
+  font-size: var(--fs-2xs);
+  font-weight: 700;
+  letter-spacing: var(--tracking-wider);
+  text-transform: uppercase;
+  vertical-align: middle;
+}
+
+.secondaryBadge {
+  background: transparent;
+  border-color: var(--border);
+  color: var(--text-muted);
+}
+
+.noPersona {
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+
+.repickBtn {
+  align-self: flex-start;
+  padding: 0.45rem 1rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  letter-spacing: var(--tracking-normal);
+  cursor: pointer;
+  transition: all var(--transition);
+}
+
+.repickBtn:hover {
+  border-color: var(--accent-hover-border);
+  color: var(--accent-light);
+}
+
+/* ── Email toggle ── */
+.toggleRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.toggleLabel {
+  font-size: var(--fs-base);
+  color: var(--text);
+}
+
+.toggleDesc {
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+  margin-top: 0.2rem;
+}
+
+.toggle {
+  flex-shrink: 0;
+  width: 44px;
+  height: 24px;
+  border-radius: 12px;
+  border: none;
+  cursor: pointer;
+  position: relative;
+  transition: background var(--transition);
+  padding: 0;
+}
+
+.toggleOn {
+  background: var(--accent);
+}
+
+.toggleOff {
+  background: var(--border);
+}
+
+.toggle:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.toggleKnob {
+  position: absolute;
+  top: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  transition: left var(--transition);
+}
+
+.toggleOn .toggleKnob {
+  left: calc(100% - 21px);
+}
+
+.toggleOff .toggleKnob {
+  left: 3px;
+}
+
+.unsubMsg {
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+
+/* ── Save feedback ── */
+.saveSuccess {
+  color: var(--success);
+  font-size: var(--fs-sm);
+  text-align: center;
+}
+
+.saveError {
+  color: var(--danger);
+  font-size: var(--fs-sm);
+  text-align: center;
+}
