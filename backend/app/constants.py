@@ -238,3 +238,18 @@ MONTH_NAMES_RU = [
 DAY_NAMES_EN = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 DAY_NAMES_ET = ["esmaspäev", "teisipäev", "kolmapäev", "neljapäev", "reede", "laupäev", "pühapäev"]
 DAY_NAMES_RU = ["понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье"]
+
+# Piletilevi HTML scraper
+PILETILEVI_BASE_URL = "https://www.piletilevi.ee"
+PILETILEVI_SOURCE_SLUG = "piletilevi"
+PILETILEVI_TALLINN_FILTER = "Tallinn"
+PILETILEVI_DATE_FORMAT = "%d.%m.%Y %H:%M"
+PILETILEVI_MAX_DETAIL_FETCHES = 200  # cap per ingestion run (~6 listings × 25 cards = 150 normal)
+PILETILEVI_LISTING_URLS: list[str] = [
+    "/eng/tickets/",
+    "/eng/tickets/concerts/",
+    "/eng/tickets/theater/",
+    "/eng/tickets/classical-music/",
+    "/eng/tickets/comedy/",
+    "/eng/tickets/exhibitions/",
+]

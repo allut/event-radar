@@ -7,6 +7,7 @@ from app.ingestion.sources.jsonld import (
     KultuurikateldAdapter,
     TelliskiviAdapter,
 )
+from app.ingestion.sources.piletilevi import PiletileviAdapter
 
 ADAPTER_REGISTRY: dict[str, type] = {
     "fienta": FientaAdapter,
@@ -15,4 +16,5 @@ ADAPTER_REGISTRY: dict[str, type] = {
     "fotografiska": FotografiskaAdapter,
     "kumu": KumuAdapter,
     "estonia_concert_hall": EstoniaConcertHallAdapter,
+    "piletilevi": PiletileviAdapter,
 }
