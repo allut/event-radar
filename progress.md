@@ -12,6 +12,7 @@ Audit trail against [`plan.md`](./plan.md). `plan.md` is the original spec and s
 | Plan day | Day 17 complete |
 | Week progress | Days 1–17 complete + Piletilevi adapter |
 | Current focus | Day 18: Estonian + Russian UI strings (i18n pass, all three locales), Europe/Tallinn date formatting |
+| Piletilevi live tests | 2026-05-14: 28 live integration tests in `tests/ingestion/test_piletilevi_live.py`; `pytest -m live` hits real piletilevi.ee; skip on network failure |
 | Eventbrite removed | 2026-05-14: adapter, tests, constants, config field, seeds fn, and DB row all removed; `/v3/events/search/` deprecated for non-partner accounts — dead code |
 | Piletilevi added | 2026-05-14: HTML scraper replacing Eventbrite; 6 listing categories, Tallinn city filter, detail-page description fetch, 200-event cap |
 | Last updated | 2026-05-14 |
@@ -158,15 +159,6 @@ Audit trail against [`plan.md`](./plan.md). `plan.md` is the original spec and s
 - `backend/app/main.py` — `_run_send_daily_digests()` wired to APScheduler daily 07:00 EET (one hour after `build_daily_feeds`)
 - **Tests:** `tests/email/test_digest.py` — 24 tests (date formatting: 6, time formatting: 3, HTML builder: 15) — 237 total passing
 
-### Day 17 (addendum) — Piletilevi HTML scraper `2026-05-14`
-- `backend/app/ingestion/sources/piletilevi.py` — `PiletileviAdapter`: scrapes 6 category listing pages on piletilevi.ee; BS4 CSS selector parsing (`a.card[href*="/en/tickets/"]`); Tallinn city filter (keeps events with "Tallinn" in `.card__description` or no city listed); deduplicates by href across listing URLs; fetches detail page per event for `.event__description` text; cap `PILETILEVI_MAX_DETAIL_FETCHES=200` prevents runaway on abnormal listings
-- `backend/app/ingestion/sources/piletilevi.py` — `_parse_piletilevi_date()`: parses `"We 19.08.2026 • 19:00"` format (strips weekday abbreviation, strptime `%d.%m.%Y %H:%M`, localized to `TALLINN_TZ`)
-- `backend/app/constants.py` — `PILETILEVI_BASE_URL`, `PILETILEVI_SOURCE_SLUG`, `PILETILEVI_TALLINN_FILTER`, `PILETILEVI_DATE_FORMAT`, `PILETILEVI_MAX_DETAIL_FETCHES`, `PILETILEVI_LISTING_URLS`
-- `backend/app/ingestion/registry.py` — registered `piletilevi` slug
-- `backend/app/seeds.py` — seeds `piletilevi` source row (`kind=html_scrape`)
-- `backend/.env.example` — comment entry for `PILETILEVI_BASE_URL` override
-- **Tests:** `tests/ingestion/test_piletilevi.py` — 23 tests (date parsing: 6, normalize: 12, fetch_raw: 5) — 260 total passing
-
 ### Day 17 — KUMU + Estonia Concert Hall + Eventbrite adapter `2026-05-14`
 - `backend/app/ingestion/sources/jsonld.py` — `KumuAdapter` (kumu.ekm.ee) + `EstoniaConcertHallAdapter` (concert.ee) added as `JsonLdAdapter` subclasses
 - `backend/app/ingestion/sources/eventbrite.py` — `EventbriteAdapter`: Eventbrite API v3 (`location.address=Tallinn, Estonia`, `expand=venue,ticket_classes`); paginated via `pagination.has_more_items`; `_parse_eb_price` converts minor-unit costs; graceful no-op when `EVENTBRITE_API_KEY` unset
@@ -177,6 +169,20 @@ Audit trail against [`plan.md`](./plan.md). `plan.md` is the original spec and s
 - `backend/.env.example` — `KUMU_URL`, `ESTONIA_CONCERT_HALL_URL`, `EVENTBRITE_API_KEY` entries
 - **Tests:** `tests/ingestion/test_eventbrite.py` — 25 tests (normalize: 11, helpers: 6, fetch: 5, pagination: 3) — 265 total passing
 - **Why Eventbrite over Ticketmaster:** Ticketmaster Discovery API covers no EE inventory (`EE` absent from supported country list; adapter returned zero results); Eventbrite has verified Tallinn coverage, free tier, individual signup
+
+### Day 17 (addendum) — Piletilevi live integration tests `2026-05-14`
+- `backend/tests/ingestion/test_piletilevi_live.py` — 28 live tests (`pytest -m live`): `TestLiveFetchRaw` (9 tests — at-least-one-event, required fields, Tallinn filter, href uniqueness via Counter, href format, description fetch); `TestLiveNormalize` (6 tests — no-None normalization, tz-aware starts_at with `tzinfo.key` check, absolute URLs, title/external_id match, ≤5% past-event tolerance); `TestLiveCSSSelectorValidity` (6 tests — card/title/date/venue/image selectors hit real markup, detail description selector verified by fetching a live detail page); `TestLiveDataExtraction` (7 tests — image_url type, at-least-some-have-image, image_url absolute after normalize, date_str bullet separator, date_str HH:MM time, venue field type, href is relative path)
+- Module-level result cache: fixture fetches once and reuses across all 28 tests; `pytest.skip()` on `ConnectError`/`TimeoutException`/`RequestError`
+- **Tests:** 28 live tests + 23 existing unit tests (51 total for piletilevi); run live with `python3 -m pytest tests/ingestion/test_piletilevi_live.py -v -m live`
+
+### Day 17 (addendum) — Piletilevi HTML scraper `2026-05-14`
+- `backend/app/ingestion/sources/piletilevi.py` — `PiletileviAdapter`: scrapes 6 category listing pages on piletilevi.ee; BS4 CSS selector parsing (`a.card[href*="/en/tickets/"]`); Tallinn city filter (keeps events with "Tallinn" in `.card__description` or no city listed); deduplicates by href across listing URLs; fetches detail page per event for `.event__description` text; cap `PILETILEVI_MAX_DETAIL_FETCHES=200` prevents runaway on abnormal listings
+- `backend/app/ingestion/sources/piletilevi.py` — `_parse_piletilevi_date()`: parses `"We 19.08.2026 • 19:00"` format (strips weekday abbreviation, strptime `%d.%m.%Y %H:%M`, localized to `TALLINN_TZ`)
+- `backend/app/constants.py` — `PILETILEVI_BASE_URL`, `PILETILEVI_SOURCE_SLUG`, `PILETILEVI_TALLINN_FILTER`, `PILETILEVI_DATE_FORMAT`, `PILETILEVI_MAX_DETAIL_FETCHES`, `PILETILEVI_LISTING_URLS`
+- `backend/app/ingestion/registry.py` — registered `piletilevi` slug
+- `backend/app/seeds.py` — seeds `piletilevi` source row (`kind=html_scrape`)
+- `backend/.env.example` — comment entry for `PILETILEVI_BASE_URL` override
+- **Tests:** `tests/ingestion/test_piletilevi.py` — 23 tests (date parsing: 6, normalize: 12, fetch_raw: 5) — 260 total passing
 
 ---
 
