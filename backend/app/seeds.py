@@ -4,7 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.constants import NEWSLETTER_SOURCE_SLUG, VALID_TIMES
+from app.constants import EVENTBRITE_SOURCE_SLUG, NEWSLETTER_SOURCE_SLUG, VALID_TIMES
 from app.llm.taxonomy import VALID_CATEGORIES, VALID_VIBES
 from app.models.models import Persona, Source
 
@@ -13,9 +13,11 @@ log = logging.getLogger(__name__)
 
 def _jsonld_sources() -> list[dict]:
     return [
-        {"slug": "telliskivi",    "kind": "html_jsonld", "enabled": True, "config": {"url": settings.TELLISKIVI_URL}},
-        {"slug": "kultuurikatel", "kind": "html_jsonld", "enabled": True, "config": {"url": settings.KULTUURIKATEL_URL}},
-        {"slug": "fotografiska",  "kind": "html_jsonld", "enabled": True, "config": {"url": settings.FOTOGRAFISKA_URL}},
+        {"slug": "telliskivi",             "kind": "html_jsonld", "enabled": True, "config": {"url": settings.TELLISKIVI_URL}},
+        {"slug": "kultuurikatel",          "kind": "html_jsonld", "enabled": True, "config": {"url": settings.KULTUURIKATEL_URL}},
+        {"slug": "fotografiska",           "kind": "html_jsonld", "enabled": True, "config": {"url": settings.FOTOGRAFISKA_URL}},
+        {"slug": "kumu",                   "kind": "html_jsonld", "enabled": True, "config": {"url": settings.KUMU_URL}},
+        {"slug": "estonia_concert_hall",   "kind": "html_jsonld", "enabled": True, "config": {"url": settings.ESTONIA_CONCERT_HALL_URL}},
     ]
 
 
@@ -82,6 +84,11 @@ async def seed_sources(db: AsyncSession) -> None:
         "enabled": True,
         "config": {},
     })
+    tm = await db.scalar(select(Source).where(Source.slug == "ticketmaster"))
+    if tm and tm.enabled:
+        tm.enabled = False
+        await db.flush()
+    await _upsert_eventbrite(db)
 
 
 def _validate_affinity_vector(slug: str, vector: dict) -> None:
@@ -136,6 +143,18 @@ async def _upsert_fienta(db: AsyncSession) -> None:
             await db.flush()
         return
     db.add(Source(**source))
+    await db.flush()
+
+
+async def _upsert_eventbrite(db: AsyncSession) -> None:
+    enabled = bool(settings.EVENTBRITE_API_KEY)
+    existing = await db.scalar(select(Source).where(Source.slug == EVENTBRITE_SOURCE_SLUG))
+    if existing:
+        if existing.enabled != enabled:
+            existing.enabled = enabled
+            await db.flush()
+        return
+    db.add(Source(slug=EVENTBRITE_SOURCE_SLUG, kind="api", enabled=enabled, config={}))
     await db.flush()
 
 

@@ -9,10 +9,12 @@ Audit trail against [`plan.md`](./plan.md). `plan.md` is the original spec and s
 | Field | Value |
 |---|---|
 | Phase | Week 3 |
-| Plan day | Day 16 complete |
-| Week progress | Days 1–16 complete |
-| Current focus | Day 17: Ticketmaster adapter + 2 more JSON-LD venues |
-| Last updated | 2026-05-13 |
+| Plan day | Day 17 complete |
+| Week progress | Days 1–17 complete |
+| Current focus | Day 18: Estonian + Russian UI strings (i18n pass, all three locales), Europe/Tallinn date formatting |
+| Last Ticketmaster swap | 2026-05-14: replaced with Eventbrite (API v3, location-based search); TM source row disabled in DB |
+| Eventbrite API status | 2026-05-14: `/v3/events/search/` returns 404 — deprecated for non-partner accounts; adapter handles gracefully (returns `[]`); API key IS valid (verified via `/v3/users/me/`) |
+| Last updated | 2026-05-14 |
 
 ---
 
@@ -156,6 +158,17 @@ Audit trail against [`plan.md`](./plan.md). `plan.md` is the original spec and s
 - `backend/app/main.py` — `_run_send_daily_digests()` wired to APScheduler daily 07:00 EET (one hour after `build_daily_feeds`)
 - **Tests:** `tests/email/test_digest.py` — 24 tests (date formatting: 6, time formatting: 3, HTML builder: 15) — 237 total passing
 
+### Day 17 — KUMU + Estonia Concert Hall + Eventbrite adapter `2026-05-14`
+- `backend/app/ingestion/sources/jsonld.py` — `KumuAdapter` (kumu.ekm.ee) + `EstoniaConcertHallAdapter` (concert.ee) added as `JsonLdAdapter` subclasses
+- `backend/app/ingestion/sources/eventbrite.py` — `EventbriteAdapter`: Eventbrite API v3 (`location.address=Tallinn, Estonia`, `expand=venue,ticket_classes`); paginated via `pagination.has_more_items`; `_parse_eb_price` converts minor-unit costs; graceful no-op when `EVENTBRITE_API_KEY` unset
+- `backend/app/ingestion/registry.py` — registered `kumu`, `estonia_concert_hall`, `eventbrite` slugs
+- `backend/app/config.py` — `KUMU_URL`, `ESTONIA_CONCERT_HALL_URL`, `EVENTBRITE_API_KEY` settings
+- `backend/app/seeds.py` — `_upsert_eventbrite()`: seeds source row; cleanup disables legacy `ticketmaster` source row (no delete — FK safety)
+- `backend/app/constants.py` — `EVENTBRITE_BASE_URL`, `EVENTBRITE_LOCATION_ADDRESS`, `EVENTBRITE_LOCATION_RADIUS`, `EVENTBRITE_PAGE_SIZE`, `EVENTBRITE_MAX_PAGES`, `EVENTBRITE_SOURCE_SLUG`
+- `backend/.env.example` — `KUMU_URL`, `ESTONIA_CONCERT_HALL_URL`, `EVENTBRITE_API_KEY` entries
+- **Tests:** `tests/ingestion/test_eventbrite.py` — 25 tests (normalize: 11, helpers: 6, fetch: 5, pagination: 3) — 265 total passing
+- **Why Eventbrite over Ticketmaster:** Ticketmaster Discovery API covers no EE inventory (`EE` absent from supported country list; adapter returned zero results); Eventbrite has verified Tallinn coverage, free tier, individual signup
+
 ---
 
 ## Issues & fixes
@@ -192,8 +205,9 @@ Audit trail against [`plan.md`](./plan.md). `plan.md` is the original spec and s
 Deferred items — each tied back to `plan.md` so context isn't lost.
 
 - **pgvector cosine** — replace category-overlap heuristic in feedback scoring once Neon pgvector is enabled _(plan.md § Personalization, v1.1)_
-- **Ticketmaster Discovery API** (`countryCode=EE`) — headline concerts, scheduled Day 17 _(plan.md § Phased delivery)_
-- **Additional JSON-LD venues** — KUMU, Estonia theatre _(plan.md § Data sources, Stretch)_
+- **Ticketmaster Discovery API** — ✅ Added Day 17, then replaced with Eventbrite (Ticketmaster covers no EE inventory)
+- **Additional JSON-LD venues (KUMU, Estonia Concert Hall)** — ✅ Done (Day 17)
+- **Eventbrite search endpoint** — ⚠️ `/v3/events/search/` deprecated for non-partner accounts (404); adapter returns `[]` gracefully; need partner approval or alternative source to restore Eventbrite coverage
 - **Email digest of Daily 5** — ✅ Done (Day 16)
 - **Secondary persona blending at 0.4 weight** — on the cut list; ship only if onboarding feels monodimensional in QA _(plan.md § Personalization)_
 - **Bookmarks** — UI + endpoint exist in v0 model; explicitly cuttable _(plan.md § Honest cuts)_

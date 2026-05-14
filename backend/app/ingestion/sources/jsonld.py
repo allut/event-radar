@@ -102,6 +102,14 @@ class FotografiskaAdapter(JsonLdAdapter):
     """tallinn.fotografiska.com/en/events — schema.org JSON-LD events listing."""
 
 
+class KumuAdapter(JsonLdAdapter):
+    """kumu.ekm.ee/en/whats-on/ — schema.org JSON-LD events listing."""
+
+
+class EstoniaConcertHallAdapter(JsonLdAdapter):
+    """concert.ee/en/events/ — Estonia Concert Hall schema.org JSON-LD events listing."""
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

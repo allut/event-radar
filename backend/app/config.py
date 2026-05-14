@@ -12,6 +12,9 @@ class Settings(BaseSettings):
     TELLISKIVI_URL: str = "https://telliskivi.cc/en/events/"
     KULTUURIKATEL_URL: str = "https://kultuurikatel.ee/en/events/"
     FOTOGRAFISKA_URL: str = "https://tallinn.fotografiska.com/en/events"
+    KUMU_URL: str = "https://kumu.ekm.ee/en/whats-on/"
+    ESTONIA_CONCERT_HALL_URL: str = "https://concert.ee/en/events/"
+    EVENTBRITE_API_KEY: str = ""  # empty = source disabled
     FIENTA_ORGANIZER_IDS: list[int] = [3349, 1946, 15, 2111, 17595, 1088, 2704, 8403, 8412, 12106]
     FIENTA_ORGANIZER_NAMES: dict[str, str] = {
         "3349": "Kanuti Gildi SAAL",

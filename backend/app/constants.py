@@ -193,6 +193,14 @@ Respond with a JSON object with one key "events" containing an array of event ob
 If no events found, return {{"events": []}}.
 JSON only, no explanation."""
 
+# Eventbrite API v3
+EVENTBRITE_BASE_URL = "https://www.eventbriteapi.com/v3/events/search/"
+EVENTBRITE_LOCATION_ADDRESS = "Tallinn, Estonia"
+EVENTBRITE_LOCATION_RADIUS = "10km"
+EVENTBRITE_PAGE_SIZE = 50             # API max
+EVENTBRITE_MAX_PAGES = 20             # safety ceiling
+EVENTBRITE_SOURCE_SLUG = "eventbrite"
+
 # JSON-LD ingestion
 JSONLD_EVENT_TYPES: frozenset[str] = frozenset({
     "Event", "MusicEvent", "TheaterEvent", "ExhibitionEvent",
