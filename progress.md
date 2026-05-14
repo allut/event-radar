@@ -12,8 +12,7 @@ Audit trail against [`plan.md`](./plan.md). `plan.md` is the original spec and s
 | Plan day | Day 17 complete |
 | Week progress | Days 1–17 complete |
 | Current focus | Day 18: Estonian + Russian UI strings (i18n pass, all three locales), Europe/Tallinn date formatting |
-| Last Ticketmaster swap | 2026-05-14: replaced with Eventbrite (API v3, location-based search); TM source row disabled in DB |
-| Eventbrite API status | 2026-05-14: `/v3/events/search/` returns 404 — deprecated for non-partner accounts; adapter handles gracefully (returns `[]`); API key IS valid (verified via `/v3/users/me/`) |
+| Eventbrite removed | 2026-05-14: adapter, tests, constants, config field, seeds fn, and DB row all removed; `/v3/events/search/` deprecated for non-partner accounts — dead code |
 | Last updated | 2026-05-14 |
 
 ---
@@ -207,11 +206,11 @@ Deferred items — each tied back to `plan.md` so context isn't lost.
 - **pgvector cosine** — replace category-overlap heuristic in feedback scoring once Neon pgvector is enabled _(plan.md § Personalization, v1.1)_
 - **Ticketmaster Discovery API** — ✅ Added Day 17, then replaced with Eventbrite (Ticketmaster covers no EE inventory)
 - **Additional JSON-LD venues (KUMU, Estonia Concert Hall)** — ✅ Done (Day 17)
-- **Eventbrite search endpoint** — ⚠️ `/v3/events/search/` deprecated for non-partner accounts (404); adapter returns `[]` gracefully; need partner approval or alternative source to restore Eventbrite coverage
+- **Eventbrite search endpoint** — ❌ Removed: `/v3/events/search/` deprecated for non-partner accounts (always 404); full adapter removed 2026-05-14; need a new source for Tallinn API coverage
+- **Submit-an-event form** — manual escape hatch for source-coverage thinness _(plan.md § Top 3 risks, Risk #1)_ — now higher priority given Eventbrite removal
 - **Email digest of Daily 5** — ✅ Done (Day 16)
 - **Secondary persona blending at 0.4 weight** — on the cut list; ship only if onboarding feels monodimensional in QA _(plan.md § Personalization)_
 - **Bookmarks** — UI + endpoint exist in v0 model; explicitly cuttable _(plan.md § Honest cuts)_
-- **Submit-an-event form** — manual escape hatch for source-coverage thinness _(plan.md § Top 3 risks, Risk #1)_
 - **Render Starter upgrade** — only if free-tier sleep becomes an issue post-launch _(plan.md § Risk #3)_
 
 ---
