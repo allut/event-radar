@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api/client';
 import { clearToken, getLocale } from '../lib/auth';
 import { toLocaleCode } from '../constants';
+import { t, ti } from '../i18n';
 import EventCard, { type EventData } from '../components/EventCard';
 import { formatTodayDate } from '../utils';
 import styles from './Feed.module.css';
@@ -12,7 +13,6 @@ interface FeedResponse {
   events: EventData[];
   built_at: string | null;
 }
-
 
 export default function Feed() {
   const navigate = useNavigate();
@@ -38,7 +38,7 @@ export default function Feed() {
   if (isLoading) {
     return (
       <div className={styles.centered}>
-        <span className={styles.spinner} aria-label="Loading feed…" />
+        <span className={styles.spinner} aria-label={t('loading', locale)} />
       </div>
     );
   }
@@ -46,7 +46,7 @@ export default function Feed() {
   if (isError) {
     return (
       <div className={styles.centered}>
-        <p className={styles.errorMsg}>Failed to load your feed. Please refresh.</p>
+        <p className={styles.errorMsg}>{t('feed_error', locale)}</p>
       </div>
     );
   }
@@ -58,27 +58,28 @@ export default function Feed() {
       <header className={styles.topBar}>
         <div className={styles.logoWrap}>
           <span className={styles.radar} aria-hidden>◉</span>
-          <span className={styles.brand}>Event Radar</span>
+          <span className={styles.brand}>{t('brand', locale)}</span>
         </div>
         <div className={styles.topActions}>
-          <Link to="/settings" className={styles.settingsLink}>Settings</Link>
-          <button className={styles.logoutBtn} onClick={handleLogout}>Sign out</button>
+          <Link to="/settings" className={styles.settingsLink}>{t('settings_link', locale)}</Link>
+          <button className={styles.logoutBtn} onClick={handleLogout}>{t('sign_out', locale)}</button>
         </div>
       </header>
 
       <main className={styles.main}>
         <div className={styles.feedHeader}>
           <div>
-            <h1 className={styles.heading}>Your Daily Five</h1>
+            <h1 className={styles.heading}>{t('daily_five', locale)}</h1>
             <p className={styles.date}>{formatTodayDate(locale)}</p>
           </div>
           {data?.built_at && (
             <p className={styles.builtAt}>
-              Curated at{' '}
-              {new Date(data.built_at).toLocaleTimeString(
-                toLocaleCode(locale),
-                { hour: '2-digit', minute: '2-digit' }
-              )}
+              {ti('curated_at', locale, {
+                time: new Date(data.built_at).toLocaleTimeString(
+                  toLocaleCode(locale),
+                  { hour: '2-digit', minute: '2-digit' }
+                ),
+              })}
             </p>
           )}
         </div>
@@ -86,17 +87,12 @@ export default function Feed() {
         {events.length === 0 ? (
           <div className={styles.empty}>
             <div className={styles.emptyIcon} aria-hidden>◉</div>
-            <h2 className={styles.emptyTitle}>Your feed is being prepared…</h2>
-            <p className={styles.emptyMsg}>
-              We're scanning Tallinn's event landscape. Your personalized Daily Five
-              will be ready by 06:00 tomorrow morning.
-            </p>
-            <p className={styles.emptyHint}>
-              In the meantime, new events are being classified and ranked for you.
-            </p>
+            <h2 className={styles.emptyTitle}>{t('feed_empty_title', locale)}</h2>
+            <p className={styles.emptyMsg}>{t('feed_empty_msg', locale)}</p>
+            <p className={styles.emptyHint}>{t('feed_empty_hint', locale)}</p>
           </div>
         ) : (
-          <ol className={styles.list} aria-label="Today's Daily Five">
+          <ol className={styles.list} aria-label={t('daily_five', locale)}>
             {events.map((event, i) => (
               <li key={event.id}>
                 <EventCard event={event} index={i} onFeedbackSent={handleFeedbackSent} />

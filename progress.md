@@ -9,13 +9,14 @@ Audit trail against [`plan.md`](./plan.md). `plan.md` is the original spec and s
 | Field | Value |
 |---|---|
 | Phase | Week 3 |
-| Plan day | Day 17 complete |
-| Week progress | Days 1–17 complete + Piletilevi adapter |
-| Current focus | Day 18: Estonian + Russian UI strings (i18n pass, all three locales), Europe/Tallinn date formatting |
+| Plan day | Day 18 complete |
+| Week progress | Days 1–18 complete |
+| Current focus | Day 19: Error pages, empty states, Plausible analytics |
 | Piletilevi live tests | 2026-05-14: 28 live integration tests in `tests/ingestion/test_piletilevi_live.py`; `pytest -m live` hits real piletilevi.ee; skip on network failure |
 | Eventbrite removed | 2026-05-14: adapter, tests, constants, config field, seeds fn, and DB row all removed; `/v3/events/search/` deprecated for non-partner accounts — dead code |
 | Piletilevi added | 2026-05-14: HTML scraper replacing Eventbrite; 6 listing categories, Tallinn city filter, detail-page description fetch, 200-event cap |
-| Last updated | 2026-05-14 |
+| i18n added | 2026-05-17: full EN/ET/RU UI string translations; `frontend/src/i18n.ts` with `t()`, `ti()`, persona name/vibe helpers; all 7 route/component files updated |
+| Last updated | 2026-05-17 |
 
 ---
 
@@ -170,11 +171,6 @@ Audit trail against [`plan.md`](./plan.md). `plan.md` is the original spec and s
 - **Tests:** `tests/ingestion/test_eventbrite.py` — 25 tests (normalize: 11, helpers: 6, fetch: 5, pagination: 3) — 265 total passing
 - **Why Eventbrite over Ticketmaster:** Ticketmaster Discovery API covers no EE inventory (`EE` absent from supported country list; adapter returned zero results); Eventbrite has verified Tallinn coverage, free tier, individual signup
 
-### Day 17 (addendum) — Piletilevi live integration tests `2026-05-14`
-- `backend/tests/ingestion/test_piletilevi_live.py` — 28 live tests (`pytest -m live`): `TestLiveFetchRaw` (9 tests — at-least-one-event, required fields, Tallinn filter, href uniqueness via Counter, href format, description fetch); `TestLiveNormalize` (6 tests — no-None normalization, tz-aware starts_at with `tzinfo.key` check, absolute URLs, title/external_id match, ≤5% past-event tolerance); `TestLiveCSSSelectorValidity` (6 tests — card/title/date/venue/image selectors hit real markup, detail description selector verified by fetching a live detail page); `TestLiveDataExtraction` (7 tests — image_url type, at-least-some-have-image, image_url absolute after normalize, date_str bullet separator, date_str HH:MM time, venue field type, href is relative path)
-- Module-level result cache: fixture fetches once and reuses across all 28 tests; `pytest.skip()` on `ConnectError`/`TimeoutException`/`RequestError`
-- **Tests:** 28 live tests + 23 existing unit tests (51 total for piletilevi); run live with `python3 -m pytest tests/ingestion/test_piletilevi_live.py -v -m live`
-
 ### Day 17 (addendum) — Piletilevi HTML scraper `2026-05-14`
 - `backend/app/ingestion/sources/piletilevi.py` — `PiletileviAdapter`: scrapes 6 category listing pages on piletilevi.ee; BS4 CSS selector parsing (`a.card[href*="/en/tickets/"]`); Tallinn city filter (keeps events with "Tallinn" in `.card__description` or no city listed); deduplicates by href across listing URLs; fetches detail page per event for `.event__description` text; cap `PILETILEVI_MAX_DETAIL_FETCHES=200` prevents runaway on abnormal listings
 - `backend/app/ingestion/sources/piletilevi.py` — `_parse_piletilevi_date()`: parses `"We 19.08.2026 • 19:00"` format (strips weekday abbreviation, strptime `%d.%m.%Y %H:%M`, localized to `TALLINN_TZ`)
@@ -183,6 +179,22 @@ Audit trail against [`plan.md`](./plan.md). `plan.md` is the original spec and s
 - `backend/app/seeds.py` — seeds `piletilevi` source row (`kind=html_scrape`)
 - `backend/.env.example` — comment entry for `PILETILEVI_BASE_URL` override
 - **Tests:** `tests/ingestion/test_piletilevi.py` — 23 tests (date parsing: 6, normalize: 12, fetch_raw: 5) — 260 total passing
+
+### Day 17 (addendum) — Piletilevi live integration tests `2026-05-14`
+- `backend/tests/ingestion/test_piletilevi_live.py` — 28 live tests (`pytest -m live`): `TestLiveFetchRaw` (9 tests — at-least-one-event, required fields, Tallinn filter, href uniqueness via Counter, href format, description fetch); `TestLiveNormalize` (6 tests — no-None normalization, tz-aware starts_at with `tzinfo.key` check, absolute URLs, title/external_id match, ≤5% past-event tolerance); `TestLiveCSSSelectorValidity` (6 tests — card/title/date/venue/image selectors hit real markup, detail description selector verified by fetching a live detail page); `TestLiveDataExtraction` (7 tests — image_url type, at-least-some-have-image, image_url absolute after normalize, date_str bullet separator, date_str HH:MM time, venue field type, href is relative path)
+- Module-level result cache: fixture fetches once and reuses across all 28 tests; `pytest.skip()` on `ConnectError`/`TimeoutException`/`RequestError`
+- **Tests:** 28 live tests + 23 existing unit tests (51 total for piletilevi); run live with `python3 -m pytest tests/ingestion/test_piletilevi_live.py -v -m live`
+
+### Day 18 — Estonian + Russian UI strings (i18n pass) `2026-05-17`
+- `frontend/src/i18n.ts` — **new file**: full EN/ET/RU translations for all UI strings; `t(key, locale)` lookup with `en` fallback; `ti(key, locale, vars)` template interpolation with `replaceAll`; `personaName(slug, locale)` / `personaVibe(slug, locale)` helpers — English falls back to `PERSONAS` from `constants.ts` (single source of truth), only ET/RU translations defined in `i18n.ts`
+- `frontend/src/routes/Login.tsx` — all strings translated; reads `getLocale()` for language (supports returning users who already set a preference)
+- `frontend/src/routes/AuthVerify.tsx` — "Verifying…", "Signed in!", error messages translated
+- `frontend/src/routes/Onboarding.tsx` — heading, sub-copy, blending line, CTA button translated; persona names/vibes rendered via `personaName`/`personaVibe`
+- `frontend/src/routes/Feed.tsx` — brand, nav links, "Your Daily Five", "Curated at {time}", empty-state copy, error message all translated
+- `frontend/src/routes/Settings.tsx` — section titles, persona display (via `personaName`), digest toggle labels, save/error messages all translated; digest button `aria-label` uses action-verb keys (`digest_subscribe`/`digest_unsubscribe`) to comply with WCAG 2.1 SC 4.1.2
+- `frontend/src/routes/EventDetail.tsx` — "← Back", "ends {time}", "View on map →", "Get tickets →", aria-labels translated
+- `frontend/src/components/EventCard.tsx` — "Why go", "Tickets →", signal button labels translated
+- `frontend/tsconfig.json` — bumped `target`/`lib` from ES2020 → ES2021 to enable `String.replaceAll`
 
 ---
 

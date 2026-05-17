@@ -1,4 +1,5 @@
 import { type PersonaData } from '../constants';
+import { t } from '../i18n';
 import styles from './PersonaCard.module.css';
 
 export type { PersonaData };
@@ -7,6 +8,7 @@ interface Props {
   persona: PersonaData;
   role: 'none' | 'primary' | 'secondary';
   primaryTaken: boolean;
+  locale: string;
   onClickPrimary: () => void;
   onClickSecondary: () => void;
 }
@@ -15,6 +17,7 @@ export default function PersonaCard({
   persona,
   role,
   primaryTaken,
+  locale,
   onClickPrimary,
   onClickSecondary,
 }: Props) {
@@ -35,7 +38,7 @@ export default function PersonaCard({
         className={styles.mainBtn}
         onClick={onClickPrimary}
         aria-pressed={isPrimary}
-        title={isPrimary ? 'Deselect' : 'Set as primary'}
+        title={isPrimary ? t('persona_btn_deselect', locale) : t('persona_btn_set_primary', locale)}
       >
         <span className={styles.emoji} aria-hidden>{persona.emoji}</span>
         <span className={styles.name}>{persona.name}</span>
@@ -47,15 +50,15 @@ export default function PersonaCard({
           type="button"
           className={styles.secondaryBtn}
           onClick={onClickSecondary}
-          title="Set as secondary"
+          title={t('persona_btn_set_secondary', locale)}
         >
-          + 2nd
+          {t('persona_btn_add_secondary', locale)}
         </button>
       )}
 
       {isPrimary && (
-        <div className={styles.badge} aria-label="Primary">
-          <span>Primary</span>
+        <div className={styles.badge} aria-label={t('persona_primary', locale)}>
+          <span>{t('persona_primary', locale)}</span>
         </div>
       )}
 
@@ -64,10 +67,10 @@ export default function PersonaCard({
           type="button"
           className={styles.secondaryBadge}
           onClick={onClickSecondary}
-          title="Remove secondary"
-          aria-label="Secondary — click to remove"
+          title={t('persona_btn_remove_secondary', locale)}
+          aria-label={t('persona_badge_secondary_label', locale)}
         >
-          2nd ×
+          {t('persona_badge_secondary_text', locale)}
         </button>
       )}
     </div>

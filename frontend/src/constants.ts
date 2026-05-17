@@ -14,6 +14,13 @@ export const AUTH_REDIRECT_DELAY_MS = 600;
 // ─── Animation ───────────────────────────────────────────────────────────────
 export const CARD_ANIMATION_DELAY_STEP_MS = 80;
 
+// ─── Settings ────────────────────────────────────────────────────────────────
+export const SAVE_MSG_CLEAR_DELAY_MS = 2000;
+
+// ─── Persona weights (frontend thresholds) ───────────────────────────────────
+// Keep in sync with PERSONA_PRIMARY_WEIGHT / PERSONA_SECONDARY_WEIGHT in backend/app/constants.py
+export const PERSONA_PRIMARY_WEIGHT_THRESHOLD = 1.0;
+
 // ─── Locale ──────────────────────────────────────────────────────────────────
 const LOCALE_CODE_MAP: Record<string, string> = {
   et: 'et-EE',

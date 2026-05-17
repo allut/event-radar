@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '../api/client';
 import { getLocale } from '../lib/auth';
 import { toLocaleCode, type Signal, SIGNAL_CONFIG } from '../constants';
+import { t, ti } from '../i18n';
 import { categoryGradient, formatEventDateTime, formatPrice, makeActiveClassMap } from '../utils';
 import { type EventData } from '../components/EventCard';
 import { useFeedback } from '../hooks/useFeedback';
@@ -11,7 +12,6 @@ import styles from './EventDetail.module.css';
 interface EventDetailData extends EventData {
   language: string | null;
 }
-
 
 const ACTIVE_CLASS = makeActiveClassMap(styles);
 
@@ -37,7 +37,7 @@ export default function EventDetail() {
   if (isLoading) {
     return (
       <div className={styles.centered}>
-        <span className={styles.spinner} aria-label="Loading event…" />
+        <span className={styles.spinner} aria-label={t('loading_event', locale)} />
       </div>
     );
   }
@@ -45,8 +45,8 @@ export default function EventDetail() {
   if (isError || !data) {
     return (
       <div className={styles.centered}>
-        <p className={styles.errorMsg}>Event not found or unavailable.</p>
-        <button className={styles.backBtn} onClick={() => navigate('/')}>← Back to feed</button>
+        <p className={styles.errorMsg}>{t('event_not_found', locale)}</p>
+        <button className={styles.backBtn} onClick={() => navigate('/')}>{t('back_to_feed_link', locale)}</button>
       </div>
     );
   }
@@ -61,12 +61,12 @@ export default function EventDetail() {
   return (
     <div className={styles.page}>
       <header className={styles.topBar}>
-        <button className={styles.backBtn} onClick={() => navigate(-1)} aria-label="Go back">
-          ← Back
+        <button className={styles.backBtn} onClick={() => navigate(-1)} aria-label={t('back', locale)}>
+          {t('back', locale)}
         </button>
         <div className={styles.logoWrap}>
           <span className={styles.radar} aria-hidden>◉</span>
-          <span className={styles.brand}>Event Radar</span>
+          <span className={styles.brand}>{t('brand', locale)}</span>
         </div>
       </header>
 
@@ -89,7 +89,9 @@ export default function EventDetail() {
             <time className={styles.time}>{formatEventDateTime(data.starts_at, locale)}</time>
             {data.ends_at && (
               <span className={styles.ends}>
-                ends {new Date(data.ends_at).toLocaleTimeString(toLocaleCode(locale), { hour: '2-digit', minute: '2-digit', hour12: false })}
+                {ti('ends_at', locale, {
+                  time: new Date(data.ends_at).toLocaleTimeString(toLocaleCode(locale), { hour: '2-digit', minute: '2-digit', hour12: false }),
+                })}
               </span>
             )}
           </div>
@@ -104,14 +106,14 @@ export default function EventDetail() {
               )}
               {mapsUrl && (
                 <a href={mapsUrl} target="_blank" rel="noopener noreferrer" className={styles.mapLink}>
-                  View on map →
+                  {t('view_on_map', locale)}
                 </a>
               )}
             </div>
           )}
 
           {data.why_go.length > 0 && (
-            <ul className={styles.bullets} aria-label="Why go">
+            <ul className={styles.bullets} aria-label={t('why_go', locale)}>
               {data.why_go.map((bullet, i) => (
                 <li key={i} className={styles.bullet}>{bullet}</li>
               ))}
@@ -135,13 +137,13 @@ export default function EventDetail() {
 
           <div className={styles.actions}>
             <div className={styles.feedbackGroup}>
-              {(Object.entries(SIGNAL_CONFIG) as [Signal, { icon: string; label: string }][]).map(([signal, { icon, label }]) => (
+              {(Object.entries(SIGNAL_CONFIG) as [Signal, { icon: string; label: string }][]).map(([signal, { icon }]) => (
                 <button
                   key={signal}
                   className={[styles.action, activeSignal === signal ? ACTIVE_CLASS[signal] : ''].join(' ')}
                   onClick={() => sendFeedback(signal)}
                   disabled={pending}
-                  aria-label={label}
+                  aria-label={t(`signal_${signal}`, locale)}
                   aria-pressed={activeSignal === signal}
                 >
                   {icon}
@@ -156,7 +158,7 @@ export default function EventDetail() {
                 className={styles.ticketsBtn}
                 onClick={handleTicketsClick}
               >
-                Get tickets →
+                {t('get_tickets', locale)}
               </a>
             )}
           </div>

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { api, ApiError } from '../api/client';
 import { setLocale } from '../lib/auth';
 import { LOCALES, PERSONAS } from '../constants';
+import { t, ti, personaName, personaVibe } from '../i18n';
 import PersonaCard from '../components/PersonaCard';
 import styles from './Onboarding.module.css';
 
@@ -10,7 +11,7 @@ export default function Onboarding() {
   const navigate = useNavigate();
   const [primarySlug, setPrimarySlug] = useState<string | null>(null);
   const [secondarySlug, setSecondarySlug] = useState<string | null>(null);
-  const [locale, setLocaleState] = useState('en');
+  const [locale, setLocaleState] = useState<string>(LOCALES[0].code);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -51,7 +52,7 @@ export default function Onboarding() {
       setLocale(locale);
       navigate('/', { replace: true });
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
+      setError(err instanceof ApiError ? err.message : t('generic_error', locale));
       setLoading(false);
     }
   }
@@ -79,10 +80,8 @@ export default function Onboarding() {
 
       <main className={styles.main}>
         <div className={styles.intro}>
-          <h1 className={styles.heading}>What's your vibe?</h1>
-          <p className={styles.sub}>
-            Pick one primary persona. Optionally add a secondary to widen your feed.
-          </p>
+          <h1 className={styles.heading}>{t('onboarding_heading', locale)}</h1>
+          <p className={styles.sub}>{t('onboarding_sub', locale)}</p>
         </div>
 
         <form onSubmit={handleSubmit}>
@@ -90,9 +89,10 @@ export default function Onboarding() {
             {PERSONAS.map((p) => (
               <PersonaCard
                 key={p.slug}
-                persona={p}
+                persona={{ ...p, name: personaName(p.slug, locale), vibe: personaVibe(p.slug, locale) }}
                 role={roleFor(p.slug)}
                 primaryTaken={!!primarySlug && primarySlug !== p.slug}
+                locale={locale}
                 onClickPrimary={() => handleClickPrimary(p.slug)}
                 onClickSecondary={() => handleClickSecondary(p.slug)}
               />
@@ -106,8 +106,10 @@ export default function Onboarding() {
           <div className={styles.cta}>
             {secondarySlug && (
               <p className={styles.blend}>
-                Blending <strong>{PERSONAS.find(p => p.slug === primarySlug)?.name}</strong> with{' '}
-                <strong>{PERSONAS.find(p => p.slug === secondarySlug)?.name}</strong>
+                {ti('persona_blending', locale, {
+                  primary: personaName(primarySlug ?? '', locale),
+                  secondary: personaName(secondarySlug, locale),
+                })}
               </p>
             )}
             <button
@@ -116,8 +118,8 @@ export default function Onboarding() {
               disabled={!primarySlug || loading}
             >
               {loading
-                ? <span className={styles.spinner} aria-label="Saving…" />
-                : "Let's go →"}
+                ? <span className={styles.spinner} aria-label={t('saving', locale)} />
+                : t('lets_go', locale)}
             </button>
           </div>
         </form>

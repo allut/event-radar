@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { api } from '../api/client';
 import { getLocale } from '../lib/auth';
 import { CARD_ANIMATION_DELAY_STEP_MS, SIGNAL_CONFIG, type Signal } from '../constants';
+import { t } from '../i18n';
 import { categoryGradient, formatEventTime, formatPrice, makeActiveClassMap } from '../utils';
 import { useFeedback } from '../hooks/useFeedback';
 import styles from './EventCard.module.css';
@@ -34,7 +35,6 @@ interface Props {
   onFeedbackSent?: () => void;
 }
 
-
 interface FeedbackButtonProps {
   signal: Signal;
   icon: string;
@@ -63,6 +63,7 @@ function FeedbackButton({ signal, icon, label, activeSignal, pending, onPress }:
 }
 
 export default function EventCard({ event, index, onFeedbackSent }: Props) {
+  const locale = getLocale();
   const { activeSignal, pending, sendFeedback } = useFeedback(event.id, onFeedbackSent);
 
   const price = formatPrice(event.price_min, event.price_max, event.currency);
@@ -94,7 +95,7 @@ export default function EventCard({ event, index, onFeedbackSent }: Props) {
 
       <div className={styles.body}>
         <div className={styles.meta}>
-          <time className={styles.time}>{formatEventTime(event.starts_at, getLocale())}</time>
+          <time className={styles.time}>{formatEventTime(event.starts_at, locale)}</time>
           {event.venue_name && (
             <span className={styles.venue}>{event.venue_name}</span>
           )}
@@ -107,7 +108,7 @@ export default function EventCard({ event, index, onFeedbackSent }: Props) {
         </h2>
 
         {event.why_go.length > 0 && (
-          <ul className={styles.bullets} aria-label="Why go">
+          <ul className={styles.bullets} aria-label={t('why_go', locale)}>
             {event.why_go.map((bullet, i) => (
               <li key={i} className={styles.bullet}>{bullet}</li>
             ))}
@@ -116,8 +117,16 @@ export default function EventCard({ event, index, onFeedbackSent }: Props) {
       </div>
 
       <div className={styles.actions}>
-        {(Object.entries(SIGNAL_CONFIG) as [Signal, { icon: string; label: string }][]).map(([signal, { icon, label }]) => (
-          <FeedbackButton key={signal} signal={signal} icon={icon} label={label} activeSignal={activeSignal} pending={pending} onPress={sendFeedback} />
+        {(Object.entries(SIGNAL_CONFIG) as [Signal, { icon: string; label: string }][]).map(([signal, { icon }]) => (
+          <FeedbackButton
+            key={signal}
+            signal={signal}
+            icon={icon}
+            label={t(`signal_${signal}`, locale)}
+            activeSignal={activeSignal}
+            pending={pending}
+            onPress={sendFeedback}
+          />
         ))}
         {event.url && (
           <a
@@ -127,7 +136,7 @@ export default function EventCard({ event, index, onFeedbackSent }: Props) {
             className={styles.ticketsLink}
             onClick={() => api.post('/feedback', { event_id: event.id, signal: 'click_external' }).catch(() => undefined)}
           >
-            Tickets →
+            {t('tickets', locale)}
           </a>
         )}
       </div>

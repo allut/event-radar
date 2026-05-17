@@ -1,9 +1,12 @@
 import { useState } from 'react';
 import { api, ApiError } from '../api/client';
+import { getLocale } from '../lib/auth';
 import { MAGIC_LINK_EXPIRY_MINUTES, type LoginState } from '../constants';
+import { t, ti } from '../i18n';
 import styles from './Login.module.css';
 
 export default function Login() {
+  const locale = getLocale();
   const [email, setEmail] = useState('');
   const [state, setState] = useState<LoginState>('idle');
   const [errorMsg, setErrorMsg] = useState('');
@@ -18,7 +21,7 @@ export default function Login() {
       await api.post('/auth/request-link', { email: trimmed.toLowerCase() });
       setState('success');
     } catch (err) {
-      setErrorMsg(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
+      setErrorMsg(err instanceof ApiError ? err.message : t('generic_error', locale));
       setState('error');
     }
   }
@@ -28,35 +31,37 @@ export default function Login() {
       <div className={styles.card}>
         <header className={styles.header}>
           <span className={styles.radar} aria-hidden>◉</span>
-          <h1 className={styles.brand}>Event Radar</h1>
+          <h1 className={styles.brand}>{t('brand', locale)}</h1>
         </header>
 
-        <p className={styles.tagline}>Your daily five events in Tallinn.</p>
+        <p className={styles.tagline}>{t('tagline', locale)}</p>
 
         {state === 'success' ? (
           <div className={styles.success} role="status">
             <div className={styles.checkCircle}>✓</div>
             <p className={styles.successMsg}>
-              Check your inbox at <strong>{email}</strong>
+              {t('check_inbox', locale)} <strong>{email}</strong>
             </p>
-            <p className={styles.successHint}>The link expires in {MAGIC_LINK_EXPIRY_MINUTES} minutes.</p>
+            <p className={styles.successHint}>
+              {ti('link_expires', locale, { minutes: String(MAGIC_LINK_EXPIRY_MINUTES) })}
+            </p>
             <button
               className={styles.resend}
               onClick={() => { setState('idle'); setEmail(''); }}
             >
-              Use a different address
+              {t('use_different', locale)}
             </button>
           </div>
         ) : (
           <form onSubmit={handleSubmit} className={styles.form} noValidate>
-            <label className={styles.label} htmlFor="email">Email address</label>
+            <label className={styles.label} htmlFor="email">{t('email_label', locale)}</label>
             <input
               id="email"
               type="email"
               className={styles.input}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com"
+              placeholder={t('email_placeholder', locale)}
               autoFocus
               autoComplete="email"
               disabled={state === 'loading'}
@@ -73,13 +78,13 @@ export default function Login() {
               disabled={state === 'loading' || !email.trim()}
             >
               {state === 'loading'
-                ? <span className={styles.spinner} aria-label="Sending…" />
-                : 'Send me a link →'}
+                ? <span className={styles.spinner} aria-label={t('sending', locale)} />
+                : t('send_link', locale)}
             </button>
           </form>
         )}
 
-        <footer className={styles.footer}>No password. No tracking. Just events.</footer>
+        <footer className={styles.footer}>{t('no_password', locale)}</footer>
       </div>
     </div>
   );
