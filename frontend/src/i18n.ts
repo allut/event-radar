@@ -132,6 +132,14 @@ const TRANSLATIONS: Record<Locale, Record<string, string>> = {
     change_persona: 'Change persona →',
     no_persona: 'No persona selected.',
     settings_error: 'Failed to load settings. Please refresh.',
+
+    // ── 404 / error boundary ─────────────────────────────────────────────
+    not_found_title: 'Page not found',
+    not_found_msg: "The page you're looking for doesn't exist.",
+    not_found_back: '← Back to feed',
+    error_boundary_title: 'Something went wrong',
+    error_boundary_msg: 'An unexpected error occurred. Try refreshing the page.',
+    error_boundary_reload: 'Reload page',
   },
 
   et: {
@@ -208,6 +216,13 @@ const TRANSLATIONS: Record<Locale, Record<string, string>> = {
     change_persona: 'Muuda persooni →',
     no_persona: 'Ühtegi persooni pole valitud.',
     settings_error: 'Seadete laadimine ebaõnnestus. Palun värskenda.',
+
+    not_found_title: 'Lehte ei leitud',
+    not_found_msg: 'Otsitavat lehte ei ole olemas.',
+    not_found_back: '← Tagasi voolu',
+    error_boundary_title: 'Midagi läks valesti',
+    error_boundary_msg: 'Tekkis ootamatu viga. Proovi lehte uuesti laadida.',
+    error_boundary_reload: 'Laadi leht uuesti',
   },
 
   ru: {
@@ -284,6 +299,13 @@ const TRANSLATIONS: Record<Locale, Record<string, string>> = {
     change_persona: 'Изменить персону →',
     no_persona: 'Персона не выбрана.',
     settings_error: 'Не удалось загрузить настройки. Обновите страницу.',
+
+    not_found_title: 'Страница не найдена',
+    not_found_msg: 'Запрашиваемая страница не существует.',
+    not_found_back: '← Назад к ленте',
+    error_boundary_title: 'Что-то пошло не так',
+    error_boundary_msg: 'Произошла непредвиденная ошибка. Попробуйте обновить страницу.',
+    error_boundary_reload: 'Обновить страницу',
   },
 };
 

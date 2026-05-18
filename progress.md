@@ -9,14 +9,15 @@ Audit trail against [`plan.md`](./plan.md). `plan.md` is the original spec and s
 | Field | Value |
 |---|---|
 | Phase | Week 3 |
-| Plan day | Day 18 complete |
-| Week progress | Days 1–18 complete |
-| Current focus | Day 19: Error pages, empty states, Plausible analytics |
+| Plan day | Day 19 complete |
+| Week progress | Days 1–19 complete |
+| Current focus | Day 20: Manual QA against 30 real Tallinn events |
 | Piletilevi live tests | 2026-05-14: 28 live integration tests in `tests/ingestion/test_piletilevi_live.py`; `pytest -m live` hits real piletilevi.ee; skip on network failure |
 | Eventbrite removed | 2026-05-14: adapter, tests, constants, config field, seeds fn, and DB row all removed; `/v3/events/search/` deprecated for non-partner accounts — dead code |
 | Piletilevi added | 2026-05-14: HTML scraper replacing Eventbrite; 6 listing categories, Tallinn city filter, detail-page description fetch, 200-event cap |
 | i18n added | 2026-05-17: full EN/ET/RU UI string translations; `frontend/src/i18n.ts` with `t()`, `ti()`, persona name/vibe helpers; all 7 route/component files updated |
-| Last updated | 2026-05-17 |
+| Error pages added | 2026-05-18: NotFound (404) page + React ErrorBoundary; Plausible deferred (no domain yet) |
+| Last updated | 2026-05-18 |
 
 ---
 
@@ -195,6 +196,13 @@ Audit trail against [`plan.md`](./plan.md). `plan.md` is the original spec and s
 - `frontend/src/routes/EventDetail.tsx` — "← Back", "ends {time}", "View on map →", "Get tickets →", aria-labels translated
 - `frontend/src/components/EventCard.tsx` — "Why go", "Tickets →", signal button labels translated
 - `frontend/tsconfig.json` — bumped `target`/`lib` from ES2020 → ES2021 to enable `String.replaceAll`
+
+### Day 19 — Error pages + empty states `2026-05-18`
+- `frontend/src/routes/NotFound.tsx` + CSS — 404 page: large dim "404" display numeral, trilingual title/message, link back to feed; wraps in `Protected` so unauthenticated users redirect to `/login`
+- `frontend/src/components/ErrorBoundary.tsx` + CSS — React class error boundary wrapping the full app; `getDerivedStateFromError` flips `hasError`, `componentDidCatch` logs to console; fallback UI uses try/catch around `getLocale()` so localStorage failures in private-browsing mode don't re-throw inside the boundary
+- `frontend/src/App.tsx` — `<ErrorBoundary>` wraps `QueryClientProvider`; wildcard `*` route now renders `<Protected><NotFound /></Protected>` instead of redirecting to `/`; `NotFound` + `ErrorBoundary` imported
+- `frontend/src/i18n.ts` — 6 new keys per locale (EN/ET/RU): `not_found_title`, `not_found_msg`, `not_found_back`, `error_boundary_title`, `error_boundary_msg`, `error_boundary_reload`
+- **Plausible analytics** — deferred: domain not yet decided (use `data-domain` once confirmed)
 
 ---
 
