@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**Event Radar** is an AI-powered event discovery platform for Tallinn, Estonia. It ingests events from multiple sources, deduplicates and classifies them via LLM, then delivers a personalized "Daily 5" curated feed per user. Project is in active development (MVP target: 3 weeks, solo).
+**Event Radar** is an AI-powered event discovery platform for Tallinn, Estonia. It ingests events from multiple sources, deduplicates and classifies them via LLM, then delivers a personalized "Daily 5" curated feed per user. Days 1–20 complete. Day 21 = soft launch (pending E2E QA). See `pending_items.md` for QA checklist.
 
 The authoritative spec is `plan.md`.
 
@@ -33,7 +33,7 @@ npm run type-check # TypeScript check only
 
 ```
 FastAPI Backend (single process on Render free tier)
-  ├── Routers: /auth  /admin  /onboarding  /events  /feed  /feedback  /users/me  /webhooks
+  ├── Routers: /auth  /admin  /onboarding  /events  /feed  /feedback  /users/me  /settings  /webhooks
   └── APScheduler (embedded, kept alive by Render Cron Job ping every 15 min)
       ├── Weekly Sun 03:00: sync_fienta_organizers (auto-discover new organizers)
       ├── Hourly:   ingest_all_enabled
@@ -49,7 +49,7 @@ LLM Router: Groq (primary) → Cerebras → Mistral (fallback chain)
 
 ## Data Flow
 
-1. **Ingestion** — 5 sources: Fienta API (~15 Tallinn organizer IDs), Telliskivi/Kultuurikatel/Fotografiska JSON-LD, Resend Inbound email webhook.
+1. **Ingestion** — 5 sources: Fienta API (~15 Tallinn organizer IDs), Piletilevi HTML scraper, Telliskivi/Kultuurikatel/Fotografiska/KUMU/Estonia Concert Hall JSON-LD, Resend Inbound email webhook. Eventbrite removed (API deprecated for non-partners).
 2. **Deduplication** — Two-stage: rule-based pre-filter (fuzzy title + time proximity), then LLM tiebreaker only on candidate pairs (keeps token usage low).
 3. **Classification** — LLM assigns fixed 12-category / 10-vibe taxonomy, quality score 0–1, 3-bullet "why go?" text. Fixed taxonomy prevents ontology drift.
 4. **Ranking** — `score = 0.45·persona_affinity + 0.20·recency_boost + 0.20·feedback_signal + 0.10·quality_score + 0.05·locality_bonus`
@@ -65,7 +65,7 @@ LLM Router: Groq (primary) → Cerebras → Mistral (fallback chain)
 - `raw_events` — source payload as JSONB
 - `event_sources` — M2M: links events to source + external_id
 - `events` — normalized: slug, title_orig, description_orig, starts_at/ends_at, venue, lat/lng, price, status (draft→classified→published|cancelled), dedup_group_id
-- `event_classifications` — categories[], vibes[], quality_score, why_go_bullets[3], language_detected, model_used
+- `event_classifications` — categories[], vibes[], quality_score, why_go_bullets[3], why_go_localized JSONB ({locale: [bullets]}), language_detected, model_used
 - `user_event_feedback` — like/dislike/bookmark/view/click_external signals
 - `user_event_scores` — cached ranking score per (user, event); unique constraint
 - `daily_feeds` — user_id, feed_date, event_ids BigInteger[]
@@ -76,6 +76,18 @@ LLM Router: Groq (primary) → Cerebras → Mistral (fallback chain)
 - **Dedup cache:** Cache decisions by content hash — never re-call LLM for identical pairs.
 - **Fallback order:** Groq (primary, `llama-3.3-70b-versatile`, Production) → Cerebras (`qwen-3-235b-a22b-instruct-2507`, Preview — 1 req/min, monitor for deprecation) → Mistral (overnight batch, 1B tok/mo).
 - Groq's 30 req/min burst means no sleep loop needed in the classification batch job.
+
+## i18n
+
+- **Frontend** — custom `frontend/src/i18n.ts` (no library). `t(key, locale)` function; locale stored in `localStorage` and read from `GET /users/me`. Translations are plain TS objects.
+- **Backend** — custom `backend/app/i18n.py` mirroring the frontend: single `TRANSLATIONS[locale][key]` dict + `DAY_NAMES`/`MONTH_NAMES` lookup tables; helpers `t(key, locale)`, `ti(key, locale, **vars)`, `day_name(weekday, locale)`, `month_name(month, locale)` with `locale → en → key` fallback. `Accept-Language` header parsed at signup → stored as `users.locale` (et|en|ru). `why_go_localized` JSONB column holds per-locale bullet translations; `resolve_why_go(cl, locale)` in `routers/utils.py` falls back: locale → en → raw.
+- **Email digest** — `backend/app/email/digest.py`; HTML built inline, sent via Resend. All subjects, labels, and day/month names resolved via `app/i18n.py`.
+
+## Frontend Structure
+
+- Routes (pages) in `frontend/src/routes/`: Login, AuthVerify, Onboarding, Feed, EventDetail, Settings, NotFound.
+- Shared components in `frontend/src/components/`: EventCard, PersonaCard, ErrorBoundary.
+- API calls in `frontend/src/routes/client.ts`. React Query used for server state (`@tanstack/react-query`).
 
 ## Auth
 
@@ -110,4 +122,4 @@ This project follows production best practices throughout:
 
 ## MVP Scope (do not cut)
 
-Deduplication, LLM classification, persona-based personalization (primary + secondary blend already implemented), magic-link auth, Daily 5 builder. Everything else (extra venues, email digest, bookmarks) is cuttable if behind schedule.
+All MVP scope implemented: dedup, LLM classification, persona-based personalization, magic-link auth, Daily 5 builder, email digest, bookmarks, i18n (et/en/ru), Settings page.

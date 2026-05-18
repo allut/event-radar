@@ -9,14 +9,15 @@ Audit trail against [`plan.md`](./plan.md). `plan.md` is the original spec and s
 | Field | Value |
 |---|---|
 | Phase | Week 3 |
-| Plan day | Day 19 complete |
-| Week progress | Days 1–19 complete |
-| Current focus | Day 20: Manual QA against 30 real Tallinn events |
+| Plan day | Day 20 complete |
+| Week progress | Days 1–20 complete |
+| Current focus | Day 21: Manual QA against 30 real Tallinn events |
 | Piletilevi live tests | 2026-05-14: 28 live integration tests in `tests/ingestion/test_piletilevi_live.py`; `pytest -m live` hits real piletilevi.ee; skip on network failure |
 | Eventbrite removed | 2026-05-14: adapter, tests, constants, config field, seeds fn, and DB row all removed; `/v3/events/search/` deprecated for non-partner accounts — dead code |
 | Piletilevi added | 2026-05-14: HTML scraper replacing Eventbrite; 6 listing categories, Tallinn city filter, detail-page description fetch, 200-event cap |
 | i18n added | 2026-05-17: full EN/ET/RU UI string translations; `frontend/src/i18n.ts` with `t()`, `ti()`, persona name/vibe helpers; all 7 route/component files updated |
 | Error pages added | 2026-05-18: NotFound (404) page + React ErrorBoundary; Plausible deferred (no domain yet) |
+| Backend i18n | 2026-05-18: magic link email localized (en/et/ru); Accept-Language detection for new users; `why_go` multi-locale JSONB column + LLM prompt updated; 260 tests passing |
 | Last updated | 2026-05-18 |
 
 ---
@@ -203,6 +204,20 @@ Audit trail against [`plan.md`](./plan.md). `plan.md` is the original spec and s
 - `frontend/src/App.tsx` — `<ErrorBoundary>` wraps `QueryClientProvider`; wildcard `*` route now renders `<Protected><NotFound /></Protected>` instead of redirecting to `/`; `NotFound` + `ErrorBoundary` imported
 - `frontend/src/i18n.ts` — 6 new keys per locale (EN/ET/RU): `not_found_title`, `not_found_msg`, `not_found_back`, `error_boundary_title`, `error_boundary_msg`, `error_boundary_reload`
 - **Plausible analytics** — deferred: domain not yet decided (use `data-domain` once confirmed)
+
+### Day 20 — Backend i18n (magic link, Accept-Language, why_go localization) `2026-05-18`
+- `backend/app/constants.py` — `MAGIC_LINK_EMAIL_HTML` str → locale dict (`en`/`et`/`ru`); `MAGIC_LINK_EMAIL_SUBJECTS` dict added; `LLM_CLASSIFY_PROMPT_TEMPLATE` updated: `why_go` field now `{"en": [...], "et": [...], "ru": [...]}` (3 bullets × 3 locales = 9 bullets max, ~180 tokens — within 600-token cap)
+- `backend/app/auth/email.py` — `send_magic_link(to_email, magic_token, locale="en")`: looks up locale-keyed subject + body, falls back to `en`
+- `backend/app/routers/auth.py` — `_detect_locale(accept_language)` helper: parses `Accept-Language` header, matches against `VALID_LOCALES`, returns first match or `DEFAULT_USER_LOCALE`; new users get locale from header; existing users keep stored locale; `send_magic_link` now passed `user.locale`
+- `backend/app/llm/classifier.py` — `_parse_classification`: handles both new dict format and old list format (backward compat fallback); populates `why_go_localized` JSONB from dict; `why_go_bullets` set from `en` locale for backward compat
+- `backend/app/models/models.py` — `why_go_localized: Mapped[Optional[dict]]` JSONB column added to `EventClassification`
+- `backend/alembic/versions/0006_why_go_localized.py` — `ADD COLUMN why_go_localized JSONB` (reversible; `down_revision = "0005"`)
+- `backend/app/routers/utils.py` — `serialize_event(event, locale="en")`: picks `why_go_localized[locale]` → `[DEFAULT_USER_LOCALE]` → `why_go_bullets` fallback chain
+- `backend/app/routers/events.py` — `GET /events/{id}`: reads optional Bearer token to detect user locale; unauthenticated requests default to `en`
+- `backend/app/routers/feed.py` — passes `current_user.locale` to `serialize_event`
+- `backend/tests/llm/test_classifier.py` — 5 new tests: dict format, list fallback, bullet cap, missing locale key, invalid type
+- `backend/tests/auth/test_auth.py` — `TestDetectLocale` class: 6 new tests (et/ru/en detection, unsupported fallback, empty fallback, new user gets header locale)
+- **Tests:** 260 passing (up from 249; 11 new tests)
 
 ---
 

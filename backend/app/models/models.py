@@ -229,6 +229,7 @@ class EventClassification(Base):
     vibes: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False, default=list)
     quality_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     why_go_bullets: Mapped[Optional[list[str]]] = mapped_column(ARRAY(Text), nullable=True)
+    why_go_localized: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
     language_detected: Mapped[Optional[str]] = mapped_column(String(5), nullable=True)
     model_used: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     classified_at: Mapped[datetime] = mapped_column(

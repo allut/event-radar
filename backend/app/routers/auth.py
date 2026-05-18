@@ -2,7 +2,7 @@
 import logging
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from itsdangerous import BadSignature, SignatureExpired
 from pydantic import BaseModel, EmailStr
 from sqlalchemy import func, select, update
@@ -17,11 +17,21 @@ from app.auth.tokens import (
     verify_magic_token,
     verify_session_token,
 )
+from app.constants import DEFAULT_USER_LOCALE, VALID_LOCALES
 from app.db import get_db
 from app.models.models import AuthMagicLink, User, UserPersona
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+
+def _detect_locale(accept_language: str) -> str:
+    """Pick the best supported locale from an Accept-Language header value."""
+    for part in accept_language.replace(" ", "").split(","):
+        lang = part.split(";")[0].split("-")[0].lower()
+        if lang in VALID_LOCALES:
+            return lang
+    return DEFAULT_USER_LOCALE
 
 
 # ---------------------------------------------------------------------------
@@ -75,6 +85,7 @@ async def get_current_user(
 @router.post("/request-link", status_code=status.HTTP_200_OK)
 async def request_magic_link(
     body: RequestLinkBody,
+    request: Request,
     db: AsyncSession = Depends(get_db),
 ):
     """Request a magic sign-in link. Always returns 200 to prevent user enumeration."""
@@ -83,7 +94,8 @@ async def request_magic_link(
     # Upsert user
     user = await db.scalar(select(User).where(User.email == email))
     if user is None:
-        user = User(email=email)
+        locale = _detect_locale(request.headers.get("Accept-Language", ""))
+        user = User(email=email, locale=locale)
         db.add(user)
         await db.flush()  # populate user.id
 
@@ -115,7 +127,7 @@ async def request_magic_link(
     await db.commit()
 
     try:
-        await send_magic_link(email, signed_token)
+        await send_magic_link(email, signed_token, user.locale)
     except Exception:
         log.exception("Failed to send magic link to %s", email)
         # Do not surface email errors to caller — link is in DB, user can retry.

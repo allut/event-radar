@@ -96,6 +96,13 @@ def mock_db():
     return db
 
 
+def _mock_request(accept_language: str = "") -> MagicMock:
+    req = MagicMock()
+    req.headers = MagicMock()
+    req.headers.get = MagicMock(return_value=accept_language)
+    return req
+
+
 class TestRequestMagicLink:
     @pytest.mark.asyncio
     async def test_new_user_creates_and_sends(self, mock_db):
@@ -113,7 +120,7 @@ class TestRequestMagicLink:
 
         with patch("app.routers.auth.send_magic_link", new_callable=AsyncMock) as mock_send:
             body = RequestLinkBody(email="test@example.com")
-            result = await request_magic_link(body, mock_db)
+            result = await request_magic_link(body, _mock_request(), mock_db)
 
         assert "registered" in result["detail"].lower() or "sent" in result["detail"].lower()
         mock_send.assert_called_once()
@@ -129,7 +136,7 @@ class TestRequestMagicLink:
 
         with patch("app.routers.auth.send_magic_link", new_callable=AsyncMock):
             body = RequestLinkBody(email="existing@example.com")
-            result = await request_magic_link(body, mock_db)
+            result = await request_magic_link(body, _mock_request(), mock_db)
 
         assert "detail" in result
 
@@ -145,7 +152,7 @@ class TestRequestMagicLink:
 
         with patch("app.routers.auth.send_magic_link", new_callable=AsyncMock) as mock_send:
             body = RequestLinkBody(email="existing@example.com")
-            result = await request_magic_link(body, mock_db)
+            result = await request_magic_link(body, _mock_request(), mock_db)
 
         assert "detail" in result
         mock_send.assert_not_called()
@@ -157,7 +164,7 @@ class TestRequestMagicLink:
         mock_db.scalar.side_effect = [None, None]
         with patch("app.routers.auth.send_magic_link", side_effect=Exception("smtp down")):
             body = RequestLinkBody(email="fail@example.com")
-            result = await request_magic_link(body, mock_db)
+            result = await request_magic_link(body, _mock_request(), mock_db)
         assert "detail" in result  # still returns 200 with message
 
 
@@ -295,3 +302,48 @@ class TestGetMe:
 
         result = await get_me(current_user=user, db=mock_db)
         assert result["has_personas"] is False
+
+
+class TestDetectLocale:
+    def test_estonian_detected(self):
+        from app.routers.auth import _detect_locale
+        assert _detect_locale("et-EE,et;q=0.9,en;q=0.8") == "et"
+
+    def test_russian_detected(self):
+        from app.routers.auth import _detect_locale
+        assert _detect_locale("ru-RU,ru;q=0.9") == "ru"
+
+    def test_english_detected(self):
+        from app.routers.auth import _detect_locale
+        assert _detect_locale("en-US,en;q=0.9") == "en"
+
+    def test_unsupported_falls_back_to_en(self):
+        from app.routers.auth import _detect_locale
+        assert _detect_locale("fi-FI,fi;q=0.9") == "en"
+
+    def test_empty_falls_back_to_en(self):
+        from app.routers.auth import _detect_locale
+        assert _detect_locale("") == "en"
+
+    @pytest.mark.asyncio
+    async def test_new_user_gets_locale_from_header(self, mock_db):
+        from app.routers.auth import request_magic_link, RequestLinkBody
+
+        mock_db.scalar.side_effect = [None, None]
+
+        created_user = None
+
+        def _capture_add(obj):
+            nonlocal created_user
+            if hasattr(obj, "locale"):
+                created_user = obj
+                obj.id = 99
+
+        mock_db.add.side_effect = _capture_add
+        mock_db.flush = AsyncMock()
+
+        with patch("app.routers.auth.send_magic_link", new_callable=AsyncMock):
+            body = RequestLinkBody(email="newuser@example.com")
+            await request_magic_link(body, _mock_request("et-EE,et;q=0.9"), mock_db)
+
+        assert created_user is not None and created_user.locale == "et"

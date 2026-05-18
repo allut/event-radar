@@ -55,15 +55,7 @@ TIME_WINDOW_HOURS = 12      # max |Δstart| in hours for two events to be dedup 
 RESEND_SEND_URL = "https://api.resend.com/emails"
 RESEND_TIMEOUT_SECONDS: float = 10.0
 RESEND_ERROR_SNIPPET_LEN = 200
-MAGIC_LINK_EMAIL_HTML = (
-    "<p>Click the link below to sign in to Event Radar. "
-    "This link expires in {ttl_minutes} minutes.</p>"
-    '<p><a href="{verify_url}">Sign in to Event Radar</a></p>'
-    "<p>If you didn't request this, ignore this email.</p>"
-)
-
-# Email digest
-DIGEST_EMAIL_SUBJECT_TEMPLATE = "Your Daily 5 — {date}"
+# Email i18n strings (subjects, labels, templates) live in app/i18n.py.
 DIGEST_SEND_HOUR = 7  # 07:00 Europe/Tallinn, one hour after build_daily_feeds
 DIGEST_MAX_WHY_GO_BULLETS = 3
 
@@ -160,12 +152,12 @@ Venue: {venue}
 Description: {description}
 
 JSON format:
-{{"categories": ["music"], "vibes": ["underground", "intimate"], "why_go": ["reason 1", "reason 2", "reason 3"], "quality": 0.8, "language": "et"}}
+{{"categories": ["music"], "vibes": ["underground", "intimate"], "why_go": {{"en": ["reason 1", "reason 2", "reason 3"], "et": ["põhjus 1", "põhjus 2", "põhjus 3"], "ru": ["причина 1", "причина 2", "причина 3"]}}, "quality": 0.8, "language": "et"}}
 
 Rules:
 - "language" must be the ISO 639-1 code of the event's original language (et, en, ru, or other).
 - "quality" is 0.0-1.0 indicating how compelling the event is.
-- "why_go" must have exactly 3 short bullets (max 15 words each).
+- "why_go" must be a dict with keys "en", "et", "ru", each containing exactly 3 short bullets (max 15 words each).
 - Only use values from the allowed lists for categories and vibes."""
 
 # Newsletter inbound email extraction
@@ -221,23 +213,6 @@ LLM_PROVIDERS: list[dict[str, str]] = [
         "key_attr": "MISTRAL_API_KEY",
     },
 ]
-
-# Date formatting (lightweight, no locale lib dependency)
-MONTH_NAMES_EN = [
-    "", "January", "February", "March", "April", "May", "June",
-    "July", "August", "September", "October", "November", "December",
-]
-MONTH_NAMES_ET = [
-    "", "jaanuar", "veebruar", "märts", "aprill", "mai", "juuni",
-    "juuli", "august", "september", "oktoober", "november", "detsember",
-]
-MONTH_NAMES_RU = [
-    "", "января", "февраля", "марта", "апреля", "мая", "июня",
-    "июля", "августа", "сентября", "октября", "ноября", "декабря",
-]
-DAY_NAMES_EN = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
-DAY_NAMES_ET = ["esmaspäev", "teisipäev", "kolmapäev", "neljapäev", "reede", "laupäev", "pühapäev"]
-DAY_NAMES_RU = ["понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье"]
 
 # Piletilevi HTML scraper
 PILETILEVI_BASE_URL = "https://www.piletilevi.ee"

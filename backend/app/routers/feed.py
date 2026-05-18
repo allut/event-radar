@@ -50,6 +50,6 @@ async def get_feed(
 
     return {
         "feed_date": today.isoformat(),
-        "events": [serialize_event(e) for e in events],
+        "events": [serialize_event(e, locale=current_user.locale) for e in events],
         "built_at": feed.built_at.isoformat(),
     }

@@ -9,16 +9,17 @@ import httpx
 
 from app.config import settings
 from app.constants import (
-    MAGIC_LINK_EMAIL_HTML,
+    DEFAULT_USER_LOCALE,
     RESEND_ERROR_SNIPPET_LEN,
     RESEND_SEND_URL,
     RESEND_TIMEOUT_SECONDS,
 )
+from app.i18n import t, ti
 
 log = logging.getLogger(__name__)
 
 
-async def send_magic_link(to_email: str, magic_token: str) -> None:
+async def send_magic_link(to_email: str, magic_token: str, locale: str = DEFAULT_USER_LOCALE) -> None:
     verify_url = f"{settings.FRONTEND_URL}/auth/verify?token={magic_token}"
 
     if not settings.RESEND_API_KEY:
@@ -27,7 +28,10 @@ async def send_magic_link(to_email: str, magic_token: str) -> None:
         log.debug("Dev-only magic link URL: %s", verify_url)
         return
 
-    html = MAGIC_LINK_EMAIL_HTML.format(
+    subject = t("email.magic_link.subject", locale)
+    html = ti(
+        "email.magic_link.body",
+        locale,
         ttl_minutes=settings.MAGIC_LINK_TTL_MINUTES,
         verify_url=verify_url,
     )
@@ -39,7 +43,7 @@ async def send_magic_link(to_email: str, magic_token: str) -> None:
             json={
                 "from": settings.RESEND_FROM_ADDRESS,
                 "to": [to_email],
-                "subject": "Your Event Radar sign-in link",
+                "subject": subject,
                 "html": html,
             },
         )

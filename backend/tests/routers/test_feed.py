@@ -54,6 +54,7 @@ def _make_event(event_id: int = 10):
     cl.vibes = ["underground"]
     cl.quality_score = 0.8
     cl.why_go_bullets = ["Great DJs", "Intimate venue", "All night long"]
+    cl.why_go_localized = None
     cl.language_detected = DEFAULT_USER_LOCALE
     e.classification = cl
     return e

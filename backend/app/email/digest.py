@@ -14,31 +14,27 @@ from sqlalchemy.orm import selectinload
 
 from app.config import settings
 from app.constants import (
-    DAY_NAMES_EN,
-    DAY_NAMES_ET,
-    DAY_NAMES_RU,
-    MONTH_NAMES_EN,
-    MONTH_NAMES_ET,
-    MONTH_NAMES_RU,
-    DIGEST_EMAIL_SUBJECT_TEMPLATE,
     DIGEST_MAX_WHY_GO_BULLETS,
     RESEND_ERROR_SNIPPET_LEN,
     RESEND_SEND_URL,
     RESEND_TIMEOUT_SECONDS,
     TALLINN_TZ,
 )
+from app.i18n import day_name, month_name, t, ti
 from app.models.models import DailyFeed, Event, User
+from app.routers.utils import resolve_why_go
 
 log = logging.getLogger(__name__)
 
 
 def _format_feed_date(d: date, locale: str) -> str:
     dow = d.weekday()  # 0=Mon
+    # Grammar differs per locale; the order of day/month/day-number is not key→string.
     if locale == "et":
-        return f"{DAY_NAMES_ET[dow]}, {d.day}. {MONTH_NAMES_ET[d.month]}"
+        return f"{day_name(dow, locale)}, {d.day}. {month_name(d.month, locale)}"
     if locale == "ru":
-        return f"{DAY_NAMES_RU[dow]}, {d.day} {MONTH_NAMES_RU[d.month]}"
-    return f"{DAY_NAMES_EN[dow]}, {MONTH_NAMES_EN[d.month]} {d.day}"
+        return f"{day_name(dow, locale)}, {d.day} {month_name(d.month, locale)}"
+    return f"{day_name(dow, locale)}, {month_name(d.month, locale)} {d.day}"
 
 
 def _format_event_time(starts_at: datetime, locale: str) -> str:
@@ -74,15 +70,13 @@ def build_digest_html(
     frontend_url: str,
 ) -> str:
     date_str = _format_feed_date(feed_date, locale)
-    subject_label = {
-        "et": "Sinu päeva viis", "ru": "Ваша Пятёрка дня"
-    }.get(locale, "Your Daily 5")
+    subject_label = t("digest.subject_label", locale)
     unsubscribe_url = f"{frontend_url}/settings"
 
     event_blocks: list[str] = []
     for event in events:
         cl = event.classification
-        bullets = (cl.why_go_bullets or [])[:DIGEST_MAX_WHY_GO_BULLETS] if cl else []
+        bullets = resolve_why_go(cl, locale)[:DIGEST_MAX_WHY_GO_BULLETS]
         time_str = _format_event_time(event.starts_at, locale)
         venue_str = html_lib.escape(event.venue_name or "")
         meta = f"{time_str} · {venue_str}" if venue_str else time_str
@@ -90,9 +84,10 @@ def build_digest_html(
         if event.price_min is not None:
             price_val = float(event.price_min)
             if price_val == 0:
-                price_str = {"et": "Tasuta", "ru": "Бесплатно"}.get(locale, "Free")
+                price_str = t("digest.price_free", locale)
             else:
-                price_str = f"From €{price_val:.2f}".rstrip("0").rstrip(".")
+                amount = f"{price_val:.2f}".rstrip("0").rstrip(".")
+                price_str = ti("digest.price_from", locale, amount=amount)
         else:
             price_str = ""
 
@@ -112,8 +107,8 @@ def build_digest_html(
             f"</div>"
         )
 
-    events_html = "\n".join(event_blocks) if event_blocks else "<p>No events today.</p>"
-    settings_label = {"et": "Tühista tellimus", "ru": "Отписаться"}.get(locale, "Unsubscribe")
+    events_html = "\n".join(event_blocks) if event_blocks else f"<p>{t('digest.no_events', locale)}</p>"
+    settings_label = t("digest.unsubscribe", locale)
 
     return f"""<!DOCTYPE html>
 <html><head><meta charset="utf-8">
@@ -146,9 +141,7 @@ async def send_digest_email(
         return
 
     html = build_digest_html(events, feed_date, locale, settings.FRONTEND_URL)
-    subject = DIGEST_EMAIL_SUBJECT_TEMPLATE.format(
-        date=_format_feed_date(feed_date, locale)
-    )
+    subject = ti("digest.subject_template", locale, date=_format_feed_date(feed_date, locale))
 
     async with httpx.AsyncClient(timeout=RESEND_TIMEOUT_SECONDS) as client:
         resp = await client.post(

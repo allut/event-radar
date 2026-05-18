@@ -14,6 +14,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.constants import (
+    DEFAULT_USER_LOCALE,
     EVENT_STATUS_CLASSIFIED,
     EVENT_STATUS_DRAFT,
     LLM_CLASSIFY_BATCH_SIZE,
@@ -24,9 +25,11 @@ from app.constants import (
     LLM_CLASSIFY_WHY_GO_MAX_BULLETS,
     LLM_MAX_PROMPT_CHARS,
     TALLINN_TZ,
+    VALID_CATEGORIES,
+    VALID_LOCALES,
+    VALID_VIBES,
 )
 from app.llm.router import LLMError, llm_json
-from app.constants import VALID_CATEGORIES, VALID_VIBES
 from app.models.models import Event, EventClassification
 
 log = logging.getLogger(__name__)
@@ -47,11 +50,19 @@ def _parse_classification(raw: dict) -> dict:
     """Extract and validate LLM output. Unknown taxonomy values are dropped."""
     cats = [c for c in raw.get("categories", []) if c in VALID_CATEGORIES]
     vibs = [v for v in raw.get("vibes", []) if v in VALID_VIBES]
-    why_go = raw.get("why_go", [])
-    if isinstance(why_go, list):
-        why_go = [str(b) for b in why_go[:LLM_CLASSIFY_WHY_GO_MAX_BULLETS]]
+    raw_why_go = raw.get("why_go", [])
+    if isinstance(raw_why_go, dict):
+        why_go_localized = {
+            loc: [str(b) for b in raw_why_go.get(loc, [])[:LLM_CLASSIFY_WHY_GO_MAX_BULLETS]]
+            for loc in VALID_LOCALES
+        }
+        why_go_bullets = why_go_localized.get(DEFAULT_USER_LOCALE) or []
+    elif isinstance(raw_why_go, list):
+        why_go_bullets = [str(b) for b in raw_why_go[:LLM_CLASSIFY_WHY_GO_MAX_BULLETS]]
+        why_go_localized = None
     else:
-        why_go = []
+        why_go_bullets = []
+        why_go_localized = None
     quality = raw.get("quality")
     try:
         quality = max(0.0, min(1.0, float(quality))) if quality is not None else None
@@ -61,7 +72,8 @@ def _parse_classification(raw: dict) -> dict:
     return {
         "categories": cats,
         "vibes": vibs,
-        "why_go_bullets": why_go,
+        "why_go_bullets": why_go_bullets,
+        "why_go_localized": why_go_localized,
         "quality_score": quality,
         "language_detected": language,
     }
@@ -89,6 +101,7 @@ async def classify_event(event: Event, db: AsyncSession) -> bool:
         existing.categories = parsed["categories"]
         existing.vibes = parsed["vibes"]
         existing.why_go_bullets = parsed["why_go_bullets"]
+        existing.why_go_localized = parsed["why_go_localized"]
         existing.quality_score = parsed["quality_score"]
         existing.language_detected = parsed["language_detected"]
         existing.model_used = model_used
@@ -100,6 +113,7 @@ async def classify_event(event: Event, db: AsyncSession) -> bool:
                 categories=parsed["categories"],
                 vibes=parsed["vibes"],
                 why_go_bullets=parsed["why_go_bullets"],
+                why_go_localized=parsed["why_go_localized"],
                 quality_score=parsed["quality_score"],
                 language_detected=parsed["language_detected"],
                 model_used=model_used,
