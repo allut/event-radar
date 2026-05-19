@@ -18,20 +18,15 @@ export default function AuthVerify() {
   const locale = getLocale();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const [state, setState] = useState<VerifyState>('verifying');
-  const [errorMsg, setErrorMsg] = useState('');
+  const token = searchParams.get('token');
+  const [state, setState] = useState<VerifyState>(token ? 'verifying' : 'error');
+  const [errorMsg, setErrorMsg] = useState(token ? '' : t('no_token', locale));
   const called = useRef(false);
 
   useEffect(() => {
+    if (!token) return;
     if (called.current) return;
     called.current = true;
-
-    const token = searchParams.get('token');
-    if (!token) {
-      setState('error');
-      setErrorMsg(t('no_token', locale));
-      return;
-    }
 
     async function verify(tok: string) {
       try {
@@ -55,8 +50,8 @@ export default function AuthVerify() {
         );
       }
     }
-    verify(token);
-  }, [navigate, searchParams]);
+    void verify(token);
+  }, [navigate, token, locale]);
 
   return (
     <div className={styles.page}>

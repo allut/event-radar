@@ -112,8 +112,8 @@ export default function EventDetail() {
 
           {data.why_go.length > 0 && (
             <ul className={styles.bullets} aria-label={t('why_go', locale)}>
-              {data.why_go.map((bullet, i) => (
-                <li key={i} className={styles.bullet}>{bullet}</li>
+              {data.why_go.map(bullet => (
+                <li key={bullet} className={styles.bullet}>{bullet}</li>
               ))}
             </ul>
           )}

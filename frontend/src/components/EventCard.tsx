@@ -82,8 +82,8 @@ export default function EventCard({ event, index, onFeedbackSent }: EventCardPro
 
         {event.why_go.length > 0 && (
           <ul className={styles.bullets} aria-label={t('why_go', locale)}>
-            {event.why_go.map((bullet, i) => (
-              <li key={i} className={styles.bullet}>{bullet}</li>
+            {event.why_go.map(bullet => (
+              <li key={bullet} className={styles.bullet}>{bullet}</li>
             ))}
           </ul>
         )}
