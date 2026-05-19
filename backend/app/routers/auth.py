@@ -88,7 +88,7 @@ async def request_magic_link(
     body: RequestLinkBody,
     request: Request,
     db: AsyncSession = Depends(get_db),
-):
+) -> dict:
     """Request a magic sign-in link. Always returns 200 to prevent user enumeration."""
     email = body.email.lower()
 
@@ -140,7 +140,7 @@ async def request_magic_link(
 async def verify_magic_link(
     token: str,
     db: AsyncSession = Depends(get_db),
-):
+) -> dict:
     """Verify a magic-link token. Returns a session token on success."""
     try:
         user_id = verify_magic_token(token)
@@ -201,7 +201,7 @@ async def verify_magic_link(
 async def get_me(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> dict:
     """Return the currently authenticated user."""
     count: int = await db.scalar(
         select(func.count()).select_from(UserPersona).where(UserPersona.user_id == current_user.id)

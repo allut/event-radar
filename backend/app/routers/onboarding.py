@@ -1,6 +1,5 @@
 """Onboarding endpoint — persona selection."""
 import logging
-from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
@@ -18,7 +17,7 @@ router = APIRouter(prefix="/onboarding", tags=["onboarding"])
 
 class PersonaBody(BaseModel):
     primary_slug: str
-    secondary_slug: Optional[str] = None
+    secondary_slug: str | None = None
 
 
 @router.post("/persona", status_code=status.HTTP_200_OK)
@@ -26,7 +25,7 @@ async def set_persona(
     body: PersonaBody,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> dict:
     """Set (or replace) the user's persona selection."""
     slugs = [body.primary_slug]
     if body.secondary_slug:

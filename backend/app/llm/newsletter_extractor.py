@@ -17,7 +17,7 @@ from app.constants import (
 from app.llm.router import LLMError, llm_json
 from app.models.models import RawEvent, RawInboundEmail, Source
 
-logger = logging.getLogger(__name__)
+log = logging.getLogger(__name__)
 
 
 async def _get_or_create_newsletter_source(db: AsyncSession) -> Source:
@@ -57,14 +57,14 @@ async def extract_events_from_email(
     try:
         raw, _model = await llm_json(LLM_TASK_NEWSLETTER, prompt, db)
     except LLMError as exc:
-        logger.warning("Newsletter LLM extraction failed for email %d: %s", email_id, exc)
+        log.warning("Newsletter LLM extraction failed for email %d: %s", email_id, exc)
         await _mark_processed(db, email_id)
         return 0
 
     # llm_json always returns a dict (json_object response_format); prompt asks for {"events": [...]}
     events: list[Any] = raw.get("events", [])
     if not isinstance(events, list):
-        logger.warning("LLM returned non-list events for email %d", email_id)
+        log.warning("LLM returned non-list events for email %d", email_id)
         await _mark_processed(db, email_id)
         return 0
 
@@ -83,7 +83,7 @@ async def extract_events_from_email(
 
     await _mark_processed(db, email_id)
     await db.flush()
-    logger.info("Extracted %d event(s) from newsletter email %d", count, email_id)
+    log.info("Extracted %d event(s) from newsletter email %d", count, email_id)
     return count
 
 

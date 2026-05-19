@@ -1,5 +1,4 @@
 from datetime import date, datetime
-from typing import Optional
 
 from sqlalchemy import (
     BigInteger,
@@ -66,7 +65,7 @@ class AuthMagicLink(Base):
     )
     token_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    used_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     user: Mapped["User"] = relationship(back_populates="magic_links")
 
@@ -117,8 +116,8 @@ class Source(Base):
     kind: Mapped[str] = mapped_column(String(20), nullable=False)
     config: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    last_run_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    last_status: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    last_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
     ingestion_runs: Mapped[list["IngestionRun"]] = relationship(back_populates="source")
     raw_events: Mapped[list["RawEvent"]] = relationship(back_populates="source")
@@ -133,10 +132,10 @@ class IngestionRun(Base):
     started_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
-    finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     raw_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     new_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     source: Mapped["Source"] = relationship(back_populates="ingestion_runs")
 
@@ -146,12 +145,12 @@ class RawEvent(Base):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     source_id: Mapped[int] = mapped_column(ForeignKey("sources.id"), nullable=False)
-    external_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    external_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     payload: Mapped[dict] = mapped_column(JSONB, nullable=False)
     fetched_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
-    processed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     source: Mapped["Source"] = relationship(back_populates="raw_events")
 
@@ -171,26 +170,26 @@ class Event(Base):
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     slug: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
     title_orig: Mapped[str] = mapped_column(Text, nullable=False)
-    description_orig: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    description_orig: Mapped[str | None] = mapped_column(Text, nullable=True)
     starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    ends_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    venue_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-    venue_address: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    lat: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-    lng: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-    url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    image_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    price_min: Mapped[Optional[float]] = mapped_column(Numeric(10, 2), nullable=True)
-    price_max: Mapped[Optional[float]] = mapped_column(Numeric(10, 2), nullable=True)
-    currency: Mapped[Optional[str]] = mapped_column(String(3), nullable=True)
+    ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    venue_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    venue_address: Mapped[str | None] = mapped_column(Text, nullable=True)
+    lat: Mapped[float | None] = mapped_column(Float, nullable=True)
+    lng: Mapped[float | None] = mapped_column(Float, nullable=True)
+    url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    image_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    price_min: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)
+    price_max: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)
+    currency: Mapped[str | None] = mapped_column(String(3), nullable=True)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default=EVENT_STATUS_DRAFT)
-    dedup_group_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    dedup_group_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
 
     sources: Mapped[list["EventSource"]] = relationship(back_populates="event")
-    classification: Mapped[Optional["EventClassification"]] = relationship(
+    classification: Mapped["EventClassification | None"] = relationship(
         back_populates="event", uselist=False
     )
     feedback: Mapped[list["UserEventFeedback"]] = relationship(back_populates="event")
@@ -205,7 +204,7 @@ class EventSource(Base):
         ForeignKey("events.id", ondelete="CASCADE"), nullable=False
     )
     source_id: Mapped[int] = mapped_column(ForeignKey("sources.id"), nullable=False)
-    external_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    external_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     event: Mapped["Event"] = relationship(back_populates="sources")
     source: Mapped["Source"] = relationship(back_populates="event_sources")
@@ -227,11 +226,11 @@ class EventClassification(Base):
     )
     categories: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False, default=list)
     vibes: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False, default=list)
-    quality_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-    why_go_bullets: Mapped[Optional[list[str]]] = mapped_column(ARRAY(Text), nullable=True)
-    why_go_localized: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
-    language_detected: Mapped[Optional[str]] = mapped_column(String(5), nullable=True)
-    model_used: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    quality_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    why_go_bullets: Mapped[list[str] | None] = mapped_column(ARRAY(Text), nullable=True)
+    why_go_localized: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    language_detected: Mapped[str | None] = mapped_column(String(5), nullable=True)
+    model_used: Mapped[str | None] = mapped_column(String(50), nullable=True)
     classified_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
@@ -322,7 +321,7 @@ class RawInboundEmail(Base):
     to_addr: Mapped[str] = mapped_column(Text, nullable=False, server_default="")
     subject: Mapped[str] = mapped_column(Text, nullable=False, server_default="")
     raw_payload: Mapped[dict] = mapped_column(JSONB, nullable=False)
-    processed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 # ---------------------------------------------------------------------------
@@ -339,13 +338,13 @@ class LlmCall(Base):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     task: Mapped[str] = mapped_column(String(20), nullable=False)
-    event_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
-    content_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    event_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    content_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     provider: Mapped[str] = mapped_column(String(20), nullable=False)
     model: Mapped[str] = mapped_column(String(100), nullable=False)
-    prompt_tokens: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    completion_tokens: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    response_json: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    prompt_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    completion_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    response_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

@@ -19,7 +19,7 @@ router = APIRouter(prefix="/feed", tags=["feed"])
 async def get_feed(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> dict:
     """Return today's Daily 5 feed. Empty events list if feed has not been built yet."""
     today = datetime.now(TALLINN_TZ).date()
 

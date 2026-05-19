@@ -1,5 +1,6 @@
 import logging
 import secrets
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -81,7 +82,7 @@ async def _run_send_daily_digests() -> None:
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     async with AsyncSessionLocal() as db:
         await seed_sources(db)
         await seed_personas(db)
@@ -172,12 +173,12 @@ app.include_router(webhooks_router)
 
 
 @app.get("/health")
-async def health():
+async def health() -> dict:
     return {"status": "ok"}
 
 
 @app.get("/internal/tick")
-async def tick(request: Request):
+async def tick(request: Request) -> dict:
     """Called by Render Cron Job every 15 min to keep the dyno alive."""
     token = settings.INTERNAL_TOKEN
     if token:

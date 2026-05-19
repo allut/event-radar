@@ -1,4 +1,5 @@
 import logging
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,7 +12,7 @@ from app.models.models import Persona, Source
 log = logging.getLogger(__name__)
 
 
-def _jsonld_sources() -> list[dict]:
+def _jsonld_sources() -> list[dict[str, Any]]:
     return [
         {"slug": "telliskivi",             "kind": "html_jsonld", "enabled": True, "config": {"url": settings.TELLISKIVI_URL}},
         {"slug": "kultuurikatel",          "kind": "html_jsonld", "enabled": True, "config": {"url": settings.KULTUURIKATEL_URL}},
@@ -21,7 +22,7 @@ def _jsonld_sources() -> list[dict]:
     ]
 
 
-def _persona_seeds() -> tuple[dict, ...]:
+def _persona_seeds() -> tuple[dict[str, Any], ...]:
     return (
         {
             "slug": "underground_clubber",
@@ -61,7 +62,7 @@ def _persona_seeds() -> tuple[dict, ...]:
     )
 
 
-def _fienta_source() -> dict:
+def _fienta_source() -> dict[str, Any]:
     return {
         "slug": "fienta",
         "kind": "api",
@@ -149,7 +150,7 @@ async def _upsert_fienta(db: AsyncSession) -> None:
 
 
 
-async def _upsert_simple(db: AsyncSession, source_def: dict) -> None:
+async def _upsert_simple(db: AsyncSession, source_def: dict[str, Any]) -> None:
     """Insert source if absent; update config['url'] if it changed (e.g. env override)."""
     existing = await db.scalar(
         select(Source).where(Source.slug == source_def["slug"])

@@ -4,7 +4,7 @@ import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 
 import httpx
 from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
@@ -62,14 +62,14 @@ async def _http_get(
     return r
 
 
-def normalize_currency(raw: Any, has_price: bool) -> Optional[str]:
+def normalize_currency(raw: Any, has_price: bool) -> str | None:
     """Coerce a raw currency value; fall back to DEFAULT_CURRENCY only when a price exists."""
     if raw:
         return str(raw)
     return DEFAULT_CURRENCY if has_price else None
 
 
-def _parse_dt(value: str) -> Optional[datetime]:
+def _parse_dt(value: str) -> datetime | None:
     try:
         dt = datetime.fromisoformat(value)
         if dt.tzinfo is None:
@@ -84,17 +84,17 @@ class NormalizedEvent:
     external_id: str
     title: str
     starts_at: datetime  # must be timezone-aware
-    description: Optional[str] = None
-    ends_at: Optional[datetime] = None
-    venue_name: Optional[str] = None
-    venue_address: Optional[str] = None
-    lat: Optional[float] = None
-    lng: Optional[float] = None
-    url: Optional[str] = None
-    image_url: Optional[str] = None
-    price_min: Optional[float] = None
-    price_max: Optional[float] = None
-    currency: Optional[str] = None
+    description: str | None = None
+    ends_at: datetime | None = None
+    venue_name: str | None = None
+    venue_address: str | None = None
+    lat: float | None = None
+    lng: float | None = None
+    url: str | None = None
+    image_url: str | None = None
+    price_min: float | None = None
+    price_max: float | None = None
+    currency: str | None = None
 
 
 def _make_slug(title: str, starts_at: datetime, external_id: str) -> str:
@@ -113,9 +113,9 @@ class SourceAdapter(ABC):
     async def fetch_raw(self) -> list[dict[str, Any]]: ...
 
     @abstractmethod
-    def normalize(self, raw: dict[str, Any]) -> Optional[NormalizedEvent]: ...
+    def normalize(self, raw: dict[str, Any]) -> NormalizedEvent | None: ...
 
-    def get_raw_external_id(self, raw: dict[str, Any]) -> Optional[str]:
+    def get_raw_external_id(self, raw: dict[str, Any]) -> str | None:
         """Extract the external ID to store on RawEvent. Override for non-'id' key sources."""
         v = raw.get("id", "")
         return str(v) if v else None

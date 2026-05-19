@@ -22,7 +22,7 @@ async def record_feedback(
     body: FeedbackBody,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> dict:
     """
     Record a feedback signal for an event.
     Invalidates the cached user_event_scores row so the next scoring pass is fresh.

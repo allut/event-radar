@@ -7,29 +7,27 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.db import get_db
+from app.db import AsyncSessionLocal, get_db
+from app.llm.newsletter_extractor import extract_events_from_email
 from app.models.models import RawInboundEmail
 
-logger = logging.getLogger(__name__)
+log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
 
 
 async def _run_extraction(email_id: int, subject: str, text_body: str) -> None:
     """Background task: extract events from email using a fresh DB session."""
-    from app.db import AsyncSessionLocal
-    from app.llm.newsletter_extractor import extract_events_from_email
-
     async with AsyncSessionLocal() as db:
         try:
             count = await extract_events_from_email(
                 db, email_id=email_id, subject=subject, text_body=text_body
             )
             await db.commit()
-            logger.info("Newsletter extraction committed: %d event(s) from email %d", count, email_id)
+            log.info("Newsletter extraction committed: %d event(s) from email %d", count, email_id)
         except Exception:
             await db.rollback()
-            logger.exception("Newsletter extraction failed for email %d", email_id)
+            log.exception("Newsletter extraction failed for email %d", email_id)
 
 
 @router.post("/inbound-mail", status_code=status.HTTP_200_OK)
@@ -45,13 +43,13 @@ async def inbound_mail(
     to guard the endpoint in production. Empty secret disables verification (dev only).
     """
     if settings.RESEND_WEBHOOK_SECRET and not hmac.compare_digest(secret, settings.RESEND_WEBHOOK_SECRET):
-        logger.warning("inbound-mail: invalid webhook secret")
+        log.warning("inbound-mail: invalid webhook secret")
         return JSONResponse({"status": "rejected"}, status_code=status.HTTP_401_UNAUTHORIZED)
 
     try:
         payload = await request.json()
     except Exception:
-        logger.warning("inbound-mail: invalid JSON body")
+        log.warning("inbound-mail: invalid JSON body")
         return JSONResponse({"status": "rejected", "reason": "invalid json"}, status_code=status.HTTP_400_BAD_REQUEST)
 
     from_addr = str(payload.get("from", ""))
@@ -74,6 +72,6 @@ async def inbound_mail(
     if text_body or subject:
         background_tasks.add_task(_run_extraction, email_id, subject, text_body)
     else:
-        logger.info("inbound-mail %d: no text body, skipping extraction", email_id)
+        log.info("inbound-mail %d: no text body, skipping extraction", email_id)
 
     return JSONResponse({"status": "accepted", "id": email_id})

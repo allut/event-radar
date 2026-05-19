@@ -1,6 +1,5 @@
 """User settings endpoints — read and update profile preferences."""
 import logging
-from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, field_validator
@@ -18,12 +17,12 @@ router = APIRouter(prefix="/users/me", tags=["settings"])
 
 
 class PatchSettingsBody(BaseModel):
-    locale: Optional[str] = None
-    email_digest_opt_in: Optional[bool] = None
+    locale: str | None = None
+    email_digest_opt_in: bool | None = None
 
     @field_validator("locale")
     @classmethod
-    def locale_must_be_valid(cls, v: Optional[str]) -> Optional[str]:
+    def locale_must_be_valid(cls, v: str | None) -> str | None:
         if v is not None and v not in VALID_LOCALES:
             raise ValueError(f"locale must be one of {sorted(VALID_LOCALES)}")
         return v
@@ -54,7 +53,7 @@ async def _get_persona_list(user_id: int, db: AsyncSession) -> list[dict]:
 async def get_settings(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> dict:
     """Return current user profile + settings."""
     personas = await _get_persona_list(current_user.id, db)
     return serialize_user(
@@ -69,7 +68,7 @@ async def patch_settings(
     body: PatchSettingsBody,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> dict:
     """Update locale and/or email digest preference."""
     if body.locale is None and body.email_digest_opt_in is None:
         raise HTTPException(

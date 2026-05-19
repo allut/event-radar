@@ -1,6 +1,6 @@
 """Shared serialization helpers for event routers."""
 from itsdangerous import BadSignature, SignatureExpired
-from sqlalchemy import select
+from sqlalchemy import Select, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -36,7 +36,7 @@ async def get_optional_user_locale(
     return user.locale if user else DEFAULT_USER_LOCALE
 
 
-def select_events_with_classification():
+def select_events_with_classification() -> Select[tuple[Event]]:
     """Base SELECT for Event with classification eager-loaded. Callers add their own .where()."""
     return select(Event).options(selectinload(Event.classification))
 

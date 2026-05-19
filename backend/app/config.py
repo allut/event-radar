@@ -1,3 +1,5 @@
+from typing import Any
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -30,27 +32,27 @@ class Settings(BaseSettings):
 
     # Persona affinity vectors — keys must match VALID_CATEGORIES / VALID_VIBES / VALID_TIMES.
     # Override in .env to retune without code changes.
-    PERSONA_UNDERGROUND_CLUBBER_AFFINITY: dict = {
+    PERSONA_UNDERGROUND_CLUBBER_AFFINITY: dict[str, Any] = {
         "categories": {"music": 1.0, "nightlife": 1.0, "alternative": 0.6},
         "vibes": {"underground": 1.0, "high_energy": 0.8, "indie": 0.6},
         "times": {"late_night": 1.0, "weekend": 0.8},
     }
-    PERSONA_NETWORKING_PRO_AFFINITY: dict = {
+    PERSONA_NETWORKING_PRO_AFFINITY: dict[str, Any] = {
         "categories": {"networking": 1.0, "workshops": 0.5},
         "vibes": {"trendy": 0.8, "accessible": 0.6, "educational": 0.5},
         "times": {"weekday": 0.8, "evening": 0.6},
     }
-    PERSONA_WEEKEND_HOBBYIST_AFFINITY: dict = {
+    PERSONA_WEEKEND_HOBBYIST_AFFINITY: dict[str, Any] = {
         "categories": {"sports": 0.8, "workshops": 0.7, "food_drink": 0.7},
         "vibes": {"casual": 1.0, "accessible": 0.8},
         "times": {"weekend": 1.0, "daytime": 0.8},
     }
-    PERSONA_CULTURE_BUFF_AFFINITY: dict = {
+    PERSONA_CULTURE_BUFF_AFFINITY: dict[str, Any] = {
         "categories": {"theater": 1.0, "exhibitions": 1.0, "cinema": 0.8, "literature": 0.7},
         "vibes": {"niche": 0.7, "indie": 0.6, "trendy": 0.5},
         # No times preference — culture buff attends any time.
     }
-    PERSONA_FAMILY_EXPLORER_AFFINITY: dict = {
+    PERSONA_FAMILY_EXPLORER_AFFINITY: dict[str, Any] = {
         "categories": {"family": 1.0, "workshops": 0.6, "sports": 0.4},
         "vibes": {"accessible": 1.0, "casual": 0.7, "educational": 0.5},
         "times": {"daytime": 0.9, "weekend": 0.8},

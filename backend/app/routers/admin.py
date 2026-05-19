@@ -4,13 +4,14 @@ import secrets
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.config import settings
+from app.constants import EVENT_STATUS_CANCELLED
 from app.db import AsyncSessionLocal
 from app.ingestion.jobs import classify_pending_job, dedup_pass, ingest_all_enabled, ingest_source
 from app.ingestion.registry import ADAPTER_REGISTRY
-from app.models.models import Event
+from app.models.models import Event, Source
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/admin")
@@ -46,14 +47,14 @@ def _require_admin(credentials: HTTPBasicCredentials = Depends(_security)) -> No
 
 
 @router.get("/ingest", dependencies=[Depends(_require_admin)])
-async def admin_ingest_all():
+async def admin_ingest_all() -> dict:
     """Trigger ingestion for all enabled sources."""
     results = await ingest_all_enabled()
     return {"results": results}
 
 
 @router.post("/ingest/{slug}", dependencies=[Depends(_require_admin)])
-async def admin_ingest_source(slug: str):
+async def admin_ingest_source(slug: str) -> dict:
     """Trigger ingestion for a single source by slug."""
     if slug not in ADAPTER_REGISTRY:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Unknown source: {slug!r}")
@@ -68,7 +69,7 @@ async def admin_ingest_source(slug: str):
 
 
 @router.post("/dedup", dependencies=[Depends(_require_admin)])
-async def admin_dedup_run():
+async def admin_dedup_run() -> dict:
     """Trigger a rule-based dedup pass over all non-cancelled events."""
     try:
         summary = await dedup_pass()
@@ -79,14 +80,12 @@ async def admin_dedup_run():
 
 
 @router.get("/dedup/groups", dependencies=[Depends(_require_admin)])
-async def admin_dedup_groups():
+async def admin_dedup_groups() -> dict:
     """Return events grouped by dedup_group_id for manual eyeballing.
 
     Only returns events that are part of a dedup group (dedup_group_id IS NOT NULL).
     Sorted by group ID then event ID so each cluster appears together.
     """
-    from app.constants import EVENT_STATUS_CANCELLED
-
     async with AsyncSessionLocal() as db:
         rows = (
             await db.scalars(
@@ -101,7 +100,7 @@ async def admin_dedup_groups():
 
     groups: dict[int, list[dict]] = {}
     for e in rows:
-        groups.setdefault(e.dedup_group_id, []).append({
+        groups.setdefault(e.dedup_group_id, []).append({  # type: ignore[arg-type]
             "id": e.id,
             "title": e.title_orig,
             "starts_at": e.starts_at.isoformat(),
@@ -121,7 +120,7 @@ async def admin_dedup_groups():
 
 
 @router.post("/classify", dependencies=[Depends(_require_admin)])
-async def admin_classify():
+async def admin_classify() -> dict:
     """Trigger LLM classification for one batch of unclassified canonical events."""
     try:
         summary = await classify_pending_job()
@@ -135,12 +134,8 @@ async def admin_classify():
 
 
 @router.get("/stats", dependencies=[Depends(_require_admin)])
-async def admin_stats():
+async def admin_stats() -> dict:
     """Aggregate counts used by checkpoint tests and manual monitoring."""
-    from sqlalchemy import func
-    from app.constants import EVENT_STATUS_CANCELLED
-    from app.models.models import Source
-
     async with AsyncSessionLocal() as db:
         total = (await db.scalar(
             select(func.count(Event.id)).where(Event.status != EVENT_STATUS_CANCELLED)

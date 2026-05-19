@@ -9,6 +9,7 @@ Any LLM-returned value not in the taxonomy is silently dropped.
 """
 import logging
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -46,7 +47,7 @@ def _build_classify_prompt(event: Event) -> str:
     )
 
 
-def _parse_classification(raw: dict) -> dict:
+def _parse_classification(raw: dict[str, Any]) -> dict[str, Any]:
     """Extract and validate LLM output. Unknown taxonomy values are dropped."""
     cats = [c for c in raw.get("categories", []) if c in VALID_CATEGORIES]
     vibs = [v for v in raw.get("vibes", []) if v in VALID_VIBES]
@@ -132,7 +133,7 @@ async def classify_event(event: Event, db: AsyncSession) -> bool:
     return True
 
 
-async def classify_pending(db: AsyncSession, *, batch_size: int = LLM_CLASSIFY_BATCH_SIZE) -> dict:
+async def classify_pending(db: AsyncSession, *, batch_size: int = LLM_CLASSIFY_BATCH_SIZE) -> dict[str, Any]:
     """Classify all canonical draft events, up to ``batch_size`` per call.
 
     A "canonical" event is one with ``dedup_group_id IS NULL`` or

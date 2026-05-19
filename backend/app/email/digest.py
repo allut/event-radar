@@ -170,7 +170,7 @@ async def send_digest_email(
 # ---------------------------------------------------------------------------
 
 
-async def send_daily_digests(db: AsyncSession) -> dict:
+async def send_daily_digests(db: AsyncSession) -> dict[str, int]:
     """
     Send today's Daily 5 digest to all opted-in users.
     Runs at 07:00 Europe/Tallinn (one hour after build_daily_feeds).

@@ -19,7 +19,7 @@ async def get_event(
     event_id: int,
     db: AsyncSession = Depends(get_db),
     authorization: str | None = Header(default=None),
-):
+) -> dict:
     """Return full event detail by ID. No auth required — events are public."""
     event = await db.scalar(
         select_events_with_classification().where(
