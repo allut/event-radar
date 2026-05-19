@@ -33,8 +33,9 @@ export default function AuthVerify() {
       return;
     }
 
-    api.get<VerifyResponse>(`/auth/verify?token=${encodeURIComponent(token)}`)
-      .then(async (data) => {
+    async function verify(tok: string) {
+      try {
+        const data = await api.get<VerifyResponse>(`/auth/verify?token=${encodeURIComponent(tok)}`);
         setToken(data.session_token);
         setState('success');
         let dest = '/onboarding';
@@ -45,15 +46,16 @@ export default function AuthVerify() {
           // /auth/me failure is non-fatal — fall back to /onboarding
         }
         setTimeout(() => navigate(dest, { replace: true }), AUTH_REDIRECT_DELAY_MS);
-      })
-      .catch((err) => {
+      } catch (err) {
         setState('error');
         setErrorMsg(
           err instanceof ApiError
             ? err.message
             : t('verify_failed', locale)
         );
-      });
+      }
+    }
+    verify(token);
   }, [navigate, searchParams]);
 
   return (

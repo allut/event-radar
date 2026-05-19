@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '../api/client';
 import { getLocale } from '../lib/auth';
 import { t, ti } from '../i18n';
-import { categoryGradient, formatEventDateTime, formatHourMinute, formatPrice, trackExternalClick } from '../utils';
+import { categoryGradient, cx, formatEventDateTime, formatHourMinute, formatPrice, trackExternalClick } from '../utils';
 import { type EventData } from '../components/EventCard';
 import FeedbackButtonRow from '../components/FeedbackButtonRow';
 import PageState from '../components/PageState';
@@ -128,7 +128,7 @@ export default function EventDetail() {
                 <span key={cat} className={styles.tag}>{cat.replace(/_/g, ' ')}</span>
               ))}
               {data.vibes.map(vibe => (
-                <span key={vibe} className={`${styles.tag} ${styles.tagVibe}`}>{vibe.replace(/_/g, ' ')}</span>
+                <span key={vibe} className={cx(styles.tag, styles.tagVibe)}>{vibe.replace(/_/g, ' ')}</span>
               ))}
             </div>
           )}

@@ -13,7 +13,7 @@ export default function Onboarding() {
   const [primarySlug, setPrimarySlug] = useState<string | null>(null);
   const [secondarySlug, setSecondarySlug] = useState<string | null>(null);
   const [locale, setLocaleState] = useState<string>(LOCALES[0].code);
-  const [loading, setLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
   function handleClickPrimary(slug: string) {
@@ -43,7 +43,7 @@ export default function Onboarding() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!primarySlug) return;
-    setLoading(true);
+    setIsLoading(true);
     setError('');
     try {
       await api.post('/onboarding/persona', {
@@ -54,7 +54,7 @@ export default function Onboarding() {
       navigate('/', { replace: true });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : t('generic_error', locale));
-      setLoading(false);
+      setIsLoading(false);
     }
   }
 
@@ -80,7 +80,7 @@ export default function Onboarding() {
                 key={p.slug}
                 persona={{ ...p, name: personaName(p.slug, locale), vibe: personaVibe(p.slug, locale) }}
                 role={roleFor(p.slug)}
-                primaryTaken={!!primarySlug && primarySlug !== p.slug}
+                isPrimaryTaken={!!primarySlug && primarySlug !== p.slug}
                 locale={locale}
                 onClickPrimary={() => handleClickPrimary(p.slug)}
                 onClickSecondary={() => handleClickSecondary(p.slug)}
@@ -104,9 +104,9 @@ export default function Onboarding() {
             <button
               type="submit"
               className={styles.submit}
-              disabled={!primarySlug || loading}
+              disabled={!primarySlug || isLoading}
             >
-              {loading
+              {isLoading
                 ? <span className={styles.spinner} aria-label={t('saving', locale)} />
                 : t('lets_go', locale)}
             </button>

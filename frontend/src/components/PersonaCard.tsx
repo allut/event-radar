@@ -3,10 +3,10 @@ import { t } from '../i18n';
 import { cx } from '../utils';
 import styles from './PersonaCard.module.css';
 
-interface Props {
+interface PersonaCardProps {
   persona: PersonaData;
   role: 'none' | 'primary' | 'secondary';
-  primaryTaken: boolean;
+  isPrimaryTaken: boolean;
   locale: string;
   onClickPrimary: () => void;
   onClickSecondary: () => void;
@@ -15,11 +15,11 @@ interface Props {
 export default function PersonaCard({
   persona,
   role,
-  primaryTaken,
+  isPrimaryTaken,
   locale,
   onClickPrimary,
   onClickSecondary,
-}: Props) {
+}: PersonaCardProps) {
   const isPrimary = role === 'primary';
   const isSecondary = role === 'secondary';
   const isNone = role === 'none';
@@ -40,7 +40,7 @@ export default function PersonaCard({
         <span className={styles.vibe}>{persona.vibe}</span>
       </button>
 
-      {primaryTaken && isNone && (
+      {isPrimaryTaken && isNone && (
         <button
           type="button"
           className={styles.secondaryBtn}

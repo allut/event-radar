@@ -29,13 +29,13 @@ export interface EventData {
   quality_score: number | null;
 }
 
-interface Props {
+interface EventCardProps {
   event: EventData;
   index: number;
   onFeedbackSent?: () => void;
 }
 
-export default function EventCard({ event, index, onFeedbackSent }: Props) {
+export default function EventCard({ event, index, onFeedbackSent }: EventCardProps) {
   const locale = getLocale();
   const { activeSignal, pending, sendFeedback } = useFeedback(event.id, onFeedbackSent);
 
