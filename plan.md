@@ -1,237 +1,174 @@
-﻿# Event Radar — MVP Implementation Plan
+# Event Radar — Plan
 
-## Context
+AI-powered event discovery for **Tallinn**. Personalized "Daily 5" curated feed per user, free-tier infra only. Solo Python developer, target steady-state cost **$0/mo**.
 
-You want to validate an AI-powered event-discovery idea cheaply: a personalized "Daily 5" of curated events for **Tallinn**, built by a solo Python developer in 2–3 weeks, on free-tier infrastructure only. This plan keeps Python full-stack, drops scraping in favor of APIs/JSON-LD/newsletters, and commits to **Personalization** as the single product differentiator.
+Tallinn speaks **Estonian, English, Russian** — every user-facing string and LLM output supports `et`/`en`/`ru`.
 
-Tallinn's population speaks three languages — **Estonian, English, and Russian** — so the product targets all three from day one. Every user-facing string, event classification output, and LLM prompt must support `et`, `en`, and `ru` locales.
+**Status (2026-05-19):** Days 1–20 complete. Day 21 (soft launch) pending E2E QA.
 
-Confirmed decisions:
-- **Stack:** FastAPI + Vite/React SPA, Postgres on Neon free
-- **City:** Tallinn (one city, hyper-local)
-- **Auth:** magic-link email
-- **AI:** free-tier LLMs only (Groq → Cerebras → Mistral fallback chain)
+---
+
+## Confirmed decisions
+
+- **Stack:** FastAPI 3.12 + SQLAlchemy 2 + Alembic; Vite/React SPA (TanStack Query, React Router, CSS Modules)
+- **DB:** Neon Postgres free (eu-central-1, 0.5 GB, scale-to-zero, pgvector available for v1.1)
+- **Auth:** magic-link email (`itsdangerous` signed token, 50 LOC); 7-day session token `X-Session-Token`
+- **Email:** Resend free (3k/mo) — magic links + daily digest
+- **LLM:** Groq primary (`llama-3.3-70b-versatile`, 14,400 req/day, 30 req/min burst) → Cerebras (`qwen-3-235b-a22b-instruct-2507`, 1 req/min Preview) → Mistral (1B tok/mo overnight batch)
+- **Scheduler:** APScheduler embedded; Render Cron Job pings `/internal/tick` every 15 min to survive free-tier sleep
+- **Hosting:** Render free Web Service (backend) + Vercel/Cloudflare Pages (frontend)
 - **Differentiator:** persona-based onboarding + like/dislike learning
-- **Sources:** free APIs + ICS/RSS + newsletter parsing — **no UI scraping** of FB/Meetup/Eventbrite
-
-Steady-state cost: **$0/mo** (optional $10/yr for an `.ee` domain).
+- **No Celery/Redis** — single-process MVP
 
 ---
 
 ## Architecture
 
 ```
-                     ┌─────────────────────────────────────────────┐
-                     │              Vite/React SPA                 │
-                     │   (Vercel CDN, talks to api.eventradar...)  │
-                     └────────────────────┬────────────────────────┘
-                                          │ HTTPS / JSON
-                                          ▼
-┌──────────────────────────────────────────────────────────────────┐
-│                       FastAPI app (single process)               │
-│  ┌────────────┐  ┌────────────┐  ┌─────────────┐  ┌───────────┐  │
-│  │  /auth     │  │  /feed     │  │  /events    │  │ /feedback │  │
-│  └────────────┘  └────────────┘  └─────────────┘  └───────────┘  │
-│  ┌────────────────────────────────────────────────────────────┐  │
-│  │           AsyncIOScheduler  (APScheduler)                  │  │
-│  │  hourly: ingest_fienta, ingest_venues, ingest_newsletters  │  │
-│  │  every 6h: dedup_pass, classify_pending                    │  │
-│  │  daily 06:00 Europe/Tallinn: build_daily_feeds             │  │
-│  └────────────────────────────────────────────────────────────┘  │
-└──────────────┬──────────────────────────────────┬────────────────┘
-               ▼                                  ▼
-       ┌──────────────┐                  ┌────────────────┐
-       │ Neon Postgres│                  │   LLM Router   │
-       │ (scale-to-0) │                  │ Groq→Cerebras→ │
-       └──────────────┘                  │   Mistral      │
-                                         └───────┬────────┘
-                                                 ▼
-                                   ┌───────────────────────────┐
-                                   │  External (free-tier LLM) │
-                                   └───────────────────────────┘
-
-Inbound newsletter pipeline:
-  Resend Inbound webhook → /webhooks/inbound-mail
-       → raw_inbound_emails table → LLM extractor → raw_events
+Vite/React SPA  ──HTTPS/JSON──▶  FastAPI (single process)
+                                    ├── Routers: /auth /admin /onboarding /events /feed
+                                    │            /feedback /users/me /settings /webhooks
+                                    └── APScheduler (in-process)
+                                        ├── Sun 03:00:  sync_fienta_organizers
+                                        ├── Hourly:     ingest_all_enabled
+                                        ├── 6-hourly:   dedup_pass + classify_pending
+                                        ├── 06:00 EET:  build_daily_feeds
+                                        └── 07:00 EET:  send_daily_digests
+                                          ↓
+                                Neon Postgres (pgvector available)
+                                          ↓
+                              LLM Router: Groq → Cerebras → Mistral
 ```
 
-Single-process design: APScheduler shares the FastAPI DB pool. **No Celery, no Redis** — Gemini was right that the original stack was overweight for an MVP. A Render external Cron Job pings `/internal/tick` every 15 min so scheduler ticks survive Render free-tier sleep.
+Inbound newsletter: `Resend Inbound webhook → /webhooks/inbound-mail → raw_inbound_emails → LLM extractor → raw_events`.
 
 ---
 
-## Tech & service choices
+## Data sources (live)
 
-| Layer | Choice | Notes |
-|---|---|---|
-| Backend | FastAPI 3.12 + SQLAlchemy 2 + Alembic | |
-| DB | **Neon free** (`eu-central-1`, 0.5 GB, 100 CU-h/mo, scale-to-zero) | Better than Supabase free which pauses projects after 7 days idle |
-| Auth | Self-hosted magic link (`itsdangerous` signed token + email) | No third-party auth lock-in; ~50 LOC |
-| Email | **Resend free** (3k/mo, 100/day) | Magic links + daily digest fits |
-| LLM primary | **Groq free** (14,400 req/day, `llama-3.3-70b-versatile`, Production) | 30 req/min burst; no sleep loop needed in batch jobs |
-| LLM secondary | **Cerebras free** (1M tok/day, `qwen-3-235b-a22b-instruct-2507`, Preview) | 1 req/min; Preview model — monitor for deprecation |
-| LLM batch | Mistral La Plateforme free (1B tok/mo, 2 RPM) | Overnight backfill only |
-| Scheduler | APScheduler `AsyncIOScheduler` embedded | + external Render Cron Job pinging `/internal/tick` every 15 min |
-| Backend host | **Render free Web Service** + free Render Cron Job keepalive | 750 hrs/mo covers 24/7 |
-| Frontend host | Vercel free (or Cloudflare Pages) | Static React build |
-| Domain | Optional `eventradar.ee` ~$10/yr | Or free `*.onrender.com` for v0 |
+1. **Fienta API** — `GET /api/v1/public/events?organizer=<id>`; ~15 Tallinn organizer IDs; weekly auto-discovery (≥3 events → auto-add)
+2. **Piletilevi HTML scraper** — 6 listing categories, Tallinn city filter, detail-page description fetch, 200-event cap
+3. **JSON-LD venues** — Telliskivi, Kultuurikatel, Fotografiska, KUMU, Estonia Concert Hall
+4. **Newsletter inbound** — Resend Inbound webhook → LLM extractor (unique-coverage moat for underground/niche)
 
-**Multilingual tip:** Llama 3.3 70B handles Estonian well per the Estonian Native LLM Benchmark (arxiv 2510.21193) and is strong on Russian natively. Always pass the original event text in the prompt and let the model answer in the user's chosen UI locale (`et`/`en`/`ru`) — works far better than asking it to translate first. Test all three locale paths explicitly, including Estonian diacritics and Cyrillic.
+**Skipped (decisions preserved):**
+- **Eventbrite** — `/v3/events/search/` deprecated for non-partners; adapter removed 2026-05-14
+- **Ticketmaster** — no EE inventory
+- **Facebook/Meetup scraping** — fragile bot-detection, out of MVP
 
 ---
 
-## Data sources (wire these 5 first)
+## Data model (Postgres key tables)
 
-1. **Fienta public API** (`GET /api/v1/public/events?organizer=<id>`) — curated list of ~15 Tallinn organizer IDs (Sveta Baar, HALL, Telliskivi tenants, Tallinn Music Week, etc.). One adapter handles all of them.
-2. **Telliskivi Loomelinnak** (`telliskivi.cc/en/events/`) — JSON-LD `Event` blocks.
-3. **Kultuurikatel** (`kultuurikatel.ee/en/events/`) — JSON-LD.
-4. **Fotografiska Tallinn** (`tallinn.fotografiska.com/en/events`) — JSON-LD.
-5. **Newsletter inbox** (`radar+tallinn@<domain>` via Resend Inbound webhook) — LLM-extracted events. **This is the highest-ROI channel** and the unique-coverage moat for the underground/niche events that justify persona-based ranking.
+- `users` — email (citext unique), locale (et|en|ru), home_city, email_digest_opt_in
+- `auth_magic_links` — token_hash (sha256), expires_at (15 min), used_at
+- `personas` — 5 static slugs, trilingual display names, affinity_vector JSONB
+- `user_personas` — M2M, primary 1.0 / secondary 0.4
+- `sources`, `ingestion_runs`, `raw_events`, `event_sources`
+- `events` — slug, title/description_orig, starts_at/ends_at, venue, lat/lng, price, status (draft|classified|published|cancelled), dedup_group_id
+- `event_classifications` — categories[], vibes[], quality_score, why_go_bullets[3], **why_go_localized** JSONB ({locale: [bullets]}), language_detected, model_used
+- `user_event_feedback` — like/dislike/bookmark/view/click_external
+- `user_event_scores` — cached score per (user, event)
+- `daily_feeds` — user_id, feed_date, event_ids BigInteger[]
+- `raw_inbound_emails` — Resend inbound payload + LLM-extraction state
+- `llm_calls` — content_hash cache + audit (provider, model, tokens, response JSONB)
 
-Stretch (Week 3): Ticketmaster Discovery API (`countryCode=EE`) for headline concerts; one or two more JSON-LD venues (KUMU, Estonia theatre).
-
-**Skipped** (with reasoning preserved so we don't relitigate later):
-- **Eventbrite** — `/v3/events/search/` is deprecated; useless for third-party aggregation.
-- **Piletilevi** — no public API, Eventival-backed; could parse JSON-LD on category pages as fallback if a primary source breaks.
-- **Facebook / Meetup UI scraping** — explicitly out; fragile bot-detection time-sink, not worth it for an MVP.
-
----
-
-## Data model (Postgres, key tables)
-
-- `users` — id, email (citext unique), locale (et|en|ru), home_city, created_at
-- `auth_magic_links` — id, user_id, token_hash, expires_at (15 min TTL), used_at
-- `personas` — id, slug, display_name_{en,et,ru}, affinity_vector (JSONB)
-- `user_personas` — user_id, persona_id, weight (primary 1.0, optional secondary 0.4)
-- `sources` — id, slug, kind (api|ics|rss|html_jsonld|inbound_email), config (JSONB), enabled, last_run_at, last_status
-- `ingestion_runs` — id, source_id, started_at, finished_at, raw_count, new_count, error
-- `raw_events` — id, source_id, external_id, payload (JSONB), fetched_at, processed_at NULL
-- `events` — id, slug, title_orig, description_orig, starts_at, ends_at, venue_name, venue_address, lat, lng, url, image_url, price_min/max, currency, status (draft|classified|published|cancelled), dedup_group_id
-- `event_sources` — M2M; preserves provenance after dedup merges
-- `event_classifications` — event_id, categories (text[]), vibes (text[]), quality_score, why_go_bullets (text[3]), language_detected, model_used
-- `user_event_feedback` — user_id, event_id, signal (like|dislike|bookmark|view|click_external), created_at
-- `user_event_scores` — user_id, event_id, score, computed_at (cached, invalidated on feedback)
-- `daily_feeds` — user_id, feed_date, event_ids (int[])
-
-Indexes: `events(starts_at, status)`, `events(dedup_group_id)`, `event_classifications(categories)` GIN, `user_event_feedback(user_id, created_at)`.
+Indexes: `events(starts_at, status)`, `events(dedup_group_id)`, `event_classifications(categories)` GIN, `user_event_feedback(user_id, created_at)`, `events(status)`, `raw_events(source_id)`.
 
 ---
 
-## Ingestion pipeline (unified for all source kinds)
+## Pipeline
 
 ```
 fetcher → raw_events → normalizer → dedup → events(draft) → classify → events(published)
 ```
 
-- **Fienta API** — async httpx loop over organizer IDs.
-- **HTML + JSON-LD** — fetch listing page, extract `<script type="application/ld+json">` with `extruct`, filter `@type == "Event"`. Per-source CSS-selector fallback if JSON-LD missing.
-- **ICS** — `icalendar` lib, one VEVENT per RawEvent. (Wire when we discover one — TalTech/TLU calendars are likely candidates.)
-- **Inbound email** — Resend Inbound webhook posts raw MIME to `/webhooks/inbound-mail` → `raw_inbound_emails` → LLM extraction prompt → RawEvents.
-
-**Dedup (two-stage, deliberate):** rule-based pre-filter (rapidfuzz `token_set_ratio > 70` + `|Δstart| < 12h` + venue compatibility), then LLM tiebreaker on bucketed candidates only (1 call per pair, JSON response, cached by content hash). On `same=true && confidence>0.7`, merge under one `dedup_group_id`. This is Gemini's "LLM dedup" suggestion implemented sanely — we don't blow tokens by sending every pair, just the candidate pairs that already passed rule-based filtering.
-
-**Classification** — one call per dedup group: input is title + description + venue + url (cap 1200 tokens); output is JSON `{categories, vibes, why_go: [3 bullets], quality, language}` against a fixed 12-category / 10-vibe taxonomy (no ontology drift).
+- **Dedup (two-stage):** rule-based pre-filter (`rapidfuzz.token_set_ratio > 70` + `|Δstart| < 12h` + venue-compatible), then LLM tiebreaker only on candidate pairs (cached by content hash). Merge on `same=true && confidence ≥ 0.7`.
+- **Classification:** one LLM call per dedup group; input = title + description + venue + url (≤1200 chars); output = JSON `{categories, vibes, why_go: {en,et,ru}, quality, language}` against fixed 12-cat / 10-vibe / 6-time taxonomy.
+- **Hard cap:** ≤600 tokens per LLM call. Cache by content hash. Provider fallback Groq → Cerebras → Mistral.
 
 ---
 
 ## Personalization
 
-**Personas (v0, 5 slugs):** `underground_clubber`, `networking_pro`, `weekend_hobbyist`, `culture_buff`, `family_explorer`. Each is a static affinity vector over (category, vibe, time) seeded as JSONB. User picks 1 primary at onboarding + optional 1 secondary at 0.4 weight.
+**Personas:** `underground_clubber`, `networking_pro`, `weekend_hobbyist`, `culture_buff`, `family_explorer`. User picks 1 primary + optional 1 secondary at 0.4 weight.
 
-**Scoring formula (v0, rule-based):**
-
+**Scoring:**
 ```
-score = 0.45 * persona_affinity(user, event)
-      + 0.20 * recency_boost(event)        # 1.0 today/tomorrow → 0 at +21d
-      + 0.20 * feedback_signal(user, event)
-      + 0.10 * quality(event)
-      + 0.05 * locality_bonus              # 1.0 if lat/lng in central Tallinn
+score = 0.45·persona_affinity + 0.20·recency_boost + 0.20·feedback_signal
+      + 0.10·quality_score + 0.05·locality_bonus
 ```
 
-- `persona_affinity = clip(Σ persona_vec · event_tags, -1, 1)` then mapped to [0,1]
-- `feedback_signal`: +1 for events sharing ≥1 category with a liked event (decay `0.9^days_since`), −1 for disliked; events in the user's disliked `dedup_group_id` set are hard-excluded. Aggregated, normalized.
-- Cached nightly into `user_event_scores`; invalidated and lazily recomputed on each new feedback row.
+- `persona_affinity` = normalized dot product over (category, vibe, time_slot) vectors
+- `recency_boost` = linear decay, 1.0 today → 0 at +21d
+- `feedback_signal` = per-day 0.9^t decay; +1 for category match w/ liked events, −1 for disliked; `dedup_group_id` of disliked events hard-excluded
+- `locality_bonus` = 1.0 if lat/lng in central Tallinn bbox
+- Cached in `user_event_scores`; invalidated on each feedback row
 
-**Daily 5 builder** runs at 06:00 Europe/Tallinn: take all `events.status='published'` in next 14 days, score per active user, apply MMR-lite diversity (max 2 per category in top 5), write `daily_feeds`.
-
-v1.1 enhancement (only if pgvector enabled on Neon — it is): replace category-overlap feedback with embedding cosine to user's liked centroid.
-
----
-
-## Frontend pages (Vite + React + TanStack Query)
-
-- **Login** — single email field → magic link → `/auth/verify?token=...`
-- **Onboarding** — pick primary persona (cards with 1-line vibe), optional secondary, locale toggle
-- **Daily feed** (home) — header date, the 5 cards: image, title, time, venue, 3-bullet "why go", like/dislike/bookmark buttons
-- **Event detail** — full description, map link, "tickets" CTA (external), feedback buttons
-- **Settings** — persona re-pick, locale, unsubscribe
-
-That's it for v0. No infinite scroll, no search, no calendar view — those add cognitive load and undercut the "Daily 5" promise.
+**Daily 5 builder:** runs 06:00 Europe/Tallinn; scores all published events in next 14 days; MMR-lite diversity (max 2 per category); writes `daily_feeds`.
 
 ---
 
-## Phased delivery (3 weeks, solo)
+## Frontend
 
-**Week 1 — Skeleton + ingestion**
-- Day 1: Repo, FastAPI scaffold, Alembic, Neon DB, Render deploy + healthcheck
-- Day 2: Migrations for users / sources / raw_events / events / event_sources / ingestion_runs
-- Day 3: Fienta adapter end-to-end; seed 5–10 Tallinn organizer IDs
-- Day 4: JSON-LD adapter base class; wire Telliskivi + Kultuurikatel + Fotografiska
-- Day 5: APScheduler hourly + `/admin/ingest` page (basic auth)
-- Day 6: Rule-based dedup; eyeball cross-source matches
-- Day 7: Magic-link auth + onboarding endpoint with persona pick
-
-**Checkpoint:** ≥200 canonical events in DB, no obvious duplicates, login works.
-
-**Week 2 — AI layer + frontend**
-- Day 8: LLM router (Groq→Cerebras→Mistral) with rate-limit awareness + `llm_calls` table
-- Day 9: LLM dedup tiebreaker layered on rule pre-filter
-- Day 10: LLM classifier (categories, vibes, why_go, quality, language); backfill all existing events
-- Day 11: Vite/React skeleton, login + onboarding pages, feed page wired to `/feed`
-- Day 12: Event detail + like/dislike/bookmark; feedback writes through
-- Day 13: Daily 5 builder + scoring formula; test with 2–3 fake users on different personas
-- Day 14: Newsletter inbound webhook + LLM extractor
-
-**Checkpoint:** "Daily 5" lands every morning; like/dislike visibly shifts tomorrow's feed.
-
-**Week 3 — Polish + ship**
-- Day 15: Settings page, locale toggle, unsubscribe
-- Day 16: Email digest of Daily 5 (Resend HTML template)
-- Day 17: Ticketmaster adapter + 2 more JSON-LD venues
-- Day 18: Estonian + Russian UI strings (i18n pass for all three locales), locale toggle in Settings, Europe/Tallinn date formatting (`zoneinfo`)
-- Day 19: Error pages, empty states, Plausible analytics
-- Day 20: Manual QA against 30 real Tallinn events of next 14 days; fix worst 5 issues
-- Day 21: Soft launch to ~10 personal contacts
-
-**Honest cuts if behind** (in order): extra venues + Ticketmaster (Day 17), email digest (Day 16), secondary persona blending, bookmarks. **Do not cut:** dedup, classification, personalization scoring, magic link, Daily 5.
+Routes (`frontend/src/routes/`): Login, AuthVerify, Onboarding, Feed, EventDetail, Settings, NotFound.
+Components (`frontend/src/components/`): EventCard, PersonaCard, ErrorBoundary.
+Server state via TanStack Query. i18n custom `frontend/src/i18n.ts` (no library) with `t()`, `ti()`, `personaName()`, `personaVibe()`.
 
 ---
 
-## Critical files to create first
+## Code quality
 
-- `C:\Users\Aleksei\event-radar\backend\app\main.py` — FastAPI app + APScheduler bootstrap
-- `C:\Users\Aleksei\event-radar\backend\app\ingestion\base.py` — `SourceAdapter` ABC; the unified RawEvent → NormalizedEvent → Event pipeline
-- `C:\Users\Aleksei\event-radar\backend\app\ingestion\sources\fienta.py` — first concrete adapter; template for the JSON-LD adapters
-- `C:\Users\Aleksei\event-radar\backend\app\ai\router.py` — provider chain (Groq → Cerebras → Mistral) with rate-limit awareness; classifier and dedup-tiebreaker prompts live next to it
-- `C:\Users\Aleksei\event-radar\backend\app\ranking\score.py` — persona affinity + recency + feedback formula and the Daily 5 builder
-- `C:\Users\Aleksei\event-radar\backend\alembic/versions/0001_init.py` — first migration with all v0 tables
-- `C:\Users\Aleksei\event-radar\frontend\src\routes\Feed.tsx` — Daily 5 page (the product surface)
+- **Backend constants** → `app/constants.py` (single source of truth)
+- **Backend utils** → `app/routers/utils.py`
+- **Frontend constants** → `frontend/src/constants.ts`
+- **Frontend utils** → `frontend/src/utils.ts`
+- **CSS design tokens** → `:root` vars in `frontend/src/index.css`; `.module.css` consumes vars only
+- **HTTP retry:** all source adapters use `_http_get()` from `app/ingestion/base.py` (tenacity, 3 attempts, 2–30s backoff)
+- **Taxonomy:** `validate_categories()` / `validate_vibes()` before persisting any LLM output
+- **Migrations:** chain `down_revision = "PREV"`; small & reversible
+- **Datetimes:** tz-aware via `zoneinfo` (`Europe/Tallinn`) — no naive UTC anywhere
+- **Email columns:** `citext`
+
+---
+
+## Next steps
+
+### P0 — Blocking soft launch
+
+1. **End-to-end QA against 30 real Tallinn events** (Day 20 was repurposed for backend i18n; QA never executed)
+2. **Soft launch to ~10 personal contacts** (Day 21) — depends on QA passing
+
+**QA checklist:**
+- [ ] Ingestion smoke — trigger `/admin/ingest` per source; check `ingestion_runs.new_count`; inspect 5 random `events` rows per source
+- [ ] Dedup spot-check — find event on Fienta + venue site (e.g. Tallinn Music Week); confirm single `dedup_group_id` + two `event_sources` rows
+- [ ] Classification — 10 random events; categories/vibes/why_go sane in all 3 locales; `language_detected` correct for ET/RU events
+- [ ] Personalization — 3 test users (clubber / pro / family); run 06:00 builder; verify `daily_feeds` differ; like/dislike shifts next feed
+- [ ] Auth flow — request magic link → Resend dashboard → click → land authenticated
+- [ ] Free-tier sanity — 24h: Neon CU-h <3/day, Groq req <500/day, Resend send count
+- [ ] Cold-start — Render dyno sleeps 15+ min; first paint <2s after cron warm
+
+### P1 — High value pre-launch or first week post-launch
+
+3. **Submit-an-event form** — manual escape hatch; elevated after Eventbrite removal
+4. **Plausible analytics** — deferred from Day 19; trivial once domain confirmed
+
+### P2 — Post-launch / v1.1
+
+5. **pgvector cosine feedback scoring** — replace category-overlap heuristic; Neon pgvector available; needs accumulated feedback data
+6. **Render Starter ($7/mo)** — reactive, only if free-tier sleep causes issues
+
+### P3 — Already built, validate in QA
+
+7. **Secondary persona blending (0.4 weight)** — implemented in `onboarding.py`; confirm feel
+8. **Bookmarks** — signal + endpoint + UI exist; verify end-to-end
+
+**Recommended execution order:** P0.1 QA → fix surfaced issues → P0.2 soft launch → P1.4 Plausible (post-domain) → P1.3 submit form (first week post-launch) → P2.5 pgvector (once feedback data exists).
 
 ---
 
 ## Top 3 risks
 
-1. **Source coverage thinness.** Tallinn has no Songkick-grade aggregator; 5 sources may yield 50–100 events/week, not 500. *Mitigation:* hard investment in newsletter ingestion (Resend Inbound + LLM extractor) — uniquely captures niche/underground events. Add a "submit an event" form as a manual escape hatch.
-2. **Free LLM quota exhaustion during backfill.** Initial dedup + classification across hundreds of events can exhaust Groq's 14,400 req/day or Cerebras's 1M-token budget quickly. *Mitigation:* (a) Groq→Cerebras→Mistral fallback chain, (b) cap prompts ≤600 tokens, (c) cache dedup decisions by content hash, (d) classify only canonical events (post-dedup), (e) push overnight backfill to Mistral's 1B tok/mo batch tier.
-3. **Render free-tier sleep killing scheduled jobs.** *Mitigation:* external Render Cron Job pings `/internal/tick` every 15 min as the actual scheduling trigger; APScheduler is the source of truth, the cron just nudges it. If traffic warrants, $7/mo Render Starter removes sleep without architecture changes.
-
----
-
-## Verification (end-to-end test plan)
-
-1. **Ingestion smoke test:** trigger `/admin/ingest` for each source; check `ingestion_runs.new_count` rows and inspect 5 random `events` rows per source.
-2. **Dedup spot-check:** find a Tallinn event listed on both Fienta and a venue site (Tallinn Music Week is a likely overlap); confirm one `dedup_group_id` and two rows in `event_sources`.
-3. **Classification check:** pick 10 random `events`; verify `categories`/`vibes`/`why_go` make sense to a human; confirm Estonian-language events get `language_detected='et'` and Russian-language events get `language_detected='ru'`; verify why_go renders correctly in all three locales (`et`/`en`/`ru`).
-4. **Personalization check:** create 3 test users with different personas (clubber, professional, family); run the 06:00 Daily 5 builder; verify `daily_feeds` contents differ in expected directions; like one event, dislike another, manually invalidate score cache, confirm next feed shifts.
-5. **Auth flow:** request magic link → check Resend dashboard → click link → land on feed authenticated.
-6. **Free-tier sanity:** after 24 h of running, check Neon CU-hours used (<3 CU-h/day expected), Groq req/day (<500 expected), Cerebras token spend if fallback was hit, Resend send count.
-7. **Cold-start test:** let Render free dyno sleep (no traffic 15+ min), then hit the feed; first paint should still be <2s after the cron-warmed Neon connection.
+1. **Source coverage thinness** — Tallinn has no Songkick-grade aggregator. *Mitigation:* heavy investment in newsletter ingestion + submit-event form.
+2. **Free LLM quota exhaustion on backfill** — *Mitigation:* Groq → Cerebras → Mistral chain, ≤600 token prompts, content-hash dedup cache, classify post-dedup only, push backfill to Mistral 1B tok/mo tier.
+3. **Render free-tier sleep killing scheduler** — *Mitigation:* external Cron Job pings `/internal/tick` every 15 min. Render Starter ($7/mo) removes sleep if needed.

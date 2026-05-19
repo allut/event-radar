@@ -1,6 +1,6 @@
 # Event Radar — Implementation Progress
 
-Audit trail against [`plan.md`](./plan.md). `plan.md` is the original spec and stays unchanged.
+Audit trail against [`plan.md`](./plan.md).
 
 ---
 
@@ -10,214 +10,45 @@ Audit trail against [`plan.md`](./plan.md). `plan.md` is the original spec and s
 |---|---|
 | Phase | Week 3 |
 | Plan day | Day 20 complete |
-| Week progress | Days 1–20 complete |
-| Current focus | Day 21: Manual QA against 30 real Tallinn events |
-| Piletilevi live tests | 2026-05-14: 28 live integration tests in `tests/ingestion/test_piletilevi_live.py`; `pytest -m live` hits real piletilevi.ee; skip on network failure |
-| Eventbrite removed | 2026-05-14: adapter, tests, constants, config field, seeds fn, and DB row all removed; `/v3/events/search/` deprecated for non-partner accounts — dead code |
-| Piletilevi added | 2026-05-14: HTML scraper replacing Eventbrite; 6 listing categories, Tallinn city filter, detail-page description fetch, 200-event cap |
-| i18n added | 2026-05-17: full EN/ET/RU UI string translations; `frontend/src/i18n.ts` with `t()`, `ti()`, persona name/vibe helpers; all 7 route/component files updated |
-| Error pages added | 2026-05-18: NotFound (404) page + React ErrorBoundary; Plausible deferred (no domain yet) |
-| Backend i18n | 2026-05-18: magic link email localized (en/et/ru); Accept-Language detection for new users; `why_go` multi-locale JSONB column + LLM prompt updated; 260 tests passing |
-| Last updated | 2026-05-18 |
+| Current focus | Day 21: E2E QA against 30 real Tallinn events, then soft launch |
+| Tests | 260 passing |
+| Last updated | 2026-05-19 |
 
 ---
 
-## Implemented
+## Completed days
 
-### Pre-Day 1 `2026-05-03`
-- Repo bootstrapped: `plan.md` committed, root `.gitignore`, seeded `progress.md`.
+### Week 1 — Skeleton + ingestion
 
-### Day 1 — FastAPI scaffold `2026-05-03`
-- `app/config.py` — pydantic-settings, `SECRET_KEY` required
-- `app/db.py` — async SQLAlchemy 2 engine + session dep
-- `app/main.py` — FastAPI with `/health` + `/internal/tick`
-- `requirements.txt`, `.env.example`, `render.yaml` (web service + keepalive cron)
+- **Pre-Day 1 (2026-05-03)** — Repo bootstrap, `.gitignore`, `plan.md`, `progress.md`.
+- **Day 1 (2026-05-03)** — FastAPI scaffold, pydantic-settings, async SQLAlchemy, `/health` + `/internal/tick`, `render.yaml`.
+- **Day 2 (2026-05-03)** — Alembic init; `0001_init.py` with all 13 v0 tables (citext, JSONB/ARRAY, all indexes).
+- **Day 3 (2026-05-03–04)** — Fienta adapter: per-organizer error isolation, free-event price=0 handling, savepoint slug-collision recovery, pagination (3 shapes), SSRF guard, `_MAX_PAGES=50`. Weekly Sun-03:00 organizer sync (auto-add ≥3 events). 20 tests.
+- **Day 4 (2026-05-04)** — `JsonLdAdapter` base + Telliskivi / Kultuurikatel / Fotografiska adapters. 30 tests.
+- **Code quality pass (2026-05-05)** — `app/constants.py` centralised; `taxonomy.py` 12-cat / 10-vibe frozensets + validators; `_http_get()` tenacity retry; index migration `0002`; `.env.example` keys.
+- **Day 5 (2026-05-05)** — `ADAPTER_REGISTRY`, `ingest_source` / `ingest_all_enabled` with per-source isolation, `/admin/ingest` (HTTP Basic, 503 in prod if `ADMIN_PASSWORD` unset), hourly APScheduler job, `X-Internal-Token` on `/internal/tick`.
+- **Day 6 (2026-05-05)** — Rule-based dedup (`token_set_ratio>70`, |Δstart|≤12h, venue-compatible), union-find clustering, `/admin/dedup`, 6-hourly job. 25 tests.
+- **Day 7 (2026-05-06)** — Magic-link auth (`itsdangerous`, SHA-256 hash, 15-min TTL), 7-day session token, `/auth/request-link` (2-min cooldown, always 200), atomic `/auth/verify` (TOCTOU-safe `UPDATE ... RETURNING`), Resend email send + fallback log. Onboarding atomic persona pick. 20 tests.
 
-### Day 2 — DB migrations `2026-05-03`
-- `alembic/` initialised with async `env.py`
-- `0001_init.py` — all 13 v0 tables (citext, JSONB/ARRAY types, all indexes from `plan.md`)
+### Week 2 — AI + frontend
 
-### Day 3 — Fienta adapter `2026-05-03–04`
-- `app/ingestion/base.py` — `SourceAdapter` ABC, `NormalizedEvent` dataclass, pipeline orchestrator (fetch → raw_events → normalize → events draft)
-- `app/ingestion/sources/fienta.py` — per-organizer error isolation, free-event price=0 handling, savepoint-guarded slug collision recovery
-- Pagination loop handles all three Fienta response shapes (plain list, `meta`-based, `links.next`-based); `_MAX_PAGES=50` budget; SSRF guard on `links.next`
-- `app/seeds.py` — idempotent source seed (8 Fienta organizer IDs)
-- `app/ingestion/organizer_sync.py` — weekly job: flags stale organizers, discovers new Tallinn orgs (≥3 events → auto-add); runs Sunday 03:00 EET
-- **Tests:** `tests/ingestion/test_fienta.py` — 20 tests (normalize: 11, fetch/pagination: 9)
+- **Days 8–10 (2026-05-07–08)** — LLM router (`llm_json`): Groq → Cerebras → Mistral fallback, SHA-256 cache against `llm_calls`, audit every attempt. Classifier with fixed taxonomy + truncation cap. LLM dedup tiebreaker (rule pre-filter → LLM on candidates only, fail-safe to "distinct"). Migration `0003_llm_calls`. 14 router unit tests + 3 live (`pytest -m live`).
+- **Day 11 (2026-05-10)** — Vite/React 18 SPA scaffold; TanStack Query; Cormorant Garamond + DM Sans; CSS Modules dark theme; auth lib + API client (Bearer, 401→clear+redirect); Login / AuthVerify / Onboarding / Feed pages; EventCard + PersonaCard; CORSMiddleware backend-side.
+- **Days 11–13 (2026-05-09–10)** — Scoring formula (persona_affinity + recency + feedback + quality + locality), MMR-lite diversity, `build_daily_feeds` 06:00 EET job. `/feed`, `/events/{id}` (published-only, no internal metadata), `/feedback` (invalidates score cache). 52 tests.
+- **Day 12 (2026-05-10)** — Event detail page (hero / meta / venue map link / why-go / description / tags / feedback / tickets CTA); EventCard title links to `/events/:id`.
+- **Day 13 addendum (2026-05-10)** — Time-slot affinity: `VALID_TIMES` (late_night/evening/daytime/morning/weekend/weekday); `_time_slots_for_event` derives slots in Europe/Tallinn; `times` sub-dict added to 4/5 personas; normalization includes `times` weights. 12 tests.
+- **Day 14 (2026-05-10)** — Inbound email: migration `0004_raw_inbound_emails`, `/webhooks/inbound-mail` (timing-safe `?secret=` guard, background extraction), `extract_events_from_email()` calls LLM router and creates `RawEvent` rows linked to `newsletter_inbound` source. **Fix:** `llm_json` returns `tuple[dict, str]`, not dict.
 
-### Day 4 — JSON-LD adapter + venue sources `2026-05-04`
-- `app/ingestion/sources/jsonld.py` — `JsonLdAdapter` base: BeautifulSoup `html.parser`, `@graph` traversal, schema.org → `NormalizedEvent` mapping
-- Concrete adapters: `TelliskiviAdapter`, `KultuurikateldAdapter`, `FotografiskaAdapter`
-- `app/seeds.py` — seeds the three JSON-LD sources with `kind=html_jsonld`
-- URL settings: `TELLISKIVI_URL`, `KULTUURIKATEL_URL`, `FOTOGRAFISKA_URL` (env-overridable); `_upsert_simple` updates `config['url']` on existing rows
-- **Tests:** `tests/ingestion/test_jsonld.py` — 30 tests (HTML extraction: 9, normalize: 17, fetch: 4)
+### Week 3 — Polish + ship
 
-### Code quality pass — pre-Day 5 `2026-05-05`
-- `app/constants.py` — single source of truth for `TALLINN_TZ`, HTTP settings, slug constants, status strings, user defaults; all 8 import sites updated
-- `app/llm/taxonomy.py` — `VALID_CATEGORIES` (12) + `VALID_VIBES` (10) frozensets; `validate_categories()` / `validate_vibes()` helpers
-- `app/ingestion/base.py` — `_http_get()` shared helper: tenacity retry (3 attempts, 2–30s exponential backoff); all adapters migrated to it
-- `0002_add_missing_indexes.py` — `ix_events_status`, `ix_raw_events_source_id`
-- `.env.example` — added `CEREBRAS_API_KEY`, `GROQ_API_KEY`, `MISTRAL_API_KEY`, `RESEND_API_KEY`
-- `requirements.txt` — added `tenacity>=9.0`; `requirements-dev.txt` — `ruff>=0.6`, `mypy>=1.11`
-
-### Day 5 — APScheduler + `/admin/ingest` `2026-05-05`
-- `app/ingestion/registry.py` — `ADAPTER_REGISTRY` mapping source slugs to adapter classes
-- `app/ingestion/jobs.py` — `ingest_source(slug)` + `ingest_all_enabled(kind=None)` with per-source error isolation
-- `app/routers/admin.py` — `GET /admin/ingest` (all sources) + `POST /admin/ingest/{slug}` (single source); HTTP Basic auth; 503 in non-dev if `ADMIN_PASSWORD` unset
-- `app/main.py` — hourly `ingest_all_enabled` scheduler job; `/internal/tick` validates `X-Internal-Token` when `INTERNAL_TOKEN` is set
-- **Tests:** 50/50 passing
-
-### Day 6 — Rule-based dedup + admin eyeballing `2026-05-05`
-- `app/dedup/rules.py` — `is_candidate_pair()` (token_set_ratio > 70, |Δstart| ≤ 12h, venue-compatible); union-find `cluster_events()` (group root = min event ID); `run_dedup_pass(db)`
-- `app/routers/admin.py` — `POST /admin/dedup` (trigger pass); `GET /admin/dedup/groups` (eyeballing JSON)
-- `app/main.py` — 6-hourly dedup scheduler job
-- `requirements.txt` — added `rapidfuzz>=3.0`
-- **Tests:** `tests/dedup/test_rules.py` — 25 tests (venue-compat: 6, candidate pair: 9, cluster: 10); 75/75 passing
-
-### Day 7 — Magic-link auth + onboarding `2026-05-06`
-- `app/auth/tokens.py` — `generate_magic_token` / `verify_magic_token` (itsdangerous, SHA-256 hash, `magic-link-v1` salt) + `generate_session_token` / `verify_session_token` (7-day TTL, `session-v1` salt); TTLs computed per-call so test monkeypatching works
-- `app/auth/email.py` — `send_magic_link()` via Resend API; falls back to WARNING log when `RESEND_API_KEY` unset (signed token never logged)
-- `app/routers/auth.py` — `POST /auth/request-link` (upsert user, 2-min cooldown, always 200 to prevent enumeration), `GET /auth/verify?token=X` (atomic `UPDATE ... RETURNING` to close TOCTOU race), `GET /auth/me`
-- `app/routers/onboarding.py` — `POST /onboarding/persona` (atomic delete + re-insert `UserPersona`; primary weight=1.0, secondary weight=0.4; validates slugs)
-- `app/seeds.py` — `seed_personas()` upserts 5 personas with trilingual display names and affinity vectors
-- `requirements.txt` — added `email-validator>=2.0.0`
-- **Tests:** `tests/auth/test_auth.py` — 20 tests (token util: 10, routers: 7); 96/96 passing
-
-### Days 8–10 — LLM layer `2026-05-07–08`
-- `app/llm/router.py` — `llm_json(task, prompt, db)`: Groq (`llama-3.3-70b-versatile`) → Cerebras (`qwen-3-235b-a22b-instruct-2507`) → Mistral fallback chain; skips providers with missing API keys; SHA-256 `content_hash` cache against `llm_calls` table (identical prompts never re-sent); records every attempt (success and failure) for audit; raises `LLMError` if all providers fail
-- `app/llm/classifier.py` — `classify_pending(db)`: fetches canonical draft events in batches (`LLM_CLASSIFY_BATCH_SIZE`); builds classify prompt (title + venue + description, hard-truncated to `LLM_MAX_PROMPT_CHARS`); parses and validates response against fixed taxonomy; writes `EventClassification` + advances `event.status` to `classified`
-- `app/dedup/llm_tiebreaker.py` — `run_dedup_pass_llm(db)`: wraps rule-based `run_dedup_pass` with LLM tiebreaker; LLM called only on candidate pairs; merge confirmed when `{"same": true, "confidence": ≥ 0.7}`; `LLMError` and parse errors treated as "distinct" (fail-safe); cap of `LLM_DEDUP_MAX_CANDIDATE_PAIRS_PER_PASS` to bound token spend per run
-- `alembic/versions/0003_llm_calls.py` — `llm_calls` table: `task`, `event_id`, `content_hash`, `provider`, `model`, `prompt_tokens`, `completion_tokens`, `response_json` (JSONB); indexes on `content_hash` and `(task, created_at)`
-- `app/main.py` — `classify_pending` job wired to APScheduler every 6h (alongside dedup); `build_daily_feeds` still stub-commented
-- `app/constants.py` — all LLM prompt templates, token budgets, batch sizes, confidence thresholds, and provider config centralized; `LLM_PROVIDERS` ordered list drives router fallback
-- **Tests:** `tests/llm/test_router.py` — 14 unit tests (cache hit, provider fallback, 429 fall-through, `LLMError` on all-fail, all-providers-unavailable); `tests/llm/test_live.py` — 3 live integration tests (one per provider, `pytest -m live`, skip when API key absent); 112 total tests passing
-
-### Day 11 (frontend) — Vite/React SPA scaffold `2026-05-10`
-- `frontend/` — Vite 5 + React 18 + TypeScript + TanStack Query v5 + React Router v6; no CSS framework (CSS Modules throughout)
-- `frontend/index.html` — Google Fonts preconnect: Cormorant Garamond (display/headings) + DM Sans (body); Baltic editorial dark theme
-- `frontend/vite.config.ts` — dev proxy: `/api/*` → `http://localhost:8000` (strips `/api` prefix); avoids CORS in dev
-- `frontend/src/lib/auth.ts` — `getToken/setToken/clearToken/isAuthenticated` + locale helpers; localStorage
-- `frontend/src/api/client.ts` — fetch wrapper: Bearer auth header, Content-Type only when body present, 401 → clearToken + redirect, throws `ApiError` on 4xx/5xx
-- `frontend/src/App.tsx` — `Protected` wrapper component; routes: `/login`, `/auth/verify`, `/onboarding` (protected), `/` (protected)
-- `frontend/src/routes/Login.tsx` + CSS — magic link form; idle/loading/success/error states; "Check your inbox" success card
-- `frontend/src/routes/AuthVerify.tsx` + CSS — reads `?token=` from URL; calls GET /auth/verify; stores session token; always redirects to `/onboarding` on success (MVP: no persona-check)
-- `frontend/src/routes/Onboarding.tsx` + CSS — 5 persona cards in 3-col grid; primary + optional secondary selection; locale pill toggle (en/et/ru); saves locale to localStorage; POSTs to /onboarding/persona
-- `frontend/src/routes/Feed.tsx` + CSS — GET /feed with TanStack Query; date header formatted per locale; ordered list of EventCards; empty state; logout button; invalidates feed query on feedback
-- `frontend/src/components/EventCard.tsx` + CSS — event card: gradient placeholder (category-keyed) when no image; Cormorant title; formatted time/venue; ◆ why_go bullets; like/dislike/bookmark (POST /feedback); active signal prevents duplicate POSTs; click_external on Tickets link
-- `frontend/src/components/PersonaCard.tsx` + CSS — primary (amber border+badge), secondary (muted amber), none states; separate primary/secondary click handlers
-- `backend/app/main.py` + `config.py` — `CORSMiddleware` added; `CORS_ORIGINS` list[str] setting (default: localhost:5173 + :4173); production note: set in Render env vars
-
-### Days 11–13 — Ranking + feed/feedback endpoints `2026-05-09–10`
-- `app/ranking/score.py` — pure scoring formula: `persona_affinity` (normalized dot-product), `recency_boost` (linear decay 21 days), `feedback_signal` (per-day 0.9^t decay, indirect category matching, hard-exclude via `_HARD_EXCLUDE` sentinel), `locality_bonus` (central Tallinn bounding box); `score_event` combines all five components; `_mmr_pick` MMR-lite diversity (max 2 per category); `build_daily_feeds` async job (upserts `daily_feeds` for all users)
-- `app/routers/feed.py` — `GET /feed` (today's Daily 5 for authenticated user, preserves feed ordering from `daily_feeds.event_ids`)
-- `app/routers/events.py` — `GET /events/{id}` (published-only; unauthenticated access; no internal metadata exposed)
-- `app/routers/feedback.py` — `POST /feedback` (like/dislike/bookmark/view/click_external; invalidates `user_event_scores` cache row)
-- `app/main.py` — wires three new routers + `build_daily_feeds` APScheduler job at 06:00 EET
-- `app/config.py` — persona affinity vectors rewritten to use only `VALID_CATEGORIES` / `VALID_VIBES` taxonomy keys
-- `app/seeds.py` — `_validate_affinity_vector()` validates persona affinity keys against taxonomy at startup
-- **Tests:** `tests/ranking/test_score.py` (38 tests) + `tests/routers/test_feed.py` (8 tests) + `tests/routers/test_feedback.py` (6 tests) — 155 total passing
-
-### Day 12 — Event detail page (frontend) `2026-05-10`
-- `frontend/src/routes/EventDetail.tsx` + CSS — full event detail page: hero image (or gradient), meta, title, venue block with map link, why-go bullets, full description, category/vibe tags, feedback buttons (like/dislike/bookmark), tickets CTA button; fires `click_external` signal on tickets click
-- `frontend/src/App.tsx` — added `/events/:id` protected route
-- `frontend/src/components/EventCard.tsx` — title now links to internal `/events/:id` (React Router `Link`); added `description`, `lat`, `lng` to `EventData` interface; "Tickets →" remains as external link
-
-### Day 13 (addendum) — Time-slot affinity `2026-05-10`
-- `app/constants.py` — `VALID_TIMES` frozenset (`late_night`, `evening`, `daytime`, `morning`, `weekend`, `weekday`) + boundary hour constants
-- `app/ranking/score.py` — `_time_slots_for_event(starts_at)` derives 1–2 time slots from `event.starts_at` in Europe/Tallinn (hour bucket + weekday/weekend); `_affinity_for_vector` / `persona_affinity` extended with `time_slots` parameter; `score_event` derives and passes time slots; max_possible normalization includes `times` weights so adding them doesn't distort category/vibe discrimination
-- `app/config.py` — restored `times` sub-dict to 4 of 5 persona vectors (culture_buff omitted — attends any time); keys from `VALID_TIMES`
-- `app/seeds.py` — `_validate_affinity_vector()` now also checks `times` keys against `VALID_TIMES`
-- **Tests:** 12 new tests (`TestTimeSlotsForEvent`, time-aware `_affinity_for_vector` cases) — 151 total passing (excl. test_feed.py which has a stale `from backend.app…` import)
-
-### Day 14 — Newsletter inbound webhook + LLM extractor `2026-05-10`
-- `backend/alembic/versions/0004_raw_inbound_emails.py` — migration adds `raw_inbound_emails` table (id, received_at, from_addr, to_addr, subject, raw_payload JSONB, processed_at); index on `received_at`
-- `backend/app/models/models.py` — `RawInboundEmail` ORM model
-- `backend/app/routers/webhooks.py` — `POST /webhooks/inbound-mail`: stores raw email payload, fires background LLM extraction; optional `?secret=` query-param guard (timing-safe `hmac.compare_digest`); controlled by `RESEND_WEBHOOK_SECRET` env var
-- `backend/app/llm/newsletter_extractor.py` — `extract_events_from_email()`: calls LLM router with newsletter prompt, parses `{"events": [...]}` response, creates `RawEvent` rows linked to `newsletter_inbound` source; race-safe source upsert via `INSERT ... ON CONFLICT DO NOTHING`
-- `backend/app/constants.py` — `LLM_TASK_NEWSLETTER`, `NEWSLETTER_SOURCE_SLUG`, `NEWSLETTER_SUBJECT_MAX_LEN` (200), `NEWSLETTER_BODY_MAX_LEN` (1500), `NEWSLETTER_EXTRACT_PROMPT_TEMPLATE`
-- `backend/app/config.py` — `RESEND_WEBHOOK_SECRET` setting (empty = dev mode, no verification)
-- `backend/app/seeds.py` — seeds `newsletter_inbound` source row on startup
-- `backend/app/main.py` — wires `webhooks_router`
-- **Key fix (caught in review):** `llm_json` returns `tuple[dict, str]`, not a plain dict. Extractor correctly unpacks as `raw, _model = await llm_json(...)`. LLM `json_object` format always returns a dict, so prompt instructs `{"events": [...]}` shape.
-
-### Day 15 — Settings page, locale toggle, unsubscribe `2026-05-13`
-- `backend/alembic/versions/0005_add_email_digest_opt_in.py` — migration adds `email_digest_opt_in` boolean column to `users` (server_default=true)
-- `backend/app/models/models.py` — `email_digest_opt_in: Mapped[bool]` field added to `User`
-- `backend/app/constants.py` — `VALID_LOCALES: frozenset[str]` added as single source of truth for supported locales (`en`, `et`, `ru`)
-- `backend/app/routers/settings.py` — `GET /users/me` (profile + personas) and `PATCH /users/me` (update locale and/or `email_digest_opt_in`); locale validator uses `VALID_LOCALES` from constants
-- `backend/app/main.py` — wires `settings_router`
-- `frontend/src/api/client.ts` — adds `api.patch<T>()` method
-- `frontend/src/routes/Settings.tsx` + CSS — settings page: account email, language pill toggle (locale-only writes to localStorage on server confirmation, rolls back on error), persona display with "Change persona" link to `/onboarding`, email digest toggle; all mutations via `PATCH /users/me`
-- `frontend/src/routes/Feed.tsx` — Settings link added to topbar
-- `frontend/src/routes/Feed.module.css` — `.topActions`, `.settingsLink` classes for the topbar grouping
-- `frontend/src/App.tsx` — `/settings` protected route added
-- **Tests:** `tests/routers/test_settings.py` — 7 tests (get settings: 2, patch settings: 5) — 213 total passing
-- **Key fix (reviewer-caught):** locale optimistic update was writing to localStorage before server confirmed; now writes only in `onSuccess` and rolls back UI state (`setLocaleState(getLocale())`) in `onError`
-
-### Day 16 — Email digest of Daily 5 `2026-05-13`
-- `backend/app/email/digest.py` — `build_digest_html()`: assembles HTML email per user (event title linked to frontend, date/time in Europe/Tallinn, venue, why-go bullets, free/paid price); all user-sourced strings run through `html.escape()`; day names + month names locale-aware for `et`/`ru`/`en`
-- `backend/app/email/digest.py` — `send_digest_email()`: delivers via Resend API; raises `RuntimeError` on non-2xx so caller's sent/skipped counters stay accurate; no-op with WARNING log when `RESEND_API_KEY` unset
-- `backend/app/email/digest.py` — `send_daily_digests(db)`: queries users with `email_digest_opt_in=True`, loads today's `daily_feeds` rows, bulk-fetches events, sends one digest per user; returns summary dict
-- `backend/app/constants.py` — `DIGEST_EMAIL_SUBJECT_TEMPLATE`, `DIGEST_SEND_HOUR=7`, `DIGEST_MAX_WHY_GO_BULLETS=3`
-- `backend/app/main.py` — `_run_send_daily_digests()` wired to APScheduler daily 07:00 EET (one hour after `build_daily_feeds`)
-- **Tests:** `tests/email/test_digest.py` — 24 tests (date formatting: 6, time formatting: 3, HTML builder: 15) — 237 total passing
-
-### Day 17 — KUMU + Estonia Concert Hall + Eventbrite adapter `2026-05-14`
-- `backend/app/ingestion/sources/jsonld.py` — `KumuAdapter` (kumu.ekm.ee) + `EstoniaConcertHallAdapter` (concert.ee) added as `JsonLdAdapter` subclasses
-- `backend/app/ingestion/sources/eventbrite.py` — `EventbriteAdapter`: Eventbrite API v3 (`location.address=Tallinn, Estonia`, `expand=venue,ticket_classes`); paginated via `pagination.has_more_items`; `_parse_eb_price` converts minor-unit costs; graceful no-op when `EVENTBRITE_API_KEY` unset
-- `backend/app/ingestion/registry.py` — registered `kumu`, `estonia_concert_hall`, `eventbrite` slugs
-- `backend/app/config.py` — `KUMU_URL`, `ESTONIA_CONCERT_HALL_URL`, `EVENTBRITE_API_KEY` settings
-- `backend/app/seeds.py` — `_upsert_eventbrite()`: seeds source row; cleanup disables legacy `ticketmaster` source row (no delete — FK safety)
-- `backend/app/constants.py` — `EVENTBRITE_BASE_URL`, `EVENTBRITE_LOCATION_ADDRESS`, `EVENTBRITE_LOCATION_RADIUS`, `EVENTBRITE_PAGE_SIZE`, `EVENTBRITE_MAX_PAGES`, `EVENTBRITE_SOURCE_SLUG`
-- `backend/.env.example` — `KUMU_URL`, `ESTONIA_CONCERT_HALL_URL`, `EVENTBRITE_API_KEY` entries
-- **Tests:** `tests/ingestion/test_eventbrite.py` — 25 tests (normalize: 11, helpers: 6, fetch: 5, pagination: 3) — 265 total passing
-- **Why Eventbrite over Ticketmaster:** Ticketmaster Discovery API covers no EE inventory (`EE` absent from supported country list; adapter returned zero results); Eventbrite has verified Tallinn coverage, free tier, individual signup
-
-### Day 17 (addendum) — Piletilevi HTML scraper `2026-05-14`
-- `backend/app/ingestion/sources/piletilevi.py` — `PiletileviAdapter`: scrapes 6 category listing pages on piletilevi.ee; BS4 CSS selector parsing (`a.card[href*="/en/tickets/"]`); Tallinn city filter (keeps events with "Tallinn" in `.card__description` or no city listed); deduplicates by href across listing URLs; fetches detail page per event for `.event__description` text; cap `PILETILEVI_MAX_DETAIL_FETCHES=200` prevents runaway on abnormal listings
-- `backend/app/ingestion/sources/piletilevi.py` — `_parse_piletilevi_date()`: parses `"We 19.08.2026 • 19:00"` format (strips weekday abbreviation, strptime `%d.%m.%Y %H:%M`, localized to `TALLINN_TZ`)
-- `backend/app/constants.py` — `PILETILEVI_BASE_URL`, `PILETILEVI_SOURCE_SLUG`, `PILETILEVI_TALLINN_FILTER`, `PILETILEVI_DATE_FORMAT`, `PILETILEVI_MAX_DETAIL_FETCHES`, `PILETILEVI_LISTING_URLS`
-- `backend/app/ingestion/registry.py` — registered `piletilevi` slug
-- `backend/app/seeds.py` — seeds `piletilevi` source row (`kind=html_scrape`)
-- `backend/.env.example` — comment entry for `PILETILEVI_BASE_URL` override
-- **Tests:** `tests/ingestion/test_piletilevi.py` — 23 tests (date parsing: 6, normalize: 12, fetch_raw: 5) — 260 total passing
-
-### Day 17 (addendum) — Piletilevi live integration tests `2026-05-14`
-- `backend/tests/ingestion/test_piletilevi_live.py` — 28 live tests (`pytest -m live`): `TestLiveFetchRaw` (9 tests — at-least-one-event, required fields, Tallinn filter, href uniqueness via Counter, href format, description fetch); `TestLiveNormalize` (6 tests — no-None normalization, tz-aware starts_at with `tzinfo.key` check, absolute URLs, title/external_id match, ≤5% past-event tolerance); `TestLiveCSSSelectorValidity` (6 tests — card/title/date/venue/image selectors hit real markup, detail description selector verified by fetching a live detail page); `TestLiveDataExtraction` (7 tests — image_url type, at-least-some-have-image, image_url absolute after normalize, date_str bullet separator, date_str HH:MM time, venue field type, href is relative path)
-- Module-level result cache: fixture fetches once and reuses across all 28 tests; `pytest.skip()` on `ConnectError`/`TimeoutException`/`RequestError`
-- **Tests:** 28 live tests + 23 existing unit tests (51 total for piletilevi); run live with `python3 -m pytest tests/ingestion/test_piletilevi_live.py -v -m live`
-
-### Day 18 — Estonian + Russian UI strings (i18n pass) `2026-05-17`
-- `frontend/src/i18n.ts` — **new file**: full EN/ET/RU translations for all UI strings; `t(key, locale)` lookup with `en` fallback; `ti(key, locale, vars)` template interpolation with `replaceAll`; `personaName(slug, locale)` / `personaVibe(slug, locale)` helpers — English falls back to `PERSONAS` from `constants.ts` (single source of truth), only ET/RU translations defined in `i18n.ts`
-- `frontend/src/routes/Login.tsx` — all strings translated; reads `getLocale()` for language (supports returning users who already set a preference)
-- `frontend/src/routes/AuthVerify.tsx` — "Verifying…", "Signed in!", error messages translated
-- `frontend/src/routes/Onboarding.tsx` — heading, sub-copy, blending line, CTA button translated; persona names/vibes rendered via `personaName`/`personaVibe`
-- `frontend/src/routes/Feed.tsx` — brand, nav links, "Your Daily Five", "Curated at {time}", empty-state copy, error message all translated
-- `frontend/src/routes/Settings.tsx` — section titles, persona display (via `personaName`), digest toggle labels, save/error messages all translated; digest button `aria-label` uses action-verb keys (`digest_subscribe`/`digest_unsubscribe`) to comply with WCAG 2.1 SC 4.1.2
-- `frontend/src/routes/EventDetail.tsx` — "← Back", "ends {time}", "View on map →", "Get tickets →", aria-labels translated
-- `frontend/src/components/EventCard.tsx` — "Why go", "Tickets →", signal button labels translated
-- `frontend/tsconfig.json` — bumped `target`/`lib` from ES2020 → ES2021 to enable `String.replaceAll`
-
-### Day 19 — Error pages + empty states `2026-05-18`
-- `frontend/src/routes/NotFound.tsx` + CSS — 404 page: large dim "404" display numeral, trilingual title/message, link back to feed; wraps in `Protected` so unauthenticated users redirect to `/login`
-- `frontend/src/components/ErrorBoundary.tsx` + CSS — React class error boundary wrapping the full app; `getDerivedStateFromError` flips `hasError`, `componentDidCatch` logs to console; fallback UI uses try/catch around `getLocale()` so localStorage failures in private-browsing mode don't re-throw inside the boundary
-- `frontend/src/App.tsx` — `<ErrorBoundary>` wraps `QueryClientProvider`; wildcard `*` route now renders `<Protected><NotFound /></Protected>` instead of redirecting to `/`; `NotFound` + `ErrorBoundary` imported
-- `frontend/src/i18n.ts` — 6 new keys per locale (EN/ET/RU): `not_found_title`, `not_found_msg`, `not_found_back`, `error_boundary_title`, `error_boundary_msg`, `error_boundary_reload`
-- **Plausible analytics** — deferred: domain not yet decided (use `data-domain` once confirmed)
-
-### Day 20 — Backend i18n (magic link, Accept-Language, why_go localization) `2026-05-18`
-- `backend/app/constants.py` — `MAGIC_LINK_EMAIL_HTML` str → locale dict (`en`/`et`/`ru`); `MAGIC_LINK_EMAIL_SUBJECTS` dict added; `LLM_CLASSIFY_PROMPT_TEMPLATE` updated: `why_go` field now `{"en": [...], "et": [...], "ru": [...]}` (3 bullets × 3 locales = 9 bullets max, ~180 tokens — within 600-token cap)
-- `backend/app/auth/email.py` — `send_magic_link(to_email, magic_token, locale="en")`: looks up locale-keyed subject + body, falls back to `en`
-- `backend/app/routers/auth.py` — `_detect_locale(accept_language)` helper: parses `Accept-Language` header, matches against `VALID_LOCALES`, returns first match or `DEFAULT_USER_LOCALE`; new users get locale from header; existing users keep stored locale; `send_magic_link` now passed `user.locale`
-- `backend/app/llm/classifier.py` — `_parse_classification`: handles both new dict format and old list format (backward compat fallback); populates `why_go_localized` JSONB from dict; `why_go_bullets` set from `en` locale for backward compat
-- `backend/app/models/models.py` — `why_go_localized: Mapped[Optional[dict]]` JSONB column added to `EventClassification`
-- `backend/alembic/versions/0006_why_go_localized.py` — `ADD COLUMN why_go_localized JSONB` (reversible; `down_revision = "0005"`)
-- `backend/app/routers/utils.py` — `serialize_event(event, locale="en")`: picks `why_go_localized[locale]` → `[DEFAULT_USER_LOCALE]` → `why_go_bullets` fallback chain
-- `backend/app/routers/events.py` — `GET /events/{id}`: reads optional Bearer token to detect user locale; unauthenticated requests default to `en`
-- `backend/app/routers/feed.py` — passes `current_user.locale` to `serialize_event`
-- `backend/tests/llm/test_classifier.py` — 5 new tests: dict format, list fallback, bullet cap, missing locale key, invalid type
-- `backend/tests/auth/test_auth.py` — `TestDetectLocale` class: 6 new tests (et/ru/en detection, unsupported fallback, empty fallback, new user gets header locale)
-- **Tests:** 260 passing (up from 249; 11 new tests)
+- **Day 15 (2026-05-13)** — Migration `0005_add_email_digest_opt_in`. `VALID_LOCALES` frozenset. `GET/PATCH /users/me`. Settings page (locale pill, persona display, digest toggle); optimistic locale rollback on server error. 7 tests.
+- **Day 16 (2026-05-13)** — `email/digest.py`: `build_digest_html` (HTML-escaped, locale-aware day/month names), `send_digest_email` (raises on non-2xx so counters stay accurate), `send_daily_digests` (queries opted-in users, bulk-fetches events). APScheduler 07:00 EET. 24 tests.
+- **Day 17 (2026-05-14)** — `KumuAdapter` + `EstoniaConcertHallAdapter` (JSON-LD). Eventbrite adapter added (later removed). 25 tests.
+- **Day 17 addendum — Piletilevi scraper (2026-05-14)** — Replaces Eventbrite. 6 listing categories on piletilevi.ee, BS4 CSS selectors, Tallinn city filter, href deduplication, detail-page description fetch, `PILETILEVI_MAX_DETAIL_FETCHES=200`. Date parser for `"We 19.08.2026 • 19:00"`. 23 unit tests + 28 live tests in `test_piletilevi_live.py` (module-level result cache; `pytest.skip` on network failure).
+- **Day 17 addendum — Eventbrite removed (2026-05-14)** — `/v3/events/search/` deprecated for non-partners (always 404). Adapter, tests, constants, config field, seeds fn, DB row all removed.
+- **Day 18 (2026-05-17)** — Full EN/ET/RU UI i18n. New `frontend/src/i18n.ts` with `t()`, `ti()`, `personaName()`, `personaVibe()` (en falls back to `PERSONAS` from `constants.ts`). All 7 route/component files updated. `tsconfig.json` target ES2021 for `String.replaceAll`. Settings digest button uses action-verb aria-labels (WCAG 4.1.2).
+- **Day 19 (2026-05-18)** — `NotFound` 404 page + `ErrorBoundary` (try/catch around `getLocale()` so localStorage failures in private-browsing don't re-throw). Wildcard route renders `<Protected><NotFound/></Protected>`. 6 new i18n keys × 3 locales. Plausible deferred (no domain yet).
+- **Day 20 (2026-05-18)** — Backend i18n. `MAGIC_LINK_EMAIL_HTML` → locale dict + subjects dict. `_detect_locale(Accept-Language)` for new users; existing users keep stored locale. `LLM_CLASSIFY_PROMPT_TEMPLATE` updated: `why_go` now `{en,et,ru}` dict (~180 tokens, within 600 cap). `why_go_localized` JSONB column (migration `0006`). Classifier backward-compat: handles dict and old list formats. `serialize_event(event, locale)` fallback chain `locale → en → why_go_bullets`. 11 new tests.
 
 ---
 
@@ -225,52 +56,36 @@ Audit trail against [`plan.md`](./plan.md). `plan.md` is the original spec and s
 
 | Symptom | Root cause | Fix |
 |---|---|---|
-| Persona affinity vector scoring was flat for multi-match events | `_affinity_for_vector` clipped raw sum to [-1,1] instead of normalizing — events with 1 or 5 matching categories all scored identically | Normalized by `max_possible = sum(vector.values())` so score discriminates across match quality |
-| `GET /events/{id}` exposed draft/cancelled events + internal `dedup_group_id` | No status filter on public endpoint | Added `Event.status == published` filter; removed `dedup_group_id` from response |
-| Persona affinity vector keys didn't match taxonomy | Old vectors used `arts`, `tech`, `business` etc. not in `VALID_CATEGORIES` | Rewrote all 5 vectors to use only taxonomy keys; added `_validate_affinity_vector()` startup check in `seeds.py` |
-| `daily_feeds.event_ids` typed `ARRAY(Integer)` | Copy-paste; `events.id` is `BigInteger` | Changed to `ARRAY(BigInteger)` in ORM + migration |
-| `SECRET_KEY` had hardcoded default | Magic-link forgery risk if deployed without setting env var | Made required (no default); app fails at startup if unset |
-| `price_raw.get('min') or fallback` drops free events (price=0) | Python `or` treats 0 as falsy | `_first_not_none()` helper using `next(v for v in vals if v is not None)` |
-| `price_raw = raw.get("price") or {}` drops `"price": 0` integer | `0 or {}` evaluates to `{}` | Changed to `isinstance(price_raw, dict)` guard; integers fall through to top-level fields |
-| SSRF guard compared `netloc` (includes port) instead of `hostname` | `urlparse(url).netloc` returns `"fienta.com:8443"` on non-standard ports | Changed to `urlparse(url).hostname`; log level escalated to ERROR |
-| Single organizer 4xx/5xx aborted entire Fienta fetch | `raise_for_status()` propagated unhandled inside organizer loop | Per-organizer try/except on `HTTPStatusError` + `RequestError`; log warning + continue |
-| Onboarding persona selection auto-submitted on first click; no chance to pick secondary | `PersonaCard` buttons had no `type` attribute — inside `<form>` they defaulted to `type="submit"` | Added `type="button"` to all three buttons (`mainBtn`, `secondaryBtn`, `secondaryBadge`) in `PersonaCard.tsx` |
+| Persona affinity flat for multi-match events | `_affinity_for_vector` clipped raw sum to [-1,1] | Normalize by `max_possible = sum(vector.values())` |
+| `GET /events/{id}` exposed draft/cancelled + `dedup_group_id` | No status filter on public endpoint | Added `status == published` filter; removed `dedup_group_id` from response |
+| Persona affinity keys didn't match taxonomy | Old vectors used `arts`/`tech`/`business` not in `VALID_CATEGORIES` | Rewrote all 5 vectors; `_validate_affinity_vector()` startup check |
+| `daily_feeds.event_ids` typed `ARRAY(Integer)` | `events.id` is `BigInteger` | Changed to `ARRAY(BigInteger)` in ORM + migration |
+| `SECRET_KEY` had hardcoded default | Magic-link forgery risk | Made required; app fails at startup if unset |
+| Free events (price=0) dropped by `price_raw.get('min') or fallback` | `0 or x` evaluates to `x` | `_first_not_none()` helper with `next(v for v in vals if v is not None)` |
+| `price_raw = raw.get("price") or {}` drops `"price": 0` integer | Same Python truthiness issue | `isinstance(price_raw, dict)` guard; integers fall through |
+| SSRF guard compared `netloc` (includes port) | `urlparse(url).netloc` returns `"host:port"` | Use `urlparse(url).hostname`; log level → ERROR |
+| Single organizer 4xx/5xx aborted entire Fienta fetch | `raise_for_status()` propagated | Per-organizer try/except on `HTTPStatusError` + `RequestError`; warn + continue |
+| Onboarding auto-submitted on first persona click | `PersonaCard` buttons had no `type` — inside `<form>` defaulted to `type=submit` | Added `type="button"` to all three buttons |
+| `llm_json` extraction bug in Day 14 | Returns `tuple[dict, str]`, not dict | Unpack as `raw, _model = await llm_json(...)` |
+| Settings locale optimistic update wrote to localStorage before server confirm | Premature write | Write only in `onSuccess`; rollback `setLocaleState(getLocale())` in `onError` |
 
 ---
 
 ## Decisions & deviations
 
-| Date | Decision | Why | Plan section |
-|---|---|---|---|
-| 2026-05-03 | Single root `.gitignore` instead of per-subdir | Simpler for solo dev; rules don't conflict | None |
-| 2026-05-03 | `SECRET_KEY` required, no default | Known default enables magic-link forgery on misconfigured deploys | Auth |
-| 2026-05-03 | `/internal/tick` had no auth initially | MVP scope; endpoint returned only `{status: ok}` | Architecture |
-| 2026-05-03 | `IngestionRun` record lost on caller rollback | Proper fix (separate transaction) deferred to Day 5 scheduler wiring | Architecture |
-| 2026-05-03 | Fienta pagination initially unhandled | API field names unconfirmed without a live organizer ID | Data sources |
-
----
-
-## Future considerations
-
-Deferred items — each tied back to `plan.md` so context isn't lost.
-
-- **pgvector cosine** — replace category-overlap heuristic in feedback scoring once Neon pgvector is enabled _(plan.md § Personalization, v1.1)_
-- **Ticketmaster Discovery API** — ✅ Added Day 17, then replaced with Eventbrite (Ticketmaster covers no EE inventory)
-- **Additional JSON-LD venues (KUMU, Estonia Concert Hall)** — ✅ Done (Day 17)
-- **Eventbrite search endpoint** — ❌ Removed: `/v3/events/search/` deprecated for non-partner accounts (always 404); full adapter removed 2026-05-14; replaced by Piletilevi scraper
-- **Piletilevi.ee HTML scraper** — ✅ Done (Day 17+): scrapes 6 category listing pages; Tallinn city filter; detail-page description fetch; 200-event cap; 23 tests; `piletilevi` slug registered
-- **Submit-an-event form** — manual escape hatch for source-coverage thinness _(plan.md § Top 3 risks, Risk #1)_ — now higher priority given Eventbrite removal
-- **Email digest of Daily 5** — ✅ Done (Day 16)
-- **Secondary persona blending at 0.4 weight** — on the cut list; ship only if onboarding feels monodimensional in QA _(plan.md § Personalization)_
-- **Bookmarks** — UI + endpoint exist in v0 model; explicitly cuttable _(plan.md § Honest cuts)_
-- **Render Starter upgrade** — only if free-tier sleep becomes an issue post-launch _(plan.md § Risk #3)_
+| Date | Decision | Why |
+|---|---|---|
+| 2026-05-03 | Single root `.gitignore` | Solo dev simplicity; no conflicting rules |
+| 2026-05-03 | `SECRET_KEY` required, no default | Known default enables magic-link forgery on misconfigured deploys |
+| 2026-05-14 | Piletilevi scraper replaces Eventbrite adapter | Eventbrite `/v3/events/search/` deprecated for non-partners (404) |
+| 2026-05-14 | Ticketmaster never wired | Discovery API has zero EE inventory |
 
 ---
 
 ## Quota / cost watch
 
-Updated weekly. >50% sustained utilization = yellow flag (plan.md Risk #2).
+Updated weekly. >50% sustained = yellow flag (plan.md Risk #2).
 
 | Week of | Cerebras tok/day (cap 1M) | Groq req/day (cap ~1k) | Mistral tok/mo (cap 1B) | Resend sends/mo (cap 3k) | Neon CU-h/mo (cap 100) |
 |---|---|---|---|---|---|
-| _(none yet)_ | — | — | — | — | — |
+| _(none yet — pre-launch)_ | — | — | — | — | — |
