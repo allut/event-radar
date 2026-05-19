@@ -5,13 +5,19 @@ Session token: same serializer with a different salt, 7-day TTL.
 The magic-link token hash (SHA-256 hex) is stored in auth_magic_links.token_hash
 so a compromised DB row cannot be turned back into a valid token.
 """
+
 import hashlib
 from datetime import datetime, timedelta, timezone
 
 from itsdangerous import URLSafeTimedSerializer
 
 from app.config import settings
-from app.constants import AUTH_MAGIC_SALT, AUTH_SESSION_SALT, SECONDS_PER_DAY, SECONDS_PER_MINUTE
+from app.constants import (
+    AUTH_MAGIC_SALT,
+    AUTH_SESSION_SALT,
+    SECONDS_PER_DAY,
+    SECONDS_PER_MINUTE,
+)
 
 
 def magic_ttl_seconds() -> int:

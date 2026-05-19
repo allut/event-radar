@@ -74,13 +74,15 @@ class PiletileviAdapter(SourceAdapter):
                         image_src = img_tag.get("src") or img_tag.get("data-src")
 
                     seen_hrefs.add(href)
-                    cards.append({
-                        "href": href,
-                        "title": title,
-                        "date_str": date_str,
-                        "venue": venue_str,
-                        "image_url": image_src,
-                    })
+                    cards.append(
+                        {
+                            "href": href,
+                            "title": title,
+                            "date_str": date_str,
+                            "venue": venue_str,
+                            "image_url": image_src,
+                        }
+                    )
 
             # Fetch detail pages for description (capped to prevent runaway on abnormally large listings)
             if len(cards) > PILETILEVI_MAX_DETAIL_FETCHES:
@@ -97,9 +99,15 @@ class PiletileviAdapter(SourceAdapter):
                     detail_resp = await _http_get(client, detail_url)
                     detail_soup = BeautifulSoup(detail_resp.text, "html.parser")
                     desc_tag = detail_soup.select_one(_DETAIL_DESC_SELECTOR)
-                    card["description"] = desc_tag.get_text(separator=" ", strip=True) if desc_tag else None
+                    card["description"] = (
+                        desc_tag.get_text(separator=" ", strip=True)
+                        if desc_tag
+                        else None
+                    )
                 except (httpx.HTTPStatusError, httpx.RequestError) as exc:
-                    log.warning("piletilevi detail fetch failed url=%s: %s", detail_url, exc)
+                    log.warning(
+                        "piletilevi detail fetch failed url=%s: %s", detail_url, exc
+                    )
                     card["description"] = None
 
         log.info("piletilevi fetched %d events", len(cards))

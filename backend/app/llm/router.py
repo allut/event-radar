@@ -9,6 +9,7 @@ Entry point: ``llm_json(task, prompt, db)``
 - Records every attempt (success and failure) for audit.
 - Raises ``LLMError`` if all available providers fail.
 """
+
 import hashlib
 import http
 import json
@@ -107,7 +108,9 @@ async def llm_json(
                 )
 
             if resp.status_code == http.HTTPStatus.TOO_MANY_REQUESTS:
-                log.warning("llm rate-limited: provider=%s task=%s", provider["name"], task)
+                log.warning(
+                    "llm rate-limited: provider=%s task=%s", provider["name"], task
+                )
                 db.add(record)
                 errors.append(f"{provider['name']}: 429 rate-limited")
                 continue
@@ -134,23 +137,35 @@ async def llm_json(
 
         except json.JSONDecodeError as exc:
             msg = f"{provider['name']}: JSON parse error — {exc}"
-            log.warning("llm response parse failed: provider=%s error=%s", provider["name"], exc)
+            log.warning(
+                "llm response parse failed: provider=%s error=%s", provider["name"], exc
+            )
             db.add(record)
             errors.append(msg)
         except httpx.HTTPStatusError as exc:
             msg = f"{provider['name']}: HTTP {exc.response.status_code}"
-            log.warning("llm HTTP error: provider=%s status=%s", provider["name"], exc.response.status_code)
+            log.warning(
+                "llm HTTP error: provider=%s status=%s",
+                provider["name"],
+                exc.response.status_code,
+            )
             db.add(record)
             errors.append(msg)
         except httpx.HTTPError as exc:
             msg = f"{provider['name']}: network error — {exc}"
-            log.warning("llm network error: provider=%s error=%s", provider["name"], exc)
+            log.warning(
+                "llm network error: provider=%s error=%s", provider["name"], exc
+            )
             db.add(record)
             errors.append(msg)
         except (KeyError, IndexError) as exc:
             msg = f"{provider['name']}: unexpected response shape — {exc}"
-            log.warning("llm response shape error: provider=%s error=%s", provider["name"], exc)
+            log.warning(
+                "llm response shape error: provider=%s error=%s", provider["name"], exc
+            )
             db.add(record)
             errors.append(msg)
 
-    raise LLMError(f"All LLM providers failed for task={task!r}: {'; '.join(errors) or 'no providers configured'}")
+    raise LLMError(
+        f"All LLM providers failed for task={task!r}: {'; '.join(errors) or 'no providers configured'}"
+    )

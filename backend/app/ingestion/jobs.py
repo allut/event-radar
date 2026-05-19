@@ -1,4 +1,5 @@
 """Scheduler job functions for the ingestion pipeline."""
+
 import logging
 
 from sqlalchemy import select
@@ -32,8 +33,17 @@ async def ingest_source(slug: str) -> dict:
         try:
             run = await adapter.run(db)
             await db.commit()
-            log.info("ingest source=%s raw=%d new=%d", slug, run.raw_count or 0, run.new_count or 0)
-            return {"slug": slug, "raw_count": run.raw_count, "new_count": run.new_count}
+            log.info(
+                "ingest source=%s raw=%d new=%d",
+                slug,
+                run.raw_count or 0,
+                run.new_count or 0,
+            )
+            return {
+                "slug": slug,
+                "raw_count": run.raw_count,
+                "new_count": run.new_count,
+            }
         except Exception:
             # Per adapter.run() contract: commit to persist the IngestionRun error record.
             # Data writes inside run() use savepoints so they are already rolled back;
@@ -57,7 +67,9 @@ async def ingest_all_enabled(kind: str | None = None) -> list[dict]:
     results = []
     for source in sources:
         if source.slug not in ADAPTER_REGISTRY:
-            log.debug("no adapter for slug=%s kind=%s — skipping", source.slug, source.kind)
+            log.debug(
+                "no adapter for slug=%s kind=%s — skipping", source.slug, source.kind
+            )
             continue
         try:
             result = await ingest_source(source.slug)

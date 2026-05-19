@@ -1,4 +1,5 @@
 """User settings endpoints — read and update profile preferences."""
+
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -6,7 +7,7 @@ from pydantic import BaseModel, field_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.constants import DEFAULT_USER_LOCALE, PERSONA_PRIMARY_WEIGHT, PERSONA_SECONDARY_WEIGHT, VALID_LOCALES
+from app.constants import VALID_LOCALES
 from app.db import get_db
 from app.models.models import Persona, User, UserPersona
 from app.routers.auth import get_current_user

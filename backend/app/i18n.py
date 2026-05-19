@@ -8,6 +8,7 @@ single source of truth for backend-rendered text.
 For per-event ``why_go`` bullets (read from DB JSONB), use
 ``app.routers.utils.resolve_why_go`` — that lookup is not static text.
 """
+
 from __future__ import annotations
 
 from app.constants import DEFAULT_USER_LOCALE, VALID_LOCALES
@@ -74,19 +75,82 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
 
 # MONTH_NAMES use a leading "" so index == calendar month (1..12).
 MONTH_NAMES: dict[str, list[str]] = {
-    "en": ["", "January", "February", "March", "April", "May", "June",
-           "July", "August", "September", "October", "November", "December"],
-    "et": ["", "jaanuar", "veebruar", "märts", "aprill", "mai", "juuni",
-           "juuli", "august", "september", "oktoober", "november", "detsember"],
-    "ru": ["", "января", "февраля", "марта", "апреля", "мая", "июня",
-           "июля", "августа", "сентября", "октября", "ноября", "декабря"],
+    "en": [
+        "",
+        "January",
+        "February",
+        "March",
+        "April",
+        "May",
+        "June",
+        "July",
+        "August",
+        "September",
+        "October",
+        "November",
+        "December",
+    ],
+    "et": [
+        "",
+        "jaanuar",
+        "veebruar",
+        "märts",
+        "aprill",
+        "mai",
+        "juuni",
+        "juuli",
+        "august",
+        "september",
+        "oktoober",
+        "november",
+        "detsember",
+    ],
+    "ru": [
+        "",
+        "января",
+        "февраля",
+        "марта",
+        "апреля",
+        "мая",
+        "июня",
+        "июля",
+        "августа",
+        "сентября",
+        "октября",
+        "ноября",
+        "декабря",
+    ],
 }
 
 # DAY_NAMES indexed 0..6 with 0 = Monday (matches date.weekday()).
 DAY_NAMES: dict[str, list[str]] = {
-    "en": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"],
-    "et": ["esmaspäev", "teisipäev", "kolmapäev", "neljapäev", "reede", "laupäev", "pühapäev"],
-    "ru": ["понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье"],
+    "en": [
+        "Monday",
+        "Tuesday",
+        "Wednesday",
+        "Thursday",
+        "Friday",
+        "Saturday",
+        "Sunday",
+    ],
+    "et": [
+        "esmaspäev",
+        "teisipäev",
+        "kolmapäev",
+        "neljapäev",
+        "reede",
+        "laupäev",
+        "pühapäev",
+    ],
+    "ru": [
+        "понедельник",
+        "вторник",
+        "среда",
+        "четверг",
+        "пятница",
+        "суббота",
+        "воскресенье",
+    ],
 }
 
 

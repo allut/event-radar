@@ -7,6 +7,7 @@ Writes an ``EventClassification`` row and advances ``event.status`` to
 Fixed taxonomy (12 categories, 10 vibes) prevents ontology drift.
 Any LLM-returned value not in the taxonomy is silently dropped.
 """
+
 import logging
 from datetime import datetime
 from typing import Any
@@ -54,7 +55,10 @@ def _parse_classification(raw: dict[str, Any]) -> dict[str, Any]:
     raw_why_go = raw.get("why_go", [])
     if isinstance(raw_why_go, dict):
         why_go_localized = {
-            loc: [str(b) for b in raw_why_go.get(loc, [])[:LLM_CLASSIFY_WHY_GO_MAX_BULLETS]]
+            loc: [
+                str(b)
+                for b in raw_why_go.get(loc, [])[:LLM_CLASSIFY_WHY_GO_MAX_BULLETS]
+            ]
             for loc in VALID_LOCALES
         }
         why_go_bullets = why_go_localized.get(DEFAULT_USER_LOCALE) or []
@@ -69,7 +73,10 @@ def _parse_classification(raw: dict[str, Any]) -> dict[str, Any]:
         quality = max(0.0, min(1.0, float(quality))) if quality is not None else None
     except (TypeError, ValueError):
         quality = None
-    language = str(raw.get("language", "")).strip()[:LLM_CLASSIFY_LANGUAGE_CODE_MAX_LEN] or None
+    language = (
+        str(raw.get("language", "")).strip()[:LLM_CLASSIFY_LANGUAGE_CODE_MAX_LEN]
+        or None
+    )
     return {
         "categories": cats,
         "vibes": vibs,
@@ -133,7 +140,9 @@ async def classify_event(event: Event, db: AsyncSession) -> bool:
     return True
 
 
-async def classify_pending(db: AsyncSession, *, batch_size: int = LLM_CLASSIFY_BATCH_SIZE) -> dict[str, Any]:
+async def classify_pending(
+    db: AsyncSession, *, batch_size: int = LLM_CLASSIFY_BATCH_SIZE
+) -> dict[str, Any]:
     """Classify all canonical draft events, up to ``batch_size`` per call.
 
     A "canonical" event is one with ``dedup_group_id IS NULL`` or
@@ -169,5 +178,10 @@ async def classify_pending(db: AsyncSession, *, batch_size: int = LLM_CLASSIFY_B
         else:
             failed += 1
 
-    log.info("classify_pending: attempted=%d succeeded=%d failed=%d", attempted, succeeded, failed)
+    log.info(
+        "classify_pending: attempted=%d succeeded=%d failed=%d",
+        attempted,
+        succeeded,
+        failed,
+    )
     return {"attempted": attempted, "succeeded": succeeded, "failed": failed}

@@ -1,4 +1,5 @@
 """POST /feedback — record user feedback signals and invalidate cached scores."""
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy import delete
@@ -35,13 +36,17 @@ async def record_feedback(
 
     event = await db.get(Event, body.event_id)
     if event is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Event not found"
+        )
 
-    db.add(UserEventFeedback(
-        user_id=current_user.id,
-        event_id=body.event_id,
-        signal=body.signal,
-    ))
+    db.add(
+        UserEventFeedback(
+            user_id=current_user.id,
+            event_id=body.event_id,
+            signal=body.signal,
+        )
+    )
 
     # Invalidate cached score — next build_daily_feeds will recompute from scratch
     await db.execute(

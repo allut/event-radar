@@ -8,6 +8,7 @@ Formula (all components normalized to [0, 1]):
         + 0.10 * quality_score
         + 0.05 * locality_bonus
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -82,13 +83,15 @@ class FeedbackContext:
                 dedup_group = r.event.dedup_group_id
                 if r.event.classification:
                     cats = r.event.classification.categories or []
-            rows.append(_FeedbackRow(
-                signal=r.signal,
-                event_id=r.event_id,
-                categories=cats,
-                dedup_group_id=dedup_group,
-                created_at=r.created_at,
-            ))
+            rows.append(
+                _FeedbackRow(
+                    signal=r.signal,
+                    event_id=r.event_id,
+                    categories=cats,
+                    dedup_group_id=dedup_group,
+                    created_at=r.created_at,
+                )
+            )
         disliked_groups = frozenset(
             row.dedup_group_id
             for row in rows
@@ -139,7 +142,9 @@ def _affinity_for_vector(
     cat_map: dict[str, float] = vector.get("categories", {})
     vibe_map: dict[str, float] = vector.get("vibes", {})
     time_map: dict[str, float] = vector.get("times", {})
-    max_possible = sum(cat_map.values()) + sum(vibe_map.values()) + sum(time_map.values())
+    max_possible = (
+        sum(cat_map.values()) + sum(vibe_map.values()) + sum(time_map.values())
+    )
     if max_possible <= 0:
         # Empty vector or all-negative weights — no meaningful signal, return neutral.
         return 0.5
@@ -199,7 +204,7 @@ def feedback_signal(
 
     for row in ctx.rows:
         days = max(0.0, (now - row.created_at).total_seconds() / SECONDS_PER_DAY)
-        decay = FEEDBACK_DECAY_BASE ** days
+        decay = FEEDBACK_DECAY_BASE**days
 
         if row.event_id == event_id:
             if row.signal == "like":
@@ -219,7 +224,10 @@ def locality_bonus(lat: Optional[float], lng: Optional[float]) -> float:
     """1.0 if within central Tallinn bounding box; 0.5 when location unknown; 0.0 otherwise."""
     if lat is None or lng is None:
         return 0.5
-    if abs(lat - TALLINN_CENTER_LAT) < TALLINN_LAT_DELTA and abs(lng - TALLINN_CENTER_LNG) < TALLINN_LNG_DELTA:
+    if (
+        abs(lat - TALLINN_CENTER_LAT) < TALLINN_LAT_DELTA
+        and abs(lng - TALLINN_CENTER_LNG) < TALLINN_LNG_DELTA
+    ):
         return 1.0
     return 0.0
 
@@ -250,15 +258,17 @@ def score_event(
     fb_normalized = (fb + 1.0) / 2.0  # map [-1, 1] → [0, 1]
 
     return (
-        SCORE_WEIGHT_AFFINITY  * affinity
-        + SCORE_WEIGHT_RECENCY   * recency
-        + SCORE_WEIGHT_FEEDBACK  * fb_normalized
-        + SCORE_WEIGHT_QUALITY   * quality
-        + SCORE_WEIGHT_LOCALITY  * locality
+        SCORE_WEIGHT_AFFINITY * affinity
+        + SCORE_WEIGHT_RECENCY * recency
+        + SCORE_WEIGHT_FEEDBACK * fb_normalized
+        + SCORE_WEIGHT_QUALITY * quality
+        + SCORE_WEIGHT_LOCALITY * locality
     )
 
 
-def _mmr_pick(scored: list[tuple[float, Event]], n: int, max_per_category: int) -> list[Event]:
+def _mmr_pick(
+    scored: list[tuple[float, Event]], n: int, max_per_category: int
+) -> list[Event]:
     """
     MMR-lite diversity pick: greedy top-n with at most max_per_category events per category.
     Events with no categories bypass the category cap.
@@ -299,13 +309,15 @@ async def build_daily_feeds(db: AsyncSession) -> dict:
     cutoff = now + timedelta(days=DAILY_5_LOOKAHEAD_DAYS)
 
     # Load all published events within the lookahead window
-    event_rows = (await db.scalars(
-        select_events_with_classification().where(
-            Event.status == EVENT_STATUS_PUBLISHED,
-            Event.starts_at >= now,
-            Event.starts_at <= cutoff,
+    event_rows = (
+        await db.scalars(
+            select_events_with_classification().where(
+                Event.status == EVENT_STATUS_PUBLISHED,
+                Event.starts_at >= now,
+                Event.starts_at <= cutoff,
+            )
         )
-    )).all()
+    ).all()
 
     users = (await db.scalars(select(User))).all()
 
@@ -314,23 +326,29 @@ async def build_daily_feeds(db: AsyncSession) -> dict:
 
     for user in users:
         # Persona weights with affinity vectors
-        up_rows = (await db.scalars(
-            select(UserPersona)
-            .where(UserPersona.user_id == user.id)
-            .options(selectinload(UserPersona.persona))
-        )).all()
+        up_rows = (
+            await db.scalars(
+                select(UserPersona)
+                .where(UserPersona.user_id == user.id)
+                .options(selectinload(UserPersona.persona))
+            )
+        ).all()
         user_persona_weights: list[tuple[float, dict]] = [
             (row.weight, row.persona.affinity_vector) for row in up_rows
         ]
 
         # Feedback with event + classification for indirect category matching
-        fb_rows = (await db.scalars(
-            select(UserEventFeedback)
-            .where(UserEventFeedback.user_id == user.id)
-            .options(
-                selectinload(UserEventFeedback.event).selectinload(Event.classification)
+        fb_rows = (
+            await db.scalars(
+                select(UserEventFeedback)
+                .where(UserEventFeedback.user_id == user.id)
+                .options(
+                    selectinload(UserEventFeedback.event).selectinload(
+                        Event.classification
+                    )
+                )
             )
-        )).all()
+        ).all()
         ctx = FeedbackContext.from_orm_rows(list(fb_rows))
 
         # Score each candidate event
@@ -340,7 +358,9 @@ async def build_daily_feeds(db: AsyncSession) -> dict:
             if s is not None:
                 scored.append((s, event))
 
-        top_events = _mmr_pick(scored, n=DAILY_5_COUNT, max_per_category=DAILY_5_MAX_PER_CATEGORY)
+        top_events = _mmr_pick(
+            scored, n=DAILY_5_COUNT, max_per_category=DAILY_5_MAX_PER_CATEGORY
+        )
         event_ids = [e.id for e in top_events]
 
         # Upsert daily feed (rebuild if already exists for today)
@@ -354,12 +374,14 @@ async def build_daily_feeds(db: AsyncSession) -> dict:
             existing.event_ids = event_ids
             existing.built_at = now
         else:
-            db.add(DailyFeed(
-                user_id=user.id,
-                feed_date=today,
-                event_ids=event_ids,
-                built_at=now,
-            ))
+            db.add(
+                DailyFeed(
+                    user_id=user.id,
+                    feed_date=today,
+                    event_ids=event_ids,
+                    built_at=now,
+                )
+            )
 
         if event_ids:
             built += 1

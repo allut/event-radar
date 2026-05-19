@@ -1,4 +1,5 @@
 """Inbound webhooks — Resend inbound email."""
+
 import hmac
 import logging
 
@@ -24,7 +25,11 @@ async def _run_extraction(email_id: int, subject: str, text_body: str) -> None:
                 db, email_id=email_id, subject=subject, text_body=text_body
             )
             await db.commit()
-            log.info("Newsletter extraction committed: %d event(s) from email %d", count, email_id)
+            log.info(
+                "Newsletter extraction committed: %d event(s) from email %d",
+                count,
+                email_id,
+            )
         except Exception:
             await db.rollback()
             log.exception("Newsletter extraction failed for email %d", email_id)
@@ -42,15 +47,22 @@ async def inbound_mail(
     Set RESEND_WEBHOOK_SECRET and append ?secret=<value> to the Resend inbound URL
     to guard the endpoint in production. Empty secret disables verification (dev only).
     """
-    if settings.RESEND_WEBHOOK_SECRET and not hmac.compare_digest(secret, settings.RESEND_WEBHOOK_SECRET):
+    if settings.RESEND_WEBHOOK_SECRET and not hmac.compare_digest(
+        secret, settings.RESEND_WEBHOOK_SECRET
+    ):
         log.warning("inbound-mail: invalid webhook secret")
-        return JSONResponse({"status": "rejected"}, status_code=status.HTTP_401_UNAUTHORIZED)
+        return JSONResponse(
+            {"status": "rejected"}, status_code=status.HTTP_401_UNAUTHORIZED
+        )
 
     try:
         payload = await request.json()
     except Exception:
         log.warning("inbound-mail: invalid JSON body")
-        return JSONResponse({"status": "rejected", "reason": "invalid json"}, status_code=status.HTTP_400_BAD_REQUEST)
+        return JSONResponse(
+            {"status": "rejected", "reason": "invalid json"},
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
 
     from_addr = str(payload.get("from", ""))
     to_raw = payload.get("to", "")

@@ -6,7 +6,13 @@ import httpx
 
 from app.config import settings
 from app.constants import FIENTA_MAX_PAGES, HTTP_TIMEOUT_SECONDS
-from app.ingestion.base import NormalizedEvent, SourceAdapter, _http_get, _parse_dt, normalize_currency
+from app.ingestion.base import (
+    NormalizedEvent,
+    SourceAdapter,
+    _http_get,
+    _parse_dt,
+    normalize_currency,
+)
 
 log = logging.getLogger(__name__)
 
@@ -38,7 +44,11 @@ class FientaAdapter(SourceAdapter):
                         await self._fetch_organizer(client, base_url, org_id)
                     )
                 except httpx.HTTPStatusError as exc:
-                    log.warning("fienta organizer=%s failed: %s", org_id, exc.response.status_code)
+                    log.warning(
+                        "fienta organizer=%s failed: %s",
+                        org_id,
+                        exc.response.status_code,
+                    )
                 except httpx.RequestError as exc:
                     log.warning("fienta organizer=%s network error: %s", org_id, exc)
 
@@ -74,7 +84,9 @@ class FientaAdapter(SourceAdapter):
             next_url = (data.get("links") or {}).get("next") or ""
             if next_url:
                 if urlparse(next_url).hostname != base_host:
-                    log.error("fienta: links.next host mismatch (SSRF guard), stopping pagination")
+                    log.error(
+                        "fienta: links.next host mismatch (SSRF guard), stopping pagination"
+                    )
                     break
                 url = next_url
                 params = None  # next URL already encodes all params
@@ -101,7 +113,9 @@ class FientaAdapter(SourceAdapter):
         if not external_id:
             return None
 
-        raw_start = raw.get("starts_at") or raw.get("start_date") or raw.get("start_time")
+        raw_start = (
+            raw.get("starts_at") or raw.get("start_date") or raw.get("start_time")
+        )
         if not raw_start:
             return None
         starts_at = _parse_dt(str(raw_start))
@@ -123,14 +137,18 @@ class FientaAdapter(SourceAdapter):
         if isinstance(price_raw, dict):
             price_min = _first_not_none(price_raw.get("min"), raw.get("min_price"))
             price_max = _first_not_none(price_raw.get("max"), raw.get("max_price"))
-            currency_raw = _first_not_none(price_raw.get("currency"), raw.get("currency"))
+            currency_raw = _first_not_none(
+                price_raw.get("currency"), raw.get("currency")
+            )
         else:
             # price_raw is None, int, or unexpected type — fall back to top-level fields
             price_min = _first_not_none(raw.get("min_price"), raw.get("price_min"))
             price_max = _first_not_none(raw.get("max_price"), raw.get("price_max"))
             currency_raw = raw.get("currency")
 
-        currency = normalize_currency(currency_raw, price_min is not None or price_max is not None)
+        currency = normalize_currency(
+            currency_raw, price_min is not None or price_max is not None
+        )
 
         return NormalizedEvent(
             external_id=external_id,
@@ -141,7 +159,9 @@ class FientaAdapter(SourceAdapter):
             venue_name=venue_name or None,
             venue_address=venue_address or None,
             url=raw.get("url") or raw.get("link"),
-            image_url=raw.get("image_url") or raw.get("image") or raw.get("cover_image"),
+            image_url=raw.get("image_url")
+            or raw.get("image")
+            or raw.get("cover_image"),
             price_min=float(price_min) if price_min is not None else None,
             price_max=float(price_max) if price_max is not None else None,
             currency=currency,

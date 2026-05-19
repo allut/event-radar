@@ -1,4 +1,5 @@
 """LLM extractor: inbound newsletter email → raw events."""
+
 import logging
 from datetime import datetime, timezone
 from typing import Any
@@ -24,12 +25,16 @@ async def _get_or_create_newsletter_source(db: AsyncSession) -> Source:
     # Use INSERT ... ON CONFLICT DO NOTHING to avoid race conditions under concurrency.
     stmt = (
         pg_insert(Source)
-        .values(slug=NEWSLETTER_SOURCE_SLUG, kind="inbound_email", config={}, enabled=True)
+        .values(
+            slug=NEWSLETTER_SOURCE_SLUG, kind="inbound_email", config={}, enabled=True
+        )
         .on_conflict_do_nothing(index_elements=["slug"])
     )
     await db.execute(stmt)
     await db.flush()
-    source = await db.scalar(select(Source).where(Source.slug == NEWSLETTER_SOURCE_SLUG))
+    source = await db.scalar(
+        select(Source).where(Source.slug == NEWSLETTER_SOURCE_SLUG)
+    )
     assert source is not None, f"Source {NEWSLETTER_SOURCE_SLUG!r} missing after upsert"
     return source
 

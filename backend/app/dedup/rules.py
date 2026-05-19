@@ -11,6 +11,7 @@ Merge criteria (ALL three must pass):
 On match: assign dedup_group_id = min(event_id) across the connected component
 (union-find over all candidate pairs).
 """
+
 import logging
 from datetime import datetime, timedelta
 
@@ -18,7 +19,12 @@ from rapidfuzz.fuzz import token_set_ratio
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.constants import SECONDS_PER_HOUR, TIME_WINDOW_HOURS, TITLE_RATIO_THRESHOLD, VENUE_RATIO_THRESHOLD
+from app.constants import (
+    SECONDS_PER_HOUR,
+    TIME_WINDOW_HOURS,
+    TITLE_RATIO_THRESHOLD,
+    VENUE_RATIO_THRESHOLD,
+)
 from app.models.models import Event
 
 log = logging.getLogger(__name__)
@@ -32,9 +38,15 @@ def _venue_compatible(a: str | None, b: str | None) -> bool:
 
 def is_candidate_pair(a: Event, b: Event) -> bool:
     """Return True when a and b pass all three rule-based criteria."""
-    if abs((a.starts_at - b.starts_at).total_seconds()) > TIME_WINDOW_HOURS * SECONDS_PER_HOUR:
+    if (
+        abs((a.starts_at - b.starts_at).total_seconds())
+        > TIME_WINDOW_HOURS * SECONDS_PER_HOUR
+    ):
         return False
-    if token_set_ratio(a.title_orig.lower(), b.title_orig.lower()) < TITLE_RATIO_THRESHOLD:
+    if (
+        token_set_ratio(a.title_orig.lower(), b.title_orig.lower())
+        < TITLE_RATIO_THRESHOLD
+    ):
         return False
     return _venue_compatible(a.venue_name, b.venue_name)
 
@@ -111,11 +123,19 @@ async def run_dedup_pass(db: AsyncSession) -> dict:
     Loads all non-cancelled events, clusters them, and writes group IDs for
     any newly discovered or changed groups. Returns a summary dict.
     """
-    from app.constants import EVENT_STATUS_CANCELLED, DEDUP_LOOKBACK_DAYS, TALLINN_TZ  # avoid circular
+    from app.constants import (
+        EVENT_STATUS_CANCELLED,
+        DEDUP_LOOKBACK_DAYS,
+        TALLINN_TZ,
+    )  # avoid circular
 
     # Extend lower bound by TIME_WINDOW_HOURS: boundary pairs (events within 12h of
     # the cutoff) are loaded together so neither is evaluated without its partner.
-    cutoff = datetime.now(tz=TALLINN_TZ) - timedelta(days=DEDUP_LOOKBACK_DAYS) - timedelta(hours=TIME_WINDOW_HOURS)
+    cutoff = (
+        datetime.now(tz=TALLINN_TZ)
+        - timedelta(days=DEDUP_LOOKBACK_DAYS)
+        - timedelta(hours=TIME_WINDOW_HOURS)
+    )
     rows = (
         await db.scalars(
             select(Event)
@@ -156,7 +176,10 @@ async def run_dedup_pass(db: AsyncSession) -> dict:
     group_count = len({gid for gid in assignments.values()})
     log.info(
         "dedup pass: %d events, %d grouped into %d group(s), %d updated",
-        len(events), len(assignments), group_count, updated,
+        len(events),
+        len(assignments),
+        group_count,
+        updated,
     )
     return {
         "total": len(events),

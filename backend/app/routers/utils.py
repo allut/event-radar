@@ -1,4 +1,5 @@
 """Shared serialization helpers for event routers."""
+
 from itsdangerous import BadSignature, SignatureExpired
 from sqlalchemy import Select, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -29,7 +30,7 @@ async def get_optional_user_locale(
     if not isinstance(authorization, str) or not authorization.startswith("Bearer "):
         return DEFAULT_USER_LOCALE
     try:
-        user_id = verify_session_token(authorization[len("Bearer "):])
+        user_id = verify_session_token(authorization[len("Bearer ") :])
     except (SignatureExpired, BadSignature):
         return DEFAULT_USER_LOCALE
     user = await db.get(User, user_id)

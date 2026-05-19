@@ -16,7 +16,18 @@ class Settings(BaseSettings):
     FOTOGRAFISKA_URL: str = "https://tallinn.fotografiska.com/en/events"
     KUMU_URL: str = "https://kumu.ekm.ee/en/whats-on/"
     ESTONIA_CONCERT_HALL_URL: str = "https://concert.ee/en/events/"
-    FIENTA_ORGANIZER_IDS: list[int] = [3349, 1946, 15, 2111, 17595, 1088, 2704, 8403, 8412, 12106]
+    FIENTA_ORGANIZER_IDS: list[int] = [
+        3349,
+        1946,
+        15,
+        2111,
+        17595,
+        1088,
+        2704,
+        8403,
+        8412,
+        12106,
+    ]
     FIENTA_ORGANIZER_NAMES: dict[str, str] = {
         "3349": "Kanuti Gildi SAAL",
         "1946": "Fotografiska Tallinn",
@@ -48,7 +59,12 @@ class Settings(BaseSettings):
         "times": {"weekend": 1.0, "daytime": 0.8},
     }
     PERSONA_CULTURE_BUFF_AFFINITY: dict[str, Any] = {
-        "categories": {"theater": 1.0, "exhibitions": 1.0, "cinema": 0.8, "literature": 0.7},
+        "categories": {
+            "theater": 1.0,
+            "exhibitions": 1.0,
+            "cinema": 0.8,
+            "literature": 0.7,
+        },
         "vibes": {"niche": 0.7, "indie": 0.6, "trendy": 0.5},
         # No times preference — culture buff attends any time.
     }
@@ -60,11 +76,17 @@ class Settings(BaseSettings):
 
     # Admin / internal security
     ADMIN_USERNAME: str = "admin"  # Basic-auth username for /admin/* endpoints
-    ADMIN_PASSWORD: str = ""       # Basic-auth password for /admin/* endpoints; empty = disabled (dev only)
-    INTERNAL_TOKEN: str = ""       # X-Internal-Token header for /internal/tick; empty = disabled (dev only)
+    ADMIN_PASSWORD: str = (
+        ""  # Basic-auth password for /admin/* endpoints; empty = disabled (dev only)
+    )
+    INTERNAL_TOKEN: str = (
+        ""  # X-Internal-Token header for /internal/tick; empty = disabled (dev only)
+    )
 
     # Auth / email
-    RESEND_API_KEY: str = ""       # Resend API key for transactional email; empty = log-only (dev)
+    RESEND_API_KEY: str = (
+        ""  # Resend API key for transactional email; empty = log-only (dev)
+    )
     RESEND_FROM_ADDRESS: str = "Event Radar <onboarding@resend.dev>"
     FRONTEND_URL: str = "http://localhost:5173"  # Base URL for magic-link verification
     MAGIC_LINK_TTL_MINUTES: int = 15

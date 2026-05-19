@@ -184,7 +184,12 @@ async def tick(request: Request) -> dict:
     if token:
         received = request.headers.get("X-Internal-Token", "")
         if not secrets.compare_digest(received, token):
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid token")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="Invalid token"
+            )
     elif settings.APP_ENV != "development":
-        log.warning("INTERNAL_TOKEN not set; /internal/tick is unauthenticated (APP_ENV=%s)", settings.APP_ENV)
+        log.warning(
+            "INTERNAL_TOKEN not set; /internal/tick is unauthenticated (APP_ENV=%s)",
+            settings.APP_ENV,
+        )
     return {"status": "ok"}

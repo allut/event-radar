@@ -46,23 +46,41 @@ async def sync_fienta_organizers(db: AsyncSession) -> dict:
         # Step 1 — check each current organizer is still returning events
         for org_id in current_ids:
             try:
-                resp = await _http_get(client, settings.FIENTA_BASE_URL, params={"organizer": org_id, "limit": FIENTA_ORGANIZER_CHECK_LIMIT})
+                resp = await _http_get(
+                    client,
+                    settings.FIENTA_BASE_URL,
+                    params={"organizer": org_id, "limit": FIENTA_ORGANIZER_CHECK_LIMIT},
+                )
                 events = resp.json().get("events", [])
                 if not events:
                     stale_ids.add(org_id)
                     log.info(
                         "organizer_sync: organizer %s (%s) returned 0 events — flagged stale",
-                        org_id, current_names.get(str(org_id)),
+                        org_id,
+                        current_names.get(str(org_id)),
                     )
             except httpx.HTTPError as exc:
-                log.warning("organizer_sync: check failed for organizer=%s: %s", org_id, exc)
+                log.warning(
+                    "organizer_sync: check failed for organizer=%s: %s", org_id, exc
+                )
 
         # Step 2 — discover new organizers via city filter scan
         try:
-            resp = await _http_get(client, settings.FIENTA_BASE_URL, params={"city": FIENTA_CITY_FILTER, "limit": FIENTA_ORGANIZER_SCAN_LIMIT})
+            resp = await _http_get(
+                client,
+                settings.FIENTA_BASE_URL,
+                params={
+                    "city": FIENTA_CITY_FILTER,
+                    "limit": FIENTA_ORGANIZER_SCAN_LIMIT,
+                },
+            )
             events = resp.json().get("events", [])
             if len(events) == FIENTA_ORGANIZER_SCAN_LIMIT:
-                log.warning("organizer_sync: city=%s scan hit limit=%d — results may be truncated", FIENTA_CITY_FILTER, FIENTA_ORGANIZER_SCAN_LIMIT)
+                log.warning(
+                    "organizer_sync: city=%s scan hit limit=%d — results may be truncated",
+                    FIENTA_CITY_FILTER,
+                    FIENTA_ORGANIZER_SCAN_LIMIT,
+                )
             org_counts: dict[int, tuple[int, str]] = {}
             for event in events:
                 raw_oid = event.get("organizer_id")
@@ -77,12 +95,20 @@ async def sync_fienta_organizers(db: AsyncSession) -> dict:
                 org_counts[oid] = (count + 1, name)
 
             for oid, (count, name) in sorted(org_counts.items()):
-                if oid not in current_id_set and count >= ORGANIZER_MIN_EVENTS_FOR_AUTO_ADD:
+                if (
+                    oid not in current_id_set
+                    and count >= ORGANIZER_MIN_EVENTS_FOR_AUTO_ADD
+                ):
                     current_ids.append(oid)
                     current_id_set.add(oid)
                     current_names[str(oid)] = name
                     added.append((oid, name))
-                    log.info("organizer_sync: auto-added organizer %s (%s) — %d events", oid, name, count)
+                    log.info(
+                        "organizer_sync: auto-added organizer %s (%s) — %d events",
+                        oid,
+                        name,
+                        count,
+                    )
         except httpx.HTTPError as exc:
             log.warning("organizer_sync: discovery scan failed: %s", exc)
 
@@ -101,6 +127,8 @@ async def sync_fienta_organizers(db: AsyncSession) -> dict:
 
     log.info(
         "organizer_sync: done — total=%d added=%d stale=%d",
-        len(current_ids), len(added), len(merged_stale),
+        len(current_ids),
+        len(added),
+        len(merged_stale),
     )
     return {"added": added, "stale": merged_stale}

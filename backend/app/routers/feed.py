@@ -1,4 +1,5 @@
 """GET /feed — today's personalized Daily 5 for the authenticated user."""
+
 from datetime import datetime
 
 from fastapi import APIRouter, Depends
@@ -12,7 +13,6 @@ from app.routers.auth import get_current_user
 from app.routers.utils import select_events_with_classification, serialize_event
 
 router = APIRouter(prefix="/feed", tags=["feed"])
-
 
 
 @router.get("")
@@ -37,9 +37,11 @@ async def get_feed(
             "built_at": None,
         }
 
-    event_rows = (await db.scalars(
-        select_events_with_classification().where(Event.id.in_(feed.event_ids))
-    )).all()
+    event_rows = (
+        await db.scalars(
+            select_events_with_classification().where(Event.id.in_(feed.event_ids))
+        )
+    ).all()
 
     event_map = {e.id: e for e in event_rows}
     # Preserve the feed ordering from daily_feeds.event_ids

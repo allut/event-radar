@@ -2,6 +2,7 @@
 
 Falls back to log-only when RESEND_API_KEY is unset (dev / CI).
 """
+
 import http
 import logging
 
@@ -19,7 +20,9 @@ from app.i18n import t, ti
 log = logging.getLogger(__name__)
 
 
-async def send_magic_link(to_email: str, magic_token: str, locale: str = DEFAULT_USER_LOCALE) -> None:
+async def send_magic_link(
+    to_email: str, magic_token: str, locale: str = DEFAULT_USER_LOCALE
+) -> None:
     verify_url = f"{settings.FRONTEND_URL}/auth/verify?token={magic_token}"
 
     if not settings.RESEND_API_KEY:

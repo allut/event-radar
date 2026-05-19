@@ -1,4 +1,5 @@
 """Onboarding endpoint — persona selection."""
+
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -36,9 +37,7 @@ async def set_persona(
             )
         slugs.append(body.secondary_slug)
 
-    personas = (
-        await db.scalars(select(Persona).where(Persona.slug.in_(slugs)))
-    ).all()
+    personas = (await db.scalars(select(Persona).where(Persona.slug.in_(slugs)))).all()
 
     found_slugs = {p.slug for p in personas}
     missing = set(slugs) - found_slugs
@@ -49,9 +48,7 @@ async def set_persona(
         )
 
     # Replace existing selections atomically
-    await db.execute(
-        delete(UserPersona).where(UserPersona.user_id == current_user.id)
-    )
+    await db.execute(delete(UserPersona).where(UserPersona.user_id == current_user.id))
 
     persona_by_slug = {p.slug: p for p in personas}
     db.add(

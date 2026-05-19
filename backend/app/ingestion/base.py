@@ -101,7 +101,9 @@ def _make_slug(title: str, starts_at: datetime, external_id: str) -> str:
     safe = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")
     date_part = starts_at.strftime("%Y%m%d")
     # short hex keeps collision probability <0.1% up to ~10k events/run
-    h = hashlib.md5(external_id.encode(), usedforsecurity=False).hexdigest()[:SLUG_HASH_HEX_LEN]
+    h = hashlib.md5(external_id.encode(), usedforsecurity=False).hexdigest()[
+        :SLUG_HASH_HEX_LEN
+    ]
     return f"{safe[:SLUG_TITLE_MAX_LEN]}-{date_part}-{h}"
 
 
@@ -164,7 +166,9 @@ class SourceAdapter(ABC):
                     raw_event.processed_at = datetime.now(tz=TALLINN_TZ)
                     continue
 
-                slug = _make_slug(normalized.title, normalized.starts_at, normalized.external_id)
+                slug = _make_slug(
+                    normalized.title, normalized.starts_at, normalized.external_id
+                )
                 try:
                     async with db.begin_nested():
                         event = Event(
@@ -186,15 +190,19 @@ class SourceAdapter(ABC):
                         )
                         db.add(event)
                         await db.flush()
-                        db.add(EventSource(
-                            event_id=event.id,
-                            source_id=self.source.id,
-                            external_id=normalized.external_id,
-                        ))
+                        db.add(
+                            EventSource(
+                                event_id=event.id,
+                                source_id=self.source.id,
+                                external_id=normalized.external_id,
+                            )
+                        )
                 except IntegrityError:
                     log.warning(
                         "slug collision source=%s external_id=%s slug=%s — skipped",
-                        self.source.slug, normalized.external_id, slug,
+                        self.source.slug,
+                        normalized.external_id,
+                        slug,
                     )
                     continue
 

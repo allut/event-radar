@@ -1,4 +1,5 @@
 """Daily 5 digest email — HTML build + Resend delivery."""
+
 from __future__ import annotations
 
 import html as html_lib
@@ -106,7 +107,11 @@ def build_digest_html(
             f"</div>"
         )
 
-    events_html = "\n".join(event_blocks) if event_blocks else f"<p>{t('digest.no_events', locale)}</p>"
+    events_html = (
+        "\n".join(event_blocks)
+        if event_blocks
+        else f"<p>{t('digest.no_events', locale)}</p>"
+    )
     settings_label = t("digest.unsubscribe", locale)
 
     return f"""<!DOCTYPE html>
@@ -140,7 +145,9 @@ async def send_digest_email(
         return
 
     html = build_digest_html(events, feed_date, locale, settings.FRONTEND_URL)
-    subject = ti("digest.subject_template", locale, date=_format_feed_date(feed_date, locale))
+    subject = ti(
+        "digest.subject_template", locale, date=_format_feed_date(feed_date, locale)
+    )
 
     async with httpx.AsyncClient(timeout=RESEND_TIMEOUT_SECONDS) as client:
         resp = await client.post(
@@ -161,7 +168,9 @@ async def send_digest_email(
             resp.status_code,
             resp.text[:RESEND_ERROR_SNIPPET_LEN],
         )
-        raise RuntimeError(f"Resend returned {resp.status_code} for digest to {to_email}")
+        raise RuntimeError(
+            f"Resend returned {resp.status_code} for digest to {to_email}"
+        )
     log.info("Digest sent to %s (%d events)", to_email, len(events))
 
 
@@ -178,21 +187,23 @@ async def send_daily_digests(db: AsyncSession) -> dict[str, int]:
     """
     today = datetime.now(TALLINN_TZ).date()
 
-    users = (await db.scalars(
-        select(User).where(User.email_digest_opt_in.is_(True))
-    )).all()
+    users = (
+        await db.scalars(select(User).where(User.email_digest_opt_in.is_(True)))
+    ).all()
 
     if not users:
         return {"sent": 0, "skipped": 0, "total_opted_in": 0}
 
     user_ids = [u.id for u in users]
 
-    feeds = (await db.scalars(
-        select(DailyFeed).where(
-            DailyFeed.user_id.in_(user_ids),
-            DailyFeed.feed_date == today,
+    feeds = (
+        await db.scalars(
+            select(DailyFeed).where(
+                DailyFeed.user_id.in_(user_ids),
+                DailyFeed.feed_date == today,
+            )
         )
-    )).all()
+    ).all()
 
     feed_by_user: dict[int, list[int]] = {f.user_id: f.event_ids for f in feeds}
 
@@ -203,9 +214,11 @@ async def send_daily_digests(db: AsyncSession) -> dict[str, int]:
     if not all_event_ids:
         return {"sent": 0, "skipped": len(users), "total_opted_in": len(users)}
 
-    events = (await db.scalars(
-        select_events_with_classification().where(Event.id.in_(all_event_ids))
-    )).all()
+    events = (
+        await db.scalars(
+            select_events_with_classification().where(Event.id.in_(all_event_ids))
+        )
+    ).all()
     event_map: dict[int, Event] = {e.id: e for e in events}
 
     user_map: dict[int, User] = {u.id: u for u in users}

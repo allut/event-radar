@@ -42,12 +42,18 @@ class User(Base):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     email: Mapped[str] = mapped_column(CIText(), nullable=False, unique=True)
-    locale: Mapped[str] = mapped_column(String(2), nullable=False, default=DEFAULT_USER_LOCALE)
-    home_city: Mapped[str] = mapped_column(String(100), nullable=False, default=DEFAULT_USER_CITY)
+    locale: Mapped[str] = mapped_column(
+        String(2), nullable=False, default=DEFAULT_USER_LOCALE
+    )
+    home_city: Mapped[str] = mapped_column(
+        String(100), nullable=False, default=DEFAULT_USER_CITY
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
-    email_digest_opt_in: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
+    email_digest_opt_in: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="true"
+    )
 
     magic_links: Mapped[list["AuthMagicLink"]] = relationship(back_populates="user")
     user_personas: Mapped[list["UserPersona"]] = relationship(back_populates="user")
@@ -64,8 +70,12 @@ class AuthMagicLink(Base):
         ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
     token_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
-    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    used_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     user: Mapped["User"] = relationship(back_populates="magic_links")
 
@@ -116,7 +126,9 @@ class Source(Base):
     kind: Mapped[str] = mapped_column(String(20), nullable=False)
     config: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    last_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_run_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     last_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
     ingestion_runs: Mapped[list["IngestionRun"]] = relationship(back_populates="source")
@@ -132,7 +144,9 @@ class IngestionRun(Base):
     started_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
-    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     raw_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     new_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -150,7 +164,9 @@ class RawEvent(Base):
     fetched_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
-    processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    processed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     source: Mapped["Source"] = relationship(back_populates="raw_events")
 
@@ -172,7 +188,9 @@ class Event(Base):
     title_orig: Mapped[str] = mapped_column(Text, nullable=False)
     description_orig: Mapped[str | None] = mapped_column(Text, nullable=True)
     starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    ends_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     venue_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     venue_address: Mapped[str | None] = mapped_column(Text, nullable=True)
     lat: Mapped[float | None] = mapped_column(Float, nullable=True)
@@ -182,7 +200,9 @@ class Event(Base):
     price_min: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)
     price_max: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)
     currency: Mapped[str | None] = mapped_column(String(3), nullable=True)
-    status: Mapped[str] = mapped_column(String(20), nullable=False, default=EVENT_STATUS_DRAFT)
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default=EVENT_STATUS_DRAFT
+    )
     dedup_group_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
@@ -224,7 +244,9 @@ class EventClassification(Base):
     event_id: Mapped[int] = mapped_column(
         ForeignKey("events.id", ondelete="CASCADE"), nullable=False, unique=True
     )
-    categories: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False, default=list)
+    categories: Mapped[list[str]] = mapped_column(
+        ARRAY(Text), nullable=False, default=list
+    )
     vibes: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False, default=list)
     quality_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     why_go_bullets: Mapped[list[str] | None] = mapped_column(ARRAY(Text), nullable=True)
@@ -294,7 +316,9 @@ class DailyFeed(Base):
         ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
     feed_date: Mapped[date] = mapped_column(Date, nullable=False)
-    event_ids: Mapped[list[int]] = mapped_column(ARRAY(BigInteger), nullable=False, default=list)
+    event_ids: Mapped[list[int]] = mapped_column(
+        ARRAY(BigInteger), nullable=False, default=list
+    )
     built_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
@@ -309,9 +333,7 @@ class DailyFeed(Base):
 
 class RawInboundEmail(Base):
     __tablename__ = "raw_inbound_emails"
-    __table_args__ = (
-        Index("ix_raw_inbound_emails_received_at", "received_at"),
-    )
+    __table_args__ = (Index("ix_raw_inbound_emails_received_at", "received_at"),)
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     received_at: Mapped[datetime] = mapped_column(
@@ -321,7 +343,9 @@ class RawInboundEmail(Base):
     to_addr: Mapped[str] = mapped_column(Text, nullable=False, server_default="")
     subject: Mapped[str] = mapped_column(Text, nullable=False, server_default="")
     raw_payload: Mapped[dict] = mapped_column(JSONB, nullable=False)
-    processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    processed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
 
 # ---------------------------------------------------------------------------

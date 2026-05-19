@@ -14,11 +14,36 @@ log = logging.getLogger(__name__)
 
 def _jsonld_sources() -> list[dict[str, Any]]:
     return [
-        {"slug": "telliskivi",             "kind": "html_jsonld", "enabled": True, "config": {"url": settings.TELLISKIVI_URL}},
-        {"slug": "kultuurikatel",          "kind": "html_jsonld", "enabled": True, "config": {"url": settings.KULTUURIKATEL_URL}},
-        {"slug": "fotografiska",           "kind": "html_jsonld", "enabled": True, "config": {"url": settings.FOTOGRAFISKA_URL}},
-        {"slug": "kumu",                   "kind": "html_jsonld", "enabled": True, "config": {"url": settings.KUMU_URL}},
-        {"slug": "estonia_concert_hall",   "kind": "html_jsonld", "enabled": True, "config": {"url": settings.ESTONIA_CONCERT_HALL_URL}},
+        {
+            "slug": "telliskivi",
+            "kind": "html_jsonld",
+            "enabled": True,
+            "config": {"url": settings.TELLISKIVI_URL},
+        },
+        {
+            "slug": "kultuurikatel",
+            "kind": "html_jsonld",
+            "enabled": True,
+            "config": {"url": settings.KULTUURIKATEL_URL},
+        },
+        {
+            "slug": "fotografiska",
+            "kind": "html_jsonld",
+            "enabled": True,
+            "config": {"url": settings.FOTOGRAFISKA_URL},
+        },
+        {
+            "slug": "kumu",
+            "kind": "html_jsonld",
+            "enabled": True,
+            "config": {"url": settings.KUMU_URL},
+        },
+        {
+            "slug": "estonia_concert_hall",
+            "kind": "html_jsonld",
+            "enabled": True,
+            "config": {"url": settings.ESTONIA_CONCERT_HALL_URL},
+        },
     ]
 
 
@@ -79,18 +104,24 @@ async def seed_sources(db: AsyncSession) -> None:
     await _upsert_fienta(db)
     for source_def in _jsonld_sources():
         await _upsert_simple(db, source_def)
-    await _upsert_simple(db, {
-        "slug": NEWSLETTER_SOURCE_SLUG,
-        "kind": "inbound_email",
-        "enabled": True,
-        "config": {},
-    })
-    await _upsert_simple(db, {
-        "slug": PILETILEVI_SOURCE_SLUG,
-        "kind": "html_scrape",
-        "enabled": True,
-        "config": {},
-    })
+    await _upsert_simple(
+        db,
+        {
+            "slug": NEWSLETTER_SOURCE_SLUG,
+            "kind": "inbound_email",
+            "enabled": True,
+            "config": {},
+        },
+    )
+    await _upsert_simple(
+        db,
+        {
+            "slug": PILETILEVI_SOURCE_SLUG,
+            "kind": "html_scrape",
+            "enabled": True,
+            "config": {},
+        },
+    )
 
 
 def _validate_affinity_vector(slug: str, vector: dict) -> None:
@@ -99,11 +130,19 @@ def _validate_affinity_vector(slug: str, vector: dict) -> None:
     unknown_vibes = set(vector.get("vibes", {}).keys()) - VALID_VIBES
     unknown_times = set(vector.get("times", {}).keys()) - VALID_TIMES
     if unknown_cats:
-        log.warning("Persona %s: unknown category keys in affinity vector: %s", slug, unknown_cats)
+        log.warning(
+            "Persona %s: unknown category keys in affinity vector: %s",
+            slug,
+            unknown_cats,
+        )
     if unknown_vibes:
-        log.warning("Persona %s: unknown vibe keys in affinity vector: %s", slug, unknown_vibes)
+        log.warning(
+            "Persona %s: unknown vibe keys in affinity vector: %s", slug, unknown_vibes
+        )
     if unknown_times:
-        log.warning("Persona %s: unknown time keys in affinity vector: %s", slug, unknown_times)
+        log.warning(
+            "Persona %s: unknown time keys in affinity vector: %s", slug, unknown_times
+        )
 
 
 async def seed_personas(db: AsyncSession) -> None:
@@ -124,16 +163,19 @@ async def seed_personas(db: AsyncSession) -> None:
 
 async def _upsert_fienta(db: AsyncSession) -> None:
     source = _fienta_source()
-    existing = await db.scalar(
-        select(Source).where(Source.slug == source["slug"])
-    )
+    existing = await db.scalar(select(Source).where(Source.slug == source["slug"]))
     if existing:
         desired = source["config"]
         db_cfg = existing.config or {}
         # Union organizer IDs so auto-discovered IDs from organizer_sync are preserved.
         # DB names take precedence — organizer_sync may have refreshed them.
-        merged_ids = sorted(set(desired["organizer_ids"]) | set(db_cfg.get("organizer_ids", [])))
-        merged_names = {**desired["organizer_names"], **db_cfg.get("organizer_names", {})}
+        merged_ids = sorted(
+            set(desired["organizer_ids"]) | set(db_cfg.get("organizer_ids", []))
+        )
+        merged_names = {
+            **desired["organizer_names"],
+            **db_cfg.get("organizer_names", {}),
+        }
         merged = {
             **db_cfg,
             "base_url": desired["base_url"],
@@ -148,13 +190,9 @@ async def _upsert_fienta(db: AsyncSession) -> None:
     await db.flush()
 
 
-
-
 async def _upsert_simple(db: AsyncSession, source_def: dict[str, Any]) -> None:
     """Insert source if absent; update config['url'] if it changed (e.g. env override)."""
-    existing = await db.scalar(
-        select(Source).where(Source.slug == source_def["slug"])
-    )
+    existing = await db.scalar(select(Source).where(Source.slug == source_def["slug"]))
     if existing:
         new_url = source_def.get("config", {}).get("url")
         if new_url and (existing.config or {}).get("url") != new_url:

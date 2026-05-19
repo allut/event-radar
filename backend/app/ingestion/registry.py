@@ -1,4 +1,5 @@
 """Maps source slugs to their adapter classes."""
+
 from app.ingestion.sources.fienta import FientaAdapter
 from app.ingestion.sources.jsonld import (
     EstoniaConcertHallAdapter,

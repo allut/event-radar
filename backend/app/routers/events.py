@@ -1,4 +1,5 @@
 """GET /events/{event_id} — full event detail."""
+
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -28,7 +29,9 @@ async def get_event(
         )
     )
     if event is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Event not found"
+        )
 
     locale = await get_optional_user_locale(authorization, db)
     return serialize_event(event, locale=locale)

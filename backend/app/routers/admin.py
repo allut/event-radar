@@ -1,4 +1,5 @@
 """Admin endpoints — protected by HTTP Basic auth."""
+
 import logging
 import secrets
 
@@ -9,7 +10,12 @@ from sqlalchemy import func, select
 from app.config import settings
 from app.constants import EVENT_STATUS_CANCELLED
 from app.db import AsyncSessionLocal
-from app.ingestion.jobs import classify_pending_job, dedup_pass, ingest_all_enabled, ingest_source
+from app.ingestion.jobs import (
+    classify_pending_job,
+    dedup_pass,
+    ingest_all_enabled,
+    ingest_source,
+)
 from app.ingestion.registry import ADAPTER_REGISTRY
 from app.models.models import Event, Source
 
@@ -28,7 +34,9 @@ def _require_admin(credentials: HTTPBasicCredentials = Depends(_security)) -> No
                 detail="Admin endpoints disabled: ADMIN_PASSWORD not configured",
             )
         # Development with no password — allow any credentials but log a warning so devs know.
-        log.warning("ADMIN_PASSWORD not set; admin endpoints are unprotected (development mode)")
+        log.warning(
+            "ADMIN_PASSWORD not set; admin endpoints are unprotected (development mode)"
+        )
         return
     username_ok = secrets.compare_digest(
         credentials.username.encode(),
@@ -57,14 +65,21 @@ async def admin_ingest_all() -> dict:
 async def admin_ingest_source(slug: str) -> dict:
     """Trigger ingestion for a single source by slug."""
     if slug not in ADAPTER_REGISTRY:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Unknown source: {slug!r}")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=f"Unknown source: {slug!r}"
+        )
     try:
         result = await ingest_source(slug)
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
+        ) from exc
     except Exception:
         log.exception("admin ingest failed for slug=%s", slug)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Ingestion failed; see server logs")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Ingestion failed; see server logs",
+        )
     return result
 
 
@@ -75,7 +90,10 @@ async def admin_dedup_run() -> dict:
         summary = await dedup_pass()
     except Exception:
         log.exception("admin dedup pass failed")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Dedup failed; see server logs")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Dedup failed; see server logs",
+        )
     return summary
 
 
@@ -100,14 +118,16 @@ async def admin_dedup_groups() -> dict:
 
     groups: dict[int, list[dict]] = {}
     for e in rows:
-        groups.setdefault(e.dedup_group_id, []).append({  # type: ignore[arg-type]
-            "id": e.id,
-            "title": e.title_orig,
-            "starts_at": e.starts_at.isoformat(),
-            "venue": e.venue_name,
-            "status": e.status,
-            "url": e.url,
-        })
+        groups.setdefault(e.dedup_group_id, []).append(
+            {  # type: ignore[arg-type]
+                "id": e.id,
+                "title": e.title_orig,
+                "starts_at": e.starts_at.isoformat(),
+                "venue": e.venue_name,
+                "status": e.status,
+                "url": e.url,
+            }
+        )
 
     return {
         "group_count": len(groups),
@@ -137,21 +157,30 @@ async def admin_classify() -> dict:
 async def admin_stats() -> dict:
     """Aggregate counts used by checkpoint tests and manual monitoring."""
     async with AsyncSessionLocal() as db:
-        total = (await db.scalar(
-            select(func.count(Event.id)).where(Event.status != EVENT_STATUS_CANCELLED)
-        )) or 0
-
-        canonical = (await db.scalar(
-            select(func.count(Event.id)).where(
-                Event.status != EVENT_STATUS_CANCELLED,
-                (Event.dedup_group_id.is_(None)) | (Event.dedup_group_id == Event.id),
+        total = (
+            await db.scalar(
+                select(func.count(Event.id)).where(
+                    Event.status != EVENT_STATUS_CANCELLED
+                )
             )
-        )) or 0
+        ) or 0
+
+        canonical = (
+            await db.scalar(
+                select(func.count(Event.id)).where(
+                    Event.status != EVENT_STATUS_CANCELLED,
+                    (Event.dedup_group_id.is_(None))
+                    | (Event.dedup_group_id == Event.id),
+                )
+            )
+        ) or 0
 
         sources_total = (await db.scalar(select(func.count(Source.id)))) or 0
-        sources_enabled = (await db.scalar(
-            select(func.count(Source.id)).where(Source.enabled.is_(True))
-        )) or 0
+        sources_enabled = (
+            await db.scalar(
+                select(func.count(Source.id)).where(Source.enabled.is_(True))
+            )
+        ) or 0
 
     return {
         "events": {"total": total, "canonical": canonical},

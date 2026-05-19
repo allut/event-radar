@@ -8,6 +8,7 @@ On confirm: union-find produces clusters → ``dedup_group_id = min(event_id)``.
 
 Run ``run_dedup_pass_llm()`` instead of ``run_dedup_pass()`` to get both stages.
 """
+
 import logging
 
 from sqlalchemy import select, update
@@ -24,7 +25,7 @@ from app.constants import (
     TALLINN_TZ,
     TIME_WINDOW_HOURS,
 )
-from app.dedup.rules import _find, _union, build_cluster_assignments, is_candidate_pair
+from app.dedup.rules import _union, build_cluster_assignments, is_candidate_pair
 from app.llm.router import LLMError, llm_json
 from app.models.models import Event
 
@@ -56,14 +57,28 @@ async def _llm_confirms_pair(a: Event, b: Event, db: AsyncSession) -> bool:
         confirmed = bool(same) and confidence >= LLM_DEDUP_CONFIDENCE_THRESHOLD
         log.debug(
             "llm dedup: a=%d b=%d same=%s confidence=%.2f → %s",
-            a.id, b.id, same, confidence, "MERGE" if confirmed else "skip",
+            a.id,
+            b.id,
+            same,
+            confidence,
+            "MERGE" if confirmed else "skip",
         )
         return confirmed
     except LLMError as exc:
-        log.warning("llm dedup failed for pair (%d, %d): %s — treating as distinct", a.id, b.id, exc)
+        log.warning(
+            "llm dedup failed for pair (%d, %d): %s — treating as distinct",
+            a.id,
+            b.id,
+            exc,
+        )
         return False
     except (TypeError, ValueError) as exc:
-        log.warning("llm dedup bad response for pair (%d, %d): %s — treating as distinct", a.id, b.id, exc)
+        log.warning(
+            "llm dedup bad response for pair (%d, %d): %s — treating as distinct",
+            a.id,
+            b.id,
+            exc,
+        )
         return False
 
 
@@ -100,7 +115,14 @@ async def run_dedup_pass_llm(db: AsyncSession) -> dict:
     events = list(rows)
 
     if not events:
-        return {"total": 0, "candidate_pairs": 0, "llm_confirmed": 0, "grouped": 0, "groups": 0, "updated": 0}
+        return {
+            "total": 0,
+            "candidate_pairs": 0,
+            "llm_confirmed": 0,
+            "grouped": 0,
+            "groups": 0,
+            "updated": 0,
+        }
 
     n = len(events)
     ids = [e.id for e in events]
@@ -150,7 +172,11 @@ async def run_dedup_pass_llm(db: AsyncSession) -> dict:
     group_count = len({gid for gid in assignments.values()})
     log.info(
         "dedup-llm pass: %d events, %d candidate pairs, %d llm-confirmed → %d groups, %d updated",
-        len(events), candidate_pairs, llm_confirmed, group_count, updated,
+        len(events),
+        candidate_pairs,
+        llm_confirmed,
+        group_count,
+        updated,
     )
     return {
         "total": len(events),

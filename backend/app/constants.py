@@ -14,12 +14,14 @@ HTTP_RETRY_MAX_ATTEMPTS = 3
 HTTP_RETRY_WAIT_MULTIPLIER = 1
 HTTP_RETRY_WAIT_MIN = 2
 HTTP_RETRY_WAIT_MAX = 30
-HTTP_RETRYABLE_STATUS_CODES: frozenset[int] = frozenset({
-    http.HTTPStatus.TOO_MANY_REQUESTS,       # 429
-    http.HTTPStatus.BAD_GATEWAY,             # 502
-    http.HTTPStatus.SERVICE_UNAVAILABLE,     # 503
-    http.HTTPStatus.GATEWAY_TIMEOUT,         # 504
-})
+HTTP_RETRYABLE_STATUS_CODES: frozenset[int] = frozenset(
+    {
+        http.HTTPStatus.TOO_MANY_REQUESTS,  # 429
+        http.HTTPStatus.BAD_GATEWAY,  # 502
+        http.HTTPStatus.SERVICE_UNAVAILABLE,  # 503
+        http.HTTPStatus.GATEWAY_TIMEOUT,  # 504
+    }
+)
 
 SLUG_TITLE_MAX_LEN = 60
 SLUG_HASH_HEX_LEN = 8
@@ -28,9 +30,11 @@ INGESTION_ERROR_MAX_LEN = 500
 ORGANIZER_MIN_EVENTS_FOR_AUTO_ADD = 3
 ORGANIZER_NAME_MAX_LEN = 200
 FIENTA_ORGANIZER_SCAN_LIMIT = 1000
-FIENTA_ORGANIZER_CHECK_LIMIT = 5   # max events fetched when probing a single organizer for staleness
+FIENTA_ORGANIZER_CHECK_LIMIT = (
+    5  # max events fetched when probing a single organizer for staleness
+)
 FIENTA_CITY_FILTER = "Tallinn"
-FIENTA_MAX_PAGES = 50              # safety ceiling per organizer — prevents runaway pagination
+FIENTA_MAX_PAGES = 50  # safety ceiling per organizer — prevents runaway pagination
 
 SOURCE_STATUS_OK = "ok"
 SOURCE_STATUS_ERROR = "error"
@@ -46,10 +50,10 @@ DEFAULT_USER_CITY = "Tallinn"
 VALID_LOCALES: frozenset[str] = frozenset({"en", "et", "ru"})
 
 # Deduplication
-DEDUP_LOOKBACK_DAYS = 30    # only re-cluster events that started within this window
+DEDUP_LOOKBACK_DAYS = 30  # only re-cluster events that started within this window
 TITLE_RATIO_THRESHOLD = 70  # rapidfuzz token_set_ratio threshold for title match
 VENUE_RATIO_THRESHOLD = 70  # rapidfuzz token_set_ratio threshold for venue match
-TIME_WINDOW_HOURS = 12      # max |Δstart| in hours for two events to be dedup candidates
+TIME_WINDOW_HOURS = 12  # max |Δstart| in hours for two events to be dedup candidates
 
 # Resend email delivery
 RESEND_SEND_URL = "https://api.resend.com/emails"
@@ -72,9 +76,11 @@ DAILY_5_COUNT = 5
 DAILY_5_MAX_PER_CATEGORY = 2
 DAILY_5_LOOKAHEAD_DAYS = 14
 RECENCY_DECAY_DAYS = 21
-FEEDBACK_DECAY_BASE: float = 0.9         # per-day decay on feedback signal
-FEEDBACK_INDIRECT_WEIGHT: float = 0.5    # weight of category-matched indirect signal
-SCORE_HARD_EXCLUDE: float = -2.0         # sentinel: outside [-1,1] clamp, cannot be a valid score
+FEEDBACK_DECAY_BASE: float = 0.9  # per-day decay on feedback signal
+FEEDBACK_INDIRECT_WEIGHT: float = 0.5  # weight of category-matched indirect signal
+SCORE_HARD_EXCLUDE: float = (
+    -2.0
+)  # sentinel: outside [-1,1] clamp, cannot be a valid score
 SCORE_WEIGHT_AFFINITY: float = 0.45
 SCORE_WEIGHT_RECENCY: float = 0.20
 SCORE_WEIGHT_FEEDBACK: float = 0.20
@@ -88,37 +94,69 @@ TALLINN_LAT_DELTA: float = 0.05
 TALLINN_LNG_DELTA: float = 0.10
 
 # Feedback signals
-VALID_SIGNALS: frozenset[str] = frozenset({"like", "dislike", "bookmark", "view", "click_external"})
+VALID_SIGNALS: frozenset[str] = frozenset(
+    {"like", "dislike", "bookmark", "view", "click_external"}
+)
 
 # Taxonomy
-VALID_CATEGORIES: frozenset[str] = frozenset({
-    "music", "theater", "exhibitions", "workshops", "sports",
-    "food_drink", "networking", "literature", "family", "cinema",
-    "alternative", "nightlife",
-})
+VALID_CATEGORIES: frozenset[str] = frozenset(
+    {
+        "music",
+        "theater",
+        "exhibitions",
+        "workshops",
+        "sports",
+        "food_drink",
+        "networking",
+        "literature",
+        "family",
+        "cinema",
+        "alternative",
+        "nightlife",
+    }
+)
 
-VALID_VIBES: frozenset[str] = frozenset({
-    "trendy", "casual", "intimate", "high_energy", "educational",
-    "indie", "underground", "mainstream", "accessible", "niche",
-})
+VALID_VIBES: frozenset[str] = frozenset(
+    {
+        "trendy",
+        "casual",
+        "intimate",
+        "high_energy",
+        "educational",
+        "indie",
+        "underground",
+        "mainstream",
+        "accessible",
+        "niche",
+    }
+)
 
 # Time-of-day / day-of-week slots derived from event.starts_at (Europe/Tallinn).
 # An event can match multiple slots simultaneously (e.g. Saturday evening → weekend + evening).
 # late_night: 22:00–05:59  |  evening: 18:00–21:59  |  daytime: 10:00–17:59  |  morning: 06:00–09:59
 # weekend: Sat/Sun  |  weekday: Mon–Fri
-VALID_TIMES: frozenset[str] = frozenset({
-    "late_night", "evening", "daytime", "morning", "weekend", "weekday",
-})
+VALID_TIMES: frozenset[str] = frozenset(
+    {
+        "late_night",
+        "evening",
+        "daytime",
+        "morning",
+        "weekend",
+        "weekday",
+    }
+)
 TIME_LATE_NIGHT_START = 22
 TIME_EVENING_START = 18
 TIME_DAYTIME_START = 10
 TIME_MORNING_START = 6
 
 # LLM
-LLM_MAX_PROMPT_CHARS = 1200                 # cap on event text passed to classification prompt
-LLM_MAX_TOKENS = 400                        # max completion tokens per LLM call
-LLM_DEDUP_CONFIDENCE_THRESHOLD: float = 0.7 # minimum confidence to accept LLM same=true verdict
-LLM_CLASSIFY_BATCH_SIZE = 30                # max events processed per classify_pending run
+LLM_MAX_PROMPT_CHARS = 1200  # cap on event text passed to classification prompt
+LLM_MAX_TOKENS = 400  # max completion tokens per LLM call
+LLM_DEDUP_CONFIDENCE_THRESHOLD: float = (
+    0.7  # minimum confidence to accept LLM same=true verdict
+)
+LLM_CLASSIFY_BATCH_SIZE = 30  # max events processed per classify_pending run
 LLM_REQUEST_TIMEOUT_SECONDS: float = 30.0
 
 LLM_DEDUP_TITLE_MAX_LEN = 200
@@ -186,12 +224,23 @@ If no events found, return {{"events": []}}.
 JSON only, no explanation."""
 
 # JSON-LD ingestion
-JSONLD_EVENT_TYPES: frozenset[str] = frozenset({
-    "Event", "MusicEvent", "TheaterEvent", "ExhibitionEvent",
-    "SocialEvent", "SportsEvent", "ChildrensEvent", "ComedyEvent",
-    "DanceEvent", "FestivalEvent", "LiteraryEvent", "ScreeningEvent",
-    "VisualArtsEvent",
-})
+JSONLD_EVENT_TYPES: frozenset[str] = frozenset(
+    {
+        "Event",
+        "MusicEvent",
+        "TheaterEvent",
+        "ExhibitionEvent",
+        "SocialEvent",
+        "SportsEvent",
+        "ChildrensEvent",
+        "ComedyEvent",
+        "DanceEvent",
+        "FestivalEvent",
+        "LiteraryEvent",
+        "ScreeningEvent",
+        "VisualArtsEvent",
+    }
+)
 
 LLM_PROVIDERS: list[dict[str, str]] = [
     {
@@ -219,7 +268,9 @@ PILETILEVI_BASE_URL = "https://www.piletilevi.ee"
 PILETILEVI_SOURCE_SLUG = "piletilevi"
 PILETILEVI_TALLINN_FILTER = "Tallinn"
 PILETILEVI_DATE_FORMAT = "%d.%m.%Y %H:%M"
-PILETILEVI_MAX_DETAIL_FETCHES = 200  # cap per ingestion run (~6 listings × 25 cards = 150 normal)
+PILETILEVI_MAX_DETAIL_FETCHES = (
+    200  # cap per ingestion run (~6 listings × 25 cards = 150 normal)
+)
 PILETILEVI_LISTING_URLS: list[str] = [
     "/eng/tickets/",
     "/eng/tickets/concerts/",

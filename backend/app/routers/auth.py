@@ -1,4 +1,5 @@
 """Auth endpoints — magic-link request + verification + current-user."""
+
 import logging
 from datetime import datetime, timedelta, timezone
 
@@ -59,7 +60,7 @@ async def get_current_user(
             detail="Missing or invalid Authorization header",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    token = authorization[len("Bearer "):]
+    token = authorization[len("Bearer ") :]
     try:
         user_id = verify_session_token(token)
     except (SignatureExpired, BadSignature):
@@ -105,16 +106,22 @@ async def request_magic_link(
     # expires_at > now + TTL - 120 ↔ T < 120 (i.e. created less than 2 min ago).
     # This prevents Resend quota exhaustion from rapid repeated requests.
     # TODO before production: add IP-level rate limiting (SlowAPI/fastapi-limiter).
-    recent_cutoff = datetime.now(timezone.utc) + timedelta(seconds=magic_ttl_seconds() - 120)
+    recent_cutoff = datetime.now(timezone.utc) + timedelta(
+        seconds=magic_ttl_seconds() - 120
+    )
     already_sent = await db.scalar(
-        select(AuthMagicLink).where(
+        select(AuthMagicLink)
+        .where(
             AuthMagicLink.user_id == user.id,
             AuthMagicLink.used_at.is_(None),
             AuthMagicLink.expires_at > recent_cutoff,
-        ).limit(1)
+        )
+        .limit(1)
     )
     if already_sent is not None:
-        return {"detail": "If that address is registered, a sign-in link has been sent."}
+        return {
+            "detail": "If that address is registered, a sign-in link has been sent."
+        }
 
     signed_token, token_hash, expires_at = generate_magic_token(user.id)
 
@@ -203,7 +210,12 @@ async def get_me(
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     """Return the currently authenticated user."""
-    count: int = await db.scalar(
-        select(func.count()).select_from(UserPersona).where(UserPersona.user_id == current_user.id)
-    ) or 0
+    count: int = (
+        await db.scalar(
+            select(func.count())
+            .select_from(UserPersona)
+            .where(UserPersona.user_id == current_user.id)
+        )
+        or 0
+    )
     return serialize_user(current_user, has_personas=count > 0)

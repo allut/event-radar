@@ -6,7 +6,13 @@ import httpx
 from bs4 import BeautifulSoup
 
 from app.constants import HTTP_TIMEOUT_SECONDS, HTTP_USER_AGENT, JSONLD_EVENT_TYPES
-from app.ingestion.base import NormalizedEvent, SourceAdapter, _http_get, _parse_dt, normalize_currency
+from app.ingestion.base import (
+    NormalizedEvent,
+    SourceAdapter,
+    _http_get,
+    _parse_dt,
+    normalize_currency,
+)
 
 log = logging.getLogger(__name__)
 
@@ -32,13 +38,24 @@ class JsonLdAdapter(SourceAdapter):
     async def fetch_raw(self) -> list[dict[str, Any]]:
         url = self.listing_url
         try:
-            async with httpx.AsyncClient(timeout=HTTP_TIMEOUT_SECONDS, follow_redirects=True) as client:
-                response = await _http_get(client, url, headers={"User-Agent": HTTP_USER_AGENT})
+            async with httpx.AsyncClient(
+                timeout=HTTP_TIMEOUT_SECONDS, follow_redirects=True
+            ) as client:
+                response = await _http_get(
+                    client, url, headers={"User-Agent": HTTP_USER_AGENT}
+                )
         except (httpx.HTTPStatusError, httpx.RequestError) as exc:
-            log.error("jsonld fetch failed source=%s url=%s: %s", self.source.slug, url, exc)
+            log.error(
+                "jsonld fetch failed source=%s url=%s: %s", self.source.slug, url, exc
+            )
             raise
         events = _extract_jsonld_events(response.text)
-        log.info("jsonld source=%s url=%s extracted=%d events", self.source.slug, url, len(events))
+        log.info(
+            "jsonld source=%s url=%s extracted=%d events",
+            self.source.slug,
+            url,
+            len(events),
+        )
         return events
 
     def normalize(self, raw: dict[str, Any]) -> Optional[NormalizedEvent]:
@@ -85,7 +102,9 @@ class JsonLdAdapter(SourceAdapter):
             image_url=image_url,
             price_min=price_min,
             price_max=price_max,
-            currency=normalize_currency(currency, price_min is not None or price_max is not None),
+            currency=normalize_currency(
+                currency, price_min is not None or price_max is not None
+            ),
         )
 
 
