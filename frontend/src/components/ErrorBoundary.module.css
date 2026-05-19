@@ -7,13 +7,8 @@
 }
 
 .card {
-  width: 100%;
-  max-width: 400px;
+  composes: card cardDangerTop cardPage from './shared/Card.module.css';
   text-align: center;
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-top: 3px solid var(--danger);
-  border-radius: var(--radius);
   padding: 2.5rem;
 }
 
@@ -38,18 +33,7 @@
 }
 
 .reloadBtn {
-  background: var(--accent);
-  color: var(--on-accent);
-  border: none;
-  border-radius: var(--radius);
+  composes: btnPrimary from './shared/Button.module.css';
   padding: 0.75rem 1.5rem;
   font-size: var(--fs-base);
-  font-weight: 600;
-  letter-spacing: var(--tracking-snug);
-  transition: background var(--transition), transform var(--transition);
-}
-
-.reloadBtn:hover {
-  background: var(--accent-light);
-  transform: translateY(-1px);
 }

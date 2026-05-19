@@ -5,8 +5,8 @@ from urllib.parse import urlparse
 import httpx
 
 from app.config import settings
-from app.constants import DEFAULT_CURRENCY, FIENTA_MAX_PAGES, HTTP_TIMEOUT_SECONDS
-from app.ingestion.base import NormalizedEvent, SourceAdapter, _http_get, _parse_dt
+from app.constants import FIENTA_MAX_PAGES, HTTP_TIMEOUT_SECONDS
+from app.ingestion.base import NormalizedEvent, SourceAdapter, _http_get, _parse_dt, normalize_currency
 
 log = logging.getLogger(__name__)
 
@@ -130,8 +130,7 @@ class FientaAdapter(SourceAdapter):
             price_max = _first_not_none(raw.get("max_price"), raw.get("price_max"))
             currency_raw = raw.get("currency")
 
-        has_price = price_min is not None or price_max is not None
-        currency = str(currency_raw) if currency_raw else (DEFAULT_CURRENCY if has_price else None)
+        currency = normalize_currency(currency_raw, price_min is not None or price_max is not None)
 
         return NormalizedEvent(
             external_id=external_id,

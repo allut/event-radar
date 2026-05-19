@@ -13,6 +13,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.constants import (
+    DEFAULT_CURRENCY,
     EVENT_STATUS_DRAFT,
     HTTP_RETRYABLE_STATUS_CODES,
     HTTP_RETRY_MAX_ATTEMPTS,
@@ -59,6 +60,13 @@ async def _http_get(
     r = await client.get(url, params=params, headers=headers)
     r.raise_for_status()
     return r
+
+
+def normalize_currency(raw: Any, has_price: bool) -> Optional[str]:
+    """Coerce a raw currency value; fall back to DEFAULT_CURRENCY only when a price exists."""
+    if raw:
+        return str(raw)
+    return DEFAULT_CURRENCY if has_price else None
 
 
 def _parse_dt(value: str) -> Optional[datetime]:

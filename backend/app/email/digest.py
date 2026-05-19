@@ -10,7 +10,6 @@ from typing import Sequence
 import httpx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from app.config import settings
 from app.constants import (
@@ -22,7 +21,7 @@ from app.constants import (
 )
 from app.i18n import day_name, month_name, t, ti
 from app.models.models import DailyFeed, Event, User
-from app.routers.utils import resolve_why_go
+from app.routers.utils import resolve_why_go, select_events_with_classification
 
 log = logging.getLogger(__name__)
 
@@ -205,9 +204,7 @@ async def send_daily_digests(db: AsyncSession) -> dict:
         return {"sent": 0, "skipped": len(users), "total_opted_in": len(users)}
 
     events = (await db.scalars(
-        select(Event)
-        .where(Event.id.in_(all_event_ids))
-        .options(selectinload(Event.classification))
+        select_events_with_classification().where(Event.id.in_(all_event_ids))
     )).all()
     event_map: dict[int, Event] = {e.id: e for e in events}
 

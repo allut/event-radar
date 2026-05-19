@@ -31,34 +31,6 @@
   flex: 1;
 }
 
-.localePills {
-  display: flex;
-  gap: 0.25rem;
-}
-
-.localePill {
-  background: none;
-  border: 1px solid var(--border);
-  border-radius: 100px;
-  padding: 0.25rem 0.75rem;
-  font-size: var(--fs-xs);
-  font-weight: 600;
-  letter-spacing: var(--tracking-wider);
-  color: var(--text-muted);
-  transition: border-color var(--transition), color var(--transition), background var(--transition);
-}
-
-.localePill:hover {
-  border-color: var(--accent);
-  color: var(--accent);
-}
-
-.localePill.activeLocale {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--on-accent);
-}
-
 .main {
   flex: 1;
   max-width: 720px;
@@ -73,7 +45,7 @@
 
 .heading {
   font-family: var(--font-display);
-  font-size: 2.25rem;
+  font-size: var(--heading-2xl);
   font-weight: 600;
   color: var(--text);
   margin-bottom: 0.5rem;
@@ -125,25 +97,14 @@
 }
 
 .submit {
-  background: var(--accent);
-  color: var(--on-accent);
-  border: none;
-  border-radius: var(--radius);
+  composes: btnPrimary from '../components/shared/Button.module.css';
   padding: 0.8125rem 2rem;
   font-size: 1rem;
-  font-weight: 600;
-  letter-spacing: var(--tracking-snug);
   height: 48px;
   min-width: 160px;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background var(--transition), transform var(--transition), opacity var(--transition);
-}
-
-.submit:hover:not(:disabled) {
-  background: var(--accent-light);
-  transform: translateY(-1px);
 }
 
 .submit:disabled {
@@ -154,11 +115,11 @@
 
 .spinner {
   display: inline-block;
-  width: 18px;
-  height: 18px;
+  width: var(--spinner-size-sm);
+  height: var(--spinner-size-sm);
   border: 2px solid var(--spinner-border);
   border-top-color: var(--on-accent);
   border-radius: 50%;
-  animation: spin 0.65s linear infinite;
+  animation: spin var(--anim-base) linear infinite;
 }
 

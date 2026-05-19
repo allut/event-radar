@@ -1,10 +1,10 @@
 import { Link } from 'react-router-dom';
-import { api } from '../api/client';
 import { getLocale } from '../lib/auth';
-import { CARD_ANIMATION_DELAY_STEP_MS, SIGNAL_CONFIG, type Signal } from '../constants';
+import { CARD_ANIMATION_DELAY_STEP_MS } from '../constants';
 import { t } from '../i18n';
-import { categoryGradient, formatEventTime, formatPrice, makeActiveClassMap } from '../utils';
+import { categoryGradient, formatEventTime, formatPrice, trackExternalClick } from '../utils';
 import { useFeedback } from '../hooks/useFeedback';
+import FeedbackButtonRow from './FeedbackButtonRow';
 import styles from './EventCard.module.css';
 
 export interface EventData {
@@ -33,33 +33,6 @@ interface Props {
   event: EventData;
   index: number;
   onFeedbackSent?: () => void;
-}
-
-interface FeedbackButtonProps {
-  signal: Signal;
-  icon: string;
-  label: string;
-  activeSignal: Signal | null;
-  pending: boolean;
-  onPress: (signal: Signal) => void;
-}
-
-const ACTIVE_CLASS = makeActiveClassMap(styles);
-
-function FeedbackButton({ signal, icon, label, activeSignal, pending, onPress }: FeedbackButtonProps) {
-  const activeClass = ACTIVE_CLASS[signal];
-  return (
-    <button
-      className={[styles.action, activeSignal === signal ? activeClass : ''].join(' ')}
-      onClick={() => onPress(signal)}
-      disabled={pending}
-      aria-label={label}
-      aria-pressed={activeSignal === signal}
-      title={label}
-    >
-      {icon}
-    </button>
-  );
 }
 
 export default function EventCard({ event, index, onFeedbackSent }: Props) {
@@ -117,24 +90,20 @@ export default function EventCard({ event, index, onFeedbackSent }: Props) {
       </div>
 
       <div className={styles.actions}>
-        {(Object.entries(SIGNAL_CONFIG) as [Signal, { icon: string; label: string }][]).map(([signal, { icon }]) => (
-          <FeedbackButton
-            key={signal}
-            signal={signal}
-            icon={icon}
-            label={t(`signal_${signal}`, locale)}
-            activeSignal={activeSignal}
-            pending={pending}
-            onPress={sendFeedback}
-          />
-        ))}
+        <FeedbackButtonRow
+          activeSignal={activeSignal}
+          pending={pending}
+          onPress={sendFeedback}
+          locale={locale}
+          variant="card"
+        />
         {event.url && (
           <a
             href={event.url}
             target="_blank"
             rel="noopener noreferrer"
             className={styles.ticketsLink}
-            onClick={() => api.post('/feedback', { event_id: event.id, signal: 'click_external' }).catch(() => undefined)}
+            onClick={() => trackExternalClick(event.id)}
           >
             {t('tickets', locale)}
           </a>

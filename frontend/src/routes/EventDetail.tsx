@@ -2,18 +2,17 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../api/client';
 import { getLocale } from '../lib/auth';
-import { toLocaleCode, type Signal, SIGNAL_CONFIG } from '../constants';
 import { t, ti } from '../i18n';
-import { categoryGradient, formatEventDateTime, formatPrice, makeActiveClassMap } from '../utils';
+import { categoryGradient, formatEventDateTime, formatHourMinute, formatPrice, trackExternalClick } from '../utils';
 import { type EventData } from '../components/EventCard';
+import FeedbackButtonRow from '../components/FeedbackButtonRow';
+import PageState from '../components/PageState';
 import { useFeedback } from '../hooks/useFeedback';
 import styles from './EventDetail.module.css';
 
 interface EventDetailData extends EventData {
   language: string | null;
 }
-
-const ACTIVE_CLASS = makeActiveClassMap(styles);
 
 export default function EventDetail() {
   const { id } = useParams<{ id: string }>();
@@ -29,25 +28,26 @@ export default function EventDetail() {
 
   const { activeSignal, pending, sendFeedback } = useFeedback(data?.id ?? 0);
 
-  async function handleTicketsClick() {
+  function handleTicketsClick() {
     if (!data) return;
-    api.post('/feedback', { event_id: data.id, signal: 'click_external' }).catch(() => undefined);
+    trackExternalClick(data.id);
   }
 
   if (isLoading) {
-    return (
-      <div className={styles.centered}>
-        <span className={styles.spinner} aria-label={t('loading_event', locale)} />
-      </div>
-    );
+    return <PageState kind="loading" message={t('loading_event', locale)} />;
   }
 
   if (isError || !data) {
     return (
-      <div className={styles.centered}>
-        <p className={styles.errorMsg}>{t('event_not_found', locale)}</p>
-        <button className={styles.backBtn} onClick={() => navigate('/')}>{t('back_to_feed_link', locale)}</button>
-      </div>
+      <PageState
+        kind="error"
+        message={t('event_not_found', locale)}
+        action={
+          <button className={styles.backBtn} onClick={() => navigate('/')}>
+            {t('back_to_feed_link', locale)}
+          </button>
+        }
+      />
     );
   }
 
@@ -89,9 +89,7 @@ export default function EventDetail() {
             <time className={styles.time}>{formatEventDateTime(data.starts_at, locale)}</time>
             {data.ends_at && (
               <span className={styles.ends}>
-                {ti('ends_at', locale, {
-                  time: new Date(data.ends_at).toLocaleTimeString(toLocaleCode(locale), { hour: '2-digit', minute: '2-digit', hour12: false }),
-                })}
+                {ti('ends_at', locale, { time: formatHourMinute(data.ends_at, locale) })}
               </span>
             )}
           </div>
@@ -136,20 +134,13 @@ export default function EventDetail() {
           )}
 
           <div className={styles.actions}>
-            <div className={styles.feedbackGroup}>
-              {(Object.entries(SIGNAL_CONFIG) as [Signal, { icon: string; label: string }][]).map(([signal, { icon }]) => (
-                <button
-                  key={signal}
-                  className={[styles.action, activeSignal === signal ? ACTIVE_CLASS[signal] : ''].join(' ')}
-                  onClick={() => sendFeedback(signal)}
-                  disabled={pending}
-                  aria-label={t(`signal_${signal}`, locale)}
-                  aria-pressed={activeSignal === signal}
-                >
-                  {icon}
-                </button>
-              ))}
-            </div>
+            <FeedbackButtonRow
+              activeSignal={activeSignal}
+              pending={pending}
+              onPress={sendFeedback}
+              locale={locale}
+              variant="detail"
+            />
             {data.url && (
               <a
                 href={data.url}

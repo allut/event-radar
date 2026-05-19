@@ -86,7 +86,8 @@ LLM Router: Groq (primary) → Cerebras → Mistral (fallback chain)
 ## Frontend Structure
 
 - Routes (pages) in `frontend/src/routes/`: Login, AuthVerify, Onboarding, Feed, EventDetail, Settings, NotFound.
-- Shared components in `frontend/src/components/`: EventCard, PersonaCard, ErrorBoundary.
+- Shared components in `frontend/src/components/`: EventCard, PersonaCard, ErrorBoundary, PageState, LocaleSelector, FeedbackButtonRow, EmptyState.
+- Shared CSS base classes in `frontend/src/components/shared/`: `Card.module.css` (`.card`, `.cardAccentTop`, `.cardDangerTop`, `.cardElevated`, `.cardPage`) and `Button.module.css` (`.btnPrimary`, `.btnOutline`). Compose from these via CSS Modules `composes` — never copy-paste the same card/button rules into route or component stylesheets.
 - API calls in `frontend/src/routes/client.ts`. React Query used for server state (`@tanstack/react-query`).
 
 ## Auth
@@ -107,7 +108,8 @@ This project follows production best practices throughout:
 - **Backend utilities** — all shared helper functions live in `backend/app/routers/utils.py`. Before writing a new utility function anywhere in the backend, check this file first. If the function is reusable, add it here and import it — never duplicate helpers across routers or modules.
 - **Frontend constants** — all magic values (numbers, strings, breakpoints, timeouts, limits) live in `frontend/src/constants.ts`. Apply the same discipline as the backend: never inline a literal near component logic — add it to `constants.ts` first, then import it. Never duplicate constants across components.
 - **Frontend utilities** — all shared helper functions live in `frontend/src/utils.ts`. Before writing a new utility function anywhere in the frontend, check this file first. If the function is reusable, add it here and import it — never duplicate helpers across components or pages.
-- **CSS design tokens** — all design values (colors, spacing, typography, border-radius, shadows, z-indices, transitions) are defined as CSS custom properties on `:root` in `frontend/src/index.css`. Component stylesheets (`.module.css` files) consume only those variables — never hardcode raw values. This is the single source of truth for theming; changing a token in `index.css` propagates everywhere automatically.
+- **CSS design tokens** — all design values (colors, spacing, typography, border-radius, shadows, z-indices, transitions) are defined as CSS custom properties on `:root` in `frontend/src/index.css`. Component stylesheets (`.module.css` files) consume only those variables — **never hardcode raw values**. This is the SSOT for theming; changing a token in `index.css` propagates everywhere automatically. When adding a new value, add the token to `:root` first, then reference it via `var(--token-name)`.
+- **CSS shared base classes** — structural CSS patterns (card chrome, button styles) live in `frontend/src/components/shared/`. Use CSS Modules `composes: baseClass from '...'` to inherit shared rules — **never duplicate card or button CSS** across route or component stylesheets. Add new shared patterns to the shared files and compose from them.
 - **Retry logic** — all HTTP calls use `_http_get()` from `app/ingestion/base.py`, which wraps `httpx` with tenacity exponential-backoff retry (3 attempts, 2–30s backoff). Retryable: 429/502/503/504 and `RequestError`. Non-retryable: 4xx except 429.
 - **Error visibility** — HTTP failures in source adapters propagate to `SourceAdapter.run()` so `IngestionRun.error` and `source.last_status` are always set correctly. Never swallow exceptions in `fetch_raw()`.
 - **Taxonomy** — LLM classification uses the fixed 12-category / 10-vibe frozensets in `app/llm/taxonomy.py`. Use `validate_categories()` / `validate_vibes()` before persisting any LLM output.

@@ -20,6 +20,7 @@ from app.auth.tokens import (
 from app.constants import DEFAULT_USER_LOCALE, VALID_LOCALES
 from app.db import get_db
 from app.models.models import AuthMagicLink, User, UserPersona
+from app.routers.utils import serialize_user
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -205,11 +206,4 @@ async def get_me(
     count: int = await db.scalar(
         select(func.count()).select_from(UserPersona).where(UserPersona.user_id == current_user.id)
     ) or 0
-    return {
-        "id": current_user.id,
-        "email": current_user.email,
-        "locale": current_user.locale,
-        "home_city": current_user.home_city,
-        "created_at": current_user.created_at.isoformat(),
-        "has_personas": count > 0,
-    }
+    return serialize_user(current_user, has_personas=count > 0)

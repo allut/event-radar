@@ -1,4 +1,21 @@
+import { api } from './api/client';
 import { CATEGORY_GRADIENTS, FALLBACK_GRADIENT, EUR_SYMBOL, FREE_LABEL, type Signal, toLocaleCode } from './constants';
+
+export function cx(...classes: (string | false | null | undefined)[]): string {
+  return classes.filter(Boolean).join(' ');
+}
+
+export function formatHourMinute(iso: string, locale: string): string {
+  return new Date(iso).toLocaleTimeString(toLocaleCode(locale), {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+}
+
+export function trackExternalClick(eventId: number): void {
+  api.post('/feedback', { event_id: eventId, signal: 'click_external' }).catch(() => undefined);
+}
 
 export function categoryGradient(categories: string[]): string {
   const key = categories[0]?.toLowerCase().replace(/\s+/g, '_') ?? '';

@@ -10,19 +10,19 @@
 .card:hover {
   border-color: var(--accent-mid);
   transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  box-shadow: var(--shadow-card-hover);
 }
 
 .card.primary {
   border-color: var(--accent);
-  background: rgba(200, 146, 42, 0.06);
-  box-shadow: 0 0 0 1px var(--accent), 0 8px 32px rgba(200, 146, 42, 0.1);
+  background: var(--accent-soft);
+  box-shadow: 0 0 0 1px var(--accent), var(--shadow-accent);
   transform: translateY(-2px);
 }
 
 .card.secondary {
   border-color: var(--accent-border);
-  background: rgba(200, 146, 42, 0.03);
+  background: var(--accent-minimal);
 }
 
 .mainBtn {
@@ -82,7 +82,7 @@
   letter-spacing: var(--tracking-wider);
   text-transform: uppercase;
   padding: 2px 8px;
-  border-radius: 100px;
+  border-radius: var(--radius-pill);
 }
 
 .secondaryBtn {
@@ -107,17 +107,17 @@
   top: 8px;
   right: 8px;
   background: var(--accent-faint);
-  border: 1px solid rgba(200, 146, 42, 0.35);
+  border: 1px solid var(--accent-muted);
   color: var(--accent);
   font-size: var(--fs-2xs);
   font-weight: 600;
   letter-spacing: var(--tracking-wide);
   padding: 2px 8px;
-  border-radius: 100px;
+  border-radius: var(--radius-pill);
   cursor: pointer;
   transition: background var(--transition);
 }
 
 .secondaryBadge:hover {
-  background: rgba(200, 146, 42, 0.25);
+  background: var(--accent-hover-bg);
 }

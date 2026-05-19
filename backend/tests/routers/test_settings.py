@@ -1,53 +1,28 @@
 """Tests for GET /users/me and PATCH /users/me (settings) endpoints."""
 import http
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 
 import pytest
 
-from app.constants import DEFAULT_USER_LOCALE, DEFAULT_USER_CITY, PERSONA_PRIMARY_WEIGHT
+from app.constants import PERSONA_PRIMARY_WEIGHT
 
 
-def _mock_db():
-    db = AsyncMock()
-    db.get = AsyncMock()
-    db.scalar = AsyncMock()
-    db.execute = AsyncMock()
-    db.add = MagicMock()
-    db.commit = AsyncMock()
-    db.refresh = AsyncMock()
-    return db
-
-
-def _make_user(user_id: int = 1, locale: str = DEFAULT_USER_LOCALE, opt_in: bool = True):
-    u = MagicMock()
-    u.id = user_id
-    u.email = "test@example.com"
-    u.locale = locale
-    u.home_city = DEFAULT_USER_CITY
-    u.email_digest_opt_in = opt_in
-    u.created_at = MagicMock()
-    u.created_at.isoformat.return_value = "2026-05-13T06:00:00+00:00"
-    return u
-
-
-def _empty_execute():
-    """Returns a mock execute result with no persona rows."""
+def _attach_empty_personas(db) -> None:
+    """Wire mock_db.execute to return zero persona rows."""
     result = MagicMock()
     result.all.return_value = []
-    db = _mock_db()
     db.execute.return_value = result
-    return db
 
 
 class TestGetSettings:
     @pytest.mark.asyncio
-    async def test_returns_user_fields(self):
+    async def test_returns_user_fields(self, mock_db, make_user):
         from app.routers.settings import get_settings
 
-        db = _empty_execute()
-        user = _make_user(locale="et", opt_in=True)
+        _attach_empty_personas(mock_db)
+        user = make_user(locale="et", opt_in=True)
 
-        result = await get_settings(current_user=user, db=db)
+        result = await get_settings(current_user=user, db=mock_db)
 
         assert result["email"] == "test@example.com"
         assert result["locale"] == "et"
@@ -55,10 +30,9 @@ class TestGetSettings:
         assert result["personas"] == []
 
     @pytest.mark.asyncio
-    async def test_personas_included(self):
+    async def test_personas_included(self, mock_db, make_user):
         from app.routers.settings import get_settings
 
-        db = _mock_db()
         persona = MagicMock()
         persona.slug = "culture_buff"
         persona.display_name_en = "Culture Buff"
@@ -68,10 +42,10 @@ class TestGetSettings:
         up.weight = PERSONA_PRIMARY_WEIGHT
         result_mock = MagicMock()
         result_mock.all.return_value = [(up, persona)]
-        db.execute.return_value = result_mock
+        mock_db.execute.return_value = result_mock
 
-        user = _make_user()
-        result = await get_settings(current_user=user, db=db)
+        user = make_user()
+        result = await get_settings(current_user=user, db=mock_db)
 
         assert len(result["personas"]) == 1
         assert result["personas"][0]["slug"] == "culture_buff"
@@ -80,52 +54,52 @@ class TestGetSettings:
 
 class TestPatchSettings:
     @pytest.mark.asyncio
-    async def test_update_locale(self):
+    async def test_update_locale(self, mock_db, make_user):
         from app.routers.settings import patch_settings, PatchSettingsBody
 
-        db = _empty_execute()
-        user = _make_user(locale="en")
+        _attach_empty_personas(mock_db)
+        user = make_user(locale="en")
 
         result = await patch_settings(
             body=PatchSettingsBody(locale="ru"),
             current_user=user,
-            db=db,
+            db=mock_db,
         )
 
         assert user.locale == "ru"
-        db.commit.assert_called_once()
+        mock_db.commit.assert_called_once()
         assert result["locale"] == "ru"
 
     @pytest.mark.asyncio
-    async def test_update_email_opt_in(self):
+    async def test_update_email_opt_in(self, mock_db, make_user):
         from app.routers.settings import patch_settings, PatchSettingsBody
 
-        db = _empty_execute()
-        user = _make_user(opt_in=True)
+        _attach_empty_personas(mock_db)
+        user = make_user(opt_in=True)
 
         result = await patch_settings(
             body=PatchSettingsBody(email_digest_opt_in=False),
             current_user=user,
-            db=db,
+            db=mock_db,
         )
 
         assert user.email_digest_opt_in is False
-        db.commit.assert_called_once()
+        mock_db.commit.assert_called_once()
         assert result["email_digest_opt_in"] is False
 
     @pytest.mark.asyncio
-    async def test_empty_body_raises_400(self):
+    async def test_empty_body_raises_400(self, mock_db, make_user):
         from fastapi import HTTPException
         from app.routers.settings import patch_settings, PatchSettingsBody
 
-        db = _empty_execute()
-        user = _make_user()
+        _attach_empty_personas(mock_db)
+        user = make_user()
 
         with pytest.raises(HTTPException) as exc_info:
             await patch_settings(
                 body=PatchSettingsBody(),
                 current_user=user,
-                db=db,
+                db=mock_db,
             )
         assert exc_info.value.status_code == http.HTTPStatus.BAD_REQUEST
 
@@ -138,16 +112,16 @@ class TestPatchSettings:
             PatchSettingsBody(locale="fr")
 
     @pytest.mark.asyncio
-    async def test_update_both_fields(self):
+    async def test_update_both_fields(self, mock_db, make_user):
         from app.routers.settings import patch_settings, PatchSettingsBody
 
-        db = _empty_execute()
-        user = _make_user(locale="en", opt_in=True)
+        _attach_empty_personas(mock_db)
+        user = make_user(locale="en", opt_in=True)
 
         await patch_settings(
             body=PatchSettingsBody(locale="et", email_digest_opt_in=False),
             current_user=user,
-            db=db,
+            db=mock_db,
         )
 
         assert user.locale == "et"

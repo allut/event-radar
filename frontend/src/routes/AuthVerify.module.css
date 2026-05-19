@@ -7,12 +7,10 @@
 }
 
 .card {
+  composes: card cardAccentTop from '../components/shared/Card.module.css';
+  --rise-distance: 10px;
   width: 100%;
   max-width: 360px;
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-top: 3px solid var(--accent);
-  border-radius: var(--radius);
   padding: 2.5rem;
   display: flex;
   flex-direction: column;
@@ -22,20 +20,15 @@
   animation: rise 0.35s cubic-bezier(0.4, 0, 0.2, 1) both;
 }
 
-@keyframes rise {
-  from { opacity: 0; transform: translateY(10px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-
 .radar {
-  font-size: 1.6rem;
+  font-size: var(--heading-lg);
   color: var(--accent);
   animation: breathe 3s ease-in-out infinite;
 }
 
 .brand {
   font-family: var(--font-display);
-  font-size: 1.5rem;
+  font-size: var(--heading-md);
   font-weight: 600;
   color: var(--text);
   margin-bottom: 2rem;
@@ -46,7 +39,7 @@
   flex-direction: column;
   align-items: center;
   gap: 0.75rem;
-  animation: fadeIn 0.25s ease;
+  animation: fadeIn var(--anim-fast) ease;
 }
 
 @keyframes fadeIn {
@@ -56,12 +49,12 @@
 
 .spinner {
   display: block;
-  width: 36px;
-  height: 36px;
+  width: var(--spinner-size-md);
+  height: var(--spinner-size-md);
   border: 2px solid var(--border);
   border-top-color: var(--accent);
   border-radius: 50%;
-  animation: spin 0.7s linear infinite;
+  animation: spin var(--anim-base) linear infinite;
 }
 
 .check {

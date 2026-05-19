@@ -4,13 +4,12 @@ from datetime import datetime
 from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from app.constants import TALLINN_TZ
 from app.db import get_db
 from app.models.models import DailyFeed, Event, User
 from app.routers.auth import get_current_user
-from app.routers.utils import serialize_event
+from app.routers.utils import select_events_with_classification, serialize_event
 
 router = APIRouter(prefix="/feed", tags=["feed"])
 
@@ -39,9 +38,7 @@ async def get_feed(
         }
 
     event_rows = (await db.scalars(
-        select(Event)
-        .where(Event.id.in_(feed.event_ids))
-        .options(selectinload(Event.classification))
+        select_events_with_classification().where(Event.id.in_(feed.event_ids))
     )).all()
 
     event_map = {e.id: e for e in event_rows}

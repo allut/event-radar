@@ -3,8 +3,11 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../api/client';
 import { getLocale, setLocale } from '../lib/auth';
-import { LOCALES, PERSONAS, SAVE_MSG_CLEAR_DELAY_MS, PERSONA_PRIMARY_WEIGHT_THRESHOLD } from '../constants';
+import { PERSONAS, SAVE_MSG_CLEAR_DELAY_MS, PERSONA_PRIMARY_WEIGHT_THRESHOLD } from '../constants';
+import { cx } from '../utils';
 import { t, personaName } from '../i18n';
+import LocaleSelector from '../components/LocaleSelector';
+import PageState from '../components/PageState';
 import styles from './Settings.module.css';
 
 interface PersonaEntry {
@@ -74,19 +77,11 @@ export default function Settings() {
   }
 
   if (isLoading) {
-    return (
-      <div className={styles.centered}>
-        <span className={styles.spinner} aria-label={t('loading', locale)} />
-      </div>
-    );
+    return <PageState kind="loading" message={t('loading', locale)} />;
   }
 
   if (isError) {
-    return (
-      <div className={styles.centered}>
-        <p className={styles.errorMsg}>{t('settings_error', locale)}</p>
-      </div>
-    );
+    return <PageState kind="error" message={t('settings_error', locale)} />;
   }
 
   return (
@@ -108,19 +103,12 @@ export default function Settings() {
 
         <section className={styles.section}>
           <h2 className={styles.sectionTitle}>{t('section_language', locale)}</h2>
-          <div className={styles.localePills} role="group" aria-label={t('section_language', locale)}>
-            {LOCALES.map(({ code, label }) => (
-              <button
-                key={code}
-                className={[styles.localePill, locale === code ? styles.activeLocale : ''].join(' ')}
-                onClick={() => handleLocaleChange(code)}
-                aria-pressed={locale === code}
-                disabled={patchMutation.isPending}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
+          <LocaleSelector
+            locale={locale}
+            onChange={handleLocaleChange}
+            ariaLabel={t('section_language', locale)}
+            disabled={patchMutation.isPending}
+          />
         </section>
 
         <section className={styles.section}>
@@ -146,7 +134,7 @@ export default function Settings() {
                   <span className={styles.personaName}>
                     {personaName(secondaryPersona.slug, locale)}
                   </span>
-                  <span className={[styles.personaBadge, styles.secondaryBadge].join(' ')}>{t('persona_secondary', locale)}</span>
+                  <span className={cx(styles.personaBadge, styles.secondaryBadge)}>{t('persona_secondary', locale)}</span>
                 </div>
               </div>
             )}
@@ -167,7 +155,7 @@ export default function Settings() {
               <p className={styles.toggleDesc}>{t('digest_desc', locale)}</p>
             </div>
             <button
-              className={[styles.toggle, data?.email_digest_opt_in ? styles.toggleOn : styles.toggleOff].join(' ')}
+              className={cx(styles.toggle, data?.email_digest_opt_in ? styles.toggleOn : styles.toggleOff)}
               onClick={handleOptInToggle}
               disabled={patchMutation.isPending}
               aria-pressed={data?.email_digest_opt_in}

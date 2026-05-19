@@ -4,28 +4,6 @@
   flex-direction: column;
 }
 
-.centered {
-  min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.spinner {
-  display: block;
-  width: 40px;
-  height: 40px;
-  border: 2px solid var(--border);
-  border-top-color: var(--accent);
-  border-radius: 50%;
-  animation: spin 0.7s linear infinite;
-}
-
-.errorMsg {
-  color: var(--text-muted);
-  font-size: var(--fs-base);
-}
-
 .topBar {
   display: flex;
   align-items: center;
@@ -77,18 +55,9 @@
 }
 
 .logoutBtn {
-  background: none;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
+  composes: btnOutline from '../components/shared/Button.module.css';
   padding: 0.3125rem 0.875rem;
   font-size: var(--fs-sm);
-  color: var(--text-muted);
-  transition: border-color var(--transition), color var(--transition);
-}
-
-.logoutBtn:hover {
-  border-color: var(--text-muted);
-  color: var(--text);
 }
 
 .main {
@@ -110,7 +79,7 @@
 
 .heading {
   font-family: var(--font-display);
-  font-size: 2rem;
+  font-size: var(--heading-xl);
   font-weight: 600;
   color: var(--text);
   letter-spacing: var(--tracking-tighter);
@@ -136,39 +105,3 @@
   gap: 1rem;
 }
 
-.empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  gap: 0.75rem;
-  padding: 5rem 2rem;
-}
-
-.emptyIcon {
-  font-size: 3rem;
-  color: var(--text-dim);
-  animation: breathe 3s ease-in-out infinite;
-  margin-bottom: 0.5rem;
-}
-
-.emptyTitle {
-  font-family: var(--font-display);
-  font-size: 1.5rem;
-  font-weight: 600;
-  color: var(--text);
-}
-
-.emptyMsg {
-  font-size: var(--fs-base);
-  color: var(--text-muted);
-  max-width: 380px;
-  line-height: 1.65;
-}
-
-.emptyHint {
-  font-size: var(--fs-sm);
-  color: var(--text-dim);
-  max-width: 340px;
-  line-height: 1.6;
-}

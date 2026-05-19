@@ -4,28 +4,6 @@
   flex-direction: column;
 }
 
-.centered {
-  min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.spinner {
-  display: block;
-  width: 40px;
-  height: 40px;
-  border: 2px solid var(--border);
-  border-top-color: var(--accent);
-  border-radius: 50%;
-  animation: spin 0.7s linear infinite;
-}
-
-.errorMsg {
-  color: var(--text-muted);
-  font-size: var(--fs-base);
-}
-
 /* ── Top bar ── */
 .topBar {
   display: flex;
@@ -103,7 +81,7 @@
 
 .sectionTitle {
   font-family: var(--font-display);
-  font-size: 1.05rem;
+  font-size: var(--heading-xs);
   font-weight: 600;
   color: var(--text-muted);
   letter-spacing: var(--tracking-wide);
@@ -113,41 +91,6 @@
 .email {
   font-size: var(--fs-base);
   color: var(--text);
-}
-
-/* ── Locale pills ── */
-.localePills {
-  display: flex;
-  gap: 0.5rem;
-}
-
-.localePill {
-  padding: 0.35rem 0.85rem;
-  border-radius: var(--radius);
-  border: 1px solid var(--border);
-  background: transparent;
-  color: var(--text-muted);
-  font-size: var(--fs-xs);
-  font-weight: 600;
-  letter-spacing: var(--tracking-wider);
-  cursor: pointer;
-  transition: all var(--transition);
-}
-
-.localePill:hover:not(:disabled) {
-  border-color: var(--accent-hover-border);
-  color: var(--text);
-}
-
-.activeLocale {
-  background: var(--accent-subtle);
-  border-color: var(--accent-border);
-  color: var(--accent-light);
-}
-
-.localePill:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
 }
 
 /* ── Persona ── */
@@ -241,9 +184,9 @@
 
 .toggle {
   flex-shrink: 0;
-  width: 44px;
-  height: 24px;
-  border-radius: 12px;
+  width: var(--toggle-width);
+  height: var(--toggle-height);
+  border-radius: calc(var(--toggle-height) / 2);
   border: none;
   cursor: pointer;
   position: relative;
@@ -266,20 +209,20 @@
 
 .toggleKnob {
   position: absolute;
-  top: 3px;
-  width: 18px;
-  height: 18px;
+  top: var(--toggle-padding);
+  width: var(--toggle-knob-size);
+  height: var(--toggle-knob-size);
   border-radius: 50%;
-  background: #fff;
+  background: var(--toggle-knob-color);
   transition: left var(--transition);
 }
 
 .toggleOn .toggleKnob {
-  left: calc(100% - 21px);
+  left: calc(100% - var(--toggle-knob-size) - var(--toggle-padding));
 }
 
 .toggleOff .toggleKnob {
-  left: 3px;
+  left: var(--toggle-padding);
 }
 
 .unsubMsg {

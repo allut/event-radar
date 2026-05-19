@@ -4,29 +4,6 @@
   flex-direction: column;
 }
 
-.centered {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-height: 100vh;
-  gap: 1.5rem;
-}
-
-.spinner {
-  width: 28px;
-  height: 28px;
-  border: 2px solid var(--border);
-  border-top-color: var(--accent);
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-}
-
-.errorMsg {
-  color: var(--text-muted);
-  font-size: var(--fs-base);
-}
-
 /* ─── Top bar ─────────────────────────────────────────────────────────────── */
 
 .topBar {
@@ -43,19 +20,14 @@
 }
 
 .backBtn {
-  background: none;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  color: var(--text-muted);
+  composes: btnOutline from '../components/shared/Button.module.css';
   font-size: var(--fs-sm);
   padding: 0.375rem 0.875rem;
   cursor: pointer;
-  transition: color var(--transition), border-color var(--transition);
   letter-spacing: var(--tracking-normal);
 }
 
 .backBtn:hover {
-  color: var(--text);
   border-color: var(--accent-hover-border);
 }
 
@@ -108,7 +80,7 @@
   font-size: var(--fs-xs);
   font-weight: 600;
   padding: 4px 12px;
-  border-radius: 100px;
+  border-radius: var(--radius-pill);
   letter-spacing: var(--tracking-wide);
 }
 
@@ -119,15 +91,11 @@
 }
 
 .content {
+  --rise-distance: 6px;
   max-width: 680px;
   margin: 0 auto;
   padding: 2rem 1.5rem 4rem;
   animation: rise 0.4s cubic-bezier(0.4, 0, 0.2, 1) both;
-}
-
-@keyframes rise {
-  from { opacity: 0; transform: translateY(6px); }
-  to   { opacity: 1; transform: translateY(0); }
 }
 
 .meta {
@@ -152,7 +120,7 @@
 
 .title {
   font-family: var(--font-display);
-  font-size: 2.25rem;
+  font-size: var(--heading-2xl);
   font-weight: 600;
   color: var(--text);
   line-height: 1.2;
@@ -249,7 +217,7 @@
   letter-spacing: var(--tracking-wider);
   text-transform: uppercase;
   padding: 3px 10px;
-  border-radius: 100px;
+  border-radius: var(--radius-pill);
   background: var(--accent-subtle);
   color: var(--accent);
   border: 1px solid var(--accent-border);
@@ -271,63 +239,12 @@
   border-top: 1px solid var(--border-subtle);
 }
 
-.feedbackGroup {
-  display: flex;
-  gap: 0.25rem;
-}
-
-.action {
-  background: none;
-  border: 1px solid transparent;
-  border-radius: var(--radius);
-  padding: 0.5rem 0.875rem;
-  font-size: 1.05rem;
-  cursor: pointer;
-  transition: background var(--transition), border-color var(--transition), transform var(--transition);
-  line-height: 1;
-}
-
-.action:hover:not(:disabled) {
-  background: var(--bg-raised);
-  border-color: var(--border);
-  transform: scale(1.1);
-}
-
-.action:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.activeLike {
-  background: var(--success-faint);
-  border-color: var(--success-border);
-}
-
-.activeDislike {
-  background: var(--danger-faint);
-  border-color: var(--danger-border);
-}
-
-.activeBookmark {
-  background: var(--accent-faint);
-  border-color: var(--accent-border);
-}
-
 .ticketsBtn {
+  composes: btnPrimary from '../components/shared/Button.module.css';
   margin-left: auto;
   display: inline-flex;
   align-items: center;
   padding: 0.625rem 1.5rem;
-  background: var(--accent);
-  color: var(--on-accent);
   font-size: var(--fs-sm);
   font-weight: 700;
-  border-radius: var(--radius);
-  letter-spacing: var(--tracking-snug);
-  transition: background var(--transition), transform var(--transition);
-}
-
-.ticketsBtn:hover {
-  background: var(--accent-light);
-  transform: translateY(-1px);
 }

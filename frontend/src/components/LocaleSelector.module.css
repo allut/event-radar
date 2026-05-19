@@ -1,0 +1,33 @@
+.localePills {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.localePill {
+  padding: 0.35rem 0.85rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: var(--tracking-wider);
+  cursor: pointer;
+  transition: all var(--transition);
+}
+
+.localePill:hover:not(:disabled) {
+  border-color: var(--accent-hover-border);
+  color: var(--text);
+}
+
+.activeLocale {
+  background: var(--accent-subtle);
+  border-color: var(--accent-border);
+  color: var(--accent-light);
+}
+
+.localePill:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

@@ -2,10 +2,11 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api/client';
 import { clearToken, getLocale } from '../lib/auth';
-import { toLocaleCode } from '../constants';
 import { t, ti } from '../i18n';
 import EventCard, { type EventData } from '../components/EventCard';
-import { formatTodayDate } from '../utils';
+import EmptyState from '../components/EmptyState';
+import PageState from '../components/PageState';
+import { formatHourMinute, formatTodayDate } from '../utils';
 import styles from './Feed.module.css';
 
 interface FeedResponse {
@@ -36,19 +37,11 @@ export default function Feed() {
   }
 
   if (isLoading) {
-    return (
-      <div className={styles.centered}>
-        <span className={styles.spinner} aria-label={t('loading', locale)} />
-      </div>
-    );
+    return <PageState kind="loading" message={t('loading', locale)} />;
   }
 
   if (isError) {
-    return (
-      <div className={styles.centered}>
-        <p className={styles.errorMsg}>{t('feed_error', locale)}</p>
-      </div>
-    );
+    return <PageState kind="error" message={t('feed_error', locale)} />;
   }
 
   const events = data?.events ?? [];
@@ -74,23 +67,18 @@ export default function Feed() {
           </div>
           {data?.built_at && (
             <p className={styles.builtAt}>
-              {ti('curated_at', locale, {
-                time: new Date(data.built_at).toLocaleTimeString(
-                  toLocaleCode(locale),
-                  { hour: '2-digit', minute: '2-digit' }
-                ),
-              })}
+              {ti('curated_at', locale, { time: formatHourMinute(data.built_at, locale) })}
             </p>
           )}
         </div>
 
         {events.length === 0 ? (
-          <div className={styles.empty}>
-            <div className={styles.emptyIcon} aria-hidden>◉</div>
-            <h2 className={styles.emptyTitle}>{t('feed_empty_title', locale)}</h2>
-            <p className={styles.emptyMsg}>{t('feed_empty_msg', locale)}</p>
-            <p className={styles.emptyHint}>{t('feed_empty_hint', locale)}</p>
-          </div>
+          <EmptyState
+            icon="◉"
+            title={t('feed_empty_title', locale)}
+            message={t('feed_empty_msg', locale)}
+            hint={t('feed_empty_hint', locale)}
+          />
         ) : (
           <ol className={styles.list} aria-label={t('daily_five', locale)}>
             {events.map((event, i) => (

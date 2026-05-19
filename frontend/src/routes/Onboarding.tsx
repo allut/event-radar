@@ -4,6 +4,7 @@ import { api, ApiError } from '../api/client';
 import { setLocale } from '../lib/auth';
 import { LOCALES, PERSONAS } from '../constants';
 import { t, ti, personaName, personaVibe } from '../i18n';
+import LocaleSelector from '../components/LocaleSelector';
 import PersonaCard from '../components/PersonaCard';
 import styles from './Onboarding.module.css';
 
@@ -63,19 +64,7 @@ export default function Onboarding() {
         <span className={styles.radar} aria-hidden>◉</span>
         <span className={styles.brand}>Event Radar</span>
 
-        <div className={styles.localePills} role="group" aria-label="Language">
-          {LOCALES.map(({ code, label }) => (
-            <button
-              key={code}
-              type="button"
-              className={[styles.localePill, locale === code ? styles.activeLocale : ''].join(' ')}
-              onClick={() => setLocaleState(code)}
-              aria-pressed={locale === code}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+        <LocaleSelector locale={locale} onChange={setLocaleState} ariaLabel="Language" />
       </header>
 
       <main className={styles.main}>

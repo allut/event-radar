@@ -9,9 +9,9 @@ Audit trail against [`plan.md`](./plan.md).
 | Field | Value |
 |---|---|
 | Phase | Week 3 |
-| Plan day | Day 20 complete |
+| Plan day | Day 20 complete + pre-launch dedup refactor + CSS SSOT component refactor |
 | Current focus | Day 21: E2E QA against 30 real Tallinn events, then soft launch |
-| Tests | 260 passing |
+| Tests | 279 passing (unit, excl. integration + live) |
 | Last updated | 2026-05-19 |
 
 ---
@@ -49,6 +49,9 @@ Audit trail against [`plan.md`](./plan.md).
 - **Day 18 (2026-05-17)** — Full EN/ET/RU UI i18n. New `frontend/src/i18n.ts` with `t()`, `ti()`, `personaName()`, `personaVibe()` (en falls back to `PERSONAS` from `constants.ts`). All 7 route/component files updated. `tsconfig.json` target ES2021 for `String.replaceAll`. Settings digest button uses action-verb aria-labels (WCAG 4.1.2).
 - **Day 19 (2026-05-18)** — `NotFound` 404 page + `ErrorBoundary` (try/catch around `getLocale()` so localStorage failures in private-browsing don't re-throw). Wildcard route renders `<Protected><NotFound/></Protected>`. 6 new i18n keys × 3 locales. Plausible deferred (no domain yet).
 - **Day 20 (2026-05-18)** — Backend i18n. `MAGIC_LINK_EMAIL_HTML` → locale dict + subjects dict. `_detect_locale(Accept-Language)` for new users; existing users keep stored locale. `LLM_CLASSIFY_PROMPT_TEMPLATE` updated: `why_go` now `{en,et,ru}` dict (~180 tokens, within 600 cap). `why_go_localized` JSONB column (migration `0006`). Classifier backward-compat: handles dict and old list formats. `serialize_event(event, locale)` fallback chain `locale → en → why_go_bullets`. 11 new tests.
+- **Pre-launch dedup sweep (2026-05-19)** — Mechanical SSOT consolidation, no behavior change. Backend: `serialize_user(user, **extras)`, `get_optional_user_locale(authorization, db)`, `select_events_with_classification()` in `routers/utils.py`; `normalize_currency(raw, has_price)` in `ingestion/base.py`; shared `mock_db`/`make_user`/`make_event` pytest fixtures in `tests/conftest.py`. Frontend: `PageState`, `LocaleSelector`, `FeedbackButtonRow` components; `cx()`, `formatHourMinute()`, `trackExternalClick()` helpers in `utils.ts`; `--anim-fast/base/slow` + `--shadow-card/hover/accent` tokens on `:root`. 4 route .module.css files trimmed of duplicate selectors. Verified: 279 unit tests pass, `tsc` + `vite build` clean. Adversarial review (claude + openai) → no blockers.
+- **CSS SSOT pass (2026-05-19)** — All hardcoded CSS values replaced with `:root` design tokens across 10 module files. Added 19 new tokens: `--accent-soft/muted/minimal/hover-bg`, `--bg-placeholder`, `--radius-pill`, `--spinner-size/size-md/size-sm`, `--toggle-*` (5 vars), `--heading-xl/lg/md/sm/xs`, `--rise-distance`. Global `@keyframes rise` added to `index.css`; 5 local duplicates removed (EventCard, AuthVerify, Login, NotFound, EventDetail). Per-component `--rise-distance` overrides preserve original motion distances. Toggle dimensions and border-radius tokenized via `calc()`. Spinner sizes unified (AuthVerify 36px → `--spinner-size-md`). `tsc` + `vite build` clean. Adversarial review: 4 regressions caught and fixed pre-commit.
+- **CSS SSOT component refactor (2026-05-19)** — Four deferred SSOT patterns applied. (1) Heading scale: `--heading-2xl: 2rem` added to `:root`; raw `rem` values in `Onboarding.heading`, `Feed.heading`, `Feed.emptyTitle` replaced with tokens. (2) Shared `Card.module.css`: base `.card`, `.cardAccentTop`, `.cardDangerTop`, `.cardElevated`, `.cardPage` classes; Login/AuthVerify/ErrorBoundary/EventCard/NotFound compose from it via CSS Modules `composes`. (3) Shared `Button.module.css`: `.btnPrimary` + `.btnOutline` base classes; Login/Onboarding/EventDetail(ticketsBtn+backBtn)/ErrorBoundary/Feed compose from it. (4) `EmptyState` component extracted from Feed — new `EmptyState.tsx` + `EmptyState.module.css`; empty-state selectors removed from `Feed.module.css`. `tsc` + `vite build` clean. Adversarial review (claude + openai) → no blockers.
 
 ---
 

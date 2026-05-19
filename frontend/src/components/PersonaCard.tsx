@@ -1,8 +1,7 @@
 import { type PersonaData } from '../constants';
 import { t } from '../i18n';
+import { cx } from '../utils';
 import styles from './PersonaCard.module.css';
-
-export type { PersonaData };
 
 interface Props {
   persona: PersonaData;
@@ -27,11 +26,7 @@ export default function PersonaCard({
 
   return (
     <div
-      className={[
-        styles.card,
-        isPrimary ? styles.primary : '',
-        isSecondary ? styles.secondary : '',
-      ].join(' ')}
+      className={cx(styles.card, isPrimary && styles.primary, isSecondary && styles.secondary)}
     >
       <button
         type="button"

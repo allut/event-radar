@@ -51,6 +51,7 @@ from app.models.models import (
     UserEventFeedback,
     UserPersona,
 )
+from app.routers.utils import select_events_with_classification
 
 # ---------------------------------------------------------------------------
 # Feedback context (precomputed for one user, reused across event scoring)
@@ -299,13 +300,11 @@ async def build_daily_feeds(db: AsyncSession) -> dict:
 
     # Load all published events within the lookahead window
     event_rows = (await db.scalars(
-        select(Event)
-        .where(
+        select_events_with_classification().where(
             Event.status == EVENT_STATUS_PUBLISHED,
             Event.starts_at >= now,
             Event.starts_at <= cutoff,
         )
-        .options(selectinload(Event.classification))
     )).all()
 
     users = (await db.scalars(select(User))).all()

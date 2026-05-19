@@ -1,117 +1,92 @@
 """Tests for POST /feedback endpoint."""
 import http
-from unittest.mock import AsyncMock, MagicMock
-
-from app.constants import DEFAULT_USER_LOCALE
 
 import pytest
 
 
-def _mock_db():
-    db = AsyncMock()
-    db.get = AsyncMock()
-    db.scalar = AsyncMock()
-    db.execute = AsyncMock()
-    db.add = MagicMock()
-    db.commit = AsyncMock()
-    return db
-
-
-def _make_user(user_id: int = 1):
-    u = MagicMock()
-    u.id = user_id
-    u.email = "test@example.com"
-    u.locale = DEFAULT_USER_LOCALE
-    return u
-
-
-def _make_event(event_id: int = 10):
-    e = MagicMock()
-    e.id = event_id
-    return e
-
-
 class TestRecordFeedback:
     @pytest.mark.asyncio
-    async def test_like_succeeds(self):
+    async def test_like_succeeds(self, mock_db, make_user, make_event):
         from app.routers.feedback import record_feedback, FeedbackBody
 
-        db = _mock_db()
-        db.get.return_value = _make_event(10)
-        user = _make_user()
+        mock_db.get.return_value = make_event(10)
+        user = make_user()
 
         result = await record_feedback(
             body=FeedbackBody(event_id=10, signal="like"),
             current_user=user,
-            db=db,
+            db=mock_db,
         )
         assert result == {"ok": True}
-        db.add.assert_called_once()
-        db.execute.assert_called_once()  # score invalidation
-        db.commit.assert_called_once()
+        mock_db.add.assert_called_once()
+        mock_db.execute.assert_called_once()  # score invalidation
+        mock_db.commit.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_all_valid_signals_accepted(self):
+    async def test_all_valid_signals_accepted(self, make_user, make_event):
         from app.constants import VALID_SIGNALS
         from app.routers.feedback import record_feedback, FeedbackBody
+        from unittest.mock import AsyncMock, MagicMock
 
         for signal in VALID_SIGNALS:
-            db = _mock_db()
-            db.get.return_value = _make_event(1)
-            user = _make_user()
+            db = AsyncMock()
+            db.get = AsyncMock(return_value=make_event(1))
+            db.scalar = AsyncMock()
+            db.scalars = AsyncMock()
+            db.execute = AsyncMock()
+            db.add = MagicMock()
+            db.commit = AsyncMock()
+            db.refresh = AsyncMock()
             result = await record_feedback(
                 body=FeedbackBody(event_id=1, signal=signal),
-                current_user=user,
+                current_user=make_user(),
                 db=db,
             )
             assert result == {"ok": True}
 
     @pytest.mark.asyncio
-    async def test_invalid_signal_raises_422(self):
+    async def test_invalid_signal_raises_422(self, mock_db, make_user, make_event):
         from fastapi import HTTPException
         from app.routers.feedback import record_feedback, FeedbackBody
 
-        db = _mock_db()
-        db.get.return_value = _make_event(1)
-        user = _make_user()
+        mock_db.get.return_value = make_event(1)
+        user = make_user()
 
         with pytest.raises(HTTPException) as exc_info:
             await record_feedback(
                 body=FeedbackBody(event_id=1, signal="thumbs_sideways"),
                 current_user=user,
-                db=db,
+                db=mock_db,
             )
         assert exc_info.value.status_code == http.HTTPStatus.UNPROCESSABLE_ENTITY
 
     @pytest.mark.asyncio
-    async def test_unknown_event_raises_404(self):
+    async def test_unknown_event_raises_404(self, mock_db, make_user):
         from fastapi import HTTPException
         from app.routers.feedback import record_feedback, FeedbackBody
 
-        db = _mock_db()
-        db.get.return_value = None  # event not found
+        mock_db.get.return_value = None  # event not found
 
         with pytest.raises(HTTPException) as exc_info:
             await record_feedback(
                 body=FeedbackBody(event_id=999, signal="like"),
-                current_user=_make_user(),
-                db=db,
+                current_user=make_user(),
+                db=mock_db,
             )
         assert exc_info.value.status_code == http.HTTPStatus.NOT_FOUND
 
     @pytest.mark.asyncio
-    async def test_score_cache_invalidated(self):
+    async def test_score_cache_invalidated(self, mock_db, make_user, make_event):
         """Ensure a DELETE is issued to user_event_scores."""
         from app.routers.feedback import record_feedback, FeedbackBody
 
-        db = _mock_db()
-        db.get.return_value = _make_event(5)
-        user = _make_user(user_id=3)
+        mock_db.get.return_value = make_event(5)
+        user = make_user(user_id=3)
 
         await record_feedback(
             body=FeedbackBody(event_id=5, signal="dislike"),
             current_user=user,
-            db=db,
+            db=mock_db,
         )
         # execute() is used for the DELETE statement
-        db.execute.assert_called_once()
+        mock_db.execute.assert_called_once()

@@ -11,6 +11,7 @@ from app.constants import DEFAULT_USER_LOCALE, PERSONA_PRIMARY_WEIGHT, PERSONA_S
 from app.db import get_db
 from app.models.models import Persona, User, UserPersona
 from app.routers.auth import get_current_user
+from app.routers.utils import serialize_user
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/users/me", tags=["settings"])
@@ -56,15 +57,11 @@ async def get_settings(
 ):
     """Return current user profile + settings."""
     personas = await _get_persona_list(current_user.id, db)
-    return {
-        "id": current_user.id,
-        "email": current_user.email,
-        "locale": current_user.locale,
-        "home_city": current_user.home_city,
-        "email_digest_opt_in": current_user.email_digest_opt_in,
-        "created_at": current_user.created_at.isoformat(),
-        "personas": personas,
-    }
+    return serialize_user(
+        current_user,
+        email_digest_opt_in=current_user.email_digest_opt_in,
+        personas=personas,
+    )
 
 
 @router.patch("", status_code=status.HTTP_200_OK)
@@ -89,12 +86,8 @@ async def patch_settings(
     await db.refresh(current_user)
 
     personas = await _get_persona_list(current_user.id, db)
-    return {
-        "id": current_user.id,
-        "email": current_user.email,
-        "locale": current_user.locale,
-        "home_city": current_user.home_city,
-        "email_digest_opt_in": current_user.email_digest_opt_in,
-        "created_at": current_user.created_at.isoformat(),
-        "personas": personas,
-    }
+    return serialize_user(
+        current_user,
+        email_digest_opt_in=current_user.email_digest_opt_in,
+        personas=personas,
+    )

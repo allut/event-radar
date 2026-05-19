@@ -5,8 +5,8 @@ from typing import Any, Optional
 import httpx
 from bs4 import BeautifulSoup
 
-from app.constants import DEFAULT_CURRENCY, HTTP_TIMEOUT_SECONDS, HTTP_USER_AGENT, JSONLD_EVENT_TYPES
-from app.ingestion.base import NormalizedEvent, SourceAdapter, _http_get, _parse_dt
+from app.constants import HTTP_TIMEOUT_SECONDS, HTTP_USER_AGENT, JSONLD_EVENT_TYPES
+from app.ingestion.base import NormalizedEvent, SourceAdapter, _http_get, _parse_dt, normalize_currency
 
 log = logging.getLogger(__name__)
 
@@ -71,7 +71,6 @@ class JsonLdAdapter(SourceAdapter):
             image = image.get("url")
         image_url = str(image) if image else None
 
-        has_price = price_min is not None or price_max is not None
         return NormalizedEvent(
             external_id=external_id,
             title=str(title),
@@ -86,7 +85,7 @@ class JsonLdAdapter(SourceAdapter):
             image_url=image_url,
             price_min=price_min,
             price_max=price_max,
-            currency=str(currency) if currency else (DEFAULT_CURRENCY if has_price else None),
+            currency=normalize_currency(currency, price_min is not None or price_max is not None),
         )
 
 

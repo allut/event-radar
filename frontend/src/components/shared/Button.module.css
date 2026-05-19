@@ -1,0 +1,22 @@
+.btnPrimary {
+  background: var(--accent);
+  color: var(--on-accent);
+  border: none;
+  border-radius: var(--radius);
+  font-weight: 600;
+  letter-spacing: var(--tracking-snug);
+  transition: background var(--transition), transform var(--transition), opacity var(--transition);
+}
+
+.btnPrimary:hover:not(:disabled) { background: var(--accent-light); transform: translateY(-1px); }
+.btnPrimary:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+.btnOutline {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-muted);
+  transition: border-color var(--transition), color var(--transition);
+}
+
+.btnOutline:hover { border-color: var(--accent-hover-border); color: var(--text); }

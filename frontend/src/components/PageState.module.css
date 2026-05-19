@@ -1,0 +1,23 @@
+.centered {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1.5rem;
+}
+
+.spinner {
+  display: block;
+  width: var(--spinner-size);
+  height: var(--spinner-size);
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin var(--anim-base) linear infinite;
+}
+
+.errorMsg {
+  color: var(--text-muted);
+  font-size: var(--fs-base);
+}

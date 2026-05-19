@@ -33,6 +33,12 @@
   --accent-subtle: rgba(200, 146, 42, 0.08);
   --accent-faint: rgba(200, 146, 42, 0.15);
   --accent-border: rgba(200, 146, 42, 0.4);
+  --accent-soft: rgba(200, 146, 42, 0.06);
+  --accent-muted: rgba(200, 146, 42, 0.35);
+  --accent-minimal: rgba(200, 146, 42, 0.03);
+  --accent-hover-bg: rgba(200, 146, 42, 0.25);
+
+  --bg-placeholder: rgba(255, 255, 255, 0.06);
 
   --success-faint: rgba(76, 173, 127, 0.15);
   --success-border: rgba(76, 173, 127, 0.4);
@@ -56,10 +62,45 @@
   --tracking-normal:   0.02em;  /* event time, links */
   --tracking-wide:     0.04em;  /* form labels, price badges */
   --tracking-wider:    0.06em;  /* uppercase pill labels */
+
+  /* Shape */
+  --radius-pill: 100px;
+
+  /* Spinner sizes */
+  --spinner-size: 40px;
+  --spinner-size-md: 36px;
+  --spinner-size-sm: 18px;
+
+  /* Toggle component */
+  --toggle-width: 44px;
+  --toggle-height: 24px;
+  --toggle-knob-size: 18px;
+  --toggle-padding: 3px;
+  --toggle-knob-color: #fff;
+
+  /* Heading scale */
+  --heading-2xl: 2.25rem;
+  --heading-xl: 2rem;
+  --heading-lg: 1.6rem;
+  --heading-md: 1.5rem;
+  --heading-sm: 1.3rem;
+  --heading-xs: 1.05rem;
+
+  /* Animation durations */
+  --anim-fast: 0.3s;
+  --anim-base: 0.65s;
+  --anim-slow: 0.8s;
+  --rise-distance: 8px;
+
+  /* Card shadows */
+  --shadow-card:        0 4px 20px rgba(0, 0, 0, 0.25);
+  --shadow-card-hover:  0 8px 24px rgba(0, 0, 0, 0.3);
+  --shadow-accent:      0 8px 32px rgba(200, 146, 42, 0.1);
 }
 
 @keyframes spin    { to { transform: rotate(360deg); } }
 @keyframes breathe { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+@keyframes rise    { from { opacity: 0; transform: translateY(var(--rise-distance, 8px)); } to { opacity: 1; transform: translateY(0); } }
 
 html {
   font-family: 'DM Sans', system-ui, sans-serif;

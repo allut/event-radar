@@ -1,6 +1,44 @@
 """Shared serialization helpers for event routers."""
+from itsdangerous import BadSignature, SignatureExpired
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+
+from app.auth.tokens import verify_session_token
 from app.constants import DEFAULT_USER_LOCALE
-from app.models.models import Event
+from app.models.models import Event, User
+
+
+def serialize_user(user: User, **extras) -> dict:
+    """Return canonical user envelope. Extra keys (e.g. has_personas, personas) via kwargs."""
+    return {
+        "id": user.id,
+        "email": user.email,
+        "locale": user.locale,
+        "home_city": user.home_city,
+        "created_at": user.created_at.isoformat(),
+        **extras,
+    }
+
+
+async def get_optional_user_locale(
+    authorization: str | None,
+    db: AsyncSession,
+) -> str:
+    """Resolve user locale from a Bearer token if present; else DEFAULT_USER_LOCALE."""
+    if not isinstance(authorization, str) or not authorization.startswith("Bearer "):
+        return DEFAULT_USER_LOCALE
+    try:
+        user_id = verify_session_token(authorization[len("Bearer "):])
+    except (SignatureExpired, BadSignature):
+        return DEFAULT_USER_LOCALE
+    user = await db.get(User, user_id)
+    return user.locale if user else DEFAULT_USER_LOCALE
+
+
+def select_events_with_classification():
+    """Base SELECT for Event with classification eager-loaded. Callers add their own .where()."""
+    return select(Event).options(selectinload(Event.classification))
 
 
 def resolve_why_go(cl, locale: str) -> list[str]:

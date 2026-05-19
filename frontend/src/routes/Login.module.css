@@ -7,19 +7,10 @@
 }
 
 .card {
-  width: 100%;
-  max-width: 400px;
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-top: 3px solid var(--accent);
-  border-radius: var(--radius);
+  composes: card cardAccentTop cardPage from '../components/shared/Card.module.css';
+  --rise-distance: 12px;
   padding: 2.5rem;
   animation: rise 0.4s cubic-bezier(0.4, 0, 0.2, 1) both;
-}
-
-@keyframes rise {
-  from { opacity: 0; transform: translateY(12px); }
-  to   { opacity: 1; transform: translateY(0); }
 }
 
 .header {
@@ -37,7 +28,7 @@
 
 .brand {
   font-family: var(--font-display);
-  font-size: 1.6rem;
+  font-size: var(--heading-lg);
   font-weight: 600;
   letter-spacing: var(--tracking-normal);
   color: var(--text);
@@ -100,41 +91,24 @@
 }
 
 .submit {
-  background: var(--accent);
-  color: var(--on-accent);
-  border: none;
-  border-radius: var(--radius);
+  composes: btnPrimary from '../components/shared/Button.module.css';
   padding: 0.8125rem 1.5rem;
   font-size: var(--fs-base);
-  font-weight: 600;
-  letter-spacing: var(--tracking-snug);
   height: 48px;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background var(--transition), transform var(--transition), opacity var(--transition);
   margin-top: 0.25rem;
-}
-
-.submit:hover:not(:disabled) {
-  background: var(--accent-light);
-  transform: translateY(-1px);
-}
-
-.submit:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-  transform: none;
 }
 
 .spinner {
   display: inline-block;
-  width: 18px;
-  height: 18px;
+  width: var(--spinner-size-sm);
+  height: var(--spinner-size-sm);
   border: 2px solid var(--spinner-border);
   border-top-color: var(--on-accent);
   border-radius: 50%;
-  animation: spin 0.65s linear infinite;
+  animation: spin var(--anim-base) linear infinite;
 }
 
 .success {
@@ -144,7 +118,7 @@
   gap: 0.6rem;
   padding: 1.5rem 0;
   text-align: center;
-  animation: fadeIn 0.3s ease;
+  animation: fadeIn var(--anim-fast) ease;
 }
 
 @keyframes fadeIn {
