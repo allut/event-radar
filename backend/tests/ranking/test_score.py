@@ -1,6 +1,5 @@
 """Unit tests for the scoring formula — no DB, all pure functions."""
 from datetime import datetime, timedelta
-from typing import Optional
 from unittest.mock import MagicMock
 
 from app.constants import SCORE_HARD_EXCLUDE, TALLINN_TZ
@@ -24,7 +23,7 @@ def _now() -> datetime:
 
 def _event(
     event_id: int = 1,
-    starts_at: Optional[datetime] = None,
+    starts_at: datetime | None = None,
     categories: list[str] | None = None,
     vibes: list[str] | None = None,
     quality: float = 0.7,
@@ -46,7 +45,7 @@ def _event(
     return e
 
 
-def _ctx(*rows: tuple[str, int, list[str], Optional[int], datetime]) -> FeedbackContext:
+def _ctx(*rows: tuple[str, int, list[str], int | None, datetime]) -> FeedbackContext:
     fb_rows = [
         _FeedbackRow(signal=sig, event_id=eid, categories=cats, dedup_group_id=grp, created_at=ts)
         for sig, eid, cats, grp, ts in rows

@@ -6,8 +6,8 @@ import asyncio
 import html as html_lib
 import http
 import logging
+from collections.abc import Sequence
 from datetime import date, datetime
-from typing import Sequence
 
 import httpx
 from sqlalchemy import select

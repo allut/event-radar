@@ -12,8 +12,8 @@ Formula (all components normalized to [0, 1]):
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from collections.abc import Sequence
 from datetime import datetime, timedelta
-from typing import Optional, Sequence
 
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -66,7 +66,7 @@ class _FeedbackRow:
     signal: str
     event_id: int
     categories: list[str]
-    dedup_group_id: Optional[int]
+    dedup_group_id: int | None
     created_at: datetime
     # Precomputed frozenset of `categories` — hoisted out of the inner scoring
     # loop so we don't rebuild it once per (event × feedback-row) iteration.
@@ -88,7 +88,7 @@ class FeedbackContext:
         rows: list[_FeedbackRow] = []
         for r in orm_rows:
             cats: list[str] = []
-            dedup_group: Optional[int] = None
+            dedup_group: int | None = None
             if r.event:
                 dedup_group = r.event.dedup_group_id
                 if r.event.classification:
@@ -204,7 +204,7 @@ def recency_boost(starts_at: datetime, now: datetime) -> float:
 def feedback_signal(
     event_id: int,
     event_categories: list[str],
-    event_dedup_group: Optional[int],
+    event_dedup_group: int | None,
     ctx: FeedbackContext,
     now: datetime,
 ) -> float:
@@ -237,7 +237,7 @@ def feedback_signal(
     return max(-1.0, min(1.0, sum(signals)))
 
 
-def locality_bonus(lat: Optional[float], lng: Optional[float]) -> float:
+def locality_bonus(lat: float | None, lng: float | None) -> float:
     """1.0 if within central Tallinn bounding box; 0.5 when location unknown; 0.0 otherwise."""
     if lat is None or lng is None:
         return 0.5
@@ -254,12 +254,12 @@ def score_event(
     ctx: FeedbackContext,
     event: Event,
     now: datetime,
-) -> Optional[float]:
+) -> float | None:
     """
     Compute personalized score for one event. Returns None if hard-excluded.
     Score is in [0, 1].
     """
-    cl: Optional[EventClassification] = event.classification
+    cl: EventClassification | None = event.classification
     categories: list[str] = cl.categories if cl else []
     vibes: list[str] = cl.vibes if cl else []
     time_slots = _time_slots_for_event(event.starts_at)

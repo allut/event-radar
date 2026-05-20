@@ -1,6 +1,6 @@
 import json
 import logging
-from typing import Any, Optional
+from typing import Any
 
 import httpx
 from bs4 import BeautifulSoup
@@ -31,7 +31,7 @@ class JsonLdAdapter(SourceAdapter):
     def listing_url(self) -> str:
         return self.source.config["url"]
 
-    def get_raw_external_id(self, raw: dict[str, Any]) -> Optional[str]:
+    def get_raw_external_id(self, raw: dict[str, Any]) -> str | None:
         v = raw.get("url") or raw.get("@id") or ""
         return str(v) if v else None
 
@@ -58,7 +58,7 @@ class JsonLdAdapter(SourceAdapter):
         )
         return events
 
-    def normalize(self, raw: dict[str, Any]) -> Optional[NormalizedEvent]:
+    def normalize(self, raw: dict[str, Any]) -> NormalizedEvent | None:
         title = raw.get("name") or ""
         if not title:
             return None
@@ -167,17 +167,17 @@ def _collect_events(data: Any, out: list[dict[str, Any]]) -> None:
 
 def _parse_location(
     location: Any,
-) -> tuple[Optional[str], Optional[str], Optional[float], Optional[float]]:
+) -> tuple[str | None, str | None, float | None, float | None]:
     if isinstance(location, list):
         location = location[0] if location else None
     if not isinstance(location, dict):
         return (str(location) if location else None), None, None, None
 
-    venue_name: Optional[str] = location.get("name") or None
+    venue_name: str | None = location.get("name") or None
     addr = location.get("address") or {}
     if isinstance(addr, dict):
         parts = [addr.get("streetAddress"), addr.get("addressLocality")]
-        venue_address: Optional[str] = ", ".join(p for p in parts if p) or None
+        venue_address: str | None = ", ".join(p for p in parts if p) or None
     else:
         venue_address = str(addr) or None
 
@@ -189,7 +189,7 @@ def _parse_location(
 
 def _parse_offers(
     offers: Any,
-) -> tuple[Optional[float], Optional[float], Optional[str]]:
+) -> tuple[float | None, float | None, str | None]:
     if offers is None:
         return None, None, None
     if isinstance(offers, dict):
@@ -197,9 +197,9 @@ def _parse_offers(
     if not isinstance(offers, list):
         return None, None, None
 
-    price_min: Optional[float] = None
-    price_max: Optional[float] = None
-    currency: Optional[str] = None
+    price_min: float | None = None
+    price_max: float | None = None
+    currency: str | None = None
 
     for offer in offers:
         if not isinstance(offer, dict):
@@ -214,7 +214,7 @@ def _parse_offers(
     return price_min, price_max, currency
 
 
-def _to_float(value: Any) -> Optional[float]:
+def _to_float(value: Any) -> float | None:
     try:
         return float(value)
     except (TypeError, ValueError):

@@ -13,8 +13,8 @@ On match: assign dedup_group_id = min(event_id) across the connected component
 """
 
 import logging
+from collections.abc import Iterable
 from datetime import datetime, timedelta
-from typing import Iterable, Optional
 
 from rapidfuzz.fuzz import token_set_ratio
 from sqlalchemy import select, update
@@ -91,7 +91,7 @@ def build_cluster_assignments(parent: dict[int, int], ids: list[int]) -> dict[in
 
 def cluster_events(
     events: list[Event],
-    candidate_pair_ids: Optional[Iterable[tuple[int, int]]] = None,
+    candidate_pair_ids: Iterable[tuple[int, int]] | None = None,
 ) -> dict[int, int]:
     """Return {event_id: dedup_group_id} for events that share a group.
 

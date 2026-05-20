@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Optional
+from typing import Any
 from urllib.parse import urlparse
 
 import httpx
@@ -104,7 +104,7 @@ class FientaAdapter(SourceAdapter):
 
         return collected
 
-    def normalize(self, raw: dict[str, Any]) -> Optional[NormalizedEvent]:
+    def normalize(self, raw: dict[str, Any]) -> NormalizedEvent | None:
         title = raw.get("name") or raw.get("title") or ""
         if not title:
             return None

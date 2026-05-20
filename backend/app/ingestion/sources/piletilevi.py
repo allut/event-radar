@@ -1,6 +1,6 @@
 import logging
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 
 import httpx
 from bs4 import BeautifulSoup
@@ -69,7 +69,7 @@ class PiletileviAdapter(SourceAdapter):
                         continue
 
                     img_tag = tag.select_one(_IMAGE_SELECTOR)
-                    image_src: Optional[str] = None
+                    image_src: str | None = None
                     if img_tag:
                         image_src = img_tag.get("src") or img_tag.get("data-src")
 
@@ -113,7 +113,7 @@ class PiletileviAdapter(SourceAdapter):
         log.info("piletilevi fetched %d events", len(cards))
         return cards
 
-    def normalize(self, raw: dict[str, Any]) -> Optional[NormalizedEvent]:
+    def normalize(self, raw: dict[str, Any]) -> NormalizedEvent | None:
         title = raw.get("title") or ""
         if not title:
             return None
@@ -141,11 +141,11 @@ class PiletileviAdapter(SourceAdapter):
             url=PILETILEVI_BASE_URL + href,
         )
 
-    def get_raw_external_id(self, raw: dict[str, Any]) -> Optional[str]:
+    def get_raw_external_id(self, raw: dict[str, Any]) -> str | None:
         return raw.get("href")
 
 
-def _parse_piletilevi_date(date_str: str) -> Optional[datetime]:
+def _parse_piletilevi_date(date_str: str) -> datetime | None:
     """Parse "We 19.08.2026 • 19:00" → timezone-aware datetime."""
     if not date_str or "•" not in date_str:
         return None
