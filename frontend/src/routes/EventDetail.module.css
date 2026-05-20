@@ -13,10 +13,10 @@
   padding: 1rem 1.5rem;
   border-bottom: 1px solid var(--border-subtle);
   background: var(--bg-overlay);
-  backdrop-filter: blur(8px);
+  backdrop-filter: blur(var(--blur-overlay));
   position: sticky;
   top: 0;
-  z-index: 10;
+  z-index: var(--z-sticky);
 }
 
 .backBtn {
@@ -75,7 +75,7 @@
   bottom: 12px;
   left: 1.5rem;
   background: var(--bg-overlay-soft);
-  backdrop-filter: blur(4px);
+  backdrop-filter: blur(var(--blur-chip));
   color: var(--accent-light);
   font-size: var(--fs-xs);
   font-weight: 600;

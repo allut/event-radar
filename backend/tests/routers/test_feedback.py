@@ -3,6 +3,8 @@ import http
 
 import pytest
 
+from app.constants import VALID_SIGNALS
+
 
 class TestRecordFeedback:
     @pytest.mark.asyncio
@@ -23,26 +25,20 @@ class TestRecordFeedback:
         mock_db.commit.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_all_valid_signals_accepted(self, make_user, make_event):
-        from app.constants import VALID_SIGNALS
+    @pytest.mark.parametrize("signal", sorted(VALID_SIGNALS))
+    async def test_all_valid_signals_accepted(
+        self, signal, mock_db, make_user, make_event
+    ):
         from app.routers.feedback import record_feedback, FeedbackBody
-        from unittest.mock import AsyncMock, MagicMock
 
-        for signal in VALID_SIGNALS:
-            db = AsyncMock()
-            db.get = AsyncMock(return_value=make_event(1))
-            db.scalar = AsyncMock()
-            db.scalars = AsyncMock()
-            db.execute = AsyncMock()
-            db.add = MagicMock()
-            db.commit = AsyncMock()
-            db.refresh = AsyncMock()
-            result = await record_feedback(
-                body=FeedbackBody(event_id=1, signal=signal),
-                current_user=make_user(),
-                db=db,
-            )
-            assert result == {"ok": True}
+        mock_db.get.return_value = make_event(1)
+
+        result = await record_feedback(
+            body=FeedbackBody(event_id=1, signal=signal),
+            current_user=make_user(),
+            db=mock_db,
+        )
+        assert result == {"ok": True}
 
     @pytest.mark.asyncio
     async def test_invalid_signal_raises_422(self, mock_db, make_user, make_event):

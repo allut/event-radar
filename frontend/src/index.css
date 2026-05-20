@@ -65,6 +65,14 @@
 
   /* Shape */
   --radius-pill: 100px;
+  --radius-sm: 3px;
+
+  /* Layering */
+  --z-sticky: 10;
+
+  /* Backdrop blur */
+  --blur-overlay: 8px;  /* sticky topbars */
+  --blur-chip: 4px;     /* price chips over imagery */
 
   /* Spinner sizes */
   --spinner-size: 40px;

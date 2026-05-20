@@ -52,7 +52,7 @@
   bottom: 10px;
   left: 12px;
   background: var(--bg-overlay-soft);
-  backdrop-filter: blur(4px);
+  backdrop-filter: blur(var(--blur-chip));
   color: var(--accent-light);
   font-size: var(--fs-xs);
   font-weight: 600;

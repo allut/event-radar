@@ -1,8 +1,6 @@
 .card {
+  composes: card from './shared/Card.module.css';
   position: relative;
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
   transition: border-color var(--transition), transform var(--transition), box-shadow var(--transition);
   overflow: hidden;
 }

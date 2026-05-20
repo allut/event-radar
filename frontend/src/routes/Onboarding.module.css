@@ -11,10 +11,10 @@
   padding: 1.25rem 2rem;
   border-bottom: 1px solid var(--border);
   background: var(--bg-overlay);
-  backdrop-filter: blur(8px);
+  backdrop-filter: blur(var(--blur-overlay));
   position: sticky;
   top: 0;
-  z-index: 10;
+  z-index: var(--z-sticky);
 }
 
 .radar {
