@@ -14,10 +14,12 @@ On match: assign dedup_group_id = min(event_id) across the connected component
 
 import logging
 from datetime import datetime, timedelta
+from typing import Iterable, Optional
 
 from rapidfuzz.fuzz import token_set_ratio
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
 from app.constants import (
     SECONDS_PER_HOUR,
@@ -87,10 +89,17 @@ def build_cluster_assignments(parent: dict[int, int], ids: list[int]) -> dict[in
     return assignments
 
 
-def cluster_events(events: list[Event]) -> dict[int, int]:
+def cluster_events(
+    events: list[Event],
+    candidate_pair_ids: Optional[Iterable[tuple[int, int]]] = None,
+) -> dict[int, int]:
     """Return {event_id: dedup_group_id} for events that share a group.
 
     Events with no duplicates are NOT included in the result.
+
+    If ``candidate_pair_ids`` is provided, only those (a_id, b_id) tuples are
+    fuzzy-checked (typically pre-filtered by SQL on the time window). Without
+    it, falls back to the original O(N²) Python enumeration.
     """
     n = len(events)
     if n < 2:
@@ -100,10 +109,21 @@ def cluster_events(events: list[Event]) -> dict[int, int]:
     parent: dict[int, int] = {eid: eid for eid in ids}
 
     pair_count = 0
-    for i in range(n):
-        for j in range(i + 1, n):
-            if is_candidate_pair(events[i], events[j]):
-                _union(parent, events[i].id, events[j].id)
+    if candidate_pair_ids is None:
+        for i in range(n):
+            for j in range(i + 1, n):
+                if is_candidate_pair(events[i], events[j]):
+                    _union(parent, events[i].id, events[j].id)
+                    pair_count += 1
+    else:
+        events_by_id: dict[int, Event] = {e.id: e for e in events}
+        for a_id, b_id in candidate_pair_ids:
+            a = events_by_id.get(a_id)
+            b = events_by_id.get(b_id)
+            if a is None or b is None:
+                continue
+            if is_candidate_pair(a, b):
+                _union(parent, a.id, b.id)
                 pair_count += 1
 
     if pair_count:
@@ -149,7 +169,33 @@ async def run_dedup_pass(db: AsyncSession) -> dict:
     if not events:
         return {"total": 0, "grouped": 0, "pairs": 0}
 
-    assignments = cluster_events(events)
+    # SQL pre-filter: self-join restricted to pairs within TIME_WINDOW_HOURS.
+    # Result set is small (~O(N·k) where k is avg events in the window), but
+    # the join itself is bounded by the existing (starts_at, status) B-tree:
+    # the planner can range-scan b on a sargable BETWEEN around a.starts_at.
+    a = aliased(Event)
+    b = aliased(Event)
+    window = timedelta(seconds=TIME_WINDOW_HOURS * SECONDS_PER_HOUR)
+    pair_rows = (
+        await db.execute(
+            select(a.id, b.id)
+            .join(
+                b,
+                (a.id < b.id)
+                & (b.starts_at >= a.starts_at - window)
+                & (b.starts_at <= a.starts_at + window),
+            )
+            .where(
+                a.status != EVENT_STATUS_CANCELLED,
+                b.status != EVENT_STATUS_CANCELLED,
+                a.starts_at >= cutoff,
+                b.starts_at >= cutoff,
+            )
+        )
+    ).all()
+    candidate_pair_ids = [(row[0], row[1]) for row in pair_rows]
+
+    assignments = cluster_events(events, candidate_pair_ids=candidate_pair_ids)
 
     updated = 0
     for event in events:

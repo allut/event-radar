@@ -87,11 +87,21 @@ def _parse_classification(raw: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-async def classify_event(event: Event, db: AsyncSession) -> bool:
+async def classify_event(
+    event: Event,
+    db: AsyncSession,
+    existing_classification: EventClassification | None = None,
+    prefetched: bool = False,
+) -> bool:
     """Classify a single event and persist the result.
 
     Returns True on success, False if LLM call failed.
     The caller must commit the session.
+
+    ``prefetched=True`` means the caller has already looked up any existing
+    classification (passed via ``existing_classification``). When True, no
+    per-event ``SELECT EventClassification`` is issued — the N+1 in the batch
+    path collapses to one bulk prefetch.
     """
     prompt = _build_classify_prompt(event)
     try:
@@ -102,9 +112,12 @@ async def classify_event(event: Event, db: AsyncSession) -> bool:
 
     parsed = _parse_classification(raw)
 
-    existing = await db.scalar(
-        select(EventClassification).where(EventClassification.event_id == event.id)
-    )
+    if prefetched:
+        existing = existing_classification
+    else:
+        existing = await db.scalar(
+            select(EventClassification).where(EventClassification.event_id == event.id)
+        )
     if existing is not None:
         existing.categories = parsed["categories"]
         existing.vibes = parsed["vibes"]
@@ -171,8 +184,27 @@ async def classify_pending(
     succeeded = 0
     failed = 0
 
+    # Bulk prefetch existing classifications for the whole batch in one query
+    # (replaces N per-event SELECTs inside classify_event).
+    existing_map: dict[int, EventClassification] = {}
+    if events:
+        event_ids = [e.id for e in events]
+        existing_rows = (
+            await db.scalars(
+                select(EventClassification).where(
+                    EventClassification.event_id.in_(event_ids)
+                )
+            )
+        ).all()
+        existing_map = {row.event_id: row for row in existing_rows}
+
     for event in events:
-        ok = await classify_event(event, db)
+        ok = await classify_event(
+            event,
+            db,
+            existing_classification=existing_map.get(event.id),
+            prefetched=True,
+        )
         if ok:
             succeeded += 1
         else:

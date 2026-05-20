@@ -48,12 +48,12 @@ async def record_feedback(
         )
     )
 
-    # Invalidate cached score — next build_daily_feeds will recompute from scratch
+    # Invalidate ALL cached scores for this user — not just the (user, event)
+    # row. A signal on event A also moves the indirect-feedback term on any
+    # other event that shares a category with A; per-row invalidation would
+    # leave those neighbours' cached scores stale until the next direct signal.
     await db.execute(
-        delete(UserEventScore).where(
-            UserEventScore.user_id == current_user.id,
-            UserEventScore.event_id == body.event_id,
-        )
+        delete(UserEventScore).where(UserEventScore.user_id == current_user.id)
     )
 
     await db.commit()

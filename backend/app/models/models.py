@@ -64,6 +64,7 @@ class User(Base):
 
 class AuthMagicLink(Base):
     __tablename__ = "auth_magic_links"
+    __table_args__ = (Index("ix_auth_magic_links_user_id", "user_id"),)
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     user_id: Mapped[int] = mapped_column(
@@ -218,6 +219,14 @@ class Event(Base):
 
 class EventSource(Base):
     __tablename__ = "event_sources"
+    __table_args__ = (
+        Index(
+            "ix_event_sources_source_external",
+            "source_id",
+            "external_id",
+            unique=True,
+        ),
+    )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     event_id: Mapped[int] = mapped_column(

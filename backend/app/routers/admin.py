@@ -3,12 +3,16 @@
 import logging
 import secrets
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from sqlalchemy import func, select
 
 from app.config import settings
-from app.constants import EVENT_STATUS_CANCELLED
+from app.constants import (
+    ADMIN_DEDUP_GROUPS_MAX_PAGE_SIZE,
+    ADMIN_DEDUP_GROUPS_PAGE_SIZE,
+    EVENT_STATUS_CANCELLED,
+)
 from app.db import AsyncSessionLocal
 from app.ingestion.jobs import (
     classify_pending_job,
@@ -98,18 +102,60 @@ async def admin_dedup_run() -> dict:
 
 
 @router.get("/dedup/groups", dependencies=[Depends(_require_admin)])
-async def admin_dedup_groups() -> dict:
+async def admin_dedup_groups(
+    limit: int = Query(
+        ADMIN_DEDUP_GROUPS_PAGE_SIZE,
+        ge=1,
+        le=ADMIN_DEDUP_GROUPS_MAX_PAGE_SIZE,
+    ),
+    offset: int = Query(0, ge=0),
+) -> dict:
     """Return events grouped by dedup_group_id for manual eyeballing.
 
-    Only returns events that are part of a dedup group (dedup_group_id IS NOT NULL).
-    Sorted by group ID then event ID so each cluster appears together.
+    Paginated by *group* (not row), so a noisy group with many duplicates does
+    not consume the whole page. ``offset`` and ``limit`` apply to the sorted
+    list of distinct dedup_group_ids.
     """
     async with AsyncSessionLocal() as db:
+        total_groups = (
+            await db.scalar(
+                select(func.count(func.distinct(Event.dedup_group_id))).where(
+                    Event.dedup_group_id.is_not(None),
+                    Event.status != EVENT_STATUS_CANCELLED,
+                )
+            )
+        ) or 0
+
+        page_group_ids = (
+            await db.scalars(
+                select(Event.dedup_group_id)
+                .where(
+                    Event.dedup_group_id.is_not(None),
+                    Event.status != EVENT_STATUS_CANCELLED,
+                )
+                .distinct()
+                .order_by(Event.dedup_group_id)
+                .limit(limit)
+                .offset(offset)
+            )
+        ).all()
+
+        if not page_group_ids:
+            return {
+                "group_count": 0,
+                "event_count": 0,
+                "total_groups": total_groups,
+                "limit": limit,
+                "offset": offset,
+                "has_more": False,
+                "groups": [],
+            }
+
         rows = (
             await db.scalars(
                 select(Event)
                 .where(
-                    Event.dedup_group_id.is_not(None),
+                    Event.dedup_group_id.in_(page_group_ids),
                     Event.status != EVENT_STATUS_CANCELLED,
                 )
                 .order_by(Event.dedup_group_id, Event.id)
@@ -132,6 +178,10 @@ async def admin_dedup_groups() -> dict:
     return {
         "group_count": len(groups),
         "event_count": len(rows),
+        "total_groups": total_groups,
+        "limit": limit,
+        "offset": offset,
+        "has_more": offset + len(page_group_ids) < total_groups,
         "groups": [
             {"dedup_group_id": gid, "events": members}
             for gid, members in sorted(groups.items())

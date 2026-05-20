@@ -16,6 +16,7 @@ from datetime import datetime, timedelta
 from typing import Optional, Sequence
 
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -50,6 +51,7 @@ from app.models.models import (
     EventClassification,
     User,
     UserEventFeedback,
+    UserEventScore,
     UserPersona,
 )
 from app.routers.utils import select_events_with_classification
@@ -66,12 +68,20 @@ class _FeedbackRow:
     categories: list[str]
     dedup_group_id: Optional[int]
     created_at: datetime
+    # Precomputed frozenset of `categories` — hoisted out of the inner scoring
+    # loop so we don't rebuild it once per (event × feedback-row) iteration.
+    category_set: frozenset[str] = field(default_factory=frozenset)
+
+    def __post_init__(self) -> None:
+        if not self.category_set and self.categories:
+            self.category_set = frozenset(self.categories)
 
 
 @dataclass
 class FeedbackContext:
     rows: list[_FeedbackRow] = field(default_factory=list)
     disliked_groups: frozenset[int] = field(default_factory=frozenset)
+    disliked_event_ids: frozenset[int] = field(default_factory=frozenset)
 
     @classmethod
     def from_orm_rows(cls, orm_rows: list[UserEventFeedback]) -> "FeedbackContext":
@@ -97,7 +107,14 @@ class FeedbackContext:
             for row in rows
             if row.signal == "dislike" and row.dedup_group_id is not None
         )
-        return cls(rows=rows, disliked_groups=disliked_groups)
+        disliked_event_ids = frozenset(
+            row.event_id for row in rows if row.signal == "dislike"
+        )
+        return cls(
+            rows=rows,
+            disliked_groups=disliked_groups,
+            disliked_event_ids=disliked_event_ids,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -211,7 +228,7 @@ def feedback_signal(
                 signals.append(decay)
             elif row.signal == "dislike":
                 signals.append(-1.0)
-        elif row.signal == "like" and event_cat_set & set(row.categories):
+        elif row.signal == "like" and event_cat_set & row.category_set:
             # Indirect: liked another event that shares a category with this one
             signals.append(FEEDBACK_INDIRECT_WEIGHT * decay)
 
@@ -302,6 +319,11 @@ async def build_daily_feeds(db: AsyncSession) -> dict:
     """
     Build personalized Daily 5 feeds for all active users.
     Runs at 06:00 Europe/Tallinn via APScheduler.
+
+    Bulk-loads all per-user data in a fixed number of queries (independent of
+    user count) and caches per-(user, event) scores in `user_event_scores`.
+    The feedback router invalidates cache rows on signal change so reused
+    scores reflect the latest signal-state at write time.
     Returns summary dict for logging.
     """
     now = datetime.now(TALLINN_TZ)
@@ -318,30 +340,36 @@ async def build_daily_feeds(db: AsyncSession) -> dict:
             )
         )
     ).all()
+    candidate_event_ids = [e.id for e in event_rows]
 
     users = (await db.scalars(select(User))).all()
+    user_ids = [u.id for u in users]
 
-    built = 0
-    empty = 0
+    if not users:
+        return {"built": 0, "empty": 0, "total_users": 0, "candidate_events": 0}
 
-    for user in users:
-        # Persona weights with affinity vectors
+    # --- Bulk-fetch personas grouped by user_id ---
+    personas_by_user: dict[int, list[tuple[float, dict]]] = {uid: [] for uid in user_ids}
+    if user_ids:
         up_rows = (
             await db.scalars(
                 select(UserPersona)
-                .where(UserPersona.user_id == user.id)
+                .where(UserPersona.user_id.in_(user_ids))
                 .options(selectinload(UserPersona.persona))
             )
         ).all()
-        user_persona_weights: list[tuple[float, dict]] = [
-            (row.weight, row.persona.affinity_vector) for row in up_rows
-        ]
+        for row in up_rows:
+            personas_by_user.setdefault(row.user_id, []).append(
+                (row.weight, row.persona.affinity_vector)
+            )
 
-        # Feedback with event + classification for indirect category matching
+    # --- Bulk-fetch feedback grouped by user_id ---
+    fb_by_user: dict[int, list[UserEventFeedback]] = {uid: [] for uid in user_ids}
+    if user_ids:
         fb_rows = (
             await db.scalars(
                 select(UserEventFeedback)
-                .where(UserEventFeedback.user_id == user.id)
+                .where(UserEventFeedback.user_id.in_(user_ids))
                 .options(
                     selectinload(UserEventFeedback.event).selectinload(
                         Event.classification
@@ -349,27 +377,84 @@ async def build_daily_feeds(db: AsyncSession) -> dict:
                 )
             )
         ).all()
-        ctx = FeedbackContext.from_orm_rows(list(fb_rows))
+        for row in fb_rows:
+            fb_by_user.setdefault(row.user_id, []).append(row)
 
-        # Score each candidate event
+    # --- Bulk-fetch today's DailyFeed rows (existing -> update; missing -> insert) ---
+    daily_by_user: dict[int, DailyFeed] = {}
+    if user_ids:
+        df_rows = (
+            await db.scalars(
+                select(DailyFeed).where(
+                    DailyFeed.user_id.in_(user_ids),
+                    DailyFeed.feed_date == today,
+                )
+            )
+        ).all()
+        for row in df_rows:
+            daily_by_user[row.user_id] = row
+
+    # --- Bulk-fetch cached scores for the (user_id, event_id) cartesian we care about ---
+    # The feedback router DELETEs the (user, event) row on signal change, so an
+    # existing row means "score reflects the most recent signal seen for that event".
+    score_cache: dict[tuple[int, int], float] = {}
+    if user_ids and candidate_event_ids:
+        ues_rows = (
+            await db.scalars(
+                select(UserEventScore).where(
+                    UserEventScore.user_id.in_(user_ids),
+                    UserEventScore.event_id.in_(candidate_event_ids),
+                )
+            )
+        ).all()
+        for row in ues_rows:
+            score_cache[(row.user_id, row.event_id)] = row.score
+
+    built = 0
+    empty = 0
+    new_score_rows: list[dict] = []
+    scores_reused = 0
+
+    for user in users:
+        user_persona_weights = personas_by_user.get(user.id, [])
+        ctx = FeedbackContext.from_orm_rows(list(fb_by_user.get(user.id, [])))
+
         scored: list[tuple[float, Event]] = []
         for event in event_rows:
+            cached = score_cache.get((user.id, event.id))
+            if cached is not None:
+                # Re-check dislike independently of cache freshness: covers
+                # both direct event dislikes and dedup_group dislikes so the
+                # cache path stays correct under any future invalidation
+                # tightening.
+                if event.id in ctx.disliked_event_ids or (
+                    event.dedup_group_id is not None
+                    and event.dedup_group_id in ctx.disliked_groups
+                ):
+                    continue
+                scored.append((cached, event))
+                scores_reused += 1
+                continue
+
             s = score_event(user_persona_weights, ctx, event, now)
-            if s is not None:
-                scored.append((s, event))
+            if s is None:
+                continue
+            scored.append((s, event))
+            new_score_rows.append(
+                {
+                    "user_id": user.id,
+                    "event_id": event.id,
+                    "score": s,
+                    "computed_at": now,
+                }
+            )
 
         top_events = _mmr_pick(
             scored, n=DAILY_5_COUNT, max_per_category=DAILY_5_MAX_PER_CATEGORY
         )
         event_ids = [e.id for e in top_events]
 
-        # Upsert daily feed (rebuild if already exists for today)
-        existing = await db.scalar(
-            select(DailyFeed).where(
-                DailyFeed.user_id == user.id,
-                DailyFeed.feed_date == today,
-            )
-        )
+        existing = daily_by_user.get(user.id)
         if existing:
             existing.event_ids = event_ids
             existing.built_at = now
@@ -388,10 +473,21 @@ async def build_daily_feeds(db: AsyncSession) -> dict:
         else:
             empty += 1
 
+    # Bulk upsert newly computed (user_id, event_id) scores.
+    if new_score_rows:
+        stmt = pg_insert(UserEventScore).values(new_score_rows)
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["user_id", "event_id"],
+            set_={"score": stmt.excluded.score, "computed_at": stmt.excluded.computed_at},
+        )
+        await db.execute(stmt)
+
     await db.commit()
     return {
         "built": built,
         "empty": empty,
         "total_users": len(users),
         "candidate_events": len(event_rows),
+        "scores_written": len(new_score_rows),
+        "scores_reused": scores_reused,
     }

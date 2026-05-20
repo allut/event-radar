@@ -62,6 +62,13 @@ RESEND_ERROR_SNIPPET_LEN = 200
 # Email i18n strings (subjects, labels, templates) live in app/i18n.py.
 DIGEST_SEND_HOUR = 7  # 07:00 Europe/Tallinn, one hour after build_daily_feeds
 DIGEST_MAX_WHY_GO_BULLETS = 3
+# Concurrency cap when fanning out digest sends — bounded by Resend free-tier
+# rate (10 req/s). Eight in-flight sends leaves headroom for occasional retries.
+DIGEST_SEND_CONCURRENCY: int = 8
+
+# Admin endpoint pagination
+ADMIN_DEDUP_GROUPS_PAGE_SIZE: int = 50
+ADMIN_DEDUP_GROUPS_MAX_PAGE_SIZE: int = 500
 
 # Auth tokens
 AUTH_MAGIC_SALT = "magic-link-v1"

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import html as html_lib
 import http
 import logging
@@ -15,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.constants import (
     DIGEST_MAX_WHY_GO_BULLETS,
+    DIGEST_SEND_CONCURRENCY,
     RESEND_ERROR_SNIPPET_LEN,
     RESEND_SEND_URL,
     RESEND_TIMEOUT_SECONDS,
@@ -222,21 +224,43 @@ async def send_daily_digests(db: AsyncSession) -> dict[str, int]:
     event_map: dict[int, Event] = {e.id: e for e in events}
 
     user_map: dict[int, User] = {u.id: u for u in users}
-    sent = skipped = 0
+    semaphore = asyncio.Semaphore(DIGEST_SEND_CONCURRENCY)
 
-    for uid, eids in feed_by_user.items():
+    async def _send_one(uid: int, eids: list[int]) -> str:
+        """Returns 'sent' | 'skipped'."""
         user = user_map.get(uid)
         if not user:
-            continue
+            return "skipped"
         ordered_events = [event_map[eid] for eid in eids if eid in event_map]
         if not ordered_events:
-            skipped += 1
-            continue
-        try:
-            await send_digest_email(user.email, user.locale, ordered_events, today)
-            sent += 1
-        except Exception:
-            log.exception("Failed to send digest to user %d", uid)
-            skipped += 1
+            return "skipped"
+        async with semaphore:
+            try:
+                await send_digest_email(
+                    user.email, user.locale, ordered_events, today
+                )
+                return "sent"
+            except Exception:
+                log.exception("Failed to send digest to user %d", uid)
+                return "skipped"
 
-    return {"sent": sent, "skipped": skipped, "total_opted_in": len(users)}
+    # return_exceptions=True is defence-in-depth: _send_one already catches
+    # every send error and returns "skipped", but a programming error inside
+    # the wrapper itself would otherwise abort the whole batch.
+    results = await asyncio.gather(
+        *(_send_one(uid, eids) for uid, eids in feed_by_user.items()),
+        return_exceptions=True,
+    )
+    sent = sum(1 for r in results if r == "sent")
+    errored = sum(1 for r in results if isinstance(r, Exception))
+    skipped = len(results) - sent - errored
+    for r in results:
+        if isinstance(r, Exception):
+            log.error("digest fanout coroutine raised", exc_info=r)
+
+    return {
+        "sent": sent,
+        "skipped": skipped,
+        "errored": errored,
+        "total_opted_in": len(users),
+    }
