@@ -1,5 +1,4 @@
 """Tests for LLM classifier — parse_classification and why_go localization."""
-import pytest
 
 from app.llm.classifier import _parse_classification
 

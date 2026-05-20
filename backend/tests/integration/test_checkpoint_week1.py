@@ -63,7 +63,7 @@ async def test_dedup_no_large_groups(client, admin_auth):
 @pytest.mark.asyncio
 async def test_auth_login_flow(client, int_db):
     """Bypass email delivery by inserting a magic-link record directly into the DB."""
-    from sqlalchemy import delete, select
+    from sqlalchemy import delete
 
     from app.auth.tokens import generate_magic_token
     from app.models.models import AuthMagicLink, User

@@ -1,7 +1,6 @@
 """Tests for PiletileviAdapter — normalize(), fetch_raw(), and _parse_piletilevi_date()."""
 import pytest
-from datetime import datetime
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import httpx
 

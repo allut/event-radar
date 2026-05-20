@@ -1,5 +1,10 @@
 line-length = 88
 
 [lint]
-select = ["E", "F", "W"]
+select = ["E", "F", "W", "Q"]
 ignore = ["E501"]
+
+[lint.flake8-quotes]
+inline-quotes = "double"
+multiline-quotes = "double"
+docstring-quotes = "double"

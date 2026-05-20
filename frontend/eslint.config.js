@@ -34,6 +34,8 @@ export default tseslint.config(
       ],
       'react/prop-types': 'off',
       'react/no-array-index-key': 'error',
+      quotes: ['error', 'single', { avoidEscape: true, allowTemplateLiterals: true }],
+      'jsx-quotes': ['error', 'prefer-double'],
     },
   },
 )

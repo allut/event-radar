@@ -114,6 +114,7 @@ This project follows production best practices throughout:
 - **Error visibility** — HTTP failures in source adapters propagate to `SourceAdapter.run()` so `IngestionRun.error` and `source.last_status` are always set correctly. Never swallow exceptions in `fetch_raw()`.
 - **Taxonomy** — LLM classification uses the fixed 12-category / 10-vibe frozensets in `app/llm/taxonomy.py`. Use `validate_categories()` / `validate_vibes()` before persisting any LLM output.
 - **Migrations** — always chain migrations correctly (`down_revision = "PREV"`). Keep migrations small and reversible.
+- **Quote style** — Backend Python uses **double quotes** (enforced by Ruff `Q` rules in `backend/ruff.toml`: `inline-quotes`, `multiline-quotes`, `docstring-quotes` all set to `double`). Frontend TypeScript uses **single quotes** for JS/TS string literals and **double quotes** for JSX attributes (enforced by ESLint `quotes: ['error', 'single', { avoidEscape: true, allowTemplateLiterals: true }]` + `'jsx-quotes': ['error', 'prefer-double']` in `frontend/eslint.config.js`). Template literals and strings containing the preferred quote character may use the alternate form (`avoidEscape`). Run `ruff check --fix` and `eslint --fix` before committing.
 
 ## Conventions
 
