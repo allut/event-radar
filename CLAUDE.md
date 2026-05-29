@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**Event Radar** is an AI-powered event discovery platform for Tallinn, Estonia. It ingests events from multiple sources, deduplicates and classifies them via LLM, then delivers a personalized "Daily 5" curated feed per user. Days 1–20 complete. Day 21 = soft launch (pending E2E QA). See `pending_items.md` for QA checklist.
+**Event Radar** is an AI-powered event discovery platform for Tallinn, Estonia. It ingests events from multiple sources, deduplicates and classifies them via LLM, then delivers a personalized "Daily 5" curated feed per user. Days 1–20 complete. Day 21 = soft launch (pending E2E QA).
 
 The authoritative spec is `plan.md`.
 
@@ -33,13 +33,19 @@ npm run lint       # ESLint (flat config in eslint.config.js)
 ## Architecture
 
 ```
-FastAPI Backend (single process on Render free tier)
-  ├── Routers: /auth  /admin  /onboarding  /events  /feed  /feedback  /users/me  /settings  /webhooks
-  └── APScheduler (embedded, kept alive by Render Cron Job ping every 15 min)
+Vite + React SPA (frontend, port 5173 in dev)
+  ├── Routes: /login  /auth/verify  /onboarding  /  /events/:id  /settings
+  ├── State: React Query (@tanstack/react-query) for server state
+  └── API client: frontend/src/api/client.ts (X-Session-Token header auth)
+        ↓
+FastAPI Backend (single process on Render free tier, port 8000 in dev)
+  ├── Routers: /auth  /admin  /onboarding  /events  /feed  /feedback  /users/me  /webhooks
+  └── APScheduler (embedded, kept alive by Render Cron Job ping /internal/tick every 15 min)
       ├── Weekly Sun 03:00: sync_fienta_organizers (auto-discover new organizers)
       ├── Hourly:   ingest_all_enabled
       ├── 6-hourly: dedup_pass + classify_pending
-      └── Daily 06:00: build_daily_feeds
+      ├── Daily 06:00: build_daily_feeds
+      └── Daily 07:00: send_daily_digests (one hour after feeds are built)
         ↓
 Neon Postgres (eu-central-1, free tier, pgvector available for v1.1)
         ↓
@@ -89,7 +95,9 @@ LLM Router: Groq (primary) → Cerebras → Mistral (fallback chain)
 - Routes (pages) in `frontend/src/routes/`: Login, AuthVerify, Onboarding, Feed, EventDetail, Settings, NotFound.
 - Shared components in `frontend/src/components/`: EventCard, PersonaCard, ErrorBoundary, PageState, LocaleSelector, FeedbackButtonRow, EmptyState.
 - Shared CSS base classes in `frontend/src/components/shared/`: `Card.module.css` (`.card`, `.cardAccentTop`, `.cardDangerTop`, `.cardElevated`, `.cardPage`) and `Button.module.css` (`.btnPrimary`, `.btnOutline`). Compose from these via CSS Modules `composes` — never copy-paste the same card/button rules into route or component stylesheets.
-- API calls in `frontend/src/routes/client.ts`. React Query used for server state (`@tanstack/react-query`).
+- API client in `frontend/src/api/client.ts`. React Query used for server state (`@tanstack/react-query`).
+- Custom hooks in `frontend/src/hooks/`: `useFeedback.ts` (feedback signal dispatch).
+- Auth helpers in `frontend/src/lib/auth.ts` (token storage, `isAuthenticated()`).
 
 ## Auth
 
