@@ -92,9 +92,11 @@ LLM Router: Groq (primary) → Cerebras → Mistral (fallback chain)
 
 ## Frontend Structure
 
-- Routes (pages) in `frontend/src/routes/`: Login, AuthVerify, Onboarding, Feed, EventDetail, Settings, NotFound.
-- Shared components in `frontend/src/components/`: EventCard, PersonaCard, ErrorBoundary, PageState, LocaleSelector, FeedbackButtonRow, EmptyState.
-- Shared CSS base classes in `frontend/src/components/shared/`: `Card.module.css` (`.card`, `.cardAccentTop`, `.cardDangerTop`, `.cardElevated`, `.cardPage`) and `Button.module.css` (`.btnPrimary`, `.btnOutline`). Compose from these via CSS Modules `composes` — never copy-paste the same card/button rules into route or component stylesheets.
+Each component and route lives in its own folder containing `Name.tsx`, `Name.module.css`, and a one-line `index.ts` barrel (`export { default } from './Name'`). The barrel keeps import strings short — callers write `./components/EventCard`, not `./components/EventCard/EventCard`.
+
+- Routes (pages) in `frontend/src/routes/`: `Login/`, `AuthVerify/`, `Onboarding/`, `Feed/`, `EventDetail/`, `Settings/`, `NotFound/`.
+- Shared components in `frontend/src/components/`: `EventCard/`, `PersonaCard/`, `ErrorBoundary/`, `PageState/`, `LocaleSelector/`, `FeedbackButtonRow/`, `EmptyState/`. `EventCard/index.ts` also re-exports `type EventData`.
+- Shared CSS base classes in `frontend/src/components/shared/`: `Card.module.css` (`.card`, `.cardAccentTop`, `.cardDangerTop`, `.cardElevated`, `.cardPage`) and `Button.module.css` (`.btnPrimary`, `.btnOutline`). Compose from these via CSS Modules `composes` — never copy-paste the same card/button rules into route or component stylesheets. Component CSS composes from `'../shared/X.module.css'`; route CSS from `'../../components/shared/X.module.css'`.
 - API client in `frontend/src/api/client.ts`. React Query used for server state (`@tanstack/react-query`).
 - Custom hooks in `frontend/src/hooks/`: `useFeedback.ts` (feedback signal dispatch).
 - Auth helpers in `frontend/src/lib/auth.ts` (token storage, `isAuthenticated()`).

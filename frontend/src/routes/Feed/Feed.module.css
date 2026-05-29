@@ -1,0 +1,107 @@
+.page {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.topBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.125rem 2rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-overlay);
+  backdrop-filter: blur(var(--blur-overlay));
+  position: sticky;
+  top: 0;
+  z-index: var(--z-sticky);
+}
+
+.logoWrap {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.radar {
+  font-size: 1.1rem;
+  color: var(--accent);
+  animation: breathe 3s ease-in-out infinite;
+}
+
+.brand {
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.topActions {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+}
+
+.settingsLink {
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+  text-decoration: none;
+  letter-spacing: var(--tracking-normal);
+  transition: color var(--transition);
+}
+
+.settingsLink:hover {
+  color: var(--accent-light);
+}
+
+.logoutBtn {
+  composes: btnOutline from '../../components/shared/Button.module.css';
+  padding: 0.3125rem 0.875rem;
+  font-size: var(--fs-sm);
+}
+
+.main {
+  flex: 1;
+  max-width: 680px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 2.5rem 1.5rem 4rem;
+}
+
+.feedHeader {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  margin-bottom: 2rem;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.heading {
+  font-family: var(--font-display);
+  font-size: var(--heading-xl);
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: var(--tracking-tighter);
+  margin-bottom: 0.2rem;
+}
+
+.date {
+  color: var(--text-muted);
+  font-size: var(--fs-md);
+  text-transform: capitalize;
+}
+
+.builtAt {
+  font-size: var(--fs-xs);
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
