@@ -6,12 +6,12 @@ Stage 2: LLM tiebreaker on candidate pairs only (1 call per pair, cached).
 Merge condition: LLM returns ``{"same": true, "confidence": ≥ 0.7}``.
 On confirm: union-find produces clusters → ``dedup_group_id = min(event_id)``.
 
-STATUS: NOT YET WIRED — reserved for a future iteration.
-The scheduled dedup job (main.py → jobs.dedup_pass → rules.run_dedup_pass) currently
-runs the rule-based stage only. This module implements stage 2 as described in
-plan.md/CLAUDE.md but is not yet invoked anywhere.
-To activate: call ``run_dedup_pass_llm()`` from ``jobs.dedup_pass`` in place of
-``run_dedup_pass()``. Until then this is intentionally inactive, not dead code.
+STATUS: WIRED — the scheduled dedup job (main.py → jobs.dedup_pass) calls
+``run_dedup_pass_llm()``. Stage 1's *time* pre-filter is the shared SQL
+self-join in ``rules.candidate_pair_ids_in_window``; the fuzzy title/venue check
+(``rules.is_candidate_pair``) then runs in Python on those pairs; stage 2 (this
+module) confirms each surviving candidate with the LLM. When no LLM provider is
+configured, the pass degrades to the rule-only ``rules.run_dedup_pass``.
 """
 
 import logging
@@ -20,18 +20,22 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.constants import (
-    DEDUP_LOOKBACK_DAYS,
     EVENT_STATUS_CANCELLED,
     LLM_DEDUP_CONFIDENCE_THRESHOLD,
     LLM_DEDUP_MAX_CANDIDATE_PAIRS_PER_PASS,
     LLM_DEDUP_PROMPT_TEMPLATE,
     LLM_DEDUP_TITLE_MAX_LEN,
     LLM_DEDUP_VENUE_MAX_LEN,
-    TALLINN_TZ,
-    TIME_WINDOW_HOURS,
 )
-from app.dedup.rules import _union, build_cluster_assignments, is_candidate_pair
-from app.llm.router import LLMError, llm_json
+from app.dedup.rules import (
+    _union,
+    build_cluster_assignments,
+    candidate_pair_ids_in_window,
+    dedup_window_cutoff,
+    is_candidate_pair,
+    run_dedup_pass,
+)
+from app.llm.router import LLMError, llm_available, llm_json
 from app.models.models import Event
 
 log = logging.getLogger(__name__)
@@ -102,13 +106,19 @@ async def run_dedup_pass_llm(db: AsyncSession) -> dict:
     Returns a summary dict with ``total``, ``candidate_pairs``, ``llm_confirmed``,
     ``grouped``, ``groups``, ``updated`` keys.
     """
-    from datetime import datetime, timedelta
+    # Graceful degradation: with no LLM provider configured (local dev, lapsed
+    # keys), every LLM call would fail and merge nothing. Fall back to the
+    # rule-only stage-1 pass instead so dedup still groups obvious duplicates.
+    if not llm_available():
+        log.info("dedup-llm: no LLM provider configured — falling back to rule-only pass")
+        summary = await run_dedup_pass(db)
+        # Keep the documented stage-2 summary shape stable regardless of which
+        # path ran, so admin/monitoring consumers see the same keys either way.
+        summary.setdefault("candidate_pairs", 0)
+        summary.setdefault("llm_confirmed", 0)
+        return summary
 
-    cutoff = (
-        datetime.now(tz=TALLINN_TZ)
-        - timedelta(days=DEDUP_LOOKBACK_DAYS)
-        - timedelta(hours=TIME_WINDOW_HOURS)
-    )
+    cutoff = dedup_window_cutoff()
     rows = (
         await db.scalars(
             select(Event)
@@ -129,31 +139,34 @@ async def run_dedup_pass_llm(db: AsyncSession) -> dict:
             "updated": 0,
         }
 
-    n = len(events)
     ids = [e.id for e in events]
     parent: dict[int, int] = {eid: eid for eid in ids}
+    events_by_id: dict[int, Event] = {e.id: e for e in events}
+
+    # Stage 1: SQL time pre-filter (shared with the rule-only pass) → Python
+    # fuzzy title/venue check. Stage 2: LLM tiebreaker on surviving candidates.
+    candidate_pair_ids = await candidate_pair_ids_in_window(db, cutoff)
 
     candidate_pairs = 0
     llm_confirmed = 0
-    capped = False
 
-    for i in range(n):
-        if capped:
+    for a_id, b_id in candidate_pair_ids:
+        a = events_by_id.get(a_id)
+        b = events_by_id.get(b_id)
+        if a is None or b is None:
+            continue
+        if not is_candidate_pair(a, b):
+            continue
+        if candidate_pairs >= LLM_DEDUP_MAX_CANDIDATE_PAIRS_PER_PASS:
+            log.warning(
+                "dedup-llm: hit %d candidate pair cap; remaining pairs skipped this pass",
+                LLM_DEDUP_MAX_CANDIDATE_PAIRS_PER_PASS,
+            )
             break
-        for j in range(i + 1, n):
-            if not is_candidate_pair(events[i], events[j]):
-                continue
-            candidate_pairs += 1
-            if candidate_pairs > LLM_DEDUP_MAX_CANDIDATE_PAIRS_PER_PASS:
-                log.warning(
-                    "dedup-llm: hit %d candidate pair cap; remaining pairs skipped this pass",
-                    LLM_DEDUP_MAX_CANDIDATE_PAIRS_PER_PASS,
-                )
-                capped = True
-                break
-            if await _llm_confirms_pair(events[i], events[j], db):
-                _union(parent, events[i].id, events[j].id)
-                llm_confirmed += 1
+        candidate_pairs += 1
+        if await _llm_confirms_pair(a, b, db):
+            _union(parent, a_id, b_id)
+            llm_confirmed += 1
 
     assignments = build_cluster_assignments(parent, ids)
 

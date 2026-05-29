@@ -5,7 +5,7 @@ import logging
 from sqlalchemy import select
 
 from app.db import AsyncSessionLocal
-from app.dedup.rules import run_dedup_pass
+from app.dedup.llm_tiebreaker import run_dedup_pass_llm
 from app.ingestion.registry import ADAPTER_REGISTRY
 from app.models.models import Source
 
@@ -81,10 +81,13 @@ async def ingest_all_enabled(kind: str | None = None) -> list[dict]:
 
 
 async def dedup_pass() -> dict:
-    """Run rule-based deduplication over all non-cancelled events."""
+    """Run two-stage deduplication (rule pre-filter + LLM tiebreaker).
+
+    Degrades to the rule-only pass when no LLM provider is configured.
+    """
     async with AsyncSessionLocal() as db:
         try:
-            summary = await run_dedup_pass(db)
+            summary = await run_dedup_pass_llm(db)
             await db.commit()
             log.info("dedup pass complete: %s", summary)
             return summary

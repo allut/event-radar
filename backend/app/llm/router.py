@@ -34,6 +34,16 @@ def _content_hash(text: str) -> str:
     return hashlib.sha256(text.encode()).hexdigest()
 
 
+def llm_available() -> bool:
+    """True if at least one provider in the chain has an API key configured.
+
+    Lets callers degrade to a non-LLM path (e.g. the dedup pass falling back to
+    rule-only clustering) instead of issuing calls that would all fail when no
+    key is set — local dev, or lapsed keys in production.
+    """
+    return any(getattr(settings, p["key_attr"], "") for p in LLM_PROVIDERS)
+
+
 async def llm_json(
     task: str,
     prompt: str,

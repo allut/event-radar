@@ -22,7 +22,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
 from app.constants import (
+    DEDUP_LOOKBACK_DAYS,
+    EVENT_STATUS_CANCELLED,
     SECONDS_PER_HOUR,
+    TALLINN_TZ,
     TIME_WINDOW_HOURS,
     TITLE_RATIO_THRESHOLD,
     VENUE_RATIO_THRESHOLD,
@@ -137,42 +140,35 @@ def cluster_events(
 # ---------------------------------------------------------------------------
 
 
-async def run_dedup_pass(db: AsyncSession) -> dict:
-    """Find duplicate events and assign dedup_group_id.
+def dedup_window_cutoff() -> datetime:
+    """Lower bound for the dedup window.
 
-    Loads all non-cancelled events, clusters them, and writes group IDs for
-    any newly discovered or changed groups. Returns a summary dict.
+    Extends the lookback by TIME_WINDOW_HOURS so boundary pairs (events within
+    the time window of the cutoff) are loaded together — neither is ever
+    evaluated without its potential partner.
     """
-    from app.constants import (
-        EVENT_STATUS_CANCELLED,
-        DEDUP_LOOKBACK_DAYS,
-        TALLINN_TZ,
-    )  # avoid circular
-
-    # Extend lower bound by TIME_WINDOW_HOURS: boundary pairs (events within 12h of
-    # the cutoff) are loaded together so neither is evaluated without its partner.
-    cutoff = (
+    return (
         datetime.now(tz=TALLINN_TZ)
         - timedelta(days=DEDUP_LOOKBACK_DAYS)
         - timedelta(hours=TIME_WINDOW_HOURS)
     )
-    rows = (
-        await db.scalars(
-            select(Event)
-            .where(Event.status != EVENT_STATUS_CANCELLED)
-            .where(Event.starts_at >= cutoff)
-            .order_by(Event.id)
-        )
-    ).all()
-    events = list(rows)
 
-    if not events:
-        return {"total": 0, "grouped": 0, "pairs": 0}
 
-    # SQL pre-filter: self-join restricted to pairs within TIME_WINDOW_HOURS.
-    # Result set is small (~O(N·k) where k is avg events in the window), but
-    # the join itself is bounded by the existing (starts_at, status) B-tree:
-    # the planner can range-scan b on a sargable BETWEEN around a.starts_at.
+async def candidate_pair_ids_in_window(
+    db: AsyncSession, cutoff: datetime
+) -> list[tuple[int, int]]:
+    """SQL pre-filter: non-cancelled event id pairs within TIME_WINDOW_HOURS.
+
+    Stage-1 *time* pre-filter shared by ``run_dedup_pass`` (rule-only) and
+    ``llm_tiebreaker.run_dedup_pass_llm`` (rule + LLM). Returned pairs always
+    satisfy ``a_id < b_id`` and are ordered by ``(a_id, b_id)`` for determinism.
+
+    The fuzzy title/venue check runs in Python on these pairs via
+    ``is_candidate_pair`` — per CLAUDE.md, never push that into SQL, and never
+    push this time check into Python. The self-join is bounded by the existing
+    (starts_at, status) B-tree: the planner can range-scan ``b`` on a sargable
+    BETWEEN around ``a.starts_at``.
+    """
     a = aliased(Event)
     b = aliased(Event)
     window = timedelta(seconds=TIME_WINDOW_HOURS * SECONDS_PER_HOUR)
@@ -191,9 +187,33 @@ async def run_dedup_pass(db: AsyncSession) -> dict:
                 a.starts_at >= cutoff,
                 b.starts_at >= cutoff,
             )
+            .order_by(a.id, b.id)
         )
     ).all()
-    candidate_pair_ids = [(row[0], row[1]) for row in pair_rows]
+    return [(row[0], row[1]) for row in pair_rows]
+
+
+async def run_dedup_pass(db: AsyncSession) -> dict:
+    """Find duplicate events and assign dedup_group_id.
+
+    Loads all non-cancelled events, clusters them, and writes group IDs for
+    any newly discovered or changed groups. Returns a summary dict.
+    """
+    cutoff = dedup_window_cutoff()
+    rows = (
+        await db.scalars(
+            select(Event)
+            .where(Event.status != EVENT_STATUS_CANCELLED)
+            .where(Event.starts_at >= cutoff)
+            .order_by(Event.id)
+        )
+    ).all()
+    events = list(rows)
+
+    if not events:
+        return {"total": 0, "grouped": 0, "groups": 0, "updated": 0}
+
+    candidate_pair_ids = await candidate_pair_ids_in_window(db, cutoff)
 
     assignments = cluster_events(events, candidate_pair_ids=candidate_pair_ids)
 
