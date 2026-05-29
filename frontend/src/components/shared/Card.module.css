@@ -6,5 +6,4 @@
 
 .cardAccentTop   { border-top: 3px solid var(--accent); }
 .cardDangerTop   { border-top: 3px solid var(--danger); }
-.cardElevated:hover { box-shadow: var(--shadow-card-hover); }
 .cardPage        { max-width: 400px; width: 100%; }

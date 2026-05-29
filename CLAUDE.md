@@ -57,7 +57,7 @@ LLM Router: Groq (primary) → Cerebras → Mistral (fallback chain)
 ## Data Flow
 
 1. **Ingestion** — 5 sources: Fienta API (~15 Tallinn organizer IDs), Piletilevi HTML scraper, Telliskivi/Kultuurikatel/Fotografiska/KUMU/Estonia Concert Hall JSON-LD, Resend Inbound email webhook. Eventbrite removed (API deprecated for non-partners).
-2. **Deduplication** — Two-stage: rule-based pre-filter (fuzzy title + time proximity), then LLM tiebreaker only on candidate pairs (keeps token usage low).
+2. **Deduplication** — Two-stage: rule-based pre-filter (fuzzy title + time proximity), then LLM tiebreaker only on candidate pairs (keeps token usage low). **Current pipeline runs stage 1 only** (`app/dedup/rules.py`); stage 2 is implemented but not yet wired (`app/dedup/llm_tiebreaker.py` — see its module docstring).
 3. **Classification** — LLM assigns fixed 12-category / 10-vibe taxonomy, quality score 0–1, 3-bullet "why go?" text. Fixed taxonomy prevents ontology drift.
 4. **Ranking** — `score = 0.45·persona_affinity + 0.20·recency_boost + 0.20·feedback_signal + 0.10·quality_score + 0.05·locality_bonus`
 5. **Daily 5 builder** — runs 06:00 Europe/Tallinn; scores events in next 14 days; MMR-lite diversity (max 2 per category); writes to `daily_feeds`.

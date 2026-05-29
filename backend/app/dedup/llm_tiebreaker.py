@@ -6,7 +6,12 @@ Stage 2: LLM tiebreaker on candidate pairs only (1 call per pair, cached).
 Merge condition: LLM returns ``{"same": true, "confidence": ≥ 0.7}``.
 On confirm: union-find produces clusters → ``dedup_group_id = min(event_id)``.
 
-Run ``run_dedup_pass_llm()`` instead of ``run_dedup_pass()`` to get both stages.
+STATUS: NOT YET WIRED — reserved for a future iteration.
+The scheduled dedup job (main.py → jobs.dedup_pass → rules.run_dedup_pass) currently
+runs the rule-based stage only. This module implements stage 2 as described in
+plan.md/CLAUDE.md but is not yet invoked anywhere.
+To activate: call ``run_dedup_pass_llm()`` from ``jobs.dedup_pass`` in place of
+``run_dedup_pass()``. Until then this is intentionally inactive, not dead code.
 """
 
 import logging
