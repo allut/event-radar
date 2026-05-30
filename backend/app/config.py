@@ -2,6 +2,11 @@ from typing import Any
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from app._generated.shared_constants import (
+    MAGIC_LINK_TTL_MINUTES as _MAGIC_LINK_TTL_DEFAULT,
+    SESSION_TTL_DAYS as _SESSION_TTL_DEFAULT,
+)
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
@@ -89,8 +94,8 @@ class Settings(BaseSettings):
     )
     RESEND_FROM_ADDRESS: str = "Event Radar <onboarding@resend.dev>"
     FRONTEND_URL: str = "http://localhost:5173"  # Base URL for magic-link verification
-    MAGIC_LINK_TTL_MINUTES: int = 15
-    SESSION_TTL_DAYS: int = 7
+    MAGIC_LINK_TTL_MINUTES: int = _MAGIC_LINK_TTL_DEFAULT
+    SESSION_TTL_DAYS: int = _SESSION_TTL_DEFAULT
 
     # Webhooks — set to a random secret and pass it as ?secret=... in the Resend inbound webhook URL
     RESEND_WEBHOOK_SECRET: str = ""  # empty = no verification (dev only)

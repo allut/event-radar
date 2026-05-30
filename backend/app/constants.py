@@ -1,6 +1,30 @@
 import http
 from zoneinfo import ZoneInfo
 
+from app._generated.shared_constants import (
+    DEFAULT_CURRENCY,
+    DEFAULT_USER_CITY,
+    DEFAULT_USER_LOCALE,
+    PERSONA_PRIMARY_WEIGHT,
+    PERSONA_SECONDARY_WEIGHT,
+    VALID_CATEGORIES,
+    VALID_LOCALES,
+    VALID_SIGNALS,
+    VALID_VIBES,
+)
+
+__all__ = [
+    "DEFAULT_CURRENCY",
+    "DEFAULT_USER_CITY",
+    "DEFAULT_USER_LOCALE",
+    "PERSONA_PRIMARY_WEIGHT",
+    "PERSONA_SECONDARY_WEIGHT",
+    "VALID_CATEGORIES",
+    "VALID_LOCALES",
+    "VALID_SIGNALS",
+    "VALID_VIBES",
+]
+
 TALLINN_TZ_NAME = "Europe/Tallinn"
 TALLINN_TZ = ZoneInfo(TALLINN_TZ_NAME)
 
@@ -44,11 +68,6 @@ EVENT_STATUS_CLASSIFIED = "classified"
 EVENT_STATUS_PUBLISHED = "published"
 EVENT_STATUS_CANCELLED = "cancelled"
 
-DEFAULT_CURRENCY = "EUR"
-DEFAULT_USER_LOCALE = "en"
-DEFAULT_USER_CITY = "Tallinn"
-VALID_LOCALES: frozenset[str] = frozenset({"en", "et", "ru"})
-
 # Deduplication
 DEDUP_LOOKBACK_DAYS = 30  # only re-cluster events that started within this window
 TITLE_RATIO_THRESHOLD = 70  # rapidfuzz token_set_ratio threshold for title match
@@ -59,7 +78,7 @@ TIME_WINDOW_HOURS = 12  # max |Δstart| in hours for two events to be dedup cand
 RESEND_SEND_URL = "https://api.resend.com/emails"
 RESEND_TIMEOUT_SECONDS: float = 10.0
 RESEND_ERROR_SNIPPET_LEN = 200
-# Email i18n strings (subjects, labels, templates) live in app/i18n.py.
+# Email i18n strings (subjects, labels, templates) live in shared/i18n/*.json.
 DIGEST_SEND_HOUR = 7  # 07:00 Europe/Tallinn, one hour after build_daily_feeds
 DIGEST_MAX_WHY_GO_BULLETS = 3
 # Concurrency cap when fanning out digest sends — bounded by Resend free-tier
@@ -73,10 +92,6 @@ ADMIN_DEDUP_GROUPS_MAX_PAGE_SIZE: int = 500
 # Auth tokens
 AUTH_MAGIC_SALT = "magic-link-v1"
 AUTH_SESSION_SALT = "session-v1"
-
-# Persona weights
-PERSONA_PRIMARY_WEIGHT: float = 1.0
-PERSONA_SECONDARY_WEIGHT: float = 0.4
 
 # Ranking / scoring
 DAILY_5_COUNT = 5
@@ -103,42 +118,9 @@ TALLINN_LNG_DELTA: float = 0.10
 # Feedback signals
 SIGNAL_LIKE = "like"
 SIGNAL_DISLIKE = "dislike"
-VALID_SIGNALS: frozenset[str] = frozenset(
-    {SIGNAL_LIKE, SIGNAL_DISLIKE, "bookmark", "view", "click_external"}
-)
-
-# Taxonomy
-VALID_CATEGORIES: frozenset[str] = frozenset(
-    {
-        "music",
-        "theater",
-        "exhibitions",
-        "workshops",
-        "sports",
-        "food_drink",
-        "networking",
-        "literature",
-        "family",
-        "cinema",
-        "alternative",
-        "nightlife",
-    }
-)
-
-VALID_VIBES: frozenset[str] = frozenset(
-    {
-        "trendy",
-        "casual",
-        "intimate",
-        "high_energy",
-        "educational",
-        "indie",
-        "underground",
-        "mainstream",
-        "accessible",
-        "niche",
-    }
-)
+# Guard: if shared/app-config.json signals ever diverge from these sentinels, fail fast.
+assert SIGNAL_LIKE in VALID_SIGNALS, f"{SIGNAL_LIKE!r} missing from VALID_SIGNALS in shared/app-config.json"
+assert SIGNAL_DISLIKE in VALID_SIGNALS, f"{SIGNAL_DISLIKE!r} missing from VALID_SIGNALS in shared/app-config.json"
 
 # Time-of-day / day-of-week slots derived from event.starts_at (Europe/Tallinn).
 # An event can match multiple slots simultaneously (e.g. Saturday evening → weekend + evening).

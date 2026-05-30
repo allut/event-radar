@@ -4,6 +4,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app._generated.i18n_data import PERSONAS as _PERSONAS_DATA
 from app.config import settings
 from app.constants import NEWSLETTER_SOURCE_SLUG, PILETILEVI_SOURCE_SLUG, VALID_TIMES
 from app.llm.taxonomy import VALID_CATEGORIES, VALID_VIBES
@@ -47,44 +48,34 @@ def _jsonld_sources() -> list[dict[str, Any]]:
     ]
 
 
+_AFFINITY_BY_SLUG = {
+    "underground_clubber": lambda: settings.PERSONA_UNDERGROUND_CLUBBER_AFFINITY,
+    "networking_pro": lambda: settings.PERSONA_NETWORKING_PRO_AFFINITY,
+    "weekend_hobbyist": lambda: settings.PERSONA_WEEKEND_HOBBYIST_AFFINITY,
+    "culture_buff": lambda: settings.PERSONA_CULTURE_BUFF_AFFINITY,
+    "family_explorer": lambda: settings.PERSONA_FAMILY_EXPLORER_AFFINITY,
+}
+
+
 def _persona_seeds() -> tuple[dict[str, Any], ...]:
-    return (
-        {
-            "slug": "underground_clubber",
-            "display_name_en": "Underground Clubber",
-            "display_name_et": "Klubi fänn",
-            "display_name_ru": "Клубный завсегдатай",
-            "affinity_vector": settings.PERSONA_UNDERGROUND_CLUBBER_AFFINITY,
-        },
-        {
-            "slug": "networking_pro",
-            "display_name_en": "Networking Pro",
-            "display_name_et": "Võrgustiku professionaal",
-            "display_name_ru": "Нетворкинг-профессионал",
-            "affinity_vector": settings.PERSONA_NETWORKING_PRO_AFFINITY,
-        },
-        {
-            "slug": "weekend_hobbyist",
-            "display_name_en": "Weekend Hobbyist",
-            "display_name_et": "Nädalavahetuse hobifänn",
-            "display_name_ru": "Любитель выходного дня",
-            "affinity_vector": settings.PERSONA_WEEKEND_HOBBYIST_AFFINITY,
-        },
-        {
-            "slug": "culture_buff",
-            "display_name_en": "Culture Buff",
-            "display_name_et": "Kultuurihuviline",
-            "display_name_ru": "Культурный энтузиаст",
-            "affinity_vector": settings.PERSONA_CULTURE_BUFF_AFFINITY,
-        },
-        {
-            "slug": "family_explorer",
-            "display_name_en": "Family Explorer",
-            "display_name_et": "Perefänn",
-            "display_name_ru": "Семейный искатель приключений",
-            "affinity_vector": settings.PERSONA_FAMILY_EXPLORER_AFFINITY,
-        },
-    )
+    seeds = []
+    for p in _PERSONAS_DATA:
+        affinity_fn = _AFFINITY_BY_SLUG.get(p["slug"])
+        if affinity_fn is None:
+            raise KeyError(
+                f"No affinity configured for persona {p['slug']!r} — "
+                "add it to _AFFINITY_BY_SLUG in seeds.py and PERSONA_*_AFFINITY in config.py"
+            )
+        seeds.append(
+            {
+                "slug": p["slug"],
+                "display_name_en": p["names"]["en"],
+                "display_name_et": p["names"]["et"],
+                "display_name_ru": p["names"]["ru"],
+                "affinity_vector": affinity_fn(),
+            }
+        )
+    return tuple(seeds)
 
 
 def _fienta_source() -> dict[str, Any]:

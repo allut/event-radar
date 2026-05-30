@@ -1,3 +1,18 @@
+import { PERSONAS_EN, type PersonaData } from './_generated/i18nData';
+import {
+  LOCALE_CODE_MAP as _LOCALE_CODE_MAP,
+  DEFAULT_LOCALE_CODE as _DEFAULT_LOCALE_CODE,
+  LOCALES,
+  MAGIC_LINK_EXPIRY_MINUTES,
+  PERSONA_PRIMARY_WEIGHT_THRESHOLD,
+} from './_generated/sharedConstants';
+
+export { LOCALES, MAGIC_LINK_EXPIRY_MINUTES, PERSONA_PRIMARY_WEIGHT_THRESHOLD };
+export type { PersonaData };
+
+// Re-export PERSONAS under the original name so all import sites are unchanged.
+export const PERSONAS: PersonaData[] = PERSONAS_EN;
+
 // ─── React Query ─────────────────────────────────────────────────────────────
 export const QUERY_RETRY = 1;
 export const QUERY_STALE_TIME = 30_000;
@@ -7,8 +22,6 @@ export const TOKEN_KEY = 'session_token';
 export const LOCALE_KEY = 'locale';
 
 // ─── Auth / magic link ───────────────────────────────────────────────────────
-// Keep in sync with MAGIC_LINK_TTL_MINUTES in backend/app/config.py
-export const MAGIC_LINK_EXPIRY_MINUTES = 15;
 export const AUTH_REDIRECT_DELAY_MS = 600;
 
 // ─── Animation ───────────────────────────────────────────────────────────────
@@ -17,42 +30,10 @@ export const CARD_ANIMATION_DELAY_STEP_MS = 80;
 // ─── Settings ────────────────────────────────────────────────────────────────
 export const SAVE_MSG_CLEAR_DELAY_MS = 2000;
 
-// ─── Persona weights (frontend thresholds) ───────────────────────────────────
-// Keep in sync with PERSONA_PRIMARY_WEIGHT / PERSONA_SECONDARY_WEIGHT in backend/app/constants.py
-export const PERSONA_PRIMARY_WEIGHT_THRESHOLD = 1.0;
-
 // ─── Locale ──────────────────────────────────────────────────────────────────
-const LOCALE_CODE_MAP: Record<string, string> = {
-  et: 'et-EE',
-  ru: 'ru-RU',
-};
-const DEFAULT_LOCALE_CODE = 'en-GB';
-
 export function toLocaleCode(locale: string): string {
-  return LOCALE_CODE_MAP[locale] ?? DEFAULT_LOCALE_CODE;
+  return _LOCALE_CODE_MAP[locale] ?? _DEFAULT_LOCALE_CODE;
 }
-
-export const LOCALES = [
-  { code: 'en', label: 'EN' },
-  { code: 'et', label: 'ET' },
-  { code: 'ru', label: 'RU' },
-] as const;
-
-// ─── Personas ─────────────────────────────────────────────────────────────────
-export interface PersonaData {
-  slug: string;
-  emoji: string;
-  name: string;
-  vibe: string;
-}
-
-export const PERSONAS: PersonaData[] = [
-  { slug: 'underground_clubber', emoji: '🎛️', name: 'Underground Clubber', vibe: 'Late-night raves, techno, basement bars' },
-  { slug: 'networking_pro',      emoji: '💼', name: 'Networking Pro',      vibe: 'Startup events, pitch nights, professional meetups' },
-  { slug: 'weekend_hobbyist',    emoji: '🎨', name: 'Weekend Hobbyist',    vibe: 'Workshops, outdoor activities, craft markets' },
-  { slug: 'culture_buff',        emoji: '🎭', name: 'Culture Buff',        vibe: 'Museums, theatre, classical concerts, art openings' },
-  { slug: 'family_explorer',     emoji: '👨‍👩‍👧', name: 'Family Explorer',     vibe: 'Kid-friendly, nature walks, weekend excursions' },
-];
 
 // ─── Events / feedback ───────────────────────────────────────────────────────
 export type Signal = 'like' | 'dislike' | 'bookmark';

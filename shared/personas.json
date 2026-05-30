@@ -1,0 +1,72 @@
+[
+  {
+    "slug": "underground_clubber",
+    "emoji": "🎛️",
+    "names": {
+      "en": "Underground Clubber",
+      "et": "Klubikülastaja",
+      "ru": "Клабер"
+    },
+    "vibes": {
+      "en": "Late-night raves, techno, basement bars",
+      "et": "Hilisöised reivid, techno, keldribaarid",
+      "ru": "Ночные рейвы, техно, подвальные бары"
+    }
+  },
+  {
+    "slug": "networking_pro",
+    "emoji": "💼",
+    "names": {
+      "en": "Networking Pro",
+      "et": "Võrgustikuproff",
+      "ru": "Нетворкинг Про"
+    },
+    "vibes": {
+      "en": "Startup events, pitch nights, professional meetups",
+      "et": "Idufirmade üritused, pitching, professionaalsed kohtumised",
+      "ru": "Стартап-события, питчинги, профессиональные встречи"
+    }
+  },
+  {
+    "slug": "weekend_hobbyist",
+    "emoji": "🎨",
+    "names": {
+      "en": "Weekend Hobbyist",
+      "et": "Nädalavahetuse Harrastaja",
+      "ru": "Хоббист выходного дня"
+    },
+    "vibes": {
+      "en": "Workshops, outdoor activities, craft markets",
+      "et": "Töötoad, välistegevused, käsitööturgud",
+      "ru": "Мастер-классы, активный отдых, ярмарки"
+    }
+  },
+  {
+    "slug": "culture_buff",
+    "emoji": "🎭",
+    "names": {
+      "en": "Culture Buff",
+      "et": "Kultuurihuviline",
+      "ru": "Ценитель культуры"
+    },
+    "vibes": {
+      "en": "Museums, theatre, classical concerts, art openings",
+      "et": "Muuseumid, teater, klassikalised kontserdid, kunstiavamised",
+      "ru": "Музеи, театр, классические концерты, арт-открытия"
+    }
+  },
+  {
+    "slug": "family_explorer",
+    "emoji": "👨‍👩‍👧",
+    "names": {
+      "en": "Family Explorer",
+      "et": "Perepuhkuse Harrastaja",
+      "ru": "Семейный исследователь"
+    },
+    "vibes": {
+      "en": "Kid-friendly, nature walks, weekend excursions",
+      "et": "Peresõbralik, loodusretked, nädalavahetuse väljasõidud",
+      "ru": "Семейный отдых, прогулки на природе, вылазки на выходных"
+    }
+  }
+]
