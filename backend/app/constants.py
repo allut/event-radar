@@ -269,7 +269,7 @@ LLM_PROVIDERS: list[dict[str, str]] = [
     {
         "name": "cerebras",
         "base_url": "https://api.cerebras.ai/v1",
-        "model": "qwen-3-235b-a22b-instruct-2507",
+        "model": "gpt-oss-120b",
         "key_attr": "CEREBRAS_API_KEY",
     },
     {
