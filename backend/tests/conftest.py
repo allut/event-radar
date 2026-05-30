@@ -25,7 +25,9 @@ def mock_db():
     db.scalars = AsyncMock()
     db.execute = AsyncMock()
     db.add = MagicMock()
+    db.flush = AsyncMock()
     db.commit = AsyncMock()
+    db.rollback = AsyncMock()
     db.refresh = AsyncMock()
     return db
 

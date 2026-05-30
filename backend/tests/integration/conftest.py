@@ -15,8 +15,8 @@ for _line in _env_path.read_text(encoding="utf-8").splitlines():
         os.environ["SECRET_KEY"] = _line.partition("=")[2].strip().strip('"').strip("'")
         break
 
-from app.constants import HTTP_TIMEOUT_SECONDS
-from app.config import settings
+from app.constants import HTTP_TIMEOUT_SECONDS  # noqa: E402
+from app.config import settings  # noqa: E402
 
 BASE_URL = os.getenv("TEST_BASE_URL", "http://localhost:8000")
 

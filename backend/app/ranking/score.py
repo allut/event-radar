@@ -35,6 +35,8 @@ from app.constants import (
     SCORE_WEIGHT_QUALITY,
     SCORE_WEIGHT_RECENCY,
     SECONDS_PER_DAY,
+    SIGNAL_DISLIKE,
+    SIGNAL_LIKE,
     TALLINN_CENTER_LAT,
     TALLINN_CENTER_LNG,
     TALLINN_LAT_DELTA,
@@ -44,6 +46,13 @@ from app.constants import (
     TIME_EVENING_START,
     TIME_LATE_NIGHT_START,
     TIME_MORNING_START,
+    TIME_SLOT_DAYTIME,
+    TIME_SLOT_EVENING,
+    TIME_SLOT_LATE_NIGHT,
+    TIME_SLOT_MORNING,
+    TIME_SLOT_WEEKDAY,
+    TIME_SLOT_WEEKEND,
+    WEEKEND_START_WEEKDAY,
 )
 from app.models.models import (
     DailyFeed,
@@ -105,10 +114,10 @@ class FeedbackContext:
         disliked_groups = frozenset(
             row.dedup_group_id
             for row in rows
-            if row.signal == "dislike" and row.dedup_group_id is not None
+            if row.signal == SIGNAL_DISLIKE and row.dedup_group_id is not None
         )
         disliked_event_ids = frozenset(
-            row.event_id for row in rows if row.signal == "dislike"
+            row.event_id for row in rows if row.signal == SIGNAL_DISLIKE
         )
         return cls(
             rows=rows,
@@ -131,17 +140,17 @@ def _time_slots_for_event(starts_at: datetime) -> list[str]:
     hour = local.hour
     slots: list[str] = []
     if hour >= TIME_LATE_NIGHT_START or hour < TIME_MORNING_START:
-        slots.append("late_night")
+        slots.append(TIME_SLOT_LATE_NIGHT)
     elif hour >= TIME_EVENING_START:
-        slots.append("evening")
+        slots.append(TIME_SLOT_EVENING)
     elif hour >= TIME_DAYTIME_START:
-        slots.append("daytime")
+        slots.append(TIME_SLOT_DAYTIME)
     elif hour >= TIME_MORNING_START:
-        slots.append("morning")
-    if local.weekday() >= 5:
-        slots.append("weekend")
+        slots.append(TIME_SLOT_MORNING)
+    if local.weekday() >= WEEKEND_START_WEEKDAY:
+        slots.append(TIME_SLOT_WEEKEND)
     else:
-        slots.append("weekday")
+        slots.append(TIME_SLOT_WEEKDAY)
     return slots
 
 
@@ -224,11 +233,11 @@ def feedback_signal(
         decay = FEEDBACK_DECAY_BASE**days
 
         if row.event_id == event_id:
-            if row.signal == "like":
+            if row.signal == SIGNAL_LIKE:
                 signals.append(decay)
-            elif row.signal == "dislike":
+            elif row.signal == SIGNAL_DISLIKE:
                 signals.append(-1.0)
-        elif row.signal == "like" and event_cat_set & row.category_set:
+        elif row.signal == SIGNAL_LIKE and event_cat_set & row.category_set:
             # Indirect: liked another event that shares a category with this one
             signals.append(FEEDBACK_INDIRECT_WEIGHT * decay)
 

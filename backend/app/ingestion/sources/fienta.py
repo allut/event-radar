@@ -37,6 +37,7 @@ class FientaAdapter(SourceAdapter):
         base_url: str = self.source.config.get("base_url", settings.FIENTA_BASE_URL)
         all_events: list[dict[str, Any]] = []
 
+        errors: list[Exception] = []
         async with httpx.AsyncClient(timeout=HTTP_TIMEOUT_SECONDS) as client:
             for org_id in organizer_ids:
                 try:
@@ -49,8 +50,16 @@ class FientaAdapter(SourceAdapter):
                         org_id,
                         exc.response.status_code,
                     )
+                    errors.append(exc)
                 except httpx.RequestError as exc:
                     log.warning("fienta organizer=%s network error: %s", org_id, exc)
+                    errors.append(exc)
+
+        # Partial tolerance: if some organizers succeeded we return what we have
+        # so a single flaky organizer doesn't suppress a real run. We only raise
+        # (which marks the IngestionRun as error) when every organizer failed.
+        if not all_events and errors:
+            raise errors[0]
 
         return all_events
 

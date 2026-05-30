@@ -33,6 +33,7 @@ class PiletileviAdapter(SourceAdapter):
     async def fetch_raw(self) -> list[dict[str, Any]]:
         seen_hrefs: set[str] = set()
         cards: list[dict[str, Any]] = []
+        listing_errors: list[Exception] = []
 
         async with httpx.AsyncClient(
             timeout=HTTP_TIMEOUT_SECONDS,
@@ -45,6 +46,7 @@ class PiletileviAdapter(SourceAdapter):
                     resp = await _http_get(client, url)
                 except (httpx.HTTPStatusError, httpx.RequestError) as exc:
                     log.warning("piletilevi listing fetch failed url=%s: %s", url, exc)
+                    listing_errors.append(exc)
                     continue
 
                 soup = BeautifulSoup(resp.text, "html.parser")
@@ -83,6 +85,11 @@ class PiletileviAdapter(SourceAdapter):
                             "image_url": image_src,
                         }
                     )
+
+            # Partial tolerance: only raise when ALL listing URLs failed so a
+            # single unavailable category page doesn't suppress a real run.
+            if not cards and listing_errors:
+                raise listing_errors[0]
 
             # Fetch detail pages for description (capped to prevent runaway on abnormally large listings)
             if len(cards) > PILETILEVI_MAX_DETAIL_FETCHES:

@@ -101,8 +101,10 @@ TALLINN_LAT_DELTA: float = 0.05
 TALLINN_LNG_DELTA: float = 0.10
 
 # Feedback signals
+SIGNAL_LIKE = "like"
+SIGNAL_DISLIKE = "dislike"
 VALID_SIGNALS: frozenset[str] = frozenset(
-    {"like", "dislike", "bookmark", "view", "click_external"}
+    {SIGNAL_LIKE, SIGNAL_DISLIKE, "bookmark", "view", "click_external"}
 )
 
 # Taxonomy
@@ -142,14 +144,22 @@ VALID_VIBES: frozenset[str] = frozenset(
 # An event can match multiple slots simultaneously (e.g. Saturday evening → weekend + evening).
 # late_night: 22:00–05:59  |  evening: 18:00–21:59  |  daytime: 10:00–17:59  |  morning: 06:00–09:59
 # weekend: Sat/Sun  |  weekday: Mon–Fri
+TIME_SLOT_LATE_NIGHT = "late_night"
+TIME_SLOT_EVENING = "evening"
+TIME_SLOT_DAYTIME = "daytime"
+TIME_SLOT_MORNING = "morning"
+TIME_SLOT_WEEKEND = "weekend"
+TIME_SLOT_WEEKDAY = "weekday"
+WEEKEND_START_WEEKDAY = 5  # Monday=0 … Saturday=5, Sunday=6
+
 VALID_TIMES: frozenset[str] = frozenset(
     {
-        "late_night",
-        "evening",
-        "daytime",
-        "morning",
-        "weekend",
-        "weekday",
+        TIME_SLOT_LATE_NIGHT,
+        TIME_SLOT_EVENING,
+        TIME_SLOT_DAYTIME,
+        TIME_SLOT_MORNING,
+        TIME_SLOT_WEEKEND,
+        TIME_SLOT_WEEKDAY,
     }
 )
 TIME_LATE_NIGHT_START = 22

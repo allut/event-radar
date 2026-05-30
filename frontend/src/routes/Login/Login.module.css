@@ -10,7 +10,7 @@
   composes: card cardAccentTop cardPage from '../../components/shared/Card.module.css';
   --rise-distance: 12px;
   padding: 2.5rem;
-  animation: rise 0.4s cubic-bezier(0.4, 0, 0.2, 1) both;
+  animation: rise 0.4s var(--easing) both;
 }
 
 .header {

@@ -83,19 +83,6 @@ class TestSessionToken:
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture()
-def mock_db():
-    db = AsyncMock()
-    db.get = AsyncMock()
-    db.scalar = AsyncMock()
-    db.execute = AsyncMock()
-    db.add = MagicMock()
-    db.flush = AsyncMock()
-    db.commit = AsyncMock()
-    db.rollback = AsyncMock()
-    return db
-
-
 def _mock_request(accept_language: str = "") -> MagicMock:
     req = MagicMock()
     req.headers = MagicMock()

@@ -21,17 +21,6 @@ def _make_openai_response(content: dict, provider_name: str = "groq") -> MagicMo
     return mock_resp
 
 
-@pytest.fixture()
-def mock_db():
-    """Minimal async DB session mock that satisfies llm_json's cache lookup."""
-    db = AsyncMock()
-    # Cache miss: scalar returns None
-    db.scalar = AsyncMock(return_value=None)
-    # session.add() is synchronous in SQLAlchemy async sessions
-    db.add = MagicMock()
-    return db
-
-
 class TestContentHash:
     def test_deterministic(self):
         assert _content_hash("hello") == _content_hash("hello")
@@ -54,6 +43,12 @@ class TestLlmJsonCacheHit:
 
 
 class TestLlmJsonProviderFallback:
+    @pytest.fixture(autouse=True)
+    def _cache_miss(self, mock_db):
+        # Ensure cache lookup returns None (cache miss) so llm_json makes real provider calls.
+        # Any new test class that exercises provider fallback must include this autouse fixture.
+        mock_db.scalar.return_value = None
+
     async def test_uses_groq_when_configured(self, mock_db):
         mock_resp = _make_openai_response({"same": False, "confidence": 0.1})
 

@@ -1,7 +1,7 @@
 .card {
   composes: card from '../shared/Card.module.css';
   overflow: hidden;
-  animation: rise 0.5s cubic-bezier(0.4, 0, 0.2, 1) both;
+  animation: rise 0.5s var(--easing) both;
   transition: border-color var(--transition), box-shadow var(--transition);
 }
 

@@ -38,7 +38,7 @@
 }
 
 .emoji {
-  font-size: 2rem;
+  font-size: var(--heading-xl);
   display: block;
   margin-bottom: 0.25rem;
   transition: transform var(--transition);

@@ -4,7 +4,7 @@ Tests the webhook endpoint in isolation — DB and background task are mocked.
 """
 import http
 import json
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi import FastAPI
@@ -18,17 +18,6 @@ def _build_app(resend_secret: str = "") -> FastAPI:
     app = FastAPI()
     app.include_router(router)
     return app
-
-
-def _mock_db() -> AsyncMock:
-    email_obj = MagicMock()
-    email_obj.id = 1
-
-    db = AsyncMock()
-    db.add = MagicMock()
-    db.flush = AsyncMock()
-    db.commit = AsyncMock()
-    return db, email_obj
 
 
 # ---------------------------------------------------------------------------
@@ -52,14 +41,15 @@ def _email_payload(
 
 
 @pytest.mark.asyncio
-async def test_inbound_mail_accepted_with_valid_body():
-    db, email_obj = _mock_db()
-    db.flush.side_effect = lambda: setattr(email_obj, "id", 7)
+async def test_inbound_mail_accepted_with_valid_body(mock_db):
+    email_obj = MagicMock()
+    email_obj.id = 1
+    mock_db.flush.side_effect = lambda: setattr(email_obj, "id", 7)
 
     app = _build_app()
 
     async def override_db():
-        yield db
+        yield mock_db
 
     from app.db import get_db
     app.dependency_overrides[get_db] = override_db
@@ -82,12 +72,11 @@ async def test_inbound_mail_accepted_with_valid_body():
 
 
 @pytest.mark.asyncio
-async def test_inbound_mail_rejects_wrong_secret():
-    db, email_obj = _mock_db()
+async def test_inbound_mail_rejects_wrong_secret(mock_db):
     app = _build_app()
 
     async def override_db():
-        yield db
+        yield mock_db
 
     from app.db import get_db
     app.dependency_overrides[get_db] = override_db
@@ -106,14 +95,15 @@ async def test_inbound_mail_rejects_wrong_secret():
 
 
 @pytest.mark.asyncio
-async def test_inbound_mail_accepts_correct_secret():
-    db, email_obj = _mock_db()
-    db.flush.side_effect = lambda: setattr(email_obj, "id", 3)
+async def test_inbound_mail_accepts_correct_secret(mock_db):
+    email_obj = MagicMock()
+    email_obj.id = 1
+    mock_db.flush.side_effect = lambda: setattr(email_obj, "id", 3)
 
     app = _build_app()
 
     async def override_db():
-        yield db
+        yield mock_db
 
     from app.db import get_db
     app.dependency_overrides[get_db] = override_db
@@ -133,12 +123,11 @@ async def test_inbound_mail_accepts_correct_secret():
 
 
 @pytest.mark.asyncio
-async def test_inbound_mail_rejects_non_json_body():
-    db, _ = _mock_db()
+async def test_inbound_mail_rejects_non_json_body(mock_db):
     app = _build_app()
 
     async def override_db():
-        yield db
+        yield mock_db
 
     from app.db import get_db
     app.dependency_overrides[get_db] = override_db
@@ -158,10 +147,11 @@ async def test_inbound_mail_rejects_non_json_body():
 
 
 @pytest.mark.asyncio
-async def test_inbound_mail_to_field_as_list_is_joined():
+async def test_inbound_mail_to_field_as_list_is_joined(mock_db):
     """'to' field sent as a JSON array must be stored as a comma-joined string."""
-    db, email_obj = _mock_db()
-    db.flush.side_effect = lambda: setattr(email_obj, "id", 5)
+    email_obj = MagicMock()
+    email_obj.id = 1
+    mock_db.flush.side_effect = lambda: setattr(email_obj, "id", 5)
 
     captured: dict = {}
 
@@ -172,7 +162,7 @@ async def test_inbound_mail_to_field_as_list_is_joined():
     app = _build_app()
 
     async def override_db():
-        yield db
+        yield mock_db
 
     from app.db import get_db
     app.dependency_overrides[get_db] = override_db
@@ -191,14 +181,15 @@ async def test_inbound_mail_to_field_as_list_is_joined():
 
 
 @pytest.mark.asyncio
-async def test_inbound_mail_no_text_and_no_subject_skips_extraction():
+async def test_inbound_mail_no_text_and_no_subject_skips_extraction(mock_db):
     """Empty text body + empty subject — email is stored but extraction is skipped."""
     from starlette.requests import Request
     from fastapi import BackgroundTasks
     from app.routers.webhooks import inbound_mail
 
-    db, email_obj = _mock_db()
-    db.flush.side_effect = lambda: setattr(email_obj, "id", 9)
+    email_obj = MagicMock()
+    email_obj.id = 1
+    mock_db.flush.side_effect = lambda: setattr(email_obj, "id", 9)
 
     scope = {
         "type": "http",
@@ -222,7 +213,7 @@ async def test_inbound_mail_no_text_and_no_subject_skips_extraction():
             request=request,
             background_tasks=bg,
             secret="",
-            db=db,
+            db=mock_db,
         )
 
     assert result.status_code == http.HTTPStatus.OK
@@ -230,10 +221,11 @@ async def test_inbound_mail_no_text_and_no_subject_skips_extraction():
 
 
 @pytest.mark.asyncio
-async def test_inbound_mail_with_text_body_queues_extraction():
+async def test_inbound_mail_with_text_body_queues_extraction(mock_db):
     """Non-empty text body causes an extraction background task to be queued."""
-    db, email_obj = _mock_db()
-    db.flush.side_effect = lambda: setattr(email_obj, "id", 11)
+    email_obj = MagicMock()
+    email_obj.id = 1
+    mock_db.flush.side_effect = lambda: setattr(email_obj, "id", 11)
 
     import json as _json
     from starlette.requests import Request
@@ -262,7 +254,7 @@ async def test_inbound_mail_with_text_body_queues_extraction():
             request=request,
             background_tasks=bg,
             secret="",
-            db=db,
+            db=mock_db,
         )
 
     assert result.status_code == http.HTTPStatus.OK
