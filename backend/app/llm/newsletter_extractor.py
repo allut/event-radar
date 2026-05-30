@@ -12,8 +12,9 @@ from app.constants import (
     LLM_TASK_NEWSLETTER,
     NEWSLETTER_BODY_MAX_LEN,
     NEWSLETTER_EXTRACT_PROMPT_TEMPLATE,
-    NEWSLETTER_SOURCE_SLUG,
     NEWSLETTER_SUBJECT_MAX_LEN,
+    SOURCE_KIND_INBOUND_EMAIL,
+    SOURCE_SLUG_NEWSLETTER,
 )
 from app.llm.router import LLMError, llm_json
 from app.models.models import RawEvent, RawInboundEmail, Source
@@ -26,16 +27,16 @@ async def _get_or_create_newsletter_source(db: AsyncSession) -> Source:
     stmt = (
         pg_insert(Source)
         .values(
-            slug=NEWSLETTER_SOURCE_SLUG, kind="inbound_email", config={}, enabled=True
+            slug=SOURCE_SLUG_NEWSLETTER, kind=SOURCE_KIND_INBOUND_EMAIL, config={}, enabled=True
         )
         .on_conflict_do_nothing(index_elements=["slug"])
     )
     await db.execute(stmt)
     await db.flush()
     source = await db.scalar(
-        select(Source).where(Source.slug == NEWSLETTER_SOURCE_SLUG)
+        select(Source).where(Source.slug == SOURCE_SLUG_NEWSLETTER)
     )
-    assert source is not None, f"Source {NEWSLETTER_SOURCE_SLUG!r} missing after upsert"
+    assert source is not None, f"Source {SOURCE_SLUG_NEWSLETTER!r} missing after upsert"
     return source
 
 

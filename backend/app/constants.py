@@ -199,7 +199,7 @@ Rules:
 
 # Newsletter inbound email extraction
 LLM_TASK_NEWSLETTER = "newsletter_extract"
-NEWSLETTER_SOURCE_SLUG = "newsletter_inbound"
+SOURCE_SLUG_NEWSLETTER = "newsletter_inbound"
 NEWSLETTER_SUBJECT_MAX_LEN = 200
 NEWSLETTER_BODY_MAX_LEN = 1500
 
@@ -278,7 +278,7 @@ SOURCE_KIND_INBOUND_EMAIL = "inbound_email"
 
 # Piletilevi HTML scraper
 PILETILEVI_BASE_URL = "https://www.piletilevi.ee"
-PILETILEVI_SOURCE_SLUG = "piletilevi"
+SOURCE_SLUG_PILETILEVI = "piletilevi"
 PILETILEVI_TALLINN_FILTER = "Tallinn"
 PILETILEVI_DATE_FORMAT = "%d.%m.%Y %H:%M"
 PILETILEVI_MAX_DETAIL_FETCHES = (
