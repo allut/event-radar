@@ -56,7 +56,7 @@ LLM Router: Groq (primary) → Cerebras → Mistral (fallback chain)
 
 ## Data Flow
 
-1. **Ingestion** — 5 sources: Fienta API (~15 Tallinn organizer IDs), Piletilevi HTML scraper, Telliskivi/Kultuurikatel/Fotografiska/KUMU/Estonia Concert Hall JSON-LD, Resend Inbound email webhook. Eventbrite removed (API deprecated for non-partners).
+1. **Ingestion** — 4 source types: Fienta API (~15 Tallinn organizer IDs), Piletilevi HTML scraper, Telliskivi/Kultuurikatel/Fotografiska/KUMU/Estonia Concert Hall JSON-LD, Resend Inbound email webhook (parsed via `app/llm/newsletter_extractor.py`). Eventbrite removed (API deprecated for non-partners).
 2. **Deduplication** — Two-stage: rule-based pre-filter (SQL time-window self-join + Python fuzzy title/venue, `app/dedup/rules.py`), then LLM tiebreaker only on the surviving candidate pairs (keeps token usage low, `app/dedup/llm_tiebreaker.py`). The scheduled job (`jobs.dedup_pass`) runs `run_dedup_pass_llm`, which degrades to the rule-only `run_dedup_pass` when no LLM provider key is configured.
 3. **Classification** — LLM assigns fixed 12-category / 10-vibe taxonomy, quality score 0–1, 3-bullet "why go?" text. Fixed taxonomy prevents ontology drift.
 4. **Ranking** — `score = 0.45·persona_affinity + 0.20·recency_boost + 0.20·feedback_signal + 0.10·quality_score + 0.05·locality_bonus`
@@ -81,7 +81,7 @@ LLM Router: Groq (primary) → Cerebras → Mistral (fallback chain)
 
 - **Hard cap:** ≤600 tokens per LLM call to avoid quota exhaustion.
 - **Dedup cache:** Cache decisions by content hash — never re-call LLM for identical pairs.
-- **Fallback order:** Groq (primary, `llama-3.3-70b-versatile`, Production) → Cerebras (`qwen-3-235b-a22b-instruct-2507`, Preview — 1 req/min, monitor for deprecation) → Mistral (overnight batch, 1B tok/mo).
+- **Fallback order:** Groq (primary, `llama-3.3-70b-versatile`) → Cerebras (`gpt-oss-120b`) → Mistral (`mistral-small-latest`, overnight batch, 1B tok/mo). Provider chain defined in `app/constants.py::LLM_PROVIDERS`.
 - Groq's 30 req/min burst means no sleep loop needed in the classification batch job.
 
 ## i18n

@@ -56,10 +56,10 @@ def _py_dict_str(d: dict[str, str], indent: int = 4) -> str:
     return "\n".join(lines)
 
 
-def _py_translations(locale_data: dict[str, dict]) -> str:
-    """Render the email TRANSLATIONS dict (3 locales, dotted keys)."""
+def _py_translations(locale_data: dict[str, dict], locales: tuple[str, ...]) -> str:
+    """Render the email TRANSLATIONS dict (one entry per locale, dotted keys)."""
     lines = ["TRANSLATIONS: dict[str, dict[str, str]] = {"]
-    for locale in ("en", "et", "ru"):
+    for locale in locales:
         lines.append(f'    "{locale}": {{')
         for k, v in locale_data[locale]["email"].items():
             lines.append(f"        {_py_str(k)}: {_py_str(v)},")
@@ -73,36 +73,36 @@ def _py_str_list(items: list[str]) -> str:
     return f"[{quoted}]"
 
 
-def _py_calendar(cal: dict) -> str:
+def _py_calendar(cal: dict, locales: tuple[str, ...]) -> str:
     lines: list[str] = []
     # MONTH_NAMES
     lines.append("MONTH_NAMES: dict[str, list[str]] = {")
-    for locale in ("en", "et", "ru"):
+    for locale in locales:
         names = cal["month_names"][locale]
         lines.append(f'    "{locale}": {_py_str_list(names)},')
     lines.append("}")
     lines.append("")
     # DAY_NAMES
     lines.append("DAY_NAMES: dict[str, list[str]] = {")
-    for locale in ("en", "et", "ru"):
+    for locale in locales:
         names = cal["day_names"][locale]
         lines.append(f'    "{locale}": {_py_str_list(names)},')
     lines.append("}")
     return "\n".join(lines)
 
 
-def _py_personas(personas: list[dict]) -> str:
+def _py_personas(personas: list[dict], locales: tuple[str, ...]) -> str:
     lines = ["PERSONAS: list[dict] = ["]
     for p in personas:
         lines.append("    {")
         lines.append(f"        {_py_str('slug')}: {_py_str(p['slug'])},")
         lines.append(f"        {_py_str('emoji')}: {_py_str(p['emoji'])},")
         lines.append(f"        {_py_str('names')}: {{")
-        for loc in ("en", "et", "ru"):
+        for loc in locales:
             lines.append(f"            {_py_str(loc)}: {_py_str(p['names'][loc])},")
         lines.append("        },")
         lines.append(f"        {_py_str('vibes')}: {{")
-        for loc in ("en", "et", "ru"):
+        for loc in locales:
             lines.append(f"            {_py_str(loc)}: {_py_str(p['vibes'][loc])},")
         lines.append("        },")
         lines.append("    },")
@@ -110,12 +110,12 @@ def _py_personas(personas: list[dict]) -> str:
     return "\n".join(lines)
 
 
-def _ts_translations(locale_data: dict[str, dict]) -> str:
+def _ts_translations(locale_data: dict[str, dict], locales: tuple[str, ...]) -> str:
     lines = [
-        "type Locale = 'en' | 'et' | 'ru';",
+        f"type Locale = {' | '.join(_ts_str(loc) for loc in locales)};",
         "export const TRANSLATIONS: Record<Locale, Record<string, string>> = {",
     ]
-    for locale in ("en", "et", "ru"):
+    for locale in locales:
         lines.append(f"  {locale}: {{")
         for k, v in locale_data[locale]["ui"].items():
             lines.append(f"    {_ts_str(k)}: {_ts_str(v)},")
@@ -124,16 +124,19 @@ def _ts_translations(locale_data: dict[str, dict]) -> str:
     return "\n".join(lines)
 
 
-def _ts_persona_translations(personas: list[dict]) -> str:
+def _ts_persona_translations(
+    personas: list[dict], non_default_locales: tuple[str, ...]
+) -> str:
+    union = " | ".join(_ts_str(loc) for loc in non_default_locales)
     lines = [
         "type PersonaLocale = { name: string; vibe: string };",
         "export const PERSONA_TRANSLATIONS:",
-        "  Record<string, Partial<Record<'et' | 'ru', PersonaLocale>>> = {",
+        f"  Record<string, Partial<Record<{union}, PersonaLocale>>> = {{",
     ]
     for p in personas:
         slug = p["slug"]
         lines.append(f"  {_ts_str(slug)}: {{")
-        for loc in ("et", "ru"):
+        for loc in non_default_locales:
             n = _ts_str(p["names"][loc])
             v = _ts_str(p["vibes"][loc])
             lines.append(f"    {loc}: {{ name: {n}, vibe: {v} }},")
@@ -142,7 +145,7 @@ def _ts_persona_translations(personas: list[dict]) -> str:
     return "\n".join(lines)
 
 
-def _ts_personas_en(personas: list[dict]) -> str:
+def _ts_personas_en(personas: list[dict], default_locale: str) -> str:
     lines = [
         "export interface PersonaData { slug: string; emoji: string; name: string; vibe: string; }",
         "export const PERSONAS_EN: PersonaData[] = [",
@@ -150,8 +153,8 @@ def _ts_personas_en(personas: list[dict]) -> str:
     for p in personas:
         slug = _ts_str(p["slug"])
         emoji = _ts_str(p["emoji"])
-        name = _ts_str(p["names"]["en"])
-        vibe = _ts_str(p["vibes"]["en"])
+        name = _ts_str(p["names"][default_locale])
+        vibe = _ts_str(p["vibes"][default_locale])
         lines.append(f"  {{ slug: {slug}, emoji: {emoji}, name: {name}, vibe: {vibe} }},")
     lines.append("];")
     return "\n".join(lines)
@@ -180,17 +183,17 @@ def _ts_locale_code_map(cfg: dict) -> str:
 
 
 def write_backend_i18n_data(
-    locale_data: dict, calendar: dict, personas: list
+    locale_data: dict, calendar: dict, personas: list, locales: tuple[str, ...]
 ) -> str:
     parts = [
         HEADER_PY,
         "from __future__ import annotations\n",
         "",
-        _py_translations(locale_data),
+        _py_translations(locale_data, locales),
         "",
-        _py_calendar(calendar),
+        _py_calendar(calendar, locales),
         "",
-        _py_personas(personas),
+        _py_personas(personas, locales),
         "",
     ]
     return "\n".join(parts)
@@ -227,16 +230,20 @@ def write_backend_shared_constants(cfg: dict) -> str:
 
 
 def write_frontend_i18n_data(
-    locale_data: dict, personas: list
+    locale_data: dict,
+    personas: list,
+    locales: tuple[str, ...],
+    non_default_locales: tuple[str, ...],
+    default_locale: str,
 ) -> str:
     parts = [
         HEADER_TS,
         "",
-        _ts_translations(locale_data),
+        _ts_translations(locale_data, locales),
         "",
-        _ts_persona_translations(personas),
+        _ts_persona_translations(personas, non_default_locales),
         "",
-        _ts_personas_en(personas),
+        _ts_personas_en(personas, default_locale),
         "",
     ]
     return "\n".join(parts)
@@ -266,23 +273,25 @@ def write_frontend_shared_constants(cfg: dict) -> str:
 
 
 def main() -> None:
-    locale_data = {
-        "en": _load("i18n/en.json"),
-        "et": _load("i18n/et.json"),
-        "ru": _load("i18n/ru.json"),
-    }
+    cfg = _load("app-config.json")
+    # Locale codes flow from shared/app-config.json — the single source of truth —
+    # so adding a locale there propagates through the generator automatically.
+    locales = tuple(loc["code"] for loc in cfg["locales"])
+    default_locale = cfg["default_locale"]
+    non_default_locales = tuple(c for c in locales if c != default_locale)
+
+    locale_data = {loc: _load(f"i18n/{loc}.json") for loc in locales}
     calendar = _load("calendar.json")
     personas = _load("personas.json")
-    cfg = _load("app-config.json")
 
     BACKEND_GEN.mkdir(parents=True, exist_ok=True)
     FRONTEND_GEN.mkdir(parents=True, exist_ok=True)
 
     files: list[tuple[Path, str]] = [
         (BACKEND_GEN / "__init__.py", HEADER_PY),
-        (BACKEND_GEN / "i18n_data.py", write_backend_i18n_data(locale_data, calendar, personas)),
+        (BACKEND_GEN / "i18n_data.py", write_backend_i18n_data(locale_data, calendar, personas, locales)),
         (BACKEND_GEN / "shared_constants.py", write_backend_shared_constants(cfg)),
-        (FRONTEND_GEN / "i18nData.ts", write_frontend_i18n_data(locale_data, personas)),
+        (FRONTEND_GEN / "i18nData.ts", write_frontend_i18n_data(locale_data, personas, locales, non_default_locales, default_locale)),
         (FRONTEND_GEN / "sharedConstants.ts", write_frontend_shared_constants(cfg)),
     ]
 
