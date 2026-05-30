@@ -14,6 +14,7 @@ from app.constants import (
     HTTP_TIMEOUT_SECONDS,
     ORGANIZER_MIN_EVENTS_FOR_AUTO_ADD,
     ORGANIZER_NAME_MAX_LEN,
+    SOURCE_SLUG_FIENTA,
     TALLINN_TZ,
 )
 from app.ingestion.base import _http_get
@@ -27,7 +28,7 @@ async def sync_fienta_organizers(db: AsyncSession) -> dict:
 
     Caller is responsible for committing the session after this returns.
     """
-    source = await db.scalar(select(Source).where(Source.slug == "fienta"))
+    source = await db.scalar(select(Source).where(Source.slug == SOURCE_SLUG_FIENTA))
     if not source:
         log.warning("organizer_sync: fienta source not found")
         return {}

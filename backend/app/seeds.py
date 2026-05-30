@@ -6,82 +6,56 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app._generated.i18n_data import PERSONAS as _PERSONAS_DATA
 from app.config import settings
-from app.constants import NEWSLETTER_SOURCE_SLUG, PILETILEVI_SOURCE_SLUG, VALID_TIMES
+from app.constants import SOURCE_KIND_API, SOURCE_SLUG_FIENTA, VALID_TIMES
+from app.ingestion.registry import SOURCE_CATALOG, SourceDef
 from app.llm.taxonomy import VALID_CATEGORIES, VALID_VIBES
 from app.models.models import Persona, Source
 
 log = logging.getLogger(__name__)
 
 
-def _jsonld_sources() -> list[dict[str, Any]]:
-    return [
-        {
-            "slug": "telliskivi",
-            "kind": "html_jsonld",
-            "enabled": True,
-            "config": {"url": settings.TELLISKIVI_URL},
-        },
-        {
-            "slug": "kultuurikatel",
-            "kind": "html_jsonld",
-            "enabled": True,
-            "config": {"url": settings.KULTUURIKATEL_URL},
-        },
-        {
-            "slug": "fotografiska",
-            "kind": "html_jsonld",
-            "enabled": True,
-            "config": {"url": settings.FOTOGRAFISKA_URL},
-        },
-        {
-            "slug": "kumu",
-            "kind": "html_jsonld",
-            "enabled": True,
-            "config": {"url": settings.KUMU_URL},
-        },
-        {
-            "slug": "estonia_concert_hall",
-            "kind": "html_jsonld",
-            "enabled": True,
-            "config": {"url": settings.ESTONIA_CONCERT_HALL_URL},
-        },
-    ]
-
-
-_AFFINITY_BY_SLUG = {
-    "underground_clubber": lambda: settings.PERSONA_UNDERGROUND_CLUBBER_AFFINITY,
-    "networking_pro": lambda: settings.PERSONA_NETWORKING_PRO_AFFINITY,
-    "weekend_hobbyist": lambda: settings.PERSONA_WEEKEND_HOBBYIST_AFFINITY,
-    "culture_buff": lambda: settings.PERSONA_CULTURE_BUFF_AFFINITY,
-    "family_explorer": lambda: settings.PERSONA_FAMILY_EXPLORER_AFFINITY,
-}
+def _persona_affinity(slug: str) -> dict:
+    attr = f"PERSONA_{slug.upper()}_AFFINITY"
+    try:
+        return getattr(settings, attr)
+    except AttributeError:
+        raise KeyError(
+            f"No affinity configured for persona {slug!r} — "
+            f"add {attr} to config.py"
+        ) from None
 
 
 def _persona_seeds() -> tuple[dict[str, Any], ...]:
-    seeds = []
-    for p in _PERSONAS_DATA:
-        affinity_fn = _AFFINITY_BY_SLUG.get(p["slug"])
-        if affinity_fn is None:
+    return tuple(
+        {
+            "slug": p["slug"],
+            "display_name_en": p["names"]["en"],
+            "display_name_et": p["names"]["et"],
+            "display_name_ru": p["names"]["ru"],
+            "affinity_vector": _persona_affinity(p["slug"]),
+        }
+        for p in _PERSONAS_DATA
+    )
+
+
+def _simple_source_def(sdef: SourceDef) -> dict[str, Any]:
+    if sdef.url_attr:
+        url = getattr(settings, sdef.url_attr, None)
+        if url is None:
             raise KeyError(
-                f"No affinity configured for persona {p['slug']!r} — "
-                "add it to _AFFINITY_BY_SLUG in seeds.py and PERSONA_*_AFFINITY in config.py"
+                f"Source {sdef.slug!r} requires settings.{sdef.url_attr} "
+                f"(set in registry.py SourceDef.url_attr) but it is not configured"
             )
-        seeds.append(
-            {
-                "slug": p["slug"],
-                "display_name_en": p["names"]["en"],
-                "display_name_et": p["names"]["et"],
-                "display_name_ru": p["names"]["ru"],
-                "affinity_vector": affinity_fn(),
-            }
-        )
-    return tuple(seeds)
+        config: dict[str, Any] = {"url": url}
+    else:
+        config = {}
+    return {"slug": sdef.slug, "kind": sdef.kind, "enabled": True, "config": config}
 
 
 def _fienta_source() -> dict[str, Any]:
     return {
-        "slug": "fienta",
-        "kind": "api",
+        "slug": SOURCE_SLUG_FIENTA,
+        "kind": SOURCE_KIND_API,
         "enabled": True,
         "config": {
             "base_url": settings.FIENTA_BASE_URL,
@@ -92,27 +66,11 @@ def _fienta_source() -> dict[str, Any]:
 
 
 async def seed_sources(db: AsyncSession) -> None:
-    await _upsert_fienta(db)
-    for source_def in _jsonld_sources():
-        await _upsert_simple(db, source_def)
-    await _upsert_simple(
-        db,
-        {
-            "slug": NEWSLETTER_SOURCE_SLUG,
-            "kind": "inbound_email",
-            "enabled": True,
-            "config": {},
-        },
-    )
-    await _upsert_simple(
-        db,
-        {
-            "slug": PILETILEVI_SOURCE_SLUG,
-            "kind": "html_scrape",
-            "enabled": True,
-            "config": {},
-        },
-    )
+    for sdef in SOURCE_CATALOG:
+        if sdef.slug == SOURCE_SLUG_FIENTA:
+            await _upsert_fienta(db)
+        else:
+            await _upsert_simple(db, _simple_source_def(sdef))
 
 
 def _validate_affinity_vector(slug: str, vector: dict) -> None:

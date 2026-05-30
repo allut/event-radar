@@ -262,6 +262,20 @@ LLM_PROVIDERS: list[dict[str, str]] = [
     },
 ]
 
+# Source slugs — single source of truth; imported by registry.py and seeds.py
+SOURCE_SLUG_FIENTA = "fienta"
+SOURCE_SLUG_TELLISKIVI = "telliskivi"
+SOURCE_SLUG_KULTUURIKATEL = "kultuurikatel"
+SOURCE_SLUG_FOTOGRAFISKA = "fotografiska"
+SOURCE_SLUG_KUMU = "kumu"
+SOURCE_SLUG_ESTONIA_CONCERT_HALL = "estonia_concert_hall"
+
+# Source kinds
+SOURCE_KIND_API = "api"
+SOURCE_KIND_HTML_JSONLD = "html_jsonld"
+SOURCE_KIND_HTML_SCRAPE = "html_scrape"
+SOURCE_KIND_INBOUND_EMAIL = "inbound_email"
+
 # Piletilevi HTML scraper
 PILETILEVI_BASE_URL = "https://www.piletilevi.ee"
 PILETILEVI_SOURCE_SLUG = "piletilevi"
