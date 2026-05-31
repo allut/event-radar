@@ -23,6 +23,13 @@ from app.constants import (
     TALLINN_TZ,
 )
 from app.email.styles import DIGEST_CSS
+from app.email.templates import (
+    DIGEST_DOCUMENT,
+    EVENT_BLOCK,
+    EVENT_BULLET,
+    EVENT_PRICE,
+    EVENT_TITLE_LINK,
+)
 from app.i18n import day_name, month_name, t, ti
 from app.models.models import DailyFeed, Event, User
 from app.routers.utils import resolve_why_go, select_events_with_classification
@@ -75,19 +82,20 @@ def build_digest_html(
             price_str = ""
 
         safe_title = html_lib.escape(event.title_orig)
-        title_link = (
-            f'<a href="{frontend_url}/events/{event.id}" class="event-title">'
-            f"{safe_title}</a>"
+        title_link = EVENT_TITLE_LINK.format(
+            href=f"{frontend_url}/events/{event.id}", title=safe_title
         )
-        bullet_html = "".join(f"<li>{html_lib.escape(b)}</li>" for b in bullets)
-        price_html = f'<p class="price">{price_str}</p>' if price_str else ""
+        bullets_html = "".join(
+            EVENT_BULLET.format(text=html_lib.escape(b)) for b in bullets
+        )
+        price_html = EVENT_PRICE.format(price=price_str) if price_str else ""
         event_blocks.append(
-            f'<div class="event">'
-            f"<p>{title_link}</p>"
-            f'<p class="event-meta">{meta}</p>'
-            f'<ul class="bullets">{bullet_html}</ul>'
-            f"{price_html}"
-            f"</div>"
+            EVENT_BLOCK.format(
+                title_link=title_link,
+                meta=meta,
+                bullets_html=bullets_html,
+                price_html=price_html,
+            )
         )
 
     events_html = (
@@ -97,19 +105,14 @@ def build_digest_html(
     )
     settings_label = t("digest.unsubscribe", locale)
 
-    return f"""<!DOCTYPE html>
-<html><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<style>{DIGEST_CSS}</style></head>
-<body><div class="wrap">
-<h1>{subject_label}</h1>
-<h2>{date_str}</h2>
-{events_html}
-<div class="footer">
-  <a href="{unsubscribe_url}">{settings_label}</a>
-  &nbsp;·&nbsp; Event Radar, Tallinn
-</div>
-</div></body></html>"""
+    return DIGEST_DOCUMENT.format(
+        css=DIGEST_CSS,
+        subject_label=subject_label,
+        date_str=date_str,
+        events_html=events_html,
+        unsubscribe_url=unsubscribe_url,
+        settings_label=settings_label,
+    )
 
 
 # ---------------------------------------------------------------------------
