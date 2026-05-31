@@ -9,7 +9,7 @@ from app.constants import FIENTA_MAX_PAGES, HTTP_TIMEOUT_SECONDS
 from app.ingestion.base import (
     NormalizedEvent,
     SourceAdapter,
-    _http_get,
+    http_get,
     _parse_dt,
     normalize_currency,
 )
@@ -78,7 +78,7 @@ class FientaAdapter(SourceAdapter):
         while url and budget > 0:
             # params=None preserves the URL's existing query string (e.g. links.next
             # already encodes all params); params=dict merges/replaces the query string.
-            response = await _http_get(client, url, params=params)
+            response = await http_get(client, url, params=params)
             budget -= 1
             data = response.json()
 

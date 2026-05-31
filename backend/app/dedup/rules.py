@@ -68,7 +68,7 @@ def _find(parent: dict[int, int], x: int) -> int:
     return x
 
 
-def _union(parent: dict[int, int], a: int, b: int) -> None:
+def union(parent: dict[int, int], a: int, b: int) -> None:
     ra, rb = _find(parent, a), _find(parent, b)
     if ra != rb:
         # smaller ID becomes the root so dedup_group_id == min(event_id)
@@ -116,7 +116,7 @@ def cluster_events(
         for i in range(n):
             for j in range(i + 1, n):
                 if is_candidate_pair(events[i], events[j]):
-                    _union(parent, events[i].id, events[j].id)
+                    union(parent, events[i].id, events[j].id)
                     pair_count += 1
     else:
         events_by_id: dict[int, Event] = {e.id: e for e in events}
@@ -126,7 +126,7 @@ def cluster_events(
             if a is None or b is None:
                 continue
             if is_candidate_pair(a, b):
-                _union(parent, a.id, b.id)
+                union(parent, a.id, b.id)
                 pair_count += 1
 
     if pair_count:

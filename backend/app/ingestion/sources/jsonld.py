@@ -9,7 +9,7 @@ from app.constants import HTTP_TIMEOUT_SECONDS, HTTP_USER_AGENT, JSONLD_EVENT_TY
 from app.ingestion.base import (
     NormalizedEvent,
     SourceAdapter,
-    _http_get,
+    http_get,
     _parse_dt,
     normalize_currency,
 )
@@ -41,7 +41,7 @@ class JsonLdAdapter(SourceAdapter):
             async with httpx.AsyncClient(
                 timeout=HTTP_TIMEOUT_SECONDS, follow_redirects=True
             ) as client:
-                response = await _http_get(
+                response = await http_get(
                     client, url, headers={"User-Agent": HTTP_USER_AGENT}
                 )
         except (httpx.HTTPStatusError, httpx.RequestError) as exc:

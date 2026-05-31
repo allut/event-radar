@@ -49,7 +49,7 @@ def _is_retryable(exc: BaseException) -> bool:
     stop=stop_after_attempt(HTTP_RETRY_MAX_ATTEMPTS),
     reraise=True,
 )
-async def _http_get(
+async def http_get(
     client: httpx.AsyncClient,
     url: str,
     *,

@@ -17,7 +17,7 @@ from app.constants import (
     SOURCE_SLUG_FIENTA,
     TALLINN_TZ,
 )
-from app.ingestion.base import _http_get
+from app.ingestion.base import http_get
 from app.models.models import Source
 
 log = logging.getLogger(__name__)
@@ -47,7 +47,7 @@ async def sync_fienta_organizers(db: AsyncSession) -> dict:
         # Step 1 — check each current organizer is still returning events
         for org_id in current_ids:
             try:
-                resp = await _http_get(
+                resp = await http_get(
                     client,
                     settings.FIENTA_BASE_URL,
                     params={"organizer": org_id, "limit": FIENTA_ORGANIZER_CHECK_LIMIT},
@@ -67,7 +67,7 @@ async def sync_fienta_organizers(db: AsyncSession) -> dict:
 
         # Step 2 — discover new organizers via city filter scan
         try:
-            resp = await _http_get(
+            resp = await http_get(
                 client,
                 settings.FIENTA_BASE_URL,
                 params={

@@ -15,7 +15,7 @@ from app.constants import (
     PILETILEVI_TALLINN_FILTER,
     TALLINN_TZ,
 )
-from app.ingestion.base import NormalizedEvent, SourceAdapter, _http_get
+from app.ingestion.base import NormalizedEvent, SourceAdapter, http_get
 
 log = logging.getLogger(__name__)
 
@@ -43,7 +43,7 @@ class PiletileviAdapter(SourceAdapter):
             for path in PILETILEVI_LISTING_URLS:
                 url = PILETILEVI_BASE_URL + path
                 try:
-                    resp = await _http_get(client, url)
+                    resp = await http_get(client, url)
                 except (httpx.HTTPStatusError, httpx.RequestError) as exc:
                     log.warning("piletilevi listing fetch failed url=%s: %s", url, exc)
                     listing_errors.append(exc)
@@ -103,7 +103,7 @@ class PiletileviAdapter(SourceAdapter):
             for card in cards:
                 detail_url = PILETILEVI_BASE_URL + card["href"]
                 try:
-                    detail_resp = await _http_get(client, detail_url)
+                    detail_resp = await http_get(client, detail_url)
                     detail_soup = BeautifulSoup(detail_resp.text, "html.parser")
                     desc_tag = detail_soup.select_one(_DETAIL_DESC_SELECTOR)
                     card["description"] = (

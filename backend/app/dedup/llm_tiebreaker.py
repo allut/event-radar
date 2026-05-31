@@ -28,7 +28,7 @@ from app.constants import (
     LLM_DEDUP_VENUE_MAX_LEN,
 )
 from app.dedup.rules import (
-    _union,
+    union,
     build_cluster_assignments,
     candidate_pair_ids_in_window,
     dedup_window_cutoff,
@@ -165,7 +165,7 @@ async def run_dedup_pass_llm(db: AsyncSession) -> dict:
             break
         candidate_pairs += 1
         if await _llm_confirms_pair(a, b, db):
-            _union(parent, a_id, b_id)
+            union(parent, a_id, b_id)
             llm_confirmed += 1
 
     assignments = build_cluster_assignments(parent, ids)

@@ -187,7 +187,7 @@ class TestFetchRaw:
         listing_resp = _mock_response(LISTING_HTML)
         detail_resp = _mock_response(DETAIL_HTML)
 
-        with patch("app.ingestion.sources.piletilevi._http_get") as mock_get:
+        with patch("app.ingestion.sources.piletilevi.http_get") as mock_get:
             mock_get.side_effect = [
                 listing_resp,  # single listing URL
                 detail_resp,   # detail for Jazz Night (Tallinn)
@@ -208,7 +208,7 @@ class TestFetchRaw:
         listing_resp = _mock_response(LISTING_HTML)
         detail_resp = _mock_response(DETAIL_HTML)
 
-        with patch("app.ingestion.sources.piletilevi._http_get") as mock_get:
+        with patch("app.ingestion.sources.piletilevi.http_get") as mock_get:
             mock_get.side_effect = [listing_resp, detail_resp, detail_resp]
             with patch("app.ingestion.sources.piletilevi.PILETILEVI_LISTING_URLS", ["/eng/tickets/"]):
                 results = await adapter.fetch_raw()
@@ -235,7 +235,7 @@ class TestFetchRaw:
         listing_resp = _mock_response(dupe_html)
         detail_resp = _mock_response(DETAIL_HTML)
 
-        with patch("app.ingestion.sources.piletilevi._http_get") as mock_get:
+        with patch("app.ingestion.sources.piletilevi.http_get") as mock_get:
             # Two listing URLs, same card on both
             mock_get.side_effect = [
                 listing_resp,  # first listing URL
@@ -261,7 +261,7 @@ class TestFetchRaw:
         """)
         detail_resp = _mock_response(DETAIL_HTML)
 
-        with patch("app.ingestion.sources.piletilevi._http_get") as mock_get:
+        with patch("app.ingestion.sources.piletilevi.http_get") as mock_get:
             mock_get.side_effect = [listing_resp, detail_resp]
             with patch("app.ingestion.sources.piletilevi.PILETILEVI_LISTING_URLS", ["/eng/tickets/"]):
                 results = await adapter.fetch_raw()
@@ -272,7 +272,7 @@ class TestFetchRaw:
     @pytest.mark.asyncio
     async def test_empty_listing_returns_empty_list(self):
         adapter = _adapter()
-        with patch("app.ingestion.sources.piletilevi._http_get") as mock_get:
+        with patch("app.ingestion.sources.piletilevi.http_get") as mock_get:
             mock_get.return_value = _mock_response(EMPTY_LISTING_HTML)
             with patch("app.ingestion.sources.piletilevi.PILETILEVI_LISTING_URLS", ["/eng/tickets/"]):
                 results = await adapter.fetch_raw()
