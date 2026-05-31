@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import Any
 
 import httpx
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, Tag
 
 from app.constants import (
     HTTP_TIMEOUT_SECONDS,
@@ -25,6 +25,19 @@ _DATE_SELECTOR = ".card__time"
 _VENUE_SELECTOR = ".card__description"
 _IMAGE_SELECTOR = ".card__image"
 _DETAIL_DESC_SELECTOR = ".event__description"
+
+
+def _attr_str(tag: Tag, name: str) -> str:
+    """Return a single-string attribute value.
+
+    bs4 types attribute values as ``str | list[str]`` (multi-valued attributes
+    like ``class`` parse as lists). The attributes we read here (href, src,
+    data-src) are single-valued, so collapse any list to its first element.
+    """
+    value = tag.get(name)
+    if isinstance(value, list):
+        return value[0] if value else ""
+    return value or ""
 
 
 class PiletileviAdapter(SourceAdapter):
@@ -51,7 +64,7 @@ class PiletileviAdapter(SourceAdapter):
 
                 soup = BeautifulSoup(resp.text, "html.parser")
                 for tag in soup.select(_CARD_SELECTOR):
-                    href: str = tag.get("href", "")
+                    href: str = _attr_str(tag, "href")
                     if not href or href in seen_hrefs:
                         continue
 
@@ -73,7 +86,11 @@ class PiletileviAdapter(SourceAdapter):
                     img_tag = tag.select_one(_IMAGE_SELECTOR)
                     image_src: str | None = None
                     if img_tag:
-                        image_src = img_tag.get("src") or img_tag.get("data-src")
+                        image_src = (
+                            _attr_str(img_tag, "src")
+                            or _attr_str(img_tag, "data-src")
+                            or None
+                        )
 
                     seen_hrefs.add(href)
                     cards.append(
