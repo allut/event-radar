@@ -22,6 +22,7 @@ from app.constants import (
     RESEND_TIMEOUT_SECONDS,
     TALLINN_TZ,
 )
+from app.email.styles import DIGEST_CSS
 from app.i18n import day_name, month_name, t, ti
 from app.models.models import DailyFeed, Event, User
 from app.routers.utils import resolve_why_go, select_events_with_classification
@@ -43,26 +44,6 @@ def _format_event_time(starts_at: datetime, locale: str) -> str:
     local = starts_at.astimezone(TALLINN_TZ)
     day_str = _format_feed_date(local.date(), locale)
     return f"{day_str}, {local.strftime('%H:%M')}"
-
-
-# ---------------------------------------------------------------------------
-# HTML template
-# ---------------------------------------------------------------------------
-
-_CSS = """
-body{margin:0;padding:0;background:#0d0d0d;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;color:#e8e2d5;}
-.wrap{max-width:600px;margin:0 auto;padding:32px 20px;}
-h1{font-size:13px;letter-spacing:3px;text-transform:uppercase;color:#8b7d6b;margin:0 0 4px 0;}
-h2{font-size:22px;font-weight:400;color:#e8e2d5;margin:0 0 32px 0;}
-.event{border-top:1px solid #2a2522;padding:20px 0;}
-.event-title{font-size:18px;font-weight:600;color:#e8e2d5;margin:0 0 4px 0;text-decoration:none;}
-.event-title:hover{color:#c9a96e;}
-.event-meta{font-size:12px;color:#8b7d6b;margin:0 0 10px 0;}
-.bullets{margin:0;padding:0 0 0 16px;color:#c4bdb5;font-size:14px;line-height:1.7;}
-.price{font-size:12px;color:#8b7d6b;margin:4px 0 0 0;}
-.footer{margin-top:40px;padding-top:20px;border-top:1px solid #2a2522;font-size:11px;color:#5a4f47;text-align:center;}
-.footer a{color:#8b7d6b;}
-"""
 
 
 def build_digest_html(
@@ -119,7 +100,7 @@ def build_digest_html(
     return f"""<!DOCTYPE html>
 <html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<style>{_CSS}</style></head>
+<style>{DIGEST_CSS}</style></head>
 <body><div class="wrap">
 <h1>{subject_label}</h1>
 <h2>{date_str}</h2>
