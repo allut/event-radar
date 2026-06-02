@@ -62,7 +62,7 @@ async def llm_json(
     Args:
         task: Short label stored in ``llm_calls.task`` (``"dedup"`` or ``"classify"``).
         prompt: Full prompt text (keep ≤600 tokens per project constraints).
-        db: Active async DB session.  Caller is responsible for committing.
+        db: Active async DB session. Caller is responsible for committing.
         event_id: Optional event FK for audit traceability.
 
     Returns:

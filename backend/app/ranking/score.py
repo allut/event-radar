@@ -218,9 +218,10 @@ def feedback_signal(
     now: datetime,
 ) -> float:
     """
-    Feedback score in [-1, 1].
-    Returns exactly -1.0 as a hard-exclude sentinel when the event belongs to a
-    disliked dedup_group (caller should skip the event entirely).
+    Feedback score in [-1, 1] for normal events.
+    Returns SCORE_HARD_EXCLUDE (-2.0, deliberately outside the [-1, 1] range so it
+    cannot collide with a legitimately disliked event's -1.0) when the event belongs
+    to a disliked dedup_group; the caller skips the event entirely.
     """
     if event_dedup_group is not None and event_dedup_group in ctx.disliked_groups:
         return SCORE_HARD_EXCLUDE
