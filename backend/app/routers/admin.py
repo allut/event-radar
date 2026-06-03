@@ -11,6 +11,7 @@ from app.config import settings
 from app.constants import (
     ADMIN_DEDUP_GROUPS_MAX_PAGE_SIZE,
     ADMIN_DEDUP_GROUPS_PAGE_SIZE,
+    APP_ENV_DEVELOPMENT,
     EVENT_STATUS_CANCELLED,
 )
 from app.db import AsyncSessionLocal
@@ -31,7 +32,7 @@ _security = HTTPBasic()
 def _require_admin(credentials: HTTPBasicCredentials = Depends(_security)) -> None:
     password = settings.ADMIN_PASSWORD
     if not password:
-        if settings.APP_ENV != "development":
+        if settings.APP_ENV != APP_ENV_DEVELOPMENT:
             # Production with no password set — refuse all access until explicitly configured.
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

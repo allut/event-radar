@@ -8,7 +8,7 @@ from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.constants import DIGEST_SEND_HOUR, TALLINN_TZ_NAME
+from app.constants import APP_ENV_DEVELOPMENT, DIGEST_SEND_HOUR, TALLINN_TZ_NAME
 from app.db import AsyncSessionLocal, engine
 from app.email.digest import send_daily_digests
 from app.ingestion.jobs import classify_pending_job, dedup_pass, ingest_all_enabled
@@ -187,7 +187,7 @@ async def tick(request: Request) -> dict:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN, detail="Invalid token"
             )
-    elif settings.APP_ENV != "development":
+    elif settings.APP_ENV != APP_ENV_DEVELOPMENT:
         log.warning(
             "INTERNAL_TOKEN not set; /internal/tick is unauthenticated (APP_ENV=%s)",
             settings.APP_ENV,

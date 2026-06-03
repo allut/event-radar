@@ -28,6 +28,12 @@ __all__ = [
 TALLINN_TZ_NAME = "Europe/Tallinn"
 TALLINN_TZ = ZoneInfo(TALLINN_TZ_NAME)
 
+# Application environment — value of settings.APP_ENV that enables dev-only
+# behaviour (unprotected admin endpoints, SQL echo, unauthenticated /internal/tick).
+# NB: app.config imports this module for the APP_ENV default, so constants.py must
+# never import app.config — doing so would create a circular import.
+APP_ENV_DEVELOPMENT = "development"
+
 SECONDS_PER_MINUTE = 60
 SECONDS_PER_HOUR = 3600
 SECONDS_PER_DAY = 86400

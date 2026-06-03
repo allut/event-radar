@@ -6,6 +6,7 @@ from app._generated.shared_constants import (
     MAGIC_LINK_TTL_MINUTES as _MAGIC_LINK_TTL_DEFAULT,
     SESSION_TTL_DAYS as _SESSION_TTL_DEFAULT,
 )
+from app.constants import APP_ENV_DEVELOPMENT
 
 
 class Settings(BaseSettings):
@@ -13,7 +14,7 @@ class Settings(BaseSettings):
 
     DATABASE_URL: str = "postgresql+asyncpg://localhost/eventradar"
     SECRET_KEY: str  # required — no default; app fails at startup if unset
-    APP_ENV: str = "development"
+    APP_ENV: str = APP_ENV_DEVELOPMENT
 
     FIENTA_BASE_URL: str = "https://fienta.com/api/v1/public/events"
     TELLISKIVI_URL: str = "https://telliskivi.cc/en/events/"
