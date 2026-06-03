@@ -165,8 +165,10 @@ async def admin_dedup_groups(
 
     groups: dict[int, list[dict]] = {}
     for e in rows:
+        if e.dedup_group_id is None:
+            continue
         groups.setdefault(e.dedup_group_id, []).append(
-            {  # type: ignore[arg-type]
+            {
                 "id": e.id,
                 "title": e.title_orig,
                 "starts_at": e.starts_at.isoformat(),
