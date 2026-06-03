@@ -13,7 +13,6 @@ from app.llm.newsletter_extractor import extract_events_from_email
 from app.models.models import RawInboundEmail
 
 log = logging.getLogger(__name__)
-
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
 
 

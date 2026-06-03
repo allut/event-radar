@@ -111,4 +111,4 @@ class Settings(BaseSettings):
     CORS_ORIGINS: list[str] = ["http://localhost:5173", "http://localhost:4173"]
 
 
-settings = Settings()
+settings = Settings() # type: ignore
