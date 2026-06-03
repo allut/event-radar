@@ -1,5 +1,6 @@
 import { api } from './api/client';
-import { CATEGORY_GRADIENTS, FALLBACK_GRADIENT, EUR_SYMBOL, FREE_LABEL, type Signal, toLocaleCode } from './constants';
+import { CATEGORY_GRADIENTS, FALLBACK_GRADIENT, EUR_SYMBOL, type Signal, toLocaleCode } from './constants';
+import { t } from './i18n';
 
 export function cx(...classes: (string | false | null | undefined)[]): string {
   return classes.filter(Boolean).join(' ');
@@ -22,10 +23,10 @@ export function categoryGradient(categories: string[]): string {
   return CATEGORY_GRADIENTS[key] ?? FALLBACK_GRADIENT;
 }
 
-export function formatPrice(min: number | null, max: number | null, currency: string | null): string | null {
+export function formatPrice(min: number | null, max: number | null, currency: string | null, locale: string): string | null {
   if (min === null && max === null) return null;
   const sym = currency === 'EUR' ? EUR_SYMBOL : currency ?? '';
-  if (min === 0) return FREE_LABEL;
+  if (min === 0) return t('price_free', locale);
   if (min !== null && max !== null && min !== max) return `${sym}${min}–${sym}${max}`;
   if (min !== null) return `${sym}${min}`;
   return null;

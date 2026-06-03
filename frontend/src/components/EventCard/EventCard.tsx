@@ -39,7 +39,7 @@ export default function EventCard({ event, index, onFeedbackSent }: EventCardPro
   const locale = getLocale();
   const { activeSignal, pending, sendFeedback } = useFeedback(event.id, onFeedbackSent);
 
-  const price = formatPrice(event.price_min, event.price_max, event.currency);
+  const price = formatPrice(event.price_min, event.price_max, event.currency, locale);
 
   return (
     <article

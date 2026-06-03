@@ -51,7 +51,7 @@ export default function EventDetail() {
     );
   }
 
-  const price = formatPrice(data.price_min, data.price_max, data.currency);
+  const price = formatPrice(data.price_min, data.price_max, data.currency, locale);
   const mapsUrl = data.lat && data.lng
     ? `https://www.google.com/maps/search/?api=1&query=${data.lat},${data.lng}`
     : data.venue_address

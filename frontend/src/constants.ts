@@ -45,7 +45,6 @@ export const SIGNAL_CONFIG: Record<Signal, { icon: string; label: string }> = {
 };
 
 export const EUR_SYMBOL = '€';
-export const FREE_LABEL = 'Free';
 
 // Keys must match the 12-category taxonomy in backend/app/llm/taxonomy.py
 export const CATEGORY_GRADIENTS: Record<string, string> = {
