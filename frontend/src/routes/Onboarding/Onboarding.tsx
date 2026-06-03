@@ -62,9 +62,9 @@ export default function Onboarding() {
     <div className={styles.page}>
       <header className={styles.topBar}>
         <span className={styles.radar} aria-hidden>◉</span>
-        <span className={styles.brand}>Event Radar</span>
+        <span className={styles.brand}>{t('brand', locale)}</span>
 
-        <LocaleSelector locale={locale} onChange={setLocaleState} ariaLabel="Language" />
+        <LocaleSelector locale={locale} onChange={setLocaleState} ariaLabel={t('section_language', locale)} />
       </header>
 
       <main className={styles.main}>
