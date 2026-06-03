@@ -172,3 +172,30 @@ Server state via TanStack Query. i18n custom `frontend/src/i18n.ts` (no library)
 1. **Source coverage thinness** — Tallinn has no Songkick-grade aggregator. *Mitigation:* heavy investment in newsletter ingestion + submit-event form.
 2. **Free LLM quota exhaustion on backfill** — *Mitigation:* Groq → Cerebras → Mistral chain, ≤600 token prompts, content-hash dedup cache, classify post-dedup only, push backfill to Mistral 1B tok/mo tier.
 3. **Render free-tier sleep killing scheduler** — *Mitigation:* external Cron Job pings `/internal/tick` every 15 min. Render Starter ($7/mo) removes sleep if needed.
+
+---
+
+## Code-comment TODOs
+
+Synthesized from comments in the codebase (2026-06-04). Ranked by priority.
+Items the code documents as intentional design (full score-cache invalidation,
+admin-auth refusal, migration dedup guards) are excluded — these are real
+deferred/hardening items only.
+
+### P1 — Pre-production hardening
+
+1. **IP-level rate limiting on magic-link request endpoint**
+   — `backend/app/routers/auth.py:108` (`# TODO before production: add IP-level
+   rate limiting (SlowAPI/fastapi-limiter)`). Today only a per-email 2-minute
+   cooldown guards Resend quota; an attacker varying the email address can still
+   exhaust the 3k/mo Resend free tier. Add SlowAPI or fastapi-limiter IP throttling
+   before/at soft launch.
+
+### P2 — Robustness / silent-failure risk
+
+2. **Fienta meta-pagination assumes `current_page` is always present**
+   — `backend/app/ingestion/sources/fienta.py:105` (`# Assumes APIs that mix
+   link+meta styles always include current_page in meta`). If a Fienta response
+   omits `current_page`, the loop falls back to the local `page` counter and may
+   stop early or loop, silently truncating ingested events. Harden the
+   meta-pagination branch (explicit guard / log when `current_page` is missing).
