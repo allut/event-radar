@@ -141,6 +141,7 @@ This project follows production best practices throughout:
 - **Python lint rules** — Ruff is configured in `backend/ruff.toml` with `select = ["E", "F", "W", "Q"]` (pycodestyle errors/warnings, Pyflakes, quotes), `line-length = 88`, `ignore = ["E501"]` (long lines allowed when wrapping would hurt readability). `python -m ruff check backend` must pass clean before commit. (`ruff` is not on PATH — always invoke via `python -m ruff`.)
 - **Type annotations** — Use modern PEP 604 / PEP 585 syntax: `X | None` not `Optional[X]`, `list[T]` / `dict[K, V]` / `tuple[T, ...]` not `List` / `Dict` / `Tuple`. Annotate return types on all public functions (including FastAPI route handlers — `-> dict`, `-> list[Schema]`, `-> None`). Import from `typing` only for things still required there (e.g. `Any`, `TypeVar`, `Protocol`).
 - **Shared test fixtures** — Common pytest fixtures (`mock_db`, `make_user`, `make_event`) live in `backend/tests/conftest.py`. Use them instead of inlining `AsyncMock()` DB scaffolding or constructing user/event objects by hand in each test. When a new fixture would be reused across two or more test files, add it to `conftest.py`.
+- **Numeric truthiness** — never gate a numeric field on truthiness; `0` is falsy, so `price_raw.get("min") or fallback` and `raw.get("price") or {}` silently drop legitimate zero prices (free events). Use explicit `is not None` checks and `isinstance(x, dict)` guards. Currency normalization goes through `normalize_currency(raw, has_price)` in `app/ingestion/base.py`.
 
 ## Conventions
 
@@ -148,6 +149,7 @@ This project follows production best practices throughout:
 - Email columns use `citext` (case-insensitive) to prevent duplicate accounts.
 - Persona affinity vectors and source config stored as JSONB for easy extension without migrations.
 - Feedback decay formula: `0.9^days_since_feedback` — recent signals weighted higher, dislike is a hard exclude.
+- Public event endpoints (`/events/{id}`) return only `status == published` events and never expose internal metadata (`dedup_group_id`, draft/cancelled rows). Filter at the query level (`routers/events.py`), not in the serializer.
 
 ## MVP Scope (do not cut)
 

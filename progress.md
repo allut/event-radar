@@ -55,25 +55,6 @@ Audit trail against [`plan.md`](./plan.md).
 
 ---
 
-## Issues & fixes
-
-| Symptom | Root cause | Fix |
-|---|---|---|
-| Persona affinity flat for multi-match events | `_affinity_for_vector` clipped raw sum to [-1,1] | Normalize by `max_possible = sum(vector.values())` |
-| `GET /events/{id}` exposed draft/cancelled + `dedup_group_id` | No status filter on public endpoint | Added `status == published` filter; removed `dedup_group_id` from response |
-| Persona affinity keys didn't match taxonomy | Old vectors used `arts`/`tech`/`business` not in `VALID_CATEGORIES` | Rewrote all 5 vectors; `_validate_affinity_vector()` startup check |
-| `daily_feeds.event_ids` typed `ARRAY(Integer)` | `events.id` is `BigInteger` | Changed to `ARRAY(BigInteger)` in ORM + migration |
-| `SECRET_KEY` had hardcoded default | Magic-link forgery risk | Made required; app fails at startup if unset |
-| Free events (price=0) dropped by `price_raw.get('min') or fallback` | `0 or x` evaluates to `x` | `_first_not_none()` helper with `next(v for v in vals if v is not None)` |
-| `price_raw = raw.get("price") or {}` drops `"price": 0` integer | Same Python truthiness issue | `isinstance(price_raw, dict)` guard; integers fall through |
-| SSRF guard compared `netloc` (includes port) | `urlparse(url).netloc` returns `"host:port"` | Use `urlparse(url).hostname`; log level → ERROR |
-| Single organizer 4xx/5xx aborted entire Fienta fetch | `raise_for_status()` propagated | Per-organizer try/except on `HTTPStatusError` + `RequestError`; warn + continue |
-| Onboarding auto-submitted on first persona click | `PersonaCard` buttons had no `type` — inside `<form>` defaulted to `type=submit` | Added `type="button"` to all three buttons |
-| `llm_json` extraction bug in Day 14 | Returns `tuple[dict, str]`, not dict | Unpack as `raw, _model = await llm_json(...)` |
-| Settings locale optimistic update wrote to localStorage before server confirm | Premature write | Write only in `onSuccess`; rollback `setLocaleState(getLocale())` in `onError` |
-
----
-
 ## Decisions & deviations
 
 | Date | Decision | Why |
