@@ -102,11 +102,25 @@ class FientaAdapter(SourceAdapter):
                 continue
 
             # meta-based pagination: advance page counter.
-            # Assumes APIs that mix link+meta styles always include current_page in meta.
             meta = data.get("meta") or {}
-            current = meta.get("current_page", page)
             last = meta.get("last_page")
-            if last is None or current >= last:
+            if last is None:
+                break  # no links.next and no last_page → nothing more to follow
+            current = meta.get("current_page")
+            if current is None:
+                # Some responses mix link+meta styles and omit current_page. Fall
+                # back to the local requested-page counter, but log so a silent
+                # truncation/loop becomes visible instead of being assumed away.
+                # The FIENTA_MAX_PAGES budget still bounds the loop.
+                log.warning(
+                    "fienta organizer=%s: meta.current_page missing; "
+                    "falling back to local page counter (page=%s, last_page=%s)",
+                    org_id,
+                    page,
+                    last,
+                )
+                current = page
+            if current >= last:
                 break
             page = current + 1
             params = {"organizer": org_id, "page": page}

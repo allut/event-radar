@@ -190,12 +190,3 @@ deferred/hardening items only.
    cooldown guards Resend quota; an attacker varying the email address can still
    exhaust the 3k/mo Resend free tier. Add SlowAPI or fastapi-limiter IP throttling
    before/at soft launch.
-
-### P2 — Robustness / silent-failure risk
-
-2. **Fienta meta-pagination assumes `current_page` is always present**
-   — `backend/app/ingestion/sources/fienta.py:105` (`# Assumes APIs that mix
-   link+meta styles always include current_page in meta`). If a Fienta response
-   omits `current_page`, the loop falls back to the local `page` counter and may
-   stop early or loop, silently truncating ingested events. Harden the
-   meta-pagination branch (explicit guard / log when `current_page` is missing).

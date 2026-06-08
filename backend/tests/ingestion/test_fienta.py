@@ -1,5 +1,6 @@
 """Tests for FientaAdapter — normalize() and fetch_raw() with pagination."""
 import http
+import logging
 import pytest
 from unittest.mock import MagicMock, patch
 
@@ -196,6 +197,42 @@ class TestFetchRaw:
             result = await adapter._fetch_organizer(client, settings.FIENTA_BASE_URL, 1)
 
         assert [e["id"] for e in result] == ["1", "2"]
+
+    @pytest.mark.asyncio
+    async def test_meta_pagination_missing_current_page_warns_and_continues(self, caplog):
+        """Missing meta.current_page falls back to the local page counter and warns."""
+        pages = {
+            1: {"data": [{"id": "1"}], "meta": {"last_page": 2}},
+            2: {"data": [{"id": "2"}], "meta": {"last_page": 2}},
+        }
+
+        async def handler(request):
+            page = int(request.url.params.get("page", "1"))
+            return _mock_response(pages[page])
+
+        adapter = _adapter(organizer_ids=[1])
+        with caplog.at_level(logging.WARNING):
+            async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+                result = await adapter._fetch_organizer(client, settings.FIENTA_BASE_URL, 1)
+
+        assert [e["id"] for e in result] == ["1", "2"]
+        assert "current_page missing" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_meta_pagination_missing_last_page_stops(self, caplog):
+        """Missing meta.last_page stops pagination immediately, without warning."""
+        payload = {"data": [{"id": "1"}], "meta": {}}
+
+        async def handler(request):
+            return _mock_response(payload)
+
+        adapter = _adapter(organizer_ids=[1])
+        with caplog.at_level(logging.WARNING):
+            async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+                result = await adapter._fetch_organizer(client, settings.FIENTA_BASE_URL, 1)
+
+        assert [e["id"] for e in result] == ["1"]
+        assert caplog.text == ""
 
     @pytest.mark.asyncio
     async def test_links_next_pagination(self):
