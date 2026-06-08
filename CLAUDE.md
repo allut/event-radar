@@ -64,7 +64,7 @@ LLM Router: Groq (primary) → Cerebras → Mistral (fallback chain)
 
 ## Key Database Tables
 
-- `users` — email (citext unique), locale (et|en|ru), home_city
+- `users` — email (citext unique), locale (et|en|ru), home_city, session_token_version (int, bumped to revoke all sessions — see Auth)
 - `auth_magic_links` — token_hash (sha256), expires_at, used_at; one-use only
 - `personas` — 5 static personas with JSONB affinity vectors; display names in et/en/ru
 - `user_personas` — M2M join with weight (1.0 primary, 0.4 secondary)
@@ -86,7 +86,7 @@ LLM Router: Groq (primary) → Cerebras → Mistral (fallback chain)
 
 ## i18n
 
-**Single source of truth:** `shared/i18n/{en,et,ru}.json` — split into `"ui"` (frontend strings) and `"email"` (backend digest/magic-link strings). `shared/personas.json` holds persona names + vibes per locale. `shared/app-config.json` holds cross-stack scalars and taxonomies.
+**Single source of truth:** `shared/i18n/{en,et,ru}.json` — split into `"ui"` (frontend strings) and `"email"` (backend digest/magic-link strings). `shared/personas.json` holds persona names + vibes per locale. `shared/app-config.json` holds cross-stack scalars and taxonomies. `shared/calendar.json` holds localized `day_names`/`month_names` (generated into the backend's `DAY_NAMES`/`MONTH_NAMES`).
 
 **Workflow:** Edit the JSON files in `shared/` → run `python scripts/generate_shared.py` → commit both the JSON and the updated `_generated` files. Never edit `_generated/` directly.
 
@@ -108,9 +108,11 @@ Each component and route lives in its own folder containing `Name.tsx`, `Name.mo
 
 ## Auth
 
-Magic-link email via `itsdangerous` tokens (~50 LOC, no third-party auth). Resend handles email delivery (3k/mo free tier). No sessions stored server-side — token is the credential.
+Magic-link email via `itsdangerous` tokens (no third-party auth). Token generation/verification lives in `app/auth/tokens.py`; magic-link delivery in `app/auth/email.py` (Resend, 3k/mo free tier). The signed session token is the credential — it is **not** stored server-side, so there is no per-token row to delete.
 
-Session tokens are issued after magic-link verification and passed as an `Authorization: Bearer <token>` header (`frontend/src/api/client.ts`, `routers/auth.py::get_current_user`). TTL is 7 days (`SESSION_TTL_DAYS`).
+Session tokens are issued after magic-link verification and passed as an `Authorization: Bearer <token>` header (`frontend/src/api/client.ts`, `routers/auth.py::get_current_user`). TTL is 7 days (`SESSION_TTL_DAYS`); magic-link TTL is `MAGIC_LINK_TTL_MINUTES`. Both are settings in `app/config.py` defaulting to values in `shared/app-config.json`.
+
+**Session revocation:** each session token embeds a `v` (version) claim equal to `users.session_token_version` at issue time; `get_current_user` rejects any token whose `v` no longer matches the stored value. `POST /auth/logout-all` increments that counter (atomic `UPDATE ... RETURNING`, mirroring the magic-link consume pattern), invalidating every previously issued token — including the one making the request. This is the only server-side state in the auth flow.
 
 **Known residual risk — magic token in URL query string:** `/auth/verify?token=...` carries the one-time sign-in token in the URL (`AuthVerify.tsx`). URLs can leak via browser history, `Referer` headers, and proxy/server access logs. This is mitigated by the token being single-use (atomic `UPDATE ... WHERE used_at IS NULL ... RETURNING`, closes the TOCTOU race) and short-lived (`MAGIC_LINK_TTL_MINUTES`), so a leaked link has a narrow exploitation window. Moving verification to a POST body would close this gap entirely but adds friction to the email-link UX (the whole point of magic links is a single click) — left as a documented trade-off rather than changed.
 
@@ -119,6 +121,18 @@ Session tokens are issued after magic-link verification and passed as an `Author
 `/admin/*` uses HTTP Basic auth (`ADMIN_PASSWORD` env var). In development with no password set, any credentials are accepted (logs a warning). In production, the env var is required — unset = 503.
 
 List endpoints that can grow unbounded (e.g. `/admin/dedup/groups`) are paginated via `limit`/`offset` query params with caps in `app/constants.py` (`ADMIN_*_PAGE_SIZE`, `ADMIN_*_MAX_PAGE_SIZE`). Pagination is by logical unit (dedup group, not row) so a single noisy cluster cannot dominate a page. Add the same pattern to any new admin list endpoint.
+
+## Security Hardening
+
+The backend was hardened against the OWASP Top 10 (2021). The middleware stack and these invariants are wired in `app/main.py`:
+
+- **Rate limiting** — `slowapi` per-IP limiter lives in `app/rate_limit.py` (its own module to avoid a circular import between `main.py` and routers). Public unauthenticated endpoints carry `@limiter.limit(...)` with the limit string sourced from a `RATE_LIMIT_*` constant in `app/constants.py` (`/auth/request-link`, `/auth/verify`, `/webhooks/inbound-mail` today). Add the same decorator + constant to any new public endpoint. `ProxyHeadersMiddleware(trusted_hosts="*")` is registered **last** (so it runs outermost) to rewrite `request.client` from `X-Forwarded-For` before the limiter reads it — without it, Render's proxy would collapse all clients into one bucket.
+- **Security headers** — the `add_security_headers` middleware sets CSP/`X-Content-Type-Options`/`X-Frame-Options`/`Referrer-Policy` on every response from the `SECURITY_HEADERS` dict in `app/constants.py`; HSTS (`HSTS_HEADER_*`) is added only outside development (safe only over HTTPS). The CSP is `default-src 'none'` — the app is a pure JSON API with no first-party HTML/script surface.
+- **API docs** — `/docs`, `/redoc`, and `/openapi.json` are enabled **only** in development (`APP_ENV == "development"`); the strict CSP would block their CDN assets in production anyway.
+- **CORS** — `CORSMiddleware` with `allow_credentials=False` (auth is a Bearer header, never a cookie); origins from `settings.CORS_ORIGINS`, methods/headers from `CORS_ALLOWED_METHODS`/`CORS_ALLOWED_HEADERS` constants.
+- **`/internal/tick`** — guarded by a constant-time `X-Internal-Token` check against `INTERNAL_TOKEN`; fail-closed outside development.
+- **External-URL sanitization** — untrusted `url`/`image_url` from source adapters pass through `safe_external_url()` (`app/ingestion/base.py`), which drops any scheme not in `SAFE_URL_SCHEMES` (guards stored XSS via `javascript:`/`data:` URLs). `SourceAdapter.run()` already applies this when persisting events; apply it to any new field that renders an untrusted URL into an `href`/`src`.
+- **Dependency CVE audit** — `.github/workflows/dependency-audit.yml` runs `pip-audit` on push/PR to `master` and weekly (Mon 04:00 UTC) to catch newly-disclosed CVEs in pinned deps.
 
 ## Code Quality & Best Practices
 
