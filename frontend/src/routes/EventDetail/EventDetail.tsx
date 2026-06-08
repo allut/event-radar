@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '../../api/client';
 import { getLocale } from '../../lib/auth';
 import { t, ti } from '../../i18n';
-import { categoryGradient, cx, formatEventDateTime, formatHourMinute, formatPrice, trackExternalClick } from '../../utils';
+import { categoryGradient, cx, formatEventDateTime, formatHourMinute, formatPrice, safeUrl, trackExternalClick } from '../../utils';
 import { type EventData } from '../../components/EventCard';
 import FeedbackButtonRow from '../../components/FeedbackButtonRow';
 import PageState from '../../components/PageState';
@@ -72,8 +72,8 @@ export default function EventDetail() {
 
       <main className={styles.main}>
         <div className={styles.hero}>
-          {data.image_url ? (
-            <img src={data.image_url} alt={data.title} className={styles.heroImage} />
+          {safeUrl(data.image_url) ? (
+            <img src={safeUrl(data.image_url) ?? undefined} alt={data.title} className={styles.heroImage} />
           ) : (
             <div
               className={styles.heroPlaceholder}
@@ -141,9 +141,9 @@ export default function EventDetail() {
               locale={locale}
               variant="detail"
             />
-            {data.url && (
+            {safeUrl(data.url) && (
               <a
-                href={data.url}
+                href={safeUrl(data.url) ?? undefined}
                 target="_blank"
                 rel="noopener noreferrer"
                 className={styles.ticketsBtn}

@@ -6,8 +6,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.auth.tokens import verify_session_token
-from app.constants import DEFAULT_USER_LOCALE
+from app.constants import DEFAULT_USER_LOCALE, EMAIL_MASK_VISIBLE_CHARS
 from app.models.models import Event, User
+
+
+def mask_email(email: str) -> str:
+    """Mask an email for log output — keep the first few local-part characters and
+    the full domain so entries stay correlatable without persisting raw PII in
+    cleartext logs (e.g. 'aleksei.lutkov@gmail.com' -> 'al***@gmail.com')."""
+    local, sep, domain = email.partition("@")
+    if not sep:
+        return "***"
+    return f"{local[:EMAIL_MASK_VISIBLE_CHARS]}***@{domain}"
 
 
 def serialize_user(user: User, **extras) -> dict:
@@ -30,7 +40,7 @@ async def get_optional_user_locale(
     if not isinstance(authorization, str) or not authorization.startswith("Bearer "):
         return DEFAULT_USER_LOCALE
     try:
-        user_id = verify_session_token(authorization[len("Bearer ") :])
+        user_id, _version = verify_session_token(authorization[len("Bearer ") :])
     except (SignatureExpired, BadSignature):
         return DEFAULT_USER_LOCALE
     user = await db.get(User, user_id)

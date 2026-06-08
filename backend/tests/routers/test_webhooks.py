@@ -8,6 +8,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi import FastAPI
+
+from app.constants import APP_ENV_DEVELOPMENT
 from httpx import ASGITransport, AsyncClient
 
 
@@ -58,6 +60,7 @@ async def test_inbound_mail_accepted_with_valid_body(mock_db):
          patch("app.routers.webhooks.RawInboundEmail", return_value=email_obj), \
          patch("app.routers.webhooks._run_extraction"):
         mock_settings.RESEND_WEBHOOK_SECRET = ""
+        mock_settings.APP_ENV = APP_ENV_DEVELOPMENT
 
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             resp = await client.post(
@@ -69,6 +72,31 @@ async def test_inbound_mail_accepted_with_valid_body(mock_db):
     body = resp.json()
     assert body["status"] == "accepted"
     assert "id" in body
+
+
+@pytest.mark.asyncio
+async def test_inbound_mail_fails_closed_in_production_when_secret_unset(mock_db):
+    """Empty RESEND_WEBHOOK_SECRET in a non-development APP_ENV must refuse with 503
+    (mirrors routers/admin.py::_require_admin) instead of accepting unauthenticated POSTs."""
+    app = _build_app()
+
+    async def override_db():
+        yield mock_db
+
+    from app.db import get_db
+    app.dependency_overrides[get_db] = override_db
+
+    with patch("app.routers.webhooks.settings") as mock_settings:
+        mock_settings.RESEND_WEBHOOK_SECRET = ""
+        mock_settings.APP_ENV = "production"
+
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post(
+                "/webhooks/inbound-mail",
+                json=_email_payload(),
+            )
+
+    assert resp.status_code == http.HTTPStatus.SERVICE_UNAVAILABLE
 
 
 @pytest.mark.asyncio
@@ -134,6 +162,7 @@ async def test_inbound_mail_rejects_non_json_body(mock_db):
 
     with patch("app.routers.webhooks.settings") as mock_settings:
         mock_settings.RESEND_WEBHOOK_SECRET = ""
+        mock_settings.APP_ENV = APP_ENV_DEVELOPMENT
 
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             resp = await client.post(
@@ -171,6 +200,7 @@ async def test_inbound_mail_to_field_as_list_is_joined(mock_db):
          patch("app.routers.webhooks.RawInboundEmail", side_effect=capture_email), \
          patch("app.routers.webhooks._run_extraction"):
         mock_settings.RESEND_WEBHOOK_SECRET = ""
+        mock_settings.APP_ENV = APP_ENV_DEVELOPMENT
 
         payload = _email_payload(to=["a@example.com", "b@example.com"])
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
@@ -209,6 +239,7 @@ async def test_inbound_mail_no_text_and_no_subject_skips_extraction(mock_db):
     with patch("app.routers.webhooks.settings") as s, \
          patch("app.routers.webhooks.RawInboundEmail", return_value=email_obj):
         s.RESEND_WEBHOOK_SECRET = ""
+        s.APP_ENV = APP_ENV_DEVELOPMENT
         result = await inbound_mail(
             request=request,
             background_tasks=bg,
@@ -250,6 +281,7 @@ async def test_inbound_mail_with_text_body_queues_extraction(mock_db):
     with patch("app.routers.webhooks.settings") as s, \
          patch("app.routers.webhooks.RawInboundEmail", return_value=email_obj):
         s.RESEND_WEBHOOK_SECRET = ""
+        s.APP_ENV = APP_ENV_DEVELOPMENT
         result = await inbound_mail(
             request=request,
             background_tasks=bg,

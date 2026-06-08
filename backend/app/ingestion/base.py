@@ -5,6 +5,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
+from urllib.parse import urlsplit
 
 import httpx
 from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
@@ -21,6 +22,7 @@ from app.constants import (
     HTTP_RETRY_WAIT_MIN,
     HTTP_RETRY_WAIT_MULTIPLIER,
     INGESTION_ERROR_MAX_LEN,
+    SAFE_URL_SCHEMES,
     SLUG_HASH_HEX_LEN,
     SLUG_TITLE_MAX_LEN,
     SOURCE_STATUS_ERROR,
@@ -60,6 +62,16 @@ async def http_get(
     r = await client.get(url, params=params, headers=headers)
     r.raise_for_status()
     return r
+
+
+def safe_external_url(url: str | None) -> str | None:
+    """Drop URLs whose scheme isn't http(s) — guards against stored XSS via
+    javascript:/data: URLs from untrusted sources rendered into <a href>/<img src>."""
+    if not url:
+        return None
+    if urlsplit(url).scheme.lower() not in SAFE_URL_SCHEMES:
+        return None
+    return url
 
 
 def normalize_currency(raw: Any, has_price: bool) -> str | None:
@@ -181,8 +193,8 @@ class SourceAdapter(ABC):
                             venue_address=normalized.venue_address,
                             lat=normalized.lat,
                             lng=normalized.lng,
-                            url=normalized.url,
-                            image_url=normalized.image_url,
+                            url=safe_external_url(normalized.url),
+                            image_url=safe_external_url(normalized.image_url),
                             price_min=normalized.price_min,
                             price_max=normalized.price_max,
                             currency=normalized.currency,

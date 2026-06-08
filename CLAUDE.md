@@ -36,7 +36,7 @@ npm run lint       # ESLint (flat config in eslint.config.js)
 Vite + React SPA (frontend, port 5173 in dev)
   ├── Routes: /login  /auth/verify  /onboarding  /  /events/:id  /settings
   ├── State: React Query (@tanstack/react-query) for server state
-  └── API client: frontend/src/api/client.ts (X-Session-Token header auth)
+  └── API client: frontend/src/api/client.ts (Authorization: Bearer session-token auth)
         ↓
 FastAPI Backend (single process on Render free tier, port 8000 in dev)
   ├── Routers: /auth  /admin  /onboarding  /events  /feed  /feedback  /users/me  /webhooks
@@ -110,7 +110,9 @@ Each component and route lives in its own folder containing `Name.tsx`, `Name.mo
 
 Magic-link email via `itsdangerous` tokens (~50 LOC, no third-party auth). Resend handles email delivery (3k/mo free tier). No sessions stored server-side — token is the credential.
 
-Session tokens are issued after magic-link verification and passed as `X-Session-Token` header. TTL is 7 days (`SESSION_TTL_DAYS`).
+Session tokens are issued after magic-link verification and passed as an `Authorization: Bearer <token>` header (`frontend/src/api/client.ts`, `routers/auth.py::get_current_user`). TTL is 7 days (`SESSION_TTL_DAYS`).
+
+**Known residual risk — magic token in URL query string:** `/auth/verify?token=...` carries the one-time sign-in token in the URL (`AuthVerify.tsx`). URLs can leak via browser history, `Referer` headers, and proxy/server access logs. This is mitigated by the token being single-use (atomic `UPDATE ... WHERE used_at IS NULL ... RETURNING`, closes the TOCTOU race) and short-lived (`MAGIC_LINK_TTL_MINUTES`), so a leaked link has a narrow exploitation window. Moving verification to a POST body would close this gap entirely but adds friction to the email-link UX (the whole point of magic links is a single click) — left as a documented trade-off rather than changed.
 
 ## Admin Endpoints
 

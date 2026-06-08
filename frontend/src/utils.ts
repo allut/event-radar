@@ -6,6 +6,20 @@ export function cx(...classes: (string | false | null | undefined)[]): string {
   return classes.filter(Boolean).join(' ');
 }
 
+const SAFE_URL_SCHEMES = new Set(['http:', 'https:']);
+
+/** Defense-in-depth render guard: only allow http(s) URLs into href/src attributes.
+ * The backend already drops non-http(s) schemes at ingest time (safe_external_url),
+ * but this protects against any other path that might surface a raw URL. */
+export function safeUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  try {
+    return SAFE_URL_SCHEMES.has(new URL(url).protocol) ? url : null;
+  } catch {
+    return null;
+  }
+}
+
 export function formatHourMinute(iso: string, locale: string): string {
   return new Date(iso).toLocaleTimeString(toLocaleCode(locale), {
     hour: '2-digit',

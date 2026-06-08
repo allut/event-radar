@@ -48,18 +48,26 @@ def hash_token(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
 
-def generate_session_token(user_id: int) -> str:
+def generate_session_token(user_id: int, version: int) -> str:
+    """Embed the user's current session_token_version ("v") in the signed
+    payload — /auth/logout-all bumps the stored version, which immediately
+    invalidates every token minted with an older value (see verify_session_token
+    and get_current_user)."""
     return _serializer().dumps(
-        {"uid": user_id},
+        {"uid": user_id, "v": version},
         salt=AUTH_SESSION_SALT,
     )
 
 
-def verify_session_token(token: str) -> int:
-    """Return user_id. Raises BadSignature / SignatureExpired on failure."""
+def verify_session_token(token: str) -> tuple[int, int]:
+    """Return (user_id, version). Raises BadSignature / SignatureExpired on failure.
+
+    Tokens minted before the "v" claim existed lack it — default to 1 so they
+    degrade gracefully to the new column's server_default rather than being
+    rejected outright on the day of the migration."""
     payload = _serializer().loads(
         token,
         salt=AUTH_SESSION_SALT,
         max_age=settings.SESSION_TTL_DAYS * SECONDS_PER_DAY,
     )
-    return int(payload["uid"])
+    return int(payload["uid"]), int(payload.get("v", 1))

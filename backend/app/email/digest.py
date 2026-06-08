@@ -32,7 +32,11 @@ from app.email.templates import (
 )
 from app.i18n import day_name, month_name, t, ti
 from app.models.models import DailyFeed, Event, User
-from app.routers.utils import resolve_why_go, select_events_with_classification
+from app.routers.utils import (
+    mask_email,
+    resolve_why_go,
+    select_events_with_classification,
+)
 
 log = logging.getLogger(__name__)
 
@@ -127,7 +131,9 @@ async def send_digest_email(
     feed_date: date,
 ) -> None:
     if not settings.RESEND_API_KEY:
-        log.warning("RESEND_API_KEY not set — digest NOT sent to %s", to_email)
+        log.warning(
+            "RESEND_API_KEY not set — digest NOT sent to %s", mask_email(to_email)
+        )
         return
 
     html = build_digest_html(events, feed_date, locale, settings.FRONTEND_URL)
@@ -150,14 +156,14 @@ async def send_digest_email(
     if resp.status_code not in (http.HTTPStatus.OK, http.HTTPStatus.CREATED):
         log.error(
             "Resend digest error for %s: %s %s",
-            to_email,
+            mask_email(to_email),
             resp.status_code,
             resp.text[:RESEND_ERROR_SNIPPET_LEN],
         )
         raise RuntimeError(
-            f"Resend returned {resp.status_code} for digest to {to_email}"
+            f"Resend returned {resp.status_code} for digest to {mask_email(to_email)}"
         )
-    log.info("Digest sent to %s (%d events)", to_email, len(events))
+    log.info("Digest sent to %s (%d events)", mask_email(to_email), len(events))
 
 
 # ---------------------------------------------------------------------------

@@ -2,8 +2,8 @@ import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../../api/client';
-import { getLocale, setLocale } from '../../lib/auth';
-import { PERSONAS, SAVE_MSG_CLEAR_DELAY_MS, PERSONA_PRIMARY_WEIGHT_THRESHOLD } from '../../constants';
+import { clearToken, getLocale, setLocale } from '../../lib/auth';
+import { AUTH_REDIRECT_DELAY_MS, PERSONAS, SAVE_MSG_CLEAR_DELAY_MS, PERSONA_PRIMARY_WEIGHT_THRESHOLD } from '../../constants';
 import { cx } from '../../utils';
 import { t, personaName } from '../../i18n';
 import LocaleSelector from '../../components/LocaleSelector';
@@ -38,6 +38,8 @@ export default function Settings() {
   const [locale, setLocaleState] = useState(getLocale());
   const [saveMsg, setSaveMsg] = useState('');
   const [saveError, setSaveError] = useState('');
+  const [logoutAllMsg, setLogoutAllMsg] = useState('');
+  const [logoutAllError, setLogoutAllError] = useState('');
 
   const patchMutation = useMutation({
     mutationFn: (body: Partial<{ locale: string; email_digest_opt_in: boolean }>) =>
@@ -67,6 +69,29 @@ export default function Settings() {
   function handleOptInToggle() {
     if (!data) return;
     patchMutation.mutate({ email_digest_opt_in: !data.email_digest_opt_in });
+  }
+
+  const logoutAllMutation = useMutation({
+    mutationFn: () => api.post<{ detail: string }>('/auth/logout-all'),
+    onSuccess: () => {
+      setLogoutAllError('');
+      setLogoutAllMsg(t('logout_all_success', locale));
+      setTimeout(() => {
+        clearToken();
+        queryClient.clear();
+        navigate('/login', { replace: true });
+      }, AUTH_REDIRECT_DELAY_MS);
+    },
+    onError: (err) => {
+      setLogoutAllMsg('');
+      setLogoutAllError(err instanceof ApiError ? err.message : t('logout_all_failed', locale));
+    },
+  });
+
+  function handleLogoutAll() {
+    setLogoutAllMsg('');
+    setLogoutAllError('');
+    logoutAllMutation.mutate();
   }
 
   const primaryPersona = data?.personas.find((p) => p.weight >= PERSONA_PRIMARY_WEIGHT_THRESHOLD);
@@ -167,6 +192,25 @@ export default function Settings() {
           {!data?.email_digest_opt_in && (
             <p className={styles.unsubMsg}>{t('digest_off', locale)}</p>
           )}
+        </section>
+
+        <section className={styles.section}>
+          <h2 className={styles.sectionTitle}>{t('section_security', locale)}</h2>
+          <div className={styles.toggleRow}>
+            <div>
+              <p className={styles.toggleLabel}>{t('logout_all_label', locale)}</p>
+              <p className={styles.toggleDesc}>{t('logout_all_desc', locale)}</p>
+            </div>
+          </div>
+          <button
+            className={styles.repickBtn}
+            onClick={handleLogoutAll}
+            disabled={logoutAllMutation.isPending}
+          >
+            {t('logout_all_btn', locale)}
+          </button>
+          {logoutAllMsg && <p className={styles.saveSuccess} role="status">{logoutAllMsg}</p>}
+          {logoutAllError && <p className={styles.saveError} role="alert">{logoutAllError}</p>}
         </section>
 
         {saveMsg && <p className={styles.saveSuccess} role="status">{saveMsg}</p>}

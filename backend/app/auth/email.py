@@ -16,6 +16,7 @@ from app.constants import (
     RESEND_TIMEOUT_SECONDS,
 )
 from app.i18n import t, ti
+from app.routers.utils import mask_email
 
 log = logging.getLogger(__name__)
 
@@ -27,7 +28,9 @@ async def send_magic_link(
 
     if not settings.RESEND_API_KEY:
         # Signed token is an auth credential — never log it at WARNING or above.
-        log.warning("RESEND_API_KEY not set — magic link NOT sent to %s", to_email)
+        log.warning(
+            "RESEND_API_KEY not set — magic link NOT sent to %s", mask_email(to_email)
+        )
         log.debug("Dev-only magic link URL: %s", verify_url)
         return
 
@@ -54,9 +57,9 @@ async def send_magic_link(
     if resp.status_code not in (http.HTTPStatus.OK, http.HTTPStatus.CREATED):
         log.error(
             "Resend API error sending to %s: %s %s",
-            to_email,
+            mask_email(to_email),
             resp.status_code,
             resp.text[:RESEND_ERROR_SNIPPET_LEN],
         )
     else:
-        log.info("Magic link sent to %s", to_email)
+        log.info("Magic link sent to %s", mask_email(to_email))

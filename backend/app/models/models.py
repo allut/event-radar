@@ -54,6 +54,12 @@ class User(Base):
     email_digest_opt_in: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default="true"
     )
+    # Bumped by /auth/logout-all to invalidate every previously-issued session
+    # token at once ("log out everywhere") — compared against the "v" claim in
+    # the signed token by get_current_user (routers/auth.py).
+    session_token_version: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="1"
+    )
 
     magic_links: Mapped[list["AuthMagicLink"]] = relationship(back_populates="user")
     user_personas: Mapped[list["UserPersona"]] = relationship(back_populates="user")

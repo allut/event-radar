@@ -18,10 +18,16 @@ from app.auth.tokens import (
     verify_magic_token,
     verify_session_token,
 )
-from app.constants import DEFAULT_USER_LOCALE, VALID_LOCALES
+from app.constants import (
+    DEFAULT_USER_LOCALE,
+    RATE_LIMIT_AUTH_REQUEST_LINK,
+    RATE_LIMIT_AUTH_VERIFY,
+    VALID_LOCALES,
+)
 from app.db import get_db
 from app.models.models import AuthMagicLink, User, UserPersona
-from app.routers.utils import serialize_user
+from app.rate_limit import limiter
+from app.routers.utils import mask_email, serialize_user
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -62,7 +68,7 @@ async def get_current_user(
         )
     token = authorization[len("Bearer ") :]
     try:
-        user_id = verify_session_token(token)
+        user_id, token_version = verify_session_token(token)
     except (SignatureExpired, BadSignature):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -76,6 +82,12 @@ async def get_current_user(
             detail="User not found",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    if token_version != user.session_token_version:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Session revoked. Please sign in again.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     return user
 
 
@@ -85,6 +97,7 @@ async def get_current_user(
 
 
 @router.post("/request-link", status_code=status.HTTP_200_OK)
+@limiter.limit(RATE_LIMIT_AUTH_REQUEST_LINK)
 async def request_magic_link(
     body: RequestLinkBody,
     request: Request,
@@ -105,7 +118,7 @@ async def request_magic_link(
     # A link created T seconds ago has expires_at = now + (TTL - T), so
     # expires_at > now + TTL - 120 ↔ T < 120 (i.e. created less than 2 min ago).
     # This prevents Resend quota exhaustion from rapid repeated requests.
-    # TODO before production: add IP-level rate limiting (SlowAPI/fastapi-limiter).
+    # IP-level throttling is handled separately by @limiter.limit(RATE_LIMIT_AUTH_REQUEST_LINK).
     recent_cutoff = datetime.now(timezone.utc) + timedelta(
         seconds=magic_ttl_seconds() - 120
     )
@@ -137,14 +150,16 @@ async def request_magic_link(
     try:
         await send_magic_link(email, signed_token, user.locale)
     except Exception:
-        log.exception("Failed to send magic link to %s", email)
+        log.exception("Failed to send magic link to %s", mask_email(email))
         # Do not surface email errors to caller — link is in DB, user can retry.
 
     return {"detail": "If that address is registered, a sign-in link has been sent."}
 
 
 @router.get("/verify")
+@limiter.limit(RATE_LIMIT_AUTH_VERIFY)
 async def verify_magic_link(
+    request: Request,
     token: str,
     db: AsyncSession = Depends(get_db),
 ) -> dict:
@@ -193,7 +208,7 @@ async def verify_magic_link(
             detail="User not found.",
         )
 
-    session_token = generate_session_token(user.id)
+    session_token = generate_session_token(user.id, user.session_token_version)
     return {
         "session_token": session_token,
         "user": {
@@ -202,6 +217,31 @@ async def verify_magic_link(
             "locale": user.locale,
         },
     }
+
+
+@router.post("/logout-all", status_code=status.HTTP_200_OK)
+async def logout_all(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Invalidate every session token issued so far ("log out everywhere") by
+    bumping session_token_version — get_current_user rejects any token whose
+    embedded "v" claim no longer matches the stored value, including the one
+    used to make this very request.
+
+    Atomic UPDATE ... RETURNING (mirrors verify_magic_link's token-consume
+    pattern) rather than ORM read-modify-write, so two concurrent calls can't
+    race and silently lose an increment."""
+    result = await db.execute(
+        update(User)
+        .where(User.id == current_user.id)
+        .values(session_token_version=User.session_token_version + 1)
+        .returning(User.session_token_version)
+    )
+    new_version = result.scalar_one()
+    await db.commit()
+    current_user.session_token_version = new_version
+    return {"detail": "Signed out of all devices."}
 
 
 @router.get("/me")

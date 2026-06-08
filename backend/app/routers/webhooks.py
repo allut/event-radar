@@ -3,14 +3,24 @@
 import hmac
 import logging
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    HTTPException,
+    Query,
+    Request,
+    status,
+)
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.constants import APP_ENV_DEVELOPMENT, RATE_LIMIT_WEBHOOK_INBOUND_MAIL
 from app.db import AsyncSessionLocal, get_db
 from app.llm.newsletter_extractor import extract_events_from_email
 from app.models.models import RawInboundEmail
+from app.rate_limit import limiter
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
@@ -35,6 +45,7 @@ async def _run_extraction(email_id: int, subject: str, text_body: str) -> None:
 
 
 @router.post("/inbound-mail", status_code=status.HTTP_200_OK)
+@limiter.limit(RATE_LIMIT_WEBHOOK_INBOUND_MAIL)
 async def inbound_mail(
     request: Request,
     background_tasks: BackgroundTasks,
@@ -44,11 +55,21 @@ async def inbound_mail(
     """Resend Inbound webhook — receives parsed email, stores it, triggers LLM extraction.
 
     Set RESEND_WEBHOOK_SECRET and append ?secret=<value> to the Resend inbound URL
-    to guard the endpoint in production. Empty secret disables verification (dev only).
+    to guard the endpoint. Empty secret is only tolerated in development — in any
+    other environment the endpoint refuses all requests until configured (mirrors
+    the admin-panel fail-closed pattern in routers/admin.py::_require_admin).
     """
-    if settings.RESEND_WEBHOOK_SECRET and not hmac.compare_digest(
-        secret, settings.RESEND_WEBHOOK_SECRET
-    ):
+    if not settings.RESEND_WEBHOOK_SECRET:
+        if settings.APP_ENV != APP_ENV_DEVELOPMENT:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Webhook disabled: RESEND_WEBHOOK_SECRET not configured",
+            )
+        log.warning(
+            "RESEND_WEBHOOK_SECRET not set; inbound-mail webhook is unprotected "
+            "(development mode)"
+        )
+    elif not hmac.compare_digest(secret, settings.RESEND_WEBHOOK_SECRET):
         log.warning("inbound-mail: invalid webhook secret")
         return JSONResponse(
             {"status": "rejected"}, status_code=status.HTTP_401_UNAUTHORIZED

@@ -11,6 +11,7 @@ from app.constants import DEFAULT_USER_CITY, DEFAULT_USER_LOCALE
 
 import pytest
 from itsdangerous import BadSignature
+from starlette.requests import Request
 
 from app.auth.tokens import (
     generate_magic_token,
@@ -51,7 +52,7 @@ class TestMagicToken:
 
     def test_wrong_salt_raises(self):
         # A session token should not be accepted as a magic token
-        session_token = generate_session_token(1)
+        session_token = generate_session_token(1, 1)
         with pytest.raises(BadSignature):
             verify_magic_token(session_token)
 
@@ -63,11 +64,24 @@ class TestMagicToken:
 
 class TestSessionToken:
     def test_roundtrip(self):
-        token = generate_session_token(99)
-        assert verify_session_token(token) == 99
+        token = generate_session_token(99, 1)
+        assert verify_session_token(token) == (99, 1)
+
+    def test_roundtrip_carries_version(self):
+        token = generate_session_token(99, 3)
+        assert verify_session_token(token) == (99, 3)
+
+    def test_legacy_token_without_version_claim_defaults_to_one(self):
+        # Tokens minted before the "v" claim existed must keep working —
+        # they decode to version 1, matching the new column's server_default.
+        from app.auth.tokens import _serializer
+        from app.constants import AUTH_SESSION_SALT
+
+        legacy_token = _serializer().dumps({"uid": 5}, salt=AUTH_SESSION_SALT)
+        assert verify_session_token(legacy_token) == (5, 1)
 
     def test_bad_signature_raises(self):
-        token = generate_session_token(1)
+        token = generate_session_token(1, 1)
         with pytest.raises(BadSignature):
             verify_session_token(token + "y")
 
@@ -83,11 +97,18 @@ class TestSessionToken:
 # ---------------------------------------------------------------------------
 
 
-def _mock_request(accept_language: str = "") -> MagicMock:
-    req = MagicMock()
-    req.headers = MagicMock()
-    req.headers.get = MagicMock(return_value=accept_language)
-    return req
+def _mock_request(accept_language: str = "") -> Request:
+    """Build a real starlette Request — slowapi's @limiter.limit requires an
+    actual Request instance (isinstance check), not a MagicMock."""
+    headers = [(b"accept-language", accept_language.encode())] if accept_language else []
+    scope = {
+        "type": "http",
+        "method": "POST",
+        "path": "/auth/request-link",
+        "query_string": b"",
+        "headers": headers,
+    }
+    return Request(scope)
 
 
 class TestRequestMagicLink:
@@ -177,13 +198,14 @@ class TestVerifyMagicLink:
         user.id = 3
         user.email = "user@example.com"
         user.locale = "en"
+        user.session_token_version = 1
         mock_db.get.return_value = user
 
-        result = await verify_magic_link(token, mock_db)
+        result = await verify_magic_link(_mock_request(), token, mock_db)
 
         assert "session_token" in result
         assert result["user"]["id"] == 3
-        assert verify_session_token(result["session_token"]) == 3
+        assert verify_session_token(result["session_token"]) == (3, 1)
 
     @pytest.mark.asyncio
     async def test_used_or_expired_link_raises_400(self, mock_db):
@@ -196,7 +218,7 @@ class TestVerifyMagicLink:
         mock_db.execute = _mock_execute_returning(None)
 
         with pytest.raises(HTTPException) as exc_info:
-            await verify_magic_link(token, mock_db)
+            await verify_magic_link(_mock_request(), token, mock_db)
         assert exc_info.value.status_code == http.HTTPStatus.BAD_REQUEST
 
     @pytest.mark.asyncio
@@ -205,7 +227,7 @@ class TestVerifyMagicLink:
         from app.routers.auth import verify_magic_link
 
         with pytest.raises(HTTPException) as exc_info:
-            await verify_magic_link("not-a-valid-token", mock_db)
+            await verify_magic_link(_mock_request(), "not-a-valid-token", mock_db)
         assert exc_info.value.status_code == http.HTTPStatus.BAD_REQUEST
 
 
@@ -216,9 +238,10 @@ class TestGetCurrentUser:
 
         user = MagicMock()
         user.id = 7
+        user.session_token_version = 1
         mock_db.get.return_value = user
 
-        session_token = generate_session_token(7)
+        session_token = generate_session_token(7, 1)
         result = await get_current_user(
             authorization=f"Bearer {session_token}",
             db=mock_db,
@@ -242,6 +265,49 @@ class TestGetCurrentUser:
         with pytest.raises(HTTPException) as exc_info:
             await get_current_user(authorization="Bearer garbage", db=mock_db)
         assert exc_info.value.status_code == http.HTTPStatus.UNAUTHORIZED
+
+    @pytest.mark.asyncio
+    async def test_revoked_session_raises_401(self, mock_db):
+        """A token minted with an older session_token_version (e.g. before the
+        user hit "log out everywhere") must be rejected even though its
+        signature and TTL are still valid."""
+        from fastapi import HTTPException
+        from app.routers.auth import get_current_user
+
+        user = MagicMock()
+        user.id = 7
+        user.session_token_version = 2
+        mock_db.get.return_value = user
+
+        session_token = generate_session_token(7, 1)
+        with pytest.raises(HTTPException) as exc_info:
+            await get_current_user(
+                authorization=f"Bearer {session_token}",
+                db=mock_db,
+            )
+        assert exc_info.value.status_code == http.HTTPStatus.UNAUTHORIZED
+
+
+class TestLogoutAll:
+    @pytest.mark.asyncio
+    async def test_increments_session_token_version(self, mock_db):
+        from app.routers.auth import logout_all
+
+        user = MagicMock()
+        user.id = 7
+        user.session_token_version = 1
+
+        execute_result = MagicMock()
+        execute_result.scalar_one.return_value = 2
+        mock_db.execute = AsyncMock(return_value=execute_result)
+        mock_db.commit = AsyncMock()
+
+        result = await logout_all(current_user=user, db=mock_db)
+
+        assert user.session_token_version == 2
+        mock_db.execute.assert_awaited_once()
+        mock_db.commit.assert_awaited_once()
+        assert "detail" in result
 
 
 class TestGetMe:

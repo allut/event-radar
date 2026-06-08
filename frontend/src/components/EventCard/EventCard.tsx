@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom';
 import { getLocale } from '../../lib/auth';
 import { CARD_ANIMATION_DELAY_STEP_MS } from '../../constants';
 import { t } from '../../i18n';
-import { categoryGradient, formatEventTime, formatPrice, trackExternalClick } from '../../utils';
+import { categoryGradient, formatEventTime, formatPrice, safeUrl, trackExternalClick } from '../../utils';
 import { useFeedback } from '../../hooks/useFeedback';
 import FeedbackButtonRow from '../FeedbackButtonRow';
 import styles from './EventCard.module.css';
@@ -47,9 +47,9 @@ export default function EventCard({ event, index, onFeedbackSent }: EventCardPro
       style={{ animationDelay: `${index * CARD_ANIMATION_DELAY_STEP_MS}ms` }}
     >
       <div className={styles.imageWrap}>
-        {event.image_url ? (
+        {safeUrl(event.image_url) ? (
           <img
-            src={event.image_url}
+            src={safeUrl(event.image_url) ?? undefined}
             alt={event.title}
             className={styles.image}
             loading="lazy"
@@ -97,9 +97,9 @@ export default function EventCard({ event, index, onFeedbackSent }: EventCardPro
           locale={locale}
           variant="card"
         />
-        {event.url && (
+        {safeUrl(event.url) && (
           <a
-            href={event.url}
+            href={safeUrl(event.url) ?? undefined}
             target="_blank"
             rel="noopener noreferrer"
             className={styles.ticketsLink}

@@ -12,7 +12,7 @@ Tallinn speaks **Estonian, English, Russian** — every user-facing string and L
 
 - **Stack:** FastAPI 3.12 + SQLAlchemy 2 + Alembic; Vite/React SPA (TanStack Query, React Router, CSS Modules)
 - **DB:** Neon Postgres free (eu-central-1, 0.5 GB, scale-to-zero, pgvector available for v1.1)
-- **Auth:** magic-link email (`itsdangerous` signed token, 50 LOC); 7-day session token `X-Session-Token`
+- **Auth:** magic-link email (`itsdangerous` signed token, 50 LOC); 7-day session token via `Authorization: Bearer`
 - **Email:** Resend free (3k/mo) — magic links + daily digest
 - **LLM:** Groq primary (`llama-3.3-70b-versatile`, 14,400 req/day, 30 req/min burst) → Cerebras (`qwen-3-235b-a22b-instruct-2507`, 1 req/min Preview) → Mistral (1B tok/mo overnight batch)
 - **Scheduler:** APScheduler embedded; Render Cron Job pings `/internal/tick` every 15 min to survive free-tier sleep
@@ -172,21 +172,3 @@ Server state via TanStack Query. i18n custom `frontend/src/i18n.ts` (no library)
 1. **Source coverage thinness** — Tallinn has no Songkick-grade aggregator. *Mitigation:* heavy investment in newsletter ingestion + submit-event form.
 2. **Free LLM quota exhaustion on backfill** — *Mitigation:* Groq → Cerebras → Mistral chain, ≤600 token prompts, content-hash dedup cache, classify post-dedup only, push backfill to Mistral 1B tok/mo tier.
 3. **Render free-tier sleep killing scheduler** — *Mitigation:* external Cron Job pings `/internal/tick` every 15 min. Render Starter ($7/mo) removes sleep if needed.
-
----
-
-## Code-comment TODOs
-
-Synthesized from comments in the codebase (2026-06-04). Ranked by priority.
-Items the code documents as intentional design (full score-cache invalidation,
-admin-auth refusal, migration dedup guards) are excluded — these are real
-deferred/hardening items only.
-
-### P1 — Pre-production hardening
-
-1. **IP-level rate limiting on magic-link request endpoint**
-   — `backend/app/routers/auth.py:108` (`# TODO before production: add IP-level
-   rate limiting (SlowAPI/fastapi-limiter)`). Today only a per-email 2-minute
-   cooldown guards Resend quota; an attacker varying the email address can still
-   exhaust the 3k/mo Resend free tier. Add SlowAPI or fastapi-limiter IP throttling
-   before/at soft launch.
