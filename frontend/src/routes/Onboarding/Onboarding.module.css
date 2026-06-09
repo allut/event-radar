@@ -20,7 +20,7 @@
 .radar {
   font-size: 1.2rem;
   color: var(--accent);
-  animation: breathe 3s ease-in-out infinite;
+  animation: breathe 3s var(--easing-breathe) infinite;
 }
 
 .brand {

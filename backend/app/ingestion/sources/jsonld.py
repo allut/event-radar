@@ -10,8 +10,8 @@ from app.ingestion.base import (
     NormalizedEvent,
     SourceAdapter,
     http_get,
-    _parse_dt,
     normalize_currency,
+    parse_dt,
 )
 
 log = logging.getLogger(__name__)
@@ -70,12 +70,12 @@ class JsonLdAdapter(SourceAdapter):
         raw_start = raw.get("startDate") or raw.get("startTime") or ""
         if not raw_start:
             return None
-        starts_at = _parse_dt(str(raw_start))
+        starts_at = parse_dt(str(raw_start))
         if starts_at is None:
             return None
 
         raw_end = raw.get("endDate") or raw.get("endTime")
-        ends_at = _parse_dt(str(raw_end)) if raw_end else None
+        ends_at = parse_dt(str(raw_end)) if raw_end else None
 
         venue_name, venue_address, lat, lng = _parse_location(raw.get("location"))
 

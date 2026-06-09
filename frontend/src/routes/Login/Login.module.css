@@ -23,7 +23,7 @@
 .radar {
   font-size: 1.4rem;
   color: var(--accent);
-  animation: breathe 3s ease-in-out infinite;
+  animation: breathe 3s var(--easing-breathe) infinite;
 }
 
 .brand {
@@ -74,7 +74,7 @@
 
 .input:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-glow);
+  box-shadow: var(--shadow-focus-ring);
 }
 
 .input:disabled {
@@ -118,7 +118,7 @@
   gap: 0.6rem;
   padding: 1.5rem 0;
   text-align: center;
-  animation: fadeIn var(--anim-fast) ease;
+  animation: fadeIn var(--anim-fast) var(--easing);
 }
 
 @keyframes fadeIn {

@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from starlette.requests import Request
 
 from app.constants import (
     DEFAULT_CURRENCY,
@@ -82,4 +83,29 @@ def make_event():
         cl.language_detected = DEFAULT_USER_LOCALE
         e.classification = cl
         return e
+    return _factory
+
+
+@pytest.fixture
+def make_request():
+    """Factory for a real starlette Request — slowapi's @limiter.limit requires an
+    actual Request instance (isinstance check), not a MagicMock. Shared across
+    router tests that call a rate-limited endpoint function directly."""
+    def _factory(
+        accept_language: str = "",
+        method: str = "GET",
+        path: str = "/",
+    ) -> Request:
+        headers = (
+            [(b"accept-language", accept_language.encode())] if accept_language else []
+        )
+        return Request(
+            {
+                "type": "http",
+                "method": method,
+                "path": path,
+                "query_string": b"",
+                "headers": headers,
+            }
+        )
     return _factory

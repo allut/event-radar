@@ -90,13 +90,13 @@ class TestGetFeed:
 
 class TestGetEvent:
     @pytest.mark.asyncio
-    async def test_returns_event_detail(self, mock_db, make_event):
+    async def test_returns_event_detail(self, mock_db, make_event, make_request):
         from app.routers.events import get_event
 
         event = make_event(42)
         mock_db.scalar.return_value = event
 
-        result = await get_event(event_id=42, db=mock_db)
+        result = await get_event(event_id=42, request=make_request(), db=mock_db)
 
         assert result["id"] == 42
         assert result["title"] == "Test Event"
@@ -104,25 +104,25 @@ class TestGetEvent:
         assert result["why_go"] == ["Great DJs", "Intimate venue", "All night long"]
 
     @pytest.mark.asyncio
-    async def test_returns_404_when_not_found(self, mock_db):
+    async def test_returns_404_when_not_found(self, mock_db, make_request):
         from fastapi import HTTPException
         from app.routers.events import get_event
 
         mock_db.scalar.return_value = None
 
         with pytest.raises(HTTPException) as exc_info:
-            await get_event(event_id=999, db=mock_db)
+            await get_event(event_id=999, request=make_request(), db=mock_db)
         assert exc_info.value.status_code == http.HTTPStatus.NOT_FOUND
 
     @pytest.mark.asyncio
-    async def test_event_no_classification(self, mock_db, make_event):
+    async def test_event_no_classification(self, mock_db, make_event, make_request):
         from app.routers.events import get_event
 
         event = make_event(1)
         event.classification = None
         mock_db.scalar.return_value = event
 
-        result = await get_event(event_id=1, db=mock_db)
+        result = await get_event(event_id=1, request=make_request(), db=mock_db)
 
         assert result["categories"] == []
         assert result["quality_score"] is None

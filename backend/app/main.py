@@ -4,7 +4,8 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from fastapi import FastAPI, HTTPException, Request, status
+from fastapi import FastAPI, HTTPException, Request, Response, status
+from starlette.middleware.base import RequestResponseEndpoint
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -197,7 +198,9 @@ app.add_middleware(
 
 
 @app.middleware("http")
-async def add_security_headers(request: Request, call_next):
+async def add_security_headers(
+    request: Request, call_next: RequestResponseEndpoint
+) -> Response:
     """Set CSP/nosniff/frame-ancestors/referrer-policy on every response — defense
     in depth against XSS and clickjacking. HSTS is added only in production, since
     it's only safe to advertise over HTTPS (Render terminates TLS in front of us;

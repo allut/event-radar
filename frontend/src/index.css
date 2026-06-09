@@ -21,7 +21,9 @@
   --danger: #d95757;
   --radius: 6px;
   --easing: cubic-bezier(0.4, 0, 0.2, 1);
+  --easing-breathe: ease-in-out; /* secondary curve for the looping breathe pulse */
   --transition: 200ms var(--easing);
+  --transition-transform: 400ms var(--easing); /* slower image zoom-on-hover */
 
   /* Semantic alpha tokens — derived from primitives above */
   --on-accent: #0f1119;
@@ -105,6 +107,10 @@
   --shadow-card:        0 4px 20px rgba(0, 0, 0, 0.25);
   --shadow-card-hover:  0 8px 24px rgba(0, 0, 0, 0.3);
   --shadow-accent:      0 8px 32px rgba(200, 146, 42, 0.1);
+
+  /* Ring shadows (geometry + token colors) */
+  --shadow-focus-ring:    0 0 0 3px var(--accent-glow);
+  --shadow-selected-ring: 0 0 0 1px var(--accent), var(--shadow-accent);
 }
 
 @keyframes spin    { to { transform: rotate(360deg); } }

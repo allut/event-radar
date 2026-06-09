@@ -10,8 +10,8 @@ from app.ingestion.base import (
     NormalizedEvent,
     SourceAdapter,
     http_get,
-    _parse_dt,
     normalize_currency,
+    parse_dt,
 )
 
 log = logging.getLogger(__name__)
@@ -141,12 +141,12 @@ class FientaAdapter(SourceAdapter):
         )
         if not raw_start:
             return None
-        starts_at = _parse_dt(str(raw_start))
+        starts_at = parse_dt(str(raw_start))
         if starts_at is None:
             return None
 
         raw_end = raw.get("ends_at") or raw.get("end_date") or raw.get("end_time")
-        ends_at = _parse_dt(str(raw_end)) if raw_end else None
+        ends_at = parse_dt(str(raw_end)) if raw_end else None
 
         venue_raw = raw.get("venue") or {}
         if isinstance(venue_raw, dict):

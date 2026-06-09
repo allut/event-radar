@@ -81,7 +81,7 @@ def normalize_currency(raw: Any, has_price: bool) -> str | None:
     return DEFAULT_CURRENCY if has_price else None
 
 
-def _parse_dt(value: str) -> datetime | None:
+def parse_dt(value: str) -> datetime | None:
     try:
         dt = datetime.fromisoformat(value)
         if dt.tzinfo is None:

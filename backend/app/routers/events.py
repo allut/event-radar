@@ -1,11 +1,12 @@
 """GET /events/{event_id} — full event detail."""
 
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.constants import EVENT_STATUS_PUBLISHED
+from app.constants import EVENT_STATUS_PUBLISHED, RATE_LIMIT_EVENTS_DETAIL
 from app.db import get_db
 from app.models.models import Event
+from app.rate_limit import limiter
 from app.routers.utils import (
     get_optional_user_locale,
     select_events_with_classification,
@@ -16,8 +17,10 @@ router = APIRouter(prefix="/events", tags=["events"])
 
 
 @router.get("/{event_id}")
+@limiter.limit(RATE_LIMIT_EVENTS_DETAIL)
 async def get_event(
     event_id: int,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     authorization: str | None = Header(default=None),
 ) -> dict:

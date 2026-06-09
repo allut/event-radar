@@ -11,7 +11,6 @@ from app.constants import DEFAULT_USER_CITY, DEFAULT_USER_LOCALE
 
 import pytest
 from itsdangerous import BadSignature
-from starlette.requests import Request
 
 from app.auth.tokens import (
     generate_magic_token,
@@ -97,23 +96,9 @@ class TestSessionToken:
 # ---------------------------------------------------------------------------
 
 
-def _mock_request(accept_language: str = "") -> Request:
-    """Build a real starlette Request — slowapi's @limiter.limit requires an
-    actual Request instance (isinstance check), not a MagicMock."""
-    headers = [(b"accept-language", accept_language.encode())] if accept_language else []
-    scope = {
-        "type": "http",
-        "method": "POST",
-        "path": "/auth/request-link",
-        "query_string": b"",
-        "headers": headers,
-    }
-    return Request(scope)
-
-
 class TestRequestMagicLink:
     @pytest.mark.asyncio
-    async def test_new_user_creates_and_sends(self, mock_db):
+    async def test_new_user_creates_and_sends(self, mock_db, make_request):
         from app.routers.auth import request_magic_link, RequestLinkBody
 
         # First scalar call: user lookup → None; second: cooldown check → None
@@ -128,13 +113,13 @@ class TestRequestMagicLink:
 
         with patch("app.routers.auth.send_magic_link", new_callable=AsyncMock) as mock_send:
             body = RequestLinkBody(email="test@example.com")
-            result = await request_magic_link(body, _mock_request(), mock_db)
+            result = await request_magic_link(body, make_request(), mock_db)
 
         assert "registered" in result["detail"].lower() or "sent" in result["detail"].lower()
         mock_send.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_existing_user_upserts_link(self, mock_db):
+    async def test_existing_user_upserts_link(self, mock_db, make_request):
         from app.routers.auth import request_magic_link, RequestLinkBody
 
         existing_user = MagicMock()
@@ -144,12 +129,12 @@ class TestRequestMagicLink:
 
         with patch("app.routers.auth.send_magic_link", new_callable=AsyncMock):
             body = RequestLinkBody(email="existing@example.com")
-            result = await request_magic_link(body, _mock_request(), mock_db)
+            result = await request_magic_link(body, make_request(), mock_db)
 
         assert "detail" in result
 
     @pytest.mark.asyncio
-    async def test_cooldown_skips_resend(self, mock_db):
+    async def test_cooldown_skips_resend(self, mock_db, make_request):
         from app.routers.auth import request_magic_link, RequestLinkBody
 
         existing_user = MagicMock()
@@ -160,19 +145,19 @@ class TestRequestMagicLink:
 
         with patch("app.routers.auth.send_magic_link", new_callable=AsyncMock) as mock_send:
             body = RequestLinkBody(email="existing@example.com")
-            result = await request_magic_link(body, _mock_request(), mock_db)
+            result = await request_magic_link(body, make_request(), mock_db)
 
         assert "detail" in result
         mock_send.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_email_failure_does_not_500(self, mock_db):
+    async def test_email_failure_does_not_500(self, mock_db, make_request):
         from app.routers.auth import request_magic_link, RequestLinkBody
 
         mock_db.scalar.side_effect = [None, None]
         with patch("app.routers.auth.send_magic_link", side_effect=Exception("smtp down")):
             body = RequestLinkBody(email="fail@example.com")
-            result = await request_magic_link(body, _mock_request(), mock_db)
+            result = await request_magic_link(body, make_request(), mock_db)
         assert "detail" in result  # still returns 200 with message
 
 
@@ -186,7 +171,7 @@ def _mock_execute_returning(row):
 
 class TestVerifyMagicLink:
     @pytest.mark.asyncio
-    async def test_valid_token_returns_session(self, mock_db):
+    async def test_valid_token_returns_session(self, mock_db, make_request):
         from app.routers.auth import verify_magic_link
 
         token, _, _ = generate_magic_token(3)
@@ -201,14 +186,14 @@ class TestVerifyMagicLink:
         user.session_token_version = 1
         mock_db.get.return_value = user
 
-        result = await verify_magic_link(_mock_request(), token, mock_db)
+        result = await verify_magic_link(make_request(), token, mock_db)
 
         assert "session_token" in result
         assert result["user"]["id"] == 3
         assert verify_session_token(result["session_token"]) == (3, 1)
 
     @pytest.mark.asyncio
-    async def test_used_or_expired_link_raises_400(self, mock_db):
+    async def test_used_or_expired_link_raises_400(self, mock_db, make_request):
         from fastapi import HTTPException
         from app.routers.auth import verify_magic_link
 
@@ -218,16 +203,16 @@ class TestVerifyMagicLink:
         mock_db.execute = _mock_execute_returning(None)
 
         with pytest.raises(HTTPException) as exc_info:
-            await verify_magic_link(_mock_request(), token, mock_db)
+            await verify_magic_link(make_request(), token, mock_db)
         assert exc_info.value.status_code == http.HTTPStatus.BAD_REQUEST
 
     @pytest.mark.asyncio
-    async def test_bad_signature_raises_400(self, mock_db):
+    async def test_bad_signature_raises_400(self, mock_db, make_request):
         from fastapi import HTTPException
         from app.routers.auth import verify_magic_link
 
         with pytest.raises(HTTPException) as exc_info:
-            await verify_magic_link(_mock_request(), "not-a-valid-token", mock_db)
+            await verify_magic_link(make_request(), "not-a-valid-token", mock_db)
         assert exc_info.value.status_code == http.HTTPStatus.BAD_REQUEST
 
 
@@ -379,7 +364,7 @@ class TestDetectLocale:
         assert _detect_locale("") == "en"
 
     @pytest.mark.asyncio
-    async def test_new_user_gets_locale_from_header(self, mock_db):
+    async def test_new_user_gets_locale_from_header(self, mock_db, make_request):
         from app.routers.auth import request_magic_link, RequestLinkBody
 
         mock_db.scalar.side_effect = [None, None]
@@ -397,6 +382,6 @@ class TestDetectLocale:
 
         with patch("app.routers.auth.send_magic_link", new_callable=AsyncMock):
             body = RequestLinkBody(email="newuser@example.com")
-            await request_magic_link(body, _mock_request("et-EE,et;q=0.9"), mock_db)
+            await request_magic_link(body, make_request("et-EE,et;q=0.9"), mock_db)
 
         assert created_user is not None and created_user.locale == "et"

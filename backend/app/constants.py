@@ -106,6 +106,9 @@ ADMIN_DEDUP_GROUPS_MAX_PAGE_SIZE: int = 500
 RATE_LIMIT_AUTH_REQUEST_LINK = "10/minute"
 RATE_LIMIT_AUTH_VERIFY = "30/minute"
 RATE_LIMIT_WEBHOOK_INBOUND_MAIL = "60/minute"
+# Public read endpoint — generous enough for normal browsing while throttling
+# ID-enumeration / scraping abuse (GET /events/{id} takes no auth).
+RATE_LIMIT_EVENTS_DETAIL = "120/minute"
 
 # Auth tokens
 AUTH_MAGIC_SALT = "magic-link-v1"
@@ -125,6 +128,7 @@ FEEDBACK_INDIRECT_WEIGHT: float = 0.5  # weight of category-matched indirect sig
 SCORE_HARD_EXCLUDE: float = (
     -2.0
 )  # sentinel: outside [-1,1] clamp, cannot be a valid score
+NEUTRAL_SCORE: float = 0.5  # neutral midpoint returned when a signal's data is unknown
 SCORE_WEIGHT_AFFINITY: float = 0.45
 SCORE_WEIGHT_RECENCY: float = 0.20
 SCORE_WEIGHT_FEEDBACK: float = 0.20

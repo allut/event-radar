@@ -27,6 +27,7 @@ from app.constants import (
     EVENT_STATUS_PUBLISHED,
     FEEDBACK_DECAY_BASE,
     FEEDBACK_INDIRECT_WEIGHT,
+    NEUTRAL_SCORE,
     RECENCY_DECAY_DAYS,
     SCORE_HARD_EXCLUDE,
     SCORE_WEIGHT_AFFINITY,
@@ -173,7 +174,7 @@ def _affinity_for_vector(
     )
     if max_possible <= 0:
         # Empty vector or all-negative weights — no meaningful signal, return neutral.
-        return 0.5
+        return NEUTRAL_SCORE
     raw = (
         sum(cat_map.get(c, 0.0) for c in categories)
         + sum(vibe_map.get(v, 0.0) for v in vibes)
@@ -189,12 +190,12 @@ def persona_affinity(
     vibes: list[str],
     time_slots: Sequence[str] = (),
 ) -> float:
-    """Weighted blend of persona affinities → [0, 1]. Returns 0.5 when no personas."""
+    """Weighted blend of persona affinities → [0, 1]. Returns NEUTRAL_SCORE with no personas."""
     if not user_persona_weights:
-        return 0.5
+        return NEUTRAL_SCORE
     total_weight = sum(w for w, _ in user_persona_weights)
     if total_weight == 0:
-        return 0.5
+        return NEUTRAL_SCORE
     weighted = sum(
         w * _affinity_for_vector(vec, categories, vibes, time_slots)
         for w, vec in user_persona_weights
@@ -248,9 +249,9 @@ def feedback_signal(
 
 
 def locality_bonus(lat: float | None, lng: float | None) -> float:
-    """1.0 if within central Tallinn bounding box; 0.5 when location unknown; 0.0 otherwise."""
+    """1.0 if within central Tallinn bounding box; NEUTRAL_SCORE when location unknown; 0.0 otherwise."""
     if lat is None or lng is None:
-        return 0.5
+        return NEUTRAL_SCORE
     if (
         abs(lat - TALLINN_CENTER_LAT) < TALLINN_LAT_DELTA
         and abs(lng - TALLINN_CENTER_LNG) < TALLINN_LNG_DELTA
@@ -280,7 +281,7 @@ def score_event(
 
     affinity = persona_affinity(user_persona_weights, categories, vibes, time_slots)
     recency = recency_boost(event.starts_at, now)
-    quality = cl.quality_score if cl and cl.quality_score is not None else 0.5
+    quality = cl.quality_score if cl and cl.quality_score is not None else NEUTRAL_SCORE
     locality = locality_bonus(event.lat, event.lng)
     fb_normalized = (fb + 1.0) / 2.0  # map [-1, 1] → [0, 1]
 
