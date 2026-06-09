@@ -1,11 +1,14 @@
 """Tests for email/digest.py — HTML builder and date formatter."""
 from datetime import date, datetime, timezone
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from app.email.digest import (
     _format_feed_date,
     _format_event_time,
     build_digest_html,
+    send_daily_digests,
 )
 from app.i18n import TRANSLATIONS, t, ti
 
@@ -281,3 +284,114 @@ class TestDigestI18nConstants:
     def test_unsubscribe_ru_locale(self):
         html = build_digest_html([], date(2026, 5, 20), "ru", "https://eventradar.ee")
         assert "Отписаться" in html
+
+
+# ---------------------------------------------------------------------------
+# send_daily_digests — dry_run behaviour
+# ---------------------------------------------------------------------------
+
+
+def _make_db_with_user_and_feed(
+    user_id: int = 1, event_ids: list[int] | None = None
+) -> AsyncMock:
+    """Return a mock DB session set up for a single opted-in user with a feed."""
+    if event_ids is None:
+        event_ids = [10]
+
+    user = MagicMock()
+    user.id = user_id
+    user.email = "test@example.com"
+    user.locale = "en"
+    user.email_digest_opt_in = True
+
+    feed = MagicMock()
+    feed.user_id = user_id
+    feed.event_ids = event_ids
+
+    event = MagicMock()
+    event.id = event_ids[0]
+
+    # db.scalars(...) is awaited; the awaited result must be a sync MagicMock
+    # whose .all() returns a plain list — not an AsyncMock (which makes .all() async).
+    def _sync_result(rows):
+        r = MagicMock()
+        r.all.return_value = rows
+        return r
+
+    db = AsyncMock()
+    # First call → users, second call → feeds, third call → events
+    db.scalars = AsyncMock(
+        side_effect=[_sync_result([user]), _sync_result([feed]), _sync_result([event])]
+    )
+    return db
+
+
+class TestSendDailyDigestsDryRun:
+    @pytest.mark.asyncio
+    async def test_dry_run_does_not_call_send_digest_email(self):
+        db = _make_db_with_user_and_feed()
+        with (
+            patch("app.email.digest.datetime") as mock_dt,
+            patch("app.email.digest.send_digest_email", new_callable=AsyncMock) as mock_send,
+        ):
+            mock_dt.now.return_value.date.return_value = date(2026, 6, 9)
+            result = await send_daily_digests(db, dry_run=True)
+
+        mock_send.assert_not_awaited()
+        assert result["dry_run"] is True
+        assert result["sent"] == 1
+
+    @pytest.mark.asyncio
+    async def test_dry_run_false_calls_send_digest_email(self):
+        db = _make_db_with_user_and_feed()
+        with (
+            patch("app.email.digest.datetime") as mock_dt,
+            patch("app.email.digest.send_digest_email", new_callable=AsyncMock) as mock_send,
+        ):
+            mock_dt.now.return_value.date.return_value = date(2026, 6, 9)
+            result = await send_daily_digests(db, dry_run=False)
+
+        mock_send.assert_awaited_once()
+        assert result["dry_run"] is False
+
+    @pytest.mark.asyncio
+    async def test_dry_run_key_present_in_early_return_no_users(self):
+        no_users = MagicMock()
+        no_users.all.return_value = []
+
+        db = AsyncMock()
+        db.scalars = AsyncMock(return_value=no_users)
+
+        with patch("app.email.digest.datetime") as mock_dt:
+            mock_dt.now.return_value.date.return_value = date(2026, 6, 9)
+            result = await send_daily_digests(db, dry_run=True)
+
+        assert "dry_run" in result
+        assert result["dry_run"] is True
+
+    @pytest.mark.asyncio
+    async def test_dry_run_key_present_in_early_return_no_feeds(self):
+        user = MagicMock()
+        user.id = 1
+        user.email_digest_opt_in = True
+
+        feed = MagicMock()
+        feed.user_id = 1
+        feed.event_ids = []
+
+        def _sync_result(rows):
+            r = MagicMock()
+            r.all.return_value = rows
+            return r
+
+        db = AsyncMock()
+        db.scalars = AsyncMock(
+            side_effect=[_sync_result([user]), _sync_result([feed])]
+        )
+
+        with patch("app.email.digest.datetime") as mock_dt:
+            mock_dt.now.return_value.date.return_value = date(2026, 6, 9)
+            result = await send_daily_digests(db, dry_run=False)
+
+        assert "dry_run" in result
+        assert result["dry_run"] is False

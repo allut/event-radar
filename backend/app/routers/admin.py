@@ -15,14 +15,17 @@ from app.constants import (
     EVENT_STATUS_CANCELLED,
 )
 from app.db import AsyncSessionLocal
+from app.email.digest import send_daily_digests
 from app.ingestion.jobs import (
     classify_pending_job,
     dedup_pass,
     ingest_all_enabled,
     ingest_source,
 )
+from app.ingestion.organizer_sync import sync_fienta_organizers
 from app.ingestion.registry import ADAPTER_REGISTRY
 from app.models.models import Event, Source
+from app.ranking.score import build_daily_feeds
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/admin")
@@ -204,6 +207,131 @@ async def admin_classify() -> dict:
             detail="Classification failed; see server logs",
         )
     return summary
+
+
+@router.post("/sync-organizers", dependencies=[Depends(_require_admin)])
+async def admin_sync_organizers() -> dict:
+    """Trigger Fienta organizer sync (discover new organizers, flag stale ones)."""
+    async with AsyncSessionLocal() as db:
+        try:
+            result = await sync_fienta_organizers(db)
+            await db.commit()
+        except Exception:
+            await db.rollback()
+            log.exception("admin sync-organizers failed")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Organizer sync failed; see server logs",
+            )
+    return result
+
+
+@router.post("/build-feeds", dependencies=[Depends(_require_admin)])
+async def admin_build_feeds() -> dict:
+    """Trigger daily feed builder for all active users (writes to daily_feeds)."""
+    async with AsyncSessionLocal() as db:
+        try:
+            summary = await build_daily_feeds(db)
+            # build_daily_feeds commits internally (score.py); no second commit needed.
+        except Exception:
+            await db.rollback()
+            log.exception("admin build-feeds failed")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Feed build failed; see server logs",
+            )
+    return summary
+
+
+@router.post("/send-digests", dependencies=[Depends(_require_admin)])
+async def admin_send_digests(
+    dry_run: bool = Query(True, description="When true (default), counts would-send but skips actual email delivery"),
+) -> dict:
+    """Trigger daily digest send. Defaults to dry-run — pass ?dry_run=false to actually send."""
+    async with AsyncSessionLocal() as db:
+        try:
+            summary = await send_daily_digests(db, dry_run=dry_run)
+        except Exception:
+            log.exception("admin send-digests failed")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Digest send failed; see server logs",
+            )
+    return summary
+
+
+@router.post("/pipeline/run", dependencies=[Depends(_require_admin)])
+async def admin_pipeline_run(
+    dry_run: bool = Query(True, description="When true (default), digest stage counts would-send but skips actual email delivery"),
+) -> dict:
+    """Run all six pipeline stages in dependency order.
+
+    Stops at the first failure — later stages depend on earlier output.
+    Returns {ok, stages} where stages is an ordered dict of per-stage results.
+    """
+    stages: dict[str, object] = {}
+
+    # Stage 1: organizer sync
+    async with AsyncSessionLocal() as db:
+        try:
+            result = await sync_fienta_organizers(db)
+            await db.commit()
+            stages["sync_organizers"] = result
+        except Exception as exc:
+            await db.rollback()
+            log.exception("pipeline: sync_organizers failed")
+            stages["sync_organizers"] = {"error": str(exc)}
+            return {"ok": False, "stages": stages}
+
+    # Stage 2: ingest
+    try:
+        result = await ingest_all_enabled()
+        stages["ingest"] = result
+    except Exception as exc:
+        log.exception("pipeline: ingest failed")
+        stages["ingest"] = {"error": str(exc)}
+        return {"ok": False, "stages": stages}
+
+    # Stage 3: dedup
+    try:
+        result = await dedup_pass()
+        stages["dedup"] = result
+    except Exception as exc:
+        log.exception("pipeline: dedup failed")
+        stages["dedup"] = {"error": str(exc)}
+        return {"ok": False, "stages": stages}
+
+    # Stage 4: classify
+    try:
+        result = await classify_pending_job()
+        stages["classify"] = result
+    except Exception as exc:
+        log.exception("pipeline: classify failed")
+        stages["classify"] = {"error": str(exc)}
+        return {"ok": False, "stages": stages}
+
+    # Stage 5: build feeds (build_daily_feeds commits internally)
+    async with AsyncSessionLocal() as db:
+        try:
+            result = await build_daily_feeds(db)
+            stages["build_feeds"] = result
+        except Exception as exc:
+            await db.rollback()
+            log.exception("pipeline: build_feeds failed")
+            stages["build_feeds"] = {"error": str(exc)}
+            return {"ok": False, "stages": stages}
+
+    # Stage 6: send digests
+    async with AsyncSessionLocal() as db:
+        try:
+            result = await send_daily_digests(db, dry_run=dry_run)
+            stages["send_digests"] = result
+        except Exception as exc:
+            log.exception("pipeline: send_digests failed")
+            stages["send_digests"] = {"error": str(exc)}
+            return {"ok": False, "stages": stages}
+
+    return {"ok": True, "stages": stages}
 
 
 @router.get("/stats", dependencies=[Depends(_require_admin)])

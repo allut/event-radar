@@ -171,7 +171,9 @@ async def send_digest_email(
 # ---------------------------------------------------------------------------
 
 
-async def send_daily_digests(db: AsyncSession) -> dict[str, int]:
+async def send_daily_digests(
+    db: AsyncSession, *, dry_run: bool = False
+) -> dict[str, int]:
     """
     Send today's Daily 5 digest to all opted-in users.
     Runs at 07:00 Europe/Tallinn (one hour after build_daily_feeds).
@@ -184,7 +186,7 @@ async def send_daily_digests(db: AsyncSession) -> dict[str, int]:
     ).all()
 
     if not users:
-        return {"sent": 0, "skipped": 0, "total_opted_in": 0}
+        return {"sent": 0, "skipped": 0, "total_opted_in": 0, "dry_run": dry_run}
 
     user_ids = [u.id for u in users]
 
@@ -204,7 +206,12 @@ async def send_daily_digests(db: AsyncSession) -> dict[str, int]:
         all_event_ids.update(eids)
 
     if not all_event_ids:
-        return {"sent": 0, "skipped": len(users), "total_opted_in": len(users)}
+        return {
+            "sent": 0,
+            "skipped": len(users),
+            "total_opted_in": len(users),
+            "dry_run": dry_run,
+        }
 
     events = (
         await db.scalars(
@@ -224,6 +231,8 @@ async def send_daily_digests(db: AsyncSession) -> dict[str, int]:
         ordered_events = [event_map[eid] for eid in eids if eid in event_map]
         if not ordered_events:
             return "skipped"
+        if dry_run:
+            return "sent"
         async with semaphore:
             try:
                 await send_digest_email(
@@ -253,4 +262,5 @@ async def send_daily_digests(db: AsyncSession) -> dict[str, int]:
         "skipped": skipped,
         "errored": errored,
         "total_opted_in": len(users),
+        "dry_run": dry_run,
     }
