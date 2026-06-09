@@ -69,7 +69,7 @@ PERSONAS: list[dict] = [
         "names": {
             "en": "Networking Pro",
             "et": "Võrgustikuproff",
-            "ru": "Нетворкинг Про",
+            "ru": "Нетворкинг про",
         },
         "vibes": {
             "en": "Startup events, pitch nights, professional meetups",
@@ -82,7 +82,7 @@ PERSONAS: list[dict] = [
         "emoji": "🎨",
         "names": {
             "en": "Weekend Hobbyist",
-            "et": "Nädalavahetuse Harrastaja",
+            "et": "Nädalavahetuse harrastaja",
             "ru": "Хоббист выходного дня",
         },
         "vibes": {
@@ -110,7 +110,7 @@ PERSONAS: list[dict] = [
         "emoji": "👨‍👩‍👧",
         "names": {
             "en": "Family Explorer",
-            "et": "Perepuhkuse Harrastaja",
+            "et": "Perepuhkuse harrastaja",
             "ru": "Семейный исследователь",
         },
         "vibes": {

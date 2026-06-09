@@ -134,10 +134,10 @@ export const TRANSLATIONS: Record<Locale, Record<string, string>> = {
     'persona_btn_deselect': 'Tühista',
     'persona_btn_set_primary': 'Määra peamiseks',
     'persona_btn_set_secondary': 'Määra teisejärguliseks',
-    'persona_btn_add_secondary': '+ 2nda',
+    'persona_btn_add_secondary': '+ 2.',
     'persona_btn_remove_secondary': 'Eemalda teisejärguline',
     'persona_badge_secondary_label': 'Teisejärguline — kliki eemaldamiseks',
-    'persona_badge_secondary_text': '2nda ×',
+    'persona_badge_secondary_text': '2. ×',
     'section_account': 'Konto',
     'section_language': 'Keel',
     'section_persona': 'Persoon',
@@ -257,10 +257,10 @@ export const PERSONA_TRANSLATIONS:
   },
   'networking_pro': {
     et: { name: 'Võrgustikuproff', vibe: 'Idufirmade üritused, pitching, professionaalsed kohtumised' },
-    ru: { name: 'Нетворкинг Про', vibe: 'Стартап-события, питчинги, профессиональные встречи' },
+    ru: { name: 'Нетворкинг про', vibe: 'Стартап-события, питчинги, профессиональные встречи' },
   },
   'weekend_hobbyist': {
-    et: { name: 'Nädalavahetuse Harrastaja', vibe: 'Töötoad, välistegevused, käsitööturgud' },
+    et: { name: 'Nädalavahetuse harrastaja', vibe: 'Töötoad, välistegevused, käsitööturgud' },
     ru: { name: 'Хоббист выходного дня', vibe: 'Мастер-классы, активный отдых, ярмарки' },
   },
   'culture_buff': {
@@ -268,7 +268,7 @@ export const PERSONA_TRANSLATIONS:
     ru: { name: 'Ценитель культуры', vibe: 'Музеи, театр, классические концерты, арт-открытия' },
   },
   'family_explorer': {
-    et: { name: 'Perepuhkuse Harrastaja', vibe: 'Peresõbralik, loodusretked, nädalavahetuse väljasõidud' },
+    et: { name: 'Perepuhkuse harrastaja', vibe: 'Peresõbralik, loodusretked, nädalavahetuse väljasõidud' },
     ru: { name: 'Семейный исследователь', vibe: 'Семейный отдых, прогулки на природе, вылазки на выходных' },
   },
 };
