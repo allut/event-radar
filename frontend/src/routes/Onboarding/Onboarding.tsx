@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { api, ApiError } from '../../api/client';
 import { getLocale, setLocale } from '../../lib/auth';
 import { PERSONAS } from '../../constants';
@@ -61,8 +61,7 @@ export default function Onboarding() {
   return (
     <div className={styles.page}>
       <header className={styles.topBar}>
-        <span className={styles.radar} aria-hidden>◉</span>
-        <span className={styles.brand}>{t('brand', locale)}</span>
+        <Link to="/settings" className={styles.back}>{t('back', locale)}</Link>
 
         <LocaleSelector locale={locale} onChange={setLocaleState} ariaLabel={t('section_language', locale)} />
       </header>
