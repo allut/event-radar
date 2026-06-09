@@ -13,6 +13,11 @@ export default function Onboarding() {
   const [primarySlug, setPrimarySlug] = useState<string | null>(null);
   const [secondarySlug, setSecondarySlug] = useState<string | null>(null);
   const [locale, setLocaleState] = useState<string>(getLocale());
+
+  function handleLocaleChange(code: string) {
+    setLocaleState(code);
+    setLocale(code);
+  }
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -63,7 +68,7 @@ export default function Onboarding() {
       <header className={styles.topBar}>
         <Link to="/settings" className={styles.back}>{t('back', locale)}</Link>
 
-        <LocaleSelector locale={locale} onChange={setLocaleState} ariaLabel={t('section_language', locale)} />
+        <LocaleSelector locale={locale} onChange={handleLocaleChange} ariaLabel={t('section_language', locale)} />
       </header>
 
       <main className={styles.main}>
