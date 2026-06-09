@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, ApiError } from '../../api/client';
-import { setLocale } from '../../lib/auth';
-import { LOCALES, PERSONAS } from '../../constants';
+import { getLocale, setLocale } from '../../lib/auth';
+import { PERSONAS } from '../../constants';
 import { t, ti, personaName, personaVibe } from '../../i18n';
 import LocaleSelector from '../../components/LocaleSelector';
 import PersonaCard from '../../components/PersonaCard';
@@ -12,7 +12,7 @@ export default function Onboarding() {
   const navigate = useNavigate();
   const [primarySlug, setPrimarySlug] = useState<string | null>(null);
   const [secondarySlug, setSecondarySlug] = useState<string | null>(null);
-  const [locale, setLocaleState] = useState<string>(LOCALES[0].code);
+  const [locale, setLocaleState] = useState<string>(getLocale());
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
