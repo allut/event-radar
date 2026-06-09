@@ -1,6 +1,8 @@
 .card {
   composes: card from '../shared/Card.module.css';
   position: relative;
+  display: flex;
+  flex-direction: column;
   transition: border-color var(--transition), transform var(--transition), box-shadow var(--transition);
   overflow: hidden;
 }
@@ -88,6 +90,7 @@
   background: none;
   border: none;
   border-top: 1px solid var(--border);
+  margin-top: auto;
   padding: 0.4rem;
   font-size: var(--fs-xs);
   color: var(--text-dim);
