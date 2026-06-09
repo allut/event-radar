@@ -1,7 +1,6 @@
 """Unit tests for app.llm.newsletter_extractor.
 
 All tests mock llm_json and the DB session — no real LLM calls, no real DB.
-Live tests that hit the actual API live in test_live_newsletter.py.
 """
 from unittest.mock import AsyncMock, MagicMock, patch
 
