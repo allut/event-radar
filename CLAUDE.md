@@ -13,6 +13,11 @@ The authoritative spec is `plan.md`.
 ```bash
 # Backend (Python 3.12, FastAPI)
 cd backend
+python -m venv venv          # create virtualenv (venv is gitignored)
+# Activate it — pick the line for your shell:
+venv\Scripts\Activate.ps1    # Windows PowerShell
+venv\Scripts\activate.bat    # Windows cmd
+source venv/bin/activate     # macOS / Linux
 pip install -r requirements.txt
 alembic upgrade head          # apply migrations
 uvicorn app.main:app --reload # dev server (port 8000)
