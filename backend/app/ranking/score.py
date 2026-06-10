@@ -369,9 +369,9 @@ async def build_daily_feeds(db: AsyncSession) -> dict:
                 .options(selectinload(UserPersona.persona))
             )
         ).all()
-        for row in up_rows:
-            personas_by_user.setdefault(row.user_id, []).append(
-                (row.weight, row.persona.affinity_vector)
+        for up_row in up_rows:
+            personas_by_user.setdefault(up_row.user_id, []).append(
+                (up_row.weight, up_row.persona.affinity_vector)
             )
 
     # --- Bulk-fetch feedback grouped by user_id ---
@@ -388,8 +388,8 @@ async def build_daily_feeds(db: AsyncSession) -> dict:
                 )
             )
         ).all()
-        for row in fb_rows:
-            fb_by_user.setdefault(row.user_id, []).append(row)
+        for fb_row in fb_rows:
+            fb_by_user.setdefault(fb_row.user_id, []).append(fb_row)
 
     # --- Bulk-fetch today's DailyFeed rows (existing -> update; missing -> insert) ---
     daily_by_user: dict[int, DailyFeed] = {}
@@ -402,8 +402,8 @@ async def build_daily_feeds(db: AsyncSession) -> dict:
                 )
             )
         ).all()
-        for row in df_rows:
-            daily_by_user[row.user_id] = row
+        for df_row in df_rows:
+            daily_by_user[df_row.user_id] = df_row
 
     # --- Bulk-fetch cached scores for the (user_id, event_id) cartesian we care about ---
     # The feedback router DELETEs the (user, event) row on signal change, so an
@@ -418,8 +418,8 @@ async def build_daily_feeds(db: AsyncSession) -> dict:
                 )
             )
         ).all()
-        for row in ues_rows:
-            score_cache[(row.user_id, row.event_id)] = row.score
+        for ues_row in ues_rows:
+            score_cache[(ues_row.user_id, ues_row.event_id)] = ues_row.score
 
     built = 0
     empty = 0

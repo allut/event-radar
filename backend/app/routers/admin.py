@@ -274,9 +274,9 @@ async def admin_pipeline_run(
     # Stage 1: organizer sync
     async with AsyncSessionLocal() as db:
         try:
-            result = await sync_fienta_organizers(db)
+            sync_result = await sync_fienta_organizers(db)
             await db.commit()
-            stages["sync_organizers"] = result
+            stages["sync_organizers"] = sync_result
         except Exception as exc:
             await db.rollback()
             log.exception("pipeline: sync_organizers failed")
@@ -285,8 +285,8 @@ async def admin_pipeline_run(
 
     # Stage 2: ingest
     try:
-        result = await ingest_all_enabled()
-        stages["ingest"] = result
+        ingest_result = await ingest_all_enabled()
+        stages["ingest"] = ingest_result
     except Exception as exc:
         log.exception("pipeline: ingest failed")
         stages["ingest"] = {"error": str(exc)}
@@ -294,8 +294,8 @@ async def admin_pipeline_run(
 
     # Stage 3: dedup
     try:
-        result = await dedup_pass()
-        stages["dedup"] = result
+        dedup_result = await dedup_pass()
+        stages["dedup"] = dedup_result
     except Exception as exc:
         log.exception("pipeline: dedup failed")
         stages["dedup"] = {"error": str(exc)}
@@ -303,8 +303,8 @@ async def admin_pipeline_run(
 
     # Stage 4: classify
     try:
-        result = await classify_pending_job()
-        stages["classify"] = result
+        classify_result = await classify_pending_job()
+        stages["classify"] = classify_result
     except Exception as exc:
         log.exception("pipeline: classify failed")
         stages["classify"] = {"error": str(exc)}
@@ -313,8 +313,8 @@ async def admin_pipeline_run(
     # Stage 5: build feeds (build_daily_feeds commits internally)
     async with AsyncSessionLocal() as db:
         try:
-            result = await build_daily_feeds(db)
-            stages["build_feeds"] = result
+            build_feeds_result = await build_daily_feeds(db)
+            stages["build_feeds"] = build_feeds_result
         except Exception as exc:
             await db.rollback()
             log.exception("pipeline: build_feeds failed")
@@ -324,8 +324,8 @@ async def admin_pipeline_run(
     # Stage 6: send digests
     async with AsyncSessionLocal() as db:
         try:
-            result = await send_daily_digests(db, dry_run=dry_run)
-            stages["send_digests"] = result
+            send_digests_result = await send_daily_digests(db, dry_run=dry_run)
+            stages["send_digests"] = send_digests_result
         except Exception as exc:
             log.exception("pipeline: send_digests failed")
             stages["send_digests"] = {"error": str(exc)}
