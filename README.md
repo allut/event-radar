@@ -164,6 +164,7 @@ cd backend
 pytest                                          # run all tests
 pytest tests/path/test_foo.py::TestClass::test  # run a single test
 python -m ruff check .                           # lint (Ruff)
+python -m mypy app                               # type-check (mypy, requirements-dev.txt)
 
 # Frontend
 cd frontend
