@@ -334,6 +334,19 @@ PILETILEVI_LISTING_URLS: list[str] = [
 CORS_ALLOWED_METHODS: list[str] = ["GET", "POST", "PATCH"]
 CORS_ALLOWED_HEADERS: list[str] = ["Authorization", "Content-Type"]
 
+# Logging — configure_logging() in app.logging_config wires these into the root
+# logger. Format/date strings render UTC ISO 8601 timestamps on every line (app,
+# uvicorn, and SQL echo alike).
+LOG_LEVEL_DEFAULT = "INFO"
+LOG_FORMAT_TEXT = "%(asctime)s.%(msecs)03dZ %(levelname)-8s %(name)s: %(message)s"
+LOG_DATE_FORMAT = "%Y-%m-%dT%H:%M:%S"
+LOG_DIR_NAME = "logs"
+LOG_FILE_NAME = "app.log"
+LOG_FILE_MAX_BYTES = 5 * 1024 * 1024  # 5 MB per file
+LOG_FILE_BACKUP_COUNT = 5  # ~25 MB total dev history
+LOG_SHIP_TIMEOUT_SECONDS = 5.0
+LOG_SHIP_QUEUE_MAXSIZE = 10_000  # bounded; drop-newest if shipping stalls
+
 # Security response headers — applied to every response by SecurityHeadersMiddleware
 # (app.main). This is a pure JSON API with no first-party HTML/script surface, so the
 # CSP can be maximally restrictive; frame-ancestors/X-Frame-Options block clickjacking.

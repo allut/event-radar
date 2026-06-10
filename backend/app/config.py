@@ -1,12 +1,14 @@
+import logging
 from typing import Any
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app._generated.shared_constants import (
     MAGIC_LINK_TTL_MINUTES as _MAGIC_LINK_TTL_DEFAULT,
     SESSION_TTL_DAYS as _SESSION_TTL_DEFAULT,
 )
-from app.constants import APP_ENV_DEVELOPMENT
+from app.constants import APP_ENV_DEVELOPMENT, LOG_LEVEL_DEFAULT
 
 
 class Settings(BaseSettings):
@@ -109,6 +111,21 @@ class Settings(BaseSettings):
     # CORS — pydantic-settings parses a JSON array from the env var (e.g. '["https://eventradar.ee"]')
     # In Render: set CORS_ORIGINS to your Vercel/CF Pages URL before deploying.
     CORS_ORIGINS: list[str] = ["http://localhost:5173", "http://localhost:4173"]
+
+    # Logging
+    LOG_LEVEL: str = LOG_LEVEL_DEFAULT
+    LOG_SHIP_URL: str = (
+        ""  # e.g. https://api.axiom.co/v1/datasets/event-radar/ingest ; empty = no shipping
+    )
+    LOG_SHIP_TOKEN: str = ""  # Bearer token for the log drain (Axiom ingest token)
+
+    @field_validator("LOG_LEVEL")
+    @classmethod
+    def _validate_log_level(cls, v: str) -> str:
+        normalized = v.upper()
+        if normalized not in logging.getLevelNamesMapping():
+            raise ValueError(f"Invalid LOG_LEVEL: {v!r}")
+        return normalized
 
 
 settings = Settings() # type: ignore

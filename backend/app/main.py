@@ -27,6 +27,7 @@ from app.db import AsyncSessionLocal, engine
 from app.email.digest import send_daily_digests
 from app.ingestion.jobs import classify_pending_job, dedup_pass, ingest_all_enabled
 from app.ingestion.organizer_sync import sync_fienta_organizers
+from app.logging_config import configure_logging, shutdown_log_shipping
 from app.ranking.score import build_daily_feeds
 from app.rate_limit import limiter
 from app.routers.admin import router as admin_router
@@ -38,6 +39,11 @@ from app.routers.onboarding import router as onboarding_router
 from app.routers.settings import router as settings_router
 from app.routers.webhooks import router as webhooks_router
 from app.seeds import seed_personas, seed_sources
+
+# uvicorn configures its own logging during Config.load(), before importing this
+# module — calling configure_logging() here runs last and wins, so every logger
+# (app, uvicorn, SQL echo) shares one timestamped format.
+configure_logging()
 
 log = logging.getLogger(__name__)
 
@@ -165,6 +171,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     finally:
         scheduler.shutdown(wait=False)
         await engine.dispose()
+        shutdown_log_shipping()
 
 
 # Swagger UI / ReDoc load their JS/CSS from a CDN, which the restrictive
