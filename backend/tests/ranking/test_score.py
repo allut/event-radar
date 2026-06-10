@@ -1,8 +1,10 @@
 """Unit tests for the scoring formula — no DB, all pure functions."""
 from datetime import datetime, timedelta
+from typing import cast
 from unittest.mock import MagicMock
 
 from app.constants import SCORE_HARD_EXCLUDE, TALLINN_TZ
+from app.models.models import Event
 from app.ranking.score import (
     FeedbackContext,
     _FeedbackRow,
@@ -30,7 +32,7 @@ def _event(
     lat: float = 59.437,
     lng: float = 24.745,
     dedup_group: int | None = None,
-) -> MagicMock:
+) -> Event:
     e = MagicMock()
     e.id = event_id
     e.starts_at = starts_at or (_now() + timedelta(days=2))
@@ -42,7 +44,7 @@ def _event(
     cl.vibes = vibes or ["underground"]
     cl.quality_score = quality
     e.classification = cl
-    return e
+    return cast(Event, e)
 
 
 def _ctx(*rows: tuple[str, int, list[str], int | None, datetime]) -> FeedbackContext:
@@ -346,6 +348,8 @@ class TestScoreEvent:
         now = _now()
         score_match = score_event([(1.0, v_match)], ctx, e, now)
         score_miss = score_event([(1.0, v_miss)], ctx, e, now)
+        assert score_match is not None
+        assert score_miss is not None
         assert score_match > score_miss
 
 
@@ -376,12 +380,17 @@ class TestMmrPick:
             self._make_event(4, ["theater"], 0.6),
         ]
         picked = _mmr_pick(scored, n=4, max_per_category=2)
-        music = [e for e in picked if "music" in (e.classification.categories or [])]
+        music = [
+            e
+            for e in picked
+            if "music" in (e.classification.categories if e.classification else [])
+        ]
         assert len(music) == 2
         assert any(e.id == 4 for e in picked)
 
     def test_no_categories_bypass_cap(self):
         e = _event(event_id=1, categories=[])
+        assert e.classification is not None
         e.classification.categories = []
         scored = [(0.9, e)]
         picked = _mmr_pick(scored, n=5, max_per_category=1)

@@ -11,12 +11,11 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
-from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
 from app.constants import RATE_LIMIT_AUTH_REQUEST_LINK
-from app.rate_limit import limiter
+from app.rate_limit import limiter, rate_limit_exceeded_handler
 
 
 def _build_app() -> FastAPI:
@@ -25,7 +24,7 @@ def _build_app() -> FastAPI:
 
     app = FastAPI()
     app.state.limiter = limiter
-    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+    app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
     app.add_middleware(SlowAPIMiddleware)
     app.include_router(router)
     return app

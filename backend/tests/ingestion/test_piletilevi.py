@@ -89,11 +89,13 @@ class TestNormalize:
     def test_external_id_is_href(self):
         adapter = _adapter()
         result = adapter.normalize(_raw(href="/en/tickets/XYZ/my-event"))
+        assert result is not None
         assert result.external_id == "/en/tickets/XYZ/my-event"
 
     def test_url_is_absolute(self):
         adapter = _adapter()
         result = adapter.normalize(_raw(href="/en/tickets/XYZ/my-event"))
+        assert result is not None
         assert result.url == PILETILEVI_BASE_URL + "/en/tickets/XYZ/my-event"
 
     def test_missing_title_returns_none(self):
@@ -115,26 +117,31 @@ class TestNormalize:
     def test_starts_at_is_tz_aware(self):
         adapter = _adapter()
         result = adapter.normalize(_raw())
+        assert result is not None
         assert result.starts_at.tzinfo is not None
 
     def test_image_url_relative_becomes_absolute(self):
         adapter = _adapter()
         result = adapter.normalize(_raw(image_url="/media/img/event.jpg"))
+        assert result is not None
         assert result.image_url == PILETILEVI_BASE_URL + "/media/img/event.jpg"
 
     def test_image_url_absolute_unchanged(self):
         adapter = _adapter()
         result = adapter.normalize(_raw(image_url="https://cdn.piletilevi.ee/img.jpg"))
+        assert result is not None
         assert result.image_url == "https://cdn.piletilevi.ee/img.jpg"
 
     def test_image_url_none_when_absent(self):
         adapter = _adapter()
         result = adapter.normalize(_raw(image_url=None))
+        assert result is not None
         assert result.image_url is None
 
     def test_no_price_fields(self):
         adapter = _adapter()
         result = adapter.normalize(_raw())
+        assert result is not None
         assert result.price_min is None
         assert result.price_max is None
         assert result.currency is None
