@@ -51,6 +51,7 @@ export default function Settings() {
       setTimeout(() => setSaveMsg(''), SAVE_MSG_CLEAR_DELAY_MS);
     },
     onError: (err, variables) => {
+      setSaveMsg('');
       setSaveError(err instanceof ApiError ? err.message : t('save_failed', locale));
       if (variables.locale !== undefined) {
         setLocaleState(getLocale());
@@ -111,6 +112,9 @@ export default function Settings() {
 
   return (
     <div className={styles.page}>
+      {saveMsg && <div className={styles.toastSuccess} role="status">{saveMsg}</div>}
+      {saveError && <div className={styles.toastError} role="alert">{saveError}</div>}
+
       <header className={styles.topBar}>
         <Link to="/" className={styles.back} aria-label={t('back_to_feed', locale)}>{t('back_to_feed', locale)}</Link>
         <div className={styles.logoWrap}>
@@ -212,9 +216,6 @@ export default function Settings() {
           {logoutAllMsg && <p className={styles.saveSuccess} role="status">{logoutAllMsg}</p>}
           {logoutAllError && <p className={styles.saveError} role="alert">{logoutAllError}</p>}
         </section>
-
-        {saveMsg && <p className={styles.saveSuccess} role="status">{saveMsg}</p>}
-        {saveError && <p className={styles.saveError} role="alert">{saveError}</p>}
       </main>
     </div>
   );

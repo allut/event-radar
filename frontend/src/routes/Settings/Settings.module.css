@@ -242,3 +242,31 @@
   font-size: var(--fs-sm);
   text-align: center;
 }
+
+/* ── Save toast (fixed, always visible regardless of scroll) ── */
+.toast {
+  position: fixed;
+  top: 5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: var(--z-toast);
+  padding: 0.6rem 1.25rem;
+  border-radius: var(--radius);
+  font-size: var(--fs-sm);
+  text-align: center;
+  box-shadow: var(--shadow-card);
+}
+
+.toastSuccess {
+  composes: toast;
+  background: var(--success-faint);
+  border: 1px solid var(--success-border);
+  color: var(--success);
+}
+
+.toastError {
+  composes: toast;
+  background: var(--danger-faint);
+  border: 1px solid var(--danger-border);
+  color: var(--danger);
+}
