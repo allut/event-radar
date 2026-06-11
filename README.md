@@ -188,7 +188,7 @@ python scripts/generate_shared.py
 
 `render.yaml` defines a free-tier deployment:
 
-- **`event-radar-api`** — the FastAPI web service. Set `DATABASE_URL` and (in production) the LLM/Resend keys, `ADMIN_PASSWORD`, `INTERNAL_TOKEN`, and `CORS_ORIGINS`. `SECRET_KEY` is auto-generated.
+- **`event-radar-api`** — the FastAPI web service. Set `DATABASE_URL` and (in production) the LLM/Resend keys, `ADMIN_PASSWORD`, `INTERNAL_TOKEN`, and `CORS_ORIGINS`. `SECRET_KEY` is auto-generated. Optionally set `LOG_SHIP_URL` (+ `LOG_SHIP_TOKEN`) to ship JSON logs to an external drain such as Axiom.
 - **`event-radar-keepalive`** — a cron job that pings `/internal/tick` every 15 minutes so the embedded scheduler survives free-tier sleep. Set its `API_URL` to the web service URL.
 
 The frontend is a static SPA build (`npm run build`) deployable to Vercel or Cloudflare Pages; set `VITE_API_BASE` to the backend URL for production builds.

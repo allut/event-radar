@@ -14,7 +14,7 @@ Tallinn speaks **Estonian, English, Russian** — every user-facing string and L
 - **DB:** Neon Postgres free (eu-central-1, 0.5 GB, scale-to-zero, pgvector available for v1.1)
 - **Auth:** magic-link email (`itsdangerous` signed token, 50 LOC); 7-day session token via `Authorization: Bearer`
 - **Email:** Resend free (3k/mo) — magic links + daily digest
-- **LLM:** Groq primary (`llama-3.3-70b-versatile`, 14,400 req/day, 30 req/min burst) → Cerebras (`qwen-3-235b-a22b-instruct-2507`, 1 req/min Preview) → Mistral (1B tok/mo overnight batch)
+- **LLM:** Groq primary (`llama-3.3-70b-versatile`, 14,400 req/day, 30 req/min burst) → Cerebras (`gpt-oss-120b`) → Mistral (`mistral-small-latest`, 1B tok/mo overnight batch)
 - **Scheduler:** APScheduler embedded; Render Cron Job pings `/internal/tick` every 15 min to survive free-tier sleep
 - **Hosting:** Render free Web Service (backend) + Vercel/Cloudflare Pages (frontend)
 - **Differentiator:** persona-based onboarding + like/dislike learning
@@ -27,7 +27,7 @@ Tallinn speaks **Estonian, English, Russian** — every user-facing string and L
 ```
 Vite/React SPA  ──HTTPS/JSON──▶  FastAPI (single process)
                                     ├── Routers: /auth /admin /onboarding /events /feed
-                                    │            /feedback /users/me /settings /webhooks
+                                    │            /feedback /users/me /webhooks
                                     └── APScheduler (in-process)
                                         ├── Sun 03:00:  sync_fienta_organizers
                                         ├── Hourly:     ingest_all_enabled
@@ -124,7 +124,7 @@ Server state via TanStack Query. i18n custom `frontend/src/i18n.ts` (no library)
 - **Frontend constants** → `frontend/src/constants.ts`
 - **Frontend utils** → `frontend/src/utils.ts`
 - **CSS design tokens** → `:root` vars in `frontend/src/index.css`; `.module.css` consumes vars only
-- **HTTP retry:** all source adapters use `_http_get()` from `app/ingestion/base.py` (tenacity, 3 attempts, 2–30s backoff)
+- **HTTP retry:** all source adapters use `http_get()` from `app/ingestion/base.py` (tenacity, 3 attempts, 2–30s backoff)
 - **Taxonomy:** `validate_categories()` / `validate_vibes()` before persisting any LLM output
 - **Migrations:** chain `down_revision = "PREV"`; small & reversible
 - **Datetimes:** tz-aware via `zoneinfo` (`Europe/Tallinn`) — no naive UTC anywhere
