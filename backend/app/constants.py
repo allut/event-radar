@@ -38,6 +38,11 @@ SECONDS_PER_MINUTE = 60
 SECONDS_PER_HOUR = 3600
 SECONDS_PER_DAY = 86400
 
+# Recycle pooled DB connections older than this many seconds. Set below Neon's
+# free-tier idle/auto-suspend window (~5 min) so we never hand out a connection
+# the server has already dropped. Works together with pool_pre_ping.
+DB_POOL_RECYCLE_SECONDS = 280
+
 HTTP_TIMEOUT_SECONDS: float = 30.0
 HTTP_USER_AGENT = "EventRadarBot/1.0 (+https://eventradar.ee)"
 HTTP_RETRY_MAX_ATTEMPTS = 3
