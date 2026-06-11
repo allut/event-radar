@@ -30,7 +30,7 @@
 
 .emptyHint {
   font-size: var(--fs-sm);
-  color: var(--text-dim);
+  color: var(--text-soft);
   max-width: 340px;
   line-height: 1.6;
 }

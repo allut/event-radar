@@ -35,6 +35,8 @@
     "feed_empty_hint": "In the meantime, new events are being classified and ranked for you.",
     "feed_error": "Failed to load your feed. Please refresh.",
     "why_go": "Why go",
+    "eyebrow_about": "About",
+    "eyebrow_details": "Details",
     "tickets": "Tickets →",
     "get_tickets": "Get tickets →",
     "price_free": "Free",

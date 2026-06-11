@@ -72,7 +72,7 @@
   flex-direction: column;
   gap: 1rem;
   padding-bottom: 2.5rem;
-  border-bottom: 1px solid var(--border-subtle);
+  border-bottom: var(--rule);
 }
 
 .section:last-of-type {
@@ -81,10 +81,10 @@
 
 .sectionTitle {
   font-family: var(--font-display);
-  font-size: var(--heading-xs);
-  font-weight: 600;
-  color: var(--text-muted);
-  letter-spacing: var(--tracking-wide);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  color: var(--text-soft);
+  letter-spacing: var(--eyebrow-tracking);
   text-transform: uppercase;
 }
 

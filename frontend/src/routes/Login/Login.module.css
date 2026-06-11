@@ -9,7 +9,7 @@
 .card {
   composes: card cardAccentTop cardPage from '../../components/shared/Card.module.css';
   --rise-distance: 12px;
-  padding: 2.5rem;
+  padding: var(--space-7);
   animation: rise 0.4s var(--easing) both;
 }
 
@@ -172,5 +172,5 @@
   margin-top: 2.5rem;
   text-align: center;
   font-size: var(--fs-xs);
-  color: var(--text-dim);
+  color: var(--text-soft);
 }

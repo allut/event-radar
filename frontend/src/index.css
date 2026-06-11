@@ -14,7 +14,8 @@
   --accent-glow: rgba(200, 146, 42, 0.12);
   --text: #e4dfd6;
   --text-muted: #7a8ba3;
-  --text-dim: #3d4d65;
+  --text-soft: #9fb0c8;   /* readable secondary content, ~8.2:1 on --bg */
+  --text-dim: #3d4d65;    /* decorative only — ghost numerals, hairlines (~2.1:1, fails AA) */
   --border: #252c3d;
   --border-subtle: #1c2333;
   --success: #4cad7f;
@@ -53,11 +54,11 @@
   /* Typography */
   --font-display: 'Cormorant Garamond', Georgia, serif;
 
-  --fs-2xs:  0.6875rem;  /* badge labels */
-  --fs-xs:   0.75rem;    /* footer, locale pills, price chips */
-  --fs-sm:   0.8125rem;  /* labels, venue, secondary text */
-  --fs-md:   0.875rem;   /* body-small, taglines, bullets */
-  --fs-base: 0.9375rem;  /* inputs, messages, primary body */
+  --fs-2xs:  0.75rem;    /* badge labels */
+  --fs-xs:   0.8125rem;  /* footer, locale pills, price chips */
+  --fs-sm:   0.875rem;   /* labels, venue, secondary text */
+  --fs-md:   0.9375rem;  /* body-small, taglines, bullets */
+  --fs-base: 1rem;       /* inputs, messages, primary body */
   --fs-icon: 0.5rem;     /* decorative icon markers */
 
   --tracking-tighter: -0.01em;  /* display headings (condensed) */
@@ -65,6 +66,17 @@
   --tracking-normal:   0.02em;  /* event time, links */
   --tracking-wide:     0.04em;  /* form labels, price badges */
   --tracking-wider:    0.06em;  /* uppercase pill labels */
+  --eyebrow-tracking:  0.12em;  /* uppercase section eyebrows */
+
+  /* Spacing scale */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-7: 3rem;
+  --space-8: 4rem;
 
   /* Shape */
   --radius-pill: 100px;
@@ -91,12 +103,17 @@
   --toggle-knob-color: #fff;
 
   /* Heading scale */
-  --heading-2xl: 2.25rem;
-  --heading-xl: 2rem;
-  --heading-lg: 1.6rem;
-  --heading-md: 1.5rem;
-  --heading-sm: 1.3rem;
+  --heading-3xl: 3rem;
+  --heading-2xl: 2.5rem;
+  --heading-xl: 2.125rem;
+  --heading-lg: 1.7rem;
+  --heading-md: 1.6rem;
+  --heading-sm: 1.375rem;
   --heading-xs: 1.05rem;
+
+  /* Leading (line-height) */
+  --leading-display: 1.15;
+  --leading-body: 1.6;
 
   /* Animation durations */
   --anim-fast: 0.3s;
@@ -108,10 +125,19 @@
   --shadow-card:        0 4px 20px rgba(0, 0, 0, 0.25);
   --shadow-card-hover:  0 8px 24px rgba(0, 0, 0, 0.3);
   --shadow-accent:      0 8px 32px rgba(200, 146, 42, 0.1);
+  --shadow-lead:        0 24px 64px rgba(0, 0, 0, 0.45), 0 0 60px var(--accent-glow);
 
   /* Ring shadows (geometry + token colors) */
   --shadow-focus-ring:    0 0 0 3px var(--accent-glow);
   --shadow-selected-ring: 0 0 0 1px var(--accent), var(--shadow-accent);
+
+  /* Atmosphere */
+  --grain-opacity: 0.035;
+  --noise-bg: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  --rule: 1px solid var(--border-subtle);
+
+  /* Decoration */
+  --numeral-color: var(--text-dim);
 }
 
 @keyframes spin    { to { transform: rotate(360deg); } }
@@ -122,17 +148,29 @@ html {
   font-family: 'DM Sans', system-ui, sans-serif;
   background-color: var(--bg);
   color: var(--text);
-  font-size: 15px;
-  line-height: 1.6;
+  font-size: 16px;
+  line-height: var(--leading-body);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
 body {
   min-height: 100vh;
+  position: relative;
   background-image:
     radial-gradient(ellipse 80% 50% at 20% 10%, rgba(200, 146, 42, 0.04) 0%, transparent 60%),
-    radial-gradient(ellipse 60% 40% at 80% 90%, rgba(25, 30, 43, 0.6) 0%, transparent 60%);
+    radial-gradient(ellipse 60% 40% at 80% 90%, rgba(25, 30, 43, 0.6) 0%, transparent 60%),
+    radial-gradient(ellipse 50% 40% at 50% 50%, rgba(200, 146, 42, 0.03) 0%, transparent 70%);
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image: var(--noise-bg);
+  opacity: var(--grain-opacity);
+  mix-blend-mode: overlay;
+  pointer-events: none;
 }
 
 #root {

@@ -96,41 +96,55 @@ export default function EventDetail() {
 
           <h1 className={styles.title}>{data.title}</h1>
 
-          {(data.venue_name || data.venue_address) && (
-            <div className={styles.venue}>
-              {data.venue_name && <span className={styles.venueName}>{data.venue_name}</span>}
-              {data.venue_address && (
-                <span className={styles.venueAddress}>{data.venue_address}</span>
-              )}
-              {mapsUrl && (
-                <a href={mapsUrl} target="_blank" rel="noopener noreferrer" className={styles.mapLink}>
-                  {t('view_on_map', locale)}
-                </a>
-              )}
-            </div>
-          )}
-
           {data.why_go.length > 0 && (
-            <ul className={styles.bullets} aria-label={t('why_go', locale)}>
-              {data.why_go.map(bullet => (
-                <li key={bullet} className={styles.bullet}>{bullet}</li>
-              ))}
-            </ul>
+            <section className={styles.section}>
+              <h2 className={styles.eyebrow}>{t('why_go', locale)}</h2>
+              <hr className={styles.rule} />
+              <ul className={styles.bullets}>
+                {data.why_go.map(bullet => (
+                  <li key={bullet} className={styles.bullet}>{bullet}</li>
+                ))}
+              </ul>
+            </section>
           )}
 
           {data.description && (
-            <p className={styles.description}>{data.description}</p>
+            <section className={styles.section}>
+              <h2 className={styles.eyebrow}>{t('eyebrow_about', locale)}</h2>
+              <hr className={styles.rule} />
+              <p className={styles.description}>{data.description}</p>
+            </section>
           )}
 
-          {(data.categories.length > 0 || data.vibes.length > 0) && (
-            <div className={styles.tags}>
-              {data.categories.map(cat => (
-                <span key={cat} className={styles.tag}>{cat.replace(/_/g, ' ')}</span>
-              ))}
-              {data.vibes.map(vibe => (
-                <span key={vibe} className={cx(styles.tag, styles.tagVibe)}>{vibe.replace(/_/g, ' ')}</span>
-              ))}
-            </div>
+          {(data.venue_name || data.venue_address || data.categories.length > 0 || data.vibes.length > 0) && (
+            <section className={styles.section}>
+              <h2 className={styles.eyebrow}>{t('eyebrow_details', locale)}</h2>
+              <hr className={styles.rule} />
+              {(data.venue_name || data.venue_address) && (
+                <div className={styles.venue}>
+                  {data.venue_name && <span className={styles.venueName}>{data.venue_name}</span>}
+                  {data.venue_address && (
+                    <span className={styles.venueAddress}>{data.venue_address}</span>
+                  )}
+                  {mapsUrl && (
+                    <a href={mapsUrl} target="_blank" rel="noopener noreferrer" className={styles.mapLink}>
+                      {t('view_on_map', locale)}
+                    </a>
+                  )}
+                </div>
+              )}
+
+              {(data.categories.length > 0 || data.vibes.length > 0) && (
+                <div className={styles.tags}>
+                  {data.categories.map(cat => (
+                    <span key={cat} className={styles.tag}>{cat.replace(/_/g, ' ')}</span>
+                  ))}
+                  {data.vibes.map(vibe => (
+                    <span key={vibe} className={cx(styles.tag, styles.tagVibe)}>{vibe.replace(/_/g, ' ')}</span>
+                  ))}
+                </div>
+              )}
+            </section>
           )}
 
           <div className={styles.actions}>

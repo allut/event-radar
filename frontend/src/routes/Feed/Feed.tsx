@@ -60,17 +60,21 @@ export default function Feed() {
       </header>
 
       <main className={styles.main}>
-        <div className={styles.feedHeader}>
-          <div>
-            <h1 className={styles.heading}>{t('daily_five', locale)}</h1>
-            <p className={styles.date}>{formatTodayDate(locale)}</p>
+        <header className={styles.masthead}>
+          <div className={styles.mastheadTop}>
+            <div>
+              <h1 className={styles.heading}>{t('daily_five', locale)}</h1>
+              <p className={styles.date}>{formatTodayDate(locale)}</p>
+            </div>
+            {data?.built_at && (
+              <p className={styles.builtAt}>
+                {ti('curated_at', locale, { time: formatHourMinute(data.built_at, locale) })}
+              </p>
+            )}
           </div>
-          {data?.built_at && (
-            <p className={styles.builtAt}>
-              {ti('curated_at', locale, { time: formatHourMinute(data.built_at, locale) })}
-            </p>
-          )}
-        </div>
+          <p className={styles.tagline}>{t('tagline', locale)}</p>
+          <hr className={styles.rule} />
+        </header>
 
         {events.length === 0 ? (
           <EmptyState
@@ -81,9 +85,13 @@ export default function Feed() {
           />
         ) : (
           <ol className={styles.list} aria-label={t('daily_five', locale)}>
-            {events.map((event, i) => (
-              <li key={event.id}>
-                <EventCard event={event} index={i} onFeedbackSent={handleFeedbackSent} />
+            <li key={events[0].id} className={styles.featuredItem}>
+              <EventCard event={events[0]} index={0} onFeedbackSent={handleFeedbackSent} variant="featured" />
+            </li>
+            {events.slice(1).map((event, i) => (
+              <li key={event.id} className={styles.standardItem}>
+                <span className={styles.indexNumeral} aria-hidden>{String(i + 2).padStart(2, '0')}</span>
+                <EventCard event={event} index={i + 1} onFeedbackSent={handleFeedbackSent} />
               </li>
             ))}
           </ol>
