@@ -184,6 +184,37 @@ python scripts/generate_shared.py
 > [!IMPORTANT]
 > Never edit files under `_generated/` directly. A test (`backend/tests/test_generated_sync.py`) fails if the generated output drifts from `shared/`.
 
+### Manually triggering pipeline jobs (E2E testing)
+
+The scheduled jobs described in [Architecture](#architecture) (`sync_fienta_organizers`, `ingest_all_enabled`, `dedup_pass`, `classify_pending`, `build_daily_feeds`, `send_daily_digests`) can each be run on demand via `/admin/*` endpoints — useful for exercising the full pipeline end to end without waiting for the schedule.
+
+All `/admin/*` endpoints require HTTP Basic auth (`ADMIN_USERNAME` / `ADMIN_PASSWORD`, see `.env.example`). In development with no `ADMIN_PASSWORD` set, any credentials are accepted — the examples below use `admin:admin`. Run them in this order to exercise a full pipeline cycle:
+
+```bash
+# 1. sync_fienta_organizers — discover/refresh Fienta organizer IDs
+curl -u admin:admin -X POST http://localhost:8000/admin/sync-organizers
+
+# 2. ingest_all_enabled — fetch raw events from every enabled source
+curl -u admin:admin http://localhost:8000/admin/ingest
+
+# 3. dedup_pass — rule pre-filter + LLM tiebreaker over non-cancelled events
+curl -u admin:admin -X POST http://localhost:8000/admin/dedup
+
+# 4. classify_pending — LLM classification for one batch of draft events
+curl -u admin:admin -X POST http://localhost:8000/admin/classify
+
+# 5. build_daily_feeds — score events and write daily_feeds for all users
+curl -u admin:admin -X POST http://localhost:8000/admin/build-feeds
+
+# 6. send_daily_digests — dry-run by default (counts would-send, sends nothing)
+curl -u admin:admin -X POST http://localhost:8000/admin/send-digests
+# Pass dry_run=false to actually deliver emails:
+curl -u admin:admin -X POST "http://localhost:8000/admin/send-digests?dry_run=false"
+```
+
+> [!TIP]
+> `POST /admin/pipeline/run` runs all six stages above in dependency order in a single call, stopping at the first failure — the fastest way to drive a full E2E cycle. It also accepts `?dry_run=false` for the final digest stage. `GET /admin/stats` and `GET /admin/dedup/groups` are useful for inspecting the results afterwards.
+
 ## Deployment
 
 `render.yaml` defines a free-tier deployment:
