@@ -146,8 +146,8 @@ def configure_logging() -> None:
         logger = logging.getLogger(name)
         logger.handlers.clear()
         logger.propagate = True
-        if name == "sqlalchemy.engine" and not is_dev:
-            logger.setLevel(logging.WARNING)
+        if name == "sqlalchemy.engine":
+            logger.setLevel(logging.INFO if is_dev else logging.WARNING)
         else:
             logger.setLevel(logging.NOTSET)
 

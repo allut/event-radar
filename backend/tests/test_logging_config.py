@@ -214,3 +214,21 @@ def test_framework_loggers_propagate_after_configure(monkeypatch, tmp_path) -> N
         logger = logging.getLogger(name)
         assert logger.propagate is True
         assert logger.handlers == []
+
+
+def test_sqlalchemy_engine_logs_at_info_in_dev(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(settings, "APP_ENV", "development")
+    monkeypatch.setattr(logging_config, "_log_dir", lambda: tmp_path)
+
+    configure_logging()
+
+    assert logging.getLogger("sqlalchemy.engine").level == logging.INFO
+
+
+def test_sqlalchemy_engine_logs_at_warning_in_prod(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(settings, "APP_ENV", "production")
+    monkeypatch.setattr(logging_config, "_log_dir", lambda: tmp_path)
+
+    configure_logging()
+
+    assert logging.getLogger("sqlalchemy.engine").level == logging.WARNING
