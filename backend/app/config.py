@@ -22,8 +22,8 @@ class Settings(BaseSettings):
     TELLISKIVI_URL: str = "https://telliskivi.cc/en/events/"
     KULTUURIKATEL_URL: str = "https://kultuurikatel.ee/en/events/"
     FOTOGRAFISKA_URL: str = "https://tallinn.fotografiska.com/en/events"
-    KUMU_URL: str = "https://kumu.ekm.ee/en/whats-on/"
-    ESTONIA_CONCERT_HALL_URL: str = "https://concert.ee/en/events/"
+    KUMU_URL: str = "https://kumu.ekm.ee/en/calendar/"
+    ESTONIA_CONCERT_HALL_URL: str = "https://concert.ee/en/"
     FIENTA_ORGANIZER_IDS: list[int] = [
         3349,
         1946,

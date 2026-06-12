@@ -49,7 +49,7 @@ def _simple_source_def(sdef: SourceDef) -> dict[str, Any]:
         config: dict[str, Any] = {"url": url}
     else:
         config = {}
-    return {"slug": sdef.slug, "kind": sdef.kind, "enabled": True, "config": config}
+    return {"slug": sdef.slug, "kind": sdef.kind, "enabled": sdef.enabled, "config": config}
 
 
 def _fienta_source() -> dict[str, Any]:
@@ -140,12 +140,19 @@ async def _upsert_fienta(db: AsyncSession) -> None:
 
 
 async def _upsert_simple(db: AsyncSession, source_def: dict[str, Any]) -> None:
-    """Insert source if absent; update config['url'] if it changed (e.g. env override)."""
+    """Insert source if absent; reconcile config['url'] and enabled (e.g. env override,
+    or a source disabled in registry.py after already being seeded)."""
     existing = await db.scalar(select(Source).where(Source.slug == source_def["slug"]))
     if existing:
+        changed = False
         new_url = source_def.get("config", {}).get("url")
         if new_url and (existing.config or {}).get("url") != new_url:
             existing.config = {**(existing.config or {}), "url": new_url}
+            changed = True
+        if existing.enabled != source_def["enabled"]:
+            existing.enabled = source_def["enabled"]
+            changed = True
+        if changed:
             await db.flush()
         return
     db.add(Source(**source_def))

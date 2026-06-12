@@ -262,25 +262,6 @@ Respond with a JSON object with one key "events" containing an array of event ob
 If no events found, return {{"events": []}}.
 JSON only, no explanation."""
 
-# JSON-LD ingestion
-JSONLD_EVENT_TYPES: frozenset[str] = frozenset(
-    {
-        "Event",
-        "MusicEvent",
-        "TheaterEvent",
-        "ExhibitionEvent",
-        "SocialEvent",
-        "SportsEvent",
-        "ChildrensEvent",
-        "ComedyEvent",
-        "DanceEvent",
-        "FestivalEvent",
-        "LiteraryEvent",
-        "ScreeningEvent",
-        "VisualArtsEvent",
-    }
-)
-
 LLM_PROVIDERS: list[dict[str, str]] = [
     {
         "name": "groq",
@@ -312,26 +293,22 @@ SOURCE_SLUG_ESTONIA_CONCERT_HALL = "estonia_concert_hall"
 
 # Source kinds
 SOURCE_KIND_API = "api"
-SOURCE_KIND_HTML_JSONLD = "html_jsonld"
 SOURCE_KIND_HTML_SCRAPE = "html_scrape"
 SOURCE_KIND_INBOUND_EMAIL = "inbound_email"
 
-# Piletilevi HTML scraper
+# HTML listing adapters (app/ingestion/sources/html_listing.py)
 PILETILEVI_BASE_URL = "https://www.piletilevi.ee"
 SOURCE_SLUG_PILETILEVI = "piletilevi"
 PILETILEVI_TALLINN_FILTER = "Tallinn"
 PILETILEVI_DATE_FORMAT = "%d.%m.%Y %H:%M"
-PILETILEVI_MAX_DETAIL_FETCHES = (
-    200  # cap per ingestion run (~6 listings × 25 cards = 150 normal)
+PILETILEVI_ALL_PATH = "/en/tickets/all"
+PILETILEVI_MAX_PAGES = 70  # safety bound — real stop is an empty page or the detail cap
+HTML_LISTING_MAX_DETAIL_FETCHES = (
+    200  # cap per ingestion run on capped-detail sources (piletilevi)
 )
-PILETILEVI_LISTING_URLS: list[str] = [
-    "/eng/tickets/",
-    "/eng/tickets/concerts/",
-    "/eng/tickets/theater/",
-    "/eng/tickets/classical-music/",
-    "/eng/tickets/comedy/",
-    "/eng/tickets/exhibitions/",
-]
+KUMU_DATE_FORMAT = "%d/%m/%Y | %H:%M"
+TELLISKIVI_DATE_FORMAT = "%b %d"
+ESTONIA_CONCERT_HALL_TALLINN_FILTER = "Tallinn"
 
 # CORS — restricted to the methods/headers the SPA actually sends (see
 # frontend/src/api/client.ts and routers/*.py route decorators). Credentials are
