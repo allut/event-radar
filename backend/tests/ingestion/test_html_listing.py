@@ -6,7 +6,8 @@ import pytest
 import httpx
 from bs4 import BeautifulSoup
 
-from app.constants import PILETILEVI_BASE_URL, TALLINN_TZ
+from app.config import settings
+from app.constants import TALLINN_TZ
 from app.ingestion.base import NormalizedEvent
 from app.ingestion.sources.html_listing import (
     EstoniaConcertHallAdapter,
@@ -273,7 +274,9 @@ PILETILEVI_DETAIL_HTML = """
 
 
 def _piletilevi_adapter():
-    return PiletileviAdapter(_make_source(slug="piletilevi"))
+    return PiletileviAdapter(
+        _make_source(slug="piletilevi", url=settings.PILETILEVI_BASE_URL)
+    )
 
 
 class TestPiletileviParseDate:
@@ -304,7 +307,7 @@ class TestPiletileviParseCards:
         jazz = cards[0]
         assert jazz["title"] == "Jazz Night"
         assert jazz["venue"] == "Jazz Club, Tallinn"
-        assert jazz["url"] == PILETILEVI_BASE_URL + "/en/tickets/AA1/jazz-night"
+        assert jazz["url"] == settings.PILETILEVI_BASE_URL + "/en/tickets/AA1/jazz-night"
         assert jazz["image_url"] == "https://www.piletilevi.ee/i/height=252/images/aa1.jpg"
 
     def test_passes_filter_drops_non_tallinn_venue(self):
@@ -323,7 +326,7 @@ class TestPiletileviParseCards:
         """
         adapter = _piletilevi_adapter()
         cards = adapter.parse_cards(BeautifulSoup(html, "html.parser"))
-        assert cards[0]["image_url"] == PILETILEVI_BASE_URL + "/media/img/event.jpg"
+        assert cards[0]["image_url"] == settings.PILETILEVI_BASE_URL + "/media/img/event.jpg"
 
 
 class TestPiletileviNormalize:
@@ -343,7 +346,7 @@ class TestPiletileviNormalize:
         assert result.title == "Jazz Night"
         assert result.external_id == "/en/tickets/AA1/jazz-night"
         assert result.venue_name == "Jazz Club, Tallinn"
-        assert result.url == PILETILEVI_BASE_URL + "/en/tickets/AA1/jazz-night"
+        assert result.url == settings.PILETILEVI_BASE_URL + "/en/tickets/AA1/jazz-night"
         assert result.starts_at.tzinfo == TALLINN_TZ
 
 

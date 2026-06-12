@@ -290,6 +290,7 @@ SOURCE_SLUG_KULTUURIKATEL = "kultuurikatel"
 SOURCE_SLUG_FOTOGRAFISKA = "fotografiska"
 SOURCE_SLUG_KUMU = "kumu"
 SOURCE_SLUG_ESTONIA_CONCERT_HALL = "estonia_concert_hall"
+SOURCE_SLUG_PILETILEVI = "piletilevi"
 
 # Source kinds
 SOURCE_KIND_API = "api"
@@ -297,8 +298,6 @@ SOURCE_KIND_HTML_SCRAPE = "html_scrape"
 SOURCE_KIND_INBOUND_EMAIL = "inbound_email"
 
 # HTML listing adapters (app/ingestion/sources/html_listing.py)
-PILETILEVI_BASE_URL = "https://www.piletilevi.ee"
-SOURCE_SLUG_PILETILEVI = "piletilevi"
 PILETILEVI_TALLINN_FILTER = "Tallinn"
 PILETILEVI_DATE_FORMAT = "%d.%m.%Y %H:%M"
 PILETILEVI_ALL_PATH = "/en/tickets/all"

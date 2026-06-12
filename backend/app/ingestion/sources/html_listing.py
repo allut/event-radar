@@ -13,7 +13,6 @@ from app.constants import (
     HTTP_USER_AGENT,
     KUMU_DATE_FORMAT,
     PILETILEVI_ALL_PATH,
-    PILETILEVI_BASE_URL,
     PILETILEVI_DATE_FORMAT,
     PILETILEVI_MAX_PAGES,
     PILETILEVI_TALLINN_FILTER,
@@ -249,9 +248,10 @@ class PiletileviAdapter(HtmlListingAdapter):
     max_pages = PILETILEVI_MAX_PAGES
 
     def listing_url_for_page(self, page: int) -> str | None:
-        return f"{PILETILEVI_BASE_URL}{PILETILEVI_ALL_PATH}?page={page}"
+        return f"{self.source.config['url']}{PILETILEVI_ALL_PATH}?page={page}"
 
     def parse_cards(self, soup: BeautifulSoup) -> list[dict[str, Any]]:
+        base_url = str(self.source.config["url"])
         cards: list[dict[str, Any]] = []
         for tag in soup.select(_PILETILEVI_CARD_SELECTOR):
             href = _attr_str(tag, "href")
@@ -274,9 +274,7 @@ class PiletileviAdapter(HtmlListingAdapter):
             if img_tag:
                 src = _attr_str(img_tag, "src")
                 if src:
-                    image_url = (
-                        PILETILEVI_BASE_URL + src if src.startswith("/") else src
-                    )
+                    image_url = base_url + src if src.startswith("/") else src
 
             cards.append(
                 {
@@ -285,7 +283,7 @@ class PiletileviAdapter(HtmlListingAdapter):
                     "date_str": date_str,
                     "venue": venue_str,
                     "image_url": image_url,
-                    "url": PILETILEVI_BASE_URL + href,
+                    "url": base_url + href,
                 }
             )
         return cards

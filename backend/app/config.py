@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     FOTOGRAFISKA_URL: str = "https://tallinn.fotografiska.com/en/events"
     KUMU_URL: str = "https://kumu.ekm.ee/en/calendar/"
     ESTONIA_CONCERT_HALL_URL: str = "https://concert.ee/en/"
+    PILETILEVI_BASE_URL: str = "https://www.piletilevi.ee"
     FIENTA_ORGANIZER_IDS: list[int] = [
         3349,
         1946,
