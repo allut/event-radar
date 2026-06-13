@@ -34,6 +34,12 @@ def _content_hash(text: str) -> str:
     return hashlib.sha256(text.encode()).hexdigest()
 
 
+def content_hash(text: str) -> str:
+    """Public delegate for ``_content_hash`` — lets other modules derive the
+    identical cache key ``llm_json`` stores in ``llm_calls.content_hash``."""
+    return _content_hash(text)
+
+
 def llm_available() -> bool:
     """True if at least one provider in the chain has an API key configured.
 

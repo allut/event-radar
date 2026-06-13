@@ -191,7 +191,12 @@ LLM_REQUEST_TIMEOUT_SECONDS: float = 30.0
 
 LLM_DEDUP_TITLE_MAX_LEN = 200
 LLM_DEDUP_VENUE_MAX_LEN = 100
-LLM_DEDUP_MAX_CANDIDATE_PAIRS_PER_PASS = 100
+# Bounds fresh (cache-miss) network calls per pass — bounds DB session lifetime
+# against slow providers (Cerebras fallback ~1 req/min). Cache hits are cheap
+# indexed lookups and are NOT counted against this cap; see llm_tiebreaker.py.
+LLM_DEDUP_MAX_FRESH_LLM_CALLS_PER_PASS = 100
+# Chunk size for the bulk llm_calls prefetch IN-list, to bound query size.
+LLM_DEDUP_HASH_QUERY_CHUNK_SIZE = 500
 LLM_DEDUP_PROMPT_TEMPLATE = """\
 Are these two events the same event?
 

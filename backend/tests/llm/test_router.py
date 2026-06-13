@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.llm.router import LLMError, _content_hash, llm_json
+from app.llm.router import LLMError, _content_hash, content_hash, llm_json
 
 
 def _make_openai_response(content: dict, provider_name: str = "groq") -> MagicMock:
@@ -27,6 +27,11 @@ class TestContentHash:
 
     def test_different_inputs_differ(self):
         assert _content_hash("hello") != _content_hash("world")
+
+    def test_public_delegate_matches_private(self):
+        # The dedup layer derives cache keys via the public `content_hash`
+        # delegate — it must match `llm_json`'s internal `_content_hash`.
+        assert content_hash("hello") == _content_hash("hello")
 
 
 class TestLlmJsonCacheHit:
