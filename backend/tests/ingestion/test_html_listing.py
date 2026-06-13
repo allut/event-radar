@@ -7,12 +7,18 @@ import httpx
 from bs4 import BeautifulSoup
 
 from app.config import settings
-from app.constants import TALLINN_TZ
+from app.constants import (
+    ESTONIA_CONCERT_HALL_AJAX_ACTION,
+    ESTONIA_CONCERT_HALL_AJAX_PATH,
+    ESTONIA_CONCERT_HALL_MAX_EVENTS,
+    TALLINN_TZ,
+)
 from app.ingestion.base import NormalizedEvent
 from app.ingestion.sources.html_listing import (
     EstoniaConcertHallAdapter,
     HtmlListingAdapter,
     KumuAdapter,
+    ListingRequest,
     PiletileviAdapter,
     TelliskiviAdapter,
     _next_occurrence_year,
@@ -78,6 +84,28 @@ class _StubAdapter(HtmlListingAdapter):
 
     def parse_detail(self, soup, card):
         card["description"] = soup.get_text(strip=True)
+
+
+class _PostStubAdapter(HtmlListingAdapter):
+    """Adapter exercising the POST dispatch via ``listing_request``."""
+
+    def __init__(self, source, cards):
+        super().__init__(source)
+        self._cards = cards
+        self.max_pages = 1
+
+    def listing_request(self, page):
+        if page != 1:
+            return None
+        return ListingRequest(
+            url="https://example.test/ajax", method="POST", data={"a": "1"}
+        )
+
+    def parse_cards(self, soup):
+        return self._cards
+
+    def parse_date(self, card):
+        return datetime(2026, 1, 1, tzinfo=TALLINN_TZ)
 
 
 class TestBasePagination:
@@ -198,6 +226,25 @@ class TestBasePagination:
 
         assert [c["external_id"] for c in results] == ["a"]
         assert "description" not in results[0]
+
+
+class TestBaseListingRequestDispatch:
+    @pytest.mark.asyncio
+    async def test_post_method_dispatches_to_http_post(self):
+        card_a = {"external_id": "a", "title": "A", "url": "https://example.test/a"}
+        adapter = _PostStubAdapter(_make_source(), cards=[card_a])
+
+        with patch("app.ingestion.sources.html_listing.http_post") as mock_post, \
+             patch("app.ingestion.sources.html_listing.http_get") as mock_get:
+            mock_post.return_value = _mock_response("<html></html>")
+            results = await adapter.fetch_raw()
+
+        assert mock_get.call_count == 0
+        assert mock_post.call_count == 1
+        _, url = mock_post.call_args.args
+        assert url == "https://example.test/ajax"
+        assert mock_post.call_args.kwargs["data"] == {"a": "1"}
+        assert [c["external_id"] for c in results] == ["a"]
 
 
 class TestBaseNormalize:
@@ -440,6 +487,47 @@ KUMU_LISTING_HTML = """
 </body></html>
 """
 
+KUMU_ITALIC_TITLE_HTML = """
+<html><body>
+<ul class="event-grid__cards">
+  <li class="event-grid__item">
+    <div class="card__header">
+      <span class="card__header-date-text">15/06/2026 | 18:00</span>
+      <a class="card__link" href="https://kumu.ekm.ee/en/syndmus/example-3/">
+        <h2 class="no-title-styles card__header-title"><i>Kristi Kongi: Chromatic Drift</i> through the Eyes of a Museum Insider
+          <span class="h-visually-hidden">15/06/2026 | 18:00</span>
+        </h2>
+      </a>
+    </div>
+  </li>
+</ul>
+</body></html>
+"""
+
+KUMU_PAGE2_HTML = """
+<html><body>
+<ul class="event-grid__cards">
+  <li class="event-grid__item">
+    <div class="card__header">
+      <span class="card__header-date-text">20/06/2026 | 19:00</span>
+      <a class="card__link" href="https://kumu.ekm.ee/en/syndmus/example-3/">
+        <h2 class="no-title-styles card__header-title">Page Two Concert
+          <span class="h-visually-hidden">20/06/2026 | 19:00</span>
+        </h2>
+      </a>
+    </div>
+  </li>
+</ul>
+</body></html>
+"""
+
+KUMU_EMPTY_PAGE_HTML = """
+<html><body>
+<ul class="event-grid__cards">
+</ul>
+</body></html>
+"""
+
 
 def _kumu_adapter():
     return KumuAdapter(_make_source(slug="kumu"))
@@ -460,6 +548,15 @@ class TestKumuParseCards:
         cards = adapter.parse_cards(soup)
         assert cards[0]["image_url"] == "https://kumu.ekm.ee/img-200.jpg"
 
+    def test_title_with_leading_italic_element_includes_full_text(self):
+        adapter = _kumu_adapter()
+        soup = BeautifulSoup(KUMU_ITALIC_TITLE_HTML, "html.parser")
+        cards = adapter.parse_cards(soup)
+        assert (
+            cards[0]["title"]
+            == "Kristi Kongi: Chromatic Drift through the Eyes of a Museum Insider"
+        )
+
 
 class TestKumuParseDate:
     def test_parses_pipe_separated_format(self):
@@ -477,15 +574,41 @@ class TestKumuFetchRaw:
     async def test_single_page_fetch_drops_unparseable_date_card(self):
         adapter = _kumu_adapter()
         with patch("app.ingestion.sources.html_listing.http_get") as mock_get:
+            # Both fetches return the same page — page 2 yields zero new ids
+            # (all already seen on page 1), so pagination stops there.
             mock_get.return_value = _mock_response(KUMU_LISTING_HTML)
             raw_items = await adapter.fetch_raw()
 
-        assert mock_get.call_count == 1
+        assert mock_get.call_count == 2
         assert len(raw_items) == 2  # both raw cards collected
         normalized = [adapter.normalize(r) for r in raw_items]
         normalized = [n for n in normalized if n is not None]
         assert len(normalized) == 1  # "Bad Date Event" dropped by normalize
         assert normalized[0].title == "Example Concert"
+
+    @pytest.mark.asyncio
+    async def test_pagination_stops_on_empty_page_and_dedups(self):
+        adapter = _kumu_adapter()
+        with patch("app.ingestion.sources.html_listing.http_get") as mock_get:
+            mock_get.side_effect = [
+                _mock_response(KUMU_LISTING_HTML),
+                _mock_response(KUMU_PAGE2_HTML),
+                _mock_response(KUMU_EMPTY_PAGE_HTML),
+            ]
+            raw_items = await adapter.fetch_raw()
+
+        assert mock_get.call_count == 3
+        urls = [call.args[1] for call in mock_get.call_args_list]
+        assert urls == [
+            "https://example.test/listing",
+            "https://example.test/listing/page/2/",
+            "https://example.test/listing/page/3/",
+        ]
+        assert {c["external_id"] for c in raw_items} == {
+            "https://kumu.ekm.ee/en/syndmus/example-1/",
+            "https://kumu.ekm.ee/en/syndmus/example-2/",
+            "https://kumu.ekm.ee/en/syndmus/example-3/",
+        }
 
 
 # ---------------------------------------------------------------------------
@@ -535,7 +658,9 @@ CONCERT_HALL_HTML = """
 
 
 def _concert_hall_adapter():
-    return EstoniaConcertHallAdapter(_make_source(slug="estonia_concert_hall"))
+    return EstoniaConcertHallAdapter(
+        _make_source(slug="estonia_concert_hall", url="https://concert.ee/en/")
+    )
 
 
 class TestEstoniaConcertHallParseCards:
@@ -574,15 +699,36 @@ class TestEstoniaConcertHallParseDate:
         assert adapter.parse_date({"date_text": "", "time_text": "20:00"}) is None
 
 
+class TestEstoniaConcertHallListingRequest:
+    def test_page_one_posts_to_admin_ajax(self):
+        adapter = _concert_hall_adapter()
+        req = adapter.listing_request(1)
+        assert req is not None
+        assert isinstance(req, ListingRequest)
+        assert req.method == "POST"
+        assert req.url == f"https://concert.ee{ESTONIA_CONCERT_HALL_AJAX_PATH}"
+        assert req.data == {
+            "action": ESTONIA_CONCERT_HALL_AJAX_ACTION,
+            "ek_ajax_count[]": str(ESTONIA_CONCERT_HALL_MAX_EVENTS),
+        }
+
+    def test_page_two_returns_none(self):
+        adapter = _concert_hall_adapter()
+        assert adapter.listing_request(2) is None
+
+
 class TestEstoniaConcertHallFetchRaw:
     @pytest.mark.asyncio
     async def test_single_page_fetch_and_tallinn_filter(self):
         adapter = _concert_hall_adapter()
-        with patch("app.ingestion.sources.html_listing.http_get") as mock_get:
-            mock_get.return_value = _mock_response(CONCERT_HALL_HTML)
+        with patch("app.ingestion.sources.html_listing.http_post") as mock_post:
+            mock_post.return_value = _mock_response(CONCERT_HALL_HTML)
             raw_items = await adapter.fetch_raw()
 
-        assert mock_get.call_count == 1
+        assert mock_post.call_count == 1
+        _, url = mock_post.call_args.args
+        assert url == f"https://concert.ee{ESTONIA_CONCERT_HALL_AJAX_PATH}"
+        assert mock_post.call_args.kwargs["data"]["action"] == ESTONIA_CONCERT_HALL_AJAX_ACTION
         assert len(raw_items) == 1
         assert raw_items[0]["title"] == "Tallinn Show"
 

@@ -306,8 +306,12 @@ HTML_LISTING_MAX_DETAIL_FETCHES = (
     200  # cap per ingestion run on capped-detail sources (piletilevi)
 )
 KUMU_DATE_FORMAT = "%d/%m/%Y | %H:%M"
+KUMU_MAX_PAGES = 15  # safety bound — calendar is ~4 pages today
 TELLISKIVI_DATE_FORMAT = "%b %d"
 ESTONIA_CONCERT_HALL_TALLINN_FILTER = "Tallinn"
+ESTONIA_CONCERT_HALL_AJAX_PATH = "/wp-admin/admin-ajax.php"
+ESTONIA_CONCERT_HALL_AJAX_ACTION = "ek_list_display"
+ESTONIA_CONCERT_HALL_MAX_EVENTS = 500  # ek_ajax_count; server returns min(count, total)
 
 # CORS — restricted to the methods/headers the SPA actually sends (see
 # frontend/src/api/client.ts and routers/*.py route decorators). Credentials are

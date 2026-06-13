@@ -1,17 +1,23 @@
 import logging
 import re
+from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Any
+from urllib.parse import urlsplit
 
 import httpx
 from bs4 import BeautifulSoup, Tag
 
 from app.constants import (
+    ESTONIA_CONCERT_HALL_AJAX_ACTION,
+    ESTONIA_CONCERT_HALL_AJAX_PATH,
+    ESTONIA_CONCERT_HALL_MAX_EVENTS,
     ESTONIA_CONCERT_HALL_TALLINN_FILTER,
     HTML_LISTING_MAX_DETAIL_FETCHES,
     HTTP_TIMEOUT_SECONDS,
     HTTP_USER_AGENT,
     KUMU_DATE_FORMAT,
+    KUMU_MAX_PAGES,
     PILETILEVI_ALL_PATH,
     PILETILEVI_DATE_FORMAT,
     PILETILEVI_MAX_PAGES,
@@ -19,7 +25,7 @@ from app.constants import (
     TALLINN_TZ,
     TELLISKIVI_DATE_FORMAT,
 )
-from app.ingestion.base import NormalizedEvent, SourceAdapter, http_get
+from app.ingestion.base import NormalizedEvent, SourceAdapter, http_get, http_post
 
 log = logging.getLogger(__name__)
 
@@ -69,6 +75,13 @@ def _next_occurrence_year(month: int, day: int, today: date | None = None) -> in
     return today.year if candidate >= today else today.year + 1
 
 
+@dataclass
+class ListingRequest:
+    url: str
+    method: str = "GET"
+    data: dict[str, Any] | None = None
+
+
 class HtmlListingAdapter(SourceAdapter):
     """Shared skeleton for server-rendered HTML listing pages.
 
@@ -86,6 +99,11 @@ class HtmlListingAdapter(SourceAdapter):
         if page == 1:
             return str(self.source.config["url"])
         return None
+
+    def listing_request(self, page: int) -> ListingRequest | None:
+        """HTTP request for ``page``, or None to stop. Default: GET listing_url_for_page."""
+        url = self.listing_url_for_page(page)
+        return ListingRequest(url=url) if url is not None else None
 
     def parse_cards(self, soup: BeautifulSoup) -> list[dict[str, Any]]:
         """Parse one listing page into common card dicts.
@@ -119,17 +137,20 @@ class HtmlListingAdapter(SourceAdapter):
         ) as client:
             page = 1
             while page <= self.max_pages:
-                url = self.listing_url_for_page(page)
-                if url is None:
+                req = self.listing_request(page)
+                if req is None:
                     break
 
                 try:
-                    resp = await http_get(client, url)
+                    if req.method == "POST":
+                        resp = await http_post(client, req.url, data=req.data)
+                    else:
+                        resp = await http_get(client, req.url)
                 except (httpx.HTTPStatusError, httpx.RequestError) as exc:
                     log.warning(
                         "%s listing fetch failed url=%s: %s",
                         self.source.slug,
-                        url,
+                        req.url,
                         exc,
                     )
                     listing_errors.append(exc)
@@ -310,12 +331,21 @@ class PiletileviAdapter(HtmlListingAdapter):
 _KUMU_CARD_SELECTOR = "ul.event-grid__cards > li.event-grid__item"
 _KUMU_LINK_SELECTOR = "a.card__link"
 _KUMU_TITLE_SELECTOR = "h2.card__header-title"
+_KUMU_HIDDEN_SELECTOR = ".h-visually-hidden"
 _KUMU_DATE_SELECTOR = ".card__header-date-text"
 _KUMU_IMAGE_SELECTOR = "img.image__img.lazyload"
 
 
 class KumuAdapter(HtmlListingAdapter):
-    """kumu.ekm.ee/en/calendar/ — server-rendered event grid."""
+    """kumu.ekm.ee/en/calendar/ — server-rendered, paginated event grid."""
+
+    max_pages = KUMU_MAX_PAGES
+
+    def listing_url_for_page(self, page: int) -> str | None:
+        url = str(self.source.config["url"])
+        if page == 1:
+            return url
+        return f"{url.rstrip('/')}/page/{page}/"
 
     def parse_cards(self, soup: BeautifulSoup) -> list[dict[str, Any]]:
         cards: list[dict[str, Any]] = []
@@ -326,8 +356,12 @@ class KumuAdapter(HtmlListingAdapter):
                 continue
 
             title_tag = item.select_one(_KUMU_TITLE_SELECTOR)
-            title_node = title_tag.find(string=True, recursive=False) if title_tag else None
-            title = title_node.strip() if title_node else ""
+            title = ""
+            if title_tag:
+                hidden = title_tag.select_one(_KUMU_HIDDEN_SELECTOR)
+                if hidden:
+                    hidden.extract()
+                title = title_tag.get_text(" ", strip=True)
             if not title:
                 continue
 
@@ -372,7 +406,21 @@ _CONCERT_IMAGE_URL_RE = re.compile(r"url\((.*?)\)")
 
 
 class EstoniaConcertHallAdapter(HtmlListingAdapter):
-    """concert.ee/en/ — root listing spans all Estonia; filtered to Tallinn."""
+    """concert.ee/en/ — full programme loaded via the "Load more" AJAX endpoint."""
+
+    def listing_request(self, page: int) -> ListingRequest | None:
+        if page != 1:
+            return None
+        parts = urlsplit(str(self.source.config["url"]))
+        ajax_url = f"{parts.scheme}://{parts.netloc}{ESTONIA_CONCERT_HALL_AJAX_PATH}"
+        return ListingRequest(
+            url=ajax_url,
+            method="POST",
+            data={
+                "action": ESTONIA_CONCERT_HALL_AJAX_ACTION,
+                "ek_ajax_count[]": str(ESTONIA_CONCERT_HALL_MAX_EVENTS),
+            },
+        )
 
     def parse_cards(self, soup: BeautifulSoup) -> list[dict[str, Any]]:
         cards: list[dict[str, Any]] = []

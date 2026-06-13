@@ -41,7 +41,7 @@ def _is_retryable(exc: BaseException) -> bool:
     return isinstance(exc, httpx.RequestError)
 
 
-@retry(
+_http_retry = retry(
     retry=retry_if_exception(_is_retryable),
     wait=wait_exponential(
         multiplier=HTTP_RETRY_WAIT_MULTIPLIER,
@@ -51,6 +51,9 @@ def _is_retryable(exc: BaseException) -> bool:
     stop=stop_after_attempt(HTTP_RETRY_MAX_ATTEMPTS),
     reraise=True,
 )
+
+
+@_http_retry
 async def http_get(
     client: httpx.AsyncClient,
     url: str,
@@ -60,6 +63,20 @@ async def http_get(
 ) -> httpx.Response:
     """Shared HTTP GET with exponential-backoff retry for transient failures."""
     r = await client.get(url, params=params, headers=headers)
+    r.raise_for_status()
+    return r
+
+
+@_http_retry
+async def http_post(
+    client: httpx.AsyncClient,
+    url: str,
+    *,
+    data: dict | None = None,
+    headers: dict | None = None,
+) -> httpx.Response:
+    """Shared HTTP POST with exponential-backoff retry for transient failures."""
+    r = await client.post(url, data=data, headers=headers)
     r.raise_for_status()
     return r
 
