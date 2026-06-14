@@ -330,7 +330,6 @@ HTML_LISTING_MAX_DETAIL_FETCHES = (
 )
 KUMU_DATE_FORMAT = "%d/%m/%Y | %H:%M"
 KUMU_MAX_PAGES = 15  # safety bound — calendar is ~4 pages today
-TELLISKIVI_DATE_FORMAT = "%b %d"
 ESTONIA_CONCERT_HALL_TALLINN_FILTER = "Tallinn"
 ESTONIA_CONCERT_HALL_AJAX_PATH = "/wp-admin/admin-ajax.php"
 ESTONIA_CONCERT_HALL_AJAX_ACTION = "ek_list_display"

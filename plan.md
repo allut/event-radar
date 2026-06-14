@@ -48,7 +48,7 @@ Inbound newsletter: `Resend Inbound webhook → /webhooks/inbound-mail → raw_i
 
 1. **Fienta API** — `GET /api/v1/public/events?organizer=<id>`; ~15 Tallinn organizer IDs; weekly auto-discovery (≥3 events → auto-add)
 2. **Piletilevi HTML scraper** — 6 listing categories, Tallinn city filter, detail-page description fetch, 200-event cap
-3. **JSON-LD venues** — Telliskivi, Kultuurikatel, Fotografiska, KUMU, Estonia Concert Hall
+3. **JSON-LD venues** — Kultuurikatel, Fotografiska, KUMU, Estonia Concert Hall
 4. **Newsletter inbound** — Resend Inbound webhook → LLM extractor (unique-coverage moat for underground/niche)
 
 **Skipped (decisions preserved):**

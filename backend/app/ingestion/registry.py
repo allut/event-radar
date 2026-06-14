@@ -20,7 +20,6 @@ from app.ingestion.sources.html_listing import (
     EstoniaConcertHallAdapter,
     KumuAdapter,
     PiletileviAdapter,
-    TelliskiviAdapter,
 )
 
 
@@ -35,7 +34,7 @@ class SourceDef:
 
 SOURCE_CATALOG: tuple[SourceDef, ...] = (
     SourceDef(SOURCE_SLUG_FIENTA, SOURCE_KIND_API, FientaAdapter),
-    SourceDef(SOURCE_SLUG_TELLISKIVI, SOURCE_KIND_HTML_SCRAPE, TelliskiviAdapter, "TELLISKIVI_URL"),
+    SourceDef(SOURCE_SLUG_TELLISKIVI, SOURCE_KIND_HTML_SCRAPE, None, None, enabled=False),
     SourceDef(SOURCE_SLUG_KUMU, SOURCE_KIND_HTML_SCRAPE, KumuAdapter, "KUMU_URL"),
     SourceDef(SOURCE_SLUG_ESTONIA_CONCERT_HALL, SOURCE_KIND_HTML_SCRAPE, EstoniaConcertHallAdapter, "ESTONIA_CONCERT_HALL_URL"),
     SourceDef(SOURCE_SLUG_PILETILEVI, SOURCE_KIND_HTML_SCRAPE, PiletileviAdapter, "PILETILEVI_BASE_URL"),

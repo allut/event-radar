@@ -8,7 +8,7 @@ The whole platform is designed to run on **free-tier infrastructure** at a stead
 
 ## Features
 
-- **Multi-source ingestion** — Fienta API, Piletilevi HTML scraper, JSON-LD venue pages (Telliskivi, Kultuurikatel, Fotografiska, KUMU, Estonia Concert Hall), and inbound newsletter parsing via email webhook.
+- **Multi-source ingestion** — Fienta API, Piletilevi HTML scraper, JSON-LD venue pages (Kultuurikatel, Fotografiska, KUMU, Estonia Concert Hall), and inbound newsletter parsing via email webhook.
 - **Two-stage deduplication** — a cheap SQL + fuzzy pre-filter narrows candidate pairs, then an LLM tiebreaker resolves only the survivors. Decisions are cached by content hash to avoid repeat LLM calls.
 - **LLM classification** — assigns a fixed 12-category / 10-vibe taxonomy, a quality score, and a localized 3-bullet "why go?" rationale, with a Groq → Cerebras → Mistral provider fallback chain.
 - **Persona-based personalization** — users pick a primary and optional secondary persona at onboarding; like/dislike/bookmark signals continuously retune their ranking.

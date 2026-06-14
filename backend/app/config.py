@@ -19,7 +19,6 @@ class Settings(BaseSettings):
     APP_ENV: str = APP_ENV_DEVELOPMENT
 
     FIENTA_BASE_URL: str = "https://fienta.com/api/v1/public/events"
-    TELLISKIVI_URL: str = "https://telliskivi.cc/en/events/"
     KULTUURIKATEL_URL: str = "https://kultuurikatel.ee/en/events/"
     FOTOGRAFISKA_URL: str = "https://tallinn.fotografiska.com/en/events"
     KUMU_URL: str = "https://kumu.ekm.ee/en/calendar/"

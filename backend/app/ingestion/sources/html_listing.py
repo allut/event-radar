@@ -23,7 +23,6 @@ from app.constants import (
     PILETILEVI_MAX_PAGES,
     PILETILEVI_TALLINN_FILTER,
     TALLINN_TZ,
-    TELLISKIVI_DATE_FORMAT,
 )
 from app.ingestion.base import NormalizedEvent, SourceAdapter, http_get, http_post
 
@@ -486,62 +485,5 @@ class EstoniaConcertHallAdapter(HtmlListingAdapter):
         year = _next_occurrence_year(month, day)
         try:
             return datetime(year, month, day, hour, minute, tzinfo=TALLINN_TZ)
-        except ValueError:
-            return None
-
-
-# ---------------------------------------------------------------------------
-# Telliskivi — https://telliskivi.cc/en/events/ (single page)
-# ---------------------------------------------------------------------------
-
-_TELLISKIVI_CARD_SELECTOR = "div.card"
-_TELLISKIVI_LINK_SELECTOR = "a.card__overlay-link"
-_TELLISKIVI_TITLE_SELECTOR = "h3.card__title"
-_TELLISKIVI_DATE_SELECTOR = ".card__timestamp-date"
-_TELLISKIVI_IMAGE_SELECTOR = "img.image__img.lazyload"
-
-
-class TelliskiviAdapter(HtmlListingAdapter):
-    """telliskivi.cc/en/events/ — listing cards carry a year-less "Mon D" date."""
-
-    def parse_cards(self, soup: BeautifulSoup) -> list[dict[str, Any]]:
-        cards: list[dict[str, Any]] = []
-        for card_tag in soup.select(_TELLISKIVI_CARD_SELECTOR):
-            link_tag = card_tag.select_one(_TELLISKIVI_LINK_SELECTOR)
-            href = _attr_str(link_tag, "href") if link_tag else ""
-            if not href:
-                continue
-
-            title_tag = card_tag.select_one(_TELLISKIVI_TITLE_SELECTOR)
-            title = title_tag.get_text(strip=True) if title_tag else ""
-            if not title:
-                continue
-
-            date_tag = card_tag.select_one(_TELLISKIVI_DATE_SELECTOR)
-            date_str = date_tag.get_text(strip=True) if date_tag else ""
-
-            img_tag = card_tag.select_one(_TELLISKIVI_IMAGE_SELECTOR)
-            image_url = _first_image_url(img_tag) if img_tag else None
-
-            cards.append(
-                {
-                    "external_id": href,
-                    "title": title,
-                    "date_str": date_str,
-                    "image_url": image_url,
-                    "url": href,
-                }
-            )
-        return cards
-
-    def parse_date(self, card: dict[str, Any]) -> datetime | None:
-        date_str = card.get("date_str") or ""
-        try:
-            parsed = datetime.strptime(date_str, TELLISKIVI_DATE_FORMAT)
-        except ValueError:
-            return None
-        year = _next_occurrence_year(parsed.month, parsed.day)
-        try:
-            return datetime(year, parsed.month, parsed.day, tzinfo=TALLINN_TZ)
         except ValueError:
             return None

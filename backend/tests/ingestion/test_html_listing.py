@@ -1,4 +1,4 @@
-"""Tests for HtmlListingAdapter base + Piletilevi/Kumu/EstoniaConcertHall/Telliskivi."""
+"""Tests for HtmlListingAdapter base + Piletilevi/Kumu/EstoniaConcertHall."""
 from datetime import date, datetime
 from unittest.mock import MagicMock, patch
 
@@ -20,7 +20,6 @@ from app.ingestion.sources.html_listing import (
     KumuAdapter,
     ListingRequest,
     PiletileviAdapter,
-    TelliskiviAdapter,
     _next_occurrence_year,
     _parse_piletilevi_date,
 )
@@ -731,85 +730,3 @@ class TestEstoniaConcertHallFetchRaw:
         assert mock_post.call_args.kwargs["data"]["action"] == ESTONIA_CONCERT_HALL_AJAX_ACTION
         assert len(raw_items) == 1
         assert raw_items[0]["title"] == "Tallinn Show"
-
-
-# ---------------------------------------------------------------------------
-# TelliskiviAdapter — telliskivi.cc/en/events/
-# ---------------------------------------------------------------------------
-
-TELLISKIVI_HTML = """
-<html><body>
-  <div class="card card--featured">
-    <a class="card__overlay-link" href="https://telliskivi.cc/en/events/example-1/"></a>
-    <div class="card__image">
-      <img class="image__img lazyload" data-srcset="https://telliskivi.cc/img-300.png 300w, https://telliskivi.cc/img-600.png 600w" src="data:image/gif;base64,placeholder"/>
-    </div>
-    <div class="card__content">
-      <div class="card__timestamp">
-        <div class="card__timestamp-item">
-          <span class="card__timestamp-date">Dec 2</span>
-          <span class="card__timestamp-day">Wednesday</span>
-        </div>
-      </div>
-      <h3 class="card__title">December Market</h3>
-    </div>
-  </div>
-  <div class="card">
-    <a class="card__overlay-link" href="https://telliskivi.cc/en/events/example-2/"></a>
-    <div class="card__content">
-      <div class="card__timestamp">
-        <div class="card__timestamp-item">
-          <span class="card__timestamp-date">not a date</span>
-        </div>
-      </div>
-      <h3 class="card__title">Bad Date Event</h3>
-    </div>
-  </div>
-</body></html>
-"""
-
-
-def _telliskivi_adapter():
-    return TelliskiviAdapter(_make_source(slug="telliskivi"))
-
-
-class TestTelliskiviParseCards:
-    def test_extracts_fields(self):
-        adapter = _telliskivi_adapter()
-        soup = BeautifulSoup(TELLISKIVI_HTML, "html.parser")
-        cards = adapter.parse_cards(soup)
-        assert len(cards) == 2
-        assert cards[0]["title"] == "December Market"
-        assert cards[0]["external_id"] == "https://telliskivi.cc/en/events/example-1/"
-        assert cards[0]["image_url"] == "https://telliskivi.cc/img-300.png"
-        assert cards[0]["date_str"] == "Dec 2"
-
-
-class TestTelliskiviParseDate:
-    def test_parses_month_day_with_year_inference(self):
-        adapter = _telliskivi_adapter()
-        result = adapter.parse_date({"date_str": "Dec 2"})
-        assert result is not None
-        assert (result.month, result.day, result.hour, result.minute) == (12, 2, 0, 0)
-        assert result.tzinfo == TALLINN_TZ
-        now_year = datetime.now(TALLINN_TZ).year
-        assert result.year in (now_year, now_year + 1)
-
-    def test_unparseable_date_returns_none(self):
-        adapter = _telliskivi_adapter()
-        assert adapter.parse_date({"date_str": "not a date"}) is None
-
-
-class TestTelliskiviFetchRaw:
-    @pytest.mark.asyncio
-    async def test_single_page_fetch_drops_unparseable_date_card(self):
-        adapter = _telliskivi_adapter()
-        with patch("app.ingestion.sources.html_listing.http_get") as mock_get:
-            mock_get.return_value = _mock_response(TELLISKIVI_HTML)
-            raw_items = await adapter.fetch_raw()
-
-        assert mock_get.call_count == 1
-        assert len(raw_items) == 2
-        normalized = [n for n in (adapter.normalize(r) for r in raw_items) if n]
-        assert len(normalized) == 1
-        assert normalized[0].title == "December Market"
