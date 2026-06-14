@@ -231,7 +231,7 @@ async def run_dedup_pass_llm(db: AsyncSession) -> dict:
         b = events_by_id.get(b_id)
         if a is None or b is None:
             continue
-        if not is_candidate_pair(a, b):
+        if not is_candidate_pair(a, b, bypass_venue_on_strong_title=True):
             continue
         survivors.append((a, b, _dedup_pair_hash(a, b)))
 

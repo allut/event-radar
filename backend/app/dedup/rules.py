@@ -27,6 +27,7 @@ from app.constants import (
     SECONDS_PER_HOUR,
     TALLINN_TZ,
     TIME_WINDOW_HOURS,
+    TITLE_RATIO_STRONG_THRESHOLD,
     TITLE_RATIO_THRESHOLD,
     VENUE_RATIO_THRESHOLD,
 )
@@ -41,18 +42,27 @@ def _venue_compatible(a: str | None, b: str | None) -> bool:
     return token_set_ratio(a.lower(), b.lower()) >= VENUE_RATIO_THRESHOLD
 
 
-def is_candidate_pair(a: Event, b: Event) -> bool:
-    """Return True when a and b pass all three rule-based criteria."""
+def is_candidate_pair(
+    a: Event, b: Event, *, bypass_venue_on_strong_title: bool = False
+) -> bool:
+    """Return True when a and b pass all three rule-based criteria.
+
+    With ``bypass_venue_on_strong_title=True``, a near-exact title match
+    (``token_set_ratio >= TITLE_RATIO_STRONG_THRESHOLD``) skips the venue
+    check entirely — used on the LLM path so cross-source duplicates whose
+    venue is spelled differently per source still reach the LLM tiebreaker.
+    The rule-only path keeps the default (strict) behavior.
+    """
     if (
         abs((a.starts_at - b.starts_at).total_seconds())
         > TIME_WINDOW_HOURS * SECONDS_PER_HOUR
     ):
         return False
-    if (
-        token_set_ratio(a.title_orig.lower(), b.title_orig.lower())
-        < TITLE_RATIO_THRESHOLD
-    ):
+    title_ratio = token_set_ratio(a.title_orig.lower(), b.title_orig.lower())
+    if title_ratio < TITLE_RATIO_THRESHOLD:
         return False
+    if bypass_venue_on_strong_title and title_ratio >= TITLE_RATIO_STRONG_THRESHOLD:
+        return True
     return _venue_compatible(a.venue_name, b.venue_name)
 
 

@@ -258,6 +258,34 @@ class TestRunDedupPassLlm:
         confirm.assert_not_called()
 
     @pytest.mark.asyncio
+    async def test_strong_title_venue_mismatch_pair_survives_to_llm(
+        self, mock_db, monkeypatch
+    ):
+        # Near-exact title, same time, different venue spellings — the rule-only
+        # gate would reject this, but the LLM path's bypass_venue_on_strong_title
+        # lets it survive to the LLM, which confirms and merges it.
+        monkeypatch.setattr(tiebreaker, "llm_available", lambda: True)
+        a = _event(1, title="Klassikatähed", venue_name="Estonia Concert Hall")
+        b = _event(2, title="Klassikatähed", venue_name="Eesti Kontsert")
+        _wire_db(mock_db, [a, b])
+        _wire_execute(mock_db, [])
+        monkeypatch.setattr(
+            tiebreaker,
+            "candidate_pair_ids_in_window",
+            AsyncMock(return_value=[(1, 2)]),
+        )
+        confirm = AsyncMock(return_value=True)
+        monkeypatch.setattr(tiebreaker, "_llm_confirms_pair", confirm)
+
+        result = await tiebreaker.run_dedup_pass_llm(mock_db)
+
+        assert result["candidate_pairs"] == 1
+        confirm.assert_awaited_once()
+        assert result["llm_confirmed"] == 1
+        assert a.dedup_group_id == 1
+        assert b.dedup_group_id == 1
+
+    @pytest.mark.asyncio
     async def test_fresh_call_cap_bounds_network_calls(self, mock_db, monkeypatch):
         # cap=2 with 3 cache-miss fuzzy-matching pairs → only 2 reach the LLM,
         # the 3rd is deferred, and the loop does NOT break (candidate_pairs==3).

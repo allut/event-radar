@@ -2,7 +2,15 @@
 from datetime import datetime, timedelta
 from unittest.mock import MagicMock
 
-from app.constants import DEDUP_LOOKBACK_DAYS, TALLINN_TZ, TIME_WINDOW_HOURS
+from rapidfuzz.fuzz import token_set_ratio
+
+from app.constants import (
+    DEDUP_LOOKBACK_DAYS,
+    TALLINN_TZ,
+    TIME_WINDOW_HOURS,
+    TITLE_RATIO_STRONG_THRESHOLD,
+    TITLE_RATIO_THRESHOLD,
+)
 from app.dedup.rules import (
     cluster_events,
     is_candidate_pair,
@@ -111,6 +119,29 @@ class TestIsCandidatePair:
         a = _event(1, "TMW Jazz Night", _BASE)
         b = _event(2, "TMW Jazz Night - Tallinn Music Week", _BASE)
         assert is_candidate_pair(a, b) is True
+
+    def test_bypass_flag_off_exact_title_different_venue_still_false(self):
+        # Rule-only path (flag default False) stays strict — unaffected by the bypass.
+        a = _event(1, "Klassikatähed", _BASE, venue_name="Estonia Concert Hall")
+        b = _event(2, "Klassikatähed", _BASE, venue_name="Eesti Kontsert")
+        assert is_candidate_pair(a, b) is False
+
+    def test_bypass_flag_on_exact_title_different_venue_true(self):
+        # Near-exact title (>= TITLE_RATIO_STRONG_THRESHOLD) bypasses the venue
+        # gate on the LLM path, letting the LLM judge differently-spelled venues.
+        a = _event(1, "Klassikatähed", _BASE, venue_name="Estonia Concert Hall")
+        b = _event(2, "Klassikatähed", _BASE, venue_name="Eesti Kontsert")
+        assert is_candidate_pair(a, b, bypass_venue_on_strong_title=True) is True
+
+    def test_bypass_flag_on_mid_confidence_title_different_venue_still_false(self):
+        # Title ratio in [TITLE_RATIO_THRESHOLD, TITLE_RATIO_STRONG_THRESHOLD) is
+        # only "above the candidate bar", not near-exact — venue still gates it
+        # even with the bypass flag on.
+        a = _event(1, "Jazz Night at Von Krahli", _BASE, venue_name="Von Krahli")
+        b = _event(2, "Jazz Night Tallinn", _BASE, venue_name="Fotografiska")
+        ratio = token_set_ratio(a.title_orig.lower(), b.title_orig.lower())
+        assert TITLE_RATIO_THRESHOLD <= ratio < TITLE_RATIO_STRONG_THRESHOLD
+        assert is_candidate_pair(a, b, bypass_venue_on_strong_title=True) is False
 
 
 # ---------------------------------------------------------------------------

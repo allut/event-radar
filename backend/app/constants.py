@@ -88,6 +88,9 @@ EVENT_STATUS_CANCELLED = "cancelled"
 # Deduplication
 DEDUP_LOOKBACK_DAYS = 30  # only re-cluster events that started within this window
 TITLE_RATIO_THRESHOLD = 70  # rapidfuzz token_set_ratio threshold for title match
+TITLE_RATIO_STRONG_THRESHOLD = 90  # near-exact title; on the LLM path, bypass the
+# venue gate at/above this so cross-source dupes with differently-spelled venues
+# reach the LLM tiebreaker (rule-only path stays strict)
 VENUE_RATIO_THRESHOLD = 70  # rapidfuzz token_set_ratio threshold for venue match
 TIME_WINDOW_HOURS = 12  # max |Δstart| in hours for two events to be dedup candidates
 
@@ -215,6 +218,9 @@ Venue A: {venue_a}
 Event B: {title_b}
 Date B: {date_b}
 Venue B: {venue_b}
+
+Venue names may be spelled differently or in different languages across listing
+sources; judge by event identity (title + date/time), treating venue as secondary.
 
 Respond with JSON only, no explanation: {{"same": true or false, "confidence": 0.0-1.0}}"""
 
