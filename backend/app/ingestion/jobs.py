@@ -120,53 +120,124 @@ async def classify_pending_job() -> dict:
             raise
 
 
+def _dedup_has_backlog(summary: dict) -> bool:
+    return summary.get("deferred_pairs", 0) > 0
+
+
+def _classify_has_backlog(summary: dict) -> bool:
+    return (
+        summary.get("attempted", 0) >= LLM_CLASSIFY_BATCH_SIZE
+        and summary.get("succeeded", 0) > 0
+    )
+
+
+# Dedup summary fields that are a snapshot of corpus state recomputed on every
+# pass (total events considered, candidate pairs, group counts) rather than
+# work done during that pass — summing them across passes would inflate them
+# by roughly a factor of `passes`. Report the last pass's value instead.
+_AGGREGATE_LAST_VALUE_FIELDS = frozenset({"total", "candidate_pairs", "grouped", "groups"})
+
+
+def _aggregate_summaries(summaries: list[dict]) -> dict:
+    """Combine numeric fields (excluding bools) across pass summaries.
+
+    Covers both summary shapes: classify (attempted/succeeded/failed, all
+    summed) and dedup (fresh_calls/llm_confirmed/deferred_pairs/updated summed;
+    total/candidate_pairs/grouped/groups take the last pass's value).
+    """
+    totals: dict = {}
+    for summary in summaries:
+        for key, value in summary.items():
+            if isinstance(value, bool) or not isinstance(value, int | float):
+                continue
+            if key in _AGGREGATE_LAST_VALUE_FIELDS:
+                totals[key] = value
+            else:
+                totals[key] = totals.get(key, 0) + value
+    totals["passes"] = len(summaries)
+    return totals
+
+
 async def _drain_backlog(
     run_once: Callable[[], Awaitable[dict]],
     has_backlog: Callable[[dict], bool],
     label: str,
+    *,
+    retry_seconds: int = LLM_BACKLOG_RETRY_SECONDS,
+    aggregate: bool = False,
 ) -> dict:
     """Re-run a single-pass LLM job until its backlog clears or the cap is hit.
 
     ``run_once`` must open/commit/close its own DB session per call (so no
     connection is held across the sleep). ``has_backlog`` inspects the pass
     summary and returns True while more work remains.
+
+    ``retry_seconds=0`` skips the sleep between passes (immediate drain,
+    suitable for a synchronous HTTP request). ``aggregate=True`` returns
+    summed counts across all passes plus a ``"passes"`` count instead of the
+    last pass's summary.
     """
     summary: dict = {}
+    summaries: list[dict] = []
     for attempt in range(LLM_BACKLOG_MAX_DRAIN_PASSES):
         summary = await run_once()
+        summaries.append(summary)
         if not has_backlog(summary):
-            return summary
+            break
         if attempt + 1 < LLM_BACKLOG_MAX_DRAIN_PASSES:
-            log.info(
-                "%s backlog remains, retrying in %ds: %s",
-                label,
-                LLM_BACKLOG_RETRY_SECONDS,
-                summary,
-            )
-            await asyncio.sleep(LLM_BACKLOG_RETRY_SECONDS)
-    log.warning(
-        "%s drain cap (%d) reached; backlog deferred to next 6h cycle: %s",
-        label,
-        LLM_BACKLOG_MAX_DRAIN_PASSES,
-        summary,
-    )
-    return summary
+            if retry_seconds:
+                log.info(
+                    "%s backlog remains, retrying in %ds: %s",
+                    label,
+                    retry_seconds,
+                    summary,
+                )
+                await asyncio.sleep(retry_seconds)
+            else:
+                log.info("%s backlog remains, retrying immediately: %s", label, summary)
+    else:
+        log.warning(
+            "%s drain cap (%d) reached; backlog deferred to next 6h cycle: %s",
+            label,
+            LLM_BACKLOG_MAX_DRAIN_PASSES,
+            summary,
+        )
+    return _aggregate_summaries(summaries) if aggregate else summary
 
 
 async def dedup_pass_drained() -> dict:
     """dedup_pass, re-run on a short interval while pairs remain deferred."""
-    return await _drain_backlog(
-        dedup_pass,
-        lambda s: s.get("deferred_pairs", 0) > 0,
-        "dedup",
-    )
+    return await _drain_backlog(dedup_pass, _dedup_has_backlog, "dedup")
 
 
 async def classify_pending_drained() -> dict:
     """classify_pending, re-run while a full batch keeps making progress."""
     return await _drain_backlog(
+        classify_pending_job, _classify_has_backlog, "classify_pending"
+    )
+
+
+async def dedup_pass_drain_now() -> dict:
+    """dedup_pass, drained synchronously with no inter-pass sleep.
+
+    For manual/admin entry points where the caller is blocking on the HTTP
+    response — the scheduler's 15-min retry interval would stall the request.
+    """
+    return await _drain_backlog(
+        dedup_pass, _dedup_has_backlog, "dedup", retry_seconds=0, aggregate=True
+    )
+
+
+async def classify_pending_drain_now() -> dict:
+    """classify_pending_job, drained synchronously with no inter-pass sleep.
+
+    For manual/admin entry points where the caller is blocking on the HTTP
+    response — the scheduler's 15-min retry interval would stall the request.
+    """
+    return await _drain_backlog(
         classify_pending_job,
-        lambda s: s.get("attempted", 0) >= LLM_CLASSIFY_BATCH_SIZE
-        and s.get("succeeded", 0) > 0,
+        _classify_has_backlog,
         "classify_pending",
+        retry_seconds=0,
+        aggregate=True,
     )

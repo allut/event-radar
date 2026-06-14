@@ -17,8 +17,8 @@ from app.constants import (
 from app.db import AsyncSessionLocal
 from app.email.digest import send_daily_digests
 from app.ingestion.jobs import (
-    classify_pending_job,
-    dedup_pass,
+    classify_pending_drain_now,
+    dedup_pass_drain_now,
     ingest_all_enabled,
     ingest_source,
 )
@@ -93,9 +93,9 @@ async def admin_ingest_source(slug: str) -> dict:
 
 @router.post("/dedup", dependencies=[Depends(_require_admin)])
 async def admin_dedup_run() -> dict:
-    """Trigger a rule-based dedup pass over all non-cancelled events."""
+    """Trigger a dedup pass, draining the backlog until it clears or the cap is hit."""
     try:
-        summary = await dedup_pass()
+        summary = await dedup_pass_drain_now()
     except Exception:
         log.exception("admin dedup pass failed")
         raise HTTPException(
@@ -197,9 +197,9 @@ async def admin_dedup_groups(
 
 @router.post("/classify", dependencies=[Depends(_require_admin)])
 async def admin_classify() -> dict:
-    """Trigger LLM classification for one batch of unclassified canonical events."""
+    """Trigger LLM classification, draining the backlog until it clears or the cap is hit."""
     try:
-        summary = await classify_pending_job()
+        summary = await classify_pending_drain_now()
     except Exception:
         log.exception("admin classify failed")
         raise HTTPException(
@@ -294,7 +294,7 @@ async def admin_pipeline_run(
 
     # Stage 3: dedup
     try:
-        dedup_result = await dedup_pass()
+        dedup_result = await dedup_pass_drain_now()
         stages["dedup"] = dedup_result
     except Exception as exc:
         log.exception("pipeline: dedup failed")
@@ -303,7 +303,7 @@ async def admin_pipeline_run(
 
     # Stage 4: classify
     try:
-        classify_result = await classify_pending_job()
+        classify_result = await classify_pending_drain_now()
         stages["classify"] = classify_result
     except Exception as exc:
         log.exception("pipeline: classify failed")

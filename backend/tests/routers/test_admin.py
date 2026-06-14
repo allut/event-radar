@@ -264,10 +264,10 @@ def _all_job_mocks(
         "app.routers.admin.ingest_all_enabled": AsyncMock(
             return_value=ingest_result or []
         ),
-        "app.routers.admin.dedup_pass": AsyncMock(
+        "app.routers.admin.dedup_pass_drain_now": AsyncMock(
             return_value=dedup_result or {"merged": 0}
         ),
-        "app.routers.admin.classify_pending_job": AsyncMock(
+        "app.routers.admin.classify_pending_drain_now": AsyncMock(
             return_value=classify_result or {"classified": 0}
         ),
         "app.routers.admin.build_daily_feeds": AsyncMock(
@@ -291,8 +291,8 @@ async def test_pipeline_run_calls_all_six_stages_in_order():
         patch("app.routers.admin.AsyncSessionLocal", return_value=db_ctx),
         patch("app.routers.admin.sync_fienta_organizers", mocks["app.routers.admin.sync_fienta_organizers"]),
         patch("app.routers.admin.ingest_all_enabled", mocks["app.routers.admin.ingest_all_enabled"]),
-        patch("app.routers.admin.dedup_pass", mocks["app.routers.admin.dedup_pass"]),
-        patch("app.routers.admin.classify_pending_job", mocks["app.routers.admin.classify_pending_job"]),
+        patch("app.routers.admin.dedup_pass_drain_now", mocks["app.routers.admin.dedup_pass_drain_now"]),
+        patch("app.routers.admin.classify_pending_drain_now", mocks["app.routers.admin.classify_pending_drain_now"]),
         patch("app.routers.admin.build_daily_feeds", mocks["app.routers.admin.build_daily_feeds"]),
         patch("app.routers.admin.send_daily_digests", mocks["app.routers.admin.send_daily_digests"]),
     ):
@@ -331,8 +331,8 @@ async def test_pipeline_run_defaults_to_dry_run_for_digests():
         patch("app.routers.admin.AsyncSessionLocal", return_value=db_ctx),
         patch("app.routers.admin.sync_fienta_organizers", mocks["app.routers.admin.sync_fienta_organizers"]),
         patch("app.routers.admin.ingest_all_enabled", mocks["app.routers.admin.ingest_all_enabled"]),
-        patch("app.routers.admin.dedup_pass", mocks["app.routers.admin.dedup_pass"]),
-        patch("app.routers.admin.classify_pending_job", mocks["app.routers.admin.classify_pending_job"]),
+        patch("app.routers.admin.dedup_pass_drain_now", mocks["app.routers.admin.dedup_pass_drain_now"]),
+        patch("app.routers.admin.classify_pending_drain_now", mocks["app.routers.admin.classify_pending_drain_now"]),
         patch("app.routers.admin.build_daily_feeds", mocks["app.routers.admin.build_daily_feeds"]),
         patch("app.routers.admin.send_daily_digests", mocks["app.routers.admin.send_daily_digests"]),
     ):
@@ -360,8 +360,8 @@ async def test_pipeline_run_passes_dry_run_false_to_digests():
         patch("app.routers.admin.AsyncSessionLocal", return_value=db_ctx),
         patch("app.routers.admin.sync_fienta_organizers", mocks["app.routers.admin.sync_fienta_organizers"]),
         patch("app.routers.admin.ingest_all_enabled", mocks["app.routers.admin.ingest_all_enabled"]),
-        patch("app.routers.admin.dedup_pass", mocks["app.routers.admin.dedup_pass"]),
-        patch("app.routers.admin.classify_pending_job", mocks["app.routers.admin.classify_pending_job"]),
+        patch("app.routers.admin.dedup_pass_drain_now", mocks["app.routers.admin.dedup_pass_drain_now"]),
+        patch("app.routers.admin.classify_pending_drain_now", mocks["app.routers.admin.classify_pending_drain_now"]),
         patch("app.routers.admin.build_daily_feeds", mocks["app.routers.admin.build_daily_feeds"]),
         patch("app.routers.admin.send_daily_digests", mocks["app.routers.admin.send_daily_digests"]),
     ):
@@ -397,8 +397,8 @@ async def test_pipeline_run_stops_on_ingest_failure():
             return_value={"added": [], "stale": []},
         ),
         patch("app.routers.admin.ingest_all_enabled", mock_ingest),
-        patch("app.routers.admin.dedup_pass", mock_dedup),
-        patch("app.routers.admin.classify_pending_job", new_callable=AsyncMock),
+        patch("app.routers.admin.dedup_pass_drain_now", mock_dedup),
+        patch("app.routers.admin.classify_pending_drain_now", new_callable=AsyncMock),
         patch("app.routers.admin.build_daily_feeds", new_callable=AsyncMock),
         patch("app.routers.admin.send_daily_digests", new_callable=AsyncMock),
     ):
@@ -434,8 +434,8 @@ async def test_pipeline_run_stops_on_sync_failure():
             side_effect=RuntimeError("fienta down"),
         ),
         patch("app.routers.admin.ingest_all_enabled", mock_ingest),
-        patch("app.routers.admin.dedup_pass", new_callable=AsyncMock),
-        patch("app.routers.admin.classify_pending_job", new_callable=AsyncMock),
+        patch("app.routers.admin.dedup_pass_drain_now", new_callable=AsyncMock),
+        patch("app.routers.admin.classify_pending_drain_now", new_callable=AsyncMock),
         patch("app.routers.admin.build_daily_feeds", new_callable=AsyncMock),
         patch("app.routers.admin.send_daily_digests", new_callable=AsyncMock),
     ):
