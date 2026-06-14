@@ -110,17 +110,20 @@ async def llm_json(
             model=provider["model"],
         )
 
+        payload: dict[str, Any] = {
+            "model": provider["model"],
+            "messages": [{"role": "user", "content": prompt}],
+            "response_format": {"type": "json_object"},
+            "max_tokens": provider.get("max_tokens", LLM_MAX_TOKENS),
+        }
+        payload.update(provider.get("params", {}))
+
         try:
             async with httpx.AsyncClient(timeout=LLM_REQUEST_TIMEOUT_SECONDS) as client:
                 resp = await client.post(
                     f"{provider['base_url']}/chat/completions",
                     headers={"Authorization": f"Bearer {api_key}"},
-                    json={
-                        "model": provider["model"],
-                        "messages": [{"role": "user", "content": prompt}],
-                        "response_format": {"type": "json_object"},
-                        "max_tokens": LLM_MAX_TOKENS,
-                    },
+                    json=payload,
                 )
 
             if resp.status_code == http.HTTPStatus.TOO_MANY_REQUESTS:
@@ -134,7 +137,9 @@ async def llm_json(
             resp.raise_for_status()
             data = resp.json()
             usage = data.get("usage", {})
-            content = data["choices"][0]["message"]["content"]
+            content = data["choices"][0]["message"].get("content")
+            if not content:
+                raise KeyError("content")
             result: dict[str, Any] = json.loads(content)
 
             record.prompt_tokens = usage.get("prompt_tokens")

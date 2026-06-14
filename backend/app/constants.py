@@ -1,4 +1,5 @@
 import http
+from typing import Any
 from zoneinfo import ZoneInfo
 
 from app._generated.shared_constants import (
@@ -183,6 +184,7 @@ TIME_MORNING_START = 6
 # LLM
 LLM_MAX_PROMPT_CHARS = 1200  # cap on event text passed to classification prompt
 LLM_MAX_TOKENS = 400  # max completion tokens per LLM call
+LLM_REASONING_MAX_TOKENS = 600  # ceiling (project hard cap); leaves room for reasoning + answer
 LLM_DEDUP_CONFIDENCE_THRESHOLD: float = (
     0.7  # minimum confidence to accept LLM same=true verdict
 )
@@ -273,7 +275,7 @@ Respond with a JSON object with one key "events" containing an array of event ob
 If no events found, return {{"events": []}}.
 JSON only, no explanation."""
 
-LLM_PROVIDERS: list[dict[str, str]] = [
+LLM_PROVIDERS: list[dict[str, Any]] = [
     {
         "name": "groq",
         "base_url": "https://api.groq.com/openai/v1",
@@ -285,6 +287,10 @@ LLM_PROVIDERS: list[dict[str, str]] = [
         "base_url": "https://api.cerebras.ai/v1",
         "model": "gpt-oss-120b",
         "key_attr": "CEREBRAS_API_KEY",
+        # gpt-oss-120b is a reasoning model: reasoning tokens precede the answer
+        # and count against max_tokens, so it gets a larger cap and lower effort.
+        "max_tokens": LLM_REASONING_MAX_TOKENS,
+        "params": {"reasoning_effort": "low"},
     },
     {
         "name": "mistral",

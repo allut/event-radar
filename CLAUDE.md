@@ -89,7 +89,7 @@ LLM Router: Groq (primary) → Cerebras → Mistral (fallback chain)
 
 - **Hard cap:** ≤600 tokens per LLM call to avoid quota exhaustion.
 - **Dedup cache:** Cache decisions by content hash — never re-call LLM for identical pairs.
-- **Fallback order:** Groq (primary, `llama-3.3-70b-versatile`) → Cerebras (`gpt-oss-120b`) → Mistral (`mistral-small-latest`, overnight batch, 1B tok/mo). Provider chain defined in `app/constants.py::LLM_PROVIDERS`.
+- **Fallback order:** Groq (primary, `llama-3.3-70b-versatile`) → Cerebras (`gpt-oss-120b`) → Mistral (`mistral-small-latest`, overnight batch, 1B tok/mo). Provider chain defined in `app/constants.py::LLM_PROVIDERS`. Cerebras's `gpt-oss-120b` is a reasoning model — its entry overrides `reasoning_effort=low` and a 600-token cap (`LLM_REASONING_MAX_TOKENS`, vs the 400-token default) so reasoning tokens don't crowd out the JSON answer.
 - Groq's 30 req/min burst means no sleep loop needed in the classification batch job.
 
 ## i18n

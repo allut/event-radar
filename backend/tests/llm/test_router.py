@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from app.constants import LLM_REASONING_MAX_TOKENS
 from app.llm.router import LLMError, _content_hash, content_hash, llm_json
 
 
@@ -120,6 +121,70 @@ class TestLlmJsonProviderFallback:
 
             with pytest.raises(LLMError):
                 await llm_json("dedup", "test prompt", mock_db)
+
+    async def test_cerebras_request_uses_reasoning_params(self, mock_db):
+        mock_resp = _make_openai_response({"same": False, "confidence": 0.1}, "cerebras")
+
+        with (
+            patch("app.llm.router.settings") as mock_settings,
+            patch("httpx.AsyncClient") as mock_client_cls,
+        ):
+            mock_settings.GROQ_API_KEY = ""
+            mock_settings.CEREBRAS_API_KEY = "csk_test"
+            mock_settings.MISTRAL_API_KEY = ""
+
+            mock_client = AsyncMock()
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock(return_value=None)
+            mock_client.post = AsyncMock(return_value=mock_resp)
+            mock_client_cls.return_value = mock_client
+
+            result, model_label = await llm_json("dedup", "test prompt", mock_db)
+
+        assert result == {"same": False, "confidence": 0.1}
+        assert model_label.startswith("cerebras/")
+        payload = mock_client.post.call_args.kwargs["json"]
+        assert payload["reasoning_effort"] == "low"
+        assert payload["max_tokens"] == LLM_REASONING_MAX_TOKENS
+
+    async def test_null_content_falls_through_to_next_provider(self, mock_db):
+        empty_content_resp = MagicMock()
+        empty_content_resp.status_code = http.HTTPStatus.OK
+        empty_content_resp.json.return_value = {
+            "choices": [{"message": {}}],
+            "usage": {"prompt_tokens": 10, "completion_tokens": 600},
+        }
+        empty_content_resp.raise_for_status = MagicMock()
+
+        mistral_resp = _make_openai_response({"categories": ["music"], "vibes": ["indie"]})
+
+        call_count = {"n": 0}
+
+        async def mock_post(*args, **kwargs):
+            call_count["n"] += 1
+            if call_count["n"] == 1:
+                return empty_content_resp
+            return mistral_resp
+
+        with (
+            patch("app.llm.router.settings") as mock_settings,
+            patch("httpx.AsyncClient") as mock_client_cls,
+        ):
+            mock_settings.GROQ_API_KEY = ""
+            mock_settings.CEREBRAS_API_KEY = "csk_test"
+            mock_settings.MISTRAL_API_KEY = "msk_test"
+
+            mock_client = AsyncMock()
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock(return_value=None)
+            mock_client.post = mock_post
+            mock_client_cls.return_value = mock_client
+
+            result, model_label = await llm_json("classify", "test prompt", mock_db)
+
+        assert result == {"categories": ["music"], "vibes": ["indie"]}
+        assert model_label.startswith("mistral/")
+        assert call_count["n"] == 2
 
     async def test_raises_llm_error_when_all_providers_fail(self, mock_db):
         import httpx
