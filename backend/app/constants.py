@@ -197,6 +197,12 @@ LLM_DEDUP_VENUE_MAX_LEN = 100
 LLM_DEDUP_MAX_FRESH_LLM_CALLS_PER_PASS = 100
 # Chunk size for the bulk llm_calls prefetch IN-list, to bound query size.
 LLM_DEDUP_HASH_QUERY_CHUNK_SIZE = 500
+
+# Backlog drain: when a periodic LLM job (dedup / classify) finishes a pass with
+# work still undone, re-run it on this short interval instead of waiting for the
+# next 6h cycle. Bounded by a pass cap so a provider outage can't spin forever.
+LLM_BACKLOG_RETRY_SECONDS = 900  # 15 min between drain passes
+LLM_BACKLOG_MAX_DRAIN_PASSES = 12  # ceiling; then defer to the next 6h cycle
 LLM_DEDUP_PROMPT_TEMPLATE = """\
 Are these two events the same event?
 

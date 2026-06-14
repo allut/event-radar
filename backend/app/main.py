@@ -24,7 +24,11 @@ from app.constants import (
 )
 from app.db import AsyncSessionLocal, engine
 from app.email.digest import send_daily_digests
-from app.ingestion.jobs import classify_pending_job, dedup_pass, ingest_all_enabled
+from app.ingestion.jobs import (
+    classify_pending_drained,
+    dedup_pass_drained,
+    ingest_all_enabled,
+)
 from app.ingestion.organizer_sync import sync_fienta_organizers
 from app.logging_config import configure_logging, shutdown_log_shipping
 from app.ranking.score import build_daily_feeds
@@ -68,7 +72,7 @@ async def _run_ingest_all() -> None:
 
 async def _run_dedup_pass() -> None:
     try:
-        summary = await dedup_pass()
+        summary = await dedup_pass_drained()
         log.info("dedup pass completed: %s", summary)
     except Exception:
         log.exception("dedup pass failed")
@@ -76,7 +80,7 @@ async def _run_dedup_pass() -> None:
 
 async def _run_classify_pending() -> None:
     try:
-        summary = await classify_pending_job()
+        summary = await classify_pending_drained()
         log.info("classify_pending completed: %s", summary)
     except Exception:
         log.exception("classify_pending failed")
