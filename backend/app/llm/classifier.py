@@ -16,21 +16,25 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.constants import (
+    CURRENCY_CODE_MAX_LEN,
     DEFAULT_USER_LOCALE,
     EVENT_STATUS_CLASSIFIED,
     EVENT_STATUS_DRAFT,
     LLM_CLASSIFY_BATCH_SIZE,
     LLM_CLASSIFY_DESC_FALLBACK,
     LLM_CLASSIFY_LANGUAGE_CODE_MAX_LEN,
+    LLM_CLASSIFY_PRICE_HINT_FALLBACK,
     LLM_CLASSIFY_PROMPT_TEMPLATE,
     LLM_CLASSIFY_VENUE_FALLBACK,
     LLM_CLASSIFY_WHY_GO_MAX_BULLETS,
     LLM_MAX_PROMPT_CHARS,
+    PRICE_HINT_MAX_CHARS,
     TALLINN_TZ,
     VALID_CATEGORIES,
     VALID_LOCALES,
     VALID_VIBES,
 )
+from app.ingestion.base import normalize_currency
 from app.llm.router import LLMError, llm_json
 from app.models.models import Event, EventClassification
 
@@ -41,10 +45,12 @@ def _build_classify_prompt(event: Event) -> str:
     desc = (event.description_orig or "").strip()
     if len(desc) > LLM_MAX_PROMPT_CHARS:
         desc = desc[:LLM_MAX_PROMPT_CHARS]
+    price_hint = (event.price_hint or "").strip()[:PRICE_HINT_MAX_CHARS]
     return LLM_CLASSIFY_PROMPT_TEMPLATE.format(
         title=event.title_orig,
         venue=event.venue_name or LLM_CLASSIFY_VENUE_FALLBACK,
         description=desc or LLM_CLASSIFY_DESC_FALLBACK,
+        price_hint=price_hint or LLM_CLASSIFY_PRICE_HINT_FALLBACK,
     )
 
 
@@ -77,6 +83,14 @@ def _parse_classification(raw: dict[str, Any]) -> dict[str, Any]:
         str(raw.get("language", "")).strip()[:LLM_CLASSIFY_LANGUAGE_CODE_MAX_LEN]
         or None
     )
+
+    price_min = _parse_price(raw.get("price_min"))
+    price_max = _parse_price(raw.get("price_max"))
+    has_price = price_min is not None or price_max is not None
+    currency = normalize_currency(raw.get("currency"), has_price)
+    if currency is not None and len(currency) > CURRENCY_CODE_MAX_LEN:
+        currency = None
+
     return {
         "categories": cats,
         "vibes": vibs,
@@ -84,7 +98,19 @@ def _parse_classification(raw: dict[str, Any]) -> dict[str, Any]:
         "why_go_localized": why_go_localized,
         "quality_score": quality,
         "language_detected": language,
+        "price_min": price_min,
+        "price_max": price_max,
+        "currency": currency,
     }
+
+
+def _parse_price(value: Any) -> float | None:
+    """Parse an LLM-returned price field. Negative values are treated as unstated."""
+    try:
+        price = float(value) if value is not None else None
+    except (TypeError, ValueError):
+        return None
+    return price if price is not None and price >= 0 else None
 
 
 async def classify_event(
@@ -140,6 +166,13 @@ async def classify_event(
                 model_used=model_used,
             )
         )
+
+    if parsed["price_min"] is not None:
+        event.price_min = parsed["price_min"]
+    if parsed["price_max"] is not None:
+        event.price_max = parsed["price_max"]
+    if parsed["currency"] is not None:
+        event.currency = parsed["currency"]
 
     event.status = EVENT_STATUS_CLASSIFIED
     log.debug(

@@ -1,24 +1,29 @@
+import asyncio
 import logging
 from typing import Any
 from urllib.parse import urlparse
 
 import httpx
+from bs4 import BeautifulSoup
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.constants import FIENTA_MAX_PAGES, HTTP_TIMEOUT_SECONDS
+from app.constants import (
+    FIENTA_DETAIL_CONCURRENCY,
+    FIENTA_DETAIL_MAX_FETCHES,
+    FIENTA_MAX_PAGES,
+    HTTP_TIMEOUT_SECONDS,
+)
 from app.ingestion.base import (
     NormalizedEvent,
     SourceAdapter,
+    existing_external_ids,
+    extract_jsonld_offers_text,
     http_get,
-    normalize_currency,
     parse_dt,
 )
 
 log = logging.getLogger(__name__)
-
-
-def _first_not_none(*vals: Any) -> Any:
-    return next((v for v in vals if v is not None), None)
 
 
 class FientaAdapter(SourceAdapter):
@@ -30,9 +35,14 @@ class FientaAdapter(SourceAdapter):
     Pagination: handles both link-based (`links.next`) and meta-based
     (`meta.current_page` / `meta.last_page`) pagination automatically.
     Plain list responses (no pagination envelope) are also supported.
+
+    The listing API returns no price fields, so price is recovered for
+    new events only by fetching each event's detail page and extracting
+    JSON-LD ``offers`` (bounded concurrency, capped per run — self-healing,
+    since events not yet stored get retried on a later run).
     """
 
-    async def fetch_raw(self) -> list[dict[str, Any]]:
+    async def fetch_raw(self, db: AsyncSession) -> list[dict[str, Any]]:
         organizer_ids: list[int] = self.source.config.get("organizer_ids", [])
         base_url: str = self.source.config.get("base_url", settings.FIENTA_BASE_URL)
         all_events: list[dict[str, Any]] = []
@@ -55,13 +65,63 @@ class FientaAdapter(SourceAdapter):
                     log.warning("fienta organizer=%s network error: %s", org_id, exc)
                     errors.append(exc)
 
-        # Partial tolerance: if some organizers succeeded we return what we have
-        # so a single flaky organizer doesn't suppress a real run. We only raise
-        # (which marks the IngestionRun as error) when every organizer failed.
-        if not all_events and errors:
-            raise errors[0]
+            # Partial tolerance: if some organizers succeeded we return what we have
+            # so a single flaky organizer doesn't suppress a real run. We only raise
+            # (which marks the IngestionRun as error) when every organizer failed.
+            if not all_events and errors:
+                raise errors[0]
+
+            await self._fetch_price_hints(client, db, all_events)
 
         return all_events
+
+    async def _fetch_price_hints(
+        self,
+        client: httpx.AsyncClient,
+        db: AsyncSession,
+        events: list[dict[str, Any]],
+    ) -> None:
+        """Fetch detail pages for new events and attach JSON-LD price_hint.
+
+        Bounded by FIENTA_DETAIL_CONCURRENCY/FIENTA_DETAIL_MAX_FETCHES. Events
+        already stored (existing_external_ids) and events past the per-run cap
+        are skipped — forward-only, self-healing on later runs.
+        """
+        known_ids = await existing_external_ids(db, self.source.id)
+        new_events = [
+            event
+            for event in events
+            if str(event.get("id", "")) and str(event.get("id", "")) not in known_ids
+        ][:FIENTA_DETAIL_MAX_FETCHES]
+        if not new_events:
+            return
+
+        semaphore = asyncio.Semaphore(FIENTA_DETAIL_CONCURRENCY)
+
+        async def _fetch_one(event: dict[str, Any]) -> None:
+            detail_url = event.get("url") or event.get("buy_tickets_url")
+            if not detail_url:
+                return
+            async with semaphore:
+                try:
+                    response = await http_get(client, detail_url)
+                except (httpx.HTTPStatusError, httpx.RequestError) as exc:
+                    log.warning(
+                        "fienta detail fetch failed url=%s: %s", detail_url, exc
+                    )
+                    return
+            try:
+                soup = BeautifulSoup(response.text, "html.parser")
+                price_hint = extract_jsonld_offers_text(soup)
+            except Exception as exc:
+                log.warning("fienta price_hint parse failed url=%s: %s", detail_url, exc)
+                return
+            if price_hint:
+                event["price_hint"] = price_hint
+
+        await asyncio.gather(
+            *(_fetch_one(event) for event in new_events), return_exceptions=True
+        )
 
     async def _fetch_organizer(
         self, client: httpx.AsyncClient, base_url: str, org_id: int
@@ -156,23 +216,6 @@ class FientaAdapter(SourceAdapter):
             venue_name = str(venue_raw) or None
             venue_address = None
 
-        price_raw = raw.get("price")
-        if isinstance(price_raw, dict):
-            price_min = _first_not_none(price_raw.get("min"), raw.get("min_price"))
-            price_max = _first_not_none(price_raw.get("max"), raw.get("max_price"))
-            currency_raw = _first_not_none(
-                price_raw.get("currency"), raw.get("currency")
-            )
-        else:
-            # price_raw is None, int, or unexpected type — fall back to top-level fields
-            price_min = _first_not_none(raw.get("min_price"), raw.get("price_min"))
-            price_max = _first_not_none(raw.get("max_price"), raw.get("price_max"))
-            currency_raw = raw.get("currency")
-
-        currency = normalize_currency(
-            currency_raw, price_min is not None or price_max is not None
-        )
-
         return NormalizedEvent(
             external_id=external_id,
             title=str(title),
@@ -185,7 +228,5 @@ class FientaAdapter(SourceAdapter):
             image_url=raw.get("image_url")
             or raw.get("image")
             or raw.get("cover_image"),
-            price_min=float(price_min) if price_min is not None else None,
-            price_max=float(price_max) if price_max is not None else None,
-            currency=currency,
+            price_hint=raw.get("price_hint"),
         )

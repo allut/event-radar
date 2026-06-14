@@ -1,6 +1,6 @@
 """Tests for HtmlListingAdapter base + Piletilevi/Kumu/EstoniaConcertHall."""
 from datetime import date, datetime
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 import httpx
@@ -11,6 +11,7 @@ from app.constants import (
     ESTONIA_CONCERT_HALL_AJAX_ACTION,
     ESTONIA_CONCERT_HALL_AJAX_PATH,
     ESTONIA_CONCERT_HALL_MAX_EVENTS,
+    ESTONIA_CONCERT_HALL_PILETILEVI_URL,
     TALLINN_TZ,
 )
 from app.ingestion.base import NormalizedEvent
@@ -37,6 +38,13 @@ def _mock_response(text: str, status: int = 200):
     resp.text = text
     resp.status_code = status
     return resp
+
+
+def _make_db(known_ids=()):
+    """A mock AsyncSession for which existing_external_ids() returns known_ids."""
+    db = MagicMock()
+    db.scalars = AsyncMock(return_value=MagicMock(all=MagicMock(return_value=list(known_ids))))
+    return db
 
 
 # ---------------------------------------------------------------------------
@@ -81,7 +89,7 @@ class _StubAdapter(HtmlListingAdapter):
     def parse_date(self, card):
         return datetime(2026, 1, 1, tzinfo=TALLINN_TZ)
 
-    def parse_detail(self, soup, card):
+    async def parse_detail(self, client, soup, card):
         card["description"] = soup.get_text(strip=True)
 
 
@@ -115,7 +123,7 @@ class TestBasePagination:
 
         with patch("app.ingestion.sources.html_listing.http_get") as mock_get:
             mock_get.side_effect = [_mock_response("0")]
-            results = await adapter.fetch_raw()
+            results = await adapter.fetch_raw(_make_db())
 
         assert mock_get.call_count == 1
         assert [c["external_id"] for c in results] == ["a"]
@@ -132,7 +140,7 @@ class TestBasePagination:
 
         with patch("app.ingestion.sources.html_listing.http_get") as mock_get:
             mock_get.side_effect = [_mock_response("0"), _mock_response("1")]
-            results = await adapter.fetch_raw()
+            results = await adapter.fetch_raw(_make_db())
 
         # Page 2 yields no new cards (all already seen) → loop halts before page 3
         assert mock_get.call_count == 2
@@ -150,7 +158,7 @@ class TestBasePagination:
 
         with patch("app.ingestion.sources.html_listing.http_get") as mock_get:
             mock_get.side_effect = [_mock_response("0"), _mock_response("1")]
-            results = await adapter.fetch_raw()
+            results = await adapter.fetch_raw(_make_db())
 
         assert mock_get.call_count == 2
         assert [c["external_id"] for c in results] == ["a", "b"]
@@ -162,7 +170,7 @@ class TestBasePagination:
         with patch("app.ingestion.sources.html_listing.http_get") as mock_get:
             mock_get.side_effect = [httpx.ConnectError("boom")]
             with pytest.raises(httpx.ConnectError):
-                await adapter.fetch_raw()
+                await adapter.fetch_raw(_make_db())
 
     @pytest.mark.asyncio
     async def test_listing_error_tolerated_when_other_pages_succeed(self):
@@ -175,7 +183,7 @@ class TestBasePagination:
 
         with patch("app.ingestion.sources.html_listing.http_get") as mock_get:
             mock_get.side_effect = [httpx.ConnectError("boom"), _mock_response("1")]
-            results = await adapter.fetch_raw()
+            results = await adapter.fetch_raw(_make_db())
 
         assert [c["external_id"] for c in results] == ["a"]
 
@@ -198,7 +206,7 @@ class TestBasePagination:
                 _mock_response("detail-a"),  # detail for card a
                 _mock_response("detail-b"),  # detail for card b
             ]
-            results = await adapter.fetch_raw()
+            results = await adapter.fetch_raw(_make_db())
 
         # Detail cap (2) truncates the 3 collected cards before detail fetches
         assert [c["external_id"] for c in results] == ["a", "b"]
@@ -221,7 +229,7 @@ class TestBasePagination:
                 _mock_response("0"),
                 httpx.ConnectError("detail down"),
             ]
-            results = await adapter.fetch_raw()
+            results = await adapter.fetch_raw(_make_db())
 
         assert [c["external_id"] for c in results] == ["a"]
         assert "description" not in results[0]
@@ -236,7 +244,7 @@ class TestBaseListingRequestDispatch:
         with patch("app.ingestion.sources.html_listing.http_post") as mock_post, \
              patch("app.ingestion.sources.html_listing.http_get") as mock_get:
             mock_post.return_value = _mock_response("<html></html>")
-            results = await adapter.fetch_raw()
+            results = await adapter.fetch_raw(_make_db())
 
         assert mock_get.call_count == 0
         assert mock_post.call_count == 1
@@ -411,7 +419,7 @@ class TestPiletileviFetchRaw:
                 detail_resp,  # detail fetch for Jazz Night
                 detail_resp,  # detail fetch for Festival Pass... no, dropped by normalize
             ]
-            results = await adapter.fetch_raw()
+            results = await adapter.fetch_raw(_make_db())
 
         # Riga Rock filtered (non-Tallinn); Jazz Night + Festival Pass collected as raw
         # cards (Festival Pass is dropped later by normalize() for its date format).
@@ -435,7 +443,7 @@ class TestPiletileviFetchRaw:
                 _mock_response(PILETILEVI_EMPTY_HTML),
                 _mock_response(PILETILEVI_DETAIL_HTML),
             ]
-            results = await adapter.fetch_raw()
+            results = await adapter.fetch_raw(_make_db())
 
         assert len(results) == 1
         assert (
@@ -449,7 +457,7 @@ class TestPiletileviFetchRaw:
         with patch("app.ingestion.sources.html_listing.http_get") as mock_get:
             mock_get.side_effect = httpx.ConnectError("down")
             with pytest.raises(httpx.ConnectError):
-                await adapter.fetch_raw()
+                await adapter.fetch_raw(_make_db())
 
 
 # ---------------------------------------------------------------------------
@@ -573,12 +581,15 @@ class TestKumuFetchRaw:
     async def test_single_page_fetch_drops_unparseable_date_card(self):
         adapter = _kumu_adapter()
         with patch("app.ingestion.sources.html_listing.http_get") as mock_get:
-            # Both fetches return the same page — page 2 yields zero new ids
-            # (all already seen on page 1), so pagination stops there.
+            # Both listing fetches return the same page — page 2 yields zero new
+            # ids (all already seen on page 1), so pagination stops there. The
+            # same response is also reused for the per-card detail fetches
+            # (needs_detail=True); it has no .event-header__ticket-price, so
+            # parse_detail is a no-op for both cards.
             mock_get.return_value = _mock_response(KUMU_LISTING_HTML)
-            raw_items = await adapter.fetch_raw()
+            raw_items = await adapter.fetch_raw(_make_db())
 
-        assert mock_get.call_count == 2
+        assert mock_get.call_count == 4  # 2 listing pages + 2 detail fetches
         assert len(raw_items) == 2  # both raw cards collected
         normalized = [adapter.normalize(r) for r in raw_items]
         normalized = [n for n in normalized if n is not None]
@@ -589,16 +600,22 @@ class TestKumuFetchRaw:
     async def test_pagination_stops_on_empty_page_and_dedups(self):
         adapter = _kumu_adapter()
         with patch("app.ingestion.sources.html_listing.http_get") as mock_get:
+            # 3 listing fetches, then needs_detail fetches a detail page per
+            # collected card (3 cards) — reuse the empty page (no price selector)
+            # so parse_detail is a no-op for each.
             mock_get.side_effect = [
                 _mock_response(KUMU_LISTING_HTML),
                 _mock_response(KUMU_PAGE2_HTML),
                 _mock_response(KUMU_EMPTY_PAGE_HTML),
+                _mock_response(KUMU_EMPTY_PAGE_HTML),
+                _mock_response(KUMU_EMPTY_PAGE_HTML),
+                _mock_response(KUMU_EMPTY_PAGE_HTML),
             ]
-            raw_items = await adapter.fetch_raw()
+            raw_items = await adapter.fetch_raw(_make_db())
 
-        assert mock_get.call_count == 3
+        assert mock_get.call_count == 6
         urls = [call.args[1] for call in mock_get.call_args_list]
-        assert urls == [
+        assert urls[:3] == [
             "https://example.test/listing",
             "https://example.test/listing/page/2/",
             "https://example.test/listing/page/3/",
@@ -608,6 +625,25 @@ class TestKumuFetchRaw:
             "https://kumu.ekm.ee/en/syndmus/example-2/",
             "https://kumu.ekm.ee/en/syndmus/example-3/",
         }
+
+
+class TestKumuParseDetail:
+    @pytest.mark.asyncio
+    async def test_price_hint_extracted_from_ticket_price_selector(self):
+        adapter = _kumu_adapter()
+        html = '<div class="event-header__ticket-price">10 - 15 €</div>'
+        soup = BeautifulSoup(html, "html.parser")
+        card: dict = {}
+        await adapter.parse_detail(MagicMock(), soup, card)
+        assert card["price_hint"] == "10 - 15 €"
+
+    @pytest.mark.asyncio
+    async def test_no_price_selector_leaves_card_unchanged(self):
+        adapter = _kumu_adapter()
+        soup = BeautifulSoup("<html></html>", "html.parser")
+        card: dict = {}
+        await adapter.parse_detail(MagicMock(), soup, card)
+        assert "price_hint" not in card
 
 
 # ---------------------------------------------------------------------------
@@ -720,13 +756,111 @@ class TestEstoniaConcertHallFetchRaw:
     @pytest.mark.asyncio
     async def test_single_page_fetch_and_tallinn_filter(self):
         adapter = _concert_hall_adapter()
-        with patch("app.ingestion.sources.html_listing.http_post") as mock_post:
+        with patch("app.ingestion.sources.html_listing.http_post") as mock_post, \
+                patch("app.ingestion.sources.html_listing.http_get") as mock_get:
             mock_post.return_value = _mock_response(CONCERT_HALL_HTML)
-            raw_items = await adapter.fetch_raw()
+            mock_get.return_value = _mock_response("<html></html>")
+            raw_items = await adapter.fetch_raw(_make_db())
 
+        # 1 listing POST, 1 detail GET for the single Tallinn card that survives
+        # the filter. mock_post is not called again since the detail page has
+        # no pid link, so parse_detail short-circuits before the price lookup.
         assert mock_post.call_count == 1
         _, url = mock_post.call_args.args
         assert url == f"https://concert.ee{ESTONIA_CONCERT_HALL_AJAX_PATH}"
         assert mock_post.call_args.kwargs["data"]["action"] == ESTONIA_CONCERT_HALL_AJAX_ACTION
+        assert mock_get.call_count == 1
         assert len(raw_items) == 1
         assert raw_items[0]["title"] == "Tallinn Show"
+        assert raw_items[0].get("price_hint") is None
+
+
+_CONCERT_HALL_DETAIL_WITH_PID_HTML = """
+<html><body>
+  <a href="https://www.piletilevi.ee/buy?pid=12345&foo=bar">Buy ticket</a>
+</body></html>
+"""
+
+
+def _piletilevi_response(payload: dict):
+    resp = MagicMock(spec=httpx.Response)
+    resp.json.return_value = payload
+    return resp
+
+
+class TestEstoniaConcertHallParseDetail:
+    @pytest.mark.asyncio
+    async def test_pid_resolves_price_via_piletilevi_store(self):
+        adapter = _concert_hall_adapter()
+        soup = BeautifulSoup(_CONCERT_HALL_DETAIL_WITH_PID_HTML, "html.parser")
+        card: dict = {}
+        payload = {
+            "responseData": {
+                "configuration": {
+                    "sections": [
+                        {"minPrice": "10.00", "maxPrice": "20.00"},
+                        {"minPrice": "15.00", "maxPrice": "30.00"},
+                    ]
+                }
+            }
+        }
+        with patch("app.ingestion.sources.html_listing.http_post") as mock_post:
+            mock_post.return_value = _piletilevi_response(payload)
+            await adapter.parse_detail(MagicMock(), soup, card)
+
+        assert card["price_hint"] == "10.00 - 30.00 EUR"
+        _, url = mock_post.call_args.args
+        assert url.startswith(ESTONIA_CONCERT_HALL_PILETILEVI_URL)
+        assert mock_post.call_args.kwargs["data"] == {"concert": "12345"}
+
+    @pytest.mark.asyncio
+    async def test_equal_min_max_price_collapses_to_single_value(self):
+        adapter = _concert_hall_adapter()
+        soup = BeautifulSoup(_CONCERT_HALL_DETAIL_WITH_PID_HTML, "html.parser")
+        card: dict = {}
+        payload = {
+            "responseData": {
+                "configuration": {"sections": [{"minPrice": "25.00", "maxPrice": "25.00"}]}
+            }
+        }
+        with patch("app.ingestion.sources.html_listing.http_post") as mock_post:
+            mock_post.return_value = _piletilevi_response(payload)
+            await adapter.parse_detail(MagicMock(), soup, card)
+
+        assert card["price_hint"] == "25.00 EUR"
+
+    @pytest.mark.asyncio
+    async def test_no_pid_link_leaves_card_unchanged(self):
+        adapter = _concert_hall_adapter()
+        soup = BeautifulSoup("<html><body>No ticket link</body></html>", "html.parser")
+        card: dict = {}
+        with patch("app.ingestion.sources.html_listing.http_post") as mock_post:
+            await adapter.parse_detail(MagicMock(), soup, card)
+
+        assert mock_post.call_count == 0
+        assert "price_hint" not in card
+
+    @pytest.mark.asyncio
+    async def test_piletilevi_request_failure_leaves_card_unchanged(self):
+        adapter = _concert_hall_adapter()
+        soup = BeautifulSoup(_CONCERT_HALL_DETAIL_WITH_PID_HTML, "html.parser")
+        card: dict = {}
+        with patch("app.ingestion.sources.html_listing.http_post") as mock_post:
+            mock_post.side_effect = httpx.HTTPStatusError(
+                "error", request=MagicMock(), response=MagicMock()
+            )
+            await adapter.parse_detail(MagicMock(), soup, card)
+
+        assert "price_hint" not in card
+
+    @pytest.mark.asyncio
+    async def test_empty_sections_leaves_card_unchanged(self):
+        adapter = _concert_hall_adapter()
+        soup = BeautifulSoup(_CONCERT_HALL_DETAIL_WITH_PID_HTML, "html.parser")
+        card: dict = {}
+        payload = {"responseData": {"configuration": {"sections": []}}}
+        with patch("app.ingestion.sources.html_listing.http_post") as mock_post:
+            mock_post.return_value = _piletilevi_response(payload)
+            await adapter.parse_detail(MagicMock(), soup, card)
+
+        assert "price_hint" not in card

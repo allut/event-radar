@@ -71,6 +71,7 @@ def make_event():
         e.price_min = None
         e.price_max = None
         e.currency = DEFAULT_CURRENCY
+        e.price_hint = None
         e.status = "published"
         e.dedup_group_id = None
 

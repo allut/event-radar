@@ -62,6 +62,7 @@ HTTP_RETRYABLE_STATUS_CODES: frozenset[int] = frozenset(
 SLUG_TITLE_MAX_LEN = 60
 SLUG_HASH_HEX_LEN = 8
 INGESTION_ERROR_MAX_LEN = 500
+PRICE_HINT_MAX_CHARS = 200  # cap on Event.price_hint, kept short for the LLM prompt
 
 # Schemes accepted for ingested event url/image_url — anything else (javascript:,
 # data:, vbscript:, etc.) is dropped at ingest time to prevent stored XSS via
@@ -76,6 +77,8 @@ FIENTA_ORGANIZER_CHECK_LIMIT = (
 )
 FIENTA_CITY_FILTER = "Tallinn"
 FIENTA_MAX_PAGES = 50  # safety ceiling per organizer — prevents runaway pagination
+FIENTA_DETAIL_MAX_FETCHES = 150  # per-run cap on new-event detail-page price fetches
+FIENTA_DETAIL_CONCURRENCY = 8  # mirrors DIGEST_SEND_CONCURRENCY, within Fienta's tolerance
 
 SOURCE_STATUS_OK = "ok"
 SOURCE_STATUS_ERROR = "error"
@@ -226,8 +229,10 @@ Respond with JSON only, no explanation: {{"same": true or false, "confidence": 0
 
 LLM_CLASSIFY_WHY_GO_MAX_BULLETS = 3
 LLM_CLASSIFY_LANGUAGE_CODE_MAX_LEN = 5
+CURRENCY_CODE_MAX_LEN = 3  # mirrors Event.currency String(3)
 LLM_CLASSIFY_VENUE_FALLBACK = "unknown"
 LLM_CLASSIFY_DESC_FALLBACK = "(no description)"
+LLM_CLASSIFY_PRICE_HINT_FALLBACK = "not stated"
 LLM_CLASSIFY_PROMPT_TEMPLATE = """\
 Classify this Tallinn event. Respond with JSON only.
 
@@ -237,14 +242,17 @@ Allowed vibes (pick 1-3): trendy, casual, intimate, high_energy, educational, in
 Event title: {title}
 Venue: {venue}
 Description: {description}
+Price info: {price_hint}
 
 JSON format:
-{{"categories": ["music"], "vibes": ["underground", "intimate"], "why_go": {{"en": ["reason 1", "reason 2", "reason 3"], "et": ["põhjus 1", "põhjus 2", "põhjus 3"], "ru": ["причина 1", "причина 2", "причина 3"]}}, "quality": 0.8, "language": "et"}}
+{{"categories": ["music"], "vibes": ["underground", "intimate"], "why_go": {{"en": ["reason 1", "reason 2", "reason 3"], "et": ["põhjus 1", "põhjus 2", "põhjus 3"], "ru": ["причина 1", "причина 2", "причина 3"]}}, "quality": 0.8, "language": "et", "price_min": 10, "price_max": 20, "currency": "EUR"}}
 
 Rules:
 - "language" must be the ISO 639-1 code of the event's original language (et, en, ru, or other).
 - "quality" is 0.0-1.0 indicating how compelling the event is.
 - "why_go" must be a dict with keys "en", "et", "ru", each containing exactly 3 short bullets (max 15 words each).
+- "price_min"/"price_max" are numbers in the stated currency; 0 for free/TASUTA/"free"; null if no price is stated.
+- "currency" is the ISO 4217 code of the stated price (default EUR); null if no price is stated.
 - Only use values from the allowed lists for categories and vibes."""
 
 # Newsletter inbound email extraction
@@ -334,6 +342,20 @@ ESTONIA_CONCERT_HALL_TALLINN_FILTER = "Tallinn"
 ESTONIA_CONCERT_HALL_AJAX_PATH = "/wp-admin/admin-ajax.php"
 ESTONIA_CONCERT_HALL_AJAX_ACTION = "ek_list_display"
 ESTONIA_CONCERT_HALL_MAX_EVENTS = 500  # ek_ajax_count; server returns min(count, total)
+# Piletilevi store price lookup — concert.ee's "Buy ticket" links carry a Piletilevi
+# store event id (pid) that resolves to min/max price via this public embed endpoint.
+# center/key are concert.ee's stable public embed constants (cold, no cookies/session).
+ESTONIA_CONCERT_HALL_PILETILEVI_URL = "https://store.piletilevi.ee/public/"
+ESTONIA_CONCERT_HALL_PILETILEVI_CENTER = "7"
+ESTONIA_CONCERT_HALL_PILETILEVI_KEY = "lfnjlllalfiidklb"
+ESTONIA_CONCERT_HALL_PILETILEVI_PARAMS = {
+    "center": ESTONIA_CONCERT_HALL_PILETILEVI_CENTER,
+    "lang": "eng",
+    "application": "ajaxFrontend",
+    "key": ESTONIA_CONCERT_HALL_PILETILEVI_KEY,
+    "type": "concertInformation",
+    "shop_provider": "econ",
+}
 
 # CORS — restricted to the methods/headers the SPA actually sends (see
 # frontend/src/api/client.ts and routers/*.py route decorators). Credentials are

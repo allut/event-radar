@@ -3,15 +3,18 @@ import re
 from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Any
-from urllib.parse import urlsplit
+from urllib.parse import urlencode, urlsplit
 
 import httpx
 from bs4 import BeautifulSoup, Tag
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.constants import (
     ESTONIA_CONCERT_HALL_AJAX_ACTION,
     ESTONIA_CONCERT_HALL_AJAX_PATH,
     ESTONIA_CONCERT_HALL_MAX_EVENTS,
+    ESTONIA_CONCERT_HALL_PILETILEVI_PARAMS,
+    ESTONIA_CONCERT_HALL_PILETILEVI_URL,
     ESTONIA_CONCERT_HALL_TALLINN_FILTER,
     HTML_LISTING_MAX_DETAIL_FETCHES,
     HTTP_TIMEOUT_SECONDS,
@@ -22,9 +25,16 @@ from app.constants import (
     PILETILEVI_DATE_FORMAT,
     PILETILEVI_MAX_PAGES,
     PILETILEVI_TALLINN_FILTER,
+    PRICE_HINT_MAX_CHARS,
     TALLINN_TZ,
 )
-from app.ingestion.base import NormalizedEvent, SourceAdapter, http_get, http_post
+from app.ingestion.base import (
+    NormalizedEvent,
+    SourceAdapter,
+    existing_external_ids,
+    http_get,
+    http_post,
+)
 
 log = logging.getLogger(__name__)
 
@@ -120,11 +130,13 @@ class HtmlListingAdapter(SourceAdapter):
         """Return False to drop a card before it is collected (e.g. non-Tallinn)."""
         return True
 
-    def parse_detail(self, soup: BeautifulSoup, card: dict[str, Any]) -> None:
+    async def parse_detail(
+        self, client: httpx.AsyncClient, soup: BeautifulSoup, card: dict[str, Any]
+    ) -> None:
         """Fill in fields on ``card`` from its detail page. No-op by default."""
         return None
 
-    async def fetch_raw(self) -> list[dict[str, Any]]:
+    async def fetch_raw(self, db: AsyncSession) -> list[dict[str, Any]]:
         seen_ids: set[str] = set()
         cards: list[dict[str, Any]] = []
         listing_errors: list[Exception] = []
@@ -192,7 +204,13 @@ class HtmlListingAdapter(SourceAdapter):
                     )
                     cards = cards[:HTML_LISTING_MAX_DETAIL_FETCHES]
 
+                # Forward-only + self-healing: skip detail fetches for events already
+                # ingested (their price_hint/description, if missing, won't be reread
+                # since run() discards normalize() output for known external_ids anyway).
+                known_ids = await existing_external_ids(db, self.source.id)
                 for card in cards:
+                    if card.get("external_id") in known_ids:
+                        continue
                     detail_url = card["url"]
                     try:
                         detail_resp = await http_get(client, detail_url)
@@ -205,7 +223,7 @@ class HtmlListingAdapter(SourceAdapter):
                         )
                         continue
                     detail_soup = BeautifulSoup(detail_resp.text, "html.parser")
-                    self.parse_detail(detail_soup, card)
+                    await self.parse_detail(client, detail_soup, card)
 
         log.info("%s fetched %d events", self.source.slug, len(cards))
         return cards
@@ -228,6 +246,7 @@ class HtmlListingAdapter(SourceAdapter):
             description=raw.get("description"),
             image_url=raw.get("image_url"),
             url=raw.get("url"),
+            price_hint=raw.get("price_hint"),
         )
 
     def get_raw_external_id(self, raw: dict[str, Any]) -> str | None:
@@ -316,7 +335,9 @@ class PiletileviAdapter(HtmlListingAdapter):
     def parse_date(self, card: dict[str, Any]) -> datetime | None:
         return _parse_piletilevi_date(card.get("date_str") or "")
 
-    def parse_detail(self, soup: BeautifulSoup, card: dict[str, Any]) -> None:
+    async def parse_detail(
+        self, client: httpx.AsyncClient, soup: BeautifulSoup, card: dict[str, Any]
+    ) -> None:
         desc_tag = soup.select_one(_PILETILEVI_DETAIL_DESC_SELECTOR)
         card["description"] = (
             desc_tag.get_text(separator=" ", strip=True) if desc_tag else None
@@ -333,11 +354,13 @@ _KUMU_TITLE_SELECTOR = "h2.card__header-title"
 _KUMU_HIDDEN_SELECTOR = ".h-visually-hidden"
 _KUMU_DATE_SELECTOR = ".card__header-date-text"
 _KUMU_IMAGE_SELECTOR = "img.image__img.lazyload"
+_KUMU_PRICE_SELECTOR = ".event-header__ticket-price"
 
 
 class KumuAdapter(HtmlListingAdapter):
     """kumu.ekm.ee/en/calendar/ — server-rendered, paginated event grid."""
 
+    needs_detail = True
     max_pages = KUMU_MAX_PAGES
 
     def listing_url_for_page(self, page: int) -> str | None:
@@ -388,6 +411,13 @@ class KumuAdapter(HtmlListingAdapter):
             return None
         return naive.replace(tzinfo=TALLINN_TZ)
 
+    async def parse_detail(
+        self, client: httpx.AsyncClient, soup: BeautifulSoup, card: dict[str, Any]
+    ) -> None:
+        price_tag = soup.select_one(_KUMU_PRICE_SELECTOR)
+        if price_tag:
+            card["price_hint"] = price_tag.get_text(" ", strip=True)[:PRICE_HINT_MAX_CHARS]
+
 
 # ---------------------------------------------------------------------------
 # Estonia Concert Hall — https://concert.ee/en/ (single page, all-Estonia listing)
@@ -402,10 +432,20 @@ _CONCERT_VENUE_SELECTOR = ".event-venue"
 _CONCERT_IMAGE_SELECTOR = ".image"
 _CONCERT_DATE_RE = re.compile(r"(\d{1,2})\.(\d{1,2})")
 _CONCERT_IMAGE_URL_RE = re.compile(r"url\((.*?)\)")
+_CONCERT_PID_RE = re.compile(r"pid=(\d+)")
+
+
+def _to_float(value: Any) -> float | None:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
 
 
 class EstoniaConcertHallAdapter(HtmlListingAdapter):
     """concert.ee/en/ — full programme loaded via the "Load more" AJAX endpoint."""
+
+    needs_detail = True
 
     def listing_request(self, page: int) -> ListingRequest | None:
         if page != 1:
@@ -487,3 +527,58 @@ class EstoniaConcertHallAdapter(HtmlListingAdapter):
             return datetime(year, month, day, hour, minute, tzinfo=TALLINN_TZ)
         except ValueError:
             return None
+
+    async def parse_detail(
+        self, client: httpx.AsyncClient, soup: BeautifulSoup, card: dict[str, Any]
+    ) -> None:
+        """Resolve price via the buy-ticket link's Piletilevi store pid, if present.
+
+        No-op (price stays null) when there's no pid (free/sold-out events) or the
+        Piletilevi store lookup fails/returns no sections — never fails the run.
+        """
+        link = soup.find("a", href=_CONCERT_PID_RE)
+        if link is None:
+            return
+        match = _CONCERT_PID_RE.search(_attr_str(link, "href"))
+        if not match:
+            return
+        pid = match.group(1)
+
+        url = f"{ESTONIA_CONCERT_HALL_PILETILEVI_URL}?{urlencode(ESTONIA_CONCERT_HALL_PILETILEVI_PARAMS)}"
+        try:
+            resp = await http_post(client, url, data={"concert": pid})
+            data = resp.json()
+        except (httpx.HTTPStatusError, httpx.RequestError, ValueError):
+            return
+        if not isinstance(data, dict):
+            return
+
+        response_data = data.get("responseData")
+        configuration = (
+            response_data.get("configuration")
+            if isinstance(response_data, dict)
+            else None
+        )
+        sections = (
+            configuration.get("sections") if isinstance(configuration, dict) else None
+        )
+        if not isinstance(sections, list):
+            return
+
+        min_prices = [
+            f
+            for s in sections
+            if isinstance(s, dict) and (f := _to_float(s.get("minPrice"))) is not None
+        ]
+        max_prices = [
+            f
+            for s in sections
+            if isinstance(s, dict) and (f := _to_float(s.get("maxPrice"))) is not None
+        ]
+        if not min_prices or not max_prices:
+            return
+
+        lo, hi = min(min_prices), max(max_prices)
+        card["price_hint"] = (
+            f"{lo:.2f} EUR" if lo == hi else f"{lo:.2f} - {hi:.2f} EUR"
+        )

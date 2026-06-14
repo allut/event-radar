@@ -1,4 +1,5 @@
 import hashlib
+import json
 import logging
 import re
 from abc import ABC, abstractmethod
@@ -8,6 +9,7 @@ from typing import Any
 from urllib.parse import urlsplit
 
 import httpx
+from bs4 import BeautifulSoup
 from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -22,6 +24,7 @@ from app.constants import (
     HTTP_RETRY_WAIT_MIN,
     HTTP_RETRY_WAIT_MULTIPLIER,
     INGESTION_ERROR_MAX_LEN,
+    PRICE_HINT_MAX_CHARS,
     SAFE_URL_SCHEMES,
     SLUG_HASH_HEX_LEN,
     SLUG_TITLE_MAX_LEN,
@@ -124,6 +127,7 @@ class NormalizedEvent:
     price_min: float | None = None
     price_max: float | None = None
     currency: str | None = None
+    price_hint: str | None = None
 
 
 def _make_slug(title: str, starts_at: datetime, external_id: str) -> str:
@@ -136,12 +140,71 @@ def _make_slug(title: str, starts_at: datetime, external_id: str) -> str:
     return f"{safe[:SLUG_TITLE_MAX_LEN]}-{date_part}-{h}"
 
 
+async def existing_external_ids(db: AsyncSession, source_id: int) -> set[str]:
+    """Return external_ids already stored in event_sources for this source.
+
+    Lets adapters skip detail fetches for already-ingested events (forward-only
+    + self-healing: new events get fetched every run until stored).
+    """
+    rows = await db.scalars(
+        select(EventSource.external_id).where(EventSource.source_id == source_id)
+    )
+    return {r for r in rows.all() if r is not None}
+
+
+def _offer_entry_text(offer: dict[str, Any]) -> str | None:
+    price = offer.get("price")
+    if price is None:
+        return None
+    currency = offer.get("priceCurrency") or ""
+    name = offer.get("name")
+    price_part = f"{price} {currency}".strip()
+    return f"{name} {price_part}" if name else price_part
+
+
+def _offers_text(offers: Any) -> str | None:
+    if isinstance(offers, dict):
+        low = offers.get("lowPrice")
+        high = offers.get("highPrice")
+        if low is not None or high is not None:
+            currency = offers.get("priceCurrency") or ""
+            if low is not None and high is not None and low != high:
+                return f"{low} - {high} {currency}".strip()
+            return f"{low if low is not None else high} {currency}".strip()
+        return _offer_entry_text(offers)
+    if isinstance(offers, list):
+        parts = [t for o in offers if isinstance(o, dict) and (t := _offer_entry_text(o))]
+        return "; ".join(parts) or None
+    return None
+
+
+def extract_jsonld_offers_text(soup: BeautifulSoup) -> str | None:
+    """Find <script type="application/ld+json"> offers and return a compact price string.
+
+    Handles ``Offer``/``Offer[]`` (``name``/``price``/``priceCurrency``) and
+    ``AggregateOffer`` (``lowPrice``/``highPrice``/``priceCurrency``). This only
+    locates/serializes price text — the numeric min/max decision is left to the LLM.
+    """
+    for script in soup.find_all("script", type="application/ld+json"):
+        try:
+            data = json.loads(script.string or "")
+        except (TypeError, ValueError):
+            continue
+        for item in data if isinstance(data, list) else [data]:
+            if not isinstance(item, dict):
+                continue
+            text = _offers_text(item.get("offers"))
+            if text:
+                return text[:PRICE_HINT_MAX_CHARS]
+    return None
+
+
 class SourceAdapter(ABC):
     def __init__(self, source: Source) -> None:
         self.source = source
 
     @abstractmethod
-    async def fetch_raw(self) -> list[dict[str, Any]]: ...
+    async def fetch_raw(self, db: AsyncSession) -> list[dict[str, Any]]: ...
 
     @abstractmethod
     def normalize(self, raw: dict[str, Any]) -> NormalizedEvent | None: ...
@@ -163,7 +226,7 @@ class SourceAdapter(ABC):
         await db.flush()
 
         try:
-            raw_items = await self.fetch_raw()
+            raw_items = await self.fetch_raw(db)
             run.raw_count = len(raw_items)
             new_count = 0
             seen_external_ids: set[str] = set()
@@ -215,6 +278,7 @@ class SourceAdapter(ABC):
                             price_min=normalized.price_min,
                             price_max=normalized.price_max,
                             currency=normalized.currency,
+                            price_hint=normalized.price_hint,
                             status=EVENT_STATUS_DRAFT,
                         )
                         db.add(event)
