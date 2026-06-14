@@ -16,11 +16,16 @@ from app.constants import (
     ESTONIA_CONCERT_HALL_PILETILEVI_PARAMS,
     ESTONIA_CONCERT_HALL_PILETILEVI_URL,
     ESTONIA_CONCERT_HALL_TALLINN_FILTER,
+    ESTONIA_CONCERT_HALL_VENUES,
     HTML_LISTING_MAX_DETAIL_FETCHES,
     HTTP_TIMEOUT_SECONDS,
     HTTP_USER_AGENT,
     KUMU_DATE_FORMAT,
     KUMU_MAX_PAGES,
+    KUMU_VENUE_ADDRESS,
+    KUMU_VENUE_LAT,
+    KUMU_VENUE_LNG,
+    KUMU_VENUE_NAME,
     PILETILEVI_ALL_PATH,
     PILETILEVI_DATE_FORMAT,
     PILETILEVI_MAX_PAGES,
@@ -32,6 +37,7 @@ from app.ingestion.base import (
     NormalizedEvent,
     SourceAdapter,
     existing_external_ids,
+    extract_jsonld_event_location,
     http_get,
     http_post,
 )
@@ -243,6 +249,9 @@ class HtmlListingAdapter(SourceAdapter):
             title=title,
             starts_at=starts_at,
             venue_name=raw.get("venue") or None,
+            venue_address=raw.get("venue_address"),
+            lat=raw.get("lat"),
+            lng=raw.get("lng"),
             description=raw.get("description"),
             image_url=raw.get("image_url"),
             url=raw.get("url"),
@@ -343,6 +352,12 @@ class PiletileviAdapter(HtmlListingAdapter):
             desc_tag.get_text(separator=" ", strip=True) if desc_tag else None
         )
 
+        location = extract_jsonld_event_location(soup)
+        if location:
+            card["venue_address"] = location["venue_address"]
+            card["lat"] = location["lat"]
+            card["lng"] = location["lng"]
+
 
 # ---------------------------------------------------------------------------
 # Kumu — https://kumu.ekm.ee/en/calendar/ (single page)
@@ -400,6 +415,10 @@ class KumuAdapter(HtmlListingAdapter):
                     "date_str": date_str,
                     "image_url": image_url,
                     "url": href,
+                    "venue": KUMU_VENUE_NAME,
+                    "venue_address": KUMU_VENUE_ADDRESS,
+                    "lat": KUMU_VENUE_LAT,
+                    "lng": KUMU_VENUE_LNG,
                 }
             )
         return cards
@@ -490,18 +509,25 @@ class EstoniaConcertHallAdapter(HtmlListingAdapter):
                 if match:
                     image_url = match.group(1).strip("'\"") or None
 
-            cards.append(
-                {
-                    "external_id": href,
-                    "title": title,
-                    "date_text": date_text,
-                    "time_text": time_text,
-                    "location": location_text,
-                    "venue": venue_text or None,
-                    "image_url": image_url,
-                    "url": href,
-                }
-            )
+            card: dict[str, Any] = {
+                "external_id": href,
+                "title": title,
+                "date_text": date_text,
+                "time_text": time_text,
+                "location": location_text,
+                "venue": venue_text or None,
+                "image_url": image_url,
+                "url": href,
+            }
+
+            venue_info = ESTONIA_CONCERT_HALL_VENUES.get(venue_text)
+            if venue_info:
+                card["venue"] = venue_info.name
+                card["venue_address"] = venue_info.address
+                card["lat"] = venue_info.lat
+                card["lng"] = venue_info.lng
+
+            cards.append(card)
         return cards
 
     def passes_filter(self, card: dict[str, Any]) -> bool:

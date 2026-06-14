@@ -199,6 +199,67 @@ def extract_jsonld_offers_text(soup: BeautifulSoup) -> str | None:
     return None
 
 
+def _coerce_float(value: Any) -> float | None:
+    """Coerce a JSON-LD numeric field (number or numeric string) to float."""
+    if isinstance(value, int | float):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            return float(value)
+        except ValueError:
+            return None
+    return None
+
+
+def _jsonld_event_items(data: Any) -> list[dict[str, Any]]:
+    """Flatten a parsed JSON-LD document (plain item, list, or ``@graph``) to dicts."""
+    if isinstance(data, dict) and "@graph" in data:
+        items = data["@graph"]
+    else:
+        items = data
+    if not isinstance(items, list):
+        items = [items]
+    return [item for item in items if isinstance(item, dict)]
+
+
+def extract_jsonld_event_location(soup: BeautifulSoup) -> dict[str, Any] | None:
+    """Find a schema.org ``Event``'s ``location`` in <script type="application/ld+json">.
+
+    Returns ``{"venue_name", "venue_address", "lat", "lng"}`` (any value may be
+    ``None``) from the first ``Event`` whose ``location`` is a ``Place``, or
+    ``None`` if no such block is found. ``venue_address`` joins
+    ``streetAddress``/``addressLocality``/``addressRegion`` with ", ".
+    """
+    for script in soup.find_all("script", type="application/ld+json"):
+        try:
+            data = json.loads(script.string or "")
+        except (TypeError, ValueError):
+            continue
+        for item in _jsonld_event_items(data):
+            item_type = item.get("@type")
+            types = item_type if isinstance(item_type, list) else [item_type]
+            if "Event" not in types:
+                continue
+            location = item.get("location")
+            if not isinstance(location, dict):
+                continue
+            address = location.get("address")
+            address_parts: list[str] = []
+            if isinstance(address, dict):
+                for key in ("streetAddress", "addressLocality", "addressRegion"):
+                    value = address.get(key)
+                    if value:
+                        address_parts.append(str(value))
+            lat_raw, lng_raw = location.get("latitude"), location.get("longitude")
+            return {
+                "venue_name": location.get("name"),
+                "venue_address": ", ".join(address_parts) or None,
+                "lat": _coerce_float(lat_raw),
+                "lng": _coerce_float(lng_raw),
+            }
+    return None
+
+
 class SourceAdapter(ABC):
     def __init__(self, source: Source) -> None:
         self.source = source

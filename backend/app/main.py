@@ -27,6 +27,7 @@ from app.email.digest import send_daily_digests
 from app.ingestion.jobs import (
     classify_pending_drained,
     dedup_pass_drained,
+    geocode_pending_job,
     ingest_all_enabled,
 )
 from app.ingestion.organizer_sync import sync_fienta_organizers
@@ -84,6 +85,14 @@ async def _run_classify_pending() -> None:
         log.info("classify_pending completed: %s", summary)
     except Exception:
         log.exception("classify_pending failed")
+
+
+async def _run_geocode_pending() -> None:
+    try:
+        summary = await geocode_pending_job()
+        log.info("geocode_pending completed: %s", summary)
+    except Exception:
+        log.exception("geocode_pending failed")
 
 
 async def _run_build_daily_feeds() -> None:
@@ -147,6 +156,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         trigger="interval",
         hours=6,
         id="classify_pending",
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        _run_geocode_pending,
+        trigger="interval",
+        hours=6,
+        id="geocode_pending",
         replace_existing=True,
     )
     # Daily 06:00 EET: build personalized feeds for all users

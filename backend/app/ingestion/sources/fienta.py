@@ -211,10 +211,13 @@ class FientaAdapter(SourceAdapter):
         venue_raw = raw.get("venue") or {}
         if isinstance(venue_raw, dict):
             venue_name = venue_raw.get("name")
-            venue_address = venue_raw.get("address")
+            address_candidate = venue_raw.get("address")
         else:
             venue_name = str(venue_raw) or None
-            venue_address = None
+            address_candidate = raw.get("address")
+        venue_address = (
+            address_candidate if isinstance(address_candidate, str) else None
+        )
 
         return NormalizedEvent(
             external_id=external_id,

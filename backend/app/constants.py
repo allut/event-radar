@@ -1,5 +1,5 @@
 import http
-from typing import Any
+from typing import Any, NamedTuple
 from zoneinfo import ZoneInfo
 
 from app._generated.shared_constants import (
@@ -356,6 +356,57 @@ ESTONIA_CONCERT_HALL_PILETILEVI_PARAMS = {
     "type": "concertInformation",
     "shop_provider": "econ",
 }
+
+# Fixed-venue address/coords for sources that scrape a single venue's own site —
+# every event normalizes to the same place.
+KUMU_VENUE_NAME = "Kumu Art Museum"
+KUMU_VENUE_ADDRESS = "A. Weizenbergi 34, 10127 Tallinn"
+KUMU_VENUE_LAT = 59.4363374
+KUMU_VENUE_LNG = 24.7958299
+
+
+class VenueInfo(NamedTuple):
+    name: str
+    address: str
+    lat: float
+    lng: float
+
+
+# concert.ee (Estonia Concert Hall source) lists Eesti Kontsert events across many
+# venues, not just Estonia Concert Hall itself. Map the exact `.event-venue` text to
+# its address/coords for the Tallinn venues seen in practice; unmatched venues (and
+# the source's own listing/location filtering) leave venue_address/lat/lng unset.
+ESTONIA_CONCERT_HALL_VENUES: dict[str, VenueInfo] = {
+    "Estonia kontserdisaal": VenueInfo(
+        "Estonia Concert Hall", "Estonia pst 4, 10143 Tallinn", 59.4348964, 24.7511983
+    ),
+    "Kadrioru loss": VenueInfo(
+        "Kadriorg Palace", "A. Weizenbergi 37, 10127 Tallinn", 59.4384656, 24.7910249
+    ),
+    "Niguliste muuseum": VenueInfo(
+        "Niguliste Museum", "Niguliste 3, 10130 Tallinn", 59.4359214, 24.7427740
+    ),
+    "Tallinna raekoda": VenueInfo(
+        "Tallinn Town Hall", "Raekoja plats 1, 10146 Tallinn", 59.4370067, 24.7453123
+    ),
+    "KUMU auditoorium": VenueInfo(
+        KUMU_VENUE_NAME, KUMU_VENUE_ADDRESS, KUMU_VENUE_LAT, KUMU_VENUE_LNG
+    ),
+    "Tallinna Filharmoonia Mustpeade maja": VenueInfo(
+        "Mustpeade Maja", "Pikk 26, 10133 Tallinn", 59.4387989, 24.7467744
+    ),
+    "Tallinna Jaani kirik": VenueInfo(
+        "St. John's Church", "Vabaduse väljak 1, 10146 Tallinn", 59.4337210, 24.7453922
+    ),
+}
+
+# Geocoding (Nominatim) — used to backfill lat/lng for events that have an address
+# but no coordinates (currently: Fienta). Usage policy requires a descriptive
+# User-Agent with contact info and a max of 1 request/second.
+NOMINATIM_BASE_URL = "https://nominatim.openstreetmap.org/search"
+NOMINATIM_USER_AGENT = "EventRadarBot/1.0 (+https://eventradar.ee; aleksei.lutkov@gmail.com)"
+GEOCODE_REQUEST_DELAY_SECONDS: float = 1.0
+GEOCODE_MAX_PER_RUN = 50
 
 # CORS — restricted to the methods/headers the SPA actually sends (see
 # frontend/src/api/client.ts and routers/*.py route decorators). Credentials are

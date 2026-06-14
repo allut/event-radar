@@ -101,6 +101,32 @@ class TestNormalize:
         assert result.venue_name == "KUMU"
         assert result.venue_address is None
 
+    def test_string_venue_with_top_level_address(self):
+        raw = {
+            "id": "41",
+            "name": "Outdoor Show",
+            "starts_at": "2026-12-02T18:00:00+03:00",
+            "venue": "Outdoor Stage",
+            "address": "Valge tänav 1, 10127 Tallinn, Harju maakond",
+        }
+        result = _adapter().normalize(raw)
+        assert result is not None
+        assert result.venue_name == "Outdoor Stage"
+        assert result.venue_address == "Valge tänav 1, 10127 Tallinn, Harju maakond"
+
+    def test_string_venue_with_non_string_top_level_address_ignored(self):
+        raw = {
+            "id": "42",
+            "name": "Outdoor Show",
+            "starts_at": "2026-12-02T18:00:00+03:00",
+            "venue": "Outdoor Stage",
+            "address": {"street": "Valge tänav 1"},
+        }
+        result = _adapter().normalize(raw)
+        assert result is not None
+        assert result.venue_name == "Outdoor Stage"
+        assert result.venue_address is None
+
     def test_price_hint_mapped(self):
         raw = {
             "id": "60",

@@ -120,6 +120,22 @@ async def classify_pending_job() -> dict:
             raise
 
 
+async def geocode_pending_job() -> dict:
+    """Geocode events with a venue_address but no lat/lng (one batch per call)."""
+    from app.ingestion.geocode import geocode_pending
+
+    async with AsyncSessionLocal() as db:
+        try:
+            summary = await geocode_pending(db)
+            await db.commit()
+            log.info("geocode_pending complete: %s", summary)
+            return summary
+        except Exception:
+            await db.rollback()
+            log.exception("geocode_pending failed")
+            raise
+
+
 def _dedup_has_backlog(summary: dict) -> bool:
     return summary.get("deferred_pairs", 0) > 0
 

@@ -12,6 +12,11 @@ from app.constants import (
     ESTONIA_CONCERT_HALL_AJAX_PATH,
     ESTONIA_CONCERT_HALL_MAX_EVENTS,
     ESTONIA_CONCERT_HALL_PILETILEVI_URL,
+    ESTONIA_CONCERT_HALL_VENUES,
+    KUMU_VENUE_ADDRESS,
+    KUMU_VENUE_LAT,
+    KUMU_VENUE_LNG,
+    KUMU_VENUE_NAME,
     TALLINN_TZ,
 )
 from app.ingestion.base import NormalizedEvent
@@ -289,6 +294,22 @@ class TestBaseNormalize:
         assert result.url == "https://example.test/x"
         assert result.starts_at.tzinfo is not None
 
+    def test_venue_address_and_coords_forwarded(self):
+        adapter = _StubAdapter(_make_source(), pages_cards=[[]])
+        result = adapter.normalize(
+            {
+                "external_id": "x",
+                "title": "X",
+                "venue_address": "Some Street 1, 10146 Tallinn",
+                "lat": 59.437,
+                "lng": 24.745,
+            }
+        )
+        assert isinstance(result, NormalizedEvent)
+        assert result.venue_address == "Some Street 1, 10146 Tallinn"
+        assert result.lat == 59.437
+        assert result.lng == 24.745
+
 
 # ---------------------------------------------------------------------------
 # PiletileviAdapter — piletilevi.ee/en/tickets/all (Nuxt SSR markup)
@@ -322,6 +343,26 @@ PILETILEVI_EMPTY_HTML = "<html><body></body></html>"
 
 PILETILEVI_DETAIL_HTML = """
 <html><body>
+  <div class="event__description">A wonderful jazz evening with local musicians.</div>
+</body></html>
+"""
+
+PILETILEVI_DETAIL_WITH_LOCATION_HTML = """
+<html><head>
+<script type="application/ld+json">
+{"@type": "Event", "name": "Jazz Night", "location": {"@type": "Place", "name": "Jazz Club", "address": {"streetAddress": "Rataskaevu 10", "addressLocality": "Tallinn", "addressRegion": "Harju maakond"}, "latitude": 59.4372, "longitude": 24.7454}}
+</script>
+</head><body>
+  <div class="event__description">A wonderful jazz evening with local musicians.</div>
+</body></html>
+"""
+
+PILETILEVI_DETAIL_WITH_ARRAY_TYPE_AND_STRING_COORDS_HTML = """
+<html><head>
+<script type="application/ld+json">
+{"@type": ["MusicEvent", "Event"], "name": "Jazz Night", "location": {"@type": "Place", "name": "Jazz Club", "address": {"streetAddress": "Rataskaevu 10", "addressLocality": "Tallinn", "addressRegion": "Harju maakond"}, "latitude": "59.4372", "longitude": "24.7454"}}
+</script>
+</head><body>
   <div class="event__description">A wonderful jazz evening with local musicians.</div>
 </body></html>
 """
@@ -460,6 +501,41 @@ class TestPiletileviFetchRaw:
                 await adapter.fetch_raw(_make_db())
 
 
+class TestPiletileviParseDetail:
+    @pytest.mark.asyncio
+    async def test_jsonld_location_populates_address_and_coords(self):
+        adapter = _piletilevi_adapter()
+        soup = BeautifulSoup(PILETILEVI_DETAIL_WITH_LOCATION_HTML, "html.parser")
+        card: dict = {}
+        await adapter.parse_detail(MagicMock(), soup, card)
+        assert card["venue_address"] == "Rataskaevu 10, Tallinn, Harju maakond"
+        assert card["lat"] == 59.4372
+        assert card["lng"] == 24.7454
+        assert card["description"] == "A wonderful jazz evening with local musicians."
+
+    @pytest.mark.asyncio
+    async def test_array_type_and_string_coords_are_handled(self):
+        adapter = _piletilevi_adapter()
+        soup = BeautifulSoup(
+            PILETILEVI_DETAIL_WITH_ARRAY_TYPE_AND_STRING_COORDS_HTML, "html.parser"
+        )
+        card: dict = {}
+        await adapter.parse_detail(MagicMock(), soup, card)
+        assert card["venue_address"] == "Rataskaevu 10, Tallinn, Harju maakond"
+        assert card["lat"] == 59.4372
+        assert card["lng"] == 24.7454
+
+    @pytest.mark.asyncio
+    async def test_no_jsonld_leaves_address_and_coords_unset(self):
+        adapter = _piletilevi_adapter()
+        soup = BeautifulSoup(PILETILEVI_DETAIL_HTML, "html.parser")
+        card: dict = {}
+        await adapter.parse_detail(MagicMock(), soup, card)
+        assert "venue_address" not in card
+        assert "lat" not in card
+        assert "lng" not in card
+
+
 # ---------------------------------------------------------------------------
 # KumuAdapter — kumu.ekm.ee/en/calendar/
 # ---------------------------------------------------------------------------
@@ -563,6 +639,15 @@ class TestKumuParseCards:
             cards[0]["title"]
             == "Kristi Kongi: Chromatic Drift through the Eyes of a Museum Insider"
         )
+
+    def test_static_venue_address_and_coords(self):
+        adapter = _kumu_adapter()
+        soup = BeautifulSoup(KUMU_LISTING_HTML, "html.parser")
+        cards = adapter.parse_cards(soup)
+        assert cards[0]["venue"] == KUMU_VENUE_NAME
+        assert cards[0]["venue_address"] == KUMU_VENUE_ADDRESS
+        assert cards[0]["lat"] == KUMU_VENUE_LAT
+        assert cards[0]["lng"] == KUMU_VENUE_LNG
 
 
 class TestKumuParseDate:
@@ -716,6 +801,28 @@ class TestEstoniaConcertHallParseCards:
         cards = adapter.parse_cards(soup)
         assert adapter.passes_filter(cards[0]) is True  # Tallinn,
         assert adapter.passes_filter(cards[1]) is False  # Haapsalu,
+
+    def test_known_venue_gets_static_address_and_coords(self):
+        html = CONCERT_HALL_HTML.replace(
+            "Alexela Kontserdimaja", "Estonia kontserdisaal"
+        )
+        adapter = _concert_hall_adapter()
+        soup = BeautifulSoup(html, "html.parser")
+        cards = adapter.parse_cards(soup)
+        info = ESTONIA_CONCERT_HALL_VENUES["Estonia kontserdisaal"]
+        assert cards[0]["venue"] == info.name
+        assert cards[0]["venue_address"] == info.address
+        assert cards[0]["lat"] == info.lat
+        assert cards[0]["lng"] == info.lng
+
+    def test_unknown_venue_leaves_address_and_coords_unset(self):
+        adapter = _concert_hall_adapter()
+        soup = BeautifulSoup(CONCERT_HALL_HTML, "html.parser")
+        cards = adapter.parse_cards(soup)
+        assert cards[0]["venue"] == "Alexela Kontserdimaja"
+        assert "venue_address" not in cards[0]
+        assert "lat" not in cards[0]
+        assert "lng" not in cards[0]
 
 
 class TestEstoniaConcertHallParseDate:
