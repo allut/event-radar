@@ -22,6 +22,7 @@ from app.constants import (
     EVENT_STATUS_DRAFT,
     LLM_CLASSIFY_BATCH_SIZE,
     LLM_CLASSIFY_DESC_FALLBACK,
+    LLM_CLASSIFY_EXPLICIT_DEFAULT,
     LLM_CLASSIFY_LANGUAGE_CODE_MAX_LEN,
     LLM_CLASSIFY_PRICE_HINT_FALLBACK,
     LLM_CLASSIFY_PROMPT_TEMPLATE,
@@ -91,6 +92,8 @@ def _parse_classification(raw: dict[str, Any]) -> dict[str, Any]:
     if currency is not None and len(currency) > CURRENCY_CODE_MAX_LEN:
         currency = None
 
+    explicit = bool(raw.get("explicit", LLM_CLASSIFY_EXPLICIT_DEFAULT))
+
     return {
         "categories": cats,
         "vibes": vibs,
@@ -101,6 +104,7 @@ def _parse_classification(raw: dict[str, Any]) -> dict[str, Any]:
         "price_min": price_min,
         "price_max": price_max,
         "currency": currency,
+        "explicit": explicit,
     }
 
 
@@ -128,7 +132,16 @@ async def classify_event(
     classification (passed via ``existing_classification``). When True, no
     per-event ``SELECT EventClassification`` is issued — the N+1 in the batch
     path collapses to one bulk prefetch.
+
+    Events already flagged ``is_explicit`` (Layer 1 keyword prefilter) skip the
+    LLM call entirely — token saving — but still advance to ``classified`` so a
+    flagged dedup-group representative doesn't strand the rest of its cluster in
+    ``draft``. ``is_explicit`` stays True regardless (read paths exclude it).
     """
+    if event.is_explicit:
+        event.status = EVENT_STATUS_CLASSIFIED
+        return True
+
     prompt = _build_classify_prompt(event)
     try:
         raw, model_used = await llm_json("classify", prompt, db, event_id=event.id)
@@ -173,6 +186,8 @@ async def classify_event(
         event.price_max = parsed["price_max"]
     if parsed["currency"] is not None:
         event.currency = parsed["currency"]
+
+    event.is_explicit = event.is_explicit or parsed["explicit"]
 
     event.status = EVENT_STATUS_CLASSIFIED
     log.debug(

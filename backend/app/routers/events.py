@@ -29,6 +29,7 @@ async def get_event(
         select_events_with_classification().where(
             Event.id == event_id,
             Event.status == EVENT_STATUS_PUBLISHED,
+            Event.is_explicit.is_(False),
         )
     )
     if event is None:

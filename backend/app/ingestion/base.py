@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.constants import (
     DEFAULT_CURRENCY,
     EVENT_STATUS_DRAFT,
+    EXPLICIT_KEYWORDS,
     HTTP_RETRYABLE_STATUS_CODES,
     HTTP_RETRY_MAX_ATTEMPTS,
     HTTP_RETRY_WAIT_MAX,
@@ -92,6 +93,21 @@ def safe_external_url(url: str | None) -> str | None:
     if urlsplit(url).scheme.lower() not in SAFE_URL_SCHEMES:
         return None
     return url
+
+
+_EXPLICIT_KEYWORD_PATTERNS = [
+    re.compile(r"\b" + re.escape(kw) + r"\b", re.IGNORECASE)
+    for kw in EXPLICIT_KEYWORDS
+]
+
+
+def is_explicit_text(*parts: str | None) -> bool:
+    """Word-boundary match of EXPLICIT_KEYWORDS against the joined text parts.
+
+    Used at ingest time to flag sexually-explicit listings (Event.is_explicit)
+    before they ever reach the LLM."""
+    text = " ".join(p for p in parts if p)
+    return any(pattern.search(text) for pattern in _EXPLICIT_KEYWORD_PATTERNS)
 
 
 def normalize_currency(raw: Any, has_price: bool) -> str | None:
@@ -341,6 +357,11 @@ class SourceAdapter(ABC):
                             currency=normalized.currency,
                             price_hint=normalized.price_hint,
                             status=EVENT_STATUS_DRAFT,
+                            is_explicit=is_explicit_text(
+                                normalized.title,
+                                normalized.description,
+                                normalized.venue_name,
+                            ),
                         )
                         db.add(event)
                         await db.flush()

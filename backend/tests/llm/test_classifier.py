@@ -1,10 +1,10 @@
 """Tests for LLM classifier — parse_classification and why_go localization."""
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.llm.classifier import _parse_classification, classify_event
+from app.llm.classifier import _parse_classification, classify_event, classify_pending
 
 
 class TestParseClassificationWhyGo:
@@ -161,3 +161,125 @@ class TestClassifyEventPrice:
         assert event.price_min == 10.0
         assert event.price_max == 20.0
         assert event.currency == "EUR"
+
+
+class TestParseClassificationExplicit:
+    def test_explicit_true(self):
+        raw = {**_BASE_RAW, "explicit": True}
+        result = _parse_classification(raw)
+        assert result["explicit"] is True
+
+    def test_explicit_false(self):
+        raw = {**_BASE_RAW, "explicit": False}
+        result = _parse_classification(raw)
+        assert result["explicit"] is False
+
+    def test_explicit_missing_defaults_to_false(self):
+        result = _parse_classification(dict(_BASE_RAW))
+        assert result["explicit"] is False
+
+
+class TestClassifyEventExplicit:
+    @pytest.mark.asyncio
+    async def test_llm_flags_explicit_sets_is_explicit(self, mock_db, make_event):
+        event = make_event()
+        assert event.is_explicit is False
+        raw = {**_BASE_RAW, "explicit": True}
+        with patch(
+            "app.llm.classifier.llm_json",
+            AsyncMock(return_value=(raw, "groq/llama-3.3-70b-versatile")),
+        ):
+            ok = await classify_event(
+                event, mock_db, existing_classification=event.classification, prefetched=True
+            )
+
+        assert ok is True
+        assert event.is_explicit is True
+
+    @pytest.mark.asyncio
+    async def test_pre_flagged_event_stays_flagged_when_llm_says_false(
+        self, mock_db, make_event
+    ):
+        event = make_event()
+        event.is_explicit = True
+        raw = {**_BASE_RAW, "explicit": False}
+        with patch(
+            "app.llm.classifier.llm_json",
+            AsyncMock(return_value=(raw, "groq/llama-3.3-70b-versatile")),
+        ):
+            ok = await classify_event(
+                event, mock_db, existing_classification=event.classification, prefetched=True
+            )
+
+        assert ok is True
+        assert event.is_explicit is True
+
+    @pytest.mark.asyncio
+    async def test_llm_says_not_explicit_leaves_unflagged_event_unflagged(
+        self, mock_db, make_event
+    ):
+        event = make_event()
+        raw = {**_BASE_RAW, "explicit": False}
+        with patch(
+            "app.llm.classifier.llm_json",
+            AsyncMock(return_value=(raw, "groq/llama-3.3-70b-versatile")),
+        ):
+            ok = await classify_event(
+                event, mock_db, existing_classification=event.classification, prefetched=True
+            )
+
+        assert ok is True
+        assert event.is_explicit is False
+
+
+class TestClassifyEventSkipsLLMWhenAlreadyExplicit:
+    @pytest.mark.asyncio
+    async def test_keyword_flagged_event_skips_llm_call(self, mock_db, make_event):
+        event = make_event()
+        event.is_explicit = True
+        event.status = "draft"
+        with patch(
+            "app.llm.classifier.llm_json",
+            AsyncMock(return_value=({}, "groq/llama-3.3-70b-versatile")),
+        ) as mock_llm:
+            ok = await classify_event(
+                event, mock_db, existing_classification=event.classification, prefetched=True
+            )
+
+        assert ok is True
+        mock_llm.assert_not_awaited()
+        assert event.is_explicit is True
+        from app.constants import EVENT_STATUS_CLASSIFIED
+
+        assert event.status == EVENT_STATUS_CLASSIFIED
+
+
+class TestClassifyPendingIncludesExplicitRepresentatives:
+    @pytest.mark.asyncio
+    async def test_dedup_root_flagged_explicit_still_classified(self, mock_db, make_event):
+        """A flagged dedup-group representative must still be picked up by
+        classify_pending and advanced to `classified` — otherwise the whole
+        cluster is permanently stuck in draft (it can never become root)."""
+        event = make_event()
+        event.is_explicit = True
+        event.status = "draft"
+        event.dedup_group_id = event.id
+
+        events_result = MagicMock()
+        events_result.all.return_value = [event]
+        existing_result = MagicMock()
+        existing_result.all.return_value = []
+        mock_db.scalars.side_effect = [events_result, existing_result]
+
+        with patch(
+            "app.llm.classifier.llm_json",
+            AsyncMock(return_value=({}, "groq/llama-3.3-70b-versatile")),
+        ) as mock_llm:
+            summary = await classify_pending(mock_db)
+
+        mock_llm.assert_not_awaited()
+        assert summary["succeeded"] == 1
+        from app.constants import EVENT_STATUS_CLASSIFIED
+
+        assert event.status == EVENT_STATUS_CLASSIFIED
+        assert event.is_explicit is True

@@ -82,6 +82,27 @@ class TestGetFeed:
         assert result["events"][0]["categories"] == []
         assert result["events"][0]["why_go"] == []
 
+    @pytest.mark.asyncio
+    async def test_event_query_excludes_explicit_events(self, mock_db, make_user):
+        from app.routers.feed import get_feed
+
+        feed = MagicMock()
+        feed.event_ids = [10]
+        feed.built_at = datetime(2026, 5, 10, 6, 0, 0, tzinfo=timezone.utc)
+        mock_db.scalar.return_value = feed
+
+        empty = MagicMock()
+        empty.all.return_value = []
+        mock_db.scalars.return_value = empty
+
+        user = make_user()
+        await get_feed(current_user=user, db=mock_db)
+
+        stmt = mock_db.scalars.call_args.args[0]
+        compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+        assert "is_explicit" in compiled
+        assert "false" in compiled.lower()
+
 
 # ---------------------------------------------------------------------------
 # GET /events/{event_id}
@@ -126,3 +147,18 @@ class TestGetEvent:
 
         assert result["categories"] == []
         assert result["quality_score"] is None
+
+    @pytest.mark.asyncio
+    async def test_query_excludes_explicit_events(self, mock_db, make_request):
+        from app.routers.events import get_event
+        from fastapi import HTTPException
+
+        mock_db.scalar.return_value = None
+
+        with pytest.raises(HTTPException):
+            await get_event(event_id=42, request=make_request(), db=mock_db)
+
+        stmt = mock_db.scalar.call_args.args[0]
+        compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+        assert "is_explicit" in compiled
+        assert "false" in compiled.lower()

@@ -346,6 +346,7 @@ async def build_daily_feeds(db: AsyncSession) -> dict:
         await db.scalars(
             select_events_with_classification().where(
                 Event.status == EVENT_STATUS_PUBLISHED,
+                Event.is_explicit.is_(False),
                 Event.starts_at >= now,
                 Event.starts_at <= cutoff,
             )

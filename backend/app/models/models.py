@@ -13,6 +13,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    false,
     func,
 )
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
@@ -210,6 +211,9 @@ class Event(Base):
     currency: Mapped[str | None] = mapped_column(String(3), nullable=True)
     status: Mapped[str] = mapped_column(
         String(20), nullable=False, default=EVENT_STATUS_DRAFT
+    )
+    is_explicit: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=false(), default=False
     )
     dedup_group_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     created_at: Mapped[datetime] = mapped_column(

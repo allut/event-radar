@@ -342,6 +342,21 @@ class TestSendDailyDigestsDryRun:
         assert result["sent"] == 1
 
     @pytest.mark.asyncio
+    async def test_event_query_excludes_explicit_events(self):
+        db = _make_db_with_user_and_feed()
+        with (
+            patch("app.email.digest.datetime") as mock_dt,
+            patch("app.email.digest.send_digest_email", new_callable=AsyncMock),
+        ):
+            mock_dt.now.return_value.date.return_value = date(2026, 6, 9)
+            await send_daily_digests(db, dry_run=True)
+
+        stmt = db.scalars.call_args_list[2].args[0]
+        compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+        assert "is_explicit" in compiled
+        assert "false" in compiled.lower()
+
+    @pytest.mark.asyncio
     async def test_dry_run_false_calls_send_digest_email(self):
         db = _make_db_with_user_and_feed()
         with (

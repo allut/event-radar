@@ -215,7 +215,10 @@ async def send_daily_digests(
 
     events = (
         await db.scalars(
-            select_events_with_classification().where(Event.id.in_(all_event_ids))
+            select_events_with_classification().where(
+                Event.id.in_(all_event_ids),
+                Event.is_explicit.is_(False),
+            )
         )
     ).all()
     event_map: dict[int, Event] = {e.id: e for e in events}

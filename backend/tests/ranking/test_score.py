@@ -403,3 +403,20 @@ class TestMmrPick:
         scored = [self._make_event(i, ["music"], 0.9) for i in range(2)]
         picked = _mmr_pick(scored, n=5, max_per_category=5)
         assert len(picked) == 2
+
+
+class TestBuildDailyFeedsExplicitFilter:
+    async def test_event_query_excludes_explicit_events(self, mock_db):
+        from app.ranking.score import build_daily_feeds
+
+        empty = MagicMock()
+        empty.all.return_value = []
+        mock_db.scalars.return_value = empty
+
+        result = await build_daily_feeds(mock_db)
+
+        assert result["total_users"] == 0
+        stmt = mock_db.scalars.call_args_list[0].args[0]
+        compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+        assert "is_explicit" in compiled
+        assert "false" in compiled.lower()

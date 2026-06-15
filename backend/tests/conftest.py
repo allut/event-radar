@@ -73,6 +73,7 @@ def make_event():
         e.currency = DEFAULT_CURRENCY
         e.price_hint = None
         e.status = "published"
+        e.is_explicit = False
         e.dedup_group_id = None
 
         cl = MagicMock()

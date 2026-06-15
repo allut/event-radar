@@ -178,6 +178,7 @@ async def admin_dedup_groups(
                 "venue": e.venue_name,
                 "status": e.status,
                 "url": e.url,
+                "is_explicit": e.is_explicit,
             }
         )
 

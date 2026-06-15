@@ -39,7 +39,10 @@ async def get_feed(
 
     event_rows = (
         await db.scalars(
-            select_events_with_classification().where(Event.id.in_(feed.event_ids))
+            select_events_with_classification().where(
+                Event.id.in_(feed.event_ids),
+                Event.is_explicit.is_(False),
+            )
         )
     ).all()
 
