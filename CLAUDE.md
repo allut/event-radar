@@ -51,7 +51,7 @@ FastAPI Backend (single process on Render free tier, port 8000 in dev)
   └── APScheduler (embedded, kept alive by Render Cron Job ping /internal/tick every 15 min)
       ├── Weekly Sun 03:00: sync_fienta_organizers (auto-discover new organizers)
       ├── Hourly:   ingest_all_enabled
-      ├── 6-hourly: dedup_pass + classify_pending
+      ├── 6-hourly: dedup_pass + classify_pending (each "drained" — re-run on a 15-min retry, up to LLM_BACKLOG_MAX_DRAIN_PASSES passes, until its backlog clears) + publish_pending + geocode_pending
       ├── Daily 06:00: build_daily_feeds
       └── Daily 07:00: send_daily_digests (one hour after feeds are built)
         ↓
@@ -64,11 +64,13 @@ LLM Router: Groq (primary) → Cerebras → Mistral (fallback chain)
 
 ## Data Flow
 
-1. **Ingestion** — 4 source types: Fienta API (~15 Tallinn organizer IDs), Piletilevi HTML scraper, Kultuurikatel/Fotografiska/KUMU/Estonia Concert Hall JSON-LD, Resend Inbound email webhook (parsed via `app/llm/newsletter_extractor.py`). Eventbrite and Telliskivi removed (Telliskivi's data was unfixably mis-dated; Eventbrite's API was deprecated for non-partners).
-2. **Deduplication** — Two-stage: rule-based pre-filter (SQL time-window self-join + Python fuzzy title/venue, `app/dedup/rules.py`), then LLM tiebreaker only on the surviving candidate pairs (keeps token usage low, `app/dedup/llm_tiebreaker.py`). The scheduled job (`jobs.dedup_pass`) runs `run_dedup_pass_llm`, which degrades to the rule-only `run_dedup_pass` when no LLM provider key is configured.
-3. **Classification** — LLM assigns fixed 12-category / 10-vibe taxonomy, quality score 0–1, 3-bullet "why go?" text. Fixed taxonomy prevents ontology drift.
+1. **Ingestion** — 3 source types: Fienta API (~15 Tallinn organizer IDs), HTML listing scrapers (Piletilevi, KUMU, Estonia Concert Hall) sharing `HtmlListingAdapter` (`app/ingestion/sources/html_listing.py`), Resend Inbound email webhook (parsed via `app/llm/newsletter_extractor.py`). Eventbrite, Telliskivi, Kultuurikatel, and Fotografiska are disabled in `app/ingestion/registry.py` (Telliskivi's data was unfixably mis-dated; Eventbrite's API was deprecated for non-partners; Kultuurikatel/Fotografiska pending a rewrite onto the shared base).
+2. **Deduplication** — Two-stage: rule-based pre-filter (SQL time-window self-join + Python fuzzy title/venue, `app/dedup/rules.py`), then LLM tiebreaker only on the surviving candidate pairs (keeps token usage low, `app/dedup/llm_tiebreaker.py`). The scheduled job (`jobs.dedup_pass`) runs `run_dedup_pass_llm`, which degrades to the rule-only `run_dedup_pass` when no LLM provider key is configured. Near-exact title matches (`title_ratio >= TITLE_RATIO_STRONG_THRESHOLD`) bypass the venue check on the LLM path, so cross-source dupes with differently-spelled venues still reach the LLM tiebreaker.
+3. **Classification** — LLM assigns fixed 12-category / 10-vibe taxonomy, quality score 0–1, 3-bullet "why go?" text, an `is_explicit` flag (NSFW layer 2, see below), and `price_min`/`price_max`/`currency` parsed from the ingested `price_hint` (capped at `PRICE_HINT_MAX_CHARS`). Fixed taxonomy prevents ontology drift.
 4. **Ranking** — `score = 0.45·persona_affinity + 0.20·recency_boost + 0.20·feedback_signal + 0.10·quality_score + 0.05·locality_bonus`
 5. **Daily 5 builder** — runs 06:00 Europe/Tallinn; scores events in next 14 days; MMR-lite diversity (max 2 per category); writes to `daily_feeds`.
+6. **Publish gate** — `app/publish.py::publish_pending()` promotes `classified` events to `published` once `quality_score >= PUBLISH_MIN_QUALITY_SCORE` (0.4), `is_explicit` is false, `starts_at` is in the future, and `title_orig` is present (NSFW layer 3). Events failing the gate stay `classified`. Runs every 6h via `publish_pending_job`.
+7. **Geocoding backfill** — `app/ingestion/geocode.py::geocode_pending()` fills `lat`/`lng` for events that have `venue_address` but no coordinates, via Nominatim (1 req/sec, `GEOCODE_REQUEST_DELAY_SECONDS`, capped at `GEOCODE_MAX_PER_RUN` events per run). Runs every 6h via `geocode_pending_job`.
 
 ## Key Database Tables
 
@@ -79,7 +81,7 @@ LLM Router: Groq (primary) → Cerebras → Mistral (fallback chain)
 - `sources` — ingestion source registry
 - `raw_events` — source payload as JSONB
 - `event_sources` — M2M: links events to source + external_id; unique index on `(source_id, external_id)` enforces ingestion idempotency at the DB level (migration 0007)
-- `events` — normalized: slug, title_orig, description_orig, starts_at/ends_at, venue, lat/lng, price, status (draft→classified→published|cancelled), dedup_group_id
+- `events` — normalized: slug, title_orig, description_orig, price_hint (raw price text from ingestion, fed to LLM classification), starts_at/ends_at, venue_name/venue_address, lat/lng (backfilled by the geocoding job when missing), price_min/price_max/currency (parsed from price_hint by classification), status (draft→classified→published|cancelled — `published` is set by the publish gate, not directly by classification), is_explicit (NSFW filter flag), dedup_group_id
 - `event_classifications` — categories[], vibes[], quality_score, why_go_bullets[3], why_go_localized JSONB ({locale: [bullets]}), language_detected, model_used
 - `user_event_feedback` — like/dislike/bookmark/view/click_external signals
 - `user_event_scores` — cached ranking score per (user, event); unique constraint. Cache is invalidated by deleting **all** rows for a user whenever that user records any feedback signal — the indirect-feedback term means a signal on one event shifts scores on every co-categorical event, so per-row invalidation would leave neighbours stale (`routers/feedback.py`).
@@ -91,6 +93,15 @@ LLM Router: Groq (primary) → Cerebras → Mistral (fallback chain)
 - **Dedup cache:** Cache decisions by content hash — never re-call LLM for identical pairs.
 - **Fallback order:** Groq (primary, `llama-3.3-70b-versatile`) → Cerebras (`gpt-oss-120b`) → Mistral (`mistral-small-latest`, overnight batch, 1B tok/mo). Provider chain defined in `app/constants.py::LLM_PROVIDERS`. Cerebras's `gpt-oss-120b` is a reasoning model — its entry overrides `reasoning_effort=low` and a 600-token cap (`LLM_REASONING_MAX_TOKENS`, vs the 400-token default) so reasoning tokens don't crowd out the JSON answer.
 - Groq's 30 req/min burst means no sleep loop needed in the classification batch job.
+- **Backlog drain** — `dedup_pass` and `classify_pending` run via `_drain_backlog()` (`app/ingestion/jobs.py`): each re-runs its single pass while work remains, retrying every `LLM_BACKLOG_RETRY_SECONDS` (15 min) up to `LLM_BACKLOG_MAX_DRAIN_PASSES` (12) before deferring the remainder to the next 6h cycle. Admin-triggered runs (`POST /admin/dedup`, `POST /admin/classify`) use `*_drain_now()`, which drains synchronously with no inter-pass sleep since the caller is blocking on the HTTP response.
+
+## Content Safety (NSFW / Explicit Content Filter)
+
+Three layers, each cheaper than the next:
+
+1. **Ingest-time keyword prefilter** — `app/ingestion/base.py::is_explicit_text()` matches title/description/venue against `EXPLICIT_KEYWORDS` (frozenset of ~30 en/et/ru phrases in `app/constants.py`) via word-boundary regex, setting `Event.is_explicit`. Events flagged here skip the LLM classification call entirely (token savings).
+2. **LLM classification flag** — `app/llm/classifier.py` asks the model to set `is_explicit` for events that pass layer 1, catching content the keyword list misses.
+3. **Publish gate** — `app/publish.py::publish_pending()` excludes any event with `is_explicit = true` from ever reaching `published`, regardless of how the flag was set.
 
 ## i18n
 
@@ -130,6 +141,8 @@ Session tokens are issued after magic-link verification and passed as an `Author
 
 List endpoints that can grow unbounded (e.g. `/admin/dedup/groups`) are paginated via `limit`/`offset` query params with caps in `app/constants.py` (`ADMIN_*_PAGE_SIZE`, `ADMIN_*_MAX_PAGE_SIZE`). Pagination is by logical unit (dedup group, not row) so a single noisy cluster cannot dominate a page. Add the same pattern to any new admin list endpoint.
 
+Manual pipeline triggers: `POST /admin/dedup`, `POST /admin/classify`, `POST /admin/publish` run the corresponding scheduled job synchronously (dedup/classify use the drain-now variant, see Backlog drain above) for ad-hoc operation outside the 6h cron cadence.
+
 ## Security Hardening
 
 The backend was hardened against the OWASP Top 10 (2021). The middleware stack and these invariants are wired in `app/main.py`:
@@ -159,9 +172,11 @@ This project follows production best practices throughout:
 - **Backend utilities** — all shared helper functions live in `backend/app/routers/utils.py`. Before writing a new utility function anywhere in the backend, check this file first. If the function is reusable, add it here and import it — never duplicate helpers across routers or modules.
 - **Frontend constants** — all magic values (numbers, strings, breakpoints, timeouts, limits) live in `frontend/src/constants.ts`. Cross-stack values (`LOCALES`, `PERSONAS`, `MAGIC_LINK_EXPIRY_MINUTES`, `PERSONA_PRIMARY_WEIGHT_THRESHOLD`) are sourced from `shared/` and imported via `frontend/src/_generated/sharedConstants.ts`. Apply the same discipline: never inline a literal near component logic — add it to `constants.ts` (or `shared/` + regenerate) first. Never duplicate constants across components.
 - **Frontend utilities** — all shared helper functions live in `frontend/src/utils.ts`. Before writing a new utility function anywhere in the frontend, check this file first. If the function is reusable, add it here and import it — never duplicate helpers across components or pages.
-- **CSS design tokens** — the following categories are fully tokenized in `:root` (`frontend/src/index.css`) and **must never be hardcoded** in component stylesheets: colors (`--color-*`, named semantic vars), border-radius (`--radius*`), shadows, z-indices, transitions (`--transition`), and animation easing (`--easing`). When any of these are needed, define the token in `:root` first, then reference it via `var(--token-name)`. **Spacing and raw font-sizes** do not yet have a `:root` scale — they may be inline `rem`/`px` values until a spacing/typography scale is added. Exception: font-sizes that exactly match an existing heading token (`--heading-xl/lg/md/sm/xs`) must use the token, not the raw value.
+- **CSS design tokens** — the following categories are fully tokenized in `:root` (`frontend/src/index.css`) and **must never be hardcoded** in component stylesheets: colors (`--color-*`, named semantic vars), border-radius (`--radius*`), shadows, z-indices, transitions (`--transition`), animation easing (`--easing`), spacing (`--space-1`…`--space-8`), and font sizes (`--fs-2xs`…`--fs-base`, `--heading-3xl`…`--heading-xs`). When any of these are needed, define the token in `:root` first, then reference it via `var(--token-name)`.
 - **CSS shared base classes** — structural CSS patterns (card chrome, button styles) live in `frontend/src/components/shared/`. Use CSS Modules `composes: baseClass from '...'` to inherit shared rules — **never duplicate card or button CSS** across route or component stylesheets. Add new shared patterns to the shared files and compose from them.
 - **Retry logic** — all HTTP calls use `http_get()` from `app/ingestion/base.py`, which wraps `httpx` with tenacity exponential-backoff retry (3 attempts, 2–30s backoff). Retryable: 429/502/503/504 and `RequestError`. Non-retryable: 4xx except 429.
+- **DB connection pooling** — `app/db.py` sets `pool_pre_ping=True` (pings before reuse) and `pool_recycle=DB_POOL_RECYCLE_SECONDS` (280s, below Neon's 5-min idle auto-suspend) so the pool never hands out a connection the server has already dropped.
+- **HTML listing adapters** — Piletilevi, KUMU, and Estonia Concert Hall share `HtmlListingAdapter` (`app/ingestion/sources/html_listing.py`), which handles pagination, parsing, dedup, and detail fetches. New HTML-scraped sources should subclass it rather than duplicating the fetch/parse loop.
 - **Presentation layer separation** — never inline static CSS or HTML markup inside business-logic or delivery modules. Extract CSS into a dedicated `styles.py` and HTML markup into a dedicated `templates.py` sibling, then import the constants into the assembly module. The email package (`app/email/styles.py`, `app/email/templates.py`, `app/email/digest.py`) is the canonical example: CSS constants in `styles.py`, `.format()`-style markup constants in `templates.py`, data formatting + Resend delivery in `digest.py`. Apply the same three-file split to any future rendering feature (new email types, report generation, etc.). Do not introduce a templating engine (Jinja2, etc.) — plain Python string constants with `str.format()` are sufficient and keep dependencies minimal.
 - **Encapsulation** — a leading underscore signals module-private; never import a `_name` from another production module. If a helper is imported cross-module, drop the underscore to make the API surface honest. Exceptions: `_is_retryable`, `_find`, `_venue_compatible`, `_make_slug` are intentionally private (used only within their defining module). Tests may import private names for white-box testing — that is an accepted pattern.
 - **Error visibility** — HTTP failures in source adapters propagate to `SourceAdapter.run()` so `IngestionRun.error` and `source.last_status` are always set correctly. Never swallow exceptions in `fetch_raw()`.
