@@ -8,9 +8,11 @@ The whole platform is designed to run on **free-tier infrastructure** at a stead
 
 ## Features
 
-- **Multi-source ingestion** — Fienta API, Piletilevi HTML scraper, JSON-LD venue pages (Kultuurikatel, Fotografiska, KUMU, Estonia Concert Hall), and inbound newsletter parsing via email webhook.
+- **Multi-source ingestion** — Fienta API, HTML listing scrapers (Piletilevi, KUMU, Estonia Concert Hall) sharing a common adapter, and inbound newsletter parsing via email webhook. A Nominatim geocoding backfill fills in venue coordinates that sources don't provide.
 - **Two-stage deduplication** — a cheap SQL + fuzzy pre-filter narrows candidate pairs, then an LLM tiebreaker resolves only the survivors. Decisions are cached by content hash to avoid repeat LLM calls.
-- **LLM classification** — assigns a fixed 12-category / 10-vibe taxonomy, a quality score, and a localized 3-bullet "why go?" rationale, with a Groq → Cerebras → Mistral provider fallback chain.
+- **LLM classification** — assigns a fixed 12-category / 10-vibe taxonomy, a quality score, an explicit-content flag, a parsed price range, and a localized 3-bullet "why go?" rationale, with a Groq → Cerebras → Mistral provider fallback chain.
+- **3-layer NSFW filter** — a keyword prefilter at ingest time, an LLM-assigned explicit-content flag, and a publish gate that excludes flagged events from the published feed.
+- **Publish gate** — classified events are promoted to `published` only once they clear a minimum quality score, pass the NSFW check, and have a future start date.
 - **Persona-based personalization** — users pick a primary and optional secondary persona at onboarding; like/dislike/bookmark signals continuously retune their ranking.
 - **Daily 5 builder** — a scheduled job scores upcoming events and writes a diverse five-event feed per user each morning, then emails a digest.
 - **Magic-link auth** — passwordless sign-in with short-lived, single-use links and revocable 7-day session tokens. No third-party auth provider.
@@ -24,9 +26,10 @@ Vite + React SPA  ──HTTPS / JSON──▶  FastAPI (single process)
                                        ├── Routers: /auth /admin /onboarding /events
                                        │            /feed /feedback /users/me /webhooks
                                        └── APScheduler (embedded, kept warm by a cron ping)
-                                           ├── Weekly:    sync_fienta_organizers
+                                           ├── Weekly Sun 03:00: sync_fienta_organizers
                                            ├── Hourly:    ingest_all_enabled
-                                           ├── 6-hourly:  dedup_pass + classify_pending
+                                           ├── 6-hourly:  dedup_pass + classify_pending +
+                                           │              publish_pending + geocode_pending
                                            ├── 06:00 EET: build_daily_feeds
                                            └── 07:00 EET: send_daily_digests
                                              ↓
@@ -40,8 +43,10 @@ There is intentionally **no Celery/Redis** — an embedded APScheduler is suffic
 The processing pipeline:
 
 ```
-fetch → raw_events → normalize → dedup → events(draft) → classify → events(published) → rank → daily_feeds → digest
+fetch → raw_events → normalize → dedup → events(draft) → classify → events(classified) → publish gate → events(published) → rank → daily_feeds → digest
 ```
+
+Geocoding runs as a separate backfill alongside this pipeline, filling in `lat`/`lng` for events that have a venue address but no coordinates.
 
 ## Tech stack
 
@@ -128,7 +133,7 @@ event-radar/
 ├── backend/                  # FastAPI application
 │   ├── app/
 │   │   ├── routers/          # /auth /admin /onboarding /events /feed /feedback /webhooks ...
-│   │   ├── ingestion/        # source adapters (Fienta, Piletilevi, JSON-LD, newsletter)
+│   │   ├── ingestion/        # source adapters (Fienta, HTML listings, newsletter), geocoding backfill
 │   │   ├── dedup/            # rule-based pre-filter + LLM tiebreaker
 │   │   ├── llm/              # provider router, classifier, taxonomy, extractor
 │   │   ├── ranking/          # scoring + Daily 5 builder
@@ -138,6 +143,7 @@ event-radar/
 │   │   ├── _generated/       # generated constants & i18n (do not edit by hand)
 │   │   ├── constants.py      # single source of truth for backend literals
 │   │   ├── config.py         # environment settings
+│   │   ├── publish.py        # publish gate (classified → published)
 │   │   └── main.py           # app wiring, middleware, scheduler
 │   ├── alembic/             # migrations
 │   └── tests/               # pytest suite
@@ -186,7 +192,7 @@ python scripts/generate_shared.py
 
 ### Manually triggering pipeline jobs (E2E testing)
 
-The scheduled jobs described in [Architecture](#architecture) (`sync_fienta_organizers`, `ingest_all_enabled`, `dedup_pass`, `classify_pending`, `build_daily_feeds`, `send_daily_digests`) can each be run on demand via `/admin/*` endpoints — useful for exercising the full pipeline end to end without waiting for the schedule.
+The scheduled jobs described in [Architecture](#architecture) (`sync_fienta_organizers`, `ingest_all_enabled`, `dedup_pass`, `classify_pending`, `publish_pending`, `build_daily_feeds`, `send_daily_digests`) can each be run on demand via `/admin/*` endpoints — useful for exercising the full pipeline end to end without waiting for the schedule.
 
 All `/admin/*` endpoints require HTTP Basic auth (`ADMIN_USERNAME` / `ADMIN_PASSWORD`, see `.env.example`). In development with no `ADMIN_PASSWORD` set, any credentials are accepted — the examples below use `admin:admin`. Run them in this order to exercise a full pipeline cycle:
 
@@ -203,17 +209,20 @@ curl -u admin:admin -X POST http://localhost:8000/admin/dedup
 # 4. classify_pending — LLM classification for one batch of draft events
 curl -u admin:admin -X POST http://localhost:8000/admin/classify
 
-# 5. build_daily_feeds — score events and write daily_feeds for all users
+# 5. publish_pending — promote qualifying classified events to published
+curl -u admin:admin -X POST http://localhost:8000/admin/publish
+
+# 6. build_daily_feeds — score events and write daily_feeds for all users
 curl -u admin:admin -X POST http://localhost:8000/admin/build-feeds
 
-# 6. send_daily_digests — dry-run by default (counts would-send, sends nothing)
+# 7. send_daily_digests — dry-run by default (counts would-send, sends nothing)
 curl -u admin:admin -X POST http://localhost:8000/admin/send-digests
 # Pass dry_run=false to actually deliver emails:
 curl -u admin:admin -X POST "http://localhost:8000/admin/send-digests?dry_run=false"
 ```
 
 > [!TIP]
-> `POST /admin/pipeline/run` runs all six stages above in dependency order in a single call, stopping at the first failure — the fastest way to drive a full E2E cycle. It also accepts `?dry_run=false` for the final digest stage. `GET /admin/stats` and `GET /admin/dedup/groups` are useful for inspecting the results afterwards.
+> `POST /admin/pipeline/run` runs all seven stages above in dependency order in a single call, stopping at the first failure — the fastest way to drive a full E2E cycle. It also accepts `?dry_run=false` for the final digest stage. `GET /admin/stats` and `GET /admin/dedup/groups` are useful for inspecting the results afterwards. The geocoding backfill (`geocode_pending`) has no admin endpoint — it only runs on its 6-hourly schedule.
 
 ## Deployment
 
