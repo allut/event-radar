@@ -192,6 +192,10 @@ SCORE_WEIGHT_FEEDBACK: float = 0.20
 SCORE_WEIGHT_QUALITY: float = 0.10
 SCORE_WEIGHT_LOCALITY: float = 0.05
 
+# Publish gate — classified events with quality_score below this stay
+# 'classified' and never reach a feed. Tunable later from real data.
+PUBLISH_MIN_QUALITY_SCORE: float = 0.4
+
 # Tallinn centre bounding box (~5 km radius) used for locality bonus
 TALLINN_CENTER_LAT: float = 59.437
 TALLINN_CENTER_LNG: float = 24.745

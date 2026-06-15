@@ -21,6 +21,7 @@ from app.ingestion.jobs import (
     dedup_pass_drain_now,
     ingest_all_enabled,
     ingest_source,
+    publish_pending_job,
 )
 from app.ingestion.organizer_sync import sync_fienta_organizers
 from app.ingestion.registry import ADAPTER_REGISTRY
@@ -210,6 +211,20 @@ async def admin_classify() -> dict:
     return summary
 
 
+@router.post("/publish", dependencies=[Depends(_require_admin)])
+async def admin_publish() -> dict:
+    """Promote qualifying classified events to published (one bulk UPDATE)."""
+    try:
+        summary = await publish_pending_job()
+    except Exception:
+        log.exception("admin publish failed")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Publish failed; see server logs",
+        )
+    return summary
+
+
 @router.post("/sync-organizers", dependencies=[Depends(_require_admin)])
 async def admin_sync_organizers() -> dict:
     """Trigger Fienta organizer sync (discover new organizers, flag stale ones)."""
@@ -265,7 +280,7 @@ async def admin_send_digests(
 async def admin_pipeline_run(
     dry_run: bool = Query(True, description="When true (default), digest stage counts would-send but skips actual email delivery"),
 ) -> dict:
-    """Run all six pipeline stages in dependency order.
+    """Run all seven pipeline stages in dependency order.
 
     Stops at the first failure — later stages depend on earlier output.
     Returns {ok, stages} where stages is an ordered dict of per-stage results.
@@ -311,7 +326,16 @@ async def admin_pipeline_run(
         stages["classify"] = {"error": str(exc)}
         return {"ok": False, "stages": stages}
 
-    # Stage 5: build feeds (build_daily_feeds commits internally)
+    # Stage 5: publish — promote qualifying classified events to published
+    try:
+        publish_result = await publish_pending_job()
+        stages["publish"] = publish_result
+    except Exception as exc:
+        log.exception("pipeline: publish failed")
+        stages["publish"] = {"error": str(exc)}
+        return {"ok": False, "stages": stages}
+
+    # Stage 6: build feeds (build_daily_feeds commits internally)
     async with AsyncSessionLocal() as db:
         try:
             build_feeds_result = await build_daily_feeds(db)
@@ -322,7 +346,7 @@ async def admin_pipeline_run(
             stages["build_feeds"] = {"error": str(exc)}
             return {"ok": False, "stages": stages}
 
-    # Stage 6: send digests
+    # Stage 7: send digests
     async with AsyncSessionLocal() as db:
         try:
             send_digests_result = await send_daily_digests(db, dry_run=dry_run)

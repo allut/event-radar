@@ -29,6 +29,7 @@ from app.ingestion.jobs import (
     dedup_pass_drained,
     geocode_pending_job,
     ingest_all_enabled,
+    publish_pending_job,
 )
 from app.ingestion.organizer_sync import sync_fienta_organizers
 from app.logging_config import configure_logging, shutdown_log_shipping
@@ -85,6 +86,14 @@ async def _run_classify_pending() -> None:
         log.info("classify_pending completed: %s", summary)
     except Exception:
         log.exception("classify_pending failed")
+
+
+async def _run_publish_pending() -> None:
+    try:
+        summary = await publish_pending_job()
+        log.info("publish_pending completed: %s", summary)
+    except Exception:
+        log.exception("publish_pending failed")
 
 
 async def _run_geocode_pending() -> None:
@@ -156,6 +165,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         trigger="interval",
         hours=6,
         id="classify_pending",
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        _run_publish_pending,
+        trigger="interval",
+        hours=6,
+        id="publish_pending",
         replace_existing=True,
     )
     scheduler.add_job(

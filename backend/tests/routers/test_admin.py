@@ -156,6 +156,60 @@ async def test_build_feeds_returns_500_on_job_error():
 
 
 # ---------------------------------------------------------------------------
+# POST /admin/publish
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_publish_calls_job_and_returns_result():
+    app = _build_app()
+    expected = {"published": 3}
+
+    with (
+        patch("app.routers.admin.settings") as mock_settings,
+        patch(
+            "app.routers.admin.publish_pending_job",
+            new_callable=AsyncMock,
+            return_value=expected,
+        ) as mock_publish,
+    ):
+        mock_settings.ADMIN_PASSWORD = ""
+        mock_settings.APP_ENV = APP_ENV_DEVELOPMENT
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            resp = await client.post("/admin/publish", auth=("admin", ""))
+
+    assert resp.status_code == http.HTTPStatus.OK
+    assert resp.json() == expected
+    mock_publish.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_publish_returns_500_on_job_error():
+    app = _build_app()
+
+    with (
+        patch("app.routers.admin.settings") as mock_settings,
+        patch(
+            "app.routers.admin.publish_pending_job",
+            new_callable=AsyncMock,
+            side_effect=RuntimeError("db error"),
+        ),
+    ):
+        mock_settings.ADMIN_PASSWORD = ""
+        mock_settings.APP_ENV = APP_ENV_DEVELOPMENT
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            resp = await client.post("/admin/publish", auth=("admin", ""))
+
+    assert resp.status_code == http.HTTPStatus.INTERNAL_SERVER_ERROR
+
+
+# ---------------------------------------------------------------------------
 # POST /admin/send-digests
 # ---------------------------------------------------------------------------
 
@@ -253,6 +307,7 @@ def _all_job_mocks(
     ingest_result=None,
     dedup_result=None,
     classify_result=None,
+    publish_result=None,
     feeds_result=None,
     digests_result=None,
 ):
@@ -270,6 +325,9 @@ def _all_job_mocks(
         "app.routers.admin.classify_pending_drain_now": AsyncMock(
             return_value=classify_result or {"classified": 0}
         ),
+        "app.routers.admin.publish_pending_job": AsyncMock(
+            return_value=publish_result or {"published": 0}
+        ),
         "app.routers.admin.build_daily_feeds": AsyncMock(
             return_value=feeds_result
             or {"built": 1, "empty": 0, "total_users": 1, "candidate_events": 5}
@@ -282,7 +340,7 @@ def _all_job_mocks(
 
 
 @pytest.mark.asyncio
-async def test_pipeline_run_calls_all_six_stages_in_order():
+async def test_pipeline_run_calls_all_seven_stages_in_order():
     app = _build_app()
     db_ctx = _make_db_ctx()
     mocks = _all_job_mocks()
@@ -293,6 +351,7 @@ async def test_pipeline_run_calls_all_six_stages_in_order():
         patch("app.routers.admin.ingest_all_enabled", mocks["app.routers.admin.ingest_all_enabled"]),
         patch("app.routers.admin.dedup_pass_drain_now", mocks["app.routers.admin.dedup_pass_drain_now"]),
         patch("app.routers.admin.classify_pending_drain_now", mocks["app.routers.admin.classify_pending_drain_now"]),
+        patch("app.routers.admin.publish_pending_job", mocks["app.routers.admin.publish_pending_job"]),
         patch("app.routers.admin.build_daily_feeds", mocks["app.routers.admin.build_daily_feeds"]),
         patch("app.routers.admin.send_daily_digests", mocks["app.routers.admin.send_daily_digests"]),
     ):
@@ -312,10 +371,11 @@ async def test_pipeline_run_calls_all_six_stages_in_order():
         "ingest",
         "dedup",
         "classify",
+        "publish",
         "build_feeds",
         "send_digests",
     ]
-    # All six job mocks were awaited exactly once
+    # All seven job mocks were awaited exactly once
     for m in mocks.values():
         m.assert_awaited_once()
 
@@ -333,6 +393,7 @@ async def test_pipeline_run_defaults_to_dry_run_for_digests():
         patch("app.routers.admin.ingest_all_enabled", mocks["app.routers.admin.ingest_all_enabled"]),
         patch("app.routers.admin.dedup_pass_drain_now", mocks["app.routers.admin.dedup_pass_drain_now"]),
         patch("app.routers.admin.classify_pending_drain_now", mocks["app.routers.admin.classify_pending_drain_now"]),
+        patch("app.routers.admin.publish_pending_job", mocks["app.routers.admin.publish_pending_job"]),
         patch("app.routers.admin.build_daily_feeds", mocks["app.routers.admin.build_daily_feeds"]),
         patch("app.routers.admin.send_daily_digests", mocks["app.routers.admin.send_daily_digests"]),
     ):
@@ -362,6 +423,7 @@ async def test_pipeline_run_passes_dry_run_false_to_digests():
         patch("app.routers.admin.ingest_all_enabled", mocks["app.routers.admin.ingest_all_enabled"]),
         patch("app.routers.admin.dedup_pass_drain_now", mocks["app.routers.admin.dedup_pass_drain_now"]),
         patch("app.routers.admin.classify_pending_drain_now", mocks["app.routers.admin.classify_pending_drain_now"]),
+        patch("app.routers.admin.publish_pending_job", mocks["app.routers.admin.publish_pending_job"]),
         patch("app.routers.admin.build_daily_feeds", mocks["app.routers.admin.build_daily_feeds"]),
         patch("app.routers.admin.send_daily_digests", mocks["app.routers.admin.send_daily_digests"]),
     ):
@@ -399,6 +461,7 @@ async def test_pipeline_run_stops_on_ingest_failure():
         patch("app.routers.admin.ingest_all_enabled", mock_ingest),
         patch("app.routers.admin.dedup_pass_drain_now", mock_dedup),
         patch("app.routers.admin.classify_pending_drain_now", new_callable=AsyncMock),
+        patch("app.routers.admin.publish_pending_job", new_callable=AsyncMock),
         patch("app.routers.admin.build_daily_feeds", new_callable=AsyncMock),
         patch("app.routers.admin.send_daily_digests", new_callable=AsyncMock),
     ):
@@ -436,6 +499,7 @@ async def test_pipeline_run_stops_on_sync_failure():
         patch("app.routers.admin.ingest_all_enabled", mock_ingest),
         patch("app.routers.admin.dedup_pass_drain_now", new_callable=AsyncMock),
         patch("app.routers.admin.classify_pending_drain_now", new_callable=AsyncMock),
+        patch("app.routers.admin.publish_pending_job", new_callable=AsyncMock),
         patch("app.routers.admin.build_daily_feeds", new_callable=AsyncMock),
         patch("app.routers.admin.send_daily_digests", new_callable=AsyncMock),
     ):
