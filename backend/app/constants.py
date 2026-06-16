@@ -466,7 +466,76 @@ ESTONIA_CONCERT_HALL_VENUES: dict[str, VenueInfo] = {
 NOMINATIM_BASE_URL = "https://nominatim.openstreetmap.org/search"
 NOMINATIM_USER_AGENT = "EventRadarBot/1.0 (+https://eventradar.ee; aleksei.lutkov@gmail.com)"
 GEOCODE_REQUEST_DELAY_SECONDS: float = 1.0
-GEOCODE_MAX_PER_RUN = 50
+GEOCODE_MAX_PER_RUN = 200  # ~3.5 min/run at 1 req/s, safely under the 6h cron cadence
+
+# Address normalization for geocoding — abbreviate Estonian street-type words that
+# OSM/Nominatim stores in abbreviated form but Fienta sends in full.
+ESTONIAN_STREET_TYPE_ABBREV: dict[str, str] = {
+    "tänav": "tn",
+    "maantee": "mnt",
+    "puiestee": "pst",
+    "tee": "tee",  # "tee" is already short — kept for completeness, no-op
+    "põik": "põik",
+    "plats": "plats",
+    "väljak": "väljak",
+    "allee": "allee",
+}
+
+# Suffix that should be stripped from building numbers before geocoding
+# e.g. "60a/9", "60a/ 9", "60a / 9" → "60a"
+GEOCODE_UNIT_SUFFIX_RE = r"(\s*/\s*\d+[a-z]?)"
+
+# Floor / extra-info fragments stripped before geocoding (e.g. ", II korrus")
+GEOCODE_FLOOR_RE = r",?\s+[IVX]+\s+korrus\b.*"
+
+# Trailing Estonian county markers stripped before geocoding
+GEOCODE_COUNTY_RE = r",\s*[\w-]+\s+maakond\b.*|,\s*Harjumaa\b.*"
+
+# Country suffix appended to Nominatim query to anchor results
+GEOCODE_COUNTRY_SUFFIX = ", Estonia"
+
+# City tokens that identify non-Tallinn events from Fienta — drop these; keep
+# Tallinn and unrecognised/missing-city addresses (city-less = probably Tallinn).
+NON_TALLINN_CITY_TOKENS: frozenset[str] = frozenset(
+    {
+        # Estonian cities
+        "Tartu",
+        "Pärnu",
+        "Narva",
+        "Viljandi",
+        "Rakvere",
+        "Kohtla-Järve",
+        "Maardu",
+        "Sillamäe",
+        "Kuressaare",
+        "Võru",
+        "Valga",
+        "Haapsalu",
+        "Jõhvi",
+        "Paide",
+        "Keila",
+        "Põlva",
+        "Jõgeva",
+        # Foreign cities (Latvian/Lithuanian capitals seen in Fienta data)
+        "Riga",
+        "Rīga",
+        "Vilnius",
+        # Generic county/region markers that imply non-Tallinn
+        "Tartumaa",
+        "Pärnumaa",
+        "Läänemaa",
+        "Saaremaa",
+        "Ida-Virumaa",
+        "Lääne-Virumaa",
+        "Põlvamaa",
+        "Valgamaa",
+        "Viljandimaa",
+        "Järvamaa",
+        "Raplamaa",
+        "Hiiumaa",
+        "Jõgevamaa",
+    }
+)
 
 # CORS — restricted to the methods/headers the SPA actually sends (see
 # frontend/src/api/client.ts and routers/*.py route decorators). Credentials are

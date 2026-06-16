@@ -138,6 +138,53 @@ class TestNormalize:
         assert result is not None
         assert result.price_hint == "5 - 10 EUR"
 
+    # -------------------------------------------------------------------
+    # City filter tests
+    # -------------------------------------------------------------------
+
+    def _event_with_address(self, address):
+        return {
+            "id": "99",
+            "name": "Test Event",
+            "starts_at": "2026-08-01T10:00:00+03:00",
+            "venue": {"name": "Venue", "address": address},
+        }
+
+    def test_tallinn_address_kept(self):
+        raw = self._event_with_address("Narva maantee 63, 10152 Tallinn, Harju maakond")
+        assert _adapter().normalize(raw) is not None
+
+    def test_tartu_address_dropped(self):
+        raw = self._event_with_address("Ülikooli 18, 51003 Tartu, Tartumaa")
+        assert _adapter().normalize(raw) is None
+
+    def test_parnu_address_dropped(self):
+        raw = self._event_with_address("Rüütli 40, 80010 Pärnu, Pärnumaa")
+        assert _adapter().normalize(raw) is None
+
+    def test_riga_address_dropped(self):
+        raw = self._event_with_address("Brīvības 55, 1010 Riga, Latvia")
+        assert _adapter().normalize(raw) is None
+
+    def test_riga_macron_address_dropped(self):
+        """Latvian diacritic form — 'Rīga' (macron-i) must also be filtered."""
+        raw = self._event_with_address("Brīvības 55, 1010 Rīga, Latvija")
+        assert _adapter().normalize(raw) is None
+
+    def test_vilnius_address_dropped(self):
+        raw = self._event_with_address("Gedimino pr. 9, 01103 Vilnius, Lithuania")
+        assert _adapter().normalize(raw) is None
+
+    def test_city_less_address_kept(self):
+        """No postal code → city undetectable → kept (likely Tallinn)."""
+        raw = self._event_with_address("Vanaturu kael 3")
+        assert _adapter().normalize(raw) is not None
+
+    def test_no_venue_address_kept(self):
+        """No address at all → city-less → kept."""
+        raw = {"id": "98", "name": "Mystery Venue", "starts_at": "2026-08-01T10:00:00+03:00"}
+        assert _adapter().normalize(raw) is not None
+
 
 # ---------------------------------------------------------------------------
 # fetch_raw() + pagination — async tests using httpx mock transport

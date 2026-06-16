@@ -20,6 +20,7 @@ from app.ingestion.base import (
     existing_external_ids,
     extract_jsonld_offers_text,
     http_get,
+    is_target_city,
     parse_dt,
 )
 
@@ -218,6 +219,9 @@ class FientaAdapter(SourceAdapter):
         venue_address = (
             address_candidate if isinstance(address_candidate, str) else None
         )
+
+        if not is_target_city(venue_address):
+            return None
 
         return NormalizedEvent(
             external_id=external_id,

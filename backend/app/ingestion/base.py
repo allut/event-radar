@@ -19,12 +19,14 @@ from app.constants import (
     DEFAULT_CURRENCY,
     EVENT_STATUS_DRAFT,
     EXPLICIT_KEYWORDS,
+    FIENTA_CITY_FILTER,
     HTTP_RETRYABLE_STATUS_CODES,
     HTTP_RETRY_MAX_ATTEMPTS,
     HTTP_RETRY_WAIT_MAX,
     HTTP_RETRY_WAIT_MIN,
     HTTP_RETRY_WAIT_MULTIPLIER,
     INGESTION_ERROR_MAX_LEN,
+    NON_TALLINN_CITY_TOKENS,
     PRICE_HINT_MAX_CHARS,
     SAFE_URL_SCHEMES,
     SLUG_HASH_HEX_LEN,
@@ -115,6 +117,35 @@ def normalize_currency(raw: Any, has_price: bool) -> str | None:
     if raw:
         return str(raw)
     return DEFAULT_CURRENCY if has_price else None
+
+
+# Regex to extract the city token from Fienta-style addresses:
+# "<street>, <postal code> <City>, <county>" — city sits after a postal code.
+# Estonian codes are 5 digits; foreign codes (LV: 4, LT: 5) also covered by 3-6.
+# \w with UNICODE matches any Unicode letter (covers Estonian, Latvian, Lithuanian diacritics).
+_CITY_FROM_ADDRESS_RE = re.compile(r"\b\d{3,6}\s+(\w[\w\-]+)", re.UNICODE)
+
+
+def address_city(address: str) -> str | None:
+    """Extract city token from a Fienta-style address string, or None if not parseable."""
+    m = _CITY_FROM_ADDRESS_RE.search(address)
+    return m.group(1) if m else None
+
+
+def is_target_city(address: str | None) -> bool:
+    """Return True if address is for FIENTA_CITY_FILTER (Tallinn) or city is unknown.
+
+    Drops only addresses whose city token is in NON_TALLINN_CITY_TOKENS.
+    City-less addresses (no postal code pattern) are kept — they're usually Tallinn.
+    """
+    if not address:
+        return True
+    city = address_city(address)
+    if city is None:
+        return True  # unparseable → keep
+    if city == FIENTA_CITY_FILTER:
+        return True
+    return city not in NON_TALLINN_CITY_TOKENS
 
 
 def parse_dt(value: str) -> datetime | None:

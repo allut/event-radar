@@ -1,6 +1,6 @@
 """Tests for shared ingestion helpers in app.ingestion.base."""
 
-from app.ingestion.base import is_explicit_text
+from app.ingestion.base import address_city, is_explicit_text, is_target_city
 
 
 class TestIsExplicitText:
@@ -36,3 +36,37 @@ class TestIsExplicitText:
 
     def test_empty_string_is_not_explicit(self):
         assert is_explicit_text("") is False
+
+
+class TestAddressCity:
+    def test_extracts_tallinn(self):
+        assert address_city("Narva maantee 63, 10152 Tallinn, Harju maakond") == "Tallinn"
+
+    def test_extracts_tartu(self):
+        assert address_city("Ülikooli 18, 51003 Tartu, Tartumaa") == "Tartu"
+
+    def test_extracts_parnu(self):
+        assert address_city("Rüütli 40, 80010 Pärnu, Pärnumaa") == "Pärnu"
+
+    def test_no_postal_code_returns_none(self):
+        assert address_city("Vanaturu kael 3") is None
+
+    def test_none_returns_none(self):
+        assert address_city("") is None
+
+
+class TestIsTargetCity:
+    def test_tallinn_address_is_target(self):
+        assert is_target_city("Narva maantee 63, 10152 Tallinn, Harju maakond") is True
+
+    def test_tartu_address_is_not_target(self):
+        assert is_target_city("Ülikooli 18, 51003 Tartu, Tartumaa") is False
+
+    def test_parnu_address_is_not_target(self):
+        assert is_target_city("Rüütli 40, 80010 Pärnu, Pärnumaa") is False
+
+    def test_city_less_address_kept(self):
+        assert is_target_city("Vanaturu kael 3") is True
+
+    def test_none_address_kept(self):
+        assert is_target_city(None) is True
