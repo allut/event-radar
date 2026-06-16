@@ -231,7 +231,7 @@ curl -u admin:admin -X POST "http://localhost:8000/admin/send-digests?dry_run=fa
 - **`event-radar-api`** — the FastAPI web service. Set `DATABASE_URL` and (in production) the LLM/Resend keys, `ADMIN_PASSWORD`, `INTERNAL_TOKEN`, and `CORS_ORIGINS`. `SECRET_KEY` is auto-generated. Optionally set `LOG_SHIP_URL` (+ `LOG_SHIP_TOKEN`) to ship JSON logs to an external drain such as Axiom.
 - **`event-radar-keepalive`** — a cron job that pings `/internal/tick` every 15 minutes so the embedded scheduler survives free-tier sleep. Set its `API_URL` to the web service URL.
 
-The frontend is a static SPA build (`npm run build`) deployable to Vercel or Cloudflare Pages; set `VITE_API_BASE` to the backend URL for production builds.
+The frontend is a static SPA build (`npm run build`) deployable to Vercel or Cloudflare Pages. The API client issues all requests against a relative `/api` prefix (`frontend/src/api/client.ts`), so the static host must rewrite/proxy `/api/*` to the backend web service URL (e.g. a Vercel rewrite or Cloudflare Pages proxy rule). No build-time API env var is used.
 
 ## Documentation
 

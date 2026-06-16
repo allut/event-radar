@@ -74,7 +74,7 @@ LLM Router: Groq (primary) → Cerebras → Mistral (fallback chain)
 
 ## Key Database Tables
 
-- `users` — email (citext unique), locale (et|en|ru), home_city, session_token_version (int, bumped to revoke all sessions — see Auth)
+- `users` — email (citext unique), locale (et|en|ru), home_city, email_digest_opt_in (bool, gates the daily digest send), session_token_version (int, bumped to revoke all sessions — see Auth)
 - `auth_magic_links` — token_hash (sha256), expires_at, used_at; one-use only
 - `personas` — 5 static personas with JSONB affinity vectors; display names in et/en/ru
 - `user_personas` — M2M join with weight (1.0 primary, 0.4 secondary)
@@ -137,7 +137,7 @@ Session tokens are issued after magic-link verification and passed as an `Author
 
 ## Admin Endpoints
 
-`/admin/*` uses HTTP Basic auth (`ADMIN_PASSWORD` env var). In development with no password set, any credentials are accepted (logs a warning). In production, the env var is required — unset = 503.
+`/admin/*` uses HTTP Basic auth (`ADMIN_USERNAME`, default `"admin"`, + `ADMIN_PASSWORD` env vars), checked with `secrets.compare_digest`. Failed auth attempts log a warning (audit trail). In development with no password set, any credentials are accepted (logs a warning). In production, the password is required — unset = 503. Every `/admin/*` route is also rate-limited (`RATE_LIMIT_ADMIN`, see Security Hardening).
 
 List endpoints that can grow unbounded (e.g. `/admin/dedup/groups`) are paginated via `limit`/`offset` query params with caps in `app/constants.py` (`ADMIN_*_PAGE_SIZE`, `ADMIN_*_MAX_PAGE_SIZE`). Pagination is by logical unit (dedup group, not row) so a single noisy cluster cannot dominate a page. Add the same pattern to any new admin list endpoint.
 
@@ -147,7 +147,7 @@ Manual pipeline triggers: `POST /admin/dedup`, `POST /admin/classify`, `POST /ad
 
 The backend was hardened against the OWASP Top 10 (2021). The middleware stack and these invariants are wired in `app/main.py`:
 
-- **Rate limiting** — `slowapi` per-IP limiter lives in `app/rate_limit.py` (its own module to avoid a circular import between `main.py` and routers). Public unauthenticated endpoints carry `@limiter.limit(...)` with the limit string sourced from a `RATE_LIMIT_*` constant in `app/constants.py` (`/auth/request-link`, `/auth/verify`, `/webhooks/inbound-mail` today). Add the same decorator + constant to any new public endpoint. `ProxyHeadersMiddleware(trusted_hosts="*")` is registered **last** (so it runs outermost) to rewrite `request.client` from `X-Forwarded-For` before the limiter reads it — without it, Render's proxy would collapse all clients into one bucket.
+- **Rate limiting** — `slowapi` per-IP limiter lives in `app/rate_limit.py` (its own module to avoid a circular import between `main.py` and routers). Endpoints carry `@limiter.limit(...)` with the limit string sourced from a `RATE_LIMIT_*` constant in `app/constants.py`: public unauthenticated routes (`/auth/request-link` → `RATE_LIMIT_AUTH_REQUEST_LINK`, `/auth/verify` → `RATE_LIMIT_AUTH_VERIFY`, `/webhooks/inbound-mail`), plus every `/admin/*` route as defense-in-depth (`RATE_LIMIT_ADMIN`, `"10/minute"` — a brute-force damper paired with a strong `ADMIN_PASSWORD`, not a hard ceiling). Add the same decorator + constant to any new public or admin endpoint. `ProxyHeadersMiddleware(trusted_hosts="*")` is registered **last** (so it runs outermost) to rewrite `request.client` from `X-Forwarded-For` before the limiter reads it — without it, Render's proxy would collapse all clients into one bucket.
 - **Security headers** — the `add_security_headers` middleware sets CSP/`X-Content-Type-Options`/`X-Frame-Options`/`Referrer-Policy` on every response from the `SECURITY_HEADERS` dict in `app/constants.py`; HSTS (`HSTS_HEADER_*`) is added only outside development (safe only over HTTPS). The CSP is `default-src 'none'` — the app is a pure JSON API with no first-party HTML/script surface.
 - **API docs** — `/docs`, `/redoc`, and `/openapi.json` are enabled **only** in development (`APP_ENV == "development"`); the strict CSP would block their CDN assets in production anyway.
 - **CORS** — `CORSMiddleware` with `allow_credentials=False` (auth is a Bearer header, never a cookie); origins from `settings.CORS_ORIGINS`, methods/headers from `CORS_ALLOWED_METHODS`/`CORS_ALLOWED_HEADERS` constants.
