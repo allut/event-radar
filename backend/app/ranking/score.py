@@ -92,6 +92,10 @@ class FeedbackContext:
     rows: list[_FeedbackRow] = field(default_factory=list)
     disliked_groups: frozenset[int] = field(default_factory=frozenset)
     disliked_event_ids: frozenset[int] = field(default_factory=frozenset)
+    # O(1) direct-match lookup: event_id → all rows for that event
+    direct_map: dict[int, list[_FeedbackRow]] = field(default_factory=dict)
+    # Only liked rows — indirect category matching iterates this subset, not all rows
+    liked_rows: list[_FeedbackRow] = field(default_factory=list)
 
     @classmethod
     def from_orm_rows(cls, orm_rows: list[UserEventFeedback]) -> "FeedbackContext":
@@ -120,10 +124,16 @@ class FeedbackContext:
         disliked_event_ids = frozenset(
             row.event_id for row in rows if row.signal == SIGNAL_DISLIKE
         )
+        direct_map: dict[int, list[_FeedbackRow]] = {}
+        for row in rows:
+            direct_map.setdefault(row.event_id, []).append(row)
+        liked_rows = [row for row in rows if row.signal == SIGNAL_LIKE]
         return cls(
             rows=rows,
             disliked_groups=disliked_groups,
             disliked_event_ids=disliked_event_ids,
+            direct_map=direct_map,
+            liked_rows=liked_rows,
         )
 
 
@@ -230,17 +240,20 @@ def feedback_signal(
     event_cat_set = set(event_categories)
     signals: list[float] = []
 
-    for row in ctx.rows:
+    # Direct: O(1) dict lookup instead of O(F) full-row scan
+    for row in ctx.direct_map.get(event_id, []):
         days = max(0.0, (now - row.created_at).total_seconds() / SECONDS_PER_DAY)
         decay = FEEDBACK_DECAY_BASE**days
+        if row.signal == SIGNAL_LIKE:
+            signals.append(decay)
+        elif row.signal == SIGNAL_DISLIKE:
+            signals.append(-1.0)
 
-        if row.event_id == event_id:
-            if row.signal == SIGNAL_LIKE:
-                signals.append(decay)
-            elif row.signal == SIGNAL_DISLIKE:
-                signals.append(-1.0)
-        elif row.signal == SIGNAL_LIKE and event_cat_set & row.category_set:
-            # Indirect: liked another event that shares a category with this one
+    # Indirect: iterate only liked rows, skipping the event itself
+    for row in ctx.liked_rows:
+        if row.event_id != event_id and event_cat_set & row.category_set:
+            days = max(0.0, (now - row.created_at).total_seconds() / SECONDS_PER_DAY)
+            decay = FEEDBACK_DECAY_BASE**days
             signals.append(FEEDBACK_INDIRECT_WEIGHT * decay)
 
     if not signals:

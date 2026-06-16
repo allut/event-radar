@@ -57,7 +57,18 @@ def _ctx(*rows: tuple[str, int, list[str], int | None, datetime]) -> FeedbackCon
         for r in fb_rows
         if r.signal == "dislike" and r.dedup_group_id is not None
     )
-    return FeedbackContext(rows=fb_rows, disliked_groups=disliked_groups)
+    disliked_event_ids = frozenset(r.event_id for r in fb_rows if r.signal == "dislike")
+    direct_map: dict[int, list[_FeedbackRow]] = {}
+    for r in fb_rows:
+        direct_map.setdefault(r.event_id, []).append(r)
+    liked_rows = [r for r in fb_rows if r.signal == "like"]
+    return FeedbackContext(
+        rows=fb_rows,
+        disliked_groups=disliked_groups,
+        disliked_event_ids=disliked_event_ids,
+        direct_map=direct_map,
+        liked_rows=liked_rows,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -284,12 +295,9 @@ class TestFeedbackSignal:
 
     def test_result_clipped_to_minus_one(self):
         # Multiple dislikes shouldn't go below -1
-        ctx = FeedbackContext(
-            rows=[
-                _FeedbackRow("dislike", 1, ["music"], None, _now()),
-                _FeedbackRow("dislike", 1, ["music"], None, _now()),
-            ],
-            disliked_groups=frozenset(),
+        ctx = _ctx(
+            ("dislike", 1, ["music"], None, _now()),
+            ("dislike", 1, ["music"], None, _now()),
         )
         result = feedback_signal(1, ["music"], None, ctx, _now())
         assert result >= -1.0
