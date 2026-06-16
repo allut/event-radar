@@ -8,7 +8,7 @@
 }
 
 .emptyIcon {
-  font-size: 3rem;
+  font-size: var(--heading-3xl);
   color: var(--text-dim);
   animation: breathe 3s var(--easing-breathe) infinite;
   margin-bottom: 0.5rem;

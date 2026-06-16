@@ -99,7 +99,7 @@
 .submit {
   composes: btnPrimary from '../../components/shared/Button.module.css';
   padding: 0.8125rem 2rem;
-  font-size: 1rem;
+  font-size: var(--fs-base);
   height: 48px;
   min-width: 160px;
   display: flex;
@@ -119,7 +119,7 @@
   height: var(--spinner-size-sm);
   border: 2px solid var(--spinner-border);
   border-top-color: var(--on-accent);
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   animation: spin var(--anim-base) linear infinite;
 }
 

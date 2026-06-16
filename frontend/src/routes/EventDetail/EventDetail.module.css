@@ -40,7 +40,7 @@
 
 .radar {
   color: var(--accent);
-  font-size: 0.85rem;
+  font-size: var(--fs-sm);
 }
 
 .brand {

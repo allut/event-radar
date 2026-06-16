@@ -13,7 +13,7 @@
   height: var(--spinner-size);
   border: 2px solid var(--border);
   border-top-color: var(--accent);
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   animation: spin var(--anim-base) linear infinite;
 }
 

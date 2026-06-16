@@ -33,7 +33,7 @@
   top: var(--space-3);
   right: var(--space-4);
   font-family: var(--font-display);
-  font-size: 5rem;
+  font-size: var(--numeral-xl);
   font-weight: 300;
   line-height: 1;
   color: var(--numeral-color);
@@ -65,7 +65,7 @@
 
 .placeholderNum {
   font-family: var(--font-display);
-  font-size: 4.5rem;
+  font-size: var(--numeral-md);
   font-weight: 300;
   color: var(--bg-placeholder);
   line-height: 1;
