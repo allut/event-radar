@@ -228,6 +228,19 @@ curl -u admin:admin -X POST http://localhost:8000/admin/geocode
 > [!TIP]
 > `POST /admin/pipeline/run` runs all seven stages above in dependency order in a single call, stopping at the first failure — the fastest way to drive a full E2E cycle. It also accepts `?dry_run=false` for the final digest stage. `GET /admin/stats` and `GET /admin/dedup/groups` are useful for inspecting the results afterwards. The geocoding backfill (`geocode_pending`) runs on its own 6-hourly schedule and is not part of `pipeline/run`; trigger it on demand via `POST /admin/geocode`.
 
+### Resetting event data
+
+`backend/scripts/reset_events.py` wipes **all** event and pipeline data and resets auto-increment IDs to 1 — useful for clearing out test/bad ingested data and starting the pipeline from a clean slate. It truncates the event, raw-event, classification, feedback, score, daily-feed, ingestion-run, LLM-call, and inbound-email tables (`RESTART IDENTITY CASCADE`), then resets each source's last-run state so ingestion re-fetches everything. **Users, personas, and the source registry are preserved.**
+
+```bash
+cd backend                              # with the venv active
+python scripts/reset_events.py          # dry run: prints target DB + per-table row counts
+python scripts/reset_events.py --yes    # actually truncate
+```
+
+> [!WARNING]
+> The `--yes` truncate is permanent and cannot be undone. The dry run (no flag) prints the masked `DATABASE_URL` it would hit and the current row counts — check that the target is the DB you expect before passing `--yes`.
+
 ## Deployment
 
 `render.yaml` defines a free-tier deployment:

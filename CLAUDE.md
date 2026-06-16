@@ -143,6 +143,18 @@ List endpoints that can grow unbounded (e.g. `/admin/dedup/groups`) are paginate
 
 Manual pipeline triggers: `POST /admin/dedup`, `POST /admin/classify`, `POST /admin/publish`, `POST /admin/geocode` run the corresponding scheduled job synchronously (dedup/classify use the drain-now variant, see Backlog drain above) for ad-hoc operation outside the 6h cron cadence. `POST /admin/geocode` runs the geocoding backfill (`geocode_pending_job`) standalone — it is not part of `POST /admin/pipeline/run`.
 
+## Maintenance Scripts
+
+`backend/scripts/` holds one-off operational scripts run manually from `backend/` with the venv active (they add `backend/` to `sys.path`, so `from app.*` resolves regardless of CWD).
+
+- **`reset_events.py`** — wipes all event/pipeline data and resets IDs to 1. `TRUNCATE ... RESTART IDENTITY CASCADE` over `events`, `raw_events`, `event_sources`, `event_classifications`, `user_event_feedback`, `user_event_scores`, `daily_feeds`, `ingestion_runs`, `llm_calls`, `raw_inbound_emails`, then sets `sources.last_run_at`/`last_status` back to `NULL` so ingestion re-fetches from scratch. **`users`, `personas`, and `sources` rows are preserved** (only the sources' run state is cleared). Dry run by default (prints the masked `DATABASE_URL` + per-table BEFORE counts); pass `--yes` to truncate. Verifies all targets are zero AFTER and warns on any nonzero. The truncate cannot be undone — intended for resetting a dev/staging DB or clearing bad ingested data before soft launch, not routine use.
+
+```bash
+cd backend                              # venv active
+python scripts/reset_events.py          # dry run: target DB + row counts
+python scripts/reset_events.py --yes    # actually truncate (irreversible)
+```
+
 ## Security Hardening
 
 The backend was hardened against the OWASP Top 10 (2021). The middleware stack and these invariants are wired in `app/main.py`:
