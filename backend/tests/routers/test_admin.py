@@ -210,6 +210,60 @@ async def test_publish_returns_500_on_job_error():
 
 
 # ---------------------------------------------------------------------------
+# POST /admin/geocode
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_geocode_calls_job_and_returns_result():
+    app = _build_app()
+    expected = {"geocoded": 4}
+
+    with (
+        patch("app.routers.admin.settings") as mock_settings,
+        patch(
+            "app.routers.admin.geocode_pending_job",
+            new_callable=AsyncMock,
+            return_value=expected,
+        ) as mock_geocode,
+    ):
+        mock_settings.ADMIN_PASSWORD = ""
+        mock_settings.APP_ENV = APP_ENV_DEVELOPMENT
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            resp = await client.post("/admin/geocode", auth=("admin", ""))
+
+    assert resp.status_code == http.HTTPStatus.OK
+    assert resp.json() == expected
+    mock_geocode.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_geocode_returns_500_on_job_error():
+    app = _build_app()
+
+    with (
+        patch("app.routers.admin.settings") as mock_settings,
+        patch(
+            "app.routers.admin.geocode_pending_job",
+            new_callable=AsyncMock,
+            side_effect=RuntimeError("nominatim error"),
+        ),
+    ):
+        mock_settings.ADMIN_PASSWORD = ""
+        mock_settings.APP_ENV = APP_ENV_DEVELOPMENT
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            resp = await client.post("/admin/geocode", auth=("admin", ""))
+
+    assert resp.status_code == http.HTTPStatus.INTERNAL_SERVER_ERROR
+
+
+# ---------------------------------------------------------------------------
 # POST /admin/send-digests
 # ---------------------------------------------------------------------------
 

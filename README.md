@@ -192,7 +192,7 @@ python scripts/generate_shared.py
 
 ### Manually triggering pipeline jobs (E2E testing)
 
-The scheduled jobs described in [Architecture](#architecture) (`sync_fienta_organizers`, `ingest_all_enabled`, `dedup_pass`, `classify_pending`, `publish_pending`, `build_daily_feeds`, `send_daily_digests`) can each be run on demand via `/admin/*` endpoints — useful for exercising the full pipeline end to end without waiting for the schedule.
+The scheduled jobs described in [Architecture](#architecture) (`sync_fienta_organizers`, `ingest_all_enabled`, `dedup_pass`, `classify_pending`, `publish_pending`, `build_daily_feeds`, `send_daily_digests`, `geocode_pending`) can each be run on demand via `/admin/*` endpoints — useful for exercising the full pipeline end to end without waiting for the schedule.
 
 All `/admin/*` endpoints require HTTP Basic auth (`ADMIN_USERNAME` / `ADMIN_PASSWORD`, see `.env.example`). In development with no `ADMIN_PASSWORD` set, any credentials are accepted — the examples below use `admin:admin`. Run them in this order to exercise a full pipeline cycle:
 
@@ -219,10 +219,14 @@ curl -u admin:admin -X POST http://localhost:8000/admin/build-feeds
 curl -u admin:admin -X POST http://localhost:8000/admin/send-digests
 # Pass dry_run=false to actually deliver emails:
 curl -u admin:admin -X POST "http://localhost:8000/admin/send-digests?dry_run=false"
+
+# geocode_pending — backfill lat/lng for events missing coordinates (runs standalone,
+# not part of pipeline/run; safe to invoke any time)
+curl -u admin:admin -X POST http://localhost:8000/admin/geocode
 ```
 
 > [!TIP]
-> `POST /admin/pipeline/run` runs all seven stages above in dependency order in a single call, stopping at the first failure — the fastest way to drive a full E2E cycle. It also accepts `?dry_run=false` for the final digest stage. `GET /admin/stats` and `GET /admin/dedup/groups` are useful for inspecting the results afterwards. The geocoding backfill (`geocode_pending`) has no admin endpoint — it only runs on its 6-hourly schedule.
+> `POST /admin/pipeline/run` runs all seven stages above in dependency order in a single call, stopping at the first failure — the fastest way to drive a full E2E cycle. It also accepts `?dry_run=false` for the final digest stage. `GET /admin/stats` and `GET /admin/dedup/groups` are useful for inspecting the results afterwards. The geocoding backfill (`geocode_pending`) runs on its own 6-hourly schedule and is not part of `pipeline/run`; trigger it on demand via `POST /admin/geocode`.
 
 ## Deployment
 

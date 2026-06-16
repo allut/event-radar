@@ -20,6 +20,7 @@ from app.email.digest import send_daily_digests
 from app.ingestion.jobs import (
     classify_pending_drain_now,
     dedup_pass_drain_now,
+    geocode_pending_job,
     ingest_all_enabled,
     ingest_source,
     publish_pending_job,
@@ -231,6 +232,21 @@ async def admin_publish(request: Request) -> dict:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Publish failed; see server logs",
+        )
+    return summary
+
+
+@router.post("/geocode", dependencies=[Depends(_require_admin)])
+@limiter.limit(RATE_LIMIT_ADMIN)
+async def admin_geocode(request: Request) -> dict:
+    """Backfill lat/lng for events with a venue_address but no coordinates (one batch)."""
+    try:
+        summary = await geocode_pending_job()
+    except Exception:
+        log.exception("admin geocode failed")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Geocoding failed; see server logs",
         )
     return summary
 

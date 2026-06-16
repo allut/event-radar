@@ -141,7 +141,7 @@ Session tokens are issued after magic-link verification and passed as an `Author
 
 List endpoints that can grow unbounded (e.g. `/admin/dedup/groups`) are paginated via `limit`/`offset` query params with caps in `app/constants.py` (`ADMIN_*_PAGE_SIZE`, `ADMIN_*_MAX_PAGE_SIZE`). Pagination is by logical unit (dedup group, not row) so a single noisy cluster cannot dominate a page. Add the same pattern to any new admin list endpoint.
 
-Manual pipeline triggers: `POST /admin/dedup`, `POST /admin/classify`, `POST /admin/publish` run the corresponding scheduled job synchronously (dedup/classify use the drain-now variant, see Backlog drain above) for ad-hoc operation outside the 6h cron cadence.
+Manual pipeline triggers: `POST /admin/dedup`, `POST /admin/classify`, `POST /admin/publish`, `POST /admin/geocode` run the corresponding scheduled job synchronously (dedup/classify use the drain-now variant, see Backlog drain above) for ad-hoc operation outside the 6h cron cadence. `POST /admin/geocode` runs the geocoding backfill (`geocode_pending_job`) standalone — it is not part of `POST /admin/pipeline/run`.
 
 ## Security Hardening
 
