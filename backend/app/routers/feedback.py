@@ -1,13 +1,14 @@
 """POST /feedback — record user feedback signals and invalidate cached scores."""
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.constants import VALID_SIGNALS
+from app.constants import RATE_LIMIT_FEEDBACK, VALID_SIGNALS
 from app.db import get_db
 from app.models.models import Event, User, UserEventFeedback, UserEventScore
+from app.rate_limit import limiter
 from app.routers.auth import get_current_user
 
 router = APIRouter(prefix="/feedback", tags=["feedback"])
@@ -19,8 +20,10 @@ class FeedbackBody(BaseModel):
 
 
 @router.post("", status_code=status.HTTP_200_OK)
+@limiter.limit(RATE_LIMIT_FEEDBACK)
 async def record_feedback(
     body: FeedbackBody,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict:

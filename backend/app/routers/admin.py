@@ -3,7 +3,7 @@
 import logging
 import secrets
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from sqlalchemy import func, select
 
@@ -13,6 +13,7 @@ from app.constants import (
     ADMIN_DEDUP_GROUPS_PAGE_SIZE,
     APP_ENV_DEVELOPMENT,
     EVENT_STATUS_CANCELLED,
+    RATE_LIMIT_ADMIN,
 )
 from app.db import AsyncSessionLocal
 from app.email.digest import send_daily_digests
@@ -27,6 +28,7 @@ from app.ingestion.organizer_sync import sync_fienta_organizers
 from app.ingestion.registry import ADAPTER_REGISTRY
 from app.models.models import Event, Source
 from app.ranking.score import build_daily_feeds
+from app.rate_limit import limiter
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/admin")
@@ -56,6 +58,7 @@ def _require_admin(credentials: HTTPBasicCredentials = Depends(_security)) -> No
         password.encode(),
     )
     if not (username_ok and password_ok):
+        log.warning("admin auth failed: username=%r", credentials.username)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect credentials",
@@ -64,14 +67,16 @@ def _require_admin(credentials: HTTPBasicCredentials = Depends(_security)) -> No
 
 
 @router.get("/ingest", dependencies=[Depends(_require_admin)])
-async def admin_ingest_all() -> dict:
+@limiter.limit(RATE_LIMIT_ADMIN)
+async def admin_ingest_all(request: Request) -> dict:
     """Trigger ingestion for all enabled sources."""
     results = await ingest_all_enabled()
     return {"results": results}
 
 
 @router.post("/ingest/{slug}", dependencies=[Depends(_require_admin)])
-async def admin_ingest_source(slug: str) -> dict:
+@limiter.limit(RATE_LIMIT_ADMIN)
+async def admin_ingest_source(slug: str, request: Request) -> dict:
     """Trigger ingestion for a single source by slug."""
     if slug not in ADAPTER_REGISTRY:
         raise HTTPException(
@@ -93,7 +98,8 @@ async def admin_ingest_source(slug: str) -> dict:
 
 
 @router.post("/dedup", dependencies=[Depends(_require_admin)])
-async def admin_dedup_run() -> dict:
+@limiter.limit(RATE_LIMIT_ADMIN)
+async def admin_dedup_run(request: Request) -> dict:
     """Trigger a dedup pass, draining the backlog until it clears or the cap is hit."""
     try:
         summary = await dedup_pass_drain_now()
@@ -107,7 +113,9 @@ async def admin_dedup_run() -> dict:
 
 
 @router.get("/dedup/groups", dependencies=[Depends(_require_admin)])
+@limiter.limit(RATE_LIMIT_ADMIN)
 async def admin_dedup_groups(
+    request: Request,
     limit: int = Query(
         ADMIN_DEDUP_GROUPS_PAGE_SIZE,
         ge=1,
@@ -198,7 +206,8 @@ async def admin_dedup_groups(
 
 
 @router.post("/classify", dependencies=[Depends(_require_admin)])
-async def admin_classify() -> dict:
+@limiter.limit(RATE_LIMIT_ADMIN)
+async def admin_classify(request: Request) -> dict:
     """Trigger LLM classification, draining the backlog until it clears or the cap is hit."""
     try:
         summary = await classify_pending_drain_now()
@@ -212,7 +221,8 @@ async def admin_classify() -> dict:
 
 
 @router.post("/publish", dependencies=[Depends(_require_admin)])
-async def admin_publish() -> dict:
+@limiter.limit(RATE_LIMIT_ADMIN)
+async def admin_publish(request: Request) -> dict:
     """Promote qualifying classified events to published (one bulk UPDATE)."""
     try:
         summary = await publish_pending_job()
@@ -226,7 +236,8 @@ async def admin_publish() -> dict:
 
 
 @router.post("/sync-organizers", dependencies=[Depends(_require_admin)])
-async def admin_sync_organizers() -> dict:
+@limiter.limit(RATE_LIMIT_ADMIN)
+async def admin_sync_organizers(request: Request) -> dict:
     """Trigger Fienta organizer sync (discover new organizers, flag stale ones)."""
     async with AsyncSessionLocal() as db:
         try:
@@ -243,7 +254,8 @@ async def admin_sync_organizers() -> dict:
 
 
 @router.post("/build-feeds", dependencies=[Depends(_require_admin)])
-async def admin_build_feeds() -> dict:
+@limiter.limit(RATE_LIMIT_ADMIN)
+async def admin_build_feeds(request: Request) -> dict:
     """Trigger daily feed builder for all active users (writes to daily_feeds)."""
     async with AsyncSessionLocal() as db:
         try:
@@ -260,7 +272,9 @@ async def admin_build_feeds() -> dict:
 
 
 @router.post("/send-digests", dependencies=[Depends(_require_admin)])
+@limiter.limit(RATE_LIMIT_ADMIN)
 async def admin_send_digests(
+    request: Request,
     dry_run: bool = Query(True, description="When true (default), counts would-send but skips actual email delivery"),
 ) -> dict:
     """Trigger daily digest send. Defaults to dry-run — pass ?dry_run=false to actually send."""
@@ -277,7 +291,9 @@ async def admin_send_digests(
 
 
 @router.post("/pipeline/run", dependencies=[Depends(_require_admin)])
+@limiter.limit(RATE_LIMIT_ADMIN)
 async def admin_pipeline_run(
+    request: Request,
     dry_run: bool = Query(True, description="When true (default), digest stage counts would-send but skips actual email delivery"),
 ) -> dict:
     """Run all seven pipeline stages in dependency order.
@@ -360,7 +376,8 @@ async def admin_pipeline_run(
 
 
 @router.get("/stats", dependencies=[Depends(_require_admin)])
-async def admin_stats() -> dict:
+@limiter.limit(RATE_LIMIT_ADMIN)
+async def admin_stats(request: Request) -> dict:
     """Aggregate counts used by checkpoint tests and manual monitoring."""
     async with AsyncSessionLocal() as db:
         total = (

@@ -166,6 +166,13 @@ RATE_LIMIT_WEBHOOK_INBOUND_MAIL = "60/minute"
 # Public read endpoint — generous enough for normal browsing while throttling
 # ID-enumeration / scraping abuse (GET /events/{id} takes no auth).
 RATE_LIMIT_EVENTS_DETAIL = "120/minute"
+# Admin Basic-auth surface — per-endpoint cap; with 11 admin routes an attacker
+# cycling all endpoints could attempt up to ~110/minute, so this is a speed-bump
+# rather than a hard brute-force ceiling. Pair with a strong ADMIN_PASSWORD.
+RATE_LIMIT_ADMIN = "10/minute"
+# Authenticated feedback writes — generous cap; prevents cache-rebuild DoS
+# (every signal wipes all user_event_scores rows for that user).
+RATE_LIMIT_FEEDBACK = "60/minute"
 
 # Auth tokens
 AUTH_MAGIC_SALT = "magic-link-v1"

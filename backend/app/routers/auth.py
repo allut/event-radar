@@ -167,11 +167,13 @@ async def verify_magic_link(
     try:
         user_id = verify_magic_token(token)
     except SignatureExpired:
+        log.warning("magic-link verify failed: expired")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Sign-in link has expired. Please request a new one.",
         )
     except BadSignature:
+        log.warning("magic-link verify failed: bad-signature")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid sign-in link.",
@@ -194,6 +196,7 @@ async def verify_magic_link(
         .returning(AuthMagicLink.user_id)
     )
     if result.fetchone() is None:
+        log.warning("magic-link verify failed: already-used or not-found")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Sign-in link already used, expired, or not found.",
