@@ -162,6 +162,28 @@ class TestClassifyEventPrice:
         assert event.price_max == 20.0
         assert event.currency == "EUR"
 
+    @pytest.mark.asyncio
+    async def test_ingest_price_not_overwritten_by_llm_guess(self, mock_db, make_event):
+        """An ingest-set price (e.g. Fienta 'From 28 EUR') survives even when the LLM
+        returns its own non-None price — ingest is authoritative."""
+        event = make_event()
+        event.price_min = 28.0
+        event.price_max = None  # open-ended, no listing ceiling
+        event.currency = "EUR"
+        raw = {**_BASE_RAW, "price_min": 15, "price_max": 30, "currency": "EUR"}
+        with patch(
+            "app.llm.classifier.llm_json",
+            AsyncMock(return_value=(raw, "groq/llama-3.3-70b-versatile")),
+        ):
+            ok = await classify_event(
+                event, mock_db, existing_classification=event.classification, prefetched=True
+            )
+
+        assert ok is True
+        assert event.price_min == 28.0
+        assert event.price_max is None
+        assert event.currency == "EUR"
+
 
 class TestParseClassificationExplicit:
     def test_explicit_true(self):

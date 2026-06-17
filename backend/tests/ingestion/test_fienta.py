@@ -44,13 +44,18 @@ class TestNormalize:
             "venue": {"name": "Von Krahli", "address": "Rataskaevu 10"},
             "url": "https://fienta.com/jazz-night",
             "image_url": "https://cdn.fienta.com/img.jpg",
-            "price_hint": "10 - 20 EUR",
+            "price_from_string": "From 12 EUR",
         }
         result = _adapter().normalize(raw)
         assert isinstance(result, NormalizedEvent)
         assert result.external_id == "123"
         assert result.title == "Jazz Night"
-        assert result.price_hint == "10 - 20 EUR"
+        assert result.price_hint is None
+        assert (result.price_min, result.price_max, result.currency) == (
+            12.0,
+            None,
+            "EUR",
+        )
         assert result.venue_name == "Von Krahli"
         assert result.venue_address == "Rataskaevu 10"
         assert result.url == "https://fienta.com/jazz-night"
@@ -64,6 +69,37 @@ class TestNormalize:
         assert result.price_min is None
         assert result.currency is None
         assert result.price_hint is None
+
+    def test_price_from_string_open_ended(self):
+        raw = {
+            "id": "5",
+            "name": "Gig",
+            "starts_at": "2026-08-01T10:00:00+03:00",
+            "price_from_string": "From 28 EUR",
+        }
+        result = _adapter().normalize(raw)
+        assert result is not None
+        assert (result.price_min, result.price_max, result.currency) == (
+            28.0,
+            None,
+            "EUR",
+        )
+        assert result.price_hint is None
+
+    def test_price_from_string_free(self):
+        raw = {
+            "id": "6",
+            "name": "Free Show",
+            "starts_at": "2026-08-01T10:00:00+03:00",
+            "price_from_string": "Free",
+        }
+        result = _adapter().normalize(raw)
+        assert result is not None
+        assert (result.price_min, result.price_max, result.currency) == (
+            0.0,
+            0.0,
+            None,
+        )
 
     def test_missing_title_returns_none(self):
         raw = {"id": "1", "starts_at": "2026-08-01T10:00:00+03:00"}
@@ -127,16 +163,24 @@ class TestNormalize:
         assert result.venue_name == "Outdoor Stage"
         assert result.venue_address is None
 
-    def test_price_hint_mapped(self):
+    def test_price_hint_ignored_price_from_listing(self):
+        """Fienta no longer maps the detail-page price_hint; price comes from the
+        listing price_from_string, and price_hint is left None."""
         raw = {
             "id": "60",
             "name": "Priced",
             "starts_at": "2026-12-20T19:00:00+03:00",
-            "price_hint": "5 - 10 EUR",
+            "price_hint": "5 - 10 EUR",  # legacy field — must be ignored now
+            "price_from_string": "10 EUR",
         }
         result = _adapter().normalize(raw)
         assert result is not None
-        assert result.price_hint == "5 - 10 EUR"
+        assert result.price_hint is None
+        assert (result.price_min, result.price_max, result.currency) == (
+            10.0,
+            10.0,
+            "EUR",
+        )
 
     # -------------------------------------------------------------------
     # City filter tests
@@ -402,133 +446,3 @@ class TestFetchRaw:
             await adapter._fetch_organizer(client, base, 1)
 
         assert request_count == FIENTA_MAX_PAGES
-
-
-# ---------------------------------------------------------------------------
-# fetch_raw() — price_hint detail-page enrichment for new events
-# ---------------------------------------------------------------------------
-
-class TestFetchRawPriceHints:
-    @pytest.mark.asyncio
-    async def test_detail_fetch_attaches_price_hint_for_new_events(self, mock_db):
-        """New events get price_hint from JSON-LD offers on their detail page."""
-        listing = [{"id": "1", "name": "Show", "url": "https://fienta.com/events/1"}]
-        detail_html = (
-            '<script type="application/ld+json">'
-            '{"@type": "Event", "offers": '
-            '{"@type": "Offer", "price": "15", "priceCurrency": "EUR"}}'
-            "</script>"
-        )
-
-        async def handler(request):
-            if "events/1" in str(request.url):
-                return httpx.Response(http.HTTPStatus.OK, html=detail_html)
-            return _mock_response(listing)
-
-        _set_known_ids(mock_db, [])
-        transport = httpx.MockTransport(handler)
-        _real = httpx.AsyncClient
-        with patch(
-            "app.ingestion.sources.fienta.httpx.AsyncClient",
-            lambda **kw: _real(transport=transport),
-        ):
-            result = await _adapter(organizer_ids=[1]).fetch_raw(mock_db)
-
-        assert result[0]["price_hint"] == "15 EUR"
-
-    @pytest.mark.asyncio
-    async def test_detail_fetch_skips_known_external_ids(self, mock_db):
-        """Already-ingested events are not re-fetched for price_hint."""
-        listing = [{"id": "1", "name": "Show", "url": "https://fienta.com/events/1"}]
-
-        async def handler(request):
-            if "events/1" in str(request.url):
-                raise AssertionError("should not fetch detail page for known event")
-            return _mock_response(listing)
-
-        _set_known_ids(mock_db, ["1"])
-        transport = httpx.MockTransport(handler)
-        _real = httpx.AsyncClient
-        with patch(
-            "app.ingestion.sources.fienta.httpx.AsyncClient",
-            lambda **kw: _real(transport=transport),
-        ):
-            result = await _adapter(organizer_ids=[1]).fetch_raw(mock_db)
-
-        assert "price_hint" not in result[0]
-
-    @pytest.mark.asyncio
-    async def test_detail_fetch_failure_is_swallowed(self, mock_db):
-        """A detail-page fetch error leaves price_hint unset, never fails the run."""
-        listing = [{"id": "1", "name": "Show", "url": "https://fienta.com/events/1"}]
-
-        async def handler(request):
-            if "events/1" in str(request.url):
-                return httpx.Response(http.HTTPStatus.NOT_FOUND)
-            return _mock_response(listing)
-
-        _set_known_ids(mock_db, [])
-        transport = httpx.MockTransport(handler)
-        _real = httpx.AsyncClient
-        with patch(
-            "app.ingestion.sources.fienta.httpx.AsyncClient",
-            lambda **kw: _real(transport=transport),
-        ):
-            result = await _adapter(organizer_ids=[1]).fetch_raw(mock_db)
-
-        assert result[0].get("price_hint") is None
-
-    @pytest.mark.asyncio
-    async def test_detail_fetch_parse_error_is_swallowed(self, mock_db):
-        """An unexpected parse error leaves price_hint unset, never fails the run."""
-        listing = [{"id": "1", "name": "Show", "url": "https://fienta.com/events/1"}]
-        detail_html = "<html></html>"
-
-        async def handler(request):
-            if "events/1" in str(request.url):
-                return httpx.Response(http.HTTPStatus.OK, html=detail_html)
-            return _mock_response(listing)
-
-        _set_known_ids(mock_db, [])
-        transport = httpx.MockTransport(handler)
-        _real = httpx.AsyncClient
-        with patch(
-            "app.ingestion.sources.fienta.httpx.AsyncClient",
-            lambda **kw: _real(transport=transport),
-        ), patch(
-            "app.ingestion.sources.fienta.extract_jsonld_offers_text",
-            side_effect=ValueError("boom"),
-        ):
-            result = await _adapter(organizer_ids=[1]).fetch_raw(mock_db)
-
-        assert result[0].get("price_hint") is None
-
-    @pytest.mark.asyncio
-    async def test_detail_fetch_capped_per_run(self, mock_db, monkeypatch):
-        """At most FIENTA_DETAIL_MAX_FETCHES new events get detail-page fetches."""
-        monkeypatch.setattr(
-            "app.ingestion.sources.fienta.FIENTA_DETAIL_MAX_FETCHES", 1
-        )
-        listing = [
-            {"id": "1", "name": "A", "url": "https://fienta.com/events/1"},
-            {"id": "2", "name": "B", "url": "https://fienta.com/events/2"},
-        ]
-        fetched_urls: list[str] = []
-
-        async def handler(request):
-            url = str(request.url)
-            if "events/" in url:
-                fetched_urls.append(url)
-                return httpx.Response(http.HTTPStatus.OK, html="<html></html>")
-            return _mock_response(listing)
-
-        _set_known_ids(mock_db, [])
-        transport = httpx.MockTransport(handler)
-        _real = httpx.AsyncClient
-        with patch(
-            "app.ingestion.sources.fienta.httpx.AsyncClient",
-            lambda **kw: _real(transport=transport),
-        ):
-            await _adapter(organizer_ids=[1]).fetch_raw(mock_db)
-
-        assert len(fetched_urls) == 1

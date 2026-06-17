@@ -16,6 +16,7 @@ from app.constants import (
     GEOCODE_INITIAL_RE,
     GEOCODE_MAX_PER_RUN,
     GEOCODE_REQUEST_DELAY_SECONDS,
+    GEOCODE_SECONDARY_UNIT_RE,
     GEOCODE_UNIT_SUFFIX_RE,
     HTTP_TIMEOUT_SECONDS,
     NOMINATIM_BASE_URL,
@@ -35,6 +36,7 @@ _INITIAL_RE = re.compile(GEOCODE_INITIAL_RE)
 _UNIT_SUFFIX_RE = re.compile(GEOCODE_UNIT_SUFFIX_RE, re.IGNORECASE)
 _FLOOR_RE = re.compile(GEOCODE_FLOOR_RE, re.IGNORECASE)
 _COUNTY_RE = re.compile(GEOCODE_COUNTY_RE, re.IGNORECASE)
+_SECONDARY_UNIT_RE = re.compile(GEOCODE_SECONDARY_UNIT_RE, re.IGNORECASE)
 
 
 def normalize_address_for_geocoding(address: str) -> str:
@@ -50,6 +52,7 @@ def normalize_address_for_geocoding(address: str) -> str:
     result = _INITIAL_RE.sub("", result)
     result = _FLOOR_RE.sub("", result)
     result = _COUNTY_RE.sub("", result)
+    result = _SECONDARY_UNIT_RE.sub("", result)
     result = _UNIT_SUFFIX_RE.sub("", result)
     result = _STREET_TYPE_PATTERN.sub("", result)
     result = re.sub(r"\s+", " ", result).strip().rstrip(",").strip()
@@ -86,6 +89,70 @@ async def geocode_address(
         return None
 
 
+async def copy_venue_from_siblings(db: AsyncSession) -> int:
+    """Copy venue_address + coords onto address-less events from a same-name sibling.
+
+    Two queries (honors the no-N+1 batch rule): one for targets (venue_name set,
+    venue_address NULL), one for donors (distinct venue_name → address/coords where
+    both are present). A venue_name is only copied when it maps to a *single*
+    distinct ``(venue_address, lat, lng)``; ambiguous venue_names (one name spanning
+    multiple physical addresses) are skipped + logged. Returns the number of events
+    updated. The caller is responsible for committing the session.
+    """
+    targets = (
+        await db.scalars(
+            select(Event)
+            .where(Event.venue_name.is_not(None), Event.venue_address.is_(None))
+            .limit(GEOCODE_MAX_PER_RUN)
+        )
+    ).all()
+    if not targets:
+        return 0
+
+    target_names = {event.venue_name for event in targets}
+    donor_rows = (
+        await db.execute(
+            select(Event.venue_name, Event.venue_address, Event.lat, Event.lng)
+            .where(
+                Event.venue_name.in_(target_names),
+                Event.venue_address.is_not(None),
+                Event.lat.is_not(None),
+            )
+            .distinct()
+        )
+    ).all()
+
+    donors: dict[str | None, set[tuple[str | None, float | None, float | None]]] = {}
+    for name, address, lat, lng in donor_rows:
+        donors.setdefault(name, set()).add((address, lat, lng))
+
+    copied = 0
+    warned_ambiguous: set[str | None] = set()
+    for event in targets:
+        candidates = donors.get(event.venue_name)
+        if not candidates:
+            continue
+        if len(candidates) > 1:
+            # One warning per ambiguous venue_name, not per event sharing it.
+            if event.venue_name not in warned_ambiguous:
+                warned_ambiguous.add(event.venue_name)
+                log.warning(
+                    "venue copy skipped: %r maps to %d distinct addresses",
+                    event.venue_name,
+                    len(candidates),
+                )
+            continue
+        address, lat, lng = next(iter(candidates))
+        event.venue_address = address
+        event.lat = lat
+        event.lng = lng
+        copied += 1
+
+    if copied:
+        log.info("copied venue data from siblings to %d events", copied)
+    return copied
+
+
 async def geocode_pending(db: AsyncSession) -> dict:
     """Backfill lat/lng for events with a venue_address but no coordinates.
 
@@ -96,7 +163,16 @@ async def geocode_pending(db: AsyncSession) -> dict:
     (e.g. "60a/9" vs "60a / 9") share a single Nominatim call.
     Remaining distinct addresses are geocoded serially with a delay between calls
     per Nominatim's usage policy (max 1 req/s).
+
+    First copies venue data between same-name siblings (copy_venue_from_siblings),
+    so copied coords count toward the run; any copied row still missing coords
+    falls through to the Nominatim pass below. The sibling copy makes no Nominatim
+    calls and sets lat, so copied rows are excluded from the pending query — the
+    Nominatim-call ceiling stays GEOCODE_MAX_PER_RUN even though total DB writes
+    across both passes (copy + geocode) can reach 2x that on disjoint event sets.
     """
+    copied = await copy_venue_from_siblings(db)
+
     pending = (
         await db.scalars(
             select(Event)
@@ -105,7 +181,7 @@ async def geocode_pending(db: AsyncSession) -> dict:
         )
     ).all()
     if not pending:
-        return {"pending": 0, "geocoded": 0, "failed": 0}
+        return {"pending": 0, "geocoded": 0, "failed": 0, "copied": copied}
 
     addresses = {event.venue_address for event in pending}
     cached_rows = (
@@ -144,4 +220,9 @@ async def geocode_pending(db: AsyncSession) -> dict:
             event.lat, event.lng = coords
             geocoded += 1
 
-    return {"pending": len(pending), "geocoded": geocoded, "failed": failed}
+    return {
+        "pending": len(pending),
+        "geocoded": geocoded,
+        "failed": failed,
+        "copied": copied,
+    }

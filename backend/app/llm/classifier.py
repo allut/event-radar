@@ -180,12 +180,23 @@ async def classify_event(
             )
         )
 
-    if parsed["price_min"] is not None:
-        event.price_min = parsed["price_min"]
-    if parsed["price_max"] is not None:
-        event.price_max = parsed["price_max"]
-    if parsed["currency"] is not None:
-        event.currency = parsed["currency"]
+    # Trust ingest-parsed prices over LLM guesswork: only write LLM-derived prices
+    # when ingest set none. Fienta parses price deterministically from the listing
+    # price_from_string at ingest (price_min set, price_hint None), so the LLM —
+    # which sees "not stated" for those events and may still infer a number — must
+    # not overwrite them. price_min gates the whole tier: a source either establishes
+    # price at ingest (skip LLM price entirely, keeping Fienta's open-ended price_max
+    # None) or defers price wholly to the LLM here (price_min None → write). Trade-off:
+    # once price_min is set (by ingest or a prior classify), a later reclassify will
+    # not refresh price — acceptable, since ingest prices are deterministic and
+    # LLM-set prices rarely change between runs (no provenance flag, no migration).
+    if event.price_min is None:
+        if parsed["price_min"] is not None:
+            event.price_min = parsed["price_min"]
+        if parsed["price_max"] is not None:
+            event.price_max = parsed["price_max"]
+        if parsed["currency"] is not None:
+            event.currency = parsed["currency"]
 
     event.is_explicit = event.is_explicit or parsed["explicit"]
 

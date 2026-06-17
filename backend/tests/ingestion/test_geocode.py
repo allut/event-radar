@@ -6,7 +6,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 
-from app.ingestion.geocode import geocode_address, geocode_pending, normalize_address_for_geocoding
+from app.ingestion.geocode import (
+    copy_venue_from_siblings,
+    geocode_address,
+    geocode_pending,
+    normalize_address_for_geocoding,
+)
 
 
 def _mock_response(json_data):
@@ -86,6 +91,20 @@ class TestNormalizeAddressForGeocoding:
         result = normalize_address_for_geocoding("Pärnu mnt 10, Tallinn, II korrus")
         assert "korrus" not in result
 
+    def test_english_secondary_unit_fragments_stripped(self):
+        """English ", building X" / ", Nth floor" fragments break Nominatim — strip them."""
+        result = normalize_address_for_geocoding(
+            "Mäealuse street 2/4, building A, 3rd floor, 12618 Tallinn, Harju County"
+        )
+        assert result == "Mäealuse 2, 12618 Tallinn, Estonia"
+
+    def test_secondary_unit_strip_is_comma_segment_bounded(self):
+        """The building/floor strip is confined to one comma segment — it removes the
+        annotation segment but never consumes the trailing city token across a comma."""
+        result = normalize_address_for_geocoding("Narva mnt 5, Old Building, Tallinn")
+        assert "Building" not in result
+        assert result == "Narva 5, Tallinn, Estonia"
+
     def test_estonia_suffix_appended(self):
         result = normalize_address_for_geocoding("Narva mnt 63, Tallinn")
         assert result.endswith(", Estonia")
@@ -131,8 +150,12 @@ class TestGeocodePending:
     @pytest.mark.asyncio
     async def test_no_pending_events_returns_zero_summary(self, mock_db):
         mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=[]))
-        summary = await geocode_pending(mock_db)
-        assert summary == {"pending": 0, "geocoded": 0, "failed": 0}
+        with patch(
+            "app.ingestion.geocode.copy_venue_from_siblings",
+            new=AsyncMock(return_value=0),
+        ):
+            summary = await geocode_pending(mock_db)
+        assert summary == {"pending": 0, "geocoded": 0, "failed": 0, "copied": 0}
 
     @pytest.mark.asyncio
     async def test_geocodes_events_and_reuses_cached_address(self, mock_db, make_event):
@@ -156,6 +179,10 @@ class TestGeocodePending:
 
         with (
             patch(
+                "app.ingestion.geocode.copy_venue_from_siblings",
+                new=AsyncMock(return_value=0),
+            ),
+            patch(
                 "app.ingestion.geocode.geocode_address",
                 new=AsyncMock(return_value=(59.5, 24.5)),
             ) as mock_geo,
@@ -163,7 +190,7 @@ class TestGeocodePending:
         ):
             summary = await geocode_pending(mock_db)
 
-        assert summary == {"pending": 2, "geocoded": 2, "failed": 0}
+        assert summary == {"pending": 2, "geocoded": 2, "failed": 0, "copied": 0}
         assert (event1.lat, event1.lng) == (59.5, 24.5)
         assert (event2.lat, event2.lng) == (59.1, 24.1)
         mock_geo.assert_called_once()  # only "Address A" needed a Nominatim call
@@ -193,6 +220,10 @@ class TestGeocodePending:
 
         with (
             patch(
+                "app.ingestion.geocode.copy_venue_from_siblings",
+                new=AsyncMock(return_value=0),
+            ),
+            patch(
                 "app.ingestion.geocode.geocode_address",
                 new=AsyncMock(return_value=(59.44, 24.72)),
             ) as mock_geo,
@@ -200,7 +231,7 @@ class TestGeocodePending:
         ):
             summary = await geocode_pending(mock_db)
 
-        assert summary == {"pending": 3, "geocoded": 3, "failed": 0}
+        assert summary == {"pending": 3, "geocoded": 3, "failed": 0, "copied": 0}
         mock_geo.assert_called_once()  # normalized key collision → 1 call for 3 events
 
     @pytest.mark.asyncio
@@ -217,12 +248,98 @@ class TestGeocodePending:
 
         with (
             patch(
+                "app.ingestion.geocode.copy_venue_from_siblings",
+                new=AsyncMock(return_value=0),
+            ),
+            patch(
                 "app.ingestion.geocode.geocode_address", new=AsyncMock(return_value=None)
             ),
             patch("app.ingestion.geocode.asyncio.sleep", new=AsyncMock()),
         ):
             summary = await geocode_pending(mock_db)
 
-        assert summary == {"pending": 1, "geocoded": 0, "failed": 1}
+        assert summary == {"pending": 1, "geocoded": 0, "failed": 1, "copied": 0}
         assert event1.lat is None
         assert event1.lng is None
+
+
+class TestCopyVenueFromSiblings:
+    @pytest.mark.asyncio
+    async def test_copies_from_single_distinct_sibling(self, mock_db, make_event):
+        """An address-less event inherits address+coords from its same-name sibling."""
+        target = make_event(event_id=1)
+        target.venue_name = "Kai Art Center"
+        target.venue_address = None
+        target.lat = None
+        target.lng = None
+
+        mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=[target]))
+        mock_db.execute.return_value = MagicMock(
+            all=MagicMock(
+                return_value=[("Kai Art Center", "Peetri 12, Tallinn", 59.44, 24.78)]
+            )
+        )
+
+        copied = await copy_venue_from_siblings(mock_db)
+
+        assert copied == 1
+        assert target.venue_address == "Peetri 12, Tallinn"
+        assert (target.lat, target.lng) == (59.44, 24.78)
+
+    @pytest.mark.asyncio
+    async def test_skips_venue_with_conflicting_sibling_addresses(
+        self, mock_db, make_event, caplog
+    ):
+        """A venue_name mapping to >1 distinct address is ambiguous → skipped + logged."""
+        target = make_event(event_id=1)
+        target.venue_name = "Club"
+        target.venue_address = None
+        target.lat = None
+        target.lng = None
+
+        mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=[target]))
+        mock_db.execute.return_value = MagicMock(
+            all=MagicMock(
+                return_value=[
+                    ("Club", "Street A 1, Tallinn", 59.1, 24.1),
+                    ("Club", "Street B 2, Tallinn", 59.2, 24.2),
+                ]
+            )
+        )
+
+        with caplog.at_level(logging.WARNING, logger="app.ingestion.geocode"):
+            copied = await copy_venue_from_siblings(mock_db)
+
+        assert copied == 0
+        assert target.venue_address is None
+        assert "venue copy skipped" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_no_targets_returns_zero_without_donor_query(self, mock_db):
+        """No address-less events → returns 0 and never runs the donor query."""
+        mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=[]))
+
+        copied = await copy_venue_from_siblings(mock_db)
+
+        assert copied == 0
+        mock_db.execute.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_target_without_matching_sibling_is_untouched(
+        self, mock_db, make_event
+    ):
+        """An address-less event whose venue has no address-bearing sibling stays null."""
+        target = make_event(event_id=1)
+        target.venue_name = "Orphan Venue"
+        target.venue_address = None
+        target.lat = None
+        target.lng = None
+
+        mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=[target]))
+        mock_db.execute.return_value = MagicMock(all=MagicMock(return_value=[]))
+
+        copied = await copy_venue_from_siblings(mock_db)
+
+        assert copied == 0
+        assert target.venue_address is None
+        assert target.lat is None

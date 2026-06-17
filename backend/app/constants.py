@@ -122,8 +122,6 @@ FIENTA_ORGANIZER_CHECK_LIMIT = (
 )
 FIENTA_CITY_FILTER = "Tallinn"
 FIENTA_MAX_PAGES = 50  # safety ceiling per organizer — prevents runaway pagination
-FIENTA_DETAIL_MAX_FETCHES = 150  # per-run cap on new-event detail-page price fetches
-FIENTA_DETAIL_CONCURRENCY = 8  # mirrors DIGEST_SEND_CONCURRENCY, within Fienta's tolerance
 
 SOURCE_STATUS_OK = "ok"
 SOURCE_STATUS_ERROR = "error"
@@ -503,6 +501,10 @@ GEOCODE_UNIT_SUFFIX_RE = r"(\s*/\s*\d+[a-z]?)"
 # Floor / extra-info fragments stripped before geocoding (e.g. ", II korrus")
 GEOCODE_FLOOR_RE = r",?\s+[IVX]+\s+korrus\b.*"
 
+# Comma-delimited secondary-unit fragments (English) stripped before geocoding,
+# e.g. ", building A", ", 3rd floor" — Nominatim has no node for these.
+GEOCODE_SECONDARY_UNIT_RE = r",\s*[^,]*\b(?:building|floor)\b[^,]*"
+
 # Trailing Estonian county markers stripped before geocoding. Covers the spaced
 # "Harju maakond", the one-word "Harjumaakond", "Harjumaa", and the bare/English
 # "Harju" / "Harju County" forms seen in the geocode logs.
@@ -515,6 +517,10 @@ GEOCODE_COUNTY_RE = (
 
 # Country suffix appended to Nominatim query to anchor results
 GEOCODE_COUNTRY_SUFFIX = ", Estonia"
+
+# Parses a Fienta listing price_from_string: "From 9.50 EUR" / "12 EUR" — a number
+# (int or decimal, "." or "," separator) followed by any 3-letter currency code.
+PRICE_FROM_STRING_RE = r"(?:from\s+)?(\d+(?:[.,]\d+)?)\s*([A-Za-z]{3})"
 
 # CORS — restricted to the methods/headers the SPA actually sends (see
 # frontend/src/api/client.ts and routers/*.py route decorators). Credentials are

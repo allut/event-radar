@@ -1,27 +1,22 @@
-import asyncio
 import logging
 from typing import Any
 from urllib.parse import urlparse
 
 import httpx
-from bs4 import BeautifulSoup
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.constants import (
-    FIENTA_DETAIL_CONCURRENCY,
-    FIENTA_DETAIL_MAX_FETCHES,
     FIENTA_MAX_PAGES,
     HTTP_TIMEOUT_SECONDS,
 )
 from app.ingestion.base import (
     NormalizedEvent,
     SourceAdapter,
-    existing_external_ids,
-    extract_jsonld_offers_text,
     http_get,
     is_target_city,
     parse_dt,
+    parse_price_from_string,
 )
 
 log = logging.getLogger(__name__)
@@ -37,10 +32,9 @@ class FientaAdapter(SourceAdapter):
     (`meta.current_page` / `meta.last_page`) pagination automatically.
     Plain list responses (no pagination envelope) are also supported.
 
-    The listing API returns no price fields, so price is recovered for
-    new events only by fetching each event's detail page and extracting
-    JSON-LD ``offers`` (bounded concurrency, capped per run — self-healing,
-    since events not yet stored get retried on a later run).
+    The listing payload carries a ``price_from_string`` (e.g. "From 28 EUR",
+    "Free"), parsed in code at normalize() into price_min/price_max/currency —
+    no detail-page fetch and no LLM price parse needed for Fienta.
     """
 
     async def fetch_raw(self, db: AsyncSession) -> list[dict[str, Any]]:
@@ -72,57 +66,7 @@ class FientaAdapter(SourceAdapter):
             if not all_events and errors:
                 raise errors[0]
 
-            await self._fetch_price_hints(client, db, all_events)
-
         return all_events
-
-    async def _fetch_price_hints(
-        self,
-        client: httpx.AsyncClient,
-        db: AsyncSession,
-        events: list[dict[str, Any]],
-    ) -> None:
-        """Fetch detail pages for new events and attach JSON-LD price_hint.
-
-        Bounded by FIENTA_DETAIL_CONCURRENCY/FIENTA_DETAIL_MAX_FETCHES. Events
-        already stored (existing_external_ids) and events past the per-run cap
-        are skipped — forward-only, self-healing on later runs.
-        """
-        known_ids = await existing_external_ids(db, self.source.id)
-        new_events = [
-            event
-            for event in events
-            if str(event.get("id", "")) and str(event.get("id", "")) not in known_ids
-        ][:FIENTA_DETAIL_MAX_FETCHES]
-        if not new_events:
-            return
-
-        semaphore = asyncio.Semaphore(FIENTA_DETAIL_CONCURRENCY)
-
-        async def _fetch_one(event: dict[str, Any]) -> None:
-            detail_url = event.get("url") or event.get("buy_tickets_url")
-            if not detail_url:
-                return
-            async with semaphore:
-                try:
-                    response = await http_get(client, detail_url)
-                except (httpx.HTTPStatusError, httpx.RequestError) as exc:
-                    log.warning(
-                        "fienta detail fetch failed url=%s: %s", detail_url, exc
-                    )
-                    return
-            try:
-                soup = BeautifulSoup(response.text, "html.parser")
-                price_hint = extract_jsonld_offers_text(soup)
-            except Exception as exc:
-                log.warning("fienta price_hint parse failed url=%s: %s", detail_url, exc)
-                return
-            if price_hint:
-                event["price_hint"] = price_hint
-
-        await asyncio.gather(
-            *(_fetch_one(event) for event in new_events), return_exceptions=True
-        )
 
     async def _fetch_organizer(
         self, client: httpx.AsyncClient, base_url: str, org_id: int
@@ -223,6 +167,10 @@ class FientaAdapter(SourceAdapter):
         if not is_target_city(venue_address):
             return None
 
+        price_min, price_max, currency = parse_price_from_string(
+            raw.get("price_from_string")
+        )
+
         return NormalizedEvent(
             external_id=external_id,
             title=str(title),
@@ -235,5 +183,7 @@ class FientaAdapter(SourceAdapter):
             image_url=raw.get("image_url")
             or raw.get("image")
             or raw.get("cover_image"),
-            price_hint=raw.get("price_hint"),
+            price_min=price_min,
+            price_max=price_max,
+            currency=currency,
         )

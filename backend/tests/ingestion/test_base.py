@@ -1,6 +1,13 @@
 """Tests for shared ingestion helpers in app.ingestion.base."""
 
-from app.ingestion.base import address_city, is_explicit_text, is_target_city
+import pytest
+
+from app.ingestion.base import (
+    address_city,
+    is_explicit_text,
+    is_target_city,
+    parse_price_from_string,
+)
 
 
 class TestIsExplicitText:
@@ -90,3 +97,28 @@ class TestIsTargetCity:
 
     def test_foreign_city_warszawa_dropped(self):
         assert is_target_city("Marszałkowska 1, 00-661 Warszawa, Poland") is False
+
+
+class TestParsePriceFromString:
+    @pytest.mark.parametrize(
+        ("value", "expected"),
+        [
+            ("10 EUR", (10.0, 10.0, "EUR")),
+            ("From 28 EUR", (28.0, None, "EUR")),
+            ("From 6 EUR, free", (0.0, None, "EUR")),
+            ("40 EUR, free", (0.0, 40.0, "EUR")),
+            ("Free", (0.0, 0.0, None)),
+            (None, (None, None, None)),
+            ("", (None, None, None)),
+            ("From 9.50 EUR", (9.5, None, "EUR")),
+            ("From 3,08 EUR", (3.08, None, "EUR")),  # comma decimal defensiveness
+            ("From 20 CHF", (20.0, None, "CHF")),
+            ("18 PLN", (18.0, 18.0, "PLN")),
+            ("sold out", (None, None, None)),  # unparseable, not free
+        ],
+    )
+    def test_grammar_table(self, value, expected):
+        assert parse_price_from_string(value) == expected
+
+    def test_currency_uppercased(self):
+        assert parse_price_from_string("12 eur")[2] == "EUR"

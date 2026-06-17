@@ -26,7 +26,7 @@ from app.constants import (
     HTTP_RETRY_WAIT_MIN,
     HTTP_RETRY_WAIT_MULTIPLIER,
     INGESTION_ERROR_MAX_LEN,
-    PRICE_HINT_MAX_CHARS,
+    PRICE_FROM_STRING_RE,
     SAFE_URL_SCHEMES,
     SLUG_HASH_HEX_LEN,
     SLUG_TITLE_MAX_LEN,
@@ -201,51 +201,38 @@ async def existing_external_ids(db: AsyncSession, source_id: int) -> set[str]:
     return {r for r in rows.all() if r is not None}
 
 
-def _offer_entry_text(offer: dict[str, Any]) -> str | None:
-    price = offer.get("price")
-    if price is None:
-        return None
-    currency = offer.get("priceCurrency") or ""
-    name = offer.get("name")
-    price_part = f"{price} {currency}".strip()
-    return f"{name} {price_part}" if name else price_part
+_PRICE_FROM_STRING_RE = re.compile(PRICE_FROM_STRING_RE, re.IGNORECASE)
 
 
-def _offers_text(offers: Any) -> str | None:
-    if isinstance(offers, dict):
-        low = offers.get("lowPrice")
-        high = offers.get("highPrice")
-        if low is not None or high is not None:
-            currency = offers.get("priceCurrency") or ""
-            if low is not None and high is not None and low != high:
-                return f"{low} - {high} {currency}".strip()
-            return f"{low if low is not None else high} {currency}".strip()
-        return _offer_entry_text(offers)
-    if isinstance(offers, list):
-        parts = [t for o in offers if isinstance(o, dict) and (t := _offer_entry_text(o))]
-        return "; ".join(parts) or None
-    return None
+def parse_price_from_string(
+    value: str | None,
+) -> tuple[float | None, float | None, str | None]:
+    """Parse a Fienta listing price_from_string into (price_min, price_max, currency).
 
-
-def extract_jsonld_offers_text(soup: BeautifulSoup) -> str | None:
-    """Find <script type="application/ld+json"> offers and return a compact price string.
-
-    Handles ``Offer``/``Offer[]`` (``name``/``price``/``priceCurrency``) and
-    ``AggregateOffer`` (``lowPrice``/``highPrice``/``priceCurrency``). This only
-    locates/serializes price text — the numeric min/max decision is left to the LLM.
+    Grammar (verified across all 803 live rows): optional "From ", a number, a 3-letter
+    currency; optional ", free" suffix; or the literal "Free"; or None/empty.
+      - "10 EUR"           -> (10, 10, "EUR")    exact price, min == max
+      - "From 28 EUR"      -> (28, None, "EUR")  open-ended, no listing ceiling
+      - "From 6 EUR, free" -> (0, None, "EUR")   free tier present, paid from 6
+      - "40 EUR, free"     -> (0, 40, "EUR")     free tier present, ceiling 40
+      - "Free"             -> (0, 0, None)
+      - None / unparseable -> (None, None, None)
     """
-    for script in soup.find_all("script", type="application/ld+json"):
-        try:
-            data = json.loads(script.string or "")
-        except (TypeError, ValueError):
-            continue
-        for item in data if isinstance(data, list) else [data]:
-            if not isinstance(item, dict):
-                continue
-            text = _offers_text(item.get("offers"))
-            if text:
-                return text[:PRICE_HINT_MAX_CHARS]
-    return None
+    if not value:
+        return (None, None, None)
+    text = value.strip()
+    has_free = text.lower() == "free" or text.lower().endswith(", free")
+    m = _PRICE_FROM_STRING_RE.search(text)
+    if not m:
+        return (0.0, 0.0, None) if has_free else (None, None, None)
+    amount = float(m.group(1).replace(",", "."))
+    currency = m.group(2).upper()
+    # The optional "From " prefix is captured inside the match, so test the raw
+    # string's start rather than text[:m.start()] (which would be empty here).
+    is_from = text.lower().startswith("from")
+    ceiling = None if is_from else amount
+    price_min = 0.0 if has_free else amount
+    return (price_min, ceiling, currency)
 
 
 def _coerce_float(value: Any) -> float | None:
