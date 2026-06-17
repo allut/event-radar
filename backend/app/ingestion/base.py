@@ -26,7 +26,6 @@ from app.constants import (
     HTTP_RETRY_WAIT_MIN,
     HTTP_RETRY_WAIT_MULTIPLIER,
     INGESTION_ERROR_MAX_LEN,
-    NON_TALLINN_CITY_TOKENS,
     PRICE_HINT_MAX_CHARS,
     SAFE_URL_SCHEMES,
     SLUG_HASH_HEX_LEN,
@@ -133,19 +132,22 @@ def address_city(address: str) -> str | None:
 
 
 def is_target_city(address: str | None) -> bool:
-    """Return True if address is for FIENTA_CITY_FILTER (Tallinn) or city is unknown.
+    """Keep only FIENTA_CITY_FILTER (Tallinn) or city-less, assumed-Tallinn addresses.
 
-    Drops only addresses whose city token is in NON_TALLINN_CITY_TOKENS.
-    City-less addresses (no postal code pattern) are kept — they're usually Tallinn.
+    Allowlist, not denylist: drops any address whose parseable city token is not
+    FIENTA_CITY_FILTER, so unknown Estonian towns and foreign cities are excluded
+    without needing to enumerate them. City-less addresses (no postal-code pattern)
+    are kept — usually a Tallinn venue name with no street/postal in the string.
+
+    Known limitation (acceptable — all observed Fienta data carries postal codes):
+    an address with a city but no postal code can't be parsed, so it is kept.
     """
     if not address:
         return True
     city = address_city(address)
     if city is None:
         return True  # unparseable → keep
-    if city == FIENTA_CITY_FILTER:
-        return True
-    return city not in NON_TALLINN_CITY_TOKENS
+    return city == FIENTA_CITY_FILTER
 
 
 def parse_dt(value: str) -> datetime | None:

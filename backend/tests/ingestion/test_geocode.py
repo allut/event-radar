@@ -16,20 +16,39 @@ def _mock_response(json_data):
 
 
 class TestNormalizeAddressForGeocoding:
-    def test_tanav_abbreviated(self):
+    def test_tanav_stripped(self):
         result = normalize_address_for_geocoding("Telliskivi tänav 60a, 10412 Tallinn")
-        assert "tn" in result
         assert "tänav" not in result
+        assert "tn" not in result
+        assert "Telliskivi 60a" in result
 
-    def test_maantee_abbreviated(self):
+    def test_maantee_stripped(self):
         result = normalize_address_for_geocoding("Narva maantee 63, Tallinn")
-        assert "mnt" in result
         assert "maantee" not in result
+        assert "mnt" not in result
+        assert "Narva 63" in result
 
-    def test_puiestee_abbreviated(self):
+    def test_puiestee_stripped(self):
         result = normalize_address_for_geocoding("Estonia puiestee 4, Tallinn")
-        assert "pst" in result
         assert "puiestee" not in result
+        assert "pst" not in result
+        assert "Estonia 4" in result
+
+    def test_tee_preserved_not_stripped(self):
+        """'tee' is an inseparable part of many Tallinn street names (Mustamäe tee)
+        — stripping it would collapse to a district-centroid match, so it stays."""
+        result = normalize_address_for_geocoding("Mustamäe tee 25, 10621 Tallinn")
+        assert "Mustamäe tee 25" in result
+
+    def test_leading_initial_stripped(self):
+        result = normalize_address_for_geocoding("A. Weizenbergi 26, 10127 Tallinn")
+        assert "Weizenbergi 26" in result
+        assert "A." not in result
+
+    def test_leading_initial_no_space_stripped(self):
+        result = normalize_address_for_geocoding("L.Koidula 12a, Tallinn")
+        assert "Koidula 12a" in result
+        assert "L." not in result
 
     def test_unit_suffix_stripped_slash_9(self):
         result = normalize_address_for_geocoding("Telliskivi tänav 60a/9, 10412 Tallinn")
@@ -77,8 +96,8 @@ class TestNormalizeAddressForGeocoding:
 
     def test_case_insensitive_street_type(self):
         result = normalize_address_for_geocoding("Narva Maantee 63, Tallinn")
-        assert "mnt" in result
         assert "Maantee" not in result
+        assert "Narva 63" in result
 
 
 class TestGeocodeAddress:

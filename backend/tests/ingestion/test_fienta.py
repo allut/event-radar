@@ -175,6 +175,11 @@ class TestNormalize:
         raw = self._event_with_address("Gedimino pr. 9, 01103 Vilnius, Lithuania")
         assert _adapter().normalize(raw) is None
 
+    def test_non_listed_foreign_city_dropped(self):
+        """Allowlist: a city never enumerated in the old denylist still drops."""
+        raw = self._event_with_address("Marszałkowska 1, 00-661 Warszawa, Poland")
+        assert _adapter().normalize(raw) is None
+
     def test_city_less_address_kept(self):
         """No postal code → city undetectable → kept (likely Tallinn)."""
         raw = self._event_with_address("Vanaturu kael 3")

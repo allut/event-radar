@@ -70,3 +70,23 @@ class TestIsTargetCity:
 
     def test_none_address_kept(self):
         assert is_target_city(None) is True
+
+    # Allowlist regression: these cities were ABSENT from the old denylist and
+    # leaked through. Under the allowlist (city != Tallinn → drop) they must fail.
+    def test_small_estonian_town_kardla_dropped(self):
+        assert is_target_city("Posti 13, 92411 Kärdla, Hiiumaa") is False
+
+    def test_small_estonian_town_korgessaare_dropped(self):
+        assert is_target_city("Kõpu tee 1, 92201 Kõrgessaare") is False
+
+    def test_foreign_city_angers_dropped(self):
+        assert is_target_city("Rue Bressigny 1, 49000 Angers, France") is False
+
+    def test_foreign_city_gent_dropped(self):
+        assert is_target_city("Korenmarkt 1, 9000 Gent, Belgium") is False
+
+    def test_foreign_city_dusseldorf_dropped(self):
+        assert is_target_city("Königsallee 1, 40212 Düsseldorf, Germany") is False
+
+    def test_foreign_city_warszawa_dropped(self):
+        assert is_target_city("Marszałkowska 1, 00-661 Warszawa, Poland") is False

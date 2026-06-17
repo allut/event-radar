@@ -9,10 +9,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.constants import (
-    ESTONIAN_STREET_TYPE_ABBREV,
+    ESTONIAN_STREET_TYPE_WORDS,
     GEOCODE_COUNTRY_SUFFIX,
     GEOCODE_COUNTY_RE,
     GEOCODE_FLOOR_RE,
+    GEOCODE_INITIAL_RE,
     GEOCODE_MAX_PER_RUN,
     GEOCODE_REQUEST_DELAY_SECONDS,
     GEOCODE_UNIT_SUFFIX_RE,
@@ -27,9 +28,10 @@ log = logging.getLogger(__name__)
 
 # Pre-compiled patterns built from constants — avoids re-compiling per call.
 _STREET_TYPE_PATTERN = re.compile(
-    r"\b(" + "|".join(re.escape(k) for k in ESTONIAN_STREET_TYPE_ABBREV) + r")\b",
+    r"\b(" + "|".join(re.escape(w) for w in ESTONIAN_STREET_TYPE_WORDS) + r")\b",
     re.IGNORECASE,
 )
+_INITIAL_RE = re.compile(GEOCODE_INITIAL_RE)
 _UNIT_SUFFIX_RE = re.compile(GEOCODE_UNIT_SUFFIX_RE, re.IGNORECASE)
 _FLOOR_RE = re.compile(GEOCODE_FLOOR_RE, re.IGNORECASE)
 _COUNTY_RE = re.compile(GEOCODE_COUNTY_RE, re.IGNORECASE)
@@ -38,18 +40,18 @@ _COUNTY_RE = re.compile(GEOCODE_COUNTY_RE, re.IGNORECASE)
 def normalize_address_for_geocoding(address: str) -> str:
     """Return a Nominatim-friendly version of a Fienta venue_address.
 
-    Abbreviates Estonian street-type words, strips unit suffixes, floor notes,
-    and county markers, then appends ", Estonia" to anchor country matching.
-    The stored venue_address is never mutated — this is query-only.
+    Strips Estonian street-type words entirely (OSM stores streets by bare name,
+    so the type word is what makes the match fail), drops a leading personal-name
+    initial, unit suffixes, floor notes, and county markers, then appends
+    ", Estonia" to anchor country matching. The whitespace-collapse cleans up the
+    gaps left by stripping. The stored venue_address is never mutated — query-only.
     """
     result = address
+    result = _INITIAL_RE.sub("", result)
     result = _FLOOR_RE.sub("", result)
     result = _COUNTY_RE.sub("", result)
     result = _UNIT_SUFFIX_RE.sub("", result)
-    result = _STREET_TYPE_PATTERN.sub(
-        lambda m: ESTONIAN_STREET_TYPE_ABBREV.get(m.group(0).lower(), m.group(0)),
-        result,
-    )
+    result = _STREET_TYPE_PATTERN.sub("", result)
     result = re.sub(r"\s+", " ", result).strip().rstrip(",").strip()
     if not result.endswith(GEOCODE_COUNTRY_SUFFIX):
         result += GEOCODE_COUNTRY_SUFFIX
