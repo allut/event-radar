@@ -7,8 +7,10 @@ import httpx
 import pytest
 
 from app.ingestion.geocode import (
+    _is_suspect_venue_name,
     canonical_venue_name,
     copy_venue_from_siblings,
+    extract_address_from_venue_name,
     geocode_address,
     geocode_pending,
     normalize_address_for_geocoding,
@@ -156,7 +158,7 @@ class TestGeocodePending:
             new=AsyncMock(return_value=0),
         ):
             summary = await geocode_pending(mock_db)
-        assert summary == {"pending": 0, "geocoded": 0, "failed": 0, "copied": 0}
+        assert summary == {"pending": 0, "geocoded": 0, "failed": 0, "copied": 0, "extracted": 0}
 
     @pytest.mark.asyncio
     async def test_geocodes_events_and_reuses_cached_address(self, mock_db, make_event):
@@ -191,7 +193,7 @@ class TestGeocodePending:
         ):
             summary = await geocode_pending(mock_db)
 
-        assert summary == {"pending": 2, "geocoded": 2, "failed": 0, "copied": 0}
+        assert summary == {"pending": 2, "geocoded": 2, "failed": 0, "copied": 0, "extracted": 0}
         assert (event1.lat, event1.lng) == (59.5, 24.5)
         assert (event2.lat, event2.lng) == (59.1, 24.1)
         mock_geo.assert_called_once()  # only "Address A" needed a Nominatim call
@@ -232,7 +234,7 @@ class TestGeocodePending:
         ):
             summary = await geocode_pending(mock_db)
 
-        assert summary == {"pending": 3, "geocoded": 3, "failed": 0, "copied": 0}
+        assert summary == {"pending": 3, "geocoded": 3, "failed": 0, "copied": 0, "extracted": 0}
         mock_geo.assert_called_once()  # normalized key collision → 1 call for 3 events
 
     @pytest.mark.asyncio
@@ -259,7 +261,7 @@ class TestGeocodePending:
         ):
             summary = await geocode_pending(mock_db)
 
-        assert summary == {"pending": 1, "geocoded": 0, "failed": 1, "copied": 0}
+        assert summary == {"pending": 1, "geocoded": 0, "failed": 1, "copied": 0, "extracted": 0}
         assert event1.lat is None
         assert event1.lng is None
 
@@ -521,3 +523,222 @@ class TestCanonicalVenueName:
 
     def test_empty_when_only_parens(self):
         assert canonical_venue_name("(STL)") == ""
+
+
+class TestIsSuspectVenueName:
+    def test_digit_flags_suspect(self):
+        assert _is_suspect_venue_name("Kopli 116") is True
+
+    def test_comma_flags_suspect(self):
+        assert _is_suspect_venue_name("Viljandi padel, Ranna pst 3") is True
+
+    def test_direction_keyword_algus_flags_suspect(self):
+        assert _is_suspect_venue_name("Algus Hildegardi aias Tornide väljakul") is True
+
+    def test_direction_keyword_kõrval_flags_suspect(self):
+        assert _is_suspect_venue_name("Katharienthal Kohviku kõrval") is True
+
+    def test_long_name_flags_suspect(self):
+        assert _is_suspect_venue_name("A" * 41) is True
+
+    def test_clean_short_name_not_suspect(self):
+        assert _is_suspect_venue_name("KUMU") is False
+
+    def test_parens_suffix_not_suspect(self):
+        assert _is_suspect_venue_name("Sõltumatu Tantsu Lava (STL)") is False
+
+    def test_exactly_max_len_not_suspect(self):
+        from app.constants import VENUE_NAME_SUSPECT_MAX_LEN
+        assert _is_suspect_venue_name("A" * VENUE_NAME_SUSPECT_MAX_LEN) is False
+
+    def test_meeting_point_en_flags_suspect(self):
+        assert _is_suspect_venue_name("Meeting point Baltic station") is True
+
+    def test_in_front_of_flags_suspect(self):
+        assert _is_suspect_venue_name("in front of the town hall") is True
+
+
+class TestExtractAddressFromVenueName:
+    """Tests for the LLM venue-address extraction pass."""
+
+    def _make_event(self, event_id: int, venue_name: str) -> MagicMock:
+        e = MagicMock()
+        e.id = event_id
+        e.venue_name = venue_name
+        e.venue_address = None
+        return e
+
+    @pytest.mark.asyncio
+    async def test_no_llm_available_returns_zero(self, mock_db):
+        with patch("app.ingestion.geocode.llm_available", return_value=False):
+            result = await extract_address_from_venue_name(mock_db)
+        assert result == 0
+        mock_db.scalars.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_no_candidates_returns_zero(self, mock_db):
+        mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=[]))
+        with patch("app.ingestion.geocode.llm_available", return_value=True):
+            result = await extract_address_from_venue_name(mock_db)
+        assert result == 0
+
+    @pytest.mark.asyncio
+    async def test_clean_name_skipped_no_llm_call(self, mock_db):
+        event = self._make_event(1, "KUMU")
+        mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=[event]))
+        with (
+            patch("app.ingestion.geocode.llm_available", return_value=True),
+            patch("app.ingestion.geocode.llm_json") as mock_llm,
+        ):
+            result = await extract_address_from_venue_name(mock_db)
+        assert result == 0
+        mock_llm.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_bare_street_number_nulls_name_sets_address(self, mock_db):
+        event = self._make_event(1, "Kopli 116")
+        mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=[event]))
+        mock_db.execute.return_value = MagicMock(all=MagicMock(return_value=[]))
+
+        llm_response = {"venue_name": None, "venue_address": "Kopli 116"}
+        with (
+            patch("app.ingestion.geocode.llm_available", return_value=True),
+            patch("app.ingestion.geocode.llm_json", new=AsyncMock(return_value=(llm_response, "groq/llama"))),
+        ):
+            result = await extract_address_from_venue_name(mock_db)
+
+        assert result == 1
+        assert event.venue_name is None
+        assert event.venue_address == "Kopli 116"
+
+    @pytest.mark.asyncio
+    async def test_comma_tail_keeps_venue_name_sets_address(self, mock_db):
+        event = self._make_event(1, "Viljandi tennise- ja padelikeskuse padeli väliväljakud, Ranna pst 3")
+        mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=[event]))
+        mock_db.execute.return_value = MagicMock(all=MagicMock(return_value=[]))
+
+        llm_response = {
+            "venue_name": "Viljandi tennise- ja padelikeskuse padeli väliväljakud",
+            "venue_address": "Ranna pst 3",
+        }
+        with (
+            patch("app.ingestion.geocode.llm_available", return_value=True),
+            patch("app.ingestion.geocode.llm_json", new=AsyncMock(return_value=(llm_response, "groq/llama"))),
+        ):
+            result = await extract_address_from_venue_name(mock_db)
+
+        assert result == 1
+        assert event.venue_name == "Viljandi tennise- ja padelikeskuse padeli väliväljakud"
+        assert event.venue_address == "Ranna pst 3"
+
+    @pytest.mark.asyncio
+    async def test_pure_direction_nulls_both_name_and_address(self, mock_db):
+        event = self._make_event(1, "Algus Hildegardi aias Tornide väljakul")
+        mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=[event]))
+        mock_db.execute.return_value = MagicMock(all=MagicMock(return_value=[]))
+
+        llm_response = {"venue_name": None, "venue_address": None}
+        with (
+            patch("app.ingestion.geocode.llm_available", return_value=True),
+            patch("app.ingestion.geocode.llm_json", new=AsyncMock(return_value=(llm_response, "groq/llama"))),
+        ):
+            result = await extract_address_from_venue_name(mock_db)
+
+        assert result == 1
+        assert event.venue_name is None
+        assert event.venue_address is None
+
+    @pytest.mark.asyncio
+    async def test_cached_decision_applied_without_fresh_call(self, mock_db):
+        from app.constants import LLM_VENUE_EXTRACT_PROMPT_TEMPLATE
+        from app.llm.router import content_hash as ch
+
+        name = "Kopli 116"
+        prompt = LLM_VENUE_EXTRACT_PROMPT_TEMPLATE.format(venue=name)
+        cached_hash = ch(prompt)
+        cached_response = {"venue_name": None, "venue_address": "Kopli 116"}
+
+        event = self._make_event(1, name)
+        mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=[event]))
+        mock_db.execute.return_value = MagicMock(
+            all=MagicMock(return_value=[(cached_hash, cached_response)])
+        )
+
+        with (
+            patch("app.ingestion.geocode.llm_available", return_value=True),
+            patch("app.ingestion.geocode.llm_json") as mock_llm,
+        ):
+            result = await extract_address_from_venue_name(mock_db)
+
+        assert result == 1
+        mock_llm.assert_not_called()
+        assert event.venue_address == "Kopli 116"
+
+    @pytest.mark.asyncio
+    async def test_fresh_call_budget_defers_excess(self, mock_db):
+        from app.constants import VENUE_EXTRACT_MAX_FRESH_LLM_CALLS_PER_RUN
+
+        events = [self._make_event(i, f"Kopli {i}") for i in range(VENUE_EXTRACT_MAX_FRESH_LLM_CALLS_PER_RUN + 2)]
+        mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=events))
+        mock_db.execute.return_value = MagicMock(all=MagicMock(return_value=[]))
+
+        llm_response = {"venue_name": None, "venue_address": "Some Street 1"}
+        call_count = 0
+
+        async def counting_llm_json(task, prompt, db, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            return (llm_response, "groq/llama")
+
+        with (
+            patch("app.ingestion.geocode.llm_available", return_value=True),
+            patch("app.ingestion.geocode.llm_json", new=counting_llm_json),
+        ):
+            await extract_address_from_venue_name(mock_db)
+
+        assert call_count == VENUE_EXTRACT_MAX_FRESH_LLM_CALLS_PER_RUN
+
+    @pytest.mark.asyncio
+    async def test_malformed_llm_response_skipped(self, mock_db):
+        event = self._make_event(1, "Algus Raevangla ees")
+        mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=[event]))
+        mock_db.execute.return_value = MagicMock(all=MagicMock(return_value=[]))
+
+        with (
+            patch("app.ingestion.geocode.llm_available", return_value=True),
+            patch("app.ingestion.geocode.llm_json", new=AsyncMock(return_value=(None, "groq/llama"))),
+        ):
+            result = await extract_address_from_venue_name(mock_db)
+
+        assert result == 0
+        assert event.venue_name == "Algus Raevangla ees"
+        assert event.venue_address is None
+
+    @pytest.mark.asyncio
+    async def test_llm_error_skips_gracefully(self, mock_db):
+        from app.llm.router import LLMError
+
+        event = self._make_event(1, "Kopli 116")
+        mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=[event]))
+        mock_db.execute.return_value = MagicMock(all=MagicMock(return_value=[]))
+
+        with (
+            patch("app.ingestion.geocode.llm_available", return_value=True),
+            patch("app.ingestion.geocode.llm_json", new=AsyncMock(side_effect=LLMError("all providers failed"))),
+        ):
+            result = await extract_address_from_venue_name(mock_db)
+
+        assert result == 0
+        assert event.venue_name == "Kopli 116"
+        assert event.venue_address is None
+
+    @pytest.mark.asyncio
+    async def test_geocode_pending_summary_includes_extracted(self, mock_db):
+        mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=[]))
+        with (
+            patch("app.ingestion.geocode.extract_address_from_venue_name", new=AsyncMock(return_value=3)),
+            patch("app.ingestion.geocode.copy_venue_from_siblings", new=AsyncMock(return_value=1)),
+        ):
+            summary = await geocode_pending(mock_db)
+        assert summary["extracted"] == 3
+        assert summary["copied"] == 1
