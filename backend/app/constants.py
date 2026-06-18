@@ -518,6 +518,24 @@ GEOCODE_COUNTY_RE = (
 # Country suffix appended to Nominatim query to anchor results
 GEOCODE_COUNTRY_SUFFIX = ", Estonia"
 
+# Parenthetical segment stripped from a venue_name before sibling venue matching,
+# e.g. "Sõltumatu Tantsu Lava (STL)" → "Sõltumatu Tantsu Lava". Compiled in geocode.py.
+VENUE_NAME_PARENS_RE = r"\([^)]*\)"
+
+# Canonical venue names that are not physical/geocodable locations. Skipped on both
+# the target and donor side of sibling venue copy so virtual events ("Online",
+# "MamaOnline") never inherit a junk donor's coords — compared against the canonical
+# form (canonical_venue_name). Extend with future virtual labels.
+NON_GEOCODABLE_VENUE_NAMES = frozenset({"online"})
+
+# Sibling venue-copy match threshold (rapidfuzz fuzz.ratio over canonical names).
+# Distinct from the dedup VENUE_RATIO_THRESHOLD (70): canonicalization strips the
+# parts that differ between a venue and its sibling, so intended matches score 98-100
+# (typo variants ~93). A symmetric ratio at 90 keeps those while rejecting the
+# token-subset false-positives a token_set_ratio would score 100 (e.g. a comma-split
+# "soprus" vs an unrelated "Kino Soprus").
+VENUE_SIBLING_RATIO_THRESHOLD = 90
+
 # Parses a Fienta listing price_from_string: "From 9.50 EUR" / "12 EUR" — a number
 # (int or decimal, "." or "," separator) followed by any 3-letter currency code.
 PRICE_FROM_STRING_RE = r"(?:from\s+)?(\d+(?:[.,]\d+)?)\s*([A-Za-z]{3})"

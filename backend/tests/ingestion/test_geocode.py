@@ -7,6 +7,7 @@ import httpx
 import pytest
 
 from app.ingestion.geocode import (
+    canonical_venue_name,
     copy_venue_from_siblings,
     geocode_address,
     geocode_pending,
@@ -343,3 +344,180 @@ class TestCopyVenueFromSiblings:
         assert copied == 0
         assert target.venue_address is None
         assert target.lat is None
+
+    @pytest.mark.asyncio
+    async def test_copies_from_parens_suffix_donor(self, mock_db, make_event):
+        """Donor "… (STL)" with 3 address spellings at one coord copies onto the
+        bare-name target; the representative address is deterministic (lex tie-break)."""
+        target = make_event(event_id=1)
+        target.venue_name = "Sõltumatu Tantsu Lava"
+        target.venue_address = None
+        target.lat = None
+        target.lng = None
+
+        mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=[target]))
+        mock_db.execute.return_value = MagicMock(
+            all=MagicMock(
+                return_value=[
+                    ("Sõltumatu Tantsu Lava (STL)", "Telliskivi tänav 60a/9, Tallinn", 59.4381936, 24.7286398),
+                    ("Sõltumatu Tantsu Lava (STL)", "Telliskivi tänav 60a, Tallinn", 59.4381936, 24.7286398),
+                    ("Sõltumatu Tantsu Lava (STL)", "Telliskivi 60a/9, Harjumaa", 59.4381936, 24.7286398),
+                ]
+            )
+        )
+
+        copied = await copy_venue_from_siblings(mock_db)
+
+        assert copied == 1
+        assert (target.lat, target.lng) == (59.4381936, 24.7286398)
+        # All three addresses are distinct → tie on count → smallest lexicographically.
+        assert target.venue_address == "Telliskivi 60a/9, Harjumaa"
+
+    @pytest.mark.asyncio
+    async def test_copies_from_bare_donor_for_address_tail_target(
+        self, mock_db, make_event
+    ):
+        """A target whose venue_name has a glued-on address tail still matches the
+        bare donor once both are canonicalized."""
+        target = make_event(event_id=1)
+        target.venue_name = "Kalamaja muuseum, Kotzebue tänav, Tallinn, Eesti"
+        target.venue_address = None
+        target.lat = None
+        target.lng = None
+
+        mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=[target]))
+        mock_db.execute.return_value = MagicMock(
+            all=MagicMock(
+                return_value=[("Kalamaja muuseum", "Kotzebue 16, Tallinn", 59.45, 24.74)]
+            )
+        )
+
+        copied = await copy_venue_from_siblings(mock_db)
+
+        assert copied == 1
+        assert target.venue_address == "Kotzebue 16, Tallinn"
+        assert (target.lat, target.lng) == (59.45, 24.74)
+
+    @pytest.mark.asyncio
+    async def test_copies_when_multiple_spellings_share_one_coord(
+        self, mock_db, make_event
+    ):
+        """Regression guard for the coord-vs-tuple fix: several distinct address
+        strings at a single coord are NOT treated as ambiguous."""
+        target = make_event(event_id=1)
+        target.venue_name = "Paavli Kultuurivabrik, Paavli tänav, Tallinn, Eesti"
+        target.venue_address = None
+        target.lat = None
+        target.lng = None
+
+        mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=[target]))
+        mock_db.execute.return_value = MagicMock(
+            all=MagicMock(
+                return_value=[
+                    ("Paavli Kultuurivabrik", "Paavli tänav 4, Tallinn", 59.4476026, 24.7049754),
+                    ("Paavli Kultuurivabrik", "Paavli 4, Tallinn", 59.4476026, 24.7049754),
+                ]
+            )
+        )
+
+        copied = await copy_venue_from_siblings(mock_db)
+
+        assert copied == 1
+        assert (target.lat, target.lng) == (59.4476026, 24.7049754)
+
+    @pytest.mark.asyncio
+    async def test_skips_when_matched_donors_span_distinct_coords(
+        self, mock_db, make_event, caplog
+    ):
+        """Two donors that both fuzzy-match the target but sit at different coords →
+        ambiguous → skipped + logged (distinct-coordinate guard)."""
+        target = make_event(event_id=1)
+        target.venue_name = "Sõltumatu Tantsu Lava"
+        target.venue_address = None
+        target.lat = None
+        target.lng = None
+
+        mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=[target]))
+        mock_db.execute.return_value = MagicMock(
+            all=MagicMock(
+                return_value=[
+                    ("Sõltumatu Tantsu Lava (STL)", "Telliskivi 60a, Tallinn", 59.4381936, 24.7286398),
+                    ("Sõltumatu Tantsu Lava", "Other 1, Tallinn", 59.5, 24.8),
+                ]
+            )
+        )
+
+        with caplog.at_level(logging.WARNING, logger="app.ingestion.geocode"):
+            copied = await copy_venue_from_siblings(mock_db)
+
+        assert copied == 0
+        assert target.venue_address is None
+        assert "venue copy skipped" in caplog.text
+        assert "distinct locations" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_dissimilar_names_below_threshold_no_copy(self, mock_db, make_event):
+        """A donor whose canonical name is below VENUE_RATIO_THRESHOLD never copies."""
+        target = make_event(event_id=1)
+        target.venue_name = "Comedy Estonia"
+        target.venue_address = None
+        target.lat = None
+        target.lng = None
+
+        mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=[target]))
+        mock_db.execute.return_value = MagicMock(
+            all=MagicMock(
+                return_value=[("Jazz Club", "Vana 2, Tallinn", 59.43, 24.75)]
+            )
+        )
+
+        copied = await copy_venue_from_siblings(mock_db)
+
+        assert copied == 0
+        assert target.venue_address is None
+
+    @pytest.mark.asyncio
+    async def test_virtual_venue_skipped_via_skip_set(
+        self, mock_db, make_event, caplog
+    ):
+        """A virtual target ("MamaOnline") gets no copy because its only fuzzy donor
+        ("online") is dropped by NON_GEOCODABLE_VENUE_NAMES — and no warning fires."""
+        target = make_event(event_id=1)
+        target.venue_name = "MamaOnline"
+        target.venue_address = None
+        target.lat = None
+        target.lng = None
+
+        mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=[target]))
+        mock_db.execute.return_value = MagicMock(
+            all=MagicMock(
+                return_value=[("online", "10614 Tallinn", 59.43, 24.75)]
+            )
+        )
+
+        with caplog.at_level(logging.WARNING, logger="app.ingestion.geocode"):
+            copied = await copy_venue_from_siblings(mock_db)
+
+        assert copied == 0
+        assert target.venue_address is None
+        assert "venue copy skipped" not in caplog.text
+
+
+class TestCanonicalVenueName:
+    def test_strips_parenthetical_suffix(self):
+        assert canonical_venue_name("Sõltumatu Tantsu Lava (STL)") == "sõltumatu tantsu lava"
+
+    def test_drops_address_tail_after_first_comma(self):
+        assert (
+            canonical_venue_name("Kalamaja muuseum, Kotzebue tänav, Tallinn, Eesti")
+            == "kalamaja muuseum"
+        )
+
+    def test_collapses_whitespace_and_lowercases(self):
+        assert canonical_venue_name("  Paavli   Kultuurivabrik  ") == "paavli kultuurivabrik"
+
+    def test_parens_and_tail_combined(self):
+        assert canonical_venue_name("Foo (Bar), Some Street 1") == "foo"
+
+    def test_empty_when_only_parens(self):
+        assert canonical_venue_name("(STL)") == ""
