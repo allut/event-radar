@@ -1,18 +1,26 @@
+import asyncio
 import logging
+import re
 from typing import Any
 from urllib.parse import urlparse
 
 import httpx
+from bs4 import BeautifulSoup
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.constants import (
+    DETAIL_FETCH_CONCURRENCY,
     FIENTA_MAX_PAGES,
     HTTP_TIMEOUT_SECONDS,
 )
 from app.ingestion.base import (
     NormalizedEvent,
     SourceAdapter,
+    coords_in_estonia,
+    existing_external_ids,
+    extract_jsonld_event_location,
+    extract_jsonld_event_offers,
     http_get,
     is_target_city,
     parse_dt,
@@ -20,6 +28,13 @@ from app.ingestion.base import (
 )
 
 log = logging.getLogger(__name__)
+
+# Matches a 5-digit postal code (Estonian format) anywhere in an address string.
+_POSTAL_CODE_RE = re.compile(r"\b\d{5}\b")
+
+
+def _has_postal_code(address: str | None) -> bool:
+    return bool(address and _POSTAL_CODE_RE.search(address))
 
 
 class FientaAdapter(SourceAdapter):
@@ -32,9 +47,10 @@ class FientaAdapter(SourceAdapter):
     (`meta.current_page` / `meta.last_page`) pagination automatically.
     Plain list responses (no pagination envelope) are also supported.
 
-    The listing payload carries a ``price_from_string`` (e.g. "From 28 EUR",
-    "Free"), parsed in code at normalize() into price_min/price_max/currency —
-    no detail-page fetch and no LLM price parse needed for Fienta.
+    For each new event (not yet in event_sources), the adapter fetches the
+    detail page concurrently and attaches parsed JSON-LD data under
+    ``raw["_detail"]``. normalize() merges listing + detail per a fixed
+    authority table; absent _detail degrades to listing-only behavior.
     """
 
     async def fetch_raw(self, db: AsyncSession) -> list[dict[str, Any]]:
@@ -65,6 +81,24 @@ class FientaAdapter(SourceAdapter):
             # (which marks the IngestionRun as error) when every organizer failed.
             if not all_events and errors:
                 raise errors[0]
+
+            # Forward-only detail fetch: skip already-stored events so each event
+            # is enriched exactly once and re-runs stay cheap.
+            known_ids = await existing_external_ids(db, self.source.id)
+            base_host = urlparse(base_url).hostname
+            semaphore = asyncio.Semaphore(DETAIL_FETCH_CONCURRENCY)
+
+            new_items = [
+                item for item in all_events
+                if str(item.get("id", "")) not in known_ids
+            ]
+            await asyncio.gather(
+                *[
+                    self._fetch_detail(client, item, base_host, semaphore)
+                    for item in new_items
+                ],
+                return_exceptions=True,
+            )
 
         return all_events
 
@@ -132,6 +166,50 @@ class FientaAdapter(SourceAdapter):
 
         return collected
 
+    async def _fetch_detail(
+        self,
+        client: httpx.AsyncClient,
+        item: dict[str, Any],
+        base_host: str | None,
+        semaphore: asyncio.Semaphore,
+    ) -> None:
+        """Fetch the event detail page and attach parsed JSON-LD under item["_detail"].
+
+        Failures are logged and silently dropped — the caller degrades to listing-only.
+        SSRF guard: only fetches when the item URL's host matches the Fienta base host.
+        """
+        url = item.get("url") or item.get("link") or ""
+        if not url:
+            return
+        if urlparse(url).hostname != base_host:
+            log.warning(
+                "fienta: detail URL host mismatch (SSRF guard), skipping id=%s",
+                item.get("id"),
+            )
+            return
+        async with semaphore:
+            try:
+                response = await http_get(client, url)
+                soup = BeautifulSoup(response.text, "html.parser")
+                loc = extract_jsonld_event_location(soup)
+                price_min, price_max, currency = extract_jsonld_event_offers(soup)
+                item["_detail"] = {
+                    "venue_name": loc.get("venue_name") if loc else None,
+                    "venue_address": loc.get("venue_address") if loc else None,
+                    "lat": loc.get("lat") if loc else None,
+                    "lng": loc.get("lng") if loc else None,
+                    "price_min": price_min,
+                    "price_max": price_max,
+                    "currency": currency,
+                }
+            except Exception as exc:
+                log.warning(
+                    "fienta: detail fetch failed id=%s url=%s: %s",
+                    item.get("id"),
+                    url,
+                    exc,
+                )
+
     def normalize(self, raw: dict[str, Any]) -> NormalizedEvent | None:
         title = raw.get("name") or raw.get("title") or ""
         if not title:
@@ -155,21 +233,68 @@ class FientaAdapter(SourceAdapter):
 
         venue_raw = raw.get("venue") or {}
         if isinstance(venue_raw, dict):
-            venue_name = venue_raw.get("name")
+            listing_venue_name = venue_raw.get("name")
             address_candidate = venue_raw.get("address")
         else:
-            venue_name = str(venue_raw) or None
+            listing_venue_name = str(venue_raw) or None
             address_candidate = raw.get("address")
-        venue_address = (
+        listing_venue_address = (
             address_candidate if isinstance(address_candidate, str) else None
         )
 
+        # Merge table — applied when detail is present; listing-only when absent.
+        detail: dict[str, Any] = raw.get("_detail") or {}
+
+        # venue_name: listing wins; detail fallback
+        venue_name = listing_venue_name or detail.get("venue_name") or None
+
+        # venue_address: prefer whichever contains a 5-digit postal code; else listing;
+        # detail fills only when listing is empty
+        detail_addr: str | None = detail.get("venue_address")
+        if _has_postal_code(listing_venue_address):
+            venue_address: str | None = listing_venue_address
+        elif _has_postal_code(detail_addr):
+            venue_address = detail_addr
+        else:
+            venue_address = listing_venue_address or detail_addr or None
+
+        # City filter on merged address
         if not is_target_city(venue_address):
             return None
 
-        price_min, price_max, currency = parse_price_from_string(
+        # lat/lng: detail geo, bbox-gated to Estonia; None otherwise (geocode fills later)
+        lat: float | None = None
+        lng: float | None = None
+        if detail:
+            d_lat: float | None = detail.get("lat")
+            d_lng: float | None = detail.get("lng")
+            if (
+                d_lat is not None
+                and d_lng is not None
+                and coords_in_estonia(d_lat, d_lng)
+            ):
+                lat = d_lat
+                lng = d_lng
+
+        # price: listing parse is the authoritative baseline
+        listing_price_min, listing_price_max, listing_currency = parse_price_from_string(
             raw.get("price_from_string")
         )
+
+        # price_min: detail offer floor wins; listing fills when detail has no price
+        if detail and detail.get("price_min") is not None:
+            price_min: float | None = detail["price_min"]
+        else:
+            price_min = listing_price_min
+
+        # price_max: detail offer ceiling wins; listing fills when detail has no price
+        if detail and detail.get("price_max") is not None:
+            price_max: float | None = detail["price_max"]
+        else:
+            price_max = listing_price_max
+
+        # currency: listing wins; detail fallback
+        currency: str | None = listing_currency or detail.get("currency") or None
 
         return NormalizedEvent(
             external_id=external_id,
@@ -179,6 +304,8 @@ class FientaAdapter(SourceAdapter):
             ends_at=ends_at,
             venue_name=venue_name or None,
             venue_address=venue_address or None,
+            lat=lat,
+            lng=lng,
             url=raw.get("url") or raw.get("link"),
             image_url=raw.get("image_url")
             or raw.get("image")

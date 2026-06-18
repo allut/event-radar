@@ -122,6 +122,12 @@ FIENTA_ORGANIZER_CHECK_LIMIT = (
 )
 FIENTA_CITY_FILTER = "Tallinn"
 FIENTA_MAX_PAGES = 50  # safety ceiling per organizer — prevents runaway pagination
+# Concurrency cap for detail-page fan-out. Fienta has no documented rate limit;
+# 8 in-flight requests leaves headroom while staying well-behaved.
+DETAIL_FETCH_CONCURRENCY: int = 8
+# Bounding box for Estonia (lat_min, lat_max, lng_min, lng_max).
+# Used to reject geo coords from detail pages that are clearly wrong (>~80 km off).
+ESTONIA_BBOX: tuple[float, float, float, float] = (57.5, 59.7, 21.5, 28.2)
 
 SOURCE_STATUS_OK = "ok"
 SOURCE_STATUS_ERROR = "error"

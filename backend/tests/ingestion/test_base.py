@@ -1,9 +1,13 @@
 """Tests for shared ingestion helpers in app.ingestion.base."""
 
 import pytest
+from bs4 import BeautifulSoup
 
 from app.ingestion.base import (
     address_city,
+    coords_in_estonia,
+    extract_jsonld_event_location,
+    extract_jsonld_event_offers,
     is_explicit_text,
     is_target_city,
     parse_price_from_string,
@@ -122,3 +126,103 @@ class TestParsePriceFromString:
 
     def test_currency_uppercased(self):
         assert parse_price_from_string("12 eur")[2] == "EUR"
+
+
+def _soup(html: str) -> BeautifulSoup:
+    return BeautifulSoup(html, "html.parser")
+
+
+def _ld_script(json_body: str) -> str:
+    return f'<script type="application/ld+json">{json_body}</script>'
+
+
+class TestExtractJsonldEventLocation:
+    def test_geo_coordinates_from_location_geo(self):
+        html = _ld_script(
+            '{"@type":"Event","location":{"@type":"Place","name":"Vaba Lava",'
+            '"geo":{"@type":"GeoCoordinates","latitude":59.437,"longitude":24.753},'
+            '"address":{"streetAddress":"Telliskivi 60a","addressLocality":"Tallinn"}}}'
+        )
+        result = extract_jsonld_event_location(_soup(html))
+        assert result is not None
+        assert result["lat"] == pytest.approx(59.437)
+        assert result["lng"] == pytest.approx(24.753)
+        assert result["venue_name"] == "Vaba Lava"
+        assert "Tallinn" in (result["venue_address"] or "")
+
+    def test_direct_lat_lng_fallback(self):
+        html = _ld_script(
+            '{"@type":"Event","location":{"@type":"Place","latitude":59.4,"longitude":24.7}}'
+        )
+        result = extract_jsonld_event_location(_soup(html))
+        assert result is not None
+        assert result["lat"] == pytest.approx(59.4)
+        assert result["lng"] == pytest.approx(24.7)
+
+    def test_no_event_returns_none(self):
+        html = _ld_script('{"@type":"Organization","name":"Fienta"}')
+        assert extract_jsonld_event_location(_soup(html)) is None
+
+    def test_no_jsonld_returns_none(self):
+        assert extract_jsonld_event_location(_soup("<html></html>")) is None
+
+
+class TestExtractJsonldEventOffers:
+    def test_single_offer(self):
+        html = _ld_script(
+            '{"@type":"Event","offers":{"@type":"Offer","price":"15","priceCurrency":"EUR"}}'
+        )
+        assert extract_jsonld_event_offers(_soup(html)) == (15.0, 15.0, "EUR")
+
+    def test_multiple_offers_min_max(self):
+        html = _ld_script(
+            '{"@type":"Event","offers":['
+            '{"@type":"Offer","price":"28","priceCurrency":"EUR"},'
+            '{"@type":"Offer","price":"75","priceCurrency":"EUR"}'
+            "]}"
+        )
+        result = extract_jsonld_event_offers(_soup(html))
+        assert result == (28.0, 75.0, "EUR")
+
+    def test_free_tier_zero_price(self):
+        html = _ld_script(
+            '{"@type":"Event","offers":['
+            '{"@type":"Offer","price":"0","priceCurrency":"EUR"},'
+            '{"@type":"Offer","price":"10","priceCurrency":"EUR"}'
+            "]}"
+        )
+        assert extract_jsonld_event_offers(_soup(html)) == (0.0, 10.0, "EUR")
+
+    def test_no_offers_returns_none_tuple(self):
+        html = _ld_script('{"@type":"Event"}')
+        assert extract_jsonld_event_offers(_soup(html)) == (None, None, None)
+
+    def test_no_event_returns_none_tuple(self):
+        html = _ld_script('{"@type":"Organization"}')
+        assert extract_jsonld_event_offers(_soup(html)) == (None, None, None)
+
+    def test_currency_uppercased(self):
+        html = _ld_script(
+            '{"@type":"Event","offers":{"@type":"Offer","price":"10","priceCurrency":"eur"}}'
+        )
+        assert extract_jsonld_event_offers(_soup(html))[2] == "EUR"
+
+
+class TestCoordsInEstonia:
+    def test_tallinn_coords_in_estonia(self):
+        assert coords_in_estonia(59.437, 24.753) is True
+
+    def test_tartu_coords_in_estonia(self):
+        assert coords_in_estonia(58.378, 26.729) is True
+
+    def test_helsinki_outside_estonia(self):
+        assert coords_in_estonia(60.169, 24.935) is False
+
+    def test_riga_outside_estonia(self):
+        assert coords_in_estonia(56.946, 24.106) is False
+
+    def test_bbox_south_edge(self):
+        assert coords_in_estonia(57.5, 25.0) is True
+
+    def test_below_south_edge(self):
+        assert coords_in_estonia(57.4, 25.0) is False

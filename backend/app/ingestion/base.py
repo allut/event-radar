@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.constants import (
     DEFAULT_CURRENCY,
+    ESTONIA_BBOX,
     EVENT_STATUS_DRAFT,
     EXPLICIT_KEYWORDS,
     FIENTA_CITY_FILTER,
@@ -286,7 +287,13 @@ def extract_jsonld_event_location(soup: BeautifulSoup) -> dict[str, Any] | None:
                     value = address.get(key)
                     if value:
                         address_parts.append(str(value))
-            lat_raw, lng_raw = location.get("latitude"), location.get("longitude")
+            geo = location.get("geo")
+            if isinstance(geo, dict):
+                lat_raw = geo.get("latitude")
+                lng_raw = geo.get("longitude")
+            else:
+                lat_raw = location.get("latitude")
+                lng_raw = location.get("longitude")
             return {
                 "venue_name": location.get("name"),
                 "venue_address": ", ".join(address_parts) or None,
@@ -294,6 +301,51 @@ def extract_jsonld_event_location(soup: BeautifulSoup) -> dict[str, Any] | None:
                 "lng": _coerce_float(lng_raw),
             }
     return None
+
+
+def extract_jsonld_event_offers(
+    soup: BeautifulSoup,
+) -> tuple[float | None, float | None, str | None]:
+    """Return ``(min_price, max_price, currency)`` from schema.org ``Event`` ``offers[]``.
+
+    Reads all ``Offer`` entries from the first JSON-LD ``Event`` block, returns
+    ``(None, None, None)`` when no offers or no parseable prices are found.
+    """
+    for script in soup.find_all("script", type="application/ld+json"):
+        try:
+            data = json.loads(script.string or "")
+        except (TypeError, ValueError):
+            continue
+        for item in _jsonld_event_items(data):
+            item_type = item.get("@type")
+            types = item_type if isinstance(item_type, list) else [item_type]
+            if "Event" not in types:
+                continue
+            offers_raw = item.get("offers") or []
+            if isinstance(offers_raw, dict):
+                offers_raw = [offers_raw]
+            prices: list[float] = []
+            currency: str | None = None
+            for offer in offers_raw:
+                if not isinstance(offer, dict):
+                    continue
+                price = _coerce_float(offer.get("price"))
+                if price is not None:
+                    prices.append(price)
+                if currency is None:
+                    cur_raw = offer.get("priceCurrency")
+                    if cur_raw:
+                        currency = str(cur_raw).upper()
+            if not prices:
+                continue  # no parseable prices in this block — try next Event item
+            return (min(prices), max(prices), currency)
+    return (None, None, None)
+
+
+def coords_in_estonia(lat: float, lng: float) -> bool:
+    """Return True when (lat, lng) falls within Estonia's bounding box."""
+    lat_min, lat_max, lng_min, lng_max = ESTONIA_BBOX
+    return lat_min <= lat <= lat_max and lng_min <= lng <= lng_max
 
 
 class SourceAdapter(ABC):

@@ -11,6 +11,38 @@ from app.constants import FIENTA_MAX_PAGES, TALLINN_TZ
 from app.ingestion.sources.fienta import FientaAdapter
 from app.ingestion.base import NormalizedEvent
 
+# Minimal HTML wrapping a JSON-LD script for detail-page stubs
+_DETAIL_HTML = (
+    "<html><body>"
+    '<script type="application/ld+json">'
+    '{{"@type":"Event",'
+    '"location":{{"@type":"Place","name":"{venue_name}",'
+    '"geo":{{"@type":"GeoCoordinates","latitude":{lat},"longitude":{lng}}},'
+    '"address":{{"streetAddress":"{street}","addressLocality":"Tallinn"}}}},'
+    '"offers":[{{"@type":"Offer","price":"{price_min}","priceCurrency":"EUR"}},'
+    '{{"@type":"Offer","price":"{price_max}","priceCurrency":"EUR"}}]}}'
+    "</script>"
+    "</body></html>"
+)
+
+
+def _detail_html(
+    venue_name="TestVenue",
+    lat=59.437,
+    lng=24.753,
+    street="Pärnu mnt 5",
+    price_min="10",
+    price_max="40",
+):
+    return _DETAIL_HTML.format(
+        venue_name=venue_name,
+        lat=lat,
+        lng=lng,
+        street=street,
+        price_min=price_min,
+        price_max=price_max,
+    )
+
 
 def _make_source(organizer_ids=None, base_url=None):
     source = MagicMock()
@@ -181,6 +213,146 @@ class TestNormalize:
             10.0,
             "EUR",
         )
+
+    # -------------------------------------------------------------------
+    # Detail merge tests
+    # -------------------------------------------------------------------
+
+    def _raw_with_detail(self, detail: dict, **overrides):
+        raw = {
+            "id": "200",
+            "name": "Merged Event",
+            "starts_at": "2026-10-01T20:00:00+03:00",
+            "venue": {"name": "Listing Venue", "address": "Narva mnt 7, 10117 Tallinn, Harju maakond"},
+            "price_from_string": "From 28 EUR",
+            "url": "https://fienta.com/ev200",
+        }
+        raw.update(overrides)
+        raw["_detail"] = detail
+        return raw
+
+    def test_detail_coords_filled_when_in_estonia(self):
+        raw = self._raw_with_detail({"lat": 59.437, "lng": 24.753, "venue_name": None, "venue_address": None, "price_min": None, "price_max": None, "currency": None})
+        result = _adapter().normalize(raw)
+        assert result is not None
+        assert result.lat == pytest.approx(59.437)
+        assert result.lng == pytest.approx(24.753)
+
+    def test_detail_coords_rejected_outside_estonia(self):
+        raw = self._raw_with_detail({"lat": 60.169, "lng": 24.935, "venue_name": None, "venue_address": None, "price_min": None, "price_max": None, "currency": None})
+        result = _adapter().normalize(raw)
+        assert result is not None
+        assert result.lat is None
+        assert result.lng is None
+
+    def test_detail_price_max_fills_open_ended_listing(self):
+        raw = self._raw_with_detail({
+            "lat": None, "lng": None, "venue_name": None, "venue_address": None,
+            "price_min": 28.0, "price_max": 75.0, "currency": "EUR",
+        })
+        result = _adapter().normalize(raw)
+        assert result is not None
+        assert result.price_min == 28.0
+        assert result.price_max == 75.0
+        assert result.currency == "EUR"
+
+    def test_detail_price_min_overrides_listing_free(self):
+        raw = self._raw_with_detail(
+            {
+                "lat": None, "lng": None, "venue_name": None, "venue_address": None,
+                "price_min": 10.0, "price_max": 40.0, "currency": "EUR",
+            },
+            price_from_string="Free",
+        )
+        result = _adapter().normalize(raw)
+        assert result is not None
+        assert result.price_min == 10.0
+        assert result.price_max == 40.0
+
+    def test_listing_price_fills_when_detail_has_no_price(self):
+        raw = self._raw_with_detail({
+            "lat": None, "lng": None, "venue_name": None, "venue_address": None,
+            "price_min": None, "price_max": None, "currency": None,
+        })
+        result = _adapter().normalize(raw)
+        assert result is not None
+        assert result.price_min == 28.0
+        assert result.price_max is None
+        assert result.currency == "EUR"
+
+    def test_venue_name_listing_wins_over_detail(self):
+        raw = self._raw_with_detail({
+            "lat": None, "lng": None, "venue_name": "Detail Venue", "venue_address": None,
+            "price_min": None, "price_max": None, "currency": None,
+        })
+        result = _adapter().normalize(raw)
+        assert result is not None
+        assert result.venue_name == "Listing Venue"
+
+    def test_venue_name_detail_fills_when_listing_empty(self):
+        raw = self._raw_with_detail(
+            {
+                "lat": None, "lng": None, "venue_name": "Detail Venue", "venue_address": None,
+                "price_min": None, "price_max": None, "currency": None,
+            },
+            venue={"name": None, "address": "Narva mnt 7, 10117 Tallinn, Harju maakond"},
+        )
+        result = _adapter().normalize(raw)
+        assert result is not None
+        assert result.venue_name == "Detail Venue"
+
+    def test_listing_address_with_postal_code_wins(self):
+        raw = self._raw_with_detail({
+            "lat": None, "lng": None, "venue_name": None,
+            "venue_address": "Pärnu mnt 5, Tallinn",  # no postal code
+            "price_min": None, "price_max": None, "currency": None,
+        })
+        result = _adapter().normalize(raw)
+        assert result is not None
+        # listing address has postal code (10117) → wins
+        assert "10117" in (result.venue_address or "")
+
+    def test_detail_address_used_when_listing_lacks_postal_code(self):
+        raw = self._raw_with_detail(
+            {
+                "lat": None, "lng": None, "venue_name": None,
+                "venue_address": "Pärnu mnt 5, 10119 Tallinn",  # has postal code
+                "price_min": None, "price_max": None, "currency": None,
+            },
+            venue={"name": "Venue", "address": "Vanaturu kael 3"},  # no postal code
+        )
+        result = _adapter().normalize(raw)
+        assert result is not None
+        assert "10119" in (result.venue_address or "")
+
+    def test_normalize_without_detail_unchanged(self):
+        raw = {
+            "id": "300",
+            "name": "No Detail",
+            "starts_at": "2026-11-01T18:00:00+03:00",
+            "venue": {"name": "Classic Venue", "address": "Viru 4, 10140 Tallinn, Harju maakond"},
+            "price_from_string": "15 EUR",
+        }
+        result = _adapter().normalize(raw)
+        assert result is not None
+        assert result.lat is None
+        assert result.lng is None
+        assert result.price_min == 15.0
+        assert result.price_max == 15.0
+        assert result.currency == "EUR"
+
+    def test_is_target_city_on_merged_address(self):
+        raw = self._raw_with_detail(
+            {
+                "lat": None, "lng": None, "venue_name": None,
+                "venue_address": "Ülikooli 18, 51003 Tartu, Tartumaa",
+                "price_min": None, "price_max": None, "currency": None,
+            },
+            venue={"name": "Venue", "address": "Vanaturu kael 3"},  # no postal code, kept
+        )
+        # listing has no postal code → detail addr wins → Tartu → filtered
+        result = _adapter().normalize(raw)
+        assert result is None
 
     # -------------------------------------------------------------------
     # City filter tests
@@ -446,3 +618,109 @@ class TestFetchRaw:
             await adapter._fetch_organizer(client, base, 1)
 
         assert request_count == FIENTA_MAX_PAGES
+
+
+# ---------------------------------------------------------------------------
+# fetch_raw() — detail fetch behavior
+# ---------------------------------------------------------------------------
+
+class TestFetchRawDetailFetch:
+    @pytest.mark.asyncio
+    async def test_detail_fetched_for_new_events(self, mock_db):
+        """New external_ids trigger detail fetches; _detail is attached to the raw item."""
+        base = settings.FIENTA_BASE_URL
+        listing = [{"id": "1", "name": "New", "url": f"{base}/event/1"}]
+        detail_content = _detail_html(price_min="10", price_max="40")
+
+        async def handler(request):
+            if "/event/1" in str(request.url):
+                return httpx.Response(200, text=detail_content)
+            return _mock_response(listing)
+
+        _set_known_ids(mock_db, [])  # no known IDs
+        transport = httpx.MockTransport(handler)
+        _real = httpx.AsyncClient
+        with patch(
+            "app.ingestion.sources.fienta.httpx.AsyncClient",
+            lambda **kw: _real(transport=transport),
+        ):
+            result = await _adapter(organizer_ids=[42]).fetch_raw(mock_db)
+
+        assert len(result) == 1
+        assert "_detail" in result[0]
+        assert result[0]["_detail"]["price_min"] == 10.0
+        assert result[0]["_detail"]["price_max"] == 40.0
+
+    @pytest.mark.asyncio
+    async def test_detail_skipped_for_known_events(self, mock_db):
+        """Already-stored external_ids must not trigger detail fetches."""
+        base = settings.FIENTA_BASE_URL
+        listing = [{"id": "99", "name": "Known", "url": f"{base}/event/99"}]
+
+        detail_fetched = False
+
+        async def handler(request):
+            nonlocal detail_fetched
+            if "/event/99" in str(request.url):
+                detail_fetched = True
+                return httpx.Response(200, text=_detail_html())
+            return _mock_response(listing)
+
+        _set_known_ids(mock_db, ["99"])  # already stored
+        transport = httpx.MockTransport(handler)
+        _real = httpx.AsyncClient
+        with patch(
+            "app.ingestion.sources.fienta.httpx.AsyncClient",
+            lambda **kw: _real(transport=transport),
+        ):
+            await _adapter(organizer_ids=[42]).fetch_raw(mock_db)
+
+        assert not detail_fetched
+
+    @pytest.mark.asyncio
+    async def test_detail_fetch_failure_degrades_gracefully(self, mock_db):
+        """A 500 on the detail page must not abort the listing result."""
+        base = settings.FIENTA_BASE_URL
+        listing = [{"id": "5", "name": "Fragile", "url": f"{base}/event/5"}]
+
+        async def handler(request):
+            if "/event/5" in str(request.url):
+                return httpx.Response(500)
+            return _mock_response(listing)
+
+        _set_known_ids(mock_db, [])
+        transport = httpx.MockTransport(handler)
+        _real = httpx.AsyncClient
+        with patch(
+            "app.ingestion.sources.fienta.httpx.AsyncClient",
+            lambda **kw: _real(transport=transport),
+        ):
+            result = await _adapter(organizer_ids=[42]).fetch_raw(mock_db)
+
+        assert len(result) == 1
+        assert "_detail" not in result[0]
+
+    @pytest.mark.asyncio
+    async def test_cross_host_detail_url_not_fetched(self, mock_db):
+        """A detail URL on a different host must not be fetched (SSRF guard)."""
+        listing = [{"id": "7", "name": "Evil", "url": "https://evil.internal/event/7"}]
+
+        evil_fetched = False
+
+        async def handler(request):
+            nonlocal evil_fetched
+            if "evil" in str(request.url):
+                evil_fetched = True
+                return httpx.Response(200, text=_detail_html())
+            return _mock_response(listing)
+
+        _set_known_ids(mock_db, [])
+        transport = httpx.MockTransport(handler)
+        _real = httpx.AsyncClient
+        with patch(
+            "app.ingestion.sources.fienta.httpx.AsyncClient",
+            lambda **kw: _real(transport=transport),
+        ):
+            await _adapter(organizer_ids=[42]).fetch_raw(mock_db)
+
+        assert not evil_fetched
