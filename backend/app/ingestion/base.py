@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.constants import (
     DEFAULT_CURRENCY,
     ESTONIA_BBOX,
+    TALLINN_REGION_BBOX,
     EVENT_STATUS_DRAFT,
     EXPLICIT_KEYWORDS,
     FIENTA_CITY_FILTER,
@@ -345,6 +346,12 @@ def extract_jsonld_event_offers(
 def coords_in_estonia(lat: float, lng: float) -> bool:
     """Return True when (lat, lng) falls within Estonia's bounding box."""
     lat_min, lat_max, lng_min, lng_max = ESTONIA_BBOX
+    return lat_min <= lat <= lat_max and lng_min <= lng <= lng_max
+
+
+def coords_in_tallinn(lat: float, lng: float) -> bool:
+    """Return True when (lat, lng) falls within the greater-Tallinn bounding box."""
+    lat_min, lat_max, lng_min, lng_max = TALLINN_REGION_BBOX
     return lat_min <= lat <= lat_max and lng_min <= lng <= lng_max
 
 

@@ -128,6 +128,9 @@ DETAIL_FETCH_CONCURRENCY: int = 8
 # Bounding box for Estonia (lat_min, lat_max, lng_min, lng_max).
 # Used to reject geo coords from detail pages that are clearly wrong (>~80 km off).
 ESTONIA_BBOX: tuple[float, float, float, float] = (57.5, 59.7, 21.5, 28.2)
+# Generous greater-Tallinn/Harju bounding box: rejects Pärnu/Tartu (~58.3 lat)
+# and all foreign coords while keeping suburban Tallinn venues.
+TALLINN_REGION_BBOX: tuple[float, float, float, float] = (59.2, 59.7, 24.3, 25.3)
 
 SOURCE_STATUS_OK = "ok"
 SOURCE_STATUS_ERROR = "error"
@@ -294,6 +297,7 @@ LLM_CLASSIFY_VENUE_FALLBACK = "unknown"
 LLM_CLASSIFY_DESC_FALLBACK = "(no description)"
 LLM_CLASSIFY_PRICE_HINT_FALLBACK = "not stated"
 LLM_CLASSIFY_EXPLICIT_DEFAULT = False
+LLM_CLASSIFY_IN_TARGET_CITY_DEFAULT = True
 LLM_CLASSIFY_PROMPT_TEMPLATE = """\
 Classify this Tallinn event. Respond with JSON only.
 
@@ -306,7 +310,7 @@ Description: {description}
 Price info: {price_hint}
 
 JSON format:
-{{"categories": ["music"], "vibes": ["underground", "intimate"], "why_go": {{"en": ["reason 1", "reason 2", "reason 3"], "et": ["põhjus 1", "põhjus 2", "põhjus 3"], "ru": ["причина 1", "причина 2", "причина 3"]}}, "quality": 0.8, "language": "et", "price_min": 10, "price_max": 20, "currency": "EUR", "explicit": false}}
+{{"categories": ["music"], "vibes": ["underground", "intimate"], "why_go": {{"en": ["reason 1", "reason 2", "reason 3"], "et": ["põhjus 1", "põhjus 2", "põhjus 3"], "ru": ["причина 1", "причина 2", "причина 3"]}}, "quality": 0.8, "language": "et", "price_min": 10, "price_max": 20, "currency": "EUR", "explicit": false, "in_target_city": true}}
 
 Rules:
 - "language" must be the ISO 639-1 code of the event's original language (et, en, ru, or other).
@@ -315,6 +319,7 @@ Rules:
 - "price_min"/"price_max" are numbers in the stated currency; 0 for free/TASUTA/"free"; null if no price is stated.
 - "currency" is the ISO 4217 code of the stated price (default EUR); null if no price is stated.
 - "explicit" is true ONLY for pornographic or sexually explicit events (porn, striptease/strip clubs, fetish, escort, sex shows). Normal nightlife, concerts, bars, and age-restricted shows are NOT explicit.
+- "in_target_city" is false ONLY if the title/venue clearly places the event outside Tallinn, Estonia (another city or country, e.g. Pärnu, Tartu, Boston, London, Vietnam); otherwise true.
 - Only use values from the allowed lists for categories and vibes."""
 
 # Venue address extraction — LLM pass that mines street addresses out of venue_name

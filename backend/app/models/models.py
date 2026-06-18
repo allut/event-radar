@@ -215,6 +215,9 @@ class Event(Base):
     is_explicit: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=false(), default=False
     )
+    is_out_of_area: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=false(), default=False
+    )
     dedup_group_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()

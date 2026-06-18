@@ -74,6 +74,7 @@ def make_event():
         e.price_hint = None
         e.status = "published"
         e.is_explicit = False
+        e.is_out_of_area = False
         e.dedup_group_id = None
 
         cl = MagicMock()

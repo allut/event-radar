@@ -6,6 +6,7 @@ from app.constants import (
     EVENT_STATUS_CLASSIFIED,
     EVENT_STATUS_PUBLISHED,
     PUBLISH_MIN_QUALITY_SCORE,
+    TALLINN_REGION_BBOX,
 )
 from app.publish import publish_pending
 
@@ -46,6 +47,8 @@ async def test_publish_pending_statement_encodes_gate_criteria(mock_db):
     )
     # is_explicit=false gate.
     assert "is_explicit" in compiled
+    # is_out_of_area=false gate (LLM location signal).
+    assert "is_out_of_area" in compiled
     # starts_at must be in the future.
     assert "starts_at >=" in compiled
     # title_orig presence check.
@@ -54,3 +57,9 @@ async def test_publish_pending_statement_encodes_gate_criteria(mock_db):
     assert "event_classifications" in compiled
     assert "quality_score" in compiled
     assert str(PUBLISH_MIN_QUALITY_SCORE) in compiled
+    # Tallinn bbox guard — lat/lng columns must appear in the compiled SQL.
+    lat_min, lat_max, lng_min, lng_max = TALLINN_REGION_BBOX
+    assert "lat" in compiled
+    assert "lng" in compiled
+    assert str(lat_min) in compiled
+    assert str(lng_max) in compiled

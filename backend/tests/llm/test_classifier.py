@@ -254,6 +254,70 @@ class TestClassifyEventExplicit:
         assert event.is_explicit is False
 
 
+class TestParseClassificationInTargetCity:
+    def test_in_target_city_false_sets_flag(self):
+        raw = {**_BASE_RAW, "in_target_city": False}
+        result = _parse_classification(raw)
+        assert result["in_target_city"] is False
+
+    def test_in_target_city_true_clears_flag(self):
+        raw = {**_BASE_RAW, "in_target_city": True}
+        result = _parse_classification(raw)
+        assert result["in_target_city"] is True
+
+    def test_in_target_city_missing_defaults_to_true(self):
+        result = _parse_classification(dict(_BASE_RAW))
+        assert result["in_target_city"] is True
+
+
+class TestClassifyEventOutOfArea:
+    @pytest.mark.asyncio
+    async def test_llm_not_in_city_sets_is_out_of_area(self, mock_db, make_event):
+        event = make_event()
+        assert event.is_out_of_area is False
+        raw = {**_BASE_RAW, "in_target_city": False}
+        with patch(
+            "app.llm.classifier.llm_json",
+            AsyncMock(return_value=(raw, "groq/llama-3.3-70b-versatile")),
+        ):
+            ok = await classify_event(
+                event, mock_db, existing_classification=event.classification, prefetched=True
+            )
+
+        assert ok is True
+        assert event.is_out_of_area is True
+
+    @pytest.mark.asyncio
+    async def test_llm_in_city_leaves_is_out_of_area_false(self, mock_db, make_event):
+        event = make_event()
+        raw = {**_BASE_RAW, "in_target_city": True}
+        with patch(
+            "app.llm.classifier.llm_json",
+            AsyncMock(return_value=(raw, "groq/llama-3.3-70b-versatile")),
+        ):
+            ok = await classify_event(
+                event, mock_db, existing_classification=event.classification, prefetched=True
+            )
+
+        assert ok is True
+        assert event.is_out_of_area is False
+
+    @pytest.mark.asyncio
+    async def test_llm_field_omitted_defaults_fail_open(self, mock_db, make_event):
+        event = make_event()
+        raw = dict(_BASE_RAW)  # no in_target_city key
+        with patch(
+            "app.llm.classifier.llm_json",
+            AsyncMock(return_value=(raw, "groq/llama-3.3-70b-versatile")),
+        ):
+            ok = await classify_event(
+                event, mock_db, existing_classification=event.classification, prefetched=True
+            )
+
+        assert ok is True
+        assert event.is_out_of_area is False
+
+
 class TestClassifyEventSkipsLLMWhenAlreadyExplicit:
     @pytest.mark.asyncio
     async def test_keyword_flagged_event_skips_llm_call(self, mock_db, make_event):

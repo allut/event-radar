@@ -6,6 +6,7 @@ from bs4 import BeautifulSoup
 from app.ingestion.base import (
     address_city,
     coords_in_estonia,
+    coords_in_tallinn,
     extract_jsonld_event_location,
     extract_jsonld_event_offers,
     is_explicit_text,
@@ -226,3 +227,14 @@ class TestCoordsInEstonia:
 
     def test_below_south_edge(self):
         assert coords_in_estonia(57.4, 25.0) is False
+
+
+class TestCoordsInTallinn:
+    def test_tallinn_centre_inside(self):
+        assert coords_in_tallinn(59.437, 24.753) is True
+
+    def test_parnu_outside(self):
+        assert coords_in_tallinn(58.38, 24.5) is False
+
+    def test_boston_outside(self):
+        assert coords_in_tallinn(42.36, -71.06) is False

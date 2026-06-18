@@ -23,6 +23,7 @@ from app.constants import (
     LLM_CLASSIFY_BATCH_SIZE,
     LLM_CLASSIFY_DESC_FALLBACK,
     LLM_CLASSIFY_EXPLICIT_DEFAULT,
+    LLM_CLASSIFY_IN_TARGET_CITY_DEFAULT,
     LLM_CLASSIFY_LANGUAGE_CODE_MAX_LEN,
     LLM_CLASSIFY_PRICE_HINT_FALLBACK,
     LLM_CLASSIFY_PROMPT_TEMPLATE,
@@ -93,6 +94,9 @@ def _parse_classification(raw: dict[str, Any]) -> dict[str, Any]:
         currency = None
 
     explicit = bool(raw.get("explicit", LLM_CLASSIFY_EXPLICIT_DEFAULT))
+    in_target_city = bool(
+        raw.get("in_target_city", LLM_CLASSIFY_IN_TARGET_CITY_DEFAULT)
+    )
 
     return {
         "categories": cats,
@@ -105,6 +109,7 @@ def _parse_classification(raw: dict[str, Any]) -> dict[str, Any]:
         "price_max": price_max,
         "currency": currency,
         "explicit": explicit,
+        "in_target_city": in_target_city,
     }
 
 
@@ -199,6 +204,7 @@ async def classify_event(
             event.currency = parsed["currency"]
 
     event.is_explicit = event.is_explicit or parsed["explicit"]
+    event.is_out_of_area = not parsed["in_target_city"]
 
     event.status = EVENT_STATUS_CLASSIFIED
     log.debug(
