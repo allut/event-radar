@@ -530,6 +530,12 @@ NOMINATIM_BASE_URL = "https://nominatim.openstreetmap.org/search"
 NOMINATIM_USER_AGENT = "EventRadarBot/1.0 (+https://eventradar.ee; aleksei.lutkov@gmail.com)"
 GEOCODE_REQUEST_DELAY_SECONDS: float = 1.0
 GEOCODE_MAX_PER_RUN = 200  # ~3.5 min/run at 1 req/s, safely under the 6h cron cadence
+# Decimal places to round (lat, lng) to when counting *distinct* donor coords in the
+# sibling-copy ambiguity guard. 6 ≈ 0.1 m — collapses sub-meter float-representation
+# differences (e.g. 59.43793509999999 vs 59.4379351) that would otherwise read as two
+# separate venues. Used for the distinct-count only; a real unrounded donor coord is
+# still written to the event.
+GEOCODE_COORD_QUANT_DECIMALS = 6
 
 # Address normalization for geocoding — Estonian street-type words to REMOVE
 # entirely before querying Nominatim. OSM stores these street types by bare name,

@@ -473,6 +473,90 @@ class TestCopyVenueFromSiblings:
         assert (target.lat, target.lng) == (59.4476026, 24.7049754)
 
     @pytest.mark.asyncio
+    async def test_float_split_coords_treated_as_one_venue(
+        self, mock_db, make_event
+    ):
+        """Fix 1: one physical coord stored as two sub-meter-apart doubles
+        (59.43793509999999 vs 59.4379351) must round to a single distinct coord →
+        copy succeeds, and a real unrounded donor coord is written (not the key)."""
+        target = make_event(event_id=1)
+        target.venue_name = "Sõltumatu Tantsu Lava"
+        target.venue_address = None
+        target.lat = None
+        target.lng = None
+
+        mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=[target]))
+        mock_db.execute.return_value = MagicMock(
+            all=MagicMock(
+                return_value=[
+                    ("Sõltumatu Tantsu Lava (STL)", "Telliskivi 60a, Tallinn", 59.43793509999999, 24.7286398),
+                    ("Sõltumatu Tantsu Lava (STL)", "Telliskivi 60a, Tallinn", 59.4379351, 24.7286398),
+                ]
+            )
+        )
+
+        copied = await copy_venue_from_siblings(mock_db)
+
+        assert copied == 1
+        assert target.venue_address == "Telliskivi 60a, Tallinn"
+        # An actual (unrounded) donor coord is written, not the rounded distinct key.
+        assert target.lat in (59.43793509999999, 59.4379351)
+        assert target.lng == 24.7286398
+
+    @pytest.mark.asyncio
+    async def test_event_with_coords_only_gains_address(self, mock_db, make_event):
+        """Fix 2: a target that already has coords (set at ingest) but no address
+        keeps its coords and only backfills venue_address from a sibling."""
+        target = make_event(event_id=1)
+        target.venue_name = "Sõltumatu Tantsu Lava"
+        target.venue_address = None
+        target.lat = 59.4380000
+        target.lng = 24.7290000
+
+        mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=[target]))
+        mock_db.execute.return_value = MagicMock(
+            all=MagicMock(
+                return_value=[
+                    ("Sõltumatu Tantsu Lava (STL)", "Telliskivi 60a, Tallinn", 59.4381936, 24.7286398),
+                ]
+            )
+        )
+
+        copied = await copy_venue_from_siblings(mock_db)
+
+        assert copied == 1
+        assert target.venue_address == "Telliskivi 60a, Tallinn"
+        # Ingest coords preserved — not overwritten by the donor's.
+        assert (target.lat, target.lng) == (59.4380000, 24.7290000)
+
+    @pytest.mark.asyncio
+    async def test_junk_address_no_coords_inherits_sibling_address(
+        self, mock_db, make_event
+    ):
+        """Fix 2: a target with a street-only junk address but no coords inherits the
+        house-numbered sibling address (overwriting the junk) plus its coords."""
+        target = make_event(event_id=1)
+        target.venue_name = "Kalamaja muuseum"
+        target.venue_address = "Kotzebue tänav, Tallinn, Eesti"  # street-only, never geocoded
+        target.lat = None
+        target.lng = None
+
+        mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=[target]))
+        mock_db.execute.return_value = MagicMock(
+            all=MagicMock(
+                return_value=[
+                    ("Kalamaja muuseum", "Kotzebue tänav 16, 10411 Tallinn, Harju maakond", 59.4485, 24.7400),
+                ]
+            )
+        )
+
+        copied = await copy_venue_from_siblings(mock_db)
+
+        assert copied == 1
+        assert target.venue_address == "Kotzebue tänav 16, 10411 Tallinn, Harju maakond"
+        assert (target.lat, target.lng) == (59.4485, 24.7400)
+
+    @pytest.mark.asyncio
     async def test_skips_when_matched_donors_span_distinct_coords(
         self, mock_db, make_event, caplog
     ):
@@ -677,20 +761,24 @@ class TestExtractAddressFromVenueName:
         assert event.venue_address == "Ranna pst 3"
 
     @pytest.mark.asyncio
-    async def test_pure_direction_nulls_both_name_and_address(self, mock_db):
-        event = self._make_event(1, "Algus Hildegardi aias Tornide väljakul")
+    async def test_no_address_extracted_leaves_venue_name_unchanged(self, mock_db):
+        """When the LLM mines no address, venue_name is left intact (Fix 3): rewriting
+        the name with no address payoff only risks breaking canonical sibling matching."""
+        original = "Algus Hildegardi aias Tornide väljakul"
+        event = self._make_event(1, original)
         mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=[event]))
         mock_db.execute.return_value = MagicMock(all=MagicMock(return_value=[]))
 
-        llm_response = {"venue_name": None, "venue_address": None}
+        # LLM proposes a shortened name but no address — must be ignored.
+        llm_response = {"venue_name": "Hildegardi aed", "venue_address": None}
         with (
             patch("app.ingestion.geocode.llm_available", return_value=True),
             patch("app.ingestion.geocode.llm_json", new=AsyncMock(return_value=(llm_response, "groq/llama"))),
         ):
             result = await extract_address_from_venue_name(mock_db)
 
-        assert result == 1
-        assert event.venue_name is None
+        assert result == 0
+        assert event.venue_name == original
         assert event.venue_address is None
 
     @pytest.mark.asyncio

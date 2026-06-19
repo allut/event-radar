@@ -7,11 +7,12 @@ from collections import Counter, defaultdict
 
 import httpx
 from rapidfuzz.fuzz import ratio as fuzz_ratio
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.constants import (
     ESTONIAN_STREET_TYPE_WORDS,
+    GEOCODE_COORD_QUANT_DECIMALS,
     GEOCODE_COUNTRY_SUFFIX,
     GEOCODE_COUNTY_RE,
     GEOCODE_FLOOR_RE,
@@ -262,12 +263,15 @@ async def extract_address_from_venue_name(db: AsyncSession) -> int:
         new_address: str | None = (raw_address.strip() or None) if isinstance(raw_address, str) else None
         new_name: str | None = (raw_name.strip()[:255] or None) if isinstance(raw_name, str) else None
 
-        if new_address is None and new_name == name[:255]:
+        # Only rewrite venue_name when an address was actually mined. Shortening or
+        # NULLing the name with no address payoff buys nothing and can break canonical
+        # sibling matching (it stranded event 482: "Katharienthal Kohviku" no longer
+        # matched its full-named EN sibling). No address → leave the event untouched.
+        if new_address is None:
             continue
 
         for event in events:
-            if new_address is not None:
-                event.venue_address = new_address
+            event.venue_address = new_address
             event.venue_name = new_name
             mutated += 1
         mutated_names += 1
@@ -278,10 +282,11 @@ async def extract_address_from_venue_name(db: AsyncSession) -> int:
 
 
 async def copy_venue_from_siblings(db: AsyncSession) -> int:
-    """Copy venue_address + coords onto address-less events from a sibling venue.
+    """Copy venue_address + coords onto under-located events from a sibling venue.
 
     Two queries (honors the no-N+1 batch rule): one for targets (venue_name set,
-    venue_address NULL), one for all geocoded donors (distinct venue_name →
+    and *either* lat NULL *or* venue_address NULL), one for all geocoded donors
+    (distinct venue_name →
     address/coords where both are present). Matching is on the *canonical* venue
     core (parens + glued-on address tails stripped, see canonical_venue_name) via
     symmetric ``fuzz.ratio >= VENUE_SIBLING_RATIO_THRESHOLD``, so "Sõltumatu Tantsu
@@ -300,7 +305,10 @@ async def copy_venue_from_siblings(db: AsyncSession) -> int:
     targets = (
         await db.scalars(
             select(Event)
-            .where(Event.venue_name.is_not(None), Event.venue_address.is_(None))
+            .where(
+                Event.venue_name.is_not(None),
+                or_(Event.lat.is_(None), Event.venue_address.is_(None)),
+            )
             .limit(GEOCODE_MAX_PER_RUN)
         )
     ).all()
@@ -350,10 +358,12 @@ async def copy_venue_from_siblings(db: AsyncSession) -> int:
         if not matched_rows:
             continue
 
-        # The donor query filters lat/lng non-null, so this is defense-in-depth:
-        # a null coord can't form a valid pin, so it's excluded rather than written.
+        # The donor query filters lat/lng non-null, so the None guard is
+        # defense-in-depth. Coords are *rounded* for the distinct-count only:
+        # one physical venue can be stored as two sub-meter-apart doubles (e.g.
+        # 59.43793509999999 vs 59.4379351), which must not read as two locations.
         distinct_coords = {
-            (lat, lng)
+            (round(lat, GEOCODE_COORD_QUANT_DECIMALS), round(lng, GEOCODE_COORD_QUANT_DECIMALS))
             for _addr, lat, lng in matched_rows
             if lat is not None and lng is not None
         }
@@ -370,11 +380,21 @@ async def copy_venue_from_siblings(db: AsyncSession) -> int:
                 )
             continue
 
-        lat, lng = next(iter(distinct_coords))
-        event.venue_address = _representative_address(matched_rows)
-        event.lat = lat
-        event.lng = lng
-        copied += 1
+        # Fill whichever field the target is missing. When it has no coords the
+        # address it carries (if any) never geocoded → unreliable → overwrite with
+        # the house-numbered sibling address; when it already has coords (set at
+        # ingest) keep them and only backfill a missing address.
+        if event.lat is None or event.lng is None:
+            event.lat, event.lng = next(
+                (la, ln)
+                for _addr, la, ln in matched_rows
+                if la is not None and ln is not None
+            )
+            event.venue_address = _representative_address(matched_rows)
+            copied += 1
+        elif event.venue_address is None:
+            event.venue_address = _representative_address(matched_rows)
+            copied += 1
 
     if copied:
         log.info("copied venue data from siblings to %d events", copied)
