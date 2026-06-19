@@ -208,8 +208,8 @@ class HtmlListingAdapter(SourceAdapter):
                     )
                     cards = cards[:HTML_LISTING_MAX_DETAIL_FETCHES]
 
-                # Forward-only + self-healing: skip detail fetches for events already
-                # ingested (their price_hint/description, if missing, won't be reread
+                # Forward-only: skip detail fetches for events already ingested
+                # (their price_hint/description, if missing, won't be reread
                 # since run() discards normalize() output for known external_ids anyway).
                 for card in cards:
                     if card.get("external_id") in known_ids:
@@ -228,8 +228,11 @@ class HtmlListingAdapter(SourceAdapter):
                     detail_soup = BeautifulSoup(detail_resp.text, "html.parser")
                     await self.parse_detail(client, detail_soup, card)
 
-        log.info("%s fetched %d events", self.source.slug, len(cards))
-        return cards
+        # Drop already-stored cards before returning — known events must never
+        # become a duplicate raw_events row on a re-run.
+        new_cards = [c for c in cards if c.get("external_id") not in known_ids]
+        log.info("%s fetched %d events", self.source.slug, len(new_cards))
+        return new_cards
 
     def normalize(self, raw: dict[str, Any]) -> NormalizedEvent | None:
         title = raw.get("title") or ""

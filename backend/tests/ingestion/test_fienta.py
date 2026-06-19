@@ -669,6 +669,56 @@ class TestFetchRawDetailFetch:
         assert not detail_fetched
 
     @pytest.mark.asyncio
+    async def test_known_events_excluded_from_returned_items(self):
+        """fetch_raw() must drop already-stored items from its return value, not
+        just skip their detail fetch — otherwise every re-run re-inserts a
+        raw_events row for unchanged data (regression)."""
+        base = settings.FIENTA_BASE_URL
+        listing = [
+            {"id": "1", "name": "Known", "url": f"{base}/event/1"},
+            {"id": "2", "name": "New", "url": f"{base}/event/2"},
+        ]
+
+        async def handler(request):
+            if "/event/" in str(request.url):
+                return httpx.Response(200, text=_detail_html())
+            return _mock_response(listing)
+
+        transport = httpx.MockTransport(handler)
+        _real = httpx.AsyncClient
+        with patch(
+            "app.ingestion.sources.fienta.httpx.AsyncClient",
+            lambda **kw: _real(transport=transport),
+        ):
+            result = await _adapter(organizer_ids=[42]).fetch_raw({"1"})
+
+        assert [e["id"] for e in result] == ["2"]
+
+    @pytest.mark.asyncio
+    async def test_empty_known_ids_returns_all_items_unchanged(self):
+        """An empty known_ids set must return every fetched item unchanged."""
+        base = settings.FIENTA_BASE_URL
+        listing = [
+            {"id": "1", "name": "A", "url": f"{base}/event/1"},
+            {"id": "2", "name": "B", "url": f"{base}/event/2"},
+        ]
+
+        async def handler(request):
+            if "/event/" in str(request.url):
+                return httpx.Response(200, text=_detail_html())
+            return _mock_response(listing)
+
+        transport = httpx.MockTransport(handler)
+        _real = httpx.AsyncClient
+        with patch(
+            "app.ingestion.sources.fienta.httpx.AsyncClient",
+            lambda **kw: _real(transport=transport),
+        ):
+            result = await _adapter(organizer_ids=[42]).fetch_raw(set())
+
+        assert [e["id"] for e in result] == ["1", "2"]
+
+    @pytest.mark.asyncio
     async def test_detail_fetch_failure_degrades_gracefully(self):
         """A 500 on the detail page must not abort the listing result."""
         base = settings.FIENTA_BASE_URL

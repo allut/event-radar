@@ -131,8 +131,9 @@ class FientaAdapter(SourceAdapter):
             if not all_events and errors:
                 raise errors[0]
 
-            # Forward-only detail fetch: skip already-stored events so each event
-            # is enriched exactly once and re-runs stay cheap.
+            # Forward-only: drop already-stored events before detail fetch and
+            # before returning, so each event is enriched exactly once, re-runs
+            # stay cheap, and known events never become a duplicate raw_events row.
             semaphore = asyncio.Semaphore(DETAIL_FETCH_CONCURRENCY)
 
             new_items = [
@@ -147,7 +148,7 @@ class FientaAdapter(SourceAdapter):
                 return_exceptions=True,
             )
 
-        return all_events
+        return new_items
 
     async def _fetch_organizer(
         self,

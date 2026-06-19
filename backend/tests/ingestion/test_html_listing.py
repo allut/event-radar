@@ -708,6 +708,34 @@ class TestKumuFetchRaw:
             "https://kumu.ekm.ee/en/syndmus/example-3/",
         }
 
+    @pytest.mark.asyncio
+    async def test_known_events_excluded_from_returned_items(self):
+        """fetch_raw() must drop already-stored cards from its return value, not
+        just skip their detail fetch — otherwise every re-run re-inserts a
+        raw_events row for unchanged listing data (regression)."""
+        adapter = _kumu_adapter()
+        known = {"https://kumu.ekm.ee/en/syndmus/example-1/"}
+        with patch("app.ingestion.sources.html_listing.http_get") as mock_get:
+            mock_get.return_value = _mock_response(KUMU_LISTING_HTML)
+            raw_items = await adapter.fetch_raw(_known_ids(known))
+
+        assert {c["external_id"] for c in raw_items} == {
+            "https://kumu.ekm.ee/en/syndmus/example-2/",
+        }
+
+    @pytest.mark.asyncio
+    async def test_empty_known_ids_returns_all_items_unchanged(self):
+        """An empty known_ids set must return every fetched card unchanged."""
+        adapter = _kumu_adapter()
+        with patch("app.ingestion.sources.html_listing.http_get") as mock_get:
+            mock_get.return_value = _mock_response(KUMU_LISTING_HTML)
+            raw_items = await adapter.fetch_raw(_known_ids())
+
+        assert {c["external_id"] for c in raw_items} == {
+            "https://kumu.ekm.ee/en/syndmus/example-1/",
+            "https://kumu.ekm.ee/en/syndmus/example-2/",
+        }
+
 
 class TestKumuParseDetail:
     @pytest.mark.asyncio
