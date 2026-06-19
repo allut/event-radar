@@ -238,6 +238,51 @@ class TestGeocodePending:
         mock_geo.assert_called_once()  # normalized key collision → 1 call for 3 events
 
     @pytest.mark.asyncio
+    async def test_donor_seeded_from_normalized_variant_not_raw_match(
+        self, mock_db, make_event
+    ):
+        """A pending event's raw address differs from an already-geocoded event's
+        raw address, but both normalize to the same query (spelling/unit variant)
+        — the donor must seed the cache so zero Nominatim calls are made."""
+        pending_event = make_event(event_id=1)
+        pending_event.venue_address = "Telliskivi 60a/9, 10412 Tallinn, Harjumaa"
+        pending_event.lat = None
+        pending_event.lng = None
+
+        mock_db.scalars.return_value = MagicMock(
+            all=MagicMock(return_value=[pending_event])
+        )
+        # Donor is a different event (not in `pending`), with a raw address that
+        # does NOT string-equal the pending event's raw address.
+        mock_db.execute.return_value = MagicMock(
+            all=MagicMock(
+                return_value=[
+                    (
+                        "Telliskivi tänav 60a/9, 10412 Tallinn, Harju maakond",
+                        59.4381936,
+                        24.7286398,
+                    )
+                ]
+            )
+        )
+
+        with (
+            patch(
+                "app.ingestion.geocode.copy_venue_from_siblings",
+                new=AsyncMock(return_value=0),
+            ),
+            patch(
+                "app.ingestion.geocode.geocode_address", new=AsyncMock()
+            ) as mock_geo,
+            patch("app.ingestion.geocode.asyncio.sleep", new=AsyncMock()),
+        ):
+            summary = await geocode_pending(mock_db)
+
+        assert summary == {"pending": 1, "geocoded": 1, "failed": 0, "copied": 0, "extracted": 0}
+        assert (pending_event.lat, pending_event.lng) == (59.4381936, 24.7286398)
+        mock_geo.assert_not_called()
+
+    @pytest.mark.asyncio
     async def test_failed_geocode_counts_as_failed_and_leaves_coords_unset(
         self, mock_db, make_event
     ):

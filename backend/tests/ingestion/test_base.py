@@ -2,6 +2,7 @@
 
 import http
 import time
+from datetime import datetime
 from unittest.mock import MagicMock
 
 import httpx
@@ -9,9 +10,10 @@ import pytest
 from bs4 import BeautifulSoup
 from tenacity import RetryCallState
 
-from app.constants import HTTP_RETRY_AFTER_MAX_SECONDS
+from app.constants import HTTP_RETRY_AFTER_MAX_SECONDS, TALLINN_TZ
 from app.ingestion.base import (
     AsyncRateLimiter,
+    NormalizedEvent,
     SourceAdapter,
     _retry_wait,
     address_city,
@@ -425,3 +427,31 @@ class TestSourceAdapterRun:
         assert len(added_runs) == 1
         assert added_runs[0].error == "crawl exploded"
         assert source.last_status == "error"
+
+
+class TestNormalizedEventAddressGate:
+    """Coords without an address are orphan data — see base.py:__post_init__."""
+
+    def test_coords_dropped_when_no_address(self):
+        event = NormalizedEvent(
+            external_id="x",
+            title="Test",
+            starts_at=datetime.now(TALLINN_TZ),
+            venue_address=None,
+            lat=59.43,
+            lng=24.75,
+        )
+        assert event.lat is None
+        assert event.lng is None
+
+    def test_coords_preserved_when_address_present(self):
+        event = NormalizedEvent(
+            external_id="x",
+            title="Test",
+            starts_at=datetime.now(TALLINN_TZ),
+            venue_address="Telliskivi 60a, 10412 Tallinn, Harjumaa",
+            lat=59.43,
+            lng=24.75,
+        )
+        assert event.lat == 59.43
+        assert event.lng == 24.75

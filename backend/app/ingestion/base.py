@@ -270,6 +270,14 @@ class NormalizedEvent:
     currency: str | None = None
     price_hint: str | None = None
 
+    def __post_init__(self) -> None:
+        # Coords without an address are orphan data here — the geocode/sibling-copy
+        # chain keys off venue_address — so drop them rather than persist a pin we
+        # can never re-derive or match.
+        if self.venue_address is None:
+            self.lat = None
+            self.lng = None
+
 
 def _make_slug(title: str, starts_at: datetime, external_id: str) -> str:
     safe = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")

@@ -3,7 +3,7 @@
 import asyncio
 import logging
 import re
-from collections import Counter
+from collections import Counter, defaultdict
 
 import httpx
 from rapidfuzz.fuzz import ratio as fuzz_ratio
@@ -385,10 +385,12 @@ async def geocode_pending(db: AsyncSession) -> dict:
     """Backfill lat/lng for events with a venue_address but no coordinates.
 
     Two queries total regardless of row count: one for pending events (capped at
-    GEOCODE_MAX_PER_RUN), one to seed a normalized-query→coords cache from events
-    already geocoded — avoids re-hitting Nominatim for venues we already know.
-    The cache is keyed by the *normalized* query so format variants of one venue
-    (e.g. "60a/9" vs "60a / 9") share a single Nominatim call.
+    GEOCODE_MAX_PER_RUN), one to seed a normalized-query→coords cache from **all**
+    geocoded events (not just pending-address matches) — avoids re-hitting
+    Nominatim for venues we already know, including spelling/unit variants of an
+    address that some other event already resolved. The cache is keyed by the
+    *normalized* query so format variants of one venue (e.g. "60a/9" vs "60a / 9")
+    share a single Nominatim call.
     Remaining distinct addresses are geocoded serially with a delay between calls
     per Nominatim's usage policy (max 1 req/s).
 
@@ -412,18 +414,22 @@ async def geocode_pending(db: AsyncSession) -> dict:
     if not pending:
         return {"pending": 0, "geocoded": 0, "failed": 0, "copied": copied, "extracted": extracted}
 
-    addresses = {event.venue_address for event in pending}
-    cached_rows = (
+    donor_rows = (
         await db.execute(
-            select(Event.venue_address, Event.lat, Event.lng).where(
-                Event.venue_address.in_(addresses), Event.lat.is_not(None)
-            )
+            select(Event.venue_address, Event.lat, Event.lng)
+            .where(Event.venue_address.is_not(None), Event.lat.is_not(None))
+            .distinct()
         )
     ).all()
-    # Seed cache by normalized query so format variants of the same venue hit once.
+    # Group geocoded coords by normalized query so spelling/unit variants of one
+    # venue share coords; pick the most-common coord per key (lex tie-break) when a
+    # key spans several near-identical Nominatim results.
+    coords_by_query: dict[str, Counter[tuple[float, float]]] = defaultdict(Counter)
+    for address, lat, lng in donor_rows:
+        coords_by_query[normalize_address_for_geocoding(address)][(lat, lng)] += 1
     cache: dict[str, tuple[float, float] | None] = {
-        normalize_address_for_geocoding(address): (lat, lng)
-        for address, lat, lng in cached_rows
+        query: min(counter.most_common(), key=lambda kv: (-kv[1], kv[0]))[0]
+        for query, counter in coords_by_query.items()
     }
 
     geocoded = 0
