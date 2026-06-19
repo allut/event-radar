@@ -8,7 +8,7 @@ The whole platform is designed to run on **free-tier infrastructure** at a stead
 
 ## Features
 
-- **Multi-source ingestion** — Fienta API, HTML listing scrapers (Piletilevi, KUMU, Estonia Concert Hall) sharing a common adapter, and inbound newsletter parsing via email webhook. A Nominatim geocoding backfill fills in venue coordinates that sources don't provide.
+- **Multi-source ingestion** — Fienta API, HTML listing scrapers (Piletilevi, KUMU, Estonia Concert Hall) sharing a common adapter, and inbound newsletter parsing via email webhook. A Nominatim geocoding backfill fills in venue coordinates that sources don't provide, and a daily detail-refetch sync reconciles venue/price/coordinates against each event's source page.
 - **Two-stage deduplication** — a cheap SQL + fuzzy pre-filter narrows candidate pairs, then an LLM tiebreaker resolves only the survivors. Decisions are cached by content hash to avoid repeat LLM calls.
 - **LLM classification** — assigns a fixed 12-category / 10-vibe taxonomy, a quality score, an explicit-content flag, a parsed price range, and a localized 3-bullet "why go?" rationale, with a Groq → Cerebras → Mistral provider fallback chain.
 - **3-layer NSFW filter** — a keyword prefilter at ingest time, an LLM-assigned explicit-content flag, and a publish gate that excludes flagged events from the published feed.
@@ -30,6 +30,7 @@ Vite + React SPA  ──HTTPS / JSON──▶  FastAPI (single process)
                                            ├── Hourly:    ingest_all_enabled
                                            ├── 6-hourly:  dedup_pass + classify_pending +
                                            │              publish_pending + geocode_pending
+                                           ├── 04:30 EET: refetch_event_details
                                            ├── 06:00 EET: build_daily_feeds
                                            └── 07:00 EET: send_daily_digests
                                              ↓
@@ -133,7 +134,7 @@ event-radar/
 ├── backend/                  # FastAPI application
 │   ├── app/
 │   │   ├── routers/          # /auth /admin /onboarding /events /feed /feedback /webhooks ...
-│   │   ├── ingestion/        # source adapters (Fienta, HTML listings, newsletter), geocoding backfill
+│   │   ├── ingestion/        # source adapters (Fienta, HTML listings, newsletter), geocoding backfill, detail-refetch sync
 │   │   ├── dedup/            # rule-based pre-filter + LLM tiebreaker
 │   │   ├── llm/              # provider router, classifier, taxonomy, extractor
 │   │   ├── ranking/          # scoring + Daily 5 builder
@@ -192,7 +193,7 @@ python scripts/generate_shared.py
 
 ### Manually triggering pipeline jobs (E2E testing)
 
-The scheduled jobs described in [Architecture](#architecture) (`sync_fienta_organizers`, `ingest_all_enabled`, `dedup_pass`, `classify_pending`, `publish_pending`, `build_daily_feeds`, `send_daily_digests`, `geocode_pending`) can each be run on demand via `/admin/*` endpoints — useful for exercising the full pipeline end to end without waiting for the schedule.
+The scheduled jobs described in [Architecture](#architecture) (`sync_fienta_organizers`, `ingest_all_enabled`, `dedup_pass`, `classify_pending`, `publish_pending`, `build_daily_feeds`, `send_daily_digests`, `geocode_pending`, `refetch_event_details`) can each be run on demand via `/admin/*` endpoints — useful for exercising the full pipeline end to end without waiting for the schedule.
 
 All `/admin/*` endpoints require HTTP Basic auth (`ADMIN_USERNAME` / `ADMIN_PASSWORD`, see `.env.example`). In development with no `ADMIN_PASSWORD` set, any credentials are accepted — the examples below use `admin:admin`. Run them in this order to exercise a full pipeline cycle:
 
@@ -223,10 +224,14 @@ curl -u admin:admin -X POST "http://localhost:8000/admin/send-digests?dry_run=fa
 # geocode_pending — backfill lat/lng for events missing coordinates (runs standalone,
 # not part of pipeline/run; safe to invoke any time)
 curl -u admin:admin -X POST http://localhost:8000/admin/geocode
+
+# refetch_event_details — re-fetch each future event's source detail page and
+# reconcile venue/price/coordinates (runs standalone, not part of pipeline/run)
+curl -u admin:admin -X POST http://localhost:8000/admin/refetch
 ```
 
 > [!TIP]
-> `POST /admin/pipeline/run` runs all seven stages above in dependency order in a single call, stopping at the first failure — the fastest way to drive a full E2E cycle. It also accepts `?dry_run=false` for the final digest stage. `GET /admin/stats` and `GET /admin/dedup/groups` are useful for inspecting the results afterwards. The geocoding backfill (`geocode_pending`) runs on its own 6-hourly schedule and is not part of `pipeline/run`; trigger it on demand via `POST /admin/geocode`.
+> `POST /admin/pipeline/run` runs all seven stages above in dependency order in a single call, stopping at the first failure — the fastest way to drive a full E2E cycle. It also accepts `?dry_run=false` for the final digest stage. `GET /admin/stats` and `GET /admin/dedup/groups` are useful for inspecting the results afterwards. The geocoding backfill (`geocode_pending`) and the detail-refetch sync (`refetch_event_details`) each run on their own schedule and are not part of `pipeline/run`; trigger them on demand via `POST /admin/geocode` and `POST /admin/refetch` respectively. Run `refetch` before `geocode` if you want coordinates cleared by an address change re-resolved in the same operation.
 
 ### Resetting event data
 
