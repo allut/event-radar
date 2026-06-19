@@ -12,6 +12,7 @@ from tenacity import RetryCallState
 from app.constants import HTTP_RETRY_AFTER_MAX_SECONDS
 from app.ingestion.base import (
     AsyncRateLimiter,
+    SourceAdapter,
     _retry_wait,
     address_city,
     coords_in_estonia,
@@ -359,3 +360,68 @@ class TestAsyncRateLimiter:
 
     def test_boston_outside(self):
         assert coords_in_tallinn(42.36, -71.06) is False
+
+
+class _FakeAdapter(SourceAdapter):
+    """Minimal SourceAdapter for exercising run()'s control flow in isolation."""
+
+    def __init__(self, source, fetch_result=None, fetch_exc=None):
+        super().__init__(source)
+        self._fetch_result = fetch_result if fetch_result is not None else []
+        self._fetch_exc = fetch_exc
+        self.fetch_raw_called_with: set[str] | None = None
+        self.fetch_raw_call_order: int | None = None
+
+    async def fetch_raw(self, known_ids):
+        self.fetch_raw_called_with = known_ids
+        if self._fetch_exc is not None:
+            raise self._fetch_exc
+        return self._fetch_result
+
+    def normalize(self, raw):
+        return None
+
+
+class TestSourceAdapterRun:
+    """run() must release the connection (commit, not rollback — see base.py
+    comment) before fetch_raw()'s crawl and only touch the DB again afterward."""
+
+    @pytest.mark.asyncio
+    async def test_known_ids_passed_and_connection_released_before_crawl(self, mock_db):
+        source = MagicMock(id=1)
+        mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=["known-1"]))
+        adapter = _FakeAdapter(source, fetch_result=[{"id": "x"}])
+
+        run = await adapter.run(mock_db)
+
+        assert adapter.fetch_raw_called_with == {"known-1"}
+        mock_db.commit.assert_awaited_once()
+        mock_db.rollback.assert_not_awaited()
+        assert run.raw_count == 1
+        assert run.error is None
+
+    @pytest.mark.asyncio
+    async def test_run_row_inserted_after_fetch_raw_with_started_at_set(self, mock_db):
+        source = MagicMock(id=1)
+        mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=[]))
+        adapter = _FakeAdapter(source, fetch_result=[])
+
+        run = await adapter.run(mock_db)
+
+        # started_at must be stamped explicitly (pre-crawl), not left to the
+        # server_default — by the time db.add(run) fires, fetch_raw already ran.
+        assert run.started_at is not None
+
+    @pytest.mark.asyncio
+    async def test_fetch_raw_failure_before_persist_still_records_run_error(self, mock_db):
+        source = MagicMock(id=1)
+        mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=[]))
+        adapter = _FakeAdapter(source, fetch_exc=RuntimeError("crawl exploded"))
+
+        with pytest.raises(RuntimeError, match="crawl exploded"):
+            await adapter.run(mock_db)
+
+        added_runs = [c.args[0] for c in mock_db.add.call_args_list]
+        assert len(added_runs) == 1
+        assert added_runs[0].error == "crawl exploded"
+        assert source.last_status == "error"

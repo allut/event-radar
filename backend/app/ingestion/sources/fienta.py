@@ -8,7 +8,6 @@ from urllib.parse import urlparse
 
 import httpx
 from bs4 import BeautifulSoup
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.constants import (
@@ -22,7 +21,6 @@ from app.ingestion.base import (
     NormalizedEvent,
     SourceAdapter,
     coords_in_estonia,
-    existing_external_ids,
     extract_jsonld_event_location,
     extract_jsonld_event_offers,
     http_get,
@@ -96,7 +94,7 @@ class FientaAdapter(SourceAdapter):
     remaining organizers/details pause together instead of piling on.
     """
 
-    async def fetch_raw(self, db: AsyncSession) -> list[dict[str, Any]]:
+    async def fetch_raw(self, known_ids: set[str]) -> list[dict[str, Any]]:
         organizer_ids: list[int] = self.source.config.get("organizer_ids", [])
         base_url: str = self.source.config.get("base_url", settings.FIENTA_BASE_URL)
         base_host = urlparse(base_url).hostname
@@ -135,7 +133,6 @@ class FientaAdapter(SourceAdapter):
 
             # Forward-only detail fetch: skip already-stored events so each event
             # is enriched exactly once and re-runs stay cheap.
-            known_ids = await existing_external_ids(db, self.source.id)
             semaphore = asyncio.Semaphore(DETAIL_FETCH_CONCURRENCY)
 
             new_items = [

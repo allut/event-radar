@@ -450,7 +450,7 @@ class SourceAdapter(ABC):
         self.source = source
 
     @abstractmethod
-    async def fetch_raw(self, db: AsyncSession) -> list[dict[str, Any]]: ...
+    async def fetch_raw(self, known_ids: set[str]) -> list[dict[str, Any]]: ...
 
     @abstractmethod
     def normalize(self, raw: dict[str, Any]) -> NormalizedEvent | None: ...
@@ -467,12 +467,30 @@ class SourceAdapter(ABC):
         On error, run.error is populated but the caller must still commit to persist
         the failure record (instead of rolling back the entire transaction).
         """
-        run = IngestionRun(source_id=self.source.id)
-        db.add(run)
-        await db.flush()
+        known_ids = await existing_external_ids(db, self.source.id)
+        # Release the connection for the crawl below — fetch_raw is network I/O only
+        # (no db access), often taking minutes, which would otherwise hold a checked-out
+        # connection idle past Neon's auto-suspend window. Nothing has been written yet,
+        # so this is a no-op beyond ending the transaction and returning the connection
+        # to the pool. Must be commit(), not rollback(): Session.rollback() unconditionally
+        # expires every ORM object in the identity map regardless of expire_on_commit,
+        # which would make every later `self.source.*` read below (and in fetch_raw()
+        # overrides) trigger an implicit lazy-load — disallowed under AsyncSession outside
+        # the greenlet-spawn context (raises MissingGreenlet). commit() respects
+        # expire_on_commit=False (app/db.py), so self.source stays usable.
+        await db.commit()
+
+        # Captured before the crawl: the IngestionRun row is now inserted after
+        # fetch_raw() completes, so started_at's server_default=func.now() would
+        # otherwise record crawl-end instead of crawl-start, silently losing the
+        # one timestamp this audit column exists to track.
+        started_at = datetime.now(tz=TALLINN_TZ)
+        run = IngestionRun(source_id=self.source.id, started_at=started_at)
 
         try:
-            raw_items = await self.fetch_raw(db)
+            raw_items = await self.fetch_raw(known_ids)
+            db.add(run)
+            await db.flush()
             run.raw_count = len(raw_items)
             new_count = 0
             seen_external_ids: set[str] = set()
@@ -563,6 +581,12 @@ class SourceAdapter(ABC):
         except Exception as exc:
             run.error = str(exc)[:INGESTION_ERROR_MAX_LEN]
             self.source.last_status = SOURCE_STATUS_ERROR
+            if run.id is None:
+                # fetch_raw failed before the persist phase flushed run — it
+                # was never added to the session, so add it now to record the
+                # error (the caller still expects an IngestionRun row).
+                db.add(run)
+                await db.flush()
             raise
 
         return run

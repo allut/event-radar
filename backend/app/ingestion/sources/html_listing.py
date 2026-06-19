@@ -7,7 +7,6 @@ from urllib.parse import urlencode, urlsplit
 
 import httpx
 from bs4 import BeautifulSoup, Tag
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.constants import (
     ESTONIA_CONCERT_HALL_AJAX_ACTION,
@@ -36,7 +35,6 @@ from app.constants import (
 from app.ingestion.base import (
     NormalizedEvent,
     SourceAdapter,
-    existing_external_ids,
     extract_jsonld_event_location,
     http_get,
     http_post,
@@ -142,7 +140,7 @@ class HtmlListingAdapter(SourceAdapter):
         """Fill in fields on ``card`` from its detail page. No-op by default."""
         return None
 
-    async def fetch_raw(self, db: AsyncSession) -> list[dict[str, Any]]:
+    async def fetch_raw(self, known_ids: set[str]) -> list[dict[str, Any]]:
         seen_ids: set[str] = set()
         cards: list[dict[str, Any]] = []
         listing_errors: list[Exception] = []
@@ -213,7 +211,6 @@ class HtmlListingAdapter(SourceAdapter):
                 # Forward-only + self-healing: skip detail fetches for events already
                 # ingested (their price_hint/description, if missing, won't be reread
                 # since run() discards normalize() output for known external_ids anyway).
-                known_ids = await existing_external_ids(db, self.source.id)
                 for card in cards:
                     if card.get("external_id") in known_ids:
                         continue

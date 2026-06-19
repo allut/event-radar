@@ -56,11 +56,6 @@ def _adapter(organizer_ids=None, base_url=None):
     return FientaAdapter(_make_source(organizer_ids=organizer_ids, base_url=base_url))
 
 
-def _set_known_ids(mock_db, ids):
-    """Configure mock_db.scalars(...) so existing_external_ids() returns ids."""
-    mock_db.scalars = AsyncMock(return_value=MagicMock(all=MagicMock(return_value=list(ids))))
-
-
 # ---------------------------------------------------------------------------
 # normalize() — unit tests (no I/O)
 # ---------------------------------------------------------------------------
@@ -540,7 +535,7 @@ class TestFetchRaw:
         assert [e["id"] for e in result] == ["A"]
 
     @pytest.mark.asyncio
-    async def test_per_organizer_error_isolation(self, mock_db):
+    async def test_per_organizer_error_isolation(self):
         """A 404 on one organizer must not abort fetching others."""
         async def handler(request):
             org = request.url.params.get("organizer")
@@ -548,33 +543,31 @@ class TestFetchRaw:
                 return httpx.Response(http.HTTPStatus.NOT_FOUND)
             return _mock_response([{"id": "ok"}])
 
-        _set_known_ids(mock_db, [])
         transport = httpx.MockTransport(handler)
         _real = httpx.AsyncClient  # capture before patch replaces the name
         with patch(
             "app.ingestion.sources.fienta.httpx.AsyncClient",
             lambda **kw: _real(transport=transport),
         ):
-            result = await _adapter(organizer_ids=[99, 42]).fetch_raw(mock_db)
+            result = await _adapter(organizer_ids=[99, 42]).fetch_raw(set())
 
         assert len(result) == 1
         assert result[0]["id"] == "ok"
 
     @pytest.mark.asyncio
-    async def test_multiple_organizers_aggregated(self, mock_db):
+    async def test_multiple_organizers_aggregated(self):
         """Events from multiple organizers are all returned."""
         async def handler(request):
             org = request.url.params.get("organizer")
             return _mock_response([{"id": f"org{org}-ev1"}, {"id": f"org{org}-ev2"}])
 
-        _set_known_ids(mock_db, [])
         transport = httpx.MockTransport(handler)
         _real = httpx.AsyncClient
         with patch(
             "app.ingestion.sources.fienta.httpx.AsyncClient",
             lambda **kw: _real(transport=transport),
         ):
-            result = await _adapter(organizer_ids=[1, 2, 3]).fetch_raw(mock_db)
+            result = await _adapter(organizer_ids=[1, 2, 3]).fetch_raw(set())
 
         assert len(result) == 6
 
@@ -626,7 +619,7 @@ class TestFetchRaw:
 
 class TestFetchRawDetailFetch:
     @pytest.mark.asyncio
-    async def test_detail_fetched_for_new_events(self, mock_db):
+    async def test_detail_fetched_for_new_events(self):
         """New external_ids trigger detail fetches; _detail is attached to the raw item."""
         base = settings.FIENTA_BASE_URL
         listing = [{"id": "1", "name": "New", "url": f"{base}/event/1"}]
@@ -637,14 +630,13 @@ class TestFetchRawDetailFetch:
                 return httpx.Response(200, text=detail_content)
             return _mock_response(listing)
 
-        _set_known_ids(mock_db, [])  # no known IDs
         transport = httpx.MockTransport(handler)
         _real = httpx.AsyncClient
         with patch(
             "app.ingestion.sources.fienta.httpx.AsyncClient",
             lambda **kw: _real(transport=transport),
         ):
-            result = await _adapter(organizer_ids=[42]).fetch_raw(mock_db)
+            result = await _adapter(organizer_ids=[42]).fetch_raw(set())  # no known IDs
 
         assert len(result) == 1
         assert "_detail" in result[0]
@@ -652,7 +644,7 @@ class TestFetchRawDetailFetch:
         assert result[0]["_detail"]["price_max"] == 40.0
 
     @pytest.mark.asyncio
-    async def test_detail_skipped_for_known_events(self, mock_db):
+    async def test_detail_skipped_for_known_events(self):
         """Already-stored external_ids must not trigger detail fetches."""
         base = settings.FIENTA_BASE_URL
         listing = [{"id": "99", "name": "Known", "url": f"{base}/event/99"}]
@@ -666,19 +658,18 @@ class TestFetchRawDetailFetch:
                 return httpx.Response(200, text=_detail_html())
             return _mock_response(listing)
 
-        _set_known_ids(mock_db, ["99"])  # already stored
         transport = httpx.MockTransport(handler)
         _real = httpx.AsyncClient
         with patch(
             "app.ingestion.sources.fienta.httpx.AsyncClient",
             lambda **kw: _real(transport=transport),
         ):
-            await _adapter(organizer_ids=[42]).fetch_raw(mock_db)
+            await _adapter(organizer_ids=[42]).fetch_raw({"99"})  # already stored
 
         assert not detail_fetched
 
     @pytest.mark.asyncio
-    async def test_detail_fetch_failure_degrades_gracefully(self, mock_db):
+    async def test_detail_fetch_failure_degrades_gracefully(self):
         """A 500 on the detail page must not abort the listing result."""
         base = settings.FIENTA_BASE_URL
         listing = [{"id": "5", "name": "Fragile", "url": f"{base}/event/5"}]
@@ -688,20 +679,19 @@ class TestFetchRawDetailFetch:
                 return httpx.Response(500)
             return _mock_response(listing)
 
-        _set_known_ids(mock_db, [])
         transport = httpx.MockTransport(handler)
         _real = httpx.AsyncClient
         with patch(
             "app.ingestion.sources.fienta.httpx.AsyncClient",
             lambda **kw: _real(transport=transport),
         ):
-            result = await _adapter(organizer_ids=[42]).fetch_raw(mock_db)
+            result = await _adapter(organizer_ids=[42]).fetch_raw(set())
 
         assert len(result) == 1
         assert "_detail" not in result[0]
 
     @pytest.mark.asyncio
-    async def test_cross_host_detail_url_not_fetched(self, mock_db):
+    async def test_cross_host_detail_url_not_fetched(self):
         """A detail URL on a different host must not be fetched (SSRF guard)."""
         listing = [{"id": "7", "name": "Evil", "url": "https://evil.internal/event/7"}]
 
@@ -714,19 +704,18 @@ class TestFetchRawDetailFetch:
                 return httpx.Response(200, text=_detail_html())
             return _mock_response(listing)
 
-        _set_known_ids(mock_db, [])
         transport = httpx.MockTransport(handler)
         _real = httpx.AsyncClient
         with patch(
             "app.ingestion.sources.fienta.httpx.AsyncClient",
             lambda **kw: _real(transport=transport),
         ):
-            await _adapter(organizer_ids=[42]).fetch_raw(mock_db)
+            await _adapter(organizer_ids=[42]).fetch_raw(set())
 
         assert not evil_fetched
 
     @pytest.mark.asyncio
-    async def test_detail_302_redirect_is_followed(self, mock_db):
+    async def test_detail_302_redirect_is_followed(self):
         """A 302 to a localized detail path must be followed, not dropped (regression)."""
         base = settings.FIENTA_BASE_URL
         listing = [{"id": "1", "name": "Localized", "url": f"{base}/event/1"}]
@@ -741,7 +730,6 @@ class TestFetchRawDetailFetch:
                 return httpx.Response(200, text=detail_content)
             return _mock_response(listing)
 
-        _set_known_ids(mock_db, [])
         transport = httpx.MockTransport(handler)
         _real = httpx.AsyncClient
         with patch(
@@ -752,13 +740,13 @@ class TestFetchRawDetailFetch:
                 event_hooks=kw.get("event_hooks"),
             ),
         ):
-            result = await _adapter(organizer_ids=[42]).fetch_raw(mock_db)
+            result = await _adapter(organizer_ids=[42]).fetch_raw(set())
 
         assert "_detail" in result[0]
         assert result[0]["_detail"]["price_min"] == 15.0
 
     @pytest.mark.asyncio
-    async def test_cross_host_redirect_is_blocked(self, mock_db):
+    async def test_cross_host_redirect_is_blocked(self):
         """A redirect to a different host must be rejected (SSRF guard), even
         though follow_redirects=True is set on the client."""
         base = settings.FIENTA_BASE_URL
@@ -771,7 +759,6 @@ class TestFetchRawDetailFetch:
                 )
             return _mock_response(listing)
 
-        _set_known_ids(mock_db, [])
         transport = httpx.MockTransport(handler)
         _real = httpx.AsyncClient
         with patch(
@@ -782,7 +769,7 @@ class TestFetchRawDetailFetch:
                 event_hooks=kw.get("event_hooks"),
             ),
         ):
-            result = await _adapter(organizer_ids=[42]).fetch_raw(mock_db)
+            result = await _adapter(organizer_ids=[42]).fetch_raw(set())
 
         # The guard raises inside the redirect-following loop; gather()
         # swallows it (return_exceptions=True), so the listing event survives
@@ -796,7 +783,7 @@ class TestFetchRawDetailFetch:
 
 class TestFetchRawRateLimiting:
     @pytest.mark.asyncio
-    async def test_429_then_200_listing_not_dropped(self, mock_db):
+    async def test_429_then_200_listing_not_dropped(self):
         """A transient 429 (with Retry-After: 0, so the retry wait is instant)
         must not drop the organizer — it should succeed on retry."""
         call_count = 0
@@ -808,26 +795,24 @@ class TestFetchRawRateLimiting:
                 return httpx.Response(429, headers={"Retry-After": "0"})
             return _mock_response([{"id": "ok"}])
 
-        _set_known_ids(mock_db, [])
         transport = httpx.MockTransport(handler)
         _real = httpx.AsyncClient
         with patch(
             "app.ingestion.sources.fienta.httpx.AsyncClient",
             lambda **kw: _real(transport=transport),
         ):
-            result = await _adapter(organizer_ids=[42]).fetch_raw(mock_db)
+            result = await _adapter(organizer_ids=[42]).fetch_raw(set())
 
         assert len(result) == 1
         assert result[0]["id"] == "ok"
         assert call_count == 2
 
     @pytest.mark.asyncio
-    async def test_limiter_acquire_called_per_listing_request(self, mock_db):
+    async def test_limiter_acquire_called_per_listing_request(self):
         """Each listing request must go through the shared AsyncRateLimiter."""
         async def handler(request):
             return _mock_response([{"id": "1"}, {"id": "2"}])
 
-        _set_known_ids(mock_db, ["1", "2"])  # skip detail fetches, isolate listing calls
         transport = httpx.MockTransport(handler)
         _real = httpx.AsyncClient
         with (
@@ -840,6 +825,7 @@ class TestFetchRawRateLimiting:
                 new_callable=AsyncMock,
             ) as mock_acquire,
         ):
-            await _adapter(organizer_ids=[1, 2]).fetch_raw(mock_db)
+            # skip detail fetches, isolate listing calls
+            await _adapter(organizer_ids=[1, 2]).fetch_raw({"1", "2"})
 
         assert mock_acquire.await_count == 2  # one listing request per organizer
