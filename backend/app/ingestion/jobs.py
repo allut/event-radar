@@ -152,6 +152,22 @@ async def geocode_pending_job() -> dict:
             raise
 
 
+async def refetch_event_details_job() -> dict:
+    """Re-fetch detail pages for all future events and reconcile stored fields."""
+    from app.ingestion.refetch import refetch_event_details
+
+    async with AsyncSessionLocal() as db:
+        try:
+            summary = await refetch_event_details(db)
+            await db.commit()
+            log.info("refetch_event_details complete: %s", summary)
+            return summary
+        except Exception:
+            await db.rollback()
+            log.exception("refetch_event_details failed")
+            raise
+
+
 def _dedup_has_backlog(summary: dict) -> bool:
     return summary.get("deferred_pairs", 0) > 0
 

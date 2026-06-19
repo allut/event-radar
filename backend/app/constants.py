@@ -607,6 +607,28 @@ NON_GEOCODABLE_VENUE_NAMES = frozenset({"online"})
 # "soprus" vs an unrelated "Kino Soprus").
 VENUE_SIBLING_RATIO_THRESHOLD = 90
 
+# Detail-refetch sync (refetch.py) — a daily job that re-fetches every future
+# event's detail page and reconciles venue/address/coords/price against the source.
+# Generic schema.org JSON-LD, so it no-ops on pages without an Event block.
+# Sized above the full future-event set (~700 today) so one daily run covers
+# everything; doubles as a safety valve. At REFETCH_REQUEST_DELAY_SECONDS that is
+# ~12 min/run, fine for a 04:30 cron.
+REFETCH_MAX_PER_RUN = 1000
+REFETCH_REQUEST_DELAY_SECONDS: float = 1.0
+# Flat daily throttle: an event re-synced within this window is not due again.
+# Guards mainly against manual POST /admin/refetch re-runs; the cron fires once daily.
+REFETCH_MIN_INTERVAL_DAYS = 1
+# Absolute tolerance (currency units) when comparing a stored price against the
+# detail-page price — sub-cent float noise must read as "unchanged", not a change.
+REFETCH_PRICE_TOLERANCE = 0.005
+# venue_name values treated as empty/placeholder, so a real detail name replaces
+# them. Matched case-insensitively. Deliberately excludes "online"/"MamaOnline" —
+# those are real (online) venue names, not placeholders (NON_GEOCODABLE_VENUE_NAMES
+# governs their *address* handling, not name replacement).
+REFETCH_PLACEHOLDER_VENUE_NAMES: frozenset[str] = frozenset(
+    {"tbd", "tba", "---", "n/a", "unknown"}
+)
+
 # Parses a Fienta listing price_from_string: "From 9.50 EUR" / "12 EUR" — a number
 # (int or decimal, "." or "," separator) followed by any 3-letter currency code.
 PRICE_FROM_STRING_RE = r"(?:from\s+)?(\d+(?:[.,]\d+)?)\s*([A-Za-z]{3})"

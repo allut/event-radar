@@ -30,6 +30,7 @@ from app.ingestion.jobs import (
     geocode_pending_job,
     ingest_all_enabled,
     publish_pending_job,
+    refetch_event_details_job,
 )
 from app.ingestion.organizer_sync import sync_fienta_organizers
 from app.logging_config import configure_logging, shutdown_log_shipping
@@ -102,6 +103,14 @@ async def _run_geocode_pending() -> None:
         log.info("geocode_pending completed: %s", summary)
     except Exception:
         log.exception("geocode_pending failed")
+
+
+async def _run_refetch_details() -> None:
+    try:
+        summary = await refetch_event_details_job()
+        log.info("refetch_event_details completed: %s", summary)
+    except Exception:
+        log.exception("refetch_event_details failed")
 
 
 async def _run_build_daily_feeds() -> None:
@@ -179,6 +188,18 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         trigger="interval",
         hours=6,
         id="geocode_pending",
+        replace_existing=True,
+    )
+    # Daily 04:30 EET: re-fetch every future event's detail page and reconcile
+    # venue/address/coords/price against the source (after hourly ingest, before
+    # the 06:00 feed build). A coord NULLed here on an address change is repaired
+    # by the next geocode_pending interval pass — coords aren't a publish gate.
+    scheduler.add_job(
+        _run_refetch_details,
+        trigger="cron",
+        hour=4,
+        minute=30,
+        id="refetch_event_details",
         replace_existing=True,
     )
     # Daily 06:00 EET: build personalized feeds for all users

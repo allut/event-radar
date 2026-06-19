@@ -130,7 +130,7 @@ async def geocode_address(
         return None
 
 
-def _is_suspect_venue_name(name: str) -> bool:
+def is_suspect_venue_name(name: str) -> bool:
     """Return True if name likely contains an address or is a direction phrase.
 
     Flags when: contains a digit, contains a comma, matches a direction keyword,
@@ -213,7 +213,7 @@ async def extract_address_from_venue_name(db: AsyncSession) -> int:
         name = event.venue_name
         if name is None:
             continue
-        if not _is_suspect_venue_name(name):
+        if not is_suspect_venue_name(name):
             continue
         by_name.setdefault(name, []).append(event)
 

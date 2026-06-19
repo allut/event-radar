@@ -7,7 +7,7 @@ import httpx
 import pytest
 
 from app.ingestion.geocode import (
-    _is_suspect_venue_name,
+    is_suspect_venue_name,
     canonical_venue_name,
     copy_venue_from_siblings,
     extract_address_from_venue_name,
@@ -656,35 +656,35 @@ class TestCanonicalVenueName:
 
 class TestIsSuspectVenueName:
     def test_digit_flags_suspect(self):
-        assert _is_suspect_venue_name("Kopli 116") is True
+        assert is_suspect_venue_name("Kopli 116") is True
 
     def test_comma_flags_suspect(self):
-        assert _is_suspect_venue_name("Viljandi padel, Ranna pst 3") is True
+        assert is_suspect_venue_name("Viljandi padel, Ranna pst 3") is True
 
     def test_direction_keyword_algus_flags_suspect(self):
-        assert _is_suspect_venue_name("Algus Hildegardi aias Tornide väljakul") is True
+        assert is_suspect_venue_name("Algus Hildegardi aias Tornide väljakul") is True
 
     def test_direction_keyword_kõrval_flags_suspect(self):
-        assert _is_suspect_venue_name("Katharienthal Kohviku kõrval") is True
+        assert is_suspect_venue_name("Katharienthal Kohviku kõrval") is True
 
     def test_long_name_flags_suspect(self):
-        assert _is_suspect_venue_name("A" * 41) is True
+        assert is_suspect_venue_name("A" * 41) is True
 
     def test_clean_short_name_not_suspect(self):
-        assert _is_suspect_venue_name("KUMU") is False
+        assert is_suspect_venue_name("KUMU") is False
 
     def test_parens_suffix_not_suspect(self):
-        assert _is_suspect_venue_name("Sõltumatu Tantsu Lava (STL)") is False
+        assert is_suspect_venue_name("Sõltumatu Tantsu Lava (STL)") is False
 
     def test_exactly_max_len_not_suspect(self):
         from app.constants import VENUE_NAME_SUSPECT_MAX_LEN
-        assert _is_suspect_venue_name("A" * VENUE_NAME_SUSPECT_MAX_LEN) is False
+        assert is_suspect_venue_name("A" * VENUE_NAME_SUSPECT_MAX_LEN) is False
 
     def test_meeting_point_en_flags_suspect(self):
-        assert _is_suspect_venue_name("Meeting point Baltic station") is True
+        assert is_suspect_venue_name("Meeting point Baltic station") is True
 
     def test_in_front_of_flags_suspect(self):
-        assert _is_suspect_venue_name("in front of the town hall") is True
+        assert is_suspect_venue_name("in front of the town hall") is True
 
 
 class TestExtractAddressFromVenueName:

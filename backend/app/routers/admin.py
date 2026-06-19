@@ -24,6 +24,7 @@ from app.ingestion.jobs import (
     ingest_all_enabled,
     ingest_source,
     publish_pending_job,
+    refetch_event_details_job,
 )
 from app.ingestion.organizer_sync import sync_fienta_organizers
 from app.ingestion.registry import ADAPTER_REGISTRY
@@ -247,6 +248,26 @@ async def admin_geocode(request: Request) -> dict:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Geocoding failed; see server logs",
+        )
+    return summary
+
+
+@router.post("/refetch", dependencies=[Depends(_require_admin)])
+@limiter.limit(RATE_LIMIT_ADMIN)
+async def admin_refetch(request: Request) -> dict:
+    """Re-fetch detail pages for all future events and reconcile stored fields (one batch).
+
+    Standalone, like /admin/geocode — not part of /admin/pipeline/run. Run it
+    before a manual geocode if you want coords NULLed by an address change
+    re-resolved in the same operation.
+    """
+    try:
+        summary = await refetch_event_details_job()
+    except Exception:
+        log.exception("admin refetch failed")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Refetch failed; see server logs",
         )
     return summary
 
