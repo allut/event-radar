@@ -46,10 +46,12 @@ DB_POOL_RECYCLE_SECONDS = 280
 
 HTTP_TIMEOUT_SECONDS: float = 30.0
 HTTP_USER_AGENT = "EventRadarBot/1.0 (+https://eventradar.ee)"
-HTTP_RETRY_MAX_ATTEMPTS = 3
+HTTP_RETRY_MAX_ATTEMPTS = 5  # bumped from 3 so backoff can outlast a short 429 penalty window
 HTTP_RETRY_WAIT_MULTIPLIER = 1
 HTTP_RETRY_WAIT_MIN = 2
 HTTP_RETRY_WAIT_MAX = 30
+HTTP_RETRY_AFTER_MAX_SECONDS: float = 60.0  # cap on an honored Retry-After header
+HTTP_RETRY_JITTER_MAX: float = 1.0  # max random jitter added to the non-429 backoff wait
 HTTP_RETRYABLE_STATUS_CODES: frozenset[int] = frozenset(
     {
         http.HTTPStatus.TOO_MANY_REQUESTS,  # 429
@@ -122,9 +124,15 @@ FIENTA_ORGANIZER_CHECK_LIMIT = (
 )
 FIENTA_CITY_FILTER = "Tallinn"
 FIENTA_MAX_PAGES = 50  # safety ceiling per organizer — prevents runaway pagination
-# Concurrency cap for detail-page fan-out. Fienta has no documented rate limit;
-# 8 in-flight requests leaves headroom while staying well-behaved.
-DETAIL_FETCH_CONCURRENCY: int = 8
+# Concurrency cap for detail-page fan-out. The shared AsyncRateLimiter (below)
+# now paces every request, so this is a secondary guard rather than the primary
+# defense against bursts — lowered to match the ~8-request trip point observed
+# in production logs before the limiter existed.
+DETAIL_FETCH_CONCURRENCY: int = 3
+# Min seconds between consecutive Fienta requests (listing + detail), shared via
+# one AsyncRateLimiter per fetch_raw() run. ~3 req/s — conservative vs the ~7 req/s
+# burst that triggered a 429 cascade in production.
+FIENTA_MIN_REQUEST_INTERVAL_SECONDS: float = 0.34
 # Bounding box for Estonia (lat_min, lat_max, lng_min, lng_max).
 # Used to reject geo coords from detail pages that are clearly wrong (>~80 km off).
 ESTONIA_BBOX: tuple[float, float, float, float] = (57.5, 59.7, 21.5, 28.2)

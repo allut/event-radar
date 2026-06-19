@@ -1,9 +1,18 @@
 """Tests for shared ingestion helpers in app.ingestion.base."""
 
+import http
+import time
+from unittest.mock import MagicMock
+
+import httpx
 import pytest
 from bs4 import BeautifulSoup
+from tenacity import RetryCallState
 
+from app.constants import HTTP_RETRY_AFTER_MAX_SECONDS
 from app.ingestion.base import (
+    AsyncRateLimiter,
+    _retry_wait,
     address_city,
     coords_in_estonia,
     coords_in_tallinn,
@@ -12,6 +21,7 @@ from app.ingestion.base import (
     is_explicit_text,
     is_target_city,
     parse_price_from_string,
+    retry_after_seconds,
 )
 
 
@@ -235,6 +245,117 @@ class TestCoordsInTallinn:
 
     def test_parnu_outside(self):
         assert coords_in_tallinn(58.38, 24.5) is False
+
+
+def _http_status_error(status_code, headers=None):
+    request = httpx.Request("GET", "https://example.com/x")
+    response = httpx.Response(status_code, headers=headers or {}, request=request)
+    return httpx.HTTPStatusError("err", request=request, response=response)
+
+
+class TestRetryAfterSeconds:
+    def test_numeric_seconds(self):
+        exc = _http_status_error(http.HTTPStatus.TOO_MANY_REQUESTS, {"Retry-After": "5"})
+        assert retry_after_seconds(exc) == 5.0
+
+    def test_http_date_form(self):
+        future = time.time() + 10
+        from email.utils import formatdate
+
+        header = formatdate(future, usegmt=True)
+        exc = _http_status_error(
+            http.HTTPStatus.TOO_MANY_REQUESTS, {"Retry-After": header}
+        )
+        result = retry_after_seconds(exc)
+        assert result is not None
+        assert 8 <= result <= 11  # small tolerance for formatdate's 1s resolution
+
+    def test_missing_header(self):
+        exc = _http_status_error(http.HTTPStatus.TOO_MANY_REQUESTS)
+        assert retry_after_seconds(exc) is None
+
+    def test_non_429_status_returns_none(self):
+        exc = _http_status_error(
+            http.HTTPStatus.SERVICE_UNAVAILABLE, {"Retry-After": "5"}
+        )
+        assert retry_after_seconds(exc) is None
+
+    def test_non_http_status_error_returns_none(self):
+        assert retry_after_seconds(httpx.ConnectError("boom")) is None
+
+    def test_capped_at_max_seconds(self):
+        exc = _http_status_error(
+            http.HTTPStatus.TOO_MANY_REQUESTS, {"Retry-After": "99999"}
+        )
+        assert retry_after_seconds(exc) == HTTP_RETRY_AFTER_MAX_SECONDS
+
+    def test_unparseable_header_returns_none(self):
+        exc = _http_status_error(
+            http.HTTPStatus.TOO_MANY_REQUESTS, {"Retry-After": "garbage"}
+        )
+        assert retry_after_seconds(exc) is None
+
+
+def _retry_state(exc, attempt_number=1):
+    state = MagicMock(spec=RetryCallState)
+    state.attempt_number = attempt_number
+    state.outcome = MagicMock()
+    state.outcome.failed = True
+    state.outcome.exception.return_value = exc
+    return state
+
+
+class TestRetryWait:
+    def test_429_with_retry_after_uses_header_value(self):
+        exc = _http_status_error(http.HTTPStatus.TOO_MANY_REQUESTS, {"Retry-After": "7"})
+        assert _retry_wait(_retry_state(exc)) == 7.0
+
+    def test_non_429_falls_back_to_jittered_exponential(self):
+        exc = _http_status_error(http.HTTPStatus.SERVICE_UNAVAILABLE)
+        wait = _retry_wait(_retry_state(exc, attempt_number=1))
+        # attempt 1 -> base exponential wait == HTTP_RETRY_WAIT_MIN (2), plus jitter [0, 1]
+        assert 2.0 <= wait <= 3.0
+
+    def test_429_without_retry_after_falls_back_to_exponential(self):
+        exc = _http_status_error(http.HTTPStatus.TOO_MANY_REQUESTS)
+        wait = _retry_wait(_retry_state(exc, attempt_number=1))
+        assert 2.0 <= wait <= 3.0
+
+
+class TestAsyncRateLimiter:
+    @pytest.mark.asyncio
+    async def test_spaces_acquisitions_by_interval(self):
+        limiter = AsyncRateLimiter(0.05)
+        start = time.monotonic()
+        for _ in range(3):
+            await limiter.acquire()
+        elapsed = time.monotonic() - start
+        assert elapsed >= 0.1  # 2 gaps of >= 0.05s between 3 acquisitions
+
+    @pytest.mark.asyncio
+    async def test_first_acquire_does_not_wait(self):
+        limiter = AsyncRateLimiter(10.0)
+        start = time.monotonic()
+        await limiter.acquire()
+        assert time.monotonic() - start < 0.1
+
+    @pytest.mark.asyncio
+    async def test_backoff_extends_next_acquire(self):
+        limiter = AsyncRateLimiter(0.01)
+        await limiter.acquire()
+        limiter.backoff(0.1)
+        start = time.monotonic()
+        await limiter.acquire()
+        assert time.monotonic() - start >= 0.08
+
+    @pytest.mark.asyncio
+    async def test_backoff_does_not_shorten_existing_wait(self):
+        limiter = AsyncRateLimiter(0.2)
+        await limiter.acquire()
+        limiter.backoff(0.001)  # shorter than the existing min-interval gap
+        start = time.monotonic()
+        await limiter.acquire()
+        assert time.monotonic() - start >= 0.15
 
     def test_boston_outside(self):
         assert coords_in_tallinn(42.36, -71.06) is False

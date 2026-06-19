@@ -724,3 +724,122 @@ class TestFetchRawDetailFetch:
             await _adapter(organizer_ids=[42]).fetch_raw(mock_db)
 
         assert not evil_fetched
+
+    @pytest.mark.asyncio
+    async def test_detail_302_redirect_is_followed(self, mock_db):
+        """A 302 to a localized detail path must be followed, not dropped (regression)."""
+        base = settings.FIENTA_BASE_URL
+        listing = [{"id": "1", "name": "Localized", "url": f"{base}/event/1"}]
+        detail_content = _detail_html(price_min="15", price_max="15")
+
+        async def handler(request):
+            if str(request.url) == f"{base}/event/1":
+                return httpx.Response(
+                    302, headers={"Location": f"{base}/et/event/1"}
+                )
+            if str(request.url) == f"{base}/et/event/1":
+                return httpx.Response(200, text=detail_content)
+            return _mock_response(listing)
+
+        _set_known_ids(mock_db, [])
+        transport = httpx.MockTransport(handler)
+        _real = httpx.AsyncClient
+        with patch(
+            "app.ingestion.sources.fienta.httpx.AsyncClient",
+            lambda **kw: _real(
+                transport=transport,
+                follow_redirects=kw.get("follow_redirects", False),
+                event_hooks=kw.get("event_hooks"),
+            ),
+        ):
+            result = await _adapter(organizer_ids=[42]).fetch_raw(mock_db)
+
+        assert "_detail" in result[0]
+        assert result[0]["_detail"]["price_min"] == 15.0
+
+    @pytest.mark.asyncio
+    async def test_cross_host_redirect_is_blocked(self, mock_db):
+        """A redirect to a different host must be rejected (SSRF guard), even
+        though follow_redirects=True is set on the client."""
+        base = settings.FIENTA_BASE_URL
+        listing = [{"id": "1", "name": "Evil redirect", "url": f"{base}/event/1"}]
+
+        async def handler(request):
+            if str(request.url) == f"{base}/event/1":
+                return httpx.Response(
+                    302, headers={"Location": "https://evil.example.com/steal"}
+                )
+            return _mock_response(listing)
+
+        _set_known_ids(mock_db, [])
+        transport = httpx.MockTransport(handler)
+        _real = httpx.AsyncClient
+        with patch(
+            "app.ingestion.sources.fienta.httpx.AsyncClient",
+            lambda **kw: _real(
+                transport=transport,
+                follow_redirects=kw.get("follow_redirects", False),
+                event_hooks=kw.get("event_hooks"),
+            ),
+        ):
+            result = await _adapter(organizer_ids=[42]).fetch_raw(mock_db)
+
+        # The guard raises inside the redirect-following loop; gather()
+        # swallows it (return_exceptions=True), so the listing event survives
+        # without enrichment rather than being sent to evil.example.com.
+        assert "_detail" not in result[0]
+
+
+# ---------------------------------------------------------------------------
+# fetch_raw() — rate limiting + 429 retry behavior
+# ---------------------------------------------------------------------------
+
+class TestFetchRawRateLimiting:
+    @pytest.mark.asyncio
+    async def test_429_then_200_listing_not_dropped(self, mock_db):
+        """A transient 429 (with Retry-After: 0, so the retry wait is instant)
+        must not drop the organizer — it should succeed on retry."""
+        call_count = 0
+
+        async def handler(request):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return httpx.Response(429, headers={"Retry-After": "0"})
+            return _mock_response([{"id": "ok"}])
+
+        _set_known_ids(mock_db, [])
+        transport = httpx.MockTransport(handler)
+        _real = httpx.AsyncClient
+        with patch(
+            "app.ingestion.sources.fienta.httpx.AsyncClient",
+            lambda **kw: _real(transport=transport),
+        ):
+            result = await _adapter(organizer_ids=[42]).fetch_raw(mock_db)
+
+        assert len(result) == 1
+        assert result[0]["id"] == "ok"
+        assert call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_limiter_acquire_called_per_listing_request(self, mock_db):
+        """Each listing request must go through the shared AsyncRateLimiter."""
+        async def handler(request):
+            return _mock_response([{"id": "1"}, {"id": "2"}])
+
+        _set_known_ids(mock_db, ["1", "2"])  # skip detail fetches, isolate listing calls
+        transport = httpx.MockTransport(handler)
+        _real = httpx.AsyncClient
+        with (
+            patch(
+                "app.ingestion.sources.fienta.httpx.AsyncClient",
+                lambda **kw: _real(transport=transport),
+            ),
+            patch(
+                "app.ingestion.sources.fienta.AsyncRateLimiter.acquire",
+                new_callable=AsyncMock,
+            ) as mock_acquire,
+        ):
+            await _adapter(organizer_ids=[1, 2]).fetch_raw(mock_db)
+
+        assert mock_acquire.await_count == 2  # one listing request per organizer

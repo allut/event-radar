@@ -1,6 +1,8 @@
 import asyncio
+import http
 import logging
 import re
+from collections.abc import Callable, Coroutine
 from typing import Any
 from urllib.parse import urlparse
 
@@ -12,9 +14,11 @@ from app.config import settings
 from app.constants import (
     DETAIL_FETCH_CONCURRENCY,
     FIENTA_MAX_PAGES,
+    FIENTA_MIN_REQUEST_INTERVAL_SECONDS,
     HTTP_TIMEOUT_SECONDS,
 )
 from app.ingestion.base import (
+    AsyncRateLimiter,
     NormalizedEvent,
     SourceAdapter,
     coords_in_estonia,
@@ -37,6 +41,29 @@ def _has_postal_code(address: str | None) -> bool:
     return bool(address and _POSTAL_CODE_RE.search(address))
 
 
+def _host_guard_hook(
+    base_host: str | None,
+) -> Callable[[httpx.Request], Coroutine[Any, Any, None]]:
+    """Build a client `request` event hook enforcing every request — including
+    each redirect hop httpx follows — stays on base_host (SSRF guard).
+
+    httpx fires the `request` hook once per hop inside its redirect loop, so
+    this is the only point that can validate a redirect's *destination* host;
+    the pre-fetch checks elsewhere only validate the un-redirected URL.
+    """
+
+    async def hook(request: httpx.Request) -> None:
+        if urlparse(str(request.url)).hostname != base_host:
+            # ValueError, not httpx.RequestError: a host mismatch is a
+            # permanent guard failure, not a transient one, and
+            # httpx.RequestError is retried by _http_retry's predicate.
+            raise ValueError(
+                f"fienta: request host mismatch (SSRF guard): {request.url}"
+            )
+
+    return hook
+
+
 class FientaAdapter(SourceAdapter):
     """Fetches events from Fienta public API for all organizer IDs in source.config.
 
@@ -51,19 +78,41 @@ class FientaAdapter(SourceAdapter):
     detail page concurrently and attaches parsed JSON-LD data under
     ``raw["_detail"]``. normalize() merges listing + detail per a fixed
     authority table; absent _detail degrades to listing-only behavior.
+
+    The httpx.AsyncClient sets follow_redirects=True: Fienta detail pages
+    302-redirect to a localized path (fienta.com/<slug> -> fienta.com/{et,ru,lv}/
+    <slug>); without it every detail fetch raised and was silently dropped.
+    httpx's redirect handling has no same-origin restriction on its own — a
+    malicious Location header could point a followed redirect at an arbitrary
+    host — so a `request` event hook (`_host_guard_hook`) re-validates the
+    host of *every* request the client sends, including each redirect hop,
+    against base_host. This is the actual SSRF enforcement for the redirect
+    case; the pre-fetch checks in `_fetch_organizer`/`_fetch_detail` remain as
+    defense-in-depth on the un-redirected URL.
+
+    All listing and detail requests share one AsyncRateLimiter per fetch_raw()
+    call (FIENTA_MIN_REQUEST_INTERVAL_SECONDS) to proactively pace requests
+    below Fienta's rate limit; a 429 also pushes the limiter's backoff out so
+    remaining organizers/details pause together instead of piling on.
     """
 
     async def fetch_raw(self, db: AsyncSession) -> list[dict[str, Any]]:
         organizer_ids: list[int] = self.source.config.get("organizer_ids", [])
         base_url: str = self.source.config.get("base_url", settings.FIENTA_BASE_URL)
+        base_host = urlparse(base_url).hostname
         all_events: list[dict[str, Any]] = []
 
         errors: list[Exception] = []
-        async with httpx.AsyncClient(timeout=HTTP_TIMEOUT_SECONDS) as client:
+        limiter = AsyncRateLimiter(FIENTA_MIN_REQUEST_INTERVAL_SECONDS)
+        async with httpx.AsyncClient(
+            timeout=HTTP_TIMEOUT_SECONDS,
+            follow_redirects=True,
+            event_hooks={"request": [_host_guard_hook(base_host)]},
+        ) as client:
             for org_id in organizer_ids:
                 try:
                     all_events.extend(
-                        await self._fetch_organizer(client, base_url, org_id)
+                        await self._fetch_organizer(client, base_url, org_id, limiter)
                     )
                 except httpx.HTTPStatusError as exc:
                     log.warning(
@@ -72,6 +121,8 @@ class FientaAdapter(SourceAdapter):
                         exc.response.status_code,
                     )
                     errors.append(exc)
+                    if exc.response.status_code == http.HTTPStatus.TOO_MANY_REQUESTS:
+                        limiter.backoff(FIENTA_MIN_REQUEST_INTERVAL_SECONDS)
                 except httpx.RequestError as exc:
                     log.warning("fienta organizer=%s network error: %s", org_id, exc)
                     errors.append(exc)
@@ -85,7 +136,6 @@ class FientaAdapter(SourceAdapter):
             # Forward-only detail fetch: skip already-stored events so each event
             # is enriched exactly once and re-runs stay cheap.
             known_ids = await existing_external_ids(db, self.source.id)
-            base_host = urlparse(base_url).hostname
             semaphore = asyncio.Semaphore(DETAIL_FETCH_CONCURRENCY)
 
             new_items = [
@@ -94,7 +144,7 @@ class FientaAdapter(SourceAdapter):
             ]
             await asyncio.gather(
                 *[
-                    self._fetch_detail(client, item, base_host, semaphore)
+                    self._fetch_detail(client, item, base_host, semaphore, limiter)
                     for item in new_items
                 ],
                 return_exceptions=True,
@@ -103,7 +153,11 @@ class FientaAdapter(SourceAdapter):
         return all_events
 
     async def _fetch_organizer(
-        self, client: httpx.AsyncClient, base_url: str, org_id: int
+        self,
+        client: httpx.AsyncClient,
+        base_url: str,
+        org_id: int,
+        limiter: AsyncRateLimiter | None = None,
     ) -> list[dict[str, Any]]:
         """Fetch all pages for a single organizer against a shared FIENTA_MAX_PAGES budget."""
         collected: list[dict[str, Any]] = []
@@ -115,6 +169,8 @@ class FientaAdapter(SourceAdapter):
         page = 1  # used only for meta-based pagination
 
         while url and budget > 0:
+            if limiter is not None:
+                await limiter.acquire()
             # params=None preserves the URL's existing query string (e.g. links.next
             # already encodes all params); params=dict merges/replaces the query string.
             response = await http_get(client, url, params=params)
@@ -172,6 +228,7 @@ class FientaAdapter(SourceAdapter):
         item: dict[str, Any],
         base_host: str | None,
         semaphore: asyncio.Semaphore,
+        limiter: AsyncRateLimiter,
     ) -> None:
         """Fetch the event detail page and attach parsed JSON-LD under item["_detail"].
 
@@ -188,6 +245,7 @@ class FientaAdapter(SourceAdapter):
             )
             return
         async with semaphore:
+            await limiter.acquire()
             try:
                 response = await http_get(client, url)
                 soup = BeautifulSoup(response.text, "html.parser")
@@ -202,6 +260,15 @@ class FientaAdapter(SourceAdapter):
                     "price_max": price_max,
                     "currency": currency,
                 }
+            except httpx.HTTPStatusError as exc:
+                if exc.response.status_code == http.HTTPStatus.TOO_MANY_REQUESTS:
+                    limiter.backoff(FIENTA_MIN_REQUEST_INTERVAL_SECONDS)
+                log.warning(
+                    "fienta: detail fetch failed id=%s url=%s: %s",
+                    item.get("id"),
+                    url,
+                    exc,
+                )
             except Exception as exc:
                 log.warning(
                     "fienta: detail fetch failed id=%s url=%s: %s",
