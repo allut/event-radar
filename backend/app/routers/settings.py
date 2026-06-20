@@ -2,14 +2,15 @@
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, field_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.constants import VALID_LOCALES
+from app.constants import RATE_LIMIT_AUTHENTICATED_WRITE, VALID_LOCALES
 from app.db import get_db
 from app.models.models import Persona, User, UserPersona
+from app.rate_limit import limiter
 from app.routers.auth import get_current_user
 from app.routers.utils import serialize_user
 
@@ -51,7 +52,9 @@ async def _get_persona_list(user_id: int, db: AsyncSession) -> list[dict]:
 
 
 @router.get("", status_code=status.HTTP_200_OK)
+@limiter.limit(RATE_LIMIT_AUTHENTICATED_WRITE)
 async def get_settings(
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
@@ -65,8 +68,10 @@ async def get_settings(
 
 
 @router.patch("", status_code=status.HTTP_200_OK)
+@limiter.limit(RATE_LIMIT_AUTHENTICATED_WRITE)
 async def patch_settings(
     body: PatchSettingsBody,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict:

@@ -275,7 +275,7 @@ class TestGetCurrentUser:
 
 class TestLogoutAll:
     @pytest.mark.asyncio
-    async def test_increments_session_token_version(self, mock_db):
+    async def test_increments_session_token_version(self, mock_db, make_request):
         from app.routers.auth import logout_all
 
         user = MagicMock()
@@ -287,7 +287,11 @@ class TestLogoutAll:
         mock_db.execute = AsyncMock(return_value=execute_result)
         mock_db.commit = AsyncMock()
 
-        result = await logout_all(current_user=user, db=mock_db)
+        result = await logout_all(
+            request=make_request(method="POST", path="/auth/logout-all"),
+            current_user=user,
+            db=mock_db,
+        )
 
         assert user.session_token_version == 2
         mock_db.execute.assert_awaited_once()

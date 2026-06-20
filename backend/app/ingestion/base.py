@@ -212,12 +212,16 @@ async def http_post(
     return r
 
 
-def safe_external_url(url: str | None) -> str | None:
+def safe_external_url(url: str | None, source: str | None = None) -> str | None:
     """Drop URLs whose scheme isn't http(s) — guards against stored XSS via
     javascript:/data: URLs from untrusted sources rendered into <a href>/<img src>."""
     if not url:
         return None
-    if urlsplit(url).scheme.lower() not in SAFE_URL_SCHEMES:
+    scheme = urlsplit(url).scheme.lower()
+    if scheme not in SAFE_URL_SCHEMES:
+        log.warning(
+            "dropped non-http(s) url from source %s: scheme=%s", source, scheme
+        )
         return None
     return url
 
@@ -579,8 +583,10 @@ class SourceAdapter(ABC):
                             venue_address=normalized.venue_address,
                             lat=normalized.lat,
                             lng=normalized.lng,
-                            url=safe_external_url(normalized.url),
-                            image_url=safe_external_url(normalized.image_url),
+                            url=safe_external_url(normalized.url, self.source.slug),
+                            image_url=safe_external_url(
+                                normalized.image_url, self.source.slug
+                            ),
                             price_min=normalized.price_min,
                             price_max=normalized.price_max,
                             currency=normalized.currency,

@@ -22,6 +22,7 @@ from app.constants import (
     DEFAULT_USER_LOCALE,
     RATE_LIMIT_AUTH_REQUEST_LINK,
     RATE_LIMIT_AUTH_VERIFY,
+    RATE_LIMIT_LOGOUT_ALL,
     VALID_LOCALES,
 )
 from app.db import get_db
@@ -223,7 +224,9 @@ async def verify_magic_link(
 
 
 @router.post("/logout-all", status_code=status.HTTP_200_OK)
+@limiter.limit(RATE_LIMIT_LOGOUT_ALL)
 async def logout_all(
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict:

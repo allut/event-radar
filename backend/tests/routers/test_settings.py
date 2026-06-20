@@ -16,13 +16,17 @@ def _attach_empty_personas(db) -> None:
 
 class TestGetSettings:
     @pytest.mark.asyncio
-    async def test_returns_user_fields(self, mock_db, make_user):
+    async def test_returns_user_fields(self, mock_db, make_user, make_request):
         from app.routers.settings import get_settings
 
         _attach_empty_personas(mock_db)
         user = make_user(locale="et", opt_in=True)
 
-        result = await get_settings(current_user=user, db=mock_db)
+        result = await get_settings(
+            request=make_request(method="GET", path="/users/me"),
+            current_user=user,
+            db=mock_db,
+        )
 
         assert result["email"] == "test@example.com"
         assert result["locale"] == "et"
@@ -30,7 +34,7 @@ class TestGetSettings:
         assert result["personas"] == []
 
     @pytest.mark.asyncio
-    async def test_personas_included(self, mock_db, make_user):
+    async def test_personas_included(self, mock_db, make_user, make_request):
         from app.routers.settings import get_settings
 
         persona = MagicMock()
@@ -45,7 +49,11 @@ class TestGetSettings:
         mock_db.execute.return_value = result_mock
 
         user = make_user()
-        result = await get_settings(current_user=user, db=mock_db)
+        result = await get_settings(
+            request=make_request(method="GET", path="/users/me"),
+            current_user=user,
+            db=mock_db,
+        )
 
         assert len(result["personas"]) == 1
         assert result["personas"][0]["slug"] == "culture_buff"
@@ -54,7 +62,7 @@ class TestGetSettings:
 
 class TestPatchSettings:
     @pytest.mark.asyncio
-    async def test_update_locale(self, mock_db, make_user):
+    async def test_update_locale(self, mock_db, make_user, make_request):
         from app.routers.settings import patch_settings, PatchSettingsBody
 
         _attach_empty_personas(mock_db)
@@ -62,6 +70,7 @@ class TestPatchSettings:
 
         result = await patch_settings(
             body=PatchSettingsBody(locale="ru"),
+            request=make_request(method="PATCH", path="/users/me"),
             current_user=user,
             db=mock_db,
         )
@@ -71,7 +80,7 @@ class TestPatchSettings:
         assert result["locale"] == "ru"
 
     @pytest.mark.asyncio
-    async def test_update_email_opt_in(self, mock_db, make_user):
+    async def test_update_email_opt_in(self, mock_db, make_user, make_request):
         from app.routers.settings import patch_settings, PatchSettingsBody
 
         _attach_empty_personas(mock_db)
@@ -79,6 +88,7 @@ class TestPatchSettings:
 
         result = await patch_settings(
             body=PatchSettingsBody(email_digest_opt_in=False),
+            request=make_request(method="PATCH", path="/users/me"),
             current_user=user,
             db=mock_db,
         )
@@ -88,7 +98,7 @@ class TestPatchSettings:
         assert result["email_digest_opt_in"] is False
 
     @pytest.mark.asyncio
-    async def test_empty_body_raises_400(self, mock_db, make_user):
+    async def test_empty_body_raises_400(self, mock_db, make_user, make_request):
         from fastapi import HTTPException
         from app.routers.settings import patch_settings, PatchSettingsBody
 
@@ -98,6 +108,7 @@ class TestPatchSettings:
         with pytest.raises(HTTPException) as exc_info:
             await patch_settings(
                 body=PatchSettingsBody(),
+                request=make_request(method="PATCH", path="/users/me"),
                 current_user=user,
                 db=mock_db,
             )
@@ -112,7 +123,7 @@ class TestPatchSettings:
             PatchSettingsBody(locale="fr")
 
     @pytest.mark.asyncio
-    async def test_update_both_fields(self, mock_db, make_user):
+    async def test_update_both_fields(self, mock_db, make_user, make_request):
         from app.routers.settings import patch_settings, PatchSettingsBody
 
         _attach_empty_personas(mock_db)
@@ -120,6 +131,7 @@ class TestPatchSettings:
 
         await patch_settings(
             body=PatchSettingsBody(locale="et", email_digest_opt_in=False),
+            request=make_request(method="PATCH", path="/users/me"),
             current_user=user,
             db=mock_db,
         )

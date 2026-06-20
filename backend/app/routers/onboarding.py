@@ -2,14 +2,19 @@
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.constants import PERSONA_PRIMARY_WEIGHT, PERSONA_SECONDARY_WEIGHT
+from app.constants import (
+    PERSONA_PRIMARY_WEIGHT,
+    PERSONA_SECONDARY_WEIGHT,
+    RATE_LIMIT_AUTHENTICATED_WRITE,
+)
 from app.db import get_db
 from app.models.models import Persona, User, UserPersona
+from app.rate_limit import limiter
 from app.routers.auth import get_current_user
 
 log = logging.getLogger(__name__)
@@ -22,8 +27,10 @@ class PersonaBody(BaseModel):
 
 
 @router.post("/persona", status_code=status.HTTP_200_OK)
+@limiter.limit(RATE_LIMIT_AUTHENTICATED_WRITE)
 async def set_persona(
     body: PersonaBody,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict:

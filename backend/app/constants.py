@@ -188,6 +188,13 @@ RATE_LIMIT_ADMIN = "10/minute"
 # Authenticated feedback writes — generous cap; prevents cache-rebuild DoS
 # (every signal wipes all user_event_scores rows for that user).
 RATE_LIMIT_FEEDBACK = "60/minute"
+# Authenticated state-changing writes (onboarding persona, settings GET/PATCH) —
+# damps self-inflicted DB write spam from a valid session token.
+RATE_LIMIT_AUTHENTICATED_WRITE = "30/minute"
+# Tighter cap for logout-all: bumps session_token_version, revoking every
+# issued session token (including the caller's own) — a higher-value target
+# than ordinary writes.
+RATE_LIMIT_LOGOUT_ALL = "10/minute"
 
 # Auth tokens
 AUTH_MAGIC_SALT = "magic-link-v1"
