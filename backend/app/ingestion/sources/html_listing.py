@@ -11,24 +11,44 @@ from bs4 import BeautifulSoup, Tag
 from app.constants import (
     ESTONIA_CONCERT_HALL_AJAX_ACTION,
     ESTONIA_CONCERT_HALL_AJAX_PATH,
+    ESTONIA_CONCERT_HALL_DATE_SELECTOR,
+    ESTONIA_CONCERT_HALL_IMAGE_SELECTOR,
+    ESTONIA_CONCERT_HALL_LOCATION_SELECTOR,
     ESTONIA_CONCERT_HALL_MAX_EVENTS,
     ESTONIA_CONCERT_HALL_PILETILEVI_PARAMS,
     ESTONIA_CONCERT_HALL_PILETILEVI_URL,
+    ESTONIA_CONCERT_HALL_ROW_SELECTOR,
     ESTONIA_CONCERT_HALL_TALLINN_FILTER,
+    ESTONIA_CONCERT_HALL_TIME_SELECTOR,
+    ESTONIA_CONCERT_HALL_TITLE_SELECTOR,
+    ESTONIA_CONCERT_HALL_VENUE_SELECTOR,
     ESTONIA_CONCERT_HALL_VENUES,
     HTML_LISTING_MAX_DETAIL_FETCHES,
     HTTP_TIMEOUT_SECONDS,
     HTTP_USER_AGENT,
+    KUMU_CARD_SELECTOR,
     KUMU_DATE_FORMAT,
+    KUMU_DATE_SELECTOR,
+    KUMU_HIDDEN_SELECTOR,
+    KUMU_IMAGE_SELECTOR,
+    KUMU_LINK_SELECTOR,
     KUMU_MAX_PAGES,
+    KUMU_PRICE_SELECTOR,
+    KUMU_TITLE_SELECTOR,
     KUMU_VENUE_ADDRESS,
     KUMU_VENUE_LAT,
     KUMU_VENUE_LNG,
     KUMU_VENUE_NAME,
     PILETILEVI_ALL_PATH,
+    PILETILEVI_CARD_SELECTOR,
     PILETILEVI_DATE_FORMAT,
+    PILETILEVI_DATE_SELECTOR,
+    PILETILEVI_DETAIL_DESC_SELECTOR,
+    PILETILEVI_IMAGE_SELECTOR,
     PILETILEVI_MAX_PAGES,
     PILETILEVI_TALLINN_FILTER,
+    PILETILEVI_TITLE_SELECTOR,
+    PILETILEVI_VENUE_SELECTOR,
     PRICE_HINT_MAX_CHARS,
     TALLINN_TZ,
 )
@@ -36,6 +56,7 @@ from app.ingestion.base import (
     NormalizedEvent,
     SourceAdapter,
     extract_jsonld_event_location,
+    host_guard_hook,
     http_get,
     http_post,
 )
@@ -106,6 +127,10 @@ class HtmlListingAdapter(SourceAdapter):
 
     needs_detail: bool = False
     max_pages: int = 1
+    # Hosts beyond the source's own listing host that this adapter
+    # deliberately fetches from via a fixed, hardcoded URL (not derived from
+    # scraped HTML) — e.g. a price-lookup API on a different domain.
+    extra_allowed_hosts: frozenset[str | None] = frozenset()
 
     def listing_url_for_page(self, page: int) -> str | None:
         """Return the listing URL for ``page`` (1-indexed), or None to stop."""
@@ -145,10 +170,13 @@ class HtmlListingAdapter(SourceAdapter):
         cards: list[dict[str, Any]] = []
         listing_errors: list[Exception] = []
 
+        base_host = urlsplit(str(self.source.config["url"])).hostname
+        allowed_hosts = frozenset({base_host}) | self.extra_allowed_hosts
         async with httpx.AsyncClient(
             timeout=HTTP_TIMEOUT_SECONDS,
             follow_redirects=True,
             headers={"User-Agent": HTTP_USER_AGENT},
+            event_hooks={"request": [host_guard_hook(allowed_hosts)]},
         ) as client:
             page = 1
             while page <= self.max_pages:
@@ -266,14 +294,6 @@ class HtmlListingAdapter(SourceAdapter):
 # Piletilevi — https://www.piletilevi.ee/en/tickets/all (paginated Nuxt catalog)
 # ---------------------------------------------------------------------------
 
-_PILETILEVI_CARD_SELECTOR = "a.card"
-_PILETILEVI_TITLE_SELECTOR = ".card__time-title h3"
-_PILETILEVI_DATE_SELECTOR = ".card__time"
-_PILETILEVI_VENUE_SELECTOR = ".card__description"
-_PILETILEVI_IMAGE_SELECTOR = "img.card__image"
-_PILETILEVI_DETAIL_DESC_SELECTOR = ".event__description"
-
-
 def _parse_piletilevi_date(date_str: str) -> datetime | None:
     """Parse "We 19.08.2026 • 19:00" → timezone-aware datetime."""
     if not date_str or "•" not in date_str:
@@ -301,23 +321,23 @@ class PiletileviAdapter(HtmlListingAdapter):
     def parse_cards(self, soup: BeautifulSoup) -> list[dict[str, Any]]:
         base_url = str(self.source.config["url"])
         cards: list[dict[str, Any]] = []
-        for tag in soup.select(_PILETILEVI_CARD_SELECTOR):
+        for tag in soup.select(PILETILEVI_CARD_SELECTOR):
             href = _attr_str(tag, "href")
             if not href:
                 continue
 
-            title_tag = tag.select_one(_PILETILEVI_TITLE_SELECTOR)
+            title_tag = tag.select_one(PILETILEVI_TITLE_SELECTOR)
             title = title_tag.get_text(strip=True) if title_tag else ""
             if not title:
                 continue
 
-            date_tag = tag.select_one(_PILETILEVI_DATE_SELECTOR)
+            date_tag = tag.select_one(PILETILEVI_DATE_SELECTOR)
             date_str = date_tag.get_text(strip=True) if date_tag else ""
 
-            venue_tag = tag.select_one(_PILETILEVI_VENUE_SELECTOR)
+            venue_tag = tag.select_one(PILETILEVI_VENUE_SELECTOR)
             venue_str = venue_tag.get_text(strip=True) if venue_tag else ""
 
-            img_tag = tag.select_one(_PILETILEVI_IMAGE_SELECTOR)
+            img_tag = tag.select_one(PILETILEVI_IMAGE_SELECTOR)
             image_url: str | None = None
             if img_tag:
                 src = _attr_str(img_tag, "src")
@@ -347,7 +367,7 @@ class PiletileviAdapter(HtmlListingAdapter):
     async def parse_detail(
         self, client: httpx.AsyncClient, soup: BeautifulSoup, card: dict[str, Any]
     ) -> None:
-        desc_tag = soup.select_one(_PILETILEVI_DETAIL_DESC_SELECTOR)
+        desc_tag = soup.select_one(PILETILEVI_DETAIL_DESC_SELECTOR)
         card["description"] = (
             desc_tag.get_text(separator=" ", strip=True) if desc_tag else None
         )
@@ -362,14 +382,6 @@ class PiletileviAdapter(HtmlListingAdapter):
 # ---------------------------------------------------------------------------
 # Kumu — https://kumu.ekm.ee/en/calendar/ (single page)
 # ---------------------------------------------------------------------------
-
-_KUMU_CARD_SELECTOR = "ul.event-grid__cards > li.event-grid__item"
-_KUMU_LINK_SELECTOR = "a.card__link"
-_KUMU_TITLE_SELECTOR = "h2.card__header-title"
-_KUMU_HIDDEN_SELECTOR = ".h-visually-hidden"
-_KUMU_DATE_SELECTOR = ".card__header-date-text"
-_KUMU_IMAGE_SELECTOR = "img.image__img.lazyload"
-_KUMU_PRICE_SELECTOR = ".event-header__ticket-price"
 
 
 class KumuAdapter(HtmlListingAdapter):
@@ -386,26 +398,26 @@ class KumuAdapter(HtmlListingAdapter):
 
     def parse_cards(self, soup: BeautifulSoup) -> list[dict[str, Any]]:
         cards: list[dict[str, Any]] = []
-        for item in soup.select(_KUMU_CARD_SELECTOR):
-            link_tag = item.select_one(_KUMU_LINK_SELECTOR)
+        for item in soup.select(KUMU_CARD_SELECTOR):
+            link_tag = item.select_one(KUMU_LINK_SELECTOR)
             href = _attr_str(link_tag, "href") if link_tag else ""
             if not href:
                 continue
 
-            title_tag = item.select_one(_KUMU_TITLE_SELECTOR)
+            title_tag = item.select_one(KUMU_TITLE_SELECTOR)
             title = ""
             if title_tag:
-                hidden = title_tag.select_one(_KUMU_HIDDEN_SELECTOR)
+                hidden = title_tag.select_one(KUMU_HIDDEN_SELECTOR)
                 if hidden:
                     hidden.extract()
                 title = title_tag.get_text(" ", strip=True)
             if not title:
                 continue
 
-            date_tag = item.select_one(_KUMU_DATE_SELECTOR)
+            date_tag = item.select_one(KUMU_DATE_SELECTOR)
             date_str = date_tag.get_text(strip=True) if date_tag else ""
 
-            img_tag = item.select_one(_KUMU_IMAGE_SELECTOR)
+            img_tag = item.select_one(KUMU_IMAGE_SELECTOR)
             image_url = _first_image_url(img_tag) if img_tag else None
 
             cards.append(
@@ -433,7 +445,7 @@ class KumuAdapter(HtmlListingAdapter):
     async def parse_detail(
         self, client: httpx.AsyncClient, soup: BeautifulSoup, card: dict[str, Any]
     ) -> None:
-        price_tag = soup.select_one(_KUMU_PRICE_SELECTOR)
+        price_tag = soup.select_one(KUMU_PRICE_SELECTOR)
         if price_tag:
             card["price_hint"] = price_tag.get_text(" ", strip=True)[:PRICE_HINT_MAX_CHARS]
 
@@ -442,13 +454,6 @@ class KumuAdapter(HtmlListingAdapter):
 # Estonia Concert Hall — https://concert.ee/en/ (single page, all-Estonia listing)
 # ---------------------------------------------------------------------------
 
-_CONCERT_ROW_SELECTOR = ".event-list .row"
-_CONCERT_TITLE_SELECTOR = ".info h2 a"
-_CONCERT_DATE_SELECTOR = ".event-date"
-_CONCERT_TIME_SELECTOR = ".event-time"
-_CONCERT_LOCATION_SELECTOR = ".event-location"
-_CONCERT_VENUE_SELECTOR = ".event-venue"
-_CONCERT_IMAGE_SELECTOR = ".image"
 _CONCERT_DATE_RE = re.compile(r"(\d{1,2})\.(\d{1,2})")
 _CONCERT_IMAGE_URL_RE = re.compile(r"url\((.*?)\)")
 _CONCERT_PID_RE = re.compile(r"pid=(\d+)")
@@ -462,9 +467,17 @@ def _to_float(value: Any) -> float | None:
 
 
 class EstoniaConcertHallAdapter(HtmlListingAdapter):
-    """concert.ee/en/ — full programme loaded via the "Load more" AJAX endpoint."""
+    """concert.ee/en/ — full programme loaded via the "Load more" AJAX endpoint.
+
+    parse_detail() resolves price via a deliberate, hardcoded cross-host POST
+    to the Piletilevi ticket store (ESTONIA_CONCERT_HALL_PILETILEVI_URL), so
+    that host is allow-listed alongside concert.ee for the SSRF guard.
+    """
 
     needs_detail = True
+    extra_allowed_hosts = frozenset(
+        {urlsplit(ESTONIA_CONCERT_HALL_PILETILEVI_URL).hostname}
+    )
 
     def listing_request(self, page: int) -> ListingRequest | None:
         if page != 1:
@@ -482,27 +495,27 @@ class EstoniaConcertHallAdapter(HtmlListingAdapter):
 
     def parse_cards(self, soup: BeautifulSoup) -> list[dict[str, Any]]:
         cards: list[dict[str, Any]] = []
-        for row in soup.select(_CONCERT_ROW_SELECTOR):
-            link_tag = row.select_one(_CONCERT_TITLE_SELECTOR)
+        for row in soup.select(ESTONIA_CONCERT_HALL_ROW_SELECTOR):
+            link_tag = row.select_one(ESTONIA_CONCERT_HALL_TITLE_SELECTOR)
             href = _attr_str(link_tag, "href") if link_tag else ""
             title = link_tag.get_text(strip=True) if link_tag else ""
             if not href or not title:
                 continue
 
-            date_tag = row.select_one(_CONCERT_DATE_SELECTOR)
+            date_tag = row.select_one(ESTONIA_CONCERT_HALL_DATE_SELECTOR)
             date_text = date_tag.get_text(" ", strip=True) if date_tag else ""
 
-            time_tag = row.select_one(_CONCERT_TIME_SELECTOR)
+            time_tag = row.select_one(ESTONIA_CONCERT_HALL_TIME_SELECTOR)
             time_text = time_tag.get_text(strip=True) if time_tag else ""
 
-            location_tag = row.select_one(_CONCERT_LOCATION_SELECTOR)
+            location_tag = row.select_one(ESTONIA_CONCERT_HALL_LOCATION_SELECTOR)
             location_text = location_tag.get_text(strip=True) if location_tag else ""
 
-            venue_tag = row.select_one(_CONCERT_VENUE_SELECTOR)
+            venue_tag = row.select_one(ESTONIA_CONCERT_HALL_VENUE_SELECTOR)
             venue_text = venue_tag.get_text(strip=True) if venue_tag else ""
 
             image_url: str | None = None
-            image_tag = row.select_one(_CONCERT_IMAGE_SELECTOR)
+            image_tag = row.select_one(ESTONIA_CONCERT_HALL_IMAGE_SELECTOR)
             if image_tag:
                 style = _attr_str(image_tag, "style")
                 match = _CONCERT_IMAGE_URL_RE.search(style)

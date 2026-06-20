@@ -8,7 +8,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 1.125rem 2rem;
+  padding: var(--space-1-125) var(--space-6);
   border-bottom: 1px solid var(--border);
   background: var(--bg-overlay);
   backdrop-filter: blur(var(--blur-overlay));
@@ -39,7 +39,7 @@
 .topActions {
   display: flex;
   align-items: center;
-  gap: 0.625rem;
+  gap: var(--space-0-625);
 }
 
 .settingsLink {
@@ -56,7 +56,7 @@
 
 .logoutBtn {
   composes: btnOutline from '../../components/shared/Button.module.css';
-  padding: 0.3125rem 0.875rem;
+  padding: 0.3125rem var(--space-0-875);
   font-size: var(--fs-sm);
 }
 
@@ -88,7 +88,7 @@
   color: var(--text);
   letter-spacing: var(--tracking-tighter);
   line-height: var(--leading-display);
-  margin-bottom: 0.2rem;
+  margin-bottom: var(--space-0-2);
 }
 
 .date {

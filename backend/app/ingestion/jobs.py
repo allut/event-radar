@@ -7,6 +7,7 @@ from collections.abc import Awaitable, Callable
 from sqlalchemy import select
 
 from app.constants import (
+    AGGREGATE_LAST_VALUE_FIELDS,
     LLM_BACKLOG_MAX_DRAIN_PASSES,
     LLM_BACKLOG_RETRY_SECONDS,
     LLM_CLASSIFY_BATCH_SIZE,
@@ -179,12 +180,6 @@ def _classify_has_backlog(summary: dict) -> bool:
     )
 
 
-# Dedup summary fields that are a snapshot of corpus state recomputed on every
-# pass (total events considered, candidate pairs, group counts) rather than
-# work done during that pass — summing them across passes would inflate them
-# by roughly a factor of `passes`. Report the last pass's value instead.
-_AGGREGATE_LAST_VALUE_FIELDS = frozenset({"total", "candidate_pairs", "grouped", "groups"})
-
 
 def _aggregate_summaries(summaries: list[dict]) -> dict:
     """Combine numeric fields (excluding bools) across pass summaries.
@@ -198,7 +193,7 @@ def _aggregate_summaries(summaries: list[dict]) -> dict:
         for key, value in summary.items():
             if isinstance(value, bool) or not isinstance(value, int | float):
                 continue
-            if key in _AGGREGATE_LAST_VALUE_FIELDS:
+            if key in AGGREGATE_LAST_VALUE_FIELDS:
                 totals[key] = value
             else:
                 totals[key] = totals.get(key, 0) + value

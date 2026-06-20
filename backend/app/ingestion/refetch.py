@@ -37,6 +37,7 @@ from app.constants import (
     REFETCH_PRICE_TOLERANCE,
     REFETCH_REQUEST_DELAY_SECONDS,
     TALLINN_TZ,
+    VENUE_NAME_MAX_LEN,
 )
 from app.ingestion.base import (
     extract_jsonld_event_location,
@@ -48,8 +49,6 @@ from app.ingestion.geocode import is_suspect_venue_name
 from app.models.models import Event
 
 log = logging.getLogger(__name__)
-
-_VENUE_NAME_MAX_LEN = 255  # mirrors Event.venue_name String(255)
 
 
 def _is_empty_venue_name(name: str | None) -> bool:
@@ -266,12 +265,12 @@ def _reconcile(
         if _is_empty_venue_name(event.venue_name):
             # Fill / replace placeholder — accept any real name.
             if name != event.venue_name:
-                event.venue_name = name[:_VENUE_NAME_MAX_LEN]
+                event.venue_name = name[:VENUE_NAME_MAX_LEN]
                 name_changed = True
         elif name != event.venue_name and not is_suspect_venue_name(name):
             # Clean stored name → only overwrite with a clean (non-suspect) detail
             # name; a glued/suspect name would undo extract_address_from_venue_name.
-            event.venue_name = name[:_VENUE_NAME_MAX_LEN]
+            event.venue_name = name[:VENUE_NAME_MAX_LEN]
             name_changed = True
     if name_changed:
         summary["venue_changed"] += 1

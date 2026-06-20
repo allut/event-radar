@@ -18,18 +18,9 @@ from app.constants import (
     LOG_FILE_MAX_BYTES,
     LOG_FILE_NAME,
     LOG_FORMAT_TEXT,
+    LOG_FRAMEWORK_LOGGER_NAMES,
     LOG_SHIP_QUEUE_MAXSIZE,
     LOG_SHIP_TIMEOUT_SECONDS,
-)
-
-# Loggers configured by frameworks/libraries before configure_logging() runs —
-# stripped of their own handlers and re-pointed at the root logger so every line
-# (app, uvicorn, SQL echo) shares the same timestamped format.
-_FRAMEWORK_LOGGER_NAMES = (
-    "uvicorn",
-    "uvicorn.error",
-    "uvicorn.access",
-    "sqlalchemy.engine",
 )
 
 _queue_listener: logging.handlers.QueueListener | None = None
@@ -142,7 +133,7 @@ def configure_logging() -> None:
         )
         _queue_listener.start()
 
-    for name in _FRAMEWORK_LOGGER_NAMES:
+    for name in LOG_FRAMEWORK_LOGGER_NAMES:
         logger = logging.getLogger(name)
         logger.handlers.clear()
         logger.propagate = True

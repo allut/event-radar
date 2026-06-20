@@ -282,6 +282,15 @@ LLM_DEDUP_HASH_QUERY_CHUNK_SIZE = 500
 # next 6h cycle. Bounded by a pass cap so a provider outage can't spin forever.
 LLM_BACKLOG_RETRY_SECONDS = 900  # 15 min between drain passes
 LLM_BACKLOG_MAX_DRAIN_PASSES = 12  # ceiling; then defer to the next 6h cycle
+
+# Dedup summary fields that are a snapshot of corpus state recomputed on every
+# pass (total events considered, candidate pairs, group counts) rather than
+# work done during that pass — summing them across passes would inflate them
+# by roughly a factor of `passes`. _aggregate_summaries (jobs.py) reports the
+# last pass's value for these instead of summing.
+AGGREGATE_LAST_VALUE_FIELDS = frozenset(
+    {"total", "candidate_pairs", "grouped", "groups"}
+)
 LLM_DEDUP_PROMPT_TEMPLATE = """\
 Are these two events the same event?
 
@@ -487,6 +496,32 @@ KUMU_VENUE_ADDRESS = "A. Weizenbergi 34, 10127 Tallinn"
 KUMU_VENUE_LAT = 59.4363374
 KUMU_VENUE_LNG = 24.7958299
 
+# CSS selectors for each HTML-listing source's markup. Tied to the live site's
+# DOM structure, not business logic — keep them grouped here per-source rather
+# than computed/derived, so a markup change is a one-line lookup.
+PILETILEVI_CARD_SELECTOR = "a.card"
+PILETILEVI_TITLE_SELECTOR = ".card__time-title h3"
+PILETILEVI_DATE_SELECTOR = ".card__time"
+PILETILEVI_VENUE_SELECTOR = ".card__description"
+PILETILEVI_IMAGE_SELECTOR = "img.card__image"
+PILETILEVI_DETAIL_DESC_SELECTOR = ".event__description"
+
+KUMU_CARD_SELECTOR = "ul.event-grid__cards > li.event-grid__item"
+KUMU_LINK_SELECTOR = "a.card__link"
+KUMU_TITLE_SELECTOR = "h2.card__header-title"
+KUMU_HIDDEN_SELECTOR = ".h-visually-hidden"
+KUMU_DATE_SELECTOR = ".card__header-date-text"
+KUMU_IMAGE_SELECTOR = "img.image__img.lazyload"
+KUMU_PRICE_SELECTOR = ".event-header__ticket-price"
+
+ESTONIA_CONCERT_HALL_ROW_SELECTOR = ".event-list .row"
+ESTONIA_CONCERT_HALL_TITLE_SELECTOR = ".info h2 a"
+ESTONIA_CONCERT_HALL_DATE_SELECTOR = ".event-date"
+ESTONIA_CONCERT_HALL_TIME_SELECTOR = ".event-time"
+ESTONIA_CONCERT_HALL_LOCATION_SELECTOR = ".event-location"
+ESTONIA_CONCERT_HALL_VENUE_SELECTOR = ".event-venue"
+ESTONIA_CONCERT_HALL_IMAGE_SELECTOR = ".image"
+
 
 class VenueInfo(NamedTuple):
     name: str
@@ -628,6 +663,9 @@ REFETCH_PRICE_TOLERANCE = 0.005
 REFETCH_PLACEHOLDER_VENUE_NAMES: frozenset[str] = frozenset(
     {"tbd", "tba", "---", "n/a", "unknown"}
 )
+# Mirrors Event.venue_name String(255) — truncation length for a detail-page
+# venue name before it is written back to the column.
+VENUE_NAME_MAX_LEN = 255
 
 # Parses a Fienta listing price_from_string: "From 9.50 EUR" / "12 EUR" — a number
 # (int or decimal, "." or "," separator) followed by any 3-letter currency code.
@@ -651,6 +689,15 @@ LOG_FILE_MAX_BYTES = 5 * 1024 * 1024  # 5 MB per file
 LOG_FILE_BACKUP_COUNT = 5  # ~25 MB total dev history
 LOG_SHIP_TIMEOUT_SECONDS = 5.0
 LOG_SHIP_QUEUE_MAXSIZE = 10_000  # bounded; drop-newest if shipping stalls
+# Loggers configured by frameworks/libraries before configure_logging() runs —
+# stripped of their own handlers and re-pointed at the root logger so every
+# line (app, uvicorn, SQL echo) shares the same timestamped format.
+LOG_FRAMEWORK_LOGGER_NAMES: tuple[str, ...] = (
+    "uvicorn",
+    "uvicorn.error",
+    "uvicorn.access",
+    "sqlalchemy.engine",
+)
 
 # Security response headers — applied to every response by SecurityHeadersMiddleware
 # (app.main). This is a pure JSON API with no first-party HTML/script surface, so the

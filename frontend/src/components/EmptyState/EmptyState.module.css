@@ -3,15 +3,15 @@
   flex-direction: column;
   align-items: center;
   text-align: center;
-  gap: 0.75rem;
-  padding: 5rem 2rem;
+  gap: var(--space-3);
+  padding: var(--space-9) var(--space-6);
 }
 
 .emptyIcon {
   font-size: var(--heading-3xl);
   color: var(--text-dim);
   animation: breathe 3s var(--easing-breathe) infinite;
-  margin-bottom: 0.5rem;
+  margin-bottom: var(--space-2);
 }
 
 .emptyTitle {

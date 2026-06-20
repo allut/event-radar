@@ -6,6 +6,7 @@ import logging
 import re
 import time
 from abc import ABC, abstractmethod
+from collections.abc import Callable, Coroutine
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
@@ -148,6 +149,39 @@ class AsyncRateLimiter:
         candidate = time.monotonic() + seconds
         if candidate > self._next_allowed:
             self._next_allowed = candidate
+
+
+def host_guard_hook(
+    allowed_hosts: str | None | frozenset[str | None],
+) -> Callable[[httpx.Request], Coroutine[Any, Any, None]]:
+    """Build a client `request` event hook enforcing every request — including
+    each redirect hop httpx follows — stays within allowed_hosts (SSRF guard).
+
+    httpx fires the `request` hook once per hop inside its redirect loop, so
+    this is the only point that can validate a redirect's *destination* host;
+    pre-fetch checks elsewhere only validate the un-redirected URL. Accepts a
+    single host or a frozenset when a source legitimately spans more than one
+    host (e.g. a deliberate cross-host lookup against a fixed, hardcoded URL).
+    """
+    raw_hosts: frozenset[str | None] = (
+        allowed_hosts
+        if isinstance(allowed_hosts, frozenset)
+        else frozenset({allowed_hosts})
+    )
+    # Drop None — a malformed configured URL whose hostname parses to None
+    # must never become an allowed host; that would let any redirect target
+    # that also parses to a None hostname (e.g. a non-network scheme) bypass
+    # the guard. Excluding it makes a misconfigured source fail closed.
+    hosts: frozenset[str] = frozenset(h for h in raw_hosts if h is not None)
+
+    async def hook(request: httpx.Request) -> None:
+        if urlsplit(str(request.url)).hostname not in hosts:
+            # ValueError, not httpx.RequestError: a host mismatch is a
+            # permanent guard failure, not a transient one, and
+            # httpx.RequestError is retried by _http_retry's predicate.
+            raise ValueError(f"request host mismatch (SSRF guard): {request.url}")
+
+    return hook
 
 
 @_http_retry

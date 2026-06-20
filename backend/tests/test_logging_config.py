@@ -8,11 +8,10 @@ import pytest
 
 from app import logging_config
 from app.config import settings
-from app.constants import LOG_FILE_NAME
+from app.constants import LOG_FILE_NAME, LOG_FRAMEWORK_LOGGER_NAMES
 from app.logging_config import (
     HttpLogShipHandler,
     JsonLogFormatter,
-    _FRAMEWORK_LOGGER_NAMES,
     _text_formatter,
     configure_logging,
     shutdown_log_shipping,
@@ -32,7 +31,7 @@ def _restore_logging():
             logging.getLogger(name).level,
             logging.getLogger(name).propagate,
         )
-        for name in _FRAMEWORK_LOGGER_NAMES
+        for name in LOG_FRAMEWORK_LOGGER_NAMES
     }
 
     yield
@@ -210,7 +209,7 @@ def test_framework_loggers_propagate_after_configure(monkeypatch, tmp_path) -> N
 
     configure_logging()
 
-    for name in _FRAMEWORK_LOGGER_NAMES:
+    for name in LOG_FRAMEWORK_LOGGER_NAMES:
         logger = logging.getLogger(name)
         assert logger.propagate is True
         assert logger.handlers == []

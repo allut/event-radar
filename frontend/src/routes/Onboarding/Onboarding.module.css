@@ -8,8 +8,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.6rem;
-  padding: 1.25rem 2rem;
+  gap: var(--space-0-6);
+  padding: var(--space-1-25) var(--space-6);
   border-bottom: 1px solid var(--border);
   background: var(--bg-overlay);
   backdrop-filter: blur(var(--blur-overlay));
@@ -24,7 +24,7 @@
   text-decoration: none;
   letter-spacing: var(--tracking-normal);
   transition: color var(--transition);
-  min-width: 5rem;
+  min-width: var(--space-9);
 }
 
 .back:hover {
@@ -36,11 +36,11 @@
   max-width: 720px;
   width: 100%;
   margin: 0 auto;
-  padding: 3rem 2rem 4rem;
+  padding: var(--space-7) var(--space-6) var(--space-8);
 }
 
 .intro {
-  margin-bottom: 2.5rem;
+  margin-bottom: var(--space-2-5);
 }
 
 .heading {
@@ -48,7 +48,7 @@
   font-size: var(--heading-2xl);
   font-weight: 600;
   color: var(--text);
-  margin-bottom: 0.5rem;
+  margin-bottom: var(--space-2);
   letter-spacing: var(--tracking-tighter);
 }
 
@@ -60,8 +60,8 @@
 .grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 1rem;
-  margin-bottom: 2rem;
+  gap: var(--space-4);
+  margin-bottom: var(--space-6);
 }
 
 @media (max-width: 560px) {
@@ -75,16 +75,16 @@
   color: var(--danger);
   background: var(--danger-subtle);
   border-left: 2px solid var(--danger);
-  padding: 0.625rem 0.875rem;
+  padding: var(--space-0-625) var(--space-0-875);
   border-radius: var(--radius);
-  margin-bottom: 1rem;
+  margin-bottom: var(--space-4);
 }
 
 .cta {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 0.75rem;
+  gap: var(--space-3);
 }
 
 .blend {
@@ -98,7 +98,7 @@
 
 .submit {
   composes: btnPrimary from '../../components/shared/Button.module.css';
-  padding: 0.8125rem 2rem;
+  padding: var(--space-0-8125) var(--space-6);
   font-size: var(--fs-base);
   height: 48px;
   min-width: 160px;

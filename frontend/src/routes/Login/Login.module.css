@@ -3,7 +3,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 2rem;
+  padding: var(--space-6);
 }
 
 .card {
@@ -16,8 +16,8 @@
 .header {
   display: flex;
   align-items: center;
-  gap: 0.6rem;
-  margin-bottom: 0.5rem;
+  gap: var(--space-0-6);
+  margin-bottom: var(--space-2);
 }
 
 .radar {
@@ -37,7 +37,7 @@
 .tagline {
   color: var(--text-muted);
   font-size: var(--fs-md);
-  margin-bottom: 2rem;
+  margin-bottom: var(--space-6);
   padding-bottom: 1.75rem;
   border-bottom: 1px solid var(--border);
 }
@@ -45,7 +45,7 @@
 .form {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: var(--space-3);
 }
 
 .label {
@@ -61,7 +61,7 @@
   background: var(--bg-raised);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 0.75rem 1rem;
+  padding: var(--space-3) var(--space-4);
   color: var(--text);
   font-size: var(--fs-base);
   outline: none;
@@ -84,7 +84,7 @@
 .error {
   font-size: var(--fs-sm);
   color: var(--danger);
-  padding: 0.5rem 0.75rem;
+  padding: var(--space-2) var(--space-3);
   background: var(--danger-subtle);
   border-radius: var(--radius);
   border-left: 2px solid var(--danger);
@@ -92,13 +92,13 @@
 
 .submit {
   composes: btnPrimary from '../../components/shared/Button.module.css';
-  padding: 0.8125rem 1.5rem;
+  padding: var(--space-0-8125) var(--space-5);
   font-size: var(--fs-base);
   height: 48px;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-top: 0.25rem;
+  margin-top: var(--space-1);
 }
 
 .spinner {
@@ -115,8 +115,8 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.6rem;
-  padding: 1.5rem 0;
+  gap: var(--space-0-6);
+  padding: var(--space-5) 0;
   text-align: center;
   animation: fadeIn var(--anim-fast) var(--easing);
 }
@@ -136,7 +136,7 @@
   justify-content: center;
   font-size: var(--fs-xl);
   color: var(--success);
-  margin-bottom: 0.5rem;
+  margin-bottom: var(--space-2);
 }
 
 .successMsg {
@@ -158,7 +158,7 @@
   border: none;
   color: var(--text-muted);
   font-size: var(--fs-sm);
-  margin-top: 0.5rem;
+  margin-top: var(--space-2);
   text-decoration: underline;
   text-underline-offset: 3px;
   transition: color var(--transition);
@@ -169,7 +169,7 @@
 }
 
 .footer {
-  margin-top: 2.5rem;
+  margin-top: var(--space-2-5);
   text-align: center;
   font-size: var(--fs-xs);
   color: var(--text-soft);

@@ -9,7 +9,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 1.125rem 2rem;
+  padding: var(--space-1-125) var(--space-6);
   border-bottom: 1px solid var(--border);
   background: var(--bg-overlay);
   backdrop-filter: blur(var(--blur-overlay));
@@ -24,7 +24,7 @@
   text-decoration: none;
   letter-spacing: var(--tracking-normal);
   transition: color var(--transition);
-  min-width: 5rem;
+  min-width: var(--space-9);
 }
 
 .back:hover {
@@ -34,7 +34,7 @@
 .logoWrap {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: var(--space-2);
 }
 
 .radar {
@@ -51,7 +51,7 @@
 }
 
 .topBarSpacer {
-  min-width: 5rem;
+  min-width: var(--space-9);
 }
 
 /* ── Main ── */
@@ -59,19 +59,19 @@
   flex: 1;
   max-width: 640px;
   margin: 0 auto;
-  padding: 2.5rem 2rem 4rem;
+  padding: var(--space-2-5) var(--space-6) var(--space-8);
   width: 100%;
   display: flex;
   flex-direction: column;
-  gap: 2.5rem;
+  gap: var(--space-2-5);
 }
 
 /* ── Section ── */
 .section {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
-  padding-bottom: 2.5rem;
+  gap: var(--space-4);
+  padding-bottom: var(--space-2-5);
   border-bottom: var(--rule);
 }
 
@@ -97,14 +97,14 @@
 .personaDisplay {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: var(--space-3);
 }
 
 .personaRow {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-  padding: 0.75rem 1rem;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -121,8 +121,8 @@
 }
 
 .personaBadge {
-  margin-left: 0.5rem;
-  padding: 0.1rem 0.45rem;
+  margin-left: var(--space-2);
+  padding: 0.1rem var(--space-0-45);
   border-radius: var(--radius-sm);
   background: var(--accent-subtle);
   border: 1px solid var(--accent-border);
@@ -147,7 +147,7 @@
 
 .repickBtn {
   align-self: flex-start;
-  padding: 0.45rem 1rem;
+  padding: var(--space-0-45) var(--space-4);
   border-radius: var(--radius);
   border: 1px solid var(--border);
   background: transparent;
@@ -168,7 +168,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 1rem;
+  gap: var(--space-4);
 }
 
 .toggleLabel {
@@ -179,7 +179,7 @@
 .toggleDesc {
   font-size: var(--fs-sm);
   color: var(--text-muted);
-  margin-top: 0.2rem;
+  margin-top: var(--space-0-2);
 }
 
 .toggle {
@@ -246,11 +246,11 @@
 /* ── Save toast (fixed, always visible regardless of scroll) ── */
 .toast {
   position: fixed;
-  top: 5rem;
+  top: var(--space-9);
   left: 50%;
   transform: translateX(-50%);
   z-index: var(--z-toast);
-  padding: 0.6rem 1.25rem;
+  padding: var(--space-0-6) var(--space-1-25);
   border-radius: var(--radius);
   font-size: var(--fs-sm);
   text-align: center;

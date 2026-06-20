@@ -83,6 +83,19 @@
   --space-6: 2rem;
   --space-7: 3rem;
   --space-8: 4rem;
+  --space-9: 5rem;
+  /* Off-scale steps used at 2+ call sites — added rather than rounding
+     existing layouts onto the nearest step above. */
+  --space-0-2: 0.2rem;
+  --space-0-375: 0.375rem;
+  --space-0-45: 0.45rem;
+  --space-0-6: 0.6rem;
+  --space-0-625: 0.625rem;
+  --space-0-875: 0.875rem;
+  --space-0-8125: 0.8125rem;
+  --space-1-125: 1.125rem;
+  --space-1-25: 1.25rem;
+  --space-2-5: 2.5rem;
 
   /* Shape */
   --radius-pill: 100px;

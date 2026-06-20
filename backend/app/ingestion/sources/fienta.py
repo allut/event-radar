@@ -2,7 +2,6 @@ import asyncio
 import http
 import logging
 import re
-from collections.abc import Callable, Coroutine
 from typing import Any
 from urllib.parse import urlparse
 
@@ -23,6 +22,7 @@ from app.ingestion.base import (
     coords_in_estonia,
     extract_jsonld_event_location,
     extract_jsonld_event_offers,
+    host_guard_hook,
     http_get,
     is_target_city,
     parse_dt,
@@ -37,29 +37,6 @@ _POSTAL_CODE_RE = re.compile(r"\b\d{5}\b")
 
 def _has_postal_code(address: str | None) -> bool:
     return bool(address and _POSTAL_CODE_RE.search(address))
-
-
-def _host_guard_hook(
-    base_host: str | None,
-) -> Callable[[httpx.Request], Coroutine[Any, Any, None]]:
-    """Build a client `request` event hook enforcing every request — including
-    each redirect hop httpx follows — stays on base_host (SSRF guard).
-
-    httpx fires the `request` hook once per hop inside its redirect loop, so
-    this is the only point that can validate a redirect's *destination* host;
-    the pre-fetch checks elsewhere only validate the un-redirected URL.
-    """
-
-    async def hook(request: httpx.Request) -> None:
-        if urlparse(str(request.url)).hostname != base_host:
-            # ValueError, not httpx.RequestError: a host mismatch is a
-            # permanent guard failure, not a transient one, and
-            # httpx.RequestError is retried by _http_retry's predicate.
-            raise ValueError(
-                f"fienta: request host mismatch (SSRF guard): {request.url}"
-            )
-
-    return hook
 
 
 class FientaAdapter(SourceAdapter):
@@ -82,11 +59,11 @@ class FientaAdapter(SourceAdapter):
     <slug>); without it every detail fetch raised and was silently dropped.
     httpx's redirect handling has no same-origin restriction on its own — a
     malicious Location header could point a followed redirect at an arbitrary
-    host — so a `request` event hook (`_host_guard_hook`) re-validates the
-    host of *every* request the client sends, including each redirect hop,
-    against base_host. This is the actual SSRF enforcement for the redirect
-    case; the pre-fetch checks in `_fetch_organizer`/`_fetch_detail` remain as
-    defense-in-depth on the un-redirected URL.
+    host — so a `request` event hook (`host_guard_hook`, `app/ingestion/base.py`)
+    re-validates the host of *every* request the client sends, including each
+    redirect hop, against base_host. This is the actual SSRF enforcement for
+    the redirect case; the pre-fetch checks in `_fetch_organizer`/`_fetch_detail`
+    remain as defense-in-depth on the un-redirected URL.
 
     All listing and detail requests share one AsyncRateLimiter per fetch_raw()
     call (FIENTA_MIN_REQUEST_INTERVAL_SECONDS) to proactively pace requests
@@ -105,7 +82,7 @@ class FientaAdapter(SourceAdapter):
         async with httpx.AsyncClient(
             timeout=HTTP_TIMEOUT_SECONDS,
             follow_redirects=True,
-            event_hooks={"request": [_host_guard_hook(base_host)]},
+            event_hooks={"request": [host_guard_hook(base_host)]},
         ) as client:
             for org_id in organizer_ids:
                 try:
