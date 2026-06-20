@@ -123,6 +123,13 @@ def cluster_events(
 
     pair_count = 0
     if candidate_pair_ids is None:
+        # Unfiltered O(N²) path — both production callers pass candidate_pair_ids
+        # (pre-filtered via candidate_pair_ids_in_window). This branch exists for
+        # white-box tests; a future caller invoking it on a large unfiltered event
+        # list would re-introduce the quadratic scan this module was built to avoid.
+        log.warning(
+            "cluster_events: running unfiltered O(N^2) fallback on %d events", n
+        )
         for i in range(n):
             for j in range(i + 1, n):
                 if is_candidate_pair(events[i], events[j]):

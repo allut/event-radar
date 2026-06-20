@@ -292,8 +292,12 @@ async def copy_venue_from_siblings(db: AsyncSession) -> int:
     symmetric ``fuzz.ratio >= VENUE_SIBLING_RATIO_THRESHOLD``, so "Sõltumatu Tantsu
     Lava" matches a "Sõltumatu Tantsu Lava (STL)" donor (canonicalization makes the
     cores equal). A symmetric ratio is used rather than token_set_ratio so a short
-    comma-split core can't score 100 against an unrelated longer donor. The ambiguity
-    guard keys on
+    comma-split core can't score 100 against an unrelated longer donor. The matched
+    donor set is memoized per distinct target_canon (an exact-equal donor bucket
+    always clears the threshold via fuzz_ratio == 100, so it can't be shortcut without
+    also dropping any other, non-identical bucket that happens to clear the threshold
+    too) — this still collapses the scan from one-per-target to one-per-distinct-name,
+    since many targets typically share the same venue_name. The ambiguity guard keys on
     distinct *coordinates*, not the full ``(address, lat, lng)`` tuple — one physical
     venue legitimately carries several address spellings at one coord, and only a
     genuine multi-location name (>1 distinct coord) is skipped + logged. Non-physical
@@ -343,6 +347,9 @@ async def copy_venue_from_siblings(db: AsyncSession) -> int:
 
     copied = 0
     warned_ambiguous: set[str] = set()
+    matched_rows_by_target_canon: dict[
+        str, list[tuple[str | None, float | None, float | None]]
+    ] = {}
     for event in targets:
         name = event.venue_name
         if name is None:
@@ -351,10 +358,14 @@ async def copy_venue_from_siblings(db: AsyncSession) -> int:
         if not target_canon or target_canon in NON_GEOCODABLE_VENUE_NAMES:
             continue
 
-        matched_rows: list[tuple[str | None, float | None, float | None]] = []
-        for donor_canon, rows in donor_addrs_by_canon.items():
-            if fuzz_ratio(target_canon, donor_canon) >= VENUE_SIBLING_RATIO_THRESHOLD:
-                matched_rows.extend(rows)
+        if target_canon not in matched_rows_by_target_canon:
+            matched: list[tuple[str | None, float | None, float | None]] = []
+            for donor_canon, rows in donor_addrs_by_canon.items():
+                if fuzz_ratio(target_canon, donor_canon) >= VENUE_SIBLING_RATIO_THRESHOLD:
+                    matched.extend(rows)
+            matched_rows_by_target_canon[target_canon] = matched
+
+        matched_rows = matched_rows_by_target_canon[target_canon]
         if not matched_rows:
             continue
 
