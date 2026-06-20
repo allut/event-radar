@@ -403,6 +403,36 @@ class TestSourceAdapterRun:
         assert run.error is None
 
     @pytest.mark.asyncio
+    async def test_recently_rejected_raw_event_id_is_skipped(self, mock_db):
+        """A raw_events row fetched within INGEST_REJECT_RECHECK_DAYS with no
+        event_sources row (a recent reject) still ends up in known_ids."""
+        source = MagicMock(id=1)
+        mock_db.scalars.side_effect = [
+            MagicMock(all=MagicMock(return_value=[])),  # existing_external_ids
+            MagicMock(all=MagicMock(return_value=["rejected-1"])),  # recent raw_events
+        ]
+        adapter = _FakeAdapter(source, fetch_result=[])
+
+        await adapter.run(mock_db)
+
+        assert adapter.fetch_raw_called_with == {"rejected-1"}
+
+    @pytest.mark.asyncio
+    async def test_stale_rejected_raw_event_id_is_not_skipped(self, mock_db):
+        """A raw_events row older than INGEST_REJECT_RECHECK_DAYS is outside the
+        recheck window, so it's eligible for re-fetch (not in known_ids)."""
+        source = MagicMock(id=1)
+        mock_db.scalars.side_effect = [
+            MagicMock(all=MagicMock(return_value=[])),  # existing_external_ids
+            MagicMock(all=MagicMock(return_value=[])),  # recent raw_events filter excludes it
+        ]
+        adapter = _FakeAdapter(source, fetch_result=[])
+
+        await adapter.run(mock_db)
+
+        assert adapter.fetch_raw_called_with == set()
+
+    @pytest.mark.asyncio
     async def test_run_row_inserted_after_fetch_raw_with_started_at_set(self, mock_db):
         source = MagicMock(id=1)
         mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=[]))

@@ -8,7 +8,7 @@ import time
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Coroutine
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from email.utils import parsedate_to_datetime
 from typing import Any
 from urllib.parse import urlsplit
@@ -41,6 +41,7 @@ from app.constants import (
     HTTP_RETRY_WAIT_MAX,
     HTTP_RETRY_WAIT_MIN,
     HTTP_RETRY_WAIT_MULTIPLIER,
+    INGEST_REJECT_RECHECK_DAYS,
     INGESTION_ERROR_MAX_LEN,
     PRICE_FROM_STRING_RE,
     SAFE_URL_SCHEMES,
@@ -339,6 +340,22 @@ async def existing_external_ids(db: AsyncSession, source_id: int) -> set[str]:
     return {r for r in rows.all() if r is not None}
 
 
+async def ingest_skip_ids(db: AsyncSession, source_id: int) -> set[str]:
+    """external_ids to skip this run: already-stored events (forward-only) plus
+    events fetched-but-rejected within INGEST_REJECT_RECHECK_DAYS, so a
+    permanently-rejected event isn't re-fetched/re-saved every run."""
+    stored = await existing_external_ids(db, source_id)
+    cutoff = datetime.now(tz=TALLINN_TZ) - timedelta(days=INGEST_REJECT_RECHECK_DAYS)
+    rows = await db.scalars(
+        select(RawEvent.external_id).where(
+            RawEvent.source_id == source_id,
+            RawEvent.fetched_at >= cutoff,
+        )
+    )
+    recent = {r for r in rows.all() if r is not None}
+    return stored | recent
+
+
 _PRICE_FROM_STRING_RE = re.compile(PRICE_FROM_STRING_RE, re.IGNORECASE)
 
 
@@ -513,7 +530,7 @@ class SourceAdapter(ABC):
         On error, run.error is populated but the caller must still commit to persist
         the failure record (instead of rolling back the entire transaction).
         """
-        known_ids = await existing_external_ids(db, self.source.id)
+        known_ids = await ingest_skip_ids(db, self.source.id)
         # Release the connection for the crawl below — fetch_raw is network I/O only
         # (no db access), often taking minutes, which would otherwise hold a checked-out
         # connection idle past Neon's auto-suspend window. Nothing has been written yet,

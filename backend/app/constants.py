@@ -663,6 +663,10 @@ REFETCH_MIN_INTERVAL_DAYS = 1
 # Absolute tolerance (currency units) when comparing a stored price against the
 # detail-page price — sub-cent float noise must read as "unchanged", not a change.
 REFETCH_PRICE_TOLERANCE = 0.005
+# An external_id fetched but rejected by normalize() (e.g. non-Tallinn) is not
+# re-fetched/re-saved on every run; it is retried once after this window so a
+# transient rejection still self-heals. Pure backend scalar — not cross-stack.
+INGEST_REJECT_RECHECK_DAYS = 7
 # venue_name values treated as empty/placeholder, so a real detail name replaces
 # them. Matched case-insensitively. Deliberately excludes "online"/"MamaOnline" —
 # those are real (online) venue names, not placeholders (NON_GEOCODABLE_VENUE_NAMES
