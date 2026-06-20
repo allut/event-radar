@@ -217,6 +217,53 @@ class TestBasePagination:
         assert mock_get.call_count == 3
 
     @pytest.mark.asyncio
+    async def test_known_ids_skip_does_not_consume_detail_cap(self):
+        card_a = {"external_id": "a", "title": "A", "url": "https://example.test/a"}
+        card_b = {"external_id": "b", "title": "B", "url": "https://example.test/b"}
+        card_c = {"external_id": "c", "title": "C", "url": "https://example.test/c"}
+        adapter = _StubAdapter(
+            _make_source(),
+            pages_cards=[[card_a, card_b], [card_c]],
+            needs_detail=True,
+            max_pages=2,
+        )
+
+        with patch("app.ingestion.sources.html_listing.HTML_LISTING_MAX_DETAIL_FETCHES", 2), \
+             patch("app.ingestion.sources.html_listing.http_get") as mock_get:
+            mock_get.side_effect = [
+                _mock_response("0"),  # listing page 1 (a, b — both known)
+                _mock_response("1"),  # listing page 2 (c — new)
+                _mock_response("detail-c"),  # detail for card c
+            ]
+            results = await adapter.fetch_raw(_known_ids({"a", "b"}))
+
+        # a/b are known: counted for pagination but never enter cards, so the
+        # cap (2) is never spent on them and the run advances to page 2.
+        assert [c["external_id"] for c in results] == ["c"]
+        assert results[0]["description"] == "detail-c"
+        assert mock_get.call_count == 3
+
+    @pytest.mark.asyncio
+    async def test_all_known_page_still_advances_pagination(self):
+        card_a = {"external_id": "a", "title": "A", "url": "https://example.test/a"}
+        card_b = {"external_id": "b", "title": "B", "url": "https://example.test/b"}
+        adapter = _StubAdapter(
+            _make_source(),
+            pages_cards=[[card_a], [card_b]],
+            max_pages=2,
+        )
+
+        with patch("app.ingestion.sources.html_listing.http_get") as mock_get:
+            mock_get.side_effect = [_mock_response("0"), _mock_response("1")]
+            results = await adapter.fetch_raw(_known_ids({"a"}))
+
+        # Page 1 is entirely known (new_ids_on_page=1, but 0 cards collected)
+        # — pagination must still proceed to page 2 rather than treating the
+        # known-only page as the end of the catalog.
+        assert mock_get.call_count == 2
+        assert [c["external_id"] for c in results] == ["b"]
+
+    @pytest.mark.asyncio
     async def test_detail_fetch_failure_is_swallowed(self):
         card_a = {"external_id": "a", "title": "A", "url": "https://example.test/a"}
         adapter = _StubAdapter(

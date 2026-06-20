@@ -211,6 +211,11 @@ class HtmlListingAdapter(SourceAdapter):
                         continue
                     seen_ids.add(external_id)
                     new_ids_on_page += 1
+                    if external_id in known_ids:
+                        # Forward-only: don't spend the detail cap on
+                        # already-stored events — lets pagination advance
+                        # past them to reach new events on later pages.
+                        continue
                     if not self.passes_filter(card):
                         continue
                     cards.append(card)
@@ -236,12 +241,9 @@ class HtmlListingAdapter(SourceAdapter):
                     )
                     cards = cards[:HTML_LISTING_MAX_DETAIL_FETCHES]
 
-                # Forward-only: skip detail fetches for events already ingested
-                # (their price_hint/description, if missing, won't be reread
-                # since run() discards normalize() output for known external_ids anyway).
+                # known_ids cards never reach here — the collection loop above
+                # already excludes them, so every card here needs a detail fetch.
                 for card in cards:
-                    if card.get("external_id") in known_ids:
-                        continue
                     detail_url = card["url"]
                     try:
                         detail_resp = await http_get(client, detail_url)
@@ -256,8 +258,8 @@ class HtmlListingAdapter(SourceAdapter):
                     detail_soup = BeautifulSoup(detail_resp.text, "html.parser")
                     await self.parse_detail(client, detail_soup, card)
 
-        # Drop already-stored cards before returning — known events must never
-        # become a duplicate raw_events row on a re-run.
+        # cards already excludes known_ids (collection loop above); the filter
+        # here is now a defensive no-op kept for the log line.
         new_cards = [c for c in cards if c.get("external_id") not in known_ids]
         log.info("%s fetched %d events", self.source.slug, len(new_cards))
         return new_cards
