@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import re
 from dataclasses import dataclass
@@ -9,6 +10,7 @@ import httpx
 from bs4 import BeautifulSoup, Tag
 
 from app.constants import (
+    DETAIL_FETCH_CONCURRENCY,
     ESTONIA_CONCERT_HALL_AJAX_ACTION,
     ESTONIA_CONCERT_HALL_AJAX_PATH,
     ESTONIA_CONCERT_HALL_DATE_SELECTOR,
@@ -244,26 +246,58 @@ class HtmlListingAdapter(SourceAdapter):
 
                 # known_ids cards never reach here — the collection loop above
                 # already excludes them, so every card here needs a detail fetch.
-                for card in cards:
-                    detail_url = card["url"]
-                    try:
-                        detail_resp = await http_get(client, detail_url)
-                    except (httpx.HTTPStatusError, httpx.RequestError) as exc:
-                        log.warning(
-                            "%s detail fetch failed url=%s: %s",
-                            self.source.slug,
-                            detail_url,
-                            exc,
-                        )
-                        continue
-                    detail_soup = BeautifulSoup(detail_resp.text, "html.parser")
-                    await self.parse_detail(client, detail_soup, card)
+                semaphore = asyncio.Semaphore(DETAIL_FETCH_CONCURRENCY)
+                results = await asyncio.gather(
+                    *[self._fetch_detail(client, card, semaphore) for card in cards],
+                    return_exceptions=True,
+                )
+                # _fetch_detail only swallows httpx errors internally — anything
+                # else escaping it is an unexpected bug (e.g. in a subclass's
+                # parse_detail). return_exceptions=True keeps one card's crash
+                # from cancelling the others' in-flight fetches, but the bug must
+                # still surface (log + propagate) rather than vanish silently,
+                # per the "never swallow exceptions in fetch_raw()" invariant.
+                unexpected = [r for r in results if isinstance(r, BaseException)]
+                for detail_exc in unexpected:
+                    log.error(
+                        "%s detail fetch task raised unexpectedly: %s",
+                        self.source.slug,
+                        detail_exc,
+                    )
+                if unexpected:
+                    raise unexpected[0]
 
         # cards already excludes known_ids (collection loop above); the filter
         # here is now a defensive no-op kept for the log line.
         new_cards = [c for c in cards if c.get("external_id") not in known_ids]
         log.info("%s fetched %d events", self.source.slug, len(new_cards))
         return new_cards
+
+    async def _fetch_detail(
+        self,
+        client: httpx.AsyncClient,
+        card: dict[str, Any],
+        semaphore: asyncio.Semaphore,
+    ) -> None:
+        """Fetch one card's detail page and let parse_detail enrich it.
+
+        Failures are logged and swallowed — the run degrades to listing-only
+        for that card (same tolerance as the old sequential loop).
+        """
+        detail_url = card["url"]
+        async with semaphore:
+            try:
+                detail_resp = await http_get(client, detail_url)
+            except (httpx.HTTPStatusError, httpx.RequestError) as exc:
+                log.warning(
+                    "%s detail fetch failed url=%s: %s",
+                    self.source.slug,
+                    detail_url,
+                    exc,
+                )
+                return
+            detail_soup = BeautifulSoup(detail_resp.text, "html.parser")
+            await self.parse_detail(client, detail_soup, card)
 
     def normalize(self, raw: dict[str, Any]) -> NormalizedEvent | None:
         title = raw.get("title") or ""
