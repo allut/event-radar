@@ -267,6 +267,7 @@ TIME_MORNING_START = 6
 
 # LLM
 LLM_MAX_PROMPT_CHARS = 1200  # cap on event text passed to classification prompt
+IMPORTANT_INFO_MAX_CHARS = 600  # cap on Piletilevi "important info" text in the prompt
 LLM_MAX_TOKENS = 400  # max completion tokens per LLM call
 LLM_REASONING_MAX_TOKENS = 600  # ceiling (project hard cap); leaves room for reasoning + answer
 LLM_DEDUP_CONFIDENCE_THRESHOLD: float = (
@@ -320,6 +321,7 @@ CURRENCY_CODE_MAX_LEN = 3  # mirrors Event.currency String(3)
 LLM_CLASSIFY_VENUE_FALLBACK = "unknown"
 LLM_CLASSIFY_DESC_FALLBACK = "(no description)"
 LLM_CLASSIFY_PRICE_HINT_FALLBACK = "not stated"
+LLM_CLASSIFY_IMPORTANT_INFO_FALLBACK = "(none)"
 LLM_CLASSIFY_EXPLICIT_DEFAULT = False
 LLM_CLASSIFY_IN_TARGET_CITY_DEFAULT = True
 LLM_CLASSIFY_PROMPT_TEMPLATE = """\
@@ -331,6 +333,7 @@ Allowed vibes (pick 1-3): trendy, casual, intimate, high_energy, educational, in
 Event title: {title}
 Venue: {venue}
 Description: {description}
+Important info: {important_info}
 Price info: {price_hint}
 
 JSON format:
@@ -512,6 +515,10 @@ PILETILEVI_DATE_SELECTOR = ".card__time"
 PILETILEVI_VENUE_SELECTOR = ".card__description"
 PILETILEVI_IMAGE_SELECTOR = "img.card__image"
 PILETILEVI_DETAIL_DESC_SELECTOR = ".event__description"
+# No stable class on the "Important information" h2 (generic Tailwind
+# utilities) — only two h2s exist on the page, so anchoring on heading text
+# is unambiguous. We scrape the /en/ path, so the English heading is stable.
+PILETILEVI_IMPORTANT_INFO_HEADING = "Important information"
 
 KUMU_CARD_SELECTOR = "ul.event-grid__cards > li.event-grid__item"
 KUMU_LINK_SELECTOR = "a.card__link"

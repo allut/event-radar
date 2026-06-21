@@ -56,6 +56,12 @@ class TestIsExplicitText:
     def test_checks_all_provided_parts(self):
         assert is_explicit_text("Friday night", None, "Brothel Bar") is True
 
+    def test_checks_important_info_part(self):
+        # important_info (e.g. Piletilevi's age/content-warning section) must
+        # be scanned the same as title/description/venue — it's where a
+        # detail page's only explicit signal sometimes lives.
+        assert is_explicit_text("Friday night", None, None, "Striptease show") is True
+
     def test_none_parts_are_ignored(self):
         assert is_explicit_text(None, None, None) is False
 

@@ -74,6 +74,7 @@ def serialize_event(event: Event, locale: str = DEFAULT_USER_LOCALE) -> dict:
         "slug": event.slug,
         "title": event.title_orig,
         "description": event.description_orig,
+        "important_info": event.important_info,
         "starts_at": event.starts_at.isoformat(),
         "ends_at": event.ends_at.isoformat() if event.ends_at else None,
         "venue_name": event.venue_name,

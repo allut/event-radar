@@ -12,6 +12,7 @@ export interface EventData {
   slug: string;
   title: string;
   description: string | null;
+  important_info: string | null;
   starts_at: string;
   ends_at: string | null;
   venue_name: string | null;

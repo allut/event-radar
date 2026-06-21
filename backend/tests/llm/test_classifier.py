@@ -4,7 +4,34 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.llm.classifier import _parse_classification, classify_event, classify_pending
+from app.constants import IMPORTANT_INFO_MAX_CHARS
+from app.llm.classifier import (
+    _build_classify_prompt,
+    _parse_classification,
+    classify_event,
+    classify_pending,
+)
+
+
+class TestBuildClassifyPromptImportantInfo:
+    def test_important_info_included_in_prompt(self, make_event):
+        event = make_event()
+        event.important_info = "Age limit: 18+. Language: English."
+        prompt = _build_classify_prompt(event)
+        assert "Important info: Age limit: 18+. Language: English." in prompt
+
+    def test_important_info_truncated_at_max_chars(self, make_event):
+        event = make_event()
+        event.important_info = "x" * (IMPORTANT_INFO_MAX_CHARS + 100)
+        prompt = _build_classify_prompt(event)
+        assert "x" * IMPORTANT_INFO_MAX_CHARS in prompt
+        assert "x" * (IMPORTANT_INFO_MAX_CHARS + 1) not in prompt
+
+    def test_important_info_none_uses_fallback(self, make_event):
+        event = make_event()
+        event.important_info = None
+        prompt = _build_classify_prompt(event)
+        assert "Important info: (none)" in prompt
 
 
 class TestParseClassificationWhyGo:

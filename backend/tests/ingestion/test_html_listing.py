@@ -411,6 +411,20 @@ PILETILEVI_DETAIL_WITH_ARRAY_TYPE_AND_STRING_COORDS_HTML = """
 </body></html>
 """
 
+PILETILEVI_DETAIL_WITH_IMPORTANT_INFO_HTML = """
+<html><body>
+  <div class="event__description">A wonderful jazz evening with local musicians.</div>
+  <div class="white-rounded-block">
+    <h2 class="text-20 font-bold pb-6">Important information</h2>
+    <div class="collapsable-container">Age limit: 18+. Language: English. Duration: 2 hours.</div>
+  </div>
+  <div class="white-rounded-block">
+    <h2 class="text-20 font-bold pb-6">Event location</h2>
+    <div class="collapsable-container">Jazz Club, Tallinn</div>
+  </div>
+</body></html>
+"""
+
 
 def _piletilevi_adapter():
     return PiletileviAdapter(
@@ -578,6 +592,27 @@ class TestPiletileviParseDetail:
         assert "venue_address" not in card
         assert "lat" not in card
         assert "lng" not in card
+
+    @pytest.mark.asyncio
+    async def test_important_info_section_present_is_captured(self):
+        adapter = _piletilevi_adapter()
+        soup = BeautifulSoup(
+            PILETILEVI_DETAIL_WITH_IMPORTANT_INFO_HTML, "html.parser"
+        )
+        card: dict = {}
+        await adapter.parse_detail(MagicMock(), soup, card)
+        assert (
+            card["important_info"]
+            == "Age limit: 18+. Language: English. Duration: 2 hours."
+        )
+
+    @pytest.mark.asyncio
+    async def test_important_info_section_absent_is_none(self):
+        adapter = _piletilevi_adapter()
+        soup = BeautifulSoup(PILETILEVI_DETAIL_HTML, "html.parser")
+        card: dict = {}
+        await adapter.parse_detail(MagicMock(), soup, card)
+        assert card["important_info"] is None
 
 
 # ---------------------------------------------------------------------------

@@ -20,9 +20,11 @@ from app.constants import (
     DEFAULT_USER_LOCALE,
     EVENT_STATUS_CLASSIFIED,
     EVENT_STATUS_DRAFT,
+    IMPORTANT_INFO_MAX_CHARS,
     LLM_CLASSIFY_BATCH_SIZE,
     LLM_CLASSIFY_DESC_FALLBACK,
     LLM_CLASSIFY_EXPLICIT_DEFAULT,
+    LLM_CLASSIFY_IMPORTANT_INFO_FALLBACK,
     LLM_CLASSIFY_IN_TARGET_CITY_DEFAULT,
     LLM_CLASSIFY_LANGUAGE_CODE_MAX_LEN,
     LLM_CLASSIFY_PRICE_HINT_FALLBACK,
@@ -48,10 +50,12 @@ def _build_classify_prompt(event: Event) -> str:
     if len(desc) > LLM_MAX_PROMPT_CHARS:
         desc = desc[:LLM_MAX_PROMPT_CHARS]
     price_hint = (event.price_hint or "").strip()[:PRICE_HINT_MAX_CHARS]
+    important_info = (event.important_info or "").strip()[:IMPORTANT_INFO_MAX_CHARS]
     return LLM_CLASSIFY_PROMPT_TEMPLATE.format(
         title=event.title_orig,
         venue=event.venue_name or LLM_CLASSIFY_VENUE_FALLBACK,
         description=desc or LLM_CLASSIFY_DESC_FALLBACK,
+        important_info=important_info or LLM_CLASSIFY_IMPORTANT_INFO_FALLBACK,
         price_hint=price_hint or LLM_CLASSIFY_PRICE_HINT_FALLBACK,
     )
 

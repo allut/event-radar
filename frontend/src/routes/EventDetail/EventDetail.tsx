@@ -116,6 +116,14 @@ export default function EventDetail() {
             </section>
           )}
 
+          {data.important_info && (
+            <section className={styles.section}>
+              <h2 className={styles.eyebrow}>{t('eyebrow_important_info', locale)}</h2>
+              <hr className={styles.rule} />
+              <p className={styles.description}>{data.important_info}</p>
+            </section>
+          )}
+
           {(data.venue_name || data.venue_address || data.categories.length > 0 || data.vibes.length > 0) && (
             <section className={styles.section}>
               <h2 className={styles.eyebrow}>{t('eyebrow_details', locale)}</h2>

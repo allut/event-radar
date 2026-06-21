@@ -45,6 +45,7 @@ from app.constants import (
     PILETILEVI_DATE_SELECTOR,
     PILETILEVI_DETAIL_DESC_SELECTOR,
     PILETILEVI_IMAGE_SELECTOR,
+    PILETILEVI_IMPORTANT_INFO_HEADING,
     PILETILEVI_MAX_PAGES,
     PILETILEVI_TALLINN_FILTER,
     PILETILEVI_TITLE_SELECTOR,
@@ -283,6 +284,7 @@ class HtmlListingAdapter(SourceAdapter):
             lat=raw.get("lat"),
             lng=raw.get("lng"),
             description=raw.get("description"),
+            important_info=raw.get("important_info"),
             image_url=raw.get("image_url"),
             url=raw.get("url"),
             price_hint=raw.get("price_hint"),
@@ -309,6 +311,30 @@ def _parse_piletilevi_date(date_str: str) -> datetime | None:
         return naive.replace(tzinfo=TALLINN_TZ)
     except (ValueError, IndexError):
         return None
+
+
+def _piletilevi_important_info(soup: BeautifulSoup) -> str | None:
+    """Extract the "Important information" section text, or None if absent.
+
+    The section's <h2> carries no stable class (generic Tailwind utilities),
+    so it's anchored by heading text instead — only two h2s exist on the
+    page ("Important information", "Event location"), so this is unambiguous.
+    """
+    heading = next(
+        (
+            h2
+            for h2 in soup.find_all("h2")
+            if h2.get_text(strip=True) == PILETILEVI_IMPORTANT_INFO_HEADING
+        ),
+        None,
+    )
+    if heading is None:
+        return None
+    block = heading.find_parent("div", class_="white-rounded-block")
+    if block is None:
+        return None
+    text = block.get_text(separator=" ", strip=True)
+    return text.removeprefix(PILETILEVI_IMPORTANT_INFO_HEADING).strip() or None
 
 
 class PiletileviAdapter(HtmlListingAdapter):
@@ -373,6 +399,7 @@ class PiletileviAdapter(HtmlListingAdapter):
         card["description"] = (
             desc_tag.get_text(separator=" ", strip=True) if desc_tag else None
         )
+        card["important_info"] = _piletilevi_important_info(soup)
 
         location = extract_jsonld_event_location(soup)
         if location:

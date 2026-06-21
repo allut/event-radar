@@ -195,6 +195,7 @@ class Event(Base):
     slug: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
     title_orig: Mapped[str] = mapped_column(Text, nullable=False)
     description_orig: Mapped[str | None] = mapped_column(Text, nullable=True)
+    important_info: Mapped[str | None] = mapped_column(Text, nullable=True)
     price_hint: Mapped[str | None] = mapped_column(Text, nullable=True)
     starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     ends_at: Mapped[datetime | None] = mapped_column(

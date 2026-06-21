@@ -60,6 +60,7 @@ def make_event():
         e.slug = f"test-event-{event_id}"
         e.title_orig = "Test Event"
         e.description_orig = "A test event"
+        e.important_info = None
         e.starts_at = datetime(2026, 5, 15, 18, 0, 0, tzinfo=timezone.utc)
         e.ends_at = None
         e.venue_name = "Test Venue"

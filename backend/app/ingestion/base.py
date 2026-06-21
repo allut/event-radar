@@ -297,6 +297,7 @@ class NormalizedEvent:
     title: str
     starts_at: datetime  # must be timezone-aware
     description: str | None = None
+    important_info: str | None = None
     ends_at: datetime | None = None
     venue_name: str | None = None
     venue_address: str | None = None
@@ -594,6 +595,7 @@ class SourceAdapter(ABC):
                             slug=slug,
                             title_orig=normalized.title,
                             description_orig=normalized.description,
+                            important_info=normalized.important_info,
                             starts_at=normalized.starts_at,
                             ends_at=normalized.ends_at,
                             venue_name=normalized.venue_name,
@@ -613,6 +615,7 @@ class SourceAdapter(ABC):
                                 normalized.title,
                                 normalized.description,
                                 normalized.venue_name,
+                                normalized.important_info,
                             ),
                         )
                         db.add(event)
