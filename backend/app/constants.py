@@ -267,7 +267,7 @@ TIME_MORNING_START = 6
 
 # LLM
 LLM_MAX_PROMPT_CHARS = 1200  # cap on event text passed to classification prompt
-IMPORTANT_INFO_MAX_CHARS = 600  # cap on Piletilevi "important info" text in the prompt
+IMPORTANT_INFO_MAX_CHARS = 1200  # cap on Piletilevi "important info" text in the prompt
 LLM_MAX_TOKENS = 400  # max completion tokens per LLM call
 LLM_REASONING_MAX_TOKENS = 600  # ceiling (project hard cap); leaves room for reasoning + answer
 LLM_DEDUP_CONFIDENCE_THRESHOLD: float = (
@@ -343,7 +343,7 @@ Rules:
 - "language" must be the ISO 639-1 code of the event's original language (et, en, ru, or other).
 - "quality" is 0.0-1.0 indicating how compelling the event is.
 - "why_go" must be a dict with keys "en", "et", "ru", each containing exactly 3 short bullets (max 15 words each).
-- "price_min"/"price_max" are numbers in the stated currency; 0 for free/TASUTA/"free"; null if no price is stated.
+- "price_min"/"price_max" are numbers in the stated currency; 0 for free/TASUTA/"free"; null if no price is stated. Read prices from the description and important info too (e.g. "Täispilet 18 €", "Õpilane 12,50 €") — use the cheapest as price_min and the most expensive as price_max.
 - "currency" is the ISO 4217 code of the stated price (default EUR); null if no price is stated.
 - "explicit" is true ONLY for pornographic or sexually explicit events (porn, striptease/strip clubs, fetish, escort, sex shows). Normal nightlife, concerts, bars, and age-restricted shows are NOT explicit.
 - "in_target_city" is false ONLY if the title/venue clearly places the event outside Tallinn, Estonia (another city or country, e.g. Pärnu, Tartu, Boston, London, Vietnam); otherwise true.

@@ -110,11 +110,6 @@ def _next_occurrence_year(month: int, day: int, today: date | None = None) -> in
     return today.year if candidate >= today else today.year + 1
 
 
-def _format_price_range_eur(lo: float, hi: float) -> str:
-    """Format a resolved min/max price pair as "lo EUR" or "lo - hi EUR"."""
-    return f"{lo:.2f} EUR" if lo == hi else f"{lo:.2f} - {hi:.2f} EUR"
-
-
 @dataclass
 class ListingRequest:
     url: str
@@ -303,39 +298,6 @@ class HtmlListingAdapter(SourceAdapter):
 # Piletilevi — https://www.piletilevi.ee/en/tickets/all (paginated Nuxt catalog)
 # ---------------------------------------------------------------------------
 
-# Piletilevi listing/detail pages carry no structured price (no schema.org
-# offers, and the price-bearing store API — /api/v1/store/events/{code}/prices
-# — sits behind Cloudflare Bot Management, unreachable via a plain httpx call
-# and not worth a headless-browser dependency on a free-tier single process).
-# Best-effort fallback: scrape a "<number> €" amount out of the free-text
-# "Important information" block (e.g. "Täispilet 18 €"). Lower coverage than
-# a structured price, and a block mentioning more than one amount (e.g. a
-# service-fee note alongside the ticket price) can produce a misleading
-# range — accepted trade-off given the alternative is no price at all.
-# The two negative lookbehinds keep a thousands-grouped amount (e.g.
-# "1.500 €", "1,500 €", or — since get_text(separator=" ") turns adjacent
-# text nodes into space-joined text — "1 500 €") from silently matching
-# just its last digit group as a wrong, much smaller price. Either form
-# makes the whole amount fail to match (price stays unset) instead of
-# corrupting it: the first lookbehind blocks a digit/dot/comma directly
-# before the match; the second blocks a digit followed by one separator
-# char (dot/comma/space) two positions back.
-_PILETILEVI_PRICE_RE = re.compile(
-    r"(?<![\d.,])(?<!\d[ .,])(\d+(?:[.,]\d{1,2})?)\s*€"
-)
-
-
-def _piletilevi_price_from_text(text: str | None) -> str | None:
-    """Extract a "lo EUR" / "lo - hi EUR" price hint from free text, or None."""
-    if not text:
-        return None
-    matches = _PILETILEVI_PRICE_RE.findall(text)
-    if not matches:
-        return None
-    prices = [float(m.replace(",", ".")) for m in matches]
-    return _format_price_range_eur(min(prices), max(prices))
-
-
 def _parse_piletilevi_date(date_str: str) -> datetime | None:
     """Parse "We 19.08.2026 • 19:00" → timezone-aware datetime."""
     if not date_str or "•" not in date_str:
@@ -433,22 +395,11 @@ class PiletileviAdapter(HtmlListingAdapter):
     async def parse_detail(
         self, client: httpx.AsyncClient, soup: BeautifulSoup, card: dict[str, Any]
     ) -> None:
-        """Fill description/location, and a best-effort price from free text.
-
-        Piletilevi's pages carry no structured price; see the module-level
-        comment above ``_PILETILEVI_PRICE_RE`` for why the store API isn't
-        used. ``price_hint`` is left unset (no-op) when "Important
-        information" carries no "<number> €" amount.
-        """
         desc_tag = soup.select_one(PILETILEVI_DETAIL_DESC_SELECTOR)
         card["description"] = (
             desc_tag.get_text(separator=" ", strip=True) if desc_tag else None
         )
         card["important_info"] = _piletilevi_important_info(soup)
-
-        price_hint = _piletilevi_price_from_text(card["important_info"])
-        if price_hint:
-            card["price_hint"] = price_hint
 
         location = extract_jsonld_event_location(soup)
         if location:
@@ -695,6 +646,7 @@ class EstoniaConcertHallAdapter(HtmlListingAdapter):
         if not min_prices or not max_prices:
             return
 
-        card["price_hint"] = _format_price_range_eur(
-            min(min_prices), max(max_prices)
+        lo, hi = min(min_prices), max(max_prices)
+        card["price_hint"] = (
+            f"{lo:.2f} EUR" if lo == hi else f"{lo:.2f} - {hi:.2f} EUR"
         )
