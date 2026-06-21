@@ -527,6 +527,7 @@ KUMU_HIDDEN_SELECTOR = ".h-visually-hidden"
 KUMU_DATE_SELECTOR = ".card__header-date-text"
 KUMU_IMAGE_SELECTOR = "img.image__img.lazyload"
 KUMU_PRICE_SELECTOR = ".event-header__ticket-price"
+KUMU_DESCRIPTION_SELECTOR = ".single__content-dynamic"
 
 ESTONIA_CONCERT_HALL_ROW_SELECTOR = ".event-list .row"
 ESTONIA_CONCERT_HALL_TITLE_SELECTOR = ".info h2 a"

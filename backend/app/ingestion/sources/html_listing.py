@@ -31,6 +31,7 @@ from app.constants import (
     KUMU_CARD_SELECTOR,
     KUMU_DATE_FORMAT,
     KUMU_DATE_SELECTOR,
+    KUMU_DESCRIPTION_SELECTOR,
     KUMU_HIDDEN_SELECTOR,
     KUMU_IMAGE_SELECTOR,
     KUMU_LINK_SELECTOR,
@@ -508,6 +509,10 @@ class KumuAdapter(HtmlListingAdapter):
     async def parse_detail(
         self, client: httpx.AsyncClient, soup: BeautifulSoup, card: dict[str, Any]
     ) -> None:
+        desc_tag = soup.select_one(KUMU_DESCRIPTION_SELECTOR)
+        if desc_tag:
+            card["description"] = desc_tag.get_text(separator=" ", strip=True)
+
         price_tag = soup.select_one(KUMU_PRICE_SELECTOR)
         if price_tag:
             card["price_hint"] = price_tag.get_text(" ", strip=True)[:PRICE_HINT_MAX_CHARS]

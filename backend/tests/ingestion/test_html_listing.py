@@ -837,6 +837,23 @@ class TestKumuParseDetail:
         await adapter.parse_detail(MagicMock(), soup, card)
         assert "price_hint" not in card
 
+    @pytest.mark.asyncio
+    async def test_description_extracted_from_content_dynamic_selector(self):
+        adapter = _kumu_adapter()
+        html = '<div class="single__content-dynamic text">An exhibition of works.</div>'
+        soup = BeautifulSoup(html, "html.parser")
+        card: dict = {}
+        await adapter.parse_detail(MagicMock(), soup, card)
+        assert card["description"] == "An exhibition of works."
+
+    @pytest.mark.asyncio
+    async def test_no_description_selector_leaves_card_unchanged(self):
+        adapter = _kumu_adapter()
+        soup = BeautifulSoup("<html></html>", "html.parser")
+        card: dict = {}
+        await adapter.parse_detail(MagicMock(), soup, card)
+        assert "description" not in card
+
 
 # ---------------------------------------------------------------------------
 # EstoniaConcertHallAdapter — concert.ee/en/
