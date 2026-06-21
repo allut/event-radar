@@ -830,6 +830,51 @@ class TestKumuParseDetail:
         assert card["price_hint"] == "10 - 15 €"
 
     @pytest.mark.asyncio
+    async def test_price_hint_includes_label_and_tooltip_tiers(self):
+        adapter = _kumu_adapter()
+        html = """
+        <div class="event-header__ticket">
+          <span class="h-uppercase">Adult: Kumu Art Museum</span>
+          <div class="event-header__ticket-price h-no-break">
+            €16
+            <div class="tooltip-wrapper">
+              <ul class="tooltip-list">
+                <li class="tooltip-list__item">
+                  <div class="tooltip-list__item-title">Family: Kumu Art Museum</div>
+                  <div class="tooltip-list__item-value">€32</div>
+                </li>
+                <li class="tooltip-list__item">
+                  <div class="tooltip-list__item-title">Discount: Kumu Art Museum</div>
+                  <div class="tooltip-list__item-value">€11</div>
+                </li>
+                <li class="tooltip-list__item">
+                  <div class="tooltip-list__item-title">Adult ticket with donation: Art Museum of Estonia</div>
+                  <div class="tooltip-list__item-value">€25</div>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+        """
+        soup = BeautifulSoup(html, "html.parser")
+        card: dict = {}
+        await adapter.parse_detail(MagicMock(), soup, card)
+        assert card["price_hint"] == (
+            "Adult: Kumu Art Museum €16, Family: Kumu Art Museum €32, "
+            "Discount: Kumu Art Museum €11, "
+            "Adult ticket with donation: Art Museum of Estonia €25"
+        )
+
+    @pytest.mark.asyncio
+    async def test_price_hint_bare_headline_without_label_span(self):
+        adapter = _kumu_adapter()
+        html = '<div class="event-header__ticket-price">10 - 15 €</div>'
+        soup = BeautifulSoup(html, "html.parser")
+        card: dict = {}
+        await adapter.parse_detail(MagicMock(), soup, card)
+        assert card["price_hint"] == "10 - 15 €"
+
+    @pytest.mark.asyncio
     async def test_no_price_selector_leaves_card_unchanged(self):
         adapter = _kumu_adapter()
         soup = BeautifulSoup("<html></html>", "html.parser")

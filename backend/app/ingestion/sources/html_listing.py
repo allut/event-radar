@@ -37,6 +37,9 @@ from app.constants import (
     KUMU_LINK_SELECTOR,
     KUMU_MAX_PAGES,
     KUMU_PRICE_SELECTOR,
+    KUMU_PRICE_TOOLTIP_ITEM_SELECTOR,
+    KUMU_PRICE_TOOLTIP_TITLE_SELECTOR,
+    KUMU_PRICE_TOOLTIP_VALUE_SELECTOR,
     KUMU_TITLE_SELECTOR,
     KUMU_VENUE_ADDRESS,
     KUMU_VENUE_LAT,
@@ -448,6 +451,33 @@ class PiletileviAdapter(HtmlListingAdapter):
 # ---------------------------------------------------------------------------
 
 
+def kumu_price_hint(price_tag: Tag) -> str:
+    """Readable, comma-separated price hint from KUMU's ticket-price block.
+
+    The headline is the price div's own direct text (e.g. "€16"), prefixed with
+    its preceding label span (e.g. "Adult: Kumu Art Museum"); each tooltip row
+    adds a "{label} {value}" entry (e.g. "Family: Kumu Art Museum €32").
+    Space-joining the whole block fused labels and values ambiguously.
+    """
+    parts: list[str] = []
+    headline = " ".join(
+        s.strip() for s in price_tag.find_all(string=True, recursive=False) if s.strip()
+    )
+    if headline:
+        label_tag = price_tag.find_previous_sibling("span")
+        label = label_tag.get_text(" ", strip=True) if label_tag else ""
+        parts.append(f"{label} {headline}".strip())
+    for item in price_tag.select(KUMU_PRICE_TOOLTIP_ITEM_SELECTOR):
+        title = item.select_one(KUMU_PRICE_TOOLTIP_TITLE_SELECTOR)
+        value = item.select_one(KUMU_PRICE_TOOLTIP_VALUE_SELECTOR)
+        label = title.get_text(" ", strip=True) if title else ""
+        amount = value.get_text(" ", strip=True) if value else ""
+        entry = f"{label} {amount}".strip()
+        if entry:
+            parts.append(entry)
+    return ", ".join(parts) if parts else price_tag.get_text(" ", strip=True)
+
+
 class KumuAdapter(HtmlListingAdapter):
     """kumu.ekm.ee/en/calendar/ — server-rendered, paginated event grid."""
 
@@ -515,7 +545,7 @@ class KumuAdapter(HtmlListingAdapter):
 
         price_tag = soup.select_one(KUMU_PRICE_SELECTOR)
         if price_tag:
-            card["price_hint"] = price_tag.get_text(" ", strip=True)[:PRICE_HINT_MAX_CHARS]
+            card["price_hint"] = kumu_price_hint(price_tag)[:PRICE_HINT_MAX_CHARS]
 
 
 # ---------------------------------------------------------------------------

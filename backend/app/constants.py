@@ -64,7 +64,7 @@ HTTP_RETRYABLE_STATUS_CODES: frozenset[int] = frozenset(
 SLUG_TITLE_MAX_LEN = 60
 SLUG_HASH_HEX_LEN = 8
 INGESTION_ERROR_MAX_LEN = 500
-PRICE_HINT_MAX_CHARS = 200  # cap on Event.price_hint, kept short for the LLM prompt
+PRICE_HINT_MAX_CHARS = 300  # cap on Event.price_hint, kept short for the LLM prompt
 
 # Schemes accepted for ingested event url/image_url — anything else (javascript:,
 # data:, vbscript:, etc.) is dropped at ingest time to prevent stored XSS via
@@ -527,6 +527,9 @@ KUMU_HIDDEN_SELECTOR = ".h-visually-hidden"
 KUMU_DATE_SELECTOR = ".card__header-date-text"
 KUMU_IMAGE_SELECTOR = "img.image__img.lazyload"
 KUMU_PRICE_SELECTOR = ".event-header__ticket-price"
+KUMU_PRICE_TOOLTIP_ITEM_SELECTOR = ".tooltip-list__item"
+KUMU_PRICE_TOOLTIP_TITLE_SELECTOR = ".tooltip-list__item-title"
+KUMU_PRICE_TOOLTIP_VALUE_SELECTOR = ".tooltip-list__item-value"
 KUMU_DESCRIPTION_SELECTOR = ".single__content-dynamic"
 
 ESTONIA_CONCERT_HALL_ROW_SELECTOR = ".event-list .row"
