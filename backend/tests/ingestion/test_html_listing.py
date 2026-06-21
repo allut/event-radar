@@ -26,8 +26,10 @@ from app.ingestion.sources.html_listing import (
     KumuAdapter,
     ListingRequest,
     PiletileviAdapter,
+    _format_price_range_eur,
     _next_occurrence_year,
     _parse_piletilevi_date,
+    _piletilevi_price_from_text,
 )
 
 
@@ -425,6 +427,24 @@ PILETILEVI_DETAIL_WITH_IMPORTANT_INFO_HTML = """
 </body></html>
 """
 
+PILETILEVI_DETAIL_WITH_SINGLE_PRICE_HTML = """
+<html><body>
+  <div class="white-rounded-block">
+    <h2 class="text-20 font-bold pb-6">Important information</h2>
+    <div class="collapsable-container">Täispilet 18 €</div>
+  </div>
+</body></html>
+"""
+
+PILETILEVI_DETAIL_WITH_PRICE_RANGE_HTML = """
+<html><body>
+  <div class="white-rounded-block">
+    <h2 class="text-20 font-bold pb-6">Important information</h2>
+    <div class="collapsable-container">Õpilane, pensionär 12,50 € Täispilet 18 €</div>
+  </div>
+</body></html>
+"""
+
 
 def _piletilevi_adapter():
     return PiletileviAdapter(
@@ -613,6 +633,91 @@ class TestPiletileviParseDetail:
         card: dict = {}
         await adapter.parse_detail(MagicMock(), soup, card)
         assert card["important_info"] is None
+
+    @pytest.mark.asyncio
+    async def test_single_price_in_important_info_sets_price_hint(self):
+        adapter = _piletilevi_adapter()
+        soup = BeautifulSoup(
+            PILETILEVI_DETAIL_WITH_SINGLE_PRICE_HTML, "html.parser"
+        )
+        card: dict = {}
+        await adapter.parse_detail(MagicMock(), soup, card)
+        assert card["price_hint"] == "18.00 EUR"
+
+    @pytest.mark.asyncio
+    async def test_multiple_prices_in_important_info_set_price_range_hint(self):
+        adapter = _piletilevi_adapter()
+        soup = BeautifulSoup(
+            PILETILEVI_DETAIL_WITH_PRICE_RANGE_HTML, "html.parser"
+        )
+        card: dict = {}
+        await adapter.parse_detail(MagicMock(), soup, card)
+        assert card["price_hint"] == "12.50 - 18.00 EUR"
+
+    @pytest.mark.asyncio
+    async def test_no_price_in_important_info_leaves_card_unchanged(self):
+        adapter = _piletilevi_adapter()
+        soup = BeautifulSoup(
+            PILETILEVI_DETAIL_WITH_IMPORTANT_INFO_HTML, "html.parser"
+        )
+        card: dict = {}
+        await adapter.parse_detail(MagicMock(), soup, card)
+        assert "price_hint" not in card
+
+    @pytest.mark.asyncio
+    async def test_no_important_info_leaves_price_hint_unset(self):
+        adapter = _piletilevi_adapter()
+        soup = BeautifulSoup(PILETILEVI_DETAIL_HTML, "html.parser")
+        card: dict = {}
+        await adapter.parse_detail(MagicMock(), soup, card)
+        assert "price_hint" not in card
+
+
+class TestPiletileviPriceFromText:
+    def test_single_amount_returns_single_value(self):
+        assert _piletilevi_price_from_text("Taispilet 18 €") == "18.00 EUR"
+
+    def test_comma_decimal_separator_is_normalized(self):
+        assert _piletilevi_price_from_text("Hind 12,50 €") == "12.50 EUR"
+
+    def test_multiple_amounts_return_min_max_range(self):
+        text = "Opilane 12,50 € Taispilet 18 €"
+        assert _piletilevi_price_from_text(text) == "12.50 - 18.00 EUR"
+
+    def test_no_amount_returns_none(self):
+        assert _piletilevi_price_from_text("Age limit: 18+. Duration: 2 hours.") is None
+
+    def test_none_input_returns_none(self):
+        assert _piletilevi_price_from_text(None) is None
+
+    def test_empty_string_returns_none(self):
+        assert _piletilevi_price_from_text("") is None
+
+    def test_thousands_separated_amount_does_not_truncate_to_a_smaller_price(self):
+        # "1.500 €" must not silently match as "500" (or "1.50") — no
+        # confident parse here is safer than a wrong, much smaller price.
+        assert _piletilevi_price_from_text("Festivalipass 1.500 €") is None
+
+    def test_thousands_separated_amount_does_not_corrupt_a_sibling_price(self):
+        text = "Festivalipass 1.500 € Paevapilet 18 €"
+        assert _piletilevi_price_from_text(text) == "18.00 EUR"
+
+    def test_space_grouped_thousands_amount_does_not_truncate_to_a_smaller_price(self):
+        # get_text(separator=" ") can join "1" and "500" with a literal
+        # space instead of a dot/comma — must not match as "500".
+        assert _piletilevi_price_from_text("Festivalipass 1 500 €") is None
+
+    def test_space_grouped_thousands_amount_does_not_corrupt_a_sibling_price(self):
+        text = "Festivalipass 1 500 € Paevapilet 18 €"
+        assert _piletilevi_price_from_text(text) == "18.00 EUR"
+
+
+class TestFormatPriceRangeEur:
+    def test_equal_min_max_collapses_to_single_value(self):
+        assert _format_price_range_eur(25.0, 25.0) == "25.00 EUR"
+
+    def test_distinct_min_max_formats_as_range(self):
+        assert _format_price_range_eur(10.0, 30.0) == "10.00 - 30.00 EUR"
 
 
 # ---------------------------------------------------------------------------
