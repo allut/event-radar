@@ -486,17 +486,21 @@ ESTONIA_CONCERT_HALL_AJAX_ACTION = "ek_list_display"
 ESTONIA_CONCERT_HALL_MAX_EVENTS = 500  # ek_ajax_count; server returns min(count, total)
 # Piletilevi store price lookup — concert.ee's "Buy ticket" links carry a Piletilevi
 # store event id (pid) that resolves to min/max price via this public embed endpoint.
-# center/key are concert.ee's stable public embed constants (cold, no cookies/session).
+# The endpoint requires a fresh per-session "key", bootstrapped via an express-auth
+# call (yellow_session claim of the returned JWT) before each ingestion run.
 ESTONIA_CONCERT_HALL_PILETILEVI_URL = "https://store.piletilevi.ee/public/"
 ESTONIA_CONCERT_HALL_PILETILEVI_CENTER = "7"
-ESTONIA_CONCERT_HALL_PILETILEVI_KEY = "lfnjlllalfiidklb"
+ESTONIA_CONCERT_HALL_PILETILEVI_SHOP_PROVIDER = "econ"
+ESTONIA_CONCERT_HALL_PILETILEVI_AUTH_URL = (
+    "https://store.piletilevi.ee/web-api/customer/public/auth/express"
+)
+ESTONIA_CONCERT_HALL_PILETILEVI_SESSION_CLAIM = "yellow_session"
 ESTONIA_CONCERT_HALL_PILETILEVI_PARAMS = {
     "center": ESTONIA_CONCERT_HALL_PILETILEVI_CENTER,
     "lang": "eng",
     "application": "ajaxFrontend",
-    "key": ESTONIA_CONCERT_HALL_PILETILEVI_KEY,
     "type": "concertInformation",
-    "shop_provider": "econ",
+    "shop_provider": ESTONIA_CONCERT_HALL_PILETILEVI_SHOP_PROVIDER,
 }
 
 # Fixed-venue address/coords for sources that scrape a single venue's own site —
@@ -539,6 +543,7 @@ ESTONIA_CONCERT_HALL_TIME_SELECTOR = ".event-time"
 ESTONIA_CONCERT_HALL_LOCATION_SELECTOR = ".event-location"
 ESTONIA_CONCERT_HALL_VENUE_SELECTOR = ".event-venue"
 ESTONIA_CONCERT_HALL_IMAGE_SELECTOR = ".image"
+ESTONIA_CONCERT_HALL_DESCRIPTION_SELECTOR = ".main"
 
 
 class VenueInfo(NamedTuple):

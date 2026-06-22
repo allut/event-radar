@@ -206,10 +206,11 @@ async def http_post(
     url: str,
     *,
     data: dict | None = None,
+    json_body: dict | None = None,
     headers: dict | None = None,
 ) -> httpx.Response:
     """Shared HTTP POST with exponential-backoff retry for transient failures."""
-    r = await client.post(url, data=data, headers=headers)
+    r = await client.post(url, data=data, json=json_body, headers=headers)
     r.raise_for_status()
     return r
 

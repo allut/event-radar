@@ -1,4 +1,6 @@
 import asyncio
+import base64
+import json
 import logging
 import re
 from dataclasses import dataclass
@@ -14,10 +16,15 @@ from app.constants import (
     ESTONIA_CONCERT_HALL_AJAX_ACTION,
     ESTONIA_CONCERT_HALL_AJAX_PATH,
     ESTONIA_CONCERT_HALL_DATE_SELECTOR,
+    ESTONIA_CONCERT_HALL_DESCRIPTION_SELECTOR,
     ESTONIA_CONCERT_HALL_IMAGE_SELECTOR,
     ESTONIA_CONCERT_HALL_LOCATION_SELECTOR,
     ESTONIA_CONCERT_HALL_MAX_EVENTS,
+    ESTONIA_CONCERT_HALL_PILETILEVI_AUTH_URL,
+    ESTONIA_CONCERT_HALL_PILETILEVI_CENTER,
     ESTONIA_CONCERT_HALL_PILETILEVI_PARAMS,
+    ESTONIA_CONCERT_HALL_PILETILEVI_SESSION_CLAIM,
+    ESTONIA_CONCERT_HALL_PILETILEVI_SHOP_PROVIDER,
     ESTONIA_CONCERT_HALL_PILETILEVI_URL,
     ESTONIA_CONCERT_HALL_ROW_SELECTOR,
     ESTONIA_CONCERT_HALL_TALLINN_FILTER,
@@ -564,18 +571,80 @@ def _to_float(value: Any) -> float | None:
         return None
 
 
+def _jwt_claim(token: str, claim: str) -> str | None:
+    """Read one claim out of a JWT's payload segment, without verifying its signature.
+
+    The token is a session credential issued by the very call that hands it to
+    us (express-auth) — there's nothing to verify against, we just need the
+    opaque session value it carries.
+    """
+    parts = token.split(".")
+    if len(parts) != 3:
+        return None
+    payload_b64 = parts[1]
+    padded = payload_b64 + "=" * (-len(payload_b64) % 4)
+    try:
+        payload = json.loads(base64.urlsafe_b64decode(padded))
+    except (ValueError, UnicodeDecodeError):
+        return None
+    value = payload.get(claim) if isinstance(payload, dict) else None
+    return value if isinstance(value, str) else None
+
+
 class EstoniaConcertHallAdapter(HtmlListingAdapter):
     """concert.ee/en/ — full programme loaded via the "Load more" AJAX endpoint.
 
     parse_detail() resolves price via a deliberate, hardcoded cross-host POST
     to the Piletilevi ticket store (ESTONIA_CONCERT_HALL_PILETILEVI_URL), so
-    that host is allow-listed alongside concert.ee for the SSRF guard.
+    that host is allow-listed alongside concert.ee for the SSRF guard. The
+    store endpoint requires a fresh per-run session key, bootstrapped once via
+    _piletilevi_session_key() and cached on the adapter instance.
     """
 
     needs_detail = True
     extra_allowed_hosts = frozenset(
         {urlsplit(ESTONIA_CONCERT_HALL_PILETILEVI_URL).hostname}
     )
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self._session_key: str | None = None
+        self._session_failed = False
+        self._session_lock = asyncio.Lock()
+
+    async def _piletilevi_session_key(self, client: httpx.AsyncClient) -> str | None:
+        """Bootstrap (once per run) and cache the Piletilevi store session key.
+
+        Token lifetime is ~15 min, comfortably covering one run's detail
+        fetches. On failure, caches the failure so later cards don't re-attempt.
+        """
+        async with self._session_lock:
+            if self._session_key is not None or self._session_failed:
+                return self._session_key
+            try:
+                resp = await http_post(
+                    client,
+                    ESTONIA_CONCERT_HALL_PILETILEVI_AUTH_URL,
+                    json_body={
+                        "centreId": int(ESTONIA_CONCERT_HALL_PILETILEVI_CENTER),
+                        "shopProviderTag": ESTONIA_CONCERT_HALL_PILETILEVI_SHOP_PROVIDER,
+                    },
+                    headers={"accept": "application/json"},
+                )
+                data = resp.json()
+                token = data.get("accessToken") if isinstance(data, dict) else None
+                session_key = (
+                    _jwt_claim(token, ESTONIA_CONCERT_HALL_PILETILEVI_SESSION_CLAIM)
+                    if isinstance(token, str)
+                    else None
+                )
+            except (httpx.HTTPStatusError, httpx.RequestError, ValueError):
+                session_key = None
+
+            if session_key is None:
+                self._session_failed = True
+            self._session_key = session_key
+            return self._session_key
 
     def listing_request(self, page: int) -> ListingRequest | None:
         if page != 1:
@@ -668,11 +737,18 @@ class EstoniaConcertHallAdapter(HtmlListingAdapter):
     async def parse_detail(
         self, client: httpx.AsyncClient, soup: BeautifulSoup, card: dict[str, Any]
     ) -> None:
-        """Resolve price via the buy-ticket link's Piletilevi store pid, if present.
+        """Fill description from the detail page, then resolve price via the
+        buy-ticket link's Piletilevi store pid, if present.
 
-        No-op (price stays null) when there's no pid (free/sold-out events) or the
-        Piletilevi store lookup fails/returns no sections — never fails the run.
+        Description covers every event regardless of pid. Price stays null
+        when there's no pid (free/sold-out events), the session bootstrap
+        fails, or the Piletilevi store lookup fails/returns no sections —
+        never fails the run.
         """
+        desc_tag = soup.select_one(ESTONIA_CONCERT_HALL_DESCRIPTION_SELECTOR)
+        if desc_tag:
+            card["description"] = desc_tag.get_text(separator=" ", strip=True)
+
         link = soup.find("a", href=_CONCERT_PID_RE)
         if link is None:
             return
@@ -681,7 +757,12 @@ class EstoniaConcertHallAdapter(HtmlListingAdapter):
             return
         pid = match.group(1)
 
-        url = f"{ESTONIA_CONCERT_HALL_PILETILEVI_URL}?{urlencode(ESTONIA_CONCERT_HALL_PILETILEVI_PARAMS)}"
+        session_key = await self._piletilevi_session_key(client)
+        if session_key is None:
+            return
+
+        params = {**ESTONIA_CONCERT_HALL_PILETILEVI_PARAMS, "key": session_key}
+        url = f"{ESTONIA_CONCERT_HALL_PILETILEVI_URL}?{urlencode(params)}"
         try:
             resp = await http_post(client, url, data={"concert": pid})
             data = resp.json()

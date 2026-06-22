@@ -1,4 +1,6 @@
 """Tests for HtmlListingAdapter base + Piletilevi/Kumu/EstoniaConcertHall."""
+import base64
+import json as json_module
 from datetime import date, datetime
 from unittest.mock import MagicMock, patch
 
@@ -1040,7 +1042,8 @@ class TestEstoniaConcertHallFetchRaw:
 
         # 1 listing POST, 1 detail GET for the single Tallinn card that survives
         # the filter. mock_post is not called again since the detail page has
-        # no pid link, so parse_detail short-circuits before the price lookup.
+        # no pid link and no .main content, so parse_detail short-circuits
+        # before the session bootstrap + price lookup.
         assert mock_post.call_count == 1
         _, url = mock_post.call_args.args
         assert url == f"https://concert.ee{ESTONIA_CONCERT_HALL_AJAX_PATH}"
@@ -1049,6 +1052,7 @@ class TestEstoniaConcertHallFetchRaw:
         assert len(raw_items) == 1
         assert raw_items[0]["title"] == "Tallinn Show"
         assert raw_items[0].get("price_hint") is None
+        assert raw_items[0].get("description") is None
 
 
 _CONCERT_HALL_DETAIL_WITH_PID_HTML = """
@@ -1064,7 +1068,38 @@ def _piletilevi_response(payload: dict):
     return resp
 
 
+def _make_jwt(claims: dict) -> str:
+    """Build a JWT-shaped string with a base64url-encoded payload (no real signature)."""
+    payload = base64.urlsafe_b64encode(json_module.dumps(claims).encode()).rstrip(b"=")
+    return f"header.{payload.decode()}.signature"
+
+
+def _auth_response(session_key: str = "testkey"):
+    resp = MagicMock(spec=httpx.Response)
+    resp.json.return_value = {
+        "accessToken": _make_jwt({"yellow_session": session_key})
+    }
+    return resp
+
+
 class TestEstoniaConcertHallParseDetail:
+    @pytest.mark.asyncio
+    async def test_description_extracted_from_main_selector(self):
+        adapter = _concert_hall_adapter()
+        html = '<html><body><div class="main">Performers and programme notes.</div></body></html>'
+        soup = BeautifulSoup(html, "html.parser")
+        card: dict = {}
+        await adapter.parse_detail(MagicMock(), soup, card)
+        assert card["description"] == "Performers and programme notes."
+
+    @pytest.mark.asyncio
+    async def test_no_main_selector_leaves_description_unset(self):
+        adapter = _concert_hall_adapter()
+        soup = BeautifulSoup("<html><body>No content</body></html>", "html.parser")
+        card: dict = {}
+        await adapter.parse_detail(MagicMock(), soup, card)
+        assert "description" not in card
+
     @pytest.mark.asyncio
     async def test_pid_resolves_price_via_piletilevi_store(self):
         adapter = _concert_hall_adapter()
@@ -1081,13 +1116,15 @@ class TestEstoniaConcertHallParseDetail:
             }
         }
         with patch("app.ingestion.sources.html_listing.http_post") as mock_post:
-            mock_post.return_value = _piletilevi_response(payload)
+            mock_post.side_effect = [_auth_response("testkey"), _piletilevi_response(payload)]
             await adapter.parse_detail(MagicMock(), soup, card)
 
         assert card["price_hint"] == "10.00 - 30.00 EUR"
-        _, url = mock_post.call_args.args
-        assert url.startswith(ESTONIA_CONCERT_HALL_PILETILEVI_URL)
-        assert mock_post.call_args.kwargs["data"] == {"concert": "12345"}
+        assert mock_post.call_count == 2
+        _, price_url = mock_post.call_args_list[1].args
+        assert price_url.startswith(ESTONIA_CONCERT_HALL_PILETILEVI_URL)
+        assert "key=testkey" in price_url
+        assert mock_post.call_args_list[1].kwargs["data"] == {"concert": "12345"}
 
     @pytest.mark.asyncio
     async def test_equal_min_max_price_collapses_to_single_value(self):
@@ -1100,7 +1137,7 @@ class TestEstoniaConcertHallParseDetail:
             }
         }
         with patch("app.ingestion.sources.html_listing.http_post") as mock_post:
-            mock_post.return_value = _piletilevi_response(payload)
+            mock_post.side_effect = [_auth_response("testkey"), _piletilevi_response(payload)]
             await adapter.parse_detail(MagicMock(), soup, card)
 
         assert card["price_hint"] == "25.00 EUR"
@@ -1117,7 +1154,7 @@ class TestEstoniaConcertHallParseDetail:
         assert "price_hint" not in card
 
     @pytest.mark.asyncio
-    async def test_piletilevi_request_failure_leaves_card_unchanged(self):
+    async def test_session_bootstrap_failure_leaves_price_unchanged(self):
         adapter = _concert_hall_adapter()
         soup = BeautifulSoup(_CONCERT_HALL_DETAIL_WITH_PID_HTML, "html.parser")
         card: dict = {}
@@ -1125,6 +1162,21 @@ class TestEstoniaConcertHallParseDetail:
             mock_post.side_effect = httpx.HTTPStatusError(
                 "error", request=MagicMock(), response=MagicMock()
             )
+            await adapter.parse_detail(MagicMock(), soup, card)
+
+        assert mock_post.call_count == 1  # only the failed auth call
+        assert "price_hint" not in card
+
+    @pytest.mark.asyncio
+    async def test_piletilevi_request_failure_leaves_card_unchanged(self):
+        adapter = _concert_hall_adapter()
+        soup = BeautifulSoup(_CONCERT_HALL_DETAIL_WITH_PID_HTML, "html.parser")
+        card: dict = {}
+        with patch("app.ingestion.sources.html_listing.http_post") as mock_post:
+            mock_post.side_effect = [
+                _auth_response("testkey"),
+                httpx.HTTPStatusError("error", request=MagicMock(), response=MagicMock()),
+            ]
             await adapter.parse_detail(MagicMock(), soup, card)
 
         assert "price_hint" not in card
@@ -1136,7 +1188,28 @@ class TestEstoniaConcertHallParseDetail:
         card: dict = {}
         payload = {"responseData": {"configuration": {"sections": []}}}
         with patch("app.ingestion.sources.html_listing.http_post") as mock_post:
-            mock_post.return_value = _piletilevi_response(payload)
+            mock_post.side_effect = [_auth_response("testkey"), _piletilevi_response(payload)]
             await adapter.parse_detail(MagicMock(), soup, card)
 
         assert "price_hint" not in card
+
+    @pytest.mark.asyncio
+    async def test_session_key_cached_across_cards(self):
+        adapter = _concert_hall_adapter()
+        soup = BeautifulSoup(_CONCERT_HALL_DETAIL_WITH_PID_HTML, "html.parser")
+        payload = {"responseData": {"configuration": {"sections": [{"minPrice": "5.00", "maxPrice": "5.00"}]}}}
+        with patch("app.ingestion.sources.html_listing.http_post") as mock_post:
+            mock_post.side_effect = [
+                _auth_response("testkey"),
+                _piletilevi_response(payload),
+                _piletilevi_response(payload),
+            ]
+            card1: dict = {}
+            card2: dict = {}
+            await adapter.parse_detail(MagicMock(), soup, card1)
+            await adapter.parse_detail(MagicMock(), soup, card2)
+
+        # 1 auth call total, 2 price calls — session key reused across cards.
+        assert mock_post.call_count == 3
+        assert card1["price_hint"] == "5.00 EUR"
+        assert card2["price_hint"] == "5.00 EUR"
