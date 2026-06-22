@@ -343,7 +343,7 @@ Rules:
 - "language" must be the ISO 639-1 code of the event's original language (et, en, ru, or other).
 - "quality" is 0.0-1.0 indicating how compelling the event is.
 - "why_go" must be a dict with keys "en", "et", "ru", each containing exactly 3 short bullets (max 15 words each).
-- "price_min"/"price_max" are numbers in the stated currency; 0 for free/TASUTA/"free"; null if no price is stated. Read prices from the description and important info too (e.g. "Täispilet 18 €", "Õpilane 12,50 €") — use the cheapest as price_min and the most expensive as price_max.
+- "price_min"/"price_max": scan EVERY price amount appearing in the price info, description, and important info — across ALL ticket tiers regardless of label (adult, family, group, discount, student, senior, donation, etc.). Set price_min to the single SMALLEST amount and price_max to the single LARGEST amount. Never exclude a tier because it is a family/group/donation price. Use 0 for free/TASUTA/"free"; null only if no price is stated at all. Example: "Adult €16, Family €32, Discount €11, Donation €25" → price_min 11, price_max 32. (Also read prices glued into description/important info, e.g. "Täispilet 18 €", "Õpilane 12,50 €".)
 - "currency" is the ISO 4217 code of the stated price (default EUR); null if no price is stated.
 - "explicit" is true ONLY for pornographic or sexually explicit events (porn, striptease/strip clubs, fetish, escort, sex shows). Normal nightlife, concerts, bars, and age-restricted shows are NOT explicit.
 - "in_target_city" is false ONLY if the title/venue clearly places the event outside Tallinn, Estonia (another city or country, e.g. Pärnu, Tartu, Boston, London, Vietnam); otherwise true.
@@ -692,6 +692,15 @@ VENUE_NAME_MAX_LEN = 255
 # Parses a Fienta listing price_from_string: "From 9.50 EUR" / "12 EUR" — a number
 # (int or decimal, "." or "," separator) followed by any 3-letter currency code.
 PRICE_FROM_STRING_RE = r"(?:from\s+)?(\d+(?:[.,]\d+)?)\s*([A-Za-z]{3})"
+
+# Matches a EUR amount in either order: "€16", "16 €", "16€", "EUR 16", "16 EUR".
+# \bEUR\b guards against incidental substrings ("European", "16EURO", "EUR-zone")
+# being mistaken for the currency code. Used to deterministically widen the
+# classifier's [price_min, price_max] envelope against the literal amounts in a
+# multi-tier price_hint.
+CURRENCY_AMOUNT_RE = (
+    r"(?:€|\bEUR\b)\s*(\d+(?:[.,]\d{1,2})?)|(\d+(?:[.,]\d{1,2})?)\s*(?:€|\bEUR\b)"
+)
 
 # CORS — restricted to the methods/headers the SPA actually sends (see
 # frontend/src/api/client.ts and routers/*.py route decorators). Credentials are

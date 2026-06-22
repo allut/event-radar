@@ -38,7 +38,7 @@ from app.constants import (
     VALID_LOCALES,
     VALID_VIBES,
 )
-from app.ingestion.base import normalize_currency
+from app.ingestion.base import eur_price_bounds_from_text, normalize_currency
 from app.llm.router import LLMError, llm_json
 from app.models.models import Event, EventClassification
 
@@ -200,6 +200,34 @@ async def classify_event(
     # not refresh price — acceptable, since ingest prices are deterministic and
     # LLM-set prices rarely change between runs (no provenance flag, no migration).
     if event.price_min is None:
+        # Deterministic net: widen (never shrink) the LLM's envelope to cover any
+        # literal €/EUR amount in price_hint it under-reported (e.g. skipped a
+        # family/group tier). Cannot conflict with prices read from the
+        # description, since those aren't reflected in price_hint. Gated to a
+        # None/EUR currency (case-insensitively — normalize_currency() passes the
+        # LLM's raw string through unchanged, it does not uppercase) so a
+        # correctly-detected non-EUR price (e.g. a foreign-currency event) isn't
+        # polluted by an incidental €/EUR-looking match elsewhere in price_hint.
+        currency_val = parsed["currency"]
+        if currency_val is None or currency_val.upper() == "EUR":
+            hint_min, hint_max = eur_price_bounds_from_text(event.price_hint)
+            if hint_min is not None:
+                parsed["price_min"] = (
+                    hint_min
+                    if parsed["price_min"] is None
+                    else min(parsed["price_min"], hint_min)
+                )
+            if hint_max is not None:
+                parsed["price_max"] = (
+                    hint_max
+                    if parsed["price_max"] is None
+                    else max(parsed["price_max"], hint_max)
+                )
+            if (hint_min is not None or hint_max is not None) and parsed[
+                "currency"
+            ] is None:
+                parsed["currency"] = "EUR"
+
         if parsed["price_min"] is not None:
             event.price_min = parsed["price_min"]
         if parsed["price_max"] is not None:

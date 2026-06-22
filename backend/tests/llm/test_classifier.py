@@ -211,6 +211,96 @@ class TestClassifyEventPrice:
         assert event.price_max is None
         assert event.currency == "EUR"
 
+    @pytest.mark.asyncio
+    async def test_price_hint_net_widens_underreported_max(self, mock_db, make_event):
+        """Regression for event-20/KUMU: LLM under-reports price_max (skips the
+        €32 'Family' tier) but price_hint literally contains it — the
+        deterministic net must widen the envelope to cover it."""
+        event = make_event()
+        event.price_hint = (
+            "Adult: Kumu Art Museum €16, Family: Kumu Art Museum €32, "
+            "Discount: Kumu Art Museum €11, Adult ticket with donation: "
+            "Art Museum of Estonia €25"
+        )
+        raw = {**_BASE_RAW, "price_min": 11, "price_max": 25, "currency": "EUR"}
+        with patch(
+            "app.llm.classifier.llm_json",
+            AsyncMock(return_value=(raw, "groq/llama-3.3-70b-versatile")),
+        ):
+            ok = await classify_event(
+                event, mock_db, existing_classification=event.classification, prefetched=True
+            )
+
+        assert ok is True
+        assert event.price_min == 11.0
+        assert event.price_max == 32.0
+        assert event.currency == "EUR"
+
+    @pytest.mark.asyncio
+    async def test_price_hint_net_does_not_shrink_min_from_description(
+        self, mock_db, make_event
+    ):
+        """The net only widens. An LLM-reported price_min lower than any literal
+        price_hint amount (e.g. read from free-text description) must survive."""
+        event = make_event()
+        event.price_hint = "Adult €16, Family €32"
+        raw = {**_BASE_RAW, "price_min": 5, "price_max": 32, "currency": "EUR"}
+        with patch(
+            "app.llm.classifier.llm_json",
+            AsyncMock(return_value=(raw, "groq/llama-3.3-70b-versatile")),
+        ):
+            ok = await classify_event(
+                event, mock_db, existing_classification=event.classification, prefetched=True
+            )
+
+        assert ok is True
+        assert event.price_min == 5.0
+        assert event.price_max == 32.0
+        assert event.currency == "EUR"
+
+    @pytest.mark.asyncio
+    async def test_price_hint_net_skipped_for_non_eur_currency(self, mock_db, make_event):
+        """A correctly-detected non-EUR price must not be polluted by an
+        incidental €/EUR-looking amount elsewhere in price_hint."""
+        event = make_event()
+        event.price_hint = "Standard ticket 50 USD, donation tier 16 EUR optional"
+        raw = {**_BASE_RAW, "price_min": 50, "price_max": 50, "currency": "USD"}
+        with patch(
+            "app.llm.classifier.llm_json",
+            AsyncMock(return_value=(raw, "groq/llama-3.3-70b-versatile")),
+        ):
+            ok = await classify_event(
+                event, mock_db, existing_classification=event.classification, prefetched=True
+            )
+
+        assert ok is True
+        assert event.price_min == 50.0
+        assert event.price_max == 50.0
+        assert event.currency == "USD"
+
+    @pytest.mark.asyncio
+    async def test_price_hint_net_applies_for_lowercase_eur_currency(
+        self, mock_db, make_event
+    ):
+        """normalize_currency() does not uppercase the LLM's raw string, so the
+        currency gate must compare case-insensitively — a lowercase 'eur' must
+        still trigger the widening net, not silently disable it."""
+        event = make_event()
+        event.price_hint = "Adult: Kumu Art Museum €16, Family: Kumu Art Museum €32"
+        raw = {**_BASE_RAW, "price_min": 16, "price_max": 16, "currency": "eur"}
+        with patch(
+            "app.llm.classifier.llm_json",
+            AsyncMock(return_value=(raw, "groq/llama-3.3-70b-versatile")),
+        ):
+            ok = await classify_event(
+                event, mock_db, existing_classification=event.classification, prefetched=True
+            )
+
+        assert ok is True
+        assert event.price_min == 16.0
+        assert event.price_max == 32.0
+        assert event.currency == "eur"
+
 
 class TestParseClassificationExplicit:
     def test_explicit_true(self):

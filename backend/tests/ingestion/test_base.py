@@ -19,6 +19,7 @@ from app.ingestion.base import (
     address_city,
     coords_in_estonia,
     coords_in_tallinn,
+    eur_price_bounds_from_text,
     extract_jsonld_event_location,
     extract_jsonld_event_offers,
     is_explicit_text,
@@ -146,6 +147,45 @@ class TestParsePriceFromString:
 
     def test_currency_uppercased(self):
         assert parse_price_from_string("12 eur")[2] == "EUR"
+
+
+class TestEurPriceBoundsFromText:
+    def test_multi_tier_string(self):
+        text = (
+            "Adult: Kumu Art Museum €16, Family: Kumu Art Museum €32, "
+            "Discount: Kumu Art Museum €11, Adult ticket with donation: "
+            "Art Museum of Estonia €25"
+        )
+        assert eur_price_bounds_from_text(text) == (11.0, 32.0)
+
+    @pytest.mark.parametrize(
+        "text",
+        ["€16", "16 €", "16€", "EUR 16", "16 EUR"],
+    )
+    def test_both_amount_orders_and_symbols(self, text):
+        assert eur_price_bounds_from_text(text) == (16.0, 16.0)
+
+    def test_european_decimal(self):
+        assert eur_price_bounds_from_text("€12,50") == (12.5, 12.5)
+
+    def test_no_currency_text_returns_none_tuple(self):
+        assert eur_price_bounds_from_text("45 min") == (None, None)
+        assert eur_price_bounds_from_text("1990s") == (None, None)
+
+    @pytest.mark.parametrize(
+        "text",
+        ["16 European tour", "16EURO ticket charge"],
+    )
+    def test_eur_substring_false_positives_ignored(self, text):
+        # "European"/"EURO" must not be mistaken for the EUR currency code
+        # adjacent to an unrelated number.
+        assert eur_price_bounds_from_text(text) == (None, None)
+
+    def test_none_returns_none_tuple(self):
+        assert eur_price_bounds_from_text(None) == (None, None)
+
+    def test_empty_string_returns_none_tuple(self):
+        assert eur_price_bounds_from_text("") == (None, None)
 
 
 def _soup(html: str) -> BeautifulSoup:

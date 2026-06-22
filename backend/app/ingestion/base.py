@@ -28,6 +28,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.constants import (
+    CURRENCY_AMOUNT_RE,
     DEFAULT_CURRENCY,
     ESTONIA_BBOX,
     TALLINN_REGION_BBOX,
@@ -389,6 +390,26 @@ def parse_price_from_string(
     ceiling = None if is_from else amount
     price_min = 0.0 if has_free else amount
     return (price_min, ceiling, currency)
+
+
+_CURRENCY_AMOUNT_RE = re.compile(CURRENCY_AMOUNT_RE, re.IGNORECASE)
+
+
+def eur_price_bounds_from_text(value: str | None) -> tuple[float | None, float | None]:
+    """Return (min, max) of all €/EUR amounts in text, or (None, None) if none found.
+
+    Only matches amounts adjacent to a € symbol or EUR code (so durations, years, and
+    other stray numbers are ignored). Handles European "12,50" and US "12.50" decimals.
+    """
+    if not value:
+        return (None, None)
+    amounts: list[float] = []
+    for m in _CURRENCY_AMOUNT_RE.finditer(value):
+        raw = m.group(1) or m.group(2)
+        amounts.append(float(raw.replace(",", ".")))
+    if not amounts:
+        return (None, None)
+    return (min(amounts), max(amounts))
 
 
 def _coerce_float(value: Any) -> float | None:
