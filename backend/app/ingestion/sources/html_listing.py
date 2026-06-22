@@ -12,6 +12,7 @@ import httpx
 from bs4 import BeautifulSoup, Tag
 
 from app.constants import (
+    DEFAULT_CURRENCY,
     DETAIL_FETCH_CONCURRENCY,
     ESTONIA_CONCERT_HALL_AJAX_ACTION,
     ESTONIA_CONCERT_HALL_AJAX_PATH,
@@ -332,6 +333,9 @@ class HtmlListingAdapter(SourceAdapter):
             important_info=raw.get("important_info"),
             image_url=raw.get("image_url"),
             url=raw.get("url"),
+            price_min=raw.get("price_min"),
+            price_max=raw.get("price_max"),
+            currency=raw.get("currency"),
             price_hint=raw.get("price_hint"),
         )
 
@@ -797,6 +801,6 @@ class EstoniaConcertHallAdapter(HtmlListingAdapter):
             return
 
         lo, hi = min(min_prices), max(max_prices)
-        card["price_hint"] = (
-            f"{lo:.2f} EUR" if lo == hi else f"{lo:.2f} - {hi:.2f} EUR"
-        )
+        card["price_min"] = lo
+        card["price_max"] = hi
+        card["currency"] = DEFAULT_CURRENCY

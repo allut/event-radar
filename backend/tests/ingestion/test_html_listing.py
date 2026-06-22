@@ -356,6 +356,23 @@ class TestBaseNormalize:
         assert result.lat == 59.437
         assert result.lng == 24.745
 
+    def test_price_fields_forwarded(self):
+        adapter = _StubAdapter(_make_source(), pages_cards=[[]])
+        result = adapter.normalize(
+            {
+                "external_id": "x",
+                "title": "X",
+                "price_min": 10.0,
+                "price_max": 30.0,
+                "currency": "EUR",
+            }
+        )
+        assert isinstance(result, NormalizedEvent)
+        assert result.price_min == 10.0
+        assert result.price_max == 30.0
+        assert result.currency == "EUR"
+        assert result.price_hint is None
+
 
 # ---------------------------------------------------------------------------
 # PiletileviAdapter — piletilevi.ee/en/tickets/all (Nuxt SSR markup)
@@ -1119,7 +1136,10 @@ class TestEstoniaConcertHallParseDetail:
             mock_post.side_effect = [_auth_response("testkey"), _piletilevi_response(payload)]
             await adapter.parse_detail(MagicMock(), soup, card)
 
-        assert card["price_hint"] == "10.00 - 30.00 EUR"
+        assert card["price_min"] == 10.00
+        assert card["price_max"] == 30.00
+        assert card["currency"] == "EUR"
+        assert "price_hint" not in card
         assert mock_post.call_count == 2
         _, price_url = mock_post.call_args_list[1].args
         assert price_url.startswith(ESTONIA_CONCERT_HALL_PILETILEVI_URL)
@@ -1140,7 +1160,10 @@ class TestEstoniaConcertHallParseDetail:
             mock_post.side_effect = [_auth_response("testkey"), _piletilevi_response(payload)]
             await adapter.parse_detail(MagicMock(), soup, card)
 
-        assert card["price_hint"] == "25.00 EUR"
+        assert card["price_min"] == 25.00
+        assert card["price_max"] == 25.00
+        assert card["currency"] == "EUR"
+        assert "price_hint" not in card
 
     @pytest.mark.asyncio
     async def test_no_pid_link_leaves_card_unchanged(self):
@@ -1151,6 +1174,7 @@ class TestEstoniaConcertHallParseDetail:
             await adapter.parse_detail(MagicMock(), soup, card)
 
         assert mock_post.call_count == 0
+        assert "price_min" not in card
         assert "price_hint" not in card
 
     @pytest.mark.asyncio
@@ -1165,6 +1189,7 @@ class TestEstoniaConcertHallParseDetail:
             await adapter.parse_detail(MagicMock(), soup, card)
 
         assert mock_post.call_count == 1  # only the failed auth call
+        assert "price_min" not in card
         assert "price_hint" not in card
 
     @pytest.mark.asyncio
@@ -1179,6 +1204,7 @@ class TestEstoniaConcertHallParseDetail:
             ]
             await adapter.parse_detail(MagicMock(), soup, card)
 
+        assert "price_min" not in card
         assert "price_hint" not in card
 
     @pytest.mark.asyncio
@@ -1191,6 +1217,7 @@ class TestEstoniaConcertHallParseDetail:
             mock_post.side_effect = [_auth_response("testkey"), _piletilevi_response(payload)]
             await adapter.parse_detail(MagicMock(), soup, card)
 
+        assert "price_min" not in card
         assert "price_hint" not in card
 
     @pytest.mark.asyncio
@@ -1211,5 +1238,7 @@ class TestEstoniaConcertHallParseDetail:
 
         # 1 auth call total, 2 price calls — session key reused across cards.
         assert mock_post.call_count == 3
-        assert card1["price_hint"] == "5.00 EUR"
-        assert card2["price_hint"] == "5.00 EUR"
+        assert card1["price_min"] == 5.00
+        assert card1["price_max"] == 5.00
+        assert card2["price_min"] == 5.00
+        assert card2["price_max"] == 5.00
