@@ -62,8 +62,18 @@ def _build_classify_prompt(event: Event) -> str:
 
 def _parse_classification(raw: dict[str, Any]) -> dict[str, Any]:
     """Extract and validate LLM output. Unknown taxonomy values are dropped."""
-    cats = [c for c in raw.get("categories", []) if c in VALID_CATEGORIES]
-    vibs = [v for v in raw.get("vibes", []) if v in VALID_VIBES]
+    raw_cats = raw.get("categories", [])
+    raw_vibs = raw.get("vibes", [])
+    cats = (
+        [c for c in raw_cats if isinstance(c, str) and c in VALID_CATEGORIES]
+        if isinstance(raw_cats, list)
+        else []
+    )
+    vibs = (
+        [v for v in raw_vibs if isinstance(v, str) and v in VALID_VIBES]
+        if isinstance(raw_vibs, list)
+        else []
+    )
     raw_why_go = raw.get("why_go", [])
     if isinstance(raw_why_go, dict):
         why_go_localized = {
@@ -158,7 +168,11 @@ async def classify_event(
         log.warning("classify failed for event_id=%d: %s", event.id, exc)
         return False
 
-    parsed = _parse_classification(raw)
+    try:
+        parsed = _parse_classification(raw)
+    except Exception as exc:  # malformed LLM output shape
+        log.warning("classify parse failed for event_id=%d: %s", event.id, exc)
+        return False
 
     if prefetched:
         existing = existing_classification

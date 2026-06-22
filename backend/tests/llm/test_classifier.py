@@ -34,6 +34,38 @@ class TestBuildClassifyPromptImportantInfo:
         assert "Important info: (none)" in prompt
 
 
+class TestParseClassificationMalformedTaxonomy:
+    def test_nested_list_in_categories_dropped(self):
+        raw = {**_BASE_RAW, "categories": [["music"], "theater"]}
+        result = _parse_classification(raw)
+        assert result["categories"] == ["theater"]
+
+    def test_nested_list_in_vibes_dropped(self):
+        raw = {**_BASE_RAW, "vibes": [["intimate"], "niche"]}
+        result = _parse_classification(raw)
+        assert result["vibes"] == ["niche"]
+
+    def test_non_list_categories_returns_empty(self):
+        raw = {**_BASE_RAW, "categories": "music"}
+        result = _parse_classification(raw)
+        assert result["categories"] == []
+
+    def test_categories_none_returns_empty(self):
+        raw = {**_BASE_RAW, "categories": None}
+        result = _parse_classification(raw)
+        assert result["categories"] == []
+
+    def test_non_list_vibes_returns_empty(self):
+        raw = {**_BASE_RAW, "vibes": "intimate"}
+        result = _parse_classification(raw)
+        assert result["vibes"] == []
+
+    def test_vibes_none_returns_empty(self):
+        raw = {**_BASE_RAW, "vibes": None}
+        result = _parse_classification(raw)
+        assert result["vibes"] == []
+
+
 class TestParseClassificationWhyGo:
     def test_dict_format_extracts_all_locales(self):
         raw = {
@@ -486,3 +518,49 @@ class TestClassifyPendingIncludesExplicitRepresentatives:
 
         assert event.status == EVENT_STATUS_CLASSIFIED
         assert event.is_explicit is True
+
+
+class TestClassifyEventMalformedParse:
+    @pytest.mark.asyncio
+    async def test_nested_list_categories_dropped_not_crashed(self, mock_db, make_event):
+        """Layer-1 fix: a 200 response with a nested-list category (groq
+        malformed-shape bug) drops the bad entry and classifies normally —
+        does not raise."""
+        event = make_event()
+        raw = {**_BASE_RAW, "categories": [["music"], "theater"]}
+        with patch(
+            "app.llm.classifier.llm_json",
+            AsyncMock(return_value=(raw, "groq/llama-3.3-70b-versatile")),
+        ):
+            ok = await classify_event(
+                event, mock_db, existing_classification=event.classification, prefetched=True
+            )
+
+        assert ok is True
+        assert event.classification.categories == ["theater"]
+
+    @pytest.mark.asyncio
+    async def test_parse_failure_degrades_to_skipped_event(self, mock_db, make_event):
+        """Layer-2 defense-in-depth: any future malformed shape that still slips
+        past layer 1 and raises inside _parse_classification must degrade to a
+        skipped event (return False), not propagate and abort the batch."""
+        from app.constants import EVENT_STATUS_DRAFT
+
+        event = make_event()
+        event.status = EVENT_STATUS_DRAFT
+        with (
+            patch(
+                "app.llm.classifier.llm_json",
+                AsyncMock(return_value=({}, "groq/llama-3.3-70b-versatile")),
+            ),
+            patch(
+                "app.llm.classifier._parse_classification",
+                side_effect=TypeError("cannot use 'list' as a set element"),
+            ),
+        ):
+            ok = await classify_event(
+                event, mock_db, existing_classification=event.classification, prefetched=True
+            )
+
+        assert ok is False
+        assert event.status == EVENT_STATUS_DRAFT
