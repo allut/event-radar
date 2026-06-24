@@ -7,6 +7,7 @@ import httpx
 import pytest
 
 from app.ingestion.geocode import (
+    _self_heal_out_of_bbox_coords,
     is_suspect_venue_name,
     canonical_venue_name,
     copy_venue_from_siblings,
@@ -148,17 +149,43 @@ class TestGeocodeAddress:
             result = await geocode_address(MagicMock(), "Some Address, Tallinn")
         assert result is None
 
+    @pytest.mark.asyncio
+    async def test_out_of_bbox_match_discarded_and_logged(self, caplog):
+        """A match outside TALLINN_REGION_BBOX (e.g. Kopli village on Saaremaa
+        instead of Tallinn's Kopli district) is treated as no match — Bug A."""
+        with patch("app.ingestion.geocode.http_get") as mock_get:
+            mock_get.return_value = _mock_response([{"lat": "58.51", "lon": "22.71"}])
+            with caplog.at_level(logging.WARNING, logger="app.ingestion.geocode"):
+                result = await geocode_address(MagicMock(), "Kopli, Estonia", original="Kopli")
+        assert result is None
+        assert "out-of-bbox" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_in_bbox_match_still_stored(self):
+        with patch("app.ingestion.geocode.http_get") as mock_get:
+            mock_get.return_value = _mock_response([{"lat": "59.45", "lon": "24.69"}])
+            result = await geocode_address(MagicMock(), "Kopli, Tallinn, Estonia")
+        assert result == (59.45, 24.69)
+
 
 class TestGeocodePending:
     @pytest.mark.asyncio
     async def test_no_pending_events_returns_zero_summary(self, mock_db):
         mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=[]))
+        mock_db.execute.return_value = MagicMock(rowcount=0, all=MagicMock(return_value=[]))
         with patch(
             "app.ingestion.geocode.copy_venue_from_siblings",
             new=AsyncMock(return_value=0),
         ):
             summary = await geocode_pending(mock_db)
-        assert summary == {"pending": 0, "geocoded": 0, "failed": 0, "copied": 0, "extracted": 0}
+        assert summary == {
+            "pending": 0,
+            "geocoded": 0,
+            "failed": 0,
+            "copied": 0,
+            "extracted": 0,
+            "healed": 0,
+        }
 
     @pytest.mark.asyncio
     async def test_geocodes_events_and_reuses_cached_address(self, mock_db, make_event):
@@ -177,7 +204,7 @@ class TestGeocodePending:
         )
         # "Address B" was already geocoded on a different event -> seeds the cache
         mock_db.execute.return_value = MagicMock(
-            all=MagicMock(return_value=[("Address B", 59.1, 24.1)])
+            rowcount=0, all=MagicMock(return_value=[("Address B", 59.43, 24.75)])
         )
 
         with (
@@ -193,9 +220,16 @@ class TestGeocodePending:
         ):
             summary = await geocode_pending(mock_db)
 
-        assert summary == {"pending": 2, "geocoded": 2, "failed": 0, "copied": 0, "extracted": 0}
+        assert summary == {
+            "pending": 2,
+            "geocoded": 2,
+            "failed": 0,
+            "copied": 0,
+            "extracted": 0,
+            "healed": 0,
+        }
         assert (event1.lat, event1.lng) == (59.5, 24.5)
-        assert (event2.lat, event2.lng) == (59.1, 24.1)
+        assert (event2.lat, event2.lng) == (59.43, 24.75)
         mock_geo.assert_called_once()  # only "Address A" needed a Nominatim call
 
     @pytest.mark.asyncio
@@ -219,7 +253,7 @@ class TestGeocodePending:
         mock_db.scalars.return_value = MagicMock(
             all=MagicMock(return_value=[event1, event2, event3])
         )
-        mock_db.execute.return_value = MagicMock(all=MagicMock(return_value=[]))
+        mock_db.execute.return_value = MagicMock(rowcount=0, all=MagicMock(return_value=[]))
 
         with (
             patch(
@@ -234,7 +268,14 @@ class TestGeocodePending:
         ):
             summary = await geocode_pending(mock_db)
 
-        assert summary == {"pending": 3, "geocoded": 3, "failed": 0, "copied": 0, "extracted": 0}
+        assert summary == {
+            "pending": 3,
+            "geocoded": 3,
+            "failed": 0,
+            "copied": 0,
+            "extracted": 0,
+            "healed": 0,
+        }
         mock_geo.assert_called_once()  # normalized key collision → 1 call for 3 events
 
     @pytest.mark.asyncio
@@ -255,6 +296,7 @@ class TestGeocodePending:
         # Donor is a different event (not in `pending`), with a raw address that
         # does NOT string-equal the pending event's raw address.
         mock_db.execute.return_value = MagicMock(
+            rowcount=0,
             all=MagicMock(
                 return_value=[
                     (
@@ -263,7 +305,7 @@ class TestGeocodePending:
                         24.7286398,
                     )
                 ]
-            )
+            ),
         )
 
         with (
@@ -278,7 +320,14 @@ class TestGeocodePending:
         ):
             summary = await geocode_pending(mock_db)
 
-        assert summary == {"pending": 1, "geocoded": 1, "failed": 0, "copied": 0, "extracted": 0}
+        assert summary == {
+            "pending": 1,
+            "geocoded": 1,
+            "failed": 0,
+            "copied": 0,
+            "extracted": 0,
+            "healed": 0,
+        }
         assert (pending_event.lat, pending_event.lng) == (59.4381936, 24.7286398)
         mock_geo.assert_not_called()
 
@@ -292,7 +341,7 @@ class TestGeocodePending:
         event1.lng = None
 
         mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=[event1]))
-        mock_db.execute.return_value = MagicMock(all=MagicMock(return_value=[]))
+        mock_db.execute.return_value = MagicMock(rowcount=0, all=MagicMock(return_value=[]))
 
         with (
             patch(
@@ -306,9 +355,17 @@ class TestGeocodePending:
         ):
             summary = await geocode_pending(mock_db)
 
-        assert summary == {"pending": 1, "geocoded": 0, "failed": 1, "copied": 0, "extracted": 0}
+        assert summary == {
+            "pending": 1,
+            "geocoded": 0,
+            "failed": 1,
+            "copied": 0,
+            "extracted": 0,
+            "healed": 0,
+        }
         assert event1.lat is None
         assert event1.lng is None
+        assert event1.geocode_attempted_at is not None  # stamped on a definitive no-match
 
 
 class TestCopyVenueFromSiblings:
@@ -371,6 +428,25 @@ class TestCopyVenueFromSiblings:
 
         assert copied == 0
         mock_db.execute.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_donor_query_excludes_out_of_area_events(self, mock_db, make_event):
+        """A legitimately out-of-area donor (is_out_of_area=True) is never
+        self-healed, so the donor query itself must exclude it directly — otherwise
+        its coord could propagate onto a fuzzy-matched in-area sibling target."""
+        target = make_event(event_id=1)
+        target.venue_name = "Some Venue"
+        target.venue_address = None
+        target.lat = None
+        target.lng = None
+
+        mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=[target]))
+        mock_db.execute.return_value = MagicMock(all=MagicMock(return_value=[]))
+
+        await copy_venue_from_siblings(mock_db)
+
+        compiled = str(mock_db.execute.call_args.args[0])
+        assert "is_out_of_area" in compiled
 
     @pytest.mark.asyncio
     async def test_target_without_matching_sibling_is_untouched(
@@ -868,6 +944,7 @@ class TestExtractAddressFromVenueName:
     @pytest.mark.asyncio
     async def test_geocode_pending_summary_includes_extracted(self, mock_db):
         mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=[]))
+        mock_db.execute.return_value = MagicMock(rowcount=0, all=MagicMock(return_value=[]))
         with (
             patch("app.ingestion.geocode.extract_address_from_venue_name", new=AsyncMock(return_value=3)),
             patch("app.ingestion.geocode.copy_venue_from_siblings", new=AsyncMock(return_value=1)),
@@ -875,3 +952,106 @@ class TestExtractAddressFromVenueName:
             summary = await geocode_pending(mock_db)
         assert summary["extracted"] == 3
         assert summary["copied"] == 1
+
+    @pytest.mark.asyncio
+    async def test_transient_http_failure_not_stamped_for_retry(self, mock_db, make_event):
+        """Bug B: a transient HTTP error must not start the cooldown — the address
+        should be retried next run, not throttled out for GEOCODE_RETRY_INTERVAL_DAYS."""
+        event1 = make_event(event_id=1)
+        event1.venue_address = "Unreachable Place"
+        event1.lat = None
+        event1.lng = None
+        event1.geocode_attempted_at = None
+
+        mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=[event1]))
+        mock_db.execute.return_value = MagicMock(rowcount=0, all=MagicMock(return_value=[]))
+
+        with (
+            patch(
+                "app.ingestion.geocode.copy_venue_from_siblings",
+                new=AsyncMock(return_value=0),
+            ),
+            patch(
+                "app.ingestion.geocode.geocode_address",
+                new=AsyncMock(side_effect=httpx.RequestError("boom")),
+            ),
+            patch("app.ingestion.geocode.asyncio.sleep", new=AsyncMock()),
+        ):
+            summary = await geocode_pending(mock_db)
+
+        assert summary["failed"] == 1
+        assert event1.geocode_attempted_at is None
+
+    @pytest.mark.asyncio
+    async def test_pending_query_excludes_recently_failed_address(self, mock_db):
+        """The pending select must filter on geocode_attempted_at (cooldown) and the
+        recency ordering must be present — asserts on the compiled SQL since
+        mock_db.scalars doesn't execute a real query."""
+        mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=[]))
+        mock_db.execute.return_value = MagicMock(rowcount=0, all=MagicMock(return_value=[]))
+
+        with patch(
+            "app.ingestion.geocode.copy_venue_from_siblings",
+            new=AsyncMock(return_value=0),
+        ):
+            await geocode_pending(mock_db)
+
+        select_call = mock_db.scalars.call_args
+        compiled = str(select_call.args[0])
+        assert "geocode_attempted_at" in compiled
+
+    @pytest.mark.asyncio
+    async def test_donor_cache_skips_out_of_bbox_address(self, mock_db, make_event):
+        """A stored coord outside TALLINN_REGION_BBOX must not seed the Nominatim
+        cache for a sibling pending address (belt-and-suspenders alongside self-heal)."""
+        event1 = make_event(event_id=1)
+        event1.venue_address = "Kopli 116"
+        event1.lat = None
+        event1.lng = None
+
+        mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=[event1]))
+        # Donor address normalizes identically but its stored coord is the
+        # mis-geocoded Saaremaa village, outside the Tallinn bbox.
+        mock_db.execute.return_value = MagicMock(
+            rowcount=0, all=MagicMock(return_value=[("Kopli 116, Estonia", 58.51, 22.71)])
+        )
+
+        with (
+            patch(
+                "app.ingestion.geocode.copy_venue_from_siblings",
+                new=AsyncMock(return_value=0),
+            ),
+            patch(
+                "app.ingestion.geocode.geocode_address", new=AsyncMock(return_value=None)
+            ) as mock_geo,
+            patch("app.ingestion.geocode.asyncio.sleep", new=AsyncMock()),
+        ):
+            await geocode_pending(mock_db)
+
+        # The bad donor was NOT used as a cache hit — Nominatim was still called.
+        mock_geo.assert_called_once()
+
+
+class TestSelfHealOutOfBboxCoords:
+    @pytest.mark.asyncio
+    async def test_heals_in_area_event_with_out_of_bbox_coords(self, mock_db):
+        mock_db.execute.return_value = MagicMock(rowcount=3)
+        healed = await _self_heal_out_of_bbox_coords(mock_db)
+        assert healed == 3
+        mock_db.execute.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_no_rows_healed_returns_zero(self, mock_db):
+        mock_db.execute.return_value = MagicMock(rowcount=0)
+        healed = await _self_heal_out_of_bbox_coords(mock_db)
+        assert healed == 0
+
+    @pytest.mark.asyncio
+    async def test_statement_excludes_out_of_area_events(self, mock_db):
+        """The WHERE clause must key on is_out_of_area=False so legitimately
+        out-of-area events (Türi/Pärnu) are left untouched."""
+        mock_db.execute.return_value = MagicMock(rowcount=0)
+        await _self_heal_out_of_bbox_coords(mock_db)
+        compiled = str(mock_db.execute.call_args.args[0])
+        assert "is_out_of_area" in compiled
+        assert "lat" in compiled and "lng" in compiled

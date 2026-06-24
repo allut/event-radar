@@ -225,6 +225,9 @@ class Event(Base):
     detail_refetch_count: Mapped[int] = mapped_column(
         Integer, nullable=False, server_default="0", default=0
     )
+    geocode_attempted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     dedup_group_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()

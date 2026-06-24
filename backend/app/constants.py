@@ -596,6 +596,11 @@ NOMINATIM_BASE_URL = "https://nominatim.openstreetmap.org/search"
 NOMINATIM_USER_AGENT = "EventRadarBot/1.0 (+https://eventradar.ee; aleksei.lutkov@gmail.com)"
 GEOCODE_REQUEST_DELAY_SECONDS: float = 1.0
 GEOCODE_MAX_PER_RUN = 200  # ~3.5 min/run at 1 req/s, safely under the 6h cron cadence
+# An address that fails to geocode (no Nominatim match, or a match outside
+# TALLINN_REGION_BBOX) is not re-queried on every run; it is retried after this
+# window, mirroring REFETCH_MIN_INTERVAL_DAYS's cooldown shape. A transient HTTP
+# failure does NOT start this cooldown — only a definitive no-match/bbox-reject does.
+GEOCODE_RETRY_INTERVAL_DAYS = 7
 # Decimal places to round (lat, lng) to when counting *distinct* donor coords in the
 # sibling-copy ambiguity guard. 6 ≈ 0.1 m — collapses sub-meter float-representation
 # differences (e.g. 59.43793509999999 vs 59.4379351) that would otherwise read as two

@@ -4,10 +4,13 @@ import asyncio
 import logging
 import re
 from collections import Counter, defaultdict
+from datetime import datetime, timedelta
+from typing import cast
 
 import httpx
 from rapidfuzz.fuzz import ratio as fuzz_ratio
-from sqlalchemy import or_, select
+from sqlalchemy import or_, select, update
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.constants import (
@@ -19,6 +22,7 @@ from app.constants import (
     GEOCODE_INITIAL_RE,
     GEOCODE_MAX_PER_RUN,
     GEOCODE_REQUEST_DELAY_SECONDS,
+    GEOCODE_RETRY_INTERVAL_DAYS,
     GEOCODE_SECONDARY_UNIT_RE,
     GEOCODE_UNIT_SUFFIX_RE,
     HTTP_TIMEOUT_SECONDS,
@@ -28,6 +32,8 @@ from app.constants import (
     NON_GEOCODABLE_VENUE_NAMES,
     NOMINATIM_BASE_URL,
     NOMINATIM_USER_AGENT,
+    TALLINN_REGION_BBOX,
+    TALLINN_TZ,
     VENUE_EXTRACT_MAX_FRESH_LLM_CALLS_PER_RUN,
     VENUE_NAME_DIRECTION_KEYWORDS,
     VENUE_NAME_PROMPT_MAX_CHARS,
@@ -35,7 +41,7 @@ from app.constants import (
     VENUE_NAME_PARENS_RE,
     VENUE_SIBLING_RATIO_THRESHOLD,
 )
-from app.ingestion.base import http_get
+from app.ingestion.base import coords_in_tallinn, http_get
 from app.llm.router import LLMError, content_hash, llm_available, llm_json
 from app.models.models import Event, LlmCall
 
@@ -109,6 +115,13 @@ async def geocode_address(
 
     ``address`` is the normalized query sent to Nominatim.
     ``original`` is the raw venue_address (used only in the no-match log line).
+
+    A result outside ``TALLINN_REGION_BBOX`` is treated as no match (logged +
+    discarded, not stored) — a bare district/place name can collide with an
+    identically-named place elsewhere in Estonia (e.g. Tallinn's Kopli district
+    vs. a Kopli village on Saaremaa), and the publish gate's own bbox backstop
+    would reject the wrong coord anyway. Leaving the event coords-less instead
+    lets it through the publish gate's coords-less branch.
     """
     response = await http_get(
         client,
@@ -125,9 +138,19 @@ async def geocode_address(
                 original or address,
             )
             return None
-        return float(results[0]["lat"]), float(results[0]["lon"])
+        lat, lng = float(results[0]["lat"]), float(results[0]["lon"])
     except (KeyError, TypeError, ValueError):
         return None
+    if not coords_in_tallinn(lat, lng):
+        log.warning(
+            "geocode out-of-bbox match discarded: query=%r original=%r lat=%s lng=%s",
+            address,
+            original or address,
+            lat,
+            lng,
+        )
+        return None
+    return lat, lng
 
 
 def is_suspect_venue_name(name: str) -> bool:
@@ -327,6 +350,11 @@ async def copy_venue_from_siblings(db: AsyncSession) -> int:
                 Event.venue_address.is_not(None),
                 Event.lat.is_not(None),
                 Event.lng.is_not(None),
+                # A legitimately out-of-area donor (is_out_of_area True) is never
+                # self-healed (that pass only targets in-area mis-geocodes), so it
+                # must be excluded here directly — otherwise its coord can still
+                # propagate onto a fuzzy-matched in-area sibling target.
+                Event.is_out_of_area.is_(False),
             )
             .distinct()
         )
@@ -412,12 +440,44 @@ async def copy_venue_from_siblings(db: AsyncSession) -> int:
     return copied
 
 
+async def _self_heal_out_of_bbox_coords(db: AsyncSession) -> int:
+    """NULL lat/lng (and reset the cooldown) for events mis-geocoded outside Tallinn.
+
+    Targets only rows where ``is_out_of_area`` is False — the event genuinely
+    belongs in the target city, so a stored coord outside ``TALLINN_REGION_BBOX``
+    is a wrong match (e.g. a same-named place elsewhere in Estonia), not a
+    legitimately out-of-area event (those have ``is_out_of_area`` True and never
+    publish anyway, so are left untouched). One bulk UPDATE, no N+1. NULLing
+    re-enters the row into the pending query below within the same run, where
+    ``geocode_address``'s bbox gate now prevents re-storing the same wrong coord.
+    """
+    stmt = (
+        update(Event)
+        .where(
+            Event.is_out_of_area.is_(False),
+            Event.lat.is_not(None),
+            Event.lng.is_not(None),
+            or_(
+                ~Event.lat.between(*TALLINN_REGION_BBOX[0:2]),
+                ~Event.lng.between(*TALLINN_REGION_BBOX[2:4]),
+            ),
+        )
+        .values(lat=None, lng=None, geocode_attempted_at=None)
+    )
+    result = await db.execute(stmt)
+    healed = cast(CursorResult, result).rowcount
+    if healed:
+        log.info("self-healed %d event(s) with out-of-bbox coords", healed)
+    return healed
+
+
 async def geocode_pending(db: AsyncSession) -> dict:
     """Backfill lat/lng for events with a venue_address but no coordinates.
 
-    Two queries total regardless of row count: one for pending events (capped at
-    GEOCODE_MAX_PER_RUN), one to seed a normalized-query→coords cache from **all**
-    geocoded events (not just pending-address matches) — avoids re-hitting
+    The Nominatim pass itself is two queries regardless of row count: one for
+    pending events (capped at GEOCODE_MAX_PER_RUN), one to seed a
+    normalized-query→coords cache from **all** geocoded events (not just
+    pending-address matches) — avoids re-hitting
     Nominatim for venues we already know, including spelling/unit variants of an
     address that some other event already resolved. The cache is keyed by the
     *normalized* query so format variants of one venue (e.g. "60a/9" vs "60a / 9")
@@ -425,25 +485,52 @@ async def geocode_pending(db: AsyncSession) -> dict:
     Remaining distinct addresses are geocoded serially with a delay between calls
     per Nominatim's usage policy (max 1 req/s).
 
+    Before any of that, self-heals events whose stored coord is outside the
+    Tallinn bbox despite being in-area (see _self_heal_out_of_bbox_coords) — done
+    first so a bad donor coord can't propagate to copy_venue_from_siblings or the
+    Nominatim cache below within the same run.
+
     First copies venue data between same-name siblings (copy_venue_from_siblings),
     so copied coords count toward the run; any copied row still missing coords
     falls through to the Nominatim pass below. The sibling copy makes no Nominatim
     calls and sets lat, so copied rows are excluded from the pending query — the
     Nominatim-call ceiling stays GEOCODE_MAX_PER_RUN even though total DB writes
     across both passes (copy + geocode) can reach 2x that on disjoint event sets.
+
+    The pending query also excludes addresses that failed within the last
+    GEOCODE_RETRY_INTERVAL_DAYS (geocode_attempted_at), so a permanently
+    un-resolvable address isn't re-sent to Nominatim every run.
     """
+    healed = await _self_heal_out_of_bbox_coords(db)
     extracted = await extract_address_from_venue_name(db)
     copied = await copy_venue_from_siblings(db)
 
+    now = datetime.now(TALLINN_TZ)
+    due_before = now - timedelta(days=GEOCODE_RETRY_INTERVAL_DAYS)
     pending = (
         await db.scalars(
             select(Event)
-            .where(Event.venue_address.is_not(None), Event.lat.is_(None))
+            .where(
+                Event.venue_address.is_not(None),
+                Event.lat.is_(None),
+                or_(
+                    Event.geocode_attempted_at.is_(None),
+                    Event.geocode_attempted_at < due_before,
+                ),
+            )
+            .order_by(Event.geocode_attempted_at.asc().nulls_first())
             .limit(GEOCODE_MAX_PER_RUN)
         )
     ).all()
     if not pending:
-        return {"pending": 0, "geocoded": 0, "failed": 0, "copied": copied, "extracted": extracted}
+        return {
+            "pending": 0,
+            "geocoded": 0,
+            "failed": 0,
+            "copied": copied,
+            "extracted": extracted,
+            "healed": healed,
+        }
 
     donor_rows = (
         await db.execute(
@@ -454,9 +541,13 @@ async def geocode_pending(db: AsyncSession) -> dict:
     ).all()
     # Group geocoded coords by normalized query so spelling/unit variants of one
     # venue share coords; pick the most-common coord per key (lex tie-break) when a
-    # key spans several near-identical Nominatim results.
+    # key spans several near-identical Nominatim results. Donors outside the
+    # Tallinn bbox are dropped so an already-bad stored coord can't seed the cache
+    # for a sibling address (belt-and-suspenders alongside the self-heal above).
     coords_by_query: dict[str, Counter[tuple[float, float]]] = defaultdict(Counter)
     for address, lat, lng in donor_rows:
+        if not coords_in_tallinn(lat, lng):
+            continue
         coords_by_query[normalize_address_for_geocoding(address)][(lat, lng)] += 1
     cache: dict[str, tuple[float, float] | None] = {
         query: min(counter.most_common(), key=lambda kv: (-kv[1], kv[0]))[0]
@@ -465,6 +556,10 @@ async def geocode_pending(db: AsyncSession) -> dict:
 
     geocoded = 0
     failed = 0
+    # Queries whose Nominatim call this run hit a transient HTTP error — these
+    # must NOT start the cooldown (mirrors refetch.py not bumping its throttle
+    # field on a fetch failure), unlike a definitive no-match/bbox-reject.
+    transient_failure_queries: set[str] = set()
     async with httpx.AsyncClient(timeout=HTTP_TIMEOUT_SECONDS) as client:
         for event in pending:
             raw_address = event.venue_address
@@ -477,13 +572,17 @@ async def geocode_pending(db: AsyncSession) -> dict:
                 except (httpx.HTTPStatusError, httpx.RequestError) as exc:
                     log.warning("geocode failed address=%s: %s", raw_address, exc)
                     cache[query] = None
+                    transient_failure_queries.add(query)
                 await asyncio.sleep(GEOCODE_REQUEST_DELAY_SECONDS)
 
             coords = cache[query]
             if coords is None:
                 failed += 1
+                if query not in transient_failure_queries:
+                    event.geocode_attempted_at = now
                 continue
             event.lat, event.lng = coords
+            event.geocode_attempted_at = now
             geocoded += 1
 
     return {
@@ -492,4 +591,5 @@ async def geocode_pending(db: AsyncSession) -> dict:
         "failed": failed,
         "copied": copied,
         "extracted": extracted,
+        "healed": healed,
     }
