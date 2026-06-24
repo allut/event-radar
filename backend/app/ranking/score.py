@@ -335,6 +335,42 @@ def _mmr_pick(
     return picked
 
 
+def _greedy_fill(
+    picked: list[Event],
+    picked_ids: set[int],
+    pool: list[tuple[float, Event]],
+    n: int,
+) -> None:
+    """Append highest-scored events from pool not already in picked_ids, until len(picked) == n."""
+    for _, event in sorted(pool, key=lambda x: x[0], reverse=True):
+        if len(picked) >= n:
+            break
+        if event.id in picked_ids:
+            continue
+        picked.append(event)
+        picked_ids.add(event.id)
+
+
+def _select_with_backfill(
+    scored: list[tuple[float, Event]],
+    cooled_scored: list[tuple[float, Event]],
+    n: int,
+    max_per_category: int,
+) -> list[Event]:
+    """
+    Capped MMR, then backfill to n by relaxing the category cap, then the
+    series cooldown. Dislikes are already excluded upstream and never re-enter.
+    """
+    picked = _mmr_pick(scored, n, max_per_category)
+    if len(picked) >= n:
+        return picked
+    picked_ids = {e.id for e in picked}
+    _greedy_fill(picked, picked_ids, scored, n)
+    if len(picked) < n:
+        _greedy_fill(picked, picked_ids, cooled_scored, n)
+    return picked
+
+
 # ---------------------------------------------------------------------------
 # Daily feed builder (async, touches DB)
 # ---------------------------------------------------------------------------
@@ -488,14 +524,10 @@ async def build_daily_feeds(db: AsyncSession) -> dict:
 
         recent_series = recent_series_by_user.get(user.id, set())
 
-        scored: list[tuple[float, Event]] = []
-        for event in event_rows:
-            # Series cooldown: skip a candidate whose recurring series this user
-            # was already shown within the cooldown window (hard skip, like an
-            # exclude). Only affects which events enter this user's MMR pool —
-            # never touches score_cache / UserEventScore or any other user.
-            if candidate_series_key[event.id] in recent_series:
-                continue
+        def _score_or_reuse(event: Event) -> float | None:
+            """Cache lookup with a dislike re-check, else fresh score_event + cache write.
+            Returns None when hard-excluded (dedup-group dislike, or cached-and-disliked)."""
+            nonlocal scores_reused
             cached = score_cache.get((user.id, event.id))
             if cached is not None:
                 # Re-check dislike independently of cache freshness: covers
@@ -506,15 +538,13 @@ async def build_daily_feeds(db: AsyncSession) -> dict:
                     event.dedup_group_id is not None
                     and event.dedup_group_id in ctx.disliked_groups
                 ):
-                    continue
-                scored.append((cached, event))
+                    return None
                 scores_reused += 1
-                continue
+                return cached
 
             s = score_event(user_persona_weights, ctx, event, now)
             if s is None:
-                continue
-            scored.append((s, event))
+                return None
             new_score_rows.append(
                 {
                     "user_id": user.id,
@@ -523,9 +553,32 @@ async def build_daily_feeds(db: AsyncSession) -> dict:
                     "computed_at": now,
                 }
             )
+            return s
 
-        top_events = _mmr_pick(
-            scored, n=DAILY_5_COUNT, max_per_category=DAILY_5_MAX_PER_CATEGORY
+        scored: list[tuple[float, Event]] = []
+        cooled_scored: list[tuple[float, Event]] = []
+        for event in event_rows:
+            # Series cooldown: route a candidate whose recurring series this
+            # user was already shown within the cooldown window into the
+            # backfill-only pool instead of the normal pool. Still scored and
+            # cached like any other candidate; only consumed by
+            # _select_with_backfill if the fresh pool can't reach n.
+            if candidate_series_key[event.id] in recent_series:
+                s = _score_or_reuse(event)
+                if s is not None:
+                    cooled_scored.append((s, event))
+                continue
+
+            s = _score_or_reuse(event)
+            if s is None:
+                continue
+            scored.append((s, event))
+
+        top_events = _select_with_backfill(
+            scored,
+            cooled_scored,
+            n=DAILY_5_COUNT,
+            max_per_category=DAILY_5_MAX_PER_CATEGORY,
         )
         event_ids = [e.id for e in top_events]
 

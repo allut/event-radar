@@ -10,6 +10,7 @@ from app.ranking.score import (
     _FeedbackRow,
     _affinity_for_vector,
     _mmr_pick,
+    _select_with_backfill,
     _time_slots_for_event,
     feedback_signal,
     locality_bonus,
@@ -413,6 +414,67 @@ class TestMmrPick:
         assert len(picked) == 2
 
 
+class TestSelectWithBackfill:
+    def _make_event(self, eid: int, categories: list[str], score: float):
+        e = _event(event_id=eid, categories=categories)
+        return (score, e)
+
+    def test_cap_excluded_backfill_when_cooldown_empty(self):
+        # 6 same-category events, cap=2 → tier 1 picks 2; tier 2 backfills the
+        # next 3 highest-scored cap-excluded events to reach n=5.
+        scored = [self._make_event(i, ["music"], 0.9 - i * 0.1) for i in range(6)]
+        picked = _select_with_backfill(scored, [], n=5, max_per_category=2)
+        assert [e.id for e in picked] == [0, 1, 2, 3, 4]
+
+    def test_cap_excluded_preferred_over_higher_scored_cooled(self):
+        # 3rd music event is cap-excluded by tier 1 but still outranks the
+        # cooled candidate for backfill purposes, even though the cooled
+        # candidate has a higher raw score.
+        scored = [
+            self._make_event(1, ["music"], 0.9),
+            self._make_event(2, ["music"], 0.8),
+            self._make_event(3, ["music"], 0.7),
+        ]
+        cooled = [self._make_event(4, ["theater"], 0.99)]
+        picked = _select_with_backfill(scored, cooled, n=3, max_per_category=2)
+        assert [e.id for e in picked] == [1, 2, 3]
+
+    def test_cooled_backfill_used_when_cap_excluded_exhausted(self):
+        # No cap-excluded events available (distinct categories) — cooled pool
+        # is the only source left to reach n.
+        scored = [
+            self._make_event(1, ["music"], 0.9),
+            self._make_event(2, ["theater"], 0.8),
+        ]
+        cooled = [
+            self._make_event(3, ["cinema"], 0.95),
+            self._make_event(4, ["sports"], 0.5),
+        ]
+        picked = _select_with_backfill(scored, cooled, n=4, max_per_category=2)
+        assert [e.id for e in picked] == [1, 2, 3, 4]
+
+    def test_no_duplicates_across_tiers(self):
+        # Same event present in both pools (defensive) must not be picked twice.
+        e = self._make_event(1, ["music"], 0.9)
+        picked = _select_with_backfill([e], [e], n=3, max_per_category=2)
+        assert [x.id for x in picked] == [1]
+
+    def test_insufficient_candidates_returns_fewer_than_n(self):
+        # Genuinely <5 total candidates across both pools → no fabrication.
+        scored = [self._make_event(1, ["music"], 0.9)]
+        cooled = [self._make_event(2, ["theater"], 0.5)]
+        picked = _select_with_backfill(scored, cooled, n=5, max_per_category=2)
+        assert [e.id for e in picked] == [1, 2]
+
+    def test_tier1_full_skips_backfill(self):
+        cats = ["music", "theater", "cinema", "sports", "workshops"]
+        scored = [self._make_event(i, [cats[i]], 0.9 - i * 0.05) for i in range(5)]
+        cooled = [self._make_event(99, ["music"], 0.99)]
+        picked = _select_with_backfill(scored, cooled, n=5, max_per_category=2)
+        assert len(picked) == 5
+        assert all(e.id != 99 for e in picked)
+
+
 class TestBuildDailyFeedsExplicitFilter:
     async def test_event_query_excludes_explicit_events(self, mock_db):
         from app.ranking.score import build_daily_feeds
@@ -436,8 +498,8 @@ def _scalar_result(items: list) -> MagicMock:
     return r
 
 
-def _feed_event(eid: int, title: str, venue: str) -> Event:
-    e = _event(event_id=eid)
+def _feed_event(eid: int, title: str, venue: str, categories: list[str] | None = None) -> Event:
+    e = _event(event_id=eid, categories=categories)
     e.title_orig = title
     e.venue_name = venue
     return e
@@ -449,22 +511,40 @@ def _user(uid: int) -> MagicMock:
     return u
 
 
+def _dislike_row(event_id: int, user_id: int = 1) -> MagicMock:
+    row = MagicMock()
+    row.user_id = user_id
+    row.event_id = event_id
+    row.signal = "dislike"
+    row.created_at = _now()
+    row.event = MagicMock()
+    row.event.dedup_group_id = None
+    row.event.classification = None
+    return row
+
+
 class TestBuildDailyFeedsSeriesCooldown:
     async def test_recent_series_excluded_from_pool(self, mock_db):
         # User 1 was shown event 150 (series "van gogh"/"vaba lava") within the
         # cooldown window. Today's candidate 100 shares that series key, so it is
-        # skipped; candidate 200 (a different series) is kept.
+        # skipped; candidate 200 (a different series) is kept. Fresh filler
+        # candidates (distinct categories) fill the pool to 5 on their own, so
+        # backfill never kicks in — this isolates pure cooldown exclusion.
         from app.ranking.score import build_daily_feeds
 
         ev100 = _feed_event(100, "Van Gogh", "Vaba Lava")
-        ev200 = _feed_event(200, "Concert X", "Hall")
+        ev200 = _feed_event(200, "Concert X", "Hall", ["music"])
+        ev201 = _feed_event(201, "Play", "Theater", ["theater"])
+        ev202 = _feed_event(202, "Film", "Cinema", ["cinema"])
+        ev203 = _feed_event(203, "Match", "Stadium", ["sports"])
+        ev204 = _feed_event(204, "Workshop", "Studio", ["workshops"])
         ev150 = _feed_event(150, "Van Gogh", "Vaba Lava")  # yesterday's instance
         df = MagicMock()
         df.user_id = 1
         df.event_ids = [150]
 
         mock_db.scalars.side_effect = [
-            _scalar_result([ev100, ev200]),   # candidate events
+            _scalar_result([ev100, ev200, ev201, ev202, ev203, ev204]),  # candidate events
             _scalar_result([_user(1)]),        # users
             _scalar_result([]),                # personas
             _scalar_result([]),                # feedback
@@ -478,7 +558,7 @@ class TestBuildDailyFeedsSeriesCooldown:
 
         added = mock_db.add.call_args.args[0]
         assert added.user_id == 1
-        assert added.event_ids == [200]  # 100 cooled down, 200 kept
+        assert added.event_ids == [200, 201, 202, 203, 204]  # 100 cooled down, never backfilled
 
     async def test_no_recent_history_keeps_series(self, mock_db):
         # Empty cooldown window (e.g. the series last appeared outside it) → the
@@ -504,16 +584,24 @@ class TestBuildDailyFeedsSeriesCooldown:
 
     async def test_other_users_history_does_not_affect_this_user(self, mock_db):
         # Only user 2 was shown the series; user 1's feed must still include it.
+        # 5 fresh filler candidates (distinct categories) ensure each user's
+        # own fresh pool can fill 5 without backfill — isolating per-user
+        # cooldown exclusion from the backfill mechanism.
         from app.ranking.score import build_daily_feeds
 
         ev100 = _feed_event(100, "Van Gogh", "Vaba Lava")
+        ev201 = _feed_event(201, "Play", "Theater", ["theater"])
+        ev202 = _feed_event(202, "Film", "Cinema", ["cinema"])
+        ev203 = _feed_event(203, "Match", "Stadium", ["sports"])
+        ev204 = _feed_event(204, "Workshop", "Studio", ["workshops"])
+        ev205 = _feed_event(205, "Gig", "Club", ["nightlife"])
         ev150 = _feed_event(150, "Van Gogh", "Vaba Lava")
         df = MagicMock()
         df.user_id = 2  # belongs to a different user
         df.event_ids = [150]
 
         mock_db.scalars.side_effect = [
-            _scalar_result([ev100]),                 # candidate events
+            _scalar_result([ev100, ev201, ev202, ev203, ev204, ev205]),  # candidate events
             _scalar_result([_user(1), _user(2)]),    # users
             _scalar_result([]),                      # personas
             _scalar_result([]),                      # feedback
@@ -529,8 +617,10 @@ class TestBuildDailyFeedsSeriesCooldown:
             call.args[0].user_id: call.args[0].event_ids
             for call in mock_db.add.call_args_list
         }
-        assert feeds_by_user[1] == [100]  # user 1 unaffected by user 2's history
-        assert feeds_by_user[2] == []     # user 2 cooled down
+        # user 1 unaffected by user 2's history — keeps 100 among its top 5
+        assert feeds_by_user[1] == [100, 201, 202, 203, 204]
+        # user 2 cooled down on 100, but its own fresh pool fills 5 → no backfill needed
+        assert feeds_by_user[2] == [201, 202, 203, 204, 205]
 
     async def test_cooldown_query_restricts_to_recent_date_window(self, mock_db):
         # The cooldown feed query (6th scalars call) must bound feed_date to
@@ -554,3 +644,104 @@ class TestBuildDailyFeedsSeriesCooldown:
         compiled = str(cooldown_stmt.compile(compile_kwargs={"literal_binds": True}))
         assert "daily_feeds.feed_date >=" in compiled
         assert "daily_feeds.feed_date <" in compiled
+
+    async def test_cooled_series_backfilled_when_fresh_pool_short(self, mock_db):
+        # 4 fresh candidates (distinct categories, no cap collision) can't reach
+        # DAILY_5_COUNT=5 on their own. The 5th candidate shares a series with
+        # yesterday's feed (cooldown) but gets backfilled in to complete the 5.
+        from app.ranking.score import build_daily_feeds
+
+        ev1 = _feed_event(1, "Concert", "Hall", ["music"])
+        ev2 = _feed_event(2, "Play", "Theater", ["theater"])
+        ev3 = _feed_event(3, "Film", "Cinema", ["cinema"])
+        ev4 = _feed_event(4, "Match", "Stadium", ["sports"])
+        ev5 = _feed_event(5, "Workshop", "Studio", ["workshops"])
+        ev150 = _feed_event(150, "Workshop", "Studio", ["workshops"])  # yesterday's instance
+        df = MagicMock()
+        df.user_id = 1
+        df.event_ids = [150]
+
+        mock_db.scalars.side_effect = [
+            _scalar_result([ev1, ev2, ev3, ev4, ev5]),  # candidate events
+            _scalar_result([_user(1)]),                 # users
+            _scalar_result([]),                          # personas
+            _scalar_result([]),                          # feedback
+            _scalar_result([]),                          # today's daily feeds
+            _scalar_result([df]),                        # cooldown-window feeds
+            _scalar_result([ev150]),                      # shown events resolved
+            _scalar_result([]),                          # cached scores
+        ]
+
+        await build_daily_feeds(mock_db)
+
+        added = mock_db.add.call_args.args[0]
+        assert added.event_ids == [1, 2, 3, 4, 5]  # ev5 backfilled in despite cooldown
+
+    async def test_disliked_cooled_event_not_backfilled(self, mock_db):
+        # Same shortfall as above, but the cooled candidate is directly
+        # disliked and was previously cached — the cache+dislike guard must
+        # exclude it from the backfill pool entirely (no fabrication).
+        from app.ranking.score import build_daily_feeds
+
+        ev1 = _feed_event(1, "Concert", "Hall", ["music"])
+        ev2 = _feed_event(2, "Play", "Theater", ["theater"])
+        ev3 = _feed_event(3, "Film", "Cinema", ["cinema"])
+        ev5 = _feed_event(5, "Workshop", "Studio", ["workshops"])
+        ev150 = _feed_event(150, "Workshop", "Studio", ["workshops"])
+        df = MagicMock()
+        df.user_id = 1
+        df.event_ids = [150]
+
+        cached_row = MagicMock()
+        cached_row.user_id = 1
+        cached_row.event_id = 5
+        cached_row.score = 0.9
+
+        mock_db.scalars.side_effect = [
+            _scalar_result([ev1, ev2, ev3, ev5]),   # candidate events
+            _scalar_result([_user(1)]),              # users
+            _scalar_result([]),                       # personas
+            _scalar_result([_dislike_row(5)]),         # feedback: direct dislike of ev5
+            _scalar_result([]),                       # today's daily feeds
+            _scalar_result([df]),                     # cooldown-window feeds
+            _scalar_result([ev150]),                   # shown events resolved
+            _scalar_result([cached_row]),              # cached scores (ev5 cached)
+        ]
+
+        await build_daily_feeds(mock_db)
+
+        added = mock_db.add.call_args.args[0]
+        assert added.event_ids == [1, 2, 3]  # ev5 excluded, feed stays short — no fabrication
+
+    async def test_backfilled_cooled_event_persisted_to_score_cache(self, mock_db):
+        # The cooled event that gets backfilled in must still be written to
+        # user_event_scores like any other freshly-scored candidate.
+        from app.ranking.score import build_daily_feeds
+
+        ev1 = _feed_event(1, "Concert", "Hall", ["music"])
+        ev2 = _feed_event(2, "Play", "Theater", ["theater"])
+        ev3 = _feed_event(3, "Film", "Cinema", ["cinema"])
+        ev4 = _feed_event(4, "Match", "Stadium", ["sports"])
+        ev5 = _feed_event(5, "Workshop", "Studio", ["workshops"])
+        ev150 = _feed_event(150, "Workshop", "Studio", ["workshops"])
+        df = MagicMock()
+        df.user_id = 1
+        df.event_ids = [150]
+
+        mock_db.scalars.side_effect = [
+            _scalar_result([ev1, ev2, ev3, ev4, ev5]),
+            _scalar_result([_user(1)]),
+            _scalar_result([]),
+            _scalar_result([]),
+            _scalar_result([]),
+            _scalar_result([df]),
+            _scalar_result([ev150]),
+            _scalar_result([]),
+        ]
+
+        await build_daily_feeds(mock_db)
+
+        execute_stmt = mock_db.execute.call_args.args[0]
+        compiled = str(execute_stmt.compile(compile_kwargs={"literal_binds": True}))
+        assert "user_event_scores" in compiled
+        assert "(1, 5," in compiled  # backfilled cooled event (user_id=1, event_id=5) was upserted
