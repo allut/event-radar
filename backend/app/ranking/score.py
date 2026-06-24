@@ -22,6 +22,7 @@ from sqlalchemy.orm import selectinload
 
 from app.constants import (
     DAILY5_SERIES_COOLDOWN_DAYS,
+    DAILY_5_BACKFILL_MAX_PER_CATEGORY,
     DAILY_5_COUNT,
     DAILY_5_LOOKAHEAD_DAYS,
     DAILY_5_MAX_PER_CATEGORY,
@@ -338,17 +339,31 @@ def _mmr_pick(
 def _greedy_fill(
     picked: list[Event],
     picked_ids: set[int],
+    category_counts: dict[str, int],
     pool: list[tuple[float, Event]],
     n: int,
+    max_per_category: int | None,
 ) -> None:
-    """Append highest-scored events from pool not already in picked_ids, until len(picked) == n."""
+    """Append highest-scored events from pool (not already picked) until len(picked) == n.
+    When max_per_category is not None, skip an event whose category already hit the cap
+    (events with no categories bypass it, matching _mmr_pick)."""
     for _, event in sorted(pool, key=lambda x: x[0], reverse=True):
         if len(picked) >= n:
             break
         if event.id in picked_ids:
             continue
+        cl = event.classification
+        cats: list[str] = cl.categories if cl else []
+        if (
+            max_per_category is not None
+            and cats
+            and any(category_counts.get(c, 0) >= max_per_category for c in cats)
+        ):
+            continue
         picked.append(event)
         picked_ids.add(event.id)
+        for c in cats:
+            category_counts[c] = category_counts.get(c, 0) + 1
 
 
 def _select_with_backfill(
@@ -356,18 +371,40 @@ def _select_with_backfill(
     cooled_scored: list[tuple[float, Event]],
     n: int,
     max_per_category: int,
+    backfill_max_per_category: int,
 ) -> list[Event]:
     """
-    Capped MMR, then backfill to n by relaxing the category cap, then the
-    series cooldown. Dislikes are already excluded upstream and never re-enter.
+    Capped MMR (tier 1), then backfill to n: relaxed-cap fresh, relaxed-cap
+    cooled, then uncapped fresh/cooled as a last resort. Diversity is preferred
+    over freshness in the relaxed tiers; the uncapped sweep guarantees reaching n
+    when scarce. Dislikes are excluded upstream and never re-enter.
     """
     picked = _mmr_pick(scored, n, max_per_category)
     if len(picked) >= n:
         return picked
     picked_ids = {e.id for e in picked}
-    _greedy_fill(picked, picked_ids, scored, n)
+    category_counts: dict[str, int] = {}
+    for e in picked:
+        for c in e.classification.categories if e.classification else []:
+            category_counts[c] = category_counts.get(c, 0) + 1
+    # relaxed-cap tiers (diversity preserved)
+    _greedy_fill(
+        picked, picked_ids, category_counts, scored, n, backfill_max_per_category
+    )
     if len(picked) < n:
-        _greedy_fill(picked, picked_ids, cooled_scored, n)
+        _greedy_fill(
+            picked,
+            picked_ids,
+            category_counts,
+            cooled_scored,
+            n,
+            backfill_max_per_category,
+        )
+    # uncapped last resort (guarantee n when relaxed cap left it short)
+    if len(picked) < n:
+        _greedy_fill(picked, picked_ids, category_counts, scored, n, None)
+    if len(picked) < n:
+        _greedy_fill(picked, picked_ids, category_counts, cooled_scored, n, None)
     return picked
 
 
@@ -579,6 +616,7 @@ async def build_daily_feeds(db: AsyncSession) -> dict:
             cooled_scored,
             n=DAILY_5_COUNT,
             max_per_category=DAILY_5_MAX_PER_CATEGORY,
+            backfill_max_per_category=DAILY_5_BACKFILL_MAX_PER_CATEGORY,
         )
         event_ids = [e.id for e in top_events]
 

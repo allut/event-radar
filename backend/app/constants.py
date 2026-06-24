@@ -208,6 +208,9 @@ EMAIL_MASK_VISIBLE_CHARS = 2
 # Ranking / scoring
 DAILY_5_COUNT = 5
 DAILY_5_MAX_PER_CATEGORY = 2
+DAILY_5_BACKFILL_MAX_PER_CATEGORY = 3  # relaxed per-category cap during backfill;
+# Tier-1 MMR keeps DAILY_5_MAX_PER_CATEGORY (2). Exceeded only by the final
+# uncapped sweep, so the feed still reaches DAILY_5_COUNT when events are scarce.
 DAILY_5_LOOKAHEAD_DAYS = 14
 # How many past days' feeds to scan for a recurring-series repeat before allowing
 # that series back into a user's Daily 5 pool — keeps a multi-day series (one

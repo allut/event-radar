@@ -420,10 +420,12 @@ class TestSelectWithBackfill:
         return (score, e)
 
     def test_cap_excluded_backfill_when_cooldown_empty(self):
-        # 6 same-category events, cap=2 → tier 1 picks 2; tier 2 backfills the
-        # next 3 highest-scored cap-excluded events to reach n=5.
+        # 6 same-category events: tier 1 picks 2 (cap=2); relaxed-cap fresh
+        # adds 1 more (cap=3); uncapped sweep takes the rest to reach n=5.
         scored = [self._make_event(i, ["music"], 0.9 - i * 0.1) for i in range(6)]
-        picked = _select_with_backfill(scored, [], n=5, max_per_category=2)
+        picked = _select_with_backfill(
+            scored, [], n=5, max_per_category=2, backfill_max_per_category=3
+        )
         assert [e.id for e in picked] == [0, 1, 2, 3, 4]
 
     def test_cap_excluded_preferred_over_higher_scored_cooled(self):
@@ -436,7 +438,9 @@ class TestSelectWithBackfill:
             self._make_event(3, ["music"], 0.7),
         ]
         cooled = [self._make_event(4, ["theater"], 0.99)]
-        picked = _select_with_backfill(scored, cooled, n=3, max_per_category=2)
+        picked = _select_with_backfill(
+            scored, cooled, n=3, max_per_category=2, backfill_max_per_category=3
+        )
         assert [e.id for e in picked] == [1, 2, 3]
 
     def test_cooled_backfill_used_when_cap_excluded_exhausted(self):
@@ -450,29 +454,65 @@ class TestSelectWithBackfill:
             self._make_event(3, ["cinema"], 0.95),
             self._make_event(4, ["sports"], 0.5),
         ]
-        picked = _select_with_backfill(scored, cooled, n=4, max_per_category=2)
+        picked = _select_with_backfill(
+            scored, cooled, n=4, max_per_category=2, backfill_max_per_category=3
+        )
         assert [e.id for e in picked] == [1, 2, 3, 4]
 
     def test_no_duplicates_across_tiers(self):
         # Same event present in both pools (defensive) must not be picked twice.
         e = self._make_event(1, ["music"], 0.9)
-        picked = _select_with_backfill([e], [e], n=3, max_per_category=2)
+        picked = _select_with_backfill(
+            [e], [e], n=3, max_per_category=2, backfill_max_per_category=3
+        )
         assert [x.id for x in picked] == [1]
 
     def test_insufficient_candidates_returns_fewer_than_n(self):
         # Genuinely <5 total candidates across both pools → no fabrication.
         scored = [self._make_event(1, ["music"], 0.9)]
         cooled = [self._make_event(2, ["theater"], 0.5)]
-        picked = _select_with_backfill(scored, cooled, n=5, max_per_category=2)
+        picked = _select_with_backfill(
+            scored, cooled, n=5, max_per_category=2, backfill_max_per_category=3
+        )
         assert [e.id for e in picked] == [1, 2]
 
     def test_tier1_full_skips_backfill(self):
         cats = ["music", "theater", "cinema", "sports", "workshops"]
         scored = [self._make_event(i, [cats[i]], 0.9 - i * 0.05) for i in range(5)]
         cooled = [self._make_event(99, ["music"], 0.99)]
-        picked = _select_with_backfill(scored, cooled, n=5, max_per_category=2)
+        picked = _select_with_backfill(
+            scored, cooled, n=5, max_per_category=2, backfill_max_per_category=3
+        )
         assert len(picked) == 5
         assert all(e.id != 99 for e in picked)
+
+    def test_relaxed_cap_prefers_diverse_cooled_over_same_cat_overflow(self):
+        # 4 same-category fresh events (tier 1 takes 2) + 2 distinct-category
+        # cooled events, n=5. Relaxed cap (3) admits 1 more music event, then
+        # diverse cooled fills the rest — the 4th music event loses out.
+        scored = [self._make_event(i, ["music"], 0.9 - i * 0.1) for i in range(4)]
+        cooled = [
+            self._make_event(10, ["theater"], 0.5),
+            self._make_event(11, ["cinema"], 0.4),
+        ]
+        picked = _select_with_backfill(
+            scored, cooled, n=5, max_per_category=2, backfill_max_per_category=3
+        )
+        assert [e.id for e in picked] == [0, 1, 2, 10, 11]
+        music_count = sum(1 for e in picked if "music" in e.classification.categories)
+        assert music_count == 3
+        assert 3 not in [e.id for e in picked]  # 4th music event excluded
+
+    def test_uncapped_fallback_guarantees_n(self):
+        # 6 same-category events, no cooled pool — the relaxed cap (3) would
+        # leave the feed short, so the uncapped sweep must still reach n=5,
+        # even though that means a single-category feed.
+        scored = [self._make_event(i, ["music"], 0.9 - i * 0.1) for i in range(6)]
+        picked = _select_with_backfill(
+            scored, [], n=5, max_per_category=2, backfill_max_per_category=3
+        )
+        assert len(picked) == 5
+        assert all("music" in e.classification.categories for e in picked)
 
 
 class TestBuildDailyFeedsExplicitFilter:
