@@ -14,17 +14,30 @@ _BASE = datetime(2026, 7, 1, 20, 0, 0, tzinfo=TALLINN_TZ)
 
 def _event(
     eid: int,
-    title: str = "Jazz Night",
+    title: str | None = None,
     starts_at: datetime = _BASE,
     venue_name: str | None = None,
 ) -> MagicMock:
     e = MagicMock()
     e.id = eid
-    e.title_orig = title
+    # Default to a per-eid title so two default events have DISTINCT normalized
+    # titles (not collapsed by apply_same_day_title_unions) yet still fuzzy-match
+    # >= TITLE_RATIO_VENUE_BYPASS_THRESHOLD, so they reach the LLM via the venue
+    # bypass — these tests exercise the cache/budget machinery, not same-day
+    # collapse. Tests that need an identical title pass it explicitly.
+    e.title_orig = title if title is not None else f"Jazz Night {eid}"
     e.starts_at = starts_at
     e.venue_name = venue_name
     e.status = "draft"
     e.dedup_group_id = None
+    # Quality fields read by build_cluster_assignments' representative pick —
+    # set to None/"" so all events rank equally and the tie-break keeps min(id),
+    # preserving the existing dedup_group_id assertions below.
+    e.price_min = None
+    e.venue_address = None
+    e.lat = None
+    e.lng = None
+    e.description_orig = ""
     return e
 
 
@@ -262,7 +275,7 @@ class TestRunDedupPassLlm:
         self, mock_db, monkeypatch
     ):
         # Near-exact title, same time, different venue spellings — the rule-only
-        # gate would reject this, but the LLM path's bypass_venue_on_strong_title
+        # gate would reject this, but the LLM path's bypass_venue_on_near_exact_title
         # lets it survive to the LLM, which confirms and merges it.
         monkeypatch.setattr(tiebreaker, "llm_available", lambda: True)
         a = _event(1, title="Klassikatähed", venue_name="Estonia Concert Hall")
@@ -284,6 +297,65 @@ class TestRunDedupPassLlm:
         assert result["llm_confirmed"] == 1
         assert a.dedup_group_id == 1
         assert b.dedup_group_id == 1
+
+    @pytest.mark.asyncio
+    async def test_same_day_identical_title_grouped_without_llm(
+        self, mock_db, monkeypatch
+    ):
+        # Two same-title, same-day, same-venue slots are collapsed deterministically
+        # by apply_same_day_title_unions before the tiebreaker, so the LLM is never
+        # consulted for the pair (Fix 1 removes the timed-entry storm) — yet they
+        # are still grouped.
+        monkeypatch.setattr(tiebreaker, "llm_available", lambda: True)
+        a = _event(1, title="Van Gogh", venue_name="Vaba Lava")
+        b = _event(2, title="Van Gogh", venue_name="Vaba Lava")
+        _wire_db(mock_db, [a, b])
+        _wire_execute(mock_db, [])
+        monkeypatch.setattr(
+            tiebreaker,
+            "candidate_pair_ids_in_window",
+            AsyncMock(return_value=[(1, 2)]),
+        )
+        confirm = AsyncMock(return_value=True)
+        monkeypatch.setattr(tiebreaker, "_llm_confirms_pair", confirm)
+
+        result = await tiebreaker.run_dedup_pass_llm(mock_db)
+
+        assert result["candidate_pairs"] == 0
+        assert result["fresh_calls"] == 0
+        confirm.assert_not_called()
+        assert result["grouped"] == 2
+        assert result["groups"] == 1
+        assert a.dedup_group_id == 1
+        assert b.dedup_group_id == 1
+
+    @pytest.mark.asyncio
+    async def test_cross_language_near_title_reaches_llm(self, mock_db, monkeypatch):
+        # Different normalized titles (ratio in [85, 90)) at cross-language venue
+        # spellings: not collapsed by the same-day union, but Fix 2's lowered
+        # bypass threshold lets the pair survive the venue gate and reach the LLM.
+        monkeypatch.setattr(tiebreaker, "llm_available", lambda: True)
+        a = _event(
+            1, title="Bach Cantata Evening Series", venue_name="Estonia kontserdisaal"
+        )
+        b = _event(
+            2, title="Bach Cantata Evening Show", venue_name="Estonia Concert Hall"
+        )
+        _wire_db(mock_db, [a, b])
+        _wire_execute(mock_db, [])
+        monkeypatch.setattr(
+            tiebreaker,
+            "candidate_pair_ids_in_window",
+            AsyncMock(return_value=[(1, 2)]),
+        )
+        confirm = AsyncMock(return_value=True)
+        monkeypatch.setattr(tiebreaker, "_llm_confirms_pair", confirm)
+
+        result = await tiebreaker.run_dedup_pass_llm(mock_db)
+
+        assert result["candidate_pairs"] == 1
+        confirm.assert_awaited_once()
+        assert result["llm_confirmed"] == 1
 
     @pytest.mark.asyncio
     async def test_fresh_call_cap_bounds_network_calls(self, mock_db, monkeypatch):

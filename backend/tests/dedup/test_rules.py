@@ -1,5 +1,5 @@
 """Tests for app.dedup.rules — rule-based deduplication pre-filter."""
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
 
 from rapidfuzz.fuzz import token_set_ratio
@@ -8,12 +8,15 @@ from app.constants import (
     DEDUP_LOOKBACK_DAYS,
     TALLINN_TZ,
     TIME_WINDOW_HOURS,
-    TITLE_RATIO_STRONG_THRESHOLD,
     TITLE_RATIO_THRESHOLD,
+    TITLE_RATIO_VENUE_BYPASS_THRESHOLD,
 )
 from app.dedup.rules import (
+    apply_same_day_title_unions,
+    build_cluster_assignments,
     cluster_events,
     is_candidate_pair,
+    same_group,
     _venue_compatible,
 )
 
@@ -24,6 +27,11 @@ def _event(
     starts_at: datetime,
     venue_name: str | None = None,
     status: str = "draft",
+    price_min: float | None = None,
+    venue_address: str | None = None,
+    lat: float | None = None,
+    lng: float | None = None,
+    description_orig: str = "",
 ) -> MagicMock:
     e = MagicMock()
     e.id = eid
@@ -31,6 +39,11 @@ def _event(
     e.starts_at = starts_at
     e.venue_name = venue_name
     e.status = status
+    e.price_min = price_min
+    e.venue_address = venue_address
+    e.lat = lat
+    e.lng = lng
+    e.description_orig = description_orig
     return e
 
 
@@ -127,21 +140,33 @@ class TestIsCandidatePair:
         assert is_candidate_pair(a, b) is False
 
     def test_bypass_flag_on_exact_title_different_venue_true(self):
-        # Near-exact title (>= TITLE_RATIO_STRONG_THRESHOLD) bypasses the venue
-        # gate on the LLM path, letting the LLM judge differently-spelled venues.
+        # Near-exact title (>= TITLE_RATIO_VENUE_BYPASS_THRESHOLD) bypasses the
+        # venue gate on the LLM path, letting the LLM judge differently-spelled
+        # venues.
         a = _event(1, "Klassikatähed", _BASE, venue_name="Estonia Concert Hall")
         b = _event(2, "Klassikatähed", _BASE, venue_name="Eesti Kontsert")
-        assert is_candidate_pair(a, b, bypass_venue_on_strong_title=True) is True
+        assert is_candidate_pair(a, b, bypass_venue_on_near_exact_title=True) is True
 
-    def test_bypass_flag_on_mid_confidence_title_different_venue_still_false(self):
-        # Title ratio in [TITLE_RATIO_THRESHOLD, TITLE_RATIO_STRONG_THRESHOLD) is
-        # only "above the candidate bar", not near-exact — venue still gates it
-        # even with the bypass flag on.
+    def test_bypass_flag_on_ratio_85_to_89_cross_venue_now_candidate(self):
+        # Title ratio in [85, 90): blocked under the old 90 strong threshold, now
+        # reaches the LLM under the 85 bypass threshold. This is the cross-language
+        # / cross-venue gap Fix 2 targets.
+        a = _event(1, "Bach Cantata Evening Series", _BASE, venue_name="Estonia")
+        b = _event(2, "Bach Cantata Evening Show", _BASE, venue_name="Eesti Kontsert")
+        ratio = token_set_ratio(a.title_orig.lower(), b.title_orig.lower())
+        assert TITLE_RATIO_VENUE_BYPASS_THRESHOLD <= ratio < 90
+        assert is_candidate_pair(a, b, bypass_venue_on_near_exact_title=True) is True
+        # Rule-only path (bypass off) still rejects the venue mismatch.
+        assert is_candidate_pair(a, b) is False
+
+    def test_bypass_flag_on_below_85_title_different_venue_still_false(self):
+        # Title ratio in [TITLE_RATIO_THRESHOLD, 85) is above the candidate bar but
+        # not near-exact — venue still gates it even with the bypass flag on.
         a = _event(1, "Jazz Night at Von Krahli", _BASE, venue_name="Von Krahli")
         b = _event(2, "Jazz Night Tallinn", _BASE, venue_name="Fotografiska")
         ratio = token_set_ratio(a.title_orig.lower(), b.title_orig.lower())
-        assert TITLE_RATIO_THRESHOLD <= ratio < TITLE_RATIO_STRONG_THRESHOLD
-        assert is_candidate_pair(a, b, bypass_venue_on_strong_title=True) is False
+        assert TITLE_RATIO_THRESHOLD <= ratio < TITLE_RATIO_VENUE_BYPASS_THRESHOLD
+        assert is_candidate_pair(a, b, bypass_venue_on_near_exact_title=True) is False
 
 
 # ---------------------------------------------------------------------------
@@ -223,3 +248,181 @@ class TestLookbackConstant:
     def test_lookback_days_reasonable(self):
         # Must be positive and not excessively large (>365 defeats the purpose)
         assert 7 <= DEDUP_LOOKBACK_DAYS <= 365
+
+
+# ---------------------------------------------------------------------------
+# apply_same_day_title_unions (Fix 1 — deterministic same-day session collapse)
+# ---------------------------------------------------------------------------
+
+
+def _parent_for(events: list) -> dict[int, int]:
+    return {e.id: e.id for e in events}
+
+
+class TestApplySameDayTitleUnions:
+    def test_same_title_same_day_unioned(self):
+        a = _event(1, "Van Gogh", _BASE, venue_name="Vaba Lava")
+        b = _event(2, "Van Gogh", _BASE + timedelta(hours=3), venue_name="Vaba Lava")
+        parent = _parent_for([a, b])
+        apply_same_day_title_unions(parent, [a, b])
+        assert same_group(parent, 1, 2)
+
+    def test_same_title_far_apart_same_day_still_unioned(self):
+        # 14h apart — outside the 12h candidate window, but same Tallinn calendar
+        # day, so the deterministic same-day collapse still merges them.
+        a = _event(1, "Van Gogh", _BASE.replace(hour=9), venue_name="Vaba Lava")
+        b = _event(2, "Van Gogh", _BASE.replace(hour=23), venue_name="Vaba Lava")
+        assert abs((a.starts_at - b.starts_at).total_seconds()) > TIME_WINDOW_HOURS * 3600
+        parent = _parent_for([a, b])
+        apply_same_day_title_unions(parent, [a, b])
+        assert same_group(parent, 1, 2)
+
+    def test_same_title_different_day_not_unioned(self):
+        a = _event(1, "Van Gogh", _BASE, venue_name="Vaba Lava")
+        b = _event(2, "Van Gogh", _BASE + timedelta(days=1), venue_name="Vaba Lava")
+        parent = _parent_for([a, b])
+        apply_same_day_title_unions(parent, [a, b])
+        assert not same_group(parent, 1, 2)
+
+    def test_different_title_same_day_not_unioned(self):
+        a = _event(1, "Van Gogh", _BASE, venue_name="Vaba Lava")
+        b = _event(2, "Monet", _BASE, venue_name="Vaba Lava")
+        parent = _parent_for([a, b])
+        apply_same_day_title_unions(parent, [a, b])
+        assert not same_group(parent, 1, 2)
+
+    def test_same_title_same_day_incompatible_venue_not_unioned(self):
+        # Generic title shared across two different venues on the same day must NOT
+        # collapse — the venue gate protects against over-merging distinct events.
+        a = _event(1, "Jazz Night", _BASE, venue_name="Von Krahli")
+        b = _event(2, "Jazz Night", _BASE, venue_name="Fotografiska")
+        parent = _parent_for([a, b])
+        apply_same_day_title_unions(parent, [a, b])
+        assert not same_group(parent, 1, 2)
+
+    def test_unknown_venue_treated_as_compatible(self):
+        a = _event(1, "Jazz Night", _BASE, venue_name=None)
+        b = _event(2, "Jazz Night", _BASE, venue_name="Von Krahli")
+        parent = _parent_for([a, b])
+        apply_same_day_title_unions(parent, [a, b])
+        assert same_group(parent, 1, 2)
+
+    def test_normalized_title_whitespace_and_case(self):
+        a = _event(1, "  Van   GOGH ", _BASE, venue_name="Vaba Lava")
+        b = _event(2, "van gogh", _BASE, venue_name="Vaba Lava")
+        parent = _parent_for([a, b])
+        apply_same_day_title_unions(parent, [a, b])
+        assert same_group(parent, 1, 2)
+
+    def test_three_same_day_slots_all_collapse(self):
+        slots = [
+            _event(i, "Miiamilla", _BASE.replace(hour=10) + timedelta(hours=i),
+                   venue_name="Miiamilla")
+            for i in range(1, 4)
+        ]
+        parent = _parent_for(slots)
+        apply_same_day_title_unions(parent, slots)
+        assert same_group(parent, 1, 2)
+        assert same_group(parent, 2, 3)
+
+    def test_tz_boundary_uses_tallinn_date(self):
+        # Two UTC instants on different UTC calendar days (07-01 and 07-02) that
+        # both fall on 2026-07-02 in Europe/Tallinn (UTC+3 in July). Bucketing on
+        # the Tallinn date unions them; a naive UTC date would not.
+        a = _event(1, "Night Show", datetime(2026, 7, 1, 22, 0, tzinfo=timezone.utc),
+                   venue_name="Club")
+        b = _event(2, "Night Show", datetime(2026, 7, 2, 0, 30, tzinfo=timezone.utc),
+                   venue_name="Club")
+        assert a.starts_at.date() != b.starts_at.date()  # differ in UTC
+        parent = _parent_for([a, b])
+        apply_same_day_title_unions(parent, [a, b])
+        assert same_group(parent, 1, 2)
+
+
+# ---------------------------------------------------------------------------
+# same_group
+# ---------------------------------------------------------------------------
+
+
+class TestSameGroup:
+    def test_disjoint_false(self):
+        assert same_group({1: 1, 2: 2}, 1, 2) is False
+
+    def test_after_union_true(self):
+        from app.dedup.rules import union
+
+        parent = {1: 1, 2: 2}
+        union(parent, 1, 2)
+        assert same_group(parent, 1, 2) is True
+
+    def test_reflexive(self):
+        assert same_group({1: 1}, 1, 1) is True
+
+
+# ---------------------------------------------------------------------------
+# build_cluster_assignments (Fix 3 — quality-based representative)
+# ---------------------------------------------------------------------------
+
+
+class TestBuildClusterAssignments:
+    def _cluster(self, events: list) -> dict[int, int]:
+        from app.dedup.rules import union
+
+        parent = _parent_for(events)
+        for e in events[1:]:
+            union(parent, events[0].id, e.id)
+        ids = [e.id for e in events]
+        events_by_id = {e.id: e for e in events}
+        return build_cluster_assignments(parent, ids, events_by_id)
+
+    def test_high_quality_member_becomes_representative(self):
+        # Member 3 has price + address + coords + description; the others are bare
+        # → group_id resolves to 3, not min(id).
+        a = _event(1, "Show", _BASE)
+        b = _event(2, "Show", _BASE)
+        c = _event(
+            3, "Show", _BASE,
+            price_min=10.0, venue_address="Main St 1",
+            lat=59.4, lng=24.7, description_orig="full description",
+        )
+        assert self._cluster([a, b, c]) == {1: 3, 2: 3, 3: 3}
+
+    def test_equal_quality_falls_back_to_min_id(self):
+        # No distinguishing data on any member → historical min(id) root wins.
+        a = _event(10, "Show", _BASE)
+        b = _event(5, "Show", _BASE)
+        c = _event(7, "Show", _BASE)
+        assert all(gid == 5 for gid in self._cluster([a, b, c]).values())
+
+    def test_description_length_breaks_remaining_tie(self):
+        # Equal price/address/coords presence (all absent) → longer description wins.
+        a = _event(1, "Show", _BASE, description_orig="short")
+        b = _event(2, "Show", _BASE, description_orig="a considerably longer blurb")
+        assert self._cluster([a, b]) == {1: 2, 2: 2}
+
+    def test_singleton_excluded(self):
+        a = _event(1, "Solo", _BASE)
+        assert build_cluster_assignments({1: 1}, [1], {1: a}) == {}
+
+    def test_published_member_pins_representative_over_richer_draft(self):
+        # A published but data-poor member stays representative even when a draft
+        # sibling has richer data — flipping would orphan the published row as a
+        # duplicate (classifier skips non-canonical; publish gate is dedup-unaware).
+        published = _event(1, "Show", _BASE, status="published")
+        rich_draft = _event(
+            2, "Show", _BASE, status="draft",
+            price_min=10.0, venue_address="Main St 1",
+            lat=59.4, lng=24.7, description_orig="full description",
+        )
+        assert self._cluster([published, rich_draft]) == {1: 1, 2: 1}
+
+    def test_published_outranks_classified_regardless_of_quality(self):
+        # published (2) outranks classified (1) even when the classified member has
+        # richer data — the published row must remain canonical.
+        classified = _event(
+            1, "Show", _BASE, status="classified",
+            price_min=10.0, venue_address="A", lat=59.4, lng=24.7,
+            description_orig="rich",
+        )
+        published = _event(2, "Show", _BASE, status="published")
+        assert self._cluster([classified, published]) == {1: 2, 2: 2}

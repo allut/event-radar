@@ -151,9 +151,10 @@ EVENT_STATUS_CANCELLED = "cancelled"
 # Deduplication
 DEDUP_LOOKBACK_DAYS = 30  # only re-cluster events that started within this window
 TITLE_RATIO_THRESHOLD = 70  # rapidfuzz token_set_ratio threshold for title match
-TITLE_RATIO_STRONG_THRESHOLD = 90  # near-exact title; on the LLM path, bypass the
-# venue gate at/above this so cross-source dupes with differently-spelled venues
-# reach the LLM tiebreaker (rule-only path stays strict)
+TITLE_RATIO_VENUE_BYPASS_THRESHOLD = 85  # near-exact title; on the LLM path, bypass
+# the venue gate at/above this so cross-source dupes with differently-spelled venues
+# (incl. cross-language spellings, e.g. "Estonia kontserdisaal" vs "Estonia Concert
+# Hall") still reach the LLM tiebreaker (rule-only path stays strict)
 VENUE_RATIO_THRESHOLD = 70  # rapidfuzz token_set_ratio threshold for venue match
 TIME_WINDOW_HOURS = 12  # max |Δstart| in hours for two events to be dedup candidates
 
@@ -208,6 +209,10 @@ EMAIL_MASK_VISIBLE_CHARS = 2
 DAILY_5_COUNT = 5
 DAILY_5_MAX_PER_CATEGORY = 2
 DAILY_5_LOOKAHEAD_DAYS = 14
+# How many past days' feeds to scan for a recurring-series repeat before allowing
+# that series back into a user's Daily 5 pool — keeps a multi-day series (one
+# canonical event per day) from being re-picked night after night.
+DAILY5_SERIES_COOLDOWN_DAYS = 3
 RECENCY_DECAY_DAYS = 21
 FEEDBACK_DECAY_BASE: float = 0.9  # per-day decay on feedback signal
 FEEDBACK_INDIRECT_WEIGHT: float = 0.5  # weight of category-matched indirect signal

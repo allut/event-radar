@@ -8,13 +8,15 @@ Merge criteria (ALL three must pass):
   2. Time proximity: |Δstart| < TIME_WINDOW_HOURS hours
   3. Venue compatibility: same venue name (fuzzy) OR either venue is unknown
 
-On match: assign dedup_group_id = min(event_id) across the connected component
-(union-find over all candidate pairs).
+On match: cluster the connected component (union-find over all candidate pairs)
+and assign every member the same dedup_group_id, equal to the id of the
+best-quality representative in the cluster (see ``_event_quality_rank``; ties
+fall back to ``min(event_id)``).
 """
 
 import logging
 from collections.abc import Iterable
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 from rapidfuzz.fuzz import token_set_ratio
 from sqlalchemy import select, update
@@ -24,14 +26,17 @@ from sqlalchemy.orm import aliased
 from app.constants import (
     DEDUP_LOOKBACK_DAYS,
     EVENT_STATUS_CANCELLED,
+    EVENT_STATUS_CLASSIFIED,
+    EVENT_STATUS_PUBLISHED,
     SECONDS_PER_HOUR,
     TALLINN_TZ,
     TIME_WINDOW_HOURS,
-    TITLE_RATIO_STRONG_THRESHOLD,
     TITLE_RATIO_THRESHOLD,
+    TITLE_RATIO_VENUE_BYPASS_THRESHOLD,
     VENUE_RATIO_THRESHOLD,
 )
 from app.models.models import Event
+from app.routers.utils import normalized_title
 
 log = logging.getLogger(__name__)
 
@@ -43,15 +48,16 @@ def _venue_compatible(a: str | None, b: str | None) -> bool:
 
 
 def is_candidate_pair(
-    a: Event, b: Event, *, bypass_venue_on_strong_title: bool = False
+    a: Event, b: Event, *, bypass_venue_on_near_exact_title: bool = False
 ) -> bool:
     """Return True when a and b pass all three rule-based criteria.
 
-    With ``bypass_venue_on_strong_title=True``, a near-exact title match
-    (``token_set_ratio >= TITLE_RATIO_STRONG_THRESHOLD``) skips the venue
-    check entirely — used on the LLM path so cross-source duplicates whose
-    venue is spelled differently per source still reach the LLM tiebreaker.
-    The rule-only path keeps the default (strict) behavior.
+    With ``bypass_venue_on_near_exact_title=True``, a near-exact title match
+    (``token_set_ratio >= TITLE_RATIO_VENUE_BYPASS_THRESHOLD``) skips the venue
+    check entirely — used on the LLM path so cross-source duplicates whose venue
+    is spelled differently per source (including cross-language spellings) still
+    reach the LLM tiebreaker, which makes the final same/different call. The
+    rule-only path keeps the default (strict) behavior.
     """
     if (
         abs((a.starts_at - b.starts_at).total_seconds())
@@ -61,7 +67,10 @@ def is_candidate_pair(
     title_ratio = token_set_ratio(a.title_orig.lower(), b.title_orig.lower())
     if title_ratio < TITLE_RATIO_THRESHOLD:
         return False
-    if bypass_venue_on_strong_title and title_ratio >= TITLE_RATIO_STRONG_THRESHOLD:
+    if (
+        bypass_venue_on_near_exact_title
+        and title_ratio >= TITLE_RATIO_VENUE_BYPASS_THRESHOLD
+    ):
         return True
     return _venue_compatible(a.venue_name, b.venue_name)
 
@@ -81,24 +90,124 @@ def _find(parent: dict[int, int], x: int) -> int:
 def union(parent: dict[int, int], a: int, b: int) -> None:
     ra, rb = _find(parent, a), _find(parent, b)
     if ra != rb:
-        # smaller ID becomes the root so dedup_group_id == min(event_id)
+        # Smaller ID becomes the root. The root only drives connectivity now —
+        # the canonical dedup_group_id is re-chosen by quality in
+        # build_cluster_assignments — but keeping min-id roots makes the
+        # equal-quality tie-break land on the historical min(event_id).
         if ra < rb:
             parent[rb] = ra
         else:
             parent[ra] = rb
 
 
-def build_cluster_assignments(parent: dict[int, int], ids: list[int]) -> dict[int, int]:
-    """Resolve union-find roots → {event_id: group_id} for groups with ≥2 members."""
+def same_group(parent: dict[int, int], a_id: int, b_id: int) -> bool:
+    """True if a_id and b_id already share a union-find cluster.
+
+    Public wrapper over the private ``_find`` so other modules (the LLM
+    tiebreaker) can skip pairs already collapsed by
+    ``apply_same_day_title_unions`` without importing ``_find`` cross-module.
+    """
+    return _find(parent, a_id) == _find(parent, b_id)
+
+
+def apply_same_day_title_unions(parent: dict[int, int], events: list[Event]) -> None:
+    """Union events sharing a normalized title on the same Europe/Tallinn calendar
+    day (and a compatible venue), deterministically and with no LLM call.
+
+    Collapses timed-entry / session ticket slots (e.g. a museum's six same-day
+    slots, or a long exhibition's per-day rows) into one dedup group, independent
+    of the 12h LLM-candidate time window. Bucketing is on the exact normalized
+    title (``normalized_title``) plus the Tallinn calendar date; members within a
+    bucket are only unioned when ``_venue_compatible`` holds (an unknown venue is
+    treated as compatible), so two genuinely different events that happen to share
+    a generic title on the same day at different venues are NOT merged.
+
+    Intentional residual: multi-day series are NOT collapsed across days — the
+    bucket key includes the date, so each day stays one canonical event (per the
+    same-day-only policy chosen for this feature).
+    """
+    buckets: dict[tuple[str, date], list[Event]] = {}
+    for e in events:
+        key = (
+            normalized_title(e.title_orig),
+            e.starts_at.astimezone(TALLINN_TZ).date(),
+        )
+        buckets.setdefault(key, []).append(e)
+    for members in buckets.values():
+        if len(members) < 2:
+            continue
+        for i in range(len(members)):
+            for j in range(i + 1, len(members)):
+                if _venue_compatible(members[i].venue_name, members[j].venue_name):
+                    union(parent, members[i].id, members[j].id)
+
+
+def _representative_status_rank(event: Event) -> int:
+    """Pin the representative to a member that has already advanced past draft.
+
+    Quality-driven re-selection (``_event_quality_rank``) must never flip the
+    canonical event away from one already classified or published — the
+    classifier only classifies *canonical drafts* and the publish gate is
+    dedup-unaware, so a flip would orphan a stale published row alongside a
+    newly-promoted sibling (two published events for one real event). Ordering:
+    published (2) > classified (1) > draft/other (0). Among members at the same
+    status, data quality (then ``min(event_id)``) decides — so a fresh all-draft
+    cluster, the common case since dedup runs before classify/publish, still
+    picks the best-data representative.
+    """
+    if event.status == EVENT_STATUS_PUBLISHED:
+        return 2
+    if event.status == EVENT_STATUS_CLASSIFIED:
+        return 1
+    return 0
+
+
+def _event_quality_rank(event: Event) -> tuple[bool, bool, bool, int]:
+    """Sortable data-completeness rank for picking a cluster representative.
+
+    Higher tuple → better. Mirrors the ingestion-authority signals the pipeline
+    already treats as "better details": price, address, coordinates, and
+    description length. Title/venue presence is omitted — every clustered member
+    already passed the fuzzy title match, so it is a fixed cost across the group.
+    """
+    return (
+        event.price_min is not None,
+        event.venue_address is not None,
+        event.lat is not None and event.lng is not None,
+        len(event.description_orig or ""),
+    )
+
+
+def build_cluster_assignments(
+    parent: dict[int, int], ids: list[int], events_by_id: dict[int, Event]
+) -> dict[int, int]:
+    """Resolve union-find roots → {event_id: group_id} for groups with ≥2 members.
+
+    The group_id is the id of the representative chosen per cluster by, in order:
+    publish-status pin (``_representative_status_rank``, so an already
+    classified/published member is never demoted), then data completeness
+    (``_event_quality_rank``), then ``-eid`` (so equal-rank clusters keep the
+    historical ``min(event_id)`` root). The representative is itself a member, so
+    it maps to its own id — leaving exactly one canonical event per group
+    (``dedup_group_id == id``), as the classifier / publish / feed paths assume.
+    """
     roots: dict[int, list[int]] = {}
     for eid in ids:
         root = _find(parent, eid)
         roots.setdefault(root, []).append(eid)
     assignments: dict[int, int] = {}
-    for root, members in roots.items():
+    for members in roots.values():
         if len(members) > 1:
+            representative_id = max(
+                members,
+                key=lambda eid: (
+                    _representative_status_rank(events_by_id[eid]),
+                    _event_quality_rank(events_by_id[eid]),
+                    -eid,
+                ),
+            )
             for eid in members:
-                assignments[eid] = root
+                assignments[eid] = representative_id
     return assignments
 
 
@@ -120,6 +229,12 @@ def cluster_events(
 
     ids = [e.id for e in events]
     parent: dict[int, int] = {eid: eid for eid in ids}
+    events_by_id: dict[int, Event] = {e.id: e for e in events}
+
+    # Deterministic same-day session collapse — seeds the rule-only path so it
+    # degrades with the same grouping behavior as the LLM path (which calls this
+    # helper too). Independent of the candidate-pair time window.
+    apply_same_day_title_unions(parent, events)
 
     pair_count = 0
     if candidate_pair_ids is None:
@@ -136,7 +251,6 @@ def cluster_events(
                     union(parent, events[i].id, events[j].id)
                     pair_count += 1
     else:
-        events_by_id: dict[int, Event] = {e.id: e for e in events}
         for a_id, b_id in candidate_pair_ids:
             a = events_by_id.get(a_id)
             b = events_by_id.get(b_id)
@@ -149,7 +263,7 @@ def cluster_events(
     if pair_count:
         log.debug("dedup: found %d candidate pair(s) among %d events", pair_count, n)
 
-    return build_cluster_assignments(parent, ids)
+    return build_cluster_assignments(parent, ids, events_by_id)
 
 
 # ---------------------------------------------------------------------------

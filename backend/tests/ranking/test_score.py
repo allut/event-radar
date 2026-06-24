@@ -428,3 +428,129 @@ class TestBuildDailyFeedsExplicitFilter:
         compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
         assert "is_explicit" in compiled
         assert "false" in compiled.lower()
+
+
+def _scalar_result(items: list) -> MagicMock:
+    r = MagicMock()
+    r.all.return_value = items
+    return r
+
+
+def _feed_event(eid: int, title: str, venue: str) -> Event:
+    e = _event(event_id=eid)
+    e.title_orig = title
+    e.venue_name = venue
+    return e
+
+
+def _user(uid: int) -> MagicMock:
+    u = MagicMock()
+    u.id = uid
+    return u
+
+
+class TestBuildDailyFeedsSeriesCooldown:
+    async def test_recent_series_excluded_from_pool(self, mock_db):
+        # User 1 was shown event 150 (series "van gogh"/"vaba lava") within the
+        # cooldown window. Today's candidate 100 shares that series key, so it is
+        # skipped; candidate 200 (a different series) is kept.
+        from app.ranking.score import build_daily_feeds
+
+        ev100 = _feed_event(100, "Van Gogh", "Vaba Lava")
+        ev200 = _feed_event(200, "Concert X", "Hall")
+        ev150 = _feed_event(150, "Van Gogh", "Vaba Lava")  # yesterday's instance
+        df = MagicMock()
+        df.user_id = 1
+        df.event_ids = [150]
+
+        mock_db.scalars.side_effect = [
+            _scalar_result([ev100, ev200]),   # candidate events
+            _scalar_result([_user(1)]),        # users
+            _scalar_result([]),                # personas
+            _scalar_result([]),                # feedback
+            _scalar_result([]),                # today's daily feeds
+            _scalar_result([df]),              # cooldown-window feeds
+            _scalar_result([ev150]),           # shown events resolved
+            _scalar_result([]),                # cached scores
+        ]
+
+        await build_daily_feeds(mock_db)
+
+        added = mock_db.add.call_args.args[0]
+        assert added.user_id == 1
+        assert added.event_ids == [200]  # 100 cooled down, 200 kept
+
+    async def test_no_recent_history_keeps_series(self, mock_db):
+        # Empty cooldown window (e.g. the series last appeared outside it) → the
+        # shown-events query is skipped and the candidate is kept.
+        from app.ranking.score import build_daily_feeds
+
+        ev100 = _feed_event(100, "Van Gogh", "Vaba Lava")
+
+        mock_db.scalars.side_effect = [
+            _scalar_result([ev100]),   # candidate events
+            _scalar_result([_user(1)]),
+            _scalar_result([]),        # personas
+            _scalar_result([]),        # feedback
+            _scalar_result([]),        # today's daily feeds
+            _scalar_result([]),        # cooldown-window feeds (empty → no shown-events query)
+            _scalar_result([]),        # cached scores
+        ]
+
+        await build_daily_feeds(mock_db)
+
+        added = mock_db.add.call_args.args[0]
+        assert added.event_ids == [100]
+
+    async def test_other_users_history_does_not_affect_this_user(self, mock_db):
+        # Only user 2 was shown the series; user 1's feed must still include it.
+        from app.ranking.score import build_daily_feeds
+
+        ev100 = _feed_event(100, "Van Gogh", "Vaba Lava")
+        ev150 = _feed_event(150, "Van Gogh", "Vaba Lava")
+        df = MagicMock()
+        df.user_id = 2  # belongs to a different user
+        df.event_ids = [150]
+
+        mock_db.scalars.side_effect = [
+            _scalar_result([ev100]),                 # candidate events
+            _scalar_result([_user(1), _user(2)]),    # users
+            _scalar_result([]),                      # personas
+            _scalar_result([]),                      # feedback
+            _scalar_result([]),                      # today's daily feeds
+            _scalar_result([df]),                    # cooldown-window feeds (user 2)
+            _scalar_result([ev150]),                 # shown events resolved
+            _scalar_result([]),                      # cached scores
+        ]
+
+        await build_daily_feeds(mock_db)
+
+        feeds_by_user = {
+            call.args[0].user_id: call.args[0].event_ids
+            for call in mock_db.add.call_args_list
+        }
+        assert feeds_by_user[1] == [100]  # user 1 unaffected by user 2's history
+        assert feeds_by_user[2] == []     # user 2 cooled down
+
+    async def test_cooldown_query_restricts_to_recent_date_window(self, mock_db):
+        # The cooldown feed query (6th scalars call) must bound feed_date to
+        # [today - DAILY5_SERIES_COOLDOWN_DAYS, today).
+        from app.ranking.score import build_daily_feeds
+
+        ev100 = _feed_event(100, "Van Gogh", "Vaba Lava")
+        mock_db.scalars.side_effect = [
+            _scalar_result([ev100]),   # candidate events
+            _scalar_result([_user(1)]),
+            _scalar_result([]),        # personas
+            _scalar_result([]),        # feedback
+            _scalar_result([]),        # today's daily feeds
+            _scalar_result([]),        # cooldown-window feeds
+            _scalar_result([]),        # cached scores
+        ]
+
+        await build_daily_feeds(mock_db)
+
+        cooldown_stmt = mock_db.scalars.call_args_list[5].args[0]
+        compiled = str(cooldown_stmt.compile(compile_kwargs={"literal_binds": True}))
+        assert "daily_feeds.feed_date >=" in compiled
+        assert "daily_feeds.feed_date <" in compiled

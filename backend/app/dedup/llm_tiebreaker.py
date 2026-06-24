@@ -4,7 +4,9 @@ Stage 1: ``is_candidate_pair()`` from rules.py (fuzzy title + time + venue).
 Stage 2: LLM tiebreaker on candidate pairs only (1 call per pair, cached).
 
 Merge condition: LLM returns ``{"same": true, "confidence": ≥ 0.7}``.
-On confirm: union-find produces clusters → ``dedup_group_id = min(event_id)``.
+On confirm: union-find produces clusters → ``dedup_group_id`` is the cluster's
+best representative (publish-status pin, then data quality, then ``min(event_id)``
+tie-break; see ``rules.build_cluster_assignments``).
 
 STATUS: WIRED — the scheduled dedup job (main.py → jobs.dedup_pass) calls
 ``run_dedup_pass_llm()``. Stage 1's *time* pre-filter is the shared SQL
@@ -38,11 +40,13 @@ from app.constants import (
 )
 from app.dedup.rules import (
     union,
+    apply_same_day_title_unions,
     build_cluster_assignments,
     candidate_pair_ids_in_window,
     dedup_window_cutoff,
     is_candidate_pair,
     run_dedup_pass,
+    same_group,
 )
 from app.llm.router import LLMError, content_hash, llm_available, llm_json
 from app.models.models import Event, LlmCall
@@ -221,6 +225,11 @@ async def run_dedup_pass_llm(db: AsyncSession) -> dict:
     parent: dict[int, int] = {eid: eid for eid in ids}
     events_by_id: dict[int, Event] = {e.id: e for e in events}
 
+    # Deterministic same-day session collapse (no LLM) before the tiebreaker, so
+    # already-collapsed pairs are skipped below instead of spending the fresh-call
+    # budget — this removes the timed-entry / session storm from the LLM path.
+    apply_same_day_title_unions(parent, events)
+
     # Stage 1: SQL time pre-filter (shared with the rule-only pass) → Python
     # fuzzy title/venue check. Stage 2: cache-aware LLM tiebreaker on survivors.
     candidate_pair_ids = await candidate_pair_ids_in_window(db, cutoff)
@@ -231,7 +240,10 @@ async def run_dedup_pass_llm(db: AsyncSession) -> dict:
         b = events_by_id.get(b_id)
         if a is None or b is None:
             continue
-        if not is_candidate_pair(a, b, bypass_venue_on_strong_title=True):
+        # Already collapsed by the same-day union — no LLM call needed.
+        if same_group(parent, a_id, b_id):
+            continue
+        if not is_candidate_pair(a, b, bypass_venue_on_near_exact_title=True):
             continue
         survivors.append((a, b, _dedup_pair_hash(a, b)))
 
@@ -269,7 +281,7 @@ async def run_dedup_pass_llm(db: AsyncSession) -> dict:
             deferred_pairs,
         )
 
-    assignments = build_cluster_assignments(parent, ids)
+    assignments = build_cluster_assignments(parent, ids, events_by_id)
 
     updated = 0
     for event in events:

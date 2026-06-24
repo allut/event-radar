@@ -10,6 +10,34 @@ from app.constants import DEFAULT_USER_LOCALE, EMAIL_MASK_VISIBLE_CHARS
 from app.models.models import Event, User
 
 
+def normalized_title(title: str) -> str:
+    """Canonical title key: lowercase + collapse all internal whitespace.
+
+    Shared by dedup same-day bucketing (``apply_same_day_title_unions``) and the
+    feed-level series identity (``event_series_key``) so both agree on what
+    counts as "the same title".
+    """
+    return " ".join(title.lower().split())
+
+
+def event_series_key(title_orig: str, venue_name: str | None) -> tuple[str, str]:
+    """Identity of an ongoing series, independent of ``starts_at``.
+
+    Deliberately broader than the dedup same-day title bucket (which is per-day
+    and feeds dedup) and independent of ``dedup_group_id`` (multi-day series are
+    intentionally not dedup-grouped). Used by the Daily 5 builder to cool down a
+    series already surfaced within the recent cooldown window.
+
+    Both halves go through ``normalized_title`` (lowercase + collapse internal
+    whitespace) so the same series still matches across minor venue-string drift
+    between ingest/refetch passes. Match is exact on the normalized key — venue
+    respellings beyond whitespace/case (a parenthetical suffix, a translation)
+    are an accepted limitation, since the cooldown is a soft feed-diversity
+    filter, not a correctness gate.
+    """
+    return (normalized_title(title_orig), normalized_title(venue_name or ""))
+
+
 def mask_email(email: str) -> str:
     """Mask an email for log output — keep the first few local-part characters and
     the full domain so entries stay correlatable without persisting raw PII in

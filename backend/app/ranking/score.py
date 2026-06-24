@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.constants import (
+    DAILY5_SERIES_COOLDOWN_DAYS,
     DAILY_5_COUNT,
     DAILY_5_LOOKAHEAD_DAYS,
     DAILY_5_MAX_PER_CATEGORY,
@@ -64,7 +65,7 @@ from app.models.models import (
     UserEventScore,
     UserPersona,
 )
-from app.routers.utils import select_events_with_classification
+from app.routers.utils import event_series_key, select_events_with_classification
 
 # ---------------------------------------------------------------------------
 # Feedback context (precomputed for one user, reused across event scoring)
@@ -419,6 +420,47 @@ async def build_daily_feeds(db: AsyncSession) -> dict:
         for df_row in df_rows:
             daily_by_user[df_row.user_id] = df_row
 
+    # --- Bulk-fetch the recent cooldown window's feeds to suppress repeat
+    # recommendations of the same recurring series across days. A multi-day
+    # series (one canonical event per day) would otherwise score well and be
+    # re-picked night after night. Independent of dedup_group_id — series are
+    # intentionally not dedup-grouped across days; this is a feed-level filter. ---
+    recent_series_by_user: dict[int, set[tuple[str, str]]] = {}
+    if user_ids:
+        cooldown_start = today - timedelta(days=DAILY5_SERIES_COOLDOWN_DAYS)
+        recent_feed_rows = (
+            await db.scalars(
+                select(DailyFeed).where(
+                    DailyFeed.user_id.in_(user_ids),
+                    DailyFeed.feed_date >= cooldown_start,
+                    DailyFeed.feed_date < today,
+                )
+            )
+        ).all()
+        # event_id -> set of user_ids who were shown it within the window
+        shown_event_users: dict[int, set[int]] = {}
+        for feed_row in recent_feed_rows:
+            for eid in feed_row.event_ids or []:
+                shown_event_users.setdefault(eid, set()).add(feed_row.user_id)
+        if shown_event_users:
+            # One bulk SELECT to resolve each shown event to its series key —
+            # these may be outside the current lookahead window, so resolve them
+            # directly rather than from event_rows.
+            shown_event_rows = (
+                await db.scalars(
+                    select(Event).where(Event.id.in_(list(shown_event_users.keys())))
+                )
+            ).all()
+            for shown_ev in shown_event_rows:
+                key = event_series_key(shown_ev.title_orig, shown_ev.venue_name)
+                for uid in shown_event_users[shown_ev.id]:
+                    recent_series_by_user.setdefault(uid, set()).add(key)
+
+    # Precompute each candidate's series key once (reused across all users).
+    candidate_series_key: dict[int, tuple[str, str]] = {
+        e.id: event_series_key(e.title_orig, e.venue_name) for e in event_rows
+    }
+
     # --- Bulk-fetch cached scores for the (user_id, event_id) cartesian we care about ---
     # The feedback router DELETEs the (user, event) row on signal change, so an
     # existing row means "score reflects the most recent signal seen for that event".
@@ -444,8 +486,16 @@ async def build_daily_feeds(db: AsyncSession) -> dict:
         user_persona_weights = personas_by_user.get(user.id, [])
         ctx = FeedbackContext.from_orm_rows(list(fb_by_user.get(user.id, [])))
 
+        recent_series = recent_series_by_user.get(user.id, set())
+
         scored: list[tuple[float, Event]] = []
         for event in event_rows:
+            # Series cooldown: skip a candidate whose recurring series this user
+            # was already shown within the cooldown window (hard skip, like an
+            # exclude). Only affects which events enter this user's MMR pool —
+            # never touches score_cache / UserEventScore or any other user.
+            if candidate_series_key[event.id] in recent_series:
+                continue
             cached = score_cache.get((user.id, event.id))
             if cached is not None:
                 # Re-check dislike independently of cache freshness: covers
