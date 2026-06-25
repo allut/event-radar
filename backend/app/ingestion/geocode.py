@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import re
+import time
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta
 from typing import cast
@@ -15,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.constants import (
     ESTONIAN_STREET_TYPE_WORDS,
+    GEOCODE_COMMIT_INTERVAL_SECONDS,
     GEOCODE_COORD_QUANT_DECIMALS,
     GEOCODE_COUNTRY_SUFFIX,
     GEOCODE_COUNTY_RE,
@@ -560,6 +562,7 @@ async def geocode_pending(db: AsyncSession) -> dict:
     # must NOT start the cooldown (mirrors refetch.py not bumping its throttle
     # field on a fetch failure), unlike a definitive no-match/bbox-reject.
     transient_failure_queries: set[str] = set()
+    last_commit = time.monotonic()
     async with httpx.AsyncClient(timeout=HTTP_TIMEOUT_SECONDS) as client:
         for event in pending:
             raw_address = event.venue_address
@@ -580,10 +583,16 @@ async def geocode_pending(db: AsyncSession) -> dict:
                 failed += 1
                 if query not in transient_failure_queries:
                     event.geocode_attempted_at = now
+                if time.monotonic() - last_commit >= GEOCODE_COMMIT_INTERVAL_SECONDS:
+                    await db.commit()
+                    last_commit = time.monotonic()
                 continue
             event.lat, event.lng = coords
             event.geocode_attempted_at = now
             geocoded += 1
+            if time.monotonic() - last_commit >= GEOCODE_COMMIT_INTERVAL_SECONDS:
+                await db.commit()
+                last_commit = time.monotonic()
 
     return {
         "pending": len(pending),

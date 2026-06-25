@@ -19,6 +19,7 @@ docstring of ``geocode.py`` and the project plan for the full rationale.
 
 import asyncio
 import logging
+import time
 from collections.abc import Callable
 from datetime import datetime, timedelta
 from urllib.parse import urlsplit
@@ -34,6 +35,7 @@ from app.constants import (
     GEOCODE_COORD_QUANT_DECIMALS,
     HTTP_TIMEOUT_SECONDS,
     LOCALIZED_TEXT_FIENTA_LOCALES,
+    REFETCH_COMMIT_INTERVAL_SECONDS,
     REFETCH_MAX_PER_RUN,
     REFETCH_MIN_INTERVAL_DAYS,
     REFETCH_PLACEHOLDER_VENUE_NAMES,
@@ -157,6 +159,7 @@ async def refetch_event_details(db: AsyncSession) -> dict:
     if not candidates:
         return summary
 
+    last_commit = time.monotonic()
     async with httpx.AsyncClient(timeout=HTTP_TIMEOUT_SECONDS) as client:
         for event in candidates:
             url = event.url
@@ -168,6 +171,9 @@ async def refetch_event_details(db: AsyncSession) -> dict:
                 # error should be retried on the next run, not throttled out.
                 summary["failed"] += 1
                 log.warning("refetch failed url=%s: %s", url, exc)
+                if time.monotonic() - last_commit >= REFETCH_COMMIT_INTERVAL_SECONDS:
+                    await db.commit()
+                    last_commit = time.monotonic()
                 continue
 
             summary["fetched"] += 1
@@ -246,6 +252,9 @@ async def refetch_event_details(db: AsyncSession) -> dict:
                 summary["no_data"] += 1
                 _mark_synced(event, now)
                 await asyncio.sleep(REFETCH_REQUEST_DELAY_SECONDS)
+                if time.monotonic() - last_commit >= REFETCH_COMMIT_INTERVAL_SECONDS:
+                    await db.commit()
+                    last_commit = time.monotonic()
                 continue
 
             changed = _reconcile(
@@ -264,6 +273,9 @@ async def refetch_event_details(db: AsyncSession) -> dict:
 
             _mark_synced(event, now)
             await asyncio.sleep(REFETCH_REQUEST_DELAY_SECONDS)
+            if time.monotonic() - last_commit >= REFETCH_COMMIT_INTERVAL_SECONDS:
+                await db.commit()
+                last_commit = time.monotonic()
 
     return summary
 

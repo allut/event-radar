@@ -612,6 +612,9 @@ NOMINATIM_BASE_URL = "https://nominatim.openstreetmap.org/search"
 NOMINATIM_USER_AGENT = "EventRadarBot/1.0 (+https://eventradar.ee; aleksei.lutkov@gmail.com)"
 GEOCODE_REQUEST_DELAY_SECONDS: float = 1.0
 GEOCODE_MAX_PER_RUN = 200  # ~3.5 min/run at 1 req/s, safely under the 6h cron cadence
+# Commit mid-loop at this wall-clock interval to keep the held DB connection warm
+# under Neon's ~5-min idle auto-suspend and persist progress incrementally.
+GEOCODE_COMMIT_INTERVAL_SECONDS: float = 120.0
 # An address that fails to geocode (no Nominatim match, or a match outside
 # TALLINN_REGION_BBOX) is not re-queried on every run; it is retried after this
 # window, mirroring REFETCH_MIN_INTERVAL_DAYS's cooldown shape. A transient HTTP
@@ -708,6 +711,9 @@ REFETCH_MIN_INTERVAL_DAYS = 1
 # Absolute tolerance (currency units) when comparing a stored price against the
 # detail-page price — sub-cent float noise must read as "unchanged", not a change.
 REFETCH_PRICE_TOLERANCE = 0.005
+# Commit mid-loop at this wall-clock interval to keep the held DB connection warm
+# under Neon's ~5-min idle auto-suspend and persist progress incrementally.
+REFETCH_COMMIT_INTERVAL_SECONDS: float = 120.0
 # An external_id fetched but rejected by normalize() (e.g. non-Tallinn) is not
 # re-fetched/re-saved on every run; it is retried once after this window so a
 # transient rejection still self-heals. Pure backend scalar — not cross-stack.
