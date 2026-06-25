@@ -116,6 +116,20 @@ EXPLICIT_KEYWORDS: frozenset[str] = frozenset(
     }
 )
 
+# Locales fetched for native-language title/description at ingest time.
+# Fienta exposes en/et/ru; HTML listing sources expose only en/et.
+# Seconds to sleep between consecutive locale-variant detail fetches in HTML listing
+# adapters — paces requests without a full rate limiter (HTML sources have no API quota).
+HTML_LISTING_LOCALE_FETCH_DELAY_SECONDS: float = 0.5
+LOCALIZED_TEXT_FIENTA_LOCALES: frozenset[str] = frozenset({"en", "et", "ru"})
+LOCALIZED_TEXT_HTML_LOCALES: frozenset[str] = frozenset({"en", "et"})
+# hreflang value used by Fienta for Russian (some pages use "ru", site also
+# uses "ru-RU"; we normalise to "ru" after lower-casing).
+LOCALIZED_TEXT_HREFLANG_NORMALIZE: dict[str, str] = {"ru-ru": "ru", "et-ee": "et", "en-gb": "en", "en-us": "en"}
+# Maximum chars kept from a localized title/description to avoid DB bloat.
+LOCALIZED_TEXT_MAX_TITLE_CHARS = 500
+LOCALIZED_TEXT_MAX_DESC_CHARS = 5000
+
 ORGANIZER_MIN_EVENTS_FOR_AUTO_ADD = 3
 ORGANIZER_NAME_MAX_LEN = 200
 FIENTA_ORGANIZER_SCAN_LIMIT = 1000

@@ -14,6 +14,7 @@ from app.constants import (
     FIENTA_MAX_PAGES,
     FIENTA_MIN_REQUEST_INTERVAL_SECONDS,
     HTTP_TIMEOUT_SECONDS,
+    LOCALIZED_TEXT_FIENTA_LOCALES,
 )
 from app.ingestion.base import (
     AsyncRateLimiter,
@@ -22,9 +23,11 @@ from app.ingestion.base import (
     coords_in_estonia,
     extract_jsonld_event_location,
     extract_jsonld_event_offers,
+    extract_jsonld_event_text,
     host_guard_hook,
     http_get,
     is_target_city,
+    localized_detail_urls,
     parse_dt,
     parse_price_from_string,
 )
@@ -235,6 +238,41 @@ class FientaAdapter(SourceAdapter):
                     "price_max": price_max,
                     "currency": currency,
                 }
+                # Fetch locale variants for native title/description
+                locale_urls = localized_detail_urls(soup, url, LOCALIZED_TEXT_FIENTA_LOCALES)
+                loc_titles: dict[str, str] = {}
+                loc_descs: dict[str, str] = {}
+                for locale, loc_url in locale_urls.items():
+                    if loc_url == url:
+                        # This URL is the same page — extract text directly
+                        loc_name, loc_desc = extract_jsonld_event_text(soup)
+                    else:
+                        await limiter.acquire()
+                        try:
+                            loc_resp = await http_get(client, loc_url)
+                            loc_soup = BeautifulSoup(loc_resp.text, "html.parser")
+                            loc_name, loc_desc = extract_jsonld_event_text(loc_soup)
+                        except (httpx.HTTPStatusError, httpx.RequestError) as exc:
+                            log.debug(
+                                "fienta: locale fetch failed id=%s locale=%s url=%s: %s",
+                                item.get("id"), locale, loc_url, exc,
+                            )
+                            continue
+                        except Exception as exc:
+                            log.warning(
+                                "fienta: locale fetch unexpected error id=%s locale=%s: %s",
+                                item.get("id"), locale, exc,
+                            )
+                            continue
+                    if loc_name:
+                        loc_titles[locale] = loc_name
+                    if loc_desc:
+                        loc_descs[locale] = loc_desc
+                if loc_titles or loc_descs:
+                    item["_detail_localized"] = {
+                        "title": loc_titles,
+                        "description": loc_descs,
+                    }
             except httpx.HTTPStatusError as exc:
                 if exc.response.status_code == http.HTTPStatus.TOO_MANY_REQUESTS:
                     limiter.backoff(FIENTA_MIN_REQUEST_INTERVAL_SECONDS)
@@ -338,6 +376,10 @@ class FientaAdapter(SourceAdapter):
         # currency: listing wins; detail fallback
         currency: str | None = listing_currency or detail.get("currency") or None
 
+        detail_localized = raw.get("_detail_localized") or {}
+        loc_titles = detail_localized.get("title") or {}
+        loc_descs = detail_localized.get("description") or {}
+
         return NormalizedEvent(
             external_id=external_id,
             title=str(title),
@@ -355,4 +397,6 @@ class FientaAdapter(SourceAdapter):
             price_min=price_min,
             price_max=price_max,
             currency=currency,
+            title_localized=loc_titles if loc_titles else None,
+            description_localized=loc_descs if loc_descs else None,
         )

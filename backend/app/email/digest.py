@@ -34,6 +34,7 @@ from app.i18n import day_name, month_name, t, ti
 from app.models.models import DailyFeed, Event, User
 from app.routers.utils import (
     mask_email,
+    resolve_title,
     resolve_why_go,
     select_events_with_classification,
 )
@@ -85,7 +86,7 @@ def build_digest_html(
         else:
             price_str = ""
 
-        safe_title = html_lib.escape(event.title_orig)
+        safe_title = html_lib.escape(resolve_title(event, locale))
         title_link = EVENT_TITLE_LINK.format(
             href=f"{frontend_url}/events/{event.id}", title=safe_title
         )

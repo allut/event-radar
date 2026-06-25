@@ -44,6 +44,9 @@ from app.constants import (
     HTTP_RETRY_WAIT_MULTIPLIER,
     INGEST_REJECT_RECHECK_DAYS,
     INGESTION_ERROR_MAX_LEN,
+    LOCALIZED_TEXT_HREFLANG_NORMALIZE,
+    LOCALIZED_TEXT_MAX_DESC_CHARS,
+    LOCALIZED_TEXT_MAX_TITLE_CHARS,
     PRICE_FROM_STRING_RE,
     SAFE_URL_SCHEMES,
     SLUG_HASH_HEX_LEN,
@@ -311,6 +314,8 @@ class NormalizedEvent:
     price_max: float | None = None
     currency: str | None = None
     price_hint: str | None = None
+    title_localized: dict[str, str] | None = None
+    description_localized: dict[str, str] | None = None
 
     def __post_init__(self) -> None:
         # Coords without an address are orphan data here — the geocode/sibling-copy
@@ -519,6 +524,78 @@ def extract_jsonld_event_offers(
     return (None, None, None)
 
 
+def extract_jsonld_event_text(soup: BeautifulSoup) -> tuple[str | None, str | None]:
+    """Return ``(name, description)`` from the first schema.org ``Event`` JSON-LD block.
+
+    Falls back to the page ``<h1>`` for name when the JSON-LD block has no ``name``
+    field. Returns ``(None, None)`` when no ``Event`` block is found.
+    """
+    for script in soup.find_all("script", type="application/ld+json"):
+        try:
+            data = json.loads(script.string or "")
+        except (TypeError, ValueError):
+            continue
+        for item in _jsonld_event_items(data):
+            item_type = item.get("@type")
+            types = item_type if isinstance(item_type, list) else [item_type]
+            if "Event" not in types:
+                continue
+            name_raw = item.get("name")
+            name: str | None = name_raw.strip()[:LOCALIZED_TEXT_MAX_TITLE_CHARS] or None if isinstance(name_raw, str) else None
+            desc_raw = item.get("description")
+            desc: str | None = desc_raw.strip()[:LOCALIZED_TEXT_MAX_DESC_CHARS] or None if isinstance(desc_raw, str) else None
+            if name is None:
+                h1 = soup.find("h1")
+                if h1:
+                    name = h1.get_text(strip=True) or None
+            return (name, desc)
+    return (None, None)
+
+
+def localized_detail_urls(
+    soup: BeautifulSoup,
+    base_url: str,
+    target_locales: frozenset[str],
+) -> dict[str, str]:
+    """Return a ``{locale: absolute_url}`` map for each wanted locale found in the page.
+
+    Reads ``<link rel="alternate" hreflang="…" href="…">`` tags and normalises
+    hreflang values via LOCALIZED_TEXT_HREFLANG_NORMALIZE.  Falls back to
+    ``<a>`` language-switcher anchors whose ``hreflang`` attribute is set.
+    Only locales present in ``target_locales`` are returned.
+    """
+    from urllib.parse import urljoin
+
+    def _str_attr(tag: Any, name: str) -> str:
+        val = tag.get(name) or ""
+        if isinstance(val, list):
+            return val[0] if val else ""
+        return val
+
+    result: dict[str, str] = {}
+    for tag in soup.find_all("link", rel="alternate"):
+        lang = _str_attr(tag, "hreflang")
+        if not lang:
+            continue
+        lang_norm = LOCALIZED_TEXT_HREFLANG_NORMALIZE.get(lang.lower(), lang.lower())
+        if lang_norm not in target_locales:
+            continue
+        href = _str_attr(tag, "href")
+        if href:
+            result[lang_norm] = urljoin(base_url, href)
+    if not result:
+        # Fallback: language-switcher <a hreflang="…"> anchors
+        for tag in soup.find_all("a", hreflang=True):
+            lang = _str_attr(tag, "hreflang")
+            lang_norm = LOCALIZED_TEXT_HREFLANG_NORMALIZE.get(lang.lower(), lang.lower())
+            if lang_norm not in target_locales:
+                continue
+            href = _str_attr(tag, "href")
+            if href and lang_norm not in result:
+                result[lang_norm] = urljoin(base_url, href)
+    return result
+
+
 def coords_in_estonia(lat: float, lng: float) -> bool:
     """Return True when (lat, lng) falls within Estonia's bounding box."""
     lat_min, lat_max, lng_min, lng_max = ESTONIA_BBOX
@@ -632,6 +709,8 @@ class SourceAdapter(ABC):
                             price_max=normalized.price_max,
                             currency=normalized.currency,
                             price_hint=normalized.price_hint,
+                            title_localized=normalized.title_localized,
+                            description_localized=normalized.description_localized,
                             status=EVENT_STATUS_DRAFT,
                             is_explicit=is_explicit_text(
                                 normalized.title,

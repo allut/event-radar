@@ -20,6 +20,7 @@ docstring of ``geocode.py`` and the project plan for the full rationale.
 import asyncio
 import logging
 from datetime import datetime, timedelta
+from urllib.parse import urlsplit
 
 import httpx
 from bs4 import BeautifulSoup
@@ -31,6 +32,7 @@ from app.constants import (
     EVENT_STATUS_PUBLISHED,
     GEOCODE_COORD_QUANT_DECIMALS,
     HTTP_TIMEOUT_SECONDS,
+    LOCALIZED_TEXT_FIENTA_LOCALES,
     REFETCH_MAX_PER_RUN,
     REFETCH_MIN_INTERVAL_DAYS,
     REFETCH_PLACEHOLDER_VENUE_NAMES,
@@ -42,8 +44,10 @@ from app.constants import (
 from app.ingestion.base import (
     extract_jsonld_event_location,
     extract_jsonld_event_offers,
+    extract_jsonld_event_text,
     http_get,
     is_explicit_text,
+    localized_detail_urls,
 )
 from app.ingestion.geocode import is_suspect_venue_name
 from app.models.models import Event
@@ -133,6 +137,7 @@ async def refetch_event_details(db: AsyncSession) -> dict:
         "no_data": 0,
         "failed": 0,
         "flagged_explicit": 0,
+        "localized_text_backfilled": 0,
     }
     if not candidates:
         return summary
@@ -159,6 +164,59 @@ async def refetch_event_details(db: AsyncSession) -> dict:
             detail_address = location.get("venue_address") if location else None
             detail_lat = location.get("lat") if location else None
             detail_lng = location.get("lng") if location else None
+
+            # Backfill localized title/description when columns are still empty.
+            # Runs before the no_data gate so events whose JSON-LD has only text
+            # (no location/offers) still receive localized titles/descriptions.
+            # Use LOCALIZED_TEXT_FIENTA_LOCALES as the superset target — HTML sources
+            # only expose en/et via hreflang so "ru" simply won't be returned for them.
+            needs_title = event.title_localized is None
+            needs_desc = event.description_localized is None
+            if needs_title or needs_desc:
+                locale_urls = localized_detail_urls(
+                    soup, url, LOCALIZED_TEXT_FIENTA_LOCALES
+                )
+                # SSRF guard: only fetch locale URLs on the same hostname as event.url.
+                # hreflang hrefs come from page HTML controlled by event organizers.
+                base_host = urlsplit(url).hostname
+                locale_urls = {
+                    loc: lu
+                    for loc, lu in locale_urls.items()
+                    if urlsplit(lu).hostname == base_host
+                }
+                loc_titles: dict[str, str] = {}
+                loc_descs: dict[str, str] = {}
+                for locale, loc_url in locale_urls.items():
+                    if loc_url == url:
+                        loc_name, loc_desc = extract_jsonld_event_text(soup)
+                    else:
+                        try:
+                            await asyncio.sleep(REFETCH_REQUEST_DELAY_SECONDS)
+                            loc_resp = await http_get(client, loc_url)
+                            loc_soup = BeautifulSoup(loc_resp.text, "html.parser")
+                            loc_name, loc_desc = extract_jsonld_event_text(loc_soup)
+                        except (httpx.HTTPStatusError, httpx.RequestError) as exc:
+                            log.debug(
+                                "refetch: locale fetch failed locale=%s url=%s: %s",
+                                locale, loc_url, exc,
+                            )
+                            continue
+                        except Exception as exc:
+                            log.warning(
+                                "refetch: locale fetch unexpected error locale=%s url=%s: %s",
+                                locale, loc_url, exc,
+                            )
+                            continue
+                    if loc_name:
+                        loc_titles[locale] = loc_name
+                    if loc_desc:
+                        loc_descs[locale] = loc_desc
+                if needs_title and loc_titles:
+                    event.title_localized = loc_titles
+                if needs_desc and loc_descs:
+                    event.description_localized = loc_descs
+                if (needs_title and loc_titles) or (needs_desc and loc_descs):
+                    summary["localized_text_backfilled"] += 1
 
             parsed_anything = location is not None or any(
                 v is not None for v in (price_min, price_max, currency)

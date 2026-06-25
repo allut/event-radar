@@ -33,9 +33,11 @@ from app.constants import (
     ESTONIA_CONCERT_HALL_TITLE_SELECTOR,
     ESTONIA_CONCERT_HALL_VENUE_SELECTOR,
     ESTONIA_CONCERT_HALL_VENUES,
+    HTML_LISTING_LOCALE_FETCH_DELAY_SECONDS,
     HTML_LISTING_MAX_DETAIL_FETCHES,
     HTTP_TIMEOUT_SECONDS,
     HTTP_USER_AGENT,
+    LOCALIZED_TEXT_HTML_LOCALES,
     KUMU_CARD_SELECTOR,
     KUMU_DATE_FORMAT,
     KUMU_DATE_SELECTOR,
@@ -71,9 +73,11 @@ from app.ingestion.base import (
     NormalizedEvent,
     SourceAdapter,
     extract_jsonld_event_location,
+    extract_jsonld_event_text,
     host_guard_hook,
     http_get,
     http_post,
+    localized_detail_urls,
 )
 
 log = logging.getLogger(__name__)
@@ -310,6 +314,41 @@ class HtmlListingAdapter(SourceAdapter):
                 return
             detail_soup = BeautifulSoup(detail_resp.text, "html.parser")
             await self.parse_detail(client, detail_soup, card)
+            # Fetch locale alternates for native title/description
+            locale_urls = localized_detail_urls(
+                detail_soup, detail_url, LOCALIZED_TEXT_HTML_LOCALES
+            )
+            loc_titles: dict[str, str] = {}
+            loc_descs: dict[str, str] = {}
+            for locale, loc_url in locale_urls.items():
+                if loc_url == detail_url:
+                    loc_name, loc_desc = extract_jsonld_event_text(detail_soup)
+                else:
+                    try:
+                        await asyncio.sleep(HTML_LISTING_LOCALE_FETCH_DELAY_SECONDS)
+                        loc_resp = await http_get(client, loc_url)
+                        loc_soup = BeautifulSoup(loc_resp.text, "html.parser")
+                        loc_name, loc_desc = extract_jsonld_event_text(loc_soup)
+                    except (httpx.HTTPStatusError, httpx.RequestError) as exc:
+                        log.debug(
+                            "%s locale fetch failed locale=%s url=%s: %s",
+                            self.source.slug, locale, loc_url, exc,
+                        )
+                        continue
+                    except Exception as exc:
+                        log.warning(
+                            "%s locale fetch unexpected error locale=%s url=%s: %s",
+                            self.source.slug, locale, loc_url, exc,
+                        )
+                        continue
+                if loc_name:
+                    loc_titles[locale] = loc_name
+                if loc_desc:
+                    loc_descs[locale] = loc_desc
+            if loc_titles:
+                card["title_localized"] = loc_titles
+            if loc_descs:
+                card["description_localized"] = loc_descs
 
     def normalize(self, raw: dict[str, Any]) -> NormalizedEvent | None:
         title = raw.get("title") or ""
@@ -321,6 +360,8 @@ class HtmlListingAdapter(SourceAdapter):
         if starts_at is None:
             return None
 
+        loc_titles = raw.get("title_localized") or {}
+        loc_descs = raw.get("description_localized") or {}
         return NormalizedEvent(
             external_id=external_id,
             title=title,
@@ -337,6 +378,8 @@ class HtmlListingAdapter(SourceAdapter):
             price_max=raw.get("price_max"),
             currency=raw.get("currency"),
             price_hint=raw.get("price_hint"),
+            title_localized=loc_titles if loc_titles else None,
+            description_localized=loc_descs if loc_descs else None,
         )
 
     def get_raw_external_id(self, raw: dict[str, Any]) -> str | None:

@@ -74,6 +74,8 @@ def _future_event(**overrides) -> MagicMock:
     e.starts_at = datetime.now(TALLINN_TZ) + timedelta(days=7)
     e.title_orig = "Test Event"
     e.description_orig = "A test event description"
+    e.title_localized = None
+    e.description_localized = None
     e.venue_name = "Test Venue"
     e.venue_address = "Old Street 1, Tallinn"
     e.lat = TALLINN_CENTER_LAT

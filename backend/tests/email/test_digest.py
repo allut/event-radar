@@ -31,6 +31,8 @@ def _make_event(
     event = MagicMock()
     event.id = id
     event.title_orig = title
+    event.title_localized = None
+    event.description_localized = None
     event.starts_at = starts_at
     event.venue_name = venue_name
     event.price_min = price_min

@@ -95,6 +95,26 @@ def select_events_with_classification() -> Select[tuple[Event]]:
     return select(Event).options(selectinload(Event.classification))
 
 
+def resolve_title(event: Event, locale: str) -> str:
+    """Return localized title with locale → en → title_orig fallback."""
+    loc = event.title_localized
+    if loc:
+        result = loc.get(locale) or loc.get(DEFAULT_USER_LOCALE)
+        if result:
+            return result
+    return event.title_orig
+
+
+def resolve_description(event: Event, locale: str) -> str | None:
+    """Return localized description with locale → en → description_orig fallback."""
+    loc = event.description_localized
+    if loc:
+        result = loc.get(locale) or loc.get(DEFAULT_USER_LOCALE)
+        if result:
+            return result
+    return event.description_orig
+
+
 def resolve_why_go(cl, locale: str) -> list[str]:
     """Return localized why_go bullets for a classification, with locale → en → raw fallback."""
     if cl is None:
@@ -115,8 +135,8 @@ def serialize_event(event: Event, locale: str = DEFAULT_USER_LOCALE) -> dict:
     return {
         "id": event.id,
         "slug": event.slug,
-        "title": event.title_orig,
-        "description": event.description_orig,
+        "title": resolve_title(event, locale),
+        "description": resolve_description(event, locale),
         "important_info": event.important_info,
         "starts_at": event.starts_at.isoformat(),
         "ends_at": event.ends_at.isoformat() if event.ends_at else None,
