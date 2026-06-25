@@ -14,6 +14,7 @@ from bs4 import BeautifulSoup, Tag
 from app.constants import (
     DEFAULT_CURRENCY,
     DETAIL_FETCH_CONCURRENCY,
+    ECH_SITE_TITLE_SUFFIX,
     ESTONIA_CONCERT_HALL_AJAX_ACTION,
     ESTONIA_CONCERT_HALL_AJAX_PATH,
     ESTONIA_CONCERT_HALL_DATE_SELECTOR,
@@ -37,7 +38,6 @@ from app.constants import (
     HTML_LISTING_MAX_DETAIL_FETCHES,
     HTTP_TIMEOUT_SECONDS,
     HTTP_USER_AGENT,
-    LOCALIZED_TEXT_HTML_LOCALES,
     KUMU_CARD_SELECTOR,
     KUMU_DATE_FORMAT,
     KUMU_DATE_SELECTOR,
@@ -50,11 +50,15 @@ from app.constants import (
     KUMU_PRICE_TOOLTIP_ITEM_SELECTOR,
     KUMU_PRICE_TOOLTIP_TITLE_SELECTOR,
     KUMU_PRICE_TOOLTIP_VALUE_SELECTOR,
+    KUMU_SITE_TITLE_SUFFIX,
     KUMU_TITLE_SELECTOR,
     KUMU_VENUE_ADDRESS,
     KUMU_VENUE_LAT,
     KUMU_VENUE_LNG,
     KUMU_VENUE_NAME,
+    LOCALIZED_TEXT_HTML_LOCALES,
+    LOCALIZED_TEXT_MAX_DESC_CHARS,
+    LOCALIZED_TEXT_MAX_TITLE_CHARS,
     PILETILEVI_ALL_PATH,
     PILETILEVI_CARD_SELECTOR,
     PILETILEVI_DATE_FORMAT,
@@ -183,6 +187,16 @@ class HtmlListingAdapter(SourceAdapter):
     ) -> None:
         """Fill in fields on ``card`` from its detail page. No-op by default."""
         return None
+
+    def extract_localized_text(
+        self, soup: BeautifulSoup
+    ) -> tuple[str | None, str | None]:
+        """Return (title, description) for one locale variant page.
+
+        Default reads schema.org Event JSON-LD (works for Piletilevi/Fienta).
+        KUMU and ECH override this to use og:title + CSS selectors instead.
+        """
+        return extract_jsonld_event_text(soup)
 
     async def fetch_raw(self, known_ids: set[str]) -> list[dict[str, Any]]:
         seen_ids: set[str] = set()
@@ -322,13 +336,13 @@ class HtmlListingAdapter(SourceAdapter):
             loc_descs: dict[str, str] = {}
             for locale, loc_url in locale_urls.items():
                 if loc_url == detail_url:
-                    loc_name, loc_desc = extract_jsonld_event_text(detail_soup)
+                    loc_name, loc_desc = self.extract_localized_text(detail_soup)
                 else:
                     try:
                         await asyncio.sleep(HTML_LISTING_LOCALE_FETCH_DELAY_SECONDS)
                         loc_resp = await http_get(client, loc_url)
                         loc_soup = BeautifulSoup(loc_resp.text, "html.parser")
-                        loc_name, loc_desc = extract_jsonld_event_text(loc_soup)
+                        loc_name, loc_desc = self.extract_localized_text(loc_soup)
                     except (httpx.HTTPStatusError, httpx.RequestError) as exc:
                         log.debug(
                             "%s locale fetch failed locale=%s url=%s: %s",
@@ -532,6 +546,63 @@ def kumu_price_hint(price_tag: Tag) -> str:
     return ", ".join(parts) if parts else price_tag.get_text(" ", strip=True)
 
 
+def _og_title(soup: BeautifulSoup) -> str | None:
+    """Return og:title content, or None if absent."""
+    tag = soup.find("meta", property="og:title")
+    if tag and isinstance(tag, Tag):
+        content = tag.get("content")
+        if isinstance(content, str):
+            return content.strip() or None
+    return None
+
+
+def kumu_localized_text(soup: BeautifulSoup) -> tuple[str | None, str | None]:
+    """Extract (title, description) from a KUMU detail page.
+
+    Uses og:title (suffix-stripped) instead of JSON-LD — KUMU's JSON-LD is a
+    Yoast WebPage graph with no Event block, so extract_jsonld_event_text returns
+    (None, None). Falls back to <h1> text when og:title is absent.
+    """
+    raw_title = _og_title(soup)
+    if raw_title:
+        title = raw_title.removesuffix(KUMU_SITE_TITLE_SUFFIX).strip() or None
+    else:
+        h1 = soup.find("h1")
+        title = h1.get_text(strip=True) if h1 else None
+    title = title[:LOCALIZED_TEXT_MAX_TITLE_CHARS] if title else None
+
+    desc_tag = soup.select_one(KUMU_DESCRIPTION_SELECTOR)
+    desc: str | None = None
+    if desc_tag:
+        text = desc_tag.get_text(separator=" ", strip=True)
+        desc = text[:LOCALIZED_TEXT_MAX_DESC_CHARS] if text else None
+
+    return title, desc
+
+
+def estonia_concert_hall_localized_text(soup: BeautifulSoup) -> tuple[str | None, str | None]:
+    """Extract (title, description) from an ECH (concert.ee) detail page.
+
+    Uses og:title (suffix-stripped) — ECH pages carry no JSON-LD Event block.
+    Falls back to <h1> text when og:title is absent.
+    """
+    raw_title = _og_title(soup)
+    if raw_title:
+        title = raw_title.removesuffix(ECH_SITE_TITLE_SUFFIX).strip() or None
+    else:
+        h1 = soup.find("h1")
+        title = h1.get_text(strip=True) if h1 else None
+    title = title[:LOCALIZED_TEXT_MAX_TITLE_CHARS] if title else None
+
+    desc_tag = soup.select_one(ESTONIA_CONCERT_HALL_DESCRIPTION_SELECTOR)
+    desc: str | None = None
+    if desc_tag:
+        text = desc_tag.get_text(separator=" ", strip=True)
+        desc = text[:LOCALIZED_TEXT_MAX_DESC_CHARS] if text else None
+
+    return title, desc
+
+
 class KumuAdapter(HtmlListingAdapter):
     """kumu.ekm.ee/en/calendar/ — server-rendered, paginated event grid."""
 
@@ -589,6 +660,11 @@ class KumuAdapter(HtmlListingAdapter):
         except ValueError:
             return None
         return naive.replace(tzinfo=TALLINN_TZ)
+
+    def extract_localized_text(
+        self, soup: BeautifulSoup
+    ) -> tuple[str | None, str | None]:
+        return kumu_localized_text(soup)
 
     async def parse_detail(
         self, client: httpx.AsyncClient, soup: BeautifulSoup, card: dict[str, Any]
@@ -780,6 +856,11 @@ class EstoniaConcertHallAdapter(HtmlListingAdapter):
             return datetime(year, month, day, hour, minute, tzinfo=TALLINN_TZ)
         except ValueError:
             return None
+
+    def extract_localized_text(
+        self, soup: BeautifulSoup
+    ) -> tuple[str | None, str | None]:
+        return estonia_concert_hall_localized_text(soup)
 
     async def parse_detail(
         self, client: httpx.AsyncClient, soup: BeautifulSoup, card: dict[str, Any]

@@ -19,6 +19,7 @@ docstring of ``geocode.py`` and the project plan for the full rationale.
 
 import asyncio
 import logging
+from collections.abc import Callable
 from datetime import datetime, timedelta
 from urllib.parse import urlsplit
 
@@ -50,9 +51,23 @@ from app.ingestion.base import (
     localized_detail_urls,
 )
 from app.ingestion.geocode import is_suspect_venue_name
+from app.ingestion.sources.html_listing import (
+    estonia_concert_hall_localized_text,
+    kumu_localized_text,
+)
 from app.models.models import Event
 
 log = logging.getLogger(__name__)
+
+# Maps event URL hostname → locale-text extractor for sources whose detail pages
+# carry no schema.org Event JSON-LD block (KUMU, ECH). Normalized hostname
+# (leading "www." stripped) so both bare and www variants match.
+_LocaleTextExtractor = Callable[[BeautifulSoup], tuple[str | None, str | None]]
+
+_LOCALE_TEXT_EXTRACTORS: dict[str, _LocaleTextExtractor] = {
+    "kumu.ekm.ee": kumu_localized_text,
+    "concert.ee": estonia_concert_hall_localized_text,
+}
 
 
 def _is_empty_venue_name(name: str | None) -> bool:
@@ -184,17 +199,23 @@ async def refetch_event_details(db: AsyncSession) -> dict:
                     for loc, lu in locale_urls.items()
                     if urlsplit(lu).hostname == base_host
                 }
+                # Pick the right extractor: JSON-LD for Fienta/Piletilevi; og:title +
+                # CSS selector for KUMU/ECH whose pages carry no Event JSON-LD block.
+                normalized_host = (base_host or "").removeprefix("www.")
+                _extract_text = _LOCALE_TEXT_EXTRACTORS.get(
+                    normalized_host, extract_jsonld_event_text
+                )
                 loc_titles: dict[str, str] = {}
                 loc_descs: dict[str, str] = {}
                 for locale, loc_url in locale_urls.items():
                     if loc_url == url:
-                        loc_name, loc_desc = extract_jsonld_event_text(soup)
+                        loc_name, loc_desc = _extract_text(soup)
                     else:
                         try:
                             await asyncio.sleep(REFETCH_REQUEST_DELAY_SECONDS)
                             loc_resp = await http_get(client, loc_url)
                             loc_soup = BeautifulSoup(loc_resp.text, "html.parser")
-                            loc_name, loc_desc = extract_jsonld_event_text(loc_soup)
+                            loc_name, loc_desc = _extract_text(loc_soup)
                         except (httpx.HTTPStatusError, httpx.RequestError) as exc:
                             log.debug(
                                 "refetch: locale fetch failed locale=%s url=%s: %s",

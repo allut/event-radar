@@ -531,6 +531,8 @@ KUMU_VENUE_NAME = "Kumu Art Museum"
 KUMU_VENUE_ADDRESS = "A. Weizenbergi 34, 10127 Tallinn"
 KUMU_VENUE_LAT = 59.4363374
 KUMU_VENUE_LNG = 24.7958299
+KUMU_SITE_TITLE_SUFFIX = " - Kumu kunstimuuseum"
+ECH_SITE_TITLE_SUFFIX = " - Eesti Kontsert"
 
 # CSS selectors for each HTML-listing source's markup. Tied to the live site's
 # DOM structure, not business logic — keep them grouped here per-source rather

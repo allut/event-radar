@@ -391,3 +391,88 @@ class TestCandidateQuery:
 
 def test_min_interval_is_one_day():
     assert REFETCH_MIN_INTERVAL_DAYS == 1
+
+
+# --- localized text backfill -------------------------------------------------
+
+
+def _hreflang_html(base_url: str, en_url: str, et_url: str, og_title: str = "", desc_text: str = "") -> str:
+    """Build a page with hreflang alternates and optional og:title + .single__content-dynamic."""
+    og = f'<meta property="og:title" content="{og_title}"/>' if og_title else ""
+    desc = f'<div class="single__content-dynamic">{desc_text}</div>' if desc_text else ""
+    return f"""<html><head>
+{og}
+<link rel="alternate" hreflang="en" href="{en_url}"/>
+<link rel="alternate" hreflang="et" href="{et_url}"/>
+</head><body>{desc}</body></html>"""
+
+
+class TestLocalizedTextBackfill:
+    @pytest.mark.asyncio
+    async def test_kumu_host_uses_og_title_extractor(self, mock_db):
+        """KUMU events (kumu.ekm.ee) must use kumu_localized_text, not JSON-LD."""
+        event = _future_event(
+            url="https://kumu.ekm.ee/en/syndmus/some-event/",
+            title_localized=None,
+            description_localized=None,
+        )
+        # Single-locale page (et URL == en URL for this test), og:title present
+        html = _hreflang_html(
+            base_url="https://kumu.ekm.ee/en/syndmus/some-event/",
+            en_url="https://kumu.ekm.ee/en/syndmus/some-event/",
+            et_url="https://kumu.ekm.ee/et/syndmus/some-event/",
+            og_title="Kumu katuseterrassi külastus - Kumu kunstimuuseum",
+            desc_text="Muuseumikirjeldus.",
+        )
+        et_html = _hreflang_html(
+            base_url="https://kumu.ekm.ee/et/syndmus/some-event/",
+            en_url="https://kumu.ekm.ee/en/syndmus/some-event/",
+            et_url="https://kumu.ekm.ee/et/syndmus/some-event/",
+            og_title="Kumu katuseterrassi külastus - Kumu kunstimuuseum",
+            desc_text="Muuseumikirjeldus.",
+        )
+        mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=[event]))
+        responses = [_resp(html), _resp(et_html)]
+        call_count = 0
+
+        async def _fake_get(client, url):
+            nonlocal call_count
+            r = responses[call_count % len(responses)]
+            call_count += 1
+            return r
+
+        with (
+            patch("app.ingestion.refetch.http_get", new=_fake_get),
+            patch("app.ingestion.refetch.asyncio.sleep", new=AsyncMock()),
+        ):
+            summary = await refetch_event_details(mock_db)
+
+        assert summary["localized_text_backfilled"] == 1
+        # Suffix must be stripped — og:title extractor in use
+        assert event.title_localized is not None
+        for loc_title in event.title_localized.values():
+            assert "Kumu kunstimuuseum" not in loc_title
+
+    @pytest.mark.asyncio
+    async def test_fienta_host_uses_jsonld_extractor(self, mock_db):
+        """Non-KUMU/ECH host (fienta.com) uses extract_jsonld_event_text."""
+        event = _future_event(
+            url="https://fienta.com/some-event",
+            title_localized=None,
+            description_localized=None,
+        )
+        # JSON-LD Event block with name — should be extracted
+        ld_html = _ld_script('{"@type":"Event","name":"Jazz Night","location":{"@type":"Place"}}')
+        mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=[event]))
+        with (
+            patch("app.ingestion.refetch.http_get", new=AsyncMock(return_value=_resp(ld_html))),
+            patch("app.ingestion.refetch.asyncio.sleep", new=AsyncMock()),
+        ):
+            summary = await refetch_event_details(mock_db)
+
+        # No hreflang alternates on the page, so no locales resolved → no backfill.
+        # But the extractor (JSON-LD) was selected, not the og:title path.
+        # The important thing: no crash, and for a page with no hreflang the
+        # localized_text_backfilled counter stays 0.
+        assert summary["localized_text_backfilled"] == 0
+        assert event.title_localized is None

@@ -10,11 +10,13 @@ from bs4 import BeautifulSoup
 
 from app.config import settings
 from app.constants import (
+    ECH_SITE_TITLE_SUFFIX,
     ESTONIA_CONCERT_HALL_AJAX_ACTION,
     ESTONIA_CONCERT_HALL_AJAX_PATH,
     ESTONIA_CONCERT_HALL_MAX_EVENTS,
     ESTONIA_CONCERT_HALL_PILETILEVI_URL,
     ESTONIA_CONCERT_HALL_VENUES,
+    KUMU_SITE_TITLE_SUFFIX,
     KUMU_VENUE_ADDRESS,
     KUMU_VENUE_LAT,
     KUMU_VENUE_LNG,
@@ -30,6 +32,8 @@ from app.ingestion.sources.html_listing import (
     PiletileviAdapter,
     _next_occurrence_year,
     _parse_piletilevi_date,
+    estonia_concert_hall_localized_text,
+    kumu_localized_text,
 )
 
 
@@ -1242,3 +1246,135 @@ class TestEstoniaConcertHallParseDetail:
         assert card1["price_max"] == 5.00
         assert card2["price_min"] == 5.00
         assert card2["price_max"] == 5.00
+
+
+# ---------------------------------------------------------------------------
+# kumu_localized_text / estonia_concert_hall_localized_text
+# ---------------------------------------------------------------------------
+
+_KUMU_DETAIL_HTML_ET = """
+<html><head>
+<meta property="og:title" content="Kumu katuseterrassi külastus - Kumu kunstimuuseum"/>
+</head><body>
+<div class="single__content-dynamic">Kumu muuseum on avatud igal nädalavahetusel.</div>
+</body></html>
+"""
+
+_KUMU_DETAIL_HTML_EN = """
+<html><head>
+<meta property="og:title" content="Visit to Kumu Rooftop Terrace - Kumu kunstimuuseum"/>
+</head><body>
+<div class="single__content-dynamic">Kumu museum is open every weekend.</div>
+</body></html>
+"""
+
+_KUMU_DETAIL_HTML_NO_OG = """
+<html><body>
+<h1>Kumu katuseterrassi külastus 28.06.2026 | 13.00</h1>
+<div class="single__content-dynamic">Muuseumi külastus.</div>
+</body></html>
+"""
+
+_KUMU_DETAIL_HTML_EMPTY = "<html><body></body></html>"
+
+_ECH_DETAIL_HTML_EN = """
+<html><head>
+<meta property="og:title" content="Summer Classics at Niguliste - Eesti Kontsert"/>
+</head><body>
+<div class="main">An evening of classical music in historic Niguliste church.</div>
+</body></html>
+"""
+
+_ECH_DETAIL_HTML_ET = """
+<html><head>
+<meta property="og:title" content="Suveklassika Niguliste kirikus - Eesti Kontsert"/>
+</head><body>
+<div class="main">Klassikalise muusika õhtu ajaloolises Niguliste kirikus.</div>
+</body></html>
+"""
+
+_ECH_DETAIL_HTML_EMPTY = "<html><head></head><body></body></html>"
+
+_PILETILEVI_DETAIL_HTML_WITH_JSONLD = """
+<html><head>
+<script type="application/ld+json">
+{"@type": "Event", "name": "Jazz Night", "description": "A jazz evening."}
+</script>
+<meta property="og:title" content="Jazz Night - Piletilevi"/>
+</head><body></body></html>
+"""
+
+
+class TestKumuLocalizedText:
+    def test_suffix_stripped_from_og_title(self):
+        soup = BeautifulSoup(_KUMU_DETAIL_HTML_ET, "html.parser")
+        title, _ = kumu_localized_text(soup)
+        assert title == "Kumu katuseterrassi külastus"
+        assert KUMU_SITE_TITLE_SUFFIX not in (title or "")
+
+    def test_description_from_content_dynamic_selector(self):
+        soup = BeautifulSoup(_KUMU_DETAIL_HTML_ET, "html.parser")
+        _, desc = kumu_localized_text(soup)
+        assert desc == "Kumu muuseum on avatud igal nädalavahetusel."
+
+    def test_english_variant_also_suffix_stripped(self):
+        soup = BeautifulSoup(_KUMU_DETAIL_HTML_EN, "html.parser")
+        title, _ = kumu_localized_text(soup)
+        assert title == "Visit to Kumu Rooftop Terrace"
+
+    def test_fallback_to_h1_when_og_title_absent(self):
+        soup = BeautifulSoup(_KUMU_DETAIL_HTML_NO_OG, "html.parser")
+        title, _ = kumu_localized_text(soup)
+        assert title == "Kumu katuseterrassi külastus 28.06.2026 | 13.00"
+
+    def test_returns_none_none_when_page_has_no_text(self):
+        soup = BeautifulSoup(_KUMU_DETAIL_HTML_EMPTY, "html.parser")
+        title, desc = kumu_localized_text(soup)
+        assert title is None
+        assert desc is None
+
+
+class TestEstoniaConcertHallLocalizedText:
+    def test_suffix_stripped_from_og_title(self):
+        soup = BeautifulSoup(_ECH_DETAIL_HTML_EN, "html.parser")
+        title, _ = estonia_concert_hall_localized_text(soup)
+        assert title == "Summer Classics at Niguliste"
+        assert ECH_SITE_TITLE_SUFFIX not in (title or "")
+
+    def test_description_from_main_selector(self):
+        soup = BeautifulSoup(_ECH_DETAIL_HTML_EN, "html.parser")
+        _, desc = estonia_concert_hall_localized_text(soup)
+        assert desc == "An evening of classical music in historic Niguliste church."
+
+    def test_estonian_variant_suffix_stripped(self):
+        soup = BeautifulSoup(_ECH_DETAIL_HTML_ET, "html.parser")
+        title, _ = estonia_concert_hall_localized_text(soup)
+        assert title == "Suveklassika Niguliste kirikus"
+
+    def test_returns_none_none_when_page_has_no_text(self):
+        soup = BeautifulSoup(_ECH_DETAIL_HTML_EMPTY, "html.parser")
+        title, desc = estonia_concert_hall_localized_text(soup)
+        assert title is None
+        assert desc is None
+
+
+class TestExtractLocalizedTextHook:
+    def test_base_default_delegates_to_jsonld(self):
+        """HtmlListingAdapter.extract_localized_text uses JSON-LD (Piletilevi path)."""
+        adapter = _piletilevi_adapter()
+        soup = BeautifulSoup(_PILETILEVI_DETAIL_HTML_WITH_JSONLD, "html.parser")
+        title, desc = adapter.extract_localized_text(soup)
+        assert title == "Jazz Night"
+        assert desc == "A jazz evening."
+
+    def test_kumu_adapter_uses_og_title(self):
+        adapter = _kumu_adapter()
+        soup = BeautifulSoup(_KUMU_DETAIL_HTML_EN, "html.parser")
+        title, _ = adapter.extract_localized_text(soup)
+        assert title == "Visit to Kumu Rooftop Terrace"
+
+    def test_ech_adapter_uses_og_title(self):
+        adapter = _concert_hall_adapter()
+        soup = BeautifulSoup(_ECH_DETAIL_HTML_EN, "html.parser")
+        title, _ = adapter.extract_localized_text(soup)
+        assert title == "Summer Classics at Niguliste"
