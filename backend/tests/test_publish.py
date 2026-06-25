@@ -1,5 +1,8 @@
 """Unit tests for the publish gate (app/publish.py)."""
 
+from types import SimpleNamespace
+from unittest.mock import MagicMock
+
 import pytest
 
 from app.constants import (
@@ -10,34 +13,82 @@ from app.constants import (
 )
 from app.publish import publish_pending
 
+REJECT_ROW_ZERO = SimpleNamespace(
+    unpublished=0,
+    fail_quality=0,
+    fail_explicit=0,
+    fail_out_of_area=0,
+    fail_ended=0,
+    fail_no_title=0,
+    fail_coords_bbox=0,
+)
+
+
+def _configure_execute(mock_db, rowcount: int, reject_row=REJECT_ROW_ZERO):
+    """Gate now issues two execute() calls: the bulk UPDATE, then a diagnostic
+    SELECT over the still-classified rows. side_effect gives each call its
+    own mocked result."""
+    update_result = MagicMock()
+    update_result.rowcount = rowcount
+    select_result = MagicMock()
+    select_result.one.return_value = reject_row
+    mock_db.execute.side_effect = [update_result, select_result]
+
 
 @pytest.mark.asyncio
 async def test_publish_pending_returns_rowcount_from_update(mock_db):
-    mock_db.execute.return_value.rowcount = 3
+    _configure_execute(mock_db, rowcount=3)
 
     result = await publish_pending(mock_db)
 
-    assert result == {"published": 3}
-    mock_db.execute.assert_awaited_once()
+    assert result["published"] == 3
+    assert mock_db.execute.call_count == 2
 
 
 @pytest.mark.asyncio
 async def test_publish_pending_zero_rowcount_when_nothing_qualifies(mock_db):
-    mock_db.execute.return_value.rowcount = 0
+    _configure_execute(mock_db, rowcount=0)
 
     result = await publish_pending(mock_db)
 
-    assert result == {"published": 0}
+    assert result["published"] == 0
+
+
+@pytest.mark.asyncio
+async def test_publish_pending_returns_reject_breakdown(mock_db):
+    reject_row = SimpleNamespace(
+        unpublished=5,
+        fail_quality=2,
+        fail_explicit=0,
+        fail_out_of_area=1,
+        fail_ended=4,
+        fail_no_title=0,
+        fail_coords_bbox=0,
+    )
+    _configure_execute(mock_db, rowcount=3, reject_row=reject_row)
+
+    result = await publish_pending(mock_db)
+
+    assert result == {
+        "published": 3,
+        "unpublished": 5,
+        "fail_quality": 2,
+        "fail_explicit": 0,
+        "fail_out_of_area": 1,
+        "fail_ended": 4,
+        "fail_no_title": 0,
+        "fail_coords_bbox": 0,
+    }
 
 
 @pytest.mark.asyncio
 async def test_publish_pending_statement_encodes_gate_criteria(mock_db):
-    """The single bulk UPDATE must encode all four gate criteria from the plan."""
-    mock_db.execute.return_value.rowcount = 0
+    """The single bulk UPDATE must encode all gate criteria from the plan."""
+    _configure_execute(mock_db, rowcount=0)
 
     await publish_pending(mock_db)
 
-    stmt = mock_db.execute.call_args[0][0]
+    stmt = mock_db.execute.call_args_list[0][0][0]
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
 
     # Reads classified, writes published — idempotent re-run is a no-op.
@@ -49,7 +100,8 @@ async def test_publish_pending_statement_encodes_gate_criteria(mock_db):
     assert "is_explicit" in compiled
     # is_out_of_area=false gate (LLM location signal).
     assert "is_out_of_area" in compiled
-    # starts_at must be in the future.
+    # event_not_ended_filter: ends_at >= now, falling back to starts_at >= now.
+    assert "ends_at >=" in compiled
     assert "starts_at >=" in compiled
     # title_orig presence check.
     assert "title_orig" in compiled

@@ -1,5 +1,12 @@
 """Unit tests for app.routers.utils helpers."""
-from app.routers.utils import event_series_key, mask_email, normalized_title
+from datetime import datetime, timezone
+
+from app.routers.utils import (
+    event_not_ended_filter,
+    event_series_key,
+    mask_email,
+    normalized_title,
+)
 
 
 class TestNormalizedTitle:
@@ -38,6 +45,25 @@ class TestEventSeriesKey:
         assert event_series_key("Jazz Night", "Von Krahli") != event_series_key(
             "Jazz Night", "Fotografiska"
         )
+
+
+class TestEventNotEndedFilter:
+    """Compiled-SQL checks — the predicate has no Python-side evaluation path,
+    so correctness is verified against the literal-bound SQL it produces."""
+
+    def test_compiles_to_ends_at_or_starts_at_fallback(self):
+        now = datetime(2026, 6, 25, tzinfo=timezone.utc)
+        compiled = str(
+            event_not_ended_filter(now).compile(
+                compile_kwargs={"literal_binds": True}
+            )
+        )
+        # Live if ends_at hasn't passed yet...
+        assert "events.ends_at >=" in compiled
+        # ...or, when ends_at is unset, live if starts_at hasn't passed yet.
+        assert "events.ends_at IS NULL" in compiled
+        assert "events.starts_at >=" in compiled
+        assert "2026-06-25" in compiled
 
 
 class TestMaskEmail:

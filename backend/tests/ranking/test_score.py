@@ -531,6 +531,24 @@ class TestBuildDailyFeedsExplicitFilter:
         assert "is_explicit" in compiled
         assert "false" in compiled.lower()
 
+    async def test_event_query_keeps_ongoing_events_via_ends_at(self, mock_db):
+        # Candidate window must use event_not_ended_filter, not a bare
+        # starts_at >= now check, so an ongoing offer (past starts_at, future
+        # ends_at) still reaches the Daily 5 pool.
+        from app.ranking.score import build_daily_feeds
+
+        empty = MagicMock()
+        empty.all.return_value = []
+        mock_db.scalars.return_value = empty
+
+        await build_daily_feeds(mock_db)
+
+        stmt = mock_db.scalars.call_args_list[0].args[0]
+        compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+        assert "events.ends_at >=" in compiled
+        assert "events.ends_at IS NULL" in compiled
+        assert "events.starts_at >=" in compiled
+
 
 def _scalar_result(items: list) -> MagicMock:
     r = MagicMock()

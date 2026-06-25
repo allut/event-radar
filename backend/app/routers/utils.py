@@ -1,7 +1,9 @@
 """Shared serialization helpers for event routers."""
 
+from datetime import datetime
+
 from itsdangerous import BadSignature, SignatureExpired
-from sqlalchemy import Select, select
+from sqlalchemy import ColumnElement, Select, and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -36,6 +38,19 @@ def event_series_key(title_orig: str, venue_name: str | None) -> tuple[str, str]
     filter, not a correctness gate.
     """
     return (normalized_title(title_orig), normalized_title(venue_name or ""))
+
+
+def event_not_ended_filter(now: datetime) -> ColumnElement[bool]:
+    """Event is live (publishable / feed-eligible) until it ends.
+
+    Uses ``ends_at`` when present, else falls back to ``starts_at``. A past
+    ``starts_at`` with a future ``ends_at`` (gift cards, multi-year course
+    recordings) stays live — only a genuinely-over event fails this.
+    """
+    return or_(
+        Event.ends_at >= now,
+        and_(Event.ends_at.is_(None), Event.starts_at >= now),
+    )
 
 
 def mask_email(email: str) -> str:

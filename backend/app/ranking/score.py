@@ -66,7 +66,11 @@ from app.models.models import (
     UserEventScore,
     UserPersona,
 )
-from app.routers.utils import event_series_key, select_events_with_classification
+from app.routers.utils import (
+    event_not_ended_filter,
+    event_series_key,
+    select_events_with_classification,
+)
 
 # ---------------------------------------------------------------------------
 # Feedback context (precomputed for one user, reused across event scoring)
@@ -434,7 +438,7 @@ async def build_daily_feeds(db: AsyncSession) -> dict:
             select_events_with_classification().where(
                 Event.status == EVENT_STATUS_PUBLISHED,
                 Event.is_explicit.is_(False),
-                Event.starts_at >= now,
+                event_not_ended_filter(now),
                 Event.starts_at <= cutoff,
             )
         )
