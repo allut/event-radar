@@ -14,6 +14,7 @@ from bs4 import BeautifulSoup, Tag
 from app.constants import (
     DEFAULT_CURRENCY,
     DETAIL_FETCH_CONCURRENCY,
+    ECH_SITE_NAME_ET,
     ECH_SITE_TITLE_SUFFIX,
     ESTONIA_CONCERT_HALL_AJAX_ACTION,
     ESTONIA_CONCERT_HALL_AJAX_PATH,
@@ -50,6 +51,7 @@ from app.constants import (
     KUMU_PRICE_TOOLTIP_ITEM_SELECTOR,
     KUMU_PRICE_TOOLTIP_TITLE_SELECTOR,
     KUMU_PRICE_TOOLTIP_VALUE_SELECTOR,
+    KUMU_SITE_NAME_ET,
     KUMU_SITE_TITLE_SUFFIX,
     KUMU_TITLE_SELECTOR,
     KUMU_VENUE_ADDRESS,
@@ -81,6 +83,7 @@ from app.ingestion.base import (
     host_guard_hook,
     http_get,
     http_post,
+    locale_from_url_path,
     localized_detail_urls,
 )
 
@@ -332,15 +335,32 @@ class HtmlListingAdapter(SourceAdapter):
             locale_urls = localized_detail_urls(
                 detail_soup, detail_url, LOCALIZED_TEXT_HTML_LOCALES
             )
+            url_locale = locale_from_url_path(detail_url, LOCALIZED_TEXT_HTML_LOCALES)
+            detail_host = urlsplit(detail_url).hostname
             loc_titles: dict[str, str] = {}
             loc_descs: dict[str, str] = {}
             for locale, loc_url in locale_urls.items():
-                if loc_url == detail_url:
+                if locale == url_locale or loc_url == detail_url:
+                    # Reuse already-loaded soup — this page IS the locale variant
                     loc_name, loc_desc = self.extract_localized_text(detail_soup)
                 else:
                     try:
                         await asyncio.sleep(HTML_LISTING_LOCALE_FETCH_DELAY_SECONDS)
                         loc_resp = await http_get(client, loc_url)
+                        # Reject pages that redirected off-host or to site root
+                        final_parsed = urlsplit(str(loc_resp.url))
+                        if final_parsed.hostname != detail_host:
+                            log.debug(
+                                "%s locale fetch redirected off-host locale=%s url=%s",
+                                self.source.slug, locale, loc_url,
+                            )
+                            continue
+                        if final_parsed.path in ("/", ""):
+                            log.debug(
+                                "%s locale page is site root locale=%s url=%s",
+                                self.source.slug, locale, loc_url,
+                            )
+                            continue
                         loc_soup = BeautifulSoup(loc_resp.text, "html.parser")
                         loc_name, loc_desc = self.extract_localized_text(loc_soup)
                     except (httpx.HTTPStatusError, httpx.RequestError) as exc:
@@ -565,7 +585,11 @@ def kumu_localized_text(soup: BeautifulSoup) -> tuple[str | None, str | None]:
     """
     raw_title = _og_title(soup)
     if raw_title:
-        title = raw_title.removesuffix(KUMU_SITE_TITLE_SUFFIX).strip() or None
+        if raw_title == KUMU_SITE_NAME_ET or raw_title.startswith(KUMU_SITE_NAME_ET + " -"):
+            # Site-level page (homepage) — og:title is the venue/site name, not an event
+            title = None
+        else:
+            title = raw_title.removesuffix(KUMU_SITE_TITLE_SUFFIX).strip() or None
     else:
         h1 = soup.find("h1")
         title = h1.get_text(strip=True) if h1 else None
@@ -588,7 +612,11 @@ def estonia_concert_hall_localized_text(soup: BeautifulSoup) -> tuple[str | None
     """
     raw_title = _og_title(soup)
     if raw_title:
-        title = raw_title.removesuffix(ECH_SITE_TITLE_SUFFIX).strip() or None
+        if raw_title == ECH_SITE_NAME_ET or raw_title.startswith(ECH_SITE_NAME_ET + " -"):
+            # Site-level page (homepage) — og:title is the venue/site name, not an event
+            title = None
+        else:
+            title = raw_title.removesuffix(ECH_SITE_TITLE_SUFFIX).strip() or None
     else:
         h1 = soup.find("h1")
         title = h1.get_text(strip=True) if h1 else None

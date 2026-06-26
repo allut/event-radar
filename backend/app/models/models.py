@@ -228,8 +228,8 @@ class Event(Base):
     geocode_attempted_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-    title_localized: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
-    description_localized: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    title_localized: Mapped[dict | None] = mapped_column(JSONB(none_as_null=True), nullable=True)
+    description_localized: Mapped[dict | None] = mapped_column(JSONB(none_as_null=True), nullable=True)
     dedup_group_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()

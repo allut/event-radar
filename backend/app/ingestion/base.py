@@ -552,6 +552,20 @@ def extract_jsonld_event_text(soup: BeautifulSoup) -> tuple[str | None, str | No
     return (None, None)
 
 
+def locale_from_url_path(url: str, locales: frozenset[str]) -> str | None:
+    """Return the locale code found as a path segment in url, or None.
+
+    Detects locale from URL structure (e.g. ``/en/event-slug`` → ``"en"``).
+    Used to identify which locale an already-loaded page represents so
+    callers can reuse its soup instead of re-fetching by URL equality.
+    """
+    path = urlsplit(url).path
+    for segment in path.strip("/").split("/"):
+        if segment.lower() in locales:
+            return segment.lower()
+    return None
+
+
 def localized_detail_urls(
     soup: BeautifulSoup,
     base_url: str,

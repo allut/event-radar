@@ -30,10 +30,12 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.constants import (
+    ECH_SITE_NAME_ET,
     EVENT_STATUS_CLASSIFIED,
     EVENT_STATUS_PUBLISHED,
     GEOCODE_COORD_QUANT_DECIMALS,
     HTTP_TIMEOUT_SECONDS,
+    KUMU_SITE_NAME_ET,
     LOCALIZED_TEXT_FIENTA_LOCALES,
     REFETCH_COMMIT_INTERVAL_SECONDS,
     REFETCH_MAX_PER_RUN,
@@ -48,8 +50,10 @@ from app.ingestion.base import (
     extract_jsonld_event_location,
     extract_jsonld_event_offers,
     extract_jsonld_event_text,
+    host_guard_hook,
     http_get,
     is_explicit_text,
+    locale_from_url_path,
     localized_detail_urls,
 )
 from app.ingestion.geocode import is_suspect_venue_name
@@ -70,6 +74,27 @@ _LOCALE_TEXT_EXTRACTORS: dict[str, _LocaleTextExtractor] = {
     "kumu.ekm.ee": kumu_localized_text,
     "concert.ee": estonia_concert_hall_localized_text,
 }
+
+
+_SUSPECT_LOCALE_TITLE_PREFIXES: dict[str, str] = {
+    "kumu.ekm.ee": KUMU_SITE_NAME_ET,
+    "concert.ee": ECH_SITE_NAME_ET,
+}
+
+
+def _is_suspect_locale_title(title: str, normalized_host: str) -> bool:
+    """True when a stored localized title looks like site-level (homepage) content.
+
+    Detects garbage written by a broken hreflang link to the venue's own
+    homepage instead of the event page — these are re-fetchable on the next run.
+    The prefix must be followed by a separator (" -") or be the entire title to
+    avoid rejecting legitimate event titles in the genitive form (e.g.
+    "Kumu kunstimuuseumi 100. aastapäeva näitus").
+    """
+    prefix = _SUSPECT_LOCALE_TITLE_PREFIXES.get(normalized_host)
+    if prefix is None:
+        return False
+    return title == prefix or title.startswith(prefix + " -")
 
 
 def _is_empty_venue_name(name: str | None) -> bool:
@@ -160,7 +185,18 @@ async def refetch_event_details(db: AsyncSession) -> dict:
         return summary
 
     last_commit = time.monotonic()
-    async with httpx.AsyncClient(timeout=HTTP_TIMEOUT_SECONDS) as client:
+    # Bug 1 fix: follow Fienta's locale 302-redirects with a host-pinning SSRF guard.
+    # Build the allowed-host set from candidate URLs so every source's own host is
+    # permitted (redirects to other hosts are still blocked). The locale sub-fetch loop
+    # has its own independent same-host guard below.
+    allowed_hosts = frozenset(
+        h for e in candidates if (h := urlsplit(e.url or "").hostname)
+    )
+    async with httpx.AsyncClient(
+        timeout=HTTP_TIMEOUT_SECONDS,
+        follow_redirects=True,
+        event_hooks={"request": [host_guard_hook(allowed_hosts)]},
+    ) as client:
         for event in candidates:
             url = event.url
             assert url is not None  # guaranteed by the WHERE clause above
@@ -186,40 +222,72 @@ async def refetch_event_details(db: AsyncSession) -> dict:
             detail_lat = location.get("lat") if location else None
             detail_lng = location.get("lng") if location else None
 
-            # Backfill localized title/description when columns are still empty.
+            # Backfill localized title/description per-locale.
             # Runs before the no_data gate so events whose JSON-LD has only text
             # (no location/offers) still receive localized titles/descriptions.
-            # Use LOCALIZED_TEXT_FIENTA_LOCALES as the superset target — HTML sources
-            # only expose en/et via hreflang so "ru" simply won't be returned for them.
-            needs_title = event.title_localized is None
-            needs_desc = event.description_localized is None
-            if needs_title or needs_desc:
+            # Bug 2c fix: gate per-locale (not per-column) and merge into existing
+            # dict so a partially-filled column self-heals missing locales.
+            base_host = urlsplit(url).hostname
+            normalized_host = (base_host or "").removeprefix("www.")
+            existing_titles: dict[str, str] = (
+                dict(event.title_localized) if event.title_localized else {}
+            )
+            existing_descs: dict[str, str] = (
+                dict(event.description_localized) if event.description_localized else {}
+            )
+            missing_title_locales = {
+                loc for loc in LOCALIZED_TEXT_FIENTA_LOCALES
+                if loc not in existing_titles
+                or _is_suspect_locale_title(existing_titles[loc], normalized_host)
+            }
+            missing_desc_locales = {
+                loc for loc in LOCALIZED_TEXT_FIENTA_LOCALES
+                if loc not in existing_descs
+            }
+            locales_to_fetch = missing_title_locales | missing_desc_locales
+            if locales_to_fetch:
                 locale_urls = localized_detail_urls(
                     soup, url, LOCALIZED_TEXT_FIENTA_LOCALES
                 )
                 # SSRF guard: only fetch locale URLs on the same hostname as event.url.
-                # hreflang hrefs come from page HTML controlled by event organizers.
-                base_host = urlsplit(url).hostname
+                # Also restrict to only locales that still need data.
                 locale_urls = {
                     loc: lu
                     for loc, lu in locale_urls.items()
-                    if urlsplit(lu).hostname == base_host
+                    if urlsplit(lu).hostname == base_host and loc in locales_to_fetch
                 }
                 # Pick the right extractor: JSON-LD for Fienta/Piletilevi; og:title +
                 # CSS selector for KUMU/ECH whose pages carry no Event JSON-LD block.
-                normalized_host = (base_host or "").removeprefix("www.")
                 _extract_text = _LOCALE_TEXT_EXTRACTORS.get(
                     normalized_host, extract_jsonld_event_text
                 )
+                # Bug 2a fix: detect this page's own locale from its URL path and reuse
+                # the already-loaded soup instead of matching on exact URL string.
+                url_locale = locale_from_url_path(url, LOCALIZED_TEXT_FIENTA_LOCALES)
                 loc_titles: dict[str, str] = {}
                 loc_descs: dict[str, str] = {}
                 for locale, loc_url in locale_urls.items():
-                    if loc_url == url:
+                    if locale == url_locale or loc_url == url:
+                        # This page IS the locale variant — reuse in-memory soup
                         loc_name, loc_desc = _extract_text(soup)
                     else:
                         try:
                             await asyncio.sleep(REFETCH_REQUEST_DELAY_SECONDS)
                             loc_resp = await http_get(client, loc_url)
+                            # Reject locale pages that redirected off-host or to site root
+                            final_parsed = urlsplit(str(loc_resp.url))
+                            if final_parsed.hostname != base_host:
+                                log.debug(
+                                    "refetch: locale fetch redirected off-host locale=%s url=%s",
+                                    locale, loc_url,
+                                )
+                                continue
+                            if final_parsed.path in ("/", ""):
+                                log.debug(
+                                    "refetch: locale page is site root locale=%s url=%s",
+                                    locale, loc_url,
+                                )
+                                continue
                             loc_soup = BeautifulSoup(loc_resp.text, "html.parser")
                             loc_name, loc_desc = _extract_text(loc_soup)
                         except (httpx.HTTPStatusError, httpx.RequestError) as exc:
@@ -234,15 +302,17 @@ async def refetch_event_details(db: AsyncSession) -> dict:
                                 locale, loc_url, exc,
                             )
                             continue
-                    if loc_name:
+                    if loc_name and locale in missing_title_locales:
                         loc_titles[locale] = loc_name
-                    if loc_desc:
+                    if loc_desc and locale in missing_desc_locales:
                         loc_descs[locale] = loc_desc
-                if needs_title and loc_titles:
-                    event.title_localized = loc_titles
-                if needs_desc and loc_descs:
-                    event.description_localized = loc_descs
-                if (needs_title and loc_titles) or (needs_desc and loc_descs):
+                if loc_titles:
+                    existing_titles.update(loc_titles)
+                    event.title_localized = existing_titles
+                if loc_descs:
+                    existing_descs.update(loc_descs)
+                    event.description_localized = existing_descs
+                if loc_titles or loc_descs:
                     summary["localized_text_backfilled"] += 1
 
             parsed_anything = location is not None or any(

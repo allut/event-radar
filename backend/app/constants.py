@@ -532,7 +532,9 @@ KUMU_VENUE_ADDRESS = "A. Weizenbergi 34, 10127 Tallinn"
 KUMU_VENUE_LAT = 59.4363374
 KUMU_VENUE_LNG = 24.7958299
 KUMU_SITE_TITLE_SUFFIX = " - Kumu kunstimuuseum"
+KUMU_SITE_NAME_ET = "Kumu kunstimuuseum"  # ET site name; homepage og:title starts with this
 ECH_SITE_TITLE_SUFFIX = " - Eesti Kontsert"
+ECH_SITE_NAME_ET = "Eesti Kontsert"  # ET site name; homepage og:title starts with this
 
 # CSS selectors for each HTML-listing source's markup. Tied to the live site's
 # DOM structure, not business logic — keep them grouped here per-source rather
