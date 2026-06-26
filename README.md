@@ -235,7 +235,7 @@ curl -u admin:admin -X POST http://localhost:8000/admin/refetch
 
 ### Resetting event data
 
-`backend/scripts/reset_events.py` wipes **all** event and pipeline data and resets auto-increment IDs to 1 — useful for clearing out test/bad ingested data and starting the pipeline from a clean slate. It truncates the event, raw-event, classification, feedback, score, daily-feed, ingestion-run, LLM-call, and inbound-email tables (`RESTART IDENTITY CASCADE`), then resets each source's last-run state so ingestion re-fetches everything. **Users, personas, and the source registry are preserved.**
+`backend/scripts/reset_events.py` wipes **all** event and pipeline data and resets auto-increment IDs to 1 — useful for clearing out test/bad ingested data and starting the pipeline from a clean slate. It truncates the event, raw-event, source-link, classification, feedback, score, daily-feed, ingestion-run, LLM-call, and inbound-email tables (`RESTART IDENTITY CASCADE`), then resets each source's last-run state so ingestion re-fetches everything. **Users, personas, and the source registry are preserved.**
 
 ```bash
 cd backend                              # with the venv active
