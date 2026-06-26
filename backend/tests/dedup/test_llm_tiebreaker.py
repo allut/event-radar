@@ -13,32 +13,30 @@ _BASE = datetime(2026, 7, 1, 20, 0, 0, tzinfo=TALLINN_TZ)
 
 
 def _event(
+    make_event_fn,
     eid: int,
     title: str | None = None,
     starts_at: datetime = _BASE,
     venue_name: str | None = None,
 ) -> MagicMock:
-    e = MagicMock()
-    e.id = eid
     # Default to a per-eid title so two default events have DISTINCT normalized
     # titles (not collapsed by apply_same_day_title_unions) yet still fuzzy-match
     # >= TITLE_RATIO_VENUE_BYPASS_THRESHOLD, so they reach the LLM via the venue
     # bypass — these tests exercise the cache/budget machinery, not same-day
     # collapse. Tests that need an identical title pass it explicitly.
-    e.title_orig = title if title is not None else f"Jazz Night {eid}"
-    e.starts_at = starts_at
-    e.venue_name = venue_name
-    e.status = "draft"
-    e.dedup_group_id = None
-    # Quality fields read by build_cluster_assignments' representative pick —
-    # set to None/"" so all events rank equally and the tie-break keeps min(id),
-    # preserving the existing dedup_group_id assertions below.
-    e.price_min = None
-    e.venue_address = None
-    e.lat = None
-    e.lng = None
-    e.description_orig = ""
-    return e
+    # Quality fields set to None/"" so all events rank equally and tie-break
+    # keeps min(id), preserving the existing dedup_group_id assertions below.
+    return make_event_fn(
+        event_id=eid,
+        title=title if title is not None else f"Jazz Night {eid}",
+        starts_at=starts_at,
+        venue_name=venue_name,
+        status="draft",
+        venue_address=None,
+        lat=None,
+        lng=None,
+        description_orig="",
+    )
 
 
 def _wire_db(mock_db, events: list) -> None:
@@ -93,50 +91,50 @@ class TestLlmAvailable:
 
 class TestLlmConfirmsPair:
     @pytest.mark.asyncio
-    async def test_confirms_when_same_and_confident(self, mock_db, monkeypatch):
+    async def test_confirms_when_same_and_confident(self, mock_db, monkeypatch, make_event):
         monkeypatch.setattr(
             tiebreaker,
             "llm_json",
             AsyncMock(return_value=({"same": True, "confidence": 0.9}, "groq/x")),
         )
-        assert await tiebreaker._llm_confirms_pair(_event(1), _event(2), mock_db) is True
+        assert await tiebreaker._llm_confirms_pair(_event(make_event, 1), _event(make_event, 2), mock_db) is True
 
     @pytest.mark.asyncio
-    async def test_rejects_below_threshold(self, mock_db, monkeypatch):
+    async def test_rejects_below_threshold(self, mock_db, monkeypatch, make_event):
         monkeypatch.setattr(
             tiebreaker,
             "llm_json",
             AsyncMock(return_value=({"same": True, "confidence": 0.5}, "groq/x")),
         )
-        assert await tiebreaker._llm_confirms_pair(_event(1), _event(2), mock_db) is False
+        assert await tiebreaker._llm_confirms_pair(_event(make_event, 1), _event(make_event, 2), mock_db) is False
 
     @pytest.mark.asyncio
-    async def test_rejects_when_not_same(self, mock_db, monkeypatch):
+    async def test_rejects_when_not_same(self, mock_db, monkeypatch, make_event):
         monkeypatch.setattr(
             tiebreaker,
             "llm_json",
             AsyncMock(return_value=({"same": False, "confidence": 0.99}, "groq/x")),
         )
-        assert await tiebreaker._llm_confirms_pair(_event(1), _event(2), mock_db) is False
+        assert await tiebreaker._llm_confirms_pair(_event(make_event, 1), _event(make_event, 2), mock_db) is False
 
     @pytest.mark.asyncio
-    async def test_rejects_on_llm_error(self, mock_db, monkeypatch):
+    async def test_rejects_on_llm_error(self, mock_db, monkeypatch, make_event):
         monkeypatch.setattr(
             tiebreaker,
             "llm_json",
             AsyncMock(side_effect=router.LLMError("all providers failed")),
         )
-        assert await tiebreaker._llm_confirms_pair(_event(1), _event(2), mock_db) is False
+        assert await tiebreaker._llm_confirms_pair(_event(make_event, 1), _event(make_event, 2), mock_db) is False
 
     @pytest.mark.asyncio
-    async def test_rejects_on_bad_response(self, mock_db, monkeypatch):
+    async def test_rejects_on_bad_response(self, mock_db, monkeypatch, make_event):
         # confidence is non-numeric → float() raises ValueError → treated as distinct
         monkeypatch.setattr(
             tiebreaker,
             "llm_json",
             AsyncMock(return_value=({"same": True, "confidence": "high"}, "groq/x")),
         )
-        assert await tiebreaker._llm_confirms_pair(_event(1), _event(2), mock_db) is False
+        assert await tiebreaker._llm_confirms_pair(_event(make_event, 1), _event(make_event, 2), mock_db) is False
 
 
 # ---------------------------------------------------------------------------
@@ -199,9 +197,9 @@ class TestRunDedupPassLlm:
         assert result["deferred_pairs"] == 0
 
     @pytest.mark.asyncio
-    async def test_confirmed_pair_is_grouped(self, mock_db, monkeypatch):
+    async def test_confirmed_pair_is_grouped(self, mock_db, monkeypatch, make_event):
         monkeypatch.setattr(tiebreaker, "llm_available", lambda: True)
-        a, b = _event(1), _event(2)
+        a, b = _event(make_event, 1), _event(make_event, 2)
         _wire_db(mock_db, [a, b])
         _wire_execute(mock_db, [])
         monkeypatch.setattr(
@@ -224,9 +222,9 @@ class TestRunDedupPassLlm:
         assert b.dedup_group_id == 1
 
     @pytest.mark.asyncio
-    async def test_rejected_pair_is_not_grouped(self, mock_db, monkeypatch):
+    async def test_rejected_pair_is_not_grouped(self, mock_db, monkeypatch, make_event):
         monkeypatch.setattr(tiebreaker, "llm_available", lambda: True)
-        a, b = _event(1), _event(2)
+        a, b = _event(make_event, 1), _event(make_event, 2)
         _wire_db(mock_db, [a, b])
         _wire_execute(mock_db, [])
         monkeypatch.setattr(
@@ -249,12 +247,12 @@ class TestRunDedupPassLlm:
         assert b.dedup_group_id is None
 
     @pytest.mark.asyncio
-    async def test_pair_failing_fuzzy_check_skips_llm(self, mock_db, monkeypatch):
+    async def test_pair_failing_fuzzy_check_skips_llm(self, mock_db, monkeypatch, make_event):
         # SQL time-window pre-filter returns the pair, but titles differ enough
         # that is_candidate_pair rejects it → LLM is never consulted.
         monkeypatch.setattr(tiebreaker, "llm_available", lambda: True)
-        a = _event(1, title="Jazz Night")
-        b = _event(2, title="Completely Different Circus Show")
+        a = _event(make_event, 1, title="Jazz Night")
+        b = _event(make_event, 2, title="Completely Different Circus Show")
         _wire_db(mock_db, [a, b])
         _wire_execute(mock_db, [])
         monkeypatch.setattr(
@@ -272,14 +270,14 @@ class TestRunDedupPassLlm:
 
     @pytest.mark.asyncio
     async def test_strong_title_venue_mismatch_pair_survives_to_llm(
-        self, mock_db, monkeypatch
+        self, mock_db, monkeypatch, make_event
     ):
         # Near-exact title, same time, different venue spellings — the rule-only
         # gate would reject this, but the LLM path's bypass_venue_on_near_exact_title
         # lets it survive to the LLM, which confirms and merges it.
         monkeypatch.setattr(tiebreaker, "llm_available", lambda: True)
-        a = _event(1, title="Klassikatähed", venue_name="Estonia Concert Hall")
-        b = _event(2, title="Klassikatähed", venue_name="Eesti Kontsert")
+        a = _event(make_event, 1, title="Klassikatähed", venue_name="Estonia Concert Hall")
+        b = _event(make_event, 2, title="Klassikatähed", venue_name="Eesti Kontsert")
         _wire_db(mock_db, [a, b])
         _wire_execute(mock_db, [])
         monkeypatch.setattr(
@@ -300,15 +298,15 @@ class TestRunDedupPassLlm:
 
     @pytest.mark.asyncio
     async def test_same_day_identical_title_grouped_without_llm(
-        self, mock_db, monkeypatch
+        self, mock_db, monkeypatch, make_event
     ):
         # Two same-title, same-day, same-venue slots are collapsed deterministically
         # by apply_same_day_title_unions before the tiebreaker, so the LLM is never
         # consulted for the pair (Fix 1 removes the timed-entry storm) — yet they
         # are still grouped.
         monkeypatch.setattr(tiebreaker, "llm_available", lambda: True)
-        a = _event(1, title="Van Gogh", venue_name="Vaba Lava")
-        b = _event(2, title="Van Gogh", venue_name="Vaba Lava")
+        a = _event(make_event, 1, title="Van Gogh", venue_name="Vaba Lava")
+        b = _event(make_event, 2, title="Van Gogh", venue_name="Vaba Lava")
         _wire_db(mock_db, [a, b])
         _wire_execute(mock_db, [])
         monkeypatch.setattr(
@@ -330,16 +328,16 @@ class TestRunDedupPassLlm:
         assert b.dedup_group_id == 1
 
     @pytest.mark.asyncio
-    async def test_cross_language_near_title_reaches_llm(self, mock_db, monkeypatch):
+    async def test_cross_language_near_title_reaches_llm(self, mock_db, monkeypatch, make_event):
         # Different normalized titles (ratio in [85, 90)) at cross-language venue
         # spellings: not collapsed by the same-day union, but Fix 2's lowered
         # bypass threshold lets the pair survive the venue gate and reach the LLM.
         monkeypatch.setattr(tiebreaker, "llm_available", lambda: True)
         a = _event(
-            1, title="Bach Cantata Evening Series", venue_name="Estonia kontserdisaal"
+            make_event, 1, title="Bach Cantata Evening Series", venue_name="Estonia kontserdisaal"
         )
         b = _event(
-            2, title="Bach Cantata Evening Show", venue_name="Estonia Concert Hall"
+            make_event, 2, title="Bach Cantata Evening Show", venue_name="Estonia Concert Hall"
         )
         _wire_db(mock_db, [a, b])
         _wire_execute(mock_db, [])
@@ -358,12 +356,12 @@ class TestRunDedupPassLlm:
         assert result["llm_confirmed"] == 1
 
     @pytest.mark.asyncio
-    async def test_fresh_call_cap_bounds_network_calls(self, mock_db, monkeypatch):
+    async def test_fresh_call_cap_bounds_network_calls(self, mock_db, monkeypatch, make_event):
         # cap=2 with 3 cache-miss fuzzy-matching pairs → only 2 reach the LLM,
         # the 3rd is deferred, and the loop does NOT break (candidate_pairs==3).
         monkeypatch.setattr(tiebreaker, "llm_available", lambda: True)
         monkeypatch.setattr(tiebreaker, "LLM_DEDUP_MAX_FRESH_LLM_CALLS_PER_PASS", 2)
-        events = [_event(1), _event(2), _event(3)]
+        events = [_event(make_event, 1), _event(make_event, 2), _event(make_event, 3)]
         _wire_db(mock_db, events)
         _wire_execute(mock_db, [])
         monkeypatch.setattr(
@@ -382,11 +380,11 @@ class TestRunDedupPassLlm:
         assert confirm.await_count == 2
 
     @pytest.mark.asyncio
-    async def test_cached_pairs_do_not_consume_fresh_budget(self, mock_db, monkeypatch):
+    async def test_cached_pairs_do_not_consume_fresh_budget(self, mock_db, monkeypatch, make_event):
         # cap=1, 2 cached + 1 fresh pair → all decided, fresh_calls==1.
         monkeypatch.setattr(tiebreaker, "llm_available", lambda: True)
         monkeypatch.setattr(tiebreaker, "LLM_DEDUP_MAX_FRESH_LLM_CALLS_PER_PASS", 1)
-        events = [_event(1), _event(2), _event(3)]
+        events = [_event(make_event, 1), _event(make_event, 2), _event(make_event, 3)]
         _wire_db(mock_db, events)
         monkeypatch.setattr(
             tiebreaker,
@@ -412,9 +410,9 @@ class TestRunDedupPassLlm:
         confirm.assert_awaited_once()
 
     @pytest.mark.asyncio
-    async def test_cached_reject_is_respected(self, mock_db, monkeypatch):
+    async def test_cached_reject_is_respected(self, mock_db, monkeypatch, make_event):
         monkeypatch.setattr(tiebreaker, "llm_available", lambda: True)
-        a, b = _event(1), _event(2)
+        a, b = _event(make_event, 1), _event(make_event, 2)
         _wire_db(mock_db, [a, b])
         monkeypatch.setattr(
             tiebreaker,
@@ -436,14 +434,14 @@ class TestRunDedupPassLlm:
 
     @pytest.mark.asyncio
     async def test_high_id_cached_pairs_applied_despite_low_id_budget_spend(
-        self, mock_db, monkeypatch
+        self, mock_db, monkeypatch, make_event
     ):
         # Core regression: cap=1 spent on the low-id pair must not prevent a
         # high-id pair's already-cached confirmation from being applied.
         monkeypatch.setattr(tiebreaker, "llm_available", lambda: True)
         monkeypatch.setattr(tiebreaker, "LLM_DEDUP_MAX_FRESH_LLM_CALLS_PER_PASS", 1)
-        low_a, low_b = _event(1), _event(2)
-        high_a, high_b = _event(100), _event(101)
+        low_a, low_b = _event(make_event, 1), _event(make_event, 2)
+        high_a, high_b = _event(make_event, 100), _event(make_event, 101)
         events = [low_a, low_b, high_a, high_b]
         _wire_db(mock_db, events)
         monkeypatch.setattr(
@@ -467,7 +465,7 @@ class TestRunDedupPassLlm:
         assert low_b.dedup_group_id is None
 
     @pytest.mark.asyncio
-    async def test_backlog_drains_across_runs(self, mock_db, monkeypatch):
+    async def test_backlog_drains_across_runs(self, mock_db, monkeypatch, make_event):
         monkeypatch.setattr(tiebreaker, "llm_available", lambda: True)
         monkeypatch.setattr(tiebreaker, "LLM_DEDUP_MAX_FRESH_LLM_CALLS_PER_PASS", 1)
         monkeypatch.setattr(tiebreaker, "_dedup_pair_hash", _hash_by_ids)
@@ -478,7 +476,7 @@ class TestRunDedupPassLlm:
         )
 
         # Run 1: cold cache, budget=1 → one fresh call, one pair deferred.
-        run1_events = [_event(1), _event(2), _event(3), _event(4)]
+        run1_events = [_event(make_event, 1), _event(make_event, 2), _event(make_event, 3), _event(make_event, 4)]
         _wire_db(mock_db, run1_events)
         _wire_execute(mock_db, [])
         monkeypatch.setattr(tiebreaker, "_llm_confirms_pair", AsyncMock(return_value=True))
@@ -489,7 +487,7 @@ class TestRunDedupPassLlm:
 
         # Run 2: prefetch now returns cached decisions for both pairs (the
         # backlog has drained) → no fresh calls, no deferrals, all grouped.
-        run2_events = [_event(1), _event(2), _event(3), _event(4)]
+        run2_events = [_event(make_event, 1), _event(make_event, 2), _event(make_event, 3), _event(make_event, 4)]
         _wire_db(mock_db, run2_events)
         _wire_execute(
             mock_db,
@@ -505,10 +503,10 @@ class TestRunDedupPassLlm:
         assert result2["llm_confirmed"] == 2
 
     @pytest.mark.asyncio
-    async def test_complete_clustering_at_warm_cache(self, mock_db, monkeypatch):
+    async def test_complete_clustering_at_warm_cache(self, mock_db, monkeypatch, make_event):
         monkeypatch.setattr(tiebreaker, "llm_available", lambda: True)
         monkeypatch.setattr(tiebreaker, "LLM_DEDUP_MAX_FRESH_LLM_CALLS_PER_PASS", 1)
-        a, b = _event(1), _event(2)
+        a, b = _event(make_event, 1), _event(make_event, 2)
         _wire_db(mock_db, [a, b])
         monkeypatch.setattr(
             tiebreaker,
@@ -527,11 +525,11 @@ class TestRunDedupPassLlm:
         confirm.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_prefetch_uses_single_bulk_query(self, mock_db, monkeypatch):
+    async def test_prefetch_uses_single_bulk_query(self, mock_db, monkeypatch, make_event):
         # M=4 cached-reject pairs → one bulk prefetch query (plus the final
         # stale-group cleanup), never one query per pair; llm_json untouched.
         monkeypatch.setattr(tiebreaker, "llm_available", lambda: True)
-        events = [_event(i) for i in range(1, 6)]
+        events = [_event(make_event, i) for i in range(1, 6)]
         _wire_db(mock_db, events)
         pairs = [(1, 2), (1, 3), (1, 4), (1, 5)]
         monkeypatch.setattr(
@@ -555,11 +553,11 @@ class TestRunDedupPassLlm:
         llm_json_mock.assert_not_awaited()
 
     @pytest.mark.asyncio
-    async def test_newest_row_wins_per_hash(self, mock_db, monkeypatch):
+    async def test_newest_row_wins_per_hash(self, mock_db, monkeypatch, make_event):
         # Two rows for the same hash, returned oldest-first (older reject,
         # newer confirm) → the newer confirm wins by dict overwrite.
         monkeypatch.setattr(tiebreaker, "llm_available", lambda: True)
-        a, b = _event(1), _event(2)
+        a, b = _event(make_event, 1), _event(make_event, 2)
         _wire_db(mock_db, [a, b])
         monkeypatch.setattr(
             tiebreaker,
@@ -585,12 +583,12 @@ class TestRunDedupPassLlm:
 
     @pytest.mark.asyncio
     async def test_malformed_cached_response_treated_as_undecided(
-        self, mock_db, monkeypatch
+        self, mock_db, monkeypatch, make_event
     ):
         # Bad confidence in the cached row → treated as absent, falls through
         # to a fresh call (not a cached reject).
         monkeypatch.setattr(tiebreaker, "llm_available", lambda: True)
-        a, b = _event(1), _event(2)
+        a, b = _event(make_event, 1), _event(make_event, 2)
         _wire_db(mock_db, [a, b])
         monkeypatch.setattr(
             tiebreaker,
@@ -610,13 +608,13 @@ class TestRunDedupPassLlm:
 
     @pytest.mark.asyncio
     async def test_non_dict_cached_response_treated_as_undecided(
-        self, mock_db, monkeypatch
+        self, mock_db, monkeypatch, make_event
     ):
         # A cached row whose response_json isn't a dict (e.g. a stray JSON
         # array) must not crash the pass — treated as absent, falls through
         # to a fresh call.
         monkeypatch.setattr(tiebreaker, "llm_available", lambda: True)
-        a, b = _event(1), _event(2)
+        a, b = _event(make_event, 1), _event(make_event, 2)
         _wire_db(mock_db, [a, b])
         monkeypatch.setattr(
             tiebreaker,

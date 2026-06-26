@@ -4,7 +4,7 @@
 }
 
 .localePill {
-  padding: 0.35rem 0.85rem;
+  padding: var(--space-0-35) var(--space-0-875);
   border-radius: var(--radius);
   border: 1px solid var(--border);
   background: transparent;

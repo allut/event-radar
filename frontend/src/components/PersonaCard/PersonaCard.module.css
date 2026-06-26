@@ -73,15 +73,15 @@
 
 .badge {
   position: absolute;
-  top: 8px;
-  right: 8px;
+  top: var(--space-2);
+  right: var(--space-2);
   background: var(--accent);
   color: var(--on-accent);
   font-size: var(--fs-2xs);
   font-weight: 600;
   letter-spacing: var(--tracking-wider);
   text-transform: uppercase;
-  padding: 2px 8px;
+  padding: var(--space-0-125) var(--space-2);
   border-radius: var(--radius-pill);
 }
 
@@ -105,15 +105,15 @@
 
 .secondaryBadge {
   position: absolute;
-  top: 8px;
-  right: 8px;
+  top: var(--space-2);
+  right: var(--space-2);
   background: var(--accent-faint);
   border: 1px solid var(--accent-muted);
   color: var(--accent);
   font-size: var(--fs-2xs);
   font-weight: 600;
   letter-spacing: var(--tracking-wide);
-  padding: 2px 8px;
+  padding: var(--space-0-125) var(--space-2);
   border-radius: var(--radius-pill);
   cursor: pointer;
   transition: background var(--transition);

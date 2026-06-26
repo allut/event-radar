@@ -75,14 +75,14 @@
 
 .price {
   position: absolute;
-  bottom: 10px;
-  left: 12px;
+  bottom: var(--space-0-625);
+  left: var(--space-3);
   background: var(--bg-overlay-soft);
   backdrop-filter: blur(var(--blur-chip));
   color: var(--accent-light);
   font-size: var(--fs-xs);
   font-weight: 600;
-  padding: 3px 10px;
+  padding: var(--space-0-1875) var(--space-0-625);
   border-radius: var(--radius-pill);
   letter-spacing: var(--tracking-wide);
 }
@@ -154,13 +154,13 @@
   list-style: none;
   display: flex;
   flex-direction: column;
-  gap: 0.3rem;
+  gap: var(--space-0-3);
 }
 
 .bullet {
   font-size: var(--fs-md);
   color: var(--text-muted);
-  padding-left: 1.1rem;
+  padding-left: var(--space-1-1);
   position: relative;
   line-height: 1.5;
 }

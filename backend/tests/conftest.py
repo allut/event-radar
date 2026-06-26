@@ -54,40 +54,65 @@ def make_user():
 
 @pytest.fixture
 def make_event():
-    def _factory(event_id: int = 10) -> MagicMock:
+    def _factory(
+        event_id: int = 10,
+        title: str = "Test Event",
+        starts_at: datetime | None = None,
+        venue_name: str | None = "Test Venue",
+        venue_address: str | None = "Test Street 1",
+        lat: float | None = TALLINN_CENTER_LAT,
+        lng: float | None = TALLINN_CENTER_LNG,
+        price_min: float | None = None,
+        status: str = "published",
+        description_orig: str = "A test event",
+        why_go: list[str] | None = None,
+        why_go_localized: dict | None = None,
+    ) -> MagicMock:
+        if starts_at is None:
+            starts_at = datetime(2026, 5, 15, 18, 0, 0, tzinfo=timezone.utc)
         e = MagicMock()
         e.id = event_id
         e.slug = f"test-event-{event_id}"
-        e.title_orig = "Test Event"
-        e.description_orig = "A test event"
+        e.title_orig = title
+        e.description_orig = description_orig
         e.title_localized = None
         e.description_localized = None
         e.important_info = None
-        e.starts_at = datetime(2026, 5, 15, 18, 0, 0, tzinfo=timezone.utc)
+        e.starts_at = starts_at
         e.ends_at = None
-        e.venue_name = "Test Venue"
-        e.venue_address = "Test Street 1"
-        e.lat = TALLINN_CENTER_LAT
-        e.lng = TALLINN_CENTER_LNG
+        e.venue_name = venue_name
+        e.venue_address = venue_address
+        e.lat = lat
+        e.lng = lng
         e.url = "https://example.com"
         e.image_url = None
-        e.price_min = None
+        e.price_min = price_min
         e.price_max = None
         e.currency = DEFAULT_CURRENCY
         e.price_hint = None
-        e.status = "published"
+        e.status = status
         e.is_explicit = False
         e.is_out_of_area = False
         e.dedup_group_id = None
 
-        cl = MagicMock()
-        cl.categories = ["music"]
-        cl.vibes = ["underground"]
-        cl.quality_score = 0.8
-        cl.why_go_bullets = ["Great DJs", "Intimate venue", "All night long"]
-        cl.why_go_localized = None
-        cl.language_detected = DEFAULT_USER_LOCALE
-        e.classification = cl
+        if why_go is not None or why_go_localized is not None:
+            cl = MagicMock()
+            cl.categories = ["music"]
+            cl.vibes = ["underground"]
+            cl.quality_score = 0.8
+            cl.why_go_bullets = why_go or []
+            cl.why_go_localized = why_go_localized
+            cl.language_detected = DEFAULT_USER_LOCALE
+            e.classification = cl
+        else:
+            cl = MagicMock()
+            cl.categories = ["music"]
+            cl.vibes = ["underground"]
+            cl.quality_score = 0.8
+            cl.why_go_bullets = ["Great DJs", "Intimate venue", "All night long"]
+            cl.why_go_localized = None
+            cl.language_detected = DEFAULT_USER_LOCALE
+            e.classification = cl
         return e
     return _factory
 

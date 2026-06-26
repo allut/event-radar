@@ -119,11 +119,10 @@ class TestRequestMagicLink:
         mock_send.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_existing_user_upserts_link(self, mock_db, make_request):
+    async def test_existing_user_upserts_link(self, mock_db, make_request, make_user):
         from app.routers.auth import request_magic_link, RequestLinkBody
 
-        existing_user = MagicMock()
-        existing_user.id = 5
+        existing_user = make_user(user_id=5)
         # First scalar: user found; second: cooldown check → no recent link
         mock_db.scalar.side_effect = [existing_user, None]
 
@@ -134,11 +133,10 @@ class TestRequestMagicLink:
         assert "detail" in result
 
     @pytest.mark.asyncio
-    async def test_cooldown_skips_resend(self, mock_db, make_request):
+    async def test_cooldown_skips_resend(self, mock_db, make_request, make_user):
         from app.routers.auth import request_magic_link, RequestLinkBody
 
-        existing_user = MagicMock()
-        existing_user.id = 5
+        existing_user = make_user(user_id=5)
         recent_link = MagicMock()
         # First scalar: user found; second: cooldown check → recent link exists
         mock_db.scalar.side_effect = [existing_user, recent_link]

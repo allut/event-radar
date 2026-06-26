@@ -20,7 +20,7 @@
 .logoWrap {
   display: flex;
   align-items: center;
-  gap: 0.55rem;
+  gap: var(--space-0-55);
 }
 
 .radar {
@@ -56,7 +56,7 @@
 
 .logoutBtn {
   composes: btnOutline from '../../components/shared/Button.module.css';
-  padding: 0.3125rem var(--space-0-875);
+  padding: var(--space-0-3125) var(--space-0-875);
   font-size: var(--fs-sm);
 }
 
@@ -159,7 +159,7 @@
     background: var(--accent-subtle);
     border: 1px solid var(--accent-border);
     border-radius: var(--radius-pill);
-    padding: 2px 10px;
+    padding: var(--space-0-125) var(--space-0-625);
     letter-spacing: var(--tracking-wider);
     text-transform: uppercase;
   }

@@ -14,39 +14,6 @@ from app.i18n import TRANSLATIONS, t, ti
 
 
 # ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-def _make_event(
-    id: int = 1,
-    title: str = "Test Event",
-    starts_at: datetime | None = None,
-    venue_name: str | None = "Test Venue",
-    price_min: float | None = None,
-    why_go: list[str] | None = None,
-    why_go_localized: dict | None = None,
-) -> MagicMock:
-    if starts_at is None:
-        starts_at = datetime(2026, 5, 20, 19, 0, tzinfo=timezone.utc)
-    event = MagicMock()
-    event.id = id
-    event.title_orig = title
-    event.title_localized = None
-    event.description_localized = None
-    event.starts_at = starts_at
-    event.venue_name = venue_name
-    event.price_min = price_min
-    if why_go is not None or why_go_localized is not None:
-        cl = MagicMock()
-        cl.why_go_bullets = why_go or []
-        cl.why_go_localized = why_go_localized
-        event.classification = cl
-    else:
-        event.classification = None
-    return event
-
-
-# ---------------------------------------------------------------------------
 # _format_feed_date
 # ---------------------------------------------------------------------------
 
@@ -106,47 +73,47 @@ class TestFormatEventTime:
 # ---------------------------------------------------------------------------
 
 class TestBuildDigestHtml:
-    def test_returns_html_string(self):
-        events = [_make_event()]
+    def test_returns_html_string(self, make_event):
+        events = [make_event()]
         html = build_digest_html(events, date(2026, 5, 20), "en", "https://eventradar.ee")
         assert html.startswith("<!DOCTYPE html>")
 
-    def test_contains_event_title(self):
-        events = [_make_event(title="Jazz Night in Tallinn")]
+    def test_contains_event_title(self, make_event):
+        events = [make_event(title="Jazz Night in Tallinn")]
         html = build_digest_html(events, date(2026, 5, 20), "en", "https://eventradar.ee")
         assert "Jazz Night in Tallinn" in html
 
-    def test_contains_why_go_bullets(self):
-        events = [_make_event(why_go=["Great music", "Central venue", "Affordable price"])]
+    def test_contains_why_go_bullets(self, make_event):
+        events = [make_event(why_go=["Great music", "Central venue", "Affordable price"])]
         html = build_digest_html(events, date(2026, 5, 20), "en", "https://eventradar.ee")
         assert "Great music" in html
         assert "Central venue" in html
 
-    def test_at_most_3_bullets(self):
+    def test_at_most_3_bullets(self, make_event):
         bullets = ["A", "B", "C", "D", "E"]
-        events = [_make_event(why_go=bullets)]
+        events = [make_event(why_go=bullets)]
         html = build_digest_html(events, date(2026, 5, 20), "en", "https://eventradar.ee")
         # Only first 3 should appear
         assert "<li>A</li>" in html
         assert "<li>D</li>" not in html
 
-    def test_free_event_en(self):
-        events = [_make_event(price_min=0.0)]
+    def test_free_event_en(self, make_event):
+        events = [make_event(price_min=0.0)]
         html = build_digest_html(events, date(2026, 5, 20), "en", "https://eventradar.ee")
         assert "Free" in html
 
-    def test_free_event_et(self):
-        events = [_make_event(price_min=0.0)]
+    def test_free_event_et(self, make_event):
+        events = [make_event(price_min=0.0)]
         html = build_digest_html(events, date(2026, 5, 20), "et", "https://eventradar.ee")
         assert "Tasuta" in html
 
-    def test_free_event_ru(self):
-        events = [_make_event(price_min=0.0)]
+    def test_free_event_ru(self, make_event):
+        events = [make_event(price_min=0.0)]
         html = build_digest_html(events, date(2026, 5, 20), "ru", "https://eventradar.ee")
         assert "Бесплатно" in html
 
-    def test_paid_event_shows_price(self):
-        events = [_make_event(price_min=12.0)]
+    def test_paid_event_shows_price(self, make_event):
+        events = [make_event(price_min=12.0)]
         html = build_digest_html(events, date(2026, 5, 20), "en", "https://eventradar.ee")
         assert "12" in html
 
@@ -162,8 +129,8 @@ class TestBuildDigestHtml:
         html = build_digest_html([], date(2026, 5, 20), "en", "https://eventradar.ee")
         assert "No events today" in html
 
-    def test_frontend_url_used_in_event_link(self):
-        events = [_make_event(id=42)]
+    def test_frontend_url_used_in_event_link(self, make_event):
+        events = [make_event(event_id=42)]
         html = build_digest_html(events, date(2026, 5, 20), "en", "https://eventradar.ee")
         assert "https://eventradar.ee/events/42" in html
 
@@ -171,14 +138,14 @@ class TestBuildDigestHtml:
         html = build_digest_html([], date(2026, 5, 20), "en", "https://eventradar.ee")
         assert "https://eventradar.ee/settings" in html
 
-    def test_multiple_events_all_rendered(self):
-        events = [_make_event(i, title=f"Event {i}") for i in range(1, 6)]
+    def test_multiple_events_all_rendered(self, make_event):
+        events = [make_event(event_id=i, title=f"Event {i}") for i in range(1, 6)]
         html = build_digest_html(events, date(2026, 5, 20), "en", "https://eventradar.ee")
         for i in range(1, 6):
             assert f"Event {i}" in html
 
-    def test_venue_in_meta(self):
-        events = [_make_event(venue_name="Kultuurikatel")]
+    def test_venue_in_meta(self, make_event):
+        events = [make_event(venue_name="Kultuurikatel")]
         html = build_digest_html(events, date(2026, 5, 20), "en", "https://eventradar.ee")
         assert "Kultuurikatel" in html
 
@@ -190,8 +157,8 @@ class TestBuildDigestHtml:
         html = build_digest_html([], date(2026, 5, 20), "ru", "https://eventradar.ee")
         assert "Сегодня нет событий" in html
 
-    def test_why_go_localized_used_when_present(self):
-        events = [_make_event(
+    def test_why_go_localized_used_when_present(self, make_event):
+        events = [make_event(
             why_go=["EN fallback"],
             why_go_localized={"et": ["ET bullet 1", "ET bullet 2", "ET bullet 3"], "en": ["EN bullet"]},
         )]
@@ -199,8 +166,8 @@ class TestBuildDigestHtml:
         assert "ET bullet 1" in html
         assert "EN fallback" not in html
 
-    def test_why_go_localized_falls_back_to_en(self):
-        events = [_make_event(
+    def test_why_go_localized_falls_back_to_en(self, make_event):
+        events = [make_event(
             why_go=["raw fallback"],
             why_go_localized={"en": ["EN bullet 1", "EN bullet 2", "EN bullet 3"]},
         )]
@@ -208,8 +175,8 @@ class TestBuildDigestHtml:
         assert "EN bullet 1" in html
         assert "raw fallback" not in html
 
-    def test_why_go_localized_falls_back_to_bullets(self):
-        events = [_make_event(
+    def test_why_go_localized_falls_back_to_bullets(self, make_event):
+        events = [make_event(
             why_go=["bullets fallback"],
             why_go_localized={},
         )]
@@ -263,8 +230,8 @@ class TestDigestI18nConstants:
         assert ti("digest.price_from", "et", amount="12") == "Alates €12"
         assert ti("digest.price_from", "ru", amount="12") == "От €12"
 
-    def test_paid_event_et_locale(self):
-        events = [_make_event(price_min=15.0)]
+    def test_paid_event_et_locale(self, make_event):
+        events = [make_event(price_min=15.0)]
         html = build_digest_html(events, date(2026, 5, 20), "et", "https://eventradar.ee")
         assert "Alates" in html
 
@@ -274,8 +241,8 @@ class TestDigestI18nConstants:
     def test_t_returns_key_for_unknown_key(self):
         assert t("nonexistent.key", "en") == "nonexistent.key"
 
-    def test_paid_event_ru_locale(self):
-        events = [_make_event(price_min=15.0)]
+    def test_paid_event_ru_locale(self, make_event):
+        events = [make_event(price_min=15.0)]
         html = build_digest_html(events, date(2026, 5, 20), "ru", "https://eventradar.ee")
         assert "От" in html
 
