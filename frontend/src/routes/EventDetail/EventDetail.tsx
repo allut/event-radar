@@ -1,11 +1,13 @@
-import { useParams, useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
+import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useQuery, useMutation } from '@tanstack/react-query';
 import { api } from '../../api/client';
-import { getLocale } from '../../lib/auth';
+import { getLocale, setLocale } from '../../lib/auth';
 import { t, ti } from '../../i18n';
 import { categoryGradient, cx, formatEventDateTime, formatHourMinute, formatPrice, safeUrl, trackExternalClick } from '../../utils';
 import { type EventData } from '../../components/EventCard';
 import FeedbackButtonRow from '../../components/FeedbackButtonRow';
+import LocaleSelector from '../../components/LocaleSelector';
 import PageState from '../../components/PageState';
 import { useFeedback } from '../../hooks/useFeedback';
 import styles from './EventDetail.module.css';
@@ -17,7 +19,18 @@ interface EventDetailData extends EventData {
 export default function EventDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const locale = getLocale();
+  const [locale, setLocaleState] = useState(getLocale());
+
+  const localeMutation = useMutation({
+    mutationFn: (code: string) => api.patch('/users/me', { locale: code }),
+    onSuccess: (_data, code) => { setLocale(code); },
+    onError: () => { setLocaleState(getLocale()); },
+  });
+
+  function handleLocaleChange(code: string) {
+    setLocaleState(code);
+    localeMutation.mutate(code);
+  }
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['event', id],
@@ -64,10 +77,11 @@ export default function EventDetail() {
         <button className={styles.backBtn} onClick={() => navigate(-1)} aria-label={t('back', locale)}>
           {t('back', locale)}
         </button>
-        <div className={styles.logoWrap}>
+        <Link to="/" className={styles.logoWrap}>
           <span className={styles.radar} aria-hidden>◉</span>
           <span className={styles.brand}>{t('brand', locale)}</span>
-        </div>
+        </Link>
+        <LocaleSelector locale={locale} onChange={handleLocaleChange} ariaLabel={t('section_language', locale)} />
       </header>
 
       <main className={styles.main}>
@@ -145,10 +159,10 @@ export default function EventDetail() {
               {(data.categories.length > 0 || data.vibes.length > 0) && (
                 <div className={styles.tags}>
                   {data.categories.map(cat => (
-                    <span key={cat} className={styles.tag}>{cat.replace(/_/g, ' ')}</span>
+                    <span key={cat} className={styles.tag}>{t(`category_${cat}`, locale)}</span>
                   ))}
                   {data.vibes.map(vibe => (
-                    <span key={vibe} className={cx(styles.tag, styles.tagVibe)}>{vibe.replace(/_/g, ' ')}</span>
+                    <span key={vibe} className={cx(styles.tag, styles.tagVibe)}>{t(`vibe_${vibe}`, locale)}</span>
                   ))}
                 </div>
               )}

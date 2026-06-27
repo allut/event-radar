@@ -68,6 +68,11 @@ export default function Onboarding() {
       <header className={styles.topBar}>
         <Link to="/settings" className={styles.back}>{t('back', locale)}</Link>
 
+        <Link to="/" className={styles.logoWrap}>
+          <span className={styles.radar} aria-hidden>◉</span>
+          <span className={styles.brand}>{t('brand', locale)}</span>
+        </Link>
+
         <LocaleSelector locale={locale} onChange={handleLocaleChange} ariaLabel={t('section_language', locale)} />
       </header>
 

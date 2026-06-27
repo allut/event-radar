@@ -117,10 +117,10 @@ export default function Settings() {
 
       <header className={styles.topBar}>
         <Link to="/" className={styles.back} aria-label={t('back_to_feed', locale)}>{t('back_to_feed', locale)}</Link>
-        <div className={styles.logoWrap}>
+        <Link to="/" className={styles.logoWrap}>
           <span className={styles.radar} aria-hidden>◉</span>
-          <span className={styles.brand}>{t('settings_link', locale)}</span>
-        </div>
+          <span className={styles.brand}>{t('brand', locale)}</span>
+        </Link>
         <div className={styles.topBarSpacer} aria-hidden />
       </header>
 

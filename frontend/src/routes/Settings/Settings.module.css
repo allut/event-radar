@@ -19,22 +19,25 @@
 }
 
 .back {
+  composes: btnOutline from '../../components/shared/Button.module.css';
   font-size: var(--fs-sm);
-  color: var(--text-muted);
-  text-decoration: none;
   letter-spacing: var(--tracking-normal);
-  transition: color var(--transition);
   min-width: var(--space-9);
-}
-
-.back:hover {
-  color: var(--accent);
 }
 
 .logoWrap {
   display: flex;
   align-items: center;
   gap: var(--space-2);
+  text-decoration: none;
+}
+
+.logoWrap:hover .brand {
+  color: var(--text);
+}
+
+.logoWrap:hover .radar {
+  color: var(--accent-light);
 }
 
 .radar {

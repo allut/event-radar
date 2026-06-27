@@ -1,10 +1,12 @@
+import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { api } from '../../api/client';
-import { clearToken, getLocale } from '../../lib/auth';
+import { clearToken, getLocale, setLocale } from '../../lib/auth';
 import { t, ti } from '../../i18n';
 import EventCard, { type EventData } from '../../components/EventCard';
 import EmptyState from '../../components/EmptyState';
+import LocaleSelector from '../../components/LocaleSelector';
 import PageState from '../../components/PageState';
 import { formatHourMinute, formatTodayDate } from '../../utils';
 import styles from './Feed.module.css';
@@ -18,7 +20,18 @@ interface FeedResponse {
 export default function Feed() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const locale = getLocale();
+  const [locale, setLocaleState] = useState(getLocale());
+
+  const localeMutation = useMutation({
+    mutationFn: (code: string) => api.patch('/users/me', { locale: code }),
+    onSuccess: (_data, code) => { setLocale(code); },
+    onError: () => { setLocaleState(getLocale()); },
+  });
+
+  function handleLocaleChange(code: string) {
+    setLocaleState(code);
+    localeMutation.mutate(code);
+  }
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['feed'],
@@ -54,6 +67,7 @@ export default function Feed() {
           <span className={styles.brand}>{t('brand', locale)}</span>
         </div>
         <div className={styles.topActions}>
+          <LocaleSelector locale={locale} onChange={handleLocaleChange} ariaLabel={t('section_language', locale)} />
           <Link to="/settings" className={styles.settingsLink}>{t('settings_link', locale)}</Link>
           <button className={styles.logoutBtn} onClick={handleLogout}>{t('sign_out', locale)}</button>
         </div>
