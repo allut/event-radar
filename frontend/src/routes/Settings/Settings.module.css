@@ -20,7 +20,11 @@
 
 .back {
   composes: btnOutline from '../../components/shared/Button.module.css';
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   font-size: var(--fs-sm);
+  padding: var(--space-0-375) var(--space-0-875);
   letter-spacing: var(--tracking-normal);
   min-width: var(--space-9);
 }
