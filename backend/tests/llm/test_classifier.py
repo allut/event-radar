@@ -33,6 +33,31 @@ class TestBuildClassifyPromptImportantInfo:
         prompt = _build_classify_prompt(event)
         assert "Important info: (none)" in prompt
 
+    def test_fee_clause_stripped_from_prompt(self, make_event):
+        # Regression: Piletilevi important_info carries "agenditasu 3,20 €" — the
+        # fee amount must not appear in the Important info section of the built prompt.
+        event = make_event()
+        event.important_info = "Nominaalhinnale lisandub agenditasu 3,20 € Pilet 45 €"
+        prompt = _build_classify_prompt(event)
+        # Extract just the Important info line to avoid false positive from the
+        # template's own example ("agenditasu 3,20 €" appears in the rules section).
+        info_line = next(
+            (line for line in prompt.splitlines() if line.startswith("Important info:")),
+            "",
+        )
+        assert "3,20" not in info_line
+        assert "45" in info_line
+
+    def test_service_fee_stripped_from_prompt(self, make_event):
+        event = make_event()
+        event.important_info = "hinnad sisaldavad teenustasu 1.40€/ pilet"
+        prompt = _build_classify_prompt(event)
+        info_line = next(
+            (line for line in prompt.splitlines() if line.startswith("Important info:")),
+            "",
+        )
+        assert "1.40" not in info_line
+
 
 class TestParseClassificationMalformedTaxonomy:
     def test_nested_list_in_categories_dropped(self):

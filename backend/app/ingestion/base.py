@@ -47,6 +47,8 @@ from app.constants import (
     LOCALIZED_TEXT_HREFLANG_NORMALIZE,
     LOCALIZED_TEXT_MAX_DESC_CHARS,
     LOCALIZED_TEXT_MAX_TITLE_CHARS,
+    PRICE_FEE_CLAUSE_RE,
+    PRICE_FEE_KEYWORDS,
     PRICE_FROM_STRING_RE,
     SAFE_URL_SCHEMES,
     SLUG_HASH_HEX_LEN,
@@ -399,6 +401,26 @@ def parse_price_from_string(
 
 
 _CURRENCY_AMOUNT_RE = re.compile(CURRENCY_AMOUNT_RE, re.IGNORECASE)
+
+_PRICE_FEE_CLAUSE_RE = re.compile(
+    PRICE_FEE_CLAUSE_RE.format(
+        keywords="|".join(re.escape(kw) for kw in sorted(PRICE_FEE_KEYWORDS, key=len, reverse=True))
+    ),
+    re.IGNORECASE,
+)
+
+
+def strip_fee_amounts(text: str | None) -> str | None:
+    """Remove booking/service/agent-fee clauses from free text.
+
+    Strips patterns like "agenditasu 3,20 €" or "teenustasu 1.40€/ pilet" so
+    a downstream price extractor doesn't treat the fee as a ticket price.
+    Real prices that trail in the same run survive ("agenditasu 3,20 € Pilet 45 €"
+    → " Pilet 45 €"). No-op when no fee keyword is present.
+    """
+    if not text:
+        return text
+    return _PRICE_FEE_CLAUSE_RE.sub("", text)
 
 
 def eur_price_bounds_from_text(value: str | None) -> tuple[float | None, float | None]:

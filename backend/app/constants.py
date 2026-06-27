@@ -365,7 +365,7 @@ Rules:
 - "language" must be the ISO 639-1 code of the event's original language (et, en, ru, or other).
 - "quality" is 0.0-1.0 indicating how compelling the event is.
 - "why_go" must be a dict with keys "en", "et", "ru", each containing exactly 3 short bullets (max 15 words each).
-- "price_min"/"price_max": scan EVERY price amount appearing in the price info, description, and important info — across ALL ticket tiers regardless of label (adult, family, group, discount, student, senior, donation, etc.). Set price_min to the single SMALLEST amount and price_max to the single LARGEST amount. Never exclude a tier because it is a family/group/donation price. Use 0 for free/TASUTA/"free"; null only if no price is stated at all. Example: "Adult €16, Family €32, Discount €11, Donation €25" → price_min 11, price_max 32. (Also read prices glued into description/important info, e.g. "Täispilet 18 €", "Õpilane 12,50 €".)
+- "price_min"/"price_max": scan EVERY price amount appearing in the price info, description, and important info — across ALL ticket tiers regardless of label (adult, family, group, discount, student, senior, donation, etc.). Set price_min to the single SMALLEST amount and price_max to the single LARGEST amount. Never exclude a tier because it is a family/group/donation price. Use 0 for free/TASUTA/"free"; null only if no price is stated at all. Example: "Adult €16, Family €32, Discount €11, Donation €25" → price_min 11, price_max 32. (Also read prices glued into description/important info, e.g. "Täispilet 18 €", "Õpilane 12,50 €".) EXCLUDE booking/service/agent fees — amounts labelled teenustasu, agenditasu, service fee, booking fee, handling fee, agent fee, transaction fee are NOT ticket prices. Example: "agenditasu 3,20 €, Pilet 45 €" → price_min 45, price_max 45.
 - "currency" is the ISO 4217 code of the stated price (default EUR); null if no price is stated.
 - "explicit" is true ONLY for pornographic or sexually explicit events (porn, striptease/strip clubs, fetish, escort, sex shows). Normal nightlife, concerts, bars, and age-restricted shows are NOT explicit.
 - "in_target_city" is false ONLY if the title/venue clearly places the event outside Tallinn, Estonia (another city or country, e.g. Pärnu, Tartu, Boston, London, Vietnam); otherwise true.
@@ -738,6 +738,33 @@ REFETCH_PLACEHOLDER_VENUE_NAMES: frozenset[str] = frozenset(
 # Mirrors Event.venue_name String(255) — truncation length for a detail-page
 # venue name before it is written back to the column.
 VENUE_NAME_MAX_LEN = 255
+
+# Booking/service/agent fee keywords — amounts that follow these must NOT be read
+# as ticket prices. Piletilevi glues fee disclaimers into important_info
+# ("agenditasu 3,20 €", "teenustasu 1.40€/ pilet"), causing the LLM to latch onto
+# the fee as price_min. strip_fee_amounts() in ingestion/base.py uses these at
+# prompt-build time to remove the fee clause before the LLM sees the text.
+PRICE_FEE_KEYWORDS: frozenset[str] = frozenset(
+    {
+        "teenustasu",
+        "teenindustasu",
+        "agenditasu",
+        "käsitlustasu",
+        "broneerimistasu",
+        "service fee",
+        "booking fee",
+        "handling fee",
+        "agent fee",
+        "transaction fee",
+    }
+)
+# Strips a fee keyword + the amount immediately following it (within a short
+# lookahead window) so the real ticket price that may trail in the same run
+# ("agenditasu 3,20 € Pilet 45 €") survives the substitution.
+# Built from PRICE_FEE_KEYWORDS at module load in ingestion/base.py.
+PRICE_FEE_CLAUSE_RE = (
+    r"(?:{keywords})[^\d€]{{0,25}}?\d+(?:[.,]\d+)?\s*(?:€|eur(?:\b|/))"
+)
 
 # Parses a Fienta listing price_from_string: "From 9.50 EUR" / "12 EUR" — a number
 # (int or decimal, "." or "," separator) followed by any 3-letter currency code.

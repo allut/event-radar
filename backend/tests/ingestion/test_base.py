@@ -26,6 +26,7 @@ from app.ingestion.base import (
     is_target_city,
     parse_price_from_string,
     retry_after_seconds,
+    strip_fee_amounts,
 )
 
 
@@ -531,3 +532,63 @@ class TestNormalizedEventAddressGate:
         )
         assert event.lat == 59.43
         assert event.lng == 24.75
+
+
+class TestStripFeeAmounts:
+    def test_event_1501_agent_fee_stripped_real_price_survives(self):
+        # "agenditasu 3,20 € Pilet 45 €" — fee 3.20 stripped, real 45 survives.
+        text = "Nominaalhinnale lisandub agenditasu 3,20 € Pilet 45 €"
+        result = strip_fee_amounts(text)
+        assert result is not None
+        assert "45" in result
+        assert "3,20" not in result
+
+    def test_event_1551_service_fee_only_stripped(self):
+        # "teenustasu 1.40€/ pilet" — fee-only string, 1.40 stripped.
+        text = "hinnad sisaldavad teenustasu 1.40€/ pilet"
+        result = strip_fee_amounts(text)
+        assert result is not None
+        assert "1.40" not in result
+
+    def test_no_keyword_noop(self):
+        text = "Täispilet 18 €, Õpilane 12 €"
+        assert strip_fee_amounts(text) == text
+
+    def test_none_returns_none(self):
+        assert strip_fee_amounts(None) is None
+
+    def test_empty_string_returns_empty(self):
+        assert strip_fee_amounts("") == ""
+
+    def test_english_service_fee_stripped(self):
+        text = "Price includes service fee 2.50 EUR. Ticket 20 EUR."
+        result = strip_fee_amounts(text)
+        assert result is not None
+        assert "2.50" not in result
+        assert "20" in result
+
+    def test_english_booking_fee_stripped(self):
+        text = "booking fee 1.99€ applies. Entry 15 €."
+        result = strip_fee_amounts(text)
+        assert result is not None
+        assert "1.99" not in result
+        assert "15" in result
+
+    def test_comma_decimal_stripped(self):
+        text = "agenditasu 3,20 € pilet"
+        result = strip_fee_amounts(text)
+        assert result is not None
+        assert "3,20" not in result
+
+    def test_dot_decimal_stripped(self):
+        text = "teenustasu 1.40€"
+        result = strip_fee_amounts(text)
+        assert result is not None
+        assert "1.40" not in result
+
+    def test_eur_suffix_stripped(self):
+        text = "käsitlustasu 2 EUR pilet 30 EUR"
+        result = strip_fee_amounts(text)
+        assert result is not None
+        assert "2 EUR" not in result
+        assert "30 EUR" in result

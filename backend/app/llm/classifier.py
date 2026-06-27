@@ -38,7 +38,7 @@ from app.constants import (
     VALID_LOCALES,
     VALID_VIBES,
 )
-from app.ingestion.base import eur_price_bounds_from_text, normalize_currency
+from app.ingestion.base import eur_price_bounds_from_text, normalize_currency, strip_fee_amounts
 from app.llm.router import LLMError, llm_json
 from app.models.models import Event, EventClassification
 
@@ -50,7 +50,8 @@ def _build_classify_prompt(event: Event) -> str:
     if len(desc) > LLM_MAX_PROMPT_CHARS:
         desc = desc[:LLM_MAX_PROMPT_CHARS]
     price_hint = (event.price_hint or "").strip()[:PRICE_HINT_MAX_CHARS]
-    important_info = (event.important_info or "").strip()[:IMPORTANT_INFO_MAX_CHARS]
+    important_info = strip_fee_amounts(event.important_info)
+    important_info = (important_info or "").strip()[:IMPORTANT_INFO_MAX_CHARS]
     return LLM_CLASSIFY_PROMPT_TEMPLATE.format(
         title=event.title_orig,
         venue=event.venue_name or LLM_CLASSIFY_VENUE_FALLBACK,
@@ -224,7 +225,9 @@ async def classify_event(
         # polluted by an incidental €/EUR-looking match elsewhere in price_hint.
         currency_val = parsed["currency"]
         if currency_val is None or currency_val.upper() == "EUR":
-            hint_min, hint_max = eur_price_bounds_from_text(event.price_hint)
+            hint_min, hint_max = eur_price_bounds_from_text(
+                strip_fee_amounts(event.price_hint)
+            )
             if hint_min is not None:
                 parsed["price_min"] = (
                     hint_min
