@@ -725,7 +725,7 @@ def full_res_wp_image(url: str | None) -> str | None:
     so we store the full-resolution original, not the listing thumbnail.
 
     Host-gated to WP_THUMBNAIL_HOSTS (concert.ee, kumu.ekm.ee); the ``\\.\\w+$``
-    anchor is an extra guard. Public because upgrade_source_images.py reuses it.
+    anchor is an extra guard.
     """
     if not url or not any(h in url for h in WP_THUMBNAIL_HOSTS):
         return url

@@ -157,14 +157,6 @@ python scripts/reset_events.py          # dry run: target DB + row counts
 python scripts/reset_events.py --yes    # actually truncate (irreversible)
 ```
 
-- **`upgrade_source_images.py`** — backfills existing `events.image_url` rows to full resolution for all handled sources: concert.ee and kumu.ekm.ee (strips WordPress `-WxH` thumbnail suffix via `full_res_wp_image()`), and piletilevi.ee (rewrites `/height=N/` path segment to `PILETILEVI_IMAGE_HEIGHT` via `full_res_piletilevi_image()`). Reuses the ingest adapter helpers so transforms stay in one place. Dry run by default (prints masked `DATABASE_URL` + before/after preview); pass `--yes` to write. Idempotent.
-
-```bash
-cd backend                                      # venv active
-python scripts/upgrade_source_images.py         # dry run: affected-row preview
-python scripts/upgrade_source_images.py --yes   # actually rewrite image URLs
-```
-
 ## Security Hardening
 
 The backend was hardened against the OWASP Top 10 (2021). The middleware stack and these invariants are wired in `app/main.py`:
