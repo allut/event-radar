@@ -52,7 +52,10 @@ export default function EventCard({ event, index, onFeedbackSent, variant = 'sta
     >
       <div className={cx(styles.imageWrap, isFeatured && styles.featuredImageWrap)}>
         {imageSrc ? (
-          <img src={imageSrc} alt={event.title} className={styles.image} loading="lazy" />
+          <>
+            <img src={imageSrc} alt="" aria-hidden className={styles.backdrop} loading="lazy" />
+            <img src={imageSrc} alt={event.title} className={styles.image} loading="lazy" />
+          </>
         ) : (
           <div
             className={styles.placeholder}

@@ -92,7 +92,10 @@ export default function EventDetail() {
       <main className={styles.main}>
         <div className={styles.hero}>
           {imageSrc ? (
-            <img src={imageSrc} alt={data.title} className={styles.heroImage} />
+            <div className={styles.heroFrame}>
+              <img src={imageSrc} alt="" aria-hidden className={styles.heroBackdrop} loading="lazy" />
+              <img src={imageSrc} alt={data.title} className={styles.heroImage} />
+            </div>
           ) : (
             <div
               className={styles.heroPlaceholder}

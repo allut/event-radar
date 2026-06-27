@@ -119,6 +119,7 @@
   /* Backdrop blur */
   --blur-overlay: 8px;   /* sticky topbars */
   --blur-chip: 4px;      /* price chips over imagery */
+  --blur-backdrop: 24px; /* cover backdrop behind contained images, fills letterbox gaps */
 
   /* Image height caps — fit-to-width natural display, bounded for extreme portraits */
   --card-image-max-height: 560px;
