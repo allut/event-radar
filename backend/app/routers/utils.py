@@ -1,5 +1,6 @@
 """Shared serialization helpers for event routers."""
 
+import re
 from datetime import datetime
 
 from itsdangerous import BadSignature, SignatureExpired
@@ -10,6 +11,12 @@ from sqlalchemy.orm import selectinload
 from app.auth.tokens import verify_session_token
 from app.constants import DEFAULT_USER_LOCALE, EMAIL_MASK_VISIBLE_CHARS
 from app.models.models import Event, User
+
+
+def mask_db_url(url: str) -> str:
+    """Redact the password in a DB URL for safe logging (``user:pass@host`` ->
+    ``user:***@host``). Shared by the maintenance scripts in ``backend/scripts``."""
+    return re.sub(r":[^@/]+@", ":***@", url)
 
 
 def normalized_title(title: str) -> str:

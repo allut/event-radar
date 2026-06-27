@@ -117,8 +117,9 @@
   --z-toast: 50;
 
   /* Backdrop blur */
-  --blur-overlay: 8px;  /* sticky topbars */
-  --blur-chip: 4px;     /* price chips over imagery */
+  --blur-overlay: 8px;   /* sticky topbars */
+  --blur-chip: 4px;      /* price chips over imagery */
+  --blur-backdrop: 24px; /* poster backdrop behind portrait images */
 
   /* Spinner sizes */
   --spinner-size: 40px;

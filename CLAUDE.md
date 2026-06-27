@@ -157,6 +157,14 @@ python scripts/reset_events.py          # dry run: target DB + row counts
 python scripts/reset_events.py --yes    # actually truncate (irreversible)
 ```
 
+- **`upgrade_ech_images.py`** — backfills existing ECH (concert.ee) `events.image_url` rows to full resolution by stripping the WordPress `-WxH` thumbnail suffix (e.g. `...-82x118.jpg` → `...jpg`), matching what the ingest adapter now stores for new events. Reuses `full_res_concert_image()` from `app/ingestion/sources/html_listing.py` so the transform lives in one place; host-gated to `concert.ee` (other sources untouched). Dry run by default (prints the masked `DATABASE_URL` + a before/after preview of affected rows); pass `--yes` to write. Idempotent — re-running after a write finds nothing to change.
+
+```bash
+cd backend                                   # venv active
+python scripts/upgrade_ech_images.py         # dry run: affected-row preview
+python scripts/upgrade_ech_images.py --yes   # actually rewrite image URLs
+```
+
 ## Security Hardening
 
 The backend was hardened against the OWASP Top 10 (2021). The middleware stack and these invariants are wired in `app/main.py`:

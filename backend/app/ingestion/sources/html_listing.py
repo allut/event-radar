@@ -713,6 +713,20 @@ class KumuAdapter(HtmlListingAdapter):
 _CONCERT_DATE_RE = re.compile(r"(\d{1,2})\.(\d{1,2})")
 _CONCERT_IMAGE_URL_RE = re.compile(r"url\((.*?)\)")
 _CONCERT_PID_RE = re.compile(r"pid=(\d+)")
+_WP_THUMB_SUFFIX_RE = re.compile(r"-\d+x\d+(\.\w+)$")
+
+
+def full_res_concert_image(url: str | None) -> str | None:
+    """Strip the WordPress -WxH thumbnail suffix from a concert.ee image URL
+    so we store the full-resolution poster, not the 82x118 listing thumbnail.
+
+    Host-gated to concert.ee so Piletilevi (no extension) / Fienta
+    (query-string) URLs are untouched; the ``\\.\\w+$`` anchor is an extra guard.
+    Public (no leading underscore) because scripts/upgrade_ech_images.py reuses it.
+    """
+    if not url or "concert.ee" not in url:
+        return url
+    return _WP_THUMB_SUFFIX_RE.sub(r"\1", url)
 
 
 def _to_float(value: Any) -> float | None:
@@ -838,7 +852,9 @@ class EstoniaConcertHallAdapter(HtmlListingAdapter):
                 style = _attr_str(image_tag, "style")
                 match = _CONCERT_IMAGE_URL_RE.search(style)
                 if match:
-                    image_url = match.group(1).strip("'\"") or None
+                    image_url = full_res_concert_image(
+                        match.group(1).strip("'\"") or None
+                    )
 
             card: dict[str, Any] = {
                 "external_id": href,

@@ -27,6 +27,11 @@ export const AUTH_REDIRECT_DELAY_MS = 600;
 // ─── Animation ───────────────────────────────────────────────────────────────
 export const CARD_ANIMATION_DELAY_STEP_MS = 80;
 
+// ─── Imagery ─────────────────────────────────────────────────────────────────
+// ratio = naturalWidth / naturalHeight; below this we treat the image as a
+// portrait poster (contain over a blurred backdrop) instead of cover-cropping.
+export const PORTRAIT_RATIO_THRESHOLD = 0.95;
+
 // ─── Settings ────────────────────────────────────────────────────────────────
 export const SAVE_MSG_CLEAR_DELAY_MS = 2000;
 

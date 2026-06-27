@@ -6,7 +6,6 @@ Run from backend/ with the venv active:
 """
 import argparse
 import asyncio
-import re
 import sys
 from pathlib import Path
 
@@ -15,6 +14,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import sqlalchemy as sa
 from sqlalchemy import text
+
+from app.routers.utils import mask_db_url
 
 WIPE_TABLES = (
     "events",
@@ -49,15 +50,11 @@ async def _counts(conn) -> dict[str, int]:  # type: ignore[no-untyped-def]
     return result
 
 
-def _masked_url(url: str) -> str:
-    return re.sub(r":[^@/]+@", ":***@", url)
-
-
 async def main(confirm: bool) -> None:
     from app.config import settings
     from app.db import engine
 
-    print(f"DB: {_masked_url(settings.DATABASE_URL)}")
+    print(f"DB: {mask_db_url(settings.DATABASE_URL)}")
     print(f"Tables: {', '.join(WIPE_TABLES)}\n")
 
     try:
