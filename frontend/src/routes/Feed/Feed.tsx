@@ -24,7 +24,10 @@ export default function Feed() {
 
   const localeMutation = useMutation({
     mutationFn: (code: string) => api.patch('/users/me', { locale: code }),
-    onSuccess: (_data, code) => { setLocale(code); },
+    onSuccess: (_data, code) => {
+      setLocale(code);
+      queryClient.invalidateQueries({ queryKey: ['feed'] });
+    },
     onError: () => { setLocaleState(getLocale()); },
   });
 
@@ -67,9 +70,9 @@ export default function Feed() {
           <span className={styles.brand}>{t('brand', locale)}</span>
         </div>
         <div className={styles.topActions}>
-          <LocaleSelector locale={locale} onChange={handleLocaleChange} ariaLabel={t('section_language', locale)} />
           <Link to="/settings" className={styles.settingsLink}>{t('settings_link', locale)}</Link>
           <button className={styles.logoutBtn} onClick={handleLogout}>{t('sign_out', locale)}</button>
+          <LocaleSelector locale={locale} onChange={handleLocaleChange} ariaLabel={t('section_language', locale)} />
         </div>
       </header>
 

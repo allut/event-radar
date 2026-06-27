@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { api } from '../../api/client';
 import { getLocale, setLocale } from '../../lib/auth';
 import { t, ti } from '../../i18n';
@@ -19,11 +19,15 @@ interface EventDetailData extends EventData {
 export default function EventDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [locale, setLocaleState] = useState(getLocale());
 
   const localeMutation = useMutation({
     mutationFn: (code: string) => api.patch('/users/me', { locale: code }),
-    onSuccess: (_data, code) => { setLocale(code); },
+    onSuccess: (_data, code) => {
+      setLocale(code);
+      queryClient.invalidateQueries({ queryKey: ['event', id] });
+    },
     onError: () => { setLocaleState(getLocale()); },
   });
 
