@@ -119,7 +119,10 @@
   /* Backdrop blur */
   --blur-overlay: 8px;   /* sticky topbars */
   --blur-chip: 4px;      /* price chips over imagery */
-  --blur-backdrop: 24px; /* poster backdrop behind portrait images */
+
+  /* Image height caps — fit-to-width natural display, bounded for extreme portraits */
+  --card-image-max-height: 560px;
+  --hero-image-max-height: 600px;
 
   /* Spinner sizes */
   --spinner-size: 40px;

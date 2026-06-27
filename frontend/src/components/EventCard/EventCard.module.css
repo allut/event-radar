@@ -20,12 +20,11 @@
 
 .imageWrap {
   position: relative;
-  aspect-ratio: 16 / 7;
   overflow: hidden;
 }
 
 .featuredImageWrap {
-  aspect-ratio: 16 / 9;
+  /* no additional rules needed; class kept for future use */
 }
 
 .numeral {
@@ -44,9 +43,10 @@
 
 .image {
   width: 100%;
-  height: 100%;
-  object-fit: cover;
+  height: auto;
   display: block;
+  max-height: var(--card-image-max-height);
+  object-fit: contain;
   transition: transform var(--transition-transform);
 }
 
@@ -54,34 +54,9 @@
   transform: scale(1.02);
 }
 
-/* Portrait poster: contain (uncropped) above a blurred cover backdrop. Both
-   imgs are absolutely positioned; the backdrop is first in the DOM so the
-   foreground paints over it (no z-index needed). imageWrap clips the bleed. */
-.poster {
-  position: absolute;
-  inset: 0;
-  object-fit: contain;
-}
-
-/* Hide the foreground until onLoad measures the ratio, so a portrait image is
-   never painted cover-cropped for a frame before it snaps to poster layout. */
-.measuring {
-  opacity: 0;
-}
-
-.backdrop {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  filter: blur(var(--blur-backdrop));
-  transform: scale(1.1);
-}
-
 .placeholder {
+  aspect-ratio: 16 / 7;
   width: 100%;
-  height: 100%;
   display: flex;
   align-items: center;
   justify-content: flex-end;

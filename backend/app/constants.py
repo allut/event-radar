@@ -536,6 +536,14 @@ KUMU_SITE_NAME_ET = "Kumu kunstimuuseum"  # ET site name; homepage og:title star
 ECH_SITE_TITLE_SUFFIX = " - Eesti Kontsert"
 ECH_SITE_NAME_ET = "Eesti Kontsert"  # ET site name; homepage og:title starts with this
 
+# WordPress thumbnail suffix stripping — hosts whose image URLs contain a -WxH
+# suffix that can be dropped to get the full-resolution original.
+WP_THUMBNAIL_HOSTS: frozenset[str] = frozenset({"concert.ee", "kumu.ekm.ee"})
+
+# Piletilevi image height parameter — the listing page pins height=252; the
+# full-resolution variant uses this value in the same /height=N/ path segment.
+PILETILEVI_IMAGE_HEIGHT = 1009
+
 # CSS selectors for each HTML-listing source's markup. Tied to the live site's
 # DOM structure, not business logic — keep them grouped here per-source rather
 # than computed/derived, so a markup change is a one-line lookup.

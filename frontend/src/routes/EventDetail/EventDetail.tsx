@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { api } from '../../api/client';
-import { PORTRAIT_RATIO_THRESHOLD } from '../../constants';
 import { getLocale, setLocale } from '../../lib/auth';
 import { t, ti } from '../../i18n';
 import { categoryGradient, cx, formatEventDateTime, formatHourMinute, formatPrice, safeUrl, trackExternalClick } from '../../utils';
@@ -22,13 +21,6 @@ export default function EventDetail() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [locale, setLocaleState] = useState(getLocale());
-  const [fit, setFit] = useState<'cover' | 'poster' | null>(null);
-
-  function handleHeroLoad(e: React.SyntheticEvent<HTMLImageElement>) {
-    const { naturalWidth, naturalHeight } = e.currentTarget;
-    const ratio = naturalWidth / naturalHeight;
-    setFit(ratio < PORTRAIT_RATIO_THRESHOLD ? 'poster' : 'cover');
-  }
 
   const localeMutation = useMutation({
     mutationFn: (code: string) => api.patch('/users/me', { locale: code }),
@@ -98,20 +90,9 @@ export default function EventDetail() {
       </header>
 
       <main className={styles.main}>
-        <div className={cx(styles.hero, fit === 'poster' && styles.heroPosterBox)}>
+        <div className={styles.hero}>
           {imageSrc ? (
-            <>
-              {fit === 'poster' && (
-                <img src={imageSrc} alt="" aria-hidden className={styles.heroBackdrop} loading="lazy" />
-              )}
-              <img
-                src={imageSrc}
-                alt={data.title}
-                className={cx(styles.heroImage, fit === 'poster' && styles.heroPoster, fit === null && styles.measuring)}
-                onLoad={handleHeroLoad}
-                onError={() => setFit('cover')}
-              />
-            </>
+            <img src={imageSrc} alt={data.title} className={styles.heroImage} />
           ) : (
             <div
               className={styles.heroPlaceholder}

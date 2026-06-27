@@ -71,9 +71,11 @@ from app.constants import (
     PILETILEVI_MAX_PAGES,
     PILETILEVI_TALLINN_FILTER,
     PILETILEVI_TITLE_SELECTOR,
+    PILETILEVI_IMAGE_HEIGHT,
     PILETILEVI_VENUE_SELECTOR,
     PRICE_HINT_MAX_CHARS,
     TALLINN_TZ,
+    WP_THUMBNAIL_HOSTS,
 )
 from app.ingestion.base import (
     NormalizedEvent,
@@ -496,7 +498,8 @@ class PiletileviAdapter(HtmlListingAdapter):
             if img_tag:
                 src = _attr_str(img_tag, "src")
                 if src:
-                    image_url = base_url + src if src.startswith("/") else src
+                    raw_url = base_url + src if src.startswith("/") else src
+                    image_url = full_res_piletilevi_image(raw_url)
 
             cards.append(
                 {
@@ -665,7 +668,7 @@ class KumuAdapter(HtmlListingAdapter):
             date_str = date_tag.get_text(strip=True) if date_tag else ""
 
             img_tag = item.select_one(KUMU_IMAGE_SELECTOR)
-            image_url = _first_image_url(img_tag) if img_tag else None
+            image_url = full_res_wp_image(_first_image_url(img_tag)) if img_tag else None
 
             cards.append(
                 {
@@ -714,19 +717,29 @@ _CONCERT_DATE_RE = re.compile(r"(\d{1,2})\.(\d{1,2})")
 _CONCERT_IMAGE_URL_RE = re.compile(r"url\((.*?)\)")
 _CONCERT_PID_RE = re.compile(r"pid=(\d+)")
 _WP_THUMB_SUFFIX_RE = re.compile(r"-\d+x\d+(\.\w+)$")
+_PILETILEVI_HEIGHT_RE = re.compile(r"/height=\d+/")
 
 
-def full_res_concert_image(url: str | None) -> str | None:
-    """Strip the WordPress -WxH thumbnail suffix from a concert.ee image URL
-    so we store the full-resolution poster, not the 82x118 listing thumbnail.
+def full_res_wp_image(url: str | None) -> str | None:
+    """Strip the WordPress -WxH thumbnail suffix from a WP_THUMBNAIL_HOSTS image URL
+    so we store the full-resolution original, not the listing thumbnail.
 
-    Host-gated to concert.ee so Piletilevi (no extension) / Fienta
-    (query-string) URLs are untouched; the ``\\.\\w+$`` anchor is an extra guard.
-    Public (no leading underscore) because scripts/upgrade_ech_images.py reuses it.
+    Host-gated to WP_THUMBNAIL_HOSTS (concert.ee, kumu.ekm.ee); the ``\\.\\w+$``
+    anchor is an extra guard. Public because upgrade_source_images.py reuses it.
     """
-    if not url or "concert.ee" not in url:
+    if not url or not any(h in url for h in WP_THUMBNAIL_HOSTS):
         return url
     return _WP_THUMB_SUFFIX_RE.sub(r"\1", url)
+
+
+def full_res_piletilevi_image(url: str | None) -> str | None:
+    """Rewrite the /height=N/ path segment to PILETILEVI_IMAGE_HEIGHT for
+    full-resolution Piletilevi images. No-op for other hosts or URLs without
+    the segment.
+    """
+    if not url or "piletilevi.ee" not in url:
+        return url
+    return _PILETILEVI_HEIGHT_RE.sub(f"/height={PILETILEVI_IMAGE_HEIGHT}/", url)
 
 
 def _to_float(value: Any) -> float | None:
@@ -852,7 +865,7 @@ class EstoniaConcertHallAdapter(HtmlListingAdapter):
                 style = _attr_str(image_tag, "style")
                 match = _CONCERT_IMAGE_URL_RE.search(style)
                 if match:
-                    image_url = full_res_concert_image(
+                    image_url = full_res_wp_image(
                         match.group(1).strip("'\"") or None
                     )
 

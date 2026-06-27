@@ -33,7 +33,8 @@ from app.ingestion.sources.html_listing import (
     _next_occurrence_year,
     _parse_piletilevi_date,
     estonia_concert_hall_localized_text,
-    full_res_concert_image,
+    full_res_piletilevi_image,
+    full_res_wp_image,
     kumu_localized_text,
 )
 
@@ -485,7 +486,7 @@ class TestPiletileviParseCards:
         assert jazz["title"] == "Jazz Night"
         assert jazz["venue"] == "Jazz Club, Tallinn"
         assert jazz["url"] == settings.PILETILEVI_BASE_URL + "/en/tickets/AA1/jazz-night"
-        assert jazz["image_url"] == "https://www.piletilevi.ee/i/height=252/images/aa1.jpg"
+        assert jazz["image_url"] == "https://www.piletilevi.ee/i/height=1009/images/aa1.jpg"
 
     def test_passes_filter_drops_non_tallinn_venue(self):
         adapter = _piletilevi_adapter()
@@ -1382,39 +1383,80 @@ class TestExtractLocalizedTextHook:
 
 
 # ---------------------------------------------------------------------------
-# full_res_concert_image
+# full_res_wp_image
 # ---------------------------------------------------------------------------
 
 
-class TestFullResConcertImage:
-    def test_strips_wp_thumbnail_suffix(self):
+class TestFullResWpImage:
+    def test_strips_wp_thumbnail_suffix_concert(self):
         url = "https://concert.ee/wp-content/uploads/2024/01/poster-82x118.jpg"
         expected = "https://concert.ee/wp-content/uploads/2024/01/poster.jpg"
-        assert full_res_concert_image(url) == expected
+        assert full_res_wp_image(url) == expected
 
-    def test_strips_arbitrary_dims(self):
+    def test_strips_arbitrary_dims_concert(self):
         url = "https://concert.ee/img/555x800px_Jouluks-koju-555x800.jpg"
         # Only the trailing -WxH suffix is stripped; an in-name "555x800px" stays.
         expected = "https://concert.ee/img/555x800px_Jouluks-koju.jpg"
-        assert full_res_concert_image(url) == expected
+        assert full_res_wp_image(url) == expected
 
     def test_concert_url_without_suffix_unchanged(self):
         url = "https://concert.ee/wp-content/uploads/2024/01/poster.jpg"
-        assert full_res_concert_image(url) == url
+        assert full_res_wp_image(url) == url
+
+    def test_strips_wp_thumbnail_suffix_kumu(self):
+        url = "https://kumu.ekm.ee/wp-content/uploads/2024/01/exhibit-200x200.jpg"
+        expected = "https://kumu.ekm.ee/wp-content/uploads/2024/01/exhibit.jpg"
+        assert full_res_wp_image(url) == expected
+
+    def test_kumu_url_without_suffix_unchanged(self):
+        url = "https://kumu.ekm.ee/wp-content/uploads/2024/01/exhibit.jpg"
+        assert full_res_wp_image(url) == url
 
     def test_piletilevi_url_untouched(self):
-        # Non-concert.ee host is never rewritten, even with a -WxH-looking tail.
+        # piletilevi.ee is not in WP_THUMBNAIL_HOSTS — never rewritten here.
         url = "https://www.piletilevi.ee/media/event-481x252.jpg"
-        assert full_res_concert_image(url) == url
+        assert full_res_wp_image(url) == url
 
     def test_fienta_query_string_url_untouched(self):
         url = "https://fienta.com/image?w=1070&h=601"
-        assert full_res_concert_image(url) == url
+        assert full_res_wp_image(url) == url
 
     def test_concert_query_string_not_at_end_untouched(self):
         # The \.\w+$ anchor means a suffix mid-URL (before a query) is left alone.
         url = "https://concert.ee/img/poster-82x118.jpg?ver=2"
-        assert full_res_concert_image(url) == url
+        assert full_res_wp_image(url) == url
 
     def test_none_returns_none(self):
-        assert full_res_concert_image(None) is None
+        assert full_res_wp_image(None) is None
+
+
+# ---------------------------------------------------------------------------
+# full_res_piletilevi_image
+# ---------------------------------------------------------------------------
+
+
+class TestFullResPiletileviImage:
+    def test_rewrites_height_segment(self):
+        url = "https://www.piletilevi.ee/i/height=252/images/event.jpg"
+        expected = "https://www.piletilevi.ee/i/height=1009/images/event.jpg"
+        assert full_res_piletilevi_image(url) == expected
+
+    def test_rewrites_any_height_value(self):
+        url = "https://www.piletilevi.ee/i/height=100/img/poster.png"
+        expected = "https://www.piletilevi.ee/i/height=1009/img/poster.png"
+        assert full_res_piletilevi_image(url) == expected
+
+    def test_url_without_height_segment_unchanged(self):
+        url = "https://www.piletilevi.ee/images/event.jpg"
+        assert full_res_piletilevi_image(url) == url
+
+    def test_concert_url_untouched(self):
+        url = "https://concert.ee/wp-content/uploads/poster-82x118.jpg"
+        assert full_res_piletilevi_image(url) == url
+
+    def test_fienta_url_untouched(self):
+        url = "https://fienta.com/image?w=1070&h=601"
+        assert full_res_piletilevi_image(url) == url
+
+    def test_none_returns_none(self):
+        assert full_res_piletilevi_image(None) is None

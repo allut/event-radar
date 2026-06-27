@@ -1,7 +1,6 @@
-import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { getLocale } from '../../lib/auth';
-import { CARD_ANIMATION_DELAY_STEP_MS, PORTRAIT_RATIO_THRESHOLD } from '../../constants';
+import { CARD_ANIMATION_DELAY_STEP_MS } from '../../constants';
 import { t } from '../../i18n';
 import { categoryGradient, cx, formatEventTime, formatPrice, safeUrl, trackExternalClick } from '../../utils';
 import { useFeedback } from '../../hooks/useFeedback';
@@ -42,16 +41,9 @@ export default function EventCard({ event, index, onFeedbackSent, variant = 'sta
   const locale = getLocale();
   const { activeSignal, pending, sendFeedback } = useFeedback(event.id, onFeedbackSent);
   const isFeatured = variant === 'featured';
-  const [fit, setFit] = useState<'cover' | 'poster' | null>(null);
 
   const price = formatPrice(event.price_min, event.price_max, event.currency, locale);
   const imageSrc = safeUrl(event.image_url);
-
-  function handleImageLoad(e: React.SyntheticEvent<HTMLImageElement>) {
-    const { naturalWidth, naturalHeight } = e.currentTarget;
-    const ratio = naturalWidth / naturalHeight;
-    setFit(ratio < PORTRAIT_RATIO_THRESHOLD ? 'poster' : 'cover');
-  }
 
   return (
     <article
@@ -60,25 +52,7 @@ export default function EventCard({ event, index, onFeedbackSent, variant = 'sta
     >
       <div className={cx(styles.imageWrap, isFeatured && styles.featuredImageWrap)}>
         {imageSrc ? (
-          <>
-            {fit === 'poster' && (
-              <img
-                src={imageSrc}
-                alt=""
-                aria-hidden
-                className={styles.backdrop}
-                loading="lazy"
-              />
-            )}
-            <img
-              src={imageSrc}
-              alt={event.title}
-              className={cx(styles.image, fit === 'poster' && styles.poster, fit === null && styles.measuring)}
-              loading="lazy"
-              onLoad={handleImageLoad}
-              onError={() => setFit('cover')}
-            />
-          </>
+          <img src={imageSrc} alt={event.title} className={styles.image} loading="lazy" />
         ) : (
           <div
             className={styles.placeholder}
