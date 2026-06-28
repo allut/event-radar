@@ -28,14 +28,16 @@ from app.constants import (
     HTTP_TIMEOUT_SECONDS,
     HTTP_USER_AGENT,
     KUMU_DESCRIPTION_SELECTOR,
+    LOCALIZED_TEXT_FIENTA_LOCALES,
     LOCALIZED_TEXT_HTML_LOCALES,
     LOCALIZED_TEXT_MAX_DESC_CHARS,
     PILETILEVI_DETAIL_DESC_SELECTOR,
     SOURCE_SLUG_ESTONIA_CONCERT_HALL,
+    SOURCE_SLUG_FIENTA,
     SOURCE_SLUG_KUMU,
     SOURCE_SLUG_PILETILEVI,
 )
-from app.ingestion.base import host_guard_hook, http_get, locale_from_url_path, localized_detail_urls, sanitize_html
+from app.ingestion.base import host_guard_hook, html_to_text, http_get, locale_from_url_path, localized_detail_urls, sanitize_html
 from app.ingestion.sources.html_listing import (
     _piletilevi_important_info,
     estonia_concert_hall_localized_text,
@@ -48,7 +50,7 @@ log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 
 DEFAULT_LIMIT = 5000
-SUPPORTED_SLUGS = {SOURCE_SLUG_PILETILEVI, SOURCE_SLUG_KUMU, SOURCE_SLUG_ESTONIA_CONCERT_HALL}
+SUPPORTED_SLUGS = {SOURCE_SLUG_PILETILEVI, SOURCE_SLUG_KUMU, SOURCE_SLUG_ESTONIA_CONCERT_HALL, SOURCE_SLUG_FIENTA}
 
 
 def _extract_description(soup: BeautifulSoup, source_slug: str) -> str | None:
@@ -97,6 +99,47 @@ async def _process_event(
     except (httpx.HTTPStatusError, httpx.RequestError) as exc:
         log.warning("fetch failed event_id=%s url=%s: %s", event.id, event.url, exc)
         stats["fetch_error"] += 1
+        return
+
+    if source_slug == SOURCE_SLUG_FIENTA:
+        # Fienta: description comes from stored listing HTML, not from the detail page.
+        # The fetch above is still needed to detect the primary locale via resp.url.
+        new_desc = sanitize_html(event.description_orig)
+        primary_locale = locale_from_url_path(str(resp.url), LOCALIZED_TEXT_FIENTA_LOCALES)
+        if primary_locale is None and event.description_localized:
+            # Fallback: match plain-text content against stored localized values.
+            # Normalize whitespace so block-level HTML (`<p>A</p><p>B</p>`) and
+            # already-stored plain text ("A B") compare equal.
+            plain = " ".join((html_to_text(new_desc) or "").split())
+            for loc, loc_desc in (event.description_localized or {}).items():
+                if " ".join((html_to_text(loc_desc) or "").split()) == plain:
+                    primary_locale = loc
+                    break
+
+        changed = False
+        if new_desc and new_desc != event.description_orig:
+            if write:
+                event.description_orig = new_desc
+            changed = True
+
+        if primary_locale and new_desc:
+            merged = dict(event.description_localized or {})
+            merged[primary_locale] = new_desc
+            if merged != dict(event.description_localized or {}):
+                if write:
+                    event.description_localized = merged
+                changed = True
+
+        if changed:
+            stats["updated"] += 1
+            log.info(
+                "%s event_id=%s source=%s",
+                "wrote" if write else "would update",
+                event.id,
+                source_slug,
+            )
+        else:
+            stats["unchanged"] += 1
         return
 
     new_desc = _extract_description(soup, source_slug)

@@ -27,9 +27,11 @@ from app.ingestion.base import (
     host_guard_hook,
     http_get,
     is_target_city,
+    locale_from_url_path,
     localized_detail_urls,
     parse_dt,
     parse_price_from_string,
+    sanitize_html,
 )
 
 log = logging.getLogger(__name__)
@@ -238,13 +240,29 @@ class FientaAdapter(SourceAdapter):
                     "price_max": price_max,
                     "currency": currency,
                 }
+                # The canonical URL 302s to a locale-prefixed path (e.g. /et/slug).
+                # That redirected URL tells us which language the listing API returned.
+                primary_locale = locale_from_url_path(
+                    str(response.url), LOCALIZED_TEXT_FIENTA_LOCALES
+                )
                 # Fetch locale variants for native title/description
                 locale_urls = localized_detail_urls(soup, url, LOCALIZED_TEXT_FIENTA_LOCALES)
                 loc_titles: dict[str, str] = {}
                 loc_descs: dict[str, str] = {}
                 for locale, loc_url in locale_urls.items():
+                    if locale == primary_locale:
+                        # Already fetched this page — reuse soup for title; listing
+                        # API HTML is authoritative for the primary-locale description,
+                        # with JSON-LD plain text as fallback when the API field is absent.
+                        loc_name, jsonld_desc = extract_jsonld_event_text(soup)
+                        html_desc = sanitize_html(item.get("description")) or sanitize_html(jsonld_desc)
+                        if loc_name:
+                            loc_titles[locale] = loc_name
+                        if html_desc:
+                            loc_descs[locale] = html_desc
+                        continue
                     if loc_url == url:
-                        # This URL is the same page — extract text directly
+                        # Same page, non-primary locale (no redirect happened).
                         loc_name, loc_desc = extract_jsonld_event_text(soup)
                     else:
                         await limiter.acquire()
@@ -266,8 +284,9 @@ class FientaAdapter(SourceAdapter):
                             continue
                     if loc_name:
                         loc_titles[locale] = loc_name
-                    if loc_desc:
-                        loc_descs[locale] = loc_desc
+                    sanitized_loc_desc = sanitize_html(loc_desc)
+                    if sanitized_loc_desc:
+                        loc_descs[locale] = sanitized_loc_desc
                 if loc_titles or loc_descs:
                     item["_detail_localized"] = {
                         "title": loc_titles,
@@ -383,7 +402,7 @@ class FientaAdapter(SourceAdapter):
         return NormalizedEvent(
             external_id=external_id,
             title=str(title),
-            description=raw.get("description") or raw.get("body"),
+            description=sanitize_html(raw.get("description") or raw.get("body")),
             starts_at=starts_at,
             ends_at=ends_at,
             venue_name=venue_name or None,
