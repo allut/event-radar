@@ -120,9 +120,22 @@ async def _process_event(
         urls = localized_detail_urls(soup, event.url, LOCALIZED_TEXT_HTML_LOCALES)
         loc_descs: dict[str, str] = {}
         loc_infos: dict[str, str] = {}
+        url_locale_pil = locale_from_url_path(event.url, LOCALIZED_TEXT_HTML_LOCALES)
         for locale in LOCALIZED_TEXT_HTML_LOCALES:
             loc_url = urls.get(locale)
             if not loc_url or loc_url == event.url:
+                # Same page already fetched — seed from the main extraction so the
+                # same-language localized field matches description_orig/important_info.
+                if locale == url_locale_pil:
+                    if new_desc:
+                        loc_descs[locale] = new_desc
+                    if new_info:
+                        loc_infos[locale] = new_info
+                elif url_locale_pil is None:
+                    log.debug(
+                        "event_id=%s: url has no locale segment, skipping same-lang seed",
+                        event.id,
+                    )
                 continue
             await asyncio.sleep(HTML_LISTING_LOCALE_FETCH_DELAY_SECONDS)
             try:
@@ -142,15 +155,17 @@ async def _process_event(
         if loc_descs:
             merged_descs = dict(event.description_localized or {})
             merged_descs.update(loc_descs)
-            if write:
-                event.description_localized = merged_descs
-            changed = True
+            if merged_descs != dict(event.description_localized or {}):
+                if write:
+                    event.description_localized = merged_descs
+                changed = True
         if loc_infos:
             merged_infos = dict(event.important_info_localized or {})
             merged_infos.update(loc_infos)
-            if write:
-                event.important_info_localized = merged_infos
-            changed = True
+            if merged_infos != dict(event.important_info_localized or {}):
+                if write:
+                    event.important_info_localized = merged_infos
+                changed = True
     elif source_slug in (SOURCE_SLUG_KUMU, SOURCE_SLUG_ESTONIA_CONCERT_HALL):
         urls = localized_detail_urls(soup, event.url, LOCALIZED_TEXT_HTML_LOCALES)
         loc_descs = {}
@@ -160,16 +175,20 @@ async def _process_event(
                 continue
             url_locale = locale_from_url_path(event.url, LOCALIZED_TEXT_HTML_LOCALES)
             if locale == url_locale or loc_url == event.url:
-                _, loc_desc = _extract_localized_text(soup, source_slug)
-            else:
-                await asyncio.sleep(HTML_LISTING_LOCALE_FETCH_DELAY_SECONDS)
-                try:
-                    loc_resp = await http_get(client, loc_url)
-                    loc_soup = BeautifulSoup(loc_resp.text, "html.parser")
-                except (httpx.HTTPStatusError, httpx.RequestError, ValueError) as exc:
-                    log.debug("locale fetch failed locale=%s: %s", locale, exc)
-                    continue
-                _, loc_desc = _extract_localized_text(loc_soup, source_slug)
+                # Already fetched this page — assign new_desc directly; it is
+                # already sanitized and truncated, so skip the reprocessing pipeline
+                # that would double-truncate and potentially re-break tag boundaries.
+                if new_desc:
+                    loc_descs[locale] = new_desc
+                continue
+            await asyncio.sleep(HTML_LISTING_LOCALE_FETCH_DELAY_SECONDS)
+            try:
+                loc_resp = await http_get(client, loc_url)
+                loc_soup = BeautifulSoup(loc_resp.text, "html.parser")
+            except (httpx.HTTPStatusError, httpx.RequestError, ValueError) as exc:
+                log.debug("locale fetch failed locale=%s: %s", locale, exc)
+                continue
+            _, loc_desc = _extract_localized_text(loc_soup, source_slug)
             if loc_desc:
                 sanitized = sanitize_html(loc_desc)
                 if sanitized:
@@ -177,9 +196,10 @@ async def _process_event(
         if loc_descs:
             merged = dict(event.description_localized or {})
             merged.update(loc_descs)
-            if write:
-                event.description_localized = merged
-            changed = True
+            if merged != dict(event.description_localized or {}):
+                if write:
+                    event.description_localized = merged
+                changed = True
 
     if changed:
         stats["updated"] += 1
