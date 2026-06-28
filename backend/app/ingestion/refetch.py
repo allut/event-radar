@@ -53,6 +53,7 @@ from app.ingestion.base import (
     host_guard_hook,
     http_get,
     is_explicit_text,
+    locale_from_html_lang,
     locale_from_url_path,
     localized_detail_urls,
     sanitize_html,
@@ -264,7 +265,9 @@ async def refetch_event_details(db: AsyncSession) -> dict:
                 )
                 # Bug 2a fix: detect this page's own locale from its URL path and reuse
                 # the already-loaded soup instead of matching on exact URL string.
-                url_locale = locale_from_url_path(url, LOCALIZED_TEXT_FIENTA_LOCALES)
+                url_locale = locale_from_url_path(
+                    url, LOCALIZED_TEXT_FIENTA_LOCALES
+                ) or locale_from_html_lang(soup, LOCALIZED_TEXT_FIENTA_LOCALES)
                 loc_titles: dict[str, str] = {}
                 loc_descs: dict[str, str] = {}
                 for locale, loc_url in locale_urls.items():

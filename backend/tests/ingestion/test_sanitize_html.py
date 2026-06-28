@@ -6,7 +6,10 @@ from unittest.mock import MagicMock
 import httpx
 import pytest
 
-from app.ingestion.base import AsyncRateLimiter, html_to_text, sanitize_html
+from bs4 import BeautifulSoup
+
+from app.constants import LOCALIZED_TEXT_FIENTA_LOCALES
+from app.ingestion.base import AsyncRateLimiter, html_to_text, locale_from_html_lang, sanitize_html
 from app.ingestion.sources.fienta import FientaAdapter
 
 
@@ -127,6 +130,36 @@ class TestHtmlToText:
 
 
 # ---------------------------------------------------------------------------
+# locale_from_html_lang
+# ---------------------------------------------------------------------------
+
+class TestLocaleFromHtmlLang:
+    def _soup(self, html: str) -> BeautifulSoup:
+        return BeautifulSoup(html, "html.parser")
+
+    def test_en_lang_returns_en(self) -> None:
+        soup = self._soup('<html lang="en"><body></body></html>')
+        assert locale_from_html_lang(soup, LOCALIZED_TEXT_FIENTA_LOCALES) == "en"
+
+    def test_et_ee_normalizes_to_et(self) -> None:
+        soup = self._soup('<html lang="et-EE"><body></body></html>')
+        assert locale_from_html_lang(soup, LOCALIZED_TEXT_FIENTA_LOCALES) == "et"
+
+    def test_unknown_lang_returns_none(self) -> None:
+        soup = self._soup('<html lang="fr"><body></body></html>')
+        assert locale_from_html_lang(soup, LOCALIZED_TEXT_FIENTA_LOCALES) is None
+
+    def test_missing_lang_attr_returns_none(self) -> None:
+        soup = self._soup("<html><body></body></html>")
+        assert locale_from_html_lang(soup, LOCALIZED_TEXT_FIENTA_LOCALES) is None
+
+    def test_fragment_with_no_lang_attr_returns_none(self) -> None:
+        # html.parser wraps bare fragments in <html> — this tests the missing-lang path
+        soup = self._soup("<p>content</p>")
+        assert locale_from_html_lang(soup, LOCALIZED_TEXT_FIENTA_LOCALES) is None
+
+
+# ---------------------------------------------------------------------------
 # Fienta HTML description — normalize() and _fetch_detail()
 # ---------------------------------------------------------------------------
 
@@ -181,6 +214,24 @@ class TestFientaNormalizeHtml:
         assert "<p>Body field</p>" in result.description
         assert "<script>" not in result.description
 
+
+# English-default detail page: no redirect, lang="en", has locale alternates.
+_EN_DEFAULT_HTML = (
+    '<html lang="en"><head>'
+    '<link rel="alternate" hreflang="et" href="https://fienta.com/et/event-88"/>'
+    '<link rel="alternate" hreflang="en" href="https://fienta.com/en/event-88"/>'
+    '</head><body>'
+    '<script type="application/ld+json">'
+    '{"@type":"Event","name":"Great Show","description":"Plain text from JSON-LD"}'
+    "</script></body></html>"
+)
+
+_ET_HTML_88 = (
+    "<html><body>"
+    '<script type="application/ld+json">'
+    '{"@type":"Event","name":"Suur Show","description":"Eesti tekst"}'
+    "</script></body></html>"
+)
 
 # Minimal HTML page template for detail-page stubs.
 _DETAIL_HTML_TEMPLATE = (
@@ -296,3 +347,42 @@ class TestFetchDetailPrimaryLocaleHtml:
         titles = item["_detail_localized"]["title"]
         assert titles.get("et") == "Sündmus"
         assert titles.get("en") == "Event"
+
+    @pytest.mark.asyncio
+    async def test_english_default_page_seeds_en_html(self) -> None:
+        """English-default Fienta page (no /en/ redirect, lang='en') seeds en HTML description."""
+        item: dict = {
+            "id": "88",
+            "description": "<p>Rich HTML content</p><strong>Bold</strong>",
+            "url": "https://fienta.com/event-88",
+        }
+
+        async def handler(request: httpx.Request) -> httpx.Response:
+            url_str = str(request.url)
+            if "/et/event-88" in url_str:
+                return httpx.Response(200, text=_ET_HTML_88, headers={"content-type": "text/html"})
+            # Canonical URL: no redirect — English default
+            return httpx.Response(200, text=_EN_DEFAULT_HTML, headers={"content-type": "text/html"})
+
+        adapter = _fienta_adapter()
+        semaphore = asyncio.Semaphore(1)
+        limiter = AsyncRateLimiter(0)
+
+        async with httpx.AsyncClient(
+            transport=httpx.MockTransport(handler),
+            follow_redirects=True,
+        ) as client:
+            await adapter._fetch_detail(client, item, "fienta.com", semaphore, limiter)
+
+        assert "_detail_localized" in item
+        descs = item["_detail_localized"]["description"]
+
+        # Primary locale (en via html lang): must contain HTML tags, not plain JSON-LD
+        en_desc = descs.get("en")
+        assert en_desc is not None, "en description must be set"
+        assert "<p>" in en_desc, "en description must contain HTML markup"
+        assert "<strong>" in en_desc or "Bold" in en_desc
+
+        # Non-primary locale (et): JSON-LD plain text
+        et_desc = descs.get("et")
+        assert et_desc == "Eesti tekst"

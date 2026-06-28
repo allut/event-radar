@@ -624,6 +624,19 @@ def locale_from_url_path(url: str, locales: frozenset[str]) -> str | None:
     return None
 
 
+def locale_from_html_lang(soup: BeautifulSoup, locales: frozenset[str]) -> str | None:
+    """Return the page's <html lang> locale if it is one of `locales`, else None."""
+    html_tag = soup.find("html")
+    lang = html_tag.get("lang") if html_tag else None
+    if isinstance(lang, list):
+        lang = lang[0] if lang else None
+    if not lang:
+        return None
+    lang = lang.lower()
+    norm = LOCALIZED_TEXT_HREFLANG_NORMALIZE.get(lang, lang.split("-")[0])
+    return norm if norm in locales else None
+
+
 def localized_detail_urls(
     soup: BeautifulSoup,
     base_url: str,

@@ -37,7 +37,7 @@ from app.constants import (
     SOURCE_SLUG_KUMU,
     SOURCE_SLUG_PILETILEVI,
 )
-from app.ingestion.base import host_guard_hook, html_to_text, http_get, locale_from_url_path, localized_detail_urls, sanitize_html
+from app.ingestion.base import host_guard_hook, html_to_text, http_get, locale_from_html_lang, locale_from_url_path, localized_detail_urls, sanitize_html
 from app.ingestion.sources.html_listing import (
     _piletilevi_important_info,
     estonia_concert_hall_localized_text,
@@ -105,7 +105,9 @@ async def _process_event(
         # Fienta: description comes from stored listing HTML, not from the detail page.
         # The fetch above is still needed to detect the primary locale via resp.url.
         new_desc = sanitize_html(event.description_orig)
-        primary_locale = locale_from_url_path(str(resp.url), LOCALIZED_TEXT_FIENTA_LOCALES)
+        primary_locale = locale_from_url_path(
+            str(resp.url), LOCALIZED_TEXT_FIENTA_LOCALES
+        ) or locale_from_html_lang(soup, LOCALIZED_TEXT_FIENTA_LOCALES)
         if primary_locale is None and event.description_localized:
             # Fallback: match plain-text content against stored localized values.
             # Normalize whitespace so block-level HTML (`<p>A</p><p>B</p>`) and

@@ -27,6 +27,7 @@ from app.ingestion.base import (
     host_guard_hook,
     http_get,
     is_target_city,
+    locale_from_html_lang,
     locale_from_url_path,
     localized_detail_urls,
     parse_dt,
@@ -244,7 +245,7 @@ class FientaAdapter(SourceAdapter):
                 # That redirected URL tells us which language the listing API returned.
                 primary_locale = locale_from_url_path(
                     str(response.url), LOCALIZED_TEXT_FIENTA_LOCALES
-                )
+                ) or locale_from_html_lang(soup, LOCALIZED_TEXT_FIENTA_LOCALES)
                 # Fetch locale variants for native title/description
                 locale_urls = localized_detail_urls(soup, url, LOCALIZED_TEXT_FIENTA_LOCALES)
                 loc_titles: dict[str, str] = {}
