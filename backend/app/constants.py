@@ -555,8 +555,11 @@ PILETILEVI_IMAGE_SELECTOR = "img.card__image"
 PILETILEVI_DETAIL_DESC_SELECTOR = ".event__description"
 # No stable class on the "Important information" h2 (generic Tailwind
 # utilities) — only two h2s exist on the page, so anchoring on heading text
-# is unambiguous. We scrape the /en/ path, so the English heading is stable.
-PILETILEVI_IMPORTANT_INFO_HEADING = "Important information"
+# is unambiguous. ET uses "Hinnainfo"; EN uses "Important information".
+PILETILEVI_IMPORTANT_INFO_HEADINGS: dict[str, str] = {
+    "en": "Important information",
+    "et": "Hinnainfo",
+}
 
 KUMU_CARD_SELECTOR = "ul.event-grid__cards > li.event-grid__item"
 KUMU_LINK_SELECTOR = "a.card__link"

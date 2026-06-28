@@ -318,6 +318,7 @@ class NormalizedEvent:
     price_hint: str | None = None
     title_localized: dict[str, str] | None = None
     description_localized: dict[str, str] | None = None
+    important_info_localized: dict[str, str] | None = None
 
     def __post_init__(self) -> None:
         # Coords without an address are orphan data here — the geocode/sibling-copy
@@ -747,6 +748,7 @@ class SourceAdapter(ABC):
                             price_hint=normalized.price_hint,
                             title_localized=normalized.title_localized,
                             description_localized=normalized.description_localized,
+                            important_info_localized=normalized.important_info_localized,
                             status=EVENT_STATUS_DRAFT,
                             is_explicit=is_explicit_text(
                                 normalized.title,

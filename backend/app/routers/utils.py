@@ -122,6 +122,16 @@ def resolve_description(event: Event, locale: str) -> str | None:
     return event.description_orig
 
 
+def resolve_important_info(event: Event, locale: str) -> str | None:
+    """Return localized important_info with locale → en → plain fallback."""
+    loc = event.important_info_localized
+    if loc:
+        result = loc.get(locale) or loc.get(DEFAULT_USER_LOCALE)
+        if result:
+            return result
+    return event.important_info
+
+
 def resolve_why_go(cl, locale: str) -> list[str]:
     """Return localized why_go bullets for a classification, with locale → en → raw fallback."""
     if cl is None:
@@ -144,7 +154,7 @@ def serialize_event(event: Event, locale: str = DEFAULT_USER_LOCALE) -> dict:
         "slug": event.slug,
         "title": resolve_title(event, locale),
         "description": resolve_description(event, locale),
-        "important_info": event.important_info,
+        "important_info": resolve_important_info(event, locale),
         "starts_at": event.starts_at.isoformat(),
         "ends_at": event.ends_at.isoformat() if event.ends_at else None,
         "venue_name": event.venue_name,

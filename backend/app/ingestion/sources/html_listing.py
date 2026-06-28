@@ -67,7 +67,7 @@ from app.constants import (
     PILETILEVI_DATE_SELECTOR,
     PILETILEVI_DETAIL_DESC_SELECTOR,
     PILETILEVI_IMAGE_SELECTOR,
-    PILETILEVI_IMPORTANT_INFO_HEADING,
+    PILETILEVI_IMPORTANT_INFO_HEADINGS,
     PILETILEVI_MAX_PAGES,
     PILETILEVI_TALLINN_FILTER,
     PILETILEVI_TITLE_SELECTOR,
@@ -191,6 +191,12 @@ class HtmlListingAdapter(SourceAdapter):
         self, client: httpx.AsyncClient, soup: BeautifulSoup, card: dict[str, Any]
     ) -> None:
         """Fill in fields on ``card`` from its detail page. No-op by default."""
+        return None
+
+    def extract_localized_important_info(
+        self, soup: BeautifulSoup, locale: str
+    ) -> str | None:
+        """Return localized important_info for one locale variant page. No-op by default."""
         return None
 
     def extract_localized_text(
@@ -341,10 +347,12 @@ class HtmlListingAdapter(SourceAdapter):
             detail_host = urlsplit(detail_url).hostname
             loc_titles: dict[str, str] = {}
             loc_descs: dict[str, str] = {}
+            loc_infos: dict[str, str] = {}
             for locale, loc_url in locale_urls.items():
                 if locale == url_locale or loc_url == detail_url:
                     # Reuse already-loaded soup — this page IS the locale variant
                     loc_name, loc_desc = self.extract_localized_text(detail_soup)
+                    loc_info = self.extract_localized_important_info(detail_soup, locale)
                 else:
                     try:
                         await asyncio.sleep(HTML_LISTING_LOCALE_FETCH_DELAY_SECONDS)
@@ -365,6 +373,7 @@ class HtmlListingAdapter(SourceAdapter):
                             continue
                         loc_soup = BeautifulSoup(loc_resp.text, "html.parser")
                         loc_name, loc_desc = self.extract_localized_text(loc_soup)
+                        loc_info = self.extract_localized_important_info(loc_soup, locale)
                     except (httpx.HTTPStatusError, httpx.RequestError) as exc:
                         log.debug(
                             "%s locale fetch failed locale=%s url=%s: %s",
@@ -381,10 +390,14 @@ class HtmlListingAdapter(SourceAdapter):
                     loc_titles[locale] = loc_name
                 if loc_desc:
                     loc_descs[locale] = loc_desc
+                if loc_info:
+                    loc_infos[locale] = loc_info
             if loc_titles:
                 card["title_localized"] = loc_titles
             if loc_descs:
                 card["description_localized"] = loc_descs
+            if loc_infos:
+                card["important_info_localized"] = loc_infos
 
     def normalize(self, raw: dict[str, Any]) -> NormalizedEvent | None:
         title = raw.get("title") or ""
@@ -398,6 +411,7 @@ class HtmlListingAdapter(SourceAdapter):
 
         loc_titles = raw.get("title_localized") or {}
         loc_descs = raw.get("description_localized") or {}
+        loc_infos = raw.get("important_info_localized") or {}
         return NormalizedEvent(
             external_id=external_id,
             title=title,
@@ -416,6 +430,7 @@ class HtmlListingAdapter(SourceAdapter):
             price_hint=raw.get("price_hint"),
             title_localized=loc_titles if loc_titles else None,
             description_localized=loc_descs if loc_descs else None,
+            important_info_localized=loc_infos if loc_infos else None,
         )
 
     def get_raw_external_id(self, raw: dict[str, Any]) -> str | None:
@@ -441,18 +456,21 @@ def _parse_piletilevi_date(date_str: str) -> datetime | None:
         return None
 
 
-def _piletilevi_important_info(soup: BeautifulSoup) -> str | None:
-    """Extract the "Important information" section text, or None if absent.
+def _piletilevi_important_info(soup: BeautifulSoup, locale: str = "en") -> str | None:
+    """Extract the important-info section text for the given locale, or None if absent.
 
     The section's <h2> carries no stable class (generic Tailwind utilities),
     so it's anchored by heading text instead — only two h2s exist on the
-    page ("Important information", "Event location"), so this is unambiguous.
+    page, so this is unambiguous.
     """
+    heading_text = PILETILEVI_IMPORTANT_INFO_HEADINGS.get(
+        locale, PILETILEVI_IMPORTANT_INFO_HEADINGS["en"]
+    )
     heading = next(
         (
             h2
             for h2 in soup.find_all("h2")
-            if h2.get_text(strip=True) == PILETILEVI_IMPORTANT_INFO_HEADING
+            if h2.get_text(strip=True) == heading_text
         ),
         None,
     )
@@ -462,7 +480,7 @@ def _piletilevi_important_info(soup: BeautifulSoup) -> str | None:
     if block is None:
         return None
     text = block.get_text(separator=" ", strip=True)
-    return text.removeprefix(PILETILEVI_IMPORTANT_INFO_HEADING).strip() or None
+    return text.removeprefix(heading_text).strip() or None
 
 
 class PiletileviAdapter(HtmlListingAdapter):
@@ -521,6 +539,11 @@ class PiletileviAdapter(HtmlListingAdapter):
     def parse_date(self, card: dict[str, Any]) -> datetime | None:
         return _parse_piletilevi_date(card.get("date_str") or "")
 
+    def extract_localized_important_info(
+        self, soup: BeautifulSoup, locale: str
+    ) -> str | None:
+        return _piletilevi_important_info(soup, locale)
+
     async def parse_detail(
         self, client: httpx.AsyncClient, soup: BeautifulSoup, card: dict[str, Any]
     ) -> None:
@@ -528,7 +551,7 @@ class PiletileviAdapter(HtmlListingAdapter):
         card["description"] = (
             desc_tag.get_text(separator=" ", strip=True) if desc_tag else None
         )
-        card["important_info"] = _piletilevi_important_info(soup)
+        card["important_info"] = _piletilevi_important_info(soup, "en")
 
         location = extract_jsonld_event_location(soup)
         if location:

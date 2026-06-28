@@ -32,6 +32,7 @@ from app.ingestion.sources.html_listing import (
     PiletileviAdapter,
     _next_occurrence_year,
     _parse_piletilevi_date,
+    _piletilevi_important_info,
     estonia_concert_hall_localized_text,
     full_res_piletilevi_image,
     full_res_wp_image,
@@ -450,6 +451,20 @@ PILETILEVI_DETAIL_WITH_IMPORTANT_INFO_HTML = """
 </body></html>
 """
 
+PILETILEVI_DETAIL_ET_WITH_IMPORTANT_INFO_HTML = """
+<html><body>
+  <div class="event__description">Imeline džässõhtu kohalike muusikutega.</div>
+  <div class="white-rounded-block">
+    <h2 class="text-20 font-bold pb-6">Hinnainfo</h2>
+    <div class="collapsable-container">Vanusepiir: 18+. Keel: inglise. Kestus: 2 tundi.</div>
+  </div>
+  <div class="white-rounded-block">
+    <h2 class="text-20 font-bold pb-6">Toimumiskoht</h2>
+    <div class="collapsable-container">Jazziklubi, Tallinn</div>
+  </div>
+</body></html>
+"""
+
 
 def _piletilevi_adapter():
     return PiletileviAdapter(
@@ -638,6 +653,25 @@ class TestPiletileviParseDetail:
         card: dict = {}
         await adapter.parse_detail(MagicMock(), soup, card)
         assert card["important_info"] is None
+
+    def test_important_info_et_locale_uses_hinnainfo_heading(self):
+        soup = BeautifulSoup(PILETILEVI_DETAIL_ET_WITH_IMPORTANT_INFO_HTML, "html.parser")
+        result = _piletilevi_important_info(soup, "et")
+        assert result == "Vanusepiir: 18+. Keel: inglise. Kestus: 2 tundi."
+
+    def test_important_info_et_locale_absent_returns_none(self):
+        soup = BeautifulSoup(PILETILEVI_DETAIL_WITH_IMPORTANT_INFO_HTML, "html.parser")
+        assert _piletilevi_important_info(soup, "et") is None
+
+    def test_important_info_en_locale_explicit(self):
+        soup = BeautifulSoup(PILETILEVI_DETAIL_WITH_IMPORTANT_INFO_HTML, "html.parser")
+        result = _piletilevi_important_info(soup, "en")
+        assert result == "Age limit: 18+. Language: English. Duration: 2 hours."
+
+    def test_important_info_unknown_locale_falls_back_to_en(self):
+        soup = BeautifulSoup(PILETILEVI_DETAIL_WITH_IMPORTANT_INFO_HTML, "html.parser")
+        result = _piletilevi_important_info(soup, "ru")
+        assert result == "Age limit: 18+. Language: English. Duration: 2 hours."
 
 
 # ---------------------------------------------------------------------------
