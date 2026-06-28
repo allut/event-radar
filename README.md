@@ -54,7 +54,7 @@ Geocoding runs as a separate backfill alongside this pipeline, filling in `lat`/
 | Layer       | Technologies |
 |-------------|--------------|
 | Backend     | Python 3.12, FastAPI, SQLAlchemy 2 (async), Alembic, APScheduler, Pydantic Settings |
-| Frontend    | Vite, React 18, TypeScript, TanStack Query, React Router, CSS Modules |
+| Frontend    | Vite, React 18, TypeScript, TanStack Query, React Router, CSS Modules, Vitest + Testing Library |
 | Database    | Neon Postgres (async via `asyncpg`) |
 | LLM         | Groq (primary), Cerebras, Mistral (fallback chain) |
 | Email       | Resend (magic links + daily digests, inbound newsletter webhook) |
@@ -178,6 +178,9 @@ cd frontend
 npm run build       # type-check + production build
 npm run type-check  # TypeScript check only
 npm run lint        # ESLint
+npm test            # run all tests (Vitest)
+npm run test:watch  # watch mode
+npm run test:coverage # coverage report
 ```
 
 ### Editing shared values & translations

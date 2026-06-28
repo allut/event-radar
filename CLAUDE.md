@@ -36,6 +36,9 @@ npm run dev        # dev server (port 5173)
 npm run build      # type-check + production build
 npm run type-check # TypeScript check only
 npm run lint       # ESLint (flat config in eslint.config.js)
+npm test           # run all tests (vitest)
+npm run test:watch # vitest watch mode
+npm run test:coverage # coverage report (v8, html + text)
 ```
 
 ## Architecture
@@ -122,6 +125,7 @@ Each component and route lives in its own folder containing `Name.tsx`, `Name.mo
 
 - Routes (pages) in `frontend/src/routes/`: `Login/`, `AuthVerify/`, `Onboarding/`, `Feed/`, `EventDetail/`, `Settings/`, `NotFound/`.
 - Shared components in `frontend/src/components/`: `EventCard/`, `PersonaCard/`, `ErrorBoundary/`, `PageState/`, `LocaleSelector/`, `FeedbackButtonRow/`, `EmptyState/`. `EventCard/index.ts` also re-exports `type EventData`.
+- Tests co-located as `Name.test.tsx` / `Name.test.ts` beside each subject file. Shared test helpers and factories live in `frontend/src/test/` (`setup.ts`, `utils.tsx`). Stack: Vitest + @testing-library/react + jsdom.
 - Shared CSS base classes in `frontend/src/components/shared/`: `Card.module.css` (`.card`, `.cardAccentTop`, `.cardDangerTop`, `.cardPage`) and `Button.module.css` (`.btnPrimary`, `.btnOutline`). Compose from these via CSS Modules `composes` — never copy-paste the same card/button rules into route or component stylesheets. Component CSS composes from `'../shared/X.module.css'`; route CSS from `'../../components/shared/X.module.css'`.
 - API client in `frontend/src/api/client.ts`. React Query used for server state (`@tanstack/react-query`).
 - Custom hooks in `frontend/src/hooks/`: `useFeedback.ts` (feedback signal dispatch).
@@ -205,6 +209,7 @@ This project follows production best practices throughout:
 - **Type checking** — `mypy` (`>=1.11`, `backend/requirements-dev.txt`) must pass clean: `python -m mypy app` from `backend/`. No mypy config file exists — defaults are sufficient. A loop/result variable reused across blocks with structurally incompatible types (e.g. different ORM models) will fail under mypy's inference even though each block is independently correct; give each block its own variable name. Third-party imports with no type stubs (e.g. `apscheduler`) get a targeted `# type: ignore[import-untyped]` on the import line rather than a blanket per-module ignore.
 - **Type annotations** — Use modern PEP 604 / PEP 585 syntax: `X | None` not `Optional[X]`, `list[T]` / `dict[K, V]` / `tuple[T, ...]` not `List` / `Dict` / `Tuple`. Annotate return types on all public functions (including FastAPI route handlers — `-> dict`, `-> list[Schema]`, `-> None`). Import from `typing` only for things still required there (e.g. `Any`, `TypeVar`, `Protocol`).
 - **Shared test fixtures** — Common pytest fixtures (`mock_db`, `make_user`, `make_event`) live in `backend/tests/conftest.py`. Use them instead of inlining `AsyncMock()` DB scaffolding or constructing user/event objects by hand in each test. When a new fixture would be reused across two or more test files, add it to `conftest.py`.
+- **Frontend test fixtures** — `renderWithProviders` (wraps in `QueryClient` + `MemoryRouter`) and `makeEvent` live in `frontend/src/test/utils.tsx`. Never inline `QueryClient`/`Router` scaffolding in a test — import from there. Mock the `api` module (`vi.mock('../../api/client')`) for component and route tests rather than mocking `fetch`.
 - **Numeric truthiness** — never gate a numeric field on truthiness; `0` is falsy, so `price_raw.get("min") or fallback` and `raw.get("price") or {}` silently drop legitimate zero prices (free events). Use explicit `is not None` checks and `isinstance(x, dict)` guards. Currency normalization goes through `normalize_currency(raw, has_price)` in `app/ingestion/base.py`.
 
 ## Conventions

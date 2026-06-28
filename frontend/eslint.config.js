@@ -8,6 +8,12 @@ import tseslint from 'typescript-eslint'
 export default tseslint.config(
   { ignores: ['dist', 'src/_generated'] },
   {
+    files: ['**/*.test.{ts,tsx}', 'src/test/**'],
+    rules: {
+      'react-refresh/only-export-components': 'off',
+    },
+  },
+  {
     extends: [
       js.configs.recommended,
       ...tseslint.configs.recommended,
