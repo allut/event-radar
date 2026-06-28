@@ -11,6 +11,7 @@ from bs4 import BeautifulSoup
 from app.config import settings
 from app.constants import (
     DETAIL_FETCH_CONCURRENCY,
+    FIENTA_DESCRIPTION_SELECTOR,
     FIENTA_MAX_PAGES,
     FIENTA_MIN_REQUEST_INTERVAL_SECONDS,
     HTTP_TIMEOUT_SECONDS,
@@ -265,12 +266,14 @@ class FientaAdapter(SourceAdapter):
                     if loc_url == url:
                         # Same page, non-primary locale (no redirect happened).
                         loc_name, loc_desc = extract_jsonld_event_text(soup)
+                        loc_page_soup = soup
                     else:
                         await limiter.acquire()
                         try:
                             loc_resp = await http_get(client, loc_url)
                             loc_soup = BeautifulSoup(loc_resp.text, "html.parser")
                             loc_name, loc_desc = extract_jsonld_event_text(loc_soup)
+                            loc_page_soup = loc_soup
                         except (httpx.HTTPStatusError, httpx.RequestError) as exc:
                             log.debug(
                                 "fienta: locale fetch failed id=%s locale=%s url=%s: %s",
@@ -285,7 +288,12 @@ class FientaAdapter(SourceAdapter):
                             continue
                     if loc_name:
                         loc_titles[locale] = loc_name
-                    sanitized_loc_desc = sanitize_html(loc_desc)
+                    # Prefer DOM HTML (div.rich-text) over JSON-LD plain text.
+                    rich_text_tag = loc_page_soup.select_one(FIENTA_DESCRIPTION_SELECTOR)
+                    if rich_text_tag:
+                        sanitized_loc_desc = sanitize_html(rich_text_tag.decode_contents())
+                    else:
+                        sanitized_loc_desc = sanitize_html(loc_desc)
                     if sanitized_loc_desc:
                         loc_descs[locale] = sanitized_loc_desc
                 if loc_titles or loc_descs:

@@ -606,6 +606,8 @@ ESTONIA_CONCERT_HALL_VENUE_SELECTOR = ".event-venue"
 ESTONIA_CONCERT_HALL_IMAGE_SELECTOR = ".image"
 ESTONIA_CONCERT_HALL_DESCRIPTION_SELECTOR = ".main"
 
+FIENTA_DESCRIPTION_SELECTOR = "div.rich-text"
+
 
 class VenueInfo(NamedTuple):
     name: str

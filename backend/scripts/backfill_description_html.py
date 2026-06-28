@@ -24,6 +24,7 @@ from sqlalchemy import select
 
 from app.constants import (
     ESTONIA_CONCERT_HALL_DESCRIPTION_SELECTOR,
+    FIENTA_DESCRIPTION_SELECTOR,
     HTML_LISTING_LOCALE_FETCH_DELAY_SECONDS,
     HTTP_TIMEOUT_SECONDS,
     HTTP_USER_AGENT,
@@ -102,8 +103,10 @@ async def _process_event(
         return
 
     if source_slug == SOURCE_SLUG_FIENTA:
-        # Fienta: description comes from stored listing HTML, not from the detail page.
-        # The fetch above is still needed to detect the primary locale via resp.url.
+        # Fienta: primary-locale description comes from stored listing HTML.
+        # The initial fetch is needed to detect the primary locale via resp.url
+        # and to find alternate-locale URLs. Non-primary locales are scraped from
+        # the div.rich-text element on each locale-prefixed detail page.
         new_desc = sanitize_html(event.description_orig)
         primary_locale = locale_from_url_path(
             str(resp.url), LOCALIZED_TEXT_FIENTA_LOCALES
@@ -124,13 +127,35 @@ async def _process_event(
                 event.description_orig = new_desc
             changed = True
 
+        merged = dict(event.description_localized or {})
         if primary_locale and new_desc:
-            merged = dict(event.description_localized or {})
             merged[primary_locale] = new_desc
-            if merged != dict(event.description_localized or {}):
-                if write:
-                    event.description_localized = merged
-                changed = True
+
+        # Fetch non-primary locale pages and extract HTML from div.rich-text.
+        fienta_locale_urls = localized_detail_urls(soup, event.url, LOCALIZED_TEXT_FIENTA_LOCALES)
+        for fl, fl_url in fienta_locale_urls.items():
+            if primary_locale is not None and fl == primary_locale:
+                continue
+            try:
+                if fl_url == event.url:
+                    fl_soup = soup
+                else:
+                    await asyncio.sleep(HTML_LISTING_LOCALE_FETCH_DELAY_SECONDS)
+                    fl_resp = await http_get(client, fl_url)
+                    fl_soup = BeautifulSoup(fl_resp.text, "html.parser")
+            except (httpx.HTTPStatusError, httpx.RequestError) as exc:
+                log.debug("fienta locale fetch failed event_id=%s locale=%s: %s", event.id, fl, exc)
+                continue
+            rich_text_tag = fl_soup.select_one(FIENTA_DESCRIPTION_SELECTOR)
+            if rich_text_tag:
+                loc_html = sanitize_html(rich_text_tag.decode_contents())
+                if loc_html:
+                    merged[fl] = loc_html
+
+        if merged != dict(event.description_localized or {}):
+            if write:
+                event.description_localized = merged
+            changed = True
 
         if changed:
             stats["updated"] += 1
