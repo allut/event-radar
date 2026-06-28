@@ -83,10 +83,12 @@ from app.ingestion.base import (
     extract_jsonld_event_location,
     extract_jsonld_event_text,
     host_guard_hook,
+    html_to_text,
     http_get,
     http_post,
     locale_from_url_path,
     localized_detail_urls,
+    sanitize_html,
 )
 
 log = logging.getLogger(__name__)
@@ -479,8 +481,9 @@ def _piletilevi_important_info(soup: BeautifulSoup, locale: str = "en") -> str |
     block = heading.find_parent("div", class_="white-rounded-block")
     if block is None:
         return None
-    text = block.get_text(separator=" ", strip=True)
-    return text.removeprefix(heading_text).strip() or None
+    inner_html = "".join(str(child) for child in block.children if child is not heading)
+    raw = sanitize_html(inner_html)
+    return raw.strip() or None if raw else None
 
 
 class PiletileviAdapter(HtmlListingAdapter):
@@ -548,9 +551,7 @@ class PiletileviAdapter(HtmlListingAdapter):
         self, client: httpx.AsyncClient, soup: BeautifulSoup, card: dict[str, Any]
     ) -> None:
         desc_tag = soup.select_one(PILETILEVI_DETAIL_DESC_SELECTOR)
-        card["description"] = (
-            desc_tag.get_text(separator=" ", strip=True) if desc_tag else None
-        )
+        card["description"] = sanitize_html(desc_tag.decode_contents()) if desc_tag else None
         card["important_info"] = _piletilevi_important_info(soup, "en")
 
         location = extract_jsonld_event_location(soup)
@@ -624,8 +625,11 @@ def kumu_localized_text(soup: BeautifulSoup) -> tuple[str | None, str | None]:
     desc_tag = soup.select_one(KUMU_DESCRIPTION_SELECTOR)
     desc: str | None = None
     if desc_tag:
-        text = desc_tag.get_text(separator=" ", strip=True)
-        desc = text[:LOCALIZED_TEXT_MAX_DESC_CHARS] if text else None
+        html = sanitize_html(desc_tag.decode_contents())
+        if html:
+            desc = html if len(html) <= LOCALIZED_TEXT_MAX_DESC_CHARS else (
+                (html_to_text(html) or "")[:LOCALIZED_TEXT_MAX_DESC_CHARS] or None
+            )
 
     return title, desc
 
@@ -651,8 +655,11 @@ def estonia_concert_hall_localized_text(soup: BeautifulSoup) -> tuple[str | None
     desc_tag = soup.select_one(ESTONIA_CONCERT_HALL_DESCRIPTION_SELECTOR)
     desc: str | None = None
     if desc_tag:
-        text = desc_tag.get_text(separator=" ", strip=True)
-        desc = text[:LOCALIZED_TEXT_MAX_DESC_CHARS] if text else None
+        html = sanitize_html(desc_tag.decode_contents())
+        if html:
+            desc = html if len(html) <= LOCALIZED_TEXT_MAX_DESC_CHARS else (
+                (html_to_text(html) or "")[:LOCALIZED_TEXT_MAX_DESC_CHARS] or None
+            )
 
     return title, desc
 
@@ -725,7 +732,7 @@ class KumuAdapter(HtmlListingAdapter):
     ) -> None:
         desc_tag = soup.select_one(KUMU_DESCRIPTION_SELECTOR)
         if desc_tag:
-            card["description"] = desc_tag.get_text(separator=" ", strip=True)
+            card["description"] = sanitize_html(desc_tag.decode_contents())
 
         price_tag = soup.select_one(KUMU_PRICE_SELECTOR)
         if price_tag:
@@ -955,7 +962,7 @@ class EstoniaConcertHallAdapter(HtmlListingAdapter):
         """
         desc_tag = soup.select_one(ESTONIA_CONCERT_HALL_DESCRIPTION_SELECTOR)
         if desc_tag:
-            card["description"] = desc_tag.get_text(separator=" ", strip=True)
+            card["description"] = sanitize_html(desc_tag.decode_contents())
 
         link = soup.find("a", href=_CONCERT_PID_RE)
         if link is None:

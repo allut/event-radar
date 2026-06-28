@@ -35,6 +35,7 @@ from app.constants import (
     TITLE_RATIO_VENUE_BYPASS_THRESHOLD,
     VENUE_RATIO_THRESHOLD,
 )
+from app.ingestion.base import html_to_text
 from app.models.models import Event
 from app.routers.utils import normalized_title
 
@@ -174,7 +175,7 @@ def _event_quality_rank(event: Event) -> tuple[bool, bool, bool, int]:
         event.price_min is not None,
         event.venue_address is not None,
         event.lat is not None and event.lng is not None,
-        len(event.description_orig or ""),
+        len(html_to_text(event.description_orig) or ""),
     )
 
 

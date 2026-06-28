@@ -38,7 +38,7 @@ from app.constants import (
     VALID_LOCALES,
     VALID_VIBES,
 )
-from app.ingestion.base import eur_price_bounds_from_text, normalize_currency, strip_fee_amounts
+from app.ingestion.base import eur_price_bounds_from_text, html_to_text, normalize_currency, strip_fee_amounts
 from app.llm.router import LLMError, llm_json
 from app.models.models import Event, EventClassification
 
@@ -46,11 +46,11 @@ log = logging.getLogger(__name__)
 
 
 def _build_classify_prompt(event: Event) -> str:
-    desc = (event.description_orig or "").strip()
+    desc = (html_to_text(event.description_orig) or "").strip()
     if len(desc) > LLM_MAX_PROMPT_CHARS:
         desc = desc[:LLM_MAX_PROMPT_CHARS]
     price_hint = (event.price_hint or "").strip()[:PRICE_HINT_MAX_CHARS]
-    important_info = strip_fee_amounts(event.important_info)
+    important_info = strip_fee_amounts(html_to_text(event.important_info))
     important_info = (important_info or "").strip()[:IMPORTANT_INFO_MAX_CHARS]
     return LLM_CLASSIFY_PROMPT_TEMPLATE.format(
         title=event.title_orig,

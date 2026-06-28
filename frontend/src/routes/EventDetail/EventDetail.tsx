@@ -4,7 +4,7 @@ import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { api } from '../../api/client';
 import { getLocale, setLocale } from '../../lib/auth';
 import { t, ti } from '../../i18n';
-import { categoryGradient, cx, formatEventDateTime, formatHourMinute, formatPrice, safeUrl, trackExternalClick } from '../../utils';
+import { categoryGradient, cx, formatEventDateTime, formatHourMinute, formatPrice, safeUrl, sanitizeHtml, trackExternalClick } from '../../utils';
 import { type EventData } from '../../components/EventCard';
 import FeedbackButtonRow from '../../components/FeedbackButtonRow';
 import LocaleSelector from '../../components/LocaleSelector';
@@ -134,7 +134,7 @@ export default function EventDetail() {
             <section className={styles.section}>
               <h2 className={styles.eyebrow}>{t('eyebrow_about', locale)}</h2>
               <hr className={styles.rule} />
-              <p className={styles.description}>{data.description}</p>
+              <div className={styles.description} dangerouslySetInnerHTML={{ __html: sanitizeHtml(data.description) }} />
             </section>
           )}
 
@@ -142,7 +142,7 @@ export default function EventDetail() {
             <section className={styles.section}>
               <h2 className={styles.eyebrow}>{t('eyebrow_important_info', locale)}</h2>
               <hr className={styles.rule} />
-              <p className={styles.description}>{data.important_info}</p>
+              <div className={styles.description} dangerouslySetInnerHTML={{ __html: sanitizeHtml(data.important_info) }} />
             </section>
           )}
 

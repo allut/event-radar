@@ -71,6 +71,30 @@ PRICE_HINT_MAX_CHARS = 300  # cap on Event.price_hint, kept short for the LLM pr
 # untrusted source content rendered into <a href>/<img src>.
 SAFE_URL_SCHEMES: frozenset[str] = frozenset({"http", "https"})
 
+# Allowlist for HTML sanitization of event description / important_info fields.
+# Stored content may be HTML (from HTML-listing sources) or plain text (Fienta/JSON-LD);
+# nh3 passes plain text through safely (entities-escaped, no tags introduced).
+HTML_SANITIZE_ALLOWED_TAGS: frozenset[str] = frozenset(
+    {
+        "p",
+        "br",
+        "strong",
+        "b",
+        "em",
+        "i",
+        "u",
+        "ul",
+        "ol",
+        "li",
+        "a",
+        "h3",
+        "h4",
+        "blockquote",
+        "span",
+    }
+)
+HTML_SANITIZE_ALLOWED_ATTRS: dict[str, set[str]] = {"a": {"href", "title"}}
+
 # Word-boundary keyword prefilter for sexually-explicit listings (en/et/ru), checked
 # at ingest time against title+description+venue. Kept tight and phrase-based to
 # avoid false positives ("sex" -> "Sussex", "strip" -> "comic strip"). Not exhaustive

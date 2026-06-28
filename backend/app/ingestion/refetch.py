@@ -55,6 +55,7 @@ from app.ingestion.base import (
     is_explicit_text,
     locale_from_url_path,
     localized_detail_urls,
+    sanitize_html,
 )
 from app.ingestion.geocode import is_suspect_venue_name
 from app.ingestion.sources.html_listing import (
@@ -305,7 +306,9 @@ async def refetch_event_details(db: AsyncSession) -> dict:
                     if loc_name and locale in missing_title_locales:
                         loc_titles[locale] = loc_name
                     if loc_desc and locale in missing_desc_locales:
-                        loc_descs[locale] = loc_desc
+                        sanitized_desc = sanitize_html(loc_desc)
+                        if sanitized_desc:
+                            loc_descs[locale] = sanitized_desc
                 if loc_titles:
                     existing_titles.update(loc_titles)
                     event.title_localized = existing_titles

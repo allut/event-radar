@@ -14,6 +14,7 @@ from typing import Any
 from urllib.parse import urlsplit
 
 import httpx
+import nh3
 from bs4 import BeautifulSoup
 from tenacity import (
     RetryCallState,
@@ -35,6 +36,8 @@ from app.constants import (
     EVENT_STATUS_DRAFT,
     EXPLICIT_KEYWORDS,
     FIENTA_CITY_FILTER,
+    HTML_SANITIZE_ALLOWED_ATTRS,
+    HTML_SANITIZE_ALLOWED_TAGS,
     HTTP_RETRY_AFTER_MAX_SECONDS,
     HTTP_RETRYABLE_STATUS_CODES,
     HTTP_RETRY_JITTER_MAX,
@@ -234,6 +237,36 @@ def safe_external_url(url: str | None, source: str | None = None) -> str | None:
     return url
 
 
+def sanitize_html(text: str | None) -> str | None:
+    """Sanitize HTML with a strict allowlist; plain text passes through unchanged.
+
+    Safe for storing in description/important_info fields. nh3/ammonia forces
+    rel="noopener" on links, drops javascript:/event-handler attrs, and HTML-escapes
+    any disallowed tags so they render as visible text rather than markup.
+    """
+    if text is None:
+        return None
+    cleaned = nh3.clean(
+        text,
+        tags=set(HTML_SANITIZE_ALLOWED_TAGS),
+        attributes=HTML_SANITIZE_ALLOWED_ATTRS,
+        url_schemes=set(SAFE_URL_SCHEMES),
+        link_rel="noopener noreferrer",
+    )
+    return cleaned or None
+
+
+def html_to_text(text: str | None) -> str | None:
+    """Strip HTML tags from a sanitized description, returning plain text.
+
+    Used by plain-text consumers (LLM prompts, explicit-keyword filter, dedup
+    quality rank) so they never receive raw HTML tags or entities.
+    """
+    if not text:
+        return text
+    return BeautifulSoup(text, "html.parser").get_text(separator=" ", strip=True) or None
+
+
 _EXPLICIT_KEYWORD_PATTERNS = [
     re.compile(r"\b" + re.escape(kw) + r"\b", re.IGNORECASE)
     for kw in EXPLICIT_KEYWORDS
@@ -244,8 +277,10 @@ def is_explicit_text(*parts: str | None) -> bool:
     """Word-boundary match of EXPLICIT_KEYWORDS against the joined text parts.
 
     Used at ingest time to flag sexually-explicit listings (Event.is_explicit)
-    before they ever reach the LLM."""
-    text = " ".join(p for p in parts if p)
+    before they ever reach the LLM. HTML tags are stripped before matching so
+    stored HTML descriptions are scanned correctly.
+    """
+    text = " ".join(html_to_text(p) or "" for p in parts if p)
     return any(pattern.search(text) for pattern in _EXPLICIT_KEYWORD_PATTERNS)
 
 

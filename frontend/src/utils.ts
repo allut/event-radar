@@ -1,3 +1,4 @@
+import DOMPurify from 'dompurify';
 import { api } from './api/client';
 import { CATEGORY_GRADIENTS, FALLBACK_GRADIENT, EUR_SYMBOL, type Signal, toLocaleCode } from './constants';
 import { t } from './i18n';
@@ -18,6 +19,18 @@ export function safeUrl(url: string | null | undefined): string | null {
   } catch {
     return null;
   }
+}
+
+const SANITIZE_ALLOWED_TAGS = ['p', 'br', 'strong', 'b', 'em', 'i', 'u', 'ul', 'ol', 'li', 'a', 'h3', 'h4', 'blockquote', 'span'];
+const SANITIZE_ALLOWED_ATTR = ['href', 'title'];
+
+/** Client-side sanitizer for HTML from event description/important_info fields.
+ * Strictly matches the backend nh3 allowlist; defense-in-depth before dangerouslySetInnerHTML. */
+export function sanitizeHtml(html: string): string {
+  return DOMPurify.sanitize(html, {
+    ALLOWED_TAGS: SANITIZE_ALLOWED_TAGS,
+    ALLOWED_ATTR: SANITIZE_ALLOWED_ATTR,
+  });
 }
 
 export function formatHourMinute(iso: string, locale: string): string {

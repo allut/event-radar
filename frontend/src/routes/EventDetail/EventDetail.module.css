@@ -251,6 +251,58 @@
   white-space: pre-wrap;
 }
 
+.description p + p {
+  margin-top: var(--space-2);
+}
+
+.description ul,
+.description ol {
+  padding-left: var(--space-4);
+  margin-top: var(--space-1);
+  margin-bottom: var(--space-1);
+}
+
+.description li {
+  margin-bottom: var(--space-1);
+}
+
+.description a {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.description a:hover {
+  color: var(--accent-light);
+}
+
+.description strong,
+.description b {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.description em,
+.description i {
+  font-style: italic;
+}
+
+.description h3,
+.description h4 {
+  font-size: var(--fs-md);
+  font-weight: 600;
+  color: var(--text);
+  margin-top: var(--space-3);
+  margin-bottom: var(--space-1);
+}
+
+.description blockquote {
+  border-left: 2px solid var(--border);
+  padding-left: var(--space-2);
+  color: var(--text-soft);
+  margin-top: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
 /* ─── Category / vibe tags ────────────────────────────────────────────────── */
 
 .tags {
