@@ -94,6 +94,13 @@ HTML_SANITIZE_ALLOWED_TAGS: frozenset[str] = frozenset(
     }
 )
 HTML_SANITIZE_ALLOWED_ATTRS: dict[str, set[str]] = {"a": {"href", "title"}}
+# Block-level wrappers that carry no allowlisted tag of their own. Some sources
+# (e.g. Piletilevi) encode every line as a bare <div>; nh3 strips disallowed tags
+# without inserting any separator, collapsing block boundaries into run-on text.
+# sanitize_html converts these to <br> before sanitizing so line structure survives.
+HTML_BLOCK_TAGS_TO_BREAK: frozenset[str] = frozenset({"div"})
+# Cap runs of consecutive <br> (from nested/empty wrapper divs) at this many.
+HTML_SANITIZE_MAX_CONSECUTIVE_BR = 2
 
 # Word-boundary keyword prefilter for sexually-explicit listings (en/et/ru), checked
 # at ingest time against title+description+venue. Kept tight and phrase-based to

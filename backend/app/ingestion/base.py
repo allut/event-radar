@@ -36,8 +36,10 @@ from app.constants import (
     EVENT_STATUS_DRAFT,
     EXPLICIT_KEYWORDS,
     FIENTA_CITY_FILTER,
+    HTML_BLOCK_TAGS_TO_BREAK,
     HTML_SANITIZE_ALLOWED_ATTRS,
     HTML_SANITIZE_ALLOWED_TAGS,
+    HTML_SANITIZE_MAX_CONSECUTIVE_BR,
     HTTP_RETRY_AFTER_MAX_SECONDS,
     HTTP_RETRYABLE_STATUS_CODES,
     HTTP_RETRY_JITTER_MAX,
@@ -237,22 +239,50 @@ def safe_external_url(url: str | None, source: str | None = None) -> str | None:
     return url
 
 
+_MULTI_BR_RE = re.compile(r"(?:<br\s*/?>\s*){%d,}" % (HTML_SANITIZE_MAX_CONSECUTIVE_BR + 1))
+_EDGE_BR_RE = re.compile(r"^(?:\s*<br\s*/?>\s*)+|(?:\s*<br\s*/?>\s*)+$")
+
+
+def _block_tags_to_breaks(html: str) -> str:
+    """Convert bare block-wrapper tags (e.g. <div>) to <br> so line structure survives.
+
+    nh3 strips disallowed tags without inserting any separator, so a source that
+    encodes each line as a <div> (Piletilevi) collapses into run-on text. Replacing
+    each such wrapper with a trailing <br> before sanitizing preserves the breaks
+    using an already-allowlisted tag, keeping the stored HTML clean (no <div> noise).
+    """
+    lowered = html.lower()
+    if not any(f"<{tag}" in lowered for tag in HTML_BLOCK_TAGS_TO_BREAK):
+        return html
+    soup = BeautifulSoup(html, "html.parser")
+    for tag in soup.find_all(list(HTML_BLOCK_TAGS_TO_BREAK)):
+        tag.insert_after(soup.new_tag("br"))
+        tag.unwrap()
+    return str(soup)
+
+
 def sanitize_html(text: str | None) -> str | None:
     """Sanitize HTML with a strict allowlist; plain text passes through unchanged.
 
     Safe for storing in description/important_info fields. nh3/ammonia forces
     rel="noopener" on links, drops javascript:/event-handler attrs, and HTML-escapes
-    any disallowed tags so they render as visible text rather than markup.
+    any disallowed tags so they render as visible text rather than markup. Block
+    wrappers in HTML_BLOCK_TAGS_TO_BREAK are converted to <br> first (see
+    _block_tags_to_breaks) so line boundaries are not lost when nh3 strips them.
     """
     if text is None:
         return None
     cleaned = nh3.clean(
-        text,
+        _block_tags_to_breaks(text),
         tags=set(HTML_SANITIZE_ALLOWED_TAGS),
         attributes=HTML_SANITIZE_ALLOWED_ATTRS,
         url_schemes=set(SAFE_URL_SCHEMES),
         link_rel="noopener noreferrer",
     )
+    if not cleaned:
+        return None
+    cleaned = _MULTI_BR_RE.sub("<br>" * HTML_SANITIZE_MAX_CONSECUTIVE_BR, cleaned)
+    cleaned = _EDGE_BR_RE.sub("", cleaned)
     return cleaned or None
 
 

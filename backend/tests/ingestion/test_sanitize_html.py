@@ -96,6 +96,58 @@ class TestSanitizeHtml:
         assert result is not None
         assert "data:" not in result
 
+    def test_div_lines_become_breaks(self) -> None:
+        # Piletilevi-style: each line wrapped in a bare <div>. Without conversion,
+        # nh3 strips the divs and the lines glue together ("AB").
+        result = sanitize_html("<div>Line A</div><div>Line B</div>")
+        assert result is not None
+        assert "<div>" not in result
+        assert "Line A<br>Line B" in result
+
+    def test_div_no_runon_glue(self) -> None:
+        result = sanitize_html("<div>W. Herrndorf, R. Koall</div><div>Lavastaja P.</div>")
+        assert result is not None
+        assert "KoallLavastaja" not in result
+        assert "Koall<br>Lavastaja" in result
+
+    def test_nested_and_empty_divs_collapsed(self) -> None:
+        html = "<div><div>A</div><div> </div><div>B</div></div>"
+        result = sanitize_html(html)
+        assert result is not None
+        assert "<div>" not in result
+        # Runs of <br> capped; never more than the configured max in a row.
+        assert "<br><br><br>" not in result
+        assert "A" in result and "B" in result
+
+    def test_div_inner_inline_tags_preserved(self) -> None:
+        html = "<div>Plot <em>twist</em></div><div><strong>Bold</strong> line</div>"
+        result = sanitize_html(html)
+        assert result is not None
+        assert "<em>twist</em>" in result
+        assert "<strong>Bold</strong>" in result
+        assert "<br>" in result
+
+    def test_leading_trailing_breaks_trimmed(self) -> None:
+        result = sanitize_html("<div>Only line</div>")
+        assert result is not None
+        assert not result.startswith("<br>")
+        assert not result.endswith("<br>")
+        assert "Only line" in result
+
+    def test_edge_break_strips_adjacent_whitespace(self) -> None:
+        # Whitespace flanking a leading/trailing <br> (from `<div>content </div>`)
+        # must be consumed too, leaving no stray edge whitespace.
+        result = sanitize_html("<div>content </div>")
+        assert result is not None
+        assert result == "content"
+
+    def test_div_with_link_preserved(self) -> None:
+        html = '<div>See <a href="https://example.com">here</a></div><div>Next</div>'
+        result = sanitize_html(html)
+        assert result is not None
+        assert "https://example.com" in result
+        assert "here</a><br>Next" in result
+
 
 class TestHtmlToText:
     def test_none_returns_none(self) -> None:
