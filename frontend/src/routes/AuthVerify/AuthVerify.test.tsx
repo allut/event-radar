@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
+import { StatusCodes } from 'http-status-codes';
 import { screen, waitFor } from '@testing-library/react';
 import AuthVerify from './AuthVerify';
 import { renderWithProviders } from '../../test/utils';
@@ -52,7 +53,7 @@ describe('AuthVerify', () => {
 
   it('on verify failure: shows error state', async () => {
     const { ApiError: ApiErrorClass } = await import('../../api/client');
-    mockGet.mockRejectedValueOnce(new ApiErrorClass(401, 'Link expired'));
+    mockGet.mockRejectedValueOnce(new ApiErrorClass(StatusCodes.UNAUTHORIZED, 'Link expired'));
 
     renderWithProviders(<AuthVerify />, { route: '/auth/verify?token=expired' });
 

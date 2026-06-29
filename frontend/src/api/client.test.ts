@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { StatusCodes } from 'http-status-codes';
 import { ApiError, api } from './client';
 
 vi.mock('../lib/auth', () => ({
@@ -38,13 +39,13 @@ afterEach(() => {
 
 describe('api.get', () => {
   it('builds correct URL with /api prefix', async () => {
-    mockFetch(200, { ok: true });
+    mockFetch(StatusCodes.OK, { ok: true });
     await api.get('/events');
     expect(vi.mocked(fetch)).toHaveBeenCalledWith('/api/events', expect.any(Object));
   });
 
   it('does not set Content-Type on GET', async () => {
-    mockFetch(200, {});
+    mockFetch(StatusCodes.OK, {});
     await api.get('/events');
     const call = vi.mocked(fetch).mock.calls[0];
     const headers = (call[1] as RequestInit).headers as Record<string, string>;
@@ -53,7 +54,7 @@ describe('api.get', () => {
 
   it('does not set Authorization when no token', async () => {
     mockGetToken.mockReturnValueOnce(null);
-    mockFetch(200, {});
+    mockFetch(StatusCodes.OK, {});
     await api.get('/events');
     const call = vi.mocked(fetch).mock.calls[0];
     const headers = (call[1] as RequestInit).headers as Record<string, string>;
@@ -62,7 +63,7 @@ describe('api.get', () => {
 
   it('sets Authorization when token present', async () => {
     mockGetToken.mockReturnValueOnce('mytoken');
-    mockFetch(200, {});
+    mockFetch(StatusCodes.OK, {});
     await api.get('/events');
     const call = vi.mocked(fetch).mock.calls[0];
     const headers = (call[1] as RequestInit).headers as Record<string, string>;
@@ -70,31 +71,31 @@ describe('api.get', () => {
   });
 
   it('returns parsed JSON on success', async () => {
-    mockFetch(200, { id: 1, title: 'Test' });
+    mockFetch(StatusCodes.OK, { id: 1, title: 'Test' });
     const result = await api.get<{ id: number; title: string }>('/events/1');
     expect(result).toEqual({ id: 1, title: 'Test' });
   });
 
   it('throws ApiError with detail on non-ok response', async () => {
-    mockFetch(404, { detail: 'Not found' }, false);
+    mockFetch(StatusCodes.NOT_FOUND, { detail: 'Not found' }, false);
     await expect(api.get('/missing')).rejects.toThrow(ApiError);
     await expect(api.get('/missing')).rejects.toMatchObject({ message: 'Not found' });
   });
 
   it('throws ApiError with HTTP status fallback when no detail', async () => {
-    mockFetch(500, {}, false);
-    await expect(api.get('/fail')).rejects.toMatchObject({ message: 'HTTP 500' });
+    mockFetch(StatusCodes.INTERNAL_SERVER_ERROR, {}, false);
+    await expect(api.get('/fail')).rejects.toMatchObject({ message: `HTTP ${StatusCodes.INTERNAL_SERVER_ERROR}` });
   });
 
   it('on 401: calls clearToken, redirects to /login, throws ApiError', async () => {
-    mockFetch(401, {}, false);
+    mockFetch(StatusCodes.UNAUTHORIZED, {}, false);
     await expect(api.get('/protected')).rejects.toThrow(ApiError);
     expect(mockClearToken).toHaveBeenCalled();
     expect(window.location.replace).toHaveBeenCalledWith('/login');
   });
 
   it('resolves undefined on 204', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, status: 204, json: vi.fn(), text: vi.fn() }));
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, status: StatusCodes.NO_CONTENT, json: vi.fn(), text: vi.fn() }));
     const result = await api.get('/empty');
     expect(result).toBeUndefined();
   });
@@ -102,7 +103,7 @@ describe('api.get', () => {
 
 describe('api.post', () => {
   it('sends POST method with JSON body', async () => {
-    mockFetch(200, {});
+    mockFetch(StatusCodes.OK, {});
     await api.post('/auth/request-link', { email: 'a@b.com' });
     const call = vi.mocked(fetch).mock.calls[0];
     const init = call[1] as RequestInit;
@@ -113,7 +114,7 @@ describe('api.post', () => {
   });
 
   it('sends POST without body when no body arg', async () => {
-    mockFetch(200, {});
+    mockFetch(StatusCodes.OK, {});
     await api.post('/logout');
     const call = vi.mocked(fetch).mock.calls[0];
     const init = call[1] as RequestInit;
@@ -123,7 +124,7 @@ describe('api.post', () => {
 
 describe('api.patch', () => {
   it('sends PATCH method', async () => {
-    mockFetch(200, {});
+    mockFetch(StatusCodes.OK, {});
     await api.patch('/users/me', { locale: 'et' });
     const call = vi.mocked(fetch).mock.calls[0];
     expect((call[1] as RequestInit).method).toBe('PATCH');

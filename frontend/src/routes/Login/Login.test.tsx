@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
+import { StatusCodes } from 'http-status-codes';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import Login from './Login';
@@ -49,7 +50,7 @@ describe('Login', () => {
 
   it('shows error message on ApiError', async () => {
     const { ApiError: ApiErrorClass } = await import('../../api/client');
-    mockPost.mockRejectedValueOnce(new ApiErrorClass(400, 'Invalid email'));
+    mockPost.mockRejectedValueOnce(new ApiErrorClass(StatusCodes.BAD_REQUEST, 'Invalid email'));
     renderWithProviders(<Login />);
     await userEvent.type(screen.getByRole('textbox', { name: /email/i }), 'bad@test.com');
     await userEvent.click(screen.getByRole('button', { name: /send/i }));

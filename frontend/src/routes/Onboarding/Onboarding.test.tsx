@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
+import { StatusCodes } from 'http-status-codes';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import Onboarding from './Onboarding';
@@ -58,7 +59,7 @@ describe('Onboarding', () => {
 
   it('shows error on submit failure', async () => {
     const { ApiError: ApiErrorClass } = await import('../../api/client');
-    mockPost.mockRejectedValueOnce(new ApiErrorClass(400, 'Bad request'));
+    mockPost.mockRejectedValueOnce(new ApiErrorClass(StatusCodes.BAD_REQUEST, 'Bad request'));
     renderWithProviders(<Onboarding />);
     await userEvent.click(screen.getAllByTitle('Set as primary')[0]);
     const submitBtn = screen.getAllByRole('button').slice(-1)[0];
