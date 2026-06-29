@@ -6,8 +6,11 @@ from app._generated.shared_constants import (
     DEFAULT_CURRENCY,
     DEFAULT_USER_CITY,
     DEFAULT_USER_LOCALE,
+    HTML_SANITIZE_ALLOWED_ATTRS,
+    HTML_SANITIZE_ALLOWED_TAGS,
     PERSONA_PRIMARY_WEIGHT,
     PERSONA_SECONDARY_WEIGHT,
+    SAFE_URL_SCHEMES,
     VALID_CATEGORIES,
     VALID_LOCALES,
     VALID_SIGNALS,
@@ -18,8 +21,11 @@ __all__ = [
     "DEFAULT_CURRENCY",
     "DEFAULT_USER_CITY",
     "DEFAULT_USER_LOCALE",
+    "HTML_SANITIZE_ALLOWED_ATTRS",
+    "HTML_SANITIZE_ALLOWED_TAGS",
     "PERSONA_PRIMARY_WEIGHT",
     "PERSONA_SECONDARY_WEIGHT",
+    "SAFE_URL_SCHEMES",
     "VALID_CATEGORIES",
     "VALID_LOCALES",
     "VALID_SIGNALS",
@@ -66,34 +72,12 @@ SLUG_HASH_HEX_LEN = 8
 INGESTION_ERROR_MAX_LEN = 500
 PRICE_HINT_MAX_CHARS = 300  # cap on Event.price_hint, kept short for the LLM prompt
 
+# SAFE_URL_SCHEMES, HTML_SANITIZE_ALLOWED_TAGS, HTML_SANITIZE_ALLOWED_ATTRS imported
+# from app._generated.shared_constants (shared/app-config.json → generate_shared.py).
 # Schemes accepted for ingested event url/image_url — anything else (javascript:,
 # data:, vbscript:, etc.) is dropped at ingest time to prevent stored XSS via
 # untrusted source content rendered into <a href>/<img src>.
-SAFE_URL_SCHEMES: frozenset[str] = frozenset({"http", "https"})
-
-# Allowlist for HTML sanitization of event description / important_info fields.
-# Stored content may be HTML (from HTML-listing sources) or plain text (Fienta/JSON-LD);
-# nh3 passes plain text through safely (entities-escaped, no tags introduced).
-HTML_SANITIZE_ALLOWED_TAGS: frozenset[str] = frozenset(
-    {
-        "p",
-        "br",
-        "strong",
-        "b",
-        "em",
-        "i",
-        "u",
-        "ul",
-        "ol",
-        "li",
-        "a",
-        "h3",
-        "h4",
-        "blockquote",
-        "span",
-    }
-)
-HTML_SANITIZE_ALLOWED_ATTRS: dict[str, set[str]] = {"a": {"href", "title"}}
+# HTML allowlist for description / important_info fields; nh3 passes plain text safely.
 # Block-level wrappers that carry no allowlisted tag of their own. Some sources
 # (e.g. Piletilevi) encode every line as a bare <div>; nh3 strips disallowed tags
 # without inserting any separator, collapsing block boundaries into run-on text.

@@ -1,13 +1,11 @@
 import DOMPurify from 'dompurify';
 import { api } from './api/client';
-import { CATEGORY_GRADIENTS, FALLBACK_GRADIENT, EUR_SYMBOL, type Signal, toLocaleCode } from './constants';
+import { CATEGORY_GRADIENTS, FALLBACK_GRADIENT, EUR_SYMBOL, type Signal, toLocaleCode, SAFE_URL_SCHEMES, SANITIZE_ALLOWED_TAGS, SANITIZE_ALLOWED_ATTR, SIGNAL_TO_CLASS } from './constants';
 import { t } from './i18n';
 
 export function cx(...classes: (string | false | null | undefined)[]): string {
   return classes.filter(Boolean).join(' ');
 }
-
-const SAFE_URL_SCHEMES = new Set(['http:', 'https:']);
 
 /** Defense-in-depth render guard: only allow http(s) URLs into href/src attributes.
  * The backend already drops non-http(s) schemes at ingest time (safe_external_url),
@@ -15,14 +13,12 @@ const SAFE_URL_SCHEMES = new Set(['http:', 'https:']);
 export function safeUrl(url: string | null | undefined): string | null {
   if (!url) return null;
   try {
-    return SAFE_URL_SCHEMES.has(new URL(url).protocol) ? url : null;
+    const proto = new URL(url).protocol.replace(/:$/, '');
+    return SAFE_URL_SCHEMES.has(proto) ? url : null;
   } catch {
     return null;
   }
 }
-
-const SANITIZE_ALLOWED_TAGS = ['p', 'br', 'strong', 'b', 'em', 'i', 'u', 'ul', 'ol', 'li', 'a', 'h3', 'h4', 'blockquote', 'span'];
-const SANITIZE_ALLOWED_ATTR = ['href', 'title'];
 
 /** Client-side sanitizer for HTML from event description/important_info fields.
  * Strictly matches the backend nh3 allowlist; defense-in-depth before dangerouslySetInnerHTML. */
@@ -58,12 +54,6 @@ export function formatPrice(min: number | null, max: number | null, currency: st
   if (min !== null) return `${sym}${min}`;
   return null;
 }
-
-const SIGNAL_TO_CLASS: Record<Signal, string> = {
-  like: 'activeLike',
-  dislike: 'activeDislike',
-  bookmark: 'activeBookmark',
-};
 
 export function formatEventTime(iso: string, locale: string): string {
   const localeCode = toLocaleCode(locale);

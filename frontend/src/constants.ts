@@ -5,9 +5,12 @@ import {
   LOCALES,
   MAGIC_LINK_EXPIRY_MINUTES,
   PERSONA_PRIMARY_WEIGHT_THRESHOLD,
+  SAFE_URL_SCHEMES,
+  SANITIZE_ALLOWED_TAGS,
+  SANITIZE_ALLOWED_ATTR,
 } from './_generated/sharedConstants';
 
-export { LOCALES, MAGIC_LINK_EXPIRY_MINUTES, PERSONA_PRIMARY_WEIGHT_THRESHOLD };
+export { LOCALES, MAGIC_LINK_EXPIRY_MINUTES, PERSONA_PRIMARY_WEIGHT_THRESHOLD, SAFE_URL_SCHEMES, SANITIZE_ALLOWED_TAGS, SANITIZE_ALLOWED_ATTR };
 export type { PersonaData };
 
 // Re-export PERSONAS under the original name so all import sites are unchanged.
@@ -42,6 +45,12 @@ export const SIGNAL_CONFIG: Record<Signal, { icon: string; label: string }> = {
   like:     { icon: '👍', label: 'Like' },
   dislike:  { icon: '👎', label: 'Dislike' },
   bookmark: { icon: '🔖', label: 'Bookmark' },
+};
+
+export const SIGNAL_TO_CLASS: Record<Signal, string> = {
+  like: 'activeLike',
+  dislike: 'activeDislike',
+  bookmark: 'activeBookmark',
 };
 
 export const EUR_SYMBOL = '€';

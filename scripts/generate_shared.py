@@ -47,6 +47,27 @@ def _py_frozenset(items: list[str]) -> str:
     return f"frozenset({{{quoted}}})"
 
 
+def _py_attr_map(d: dict[str, list[str]]) -> str:
+    """Emit a dict[str, set[str]] literal with sorted attr values."""
+    pairs = ", ".join(
+        f"{_py_str(tag)}: {{{', '.join(_py_str(a) for a in sorted(attrs))}}}"
+        for tag, attrs in sorted(d.items())
+    )
+    return "{" + pairs + "}"
+
+
+def _ts_set(items: list[str]) -> str:
+    """Emit a new Set([...]) literal with single-quoted members."""
+    quoted = ", ".join(_ts_str(v) for v in items)
+    return f"new Set([{quoted}])"
+
+
+def _ts_str_list(items: list[str]) -> str:
+    """Emit a readonly string array literal."""
+    quoted = ", ".join(_ts_str(v) for v in items)
+    return f"[{quoted}]"
+
+
 def _py_dict_str(d: dict[str, str], indent: int = 4) -> str:
     pad = " " * indent
     lines = ["{"]
@@ -207,6 +228,10 @@ def write_backend_shared_constants(cfg: dict) -> str:
     locale_code_map_pairs = ", ".join(
         f"{_py_str(k)}: {_py_str(v)}" for k, v in cfg["locale_code_map"].items()
     )
+    safe_schemes = _py_frozenset(cfg["safe_url_schemes"])
+    san = cfg["html_sanitize"]
+    allowed_tags = _py_frozenset(san["allowed_tags"])
+    allowed_attrs = _py_attr_map(san["allowed_attrs"])
     parts = [
         HEADER_PY,
         "from __future__ import annotations\n",
@@ -224,6 +249,11 @@ def write_backend_shared_constants(cfg: dict) -> str:
         f"VALID_SIGNALS: frozenset[str] = {signals}",
         f"VALID_CATEGORIES: frozenset[str] = {cats}",
         f"VALID_VIBES: frozenset[str] = {vibes}",
+        # Schemes accepted for ingested event url/image_url — matches frontend SAFE_URL_SCHEMES.
+        # Backend urlsplit().scheme returns colon-less names ("http", "https").
+        f"SAFE_URL_SCHEMES: frozenset[str] = {safe_schemes}",
+        f"HTML_SANITIZE_ALLOWED_TAGS: frozenset[str] = {allowed_tags}",
+        f"HTML_SANITIZE_ALLOWED_ATTRS: dict[str, set[str]] = {allowed_attrs}",
         "",
     ]
     return "\n".join(parts)
@@ -250,6 +280,11 @@ def write_frontend_i18n_data(
 
 
 def write_frontend_shared_constants(cfg: dict) -> str:
+    san = cfg["html_sanitize"]
+    # Flatten per-tag attr map to a unique sorted list for DOMPurify's ALLOWED_ATTR.
+    all_attrs: list[str] = sorted(
+        {attr for attrs in san["allowed_attrs"].values() for attr in attrs}
+    )
     parts = [
         HEADER_TS,
         "",
@@ -262,6 +297,11 @@ def write_frontend_shared_constants(cfg: dict) -> str:
         "",
         _ts_locale_code_map(cfg),
         f"export const DEFAULT_LOCALE_CODE = {_ts_str(cfg['default_locale_code'])};",
+        "",
+        # URL schemes without trailing colon — matches URL.protocol.replace(/:$/, '').
+        f"export const SAFE_URL_SCHEMES = {_ts_set(cfg['safe_url_schemes'])};",
+        f"export const SANITIZE_ALLOWED_TAGS = {_ts_str_list(san['allowed_tags'])};",
+        f"export const SANITIZE_ALLOWED_ATTR = {_ts_str_list(all_attrs)};",
         "",
     ]
     return "\n".join(parts)
