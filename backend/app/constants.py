@@ -350,6 +350,11 @@ Venue B: {venue_b}
 Venue names may be spelled differently or in different languages across listing
 sources; judge by event identity (title + date/time), treating venue as secondary.
 
+Titles may be in different languages (Estonian, English, Russian, etc.) —
+translate if needed and judge by real-world meaning, not spelling. Two
+listings for different products, ticket types, or sessions at the same venue
+and time are NOT the same event, even if the wording looks similar.
+
 Respond with JSON only, no explanation: {{"same": true or false, "confidence": 0.0-1.0}}"""
 
 LLM_CLASSIFY_WHY_GO_MAX_BULLETS = 3

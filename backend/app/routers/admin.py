@@ -31,6 +31,7 @@ from app.ingestion.registry import ADAPTER_REGISTRY
 from app.models.models import Event, Source
 from app.ranking.score import build_daily_feeds
 from app.rate_limit import limiter
+from app.routers.utils import canonical_event_filter
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/admin")
@@ -429,8 +430,7 @@ async def admin_stats(request: Request) -> dict:
             await db.scalar(
                 select(func.count(Event.id)).where(
                     Event.status != EVENT_STATUS_CANCELLED,
-                    (Event.dedup_group_id.is_(None))
-                    | (Event.dedup_group_id == Event.id),
+                    canonical_event_filter(),
                 )
             )
         ) or 0

@@ -243,7 +243,12 @@ async def run_dedup_pass_llm(db: AsyncSession) -> dict:
         # Already collapsed by the same-day union — no LLM call needed.
         if same_group(parent, a_id, b_id):
             continue
-        if not is_candidate_pair(a, b, bypass_venue_on_near_exact_title=True):
+        if not is_candidate_pair(
+            a,
+            b,
+            bypass_venue_on_near_exact_title=True,
+            bypass_title_on_exact_time_and_venue=True,
+        ):
             continue
         survivors.append((a, b, _dedup_pair_hash(a, b)))
 

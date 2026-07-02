@@ -49,7 +49,11 @@ def _venue_compatible(a: str | None, b: str | None) -> bool:
 
 
 def is_candidate_pair(
-    a: Event, b: Event, *, bypass_venue_on_near_exact_title: bool = False
+    a: Event,
+    b: Event,
+    *,
+    bypass_venue_on_near_exact_title: bool = False,
+    bypass_title_on_exact_time_and_venue: bool = False,
 ) -> bool:
     """Return True when a and b pass all three rule-based criteria.
 
@@ -57,14 +61,39 @@ def is_candidate_pair(
     (``token_set_ratio >= TITLE_RATIO_VENUE_BYPASS_THRESHOLD``) skips the venue
     check entirely — used on the LLM path so cross-source duplicates whose venue
     is spelled differently per source (including cross-language spellings) still
-    reach the LLM tiebreaker, which makes the final same/different call. The
-    rule-only path keeps the default (strict) behavior.
+    reach the LLM tiebreaker, which makes the final same/different call.
+
+    With ``bypass_title_on_exact_time_and_venue=True``, an *exact* ``starts_at``
+    match plus a compatible venue skips the title check entirely — used on the
+    LLM path so same-language-listing-different-language-title duplicates (e.g.
+    a Fienta organizer publishing one et/ru/en listing per language, each with a
+    completely different ``title_orig`` string, same showing) still reach the
+    LLM tiebreaker. This is deliberately narrower than the venue bypass above
+    (exact time equality, not the ``TIME_WINDOW_HOURS`` window) because unlike a
+    near-exact title match, "same venue + same instant" alone is a weak signal —
+    plenty of venues legitimately sell several distinct products/sessions at the
+    same advertised time (see LLM_DEDUP_PROMPT_TEMPLATE, which instructs the LLM
+    to reject those). It therefore requires *both* venue names to be present and
+    fuzzy-compatible — unlike ``_venue_compatible``'s normal "unknown venue is
+    compatible" rule, a missing venue on either side has zero corroborating
+    signal (no title match either) and must not alone turn an arbitrary
+    identical-round-time pair into an LLM candidate. The rule-only path keeps
+    the default (strict) behavior for both bypasses — it has no way to
+    adjudicate the ambiguity a bypass admits.
     """
     if (
         abs((a.starts_at - b.starts_at).total_seconds())
         > TIME_WINDOW_HOURS * SECONDS_PER_HOUR
     ):
         return False
+    if (
+        bypass_title_on_exact_time_and_venue
+        and a.starts_at == b.starts_at
+        and a.venue_name is not None
+        and b.venue_name is not None
+        and _venue_compatible(a.venue_name, b.venue_name)
+    ):
+        return True
     title_ratio = token_set_ratio(a.title_orig.lower(), b.title_orig.lower())
     if title_ratio < TITLE_RATIO_THRESHOLD:
         return False

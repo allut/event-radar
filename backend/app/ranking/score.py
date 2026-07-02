@@ -67,6 +67,7 @@ from app.models.models import (
     UserPersona,
 )
 from app.routers.utils import (
+    canonical_event_filter,
     event_not_ended_filter,
     event_series_key,
     select_events_with_classification,
@@ -440,6 +441,7 @@ async def build_daily_feeds(db: AsyncSession) -> dict:
                 Event.is_explicit.is_(False),
                 event_not_ended_filter(now),
                 Event.starts_at <= cutoff,
+                canonical_event_filter(),
             )
         )
     ).all()

@@ -47,6 +47,19 @@ def event_series_key(title_orig: str, venue_name: str | None) -> tuple[str, str]
     return (normalized_title(title_orig), normalized_title(venue_name or ""))
 
 
+def canonical_event_filter() -> ColumnElement[bool]:
+    """Event is dedup-canonical: ungrouped, or the representative of its group.
+
+    Shared by any query that must not surface a duplicate a second time —
+    ``classify_pending`` only classifies canonical drafts, ``admin_stats``
+    counts canonical events, and the Daily 5 candidate query excludes
+    non-canonical duplicates that were somehow already published (dedup
+    normally runs before classify/publish, so this is a defense-in-depth
+    backstop, not the primary suppression mechanism).
+    """
+    return or_(Event.dedup_group_id.is_(None), Event.dedup_group_id == Event.id)
+
+
 def event_not_ended_filter(now: datetime) -> ColumnElement[bool]:
     """Event is live (publishable / feed-eligible) until it ends.
 

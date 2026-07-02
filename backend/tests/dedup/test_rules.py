@@ -168,6 +168,75 @@ class TestIsCandidatePair:
         assert TITLE_RATIO_THRESHOLD <= ratio < TITLE_RATIO_VENUE_BYPASS_THRESHOLD
         assert is_candidate_pair(a, b, bypass_venue_on_near_exact_title=True) is False
 
+    def test_cross_language_titles_exact_time_venue_default_false(self):
+        # Rule-only path (default): completely different scripts score ~0 on
+        # token_set_ratio and stay rejected — the flag is off.
+        a = _event(1, "Energia avastuskeskuse sissepääsupilet", _BASE, venue_name="Energia avastuskeskus")
+        b = _event(2, "Входной билет Познавательного центра", _BASE, venue_name="Energia avastuskeskus")
+        assert is_candidate_pair(a, b) is False
+
+    def test_cross_language_titles_exact_time_venue_bypass_true(self):
+        # LLM path: exact starts_at + compatible venue reaches the LLM regardless
+        # of title similarity — this is the 142/143/144 language-variant case.
+        a = _event(1, "Energia avastuskeskuse sissepääsupilet", _BASE, venue_name="Energia avastuskeskus")
+        b = _event(2, "Входной билет Познавательного центра", _BASE, venue_name="Energia avastuskeskus")
+        assert (
+            is_candidate_pair(a, b, bypass_title_on_exact_time_and_venue=True)
+            is True
+        )
+
+    def test_title_bypass_requires_exact_time_not_just_within_window(self):
+        # Even 1 minute apart is enough to fail the *exact* time-equality bypass —
+        # deliberately narrower than the 12h candidate window, so it falls through
+        # to the ordinary title-ratio gate and is rejected.
+        a = _event(1, "Energia avastuskeskuse sissepääsupilet", _BASE, venue_name="Energia avastuskeskus")
+        b = _event(
+            2, "Входной билет Познавательного центра",
+            _BASE + timedelta(minutes=1), venue_name="Energia avastuskeskus",
+        )
+        assert (
+            is_candidate_pair(a, b, bypass_title_on_exact_time_and_venue=True)
+            is False
+        )
+
+    def test_title_bypass_requires_non_null_venue_on_both_sides(self):
+        # Adversarial-review finding: with venue_name=None on either side,
+        # _venue_compatible's normal "unknown is compatible" rule must NOT let
+        # an arbitrary identical-round-time pair (zero title/venue evidence)
+        # become an LLM candidate.
+        a = _event(1, "Unrelated Ticket A", _BASE, venue_name=None)
+        b = _event(2, "Completely Different Thing B", _BASE, venue_name="Von Krahli")
+        assert (
+            is_candidate_pair(a, b, bypass_title_on_exact_time_and_venue=True)
+            is False
+        )
+        c = _event(3, "Unrelated Ticket A", _BASE, venue_name=None)
+        d = _event(4, "Completely Different Thing B", _BASE, venue_name=None)
+        assert (
+            is_candidate_pair(c, d, bypass_title_on_exact_time_and_venue=True)
+            is False
+        )
+
+    def test_title_bypass_requires_compatible_venue(self):
+        # Exact time match alone is not enough — an incompatible venue still gates,
+        # even with the bypass flag on.
+        a = _event(1, "Ticket A", _BASE, venue_name="Von Krahli")
+        b = _event(2, "Совершенно другое", _BASE, venue_name="Fotografiska")
+        assert (
+            is_candidate_pair(a, b, bypass_title_on_exact_time_and_venue=True)
+            is False
+        )
+
+    def test_title_bypass_off_by_default_distinct_products_same_slot(self):
+        # False-positive pattern found in the DB scan: same organizer, same
+        # venue/time, genuinely distinct products (title ratio ~51, below
+        # TITLE_RATIO_THRESHOLD). Default (flag off) rejects — only the LLM path
+        # (flag on) would even consider it, and the LLM prompt is responsible for
+        # telling these apart, not the rule layer.
+        a = _event(1, "Sauna Social + Bar @Heldeke", _BASE, venue_name="Heldeke!")
+        b = _event(2, "No Stress Chess @Heldeke", _BASE, venue_name="Heldeke!")
+        assert is_candidate_pair(a, b) is False
+
 
 # ---------------------------------------------------------------------------
 # cluster_events

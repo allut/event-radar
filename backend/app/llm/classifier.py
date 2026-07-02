@@ -12,7 +12,7 @@ import logging
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import or_, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.constants import (
@@ -41,6 +41,7 @@ from app.constants import (
 from app.ingestion.base import eur_price_bounds_from_text, html_to_text, normalize_currency, strip_fee_amounts
 from app.llm.router import LLMError, llm_json
 from app.models.models import Event, EventClassification
+from app.routers.utils import canonical_event_filter
 
 log = logging.getLogger(__name__)
 
@@ -283,10 +284,7 @@ async def classify_pending(
             select(Event)
             .where(
                 Event.status == EVENT_STATUS_DRAFT,
-                or_(
-                    Event.dedup_group_id.is_(None),
-                    Event.dedup_group_id == Event.id,
-                ),
+                canonical_event_filter(),
             )
             .order_by(Event.id)
             .limit(batch_size)

@@ -249,10 +249,12 @@ class TestRunDedupPassLlm:
     @pytest.mark.asyncio
     async def test_pair_failing_fuzzy_check_skips_llm(self, mock_db, monkeypatch, make_event):
         # SQL time-window pre-filter returns the pair, but titles differ enough
-        # that is_candidate_pair rejects it → LLM is never consulted.
+        # and venues are incompatible, so is_candidate_pair rejects it under both
+        # bypasses → LLM is never consulted. (Distinct, incompatible venues also
+        # rule out the exact-time-and-venue title bypass, not just the fuzzy gate.)
         monkeypatch.setattr(tiebreaker, "llm_available", lambda: True)
-        a = _event(make_event, 1, title="Jazz Night")
-        b = _event(make_event, 2, title="Completely Different Circus Show")
+        a = _event(make_event, 1, title="Jazz Night", venue_name="Von Krahli")
+        b = _event(make_event, 2, title="Completely Different Circus Show", venue_name="Fotografiska")
         _wire_db(mock_db, [a, b])
         _wire_execute(mock_db, [])
         monkeypatch.setattr(
@@ -354,6 +356,64 @@ class TestRunDedupPassLlm:
         assert result["candidate_pairs"] == 1
         confirm.assert_awaited_once()
         assert result["llm_confirmed"] == 1
+
+    @pytest.mark.asyncio
+    async def test_cross_language_titles_exact_slot_reaches_llm_and_merges(
+        self, mock_db, monkeypatch, make_event
+    ):
+        # The 142/143/144 case: three completely different-language titles at an
+        # identical starts_at/venue. token_set_ratio is near 0 — only the new
+        # bypass_title_on_exact_time_and_venue path gets this to the LLM.
+        monkeypatch.setattr(tiebreaker, "llm_available", lambda: True)
+        a = _event(make_event, 1, title="Energia avastuskeskuse sissepääsupilet", venue_name="Energia avastuskeskus")
+        b = _event(make_event, 2, title="Входной билет Познавательного центра", venue_name="Energia avastuskeskus")
+        c = _event(make_event, 3, title="Entrance ticket to Energy Discovery Centre", venue_name="Energia avastuskeskus")
+        _wire_db(mock_db, [a, b, c])
+        _wire_execute(mock_db, [])
+        monkeypatch.setattr(
+            tiebreaker,
+            "candidate_pair_ids_in_window",
+            AsyncMock(return_value=[(1, 2), (1, 3), (2, 3)]),
+        )
+        confirm = AsyncMock(return_value=True)
+        monkeypatch.setattr(tiebreaker, "_llm_confirms_pair", confirm)
+
+        result = await tiebreaker.run_dedup_pass_llm(mock_db)
+
+        assert result["candidate_pairs"] == 3
+        assert result["llm_confirmed"] == 3
+        assert a.dedup_group_id == 1
+        assert b.dedup_group_id == 1
+        assert c.dedup_group_id == 1
+
+    @pytest.mark.asyncio
+    async def test_distinct_products_same_slot_reach_llm_but_stay_unmerged(
+        self, mock_db, monkeypatch, make_event
+    ):
+        # False-positive pattern found in the DB scan (Pirita Seikluspark ticket
+        # vs gift card): same venue/exact time survives the new bypass and
+        # reaches the LLM, but the (mocked) LLM correctly says "different" and
+        # no merge happens.
+        monkeypatch.setattr(tiebreaker, "llm_available", lambda: True)
+        a = _event(make_event, 1, title="Piletid Pirita Seiklusparki", venue_name="Pirita Seikluspark")
+        b = _event(make_event, 2, title="Kinkekaart Pirita Seiklusparki", venue_name="Pirita Seikluspark")
+        _wire_db(mock_db, [a, b])
+        _wire_execute(mock_db, [])
+        monkeypatch.setattr(
+            tiebreaker,
+            "candidate_pair_ids_in_window",
+            AsyncMock(return_value=[(1, 2)]),
+        )
+        confirm = AsyncMock(return_value=False)
+        monkeypatch.setattr(tiebreaker, "_llm_confirms_pair", confirm)
+
+        result = await tiebreaker.run_dedup_pass_llm(mock_db)
+
+        assert result["candidate_pairs"] == 1
+        confirm.assert_awaited_once()
+        assert result["llm_confirmed"] == 0
+        assert a.dedup_group_id is None
+        assert b.dedup_group_id is None
 
     @pytest.mark.asyncio
     async def test_fresh_call_cap_bounds_network_calls(self, mock_db, monkeypatch, make_event):
