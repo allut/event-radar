@@ -92,6 +92,7 @@ def make_event():
         e.price_hint = None
         e.status = status
         e.is_explicit = False
+        e.is_non_event = False
         e.is_out_of_area = False
         e.dedup_group_id = None
 

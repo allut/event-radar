@@ -64,8 +64,8 @@ def event_not_ended_filter(now: datetime) -> ColumnElement[bool]:
     """Event is live (publishable / feed-eligible) until it ends.
 
     Uses ``ends_at`` when present, else falls back to ``starts_at``. A past
-    ``starts_at`` with a future ``ends_at`` (gift cards, multi-year course
-    recordings) stays live — only a genuinely-over event fails this.
+    ``starts_at`` with a future ``ends_at`` (multi-day runs, ongoing
+    exhibitions) stays live — only a genuinely-over event fails this.
     """
     return or_(
         Event.ends_at >= now,

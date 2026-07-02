@@ -219,6 +219,9 @@ class Event(Base):
     is_out_of_area: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=false(), default=False
     )
+    is_non_event: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=false(), default=False
+    )
     detail_refetched_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

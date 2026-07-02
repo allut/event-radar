@@ -35,6 +35,8 @@ from app.constants import (
     TALLINN_REGION_BBOX,
     EVENT_STATUS_DRAFT,
     EXPLICIT_KEYWORDS,
+    NON_EVENT_TITLE_KEYWORDS,
+    NON_EVENT_VENUE_KEYWORDS,
     FIENTA_CITY_FILTER,
     HTML_BLOCK_TAGS_TO_BREAK,
     HTML_SANITIZE_ALLOWED_ATTRS,
@@ -340,6 +342,32 @@ def is_explicit_text(*parts: str | None) -> bool:
     """
     text = " ".join(html_to_text(p) or "" for p in parts if p)
     return any(pattern.search(text) for pattern in _EXPLICIT_KEYWORD_PATTERNS)
+
+
+_NON_EVENT_TITLE_PATTERNS = [
+    re.compile(r"\b" + re.escape(kw) + r"\b", re.IGNORECASE)
+    for kw in NON_EVENT_TITLE_KEYWORDS
+]
+_NON_EVENT_VENUE_PATTERNS = [
+    re.compile(r"\b" + re.escape(kw) + r"\b", re.IGNORECASE)
+    for kw in NON_EVENT_VENUE_KEYWORDS
+]
+
+
+def is_non_event_text(title: str | None, venue_name: str | None) -> bool:
+    """Word-boundary match flagging non-event listings (Event.is_non_event).
+
+    Scoped narrower than is_explicit_text: NON_EVENT_TITLE_KEYWORDS run against
+    the title only (descriptions routinely mention "gift cards available" as a
+    payment option — a false positive), and NON_EVENT_VENUE_KEYWORDS run
+    against the venue name only (online-only webinars/recordings). Layer 2
+    (LLM "non_event" classification flag) catches what this misses.
+    """
+    title_text = (html_to_text(title) or "") if title else ""
+    if any(p.search(title_text) for p in _NON_EVENT_TITLE_PATTERNS):
+        return True
+    venue_text = (html_to_text(venue_name) or "") if venue_name else ""
+    return any(p.search(venue_text) for p in _NON_EVENT_VENUE_PATTERNS)
 
 
 def normalize_currency(raw: Any, has_price: bool) -> str | None:
@@ -861,6 +889,10 @@ class SourceAdapter(ABC):
                                 normalized.description,
                                 normalized.venue_name,
                                 normalized.important_info,
+                            ),
+                            is_non_event=is_non_event_text(
+                                normalized.title,
+                                normalized.venue_name,
                             ),
                         )
                         db.add(event)

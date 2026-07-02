@@ -101,6 +101,7 @@ class TestGetFeed:
         stmt = mock_db.scalars.call_args.args[0]
         compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
         assert "is_explicit" in compiled
+        assert "is_non_event" in compiled
         assert "false" in compiled.lower()
 
 
@@ -161,4 +162,5 @@ class TestGetEvent:
         stmt = mock_db.scalar.call_args.args[0]
         compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
         assert "is_explicit" in compiled
+        assert "is_non_event" in compiled
         assert "false" in compiled.lower()

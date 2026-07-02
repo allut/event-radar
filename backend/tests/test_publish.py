@@ -17,6 +17,7 @@ REJECT_ROW_ZERO = SimpleNamespace(
     unpublished=0,
     fail_quality=0,
     fail_explicit=0,
+    fail_non_event=0,
     fail_out_of_area=0,
     fail_ended=0,
     fail_no_title=0,
@@ -60,6 +61,7 @@ async def test_publish_pending_returns_reject_breakdown(mock_db):
         unpublished=5,
         fail_quality=2,
         fail_explicit=0,
+        fail_non_event=3,
         fail_out_of_area=1,
         fail_ended=4,
         fail_no_title=0,
@@ -74,6 +76,7 @@ async def test_publish_pending_returns_reject_breakdown(mock_db):
         "unpublished": 5,
         "fail_quality": 2,
         "fail_explicit": 0,
+        "fail_non_event": 3,
         "fail_out_of_area": 1,
         "fail_ended": 4,
         "fail_no_title": 0,
@@ -98,6 +101,8 @@ async def test_publish_pending_statement_encodes_gate_criteria(mock_db):
     )
     # is_explicit=false gate.
     assert "is_explicit" in compiled
+    # is_non_event=false gate (gift cards / merch / webinars).
+    assert "is_non_event" in compiled
     # is_out_of_area=false gate (LLM location signal).
     assert "is_out_of_area" in compiled
     # event_not_ended_filter: ends_at >= now, falling back to starts_at >= now.

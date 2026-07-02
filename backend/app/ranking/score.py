@@ -439,6 +439,7 @@ async def build_daily_feeds(db: AsyncSession) -> dict:
             select_events_with_classification().where(
                 Event.status == EVENT_STATUS_PUBLISHED,
                 Event.is_explicit.is_(False),
+                Event.is_non_event.is_(False),
                 event_not_ended_filter(now),
                 Event.starts_at <= cutoff,
                 canonical_event_filter(),

@@ -30,6 +30,7 @@ async def get_event(
             Event.id == event_id,
             Event.status == EVENT_STATUS_PUBLISHED,
             Event.is_explicit.is_(False),
+            Event.is_non_event.is_(False),
         )
     )
     if event is None:

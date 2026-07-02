@@ -529,6 +529,7 @@ class TestBuildDailyFeedsExplicitFilter:
         stmt = mock_db.scalars.call_args_list[0].args[0]
         compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
         assert "is_explicit" in compiled
+        assert "is_non_event" in compiled
         assert "false" in compiled.lower()
 
     async def test_event_query_keeps_ongoing_events_via_ends_at(self, mock_db):

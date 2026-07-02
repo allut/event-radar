@@ -131,6 +131,56 @@ EXPLICIT_KEYWORDS: frozenset[str] = frozenset(
     }
 )
 
+# Word-boundary keyword prefilter for non-event listings (gift cards, vouchers,
+# merchandise, donations, webinars), checked at ingest time against the TITLE only —
+# descriptions routinely mention "gift cards available" as a payment option, which
+# would be a false positive. Kept tight and phrase-based (same philosophy as
+# EXPLICIT_KEYWORDS); Layer 2 (LLM "non_event" classification flag) catches what
+# this misses (e.g. books/merch with no keyword in the title).
+NON_EVENT_TITLE_KEYWORDS: frozenset[str] = frozenset(
+    {
+        # et
+        "kinkekaart",
+        "kinkekaardid",
+        "kinkepilet",
+        "annetus",
+        # en
+        "gift card",
+        "giftcard",
+        "gift voucher",
+        "voucher",
+        "donate",
+        "donation",
+        # ru
+        "подарочная карта",
+        "подарочные карточки",
+        "подарочная карточка",
+        "подарочный сертификат",
+        "подарочный билет",
+        "вебинар",
+        "вебинара",
+        "вебинаров",
+        "вебинары",
+        # webinars (et/en)
+        "webinar",
+        "veebinar",
+        "veebiseminar",
+    }
+)
+
+# Word-boundary keywords matched against venue_name to flag online-only listings
+# (webinars, course recordings, online clubs) as non-events — the product surfaces
+# in-person Tallinn events only. "mamaonline" catches "MamaOnline"/"mamaonline.eu";
+# "онлайн" catches "Онлайн, https://…" venue strings.
+NON_EVENT_VENUE_KEYWORDS: frozenset[str] = frozenset(
+    {
+        "online",
+        "онлайн",
+        "veebis",
+        "mamaonline",
+    }
+)
+
 # Locales fetched for native-language title/description at ingest time.
 # Fienta exposes en/et/ru; HTML listing sources expose only en/et.
 # Seconds to sleep between consecutive locale-variant detail fetches in HTML listing
@@ -365,6 +415,7 @@ LLM_CLASSIFY_DESC_FALLBACK = "(no description)"
 LLM_CLASSIFY_PRICE_HINT_FALLBACK = "not stated"
 LLM_CLASSIFY_IMPORTANT_INFO_FALLBACK = "(none)"
 LLM_CLASSIFY_EXPLICIT_DEFAULT = False
+LLM_CLASSIFY_NON_EVENT_DEFAULT = False
 LLM_CLASSIFY_IN_TARGET_CITY_DEFAULT = True
 LLM_CLASSIFY_PROMPT_TEMPLATE = """\
 Classify this Tallinn event. Respond with JSON only.
@@ -379,7 +430,7 @@ Important info: {important_info}
 Price info: {price_hint}
 
 JSON format:
-{{"categories": ["music"], "vibes": ["underground", "intimate"], "why_go": {{"en": ["reason 1", "reason 2", "reason 3"], "et": ["põhjus 1", "põhjus 2", "põhjus 3"], "ru": ["причина 1", "причина 2", "причина 3"]}}, "quality": 0.8, "language": "et", "price_min": 10, "price_max": 20, "currency": "EUR", "explicit": false, "in_target_city": true}}
+{{"categories": ["music"], "vibes": ["underground", "intimate"], "why_go": {{"en": ["reason 1", "reason 2", "reason 3"], "et": ["põhjus 1", "põhjus 2", "põhjus 3"], "ru": ["причина 1", "причина 2", "причина 3"]}}, "quality": 0.8, "language": "et", "price_min": 10, "price_max": 20, "currency": "EUR", "explicit": false, "non_event": false, "in_target_city": true}}
 
 Rules:
 - "language" must be the ISO 639-1 code of the event's original language (et, en, ru, or other).
@@ -388,6 +439,7 @@ Rules:
 - "price_min"/"price_max": scan EVERY price amount appearing in the price info, description, and important info — across ALL ticket tiers regardless of label (adult, family, group, discount, student, senior, donation, etc.). Set price_min to the single SMALLEST amount and price_max to the single LARGEST amount. Never exclude a tier because it is a family/group/donation price. Use 0 for free/TASUTA/"free"; null only if no price is stated at all. Example: "Adult €16, Family €32, Discount €11, Donation €25" → price_min 11, price_max 32. (Also read prices glued into description/important info, e.g. "Täispilet 18 €", "Õpilane 12,50 €".) EXCLUDE booking/service/agent fees — amounts labelled teenustasu, agenditasu, service fee, booking fee, handling fee, agent fee, transaction fee are NOT ticket prices. Example: "agenditasu 3,20 €, Pilet 45 €" → price_min 45, price_max 45.
 - "currency" is the ISO 4217 code of the stated price (default EUR); null if no price is stated.
 - "explicit" is true ONLY for pornographic or sexually explicit events (porn, striptease/strip clubs, fetish, escort, sex shows). Normal nightlife, concerts, bars, and age-restricted shows are NOT explicit.
+- "non_event" is true for listings that are NOT a scheduled attendable event: gift cards/vouchers, merchandise (books, records, clothing), donations/support tickets, memberships/VIP/club cards, online-only webinars/online courses/webinar or course recordings, and open-ended service bookings. In-person workshops, trainings, and classes with a set time are NOT non_event.
 - "in_target_city" is false ONLY if the title/venue clearly places the event outside Tallinn, Estonia (another city or country, e.g. Pärnu, Tartu, Boston, London, Vietnam); otherwise true.
 - Only use values from the allowed lists for categories and vibes."""
 

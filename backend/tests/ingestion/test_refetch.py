@@ -85,6 +85,7 @@ def _future_event(**overrides) -> MagicMock:
     e.currency = "EUR"
     e.status = "published"
     e.is_explicit = False
+    e.is_non_event = False
     e.detail_refetched_at = None
     e.detail_refetch_count = 0
     for k, v in overrides.items():
@@ -310,6 +311,30 @@ class TestExplicitVenueNameGuard:
         assert event.is_explicit is False
         assert event.status == "published"
         assert summary["flagged_explicit"] == 0
+        assert summary["flagged_non_event"] == 0
+
+
+class TestNonEventVenueNameGuard:
+    @pytest.mark.asyncio
+    async def test_online_detail_name_flags_and_demotes_published(self, mock_db):
+        # A detail refetch that rewrites venue_name to an online-only venue must
+        # re-run the non-event prefilter and demote the published event.
+        event = _future_event(
+            venue_name="Old Venue", is_non_event=False, status="published"
+        )
+        summary = await _run(mock_db, event, _event_html(name="MamaOnline"))
+        assert event.venue_name == "MamaOnline"
+        assert event.is_non_event is True
+        assert event.status == "classified"
+        assert summary["flagged_non_event"] == 1
+
+    @pytest.mark.asyncio
+    async def test_clean_name_change_does_not_flag_non_event(self, mock_db):
+        event = _future_event(venue_name="KUMU", is_non_event=False, status="published")
+        summary = await _run(mock_db, event, _event_html(name="Vaba Lava"))
+        assert event.is_non_event is False
+        assert event.status == "published"
+        assert summary["flagged_non_event"] == 0
 
 
 # --- throttle bump + no-data -------------------------------------------------

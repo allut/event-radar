@@ -323,6 +323,7 @@ class TestSendDailyDigestsDryRun:
         stmt = db.scalars.call_args_list[2].args[0]
         compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
         assert "is_explicit" in compiled
+        assert "is_non_event" in compiled
         assert "false" in compiled.lower()
 
     @pytest.mark.asyncio

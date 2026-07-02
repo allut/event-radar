@@ -29,9 +29,10 @@ async def publish_pending(db: AsyncSession) -> dict:
     Gate (all must hold): quality_score >= PUBLISH_MIN_QUALITY_SCORE (joined
     from event_classifications), event not yet ended (live until ``ends_at``,
     or ``starts_at`` when ``ends_at`` is unset — see ``event_not_ended_filter``),
-    title_orig present, is_explicit is false, is_out_of_area is false (LLM
-    location signal), and present lat/lng coords must fall within the Tallinn
-    region bbox (defense-in-depth; coords-less events pass).
+    title_orig present, is_explicit is false, is_non_event is false (gift
+    cards, merch, online webinars — keyword prefilter + LLM signal), is_out_of_area
+    is false (LLM location signal), and present lat/lng coords must fall within
+    the Tallinn region bbox (defense-in-depth; coords-less events pass).
 
     After the UPDATE, a diagnostic SELECT over the events still left in
     'classified' (the rejects) breaks down per-reason counts. Reasons are
@@ -57,6 +58,7 @@ async def publish_pending(db: AsyncSession) -> dict:
         .where(
             Event.status == EVENT_STATUS_CLASSIFIED,
             Event.is_explicit.is_(False),
+            Event.is_non_event.is_(False),
             Event.is_out_of_area.is_(False),
             event_not_ended_filter(now),
             func.trim(Event.title_orig) != "",
@@ -86,6 +88,9 @@ async def publish_pending(db: AsyncSession) -> dict:
             ).label("fail_quality"),
             func.sum(case((Event.is_explicit.is_(True), 1), else_=0)).label(
                 "fail_explicit"
+            ),
+            func.sum(case((Event.is_non_event.is_(True), 1), else_=0)).label(
+                "fail_non_event"
             ),
             func.sum(case((Event.is_out_of_area.is_(True), 1), else_=0)).label(
                 "fail_out_of_area"
@@ -117,6 +122,7 @@ async def publish_pending(db: AsyncSession) -> dict:
             "unpublished": reject_row.unpublished or 0,
             "fail_quality": reject_row.fail_quality or 0,
             "fail_explicit": reject_row.fail_explicit or 0,
+            "fail_non_event": reject_row.fail_non_event or 0,
             "fail_out_of_area": reject_row.fail_out_of_area or 0,
             "fail_ended": reject_row.fail_ended or 0,
             "fail_no_title": reject_row.fail_no_title or 0,

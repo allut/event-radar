@@ -428,6 +428,79 @@ class TestClassifyEventExplicit:
         assert event.is_explicit is False
 
 
+class TestParseClassificationNonEvent:
+    def test_non_event_true(self):
+        raw = {**_BASE_RAW, "non_event": True}
+        result = _parse_classification(raw)
+        assert result["non_event"] is True
+
+    def test_non_event_false(self):
+        raw = {**_BASE_RAW, "non_event": False}
+        result = _parse_classification(raw)
+        assert result["non_event"] is False
+
+    def test_non_event_missing_defaults_to_false(self):
+        result = _parse_classification(dict(_BASE_RAW))
+        assert result["non_event"] is False
+
+
+class TestClassifyEventNonEvent:
+    @pytest.mark.asyncio
+    async def test_llm_flags_non_event_sets_is_non_event(self, mock_db, make_event):
+        event = make_event()
+        assert event.is_non_event is False
+        raw = {**_BASE_RAW, "non_event": True}
+        with patch(
+            "app.llm.classifier.llm_json",
+            AsyncMock(return_value=(raw, "groq/llama-3.3-70b-versatile")),
+        ):
+            ok = await classify_event(
+                event, mock_db, existing_classification=event.classification, prefetched=True
+            )
+
+        assert ok is True
+        assert event.is_non_event is True
+
+    @pytest.mark.asyncio
+    async def test_pre_flagged_non_event_skips_llm_and_stays_flagged(
+        self, mock_db, make_event
+    ):
+        event = make_event()
+        event.is_non_event = True
+        event.status = "draft"
+        with patch(
+            "app.llm.classifier.llm_json",
+            AsyncMock(return_value=({}, "groq/llama-3.3-70b-versatile")),
+        ) as mock_llm:
+            ok = await classify_event(
+                event, mock_db, existing_classification=event.classification, prefetched=True
+            )
+
+        assert ok is True
+        mock_llm.assert_not_awaited()
+        assert event.is_non_event is True
+        from app.constants import EVENT_STATUS_CLASSIFIED
+
+        assert event.status == EVENT_STATUS_CLASSIFIED
+
+    @pytest.mark.asyncio
+    async def test_llm_says_not_non_event_leaves_unflagged_event_unflagged(
+        self, mock_db, make_event
+    ):
+        event = make_event()
+        raw = {**_BASE_RAW, "non_event": False}
+        with patch(
+            "app.llm.classifier.llm_json",
+            AsyncMock(return_value=(raw, "groq/llama-3.3-70b-versatile")),
+        ):
+            ok = await classify_event(
+                event, mock_db, existing_classification=event.classification, prefetched=True
+            )
+
+        assert ok is True
+        assert event.is_non_event is False
+
+
 class TestParseClassificationInTargetCity:
     def test_in_target_city_false_sets_flag(self):
         raw = {**_BASE_RAW, "in_target_city": False}

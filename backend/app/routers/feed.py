@@ -42,6 +42,7 @@ async def get_feed(
             select_events_with_classification().where(
                 Event.id.in_(feed.event_ids),
                 Event.is_explicit.is_(False),
+                Event.is_non_event.is_(False),
             )
         )
     ).all()

@@ -219,6 +219,7 @@ async def send_daily_digests(
             select_events_with_classification().where(
                 Event.id.in_(all_event_ids),
                 Event.is_explicit.is_(False),
+                Event.is_non_event.is_(False),
             )
         )
     ).all()

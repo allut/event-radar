@@ -23,6 +23,7 @@ from app.ingestion.base import (
     extract_jsonld_event_location,
     extract_jsonld_event_offers,
     is_explicit_text,
+    is_non_event_text,
     is_target_city,
     parse_price_from_string,
     retry_after_seconds,
@@ -69,6 +70,65 @@ class TestIsExplicitText:
 
     def test_empty_string_is_not_explicit(self):
         assert is_explicit_text("") is False
+
+
+class TestIsNonEventText:
+    # Title keywords (gift cards / vouchers / donations / webinars)
+    def test_estonian_gift_card_title(self):
+        assert is_non_event_text("Kellerteater kinkekaart", "Kellerteater") is True
+
+    def test_english_gift_card_title(self):
+        assert is_non_event_text("PoCo gift card", "PoCo Museum") is True
+
+    def test_russian_gift_ticket_title(self):
+        assert is_non_event_text("Подарочный билет на экскурсию!", "Tallinn") is True
+
+    def test_russian_webinar_title(self):
+        assert is_non_event_text("Запись вебинара «Ожоги»", "Lastekohvik Domino") is True
+
+    def test_webinar_english_title(self):
+        assert is_non_event_text("Marketing webinar for founders", None) is True
+
+    # Venue keywords (online-only listings)
+    def test_mamaonline_venue(self):
+        assert is_non_event_text("Как пережить болезни малыша?", "MamaOnline") is True
+
+    def test_mamaonline_domain_venue(self):
+        assert is_non_event_text("Онлайн-курс «Подготовка к родам»", "mamaonline.eu") is True
+
+    def test_online_venue_with_url(self):
+        assert is_non_event_text("Расслабляющий массаж", "Онлайн, https://example.eu") is True
+
+    def test_plain_online_venue(self):
+        assert is_non_event_text("Режим питания ребенка", "online") is True
+
+    # Negatives
+    def test_normal_concert_not_flagged(self):
+        assert is_non_event_text("Techno night at Hall club", "Hall") is False
+
+    def test_raamatute_title_not_flagged(self):
+        # "raamat" is deliberately NOT a keyword — book-themed events are real events.
+        assert is_non_event_text(
+            "Pokudel külas: haridusprogramm Edgar Valteri raamatute ainetel",
+            "Südalinna Teater",
+        ) is False
+
+    def test_annetuskontsert_compound_not_flagged(self):
+        # Word boundary: "annetus" must not match inside a compound title.
+        assert is_non_event_text("Annetuskontsert lastele", "Estonia") is False
+
+    def test_in_person_koolitus_not_flagged(self):
+        assert is_non_event_text(
+            "Vaimse tervise esmaabi koolitus Tallinnas", "Peaasjad MTÜ"
+        ) is False
+
+    def test_gift_card_in_description_scope_note(self):
+        # Only title/venue are scanned — the function takes no description arg,
+        # so a "gift cards available" mention in a description can never flag.
+        assert is_non_event_text("Jazz evening", "Philly Joe's") is False
+
+    def test_none_inputs_not_flagged(self):
+        assert is_non_event_text(None, None) is False
 
 
 class TestAddressCity:

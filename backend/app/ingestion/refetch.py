@@ -53,6 +53,7 @@ from app.ingestion.base import (
     host_guard_hook,
     http_get,
     is_explicit_text,
+    is_non_event_text,
     locale_from_html_lang,
     locale_from_url_path,
     localized_detail_urls,
@@ -181,6 +182,7 @@ async def refetch_event_details(db: AsyncSession) -> dict:
         "no_data": 0,
         "failed": 0,
         "flagged_explicit": 0,
+        "flagged_non_event": 0,
         "localized_text_backfilled": 0,
     }
     if not candidates:
@@ -452,6 +454,16 @@ def _reconcile(
         ):
             event.is_explicit = True
             summary["flagged_explicit"] += 1
+            if event.status == EVENT_STATUS_PUBLISHED:
+                event.status = EVENT_STATUS_CLASSIFIED
+        # Non-event layer 1 re-check, same rationale: venue_name is exactly the
+        # field NON_EVENT_VENUE_KEYWORDS inspects, and refetch is the only
+        # post-ingest path that mutates it on an already-published event.
+        if not event.is_non_event and is_non_event_text(
+            event.title_orig, event.venue_name
+        ):
+            event.is_non_event = True
+            summary["flagged_non_event"] += 1
             if event.status == EVENT_STATUS_PUBLISHED:
                 event.status = EVENT_STATUS_CLASSIFIED
 

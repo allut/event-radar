@@ -27,6 +27,7 @@ from app.constants import (
     LLM_CLASSIFY_IMPORTANT_INFO_FALLBACK,
     LLM_CLASSIFY_IN_TARGET_CITY_DEFAULT,
     LLM_CLASSIFY_LANGUAGE_CODE_MAX_LEN,
+    LLM_CLASSIFY_NON_EVENT_DEFAULT,
     LLM_CLASSIFY_PRICE_HINT_FALLBACK,
     LLM_CLASSIFY_PROMPT_TEMPLATE,
     LLM_CLASSIFY_VENUE_FALLBACK,
@@ -110,6 +111,7 @@ def _parse_classification(raw: dict[str, Any]) -> dict[str, Any]:
         currency = None
 
     explicit = bool(raw.get("explicit", LLM_CLASSIFY_EXPLICIT_DEFAULT))
+    non_event = bool(raw.get("non_event", LLM_CLASSIFY_NON_EVENT_DEFAULT))
     in_target_city = bool(
         raw.get("in_target_city", LLM_CLASSIFY_IN_TARGET_CITY_DEFAULT)
     )
@@ -125,6 +127,7 @@ def _parse_classification(raw: dict[str, Any]) -> dict[str, Any]:
         "price_max": price_max,
         "currency": currency,
         "explicit": explicit,
+        "non_event": non_event,
         "in_target_city": in_target_city,
     }
 
@@ -154,12 +157,13 @@ async def classify_event(
     per-event ``SELECT EventClassification`` is issued — the N+1 in the batch
     path collapses to one bulk prefetch.
 
-    Events already flagged ``is_explicit`` (Layer 1 keyword prefilter) skip the
-    LLM call entirely — token saving — but still advance to ``classified`` so a
-    flagged dedup-group representative doesn't strand the rest of its cluster in
-    ``draft``. ``is_explicit`` stays True regardless (read paths exclude it).
+    Events already flagged ``is_explicit`` or ``is_non_event`` (Layer 1 keyword
+    prefilters) skip the LLM call entirely — token saving — but still advance to
+    ``classified`` so a flagged dedup-group representative doesn't strand the
+    rest of its cluster in ``draft``. The flags stay True regardless (the
+    publish gate and read paths exclude them).
     """
-    if event.is_explicit:
+    if event.is_explicit or event.is_non_event:
         event.status = EVENT_STATUS_CLASSIFIED
         return True
 
@@ -254,6 +258,7 @@ async def classify_event(
             event.currency = parsed["currency"]
 
     event.is_explicit = event.is_explicit or parsed["explicit"]
+    event.is_non_event = event.is_non_event or parsed["non_event"]
     event.is_out_of_area = not parsed["in_target_city"]
 
     event.status = EVENT_STATUS_CLASSIFIED
