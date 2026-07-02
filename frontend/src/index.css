@@ -198,7 +198,7 @@ body {
   position: relative;
   background-image:
     radial-gradient(ellipse 80% 50% at 20% 10%, rgba(200, 146, 42, 0.04) 0%, transparent 60%),
-    radial-gradient(ellipse 60% 40% at 80% 90%, rgba(25, 30, 43, 0.6) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 40% at 80% 90%, rgba(200, 146, 42, 0.04) 0%, transparent 60%),
     radial-gradient(ellipse 50% 40% at 50% 50%, rgba(200, 146, 42, 0.03) 0%, transparent 70%);
 }
 
