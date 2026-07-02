@@ -148,6 +148,47 @@ class TestSanitizeHtml:
         assert "https://example.com" in result
         assert "here</a><br>Next" in result
 
+    def test_whitespace_around_link_collapsed(self) -> None:
+        # KUMU-style indentation: source markup wraps the anchor on its own
+        # line, leaving newlines/indentation as literal text-node whitespace.
+        # Under the frontend's white-space: pre-wrap that renders as visible
+        # gaps before/after the link (event 1575's Facebook link).
+        html = (
+            "Vaata rohkem:\n            "
+            '<a href="https://facebook.com/example">Facebook</a>\n            '
+            "See you there!"
+        )
+        result = sanitize_html(html)
+        assert result is not None
+        assert "Vaata rohkem: <a" in result
+        assert ">Facebook</a> See you there!" in result
+        assert "  " not in result
+        assert "\n" not in result
+
+    def test_whitespace_collapse_preserves_href(self) -> None:
+        # Whitespace collapsing must only touch text nodes, never attributes.
+        html = '<a href="https://example.com/path?a=1&amp;b=2">  spaced   text  </a>'
+        result = sanitize_html(html)
+        assert result is not None
+        assert 'href="https://example.com/path?a=1&amp;b=2"' in result
+        assert "spaced text" in result
+
+    def test_whitespace_collapse_preserves_nbsp(self) -> None:
+        # &nbsp; decodes to U+00A0, which Python's \s matches — collapsing it
+        # would silently turn intentional non-breaking spacing into an
+        # ordinary breakable space.
+        result = sanitize_html("a&nbsp;&nbsp;b")
+        assert result is not None
+        assert result == "a\xa0\xa0b"
+
+    def test_edge_nbsp_preserved(self) -> None:
+        # A bare .strip() also treats U+00A0 as whitespace and would delete a
+        # leading/trailing &nbsp; — must survive at the string boundary too.
+        result = sanitize_html("&nbsp;Foo")
+        assert result == "\xa0Foo"
+        result = sanitize_html("Foo&nbsp;")
+        assert result == "Foo\xa0"
+
 
 class TestHtmlToText:
     def test_none_returns_none(self) -> None:

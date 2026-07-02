@@ -261,6 +261,29 @@ def _block_tags_to_breaks(html: str) -> str:
     return str(soup)
 
 
+_WHITESPACE_RUN_RE = re.compile(r"[ \t\n\r\f\v]+")
+
+
+def _collapse_text_whitespace(html: str) -> str:
+    """Collapse whitespace runs within text nodes, leaving tags/attributes untouched.
+
+    Source markup (e.g. KUMU's indented anchor tags) leaves newlines/indentation
+    inside text nodes; nh3 sanitizes tags but never touches text content, so that
+    raw whitespace survives into storage and renders literally under the
+    frontend's white-space: pre-wrap. Collapsing here (post-sanitize, text-only)
+    fixes it at the source for every HTML-sourced description. Matches ASCII
+    whitespace only, not U+00A0 (non-breaking space, which BeautifulSoup decodes
+    &nbsp; entities into) — nbsp is intentional spacing from the source content,
+    not formatting noise, and Python's \\s would otherwise silently collapse it.
+    """
+    soup = BeautifulSoup(html, "html.parser")
+    for node in soup.find_all(string=True):
+        node.replace_with(_WHITESPACE_RUN_RE.sub(" ", node))
+    # BeautifulSoup serializes void elements as "<br/>"; normalize back to the
+    # bare "<br>" form the rest of sanitize_html and its callers expect.
+    return re.sub(r"<br\s*/>", "<br>", str(soup))
+
+
 def sanitize_html(text: str | None) -> str | None:
     """Sanitize HTML with a strict allowlist; plain text passes through unchanged.
 
@@ -283,7 +306,12 @@ def sanitize_html(text: str | None) -> str | None:
         return None
     cleaned = _MULTI_BR_RE.sub("<br>" * HTML_SANITIZE_MAX_CONSECUTIVE_BR, cleaned)
     cleaned = _EDGE_BR_RE.sub("", cleaned)
-    return cleaned or None
+    if not cleaned:
+        return None
+    cleaned = _collapse_text_whitespace(cleaned)
+    # Strip ASCII whitespace only — bare .strip() also treats U+00A0 (nbsp) as
+    # whitespace and would delete an intentional leading/trailing &nbsp;.
+    return cleaned.strip(" \t\n\r\f\v") or None
 
 
 def html_to_text(text: str | None) -> str | None:
