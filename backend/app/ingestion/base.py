@@ -66,6 +66,7 @@ from app.constants import (
     SOURCE_STATUS_OK,
     TALLINN_TZ,
 )
+from app.ingestion.language_split import fill_missing_locales
 from app.models.models import Event, EventSource, IngestionRun, RawEvent, Source
 
 log = logging.getLogger(__name__)
@@ -492,6 +493,23 @@ class NormalizedEvent:
         if self.venue_address is None:
             self.lat = None
             self.lng = None
+
+
+def _fill_missing_locales_via_split(normalized: NormalizedEvent) -> None:
+    """Mutate ``normalized`` in place, filling any ``*_localized`` locale keys
+    still missing after the adapter's own per-locale fetch by heuristically
+    splitting a single field that concatenates two languages in one blob.
+    Never overwrites a locale already populated from a real page fetch.
+    """
+    normalized.title_localized = fill_missing_locales(
+        normalized.title_localized, normalized.title
+    )
+    normalized.description_localized = fill_missing_locales(
+        normalized.description_localized, normalized.description
+    )
+    normalized.important_info_localized = fill_missing_locales(
+        normalized.important_info_localized, normalized.important_info
+    )
 
 
 def _make_slug(title: str, starts_at: datetime, external_id: str) -> str:
@@ -964,6 +982,25 @@ class SourceAdapter(ABC):
                 if existing:
                     raw_event.processed_at = datetime.now(tz=TALLINN_TZ)
                     continue
+
+                # Deferred until here (after the dup/seen checks) — HTML
+                # parsing + language detection is wasted work for an event
+                # that's about to be skipped anyway. Offloaded to a thread:
+                # lingua's per-block n-gram detection is CPU-bound and this
+                # run() loop shares an event loop with the FastAPI app
+                # (AsyncIOScheduler in app/main.py) — left inline it would
+                # stall concurrent request handling during ingestion.
+                # Isolated in its own try/except: a pathological input
+                # shouldn't abort the whole source's batch over one event's
+                # locale enrichment, which is a nice-to-have, not required.
+                try:
+                    await asyncio.to_thread(_fill_missing_locales_via_split, normalized)
+                except Exception:
+                    log.warning(
+                        "language split failed for external_id=%s, continuing without it",
+                        normalized.external_id,
+                        exc_info=True,
+                    )
 
                 slug = _make_slug(
                     normalized.title, normalized.starts_at, normalized.external_id
