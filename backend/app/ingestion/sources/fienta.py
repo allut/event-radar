@@ -232,7 +232,7 @@ class FientaAdapter(SourceAdapter):
                 response = await http_get(client, url)
                 soup = BeautifulSoup(response.text, "html.parser")
                 loc = extract_jsonld_event_location(soup)
-                price_min, price_max, currency = extract_jsonld_event_offers(soup)
+                price_min, price_max, currency, has_free_tier = extract_jsonld_event_offers(soup)
                 item["_detail"] = {
                     "venue_name": loc.get("venue_name") if loc else None,
                     "venue_address": loc.get("venue_address") if loc else None,
@@ -241,6 +241,7 @@ class FientaAdapter(SourceAdapter):
                     "price_min": price_min,
                     "price_max": price_max,
                     "currency": currency,
+                    "has_free_tier": has_free_tier,
                 }
                 # The canonical URL 302s to a locale-prefixed path (e.g. /et/slug).
                 # That redirected URL tells us which language the listing API returned.
@@ -385,21 +386,30 @@ class FientaAdapter(SourceAdapter):
                 lng = d_lng
 
         # price: listing parse is the authoritative baseline
-        listing_price_min, listing_price_max, listing_currency = parse_price_from_string(
-            raw.get("price_from_string")
+        listing_price_min, listing_price_max, listing_currency, listing_has_free_tier = (
+            parse_price_from_string(raw.get("price_from_string"))
         )
+        detail_price_min: float | None = detail.get("price_min") if detail else None
+        detail_price_max: float | None = detail.get("price_max") if detail else None
+        detail_has_free_tier = bool(detail.get("has_free_tier")) if detail else False
 
-        # price_min: detail offer floor wins; listing fills when detail has no price
-        if detail and detail.get("price_min") is not None:
-            price_min: float | None = detail["price_min"]
-        else:
-            price_min = listing_price_min
+        has_free_tier = listing_has_free_tier or detail_has_free_tier
 
-        # price_max: detail offer ceiling wins; listing fills when detail has no price
-        if detail and detail.get("price_max") is not None:
-            price_max: float | None = detail["price_max"]
+        # A listing parsed as plain "Free" (both bounds 0, no paid tier at the
+        # listing level) means admission itself is free — the free floor must
+        # survive even when the detail page later reveals an optional paid
+        # ticket (e.g. an open-mic's €10 support ticket): price_min stays 0,
+        # and only price_max is raised to the detail's paid ceiling, if any.
+        if listing_price_min == 0 and listing_price_max == 0 and not listing_has_free_tier:
+            price_min: float | None = 0.0
+            price_max: float | None = (
+                detail_price_max if detail_price_max is not None else listing_price_max
+            )
         else:
-            price_max = listing_price_max
+            # price_min: detail offer floor wins; listing fills when detail has no price
+            price_min = detail_price_min if detail_price_min is not None else listing_price_min
+            # price_max: detail offer ceiling wins; listing fills when detail has no price
+            price_max = detail_price_max if detail_price_max is not None else listing_price_max
 
         # currency: listing wins; detail fallback
         currency: str | None = listing_currency or detail.get("currency") or None
@@ -425,6 +435,7 @@ class FientaAdapter(SourceAdapter):
             price_min=price_min,
             price_max=price_max,
             currency=currency,
+            has_free_tier=has_free_tier,
             title_localized=loc_titles if loc_titles else None,
             description_localized=loc_descs if loc_descs else None,
         )

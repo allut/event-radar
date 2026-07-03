@@ -41,6 +41,9 @@
     "tickets": "Tickets →",
     "get_tickets": "Get tickets →",
     "price_free": "Free",
+    "price_free_with_paid": "Free · paid tickets up to {amount}",
+    "price_free_options": "free options available",
+    "price_free_options_hint": "Free options available for some groups — check ticket conditions.",
     "signal_like": "Like",
     "signal_dislike": "Dislike",
     "signal_bookmark": "Bookmark",
@@ -111,7 +114,9 @@
     "digest.subject_template": "Your Daily 5 — {date}",
     "digest.subject_label": "Your Daily 5",
     "digest.price_free": "Free",
+    "digest.price_free_with_paid": "Free · paid tickets up to €{amount}",
     "digest.price_from": "From €{amount}",
+    "digest.price_free_options": "free options available",
     "digest.unsubscribe": "Unsubscribe",
     "digest.no_events": "No events today."
   }

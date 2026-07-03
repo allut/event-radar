@@ -251,7 +251,10 @@ class TestNormalize:
         assert result.price_max == 75.0
         assert result.currency == "EUR"
 
-    def test_detail_price_min_overrides_listing_free(self):
+    def test_free_listing_keeps_free_floor_takes_detail_paid_ceiling(self):
+        """A listing parsed as plain 'Free' (e.g. an open-mic) keeps price_min=0
+        even when the detail page reveals an optional paid ticket — only
+        price_max is raised to the detail's paid ceiling."""
         raw = self._raw_with_detail(
             {
                 "lat": None, "lng": None, "venue_name": None, "venue_address": None,
@@ -261,8 +264,41 @@ class TestNormalize:
         )
         result = _adapter().normalize(raw)
         assert result is not None
-        assert result.price_min == 10.0
+        assert result.price_min == 0.0
         assert result.price_max == 40.0
+
+    def test_free_tier_member_offer_keeps_paid_bounds_and_flags(self):
+        """A listing with an open-ended paid price plus a free member/companion
+        tier (has_free_tier) keeps the detail's paid min/max bounds and flags
+        has_free_tier — mirrors event 158 (Deltakutse x Fotografiska)."""
+        raw = self._raw_with_detail(
+            {
+                "lat": None, "lng": None, "venue_name": None, "venue_address": None,
+                "price_min": 14.0, "price_max": 17.0, "currency": "EUR",
+                "has_free_tier": True,
+            },
+            price_from_string="From 14 EUR, free",
+        )
+        result = _adapter().normalize(raw)
+        assert result is not None
+        assert result.price_min == 14.0
+        assert result.price_max == 17.0
+        assert result.has_free_tier is True
+
+    def test_sold_out_listing_keeps_listing_price_when_detail_has_none(self):
+        """A sold-out Fienta event yields nothing from the detail offers
+        extractor — the listing's price ('From 39 EUR') must survive."""
+        raw = self._raw_with_detail(
+            {
+                "lat": None, "lng": None, "venue_name": None, "venue_address": None,
+                "price_min": None, "price_max": None, "currency": None,
+            },
+            price_from_string="From 39 EUR",
+        )
+        result = _adapter().normalize(raw)
+        assert result is not None
+        assert result.price_min == 39.0
+        assert result.price_max is None
 
     def test_listing_price_fills_when_detail_has_no_price(self):
         raw = self._raw_with_detail({

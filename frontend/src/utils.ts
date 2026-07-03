@@ -1,7 +1,7 @@
 import DOMPurify from 'dompurify';
 import { api } from './api/client';
 import { CATEGORY_GRADIENTS, FALLBACK_GRADIENT, EUR_SYMBOL, type Signal, toLocaleCode, SAFE_URL_SCHEMES, SANITIZE_ALLOWED_TAGS, SANITIZE_ALLOWED_ATTR, SIGNAL_TO_CLASS } from './constants';
-import { t } from './i18n';
+import { t, ti } from './i18n';
 
 export function cx(...classes: (string | false | null | undefined)[]): string {
   return classes.filter(Boolean).join(' ');
@@ -46,13 +46,30 @@ export function categoryGradient(categories: string[]): string {
   return CATEGORY_GRADIENTS[key] ?? FALLBACK_GRADIENT;
 }
 
-export function formatPrice(min: number | null, max: number | null, currency: string | null, locale: string): string | null {
+export function formatPrice(min: number | null, max: number | null, currency: string | null, locale: string, hasFreeTier = false): string | null {
   if (min === null && max === null) return null;
   const sym = currency === 'EUR' ? EUR_SYMBOL : currency ?? '';
-  if (min === 0) return t('price_free', locale);
-  if (min !== null && max !== null && min !== max) return `${sym}${min}–${sym}${max}`;
-  if (min !== null) return `${sym}${min}`;
-  return null;
+  if (min === 0) {
+    // Base admission is free; a positive max means an optional paid tier exists
+    // (e.g. an open-mic's support ticket) — surface it rather than showing a
+    // bare "Free" that hides the paid option entirely.
+    if (max !== null && max > 0) {
+      return ti('price_free_with_paid', locale, { amount: `${sym}${max}` });
+    }
+    return t('price_free', locale);
+  }
+  let priceStr: string | null;
+  if (min !== null && max !== null && min !== max) {
+    priceStr = `${sym}${min}–${sym}${max}`;
+  } else if (min !== null) {
+    priceStr = `${sym}${min}`;
+  } else {
+    priceStr = null;
+  }
+  if (priceStr && hasFreeTier) {
+    return `${priceStr} · ${t('price_free_options', locale)}`;
+  }
+  return priceStr;
 }
 
 export function formatEventTime(iso: string, locale: string): string {

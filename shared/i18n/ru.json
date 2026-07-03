@@ -41,6 +41,9 @@
     "tickets": "Билеты →",
     "get_tickets": "Получить билеты →",
     "price_free": "Бесплатно",
+    "price_free_with_paid": "Бесплатно · платные билеты до {amount}",
+    "price_free_options": "есть бесплатные варианты",
+    "price_free_options_hint": "Для некоторых групп есть бесплатные варианты — уточните условия билета.",
     "signal_like": "Нравится",
     "signal_dislike": "Не нравится",
     "signal_bookmark": "Закладка",
@@ -111,7 +114,9 @@
     "digest.subject_template": "Ваша Пятёрка дня — {date}",
     "digest.subject_label": "Ваша Пятёрка дня",
     "digest.price_free": "Бесплатно",
+    "digest.price_free_with_paid": "Бесплатно · платные билеты до €{amount}",
     "digest.price_from": "От €{amount}",
+    "digest.price_free_options": "есть бесплатные варианты",
     "digest.unsubscribe": "Отписаться",
     "digest.no_events": "Сегодня нет событий."
   }

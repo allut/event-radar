@@ -78,11 +78,18 @@ def build_digest_html(
 
         if event.price_min is not None:
             price_val = float(event.price_min)
+            price_max_val = float(event.price_max) if event.price_max is not None else None
             if price_val == 0:
-                price_str = t("digest.price_free", locale)
+                if price_max_val is not None and price_max_val > 0:
+                    max_amount = f"{price_max_val:.2f}".rstrip("0").rstrip(".")
+                    price_str = ti("digest.price_free_with_paid", locale, amount=max_amount)
+                else:
+                    price_str = t("digest.price_free", locale)
             else:
                 amount = f"{price_val:.2f}".rstrip("0").rstrip(".")
                 price_str = ti("digest.price_from", locale, amount=amount)
+                if event.has_free_tier:
+                    price_str = f"{price_str} · {t('digest.price_free_options', locale)}"
         else:
             price_str = ""
 

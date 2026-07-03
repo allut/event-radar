@@ -19,6 +19,7 @@ from app.ingestion.base import (
     address_city,
     coords_in_estonia,
     coords_in_tallinn,
+    eur_amounts_from_text,
     eur_price_bounds_from_text,
     extract_jsonld_event_location,
     extract_jsonld_event_offers,
@@ -26,6 +27,7 @@ from app.ingestion.base import (
     is_non_event_text,
     is_target_city,
     parse_price_from_string,
+    price_context_digest,
     retry_after_seconds,
     strip_fee_amounts,
 )
@@ -233,18 +235,18 @@ class TestParsePriceFromString:
     @pytest.mark.parametrize(
         ("value", "expected"),
         [
-            ("10 EUR", (10.0, 10.0, "EUR")),
-            ("From 28 EUR", (28.0, None, "EUR")),
-            ("From 6 EUR, free", (0.0, None, "EUR")),
-            ("40 EUR, free", (0.0, 40.0, "EUR")),
-            ("Free", (0.0, 0.0, None)),
-            (None, (None, None, None)),
-            ("", (None, None, None)),
-            ("From 9.50 EUR", (9.5, None, "EUR")),
-            ("From 3,08 EUR", (3.08, None, "EUR")),  # comma decimal defensiveness
-            ("From 20 CHF", (20.0, None, "CHF")),
-            ("18 PLN", (18.0, 18.0, "PLN")),
-            ("sold out", (None, None, None)),  # unparseable, not free
+            ("10 EUR", (10.0, 10.0, "EUR", False)),
+            ("From 28 EUR", (28.0, None, "EUR", False)),
+            ("From 6 EUR, free", (6.0, None, "EUR", True)),
+            ("40 EUR, free", (40.0, 40.0, "EUR", True)),
+            ("Free", (0.0, 0.0, None, False)),
+            (None, (None, None, None, False)),
+            ("", (None, None, None, False)),
+            ("From 9.50 EUR", (9.5, None, "EUR", False)),
+            ("From 3,08 EUR", (3.08, None, "EUR", False)),  # comma decimal defensiveness
+            ("From 20 CHF", (20.0, None, "CHF", False)),
+            ("18 PLN", (18.0, 18.0, "PLN", False)),
+            ("sold out", (None, None, None, False)),  # unparseable, not free
         ],
     )
     def test_grammar_table(self, value, expected):
@@ -293,6 +295,63 @@ class TestEurPriceBoundsFromText:
         assert eur_price_bounds_from_text("") == (None, None)
 
 
+class TestEurAmountsFromText:
+    def test_returns_all_amounts_with_duplicates(self):
+        assert eur_amounts_from_text("€10, €10, €20") == [10.0, 10.0, 20.0]
+
+    def test_none_returns_empty_list(self):
+        assert eur_amounts_from_text(None) == []
+
+    def test_no_currency_returns_empty_list(self):
+        assert eur_amounts_from_text("45 minutes long") == []
+
+
+class TestPriceContextDigest:
+    def test_keeps_only_price_bearing_lines(self):
+        html = (
+            "<p>Welcome to the show.</p>"
+            "<p>Full price €15<br>Discount €11</p>"
+            "<p>Doors open at 19:00, no prices here.</p>"
+        )
+        digest = price_context_digest(html)
+        assert "€15" in digest
+        assert "€11" in digest
+        assert "Welcome to the show" not in digest
+        assert "Doors open" not in digest
+
+    def test_combines_multiple_texts(self):
+        digest = price_context_digest("<p>Adult €16</p>", "<p>Family €32</p>")
+        assert "€16" in digest
+        assert "€32" in digest
+
+    def test_strips_fee_clauses(self):
+        digest = price_context_digest("<p>agenditasu 3,20 €, Pilet 45 €</p>")
+        assert "45" in digest
+        assert "3,20" not in digest
+
+    def test_empty_inputs_return_empty_string(self):
+        assert price_context_digest(None, "") == ""
+
+    def test_caps_at_price_context_max_chars(self):
+        long_html = "<p>" + "".join(f"Tier {i} €{i}<br>" for i in range(200)) + "</p>"
+        digest = price_context_digest(long_html)
+        from app.constants import PRICE_CONTEXT_MAX_CHARS
+
+        assert len(digest) <= PRICE_CONTEXT_MAX_CHARS
+
+    def test_truncation_never_cuts_a_line_mid_amount(self):
+        """The cap must drop whole trailing lines, never slice a kept line —
+        otherwise a price literal like '€199' could survive as '€19'."""
+        long_html = "<p>" + "".join(f"Tier {i} €{100 + i}<br>" for i in range(200)) + "</p>"
+        digest = price_context_digest(long_html)
+        for line in digest.splitlines():
+            assert line == line.strip()
+            # every kept line must end on a complete "€<digits>" amount, not a
+            # truncated one (e.g. never ends in a bare digit run cut short of
+            # the next expected digit).
+            assert eur_amounts_from_text(line)
+
+
 def _soup(html: str) -> BeautifulSoup:
     return BeautifulSoup(html, "html.parser")
 
@@ -337,7 +396,7 @@ class TestExtractJsonldEventOffers:
         html = _ld_script(
             '{"@type":"Event","offers":{"@type":"Offer","price":"15","priceCurrency":"EUR"}}'
         )
-        assert extract_jsonld_event_offers(_soup(html)) == (15.0, 15.0, "EUR")
+        assert extract_jsonld_event_offers(_soup(html)) == (15.0, 15.0, "EUR", False)
 
     def test_multiple_offers_min_max(self):
         html = _ld_script(
@@ -347,24 +406,58 @@ class TestExtractJsonldEventOffers:
             "]}"
         )
         result = extract_jsonld_event_offers(_soup(html))
-        assert result == (28.0, 75.0, "EUR")
+        assert result == (28.0, 75.0, "EUR", False)
 
     def test_free_tier_zero_price(self):
+        """A €0 in-stock offer (e.g. Member/Companion) alongside a paid offer
+        bounds price_min/max to the PAID amount and flags has_free_tier."""
         html = _ld_script(
             '{"@type":"Event","offers":['
-            '{"@type":"Offer","price":"0","priceCurrency":"EUR"},'
-            '{"@type":"Offer","price":"10","priceCurrency":"EUR"}'
+            '{"@type":"Offer","price":"0","priceCurrency":"EUR",'
+            '"availability":"http://schema.org/InStock"},'
+            '{"@type":"Offer","price":"10","priceCurrency":"EUR",'
+            '"availability":"http://schema.org/InStock"}'
             "]}"
         )
-        assert extract_jsonld_event_offers(_soup(html)) == (0.0, 10.0, "EUR")
+        assert extract_jsonld_event_offers(_soup(html)) == (10.0, 10.0, "EUR", True)
+
+    def test_all_free_offers_no_paid(self):
+        html = _ld_script(
+            '{"@type":"Event","offers":['
+            '{"@type":"Offer","price":"0","priceCurrency":"EUR",'
+            '"availability":"http://schema.org/InStock"}'
+            "]}"
+        )
+        assert extract_jsonld_event_offers(_soup(html)) == (0.0, 0.0, None, False)
+
+    def test_sold_out_placeholder_ignored(self):
+        """A sold-out event collapsed to a single {price: 0, availability:
+        SoldOut} offer (Fienta's pattern) must not be read as a real free
+        price — it should yield nothing usable."""
+        html = _ld_script(
+            '{"@type":"Event","offers":{"@type":"Offer","price":"0.00",'
+            '"priceCurrency":"EUR","availability":"http://schema.org/SoldOut"}}'
+        )
+        assert extract_jsonld_event_offers(_soup(html)) == (None, None, None, False)
+
+    def test_sold_out_placeholder_does_not_mask_paid_offer(self):
+        html = _ld_script(
+            '{"@type":"Event","offers":['
+            '{"@type":"Offer","price":"0.00","priceCurrency":"EUR",'
+            '"availability":"http://schema.org/SoldOut"},'
+            '{"@type":"Offer","price":"17","priceCurrency":"EUR",'
+            '"availability":"http://schema.org/InStock"}'
+            "]}"
+        )
+        assert extract_jsonld_event_offers(_soup(html)) == (17.0, 17.0, "EUR", False)
 
     def test_no_offers_returns_none_tuple(self):
         html = _ld_script('{"@type":"Event"}')
-        assert extract_jsonld_event_offers(_soup(html)) == (None, None, None)
+        assert extract_jsonld_event_offers(_soup(html)) == (None, None, None, False)
 
     def test_no_event_returns_none_tuple(self):
         html = _ld_script('{"@type":"Organization"}')
-        assert extract_jsonld_event_offers(_soup(html)) == (None, None, None)
+        assert extract_jsonld_event_offers(_soup(html)) == (None, None, None, False)
 
     def test_currency_uppercased(self):
         html = _ld_script(

@@ -54,6 +54,7 @@ from app.constants import (
     LOCALIZED_TEXT_HREFLANG_NORMALIZE,
     LOCALIZED_TEXT_MAX_DESC_CHARS,
     LOCALIZED_TEXT_MAX_TITLE_CHARS,
+    PRICE_CONTEXT_MAX_CHARS,
     PRICE_FEE_CLAUSE_RE,
     PRICE_FEE_KEYWORDS,
     PRICE_FROM_STRING_RE,
@@ -442,6 +443,7 @@ class NormalizedEvent:
     price_max: float | None = None
     currency: str | None = None
     price_hint: str | None = None
+    has_free_tier: bool = False
     title_localized: dict[str, str] | None = None
     description_localized: dict[str, str] | None = None
     important_info_localized: dict[str, str] | None = None
@@ -498,33 +500,35 @@ _PRICE_FROM_STRING_RE = re.compile(PRICE_FROM_STRING_RE, re.IGNORECASE)
 
 def parse_price_from_string(
     value: str | None,
-) -> tuple[float | None, float | None, str | None]:
-    """Parse a Fienta listing price_from_string into (price_min, price_max, currency).
+) -> tuple[float | None, float | None, str | None, bool]:
+    """Parse a Fienta listing price_from_string into
+    (price_min, price_max, currency, has_free_tier).
 
     Grammar (verified across all 803 live rows): optional "From ", a number, a 3-letter
     currency; optional ", free" suffix; or the literal "Free"; or None/empty.
-      - "10 EUR"           -> (10, 10, "EUR")    exact price, min == max
-      - "From 28 EUR"      -> (28, None, "EUR")  open-ended, no listing ceiling
-      - "From 6 EUR, free" -> (0, None, "EUR")   free tier present, paid from 6
-      - "40 EUR, free"     -> (0, 40, "EUR")     free tier present, ceiling 40
-      - "Free"             -> (0, 0, None)
-      - None / unparseable -> (None, None, None)
+    price_min/price_max bound the PAID amount(s); has_free_tier flags a paid listing
+    that also has a free option (e.g. members/companions) alongside the paid tier.
+      - "10 EUR"           -> (10, 10, "EUR", False)  exact price, min == max
+      - "From 28 EUR"      -> (28, None, "EUR", False) open-ended, no listing ceiling
+      - "From 6 EUR, free" -> (6, None, "EUR", True)   paid from 6, free tier also exists
+      - "40 EUR, free"     -> (40, 40, "EUR", True)    paid 40, free tier also exists
+      - "Free"             -> (0, 0, None, False)       genuinely free, no paid tier
+      - None / unparseable -> (None, None, None, False)
     """
     if not value:
-        return (None, None, None)
+        return (None, None, None, False)
     text = value.strip()
     has_free = text.lower() == "free" or text.lower().endswith(", free")
     m = _PRICE_FROM_STRING_RE.search(text)
     if not m:
-        return (0.0, 0.0, None) if has_free else (None, None, None)
+        return (0.0, 0.0, None, False) if has_free else (None, None, None, False)
     amount = float(m.group(1).replace(",", "."))
     currency = m.group(2).upper()
     # The optional "From " prefix is captured inside the match, so test the raw
     # string's start rather than text[:m.start()] (which would be empty here).
     is_from = text.lower().startswith("from")
     ceiling = None if is_from else amount
-    price_min = 0.0 if has_free else amount
-    return (price_min, ceiling, currency)
+    return (amount, ceiling, currency, has_free)
 
 
 _CURRENCY_AMOUNT_RE = re.compile(CURRENCY_AMOUNT_RE, re.IGNORECASE)
@@ -550,21 +554,66 @@ def strip_fee_amounts(text: str | None) -> str | None:
     return _PRICE_FEE_CLAUSE_RE.sub("", text)
 
 
-def eur_price_bounds_from_text(value: str | None) -> tuple[float | None, float | None]:
-    """Return (min, max) of all €/EUR amounts in text, or (None, None) if none found.
+def eur_amounts_from_text(value: str | None) -> list[float]:
+    """Return every €/EUR amount found in text (duplicates included), or [] if none.
 
     Only matches amounts adjacent to a € symbol or EUR code (so durations, years, and
     other stray numbers are ignored). Handles European "12,50" and US "12.50" decimals.
     """
     if not value:
-        return (None, None)
-    amounts: list[float] = []
-    for m in _CURRENCY_AMOUNT_RE.finditer(value):
-        raw = m.group(1) or m.group(2)
-        amounts.append(float(raw.replace(",", ".")))
+        return []
+    return [
+        float((m.group(1) or m.group(2)).replace(",", "."))
+        for m in _CURRENCY_AMOUNT_RE.finditer(value)
+    ]
+
+
+def eur_price_bounds_from_text(value: str | None) -> tuple[float | None, float | None]:
+    """Return (min, max) of all €/EUR amounts in text, or (None, None) if none found."""
+    amounts = eur_amounts_from_text(value)
     if not amounts:
         return (None, None)
     return (min(amounts), max(amounts))
+
+
+def price_context_digest(*texts: str | None) -> str:
+    """Return only the lines carrying a €/EUR amount from the given raw HTML texts,
+    joined and capped at ``PRICE_CONTEXT_MAX_CHARS``.
+
+    Full ``description_orig``/``important_info`` can run past the LLM prompt's
+    per-field char caps (e.g. IMPORTANT_INFO_MAX_CHARS), truncating away distant
+    price tiers (see VAN GOGH: paid tiers up to €52 sit past the 1200-char cut).
+    Distilling to price-bearing lines first lets the full tier list reach the
+    prompt within a small, fixed budget regardless of surrounding prose length.
+    Each text is converted from HTML and fee clauses (agenditasu, service fee,
+    etc.) are stripped before scanning, mirroring the prompt-field pipeline.
+    """
+    lines: list[str] = []
+    for text in texts:
+        if not text:
+            continue
+        # Newline-separated (not html_to_text's space-joined) so each block/line
+        # can be scanned and kept/dropped independently.
+        raw_plain = BeautifulSoup(text, "html.parser").get_text(separator="\n", strip=True)
+        plain = strip_fee_amounts(raw_plain) or ""
+        for line in plain.splitlines():
+            line = line.strip()
+            if line and _CURRENCY_AMOUNT_RE.search(line):
+                lines.append(line)
+
+    # Cap by whole lines rather than a raw character slice — an arbitrary
+    # mid-string cut can truncate a price literal (e.g. "€15" -> "€1"), which
+    # would otherwise feed a spurious amount into the validation set built
+    # from this digest (see _validate_llm_prices).
+    kept: list[str] = []
+    total_len = 0
+    for line in lines:
+        added_len = len(line) + (1 if kept else 0)  # +1 for the joining "\n"
+        if total_len + added_len > PRICE_CONTEXT_MAX_CHARS:
+            break
+        kept.append(line)
+        total_len += added_len
+    return "\n".join(kept)
 
 
 def _coerce_float(value: Any) -> float | None:
@@ -636,11 +685,18 @@ def extract_jsonld_event_location(soup: BeautifulSoup) -> dict[str, Any] | None:
 
 def extract_jsonld_event_offers(
     soup: BeautifulSoup,
-) -> tuple[float | None, float | None, str | None]:
-    """Return ``(min_price, max_price, currency)`` from schema.org ``Event`` ``offers[]``.
+) -> tuple[float | None, float | None, str | None, bool]:
+    """Return ``(min_price, max_price, currency, has_free_tier)`` from schema.org
+    ``Event`` ``offers[]``.
 
-    Reads all ``Offer`` entries from the first JSON-LD ``Event`` block, returns
-    ``(None, None, None)`` when no offers or no parseable prices are found.
+    Reads all ``Offer`` entries from the first JSON-LD ``Event`` block. price_min/max
+    bound the PAID offers only; a zero-priced offer whose ``availability`` is
+    ``SoldOut`` is a placeholder (Fienta collapses a sold-out event to a single
+    ``{price: 0, availability: SoldOut}`` offer) and is ignored entirely — not
+    counted as paid or free. A genuine zero-priced, in-stock offer (e.g. a
+    Member/Companion tier) sets ``has_free_tier`` alongside any paid offers found.
+    Returns ``(None, None, None, False)`` when no offers or no usable prices are
+    found in any Event block.
     """
     for script in soup.find_all("script", type="application/ld+json"):
         try:
@@ -655,22 +711,33 @@ def extract_jsonld_event_offers(
             offers_raw = item.get("offers") or []
             if isinstance(offers_raw, dict):
                 offers_raw = [offers_raw]
-            prices: list[float] = []
+            paid_prices: list[float] = []
+            has_free_offer = False
             currency: str | None = None
             for offer in offers_raw:
                 if not isinstance(offer, dict):
                     continue
                 price = _coerce_float(offer.get("price"))
-                if price is not None:
-                    prices.append(price)
-                if currency is None:
-                    cur_raw = offer.get("priceCurrency")
-                    if cur_raw:
-                        currency = str(cur_raw).upper()
-            if not prices:
-                continue  # no parseable prices in this block — try next Event item
-            return (min(prices), max(prices), currency)
-    return (None, None, None)
+                if price is None:
+                    continue
+                availability = str(offer.get("availability") or "")
+                sold_out = availability.endswith("SoldOut")
+                if price == 0 and sold_out:
+                    continue  # placeholder — not a real offer
+                if price > 0:
+                    paid_prices.append(price)
+                    if currency is None:
+                        cur_raw = offer.get("priceCurrency")
+                        if cur_raw:
+                            currency = str(cur_raw).upper()
+                else:
+                    has_free_offer = True
+            if paid_prices:
+                return (min(paid_prices), max(paid_prices), currency, has_free_offer)
+            if has_free_offer:
+                return (0.0, 0.0, None, False)
+            continue  # nothing usable in this block — try next Event item
+    return (None, None, None, False)
 
 
 def extract_jsonld_event_text(soup: BeautifulSoup) -> tuple[str | None, str | None]:
@@ -885,6 +952,7 @@ class SourceAdapter(ABC):
                             price_max=normalized.price_max,
                             currency=normalized.currency,
                             price_hint=normalized.price_hint,
+                            has_free_tier=normalized.has_free_tier,
                             title_localized=normalized.title_localized,
                             description_localized=normalized.description_localized,
                             important_info_localized=normalized.important_info_localized,

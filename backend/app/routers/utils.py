@@ -179,6 +179,7 @@ def serialize_event(event: Event, locale: str = DEFAULT_USER_LOCALE) -> dict:
         "price_min": float(event.price_min) if event.price_min is not None else None,
         "price_max": float(event.price_max) if event.price_max is not None else None,
         "currency": event.currency,
+        "has_free_tier": event.has_free_tier,
         "categories": cl.categories if cl else [],
         "vibes": cl.vibes if cl else [],
         "why_go": why_go,

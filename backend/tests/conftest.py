@@ -94,6 +94,7 @@ def make_event():
         e.is_explicit = False
         e.is_non_event = False
         e.is_out_of_area = False
+        e.has_free_tier = False
         e.dedup_group_id = None
 
         if why_go is not None or why_go_localized is not None:

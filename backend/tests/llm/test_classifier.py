@@ -212,7 +212,9 @@ class TestClassifyEventPrice:
     @pytest.mark.asyncio
     async def test_writes_price_fields_onto_event(self, mock_db, make_event):
         event = make_event()
+        event.price_hint = "10 EUR"
         raw = {**_BASE_RAW, "price_min": 10, "price_max": 20, "currency": "EUR"}
+        event.description_orig = "Full price 10 EUR, family ticket 20 EUR."
         with patch(
             "app.llm.classifier.llm_json",
             AsyncMock(return_value=(raw, "groq/llama-3.3-70b-versatile")),
@@ -225,6 +227,86 @@ class TestClassifyEventPrice:
         assert event.price_min == 10.0
         assert event.price_max == 20.0
         assert event.currency == "EUR"
+
+    @pytest.mark.asyncio
+    async def test_invented_price_not_backed_by_text_is_nulled(self, mock_db, make_event):
+        """Regression: the classify prompt's own JSON example amounts (10/20)
+        must not leak into the answer for an event with no stated price at all —
+        an LLM price with no literal match in price_hint/description is nulled."""
+        event = make_event()
+        event.price_hint = None
+        event.description_orig = "A test event with no price information at all."
+        raw = {**_BASE_RAW, "price_min": 10, "price_max": 20, "currency": "EUR"}
+        with patch(
+            "app.llm.classifier.llm_json",
+            AsyncMock(return_value=(raw, "groq/llama-3.3-70b-versatile")),
+        ):
+            ok = await classify_event(
+                event, mock_db, existing_classification=event.classification, prefetched=True
+            )
+
+        assert ok is True
+        assert event.price_min is None
+        assert event.price_max is None
+
+    @pytest.mark.asyncio
+    async def test_has_free_tier_accepted_when_backed_by_text(self, mock_db, make_event):
+        event = make_event()
+        event.price_hint = None
+        event.description_orig = "Adult ticket €14. Members enter free."
+        raw = {**_BASE_RAW, "price_min": 14, "price_max": 14, "currency": "EUR", "has_free_tier": True}
+        with patch(
+            "app.llm.classifier.llm_json",
+            AsyncMock(return_value=(raw, "groq/llama-3.3-70b-versatile")),
+        ):
+            ok = await classify_event(
+                event, mock_db, existing_classification=event.classification, prefetched=True
+            )
+
+        assert ok is True
+        assert event.price_min == 14.0
+        assert event.has_free_tier is True
+
+    @pytest.mark.asyncio
+    async def test_has_free_tier_rejected_without_free_keyword(self, mock_db, make_event):
+        """has_free_tier must not survive when the source text has no free
+        mention at all — an unenforced LLM claim would otherwise surface a
+        'free options available' hint with nothing behind it."""
+        event = make_event()
+        event.price_hint = None
+        event.description_orig = "Adult ticket €14."
+        raw = {**_BASE_RAW, "price_min": 14, "price_max": 14, "currency": "EUR", "has_free_tier": True}
+        with patch(
+            "app.llm.classifier.llm_json",
+            AsyncMock(return_value=(raw, "groq/llama-3.3-70b-versatile")),
+        ):
+            ok = await classify_event(
+                event, mock_db, existing_classification=event.classification, prefetched=True
+            )
+
+        assert ok is True
+        assert event.price_min == 14.0
+        assert event.has_free_tier is False
+
+    @pytest.mark.asyncio
+    async def test_has_free_tier_rejected_when_price_min_nulled(self, mock_db, make_event):
+        """has_free_tier=True alongside an invented (unbacked) price_min must
+        not survive once that price_min is nulled by validation."""
+        event = make_event()
+        event.price_hint = None
+        event.description_orig = "Members enter free. No further price stated."
+        raw = {**_BASE_RAW, "price_min": 14, "price_max": 14, "currency": "EUR", "has_free_tier": True}
+        with patch(
+            "app.llm.classifier.llm_json",
+            AsyncMock(return_value=(raw, "groq/llama-3.3-70b-versatile")),
+        ):
+            ok = await classify_event(
+                event, mock_db, existing_classification=event.classification, prefetched=True
+            )
+
+        assert ok is True
+        assert event.price_min is None
+        assert event.has_free_tier is False
 
     @pytest.mark.asyncio
     async def test_reclassify_without_price_does_not_clobber_existing(self, mock_db, make_event):
@@ -298,9 +380,11 @@ class TestClassifyEventPrice:
         self, mock_db, make_event
     ):
         """The net only widens. An LLM-reported price_min lower than any literal
-        price_hint amount (e.g. read from free-text description) must survive."""
+        price_hint amount, but backed by a literal amount in the description
+        (e.g. a student discount tier), must survive validation."""
         event = make_event()
         event.price_hint = "Adult €16, Family €32"
+        event.description_orig = "Student discount €5 available at the door."
         raw = {**_BASE_RAW, "price_min": 5, "price_max": 32, "currency": "EUR"}
         with patch(
             "app.llm.classifier.llm_json",

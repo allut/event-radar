@@ -219,7 +219,7 @@ async def refetch_event_details(db: AsyncSession) -> dict:
             summary["fetched"] += 1
             soup = BeautifulSoup(response.text, "html.parser")
             location = extract_jsonld_event_location(soup)
-            price_min, price_max, currency = extract_jsonld_event_offers(soup)
+            price_min, price_max, currency, has_free_tier = extract_jsonld_event_offers(soup)
 
             detail_name = location.get("venue_name") if location else None
             detail_address = location.get("venue_address") if location else None
@@ -345,6 +345,7 @@ async def refetch_event_details(db: AsyncSession) -> dict:
                 price_min=price_min,
                 price_max=price_max,
                 currency=currency,
+                has_free_tier=has_free_tier,
             )
             if not changed:
                 summary["unchanged"] += 1
@@ -375,6 +376,7 @@ def _reconcile(
     price_min: float | None,
     price_max: float | None,
     currency: str | None,
+    has_free_tier: bool = False,
 ) -> bool:
     """Apply the reconciliation rules to one event in place. Returns True if any
     field was changed. Increments the matching ``summary`` counters."""
@@ -392,6 +394,9 @@ def _reconcile(
         price_changed = True
     if currency is not None and event.currency != currency:
         event.currency = currency
+        price_changed = True
+    if has_free_tier and not event.has_free_tier:
+        event.has_free_tier = True
         price_changed = True
     if price_changed:
         summary["price_changed"] += 1

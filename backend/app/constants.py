@@ -385,6 +385,7 @@ TIME_MORNING_START = 6
 # LLM
 LLM_MAX_PROMPT_CHARS = 1200  # cap on event text passed to classification prompt
 IMPORTANT_INFO_MAX_CHARS = 1200  # cap on Piletilevi "important info" text in the prompt
+PRICE_CONTEXT_MAX_CHARS = 700  # cap on the price-lines digest passed to the prompt
 LLM_MAX_TOKENS = 400  # max completion tokens per LLM call
 LLM_REASONING_MAX_TOKENS = 600  # ceiling (project hard cap); leaves room for reasoning + answer
 LLM_DEDUP_CONFIDENCE_THRESHOLD: float = (
@@ -444,9 +445,15 @@ LLM_CLASSIFY_VENUE_FALLBACK = "unknown"
 LLM_CLASSIFY_DESC_FALLBACK = "(no description)"
 LLM_CLASSIFY_PRICE_HINT_FALLBACK = "not stated"
 LLM_CLASSIFY_IMPORTANT_INFO_FALLBACK = "(none)"
+LLM_CLASSIFY_PRICE_CONTEXT_FALLBACK = "(none)"
 LLM_CLASSIFY_EXPLICIT_DEFAULT = False
 LLM_CLASSIFY_NON_EVENT_DEFAULT = False
 LLM_CLASSIFY_IN_TARGET_CITY_DEFAULT = True
+LLM_CLASSIFY_HAS_FREE_TIER_DEFAULT = False
+# Tolerance (EUR) for matching an LLM-reported price against amounts literally
+# present in price_hint/price_context — guards against float round-trip noise
+# while still rejecting a genuinely invented number.
+LLM_CLASSIFY_PRICE_MATCH_TOLERANCE = 0.01
 LLM_CLASSIFY_PROMPT_TEMPLATE = """\
 Classify this Tallinn event. Respond with JSON only.
 
@@ -458,16 +465,18 @@ Venue: {venue}
 Description: {description}
 Important info: {important_info}
 Price info: {price_hint}
+Price details: {price_context}
 
 JSON format:
-{{"categories": ["music"], "vibes": ["underground", "intimate"], "why_go": {{"en": ["reason 1", "reason 2", "reason 3"], "et": ["põhjus 1", "põhjus 2", "põhjus 3"], "ru": ["причина 1", "причина 2", "причина 3"]}}, "quality": 0.8, "language": "et", "price_min": 10, "price_max": 20, "currency": "EUR", "explicit": false, "non_event": false, "in_target_city": true}}
+{{"categories": ["music"], "vibes": ["underground", "intimate"], "why_go": {{"en": ["reason 1", "reason 2", "reason 3"], "et": ["põhjus 1", "põhjus 2", "põhjus 3"], "ru": ["причина 1", "причина 2", "причина 3"]}}, "quality": 0.8, "language": "et", "price_min": null, "price_max": null, "currency": null, "has_free_tier": false, "explicit": false, "non_event": false, "in_target_city": true}}
 
 Rules:
 - "language" must be the ISO 639-1 code of the event's original language (et, en, ru, or other).
 - "quality" is 0.0-1.0 indicating how compelling the event is.
 - "why_go" must be a dict with keys "en", "et", "ru", each containing exactly 3 short bullets (max 15 words each).
-- "price_min"/"price_max": scan EVERY price amount appearing in the price info, description, and important info — across ALL ticket tiers regardless of label (adult, family, group, discount, student, senior, donation, etc.). Set price_min to the single SMALLEST amount and price_max to the single LARGEST amount. Never exclude a tier because it is a family/group/donation price. Use 0 for free/TASUTA/"free"; null only if no price is stated at all. Example: "Adult €16, Family €32, Discount €11, Donation €25" → price_min 11, price_max 32. (Also read prices glued into description/important info, e.g. "Täispilet 18 €", "Õpilane 12,50 €".) EXCLUDE booking/service/agent fees — amounts labelled teenustasu, agenditasu, service fee, booking fee, handling fee, agent fee, transaction fee are NOT ticket prices. Example: "agenditasu 3,20 €, Pilet 45 €" → price_min 45, price_max 45.
+- "price_min"/"price_max": every amount you report MUST be copied VERBATIM from a price literally written in "Price info", "Price details", the description, or the important info — NEVER estimate, guess, round, or invent a number that does not appear in the text. Scan EVERY price amount across ALL ticket tiers regardless of label (adult, family, group, discount, student, senior, donation, etc.). Set price_min to the single SMALLEST PAID amount and price_max to the single LARGEST amount. Never exclude a tier because it is a family/group/donation price. If EVERY tier is free (0/TASUTA/"free"), set price_min and price_max both to 0. If some tiers are free but at least one tier is paid (e.g. "Members free, Adult €16"), set "has_free_tier" true and set price_min/price_max from the PAID tiers only (not 0). Set price_min and price_max to null only if NO price of any kind is stated anywhere in the text — null is always correct over a guessed number. Example: "Adult €16, Family €32, Discount €11, Donation €25" → price_min 11, price_max 32. Example: "Member: free, Companion: free, Adult €14, +VR €17" → price_min 14, price_max 17, has_free_tier true. (Also read prices glued into description/important info, e.g. "Täispilet 18 €", "Õpilane 12,50 €".) EXCLUDE booking/service/agent fees — amounts labelled teenustasu, agenditasu, service fee, booking fee, handling fee, agent fee, transaction fee are NOT ticket prices, nor is a value merely "included" in a ticket (e.g. "VR experience valued at €2 within the ticket price"). Example: "agenditasu 3,20 €, Pilet 45 €" → price_min 45, price_max 45.
 - "currency" is the ISO 4217 code of the stated price (default EUR); null if no price is stated.
+- "has_free_tier" is true only for a PAID event (price_min > 0) that also has a free option for specific groups (members, companions, disabled visitors' companions, lap children, etc). False for a fully free event and false for a fully paid event with no free option.
 - "explicit" is true for pornographic or sexually explicit events: porn, striptease/strip clubs, escort, sex shows, AND adult sexual/kink/fetish/BDSM content — e.g. kink or fetish parties, femdom/dominatrix nights, sissification/crossdress-kink play, bondage/shibari, and sex/kink workshops or coaching centred on explicit acts (anal, strap-on, fisting). An "educational", "workshop", "panel", or "party" framing does NOT exempt sexually-explicit adult content. Normal nightlife, concerts, bars, LGBTQ+ pride events, and merely age-restricted (18+) shows are NOT explicit by themselves.
 - "non_event" is true for listings that are NOT a scheduled attendable event: gift cards/vouchers, merchandise (books, records, clothing), donations/support tickets, memberships/VIP/club cards, online-only webinars/online courses/webinar or course recordings, and open-ended service bookings. In-person workshops, trainings, and classes with a set time are NOT non_event.
 - "in_target_city" is false ONLY if the title/venue clearly places the event outside Tallinn, Estonia (another city or country, e.g. Pärnu, Tartu, Boston, London, Vietnam); otherwise true.

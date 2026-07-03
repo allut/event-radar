@@ -24,11 +24,14 @@ from app.constants import (
     LLM_CLASSIFY_BATCH_SIZE,
     LLM_CLASSIFY_DESC_FALLBACK,
     LLM_CLASSIFY_EXPLICIT_DEFAULT,
+    LLM_CLASSIFY_HAS_FREE_TIER_DEFAULT,
     LLM_CLASSIFY_IMPORTANT_INFO_FALLBACK,
     LLM_CLASSIFY_IN_TARGET_CITY_DEFAULT,
     LLM_CLASSIFY_LANGUAGE_CODE_MAX_LEN,
     LLM_CLASSIFY_NON_EVENT_DEFAULT,
+    LLM_CLASSIFY_PRICE_CONTEXT_FALLBACK,
     LLM_CLASSIFY_PRICE_HINT_FALLBACK,
+    LLM_CLASSIFY_PRICE_MATCH_TOLERANCE,
     LLM_CLASSIFY_PROMPT_TEMPLATE,
     LLM_CLASSIFY_VENUE_FALLBACK,
     LLM_CLASSIFY_WHY_GO_MAX_BULLETS,
@@ -39,12 +42,34 @@ from app.constants import (
     VALID_LOCALES,
     VALID_VIBES,
 )
-from app.ingestion.base import eur_price_bounds_from_text, html_to_text, normalize_currency, strip_fee_amounts
+from app.ingestion.base import (
+    eur_amounts_from_text,
+    eur_price_bounds_from_text,
+    html_to_text,
+    normalize_currency,
+    price_context_digest,
+    strip_fee_amounts,
+)
 from app.llm.router import LLMError, llm_json
 from app.models.models import Event, EventClassification
 from app.routers.utils import canonical_event_filter
 
+# Free-tier keywords across et/en/ru — a "0" reported by the LLM is only trusted
+# when one of these literally appears in the text; otherwise it's treated as an
+# invented number (see _validate_llm_prices).
+_FREE_KEYWORDS = ("free", "tasuta", "бесплатно")
+
 log = logging.getLogger(__name__)
+
+
+def _price_context(event: Event) -> str:
+    """Price-bearing lines from the FULL (untruncated) description + important_info.
+
+    Distilled separately from the truncated prompt fields so a price tier past
+    IMPORTANT_INFO_MAX_CHARS/LLM_MAX_PROMPT_CHARS (e.g. VAN GOGH's weekend/family
+    tiers up to €52, past the 1200-char important_info cut) still reaches the LLM.
+    """
+    return price_context_digest(event.description_orig, event.important_info)
 
 
 def _build_classify_prompt(event: Event) -> str:
@@ -54,12 +79,14 @@ def _build_classify_prompt(event: Event) -> str:
     price_hint = (event.price_hint or "").strip()[:PRICE_HINT_MAX_CHARS]
     important_info = strip_fee_amounts(html_to_text(event.important_info))
     important_info = (important_info or "").strip()[:IMPORTANT_INFO_MAX_CHARS]
+    price_context = _price_context(event)
     return LLM_CLASSIFY_PROMPT_TEMPLATE.format(
         title=event.title_orig,
         venue=event.venue_name or LLM_CLASSIFY_VENUE_FALLBACK,
         description=desc or LLM_CLASSIFY_DESC_FALLBACK,
         important_info=important_info or LLM_CLASSIFY_IMPORTANT_INFO_FALLBACK,
         price_hint=price_hint or LLM_CLASSIFY_PRICE_HINT_FALLBACK,
+        price_context=price_context or LLM_CLASSIFY_PRICE_CONTEXT_FALLBACK,
     )
 
 
@@ -115,6 +142,9 @@ def _parse_classification(raw: dict[str, Any]) -> dict[str, Any]:
     in_target_city = bool(
         raw.get("in_target_city", LLM_CLASSIFY_IN_TARGET_CITY_DEFAULT)
     )
+    has_free_tier = bool(
+        raw.get("has_free_tier", LLM_CLASSIFY_HAS_FREE_TIER_DEFAULT)
+    )
 
     return {
         "categories": cats,
@@ -129,6 +159,7 @@ def _parse_classification(raw: dict[str, Any]) -> dict[str, Any]:
         "explicit": explicit,
         "non_event": non_event,
         "in_target_city": in_target_city,
+        "has_free_tier": has_free_tier,
     }
 
 
@@ -139,6 +170,51 @@ def _parse_price(value: Any) -> float | None:
     except (TypeError, ValueError):
         return None
     return price if price is not None and price >= 0 else None
+
+
+def _validate_llm_prices(parsed: dict[str, Any], event: Event) -> None:
+    """Null out an LLM-reported price_min/price_max not backed by a literal amount
+    in the source text. Mutates ``parsed`` in place.
+
+    Guards against invented numbers — most notably the classify prompt's own JSON
+    example amounts leaking into the answer (observed as a verbatim "10"/"20" on
+    events with no stated price at all). A reported 0 is accepted only alongside a
+    free keyword or a literal "0" amount, since "0" is also the model's likely
+    guess for "no price found" despite the prompt instructing null for that case.
+
+    Only the €/EUR amounts are extractable from the text (see eur_amounts_from_text),
+    so — mirroring the existing hint-widening net's currency gate — a correctly
+    detected non-EUR price is trusted as-is rather than being nulled for "not
+    matching" a set this function has no way to build for that currency.
+    """
+    currency_val = parsed["currency"]
+    if currency_val is not None and currency_val.upper() != "EUR":
+        return
+
+    text = f"{event.price_hint or ''}\n{_price_context(event)}"
+    amounts = eur_amounts_from_text(strip_fee_amounts(text))
+    is_free_signaled = any(kw in text.lower() for kw in _FREE_KEYWORDS) or 0.0 in amounts
+
+    def _is_backed(value: float | None) -> bool:
+        if value is None:
+            return True
+        if value == 0:
+            return is_free_signaled
+        return any(abs(value - a) <= LLM_CLASSIFY_PRICE_MATCH_TOLERANCE for a in amounts)
+
+    if not _is_backed(parsed["price_min"]):
+        parsed["price_min"] = None
+    if not _is_backed(parsed["price_max"]):
+        parsed["price_max"] = None
+
+    # has_free_tier only makes sense for a paid event (price_min > 0) that also
+    # has a free-keyword/€0 mention in the text — otherwise it's an unenforced
+    # LLM claim that can survive even after its price_min was just nulled above,
+    # surfacing a "free options available" hint with no paid price behind it.
+    if parsed["has_free_tier"] and (
+        not parsed["price_min"] or not is_free_signaled
+    ):
+        parsed["has_free_tier"] = False
 
 
 async def classify_event(
@@ -179,6 +255,7 @@ async def classify_event(
     except Exception as exc:  # malformed LLM output shape
         log.warning("classify parse failed for event_id=%d: %s", event.id, exc)
         return False
+    _validate_llm_prices(parsed, event)
 
     if prefetched:
         existing = existing_classification
@@ -256,6 +333,7 @@ async def classify_event(
             event.price_max = parsed["price_max"]
         if parsed["currency"] is not None:
             event.currency = parsed["currency"]
+        event.has_free_tier = event.has_free_tier or parsed["has_free_tier"]
 
     event.is_explicit = event.is_explicit or parsed["explicit"]
     event.is_non_event = event.is_non_event or parsed["non_event"]

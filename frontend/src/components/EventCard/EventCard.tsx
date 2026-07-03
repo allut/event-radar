@@ -24,6 +24,7 @@ export interface EventData {
   price_min: number | null;
   price_max: number | null;
   currency: string | null;
+  has_free_tier: boolean;
   categories: string[];
   vibes: string[];
   why_go: string[];
@@ -42,7 +43,7 @@ export default function EventCard({ event, index, onFeedbackSent, variant = 'sta
   const { activeSignal, pending, sendFeedback } = useFeedback(event.id, onFeedbackSent);
   const isFeatured = variant === 'featured';
 
-  const price = formatPrice(event.price_min, event.price_max, event.currency, locale);
+  const price = formatPrice(event.price_min, event.price_max, event.currency, locale, event.has_free_tier);
   const imageSrc = safeUrl(event.image_url);
 
   return (

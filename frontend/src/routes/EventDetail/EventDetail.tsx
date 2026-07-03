@@ -68,7 +68,7 @@ export default function EventDetail() {
     );
   }
 
-  const price = formatPrice(data.price_min, data.price_max, data.currency, locale);
+  const price = formatPrice(data.price_min, data.price_max, data.currency, locale, data.has_free_tier);
   const imageSrc = safeUrl(data.image_url);
   const mapsUrl = data.lat && data.lng
     ? `https://www.google.com/maps/search/?api=1&query=${data.lat},${data.lng}`
@@ -117,6 +117,10 @@ export default function EventDetail() {
           </div>
 
           <h1 className={styles.title}>{data.title}</h1>
+
+          {data.has_free_tier && (
+            <p className={styles.freeTierHint}>{t('price_free_options_hint', locale)}</p>
+          )}
 
           {data.why_go.length > 0 && (
             <section className={styles.section}>

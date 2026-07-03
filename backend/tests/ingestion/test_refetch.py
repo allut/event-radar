@@ -33,6 +33,7 @@ def _event_html(
     lng: float | None = None,
     price: float | None = None,
     currency: str = "EUR",
+    sold_out: bool = False,
 ) -> str:
     """Build a fienta-style detail page with a schema.org Event JSON-LD block."""
     parts: list[str] = ['"@type":"Event"']
@@ -51,8 +52,10 @@ def _event_html(
             loc.append('"address":{' + ",".join(addr) + "}")
         parts.append('"location":{' + ",".join(loc) + "}")
     if price is not None:
+        availability = "SoldOut" if sold_out else "InStock"
         parts.append(
-            f'"offers":{{"@type":"Offer","price":"{price}","priceCurrency":"{currency}"}}'
+            f'"offers":{{"@type":"Offer","price":"{price}","priceCurrency":"{currency}",'
+            f'"availability":"http://schema.org/{availability}"}}'
         )
     return _ld_script("{" + ",".join(parts) + "}")
 
@@ -83,6 +86,7 @@ def _future_event(**overrides) -> MagicMock:
     e.price_min = None
     e.price_max = None
     e.currency = "EUR"
+    e.has_free_tier = False
     e.status = "published"
     e.is_explicit = False
     e.is_non_event = False
@@ -149,6 +153,31 @@ class TestPriceReconcile:
         summary = await _run(mock_db, event, _event_html(name="Test Venue", street="Old Street 1"))
         assert event.price_min == Decimal("9.00")
         assert summary["price_changed"] == 0
+
+    @pytest.mark.asyncio
+    async def test_sold_out_placeholder_leaves_stored_price(self, mock_db):
+        """A sold-out event's collapsed {price: 0, availability: SoldOut} offer
+        must not overwrite the listing's real stored price with a fake free one."""
+        event = _future_event(price_min=Decimal("39.00"), price_max=None)
+        summary = await _run(mock_db, event, _event_html(price=0.0, sold_out=True))
+        assert event.price_min == Decimal("39.00")
+        assert summary["price_changed"] == 0
+        assert summary["no_data"] == 1
+
+    @pytest.mark.asyncio
+    async def test_free_tier_offer_flags_event(self, mock_db):
+        event = _future_event(price_min=None, price_max=None, has_free_tier=False)
+        html = _ld_script(
+            '{"@type":"Event","offers":['
+            '{"@type":"Offer","price":"0","priceCurrency":"EUR",'
+            '"availability":"http://schema.org/InStock"},'
+            '{"@type":"Offer","price":"17","priceCurrency":"EUR",'
+            '"availability":"http://schema.org/InStock"}'
+            "]}"
+        )
+        await _run(mock_db, event, html)
+        assert event.price_min == 17.0
+        assert event.has_free_tier is True
 
 
 # --- address <-> coords coupling --------------------------------------------

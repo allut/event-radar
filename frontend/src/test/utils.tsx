@@ -49,6 +49,7 @@ export function makeEvent(overrides: Partial<EventData> = {}): EventData {
     price_min: null,
     price_max: null,
     currency: null,
+    has_free_tier: false,
     categories: ['music'],
     vibes: ['vibrant'],
     why_go: [],

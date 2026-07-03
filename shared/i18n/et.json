@@ -41,6 +41,9 @@
     "tickets": "Piletid →",
     "get_tickets": "Hangi piletid →",
     "price_free": "Tasuta",
+    "price_free_with_paid": "Tasuta · tasulised piletid kuni {amount}",
+    "price_free_options": "tasuta valikud saadaval",
+    "price_free_options_hint": "Mõnele rühmale on tasuta valikud saadaval — kontrolli piletitingimusi.",
     "signal_like": "Meeldib",
     "signal_dislike": "Ei meeldi",
     "signal_bookmark": "Järjehoidja",
@@ -111,7 +114,9 @@
     "digest.subject_template": "Sinu päevane viisik — {date}",
     "digest.subject_label": "Sinu päevane viisik",
     "digest.price_free": "Tasuta",
+    "digest.price_free_with_paid": "Tasuta · tasulised piletid kuni €{amount}",
     "digest.price_from": "Alates €{amount}",
+    "digest.price_free_options": "tasuta valikud saadaval",
     "digest.unsubscribe": "Tühista tellimus",
     "digest.no_events": "Täna pole üritusi."
   }
