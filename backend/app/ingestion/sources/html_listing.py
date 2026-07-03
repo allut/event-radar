@@ -9,7 +9,7 @@ from typing import Any
 from urllib.parse import urlencode, urlsplit
 
 import httpx
-from bs4 import BeautifulSoup, Tag
+from bs4 import BeautifulSoup, NavigableString, Tag
 
 from app.constants import (
     DEFAULT_CURRENCY,
@@ -481,7 +481,20 @@ def _piletilevi_important_info(soup: BeautifulSoup, locale: str = "en") -> str |
     block = heading.find_parent("div", class_="white-rounded-block")
     if block is None:
         return None
-    inner_html = "".join(str(child) for child in block.children if child is not heading)
+    # Piletilevi's Nuxt SSR markup leaves bare "[" / "]" text nodes as direct
+    # children of the block (fragment-boundary artifacts) — real content is
+    # always tag-wrapped (<p>, <strong>, ...), so a bare text node matching
+    # exactly one of these is noise, not content.
+    inner_html = "".join(
+        str(child)
+        for child in block.children
+        if child is not heading
+        and not (
+            isinstance(child, NavigableString)
+            and not isinstance(child, Tag)
+            and child.strip() in ("[", "]")
+        )
+    )
     raw = sanitize_html(inner_html)
     return raw.strip() or None if raw else None
 

@@ -466,6 +466,17 @@ PILETILEVI_DETAIL_ET_WITH_IMPORTANT_INFO_HTML = """
 """
 
 
+PILETILEVI_DETAIL_WITH_BRACKET_ARTIFACT_HTML = """
+<html><body>
+  <div class="event__description">A wonderful jazz evening with local musicians.</div>
+  <div class="white-rounded-block">
+    <h2 class="text-20 font-bold pb-6">Important information</h2>
+    [<p>Ticket prices include fees.</p><p>Age limit: 18+.</p>]
+  </div>
+</body></html>
+"""
+
+
 def _piletilevi_adapter():
     return PiletileviAdapter(
         _make_source(slug="piletilevi", url=settings.PILETILEVI_BASE_URL)
@@ -672,6 +683,19 @@ class TestPiletileviParseDetail:
         soup = BeautifulSoup(PILETILEVI_DETAIL_WITH_IMPORTANT_INFO_HTML, "html.parser")
         result = _piletilevi_important_info(soup, "ru")
         assert result == "Age limit: 18+. Language: English. Duration: 2 hours."
+
+    def test_stray_bracket_fragment_artifacts_excluded(self):
+        # Piletilevi's Nuxt SSR markup wraps the block's real <p> content in
+        # bare "[" / "]" text-node siblings (fragment-boundary artifacts).
+        # These must not leak into the stored important_info.
+        soup = BeautifulSoup(
+            PILETILEVI_DETAIL_WITH_BRACKET_ARTIFACT_HTML, "html.parser"
+        )
+        result = _piletilevi_important_info(soup, "en")
+        assert result is not None
+        assert not result.startswith("[")
+        assert not result.endswith("]")
+        assert result == "<p>Ticket prices include fees.</p><p>Age limit: 18+.</p>"
 
 
 # ---------------------------------------------------------------------------

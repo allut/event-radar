@@ -181,6 +181,64 @@ class TestSanitizeHtml:
         assert result is not None
         assert result == "a\xa0\xa0b"
 
+    def test_block_boundary_leading_space_stripped(self) -> None:
+        # ECH-style performer list: <h4> heading followed by tab-indented name,
+        # then <br>-separated lines (event 1580's "Esitajad:" block). A leading
+        # space right after </h4> or a <br> is a formatting artifact, not a
+        # real word-boundary separator, so it must not survive.
+        html = (
+            "<h4>Esitajad:</h4>\n\t\t\t\t\t\t\t\tMomir Novakovic (akordion)<br>\n"
+            "Villu Vihermäe (viola da gamba)<br>\n"
+            "Saale Fischer (klavessiin)\t\t\t\t\t\t\t<br>\n"
+            "<p>Kavas:<br>\nMarais, Rameau, Couperin, Royer, Forqueray</p>"
+        )
+        result = sanitize_html(html)
+        assert result is not None
+        assert "</h4>Momir Novakovic" in result
+        assert "<br>Villu Vihermäe" in result
+        assert "<br><p>Kavas:<br>Marais" in result
+        assert " <br>" not in result
+        assert "<br> " not in result
+
+    def test_inline_tag_spacing_preserved(self) -> None:
+        # Word-boundary spaces around inline tags (a, strong, em, ...) are
+        # real content, not formatting artifacts — must survive even though
+        # they touch a tag boundary, unlike block-boundary tags (br/p/h4/...).
+        html = '<p>visit our <a href="https://example.com">website</a> today</p>'
+        result = sanitize_html(html)
+        assert result is not None
+        assert "visit our <a" in result
+        assert "website</a> today" in result
+
+    def test_word_separator_space_inside_inline_tag_preserved(self) -> None:
+        # A word-boundary space that is the first/last character *inside* an
+        # inline tag (not just adjacent to it) must survive — the text node
+        # has no previous/next sibling, but its parent is inline, so it is
+        # not a block boundary. Regression: an earlier version stripped this
+        # and merged "before"+"important" into "beforeimportant".
+        result = sanitize_html("<p>before<b> important</b> after</p>")
+        assert result is not None
+        assert "before<b> important</b> after" in result
+
+        result2 = sanitize_html("<p>before <b>important </b>after</p>")
+        assert result2 is not None
+        assert "before <b>important </b>after" in result2
+
+    def test_block_edge_inline_wrapper_space_stripped(self) -> None:
+        # An inline tag wrapping the very first/last content of a block, with
+        # its own leading/trailing space, is still a block-edge artifact even
+        # though the text node's *immediate* parent is inline — the search
+        # must walk up through the inline ancestor chain to find this.
+        # Regression: an earlier version only checked the immediate parent
+        # and left these stray spaces in place.
+        result = sanitize_html("<p><b> Hello world</b> after</p>")
+        assert result is not None
+        assert result == "<p><b>Hello world</b> after</p>"
+
+        result2 = sanitize_html("<p>before <b>trailing space here </b></p>")
+        assert result2 is not None
+        assert result2 == "<p>before <b>trailing space here</b></p>"
+
     def test_edge_nbsp_preserved(self) -> None:
         # A bare .strip() also treats U+00A0 as whitespace and would delete a
         # leading/trailing &nbsp; — must survive at the string boundary too.

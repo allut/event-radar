@@ -15,7 +15,7 @@ from urllib.parse import urlsplit
 
 import httpx
 import nh3
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, Tag
 from tenacity import (
     RetryCallState,
     retry,
@@ -38,6 +38,7 @@ from app.constants import (
     NON_EVENT_TITLE_KEYWORDS,
     NON_EVENT_VENUE_KEYWORDS,
     FIENTA_CITY_FILTER,
+    HTML_BLOCK_BOUNDARY_TAGS,
     HTML_BLOCK_TAGS_TO_BREAK,
     HTML_SANITIZE_ALLOWED_ATTRS,
     HTML_SANITIZE_ALLOWED_TAGS,
@@ -267,6 +268,25 @@ def _block_tags_to_breaks(html: str) -> str:
 _WHITESPACE_RUN_RE = re.compile(r"[ \t\n\r\f\v]+")
 
 
+def _at_block_edge(node: Any, inline_tags: frozenset[str], leading: bool) -> bool:
+    """Whether node sits at a true block boundary on the given side.
+
+    Walks up through any chain of inline-tag ancestors (a, b, em, ...) so a
+    wrapper sitting at the very start/end of a block — e.g. the <b> in
+    "<p><b> Hello</b> after</p>" — still counts as a boundary, while a real
+    adjacent text/inline sibling (a genuine word separator) does not.
+    """
+    element: Any = node
+    while True:
+        sibling = element.previous_sibling if leading else element.next_sibling
+        if sibling is not None:
+            return isinstance(sibling, Tag) and sibling.name in HTML_BLOCK_BOUNDARY_TAGS
+        parent = element.parent
+        if not isinstance(parent, Tag) or parent.name not in inline_tags:
+            return True
+        element = parent
+
+
 def _collapse_text_whitespace(html: str) -> str:
     """Collapse whitespace runs within text nodes, leaving tags/attributes untouched.
 
@@ -279,9 +299,26 @@ def _collapse_text_whitespace(html: str) -> str:
     &nbsp; entities into) — nbsp is intentional spacing from the source content,
     not formatting noise, and Python's \\s would otherwise silently collapse it.
     """
+    inline_tags = HTML_SANITIZE_ALLOWED_TAGS - HTML_BLOCK_BOUNDARY_TAGS
     soup = BeautifulSoup(html, "html.parser")
     for node in soup.find_all(string=True):
-        node.replace_with(_WHITESPACE_RUN_RE.sub(" ", node))
+        collapsed = _WHITESPACE_RUN_RE.sub(" ", node)
+        # A single space touching a block boundary (line start/end, or the
+        # edge of the whole fragment) is a leftover formatting artifact, not
+        # a word-boundary separator — strip it so lines don't visibly start
+        # or end with a stray space under the frontend's white-space:
+        # pre-wrap. Inline tags (a, b, em, ...) are not boundaries: a real
+        # separator like "text <a>link</a> more" — or a space living just
+        # inside one, e.g. "before<b> after</b>" — must survive. When the
+        # node has no sibling on a side, the search walks up through any
+        # chain of inline ancestors (e.g. "<p><b> Hello</b> after</p>") to
+        # find the true edge, since an inline wrapper sitting at the very
+        # start/end of a block is still a block boundary.
+        if _at_block_edge(node, inline_tags, leading=True):
+            collapsed = collapsed.lstrip(" ")
+        if _at_block_edge(node, inline_tags, leading=False):
+            collapsed = collapsed.rstrip(" ")
+        node.replace_with(collapsed)
     # BeautifulSoup serializes void elements as "<br/>"; normalize back to the
     # bare "<br>" form the rest of sanitize_html and its callers expect.
     return re.sub(r"<br\s*/>", "<br>", str(soup))

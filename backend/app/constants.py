@@ -86,6 +86,16 @@ HTML_BLOCK_TAGS_TO_BREAK: frozenset[str] = frozenset({"div"})
 # Cap runs of consecutive <br> (from nested/empty wrapper divs) at this many.
 HTML_SANITIZE_MAX_CONSECUTIVE_BR = 2
 
+# Line/block-boundary tags within HTML_SANITIZE_ALLOWED_TAGS. A text node
+# touching one of these on a side has its whitespace stripped on that side
+# (post-collapse) so lines don't visibly start/end with a stray space under
+# the frontend's white-space: pre-wrap. Excludes inline tags (a, b, em, i,
+# span, strong, u) — a word-boundary space like "text <a>link</a> more" must
+# survive.
+HTML_BLOCK_BOUNDARY_TAGS: frozenset[str] = frozenset(
+    {"br", "p", "h3", "h4", "li", "ul", "ol", "blockquote"}
+)
+
 # Word-boundary keyword prefilter for sexually-explicit listings (en/et/ru), checked
 # at ingest time against title+description+venue. Kept tight and phrase-based to
 # avoid false positives ("sex" -> "Sussex", "strip" -> "comic strip"). Not exhaustive
