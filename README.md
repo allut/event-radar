@@ -8,11 +8,12 @@ The whole platform is designed to run on **free-tier infrastructure** at a stead
 
 ## Features
 
-- **Multi-source ingestion** — Fienta API, HTML listing scrapers (Piletilevi, KUMU, Estonia Concert Hall) sharing a common adapter, and inbound newsletter parsing via email webhook. A Nominatim geocoding backfill fills in venue coordinates that sources don't provide, and a daily detail-refetch sync reconciles venue/price/coordinates against each event's source page.
+- **Multi-source ingestion** — Fienta API, HTML listing scrapers (Piletilevi, KUMU, Estonia Concert Hall) sharing a common adapter, and inbound newsletter parsing via email webhook. A Nominatim geocoding backfill fills in venue coordinates that sources don't provide, a daily detail-refetch sync reconciles venue/price/coordinates against each event's source page, and a bilingual-content splitter breaks apart source pages that concatenate two languages in one field.
 - **Two-stage deduplication** — a cheap SQL + fuzzy pre-filter narrows candidate pairs, then an LLM tiebreaker resolves only the survivors. Decisions are cached by content hash to avoid repeat LLM calls.
-- **LLM classification** — assigns a fixed 12-category / 10-vibe taxonomy, a quality score, an explicit-content flag, a parsed price range, and a localized 3-bullet "why go?" rationale, with a Groq → Cerebras → Mistral provider fallback chain.
+- **LLM classification** — assigns a fixed 12-category / 10-vibe taxonomy, a quality score, an explicit-content flag, a non-event flag, a parsed price range, and a localized 3-bullet "why go?" rationale, with a Groq → Cerebras → Mistral provider fallback chain.
 - **3-layer NSFW filter** — a keyword prefilter at ingest time, an LLM-assigned explicit-content flag, and a publish gate that excludes flagged events from the published feed.
-- **Publish gate** — classified events are promoted to `published` only once they clear a minimum quality score, pass the NSFW check, and have a future start date.
+- **3-layer non-event filter** — the same pattern applied to gift cards/merch/webinars, so the published feed only surfaces real attendable events.
+- **Publish gate** — classified events are promoted to `published` only once they clear a minimum quality score, pass the NSFW and non-event checks, pass a location check, haven't already ended, and (if geocoded) fall within the Tallinn region.
 - **Persona-based personalization** — users pick a primary and optional secondary persona at onboarding; like/dislike/bookmark signals continuously retune their ranking.
 - **Daily 5 builder** — a scheduled job scores upcoming events and writes a diverse five-event feed per user each morning, then emails a digest.
 - **Magic-link auth** — passwordless sign-in with short-lived, single-use links and revocable 7-day session tokens. No third-party auth provider.
