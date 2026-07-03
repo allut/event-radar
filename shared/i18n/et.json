@@ -118,6 +118,8 @@
     "digest.price_from": "Alates €{amount}",
     "digest.price_free_options": "tasuta valikud saadaval",
     "digest.unsubscribe": "Tühista tellimus",
-    "digest.no_events": "Täna pole üritusi."
+    "digest.no_events": "Täna pole üritusi.",
+    "digest.open_feed": "Ava oma voog →",
+    "digest.tickets": "Hangi piletid →"
   }
 }

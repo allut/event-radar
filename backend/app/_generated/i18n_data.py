@@ -15,6 +15,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "digest.price_free_options": "free options available",
         "digest.unsubscribe": "Unsubscribe",
         "digest.no_events": "No events today.",
+        "digest.open_feed": "Open your feed →",
+        "digest.tickets": "Get tickets →",
     },
     "et": {
         "email.magic_link.subject": "Sinu Event Radar sisselogimislink",
@@ -27,6 +29,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "digest.price_free_options": "tasuta valikud saadaval",
         "digest.unsubscribe": "Tühista tellimus",
         "digest.no_events": "Täna pole üritusi.",
+        "digest.open_feed": "Ava oma voog →",
+        "digest.tickets": "Hangi piletid →",
     },
     "ru": {
         "email.magic_link.subject": "Ваша ссылка для входа в Event Radar",
@@ -39,6 +43,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "digest.price_free_options": "есть бесплатные варианты",
         "digest.unsubscribe": "Отписаться",
         "digest.no_events": "Сегодня нет событий.",
+        "digest.open_feed": "Открыть ленту →",
+        "digest.tickets": "Получить билеты →",
     },
 }
 

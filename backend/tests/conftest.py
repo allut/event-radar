@@ -67,6 +67,7 @@ def make_event():
         description_orig: str = "A test event",
         why_go: list[str] | None = None,
         why_go_localized: dict | None = None,
+        image_url: str | None = None,
     ) -> MagicMock:
         if starts_at is None:
             starts_at = datetime(2026, 5, 15, 18, 0, 0, tzinfo=timezone.utc)
@@ -85,7 +86,7 @@ def make_event():
         e.lat = lat
         e.lng = lng
         e.url = "https://example.com"
-        e.image_url = None
+        e.image_url = image_url
         e.price_min = price_min
         e.price_max = None
         e.currency = DEFAULT_CURRENCY

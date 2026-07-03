@@ -94,8 +94,8 @@ class TestBuildDigestHtml:
         events = [make_event(why_go=bullets)]
         html = build_digest_html(events, date(2026, 5, 20), "en", "https://eventradar.ee")
         # Only first 3 should appear
-        assert "<li>A</li>" in html
-        assert "<li>D</li>" not in html
+        assert "&#9670;</span>A</p>" in html
+        assert "&#9670;</span>D</p>" not in html
 
     def test_free_event_en(self, make_event):
         events = [make_event(price_min=0.0)]
@@ -182,6 +182,34 @@ class TestBuildDigestHtml:
         )]
         html = build_digest_html(events, date(2026, 5, 20), "et", "https://eventradar.ee")
         assert "bullets fallback" in html
+
+    def test_event_image_rendered_when_present(self, make_event):
+        events = [make_event(image_url="https://example.com/photo.jpg")]
+        html = build_digest_html(events, date(2026, 5, 20), "en", "https://eventradar.ee")
+        assert '<img src="https://example.com/photo.jpg"' in html
+
+    def test_branded_band_rendered_when_no_image(self, make_event):
+        events = [make_event(image_url=None)]
+        html = build_digest_html(events, date(2026, 5, 20), "en", "https://eventradar.ee")
+        assert "&#9670;" in html
+        assert "MUSIC" in html  # default classification category from make_event
+        assert "<img" not in html
+
+    def test_feed_button_links_to_frontend_root(self, make_event):
+        html = build_digest_html([make_event()], date(2026, 5, 20), "en", "https://eventradar.ee")
+        assert 'href="https://eventradar.ee"' in html
+        assert "Open your feed" in html
+
+    def test_tickets_link_present_when_event_url_set(self, make_event):
+        events = [make_event()]
+        html = build_digest_html(events, date(2026, 5, 20), "en", "https://eventradar.ee")
+        assert 'href="https://example.com"' in html
+        assert "Get tickets" in html
+
+    def test_price_pill_rendered_for_paid_event(self, make_event):
+        events = [make_event(price_min=12.0)]
+        html = build_digest_html(events, date(2026, 5, 20), "en", "https://eventradar.ee")
+        assert "From €12" in html
 
 
 # ---------------------------------------------------------------------------

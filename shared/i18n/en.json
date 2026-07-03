@@ -118,6 +118,8 @@
     "digest.price_from": "From €{amount}",
     "digest.price_free_options": "free options available",
     "digest.unsubscribe": "Unsubscribe",
-    "digest.no_events": "No events today."
+    "digest.no_events": "No events today.",
+    "digest.open_feed": "Open your feed →",
+    "digest.tickets": "Get tickets →"
   }
 }

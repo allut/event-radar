@@ -22,13 +22,18 @@ from app.constants import (
     RESEND_TIMEOUT_SECONDS,
     TALLINN_TZ,
 )
+from app.email import styles
 from app.email.styles import DIGEST_CSS
 from app.email.templates import (
     DIGEST_DOCUMENT,
     EVENT_BLOCK,
     EVENT_BULLET,
-    EVENT_PRICE,
+    EVENT_IMAGE,
+    EVENT_IMAGE_BAND,
+    EVENT_PRICE_PILL,
+    EVENT_TICKETS_ROW,
     EVENT_TITLE_LINK,
+    EVENT_VENUE,
 )
 from app.i18n import day_name, month_name, t, ti
 from app.models.models import DailyFeed, Event, User
@@ -72,9 +77,15 @@ def build_digest_html(
     for event in events:
         cl = event.classification
         bullets = resolve_why_go(cl, locale)[:DIGEST_MAX_WHY_GO_BULLETS]
-        time_str = _format_event_time(event.starts_at, locale)
+        time_str = html_lib.escape(_format_event_time(event.starts_at, locale))
+        event_href = f"{frontend_url}/events/{event.id}"
+
         venue_str = html_lib.escape(event.venue_name or "")
-        meta = f"{time_str} · {venue_str}" if venue_str else time_str
+        venue_html = (
+            EVENT_VENUE.format(s_venue=styles.S_VENUE, venue=venue_str)
+            if venue_str
+            else ""
+        )
 
         if event.price_min is not None:
             price_val = float(event.price_min)
@@ -92,21 +103,66 @@ def build_digest_html(
                     price_str = f"{price_str} · {t('digest.price_free_options', locale)}"
         else:
             price_str = ""
+        price_html = (
+            EVENT_PRICE_PILL.format(s_price_pill=styles.S_PRICE_PILL, price=price_str)
+            if price_str
+            else ""
+        )
+
+        if event.image_url:
+            image_html = EVENT_IMAGE.format(
+                event_href=event_href,
+                image_url=html_lib.escape(event.image_url, quote=True),
+                title=html_lib.escape(resolve_title(event, locale)),
+                s_img=styles.S_IMG,
+            )
+        else:
+            category = (cl.categories[0] if cl and cl.categories else "event").replace("_", " ")
+            image_html = EVENT_IMAGE_BAND.format(
+                event_href=event_href,
+                s_band=styles.S_BAND,
+                s_band_diamond=styles.S_BAND_DIAMOND,
+                s_band_category=styles.S_BAND_CATEGORY,
+                category=html_lib.escape(category.upper()),
+            )
 
         safe_title = html_lib.escape(resolve_title(event, locale))
         title_link = EVENT_TITLE_LINK.format(
-            href=f"{frontend_url}/events/{event.id}", title=safe_title
+            href=event_href, title=safe_title, s_title_link=styles.S_TITLE_LINK
         )
         bullets_html = "".join(
-            EVENT_BULLET.format(text=html_lib.escape(b)) for b in bullets
+            EVENT_BULLET.format(
+                text=html_lib.escape(b),
+                s_bullet_row=styles.S_BULLET_ROW,
+                s_diamond=styles.S_DIAMOND,
+            )
+            for b in bullets
         )
-        price_html = EVENT_PRICE.format(price=price_str) if price_str else ""
+        tickets_row_html = (
+            EVENT_TICKETS_ROW.format(
+                s_footer_row=styles.S_FOOTER_ROW,
+                s_tickets_link=styles.S_TICKETS_LINK,
+                href=html_lib.escape(event.url, quote=True),
+                label=t("digest.tickets", locale),
+            )
+            if event.url
+            else ""
+        )
+
         event_blocks.append(
             EVENT_BLOCK.format(
-                title_link=title_link,
-                meta=meta,
-                bullets_html=bullets_html,
+                s_card_wrap=styles.S_CARD_WRAP,
+                s_card=styles.S_CARD,
+                image_html=image_html,
+                s_body=styles.S_BODY,
+                s_meta=styles.S_META,
+                s_time=styles.S_TIME,
+                time_str=time_str,
+                venue_html=venue_html,
                 price_html=price_html,
+                title_link=title_link,
+                bullets_html=bullets_html,
+                tickets_row_html=tickets_row_html,
             )
         )
 
@@ -119,9 +175,22 @@ def build_digest_html(
 
     return DIGEST_DOCUMENT.format(
         css=DIGEST_CSS,
+        s_page=styles.S_PAGE,
+        s_container=styles.S_CONTAINER,
+        s_header_pad=styles.S_HEADER_PAD,
+        s_eyebrow=styles.S_EYEBROW,
+        s_h1=styles.S_H1,
         subject_label=subject_label,
         date_str=date_str,
+        s_date=styles.S_DATE,
+        s_feed_btn_wrap=styles.S_FEED_BTN_WRAP,
+        s_feed_btn=styles.S_FEED_BTN,
+        feed_url=frontend_url,
+        open_feed_label=t("digest.open_feed", locale),
+        s_events_pad=styles.S_EVENTS_PAD,
         events_html=events_html,
+        s_footer=styles.S_FOOTER,
+        s_footer_link=styles.S_FOOTER_LINK,
         unsubscribe_url=unsubscribe_url,
         settings_label=settings_label,
     )

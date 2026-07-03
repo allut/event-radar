@@ -118,6 +118,8 @@
     "digest.price_from": "От €{amount}",
     "digest.price_free_options": "есть бесплатные варианты",
     "digest.unsubscribe": "Отписаться",
-    "digest.no_events": "Сегодня нет событий."
+    "digest.no_events": "Сегодня нет событий.",
+    "digest.open_feed": "Открыть ленту →",
+    "digest.tickets": "Получить билеты →"
   }
 }
