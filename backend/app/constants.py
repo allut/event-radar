@@ -106,6 +106,31 @@ EXPLICIT_KEYWORDS: frozenset[str] = frozenset(
         "sex shop",
         "brothel",
         "swinger",
+        # kink/BDSM (en) — unambiguous terms only. Bare "kink"/"kinky" and
+        # "fetish"/"fetiš" were tried and dropped: they false-positived on a
+        # dance-theater piece referencing "fetish dance scene" and a
+        # nonsexual cuddle-party event whose host bio mentions "kink coach".
+        # Layer-1 flags skip the LLM call entirely (see classifier.py), so
+        # there is no Layer-2 backstop for a Layer-1 false positive — a
+        # flagged-here event never gets reviewed again. Ambiguous kink
+        # references are left to Layer 2 (LLM), which now explicitly covers
+        # them (see LLM_CLASSIFY_PROMPT_TEMPLATE).
+        "bdsm",
+        "femdom",
+        "dominatrix",
+        "fisting",
+        "strap-on",
+        "strapon",
+        "shibari",
+        "bondage",
+        "sissification",
+        "sissy play",
+        "play party",
+        "playparty",
+        "orgy",
+        "gangbang",
+        "anal sex",
+        "anal play",
         # et
         "porno",
         "striptiis",
@@ -116,6 +141,8 @@ EXPLICIT_KEYWORDS: frozenset[str] = frozenset(
         "intiim teenused",
         "bordell",
         "swinger",
+        "anaalseks",
+        "dominatriks",
         # ru
         "порно",
         "стриптиз",
@@ -128,6 +155,9 @@ EXPLICIT_KEYWORDS: frozenset[str] = frozenset(
         "интим услуги",
         "бордель",
         "свингер",
+        "бдсм",
+        "доминатрикс",
+        "анальный секс",
     }
 )
 
@@ -438,7 +468,7 @@ Rules:
 - "why_go" must be a dict with keys "en", "et", "ru", each containing exactly 3 short bullets (max 15 words each).
 - "price_min"/"price_max": scan EVERY price amount appearing in the price info, description, and important info — across ALL ticket tiers regardless of label (adult, family, group, discount, student, senior, donation, etc.). Set price_min to the single SMALLEST amount and price_max to the single LARGEST amount. Never exclude a tier because it is a family/group/donation price. Use 0 for free/TASUTA/"free"; null only if no price is stated at all. Example: "Adult €16, Family €32, Discount €11, Donation €25" → price_min 11, price_max 32. (Also read prices glued into description/important info, e.g. "Täispilet 18 €", "Õpilane 12,50 €".) EXCLUDE booking/service/agent fees — amounts labelled teenustasu, agenditasu, service fee, booking fee, handling fee, agent fee, transaction fee are NOT ticket prices. Example: "agenditasu 3,20 €, Pilet 45 €" → price_min 45, price_max 45.
 - "currency" is the ISO 4217 code of the stated price (default EUR); null if no price is stated.
-- "explicit" is true ONLY for pornographic or sexually explicit events (porn, striptease/strip clubs, fetish, escort, sex shows). Normal nightlife, concerts, bars, and age-restricted shows are NOT explicit.
+- "explicit" is true for pornographic or sexually explicit events: porn, striptease/strip clubs, escort, sex shows, AND adult sexual/kink/fetish/BDSM content — e.g. kink or fetish parties, femdom/dominatrix nights, sissification/crossdress-kink play, bondage/shibari, and sex/kink workshops or coaching centred on explicit acts (anal, strap-on, fisting). An "educational", "workshop", "panel", or "party" framing does NOT exempt sexually-explicit adult content. Normal nightlife, concerts, bars, LGBTQ+ pride events, and merely age-restricted (18+) shows are NOT explicit by themselves.
 - "non_event" is true for listings that are NOT a scheduled attendable event: gift cards/vouchers, merchandise (books, records, clothing), donations/support tickets, memberships/VIP/club cards, online-only webinars/online courses/webinar or course recordings, and open-ended service bookings. In-person workshops, trainings, and classes with a set time are NOT non_event.
 - "in_target_city" is false ONLY if the title/venue clearly places the event outside Tallinn, Estonia (another city or country, e.g. Pärnu, Tartu, Boston, London, Vietnam); otherwise true.
 - Only use values from the allowed lists for categories and vibes."""

@@ -71,6 +71,50 @@ class TestIsExplicitText:
     def test_empty_string_is_not_explicit(self):
         assert is_explicit_text("") is False
 
+    # Kink/BDSM (added after event 563 audit — "Butt Stuff Workshop")
+    def test_positive_strap_on_fisting_description(self):
+        assert is_explicit_text(
+            "Butt Stuff Workshop",
+            "Talking about anal pleasure, strap-on play and fisting.",
+        ) is True
+
+    def test_positive_femdom_party_title(self):
+        assert is_explicit_text("Kultus FemDom party: Crossdress & Sissyfication") is True
+
+    def test_positive_bdsm_keyword(self):
+        assert is_explicit_text("Intro to BDSM for beginners") is True
+
+    def test_positive_anal_sex_phrase(self):
+        assert is_explicit_text("Workshop", "A night about anal sex and pleasure.") is True
+
+    def test_negative_swing_jazz_concert(self):
+        assert is_explicit_text("Swing Jazz Night at the Hall") is False
+
+    def test_negative_analysis_word_boundary(self):
+        assert is_explicit_text("Financial analysis workshop") is False
+
+    def test_negative_kink_bare_word_not_flagged(self):
+        # Bare "kink"/"kinky" dropped after false-positiving on a nonsexual
+        # cuddle-party event whose host bio says "sex and kink coach" —
+        # Layer-1 flags skip the LLM call entirely, so there's no backstop
+        # for a Layer-1 false positive.
+        assert is_explicit_text(
+            "Cuddle party", "Hosted by a sex and kink coach. Nonsexual touch only."
+        ) is False
+
+    def test_negative_fetish_bare_word_not_flagged(self):
+        # Bare "fetish"/"fetiš" dropped after false-positiving on a
+        # dance-theater piece referencing the "fetish dance scene".
+        assert is_explicit_text(
+            "Flex", "The artist works in the club, fetish, and pole dance scene."
+        ) is False
+
+    def test_positive_multiword_phrase_across_literal_newline(self):
+        # Multi-word keywords ("anal sex", "sissy play", ...) must still
+        # match when the two words are split by a literal newline or run of
+        # whitespace within a single text node, not just an HTML tag break.
+        assert is_explicit_text("Workshop", "A night about anal\nsex and pleasure.") is True
+
 
 class TestIsNonEventText:
     # Title keywords (gift cards / vouchers / donations / webinars)

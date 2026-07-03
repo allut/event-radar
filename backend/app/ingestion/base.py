@@ -338,9 +338,14 @@ def is_explicit_text(*parts: str | None) -> bool:
 
     Used at ingest time to flag sexually-explicit listings (Event.is_explicit)
     before they ever reach the LLM. HTML tags are stripped before matching so
-    stored HTML descriptions are scanned correctly.
+    stored HTML descriptions are scanned correctly. Whitespace runs (including
+    literal newlines within a single text node, not just HTML-tag breaks) are
+    collapsed to a single space so multi-word keywords (e.g. "anal sex") still
+    match across them — a miss here has no Layer-2 backstop, since flagged and
+    unflagged-but-explicit events both skip straight past the LLM call.
     """
     text = " ".join(html_to_text(p) or "" for p in parts if p)
+    text = re.sub(r"\s+", " ", text)
     return any(pattern.search(text) for pattern in _EXPLICIT_KEYWORD_PATTERNS)
 
 
