@@ -307,6 +307,23 @@ class TestClusterEvents:
         b = _event(2, "Jazz Night", _BASE, venue_name="Fotografiska")
         assert cluster_events([a, b]) == {}
 
+    def test_unfiltered_fallback_raises_above_hard_cap(self):
+        """P2-3 hardening: cluster_events() called without candidate_pair_ids (the
+        O(N^2) Python fallback) must fail loudly above DEDUP_UNFILTERED_FALLBACK_MAX_EVENTS
+        rather than silently running the quadratic scan on a large event list. Existing
+        small-N white-box tests (all well under the cap) are unaffected."""
+        from app.constants import DEDUP_UNFILTERED_FALLBACK_MAX_EVENTS
+
+        events = [
+            _event(i, "Distinct Title", _BASE + timedelta(days=i))
+            for i in range(DEDUP_UNFILTERED_FALLBACK_MAX_EVENTS + 1)
+        ]
+        try:
+            cluster_events(events)
+            assert False, "expected ValueError above the unfiltered-fallback cap"
+        except ValueError as exc:
+            assert str(DEDUP_UNFILTERED_FALLBACK_MAX_EVENTS) in str(exc)
+
 
 # ---------------------------------------------------------------------------
 # Lookback constant sanity
@@ -406,6 +423,61 @@ class TestApplySameDayTitleUnions:
         parent = _parent_for([a, b])
         apply_same_day_title_unions(parent, [a, b])
         assert same_group(parent, 1, 2)
+
+    def test_fuzzy_compatible_distinct_venue_strings_still_unioned(self):
+        """The O(d^2) group-representative pass must still catch two DIFFERENT (not
+        exact-string-equal) venue names that clear the fuzzy threshold — not just
+        exact matches. Regression test for the linearized _union_by_venue_group
+        rewrite (must not accidentally reduce to an exact-only comparison)."""
+        a = _event(1, "Jazz Night", _BASE, venue_name="Von Krahli Teater")
+        b = _event(2, "Jazz Night", _BASE, venue_name="von krahli teater")
+        assert token_set_ratio(a.venue_name.lower(), b.venue_name.lower()) >= 70
+        assert a.venue_name != b.venue_name  # distinct strings, not an exact match
+        parent = _parent_for([a, b])
+        apply_same_day_title_unions(parent, [a, b])
+        assert same_group(parent, 1, 2)
+
+    def test_mixed_bucket_identical_fuzzy_distinct_and_none_venues(self):
+        """One bucket exercising every group kind at once: two members with an
+        identical venue string (exact-group chaining), one with a fuzzy-compatible
+        variant of that string (cross-group fuzzy union), one with a wholly
+        incompatible venue (must stay isolated from the rest), and one with an
+        unknown (None) venue (must bridge everything else together, including the
+        otherwise-incompatible one — matching _venue_compatible's "None is always
+        compatible" rule)."""
+        exact_1 = _event(1, "Miiamilla", _BASE, venue_name="Kanuti Gildi SAAL")
+        exact_2 = _event(2, "Miiamilla", _BASE, venue_name="Kanuti Gildi SAAL")
+        fuzzy = _event(3, "Miiamilla", _BASE, venue_name="kanuti gildi saal")
+        incompatible = _event(4, "Miiamilla", _BASE, venue_name="Fotografiska")
+        unknown = _event(5, "Miiamilla", _BASE, venue_name=None)
+        members = [exact_1, exact_2, fuzzy, incompatible, unknown]
+        assert not _venue_compatible(exact_1.venue_name, incompatible.venue_name)
+
+        parent = _parent_for(members)
+        apply_same_day_title_unions(parent, members)
+
+        # Exact + fuzzy variants of the same venue collapse together.
+        assert same_group(parent, 1, 2)
+        assert same_group(parent, 1, 3)
+        # The None-venue member bridges everything, including the otherwise-
+        # incompatible venue — reproducing the old O(k^2) loop's behavior, where any
+        # pair involving a None venue was unioned directly.
+        assert same_group(parent, 1, 5)
+        assert same_group(parent, 4, 5)
+        assert same_group(parent, 1, 4)  # transitively, via the None hub
+
+    def test_incompatible_venues_stay_isolated_with_no_none_bridge(self):
+        """Without a None-venue member to bridge them, two mutually-incompatible
+        named venues in the same bucket must NOT be unioned — the isolation the
+        venue gate exists to preserve must survive the grouped-comparison rewrite."""
+        a = _event(1, "Jazz Night", _BASE, venue_name="Von Krahli")
+        b = _event(2, "Jazz Night", _BASE, venue_name="Fotografiska")
+        c = _event(3, "Jazz Night", _BASE, venue_name="Kellerteater")
+        parent = _parent_for([a, b, c])
+        apply_same_day_title_unions(parent, [a, b, c])
+        assert not same_group(parent, 1, 2)
+        assert not same_group(parent, 1, 3)
+        assert not same_group(parent, 2, 3)
 
 
 # ---------------------------------------------------------------------------

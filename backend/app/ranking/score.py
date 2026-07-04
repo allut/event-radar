@@ -14,6 +14,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from collections.abc import Sequence
 from datetime import datetime, timedelta
+from functools import lru_cache
 
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -55,6 +56,7 @@ from app.constants import (
     TIME_SLOT_MORNING,
     TIME_SLOT_WEEKDAY,
     TIME_SLOT_WEEKEND,
+    TIME_SLOTS_CACHE_MAXSIZE,
     WEEKEND_START_WEEKDAY,
 )
 from app.models.models import (
@@ -103,6 +105,49 @@ class FeedbackContext:
     direct_map: dict[int, list[_FeedbackRow]] = field(default_factory=dict)
     # Only liked rows — indirect category matching iterates this subset, not all rows
     liked_rows: list[_FeedbackRow] = field(default_factory=list)
+    # Indirect-signal aggregates, lazily populated by feedback_signal() via
+    # build_liked_aggregates(now) on first use (decay depends on `now`, fixed once per
+    # build_daily_feeds call). Keyed by distinct category_set rather than per-row:
+    # collapses the O(E * L) indirect scan in feedback_signal to O(E * S), S = distinct
+    # liked category-sets (S << L for a real user, since likes cluster into a handful
+    # of category combinations).
+    liked_decay_by_catset: dict[frozenset[str], float] = field(default_factory=dict)
+    # Each liked row's own decay contribution, for self-exclusion when the scored event
+    # is itself one of the user's liked rows (row.event_id != event_id in the old loop).
+    liked_decay_by_event: dict[int, float] = field(default_factory=dict)
+    # `now` the aggregates above were built for; None means not built yet. Lets
+    # feedback_signal() lazily (re)build on first use / if `now` changes, so a caller
+    # that forgets to call build_liked_aggregates() explicitly still gets correct
+    # results instead of a silent all-zero indirect signal.
+    _liked_aggregates_built_for: datetime | None = field(default=None, repr=False)
+
+    def build_liked_aggregates(self, now: datetime) -> None:
+        """Populate liked_decay_by_catset / liked_decay_by_event for this `now`.
+
+        Idempotent per `now`: a repeat call with the same `now` is a no-op (checked by
+        feedback_signal before calling this, so normal per-user-per-build usage costs
+        exactly one O(L) pass). Exactly reproduces the old per-row loop's semantics:
+        each liked row contributes FEEDBACK_INDIRECT_WEIGHT * decay(row) once, decay =
+        FEEDBACK_DECAY_BASE**days.
+        """
+        if self._liked_aggregates_built_for == now:
+            return
+        self.liked_decay_by_catset = {}
+        self.liked_decay_by_event = {}
+        for row in self.liked_rows:
+            days = max(0.0, (now - row.created_at).total_seconds() / SECONDS_PER_DAY)
+            decay = FEEDBACK_INDIRECT_WEIGHT * (FEEDBACK_DECAY_BASE**days)
+            self.liked_decay_by_catset[row.category_set] = (
+                self.liked_decay_by_catset.get(row.category_set, 0.0) + decay
+            )
+            # Sum, not overwrite: user_event_feedback has no unique constraint, so
+            # multiple liked rows can share an event_id — every one of them must be
+            # excluded when scoring that same event (matches the old per-row loop,
+            # which skipped every row with row.event_id == event_id).
+            self.liked_decay_by_event[row.event_id] = (
+                self.liked_decay_by_event.get(row.event_id, 0.0) + decay
+            )
+        self._liked_aggregates_built_for = now
 
     @classmethod
     def from_orm_rows(cls, orm_rows: list[UserEventFeedback]) -> "FeedbackContext":
@@ -149,10 +194,18 @@ class FeedbackContext:
 # ---------------------------------------------------------------------------
 
 
+@lru_cache(maxsize=TIME_SLOTS_CACHE_MAXSIZE)
 def _time_slots_for_event(starts_at: datetime) -> list[str]:
     """
     Derive time-of-day and day-of-week slots from a timezone-aware starts_at.
     An event can match multiple slots (e.g. Saturday evening → ['weekend', 'evening']).
+
+    Memoized: build_daily_feeds calls this once per (user, candidate-event) pair, but
+    the result depends only on the event's starts_at — without caching this repeats the
+    same astimezone conversion + branch ladder for every user scoring the same event
+    (O(U*E) calls where only O(E) distinct results exist). Callers must not mutate the
+    returned list — the cache hands out the same object on every hit; nothing in this
+    module does (each caller only iterates it).
     """
     local = starts_at.astimezone(TALLINN_TZ)
     hour = local.hour
@@ -244,7 +297,7 @@ def feedback_signal(
     if event_dedup_group is not None and event_dedup_group in ctx.disliked_groups:
         return SCORE_HARD_EXCLUDE
 
-    event_cat_set = set(event_categories)
+    event_cat_set = frozenset(event_categories)
     signals: list[float] = []
 
     # Direct: O(1) dict lookup instead of O(F) full-row scan
@@ -256,12 +309,38 @@ def feedback_signal(
         elif row.signal == SIGNAL_DISLIKE:
             signals.append(-1.0)
 
-    # Indirect: iterate only liked rows, skipping the event itself
-    for row in ctx.liked_rows:
-        if row.event_id != event_id and event_cat_set & row.category_set:
-            days = max(0.0, (now - row.created_at).total_seconds() / SECONDS_PER_DAY)
-            decay = FEEDBACK_DECAY_BASE**days
-            signals.append(FEEDBACK_INDIRECT_WEIGHT * decay)
+    # Indirect: sum pre-aggregated decay for every distinct liked category-set that
+    # overlaps this event's categories — O(distinct liked category-sets) instead of
+    # O(all liked rows). build_liked_aggregates() is a no-op if already built for this
+    # `now` (the normal per-user-per-build case), so calling it here is self-healing
+    # for any caller that forgot to, at negligible extra cost.
+    ctx.build_liked_aggregates(now)
+    if event_cat_set:
+        indirect = sum(
+            decay
+            for cats, decay in ctx.liked_decay_by_catset.items()
+            if cats & event_cat_set
+        )
+        # Drop this event's own contribution — the old loop excluded every row with
+        # row.event_id == event_id, which this event's aggregated share reproduces
+        # exactly (liked_decay_by_event sums all of this event's liked-row decays).
+        # Correctness of this unconditional subtraction depends on an invariant that
+        # holds structurally today but is NOT enforced: a liked row's category_set
+        # (read once in FeedbackContext.from_orm_rows via r.event.classification) is
+        # always identical to — not just overlapping — event_categories for that same
+        # event_id, because both reads resolve to the same identity-mapped Event
+        # object within one build_daily_feeds() call (no reclassification happens
+        # mid-build). If that ever changes (e.g. a future job reclassifies an event
+        # concurrently with feed building, or FeedbackContext starts sourcing
+        # categories from a separately-cached snapshot), this subtraction could pull
+        # out decay that was never added to `indirect` above, driving it negative for
+        # rows whose stored category_set no longer overlaps event_cat_set. Guarding
+        # against that would require an overlap check per liked row, which is exactly
+        # the O(L) scan this aggregation exists to avoid — so this is a documented
+        # assumption, not a runtime-checked one.
+        indirect -= ctx.liked_decay_by_event.get(event_id, 0.0)
+        if indirect:
+            signals.append(indirect)
 
     if not signals:
         return 0.0
@@ -315,16 +394,21 @@ def score_event(
 
 
 def _mmr_pick(
-    scored: list[tuple[float, Event]], n: int, max_per_category: int
+    scored_sorted: list[tuple[float, Event]], n: int, max_per_category: int
 ) -> list[Event]:
     """
     MMR-lite diversity pick: greedy top-n with at most max_per_category events per category.
     Events with no categories bypass the category cap.
+
+    ``scored_sorted`` must already be sorted by score descending (the caller,
+    ``_select_with_backfill``, sorts each pool once up front and reuses it across every
+    tier — sorting here too would repeat the same O(E log E) work per tier for no
+    benefit, since the order is identical every time).
     """
     category_counts: dict[str, int] = {}
     picked: list[Event] = []
 
-    for _, event in sorted(scored, key=lambda x: x[0], reverse=True):
+    for _, event in scored_sorted:
         if len(picked) >= n:
             break
         cl = event.classification
@@ -345,14 +429,17 @@ def _greedy_fill(
     picked: list[Event],
     picked_ids: set[int],
     category_counts: dict[str, int],
-    pool: list[tuple[float, Event]],
+    pool_sorted: list[tuple[float, Event]],
     n: int,
     max_per_category: int | None,
 ) -> None:
     """Append highest-scored events from pool (not already picked) until len(picked) == n.
     When max_per_category is not None, skip an event whose category already hit the cap
-    (events with no categories bypass it, matching _mmr_pick)."""
-    for _, event in sorted(pool, key=lambda x: x[0], reverse=True):
+    (events with no categories bypass it, matching _mmr_pick).
+
+    ``pool_sorted`` must already be sorted by score descending — see the note on
+    ``_mmr_pick``; the same pre-sorted pool is passed to more than one tier here."""
+    for _, event in pool_sorted:
         if len(picked) >= n:
             break
         if event.id in picked_ids:
@@ -383,8 +470,16 @@ def _select_with_backfill(
     cooled, then uncapped fresh/cooled as a last resort. Diversity is preferred
     over freshness in the relaxed tiers; the uncapped sweep guarantees reaching n
     when scarce. Dislikes are excluded upstream and never re-enter.
+
+    Each pool is sorted by score descending exactly once here and the same sorted
+    list is reused across every tier that consumes it (``scored`` feeds tiers 1, 2,
+    and 4; ``cooled_scored`` feeds tiers 3 and 5) — previously each tier re-sorted
+    its pool independently, repeating identical O(E log E) work up to 3-4x per user.
     """
-    picked = _mmr_pick(scored, n, max_per_category)
+    scored_sorted = sorted(scored, key=lambda x: x[0], reverse=True)
+    cooled_sorted = sorted(cooled_scored, key=lambda x: x[0], reverse=True)
+
+    picked = _mmr_pick(scored_sorted, n, max_per_category)
     if len(picked) >= n:
         return picked
     picked_ids = {e.id for e in picked}
@@ -394,22 +489,22 @@ def _select_with_backfill(
             category_counts[c] = category_counts.get(c, 0) + 1
     # relaxed-cap tiers (diversity preserved)
     _greedy_fill(
-        picked, picked_ids, category_counts, scored, n, backfill_max_per_category
+        picked, picked_ids, category_counts, scored_sorted, n, backfill_max_per_category
     )
     if len(picked) < n:
         _greedy_fill(
             picked,
             picked_ids,
             category_counts,
-            cooled_scored,
+            cooled_sorted,
             n,
             backfill_max_per_category,
         )
     # uncapped last resort (guarantee n when relaxed cap left it short)
     if len(picked) < n:
-        _greedy_fill(picked, picked_ids, category_counts, scored, n, None)
+        _greedy_fill(picked, picked_ids, category_counts, scored_sorted, n, None)
     if len(picked) < n:
-        _greedy_fill(picked, picked_ids, category_counts, cooled_scored, n, None)
+        _greedy_fill(picked, picked_ids, category_counts, cooled_sorted, n, None)
     return picked
 
 

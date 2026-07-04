@@ -3,7 +3,7 @@
 import http
 import time
 from datetime import datetime
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import httpx
 import pytest
@@ -701,6 +701,84 @@ class TestSourceAdapterRun:
         assert len(added_runs) == 1
         assert added_runs[0].error == "crawl exploded"
         assert source.last_status == "error"
+
+
+class _NormalizingFakeAdapter(SourceAdapter):
+    """SourceAdapter whose normalize() returns a real NormalizedEvent, so run()'s
+    known-external-id skip branch (base.py ~:976-985) is actually exercised — unlike
+    _FakeAdapter above, whose normalize() always returns None and short-circuits
+    before that branch."""
+
+    def __init__(self, source, fetch_result, normalized_external_id):
+        super().__init__(source)
+        self._fetch_result = fetch_result
+        self._normalized_external_id = normalized_external_id
+
+    async def fetch_raw(self, known_ids):
+        return self._fetch_result
+
+    def normalize(self, raw):
+        return NormalizedEvent(
+            external_id=self._normalized_external_id,
+            title="Test Event",
+            starts_at=datetime(2026, 6, 1, 18, 0, tzinfo=TALLINN_TZ),
+        )
+
+
+class TestSourceAdapterRunKnownIdSkip:
+    """P1-2 fix: a raw item whose external_id is already in known_ids must be skipped
+    via an in-memory check, never a per-item SELECT EventSource — see base.py's
+    known_ids in-memory check, which replaced a query previously issued once per raw
+    item (N+1 on a large crawl)."""
+
+    @pytest.mark.asyncio
+    async def test_known_external_id_skipped_without_a_db_query(self, mock_db):
+        source = MagicMock(id=1, slug="test-source")
+        mock_db.scalars.return_value = MagicMock(
+            all=MagicMock(return_value=["dup-1"])
+        )  # known_ids will contain "dup-1"
+        adapter = _NormalizingFakeAdapter(
+            source, fetch_result=[{"id": "dup-1"}], normalized_external_id="dup-1"
+        )
+
+        run = await adapter.run(mock_db)
+
+        # The whole point of the fix: zero SELECTs issued for the skipped item.
+        mock_db.scalar.assert_not_awaited()
+        # Still marked processed and not counted as new, matching pre-fix behavior.
+        added_raw_events = [
+            c.args[0] for c in mock_db.add.call_args_list if hasattr(c.args[0], "processed_at")
+        ]
+        assert len(added_raw_events) == 1
+        assert added_raw_events[0].processed_at is not None
+        assert run.new_count in (0, None)
+
+    @pytest.mark.asyncio
+    async def test_unknown_external_id_not_skipped(self, mock_db):
+        """Sanity check the fixture actually distinguishes the two cases: an
+        external_id NOT in known_ids proceeds past the skip branch (no false-skip) —
+        still with zero per-item SELECTs (the fix removed the query entirely, not just
+        for the skip case)."""
+        source = MagicMock(id=1, slug="test-source")
+        mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=[]))
+        nested_cm = MagicMock()
+        nested_cm.__aenter__ = AsyncMock(return_value=None)
+        nested_cm.__aexit__ = AsyncMock(return_value=False)
+        mock_db.begin_nested = MagicMock(return_value=nested_cm)
+        adapter = _NormalizingFakeAdapter(
+            source, fetch_result=[{"id": "new-1"}], normalized_external_id="new-1"
+        )
+
+        await adapter.run(mock_db)
+
+        raw_events = [
+            c.args[0] for c in mock_db.add.call_args_list if hasattr(c.args[0], "processed_at")
+        ]
+        assert len(raw_events) == 1
+        # processed_at set by the post-insert path (line ~1063), not by the skip
+        # branch — but either way, never via a per-item SELECT.
+        assert raw_events[0].processed_at is not None
+        assert mock_db.scalar.await_count == 0  # still never queries the DB per-item
 
 
 class TestNormalizedEventAddressGate:

@@ -709,6 +709,46 @@ class TestCopyVenueFromSiblings:
         assert target.venue_address is None
         assert "venue copy skipped" not in caplog.text
 
+    @pytest.mark.asyncio
+    async def test_copies_from_genuinely_fuzzy_non_exact_donor(self, mock_db, make_event):
+        """P2-1 regression: the score_cutoff optimization passed to fuzz_ratio must not
+        change the match outcome for a pair whose true ratio clears
+        VENUE_SIBLING_RATIO_THRESHOLD but isn't a 100 (exact-canon) match — this is
+        the case the exact-fast-path idea (rejected — see rules.py's own docstring on
+        why an exact-shortcut is unsound) would have needed to fall through to anyway,
+        and score_cutoff must still find it."""
+        from rapidfuzz.fuzz import ratio as fuzz_ratio
+
+        from app.constants import VENUE_SIBLING_RATIO_THRESHOLD
+        from app.ingestion.geocode import canonical_venue_name
+
+        target_name = "Kanuti Gildi Saali"  # one extra trailing char vs the donor
+        donor_name = "Kanuti Gildi Saal"
+        target_canon = canonical_venue_name(target_name)
+        donor_canon = canonical_venue_name(donor_name)
+        true_ratio = fuzz_ratio(target_canon, donor_canon)
+        assert target_canon != donor_canon  # not an exact-canon match
+        assert VENUE_SIBLING_RATIO_THRESHOLD <= true_ratio < 100
+
+        target = make_event(event_id=1)
+        target.venue_name = target_name
+        target.venue_address = None
+        target.lat = None
+        target.lng = None
+
+        mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=[target]))
+        mock_db.execute.return_value = MagicMock(
+            all=MagicMock(
+                return_value=[(donor_name, "Pikk 20, Tallinn", 59.437, 24.745)]
+            )
+        )
+
+        copied = await copy_venue_from_siblings(mock_db)
+
+        assert copied == 1
+        assert target.venue_address == "Pikk 20, Tallinn"
+        assert (target.lat, target.lng) == (59.437, 24.745)
+
 
 class TestCanonicalVenueName:
     def test_strips_parenthetical_suffix(self):

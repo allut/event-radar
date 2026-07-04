@@ -380,6 +380,7 @@ async def copy_venue_from_siblings(db: AsyncSession) -> int:
     matched_rows_by_target_canon: dict[
         str, list[tuple[str | None, float | None, float | None]]
     ] = {}
+    distinct_coords_by_target_canon: dict[str, set[tuple[float, float]]] = {}
     for event in targets:
         name = event.venue_name
         if name is None:
@@ -391,23 +392,47 @@ async def copy_venue_from_siblings(db: AsyncSession) -> int:
         if target_canon not in matched_rows_by_target_canon:
             matched: list[tuple[str | None, float | None, float | None]] = []
             for donor_canon, rows in donor_addrs_by_canon.items():
-                if fuzz_ratio(target_canon, donor_canon) >= VENUE_SIBLING_RATIO_THRESHOLD:
+                # score_cutoff lets rapidfuzz's C implementation prove "below cutoff"
+                # from a cheap length-bound check and skip the full edit-distance DP
+                # for clearly-dissimilar pairs — it never changes whether the *true*
+                # ratio is >= VENUE_SIBLING_RATIO_THRESHOLD (a below-cutoff pair comes
+                # back as 0.0 instead of its real, still-below-threshold score, which
+                # compares identically against the threshold below). This does NOT
+                # skip the scan on an exact match: a different, non-identical donor
+                # bucket can independently clear the threshold too (see docstring
+                # above), so every bucket is still checked — only the per-comparison
+                # cost drops for the many pairs that are nowhere close to matching.
+                if (
+                    fuzz_ratio(
+                        target_canon,
+                        donor_canon,
+                        score_cutoff=VENUE_SIBLING_RATIO_THRESHOLD,
+                    )
+                    >= VENUE_SIBLING_RATIO_THRESHOLD
+                ):
                     matched.extend(rows)
             matched_rows_by_target_canon[target_canon] = matched
+            # distinct_coords (and the ambiguity-vs-representative outcome derived from
+            # it below) is a pure function of matched_rows, which is itself memoized
+            # per target_canon — memoize this derived value too so events sharing a
+            # venue_name don't recompute the same set comprehension repeatedly.
+            # Coords are *rounded* for the distinct-count only: one physical venue can
+            # be stored as two sub-meter-apart doubles (e.g. 59.43793509999999 vs
+            # 59.4379351), which must not read as two locations.
+            distinct_coords_by_target_canon[target_canon] = {
+                (
+                    round(lat, GEOCODE_COORD_QUANT_DECIMALS),
+                    round(lng, GEOCODE_COORD_QUANT_DECIMALS),
+                )
+                for _addr, lat, lng in matched
+                if lat is not None and lng is not None
+            }
 
         matched_rows = matched_rows_by_target_canon[target_canon]
         if not matched_rows:
             continue
 
-        # The donor query filters lat/lng non-null, so the None guard is
-        # defense-in-depth. Coords are *rounded* for the distinct-count only:
-        # one physical venue can be stored as two sub-meter-apart doubles (e.g.
-        # 59.43793509999999 vs 59.4379351), which must not read as two locations.
-        distinct_coords = {
-            (round(lat, GEOCODE_COORD_QUANT_DECIMALS), round(lng, GEOCODE_COORD_QUANT_DECIMALS))
-            for _addr, lat, lng in matched_rows
-            if lat is not None and lng is not None
-        }
+        distinct_coords = distinct_coords_by_target_canon[target_canon]
         if not distinct_coords:
             continue
         if len(distinct_coords) > 1:

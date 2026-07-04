@@ -1,5 +1,4 @@
 import { Link } from 'react-router-dom';
-import { getLocale } from '../../lib/auth';
 import { CARD_ANIMATION_DELAY_STEP_MS } from '../../constants';
 import { t } from '../../i18n';
 import { categoryGradient, cx, formatEventTime, formatPrice, padIndex, safeUrl, trackExternalClick } from '../../utils';
@@ -34,12 +33,12 @@ export interface EventData {
 interface EventCardProps {
   event: EventData;
   index: number;
+  locale: string;
   onFeedbackSent?: () => void;
   variant?: 'standard' | 'featured';
 }
 
-export default function EventCard({ event, index, onFeedbackSent, variant = 'standard' }: EventCardProps) {
-  const locale = getLocale();
+export default function EventCard({ event, index, locale, onFeedbackSent, variant = 'standard' }: EventCardProps) {
   const { activeSignal, pending, sendFeedback } = useFeedback(event.id, onFeedbackSent);
   const isFeatured = variant === 'featured';
 

@@ -4,8 +4,13 @@ import { PERSONAS_EN } from './_generated/i18nData';
 
 export { TRANSLATIONS };
 
+// Built once at module load — personaName()/personaVibe() are called per persona per
+// render (Onboarding renders every persona), so a linear PERSONAS_EN.find() scan on
+// every call is avoidable with a one-time indexed lookup.
+const PERSONAS_EN_BY_SLUG = new Map(PERSONAS_EN.map((p) => [p.slug, p]));
+
 function _enPersona(slug: string): { name: string; vibe: string } {
-  const p = PERSONAS_EN.find((x) => x.slug === slug);
+  const p = PERSONAS_EN_BY_SLUG.get(slug);
   return { name: p?.name ?? slug, vibe: p?.vibe ?? '' };
 }
 

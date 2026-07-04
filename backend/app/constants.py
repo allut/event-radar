@@ -293,6 +293,12 @@ TITLE_RATIO_VENUE_BYPASS_THRESHOLD = 85  # near-exact title; on the LLM path, by
 # Hall") still reach the LLM tiebreaker (rule-only path stays strict)
 VENUE_RATIO_THRESHOLD = 70  # rapidfuzz token_set_ratio threshold for venue match
 TIME_WINDOW_HOURS = 12  # max |Δstart| in hours for two events to be dedup candidates
+# cluster_events()'s unfiltered fallback (no candidate_pair_ids) is an O(N^2) Python
+# enumeration — both production callers always pass pre-filtered pairs, so this path is
+# test-only scaffolding today. Hard-cap it so a future caller invoking it on a large
+# unfiltered event list fails loudly instead of silently degrading to quadratic time;
+# well above any legitimate test's event count.
+DEDUP_UNFILTERED_FALLBACK_MAX_EVENTS = 500
 
 # Resend email delivery
 RESEND_SEND_URL = "https://api.resend.com/emails"
@@ -364,6 +370,11 @@ SCORE_WEIGHT_RECENCY: float = 0.20
 SCORE_WEIGHT_FEEDBACK: float = 0.20
 SCORE_WEIGHT_QUALITY: float = 0.10
 SCORE_WEIGHT_LOCALITY: float = 0.05
+# _time_slots_for_event() memoization cap (ranking/score.py) — bounds an lru_cache keyed
+# on distinct starts_at values so repeated calls across users scoring the same event
+# don't redo the astimezone conversion. Comfortably above the number of distinct
+# starts_at values in one DAILY_5_LOOKAHEAD_DAYS candidate window.
+TIME_SLOTS_CACHE_MAXSIZE = 4096
 
 # Publish gate — classified events with quality_score below this stay
 # 'classified' and never reach a feed. Tunable later from real data.

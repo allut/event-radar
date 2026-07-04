@@ -973,13 +973,13 @@ class SourceAdapter(ABC):
                     raw_event.processed_at = datetime.now(tz=TALLINN_TZ)
                     continue
 
-                existing = await db.scalar(
-                    select(EventSource).where(
-                        EventSource.source_id == self.source.id,
-                        EventSource.external_id == normalized.external_id,
-                    )
-                )
-                if existing:
+                # known_ids (loaded once above via ingest_skip_ids) already holds every
+                # stored external_id for this source — an in-memory check here replaces
+                # a per-item SELECT EventSource that was previously issued for every raw
+                # item (N+1 on a large crawl). Race safety against a concurrent insert is
+                # still covered by the event_sources(source_id, external_id) unique index
+                # + the IntegrityError handler below.
+                if normalized.external_id in known_ids:
                     raw_event.processed_at = datetime.now(tz=TALLINN_TZ)
                     continue
 

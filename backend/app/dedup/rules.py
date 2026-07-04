@@ -25,6 +25,7 @@ from sqlalchemy.orm import aliased
 
 from app.constants import (
     DEDUP_LOOKBACK_DAYS,
+    DEDUP_UNFILTERED_FALLBACK_MAX_EVENTS,
     EVENT_STATUS_CANCELLED,
     EVENT_STATUS_CLASSIFIED,
     EVENT_STATUS_PUBLISHED,
@@ -155,6 +156,17 @@ def apply_same_day_title_unions(parent: dict[int, int], events: list[Event]) -> 
     Intentional residual: multi-day series are NOT collapsed across days — the
     bucket key includes the date, so each day stays one canonical event (per the
     same-day-only policy chosen for this feature).
+
+    Within one (title, date) bucket of k members, comparing every pair directly is
+    O(k^2) token_set_ratio calls — a generic/collision-prone title or an all-day
+    (00:00) timestamp can make one bucket large. ``_venue_compatible(a, b)`` depends
+    only on the two venue_name *strings*, not on which specific members carry them, so
+    this groups members by exact venue_name first (union-find is transitive: unioning
+    one representative pair per *distinct* venue-name pair reproduces the same final
+    connected components as unioning every member pair — see ``_union_by_venue_group``)
+    — collapsing the fuzzy comparison from O(k^2) member-pairs to O(d^2) distinct-name
+    pairs, d = distinct venue-name values in the bucket (d <= k; d == 1 in the common
+    timed-entry-slot case, where every slot shares one venue_name).
     """
     buckets: dict[tuple[str, date], list[Event]] = {}
     for e in events:
@@ -166,10 +178,50 @@ def apply_same_day_title_unions(parent: dict[int, int], events: list[Event]) -> 
     for members in buckets.values():
         if len(members) < 2:
             continue
-        for i in range(len(members)):
-            for j in range(i + 1, len(members)):
-                if _venue_compatible(members[i].venue_name, members[j].venue_name):
-                    union(parent, members[i].id, members[j].id)
+        _union_by_venue_group(parent, members)
+
+
+def _union_by_venue_group(parent: dict[int, int], members: list[Event]) -> None:
+    """Union a same-day-title bucket's members using ``_venue_compatible``, without
+    comparing every member pair directly (see ``apply_same_day_title_unions``).
+
+    1. Group members by exact ``venue_name`` (a dedicated ``None`` group holds every
+       "unknown venue" member — trivially compatible with everything, same as
+       ``_venue_compatible``'s own `a is None or b is None` rule) and union each
+       group's members together linearly (exact-string members are always mutually
+       compatible: ``token_set_ratio(x, x) == 100``).
+    2. If a ``None`` group exists, union its representative with one representative of
+       every named group — reproducing ``_venue_compatible``'s "unknown venue bridges
+       to anything" rule, which old code applied pairwise (any member pair involving a
+       None venue was unioned directly, transitively merging the whole bucket).
+    3. For every remaining pair of distinct *named* groups, run ``_venue_compatible``
+       once on the group keys (not once per member pair) and union one representative
+       from each compatible pair.
+    """
+    groups: dict[str | None, list[Event]] = {}
+    for m in members:
+        groups.setdefault(m.venue_name, []).append(m)
+
+    for group_members in groups.values():
+        first_id = group_members[0].id
+        for m in group_members[1:]:
+            union(parent, first_id, m.id)
+
+    representatives = {key: group_members[0] for key, group_members in groups.items()}
+    none_rep = representatives.pop(None, None)
+    if none_rep is not None:
+        for rep in representatives.values():
+            union(parent, none_rep.id, rep.id)
+
+    named_keys = list(representatives.keys())
+    for i in range(len(named_keys)):
+        for j in range(i + 1, len(named_keys)):
+            if _venue_compatible(named_keys[i], named_keys[j]):
+                union(
+                    parent,
+                    representatives[named_keys[i]].id,
+                    representatives[named_keys[j]].id,
+                )
 
 
 def _representative_status_rank(event: Event) -> int:
@@ -270,8 +322,16 @@ def cluster_events(
     if candidate_pair_ids is None:
         # Unfiltered O(N²) path — both production callers pass candidate_pair_ids
         # (pre-filtered via candidate_pair_ids_in_window). This branch exists for
-        # white-box tests; a future caller invoking it on a large unfiltered event
-        # list would re-introduce the quadratic scan this module was built to avoid.
+        # white-box tests; hard-capped so a future caller invoking it on a large
+        # unfiltered event list fails loudly instead of silently re-introducing the
+        # quadratic scan this module was built to avoid.
+        if n > DEDUP_UNFILTERED_FALLBACK_MAX_EVENTS:
+            raise ValueError(
+                f"cluster_events: unfiltered fallback called with {n} events "
+                f"(max {DEDUP_UNFILTERED_FALLBACK_MAX_EVENTS}) — pass "
+                "candidate_pair_ids (e.g. from candidate_pair_ids_in_window) instead "
+                "of running the O(N^2) fallback on a large event list"
+            )
         log.warning(
             "cluster_events: running unfiltered O(N^2) fallback on %d events", n
         )
