@@ -23,14 +23,14 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from sqlalchemy import select
 
+from app.constants import BACKFILL_DEFAULT_LIMIT
 from app.ingestion.language_split import split_by_language
+from app.logging_config import configure_logging
 from app.models.models import Event
 from app.routers.utils import mask_db_url
 
+configure_logging()
 log = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
-
-DEFAULT_LIMIT = 5000
 
 
 def _split_updates(event: Event) -> dict[str, dict[str, str]]:
@@ -117,8 +117,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "--limit",
         type=int,
-        default=DEFAULT_LIMIT,
-        help=f"Max events to scan (default {DEFAULT_LIMIT}).",
+        default=BACKFILL_DEFAULT_LIMIT,
+        help=f"Max events to scan (default {BACKFILL_DEFAULT_LIMIT}).",
     )
     args = parser.parse_args()
     asyncio.run(main(confirm=args.yes, limit=args.limit))

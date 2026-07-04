@@ -23,6 +23,7 @@ from bs4 import BeautifulSoup
 from sqlalchemy import select
 
 from app.constants import (
+    BACKFILL_DEFAULT_LIMIT,
     ESTONIA_CONCERT_HALL_DESCRIPTION_SELECTOR,
     FIENTA_DESCRIPTION_SELECTOR,
     HTML_LISTING_LOCALE_FETCH_DELAY_SECONDS,
@@ -44,13 +45,13 @@ from app.ingestion.sources.html_listing import (
     estonia_concert_hall_localized_text,
     kumu_localized_text,
 )
+from app.logging_config import configure_logging
 from app.models.models import Event, EventSource, Source
 from app.routers.utils import mask_db_url
 
+configure_logging()
 log = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 
-DEFAULT_LIMIT = 5000
 SUPPORTED_SLUGS = {SOURCE_SLUG_PILETILEVI, SOURCE_SLUG_KUMU, SOURCE_SLUG_ESTONIA_CONCERT_HALL, SOURCE_SLUG_FIENTA}
 
 
@@ -357,6 +358,6 @@ async def main(write: bool, limit: int) -> None:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--yes", action="store_true", help="Write changes to DB")
-    parser.add_argument("--limit", type=int, default=DEFAULT_LIMIT)
+    parser.add_argument("--limit", type=int, default=BACKFILL_DEFAULT_LIMIT)
     args = parser.parse_args()
     asyncio.run(main(write=args.yes, limit=args.limit))

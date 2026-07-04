@@ -35,14 +35,15 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import sqlalchemy as sa
 
+from app.constants import (
+    FIX_PRICES_COMMIT_INTERVAL_SECONDS,
+    SOURCE_SLUG_FIENTA,
+    SOURCE_SLUG_PILETILEVI,
+)
 from app.ingestion.base import parse_price_from_string
 from app.llm.classifier import classify_event
 from app.models.models import Event, EventClassification, EventSource, RawEvent, Source
 from app.routers.utils import mask_db_url
-
-FIENTA_SLUG = "fienta"
-PILETILEVI_SLUG = "piletilevi"
-COMMIT_INTERVAL_SECONDS = 10.0
 
 
 async def fix_fienta(db, confirm: bool) -> None:
@@ -66,7 +67,7 @@ async def fix_fienta(db, confirm: bool) -> None:
                     RawEvent.external_id == EventSource.external_id,
                 ),
             )
-            .where(Source.slug == FIENTA_SLUG)
+            .where(Source.slug == SOURCE_SLUG_FIENTA)
             .order_by(Event.id)
         )
     ).all()
@@ -110,7 +111,7 @@ async def fix_fienta(db, confirm: bool) -> None:
                 has_free_tier=new_free_tier,
             )
         )
-        if time.monotonic() - last_commit >= COMMIT_INTERVAL_SECONDS:
+        if time.monotonic() - last_commit >= FIX_PRICES_COMMIT_INTERVAL_SECONDS:
             await db.commit()
             last_commit = time.monotonic()
     await db.commit()
@@ -124,7 +125,7 @@ async def fix_piletilevi(db, confirm: bool) -> None:
             .select_from(Event)
             .join(EventSource, EventSource.event_id == Event.id)
             .join(Source, Source.id == EventSource.source_id)
-            .where(Source.slug == PILETILEVI_SLUG, Event.price_min.is_not(None))
+            .where(Source.slug == SOURCE_SLUG_PILETILEVI, Event.price_min.is_not(None))
             .order_by(Event.id)
         )
     ).all()
@@ -158,7 +159,7 @@ async def fix_piletilevi(db, confirm: bool) -> None:
             succeeded += 1
         else:
             failed += 1
-        if time.monotonic() - last_commit >= COMMIT_INTERVAL_SECONDS:
+        if time.monotonic() - last_commit >= FIX_PRICES_COMMIT_INTERVAL_SECONDS:
             await db.commit()
             last_commit = time.monotonic()
         if i % 50 == 0:

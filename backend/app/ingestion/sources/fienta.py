@@ -124,13 +124,25 @@ class FientaAdapter(SourceAdapter):
                 item for item in all_events
                 if str(item.get("id", "")) not in known_ids
             ]
-            await asyncio.gather(
+            results = await asyncio.gather(
                 *[
                     self._fetch_detail(client, item, base_host, semaphore, limiter)
                     for item in new_items
                 ],
                 return_exceptions=True,
             )
+            # _fetch_detail only swallows httpx errors internally — anything else
+            # escaping it is an unexpected bug. return_exceptions=True keeps one
+            # item's crash from cancelling the others' in-flight fetches, but the
+            # bug must still surface (log + propagate) rather than vanish silently,
+            # per the "never swallow exceptions in fetch_raw()" invariant.
+            unexpected = [r for r in results if isinstance(r, BaseException)]
+            for detail_exc in unexpected:
+                log.error(
+                    "fienta detail fetch task raised unexpectedly: %s", detail_exc
+                )
+            if unexpected:
+                raise unexpected[0]
 
         return new_items
 
@@ -281,12 +293,6 @@ class FientaAdapter(SourceAdapter):
                                 item.get("id"), locale, loc_url, exc,
                             )
                             continue
-                        except Exception as exc:
-                            log.warning(
-                                "fienta: locale fetch unexpected error id=%s locale=%s: %s",
-                                item.get("id"), locale, exc,
-                            )
-                            continue
                     if loc_name:
                         loc_titles[locale] = loc_name
                     # Prefer DOM HTML (div.rich-text) over JSON-LD plain text.
@@ -311,13 +317,28 @@ class FientaAdapter(SourceAdapter):
                     url,
                     exc,
                 )
-            except Exception as exc:
+            except httpx.RequestError as exc:
                 log.warning(
-                    "fienta: detail fetch failed id=%s url=%s: %s",
+                    "fienta: detail fetch network error id=%s url=%s: %s",
                     item.get("id"),
                     url,
                     exc,
                 )
+            except ValueError as exc:
+                # host_guard_hook's SSRF guard raises ValueError when a redirect
+                # hop targets an unexpected host — an expected per-item rejection,
+                # not a bug, so it degrades to listing-only like the httpx cases.
+                log.warning(
+                    "fienta: detail fetch host mismatch (SSRF guard) id=%s url=%s: %s",
+                    item.get("id"),
+                    url,
+                    exc,
+                )
+            # Anything else (e.g. a bug in JSON-LD/BeautifulSoup parsing) is not a
+            # transient fetch failure — let it propagate so the gather() in
+            # fetch_raw() surfaces it, per the "never swallow exceptions in
+            # fetch_raw()" invariant, instead of silently degrading to
+            # listing-only for every future run.
 
     def normalize(self, raw: dict[str, Any]) -> NormalizedEvent | None:
         title = raw.get("name") or raw.get("title") or ""

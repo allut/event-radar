@@ -8,7 +8,7 @@ import EventCard, { type EventData } from '../../components/EventCard';
 import EmptyState from '../../components/EmptyState';
 import LocaleSelector from '../../components/LocaleSelector';
 import PageState from '../../components/PageState';
-import { formatHourMinute, formatTodayDate } from '../../utils';
+import { formatHourMinute, formatTodayDate, padIndex } from '../../utils';
 import styles from './Feed.module.css';
 
 interface FeedResponse {
@@ -107,7 +107,7 @@ export default function Feed() {
             </li>
             {events.slice(1).map((event, i) => (
               <li key={event.id} className={styles.standardItem}>
-                <span className={styles.indexNumeral} aria-hidden>{String(i + 2).padStart(2, '0')}</span>
+                <span className={styles.indexNumeral} aria-hidden>{padIndex(i + 2)}</span>
                 <EventCard event={event} index={i + 1} onFeedbackSent={handleFeedbackSent} />
               </li>
             ))}

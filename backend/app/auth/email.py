@@ -3,7 +3,6 @@
 Falls back to log-only when RESEND_API_KEY is unset (dev / CI).
 """
 
-import http
 import logging
 
 import httpx
@@ -42,6 +41,11 @@ async def send_magic_link(
         verify_url=verify_url,
     )
 
+    # Not routed through the shared retrying http_post: this call is awaited
+    # synchronously inside the rate-limited, user-facing POST /auth/request-link
+    # endpoint — a 5-attempt exponential backoff on a Resend hiccup would stall
+    # that request up to ~150s instead of failing fast (errors are already
+    # swallowed by the caller, which always returns 200 regardless).
     async with httpx.AsyncClient(timeout=RESEND_TIMEOUT_SECONDS) as client:
         resp = await client.post(
             RESEND_SEND_URL,
@@ -54,7 +58,7 @@ async def send_magic_link(
             },
         )
 
-    if resp.status_code not in (http.HTTPStatus.OK, http.HTTPStatus.CREATED):
+    if resp.status_code not in (httpx.codes.OK, httpx.codes.CREATED):
         log.error(
             "Resend API error sending to %s: %s %s",
             mask_email(to_email),

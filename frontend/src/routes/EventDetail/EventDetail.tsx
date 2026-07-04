@@ -5,6 +5,7 @@ import { api } from '../../api/client';
 import { getLocale, setLocale } from '../../lib/auth';
 import { t, ti } from '../../i18n';
 import { categoryGradient, cx, formatEventDateTime, formatHourMinute, formatPrice, safeUrl, sanitizeHtml, trackExternalClick } from '../../utils';
+import { GOOGLE_MAPS_SEARCH_URL } from '../../constants';
 import { type EventData } from '../../components/EventCard';
 import FeedbackButtonRow from '../../components/FeedbackButtonRow';
 import LocaleSelector from '../../components/LocaleSelector';
@@ -71,9 +72,9 @@ export default function EventDetail() {
   const price = formatPrice(data.price_min, data.price_max, data.currency, locale, data.has_free_tier);
   const imageSrc = safeUrl(data.image_url);
   const mapsUrl = data.lat && data.lng
-    ? `https://www.google.com/maps/search/?api=1&query=${data.lat},${data.lng}`
+    ? `${GOOGLE_MAPS_SEARCH_URL}${data.lat},${data.lng}`
     : data.venue_address
-    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(data.venue_address)}`
+    ? `${GOOGLE_MAPS_SEARCH_URL}${encodeURIComponent(data.venue_address)}`
     : null;
 
   return (

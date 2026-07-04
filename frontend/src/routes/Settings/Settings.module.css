@@ -108,13 +108,11 @@
 }
 
 .personaRow {
+  composes: card from '../../components/shared/Card.module.css';
   display: flex;
   align-items: center;
   gap: var(--space-3);
   padding: var(--space-3) var(--space-4);
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
 }
 
 .personaEmoji {
@@ -153,20 +151,15 @@
 }
 
 .repickBtn {
+  composes: btnOutline from '../../components/shared/Button.module.css';
   align-self: flex-start;
   padding: var(--space-0-45) var(--space-4);
-  border-radius: var(--radius);
-  border: 1px solid var(--border);
-  background: transparent;
-  color: var(--text-muted);
   font-size: var(--fs-sm);
   letter-spacing: var(--tracking-normal);
   cursor: pointer;
-  transition: all var(--transition);
 }
 
 .repickBtn:hover {
-  border-color: var(--accent-hover-border);
   color: var(--accent-light);
 }
 

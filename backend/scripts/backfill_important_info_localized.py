@@ -24,6 +24,7 @@ from bs4 import BeautifulSoup
 from sqlalchemy import select
 
 from app.constants import (
+    BACKFILL_DEFAULT_LIMIT,
     HTML_LISTING_LOCALE_FETCH_DELAY_SECONDS,
     HTTP_TIMEOUT_SECONDS,
     HTTP_USER_AGENT,
@@ -36,13 +37,12 @@ from app.ingestion.sources.html_listing import (
     locale_from_url_path,
     localized_detail_urls,
 )
+from app.logging_config import configure_logging
 from app.models.models import Event, EventSource, Source
 from app.routers.utils import mask_db_url
 
+configure_logging()
 log = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
-
-DEFAULT_LIMIT = 5000
 
 
 async def _fetch_localized_infos(
@@ -182,8 +182,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "--limit",
         type=int,
-        default=DEFAULT_LIMIT,
-        help=f"Max events to process (default {DEFAULT_LIMIT}).",
+        default=BACKFILL_DEFAULT_LIMIT,
+        help=f"Max events to process (default {BACKFILL_DEFAULT_LIMIT}).",
     )
     args = parser.parse_args()
     asyncio.run(main(confirm=args.yes, limit=args.limit))

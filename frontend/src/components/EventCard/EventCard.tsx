@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom';
 import { getLocale } from '../../lib/auth';
 import { CARD_ANIMATION_DELAY_STEP_MS } from '../../constants';
 import { t } from '../../i18n';
-import { categoryGradient, cx, formatEventTime, formatPrice, safeUrl, trackExternalClick } from '../../utils';
+import { categoryGradient, cx, formatEventTime, formatPrice, padIndex, safeUrl, trackExternalClick } from '../../utils';
 import { useFeedback } from '../../hooks/useFeedback';
 import FeedbackButtonRow from '../FeedbackButtonRow';
 import styles from './EventCard.module.css';
@@ -64,12 +64,12 @@ export default function EventCard({ event, index, onFeedbackSent, variant = 'sta
             aria-hidden
           >
             {!isFeatured && (
-              <span className={styles.placeholderNum}>{String(index + 1).padStart(2, '0')}</span>
+              <span className={styles.placeholderNum}>{padIndex(index + 1)}</span>
             )}
           </div>
         )}
         {isFeatured && (
-          <span className={styles.numeral} aria-hidden>{String(index + 1).padStart(2, '0')}</span>
+          <span className={styles.numeral} aria-hidden>{padIndex(index + 1)}</span>
         )}
         {price && <span className={styles.price}>{price}</span>}
       </div>

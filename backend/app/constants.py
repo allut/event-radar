@@ -959,3 +959,11 @@ SECURITY_HEADERS: dict[str, str] = {
 HSTS_HEADER_NAME = "Strict-Transport-Security"
 HSTS_MAX_AGE_SECONDS = 31536000  # 1 year, matches HSTS preload-list minimum
 HSTS_HEADER_VALUE = f"max-age={HSTS_MAX_AGE_SECONDS}; includeSubDomains"
+
+# One-off maintenance scripts (backend/scripts/) — shared defaults so each
+# script doesn't redefine the same sentinel independently.
+BACKFILL_DEFAULT_LIMIT = 5000  # max rows scanned/processed per run, overridable via --limit
+# Commit mid-loop at this wall-clock interval, mirroring GEOCODE_COMMIT_INTERVAL_SECONDS
+# / REFETCH_COMMIT_INTERVAL_SECONDS, to keep the held DB connection warm under Neon's
+# ~5-min idle auto-suspend and persist progress incrementally.
+FIX_PRICES_COMMIT_INTERVAL_SECONDS: float = 10.0

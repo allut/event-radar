@@ -100,6 +100,10 @@ export function formatTodayDate(locale: string): string {
   });
 }
 
+export function padIndex(n: number): string {
+  return String(n).padStart(2, '0');
+}
+
 export function makeActiveClassMap(styles: Record<string, string>): Record<Signal, string> {
   const result = {} as Record<Signal, string>;
   for (const [signal, cssKey] of Object.entries(SIGNAL_TO_CLASS) as [Signal, string][]) {

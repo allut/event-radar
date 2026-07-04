@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import html as html_lib
-import http
 import logging
 from collections.abc import Sequence
 from datetime import date, datetime
@@ -36,6 +35,7 @@ from app.email.templates import (
     EVENT_VENUE,
 )
 from app.i18n import day_name, month_name, t, ti
+from app.ingestion.base import http_post
 from app.models.models import DailyFeed, Event, User
 from app.routers.utils import (
     mask_email,
@@ -219,27 +219,28 @@ async def send_digest_email(
     )
 
     async with httpx.AsyncClient(timeout=RESEND_TIMEOUT_SECONDS) as client:
-        resp = await client.post(
-            RESEND_SEND_URL,
-            headers={"Authorization": f"Bearer {settings.RESEND_API_KEY}"},
-            json={
-                "from": settings.RESEND_FROM_ADDRESS,
-                "to": [to_email],
-                "subject": subject,
-                "html": html,
-            },
-        )
-
-    if resp.status_code not in (http.HTTPStatus.OK, http.HTTPStatus.CREATED):
-        log.error(
-            "Resend digest error for %s: %s %s",
-            mask_email(to_email),
-            resp.status_code,
-            resp.text[:RESEND_ERROR_SNIPPET_LEN],
-        )
-        raise RuntimeError(
-            f"Resend returned {resp.status_code} for digest to {mask_email(to_email)}"
-        )
+        try:
+            await http_post(
+                client,
+                RESEND_SEND_URL,
+                headers={"Authorization": f"Bearer {settings.RESEND_API_KEY}"},
+                json_body={
+                    "from": settings.RESEND_FROM_ADDRESS,
+                    "to": [to_email],
+                    "subject": subject,
+                    "html": html,
+                },
+            )
+        except httpx.HTTPStatusError as exc:
+            log.error(
+                "Resend digest error for %s: %s %s",
+                mask_email(to_email),
+                exc.response.status_code,
+                exc.response.text[:RESEND_ERROR_SNIPPET_LEN],
+            )
+            raise RuntimeError(
+                f"Resend returned {exc.response.status_code} for digest to {mask_email(to_email)}"
+            ) from exc
     log.info("Digest sent to %s (%d events)", mask_email(to_email), len(events))
 
 

@@ -33,6 +33,9 @@ export const CARD_ANIMATION_DELAY_STEP_MS = 80;
 // ─── Settings ────────────────────────────────────────────────────────────────
 export const SAVE_MSG_CLEAR_DELAY_MS = 2000;
 
+// ─── External links ──────────────────────────────────────────────────────────
+export const GOOGLE_MAPS_SEARCH_URL = 'https://www.google.com/maps/search/?api=1&query=';
+
 // ─── Locale ──────────────────────────────────────────────────────────────────
 export function toLocaleCode(locale: string): string {
   return _LOCALE_CODE_MAP[locale] ?? _DEFAULT_LOCALE_CODE;
