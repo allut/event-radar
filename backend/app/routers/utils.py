@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.auth.tokens import verify_session_token
-from app.constants import DEFAULT_USER_LOCALE, EMAIL_MASK_VISIBLE_CHARS
+from app.constants import DEFAULT_USER_LOCALE, EMAIL_MASK_VISIBLE_CHARS, EVENT_STATUS_PUBLISHED
 from app.models.models import Event, User
 
 
@@ -58,6 +58,20 @@ def canonical_event_filter() -> ColumnElement[bool]:
     backstop, not the primary suppression mechanism).
     """
     return or_(Event.dedup_group_id.is_(None), Event.dedup_group_id == Event.id)
+
+
+def public_event_filter() -> ColumnElement[bool]:
+    """Event is publicly visible: published, and neither explicit nor a non-event.
+
+    Shared by any endpoint that accepts a caller-supplied event_id and must not
+    leak the existence of a draft/hidden/explicit/non-event row via a 200-vs-404
+    timing or status-code oracle (e.g. GET /events/{id}, POST /feedback).
+    """
+    return and_(
+        Event.status == EVENT_STATUS_PUBLISHED,
+        Event.is_explicit.is_(False),
+        Event.is_non_event.is_(False),
+    )
 
 
 def event_not_ended_filter(now: datetime) -> ColumnElement[bool]:

@@ -51,6 +51,16 @@ describe('AuthVerify', () => {
     await waitFor(() => expect(screen.getByRole('status')).toBeInTheDocument());
   });
 
+  it('strips the token from the address bar before verifying', () => {
+    const replaceStateSpy = vi.spyOn(window.history, 'replaceState');
+    mockGet.mockReturnValue(new Promise(() => undefined));
+
+    renderWithProviders(<AuthVerify />, { route: '/auth/verify?token=valid' });
+
+    expect(replaceStateSpy).toHaveBeenCalledWith({}, '', '/auth/verify');
+    replaceStateSpy.mockRestore();
+  });
+
   it('on verify failure: shows error state', async () => {
     const { ApiError: ApiErrorClass } = await import('../../api/client');
     mockGet.mockRejectedValueOnce(new ApiErrorClass(StatusCodes.UNAUTHORIZED, 'Link expired'));

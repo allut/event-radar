@@ -114,6 +114,13 @@ async def request_magic_link(
         user = User(email=email, locale=locale)
         db.add(user)
         await db.flush()  # populate user.id
+        # This creates a User row before the email is ever verified, so an
+        # unauthenticated caller can pollute the users table with unverified
+        # addresses (mitigated by RATE_LIMIT_AUTH_REQUEST_LINK + the per-email
+        # cooldown below, not eliminated). Log a distinct, greppable marker so
+        # an operator monitoring shipped logs (settings.LOG_SHIP_URL) can alert
+        # on abnormal unverified-account growth.
+        log.info("auth: new unverified user row created email=%s", mask_email(email))
 
     # Per-email cooldown: skip if an unused link was issued in the last 2 minutes.
     # A link created T seconds ago has expires_at = now + (TTL - T), so

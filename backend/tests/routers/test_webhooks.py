@@ -2,18 +2,29 @@
 
 Tests the webhook endpoint in isolation — DB and background task are mocked.
 """
+import base64
+import hashlib
+import hmac
 import http
 import json
+import time
 from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi import FastAPI
 
-from app.constants import APP_ENV_DEVELOPMENT
+from app.constants import (
+    APP_ENV_DEVELOPMENT,
+    SVIX_ID_HEADER,
+    SVIX_SIGNATURE_HEADER,
+    SVIX_TIMESTAMP_HEADER,
+)
 from httpx import ASGITransport, AsyncClient
 
+TEST_SECRET = "whsec_" + base64.b64encode(b"0" * 24).decode()
 
-def _build_app(resend_secret: str = "") -> FastAPI:
+
+def _build_app() -> FastAPI:
     """Create a minimal FastAPI app with the webhooks router and patched settings."""
     from app.routers.webhooks import router
 
@@ -35,6 +46,21 @@ def _email_payload(
     text: str = "Jazz Night on Friday at Telliskivi.",
 ) -> dict:
     return {"from": from_addr, "to": to, "subject": subject, "text": text}
+
+
+def _svix_headers(
+    body: bytes, *, secret: str = TEST_SECRET, svix_id: str = "msg_test", timestamp: str | None = None
+) -> dict:
+    """Build valid svix-id/svix-timestamp/svix-signature headers for body."""
+    ts = timestamp or str(int(time.time()))
+    key = base64.b64decode(secret[len("whsec_") :])
+    signed_content = f"{svix_id}.{ts}.".encode() + body
+    sig = base64.b64encode(hmac.new(key, signed_content, hashlib.sha256).digest()).decode()
+    return {
+        SVIX_ID_HEADER: svix_id,
+        SVIX_TIMESTAMP_HEADER: ts,
+        SVIX_SIGNATURE_HEADER: f"v1,{sig}",
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -100,7 +126,7 @@ async def test_inbound_mail_fails_closed_in_production_when_secret_unset(mock_db
 
 
 @pytest.mark.asyncio
-async def test_inbound_mail_rejects_wrong_secret(mock_db):
+async def test_inbound_mail_rejects_missing_signature_headers(mock_db):
     app = _build_app()
 
     async def override_db():
@@ -110,11 +136,11 @@ async def test_inbound_mail_rejects_wrong_secret(mock_db):
     app.dependency_overrides[get_db] = override_db
 
     with patch("app.routers.webhooks.settings") as mock_settings:
-        mock_settings.RESEND_WEBHOOK_SECRET = "correct-secret"
+        mock_settings.RESEND_WEBHOOK_SECRET = TEST_SECRET
 
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             resp = await client.post(
-                "/webhooks/inbound-mail?secret=wrong",
+                "/webhooks/inbound-mail",
                 json=_email_payload(),
             )
 
@@ -123,12 +149,101 @@ async def test_inbound_mail_rejects_wrong_secret(mock_db):
 
 
 @pytest.mark.asyncio
-async def test_inbound_mail_accepts_correct_secret(mock_db):
+async def test_inbound_mail_rejects_tampered_body(mock_db):
+    """A body modified after signing must fail signature verification."""
+    app = _build_app()
+    payload = _email_payload()
+    signed_body = json.dumps(payload).encode()
+    headers = _svix_headers(signed_body)
+
+    async def override_db():
+        yield mock_db
+
+    from app.db import get_db
+    app.dependency_overrides[get_db] = override_db
+
+    tampered_payload = {**payload, "from": "attacker@evil.com"}
+
+    with patch("app.routers.webhooks.settings") as mock_settings:
+        mock_settings.RESEND_WEBHOOK_SECRET = TEST_SECRET
+
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post(
+                "/webhooks/inbound-mail",
+                content=json.dumps(tampered_payload).encode(),
+                headers={**headers, "Content-Type": "application/json"},
+            )
+
+    assert resp.status_code == http.HTTPStatus.UNAUTHORIZED
+
+
+@pytest.mark.asyncio
+async def test_inbound_mail_rejects_stale_timestamp(mock_db):
+    """A svix-timestamp far outside tolerance must be rejected (anti-replay)."""
+    app = _build_app()
+    payload = _email_payload()
+    body = json.dumps(payload).encode()
+    stale_ts = str(int(time.time()) - 3600)  # 1 hour old, well past tolerance
+    headers = _svix_headers(body, timestamp=stale_ts)
+
+    async def override_db():
+        yield mock_db
+
+    from app.db import get_db
+    app.dependency_overrides[get_db] = override_db
+
+    with patch("app.routers.webhooks.settings") as mock_settings:
+        mock_settings.RESEND_WEBHOOK_SECRET = TEST_SECRET
+
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post(
+                "/webhooks/inbound-mail",
+                content=body,
+                headers={**headers, "Content-Type": "application/json"},
+            )
+
+    assert resp.status_code == http.HTTPStatus.UNAUTHORIZED
+
+
+@pytest.mark.asyncio
+async def test_inbound_mail_rejects_wrong_secret(mock_db):
+    """A signature computed with a different secret must be rejected."""
+    app = _build_app()
+    payload = _email_payload()
+    body = json.dumps(payload).encode()
+    wrong_secret = "whsec_" + base64.b64encode(b"1" * 24).decode()
+    headers = _svix_headers(body, secret=wrong_secret)
+
+    async def override_db():
+        yield mock_db
+
+    from app.db import get_db
+    app.dependency_overrides[get_db] = override_db
+
+    with patch("app.routers.webhooks.settings") as mock_settings:
+        mock_settings.RESEND_WEBHOOK_SECRET = TEST_SECRET
+
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post(
+                "/webhooks/inbound-mail",
+                content=body,
+                headers={**headers, "Content-Type": "application/json"},
+            )
+
+    assert resp.status_code == http.HTTPStatus.UNAUTHORIZED
+    assert resp.json()["status"] == "rejected"
+
+
+@pytest.mark.asyncio
+async def test_inbound_mail_accepts_valid_signature(mock_db):
     email_obj = MagicMock()
     email_obj.id = 1
     mock_db.flush.side_effect = lambda: setattr(email_obj, "id", 3)
 
     app = _build_app()
+    payload = _email_payload()
+    body = json.dumps(payload).encode()
+    headers = _svix_headers(body)
 
     async def override_db():
         yield mock_db
@@ -139,12 +254,13 @@ async def test_inbound_mail_accepts_correct_secret(mock_db):
     with patch("app.routers.webhooks.settings") as mock_settings, \
          patch("app.routers.webhooks.RawInboundEmail", return_value=email_obj), \
          patch("app.routers.webhooks._run_extraction"):
-        mock_settings.RESEND_WEBHOOK_SECRET = "my-secret"
+        mock_settings.RESEND_WEBHOOK_SECRET = TEST_SECRET
 
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             resp = await client.post(
-                "/webhooks/inbound-mail?secret=my-secret",
-                json=_email_payload(),
+                "/webhooks/inbound-mail",
+                content=body,
+                headers={**headers, "Content-Type": "application/json"},
             )
 
     assert resp.status_code == http.HTTPStatus.OK
@@ -243,7 +359,6 @@ async def test_inbound_mail_no_text_and_no_subject_skips_extraction(mock_db):
         result = await inbound_mail(
             request=request,
             background_tasks=bg,
-            secret="",
             db=mock_db,
         )
 
@@ -285,7 +400,6 @@ async def test_inbound_mail_with_text_body_queues_extraction(mock_db):
         result = await inbound_mail(
             request=request,
             background_tasks=bg,
-            secret="",
             db=mock_db,
         )
 

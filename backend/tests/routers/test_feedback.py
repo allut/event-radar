@@ -11,7 +11,7 @@ class TestRecordFeedback:
     async def test_like_succeeds(self, mock_db, make_user, make_event, make_request):
         from app.routers.feedback import record_feedback, FeedbackBody
 
-        mock_db.get.return_value = make_event(10)
+        mock_db.scalar.return_value = make_event(10)
         user = make_user()
 
         result = await record_feedback(
@@ -32,7 +32,7 @@ class TestRecordFeedback:
     ):
         from app.routers.feedback import record_feedback, FeedbackBody
 
-        mock_db.get.return_value = make_event(1)
+        mock_db.scalar.return_value = make_event(1)
 
         result = await record_feedback(
             body=FeedbackBody(event_id=1, signal=signal),
@@ -47,7 +47,7 @@ class TestRecordFeedback:
         from fastapi import HTTPException
         from app.routers.feedback import record_feedback, FeedbackBody
 
-        mock_db.get.return_value = make_event(1)
+        mock_db.scalar.return_value = make_event(1)
         user = make_user()
 
         with pytest.raises(HTTPException) as exc_info:
@@ -64,7 +64,7 @@ class TestRecordFeedback:
         from fastapi import HTTPException
         from app.routers.feedback import record_feedback, FeedbackBody
 
-        mock_db.get.return_value = None  # event not found
+        mock_db.scalar.return_value = None  # event not found
 
         with pytest.raises(HTTPException) as exc_info:
             await record_feedback(
@@ -80,7 +80,7 @@ class TestRecordFeedback:
         """Ensure a DELETE is issued to user_event_scores."""
         from app.routers.feedback import record_feedback, FeedbackBody
 
-        mock_db.get.return_value = make_event(5)
+        mock_db.scalar.return_value = make_event(5)
         user = make_user(user_id=3)
 
         await record_feedback(

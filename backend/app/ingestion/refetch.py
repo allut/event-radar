@@ -51,6 +51,7 @@ from app.ingestion.base import (
     extract_jsonld_event_offers,
     extract_jsonld_event_text,
     host_guard_hook,
+    host_is_allowed,
     http_get,
     is_explicit_text,
     is_non_event_text,
@@ -190,11 +191,19 @@ async def refetch_event_details(db: AsyncSession) -> dict:
 
     last_commit = time.monotonic()
     # Bug 1 fix: follow Fienta's locale 302-redirects with a host-pinning SSRF guard.
-    # Build the allowed-host set from candidate URLs so every source's own host is
-    # permitted (redirects to other hosts are still blocked). The locale sub-fetch loop
+    # Build the allowed-host set from candidate URLs, intersected with the fixed
+    # ALLOWED_SOURCE_HOSTS allowlist — NOT from the raw candidate URLs alone. A
+    # candidate's event.url is untrusted (parsed from third-party page/API
+    # content); deriving the guard purely from it would let a malicious stored
+    # URL simply allowlist itself. The intersection permits every legitimate
+    # source host (candidates are host-checked at ingest by safe_fetchable_url,
+    # so in the normal case this equals the candidate hosts) while refusing to
+    # ever widen the guard beyond known-good hosts. The locale sub-fetch loop
     # has its own independent same-host guard below.
     allowed_hosts = frozenset(
-        h for e in candidates if (h := urlsplit(e.url or "").hostname)
+        h
+        for e in candidates
+        if (h := urlsplit(e.url or "").hostname) and host_is_allowed(h)
     )
     async with httpx.AsyncClient(
         timeout=HTTP_TIMEOUT_SECONDS,
@@ -206,7 +215,12 @@ async def refetch_event_details(db: AsyncSession) -> dict:
             assert url is not None  # guaranteed by the WHERE clause above
             try:
                 response = await http_get(client, url)
-            except (httpx.HTTPStatusError, httpx.RequestError) as exc:
+            except (httpx.HTTPStatusError, httpx.RequestError, ValueError) as exc:
+                # ValueError: host_guard_hook's SSRF guard raises this when url's
+                # host isn't in allowed_hosts (e.g. a row stored before this guard
+                # existed, or a redirect hop off-host) — an expected per-item
+                # rejection, not a bug, so it degrades like any other fetch
+                # failure (mirrors app/ingestion/sources/fienta.py::_fetch_detail).
                 # Don't bump detail_refetched_at on a fetch failure — a transient
                 # error should be retried on the next run, not throttled out.
                 summary["failed"] += 1

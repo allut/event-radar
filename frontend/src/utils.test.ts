@@ -86,6 +86,21 @@ describe('sanitizeHtml', () => {
     expect(result).not.toContain('class=');
     expect(result).not.toContain('style=');
   });
+
+  it('forces rel="noopener noreferrer" and target="_blank" on anchors', () => {
+    const result = sanitizeHtml('<a href="https://example.com">link</a>');
+    expect(result).toContain('rel="noopener noreferrer"');
+    expect(result).toContain('target="_blank"');
+  });
+
+  it('overrides an attacker-supplied rel/target on anchors', () => {
+    const result = sanitizeHtml(
+      '<a href="https://evil.com" rel="opener" target="_self">link</a>'
+    );
+    expect(result).toContain('rel="noopener noreferrer"');
+    expect(result).toContain('target="_blank"');
+    expect(result).not.toContain('rel="opener"');
+  });
 });
 
 describe('formatPrice', () => {

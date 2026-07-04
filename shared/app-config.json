@@ -1,6 +1,6 @@
 {
   "magic_link_ttl_minutes": 15,
-  "session_ttl_days": 7,
+  "session_ttl_days": 2,
   "persona_primary_weight": 1.0,
   "persona_secondary_weight": 0.4,
   "default_locale": "en",

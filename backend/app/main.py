@@ -310,6 +310,16 @@ async def add_security_headers(
 # bucket. trusted_hosts="*" is safe here: Render's web services are reachable only
 # through its proxy, so any connection reaching this process is by definition from
 # that trusted hop.
+#
+# DEPLOYMENT INVARIANT this depends on: trusted_hosts="*" means ANY peer that can
+# open a TCP connection to this process gets its X-Forwarded-For header trusted
+# verbatim (rate-limit bucketing and logged client IPs become spoofable by that
+# peer). Render doesn't publish a stable proxy egress CIDR to pin trusted_hosts to
+# instead, so this is safe only as long as the process is never reachable off of
+# Render's proxy — e.g. it would break silently if the service were ever exposed
+# directly (a public port, a misconfigured internal network, a non-Render host),
+# or fronted by another CDN/proxy in addition to Render's. Re-derive this trade-off
+# if the deployment topology changes.
 app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
 
 app.include_router(admin_router)

@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
-from sqlalchemy import delete
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.constants import RATE_LIMIT_FEEDBACK, VALID_SIGNALS
@@ -10,6 +10,7 @@ from app.db import get_db
 from app.models.models import Event, User, UserEventFeedback, UserEventScore
 from app.rate_limit import limiter
 from app.routers.auth import get_current_user
+from app.routers.utils import public_event_filter
 
 router = APIRouter(prefix="/feedback", tags=["feedback"])
 
@@ -37,7 +38,13 @@ async def record_feedback(
             detail=f"Invalid signal. Must be one of: {sorted(VALID_SIGNALS)}",
         )
 
-    event = await db.get(Event, body.event_id)
+    # Filtered to the same public-visibility predicate as GET /events/{id} —
+    # db.get() would let an authenticated caller probe internal event-ID
+    # existence (200 vs 404) and record signals against draft/hidden rows,
+    # skewing personalization for events that were never publicly surfaced.
+    event = await db.scalar(
+        select(Event).where(Event.id == body.event_id, public_event_filter())
+    )
     if event is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Event not found"

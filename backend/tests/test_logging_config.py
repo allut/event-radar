@@ -65,6 +65,17 @@ def test_text_formatter_includes_timestamp() -> None:
     assert "hello" in formatted
 
 
+def test_text_formatter_escapes_embedded_newlines() -> None:
+    # An untrusted value (e.g. a raw email subject) containing CR/LF must not
+    # be able to forge extra fake log lines in the dev console.
+    formatted = _text_formatter().format(
+        _make_record("line one\nWARNING app.evil: fake injected line\r\nline two")
+    )
+    assert "\n" not in formatted
+    assert "\r" not in formatted
+    assert "line one\\nWARNING app.evil: fake injected line\\r\\nline two" in formatted
+
+
 def test_json_formatter_shape() -> None:
     formatted = JsonLogFormatter().format(_make_record())
     payload = json.loads(formatted)

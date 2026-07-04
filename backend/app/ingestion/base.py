@@ -1,9 +1,11 @@
 import asyncio
 import hashlib
 import http
+import ipaddress
 import json
 import logging
 import re
+import socket
 import time
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Coroutine
@@ -29,6 +31,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.constants import (
+    ALLOWED_SOURCE_HOSTS,
     CURRENCY_AMOUNT_RE,
     DEFAULT_CURRENCY,
     ESTONIA_BBOX,
@@ -232,7 +235,13 @@ async def http_post(
 
 def safe_external_url(url: str | None, source: str | None = None) -> str | None:
     """Drop URLs whose scheme isn't http(s) — guards against stored XSS via
-    javascript:/data: URLs from untrusted sources rendered into <a href>/<img src>."""
+    javascript:/data: URLs from untrusted sources rendered into <a href>/<img src>.
+
+    Scheme-only: safe for values that are only ever rendered client-side
+    (e.g. Event.image_url) and never fetched by our own server. Values that
+    ARE fetched server-side (e.g. Event.url, re-fetched daily by
+    app/ingestion/refetch.py) must go through safe_fetchable_url instead,
+    which additionally pins the host against SSRF."""
     if not url:
         return None
     scheme = urlsplit(url).scheme.lower()
@@ -242,6 +251,83 @@ def safe_external_url(url: str | None, source: str | None = None) -> str | None:
         )
         return None
     return url
+
+
+def host_is_allowed(hostname: str | None) -> bool:
+    """True when hostname is (or is a subdomain of) an ALLOWED_SOURCE_HOSTS entry."""
+    if not hostname:
+        return False
+    hostname = hostname.lower()
+    return any(
+        hostname == allowed or hostname.endswith(f".{allowed}")
+        for allowed in ALLOWED_SOURCE_HOSTS
+    )
+
+
+def resolves_to_private_ip(hostname: str | None) -> bool:
+    """True when hostname has no public-routable address (or fails to resolve).
+
+    Guards against DNS rebinding on an otherwise-allowlisted host (e.g. a
+    misconfigured or compromised DNS record for an ALLOWED_SOURCE_HOSTS
+    domain pointing at cloud metadata or an internal service). Resolution
+    failure is treated as "private" (fail closed) rather than "unknown, so
+    allow" — a source we can't resolve isn't one we should be fetching.
+
+    Known trade-off (documented, not fixed here): this resolves once at
+    check time. httpx re-resolves the host itself when it opens the
+    connection, so a narrow TOCTOU window remains between this check and the
+    actual request if a resolver returns a different address a moment later.
+    Closing that fully would require pinning the resolved IP for the
+    connection (e.g. a custom httpx transport), which is out of scope here.
+    """
+    try:
+        infos = socket.getaddrinfo(hostname, None)
+    except socket.gaierror:
+        return True
+    for family, _type, _proto, _canonname, sockaddr in infos:
+        ip = ipaddress.ip_address(sockaddr[0])
+        if not (
+            ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_reserved
+            or ip.is_multicast
+            or ip.is_unspecified
+        ):
+            return False  # at least one public address — good enough to allow
+    return True  # every resolved address was non-public
+
+
+async def safe_fetchable_url(url: str | None, source: str | None = None) -> str | None:
+    """Drop any URL that is not safe for OUR server to fetch (SSRF guard).
+
+    Use for values later fetched server-side — currently Event.url, re-fetched
+    daily by app/ingestion/refetch.py. Layers on top of safe_external_url's
+    scheme check: the host must also be in ALLOWED_SOURCE_HOSTS and must not
+    resolve to a private/reserved/loopback address. The DNS check runs in a
+    thread (asyncio.to_thread) — it's blocking I/O and this is called from
+    the ingestion run loop, which shares the event loop with the FastAPI app.
+    """
+    scheme_checked = safe_external_url(url, source)
+    if scheme_checked is None:
+        return None
+    hostname = urlsplit(scheme_checked).hostname
+    if not host_is_allowed(hostname):
+        log.warning(
+            "dropped fetchable url from source %s: host not allowlisted (%s)",
+            source,
+            hostname,
+        )
+        return None
+    if await asyncio.to_thread(resolves_to_private_ip, hostname):
+        log.warning(
+            "dropped fetchable url from source %s: host resolves to a "
+            "private/reserved/unresolvable address (%s)",
+            source,
+            hostname,
+        )
+        return None
+    return scheme_checked
 
 
 _MULTI_BR_RE = re.compile(r"(?:<br\s*/?>\s*){%d,}" % (HTML_SANITIZE_MAX_CONSECUTIVE_BR + 1))
@@ -1005,6 +1091,10 @@ class SourceAdapter(ABC):
                 slug = _make_slug(
                     normalized.title, normalized.starts_at, normalized.external_id
                 )
+                # SSRF guard: event.url is fetched server-side by the daily refetch
+                # job, so — unlike image_url, which is only ever rendered
+                # client-side — it must be host-pinned, not just scheme-checked.
+                safe_url = await safe_fetchable_url(normalized.url, self.source.slug)
                 try:
                     async with db.begin_nested():
                         event = Event(
@@ -1018,7 +1108,7 @@ class SourceAdapter(ABC):
                             venue_address=normalized.venue_address,
                             lat=normalized.lat,
                             lng=normalized.lng,
-                            url=safe_external_url(normalized.url, self.source.slug),
+                            url=safe_url,
                             image_url=safe_external_url(
                                 normalized.image_url, self.source.slug
                             ),

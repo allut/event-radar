@@ -4,7 +4,7 @@ from __future__ import annotations
 
 
 MAGIC_LINK_TTL_MINUTES: int = 15
-SESSION_TTL_DAYS: int = 7
+SESSION_TTL_DAYS: int = 2
 PERSONA_PRIMARY_WEIGHT: float = 1.0
 PERSONA_SECONDARY_WEIGHT: float = 0.4
 DEFAULT_USER_LOCALE: str = "en"

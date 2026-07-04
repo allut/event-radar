@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 
 from app.constants import (
@@ -407,8 +408,45 @@ class TestThrottleBump:
         ):
             summary = await refetch_event_details(mock_db)
         assert summary["failed"] == 1
-        assert event.detail_refetch_count == 0  # not throttled — retries next run
-        assert event.detail_refetched_at is None
+
+
+class TestSsrfHostGuard:
+    """The allowed-host set passed to host_guard_hook must come from
+    ALLOWED_SOURCE_HOSTS, not from the raw candidate URLs — otherwise a
+    malicious/pre-fix stored event.url would allowlist itself. http_get is
+    NOT mocked here (unlike _run/other tests) so the real event_hooks guard
+    actually executes against a mocked transport."""
+
+    @pytest.mark.asyncio
+    async def test_non_allowlisted_host_is_blocked_not_crashed(self, mock_db):
+        good = _future_event(id=1, url="https://fienta.com/good-event")
+        evil = _future_event(
+            id=2, url="http://169.254.169.254/latest/meta-data/", detail_refetched_at=None
+        )
+        mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=[good, evil]))
+
+        good_html = _event_html(name="Real Venue", street="Main St 1")
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, text=good_html)
+
+        class _MockedAsyncClient(httpx.AsyncClient):
+            def __init__(self, *args, **kwargs):
+                kwargs["transport"] = httpx.MockTransport(handler)
+                super().__init__(*args, **kwargs)
+
+        with (
+            patch("app.ingestion.refetch.httpx.AsyncClient", _MockedAsyncClient),
+            patch("app.ingestion.refetch.asyncio.sleep", new=AsyncMock()),
+        ):
+            # Must not raise — a host-mismatch is a per-item skip, not a crash.
+            summary = await refetch_event_details(mock_db)
+
+        assert summary["candidates"] == 2
+        assert summary["failed"] == 1  # evil, blocked by the SSRF guard
+        assert summary["fetched"] == 1  # good, actually reached the transport
+        assert evil.detail_refetched_at is None  # not throttled out — retried next run
+        assert good.detail_refetched_at is not None
 
 
 # --- candidate query ---------------------------------------------------------

@@ -75,8 +75,23 @@ class HttpLogShipHandler(logging.Handler):
         super().close()
 
 
+class _DevTextFormatter(logging.Formatter):
+    """Text formatter for local dev console output.
+
+    Strips CR/LF from the fully-rendered line so an untrusted value
+    interpolated into a log message (e.g. a raw email subject/header) can't
+    forge extra fake log lines in the terminal. The prod JSON formatter
+    already gets this for free (JSON-encoding escapes embedded newlines);
+    most call sites already use %r for untrusted values too, but this closes
+    the gap for any that don't.
+    """
+
+    def format(self, record: logging.LogRecord) -> str:
+        return super().format(record).replace("\r", "\\r").replace("\n", "\\n")
+
+
 def _text_formatter() -> logging.Formatter:
-    formatter = logging.Formatter(LOG_FORMAT_TEXT, datefmt=LOG_DATE_FORMAT)
+    formatter = _DevTextFormatter(LOG_FORMAT_TEXT, datefmt=LOG_DATE_FORMAT)
     formatter.converter = time.gmtime
     return formatter
 

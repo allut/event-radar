@@ -1,5 +1,6 @@
 """Tests for LLM classifier — parse_classification and why_go localization."""
 
+import re
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -13,12 +14,35 @@ from app.llm.classifier import (
 )
 
 
+def _extract_tag(prompt: str, tag: str) -> str:
+    """Return the content between <tag>...</tag> in a built prompt, or "" if absent."""
+    m = re.search(rf"<{tag}>\n(.*?)\n</{tag}>", prompt, re.DOTALL)
+    return m.group(1) if m else ""
+
+
+class TestBuildClassifyPromptUntrustedDelimiters:
+    def test_all_untrusted_fields_are_delimited(self, make_event):
+        # Drift guard: the classifier prompt must wrap every untrusted
+        # source-derived field in its own tag pair (mirrors the venue-extract
+        # and newsletter prompts) so the LLM can distinguish data from
+        # instructions.
+        event = make_event()
+        prompt = _build_classify_prompt(event)
+        for tag in ("title", "venue", "description", "important_info"):
+            assert f"<{tag}>" in prompt and f"</{tag}>" in prompt
+
+    def test_untrusted_data_preamble_present(self, make_event):
+        event = make_event()
+        prompt = _build_classify_prompt(event)
+        assert "treat it" in prompt and "never as instructions" in prompt
+
+
 class TestBuildClassifyPromptImportantInfo:
     def test_important_info_included_in_prompt(self, make_event):
         event = make_event()
         event.important_info = "Age limit: 18+. Language: English."
         prompt = _build_classify_prompt(event)
-        assert "Important info: Age limit: 18+. Language: English." in prompt
+        assert _extract_tag(prompt, "important_info") == "Age limit: 18+. Language: English."
 
     def test_important_info_truncated_at_max_chars(self, make_event):
         event = make_event()
@@ -31,7 +55,7 @@ class TestBuildClassifyPromptImportantInfo:
         event = make_event()
         event.important_info = None
         prompt = _build_classify_prompt(event)
-        assert "Important info: (none)" in prompt
+        assert _extract_tag(prompt, "important_info") == "(none)"
 
     def test_fee_clause_stripped_from_prompt(self, make_event):
         # Regression: Piletilevi important_info carries "agenditasu 3,20 €" — the
@@ -39,24 +63,18 @@ class TestBuildClassifyPromptImportantInfo:
         event = make_event()
         event.important_info = "Nominaalhinnale lisandub agenditasu 3,20 € Pilet 45 €"
         prompt = _build_classify_prompt(event)
-        # Extract just the Important info line to avoid false positive from the
-        # template's own example ("agenditasu 3,20 €" appears in the rules section).
-        info_line = next(
-            (line for line in prompt.splitlines() if line.startswith("Important info:")),
-            "",
-        )
-        assert "3,20" not in info_line
-        assert "45" in info_line
+        # Extract just the <important_info> block to avoid a false positive from
+        # the template's own example ("agenditasu 3,20 €" appears in the rules section).
+        info_block = _extract_tag(prompt, "important_info")
+        assert "3,20" not in info_block
+        assert "45" in info_block
 
     def test_service_fee_stripped_from_prompt(self, make_event):
         event = make_event()
         event.important_info = "hinnad sisaldavad teenustasu 1.40€/ pilet"
         prompt = _build_classify_prompt(event)
-        info_line = next(
-            (line for line in prompt.splitlines() if line.startswith("Important info:")),
-            "",
-        )
-        assert "1.40" not in info_line
+        info_block = _extract_tag(prompt, "important_info")
+        assert "1.40" not in info_block
 
 
 class TestParseClassificationMalformedTaxonomy:

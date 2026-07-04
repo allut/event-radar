@@ -12,6 +12,7 @@ from app.config import settings
 from app.constants import (
     ADMIN_DEDUP_GROUPS_MAX_PAGE_SIZE,
     ADMIN_DEDUP_GROUPS_PAGE_SIZE,
+    ADMIN_USERNAME_DEFAULT,
     APP_ENV_DEVELOPMENT,
     EVENT_STATUS_CANCELLED,
     RATE_LIMIT_ADMIN,
@@ -53,6 +54,17 @@ def _require_admin(credentials: HTTPBasicCredentials = Depends(_security)) -> No
             "ADMIN_PASSWORD not set; admin endpoints are unprotected (development mode)"
         )
         return
+    if (
+        settings.ADMIN_USERNAME == ADMIN_USERNAME_DEFAULT
+        and settings.APP_ENV != APP_ENV_DEVELOPMENT
+    ):
+        # Production with the default username — refuse until explicitly configured,
+        # mirroring the ADMIN_PASSWORD fail-closed check above. A well-known username
+        # halves the credential pair an attacker needs to guess/brute-force.
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Admin endpoints disabled: ADMIN_USERNAME left at its default value",
+        )
     username_ok = secrets.compare_digest(
         credentials.username.encode(),
         settings.ADMIN_USERNAME.encode(),

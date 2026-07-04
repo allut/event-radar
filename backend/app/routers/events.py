@@ -3,12 +3,13 @@
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.constants import EVENT_STATUS_PUBLISHED, RATE_LIMIT_EVENTS_DETAIL
+from app.constants import RATE_LIMIT_EVENTS_DETAIL
 from app.db import get_db
 from app.models.models import Event
 from app.rate_limit import limiter
 from app.routers.utils import (
     get_optional_user_locale,
+    public_event_filter,
     select_events_with_classification,
     serialize_event,
 )
@@ -28,9 +29,7 @@ async def get_event(
     event = await db.scalar(
         select_events_with_classification().where(
             Event.id == event_id,
-            Event.status == EVENT_STATUS_PUBLISHED,
-            Event.is_explicit.is_(False),
-            Event.is_non_event.is_(False),
+            public_event_filter(),
         )
     )
     if event is None:

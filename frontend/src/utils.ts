@@ -20,6 +20,20 @@ export function safeUrl(url: string | null | undefined): string | null {
   }
 }
 
+// Registered once at module scope (not per sanitizeHtml call) — DOMPurify hooks
+// are global, so re-adding on every call would pile up duplicate listeners.
+// Forces rel="noopener noreferrer" on every sanitized <a>, matching the trusted
+// outbound links in EventCard/EventDetail: without it, an anchor from
+// untrusted event HTML opened via target="_blank" could use
+// window.opener to navigate the origin tab (reverse tabnabbing), and omitting
+// rel="noreferrer" would leak the full referrer URL to the linked site.
+DOMPurify.addHook('afterSanitizeAttributes', (node) => {
+  if (node.tagName === 'A') {
+    node.setAttribute('rel', 'noopener noreferrer');
+    node.setAttribute('target', '_blank');
+  }
+});
+
 /** Client-side sanitizer for HTML from event description/important_info fields.
  * Strictly matches the backend nh3 allowlist; defense-in-depth before dangerouslySetInnerHTML. */
 export function sanitizeHtml(html: string): string {

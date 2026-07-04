@@ -1,9 +1,10 @@
 """Tests for shared ingestion helpers in app.ingestion.base."""
 
 import http
+import socket
 import time
 from datetime import datetime
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
@@ -23,14 +24,109 @@ from app.ingestion.base import (
     eur_price_bounds_from_text,
     extract_jsonld_event_location,
     extract_jsonld_event_offers,
+    host_is_allowed,
     is_explicit_text,
     is_non_event_text,
     is_target_city,
     parse_price_from_string,
     price_context_digest,
+    resolves_to_private_ip,
     retry_after_seconds,
+    safe_fetchable_url,
     strip_fee_amounts,
 )
+
+
+def _addrinfo(*ips: str) -> list:
+    return [
+        (socket.AF_INET, socket.SOCK_STREAM, 6, "", (ip, 0)) for ip in ips
+    ]
+
+
+class TestHostIsAllowed:
+    def test_exact_match(self):
+        assert host_is_allowed("fienta.com") is True
+
+    def test_case_insensitive(self):
+        assert host_is_allowed("Fienta.COM") is True
+
+    def test_subdomain_match(self):
+        assert host_is_allowed("en.fienta.com") is True
+
+    def test_unrelated_host_rejected(self):
+        assert host_is_allowed("evil.com") is False
+
+    def test_lookalike_suffix_not_matched(self):
+        # "notfienta.com" ends with "fienta.com" as a raw string but is not a
+        # subdomain of it — must not match.
+        assert host_is_allowed("notfienta.com") is False
+
+    def test_none_rejected(self):
+        assert host_is_allowed(None) is False
+
+    def test_empty_string_rejected(self):
+        assert host_is_allowed("") is False
+
+
+class TestResolvesToPrivateIp:
+    def test_public_ip_is_not_private(self):
+        with patch("socket.getaddrinfo", return_value=_addrinfo("93.184.216.34")):
+            assert resolves_to_private_ip("example.com") is False
+
+    def test_loopback_is_private(self):
+        with patch("socket.getaddrinfo", return_value=_addrinfo("127.0.0.1")):
+            assert resolves_to_private_ip("localhost") is True
+
+    def test_link_local_metadata_ip_is_private(self):
+        # 169.254.169.254 — cloud metadata endpoint, the canonical SSRF target.
+        with patch("socket.getaddrinfo", return_value=_addrinfo("169.254.169.254")):
+            assert resolves_to_private_ip("evil.example") is True
+
+    def test_rfc1918_is_private(self):
+        with patch("socket.getaddrinfo", return_value=_addrinfo("10.0.0.5")):
+            assert resolves_to_private_ip("internal.example") is True
+
+    def test_dns_failure_treated_as_private(self):
+        with patch("socket.getaddrinfo", side_effect=socket.gaierror("no such host")):
+            assert resolves_to_private_ip("nonexistent.invalid") is True
+
+    def test_any_public_address_among_many_is_allowed(self):
+        with patch(
+            "socket.getaddrinfo", return_value=_addrinfo("10.0.0.5", "93.184.216.34")
+        ):
+            assert resolves_to_private_ip("mixed.example") is False
+
+
+class TestSafeFetchableUrl:
+    @pytest.mark.asyncio
+    async def test_allowed_host_public_ip_passes(self):
+        with patch("socket.getaddrinfo", return_value=_addrinfo("93.184.216.34")):
+            result = await safe_fetchable_url("https://fienta.com/e/123", "fienta")
+        assert result == "https://fienta.com/e/123"
+
+    @pytest.mark.asyncio
+    async def test_non_allowlisted_host_rejected(self):
+        result = await safe_fetchable_url("https://evil.com/e/123", "fienta")
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_private_ip_rejected_even_on_allowlisted_host(self):
+        # DNS-rebinding scenario: hostname passes the allowlist but resolves
+        # to a private/metadata address.
+        with patch("socket.getaddrinfo", return_value=_addrinfo("169.254.169.254")):
+            result = await safe_fetchable_url("https://fienta.com/e/123", "fienta")
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_non_http_scheme_rejected_before_dns_lookup(self):
+        with patch("socket.getaddrinfo") as mock_getaddrinfo:
+            result = await safe_fetchable_url("javascript:alert(1)", "fienta")
+        assert result is None
+        mock_getaddrinfo.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_none_url_returns_none(self):
+        assert await safe_fetchable_url(None, "fienta") is None
 
 
 class TestIsExplicitText:

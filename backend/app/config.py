@@ -8,7 +8,7 @@ from app._generated.shared_constants import (
     MAGIC_LINK_TTL_MINUTES as _MAGIC_LINK_TTL_DEFAULT,
     SESSION_TTL_DAYS as _SESSION_TTL_DEFAULT,
 )
-from app.constants import APP_ENV_DEVELOPMENT, LOG_LEVEL_DEFAULT
+from app.constants import ADMIN_USERNAME_DEFAULT, APP_ENV_DEVELOPMENT, LOG_LEVEL_DEFAULT
 
 
 class Settings(BaseSettings):
@@ -83,7 +83,7 @@ class Settings(BaseSettings):
     }
 
     # Admin / internal security
-    ADMIN_USERNAME: str = "admin"  # Basic-auth username for /admin/* endpoints
+    ADMIN_USERNAME: str = ADMIN_USERNAME_DEFAULT  # Basic-auth username for /admin/* endpoints
     ADMIN_PASSWORD: str = (
         ""  # Basic-auth password for /admin/* endpoints; empty = disabled (dev only)
     )
@@ -100,7 +100,9 @@ class Settings(BaseSettings):
     MAGIC_LINK_TTL_MINUTES: int = _MAGIC_LINK_TTL_DEFAULT
     SESSION_TTL_DAYS: int = _SESSION_TTL_DEFAULT
 
-    # Webhooks — set to a random secret and pass it as ?secret=... in the Resend inbound webhook URL
+    # Webhooks — Svix signing secret ("whsec_...") shown on the webhook's page in the
+    # Resend dashboard. Verifies the svix-id/svix-timestamp/svix-signature headers
+    # over the raw request body; do NOT pass it as a URL query param.
     RESEND_WEBHOOK_SECRET: str = ""  # empty = no verification (dev only)
 
     # LLM providers — empty key means that provider is skipped in the fallback chain

@@ -28,6 +28,12 @@ export default function AuthVerify() {
     if (called.current) return;
     called.current = true;
 
+    // Strip the single-use token from the address bar before the async verify
+    // call — otherwise it persists in browser history (and any history-sync
+    // service) for as long as the entry survives, extending its exposure well
+    // past the short window a network observer would have.
+    window.history.replaceState({}, '', '/auth/verify');
+
     async function verify(tok: string) {
       try {
         const data = await api.get<VerifyResponse>(`/auth/verify?token=${encodeURIComponent(tok)}`);
