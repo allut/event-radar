@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from sqlalchemy import func, select
 
+from app.cleanup import cleanup_stale_data
 from app.config import settings
 from app.constants import (
     ADMIN_DEDUP_GROUPS_MAX_PAGE_SIZE,
@@ -289,6 +290,39 @@ async def admin_sync_organizers(request: Request) -> dict:
                 detail="Organizer sync failed; see server logs",
             )
     return result
+
+
+@router.post("/cleanup", dependencies=[Depends(_require_admin)])
+@limiter.limit(RATE_LIMIT_ADMIN)
+async def admin_cleanup(
+    request: Request,
+    dry_run: bool = Query(
+        True,
+        description="When true (default), counts candidate rows but deletes nothing",
+    ),
+) -> dict:
+    """Trigger data retention cleanup (prunes satellite tables; never events).
+
+    Defaults to dry-run, matching every other destructive admin/maintenance
+    tool in this codebase (reset_events.py, demote_non_events.py,
+    demote_explicit_events.py, /admin/pipeline/run) — pass ?dry_run=false to
+    actually delete.
+
+    See app.cleanup.cleanup_stale_data for the per-table retention windows.
+    """
+    async with AsyncSessionLocal() as db:
+        try:
+            summary = await cleanup_stale_data(db, dry_run=dry_run)
+            if not dry_run:
+                await db.commit()
+        except Exception:
+            await db.rollback()
+            log.exception("admin cleanup failed")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Cleanup failed; see server logs",
+            )
+    return summary
 
 
 @router.post("/build-feeds", dependencies=[Depends(_require_admin)])

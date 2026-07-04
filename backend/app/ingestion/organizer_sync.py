@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import httpx
 from sqlalchemy import select
@@ -15,6 +15,7 @@ from app.constants import (
     ORGANIZER_MIN_EVENTS_FOR_AUTO_ADD,
     ORGANIZER_NAME_MAX_LEN,
     SOURCE_SLUG_FIENTA,
+    STALE_ORGANIZER_RETIRE_DAYS,
     TALLINN_TZ,
 )
 from app.ingestion.base import http_get
@@ -24,7 +25,16 @@ log = logging.getLogger(__name__)
 
 
 async def sync_fienta_organizers(db: AsyncSession) -> dict:
-    """Check active organizers, discover new ones, update Source.config.
+    """Check active organizers, discover new ones, retire long-dead ones, update Source.config.
+
+    Lifecycle: an organizer that returns 0 events is flagged stale (skipped by
+    the next hourly ingest, still re-probed weekly here so a revival is
+    detected). Once an organizer has been continuously stale for
+    STALE_ORGANIZER_RETIRE_DAYS, it is retired — dropped out of organizer_ids
+    entirely into retired_organizer_ids, so seeding (app/seeds.py) never
+    resurrects it from the hardcoded settings floor. A retired organizer that
+    resurfaces in the discovery scan (>= ORGANIZER_MIN_EVENTS_FOR_AUTO_ADD
+    Tallinn events) rejoins organizer_ids like any newly-discovered one.
 
     Caller is responsible for committing the session after this returns.
     """
@@ -37,11 +47,15 @@ async def sync_fienta_organizers(db: AsyncSession) -> dict:
     current_ids: list[int] = [int(x) for x in config.get("organizer_ids", [])]
     current_names: dict[str, str] = dict(config.get("organizer_names", {}))
     current_id_set: set[int] = set(current_ids)
-    # Carry forward stale IDs from previous runs so transient errors don't silently clear them.
-    prev_stale: set[int] = set(int(x) for x in config.get("stale_organizer_ids", []))
+    retired_ids: set[int] = set(int(x) for x in config.get("retired_organizer_ids", []))
+    # stale_since: oid (str key, JSONB) -> ISO timestamp of first consecutive stale probe.
+    stale_since: dict[str, str] = dict(config.get("stale_since", {}))
 
-    stale_ids: set[int] = set()
+    now = datetime.now(tz=TALLINN_TZ)
+    stale_this_run: set[int] = set()
+    revived: set[int] = set()
     added: list[tuple[int, str]] = []
+    retired_now: list[int] = []
 
     async with httpx.AsyncClient(timeout=HTTP_TIMEOUT_SECONDS) as client:
         # Step 1 — check each current organizer is still returning events
@@ -54,16 +68,20 @@ async def sync_fienta_organizers(db: AsyncSession) -> dict:
                 )
                 events = resp.json().get("events", [])
                 if not events:
-                    stale_ids.add(org_id)
+                    stale_this_run.add(org_id)
                     log.info(
                         "organizer_sync: organizer %s (%s) returned 0 events — flagged stale",
                         org_id,
                         current_names.get(str(org_id)),
                     )
+                else:
+                    revived.add(org_id)
             except httpx.HTTPError as exc:
                 log.warning(
                     "organizer_sync: check failed for organizer=%s: %s", org_id, exc
                 )
+                # Transient error: neither stale nor revived this run — carry forward
+                # whatever stale_since state already existed for this oid.
 
         # Step 2 — discover new organizers via city filter scan
         try:
@@ -96,40 +114,79 @@ async def sync_fienta_organizers(db: AsyncSession) -> dict:
                 org_counts[oid] = (count + 1, name)
 
             for oid, (count, name) in sorted(org_counts.items()):
-                if (
-                    oid not in current_id_set
-                    and count >= ORGANIZER_MIN_EVENTS_FOR_AUTO_ADD
-                ):
-                    current_ids.append(oid)
-                    current_id_set.add(oid)
-                    current_names[str(oid)] = name
-                    added.append((oid, name))
+                if oid in current_id_set or count < ORGANIZER_MIN_EVENTS_FOR_AUTO_ADD:
+                    continue
+                current_ids.append(oid)
+                current_id_set.add(oid)
+                current_names[str(oid)] = name
+                added.append((oid, name))
+                if oid in retired_ids:
+                    retired_ids.discard(oid)
                     log.info(
-                        "organizer_sync: auto-added organizer %s (%s) — %d events",
+                        "organizer_sync: retired organizer %s (%s) revived — rejoined",
                         oid,
                         name,
-                        count,
                     )
+                log.info(
+                    "organizer_sync: auto-added organizer %s (%s) — %d events",
+                    oid,
+                    name,
+                    count,
+                )
         except httpx.HTTPError as exc:
             log.warning("organizer_sync: discovery scan failed: %s", exc)
 
-    # Merge with previous stale set so HTTP-error runs don't silently clear prior stale flags.
-    merged_stale: list[int] = sorted(stale_ids | prev_stale)
+    # Update stale_since: new stale oids get a first-seen timestamp; revived
+    # oids are cleared. Errored oids keep whatever prior state they had.
+    for oid in stale_this_run:
+        stale_since.setdefault(str(oid), now.isoformat())
+    for oid in revived:
+        stale_since.pop(str(oid), None)
+
+    # Retire any oid stale continuously for >= STALE_ORGANIZER_RETIRE_DAYS.
+    retire_cutoff = now - timedelta(days=STALE_ORGANIZER_RETIRE_DAYS)
+    for oid_str, since_iso in list(stale_since.items()):
+        since = datetime.fromisoformat(since_iso)
+        if since <= retire_cutoff:
+            oid = int(oid_str)
+            if oid in current_id_set:
+                current_ids.remove(oid)
+                current_id_set.discard(oid)
+            retired_ids.add(oid)
+            retired_now.append(oid)
+            stale_since.pop(oid_str, None)
+            log.info(
+                "organizer_sync: retired organizer %s (%s) — stale since %s",
+                oid,
+                current_names.get(oid_str),
+                since_iso,
+            )
+
+    # stale_organizer_ids = currently stale, not yet retired (still polled next
+    # week so a revival is detectable; skipped by hourly ingest, see fienta.py).
+    stale_organizer_ids = sorted(int(x) for x in stale_since)
 
     # Step 3 — always persist last_sync; update organizer lists only if changed
     source.config = {
         **config,
         "organizer_ids": current_ids,
         "organizer_names": current_names,
-        "last_sync": datetime.now(tz=TALLINN_TZ).isoformat(),
-        "stale_organizer_ids": merged_stale,  # retained for human review; not auto-removed
+        "last_sync": now.isoformat(),
+        "stale_organizer_ids": stale_organizer_ids,
+        "stale_since": stale_since,
+        "retired_organizer_ids": sorted(retired_ids),
     }
     flag_modified(source, "config")
 
     log.info(
-        "organizer_sync: done — total=%d added=%d stale=%d",
+        "organizer_sync: done — total=%d added=%d stale=%d retired=%d",
         len(current_ids),
         len(added),
-        len(merged_stale),
+        len(stale_organizer_ids),
+        len(retired_now),
     )
-    return {"added": added, "stale": merged_stale}
+    return {
+        "added": added,
+        "stale": stale_organizer_ids,
+        "retired": retired_now,
+    }

@@ -253,6 +253,11 @@ FIENTA_ORGANIZER_SCAN_LIMIT = 1000
 FIENTA_ORGANIZER_CHECK_LIMIT = (
     5  # max events fetched when probing a single organizer for staleness
 )
+# An organizer that has returned 0 events on every weekly probe for this many
+# days is retired: dropped from organizer_ids into retired_organizer_ids, no
+# longer polled by hourly ingest or the weekly probe. A revival (auto-discovery
+# sees it again with enough events) rejoins organizer_ids.
+STALE_ORGANIZER_RETIRE_DAYS = 30
 FIENTA_CITY_FILTER = "Tallinn"
 FIENTA_MAX_PAGES = 50  # safety ceiling per organizer — prevents runaway pagination
 # Concurrency cap for detail-page fan-out. The shared AsyncRateLimiter (below)
@@ -967,3 +972,17 @@ BACKFILL_DEFAULT_LIMIT = 5000  # max rows scanned/processed per run, overridable
 # / REFETCH_COMMIT_INTERVAL_SECONDS, to keep the held DB connection warm under Neon's
 # ~5-min idle auto-suspend and persist progress incrementally.
 FIX_PRICES_COMMIT_INTERVAL_SECONDS: float = 10.0
+
+# Data retention — app/cleanup.py::cleanup_stale_data(), weekly Sun 03:30 EET.
+# These prune satellite/audit tables only; `events` rows are never deleted.
+MAGIC_LINK_RETENTION_DAYS = 7  # expired/used auth_magic_links rows
+LLM_CALLS_RETENTION_DAYS = 90  # also the dedup/classification cache window
+# Trade-off: a one-off forensic/backfill script (e.g. fix_prices.py, which read
+# raw_events.payload["price_from_string"]) cannot recover a row pruned past
+# this window — any future script needing raw payloads must run within 90
+# days of ingest, or this constant must be raised first.
+RAW_EVENTS_RETENTION_DAYS = 90
+INGESTION_RUNS_RETENTION_DAYS = 90
+RAW_INBOUND_EMAILS_RETENTION_DAYS = 90
+DAILY_FEEDS_RETENTION_DAYS = 30
+USER_EVENT_SCORES_RETENTION_DAYS = 30  # keyed on the underlying event's end date

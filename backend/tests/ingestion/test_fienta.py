@@ -608,6 +608,33 @@ class TestFetchRaw:
         assert len(result) == 6
 
     @pytest.mark.asyncio
+    async def test_stale_organizers_are_skipped(self):
+        """organizer_ids in stale_organizer_ids are not polled by fetch_raw()."""
+        requested_orgs = []
+
+        async def handler(request):
+            requested_orgs.append(request.url.params.get("organizer"))
+            return _mock_response([{"id": "ok"}])
+
+        source = MagicMock()
+        source.config = {
+            "organizer_ids": [1, 2],
+            "stale_organizer_ids": [2],
+        }
+        adapter = FientaAdapter(source)
+
+        transport = httpx.MockTransport(handler)
+        _real = httpx.AsyncClient
+        with patch(
+            "app.ingestion.sources.fienta.httpx.AsyncClient",
+            lambda **kw: _real(transport=transport),
+        ):
+            result = await adapter.fetch_raw(set())
+
+        assert requested_orgs == ["1"]
+        assert len(result) == 1
+
+    @pytest.mark.asyncio
     async def test_meta_pagination_ceiling(self):
         """Meta-based pagination stops at FIENTA_MAX_PAGES even if last_page is huge."""
         request_count = 0

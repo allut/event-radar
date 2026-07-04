@@ -98,6 +98,93 @@ async def test_sync_organizers_returns_500_on_job_error():
 
 
 # ---------------------------------------------------------------------------
+# POST /admin/cleanup
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_cleanup_defaults_to_dry_run_and_does_not_commit():
+    """Matches every other destructive admin/maintenance tool's dry-run-first convention."""
+    app = _build_app()
+    db_ctx = _make_db_ctx()
+    expected = {"auth_magic_links": 3, "llm_calls": 10}
+
+    with (
+        patch("app.routers.admin.settings") as mock_settings,
+        patch("app.routers.admin.AsyncSessionLocal", return_value=db_ctx),
+        patch(
+            "app.routers.admin.cleanup_stale_data",
+            new_callable=AsyncMock,
+            return_value=expected,
+        ) as mock_cleanup,
+    ):
+        mock_settings.ADMIN_PASSWORD = ""
+        mock_settings.APP_ENV = APP_ENV_DEVELOPMENT
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            resp = await client.post("/admin/cleanup", auth=("admin", ""))
+
+    assert resp.status_code == http.HTTPStatus.OK
+    assert resp.json() == expected
+    mock_cleanup.assert_awaited_once_with(db_ctx.__aenter__.return_value, dry_run=True)
+    db_ctx.__aenter__.return_value.commit.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_cleanup_dry_run_false_actually_deletes_and_commits():
+    app = _build_app()
+    db_ctx = _make_db_ctx()
+
+    with (
+        patch("app.routers.admin.settings") as mock_settings,
+        patch("app.routers.admin.AsyncSessionLocal", return_value=db_ctx),
+        patch(
+            "app.routers.admin.cleanup_stale_data",
+            new_callable=AsyncMock,
+            return_value={},
+        ) as mock_cleanup,
+    ):
+        mock_settings.ADMIN_PASSWORD = ""
+        mock_settings.APP_ENV = APP_ENV_DEVELOPMENT
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            resp = await client.post("/admin/cleanup?dry_run=false", auth=("admin", ""))
+
+    assert resp.status_code == http.HTTPStatus.OK
+    mock_cleanup.assert_awaited_once_with(db_ctx.__aenter__.return_value, dry_run=False)
+    db_ctx.__aenter__.return_value.commit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_cleanup_returns_500_on_job_error():
+    app = _build_app()
+    db_ctx = _make_db_ctx()
+
+    with (
+        patch("app.routers.admin.settings") as mock_settings,
+        patch("app.routers.admin.AsyncSessionLocal", return_value=db_ctx),
+        patch(
+            "app.routers.admin.cleanup_stale_data",
+            new_callable=AsyncMock,
+            side_effect=RuntimeError("db down"),
+        ),
+    ):
+        mock_settings.ADMIN_PASSWORD = ""
+        mock_settings.APP_ENV = APP_ENV_DEVELOPMENT
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            resp = await client.post("/admin/cleanup", auth=("admin", ""))
+
+    assert resp.status_code == http.HTTPStatus.INTERNAL_SERVER_ERROR
+
+
+# ---------------------------------------------------------------------------
 # POST /admin/build-feeds
 # ---------------------------------------------------------------------------
 

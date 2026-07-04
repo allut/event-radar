@@ -22,6 +22,7 @@ from app.constants import (
     SECURITY_HEADERS,
     TALLINN_TZ_NAME,
 )
+from app.cleanup import cleanup_stale_data
 from app.db import AsyncSessionLocal, engine
 from app.email.digest import send_daily_digests
 from app.ingestion.jobs import (
@@ -63,6 +64,17 @@ async def _run_organizer_sync() -> None:
         except Exception:
             await db.rollback()
             log.exception("organizer sync failed")
+
+
+async def _run_cleanup() -> None:
+    async with AsyncSessionLocal() as db:
+        try:
+            summary = await cleanup_stale_data(db)
+            await db.commit()
+            log.info("cleanup_stale_data committed: %s", summary)
+        except Exception:
+            await db.rollback()
+            log.exception("cleanup_stale_data failed")
 
 
 async def _run_ingest_all() -> None:
@@ -149,6 +161,17 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         hour=3,
         minute=0,
         id="sync_fienta_organizers",
+        replace_existing=True,
+    )
+
+    # Data retention cleanup — weekly Sunday 03:30 EET (after organizer sync, off-peak)
+    scheduler.add_job(
+        _run_cleanup,
+        trigger="cron",
+        day_of_week="sun",
+        hour=3,
+        minute=30,
+        id="cleanup_stale_data",
         replace_existing=True,
     )
 

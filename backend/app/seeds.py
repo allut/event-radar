@@ -118,8 +118,13 @@ async def _upsert_fienta(db: AsyncSession) -> None:
         db_cfg = existing.config or {}
         # Union organizer IDs so auto-discovered IDs from organizer_sync are preserved.
         # DB names take precedence — organizer_sync may have refreshed them.
+        # Subtract retired_organizer_ids so a hardcoded seed ID that organizer_sync
+        # has since retired (dead for STALE_ORGANIZER_RETIRE_DAYS) is not resurrected
+        # by this union on the next startup.
+        retired_ids = set(db_cfg.get("retired_organizer_ids", []))
         merged_ids = sorted(
-            set(desired["organizer_ids"]) | set(db_cfg.get("organizer_ids", []))
+            (set(desired["organizer_ids"]) | set(db_cfg.get("organizer_ids", [])))
+            - retired_ids
         )
         merged_names = {
             **desired["organizer_names"],

@@ -52,6 +52,11 @@ class FientaAdapter(SourceAdapter):
     source.config must contain:
       organizer_ids: list[int] — Fienta numeric organizer IDs
 
+    Organizers listed in source.config["stale_organizer_ids"] (set by
+    app.ingestion.organizer_sync.sync_fienta_organizers) are skipped here —
+    they are still re-probed by the weekly organizer sync so a revival is
+    detected, but hourly ingest stops polling a known-dead organizer.
+
     Pagination: handles both link-based (`links.next`) and meta-based
     (`meta.current_page` / `meta.last_page`) pagination automatically.
     Plain list responses (no pagination envelope) are also supported.
@@ -79,7 +84,12 @@ class FientaAdapter(SourceAdapter):
     """
 
     async def fetch_raw(self, known_ids: set[str]) -> list[dict[str, Any]]:
-        organizer_ids: list[int] = self.source.config.get("organizer_ids", [])
+        stale_ids: set[int] = set(self.source.config.get("stale_organizer_ids", []))
+        organizer_ids: list[int] = [
+            oid
+            for oid in self.source.config.get("organizer_ids", [])
+            if oid not in stale_ids
+        ]
         base_url: str = self.source.config.get("base_url", settings.FIENTA_BASE_URL)
         base_host = urlparse(base_url).hostname
         all_events: list[dict[str, Any]] = []
