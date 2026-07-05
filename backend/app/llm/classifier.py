@@ -10,14 +10,17 @@ Any LLM-returned value not in the taxonomy is silently dropped.
 
 import logging
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
-from sqlalchemy import select
+from sqlalchemy import ColumnElement, and_, exists, or_, select, update
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
 from app.constants import (
     CURRENCY_CODE_MAX_LEN,
     DEFAULT_USER_LOCALE,
+    EVENT_STATUS_CANCELLED,
     EVENT_STATUS_CLASSIFIED,
     EVENT_STATUS_DRAFT,
     IMPORTANT_INFO_MAX_CHARS,
@@ -52,7 +55,11 @@ from app.ingestion.base import (
 )
 from app.llm.router import LLMError, llm_json
 from app.models.models import Event, EventClassification
-from app.routers.utils import canonical_event_filter
+from app.routers.utils import (
+    canonical_event_filter,
+    event_ended_filter,
+    event_not_ended_filter,
+)
 
 # Free-tier keywords across et/en/ru — a "0" reported by the LLM is only trusted
 # when one of these literally appears in the text; otherwise it's treated as an
@@ -351,6 +358,35 @@ async def classify_event(
     return True
 
 
+def _no_live_dedup_sibling_clause(now: datetime) -> ColumnElement[bool]:
+    """True when no other, still-live member points its ``dedup_group_id`` at
+    this event's id.
+
+    Guards the bulk-cancel below: a dedup-canonical representative must not be
+    cancelled out from under a still-live sibling (same dedup group, not yet
+    ended, not already cancelled) — that sibling's ``dedup_group_id`` would
+    keep pointing at a cancelled id until the next ``dedup_pass`` reclusters,
+    stranding it outside ``canonical_event_filter()`` (and hence unreachable by
+    ``classify_pending``) for up to one 6h cycle. Ungrouped events (no row
+    references their id as a group) and events with only already-ended or
+    already-cancelled siblings are unaffected and cancel normally.
+    """
+    sibling = aliased(Event)
+    return ~exists(
+        select(1)
+        .select_from(sibling)
+        .where(
+            sibling.dedup_group_id == Event.id,
+            sibling.id != Event.id,
+            sibling.status != EVENT_STATUS_CANCELLED,
+            or_(
+                sibling.ends_at >= now,
+                and_(sibling.ends_at.is_(None), sibling.starts_at >= now),
+            ),
+        )
+    )
+
+
 async def classify_pending(
     db: AsyncSession, *, batch_size: int = LLM_CLASSIFY_BATCH_SIZE
 ) -> dict[str, Any]:
@@ -359,15 +395,37 @@ async def classify_pending(
     A "canonical" event is one with ``dedup_group_id IS NULL`` or
     ``dedup_group_id == event.id`` (the representative of its group).
 
-    Returns a summary dict with ``attempted``, ``succeeded``, ``failed`` keys.
-    The caller must commit the session.
+    Before selecting the batch, any draft whose event has already ended
+    (``event_ended_filter``) is bulk-cancelled — it can never pass the
+    publish gate's ``fail_ended`` check even if classified, so spending an
+    LLM call (or a batch slot) on it is wasted, and leaving it in ``draft``
+    forever would otherwise strand it there indefinitely once its FIFO
+    position falls behind newer arrivals. Excludes a dedup-canonical
+    representative that still has a live sibling (see
+    ``_no_live_dedup_sibling_clause``) so that sibling isn't orphaned.
+
+    Returns a summary dict with ``attempted``, ``succeeded``, ``failed``,
+    ``cancelled`` keys. The caller must commit the session.
     """
+    now = datetime.now(tz=TALLINN_TZ)
+    cancel_result = await db.execute(
+        update(Event)
+        .where(
+            Event.status == EVENT_STATUS_DRAFT,
+            event_ended_filter(now),
+            _no_live_dedup_sibling_clause(now),
+        )
+        .values(status=EVENT_STATUS_CANCELLED)
+    )
+    cancelled = cast(CursorResult, cancel_result).rowcount
+
     rows = (
         await db.scalars(
             select(Event)
             .where(
                 Event.status == EVENT_STATUS_DRAFT,
                 canonical_event_filter(),
+                event_not_ended_filter(now),
             )
             .order_by(Event.id)
             .limit(batch_size)
@@ -406,9 +464,15 @@ async def classify_pending(
             failed += 1
 
     log.info(
-        "classify_pending: attempted=%d succeeded=%d failed=%d",
+        "classify_pending: attempted=%d succeeded=%d failed=%d cancelled=%d",
         attempted,
         succeeded,
         failed,
+        cancelled,
     )
-    return {"attempted": attempted, "succeeded": succeeded, "failed": failed}
+    return {
+        "attempted": attempted,
+        "succeeded": succeeded,
+        "failed": failed,
+        "cancelled": cancelled,
+    }

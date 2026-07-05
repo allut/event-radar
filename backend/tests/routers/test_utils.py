@@ -2,6 +2,7 @@
 from datetime import datetime, timezone
 
 from app.routers.utils import (
+    event_ended_filter,
     event_not_ended_filter,
     event_series_key,
     mask_email,
@@ -63,6 +64,26 @@ class TestEventNotEndedFilter:
         # ...or, when ends_at is unset, live if starts_at hasn't passed yet.
         assert "events.ends_at IS NULL" in compiled
         assert "events.starts_at >=" in compiled
+        assert "2026-06-25" in compiled
+
+
+class TestEventEndedFilter:
+    """event_ended_filter must NOT be ``not_(event_not_ended_filter(...))`` —
+    negating that expression hits SQL three-valued logic: for an ended event
+    with ``ends_at IS NULL``, ``event_not_ended_filter`` evaluates to NULL
+    (via ``ends_at >= now``), and ``NOT NULL`` is also NULL, which a WHERE
+    clause treats as non-matching. event_ended_filter must build the
+    complement directly using ``<`` comparisons so it has no such gap."""
+
+    def test_compiles_without_negating_a_nullable_comparison(self):
+        now = datetime(2026, 6, 25, tzinfo=timezone.utc)
+        compiled = str(
+            event_ended_filter(now).compile(compile_kwargs={"literal_binds": True})
+        )
+        assert "NOT" not in compiled.upper()
+        assert "events.ends_at <" in compiled
+        assert "events.ends_at IS NULL" in compiled
+        assert "events.starts_at <" in compiled
         assert "2026-06-25" in compiled
 
 

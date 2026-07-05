@@ -1,6 +1,7 @@
 """Tests for LLM classifier — parse_classification and why_go localization."""
 
 import re
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -8,6 +9,7 @@ import pytest
 from app.constants import IMPORTANT_INFO_MAX_CHARS
 from app.llm.classifier import (
     _build_classify_prompt,
+    _no_live_dedup_sibling_clause,
     _parse_classification,
     classify_event,
     classify_pending,
@@ -718,6 +720,70 @@ class TestClassifyPendingIncludesExplicitRepresentatives:
 
         assert event.status == EVENT_STATUS_CLASSIFIED
         assert event.is_explicit is True
+
+
+class TestNoLiveDedupSiblingClause:
+    """Compiled-SQL check: verified live (VALUES-CTE query against the real DB)
+    that a dedup-canonical representative with a still-live sibling correctly
+    evaluates NOT EXISTS to False (blocks cancellation), while a solo event
+    with no sibling evaluates to True (cancels normally). This test guards the
+    query shape that produced those results."""
+
+    def test_compiles_to_not_exists_correlated_on_own_id(self):
+        now = datetime(2026, 6, 25, tzinfo=timezone.utc)
+        compiled = str(
+            _no_live_dedup_sibling_clause(now).compile(
+                compile_kwargs={"literal_binds": True}
+            )
+        )
+        assert "NOT (EXISTS" in compiled or "NOT EXISTS" in compiled
+        assert "dedup_group_id" in compiled
+        assert "!=" in compiled or "<>" in compiled
+        assert "cancelled" in compiled
+        assert "2026-06-25" in compiled
+
+
+class TestClassifyPendingCancelsEndedDrafts:
+    @pytest.mark.asyncio
+    async def test_ended_drafts_bulk_cancelled_before_batch_select(self, mock_db):
+        """A draft whose event already ended can never pass the publish gate
+        even once classified — classify_pending must bulk-cancel it up front
+        instead of spending a batch slot (or leaving it stuck in draft forever
+        once its FIFO position falls behind newer arrivals)."""
+        cancel_result = MagicMock()
+        cancel_result.rowcount = 3
+        mock_db.execute.return_value = cancel_result
+        events_result = MagicMock()
+        events_result.all.return_value = []
+        mock_db.scalars.side_effect = [events_result]
+
+        summary = await classify_pending(mock_db)
+
+        mock_db.execute.assert_awaited_once()
+        assert summary["cancelled"] == 3
+        assert summary["attempted"] == 0
+
+    @pytest.mark.asyncio
+    async def test_no_ended_drafts_reports_zero_cancelled(self, mock_db, make_event):
+        cancel_result = MagicMock()
+        cancel_result.rowcount = 0
+        mock_db.execute.return_value = cancel_result
+        event = make_event()
+        event.status = "draft"
+        events_result = MagicMock()
+        events_result.all.return_value = [event]
+        existing_result = MagicMock()
+        existing_result.all.return_value = []
+        mock_db.scalars.side_effect = [events_result, existing_result]
+
+        with patch(
+            "app.llm.classifier.llm_json",
+            AsyncMock(return_value=(_BASE_RAW, "groq/llama-3.3-70b-versatile")),
+        ):
+            summary = await classify_pending(mock_db)
+
+        assert summary["cancelled"] == 0
+        assert summary["attempted"] == 1
 
 
 class TestClassifyEventMalformedParse:

@@ -1,3 +1,4 @@
+import http
 import logging
 from datetime import datetime, timedelta
 
@@ -9,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.constants import (
     FIENTA_CITY_FILTER,
+    FIENTA_MIN_REQUEST_INTERVAL_SECONDS,
     FIENTA_ORGANIZER_CHECK_LIMIT,
     FIENTA_ORGANIZER_SCAN_LIMIT,
     HTTP_TIMEOUT_SECONDS,
@@ -18,7 +20,7 @@ from app.constants import (
     STALE_ORGANIZER_RETIRE_DAYS,
     TALLINN_TZ,
 )
-from app.ingestion.base import http_get
+from app.ingestion.base import AsyncRateLimiter, http_get
 from app.models.models import Source
 
 log = logging.getLogger(__name__)
@@ -57,9 +59,14 @@ async def sync_fienta_organizers(db: AsyncSession) -> dict:
     added: list[tuple[int, str]] = []
     retired_now: list[int] = []
 
+    # Shared with fienta.py's ingest pacing: proactively spaces every request to
+    # this same upstream instead of firing one per organizer back-to-back, which
+    # was tripping Fienta's rate limit on accounts with many organizers.
+    limiter = AsyncRateLimiter(FIENTA_MIN_REQUEST_INTERVAL_SECONDS)
     async with httpx.AsyncClient(timeout=HTTP_TIMEOUT_SECONDS) as client:
         # Step 1 — check each current organizer is still returning events
         for org_id in current_ids:
+            await limiter.acquire()
             try:
                 resp = await http_get(
                     client,
@@ -80,10 +87,16 @@ async def sync_fienta_organizers(db: AsyncSession) -> dict:
                 log.warning(
                     "organizer_sync: check failed for organizer=%s: %s", org_id, exc
                 )
+                if (
+                    isinstance(exc, httpx.HTTPStatusError)
+                    and exc.response.status_code == http.HTTPStatus.TOO_MANY_REQUESTS
+                ):
+                    limiter.backoff(FIENTA_MIN_REQUEST_INTERVAL_SECONDS)
                 # Transient error: neither stale nor revived this run — carry forward
                 # whatever stale_since state already existed for this oid.
 
         # Step 2 — discover new organizers via city filter scan
+        await limiter.acquire()
         try:
             resp = await http_get(
                 client,

@@ -707,7 +707,8 @@ PILETILEVI_DATE_FORMAT = "%d.%m.%Y %H:%M"
 PILETILEVI_ALL_PATH = "/en/tickets/all"
 PILETILEVI_MAX_PAGES = 70  # safety bound — real stop is an empty page or the detail cap
 HTML_LISTING_MAX_DETAIL_FETCHES = (
-    200  # cap per ingestion run on capped-detail sources (piletilevi)
+    300  # cap per ingestion run on capped-detail sources (piletilevi) — headroom
+    # above observed 206-220 new-card runs, which truncated detail fetches at 200
 )
 KUMU_DATE_FORMAT = "%d/%m/%Y | %H:%M"
 KUMU_MAX_PAGES = 15  # safety bound — calendar is ~4 pages today

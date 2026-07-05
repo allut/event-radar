@@ -87,6 +87,23 @@ def event_not_ended_filter(now: datetime) -> ColumnElement[bool]:
     )
 
 
+def event_ended_filter(now: datetime) -> ColumnElement[bool]:
+    """Event has ended — the NULL-safe complement of ``event_not_ended_filter``.
+
+    ``~event_not_ended_filter(now)`` is NOT equivalent: when ``ends_at IS
+    NULL`` and ``starts_at < now``, ``event_not_ended_filter`` evaluates to
+    SQL NULL (three-valued logic on ``ends_at >= now``), and ``NOT NULL`` is
+    also NULL — which a WHERE clause treats as non-matching. That silently
+    excludes exactly the ended, no-``ends_at`` events callers usually mean to
+    catch (e.g. bulk-cancelling stale drafts), so build the negation
+    explicitly instead of negating the nullable expression.
+    """
+    return or_(
+        Event.ends_at < now,
+        and_(Event.ends_at.is_(None), Event.starts_at < now),
+    )
+
+
 def mask_email(email: str) -> str:
     """Mask an email for log output — keep the first few local-part characters and
     the full domain so entries stay correlatable without persisting raw PII in
