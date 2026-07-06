@@ -161,6 +161,137 @@ class SourceAdapter(ABC):
         v = raw.get("id", "")
         return str(v) if v else None
 
+    @staticmethod
+    async def _enrich_locales(normalized: NormalizedEvent) -> None:
+        """Heuristic bilingual-content split for still-missing locale keys.
+
+        Offloaded to a thread: lingua's per-block n-gram detection is
+        CPU-bound and run() shares an event loop with the FastAPI app — left
+        inline it would stall request handling during ingestion. Isolated
+        try/except: one pathological input must not abort the source's batch
+        over a nice-to-have enrichment.
+        """
+        try:
+            await asyncio.to_thread(_fill_missing_locales_via_split, normalized)
+        except Exception:
+            log.warning(
+                "language split failed for external_id=%s, continuing without it",
+                normalized.external_id,
+                exc_info=True,
+            )
+
+    async def _insert_event(
+        self, db: AsyncSession, normalized: NormalizedEvent
+    ) -> bool:
+        """Insert the Event + EventSource rows inside a savepoint.
+
+        Returns False on a slug collision (IntegrityError) — the savepoint
+        rolls back just this event, not the whole batch.
+        """
+        slug = _make_slug(
+            normalized.title, normalized.starts_at, normalized.external_id
+        )
+        # SSRF guard: event.url is fetched server-side by the daily refetch
+        # job, so — unlike image_url, which is only ever rendered client-side —
+        # it must be host-pinned, not just scheme-checked.
+        safe_url = await safe_fetchable_url(normalized.url, self.source.slug)
+        try:
+            async with db.begin_nested():
+                event = Event(
+                    slug=slug,
+                    title_orig=normalized.title,
+                    description_orig=normalized.description,
+                    important_info=normalized.important_info,
+                    starts_at=normalized.starts_at,
+                    ends_at=normalized.ends_at,
+                    venue_name=normalized.venue_name,
+                    venue_address=normalized.venue_address,
+                    lat=normalized.lat,
+                    lng=normalized.lng,
+                    url=safe_url,
+                    image_url=safe_external_url(
+                        normalized.image_url, self.source.slug
+                    ),
+                    price_min=normalized.price_min,
+                    price_max=normalized.price_max,
+                    currency=normalized.currency,
+                    price_hint=normalized.price_hint,
+                    has_free_tier=normalized.has_free_tier,
+                    title_localized=normalized.title_localized,
+                    description_localized=normalized.description_localized,
+                    important_info_localized=normalized.important_info_localized,
+                    status=EVENT_STATUS_DRAFT,
+                    is_explicit=is_explicit_text(
+                        normalized.title,
+                        normalized.description,
+                        normalized.venue_name,
+                        normalized.important_info,
+                    ),
+                    is_non_event=is_non_event_text(
+                        normalized.title,
+                        normalized.venue_name,
+                    ),
+                )
+                db.add(event)
+                await db.flush()
+                db.add(
+                    EventSource(
+                        event_id=event.id,
+                        source_id=self.source.id,
+                        external_id=normalized.external_id,
+                    )
+                )
+        except IntegrityError:
+            log.warning(
+                "slug collision source=%s external_id=%s slug=%s — skipped",
+                self.source.slug,
+                normalized.external_id,
+                slug,
+            )
+            return False
+        return True
+
+    async def _process_raw_item(
+        self,
+        db: AsyncSession,
+        raw: dict[str, Any],
+        known_ids: set[str],
+        seen: set[str],
+    ) -> bool:
+        """Persist one raw item and, when new, its normalized Event.
+
+        Returns True when a new Event row was inserted. Locale enrichment is
+        deferred until after the dup/seen checks — HTML parsing + language
+        detection is wasted work for an item about to be skipped.
+        """
+        raw_event = RawEvent(
+            source_id=self.source.id,
+            external_id=self.get_raw_external_id(raw),
+            payload=raw,
+        )
+        db.add(raw_event)
+        await db.flush()
+
+        normalized = self.normalize(raw)
+        if normalized is None or not normalized.external_id:
+            return False
+        # known_ids (loaded once via ingest_skip_ids) holds every stored
+        # external_id for this source — an in-memory check instead of a
+        # per-item SELECT (no N+1 on a large crawl). Race safety against a
+        # concurrent insert stays covered by the event_sources unique index +
+        # the IntegrityError handler in _insert_event.
+        if normalized.external_id in seen or normalized.external_id in known_ids:
+            raw_event.processed_at = datetime.now(tz=TALLINN_TZ)
+            return False
+
+        await self._enrich_locales(normalized)
+        if not await self._insert_event(db, normalized):
+            return False
+
+        raw_event.processed_at = datetime.now(tz=TALLINN_TZ)
+        seen.add(normalized.external_id)
+        return True
+
     async def run(self, db: AsyncSession) -> IngestionRun:
         """Execute full pipeline: fetch → raw_events → normalize → events(draft).
 
@@ -197,116 +328,8 @@ class SourceAdapter(ABC):
             seen_external_ids: set[str] = set()
 
             for raw in raw_items:
-                raw_event = RawEvent(
-                    source_id=self.source.id,
-                    external_id=self.get_raw_external_id(raw),
-                    payload=raw,
-                )
-                db.add(raw_event)
-                await db.flush()
-
-                normalized = self.normalize(raw)
-                if normalized is None or not normalized.external_id:
-                    continue
-
-                if normalized.external_id in seen_external_ids:
-                    raw_event.processed_at = datetime.now(tz=TALLINN_TZ)
-                    continue
-
-                # known_ids (loaded once above via ingest_skip_ids) already holds every
-                # stored external_id for this source — an in-memory check here replaces
-                # a per-item SELECT EventSource that was previously issued for every raw
-                # item (N+1 on a large crawl). Race safety against a concurrent insert is
-                # still covered by the event_sources(source_id, external_id) unique index
-                # + the IntegrityError handler below.
-                if normalized.external_id in known_ids:
-                    raw_event.processed_at = datetime.now(tz=TALLINN_TZ)
-                    continue
-
-                # Deferred until here (after the dup/seen checks) — HTML
-                # parsing + language detection is wasted work for an event
-                # that's about to be skipped anyway. Offloaded to a thread:
-                # lingua's per-block n-gram detection is CPU-bound and this
-                # run() loop shares an event loop with the FastAPI app
-                # (AsyncIOScheduler in app/main.py) — left inline it would
-                # stall concurrent request handling during ingestion.
-                # Isolated in its own try/except: a pathological input
-                # shouldn't abort the whole source's batch over one event's
-                # locale enrichment, which is a nice-to-have, not required.
-                try:
-                    await asyncio.to_thread(_fill_missing_locales_via_split, normalized)
-                except Exception:
-                    log.warning(
-                        "language split failed for external_id=%s, continuing without it",
-                        normalized.external_id,
-                        exc_info=True,
-                    )
-
-                slug = _make_slug(
-                    normalized.title, normalized.starts_at, normalized.external_id
-                )
-                # SSRF guard: event.url is fetched server-side by the daily refetch
-                # job, so — unlike image_url, which is only ever rendered
-                # client-side — it must be host-pinned, not just scheme-checked.
-                safe_url = await safe_fetchable_url(normalized.url, self.source.slug)
-                try:
-                    async with db.begin_nested():
-                        event = Event(
-                            slug=slug,
-                            title_orig=normalized.title,
-                            description_orig=normalized.description,
-                            important_info=normalized.important_info,
-                            starts_at=normalized.starts_at,
-                            ends_at=normalized.ends_at,
-                            venue_name=normalized.venue_name,
-                            venue_address=normalized.venue_address,
-                            lat=normalized.lat,
-                            lng=normalized.lng,
-                            url=safe_url,
-                            image_url=safe_external_url(
-                                normalized.image_url, self.source.slug
-                            ),
-                            price_min=normalized.price_min,
-                            price_max=normalized.price_max,
-                            currency=normalized.currency,
-                            price_hint=normalized.price_hint,
-                            has_free_tier=normalized.has_free_tier,
-                            title_localized=normalized.title_localized,
-                            description_localized=normalized.description_localized,
-                            important_info_localized=normalized.important_info_localized,
-                            status=EVENT_STATUS_DRAFT,
-                            is_explicit=is_explicit_text(
-                                normalized.title,
-                                normalized.description,
-                                normalized.venue_name,
-                                normalized.important_info,
-                            ),
-                            is_non_event=is_non_event_text(
-                                normalized.title,
-                                normalized.venue_name,
-                            ),
-                        )
-                        db.add(event)
-                        await db.flush()
-                        db.add(
-                            EventSource(
-                                event_id=event.id,
-                                source_id=self.source.id,
-                                external_id=normalized.external_id,
-                            )
-                        )
-                except IntegrityError:
-                    log.warning(
-                        "slug collision source=%s external_id=%s slug=%s — skipped",
-                        self.source.slug,
-                        normalized.external_id,
-                        slug,
-                    )
-                    continue
-
-                raw_event.processed_at = datetime.now(tz=TALLINN_TZ)
-                seen_external_ids.add(normalized.external_id)
-                new_count += 1
+                if await self._process_raw_item(db, raw, known_ids, seen_external_ids):
+                    new_count += 1
 
             finished_at = datetime.now(tz=TALLINN_TZ)
             run.new_count = new_count

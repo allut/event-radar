@@ -25,6 +25,7 @@ reaches 0 and every run is fully correct.
 """
 
 import logging
+from datetime import datetime
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -163,6 +164,72 @@ async def _prefetch_cached_decisions(
     return cached_decisions
 
 
+async def _find_llm_survivor_pairs(
+    db: AsyncSession,
+    cutoff: datetime,
+    events_by_id: dict[int, Event],
+    parent: dict[int, int],
+) -> list[tuple[Event, Event, str]]:
+    """Stage 1: SQL time pre-filter (shared with the rule-only pass) → Python
+    fuzzy title/venue check. Pairs already collapsed by the same-day union are
+    skipped (no LLM call needed). Returns (a, b, content_hash) triples."""
+    candidate_pair_ids = await candidate_pair_ids_in_window(db, cutoff)
+    survivors: list[tuple[Event, Event, str]] = []
+    for a_id, b_id in candidate_pair_ids:
+        a = events_by_id.get(a_id)
+        b = events_by_id.get(b_id)
+        if a is None or b is None:
+            continue
+        if same_group(parent, a_id, b_id):
+            continue
+        if not is_candidate_pair(
+            a,
+            b,
+            bypass_venue_on_near_exact_title=True,
+            bypass_title_on_exact_time_and_venue=True,
+        ):
+            continue
+        survivors.append((a, b, _dedup_pair_hash(a, b)))
+    return survivors
+
+
+async def _resolve_survivor_pairs(
+    db: AsyncSession,
+    survivors: list[tuple[Event, Event, str]],
+    cached_decisions: dict[str, bool],
+    parent: dict[int, int],
+) -> tuple[int, int, int]:
+    """Stage 2: resolve each survivor via the cache, else a fresh LLM call
+    (bounded by LLM_DEDUP_MAX_FRESH_LLM_CALLS_PER_PASS). Unions confirmed
+    pairs into ``parent``. Returns (llm_confirmed, fresh_calls, deferred)."""
+    llm_confirmed = 0
+    fresh_calls = 0
+    deferred_pairs = 0
+    for a, b, pair_hash in survivors:
+        cached = cached_decisions.get(pair_hash)
+        if cached is not None:
+            if cached:
+                union(parent, a.id, b.id)
+                llm_confirmed += 1
+            continue
+        if fresh_calls >= LLM_DEDUP_MAX_FRESH_LLM_CALLS_PER_PASS:
+            deferred_pairs += 1
+            continue
+        fresh_calls += 1
+        if await _llm_confirms_pair(a, b, db):
+            union(parent, a.id, b.id)
+            llm_confirmed += 1
+
+    if deferred_pairs > 0:
+        log.info(
+            "dedup-llm: fresh-call budget (%d) reached; %d pair(s) deferred to "
+            "next pass (self-healing)",
+            LLM_DEDUP_MAX_FRESH_LLM_CALLS_PER_PASS,
+            deferred_pairs,
+        )
+    return llm_confirmed, fresh_calls, deferred_pairs
+
+
 async def run_dedup_pass_llm(db: AsyncSession) -> dict:
     """Two-stage dedup: rule pre-filter + cache-aware LLM tiebreaker.
 
@@ -224,61 +291,16 @@ async def run_dedup_pass_llm(db: AsyncSession) -> dict:
     # budget — this removes the timed-entry / session storm from the LLM path.
     apply_same_day_title_unions(parent, events)
 
-    # Stage 1: SQL time pre-filter (shared with the rule-only pass) → Python
-    # fuzzy title/venue check. Stage 2: cache-aware LLM tiebreaker on survivors.
-    candidate_pair_ids = await candidate_pair_ids_in_window(db, cutoff)
-
-    survivors: list[tuple[Event, Event, str]] = []
-    for a_id, b_id in candidate_pair_ids:
-        a = events_by_id.get(a_id)
-        b = events_by_id.get(b_id)
-        if a is None or b is None:
-            continue
-        # Already collapsed by the same-day union — no LLM call needed.
-        if same_group(parent, a_id, b_id):
-            continue
-        if not is_candidate_pair(
-            a,
-            b,
-            bypass_venue_on_near_exact_title=True,
-            bypass_title_on_exact_time_and_venue=True,
-        ):
-            continue
-        survivors.append((a, b, _dedup_pair_hash(a, b)))
+    survivors = await _find_llm_survivor_pairs(db, cutoff, events_by_id, parent)
 
     # Bulk prefetch (once, before the loop) — satisfies the no-N+1 batch rule.
     cached_decisions = await _prefetch_cached_decisions(
         db, [pair_hash for _, _, pair_hash in survivors]
     )
 
-    candidate_pairs = 0
-    llm_confirmed = 0
-    fresh_calls = 0
-    deferred_pairs = 0
-
-    for a, b, pair_hash in survivors:
-        candidate_pairs += 1
-        cached = cached_decisions.get(pair_hash)
-        if cached is not None:
-            if cached:
-                union(parent, a.id, b.id)
-                llm_confirmed += 1
-            continue
-        if fresh_calls >= LLM_DEDUP_MAX_FRESH_LLM_CALLS_PER_PASS:
-            deferred_pairs += 1
-            continue
-        fresh_calls += 1
-        if await _llm_confirms_pair(a, b, db):
-            union(parent, a.id, b.id)
-            llm_confirmed += 1
-
-    if deferred_pairs > 0:
-        log.info(
-            "dedup-llm: fresh-call budget (%d) reached; %d pair(s) deferred to "
-            "next pass (self-healing)",
-            LLM_DEDUP_MAX_FRESH_LLM_CALLS_PER_PASS,
-            deferred_pairs,
-        )
+    llm_confirmed, fresh_calls, deferred_pairs = await _resolve_survivor_pairs(
+        db, survivors, cached_decisions, parent
+    )
 
     assignments = build_cluster_assignments(parent, ids, events_by_id)
 
@@ -296,7 +318,7 @@ async def run_dedup_pass_llm(db: AsyncSession) -> dict:
         "dedup-llm pass: %d events, %d candidate pairs, %d llm-confirmed "
         "(%d fresh calls, %d deferred) → %d groups, %d updated",
         len(events),
-        candidate_pairs,
+        len(survivors),
         llm_confirmed,
         fresh_calls,
         deferred_pairs,
@@ -305,7 +327,7 @@ async def run_dedup_pass_llm(db: AsyncSession) -> dict:
     )
     return {
         "total": len(events),
-        "candidate_pairs": candidate_pairs,
+        "candidate_pairs": len(survivors),
         "llm_confirmed": llm_confirmed,
         "fresh_calls": fresh_calls,
         "deferred_pairs": deferred_pairs,

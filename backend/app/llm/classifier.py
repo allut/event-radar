@@ -224,6 +224,95 @@ def _validate_llm_prices(parsed: dict[str, Any], event: Event) -> None:
         parsed["has_free_tier"] = False
 
 
+def _persist_classification(
+    db: AsyncSession,
+    event: Event,
+    parsed: dict[str, Any],
+    model_used: str,
+    existing: EventClassification | None,
+) -> None:
+    """Write the parsed classification to the existing row or insert a new one."""
+    if existing is not None:
+        existing.categories = parsed["categories"]
+        existing.vibes = parsed["vibes"]
+        existing.why_go_bullets = parsed["why_go_bullets"]
+        existing.why_go_localized = parsed["why_go_localized"]
+        existing.quality_score = parsed["quality_score"]
+        existing.language_detected = parsed["language_detected"]
+        existing.model_used = model_used
+        existing.classified_at = datetime.now(tz=TALLINN_TZ)
+    else:
+        db.add(
+            EventClassification(
+                event_id=event.id,
+                categories=parsed["categories"],
+                vibes=parsed["vibes"],
+                why_go_bullets=parsed["why_go_bullets"],
+                why_go_localized=parsed["why_go_localized"],
+                quality_score=parsed["quality_score"],
+                language_detected=parsed["language_detected"],
+                model_used=model_used,
+            )
+        )
+
+
+def _reconcile_event_price_fields(event: Event, parsed: dict[str, Any]) -> None:
+    """Write LLM-derived prices onto the event — only when ingest set none.
+
+    Ingest-parsed prices are authoritative: Fienta parses price
+    deterministically at ingest (price_min set, price_hint None), and the LLM —
+    which sees "not stated" for those events and may still infer a number —
+    must not overwrite them. price_min gates the whole tier: a source either
+    establishes price at ingest (skip LLM price entirely) or defers price
+    wholly to the LLM (price_min None → write). Once price_min is set, a later
+    reclassify won't refresh price — acceptable; ingest prices are
+    deterministic and LLM prices rarely change between runs.
+
+    Before writing, deterministically widens (never shrinks) the LLM's
+    envelope to cover any literal €/EUR amount in price_hint it under-reported
+    (e.g. a skipped family/group tier). Gated to a None/EUR currency
+    (case-insensitive) so a correctly-detected non-EUR price isn't polluted by
+    an incidental €-looking match in price_hint.
+    """
+    if event.price_min is not None:
+        return
+
+    currency_val = parsed["currency"]
+    if currency_val is None or currency_val.upper() == "EUR":
+        hint_min, hint_max = eur_price_bounds_from_text(
+            strip_fee_amounts(event.price_hint)
+        )
+        if hint_min is not None:
+            parsed["price_min"] = (
+                hint_min
+                if parsed["price_min"] is None
+                else min(parsed["price_min"], hint_min)
+            )
+        if hint_max is not None:
+            parsed["price_max"] = (
+                hint_max
+                if parsed["price_max"] is None
+                else max(parsed["price_max"], hint_max)
+            )
+        if (hint_min is not None or hint_max is not None) and parsed["currency"] is None:
+            parsed["currency"] = "EUR"
+
+    if parsed["price_min"] is not None:
+        event.price_min = parsed["price_min"]
+    if parsed["price_max"] is not None:
+        event.price_max = parsed["price_max"]
+    if parsed["currency"] is not None:
+        event.currency = parsed["currency"]
+    event.has_free_tier = event.has_free_tier or parsed["has_free_tier"]
+
+
+def _apply_content_flags(event: Event, parsed: dict[str, Any]) -> None:
+    """OR-merge the LLM's content flags; is_out_of_area is set directly."""
+    event.is_explicit = event.is_explicit or parsed["explicit"]
+    event.is_non_event = event.is_non_event or parsed["non_event"]
+    event.is_out_of_area = not parsed["in_target_city"]
+
+
 async def classify_event(
     event: Event,
     db: AsyncSession,
@@ -275,81 +364,9 @@ async def classify_event(
         existing = await db.scalar(
             select(EventClassification).where(EventClassification.event_id == event.id)
         )
-    if existing is not None:
-        existing.categories = parsed["categories"]
-        existing.vibes = parsed["vibes"]
-        existing.why_go_bullets = parsed["why_go_bullets"]
-        existing.why_go_localized = parsed["why_go_localized"]
-        existing.quality_score = parsed["quality_score"]
-        existing.language_detected = parsed["language_detected"]
-        existing.model_used = model_used
-        existing.classified_at = datetime.now(tz=TALLINN_TZ)
-    else:
-        db.add(
-            EventClassification(
-                event_id=event.id,
-                categories=parsed["categories"],
-                vibes=parsed["vibes"],
-                why_go_bullets=parsed["why_go_bullets"],
-                why_go_localized=parsed["why_go_localized"],
-                quality_score=parsed["quality_score"],
-                language_detected=parsed["language_detected"],
-                model_used=model_used,
-            )
-        )
-
-    # Trust ingest-parsed prices over LLM guesswork: only write LLM-derived prices
-    # when ingest set none. Fienta parses price deterministically from the listing
-    # price_from_string at ingest (price_min set, price_hint None), so the LLM —
-    # which sees "not stated" for those events and may still infer a number — must
-    # not overwrite them. price_min gates the whole tier: a source either establishes
-    # price at ingest (skip LLM price entirely, keeping Fienta's open-ended price_max
-    # None) or defers price wholly to the LLM here (price_min None → write). Trade-off:
-    # once price_min is set (by ingest or a prior classify), a later reclassify will
-    # not refresh price — acceptable, since ingest prices are deterministic and
-    # LLM-set prices rarely change between runs (no provenance flag, no migration).
-    if event.price_min is None:
-        # Deterministic net: widen (never shrink) the LLM's envelope to cover any
-        # literal €/EUR amount in price_hint it under-reported (e.g. skipped a
-        # family/group tier). Cannot conflict with prices read from the
-        # description, since those aren't reflected in price_hint. Gated to a
-        # None/EUR currency (case-insensitively — normalize_currency() passes the
-        # LLM's raw string through unchanged, it does not uppercase) so a
-        # correctly-detected non-EUR price (e.g. a foreign-currency event) isn't
-        # polluted by an incidental €/EUR-looking match elsewhere in price_hint.
-        currency_val = parsed["currency"]
-        if currency_val is None or currency_val.upper() == "EUR":
-            hint_min, hint_max = eur_price_bounds_from_text(
-                strip_fee_amounts(event.price_hint)
-            )
-            if hint_min is not None:
-                parsed["price_min"] = (
-                    hint_min
-                    if parsed["price_min"] is None
-                    else min(parsed["price_min"], hint_min)
-                )
-            if hint_max is not None:
-                parsed["price_max"] = (
-                    hint_max
-                    if parsed["price_max"] is None
-                    else max(parsed["price_max"], hint_max)
-                )
-            if (hint_min is not None or hint_max is not None) and parsed[
-                "currency"
-            ] is None:
-                parsed["currency"] = "EUR"
-
-        if parsed["price_min"] is not None:
-            event.price_min = parsed["price_min"]
-        if parsed["price_max"] is not None:
-            event.price_max = parsed["price_max"]
-        if parsed["currency"] is not None:
-            event.currency = parsed["currency"]
-        event.has_free_tier = event.has_free_tier or parsed["has_free_tier"]
-
-    event.is_explicit = event.is_explicit or parsed["explicit"]
-    event.is_non_event = event.is_non_event or parsed["non_event"]
-    event.is_out_of_area = not parsed["in_target_city"]
+    _persist_classification(db, event, parsed, model_used, existing)
+    _reconcile_event_price_fields(event, parsed)
+    _apply_content_flags(event, parsed)
 
     event.status = EVENT_STATUS_CLASSIFIED
     log.debug(
@@ -389,6 +406,40 @@ def _no_live_dedup_sibling_clause(now: datetime) -> ColumnElement[bool]:
     )
 
 
+async def _cancel_ended_drafts(db: AsyncSession, now: datetime) -> int:
+    """Bulk-cancel drafts that already ended — they can never pass the publish
+    gate, so an LLM call (or batch slot) on them is wasted. Skips a
+    dedup-canonical representative with a still-live sibling (see
+    _no_live_dedup_sibling_clause) so that sibling isn't orphaned."""
+    cancel_result = await db.execute(
+        update(Event)
+        .where(
+            Event.status == EVENT_STATUS_DRAFT,
+            event_ended_filter(now),
+            _no_live_dedup_sibling_clause(now),
+        )
+        .values(status=EVENT_STATUS_CANCELLED)
+    )
+    return cast(CursorResult, cancel_result).rowcount
+
+
+async def _prefetch_existing_classifications(
+    db: AsyncSession, events: list[Event]
+) -> dict[int, EventClassification]:
+    """Bulk prefetch existing classifications for the whole batch in one query
+    (replaces N per-event SELECTs inside classify_event)."""
+    if not events:
+        return {}
+    existing_rows = (
+        await db.scalars(
+            select(EventClassification).where(
+                EventClassification.event_id.in_([e.id for e in events])
+            )
+        )
+    ).all()
+    return {row.event_id: row for row in existing_rows}
+
+
 async def classify_pending(
     db: AsyncSession, *, batch_size: int = LLM_CLASSIFY_BATCH_SIZE
 ) -> dict[str, Any]:
@@ -410,16 +461,7 @@ async def classify_pending(
     ``cancelled`` keys. The caller must commit the session.
     """
     now = datetime.now(tz=TALLINN_TZ)
-    cancel_result = await db.execute(
-        update(Event)
-        .where(
-            Event.status == EVENT_STATUS_DRAFT,
-            event_ended_filter(now),
-            _no_live_dedup_sibling_clause(now),
-        )
-        .values(status=EVENT_STATUS_CANCELLED)
-    )
-    cancelled = cast(CursorResult, cancel_result).rowcount
+    cancelled = await _cancel_ended_drafts(db, now)
 
     rows = (
         await db.scalars(
@@ -439,19 +481,7 @@ async def classify_pending(
     succeeded = 0
     failed = 0
 
-    # Bulk prefetch existing classifications for the whole batch in one query
-    # (replaces N per-event SELECTs inside classify_event).
-    existing_map: dict[int, EventClassification] = {}
-    if events:
-        event_ids = [e.id for e in events]
-        existing_rows = (
-            await db.scalars(
-                select(EventClassification).where(
-                    EventClassification.event_id.in_(event_ids)
-                )
-            )
-        ).all()
-        existing_map = {row.event_id: row for row in existing_rows}
+    existing_map = await _prefetch_existing_classifications(db, events)
 
     for event in events:
         ok = await classify_event(
