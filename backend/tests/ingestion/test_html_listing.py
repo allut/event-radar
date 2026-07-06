@@ -24,19 +24,22 @@ from app.ingestion.selectors import (
     KUMU_VENUE_NAME,
 )
 from app.ingestion.adapter import NormalizedEvent
-from app.ingestion.sources.html_listing import (
+from app.ingestion.sources.estonia_concert_hall import (
     EstoniaConcertHallAdapter,
+    estonia_concert_hall_localized_text,
+)
+from app.ingestion.sources.html_base import (
     HtmlListingAdapter,
-    KumuAdapter,
     ListingRequest,
+    full_res_wp_image,
+    next_occurrence_year,
+)
+from app.ingestion.sources.kumu import KumuAdapter, kumu_localized_text
+from app.ingestion.sources.piletilevi import (
     PiletileviAdapter,
-    _next_occurrence_year,
     _parse_piletilevi_date,
     _piletilevi_important_info,
-    estonia_concert_hall_localized_text,
     full_res_piletilevi_image,
-    full_res_wp_image,
-    kumu_localized_text,
 )
 
 
@@ -59,19 +62,19 @@ def _known_ids(known_ids=()):
 
 
 # ---------------------------------------------------------------------------
-# _next_occurrence_year
+# next_occurrence_year
 # ---------------------------------------------------------------------------
 
 
 class TestNextOccurrenceYear:
     def test_future_date_this_year(self):
-        assert _next_occurrence_year(12, 2, today=date(2026, 6, 12)) == 2026
+        assert next_occurrence_year(12, 2, today=date(2026, 6, 12)) == 2026
 
     def test_past_date_rolls_to_next_year(self):
-        assert _next_occurrence_year(5, 30, today=date(2026, 6, 12)) == 2027
+        assert next_occurrence_year(5, 30, today=date(2026, 6, 12)) == 2027
 
     def test_today_itself_stays_this_year(self):
-        assert _next_occurrence_year(6, 12, today=date(2026, 6, 12)) == 2026
+        assert next_occurrence_year(6, 12, today=date(2026, 6, 12)) == 2026
 
 
 # ---------------------------------------------------------------------------
@@ -132,7 +135,7 @@ class TestBasePagination:
         card_a = {"external_id": "a", "title": "A", "url": "https://example.test/a"}
         adapter = _StubAdapter(_make_source(), pages_cards=[[card_a]], max_pages=1)
 
-        with patch("app.ingestion.sources.html_listing.http_get") as mock_get:
+        with patch("app.ingestion.sources.html_base.http_get") as mock_get:
             mock_get.side_effect = [_mock_response("0")]
             results = await adapter.fetch_raw(_known_ids())
 
@@ -149,7 +152,7 @@ class TestBasePagination:
             max_pages=5,
         )
 
-        with patch("app.ingestion.sources.html_listing.http_get") as mock_get:
+        with patch("app.ingestion.sources.html_base.http_get") as mock_get:
             mock_get.side_effect = [_mock_response("0"), _mock_response("1")]
             results = await adapter.fetch_raw(_known_ids())
 
@@ -167,7 +170,7 @@ class TestBasePagination:
             max_pages=5,
         )
 
-        with patch("app.ingestion.sources.html_listing.http_get") as mock_get:
+        with patch("app.ingestion.sources.html_base.http_get") as mock_get:
             mock_get.side_effect = [_mock_response("0"), _mock_response("1")]
             results = await adapter.fetch_raw(_known_ids())
 
@@ -178,7 +181,7 @@ class TestBasePagination:
     async def test_listing_error_raises_when_no_cards_collected(self):
         adapter = _StubAdapter(_make_source(), pages_cards=[[]], max_pages=1)
 
-        with patch("app.ingestion.sources.html_listing.http_get") as mock_get:
+        with patch("app.ingestion.sources.html_base.http_get") as mock_get:
             mock_get.side_effect = [httpx.ConnectError("boom")]
             with pytest.raises(httpx.ConnectError):
                 await adapter.fetch_raw(_known_ids())
@@ -192,7 +195,7 @@ class TestBasePagination:
             max_pages=2,
         )
 
-        with patch("app.ingestion.sources.html_listing.http_get") as mock_get:
+        with patch("app.ingestion.sources.html_base.http_get") as mock_get:
             mock_get.side_effect = [httpx.ConnectError("boom"), _mock_response("1")]
             results = await adapter.fetch_raw(_known_ids())
 
@@ -210,8 +213,8 @@ class TestBasePagination:
             max_pages=5,
         )
 
-        with patch("app.ingestion.sources.html_listing.HTML_LISTING_MAX_DETAIL_FETCHES", 2), \
-             patch("app.ingestion.sources.html_listing.http_get") as mock_get:
+        with patch("app.ingestion.sources.html_base.HTML_LISTING_MAX_DETAIL_FETCHES", 2), \
+             patch("app.ingestion.sources.html_base.http_get") as mock_get:
             mock_get.side_effect = [
                 _mock_response("0"),  # listing page 1
                 _mock_response("detail-a"),  # detail for card a
@@ -237,8 +240,8 @@ class TestBasePagination:
             max_pages=2,
         )
 
-        with patch("app.ingestion.sources.html_listing.HTML_LISTING_MAX_DETAIL_FETCHES", 2), \
-             patch("app.ingestion.sources.html_listing.http_get") as mock_get:
+        with patch("app.ingestion.sources.html_base.HTML_LISTING_MAX_DETAIL_FETCHES", 2), \
+             patch("app.ingestion.sources.html_base.http_get") as mock_get:
             mock_get.side_effect = [
                 _mock_response("0"),  # listing page 1 (a, b — both known)
                 _mock_response("1"),  # listing page 2 (c — new)
@@ -262,7 +265,7 @@ class TestBasePagination:
             max_pages=2,
         )
 
-        with patch("app.ingestion.sources.html_listing.http_get") as mock_get:
+        with patch("app.ingestion.sources.html_base.http_get") as mock_get:
             mock_get.side_effect = [_mock_response("0"), _mock_response("1")]
             results = await adapter.fetch_raw(_known_ids({"a"}))
 
@@ -282,7 +285,7 @@ class TestBasePagination:
             max_pages=1,
         )
 
-        with patch("app.ingestion.sources.html_listing.http_get") as mock_get:
+        with patch("app.ingestion.sources.html_base.http_get") as mock_get:
             mock_get.side_effect = [
                 _mock_response("0"),
                 httpx.ConnectError("detail down"),
@@ -299,8 +302,8 @@ class TestBaseListingRequestDispatch:
         card_a = {"external_id": "a", "title": "A", "url": "https://example.test/a"}
         adapter = _PostStubAdapter(_make_source(), cards=[card_a])
 
-        with patch("app.ingestion.sources.html_listing.http_post") as mock_post, \
-             patch("app.ingestion.sources.html_listing.http_get") as mock_get:
+        with patch("app.ingestion.sources.html_base.http_post") as mock_post, \
+             patch("app.ingestion.sources.html_base.http_get") as mock_get:
             mock_post.return_value = _mock_response("<html></html>")
             results = await adapter.fetch_raw(_known_ids())
 
@@ -562,7 +565,7 @@ class TestPiletileviFetchRaw:
         empty_resp = _mock_response(PILETILEVI_EMPTY_HTML)
         detail_resp = _mock_response(PILETILEVI_DETAIL_HTML)
 
-        with patch("app.ingestion.sources.html_listing.http_get") as mock_get:
+        with patch("app.ingestion.sources.html_base.http_get") as mock_get:
             mock_get.side_effect = [
                 listing_resp,  # page 1 — 2 cards survive the Tallinn filter
                 empty_resp,  # page 2 — no cards → pagination halts
@@ -587,7 +590,7 @@ class TestPiletileviFetchRaw:
           <div class="card__description">Jazz Club, Tallinn</div>
         </a>
         """
-        with patch("app.ingestion.sources.html_listing.http_get") as mock_get:
+        with patch("app.ingestion.sources.html_base.http_get") as mock_get:
             mock_get.side_effect = [
                 _mock_response(single_card_html),
                 _mock_response(PILETILEVI_EMPTY_HTML),
@@ -604,7 +607,7 @@ class TestPiletileviFetchRaw:
     @pytest.mark.asyncio
     async def test_empty_first_page_raises_on_fetch_error(self):
         adapter = _piletilevi_adapter()
-        with patch("app.ingestion.sources.html_listing.http_get") as mock_get:
+        with patch("app.ingestion.sources.html_base.http_get") as mock_get:
             mock_get.side_effect = httpx.ConnectError("down")
             with pytest.raises(httpx.ConnectError):
                 await adapter.fetch_raw(_known_ids())
@@ -827,7 +830,7 @@ class TestKumuFetchRaw:
     @pytest.mark.asyncio
     async def test_single_page_fetch_drops_unparseable_date_card(self):
         adapter = _kumu_adapter()
-        with patch("app.ingestion.sources.html_listing.http_get") as mock_get:
+        with patch("app.ingestion.sources.html_base.http_get") as mock_get:
             # Both listing fetches return the same page — page 2 yields zero new
             # ids (all already seen on page 1), so pagination stops there. The
             # same response is also reused for the per-card detail fetches
@@ -846,7 +849,7 @@ class TestKumuFetchRaw:
     @pytest.mark.asyncio
     async def test_pagination_stops_on_empty_page_and_dedups(self):
         adapter = _kumu_adapter()
-        with patch("app.ingestion.sources.html_listing.http_get") as mock_get:
+        with patch("app.ingestion.sources.html_base.http_get") as mock_get:
             # 3 listing fetches, then needs_detail fetches a detail page per
             # collected card (3 cards) — reuse the empty page (no price selector)
             # so parse_detail is a no-op for each.
@@ -880,7 +883,7 @@ class TestKumuFetchRaw:
         raw_events row for unchanged listing data (regression)."""
         adapter = _kumu_adapter()
         known = {"https://kumu.ekm.ee/en/syndmus/example-1/"}
-        with patch("app.ingestion.sources.html_listing.http_get") as mock_get:
+        with patch("app.ingestion.sources.html_base.http_get") as mock_get:
             mock_get.return_value = _mock_response(KUMU_LISTING_HTML)
             raw_items = await adapter.fetch_raw(_known_ids(known))
 
@@ -892,7 +895,7 @@ class TestKumuFetchRaw:
     async def test_empty_known_ids_returns_all_items_unchanged(self):
         """An empty known_ids set must return every fetched card unchanged."""
         adapter = _kumu_adapter()
-        with patch("app.ingestion.sources.html_listing.http_get") as mock_get:
+        with patch("app.ingestion.sources.html_base.http_get") as mock_get:
             mock_get.return_value = _mock_response(KUMU_LISTING_HTML)
             raw_items = await adapter.fetch_raw(_known_ids())
 
@@ -1115,8 +1118,8 @@ class TestEstoniaConcertHallFetchRaw:
     @pytest.mark.asyncio
     async def test_single_page_fetch_and_tallinn_filter(self):
         adapter = _concert_hall_adapter()
-        with patch("app.ingestion.sources.html_listing.http_post") as mock_post, \
-                patch("app.ingestion.sources.html_listing.http_get") as mock_get:
+        with patch("app.ingestion.sources.html_base.http_post") as mock_post, \
+                patch("app.ingestion.sources.html_base.http_get") as mock_get:
             mock_post.return_value = _mock_response(CONCERT_HALL_HTML)
             mock_get.return_value = _mock_response("<html></html>")
             raw_items = await adapter.fetch_raw(_known_ids())
@@ -1196,7 +1199,7 @@ class TestEstoniaConcertHallParseDetail:
                 }
             }
         }
-        with patch("app.ingestion.sources.html_listing.http_post") as mock_post:
+        with patch("app.ingestion.sources.estonia_concert_hall.http_post") as mock_post:
             mock_post.side_effect = [_auth_response("testkey"), _piletilevi_response(payload)]
             await adapter.parse_detail(MagicMock(), soup, card)
 
@@ -1220,7 +1223,7 @@ class TestEstoniaConcertHallParseDetail:
                 "configuration": {"sections": [{"minPrice": "25.00", "maxPrice": "25.00"}]}
             }
         }
-        with patch("app.ingestion.sources.html_listing.http_post") as mock_post:
+        with patch("app.ingestion.sources.estonia_concert_hall.http_post") as mock_post:
             mock_post.side_effect = [_auth_response("testkey"), _piletilevi_response(payload)]
             await adapter.parse_detail(MagicMock(), soup, card)
 
@@ -1234,7 +1237,7 @@ class TestEstoniaConcertHallParseDetail:
         adapter = _concert_hall_adapter()
         soup = BeautifulSoup("<html><body>No ticket link</body></html>", "html.parser")
         card: dict = {}
-        with patch("app.ingestion.sources.html_listing.http_post") as mock_post:
+        with patch("app.ingestion.sources.estonia_concert_hall.http_post") as mock_post:
             await adapter.parse_detail(MagicMock(), soup, card)
 
         assert mock_post.call_count == 0
@@ -1246,7 +1249,7 @@ class TestEstoniaConcertHallParseDetail:
         adapter = _concert_hall_adapter()
         soup = BeautifulSoup(_CONCERT_HALL_DETAIL_WITH_PID_HTML, "html.parser")
         card: dict = {}
-        with patch("app.ingestion.sources.html_listing.http_post") as mock_post:
+        with patch("app.ingestion.sources.estonia_concert_hall.http_post") as mock_post:
             mock_post.side_effect = httpx.HTTPStatusError(
                 "error", request=MagicMock(), response=MagicMock()
             )
@@ -1261,7 +1264,7 @@ class TestEstoniaConcertHallParseDetail:
         adapter = _concert_hall_adapter()
         soup = BeautifulSoup(_CONCERT_HALL_DETAIL_WITH_PID_HTML, "html.parser")
         card: dict = {}
-        with patch("app.ingestion.sources.html_listing.http_post") as mock_post:
+        with patch("app.ingestion.sources.estonia_concert_hall.http_post") as mock_post:
             mock_post.side_effect = [
                 _auth_response("testkey"),
                 httpx.HTTPStatusError("error", request=MagicMock(), response=MagicMock()),
@@ -1277,7 +1280,7 @@ class TestEstoniaConcertHallParseDetail:
         soup = BeautifulSoup(_CONCERT_HALL_DETAIL_WITH_PID_HTML, "html.parser")
         card: dict = {}
         payload = {"responseData": {"configuration": {"sections": []}}}
-        with patch("app.ingestion.sources.html_listing.http_post") as mock_post:
+        with patch("app.ingestion.sources.estonia_concert_hall.http_post") as mock_post:
             mock_post.side_effect = [_auth_response("testkey"), _piletilevi_response(payload)]
             await adapter.parse_detail(MagicMock(), soup, card)
 
@@ -1289,7 +1292,7 @@ class TestEstoniaConcertHallParseDetail:
         adapter = _concert_hall_adapter()
         soup = BeautifulSoup(_CONCERT_HALL_DETAIL_WITH_PID_HTML, "html.parser")
         payload = {"responseData": {"configuration": {"sections": [{"minPrice": "5.00", "maxPrice": "5.00"}]}}}
-        with patch("app.ingestion.sources.html_listing.http_post") as mock_post:
+        with patch("app.ingestion.sources.estonia_concert_hall.http_post") as mock_post:
             mock_post.side_effect = [
                 _auth_response("testkey"),
                 _piletilevi_response(payload),

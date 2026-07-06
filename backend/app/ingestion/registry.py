@@ -15,12 +15,10 @@ from app.constants import (
     SOURCE_SLUG_KULTUURIKATEL,
     SOURCE_SLUG_TELLISKIVI,
 )
+from app.ingestion.sources.estonia_concert_hall import EstoniaConcertHallAdapter
 from app.ingestion.sources.fienta import FientaAdapter
-from app.ingestion.sources.html_listing import (
-    EstoniaConcertHallAdapter,
-    KumuAdapter,
-    PiletileviAdapter,
-)
+from app.ingestion.sources.kumu import KumuAdapter
+from app.ingestion.sources.piletilevi import PiletileviAdapter
 
 
 @dataclass(frozen=True)

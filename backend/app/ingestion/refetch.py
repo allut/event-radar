@@ -62,10 +62,10 @@ from app.ingestion.locale_urls import (
 )
 from app.ingestion.sanitize import sanitize_html
 from app.ingestion.geocode import is_suspect_venue_name
-from app.ingestion.sources.html_listing import (
+from app.ingestion.sources.estonia_concert_hall import (
     estonia_concert_hall_localized_text,
-    kumu_localized_text,
 )
+from app.ingestion.sources.kumu import kumu_localized_text
 from app.models.models import Event
 
 log = logging.getLogger(__name__)

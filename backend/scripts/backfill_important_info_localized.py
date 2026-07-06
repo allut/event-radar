@@ -32,11 +32,8 @@ from app.constants import (
     SOURCE_SLUG_PILETILEVI,
 )
 from app.ingestion.http_client import host_guard_hook, http_get
-from app.ingestion.sources.html_listing import (
-    _piletilevi_important_info,
-    locale_from_url_path,
-    localized_detail_urls,
-)
+from app.ingestion.locale_urls import locale_from_url_path, localized_detail_urls
+from app.ingestion.sources.piletilevi import _piletilevi_important_info
 from app.logging_config import configure_logging
 from app.models.models import Event, EventSource, Source
 from app.routers.utils import mask_db_url

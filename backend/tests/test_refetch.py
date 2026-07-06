@@ -19,7 +19,7 @@ from app.ingestion.selectors import (
 )
 from app.ingestion.locale_urls import locale_from_url_path
 from app.ingestion.refetch import _is_suspect_locale_title
-from app.ingestion.sources.html_listing import kumu_localized_text
+from app.ingestion.sources.kumu import kumu_localized_text
 
 
 # ---------------------------------------------------------------------------

@@ -24,20 +24,22 @@ from sqlalchemy import select
 
 from app.constants import (
     BACKFILL_DEFAULT_LIMIT,
-    ESTONIA_CONCERT_HALL_DESCRIPTION_SELECTOR,
-    FIENTA_DESCRIPTION_SELECTOR,
     HTML_LISTING_LOCALE_FETCH_DELAY_SECONDS,
     HTTP_TIMEOUT_SECONDS,
     HTTP_USER_AGENT,
-    KUMU_DESCRIPTION_SELECTOR,
     LOCALIZED_TEXT_FIENTA_LOCALES,
     LOCALIZED_TEXT_HTML_LOCALES,
     LOCALIZED_TEXT_MAX_DESC_CHARS,
-    PILETILEVI_DETAIL_DESC_SELECTOR,
     SOURCE_SLUG_ESTONIA_CONCERT_HALL,
     SOURCE_SLUG_FIENTA,
     SOURCE_SLUG_KUMU,
     SOURCE_SLUG_PILETILEVI,
+)
+from app.ingestion.selectors import (
+    ESTONIA_CONCERT_HALL_DESCRIPTION_SELECTOR,
+    FIENTA_DESCRIPTION_SELECTOR,
+    KUMU_DESCRIPTION_SELECTOR,
+    PILETILEVI_DETAIL_DESC_SELECTOR,
 )
 from app.ingestion.http_client import host_guard_hook, http_get
 from app.ingestion.locale_urls import (
@@ -46,11 +48,11 @@ from app.ingestion.locale_urls import (
     localized_detail_urls,
 )
 from app.ingestion.sanitize import html_to_text, sanitize_html
-from app.ingestion.sources.html_listing import (
-    _piletilevi_important_info,
+from app.ingestion.sources.estonia_concert_hall import (
     estonia_concert_hall_localized_text,
-    kumu_localized_text,
 )
+from app.ingestion.sources.kumu import kumu_localized_text
+from app.ingestion.sources.piletilevi import _piletilevi_important_info
 from app.logging_config import configure_logging
 from app.models.models import Event, EventSource, Source
 from app.routers.utils import mask_db_url
