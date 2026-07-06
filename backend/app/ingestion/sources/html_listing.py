@@ -14,6 +14,17 @@ from bs4 import BeautifulSoup, NavigableString, Tag
 from app.constants import (
     DEFAULT_CURRENCY,
     DETAIL_FETCH_CONCURRENCY,
+    HTML_LISTING_LOCALE_FETCH_DELAY_SECONDS,
+    HTML_LISTING_MAX_DETAIL_FETCHES,
+    HTTP_TIMEOUT_SECONDS,
+    HTTP_USER_AGENT,
+    LOCALIZED_TEXT_HTML_LOCALES,
+    LOCALIZED_TEXT_MAX_DESC_CHARS,
+    LOCALIZED_TEXT_MAX_TITLE_CHARS,
+    PRICE_HINT_MAX_CHARS,
+    TALLINN_TZ,
+)
+from app.ingestion.selectors import (
     ECH_SITE_NAME_ET,
     ECH_SITE_TITLE_SUFFIX,
     ESTONIA_CONCERT_HALL_AJAX_ACTION,
@@ -33,12 +44,8 @@ from app.constants import (
     ESTONIA_CONCERT_HALL_TALLINN_FILTER,
     ESTONIA_CONCERT_HALL_TIME_SELECTOR,
     ESTONIA_CONCERT_HALL_TITLE_SELECTOR,
-    ESTONIA_CONCERT_HALL_VENUE_SELECTOR,
     ESTONIA_CONCERT_HALL_VENUES,
-    HTML_LISTING_LOCALE_FETCH_DELAY_SECONDS,
-    HTML_LISTING_MAX_DETAIL_FETCHES,
-    HTTP_TIMEOUT_SECONDS,
-    HTTP_USER_AGENT,
+    ESTONIA_CONCERT_HALL_VENUE_SELECTOR,
     KUMU_CARD_SELECTOR,
     KUMU_DATE_FORMAT,
     KUMU_DATE_SELECTOR,
@@ -58,23 +65,18 @@ from app.constants import (
     KUMU_VENUE_LAT,
     KUMU_VENUE_LNG,
     KUMU_VENUE_NAME,
-    LOCALIZED_TEXT_HTML_LOCALES,
-    LOCALIZED_TEXT_MAX_DESC_CHARS,
-    LOCALIZED_TEXT_MAX_TITLE_CHARS,
     PILETILEVI_ALL_PATH,
     PILETILEVI_CARD_SELECTOR,
     PILETILEVI_DATE_FORMAT,
     PILETILEVI_DATE_SELECTOR,
     PILETILEVI_DETAIL_DESC_SELECTOR,
+    PILETILEVI_IMAGE_HEIGHT,
     PILETILEVI_IMAGE_SELECTOR,
     PILETILEVI_IMPORTANT_INFO_HEADINGS,
     PILETILEVI_MAX_PAGES,
     PILETILEVI_TALLINN_FILTER,
     PILETILEVI_TITLE_SELECTOR,
-    PILETILEVI_IMAGE_HEIGHT,
     PILETILEVI_VENUE_SELECTOR,
-    PRICE_HINT_MAX_CHARS,
-    TALLINN_TZ,
     WP_THUMBNAIL_HOSTS,
 )
 from app.ingestion.base import (
@@ -310,11 +312,8 @@ class HtmlListingAdapter(SourceAdapter):
                 if unexpected:
                     raise unexpected[0]
 
-        # cards already excludes known_ids (collection loop above); the filter
-        # here is now a defensive no-op kept for the log line.
-        new_cards = [c for c in cards if c.get("external_id") not in known_ids]
-        log.info("%s fetched %d events", self.source.slug, len(new_cards))
-        return new_cards
+        log.info("%s fetched %d events", self.source.slug, len(cards))
+        return cards
 
     async def _fetch_detail(
         self,

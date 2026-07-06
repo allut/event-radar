@@ -9,7 +9,8 @@ import httpx
 from bs4 import BeautifulSoup
 
 from app.config import settings
-from app.constants import (
+from app.constants import TALLINN_TZ
+from app.ingestion.selectors import (
     ECH_SITE_TITLE_SUFFIX,
     ESTONIA_CONCERT_HALL_AJAX_ACTION,
     ESTONIA_CONCERT_HALL_AJAX_PATH,
@@ -21,7 +22,6 @@ from app.constants import (
     KUMU_VENUE_LAT,
     KUMU_VENUE_LNG,
     KUMU_VENUE_NAME,
-    TALLINN_TZ,
 )
 from app.ingestion.base import NormalizedEvent
 from app.ingestion.sources.html_listing import (

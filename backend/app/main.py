@@ -44,6 +44,7 @@ from app.routers.feed import router as feed_router
 from app.routers.feedback import router as feedback_router
 from app.routers.onboarding import router as onboarding_router
 from app.routers.settings import router as settings_router
+from app.routers.utils import require_configured_secret
 from app.routers.webhooks import router as webhooks_router
 from app.seeds import seed_personas, seed_sources
 
@@ -341,7 +342,12 @@ async def health() -> dict:
 async def tick(request: Request) -> dict:
     """Called by Render Cron Job every 15 min to keep the dyno alive."""
     token = settings.INTERNAL_TOKEN
-    if token:
+    if require_configured_secret(
+        token,
+        feature="Internal tick",
+        setting_name="INTERNAL_TOKEN",
+        app_env=settings.APP_ENV,
+    ):
         received = request.headers.get("X-Internal-Token", "")
         if not secrets.compare_digest(received, token):
             log.warning(
@@ -351,9 +357,4 @@ async def tick(request: Request) -> dict:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN, detail="Invalid token"
             )
-    elif settings.APP_ENV != APP_ENV_DEVELOPMENT:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="INTERNAL_TOKEN not configured",
-        )
     return {"status": "ok"}

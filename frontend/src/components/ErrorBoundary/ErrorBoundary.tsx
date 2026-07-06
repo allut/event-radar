@@ -20,7 +20,7 @@ export default class ErrorBoundary extends Component<Props, State> {
 
   render() {
     if (!this.state.hasError) return this.props.children;
-    let locale: string = LOCALES[0].code; // default to first locale
+    let locale: string = LOCALES[0].code;
     try { locale = getLocale(); } catch { /* localStorage unavailable */ }
     return (
       <div className={styles.page}>

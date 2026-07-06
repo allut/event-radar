@@ -30,12 +30,10 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.constants import (
-    ECH_SITE_NAME_ET,
     EVENT_STATUS_CLASSIFIED,
     EVENT_STATUS_PUBLISHED,
     GEOCODE_COORD_QUANT_DECIMALS,
     HTTP_TIMEOUT_SECONDS,
-    KUMU_SITE_NAME_ET,
     LOCALIZED_TEXT_FIENTA_LOCALES,
     REFETCH_COMMIT_INTERVAL_SECONDS,
     REFETCH_MAX_PER_RUN,
@@ -45,6 +43,10 @@ from app.constants import (
     REFETCH_REQUEST_DELAY_SECONDS,
     TALLINN_TZ,
     VENUE_NAME_MAX_LEN,
+)
+from app.ingestion.selectors import (
+    ECH_SITE_NAME_ET,
+    KUMU_SITE_NAME_ET,
 )
 from app.ingestion.base import (
     extract_jsonld_event_location,
@@ -190,7 +192,7 @@ async def refetch_event_details(db: AsyncSession) -> dict:
         return summary
 
     last_commit = time.monotonic()
-    # Bug 1 fix: follow Fienta's locale 302-redirects with a host-pinning SSRF guard.
+    # Follow Fienta's locale 302-redirects with a host-pinning SSRF guard.
     # Build the allowed-host set from candidate URLs, intersected with the fixed
     # ALLOWED_SOURCE_HOSTS allowlist — NOT from the raw candidate URLs alone. A
     # candidate's event.url is untrusted (parsed from third-party page/API
@@ -243,8 +245,8 @@ async def refetch_event_details(db: AsyncSession) -> dict:
             # Backfill localized title/description per-locale.
             # Runs before the no_data gate so events whose JSON-LD has only text
             # (no location/offers) still receive localized titles/descriptions.
-            # Bug 2c fix: gate per-locale (not per-column) and merge into existing
-            # dict so a partially-filled column self-heals missing locales.
+            # Gated per-locale (not per-column), merged into the existing dict,
+            # so a partially-filled column self-heals missing locales.
             base_host = urlsplit(url).hostname
             normalized_host = (base_host or "").removeprefix("www.")
             existing_titles: dict[str, str] = (
@@ -279,8 +281,8 @@ async def refetch_event_details(db: AsyncSession) -> dict:
                 _extract_text = _LOCALE_TEXT_EXTRACTORS.get(
                     normalized_host, extract_jsonld_event_text
                 )
-                # Bug 2a fix: detect this page's own locale from its URL path and reuse
-                # the already-loaded soup instead of matching on exact URL string.
+                # Detect this page's own locale from its URL path and reuse the
+                # already-loaded soup instead of matching on exact URL string.
                 url_locale = locale_from_url_path(
                     url, LOCALIZED_TEXT_FIENTA_LOCALES
                 ) or locale_from_html_lang(soup, LOCALIZED_TEXT_FIENTA_LOCALES)

@@ -1,16 +1,69 @@
 """Shared serialization helpers for event routers."""
 
+import logging
 import re
+from collections.abc import Awaitable
 from datetime import datetime
+from typing import Any
 
+from fastapi import HTTPException, status
 from itsdangerous import BadSignature, SignatureExpired
 from sqlalchemy import ColumnElement, Select, and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.auth.tokens import verify_session_token
-from app.constants import DEFAULT_USER_LOCALE, EMAIL_MASK_VISIBLE_CHARS, EVENT_STATUS_PUBLISHED
+from app.constants import (
+    APP_ENV_DEVELOPMENT,
+    DEFAULT_USER_LOCALE,
+    EMAIL_MASK_VISIBLE_CHARS,
+    EVENT_STATUS_PUBLISHED,
+)
 from app.models.models import Event, User
+
+log = logging.getLogger(__name__)
+
+
+async def run_admin_job(name: str, coro: Awaitable[dict]) -> dict:
+    """Await an admin-triggered job, converting any failure into a generic 500.
+
+    Shared by every /admin/* trigger endpoint: the full traceback goes to the
+    server log; the response detail stays generic so internals never leak.
+    """
+    try:
+        return await coro
+    except HTTPException:
+        raise
+    except Exception:
+        log.exception("admin %s failed", name)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"{name} failed; see server logs",
+        )
+
+
+def require_configured_secret(
+    secret: str | None, *, feature: str, setting_name: str, app_env: str
+) -> bool:
+    """Fail-closed gate shared by every secret-protected surface (admin auth,
+    inbound webhook, /internal/tick).
+
+    Returns True when the secret is configured — the caller must then verify
+    it. When unset: 503 outside development; in development, log a warning and
+    return False (caller skips verification). Callers pass their own module's
+    ``settings`` values so tests that patch the caller's settings keep working.
+    """
+    if secret:
+        return True
+    if app_env != APP_ENV_DEVELOPMENT:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"{feature} disabled: {setting_name} not configured",
+        )
+    log.warning(
+        "%s not set; %s unprotected (development mode)", setting_name, feature
+    )
+    return False
 
 
 def mask_db_url(url: str) -> str:
@@ -74,20 +127,23 @@ def public_event_filter() -> ColumnElement[bool]:
     )
 
 
-def event_not_ended_filter(now: datetime) -> ColumnElement[bool]:
+def event_not_ended_filter(now: datetime, entity: Any = Event) -> ColumnElement[bool]:
     """Event is live (publishable / feed-eligible) until it ends.
 
     Uses ``ends_at`` when present, else falls back to ``starts_at``. A past
     ``starts_at`` with a future ``ends_at`` (multi-day runs, ongoing
     exhibitions) stays live — only a genuinely-over event fails this.
+
+    ``entity`` accepts ``Event`` (default) or an ``aliased(Event)`` so
+    self-join clauses reuse this definition instead of re-deriving it.
     """
     return or_(
-        Event.ends_at >= now,
-        and_(Event.ends_at.is_(None), Event.starts_at >= now),
+        entity.ends_at >= now,
+        and_(entity.ends_at.is_(None), entity.starts_at >= now),
     )
 
 
-def event_ended_filter(now: datetime) -> ColumnElement[bool]:
+def event_ended_filter(now: datetime, entity: Any = Event) -> ColumnElement[bool]:
     """Event has ended — the NULL-safe complement of ``event_not_ended_filter``.
 
     ``~event_not_ended_filter(now)`` is NOT equivalent: when ``ends_at IS
@@ -99,8 +155,8 @@ def event_ended_filter(now: datetime) -> ColumnElement[bool]:
     explicitly instead of negating the nullable expression.
     """
     return or_(
-        Event.ends_at < now,
-        and_(Event.ends_at.is_(None), Event.starts_at < now),
+        entity.ends_at < now,
+        and_(entity.ends_at.is_(None), entity.starts_at < now),
     )
 
 

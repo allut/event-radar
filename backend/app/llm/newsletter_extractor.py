@@ -11,12 +11,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.constants import (
     LLM_TASK_NEWSLETTER,
     NEWSLETTER_BODY_MAX_LEN,
-    NEWSLETTER_EXTRACT_PROMPT_TEMPLATE,
     NEWSLETTER_SUBJECT_MAX_LEN,
     SOURCE_KIND_INBOUND_EMAIL,
     SOURCE_SLUG_NEWSLETTER,
 )
-from app.llm.router import LLMError, llm_json
+from app.llm.prompts import NEWSLETTER_EXTRACT_PROMPT_TEMPLATE
+from app.llm.router import llm_json_or_none
 from app.models.models import RawEvent, RawInboundEmail, Source
 
 log = logging.getLogger(__name__)
@@ -60,12 +60,16 @@ async def extract_events_from_email(
         body=text_body[:NEWSLETTER_BODY_MAX_LEN],
     )
 
-    try:
-        raw, _model = await llm_json(LLM_TASK_NEWSLETTER, prompt, db)
-    except LLMError as exc:
-        log.warning("Newsletter LLM extraction failed for email %d: %s", email_id, exc)
+    response = await llm_json_or_none(
+        LLM_TASK_NEWSLETTER,
+        prompt,
+        db,
+        context=f"Newsletter LLM extraction failed for email {email_id}",
+    )
+    if response is None:
         await _mark_processed(db, email_id)
         return 0
+    raw, _model = response
 
     # llm_json always returns a dict (json_object response_format); prompt asks for {"events": [...]}
     events: list[Any] = raw.get("events", [])

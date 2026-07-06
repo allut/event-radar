@@ -11,12 +11,12 @@ from bs4 import BeautifulSoup
 from app.config import settings
 from app.constants import (
     DETAIL_FETCH_CONCURRENCY,
-    FIENTA_DESCRIPTION_SELECTOR,
     FIENTA_MAX_PAGES,
     FIENTA_MIN_REQUEST_INTERVAL_SECONDS,
     HTTP_TIMEOUT_SECONDS,
     LOCALIZED_TEXT_FIENTA_LOCALES,
 )
+from app.ingestion.selectors import FIENTA_DESCRIPTION_SELECTOR
 from app.ingestion.base import (
     AsyncRateLimiter,
     NormalizedEvent,

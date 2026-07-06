@@ -2,10 +2,12 @@
 
 import logging
 import secrets
+from collections.abc import Awaitable, Callable
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.cleanup import cleanup_stale_data
 from app.config import settings
@@ -33,34 +35,47 @@ from app.ingestion.registry import ADAPTER_REGISTRY
 from app.models.models import Event, Source
 from app.ranking.score import build_daily_feeds
 from app.rate_limit import limiter
-from app.routers.utils import canonical_event_filter
+from app.routers.utils import (
+    canonical_event_filter,
+    require_configured_secret,
+    run_admin_job,
+)
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/admin")
 _security = HTTPBasic()
 
 
+async def _run_in_session(
+    func: Callable[[AsyncSession], Awaitable[dict]], *, commit: bool
+) -> dict:
+    """Run a session-scoped job; commit when asked, roll back on failure."""
+    async with AsyncSessionLocal() as db:
+        try:
+            result = await func(db)
+            if commit:
+                await db.commit()
+            return result
+        except Exception:
+            await db.rollback()
+            raise
+
+
 def _require_admin(credentials: HTTPBasicCredentials = Depends(_security)) -> None:
     password = settings.ADMIN_PASSWORD
-    if not password:
-        if settings.APP_ENV != APP_ENV_DEVELOPMENT:
-            # Production with no password set — refuse all access until explicitly configured.
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Admin endpoints disabled: ADMIN_PASSWORD not configured",
-            )
-        # Development with no password — allow any credentials but log a warning so devs know.
-        log.warning(
-            "ADMIN_PASSWORD not set; admin endpoints are unprotected (development mode)"
-        )
+    if not require_configured_secret(
+        password,
+        feature="Admin endpoints",
+        setting_name="ADMIN_PASSWORD",
+        app_env=settings.APP_ENV,
+    ):
         return
     if (
         settings.ADMIN_USERNAME == ADMIN_USERNAME_DEFAULT
         and settings.APP_ENV != APP_ENV_DEVELOPMENT
     ):
-        # Production with the default username — refuse until explicitly configured,
-        # mirroring the ADMIN_PASSWORD fail-closed check above. A well-known username
-        # halves the credential pair an attacker needs to guess/brute-force.
+        # Fail closed like the password check: a well-known username halves the
+        # credential pair an attacker needs to brute-force.
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Admin endpoints disabled: ADMIN_USERNAME left at its default value",
@@ -98,34 +113,23 @@ async def admin_ingest_source(slug: str, request: Request) -> dict:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail=f"Unknown source: {slug!r}"
         )
-    try:
-        result = await ingest_source(slug)
-    except ValueError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
-        ) from exc
-    except Exception:
-        log.exception("admin ingest failed for slug=%s", slug)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Ingestion failed; see server logs",
-        )
-    return result
+
+    async def _run() -> dict:
+        try:
+            return await ingest_source(slug)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
+            ) from exc
+
+    return await run_admin_job("Ingestion", _run())
 
 
 @router.post("/dedup", dependencies=[Depends(_require_admin)])
 @limiter.limit(RATE_LIMIT_ADMIN)
 async def admin_dedup_run(request: Request) -> dict:
     """Trigger a dedup pass, draining the backlog until it clears or the cap is hit."""
-    try:
-        summary = await dedup_pass_drain_now()
-    except Exception:
-        log.exception("admin dedup pass failed")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Dedup failed; see server logs",
-        )
-    return summary
+    return await run_admin_job("Dedup", dedup_pass_drain_now())
 
 
 @router.get("/dedup/groups", dependencies=[Depends(_require_admin)])
@@ -225,45 +229,21 @@ async def admin_dedup_groups(
 @limiter.limit(RATE_LIMIT_ADMIN)
 async def admin_classify(request: Request) -> dict:
     """Trigger LLM classification, draining the backlog until it clears or the cap is hit."""
-    try:
-        summary = await classify_pending_drain_now()
-    except Exception:
-        log.exception("admin classify failed")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Classification failed; see server logs",
-        )
-    return summary
+    return await run_admin_job("Classification", classify_pending_drain_now())
 
 
 @router.post("/publish", dependencies=[Depends(_require_admin)])
 @limiter.limit(RATE_LIMIT_ADMIN)
 async def admin_publish(request: Request) -> dict:
     """Promote qualifying classified events to published (one bulk UPDATE)."""
-    try:
-        summary = await publish_pending_job()
-    except Exception:
-        log.exception("admin publish failed")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Publish failed; see server logs",
-        )
-    return summary
+    return await run_admin_job("Publish", publish_pending_job())
 
 
 @router.post("/geocode", dependencies=[Depends(_require_admin)])
 @limiter.limit(RATE_LIMIT_ADMIN)
 async def admin_geocode(request: Request) -> dict:
     """Backfill lat/lng for events with a venue_address but no coordinates (one batch)."""
-    try:
-        summary = await geocode_pending_job()
-    except Exception:
-        log.exception("admin geocode failed")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Geocoding failed; see server logs",
-        )
-    return summary
+    return await run_admin_job("Geocoding", geocode_pending_job())
 
 
 @router.post("/refetch", dependencies=[Depends(_require_admin)])
@@ -275,33 +255,16 @@ async def admin_refetch(request: Request) -> dict:
     before a manual geocode if you want coords NULLed by an address change
     re-resolved in the same operation.
     """
-    try:
-        summary = await refetch_event_details_job()
-    except Exception:
-        log.exception("admin refetch failed")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Refetch failed; see server logs",
-        )
-    return summary
+    return await run_admin_job("Refetch", refetch_event_details_job())
 
 
 @router.post("/sync-organizers", dependencies=[Depends(_require_admin)])
 @limiter.limit(RATE_LIMIT_ADMIN)
 async def admin_sync_organizers(request: Request) -> dict:
     """Trigger Fienta organizer sync (discover new organizers, flag stale ones)."""
-    async with AsyncSessionLocal() as db:
-        try:
-            result = await sync_fienta_organizers(db)
-            await db.commit()
-        except Exception:
-            await db.rollback()
-            log.exception("admin sync-organizers failed")
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Organizer sync failed; see server logs",
-            )
-    return result
+    return await run_admin_job(
+        "Organizer sync", _run_in_session(sync_fienta_organizers, commit=True)
+    )
 
 
 @router.post("/cleanup", dependencies=[Depends(_require_admin)])
@@ -322,37 +285,22 @@ async def admin_cleanup(
 
     See app.cleanup.cleanup_stale_data for the per-table retention windows.
     """
-    async with AsyncSessionLocal() as db:
-        try:
-            summary = await cleanup_stale_data(db, dry_run=dry_run)
-            if not dry_run:
-                await db.commit()
-        except Exception:
-            await db.rollback()
-            log.exception("admin cleanup failed")
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Cleanup failed; see server logs",
-            )
-    return summary
+    return await run_admin_job(
+        "Cleanup",
+        _run_in_session(
+            lambda db: cleanup_stale_data(db, dry_run=dry_run), commit=not dry_run
+        ),
+    )
 
 
 @router.post("/build-feeds", dependencies=[Depends(_require_admin)])
 @limiter.limit(RATE_LIMIT_ADMIN)
 async def admin_build_feeds(request: Request) -> dict:
     """Trigger daily feed builder for all active users (writes to daily_feeds)."""
-    async with AsyncSessionLocal() as db:
-        try:
-            summary = await build_daily_feeds(db)
-            # build_daily_feeds commits internally (score.py); no second commit needed.
-        except Exception:
-            await db.rollback()
-            log.exception("admin build-feeds failed")
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Feed build failed; see server logs",
-            )
-    return summary
+    # build_daily_feeds commits internally (score.py); no second commit needed.
+    return await run_admin_job(
+        "Feed build", _run_in_session(build_daily_feeds, commit=False)
+    )
 
 
 @router.post("/send-digests", dependencies=[Depends(_require_admin)])
@@ -362,16 +310,10 @@ async def admin_send_digests(
     dry_run: bool = Query(True, description="When true (default), counts would-send but skips actual email delivery"),
 ) -> dict:
     """Trigger daily digest send. Defaults to dry-run — pass ?dry_run=false to actually send."""
-    async with AsyncSessionLocal() as db:
-        try:
-            summary = await send_daily_digests(db, dry_run=dry_run)
-        except Exception:
-            log.exception("admin send-digests failed")
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Digest send failed; see server logs",
-            )
-    return summary
+    return await run_admin_job(
+        "Digest send",
+        _run_in_session(lambda db: send_daily_digests(db, dry_run=dry_run), commit=False),
+    )
 
 
 @router.post("/pipeline/run", dependencies=[Depends(_require_admin)])
@@ -385,75 +327,32 @@ async def admin_pipeline_run(
     Stops at the first failure — later stages depend on earlier output.
     Returns {ok, stages} where stages is an ordered dict of per-stage results.
     """
+    stage_runners: list[tuple[str, Callable[[], Awaitable[object]]]] = [
+        (
+            "sync_organizers",
+            lambda: _run_in_session(sync_fienta_organizers, commit=True),
+        ),
+        ("ingest", ingest_all_enabled),
+        ("dedup", dedup_pass_drain_now),
+        ("classify", classify_pending_drain_now),
+        ("publish", publish_pending_job),
+        # build_daily_feeds commits internally (score.py)
+        ("build_feeds", lambda: _run_in_session(build_daily_feeds, commit=False)),
+        (
+            "send_digests",
+            lambda: _run_in_session(
+                lambda db: send_daily_digests(db, dry_run=dry_run), commit=False
+            ),
+        ),
+    ]
+
     stages: dict[str, object] = {}
-
-    # Stage 1: organizer sync
-    async with AsyncSessionLocal() as db:
+    for stage_name, runner in stage_runners:
         try:
-            sync_result = await sync_fienta_organizers(db)
-            await db.commit()
-            stages["sync_organizers"] = sync_result
+            stages[stage_name] = await runner()
         except Exception as exc:
-            await db.rollback()
-            log.exception("pipeline: sync_organizers failed")
-            stages["sync_organizers"] = {"error": str(exc)}
-            return {"ok": False, "stages": stages}
-
-    # Stage 2: ingest
-    try:
-        ingest_result = await ingest_all_enabled()
-        stages["ingest"] = ingest_result
-    except Exception as exc:
-        log.exception("pipeline: ingest failed")
-        stages["ingest"] = {"error": str(exc)}
-        return {"ok": False, "stages": stages}
-
-    # Stage 3: dedup
-    try:
-        dedup_result = await dedup_pass_drain_now()
-        stages["dedup"] = dedup_result
-    except Exception as exc:
-        log.exception("pipeline: dedup failed")
-        stages["dedup"] = {"error": str(exc)}
-        return {"ok": False, "stages": stages}
-
-    # Stage 4: classify
-    try:
-        classify_result = await classify_pending_drain_now()
-        stages["classify"] = classify_result
-    except Exception as exc:
-        log.exception("pipeline: classify failed")
-        stages["classify"] = {"error": str(exc)}
-        return {"ok": False, "stages": stages}
-
-    # Stage 5: publish — promote qualifying classified events to published
-    try:
-        publish_result = await publish_pending_job()
-        stages["publish"] = publish_result
-    except Exception as exc:
-        log.exception("pipeline: publish failed")
-        stages["publish"] = {"error": str(exc)}
-        return {"ok": False, "stages": stages}
-
-    # Stage 6: build feeds (build_daily_feeds commits internally)
-    async with AsyncSessionLocal() as db:
-        try:
-            build_feeds_result = await build_daily_feeds(db)
-            stages["build_feeds"] = build_feeds_result
-        except Exception as exc:
-            await db.rollback()
-            log.exception("pipeline: build_feeds failed")
-            stages["build_feeds"] = {"error": str(exc)}
-            return {"ok": False, "stages": stages}
-
-    # Stage 7: send digests
-    async with AsyncSessionLocal() as db:
-        try:
-            send_digests_result = await send_daily_digests(db, dry_run=dry_run)
-            stages["send_digests"] = send_digests_result
-        except Exception as exc:
-            log.exception("pipeline: send_digests failed")
-            stages["send_digests"] = {"error": str(exc)}
+            log.exception("pipeline: %s failed", stage_name)
+            stages[stage_name] = {"error": str(exc)}
             return {"ok": False, "stages": stages}
 
     return {"ok": True, "stages": stages}

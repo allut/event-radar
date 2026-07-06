@@ -899,7 +899,7 @@ class TestExtractAddressFromVenueName:
 
     @pytest.mark.asyncio
     async def test_cached_decision_applied_without_fresh_call(self, mock_db):
-        from app.constants import LLM_VENUE_EXTRACT_PROMPT_TEMPLATE
+        from app.llm.prompts import LLM_VENUE_EXTRACT_PROMPT_TEMPLATE
         from app.llm.router import content_hash as ch
 
         name = "Kopli 116"

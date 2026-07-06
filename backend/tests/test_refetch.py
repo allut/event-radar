@@ -12,10 +12,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from bs4 import BeautifulSoup
 
-from app.constants import (
+from app.constants import LOCALIZED_TEXT_FIENTA_LOCALES
+from app.ingestion.selectors import (
     KUMU_SITE_NAME_ET,
     KUMU_SITE_TITLE_SUFFIX,
-    LOCALIZED_TEXT_FIENTA_LOCALES,
 )
 from app.ingestion.base import locale_from_url_path
 from app.ingestion.refetch import _is_suspect_locale_title

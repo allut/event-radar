@@ -88,85 +88,61 @@ async def ingest_all_enabled(kind: str | None = None) -> list[dict]:
     return results
 
 
+async def _run_db_job(
+    label: str, func: Callable[..., Awaitable[dict]]
+) -> dict:
+    """Open a session, run ``func(db)``, commit, and log the summary.
+
+    Rolls back and re-raises on failure. Shared shape for every scheduler job
+    below except ``ingest_source``, whose contract is commit-on-error (the
+    IngestionRun error record must persist).
+    """
+    async with AsyncSessionLocal() as db:
+        try:
+            summary = await func(db)
+            await db.commit()
+            log.info("%s complete: %s", label, summary)
+            return summary
+        except Exception:
+            await db.rollback()
+            log.exception("%s failed", label)
+            raise
+
+
 async def dedup_pass() -> dict:
     """Run two-stage deduplication (rule pre-filter + LLM tiebreaker).
 
     Degrades to the rule-only pass when no LLM provider is configured.
     """
-    async with AsyncSessionLocal() as db:
-        try:
-            summary = await run_dedup_pass_llm(db)
-            await db.commit()
-            log.info("dedup pass complete: %s", summary)
-            return summary
-        except Exception:
-            await db.rollback()
-            log.exception("dedup pass failed")
-            raise
+    return await _run_db_job("dedup pass", run_dedup_pass_llm)
 
 
 async def classify_pending_job() -> dict:
     """Classify canonical draft events via LLM (one batch per call)."""
     from app.llm.classifier import classify_pending
 
-    async with AsyncSessionLocal() as db:
-        try:
-            summary = await classify_pending(db)
-            await db.commit()
-            log.info("classify_pending complete: %s", summary)
-            return summary
-        except Exception:
-            await db.rollback()
-            log.exception("classify_pending failed")
-            raise
+    return await _run_db_job("classify_pending", classify_pending)
 
 
 async def publish_pending_job() -> dict:
     """Promote qualifying classified events to published (one bulk UPDATE per call)."""
     from app.publish import publish_pending
 
-    async with AsyncSessionLocal() as db:
-        try:
-            summary = await publish_pending(db)
-            await db.commit()
-            log.info("publish_pending complete: %s", summary)
-            return summary
-        except Exception:
-            await db.rollback()
-            log.exception("publish_pending failed")
-            raise
+    return await _run_db_job("publish_pending", publish_pending)
 
 
 async def geocode_pending_job() -> dict:
     """Geocode events with a venue_address but no lat/lng (one batch per call)."""
     from app.ingestion.geocode import geocode_pending
 
-    async with AsyncSessionLocal() as db:
-        try:
-            summary = await geocode_pending(db)
-            await db.commit()
-            log.info("geocode_pending complete: %s", summary)
-            return summary
-        except Exception:
-            await db.rollback()
-            log.exception("geocode_pending failed")
-            raise
+    return await _run_db_job("geocode_pending", geocode_pending)
 
 
 async def refetch_event_details_job() -> dict:
     """Re-fetch detail pages for all future events and reconcile stored fields."""
     from app.ingestion.refetch import refetch_event_details
 
-    async with AsyncSessionLocal() as db:
-        try:
-            summary = await refetch_event_details(db)
-            await db.commit()
-            log.info("refetch_event_details complete: %s", summary)
-            return summary
-        except Exception:
-            await db.rollback()
-            log.exception("refetch_event_details failed")
-            raise
+    return await _run_db_job("refetch_event_details", refetch_event_details)
 
 
 def _dedup_has_backlog(summary: dict) -> bool:

@@ -30,19 +30,19 @@ from app.constants import (
     HTTP_TIMEOUT_SECONDS,
     LLM_DEDUP_HASH_QUERY_CHUNK_SIZE,
     LLM_TASK_VENUE_EXTRACT,
-    LLM_VENUE_EXTRACT_PROMPT_TEMPLATE,
-    NON_GEOCODABLE_VENUE_NAMES,
     NOMINATIM_BASE_URL,
     NOMINATIM_USER_AGENT,
+    NON_GEOCODABLE_VENUE_NAMES,
     TALLINN_REGION_BBOX,
     TALLINN_TZ,
     VENUE_EXTRACT_MAX_FRESH_LLM_CALLS_PER_RUN,
     VENUE_NAME_DIRECTION_KEYWORDS,
+    VENUE_NAME_PARENS_RE,
     VENUE_NAME_PROMPT_MAX_CHARS,
     VENUE_NAME_SUSPECT_MAX_LEN,
-    VENUE_NAME_PARENS_RE,
     VENUE_SIBLING_RATIO_THRESHOLD,
 )
+from app.llm.prompts import LLM_VENUE_EXTRACT_PROMPT_TEMPLATE
 from app.ingestion.base import coords_in_tallinn, http_get
 from app.llm.router import LLMError, content_hash, llm_available, llm_json
 from app.models.models import Event, LlmCall

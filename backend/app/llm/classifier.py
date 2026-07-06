@@ -12,7 +12,7 @@ import logging
 from datetime import datetime
 from typing import Any, cast
 
-from sqlalchemy import ColumnElement, and_, exists, or_, select, update
+from sqlalchemy import ColumnElement, exists, select, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
@@ -35,7 +35,6 @@ from app.constants import (
     LLM_CLASSIFY_PRICE_CONTEXT_FALLBACK,
     LLM_CLASSIFY_PRICE_HINT_FALLBACK,
     LLM_CLASSIFY_PRICE_MATCH_TOLERANCE,
-    LLM_CLASSIFY_PROMPT_TEMPLATE,
     LLM_CLASSIFY_VENUE_FALLBACK,
     LLM_CLASSIFY_WHY_GO_MAX_BULLETS,
     LLM_MAX_PROMPT_CHARS,
@@ -45,6 +44,7 @@ from app.constants import (
     VALID_LOCALES,
     VALID_VIBES,
 )
+from app.llm.prompts import LLM_CLASSIFY_PROMPT_TEMPLATE
 from app.ingestion.base import (
     eur_amounts_from_text,
     eur_price_bounds_from_text,
@@ -53,7 +53,7 @@ from app.ingestion.base import (
     price_context_digest,
     strip_fee_amounts,
 )
-from app.llm.router import LLMError, llm_json
+from app.llm.router import llm_json_or_none
 from app.models.models import Event, EventClassification
 from app.routers.utils import (
     canonical_event_filter,
@@ -251,11 +251,16 @@ async def classify_event(
         return True
 
     prompt = _build_classify_prompt(event)
-    try:
-        raw, model_used = await llm_json("classify", prompt, db, event_id=event.id)
-    except LLMError as exc:
-        log.warning("classify failed for event_id=%d: %s", event.id, exc)
+    response = await llm_json_or_none(
+        "classify",
+        prompt,
+        db,
+        event_id=event.id,
+        context=f"classify failed for event_id={event.id}",
+    )
+    if response is None:
         return False
+    raw, model_used = response
 
     try:
         parsed = _parse_classification(raw)
@@ -379,10 +384,7 @@ def _no_live_dedup_sibling_clause(now: datetime) -> ColumnElement[bool]:
             sibling.dedup_group_id == Event.id,
             sibling.id != Event.id,
             sibling.status != EVENT_STATUS_CANCELLED,
-            or_(
-                sibling.ends_at >= now,
-                and_(sibling.ends_at.is_(None), sibling.starts_at >= now),
-            ),
+            event_not_ended_filter(now, entity=sibling),
         )
     )
 

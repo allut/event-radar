@@ -94,7 +94,7 @@ class TestLlmConfirmsPair:
     async def test_confirms_when_same_and_confident(self, mock_db, monkeypatch, make_event):
         monkeypatch.setattr(
             tiebreaker,
-            "llm_json",
+            "llm_json_or_none",
             AsyncMock(return_value=({"same": True, "confidence": 0.9}, "groq/x")),
         )
         assert await tiebreaker._llm_confirms_pair(_event(make_event, 1), _event(make_event, 2), mock_db) is True
@@ -103,7 +103,7 @@ class TestLlmConfirmsPair:
     async def test_rejects_below_threshold(self, mock_db, monkeypatch, make_event):
         monkeypatch.setattr(
             tiebreaker,
-            "llm_json",
+            "llm_json_or_none",
             AsyncMock(return_value=({"same": True, "confidence": 0.5}, "groq/x")),
         )
         assert await tiebreaker._llm_confirms_pair(_event(make_event, 1), _event(make_event, 2), mock_db) is False
@@ -112,17 +112,18 @@ class TestLlmConfirmsPair:
     async def test_rejects_when_not_same(self, mock_db, monkeypatch, make_event):
         monkeypatch.setattr(
             tiebreaker,
-            "llm_json",
+            "llm_json_or_none",
             AsyncMock(return_value=({"same": False, "confidence": 0.99}, "groq/x")),
         )
         assert await tiebreaker._llm_confirms_pair(_event(make_event, 1), _event(make_event, 2), mock_db) is False
 
     @pytest.mark.asyncio
     async def test_rejects_on_llm_error(self, mock_db, monkeypatch, make_event):
+        # llm_json_or_none returns None when every provider failed.
         monkeypatch.setattr(
             tiebreaker,
-            "llm_json",
-            AsyncMock(side_effect=router.LLMError("all providers failed")),
+            "llm_json_or_none",
+            AsyncMock(return_value=None),
         )
         assert await tiebreaker._llm_confirms_pair(_event(make_event, 1), _event(make_event, 2), mock_db) is False
 
@@ -131,7 +132,7 @@ class TestLlmConfirmsPair:
         # confidence is non-numeric → float() raises ValueError → treated as distinct
         monkeypatch.setattr(
             tiebreaker,
-            "llm_json",
+            "llm_json_or_none",
             AsyncMock(return_value=({"same": True, "confidence": "high"}, "groq/x")),
         )
         assert await tiebreaker._llm_confirms_pair(_event(make_event, 1), _event(make_event, 2), mock_db) is False
@@ -602,7 +603,7 @@ class TestRunDedupPassLlm:
         ]
         _wire_execute(mock_db, cached_rows)
         llm_json_mock = AsyncMock()
-        monkeypatch.setattr(tiebreaker, "llm_json", llm_json_mock)
+        monkeypatch.setattr(tiebreaker, "llm_json_or_none", llm_json_mock)
 
         result = await tiebreaker.run_dedup_pass_llm(mock_db)
 

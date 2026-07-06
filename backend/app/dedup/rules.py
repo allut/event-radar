@@ -414,6 +414,42 @@ async def candidate_pair_ids_in_window(
     return [(row[0], row[1]) for row in pair_rows]
 
 
+async def load_dedup_candidate_events(
+    db: AsyncSession, cutoff: datetime
+) -> list[Event]:
+    """Non-cancelled events inside the dedup lookback window, ordered by id.
+
+    Shared by ``run_dedup_pass`` and ``llm_tiebreaker.run_dedup_pass_llm`` so
+    both passes always cluster the same population.
+    """
+    rows = await db.scalars(
+        select(Event)
+        .where(Event.status != EVENT_STATUS_CANCELLED)
+        .where(Event.starts_at >= cutoff)
+        .order_by(Event.id)
+    )
+    return list(rows.all())
+
+
+async def clear_stale_dedup_groups(db: AsyncSession, cutoff: datetime) -> None:
+    """NULL out dedup_group_id on events that have aged out of the window.
+
+    Without this, an event excluded from the load query would keep a stale
+    group id after its partner was recomputed. ``synchronize_session=False``
+    is safe: aged-out rows (``starts_at < cutoff``) are never loaded by
+    ``load_dedup_candidate_events``, so no identity-map objects are affected.
+    Shared by both dedup passes.
+    """
+    await db.execute(
+        update(Event)
+        .where(Event.starts_at < cutoff)
+        .where(Event.status != EVENT_STATUS_CANCELLED)
+        .where(Event.dedup_group_id.is_not(None))
+        .values(dedup_group_id=None),
+        execution_options={"synchronize_session": False},
+    )
+
+
 async def run_dedup_pass(db: AsyncSession) -> dict:
     """Find duplicate events and assign dedup_group_id.
 
@@ -421,15 +457,7 @@ async def run_dedup_pass(db: AsyncSession) -> dict:
     any newly discovered or changed groups. Returns a summary dict.
     """
     cutoff = dedup_window_cutoff()
-    rows = (
-        await db.scalars(
-            select(Event)
-            .where(Event.status != EVENT_STATUS_CANCELLED)
-            .where(Event.starts_at >= cutoff)
-            .order_by(Event.id)
-        )
-    ).all()
-    events = list(rows)
+    events = await load_dedup_candidate_events(db, cutoff)
 
     if not events:
         return {"total": 0, "grouped": 0, "groups": 0, "updated": 0}
@@ -445,20 +473,7 @@ async def run_dedup_pass(db: AsyncSession) -> dict:
             event.dedup_group_id = new_gid
             updated += 1
 
-    # Null out dedup_group_id for events that have aged out of the window.
-    # Without this, an event excluded from the query would retain a stale group_id
-    # even after its partner was cleared by the loop above.
-    # synchronize_session=False: safe here because aged-out rows (starts_at < cutoff)
-    # were never loaded by the SELECT above (starts_at >= cutoff), so no identity-map
-    # objects are affected. The status filter mirrors the SELECT to keep scope consistent.
-    await db.execute(
-        update(Event)
-        .where(Event.starts_at < cutoff)
-        .where(Event.status != EVENT_STATUS_CANCELLED)
-        .where(Event.dedup_group_id.is_not(None))
-        .values(dedup_group_id=None),
-        execution_options={"synchronize_session": False},
-    )
+    await clear_stale_dedup_groups(db, cutoff)
 
     group_count = len({gid for gid in assignments.values()})
     log.info(

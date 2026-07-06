@@ -26,29 +26,30 @@ reaches 0 and every run is fully correct.
 
 import logging
 
-from sqlalchemy import select, update
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.constants import (
-    EVENT_STATUS_CANCELLED,
     LLM_DEDUP_CONFIDENCE_THRESHOLD,
     LLM_DEDUP_HASH_QUERY_CHUNK_SIZE,
     LLM_DEDUP_MAX_FRESH_LLM_CALLS_PER_PASS,
-    LLM_DEDUP_PROMPT_TEMPLATE,
     LLM_DEDUP_TITLE_MAX_LEN,
     LLM_DEDUP_VENUE_MAX_LEN,
 )
+from app.llm.prompts import LLM_DEDUP_PROMPT_TEMPLATE
 from app.dedup.rules import (
     union,
     apply_same_day_title_unions,
     build_cluster_assignments,
     candidate_pair_ids_in_window,
+    clear_stale_dedup_groups,
     dedup_window_cutoff,
     is_candidate_pair,
+    load_dedup_candidate_events,
     run_dedup_pass,
     same_group,
 )
-from app.llm.router import LLMError, content_hash, llm_available, llm_json
+from app.llm.router import content_hash, llm_available, llm_json_or_none
 from app.models.models import Event, LlmCall
 
 log = logging.getLogger(__name__)
@@ -98,25 +99,18 @@ async def _llm_confirms_pair(a: Event, b: Event, db: AsyncSession) -> bool:
     recoverable from the content_hash (which encodes both titles + dates).
     """
     prompt = _build_prompt(a, b)
-    try:
-        result, _ = await llm_json("dedup", prompt, db, event_id=a.id)
-        confirmed = _verdict_confirms(result)
-        log.debug(
-            "llm dedup: a=%d b=%d result=%s → %s",
-            a.id,
-            b.id,
-            result,
-            "MERGE" if confirmed else "skip",
-        )
-        return confirmed
-    except LLMError as exc:
-        log.warning(
-            "llm dedup failed for pair (%d, %d): %s — treating as distinct",
-            a.id,
-            b.id,
-            exc,
-        )
+    response = await llm_json_or_none(
+        "dedup",
+        prompt,
+        db,
+        event_id=a.id,
+        context=f"llm dedup failed for pair ({a.id}, {b.id}) — treating as distinct",
+    )
+    if response is None:
         return False
+    result, _ = response
+    try:
+        confirmed = _verdict_confirms(result)
     except (TypeError, ValueError) as exc:
         log.warning(
             "llm dedup bad response for pair (%d, %d): %s — treating as distinct",
@@ -125,6 +119,14 @@ async def _llm_confirms_pair(a: Event, b: Event, db: AsyncSession) -> bool:
             exc,
         )
         return False
+    log.debug(
+        "llm dedup: a=%d b=%d result=%s → %s",
+        a.id,
+        b.id,
+        result,
+        "MERGE" if confirmed else "skip",
+    )
+    return confirmed
 
 
 async def _prefetch_cached_decisions(
@@ -199,15 +201,7 @@ async def run_dedup_pass_llm(db: AsyncSession) -> dict:
         return summary
 
     cutoff = dedup_window_cutoff()
-    rows = (
-        await db.scalars(
-            select(Event)
-            .where(Event.status != EVENT_STATUS_CANCELLED)
-            .where(Event.starts_at >= cutoff)
-            .order_by(Event.id)
-        )
-    ).all()
-    events = list(rows)
+    events = await load_dedup_candidate_events(db, cutoff)
 
     if not events:
         return {
@@ -295,15 +289,7 @@ async def run_dedup_pass_llm(db: AsyncSession) -> dict:
             event.dedup_group_id = new_gid
             updated += 1
 
-    # Clear stale group IDs for aged-out events (same logic as rules.run_dedup_pass)
-    await db.execute(
-        update(Event)
-        .where(Event.starts_at < cutoff)
-        .where(Event.status != EVENT_STATUS_CANCELLED)
-        .where(Event.dedup_group_id.is_not(None))
-        .values(dedup_group_id=None),
-        execution_options={"synchronize_session": False},
-    )
+    await clear_stale_dedup_groups(db, cutoff)
 
     group_count = len({gid for gid in assignments.values()})
     log.info(

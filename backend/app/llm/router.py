@@ -97,6 +97,11 @@ async def llm_json(
         return cached.response_json, model_label  # type: ignore[return-value]
 
     errors: list[str] = []
+
+    def _record_attempt_failure(record: LlmCall, msg: str) -> None:
+        db.add(record)
+        errors.append(msg)
+
     for provider in LLM_PROVIDERS:
         api_key: str = getattr(settings, provider["key_attr"], "")
         if not api_key:
@@ -130,8 +135,7 @@ async def llm_json(
                 log.warning(
                     "llm rate-limited: provider=%s task=%s", provider["name"], task
                 )
-                db.add(record)
-                errors.append(f"{provider['name']}: 429 rate-limited")
+                _record_attempt_failure(record, f"{provider['name']}: 429 rate-limited")
                 continue
 
             resp.raise_for_status()
@@ -157,36 +161,53 @@ async def llm_json(
             return result, model_label
 
         except json.JSONDecodeError as exc:
-            msg = f"{provider['name']}: JSON parse error — {exc}"
             log.warning(
                 "llm response parse failed: provider=%s error=%s", provider["name"], exc
             )
-            db.add(record)
-            errors.append(msg)
+            _record_attempt_failure(record, f"{provider['name']}: JSON parse error — {exc}")
         except httpx.HTTPStatusError as exc:
-            msg = f"{provider['name']}: HTTP {exc.response.status_code}"
             log.warning(
                 "llm HTTP error: provider=%s status=%s",
                 provider["name"],
                 exc.response.status_code,
             )
-            db.add(record)
-            errors.append(msg)
+            _record_attempt_failure(
+                record, f"{provider['name']}: HTTP {exc.response.status_code}"
+            )
         except httpx.HTTPError as exc:
-            msg = f"{provider['name']}: network error — {exc}"
             log.warning(
                 "llm network error: provider=%s error=%s", provider["name"], exc
             )
-            db.add(record)
-            errors.append(msg)
+            _record_attempt_failure(record, f"{provider['name']}: network error — {exc}")
         except (KeyError, IndexError) as exc:
-            msg = f"{provider['name']}: unexpected response shape — {exc}"
             log.warning(
                 "llm response shape error: provider=%s error=%s", provider["name"], exc
             )
-            db.add(record)
-            errors.append(msg)
+            _record_attempt_failure(
+                record, f"{provider['name']}: unexpected response shape — {exc}"
+            )
 
     raise LLMError(
         f"All LLM providers failed for task={task!r}: {'; '.join(errors) or 'no providers configured'}"
     )
+
+
+async def llm_json_or_none(
+    task: str,
+    prompt: str,
+    db: AsyncSession,
+    *,
+    event_id: int | None = None,
+    context: str,
+) -> tuple[dict[str, Any], str] | None:
+    """``llm_json`` for callers that degrade gracefully on total LLM failure.
+
+    Returns None (after logging a warning prefixed with ``context``) instead of
+    raising ``LLMError``. Shared by the classifier, dedup tiebreaker, and
+    newsletter extractor so each doesn't hand-roll the same try/except.
+    """
+    try:
+        return await llm_json(task, prompt, db, event_id=event_id)
+    except LLMError as exc:
+        log.warning("%s: %s", context, exc)
+        return None

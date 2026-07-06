@@ -236,7 +236,7 @@ class TestClassifyEventPrice:
         raw = {**_BASE_RAW, "price_min": 10, "price_max": 20, "currency": "EUR"}
         event.description_orig = "Full price 10 EUR, family ticket 20 EUR."
         with patch(
-            "app.llm.classifier.llm_json",
+            "app.llm.classifier.llm_json_or_none",
             AsyncMock(return_value=(raw, "groq/llama-3.3-70b-versatile")),
         ):
             ok = await classify_event(
@@ -258,7 +258,7 @@ class TestClassifyEventPrice:
         event.description_orig = "A test event with no price information at all."
         raw = {**_BASE_RAW, "price_min": 10, "price_max": 20, "currency": "EUR"}
         with patch(
-            "app.llm.classifier.llm_json",
+            "app.llm.classifier.llm_json_or_none",
             AsyncMock(return_value=(raw, "groq/llama-3.3-70b-versatile")),
         ):
             ok = await classify_event(
@@ -276,7 +276,7 @@ class TestClassifyEventPrice:
         event.description_orig = "Adult ticket €14. Members enter free."
         raw = {**_BASE_RAW, "price_min": 14, "price_max": 14, "currency": "EUR", "has_free_tier": True}
         with patch(
-            "app.llm.classifier.llm_json",
+            "app.llm.classifier.llm_json_or_none",
             AsyncMock(return_value=(raw, "groq/llama-3.3-70b-versatile")),
         ):
             ok = await classify_event(
@@ -297,7 +297,7 @@ class TestClassifyEventPrice:
         event.description_orig = "Adult ticket €14."
         raw = {**_BASE_RAW, "price_min": 14, "price_max": 14, "currency": "EUR", "has_free_tier": True}
         with patch(
-            "app.llm.classifier.llm_json",
+            "app.llm.classifier.llm_json_or_none",
             AsyncMock(return_value=(raw, "groq/llama-3.3-70b-versatile")),
         ):
             ok = await classify_event(
@@ -317,7 +317,7 @@ class TestClassifyEventPrice:
         event.description_orig = "Members enter free. No further price stated."
         raw = {**_BASE_RAW, "price_min": 14, "price_max": 14, "currency": "EUR", "has_free_tier": True}
         with patch(
-            "app.llm.classifier.llm_json",
+            "app.llm.classifier.llm_json_or_none",
             AsyncMock(return_value=(raw, "groq/llama-3.3-70b-versatile")),
         ):
             ok = await classify_event(
@@ -336,7 +336,7 @@ class TestClassifyEventPrice:
         event.currency = "EUR"
         raw = dict(_BASE_RAW)
         with patch(
-            "app.llm.classifier.llm_json",
+            "app.llm.classifier.llm_json_or_none",
             AsyncMock(return_value=(raw, "groq/llama-3.3-70b-versatile")),
         ):
             ok = await classify_event(
@@ -358,7 +358,7 @@ class TestClassifyEventPrice:
         event.currency = "EUR"
         raw = {**_BASE_RAW, "price_min": 15, "price_max": 30, "currency": "EUR"}
         with patch(
-            "app.llm.classifier.llm_json",
+            "app.llm.classifier.llm_json_or_none",
             AsyncMock(return_value=(raw, "groq/llama-3.3-70b-versatile")),
         ):
             ok = await classify_event(
@@ -383,7 +383,7 @@ class TestClassifyEventPrice:
         )
         raw = {**_BASE_RAW, "price_min": 11, "price_max": 25, "currency": "EUR"}
         with patch(
-            "app.llm.classifier.llm_json",
+            "app.llm.classifier.llm_json_or_none",
             AsyncMock(return_value=(raw, "groq/llama-3.3-70b-versatile")),
         ):
             ok = await classify_event(
@@ -407,7 +407,7 @@ class TestClassifyEventPrice:
         event.description_orig = "Student discount €5 available at the door."
         raw = {**_BASE_RAW, "price_min": 5, "price_max": 32, "currency": "EUR"}
         with patch(
-            "app.llm.classifier.llm_json",
+            "app.llm.classifier.llm_json_or_none",
             AsyncMock(return_value=(raw, "groq/llama-3.3-70b-versatile")),
         ):
             ok = await classify_event(
@@ -427,7 +427,7 @@ class TestClassifyEventPrice:
         event.price_hint = "Standard ticket 50 USD, donation tier 16 EUR optional"
         raw = {**_BASE_RAW, "price_min": 50, "price_max": 50, "currency": "USD"}
         with patch(
-            "app.llm.classifier.llm_json",
+            "app.llm.classifier.llm_json_or_none",
             AsyncMock(return_value=(raw, "groq/llama-3.3-70b-versatile")),
         ):
             ok = await classify_event(
@@ -450,7 +450,7 @@ class TestClassifyEventPrice:
         event.price_hint = "Adult: Kumu Art Museum €16, Family: Kumu Art Museum €32"
         raw = {**_BASE_RAW, "price_min": 16, "price_max": 16, "currency": "eur"}
         with patch(
-            "app.llm.classifier.llm_json",
+            "app.llm.classifier.llm_json_or_none",
             AsyncMock(return_value=(raw, "groq/llama-3.3-70b-versatile")),
         ):
             ok = await classify_event(
@@ -486,7 +486,7 @@ class TestClassifyEventExplicit:
         assert event.is_explicit is False
         raw = {**_BASE_RAW, "explicit": True}
         with patch(
-            "app.llm.classifier.llm_json",
+            "app.llm.classifier.llm_json_or_none",
             AsyncMock(return_value=(raw, "groq/llama-3.3-70b-versatile")),
         ):
             ok = await classify_event(
@@ -504,7 +504,7 @@ class TestClassifyEventExplicit:
         event.is_explicit = True
         raw = {**_BASE_RAW, "explicit": False}
         with patch(
-            "app.llm.classifier.llm_json",
+            "app.llm.classifier.llm_json_or_none",
             AsyncMock(return_value=(raw, "groq/llama-3.3-70b-versatile")),
         ):
             ok = await classify_event(
@@ -521,7 +521,7 @@ class TestClassifyEventExplicit:
         event = make_event()
         raw = {**_BASE_RAW, "explicit": False}
         with patch(
-            "app.llm.classifier.llm_json",
+            "app.llm.classifier.llm_json_or_none",
             AsyncMock(return_value=(raw, "groq/llama-3.3-70b-versatile")),
         ):
             ok = await classify_event(
@@ -555,7 +555,7 @@ class TestClassifyEventNonEvent:
         assert event.is_non_event is False
         raw = {**_BASE_RAW, "non_event": True}
         with patch(
-            "app.llm.classifier.llm_json",
+            "app.llm.classifier.llm_json_or_none",
             AsyncMock(return_value=(raw, "groq/llama-3.3-70b-versatile")),
         ):
             ok = await classify_event(
@@ -573,7 +573,7 @@ class TestClassifyEventNonEvent:
         event.is_non_event = True
         event.status = "draft"
         with patch(
-            "app.llm.classifier.llm_json",
+            "app.llm.classifier.llm_json_or_none",
             AsyncMock(return_value=({}, "groq/llama-3.3-70b-versatile")),
         ) as mock_llm:
             ok = await classify_event(
@@ -594,7 +594,7 @@ class TestClassifyEventNonEvent:
         event = make_event()
         raw = {**_BASE_RAW, "non_event": False}
         with patch(
-            "app.llm.classifier.llm_json",
+            "app.llm.classifier.llm_json_or_none",
             AsyncMock(return_value=(raw, "groq/llama-3.3-70b-versatile")),
         ):
             ok = await classify_event(
@@ -628,7 +628,7 @@ class TestClassifyEventOutOfArea:
         assert event.is_out_of_area is False
         raw = {**_BASE_RAW, "in_target_city": False}
         with patch(
-            "app.llm.classifier.llm_json",
+            "app.llm.classifier.llm_json_or_none",
             AsyncMock(return_value=(raw, "groq/llama-3.3-70b-versatile")),
         ):
             ok = await classify_event(
@@ -643,7 +643,7 @@ class TestClassifyEventOutOfArea:
         event = make_event()
         raw = {**_BASE_RAW, "in_target_city": True}
         with patch(
-            "app.llm.classifier.llm_json",
+            "app.llm.classifier.llm_json_or_none",
             AsyncMock(return_value=(raw, "groq/llama-3.3-70b-versatile")),
         ):
             ok = await classify_event(
@@ -658,7 +658,7 @@ class TestClassifyEventOutOfArea:
         event = make_event()
         raw = dict(_BASE_RAW)  # no in_target_city key
         with patch(
-            "app.llm.classifier.llm_json",
+            "app.llm.classifier.llm_json_or_none",
             AsyncMock(return_value=(raw, "groq/llama-3.3-70b-versatile")),
         ):
             ok = await classify_event(
@@ -676,7 +676,7 @@ class TestClassifyEventSkipsLLMWhenAlreadyExplicit:
         event.is_explicit = True
         event.status = "draft"
         with patch(
-            "app.llm.classifier.llm_json",
+            "app.llm.classifier.llm_json_or_none",
             AsyncMock(return_value=({}, "groq/llama-3.3-70b-versatile")),
         ) as mock_llm:
             ok = await classify_event(
@@ -709,7 +709,7 @@ class TestClassifyPendingIncludesExplicitRepresentatives:
         mock_db.scalars.side_effect = [events_result, existing_result]
 
         with patch(
-            "app.llm.classifier.llm_json",
+            "app.llm.classifier.llm_json_or_none",
             AsyncMock(return_value=({}, "groq/llama-3.3-70b-versatile")),
         ) as mock_llm:
             summary = await classify_pending(mock_db)
@@ -777,7 +777,7 @@ class TestClassifyPendingCancelsEndedDrafts:
         mock_db.scalars.side_effect = [events_result, existing_result]
 
         with patch(
-            "app.llm.classifier.llm_json",
+            "app.llm.classifier.llm_json_or_none",
             AsyncMock(return_value=(_BASE_RAW, "groq/llama-3.3-70b-versatile")),
         ):
             summary = await classify_pending(mock_db)
@@ -795,7 +795,7 @@ class TestClassifyEventMalformedParse:
         event = make_event()
         raw = {**_BASE_RAW, "categories": [["music"], "theater"]}
         with patch(
-            "app.llm.classifier.llm_json",
+            "app.llm.classifier.llm_json_or_none",
             AsyncMock(return_value=(raw, "groq/llama-3.3-70b-versatile")),
         ):
             ok = await classify_event(
@@ -816,7 +816,7 @@ class TestClassifyEventMalformedParse:
         event.status = EVENT_STATUS_DRAFT
         with (
             patch(
-                "app.llm.classifier.llm_json",
+                "app.llm.classifier.llm_json_or_none",
                 AsyncMock(return_value=({}, "groq/llama-3.3-70b-versatile")),
             ),
             patch(

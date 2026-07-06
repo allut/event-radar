@@ -12,7 +12,6 @@ from fastapi import (
     APIRouter,
     BackgroundTasks,
     Depends,
-    HTTPException,
     Request,
     status,
 )
@@ -21,7 +20,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.constants import (
-    APP_ENV_DEVELOPMENT,
     RATE_LIMIT_WEBHOOK_INBOUND_MAIL,
     SVIX_ID_HEADER,
     SVIX_SECRET_PREFIX,
@@ -33,6 +31,7 @@ from app.db import AsyncSessionLocal, get_db
 from app.llm.newsletter_extractor import extract_events_from_email
 from app.models.models import RawInboundEmail
 from app.rate_limit import limiter
+from app.routers.utils import require_configured_secret
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
@@ -111,24 +110,17 @@ async def inbound_mail(
     the raw body) rather than a shared secret in the query string, which leaks into
     proxy/access logs and lets anyone who learns it inject fabricated events. Set
     RESEND_WEBHOOK_SECRET to the "whsec_..." signing secret shown on this webhook's
-    page in the Resend dashboard (NOT passed as a URL query param). Empty secret is
-    only tolerated in development — in any other environment the endpoint refuses
-    all requests until configured (mirrors the admin-panel fail-closed pattern in
-    routers/admin.py::_require_admin).
+    page in the Resend dashboard (NOT passed as a URL query param). An empty secret
+    fails closed outside development (require_configured_secret).
     """
     body = await request.body()
 
-    if not settings.RESEND_WEBHOOK_SECRET:
-        if settings.APP_ENV != APP_ENV_DEVELOPMENT:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Webhook disabled: RESEND_WEBHOOK_SECRET not configured",
-            )
-        log.warning(
-            "RESEND_WEBHOOK_SECRET not set; inbound-mail webhook is unprotected "
-            "(development mode)"
-        )
-    else:
+    if require_configured_secret(
+        settings.RESEND_WEBHOOK_SECRET,
+        feature="Webhook",
+        setting_name="RESEND_WEBHOOK_SECRET",
+        app_env=settings.APP_ENV,
+    ):
         svix_id = request.headers.get(SVIX_ID_HEADER, "")
         svix_timestamp = request.headers.get(SVIX_TIMESTAMP_HEADER, "")
         svix_signature = request.headers.get(SVIX_SIGNATURE_HEADER, "")
