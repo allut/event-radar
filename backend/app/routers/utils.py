@@ -182,18 +182,26 @@ def serialize_user(user: User, **extras) -> dict:
     }
 
 
+def parse_bearer_user(authorization: str | None) -> tuple[int, int] | None:
+    """(user_id, token_version) from an ``Authorization: Bearer`` header, or
+    None when the header is missing/malformed or the token is expired/invalid."""
+    if not isinstance(authorization, str) or not authorization.startswith("Bearer "):
+        return None
+    try:
+        return verify_session_token(authorization[len("Bearer ") :])
+    except (SignatureExpired, BadSignature):
+        return None
+
+
 async def get_optional_user_locale(
     authorization: str | None,
     db: AsyncSession,
 ) -> str:
     """Resolve user locale from a Bearer token if present; else DEFAULT_USER_LOCALE."""
-    if not isinstance(authorization, str) or not authorization.startswith("Bearer "):
+    parsed = parse_bearer_user(authorization)
+    if parsed is None:
         return DEFAULT_USER_LOCALE
-    try:
-        user_id, _version = verify_session_token(authorization[len("Bearer ") :])
-    except (SignatureExpired, BadSignature):
-        return DEFAULT_USER_LOCALE
-    user = await db.get(User, user_id)
+    user = await db.get(User, parsed[0])
     return user.locale if user else DEFAULT_USER_LOCALE
 
 

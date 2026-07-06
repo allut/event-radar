@@ -26,6 +26,154 @@ from app.models.models import Source
 log = logging.getLogger(__name__)
 
 
+async def _check_existing_organizers(
+    client: httpx.AsyncClient,
+    limiter: AsyncRateLimiter,
+    current_ids: list[int],
+    current_names: dict[str, str],
+) -> tuple[set[int], set[int]]:
+    """Probe each current organizer; return (stale_this_run, revived).
+
+    A transient HTTP error leaves the organizer in neither set — its existing
+    stale_since state carries forward, avoiding false stale/revival flips on a
+    network blip.
+    """
+    stale_this_run: set[int] = set()
+    revived: set[int] = set()
+    for org_id in current_ids:
+        await limiter.acquire()
+        try:
+            resp = await http_get(
+                client,
+                settings.FIENTA_BASE_URL,
+                params={"organizer": org_id, "limit": FIENTA_ORGANIZER_CHECK_LIMIT},
+            )
+            events = resp.json().get("events", [])
+            if not events:
+                stale_this_run.add(org_id)
+                log.info(
+                    "organizer_sync: organizer %s (%s) returned 0 events — flagged stale",
+                    org_id,
+                    current_names.get(str(org_id)),
+                )
+            else:
+                revived.add(org_id)
+        except httpx.HTTPError as exc:
+            log.warning(
+                "organizer_sync: check failed for organizer=%s: %s", org_id, exc
+            )
+            if (
+                isinstance(exc, httpx.HTTPStatusError)
+                and exc.response.status_code == http.HTTPStatus.TOO_MANY_REQUESTS
+            ):
+                limiter.backoff(FIENTA_MIN_REQUEST_INTERVAL_SECONDS)
+    return stale_this_run, revived
+
+
+async def _discover_new_organizers(
+    client: httpx.AsyncClient,
+    limiter: AsyncRateLimiter,
+    current_ids: list[int],
+    current_id_set: set[int],
+    current_names: dict[str, str],
+    retired_ids: set[int],
+) -> list[tuple[int, str]]:
+    """City-filtered scan; auto-add organizers with enough Tallinn events.
+
+    Mutates current_ids/current_id_set/current_names/retired_ids in place
+    (a retired organizer that resurfaces rejoins like any new one).
+    Returns the (oid, name) pairs added.
+    """
+    added: list[tuple[int, str]] = []
+    await limiter.acquire()
+    try:
+        resp = await http_get(
+            client,
+            settings.FIENTA_BASE_URL,
+            params={
+                "city": FIENTA_CITY_FILTER,
+                "limit": FIENTA_ORGANIZER_SCAN_LIMIT,
+            },
+        )
+        events = resp.json().get("events", [])
+        if len(events) == FIENTA_ORGANIZER_SCAN_LIMIT:
+            log.warning(
+                "organizer_sync: city=%s scan hit limit=%d — results may be truncated",
+                FIENTA_CITY_FILTER,
+                FIENTA_ORGANIZER_SCAN_LIMIT,
+            )
+        org_counts: dict[int, tuple[int, str]] = {}
+        for event in events:
+            raw_oid = event.get("organizer_id")
+            if raw_oid is None:
+                continue
+            try:
+                oid = int(raw_oid)
+            except (ValueError, TypeError):
+                continue
+            name = str(event.get("organizer_name", ""))[:ORGANIZER_NAME_MAX_LEN]
+            count, _ = org_counts.get(oid, (0, name))
+            org_counts[oid] = (count + 1, name)
+
+        for oid, (count, name) in sorted(org_counts.items()):
+            if oid in current_id_set or count < ORGANIZER_MIN_EVENTS_FOR_AUTO_ADD:
+                continue
+            current_ids.append(oid)
+            current_id_set.add(oid)
+            current_names[str(oid)] = name
+            added.append((oid, name))
+            if oid in retired_ids:
+                retired_ids.discard(oid)
+                log.info(
+                    "organizer_sync: retired organizer %s (%s) revived — rejoined",
+                    oid,
+                    name,
+                )
+            log.info(
+                "organizer_sync: auto-added organizer %s (%s) — %d events",
+                oid,
+                name,
+                count,
+            )
+    except httpx.HTTPError as exc:
+        log.warning("organizer_sync: discovery scan failed: %s", exc)
+    return added
+
+
+def _retire_stale(
+    stale_since: dict[str, str],
+    current_ids: list[int],
+    current_id_set: set[int],
+    current_names: dict[str, str],
+    retired_ids: set[int],
+    now: datetime,
+) -> list[int]:
+    """Retire any oid stale continuously for >= STALE_ORGANIZER_RETIRE_DAYS.
+
+    Mutates stale_since/current_ids/current_id_set/retired_ids in place;
+    returns the oids retired this run.
+    """
+    retired_now: list[int] = []
+    retire_cutoff = now - timedelta(days=STALE_ORGANIZER_RETIRE_DAYS)
+    for oid_str, since_iso in list(stale_since.items()):
+        since = datetime.fromisoformat(since_iso)
+        if since <= retire_cutoff:
+            oid = int(oid_str)
+            if oid in current_id_set:
+                current_ids.remove(oid)
+                current_id_set.discard(oid)
+            retired_ids.add(oid)
+            retired_now.append(oid)
+            stale_since.pop(oid_str, None)
+            log.info(
+                "organizer_sync: retired organizer %s (%s) — stale since %s",
+                oid,
+                current_names.get(oid_str),
+                since_iso,
+            )
+    return retired_now
+
+
 async def sync_fienta_organizers(db: AsyncSession) -> dict:
     """Check active organizers, discover new ones, retire long-dead ones, update Source.config.
 
@@ -54,132 +202,35 @@ async def sync_fienta_organizers(db: AsyncSession) -> dict:
     stale_since: dict[str, str] = dict(config.get("stale_since", {}))
 
     now = datetime.now(tz=TALLINN_TZ)
-    stale_this_run: set[int] = set()
-    revived: set[int] = set()
-    added: list[tuple[int, str]] = []
-    retired_now: list[int] = []
 
     # Shared with fienta.py's ingest pacing: proactively spaces every request to
     # this same upstream instead of firing one per organizer back-to-back, which
     # was tripping Fienta's rate limit on accounts with many organizers.
     limiter = AsyncRateLimiter(FIENTA_MIN_REQUEST_INTERVAL_SECONDS)
     async with httpx.AsyncClient(timeout=HTTP_TIMEOUT_SECONDS) as client:
-        # Step 1 — check each current organizer is still returning events
-        for org_id in current_ids:
-            await limiter.acquire()
-            try:
-                resp = await http_get(
-                    client,
-                    settings.FIENTA_BASE_URL,
-                    params={"organizer": org_id, "limit": FIENTA_ORGANIZER_CHECK_LIMIT},
-                )
-                events = resp.json().get("events", [])
-                if not events:
-                    stale_this_run.add(org_id)
-                    log.info(
-                        "organizer_sync: organizer %s (%s) returned 0 events — flagged stale",
-                        org_id,
-                        current_names.get(str(org_id)),
-                    )
-                else:
-                    revived.add(org_id)
-            except httpx.HTTPError as exc:
-                log.warning(
-                    "organizer_sync: check failed for organizer=%s: %s", org_id, exc
-                )
-                if (
-                    isinstance(exc, httpx.HTTPStatusError)
-                    and exc.response.status_code == http.HTTPStatus.TOO_MANY_REQUESTS
-                ):
-                    limiter.backoff(FIENTA_MIN_REQUEST_INTERVAL_SECONDS)
-                # Transient error: neither stale nor revived this run — carry forward
-                # whatever stale_since state already existed for this oid.
+        stale_this_run, revived = await _check_existing_organizers(
+            client, limiter, current_ids, current_names
+        )
+        added = await _discover_new_organizers(
+            client, limiter, current_ids, current_id_set, current_names, retired_ids
+        )
 
-        # Step 2 — discover new organizers via city filter scan
-        await limiter.acquire()
-        try:
-            resp = await http_get(
-                client,
-                settings.FIENTA_BASE_URL,
-                params={
-                    "city": FIENTA_CITY_FILTER,
-                    "limit": FIENTA_ORGANIZER_SCAN_LIMIT,
-                },
-            )
-            events = resp.json().get("events", [])
-            if len(events) == FIENTA_ORGANIZER_SCAN_LIMIT:
-                log.warning(
-                    "organizer_sync: city=%s scan hit limit=%d — results may be truncated",
-                    FIENTA_CITY_FILTER,
-                    FIENTA_ORGANIZER_SCAN_LIMIT,
-                )
-            org_counts: dict[int, tuple[int, str]] = {}
-            for event in events:
-                raw_oid = event.get("organizer_id")
-                if raw_oid is None:
-                    continue
-                try:
-                    oid = int(raw_oid)
-                except (ValueError, TypeError):
-                    continue
-                name = str(event.get("organizer_name", ""))[:ORGANIZER_NAME_MAX_LEN]
-                count, _ = org_counts.get(oid, (0, name))
-                org_counts[oid] = (count + 1, name)
-
-            for oid, (count, name) in sorted(org_counts.items()):
-                if oid in current_id_set or count < ORGANIZER_MIN_EVENTS_FOR_AUTO_ADD:
-                    continue
-                current_ids.append(oid)
-                current_id_set.add(oid)
-                current_names[str(oid)] = name
-                added.append((oid, name))
-                if oid in retired_ids:
-                    retired_ids.discard(oid)
-                    log.info(
-                        "organizer_sync: retired organizer %s (%s) revived — rejoined",
-                        oid,
-                        name,
-                    )
-                log.info(
-                    "organizer_sync: auto-added organizer %s (%s) — %d events",
-                    oid,
-                    name,
-                    count,
-                )
-        except httpx.HTTPError as exc:
-            log.warning("organizer_sync: discovery scan failed: %s", exc)
-
-    # Update stale_since: new stale oids get a first-seen timestamp; revived
-    # oids are cleared. Errored oids keep whatever prior state they had.
+    # New stale oids get a first-seen timestamp; revived oids are cleared.
+    # Errored oids keep whatever prior state they had.
     for oid in stale_this_run:
         stale_since.setdefault(str(oid), now.isoformat())
     for oid in revived:
         stale_since.pop(str(oid), None)
 
-    # Retire any oid stale continuously for >= STALE_ORGANIZER_RETIRE_DAYS.
-    retire_cutoff = now - timedelta(days=STALE_ORGANIZER_RETIRE_DAYS)
-    for oid_str, since_iso in list(stale_since.items()):
-        since = datetime.fromisoformat(since_iso)
-        if since <= retire_cutoff:
-            oid = int(oid_str)
-            if oid in current_id_set:
-                current_ids.remove(oid)
-                current_id_set.discard(oid)
-            retired_ids.add(oid)
-            retired_now.append(oid)
-            stale_since.pop(oid_str, None)
-            log.info(
-                "organizer_sync: retired organizer %s (%s) — stale since %s",
-                oid,
-                current_names.get(oid_str),
-                since_iso,
-            )
+    retired_now = _retire_stale(
+        stale_since, current_ids, current_id_set, current_names, retired_ids, now
+    )
 
     # stale_organizer_ids = currently stale, not yet retired (still polled next
     # week so a revival is detectable; skipped by hourly ingest, see fienta.py).
     stale_organizer_ids = sorted(int(x) for x in stale_since)
 
-    # Step 3 — always persist last_sync; update organizer lists only if changed
+    # Always persist last_sync; organizer lists ride along.
     source.config = {
         **config,
         "organizer_ids": current_ids,

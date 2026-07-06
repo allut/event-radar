@@ -92,6 +92,47 @@ async def get_current_user(
     return user
 
 
+async def _get_or_create_user(db: AsyncSession, email: str, request: Request) -> User:
+    """Look up (or insert) the user for a magic-link request.
+
+    Creates a User row before the email is ever verified, so an
+    unauthenticated caller can pollute the users table with unverified
+    addresses (mitigated by RATE_LIMIT_AUTH_REQUEST_LINK + the per-email
+    cooldown, not eliminated). The distinct greppable log marker lets an
+    operator alert on abnormal unverified-account growth via shipped logs.
+    """
+    user = await db.scalar(select(User).where(User.email == email))
+    if user is None:
+        locale = _detect_locale(request.headers.get("Accept-Language", ""))
+        user = User(email=email, locale=locale)
+        db.add(user)
+        await db.flush()  # populate user.id
+        log.info("auth: new unverified user row created email=%s", mask_email(email))
+    return user
+
+
+async def _recent_unused_link_exists(db: AsyncSession, user_id: int) -> bool:
+    """Per-email cooldown: True if an unused link was issued in the last 2 minutes.
+
+    A link created T seconds ago has expires_at = now + (TTL - T), so
+    expires_at > now + TTL - 120 ↔ T < 120. Prevents Resend quota exhaustion
+    from rapid repeats; IP-level throttling is the @limiter.limit decorator.
+    """
+    recent_cutoff = datetime.now(timezone.utc) + timedelta(
+        seconds=magic_ttl_seconds() - 120
+    )
+    already_sent = await db.scalar(
+        select(AuthMagicLink)
+        .where(
+            AuthMagicLink.user_id == user_id,
+            AuthMagicLink.used_at.is_(None),
+            AuthMagicLink.expires_at > recent_cutoff,
+        )
+        .limit(1)
+    )
+    return already_sent is not None
+
+
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
@@ -106,40 +147,9 @@ async def request_magic_link(
 ) -> dict:
     """Request a magic sign-in link. Always returns 200 to prevent user enumeration."""
     email = body.email.lower()
+    user = await _get_or_create_user(db, email, request)
 
-    # Upsert user
-    user = await db.scalar(select(User).where(User.email == email))
-    if user is None:
-        locale = _detect_locale(request.headers.get("Accept-Language", ""))
-        user = User(email=email, locale=locale)
-        db.add(user)
-        await db.flush()  # populate user.id
-        # This creates a User row before the email is ever verified, so an
-        # unauthenticated caller can pollute the users table with unverified
-        # addresses (mitigated by RATE_LIMIT_AUTH_REQUEST_LINK + the per-email
-        # cooldown below, not eliminated). Log a distinct, greppable marker so
-        # an operator monitoring shipped logs (settings.LOG_SHIP_URL) can alert
-        # on abnormal unverified-account growth.
-        log.info("auth: new unverified user row created email=%s", mask_email(email))
-
-    # Per-email cooldown: skip if an unused link was issued in the last 2 minutes.
-    # A link created T seconds ago has expires_at = now + (TTL - T), so
-    # expires_at > now + TTL - 120 ↔ T < 120 (i.e. created less than 2 min ago).
-    # This prevents Resend quota exhaustion from rapid repeated requests.
-    # IP-level throttling is handled separately by @limiter.limit(RATE_LIMIT_AUTH_REQUEST_LINK).
-    recent_cutoff = datetime.now(timezone.utc) + timedelta(
-        seconds=magic_ttl_seconds() - 120
-    )
-    already_sent = await db.scalar(
-        select(AuthMagicLink)
-        .where(
-            AuthMagicLink.user_id == user.id,
-            AuthMagicLink.used_at.is_(None),
-            AuthMagicLink.expires_at > recent_cutoff,
-        )
-        .limit(1)
-    )
-    if already_sent is not None:
+    if await _recent_unused_link_exists(db, user.id):
         return {
             "detail": "If that address is registered, a sign-in link has been sent."
         }

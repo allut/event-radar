@@ -44,30 +44,113 @@ def _representative_address(
     return min(counts, key=lambda a: (-counts[a], a))
 
 
+_DonorRow = tuple[str | None, float | None, float | None]
+
+
+async def _load_donor_rows_by_canon(db: AsyncSession) -> dict[str, list[_DonorRow]]:
+    """All geocoded donors, grouped by canonical venue name.
+
+    Grouping bounds the fuzzy loop to distinct cores; non-physical donors
+    (NON_GEOCODABLE_VENUE_NAMES) are dropped so virtual events can't donate
+    junk coords. Legitimately out-of-area donors are excluded in SQL — the
+    self-heal pass never fixes them, so their coord must not propagate onto a
+    fuzzy-matched in-area sibling.
+    """
+    donor_rows = (
+        await db.execute(
+            select(Event.venue_name, Event.venue_address, Event.lat, Event.lng)
+            .where(
+                Event.venue_name.is_not(None),
+                Event.venue_address.is_not(None),
+                Event.lat.is_not(None),
+                Event.lng.is_not(None),
+                Event.is_out_of_area.is_(False),
+            )
+            .distinct()
+        )
+    ).all()
+    donor_addrs_by_canon: dict[str, list[_DonorRow]] = {}
+    for name, address, lat, lng in donor_rows:
+        if name is None:
+            continue
+        canon = canonical_venue_name(name)
+        if not canon or canon in NON_GEOCODABLE_VENUE_NAMES:
+            continue
+        donor_addrs_by_canon.setdefault(canon, []).append((address, lat, lng))
+    return donor_addrs_by_canon
+
+
+def _matched_donor_rows(
+    target_canon: str, donor_addrs_by_canon: dict[str, list[_DonorRow]]
+) -> list[_DonorRow]:
+    """All donor rows whose canonical name fuzzy-matches the target's.
+
+    score_cutoff lets rapidfuzz prove "below cutoff" from a cheap length-bound
+    check and skip the full edit-distance DP for clearly-dissimilar pairs — it
+    never changes whether the true ratio clears the threshold. Every bucket is
+    still checked (a non-identical bucket can independently clear it too).
+    """
+    matched: list[_DonorRow] = []
+    for donor_canon, rows in donor_addrs_by_canon.items():
+        if (
+            fuzz_ratio(
+                target_canon,
+                donor_canon,
+                score_cutoff=VENUE_SIBLING_RATIO_THRESHOLD,
+            )
+            >= VENUE_SIBLING_RATIO_THRESHOLD
+        ):
+            matched.extend(rows)
+    return matched
+
+
+def _distinct_coords(matched: list[_DonorRow]) -> set[tuple[float, float]]:
+    """Rounded distinct coords for the ambiguity count — one physical venue can
+    be stored as two sub-meter-apart doubles, which must not read as two
+    locations."""
+    return {
+        (
+            round(lat, GEOCODE_COORD_QUANT_DECIMALS),
+            round(lng, GEOCODE_COORD_QUANT_DECIMALS),
+        )
+        for _addr, lat, lng in matched
+        if lat is not None and lng is not None
+    }
+
+
+def _fill_from_donors(event: Event, matched_rows: list[_DonorRow]) -> bool:
+    """Fill whichever location field the target is missing; True when written.
+
+    When the target has no coords, its address (if any) never geocoded →
+    unreliable → overwrite with the house-numbered sibling address; when it
+    already has coords (set at ingest) keep them, only backfill the address.
+    """
+    if event.lat is None or event.lng is None:
+        event.lat, event.lng = next(
+            (la, ln)
+            for _addr, la, ln in matched_rows
+            if la is not None and ln is not None
+        )
+        event.venue_address = _representative_address(matched_rows)
+        return True
+    if event.venue_address is None:
+        event.venue_address = _representative_address(matched_rows)
+        return True
+    return False
+
+
 async def copy_venue_from_siblings(db: AsyncSession) -> int:
     """Copy venue_address + coords onto under-located events from a sibling venue.
 
-    Two queries (honors the no-N+1 batch rule): one for targets (venue_name set,
-    and *either* lat NULL *or* venue_address NULL), one for all geocoded donors
-    (distinct venue_name →
-    address/coords where both are present). Matching is on the *canonical* venue
-    core (parens + glued-on address tails stripped, see canonical_venue_name) via
-    symmetric ``fuzz.ratio >= VENUE_SIBLING_RATIO_THRESHOLD``, so "Sõltumatu Tantsu
-    Lava" matches a "Sõltumatu Tantsu Lava (STL)" donor (canonicalization makes the
-    cores equal). A symmetric ratio is used rather than token_set_ratio so a short
-    comma-split core can't score 100 against an unrelated longer donor. The matched
-    donor set is memoized per distinct target_canon (an exact-equal donor bucket
-    always clears the threshold via fuzz_ratio == 100, so it can't be shortcut without
-    also dropping any other, non-identical bucket that happens to clear the threshold
-    too) — this still collapses the scan from one-per-target to one-per-distinct-name,
-    since many targets typically share the same venue_name. The ambiguity guard keys on
-    distinct *coordinates*, not the full ``(address, lat, lng)`` tuple — one physical
-    venue legitimately carries several address spellings at one coord, and only a
-    genuine multi-location name (>1 distinct coord) is skipped + logged. Non-physical
-    venue names (NON_GEOCODABLE_VENUE_NAMES) are skipped on both sides. venue_name
-    itself is never altered by this function; the earlier extract_address_from_venue_name
-    pass (run first in geocode_pending) may NULL or rewrite venue_name before this runs.
-    Returns the number of events updated; the caller commits.
+    Two queries (no-N+1): targets (venue_name set, lat or address NULL) and
+    donors (see _load_donor_rows_by_canon). Matching is on the *canonical*
+    venue core (canonical_venue_name) via symmetric fuzz.ratio — so "Sõltumatu
+    Tantsu Lava" matches a "Sõltumatu Tantsu Lava (STL)" donor — memoized per
+    distinct target name. The ambiguity guard keys on distinct *coordinates*:
+    one physical venue legitimately carries several address spellings at one
+    coord; only a genuine multi-location name (>1 distinct coord) is skipped.
+    venue_name itself is never altered here (extract_address_from_venue_name
+    runs earlier and may rewrite it). Returns events updated; caller commits.
     """
     targets = (
         await db.scalars(
@@ -82,43 +165,14 @@ async def copy_venue_from_siblings(db: AsyncSession) -> int:
     if not targets:
         return 0
 
-    donor_rows = (
-        await db.execute(
-            select(Event.venue_name, Event.venue_address, Event.lat, Event.lng)
-            .where(
-                Event.venue_name.is_not(None),
-                Event.venue_address.is_not(None),
-                Event.lat.is_not(None),
-                Event.lng.is_not(None),
-                # A legitimately out-of-area donor (is_out_of_area True) is never
-                # self-healed (that pass only targets in-area mis-geocodes), so it
-                # must be excluded here directly — otherwise its coord can still
-                # propagate onto a fuzzy-matched in-area sibling target.
-                Event.is_out_of_area.is_(False),
-            )
-            .distinct()
-        )
-    ).all()
-
-    # Group donor rows by canonical name (bounds the fuzzy loop to distinct cores);
-    # drop non-physical donors so virtual events can't inherit their junk coords.
-    donor_addrs_by_canon: dict[
-        str, list[tuple[str | None, float | None, float | None]]
-    ] = {}
-    for name, address, lat, lng in donor_rows:
-        if name is None:
-            continue
-        canon = canonical_venue_name(name)
-        if not canon or canon in NON_GEOCODABLE_VENUE_NAMES:
-            continue
-        donor_addrs_by_canon.setdefault(canon, []).append((address, lat, lng))
+    donor_addrs_by_canon = await _load_donor_rows_by_canon(db)
 
     copied = 0
     warned_ambiguous: set[str] = set()
-    matched_rows_by_target_canon: dict[
-        str, list[tuple[str | None, float | None, float | None]]
-    ] = {}
-    distinct_coords_by_target_canon: dict[str, set[tuple[float, float]]] = {}
+    # Memoized per distinct target canon — many targets share one venue_name,
+    # so the fuzzy scan (and the coord set derived from it) runs once per name.
+    matched_by_canon: dict[str, list[_DonorRow]] = {}
+    coords_by_canon: dict[str, set[tuple[float, float]]] = {}
     for event in targets:
         name = event.venue_name
         if name is None:
@@ -127,51 +181,17 @@ async def copy_venue_from_siblings(db: AsyncSession) -> int:
         if not target_canon or target_canon in NON_GEOCODABLE_VENUE_NAMES:
             continue
 
-        if target_canon not in matched_rows_by_target_canon:
-            matched: list[tuple[str | None, float | None, float | None]] = []
-            for donor_canon, rows in donor_addrs_by_canon.items():
-                # score_cutoff lets rapidfuzz's C implementation prove "below cutoff"
-                # from a cheap length-bound check and skip the full edit-distance DP
-                # for clearly-dissimilar pairs — it never changes whether the *true*
-                # ratio is >= VENUE_SIBLING_RATIO_THRESHOLD (a below-cutoff pair comes
-                # back as 0.0 instead of its real, still-below-threshold score, which
-                # compares identically against the threshold below). This does NOT
-                # skip the scan on an exact match: a different, non-identical donor
-                # bucket can independently clear the threshold too (see docstring
-                # above), so every bucket is still checked — only the per-comparison
-                # cost drops for the many pairs that are nowhere close to matching.
-                if (
-                    fuzz_ratio(
-                        target_canon,
-                        donor_canon,
-                        score_cutoff=VENUE_SIBLING_RATIO_THRESHOLD,
-                    )
-                    >= VENUE_SIBLING_RATIO_THRESHOLD
-                ):
-                    matched.extend(rows)
-            matched_rows_by_target_canon[target_canon] = matched
-            # distinct_coords (and the ambiguity-vs-representative outcome derived from
-            # it below) is a pure function of matched_rows, which is itself memoized
-            # per target_canon — memoize this derived value too so events sharing a
-            # venue_name don't recompute the same set comprehension repeatedly.
-            # Coords are *rounded* for the distinct-count only: one physical venue can
-            # be stored as two sub-meter-apart doubles (e.g. 59.43793509999999 vs
-            # 59.4379351), which must not read as two locations.
-            distinct_coords_by_target_canon[target_canon] = {
-                (
-                    round(lat, GEOCODE_COORD_QUANT_DECIMALS),
-                    round(lng, GEOCODE_COORD_QUANT_DECIMALS),
-                )
-                for _addr, lat, lng in matched
-                if lat is not None and lng is not None
-            }
+        if target_canon not in matched_by_canon:
+            matched_by_canon[target_canon] = _matched_donor_rows(
+                target_canon, donor_addrs_by_canon
+            )
+            coords_by_canon[target_canon] = _distinct_coords(
+                matched_by_canon[target_canon]
+            )
 
-        matched_rows = matched_rows_by_target_canon[target_canon]
-        if not matched_rows:
-            continue
-
-        distinct_coords = distinct_coords_by_target_canon[target_canon]
-        if not distinct_coords:
+        matched_rows = matched_by_canon[target_canon]
+        distinct_coords = coords_by_canon[target_canon]
+        if not matched_rows or not distinct_coords:
             continue
         if len(distinct_coords) > 1:
             # One warning per ambiguous venue_name, not per event sharing it.
@@ -184,20 +204,7 @@ async def copy_venue_from_siblings(db: AsyncSession) -> int:
                 )
             continue
 
-        # Fill whichever field the target is missing. When it has no coords the
-        # address it carries (if any) never geocoded → unreliable → overwrite with
-        # the house-numbered sibling address; when it already has coords (set at
-        # ingest) keep them and only backfill a missing address.
-        if event.lat is None or event.lng is None:
-            event.lat, event.lng = next(
-                (la, ln)
-                for _addr, la, ln in matched_rows
-                if la is not None and ln is not None
-            )
-            event.venue_address = _representative_address(matched_rows)
-            copied += 1
-        elif event.venue_address is None:
-            event.venue_address = _representative_address(matched_rows)
+        if _fill_from_donors(event, matched_rows):
             copied += 1
 
     if copied:

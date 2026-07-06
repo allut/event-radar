@@ -132,6 +132,26 @@ async def admin_dedup_run(request: Request) -> dict:
     return await run_admin_job("Dedup", dedup_pass_drain_now())
 
 
+def _serialize_dedup_groups(rows) -> dict[int, list[dict]]:
+    """Group event rows by dedup_group_id into response dicts."""
+    groups: dict[int, list[dict]] = {}
+    for e in rows:
+        if e.dedup_group_id is None:
+            continue
+        groups.setdefault(e.dedup_group_id, []).append(
+            {
+                "id": e.id,
+                "title": e.title_orig,
+                "starts_at": e.starts_at.isoformat(),
+                "venue": e.venue_name,
+                "status": e.status,
+                "url": e.url,
+                "is_explicit": e.is_explicit,
+            }
+        )
+    return groups
+
+
 @router.get("/dedup/groups", dependencies=[Depends(_require_admin)])
 @limiter.limit(RATE_LIMIT_ADMIN)
 async def admin_dedup_groups(
@@ -195,21 +215,7 @@ async def admin_dedup_groups(
             )
         ).all()
 
-    groups: dict[int, list[dict]] = {}
-    for e in rows:
-        if e.dedup_group_id is None:
-            continue
-        groups.setdefault(e.dedup_group_id, []).append(
-            {
-                "id": e.id,
-                "title": e.title_orig,
-                "starts_at": e.starts_at.isoformat(),
-                "venue": e.venue_name,
-                "status": e.status,
-                "url": e.url,
-                "is_explicit": e.is_explicit,
-            }
-        )
+    groups = _serialize_dedup_groups(rows)
 
     return {
         "group_count": len(groups),

@@ -1,6 +1,6 @@
 import logging
 import secrets
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler  # type: ignore[import-untyped]
@@ -56,104 +56,69 @@ configure_logging()
 log = logging.getLogger(__name__)
 
 
-async def _run_organizer_sync() -> None:
-    async with AsyncSessionLocal() as db:
+def _scheduled(
+    label: str, run: Callable[[], Awaitable[object]]
+) -> Callable[[], Awaitable[None]]:
+    """Wrap a job for APScheduler: log the summary, swallow + log failures.
+
+    Scheduled jobs must never raise (the scheduler would only log a bare
+    traceback); admin-triggered runs of the same jobs convert failures to 500s
+    via routers.utils.run_admin_job instead.
+    """
+
+    async def _job() -> None:
         try:
-            result = await sync_fienta_organizers(db)
-            await db.commit()
-            log.info("organizer sync committed: %s", result)
+            summary = await run()
+            log.info("%s completed: %s", label, summary)
         except Exception:
-            await db.rollback()
-            log.exception("organizer sync failed")
+            log.exception("%s failed", label)
+
+    return _job
 
 
-async def _run_cleanup() -> None:
-    async with AsyncSessionLocal() as db:
-        try:
-            summary = await cleanup_stale_data(db)
-            await db.commit()
-            log.info("cleanup_stale_data committed: %s", summary)
-        except Exception:
-            await db.rollback()
-            log.exception("cleanup_stale_data failed")
+def _in_session(
+    func: Callable[..., Awaitable[object]], *, commit: bool
+) -> Callable[[], Awaitable[object]]:
+    """Session-scoped job runner: open a session, run, commit when asked,
+    roll back on failure (the error still propagates to _scheduled's logger)."""
+
+    async def _run() -> object:
+        async with AsyncSessionLocal() as db:
+            try:
+                result = await func(db)
+                if commit:
+                    await db.commit()
+                return result
+            except Exception:
+                await db.rollback()
+                raise
+
+    return _run
 
 
-async def _run_ingest_all() -> None:
-    try:
-        results = await ingest_all_enabled()
-        log.info("hourly ingest completed: %s", results)
-    except Exception:
-        log.exception("hourly ingest failed")
+_run_organizer_sync = _scheduled(
+    "organizer sync", _in_session(sync_fienta_organizers, commit=True)
+)
+_run_cleanup = _scheduled(
+    "cleanup_stale_data", _in_session(cleanup_stale_data, commit=True)
+)
+_run_ingest_all = _scheduled("hourly ingest", ingest_all_enabled)
+_run_dedup_pass = _scheduled("dedup pass", dedup_pass_drained)
+_run_classify_pending = _scheduled("classify_pending", classify_pending_drained)
+_run_publish_pending = _scheduled("publish_pending", publish_pending_job)
+_run_geocode_pending = _scheduled("geocode_pending", geocode_pending_job)
+_run_refetch_details = _scheduled("refetch_event_details", refetch_event_details_job)
+# build_daily_feeds and send_daily_digests commit internally / send only.
+_run_build_daily_feeds = _scheduled(
+    "build_daily_feeds", _in_session(build_daily_feeds, commit=False)
+)
+_run_send_daily_digests = _scheduled(
+    "send_daily_digests", _in_session(send_daily_digests, commit=False)
+)
 
 
-async def _run_dedup_pass() -> None:
-    try:
-        summary = await dedup_pass_drained()
-        log.info("dedup pass completed: %s", summary)
-    except Exception:
-        log.exception("dedup pass failed")
-
-
-async def _run_classify_pending() -> None:
-    try:
-        summary = await classify_pending_drained()
-        log.info("classify_pending completed: %s", summary)
-    except Exception:
-        log.exception("classify_pending failed")
-
-
-async def _run_publish_pending() -> None:
-    try:
-        summary = await publish_pending_job()
-        log.info("publish_pending completed: %s", summary)
-    except Exception:
-        log.exception("publish_pending failed")
-
-
-async def _run_geocode_pending() -> None:
-    try:
-        summary = await geocode_pending_job()
-        log.info("geocode_pending completed: %s", summary)
-    except Exception:
-        log.exception("geocode_pending failed")
-
-
-async def _run_refetch_details() -> None:
-    try:
-        summary = await refetch_event_details_job()
-        log.info("refetch_event_details completed: %s", summary)
-    except Exception:
-        log.exception("refetch_event_details failed")
-
-
-async def _run_build_daily_feeds() -> None:
-    async with AsyncSessionLocal() as db:
-        try:
-            summary = await build_daily_feeds(db)
-            log.info("build_daily_feeds completed: %s", summary)
-        except Exception:
-            await db.rollback()
-            log.exception("build_daily_feeds failed")
-
-
-async def _run_send_daily_digests() -> None:
-    async with AsyncSessionLocal() as db:
-        try:
-            summary = await send_daily_digests(db)
-            log.info("send_daily_digests completed: %s", summary)
-        except Exception:
-            log.exception("send_daily_digests failed")
-
-
-@asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    async with AsyncSessionLocal() as db:
-        await seed_sources(db)
-        await seed_personas(db)
-        await db.commit()
-
-    scheduler = AsyncIOScheduler(timezone=TALLINN_TZ_NAME)
-
+def _register_scheduled_jobs(scheduler: AsyncIOScheduler) -> None:
+    """Wire the full cron schedule (see CLAUDE.md Architecture for the cadence)."""
     # Organizer discovery — weekly Sunday 03:00 EET
     scheduler.add_job(
         _run_organizer_sync,
@@ -245,6 +210,16 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         replace_existing=True,
     )
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    async with AsyncSessionLocal() as db:
+        await seed_sources(db)
+        await seed_personas(db)
+        await db.commit()
+
+    scheduler = AsyncIOScheduler(timezone=TALLINN_TZ_NAME)
+    _register_scheduled_jobs(scheduler)
     scheduler.start()
     try:
         yield

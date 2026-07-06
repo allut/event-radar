@@ -85,6 +85,82 @@ async def _self_heal_out_of_bbox_coords(db: AsyncSession) -> int:
     return healed
 
 
+async def _build_geocode_cache(
+    db: AsyncSession,
+) -> dict[str, tuple[float, float] | None]:
+    """Seed a normalized-query → coords cache from all geocoded events.
+
+    Avoids re-hitting Nominatim for venues we already know, including
+    spelling/unit variants (the key is the normalized query). Most-common
+    coord wins per key (lex tie-break). Donors outside the Tallinn bbox are
+    dropped so a bad stored coord can't seed the cache for a sibling address
+    (belt-and-suspenders alongside the self-heal pass).
+    """
+    donor_rows = (
+        await db.execute(
+            select(Event.venue_address, Event.lat, Event.lng)
+            .where(Event.venue_address.is_not(None), Event.lat.is_not(None))
+            .distinct()
+        )
+    ).all()
+    coords_by_query: dict[str, Counter[tuple[float, float]]] = defaultdict(Counter)
+    for address, lat, lng in donor_rows:
+        if not coords_in_tallinn(lat, lng):
+            continue
+        coords_by_query[normalize_address_for_geocoding(address)][(lat, lng)] += 1
+    return {
+        query: min(counter.most_common(), key=lambda kv: (-kv[1], kv[0]))[0]
+        for query, counter in coords_by_query.items()
+    }
+
+
+async def _run_nominatim_pass(
+    db: AsyncSession,
+    pending: list[Event],
+    cache: dict[str, tuple[float, float] | None],
+    now: datetime,
+) -> tuple[int, int]:
+    """Geocode pending events serially (Nominatim policy: max 1 req/s).
+
+    Returns (geocoded, failed). A transient HTTP failure does NOT start the
+    retry cooldown (geocode_attempted_at) — only a definitive
+    no-match/bbox-reject does, mirroring refetch's throttle behavior.
+    Commits mid-loop on the Neon keep-alive cadence.
+    """
+    geocoded = 0
+    failed = 0
+    transient_failure_queries: set[str] = set()
+    last_commit = time.monotonic()
+    async with httpx.AsyncClient(timeout=HTTP_TIMEOUT_SECONDS) as client:
+        for event in pending:
+            raw_address = event.venue_address
+            assert raw_address is not None  # guaranteed by the pending query
+            query = normalize_address_for_geocoding(raw_address)
+
+            if query not in cache:
+                try:
+                    cache[query] = await geocode_address(client, query, original=raw_address)
+                except (httpx.HTTPStatusError, httpx.RequestError) as exc:
+                    log.warning("geocode failed address=%s: %s", raw_address, exc)
+                    cache[query] = None
+                    transient_failure_queries.add(query)
+                await asyncio.sleep(GEOCODE_REQUEST_DELAY_SECONDS)
+
+            coords = cache[query]
+            if coords is None:
+                failed += 1
+                if query not in transient_failure_queries:
+                    event.geocode_attempted_at = now
+            else:
+                event.lat, event.lng = coords
+                event.geocode_attempted_at = now
+                geocoded += 1
+            if time.monotonic() - last_commit >= GEOCODE_COMMIT_INTERVAL_SECONDS:
+                await db.commit()
+                last_commit = time.monotonic()
+    return geocoded, failed
+
+
 async def geocode_pending(db: AsyncSession) -> dict:
     """Backfill lat/lng for events with a venue_address but no coordinates.
 
@@ -146,65 +222,8 @@ async def geocode_pending(db: AsyncSession) -> dict:
             "healed": healed,
         }
 
-    donor_rows = (
-        await db.execute(
-            select(Event.venue_address, Event.lat, Event.lng)
-            .where(Event.venue_address.is_not(None), Event.lat.is_not(None))
-            .distinct()
-        )
-    ).all()
-    # Group geocoded coords by normalized query so spelling/unit variants of one
-    # venue share coords; pick the most-common coord per key (lex tie-break) when a
-    # key spans several near-identical Nominatim results. Donors outside the
-    # Tallinn bbox are dropped so an already-bad stored coord can't seed the cache
-    # for a sibling address (belt-and-suspenders alongside the self-heal above).
-    coords_by_query: dict[str, Counter[tuple[float, float]]] = defaultdict(Counter)
-    for address, lat, lng in donor_rows:
-        if not coords_in_tallinn(lat, lng):
-            continue
-        coords_by_query[normalize_address_for_geocoding(address)][(lat, lng)] += 1
-    cache: dict[str, tuple[float, float] | None] = {
-        query: min(counter.most_common(), key=lambda kv: (-kv[1], kv[0]))[0]
-        for query, counter in coords_by_query.items()
-    }
-
-    geocoded = 0
-    failed = 0
-    # Queries whose Nominatim call this run hit a transient HTTP error — these
-    # must NOT start the cooldown (mirrors refetch.py not bumping its throttle
-    # field on a fetch failure), unlike a definitive no-match/bbox-reject.
-    transient_failure_queries: set[str] = set()
-    last_commit = time.monotonic()
-    async with httpx.AsyncClient(timeout=HTTP_TIMEOUT_SECONDS) as client:
-        for event in pending:
-            raw_address = event.venue_address
-            assert raw_address is not None  # guaranteed by the WHERE clause above
-            query = normalize_address_for_geocoding(raw_address)
-
-            if query not in cache:
-                try:
-                    cache[query] = await geocode_address(client, query, original=raw_address)
-                except (httpx.HTTPStatusError, httpx.RequestError) as exc:
-                    log.warning("geocode failed address=%s: %s", raw_address, exc)
-                    cache[query] = None
-                    transient_failure_queries.add(query)
-                await asyncio.sleep(GEOCODE_REQUEST_DELAY_SECONDS)
-
-            coords = cache[query]
-            if coords is None:
-                failed += 1
-                if query not in transient_failure_queries:
-                    event.geocode_attempted_at = now
-                if time.monotonic() - last_commit >= GEOCODE_COMMIT_INTERVAL_SECONDS:
-                    await db.commit()
-                    last_commit = time.monotonic()
-                continue
-            event.lat, event.lng = coords
-            event.geocode_attempted_at = now
-            geocoded += 1
-            if time.monotonic() - last_commit >= GEOCODE_COMMIT_INTERVAL_SECONDS:
-                await db.commit()
-                last_commit = time.monotonic()
+    cache = await _build_geocode_cache(db)
+    geocoded, failed = await _run_nominatim_pass(db, list(pending), cache, now)
 
     return {
         "pending": len(pending),

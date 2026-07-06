@@ -79,6 +79,22 @@ def _verify_svix_signature(
     return False
 
 
+def _request_signature_valid(request: Request, body: bytes) -> bool:
+    """All three Svix headers present, timestamp within tolerance, HMAC valid."""
+    svix_id = request.headers.get(SVIX_ID_HEADER, "")
+    svix_timestamp = request.headers.get(SVIX_TIMESTAMP_HEADER, "")
+    svix_signature = request.headers.get(SVIX_SIGNATURE_HEADER, "")
+    return bool(
+        svix_id
+        and svix_timestamp
+        and svix_signature
+        and _timestamp_within_tolerance(svix_timestamp)
+        and _verify_svix_signature(
+            settings.RESEND_WEBHOOK_SECRET, svix_id, svix_timestamp, body, svix_signature
+        )
+    )
+
+
 async def _run_extraction(email_id: int, subject: str, text_body: str) -> None:
     """Background task: extract events from email using a fresh DB session."""
     async with AsyncSessionLocal() as db:
@@ -120,23 +136,11 @@ async def inbound_mail(
         feature="Webhook",
         setting_name="RESEND_WEBHOOK_SECRET",
         app_env=settings.APP_ENV,
-    ):
-        svix_id = request.headers.get(SVIX_ID_HEADER, "")
-        svix_timestamp = request.headers.get(SVIX_TIMESTAMP_HEADER, "")
-        svix_signature = request.headers.get(SVIX_SIGNATURE_HEADER, "")
-        if (
-            not svix_id
-            or not svix_timestamp
-            or not svix_signature
-            or not _timestamp_within_tolerance(svix_timestamp)
-            or not _verify_svix_signature(
-                settings.RESEND_WEBHOOK_SECRET, svix_id, svix_timestamp, body, svix_signature
-            )
-        ):
-            log.warning("inbound-mail: invalid or missing webhook signature")
-            return JSONResponse(
-                {"status": "rejected"}, status_code=status.HTTP_401_UNAUTHORIZED
-            )
+    ) and not _request_signature_valid(request, body):
+        log.warning("inbound-mail: invalid or missing webhook signature")
+        return JSONResponse(
+            {"status": "rejected"}, status_code=status.HTTP_401_UNAUTHORIZED
+        )
 
     try:
         payload = json.loads(body)
