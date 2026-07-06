@@ -126,14 +126,14 @@ class TestNormalizeAddressForGeocoding:
 class TestGeocodeAddress:
     @pytest.mark.asyncio
     async def test_returns_lat_lng_from_first_result(self):
-        with patch("app.ingestion.geocode.http_get") as mock_get:
+        with patch("app.ingestion.geocode.nominatim.http_get") as mock_get:
             mock_get.return_value = _mock_response([{"lat": "59.437", "lon": "24.745"}])
             result = await geocode_address(MagicMock(), "Some Address, Tallinn")
         assert result == (59.437, 24.745)
 
     @pytest.mark.asyncio
     async def test_empty_results_returns_none_and_logs_warning(self, caplog):
-        with patch("app.ingestion.geocode.http_get") as mock_get:
+        with patch("app.ingestion.geocode.nominatim.http_get") as mock_get:
             mock_get.return_value = _mock_response([])
             with caplog.at_level(logging.WARNING, logger="app.ingestion.geocode"):
                 result = await geocode_address(MagicMock(), "Nowhere tn 1, Estonia", original="Nowhere tänav 1")
@@ -144,7 +144,7 @@ class TestGeocodeAddress:
     async def test_non_json_response_returns_none(self):
         resp = MagicMock(spec=httpx.Response)
         resp.json.side_effect = ValueError("Expecting value: line 1 column 1")
-        with patch("app.ingestion.geocode.http_get") as mock_get:
+        with patch("app.ingestion.geocode.nominatim.http_get") as mock_get:
             mock_get.return_value = resp
             result = await geocode_address(MagicMock(), "Some Address, Tallinn")
         assert result is None
@@ -153,7 +153,7 @@ class TestGeocodeAddress:
     async def test_out_of_bbox_match_discarded_and_logged(self, caplog):
         """A match outside TALLINN_REGION_BBOX (e.g. Kopli village on Saaremaa
         instead of Tallinn's Kopli district) is treated as no match — Bug A."""
-        with patch("app.ingestion.geocode.http_get") as mock_get:
+        with patch("app.ingestion.geocode.nominatim.http_get") as mock_get:
             mock_get.return_value = _mock_response([{"lat": "58.51", "lon": "22.71"}])
             with caplog.at_level(logging.WARNING, logger="app.ingestion.geocode"):
                 result = await geocode_address(MagicMock(), "Kopli, Estonia", original="Kopli")
@@ -162,7 +162,7 @@ class TestGeocodeAddress:
 
     @pytest.mark.asyncio
     async def test_in_bbox_match_still_stored(self):
-        with patch("app.ingestion.geocode.http_get") as mock_get:
+        with patch("app.ingestion.geocode.nominatim.http_get") as mock_get:
             mock_get.return_value = _mock_response([{"lat": "59.45", "lon": "24.69"}])
             result = await geocode_address(MagicMock(), "Kopli, Tallinn, Estonia")
         assert result == (59.45, 24.69)
@@ -815,7 +815,7 @@ class TestExtractAddressFromVenueName:
 
     @pytest.mark.asyncio
     async def test_no_llm_available_returns_zero(self, mock_db):
-        with patch("app.ingestion.geocode.llm_available", return_value=False):
+        with patch("app.ingestion.geocode.venue_extract.llm_available", return_value=False):
             result = await extract_address_from_venue_name(mock_db)
         assert result == 0
         mock_db.scalars.assert_not_called()
@@ -823,7 +823,7 @@ class TestExtractAddressFromVenueName:
     @pytest.mark.asyncio
     async def test_no_candidates_returns_zero(self, mock_db):
         mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=[]))
-        with patch("app.ingestion.geocode.llm_available", return_value=True):
+        with patch("app.ingestion.geocode.venue_extract.llm_available", return_value=True):
             result = await extract_address_from_venue_name(mock_db)
         assert result == 0
 
@@ -832,8 +832,8 @@ class TestExtractAddressFromVenueName:
         event = self._make_event(1, "KUMU")
         mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=[event]))
         with (
-            patch("app.ingestion.geocode.llm_available", return_value=True),
-            patch("app.ingestion.geocode.llm_json") as mock_llm,
+            patch("app.ingestion.geocode.venue_extract.llm_available", return_value=True),
+            patch("app.ingestion.geocode.venue_extract.llm_json") as mock_llm,
         ):
             result = await extract_address_from_venue_name(mock_db)
         assert result == 0
@@ -847,8 +847,8 @@ class TestExtractAddressFromVenueName:
 
         llm_response = {"venue_name": None, "venue_address": "Kopli 116"}
         with (
-            patch("app.ingestion.geocode.llm_available", return_value=True),
-            patch("app.ingestion.geocode.llm_json", new=AsyncMock(return_value=(llm_response, "groq/llama"))),
+            patch("app.ingestion.geocode.venue_extract.llm_available", return_value=True),
+            patch("app.ingestion.geocode.venue_extract.llm_json", new=AsyncMock(return_value=(llm_response, "groq/llama"))),
         ):
             result = await extract_address_from_venue_name(mock_db)
 
@@ -867,8 +867,8 @@ class TestExtractAddressFromVenueName:
             "venue_address": "Ranna pst 3",
         }
         with (
-            patch("app.ingestion.geocode.llm_available", return_value=True),
-            patch("app.ingestion.geocode.llm_json", new=AsyncMock(return_value=(llm_response, "groq/llama"))),
+            patch("app.ingestion.geocode.venue_extract.llm_available", return_value=True),
+            patch("app.ingestion.geocode.venue_extract.llm_json", new=AsyncMock(return_value=(llm_response, "groq/llama"))),
         ):
             result = await extract_address_from_venue_name(mock_db)
 
@@ -888,8 +888,8 @@ class TestExtractAddressFromVenueName:
         # LLM proposes a shortened name but no address — must be ignored.
         llm_response = {"venue_name": "Hildegardi aed", "venue_address": None}
         with (
-            patch("app.ingestion.geocode.llm_available", return_value=True),
-            patch("app.ingestion.geocode.llm_json", new=AsyncMock(return_value=(llm_response, "groq/llama"))),
+            patch("app.ingestion.geocode.venue_extract.llm_available", return_value=True),
+            patch("app.ingestion.geocode.venue_extract.llm_json", new=AsyncMock(return_value=(llm_response, "groq/llama"))),
         ):
             result = await extract_address_from_venue_name(mock_db)
 
@@ -914,8 +914,8 @@ class TestExtractAddressFromVenueName:
         )
 
         with (
-            patch("app.ingestion.geocode.llm_available", return_value=True),
-            patch("app.ingestion.geocode.llm_json") as mock_llm,
+            patch("app.ingestion.geocode.venue_extract.llm_available", return_value=True),
+            patch("app.ingestion.geocode.venue_extract.llm_json") as mock_llm,
         ):
             result = await extract_address_from_venue_name(mock_db)
 
@@ -940,8 +940,8 @@ class TestExtractAddressFromVenueName:
             return (llm_response, "groq/llama")
 
         with (
-            patch("app.ingestion.geocode.llm_available", return_value=True),
-            patch("app.ingestion.geocode.llm_json", new=counting_llm_json),
+            patch("app.ingestion.geocode.venue_extract.llm_available", return_value=True),
+            patch("app.ingestion.geocode.venue_extract.llm_json", new=counting_llm_json),
         ):
             await extract_address_from_venue_name(mock_db)
 
@@ -954,8 +954,8 @@ class TestExtractAddressFromVenueName:
         mock_db.execute.return_value = MagicMock(all=MagicMock(return_value=[]))
 
         with (
-            patch("app.ingestion.geocode.llm_available", return_value=True),
-            patch("app.ingestion.geocode.llm_json", new=AsyncMock(return_value=(None, "groq/llama"))),
+            patch("app.ingestion.geocode.venue_extract.llm_available", return_value=True),
+            patch("app.ingestion.geocode.venue_extract.llm_json", new=AsyncMock(return_value=(None, "groq/llama"))),
         ):
             result = await extract_address_from_venue_name(mock_db)
 
@@ -972,8 +972,8 @@ class TestExtractAddressFromVenueName:
         mock_db.execute.return_value = MagicMock(all=MagicMock(return_value=[]))
 
         with (
-            patch("app.ingestion.geocode.llm_available", return_value=True),
-            patch("app.ingestion.geocode.llm_json", new=AsyncMock(side_effect=LLMError("all providers failed"))),
+            patch("app.ingestion.geocode.venue_extract.llm_available", return_value=True),
+            patch("app.ingestion.geocode.venue_extract.llm_json", new=AsyncMock(side_effect=LLMError("all providers failed"))),
         ):
             result = await extract_address_from_venue_name(mock_db)
 
