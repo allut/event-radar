@@ -1,15 +1,117 @@
-"""Locale discovery for per-locale detail-page fetches.
+"""Locale discovery and per-locale detail-page fetching.
 
-Detects which locale a page represents (URL path segment, <html lang>) and
-maps hreflang alternate links to absolute per-locale URLs.
+Detects which locale a page represents (URL path segment, <html lang>), maps
+hreflang alternate links to absolute per-locale URLs, and owns the shared
+locale-variant fetch loop (``fetch_locale_variants``) used by the HTML-listing
+base adapter, the Fienta adapter, and the daily detail refetch.
 """
 
+import logging
+from collections.abc import Awaitable, Callable
 from typing import Any
 from urllib.parse import urlsplit
 
+import httpx
 from bs4 import BeautifulSoup
 
 from app.constants import LOCALIZED_TEXT_HREFLANG_NORMALIZE
+
+log = logging.getLogger(__name__)
+
+# extract(soup, locale) -> (title, description, important_info); any may be None.
+LocaleExtractor = Callable[
+    [BeautifulSoup, str], tuple[str | None, str | None, str | None]
+]
+
+
+async def fetch_locale_variants(
+    client: httpx.AsyncClient,
+    base_soup: BeautifulSoup,
+    base_url: str,
+    target_locales: frozenset[str],
+    extract: LocaleExtractor,
+    *,
+    fetch: Callable[..., Awaitable[httpx.Response]],
+    wait: Callable[[], Awaitable[None]],
+    source_label: str,
+    base_locale: str | None = None,
+    wanted_locales: set[str] | None = None,
+) -> tuple[dict[str, str], dict[str, str], dict[str, str]]:
+    """Fetch each locale-variant page and extract per-locale text.
+
+    Returns ``(titles, descriptions, important_infos)`` keyed by locale. The
+    page's own locale (``base_locale``, else detected from the URL path /
+    <html lang>) and any variant URL equal to ``base_url`` reuse ``base_soup``
+    instead of re-fetching. Every real fetch waits via ``wait()`` first (rate
+    limiting) and applies the SSRF/garbage guards uniformly: variant URLs on a
+    different host are skipped up front, and a response that redirected
+    off-host or to the site root is rejected.
+
+    ``fetch`` is the caller's own ``http_get`` binding, passed in (rather than
+    imported here) so tests patching the caller module's ``http_get`` still
+    intercept locale fetches.
+    """
+    base_host = urlsplit(base_url).hostname
+    own_locale = (
+        base_locale
+        or locale_from_url_path(base_url, target_locales)
+        or locale_from_html_lang(base_soup, target_locales)
+    )
+    locale_urls = localized_detail_urls(base_soup, base_url, target_locales)
+    locale_urls = {
+        locale: loc_url
+        for locale, loc_url in locale_urls.items()
+        if urlsplit(loc_url).hostname == base_host
+        and (wanted_locales is None or locale in wanted_locales)
+    }
+
+    titles: dict[str, str] = {}
+    descs: dict[str, str] = {}
+    infos: dict[str, str] = {}
+    for locale, loc_url in locale_urls.items():
+        if locale == own_locale or loc_url == base_url:
+            # This page IS the locale variant — reuse the in-memory soup.
+            title, desc, info = extract(base_soup, locale)
+        else:
+            try:
+                await wait()
+                resp = await fetch(client, loc_url)
+                final = urlsplit(str(resp.url))
+                if final.hostname != base_host:
+                    log.debug(
+                        "%s: locale fetch redirected off-host locale=%s url=%s",
+                        source_label, locale, loc_url,
+                    )
+                    continue
+                if final.path in ("/", ""):
+                    log.debug(
+                        "%s: locale page is site root locale=%s url=%s",
+                        source_label, locale, loc_url,
+                    )
+                    continue
+                title, desc, info = extract(
+                    BeautifulSoup(resp.text, "html.parser"), locale
+                )
+            except (httpx.HTTPStatusError, httpx.RequestError) as exc:
+                log.debug(
+                    "%s: locale fetch failed locale=%s url=%s: %s",
+                    source_label, locale, loc_url, exc,
+                )
+                continue
+            except Exception as exc:
+                log.warning(
+                    "%s: locale fetch unexpected error locale=%s url=%s: %s",
+                    source_label, locale, loc_url, exc,
+                )
+                continue
+        if title:
+            titles[locale] = title
+        if desc:
+            descs[locale] = desc
+        if info:
+            infos[locale] = info
+    return titles, descs, infos
+
 
 def locale_from_url_path(url: str, locales: frozenset[str]) -> str | None:
     """Return the locale code found as a path segment in url, or None.

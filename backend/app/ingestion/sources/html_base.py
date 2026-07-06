@@ -29,7 +29,7 @@ from app.constants import (
 from app.ingestion.adapter import NormalizedEvent, SourceAdapter
 from app.ingestion.http_client import host_guard_hook, http_get, http_post
 from app.ingestion.jsonld import extract_jsonld_event_text
-from app.ingestion.locale_urls import locale_from_url_path, localized_detail_urls
+from app.ingestion.locale_urls import fetch_locale_variants
 from app.ingestion.selectors import WP_THUMBNAIL_HOSTS
 
 log = logging.getLogger(__name__)
@@ -303,59 +303,23 @@ class HtmlListingAdapter(SourceAdapter):
                 return
             detail_soup = BeautifulSoup(detail_resp.text, "html.parser")
             await self.parse_detail(client, detail_soup, card)
-            # Fetch locale alternates for native title/description
-            locale_urls = localized_detail_urls(
-                detail_soup, detail_url, LOCALIZED_TEXT_HTML_LOCALES
+
+            def _extract(
+                soup: BeautifulSoup, locale: str
+            ) -> tuple[str | None, str | None, str | None]:
+                title, desc = self.extract_localized_text(soup)
+                return title, desc, self.extract_localized_important_info(soup, locale)
+
+            loc_titles, loc_descs, loc_infos = await fetch_locale_variants(
+                client,
+                detail_soup,
+                detail_url,
+                LOCALIZED_TEXT_HTML_LOCALES,
+                _extract,
+                fetch=http_get,
+                wait=lambda: asyncio.sleep(HTML_LISTING_LOCALE_FETCH_DELAY_SECONDS),
+                source_label=self.source.slug,
             )
-            url_locale = locale_from_url_path(detail_url, LOCALIZED_TEXT_HTML_LOCALES)
-            detail_host = urlsplit(detail_url).hostname
-            loc_titles: dict[str, str] = {}
-            loc_descs: dict[str, str] = {}
-            loc_infos: dict[str, str] = {}
-            for locale, loc_url in locale_urls.items():
-                if locale == url_locale or loc_url == detail_url:
-                    # Reuse already-loaded soup — this page IS the locale variant
-                    loc_name, loc_desc = self.extract_localized_text(detail_soup)
-                    loc_info = self.extract_localized_important_info(detail_soup, locale)
-                else:
-                    try:
-                        await asyncio.sleep(HTML_LISTING_LOCALE_FETCH_DELAY_SECONDS)
-                        loc_resp = await http_get(client, loc_url)
-                        # Reject pages that redirected off-host or to site root
-                        final_parsed = urlsplit(str(loc_resp.url))
-                        if final_parsed.hostname != detail_host:
-                            log.debug(
-                                "%s locale fetch redirected off-host locale=%s url=%s",
-                                self.source.slug, locale, loc_url,
-                            )
-                            continue
-                        if final_parsed.path in ("/", ""):
-                            log.debug(
-                                "%s locale page is site root locale=%s url=%s",
-                                self.source.slug, locale, loc_url,
-                            )
-                            continue
-                        loc_soup = BeautifulSoup(loc_resp.text, "html.parser")
-                        loc_name, loc_desc = self.extract_localized_text(loc_soup)
-                        loc_info = self.extract_localized_important_info(loc_soup, locale)
-                    except (httpx.HTTPStatusError, httpx.RequestError) as exc:
-                        log.debug(
-                            "%s locale fetch failed locale=%s url=%s: %s",
-                            self.source.slug, locale, loc_url, exc,
-                        )
-                        continue
-                    except Exception as exc:
-                        log.warning(
-                            "%s locale fetch unexpected error locale=%s url=%s: %s",
-                            self.source.slug, locale, loc_url, exc,
-                        )
-                        continue
-                if loc_name:
-                    loc_titles[locale] = loc_name
-                if loc_desc:
-                    loc_descs[locale] = loc_desc
-                if loc_info:
-                    loc_infos[locale] = loc_info
             if loc_titles:
                 card["title_localized"] = loc_titles
             if loc_descs:

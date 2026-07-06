@@ -33,7 +33,7 @@ from app.ingestion.jsonld import (
 from app.ingestion.locale_urls import (
     locale_from_html_lang,
     locale_from_url_path,
-    localized_detail_urls,
+    fetch_locale_variants,
 )
 from app.ingestion.pricing import parse_price_from_string
 from app.ingestion.sanitize import sanitize_html
@@ -52,6 +52,36 @@ def address_city(address: str) -> str | None:
     """Extract city token from a Fienta-style address string, or None if not parseable."""
     m = _CITY_FROM_ADDRESS_RE.search(address)
     return m.group(1) if m else None
+
+
+def _parse_detail_fields(soup: BeautifulSoup) -> dict[str, Any]:
+    """Parse a detail page's JSON-LD location + offers into the _detail dict."""
+    loc = extract_jsonld_event_location(soup)
+    price_min, price_max, currency, has_free_tier = extract_jsonld_event_offers(soup)
+    return {
+        "venue_name": loc.get("venue_name") if loc else None,
+        "venue_address": loc.get("venue_address") if loc else None,
+        "lat": loc.get("lat") if loc else None,
+        "lng": loc.get("lng") if loc else None,
+        "price_min": price_min,
+        "price_max": price_max,
+        "currency": currency,
+        "has_free_tier": has_free_tier,
+    }
+
+
+def _extract_locale_text(
+    soup: BeautifulSoup, _locale: str
+) -> tuple[str | None, str | None, str | None]:
+    """Locale-page extractor for fetch_locale_variants: JSON-LD title, and
+    DOM rich-text HTML (preferred) or JSON-LD plain text for the description."""
+    title, jsonld_desc = extract_jsonld_event_text(soup)
+    rich_text_tag = soup.select_one(FIENTA_DESCRIPTION_SELECTOR)
+    if rich_text_tag:
+        desc = sanitize_html(rich_text_tag.decode_contents())
+    else:
+        desc = sanitize_html(jsonld_desc)
+    return title, desc, None
 
 
 def is_target_city(address: str | None) -> bool:
@@ -288,66 +318,42 @@ class FientaAdapter(SourceAdapter):
             try:
                 response = await http_get(client, url)
                 soup = BeautifulSoup(response.text, "html.parser")
-                loc = extract_jsonld_event_location(soup)
-                price_min, price_max, currency, has_free_tier = extract_jsonld_event_offers(soup)
-                item["_detail"] = {
-                    "venue_name": loc.get("venue_name") if loc else None,
-                    "venue_address": loc.get("venue_address") if loc else None,
-                    "lat": loc.get("lat") if loc else None,
-                    "lng": loc.get("lng") if loc else None,
-                    "price_min": price_min,
-                    "price_max": price_max,
-                    "currency": currency,
-                    "has_free_tier": has_free_tier,
-                }
+                item["_detail"] = _parse_detail_fields(soup)
+
                 # The canonical URL 302s to a locale-prefixed path (e.g. /et/slug).
                 # That redirected URL tells us which language the listing API returned.
                 primary_locale = locale_from_url_path(
                     str(response.url), LOCALIZED_TEXT_FIENTA_LOCALES
                 ) or locale_from_html_lang(soup, LOCALIZED_TEXT_FIENTA_LOCALES)
-                # Fetch locale variants for native title/description
-                locale_urls = localized_detail_urls(soup, url, LOCALIZED_TEXT_FIENTA_LOCALES)
+
                 loc_titles: dict[str, str] = {}
                 loc_descs: dict[str, str] = {}
-                for locale, loc_url in locale_urls.items():
-                    if locale == primary_locale:
-                        # Already fetched this page — reuse soup for title; listing
-                        # API HTML is authoritative for the primary-locale description,
-                        # with JSON-LD plain text as fallback when the API field is absent.
-                        loc_name, jsonld_desc = extract_jsonld_event_text(soup)
-                        html_desc = sanitize_html(item.get("description")) or sanitize_html(jsonld_desc)
-                        if loc_name:
-                            loc_titles[locale] = loc_name
-                        if html_desc:
-                            loc_descs[locale] = html_desc
-                        continue
-                    if loc_url == url:
-                        # Same page, non-primary locale (no redirect happened).
-                        loc_name, loc_desc = extract_jsonld_event_text(soup)
-                        loc_page_soup = soup
-                    else:
-                        await limiter.acquire()
-                        try:
-                            loc_resp = await http_get(client, loc_url)
-                            loc_soup = BeautifulSoup(loc_resp.text, "html.parser")
-                            loc_name, loc_desc = extract_jsonld_event_text(loc_soup)
-                            loc_page_soup = loc_soup
-                        except (httpx.HTTPStatusError, httpx.RequestError) as exc:
-                            log.debug(
-                                "fienta: locale fetch failed id=%s locale=%s url=%s: %s",
-                                item.get("id"), locale, loc_url, exc,
-                            )
-                            continue
+                if primary_locale:
+                    # Reuse this page for the primary locale; the listing API HTML
+                    # is authoritative for its description, with JSON-LD plain
+                    # text as fallback when the API field is absent.
+                    loc_name, jsonld_desc = extract_jsonld_event_text(soup)
+                    html_desc = sanitize_html(item.get("description")) or sanitize_html(jsonld_desc)
                     if loc_name:
-                        loc_titles[locale] = loc_name
-                    # Prefer DOM HTML (div.rich-text) over JSON-LD plain text.
-                    rich_text_tag = loc_page_soup.select_one(FIENTA_DESCRIPTION_SELECTOR)
-                    if rich_text_tag:
-                        sanitized_loc_desc = sanitize_html(rich_text_tag.decode_contents())
-                    else:
-                        sanitized_loc_desc = sanitize_html(loc_desc)
-                    if sanitized_loc_desc:
-                        loc_descs[locale] = sanitized_loc_desc
+                        loc_titles[primary_locale] = loc_name
+                    if html_desc:
+                        loc_descs[primary_locale] = html_desc
+
+                fetched_titles, fetched_descs, _ = await fetch_locale_variants(
+                    client,
+                    soup,
+                    url,
+                    LOCALIZED_TEXT_FIENTA_LOCALES,
+                    _extract_locale_text,
+                    fetch=http_get,
+                    wait=limiter.acquire,
+                    source_label="fienta",
+                    base_locale=primary_locale,
+                    wanted_locales=set(LOCALIZED_TEXT_FIENTA_LOCALES)
+                    - ({primary_locale} if primary_locale else set()),
+                )
+                loc_titles.update(fetched_titles)
+                loc_descs.update(fetched_descs)
                 if loc_titles or loc_descs:
                     item["_detail_localized"] = {
                         "title": loc_titles,

@@ -56,9 +56,9 @@ from app.ingestion.jsonld import (
     extract_jsonld_event_text,
 )
 from app.ingestion.locale_urls import (
+    fetch_locale_variants,
     locale_from_html_lang,
     locale_from_url_path,
-    localized_detail_urls,
 )
 from app.ingestion.sanitize import sanitize_html
 from app.ingestion.geocode import is_suspect_venue_name
@@ -144,34 +144,195 @@ def _coords_differ(
     )
 
 
+async def _select_candidates(db: AsyncSession, now: datetime) -> list[Event]:
+    """Future events with a URL, not synced within REFETCH_MIN_INTERVAL_DAYS.
+
+    Ordered oldest-synced-first so a capped run prioritizes the
+    least-recently-synced events.
+    """
+    due_before = now - timedelta(days=REFETCH_MIN_INTERVAL_DAYS)
+    rows = await db.scalars(
+        select(Event)
+        .where(
+            Event.url.is_not(None),
+            Event.starts_at > now,
+            or_(
+                Event.detail_refetched_at.is_(None),
+                Event.detail_refetched_at < due_before,
+            ),
+        )
+        .order_by(Event.detail_refetched_at.asc().nulls_first())
+        .limit(REFETCH_MAX_PER_RUN)
+    )
+    return list(rows.all())
+
+
+def _allowed_refetch_hosts(candidates: list[Event]) -> frozenset[str]:
+    """Host allowlist for the run's SSRF guard.
+
+    Built from candidate URLs intersected with the fixed ALLOWED_SOURCE_HOSTS
+    allowlist — NOT from the raw candidate URLs alone. A candidate's event.url
+    is untrusted (parsed from third-party content); deriving the guard purely
+    from it would let a malicious stored URL allowlist itself. The intersection
+    permits every legitimate source host while never widening the guard beyond
+    known-good hosts.
+    """
+    return frozenset(
+        h
+        for e in candidates
+        if (h := urlsplit(e.url or "").hostname) and host_is_allowed(h)
+    )
+
+
+async def _backfill_localized_text(
+    client: httpx.AsyncClient,
+    event: Event,
+    soup: BeautifulSoup,
+    url: str,
+    summary: dict,
+) -> None:
+    """Backfill missing locale keys of title/description from locale-variant pages.
+
+    Gated per-locale (not per-column) and merged into the existing dicts, so a
+    partially-filled column self-heals missing locales. A stored title that
+    looks like site-level homepage content (see _is_suspect_locale_title)
+    counts as missing and is re-fetched.
+    """
+    base_host = urlsplit(url).hostname
+    normalized_host = (base_host or "").removeprefix("www.")
+    existing_titles: dict[str, str] = (
+        dict(event.title_localized) if event.title_localized else {}
+    )
+    existing_descs: dict[str, str] = (
+        dict(event.description_localized) if event.description_localized else {}
+    )
+    missing_title_locales = {
+        loc for loc in LOCALIZED_TEXT_FIENTA_LOCALES
+        if loc not in existing_titles
+        or _is_suspect_locale_title(existing_titles[loc], normalized_host)
+    }
+    missing_desc_locales = {
+        loc for loc in LOCALIZED_TEXT_FIENTA_LOCALES
+        if loc not in existing_descs
+    }
+    locales_to_fetch = missing_title_locales | missing_desc_locales
+    if not locales_to_fetch:
+        return
+
+    # JSON-LD extractor for Fienta/Piletilevi; og:title + CSS selector for
+    # KUMU/ECH whose pages carry no Event JSON-LD block.
+    extract_text = _LOCALE_TEXT_EXTRACTORS.get(normalized_host, extract_jsonld_event_text)
+
+    def _extract(
+        page_soup: BeautifulSoup, _locale: str
+    ) -> tuple[str | None, str | None, str | None]:
+        title, desc = extract_text(page_soup)
+        return title, desc, None
+
+    base_locale = locale_from_url_path(
+        url, LOCALIZED_TEXT_FIENTA_LOCALES
+    ) or locale_from_html_lang(soup, LOCALIZED_TEXT_FIENTA_LOCALES)
+    fetched_titles, fetched_descs, _ = await fetch_locale_variants(
+        client,
+        soup,
+        url,
+        LOCALIZED_TEXT_FIENTA_LOCALES,
+        _extract,
+        fetch=http_get,
+        wait=lambda: asyncio.sleep(REFETCH_REQUEST_DELAY_SECONDS),
+        source_label="refetch",
+        base_locale=base_locale,
+        wanted_locales=locales_to_fetch,
+    )
+
+    loc_titles = {
+        loc: title
+        for loc, title in fetched_titles.items()
+        if loc in missing_title_locales
+    }
+    loc_descs: dict[str, str] = {}
+    for loc, desc in fetched_descs.items():
+        if loc in missing_desc_locales:
+            sanitized = sanitize_html(desc)
+            if sanitized:
+                loc_descs[loc] = sanitized
+    if loc_titles:
+        existing_titles.update(loc_titles)
+        event.title_localized = existing_titles
+    if loc_descs:
+        existing_descs.update(loc_descs)
+        event.description_localized = existing_descs
+    if loc_titles or loc_descs:
+        summary["localized_text_backfilled"] += 1
+
+
+async def _process_one(
+    client: httpx.AsyncClient,
+    event: Event,
+    summary: dict,
+    now: datetime,
+) -> bool:
+    """Fetch one event's detail page, backfill locales, and reconcile fields.
+
+    Returns False when the fetch itself failed (caller skips the pacing sleep
+    and leaves detail_refetched_at untouched so the event retries next run).
+    """
+    url = event.url
+    assert url is not None  # guaranteed by the candidate query
+    try:
+        response = await http_get(client, url)
+    except (httpx.HTTPStatusError, httpx.RequestError, ValueError) as exc:
+        # ValueError: host_guard_hook's SSRF guard — an expected per-item
+        # rejection (e.g. a pre-guard row or off-host redirect), degrades like
+        # any fetch failure.
+        summary["failed"] += 1
+        log.warning("refetch failed url=%s: %s", url, exc)
+        return False
+
+    summary["fetched"] += 1
+    soup = BeautifulSoup(response.text, "html.parser")
+    location = extract_jsonld_event_location(soup)
+    price_min, price_max, currency, has_free_tier = extract_jsonld_event_offers(soup)
+
+    # Runs before the no_data gate so events whose JSON-LD has only text
+    # (no location/offers) still receive localized titles/descriptions.
+    await _backfill_localized_text(client, event, soup, url, summary)
+
+    parsed_anything = location is not None or any(
+        v is not None for v in (price_min, price_max, currency)
+    )
+    if not parsed_anything:
+        summary["no_data"] += 1
+        _mark_synced(event, now)
+        return True
+
+    changed = _reconcile(
+        event,
+        summary,
+        detail_name=location.get("venue_name") if location else None,
+        detail_address=location.get("venue_address") if location else None,
+        detail_lat=location.get("lat") if location else None,
+        detail_lng=location.get("lng") if location else None,
+        price_min=price_min,
+        price_max=price_max,
+        currency=currency,
+        has_free_tier=has_free_tier,
+    )
+    if not changed:
+        summary["unchanged"] += 1
+    _mark_synced(event, now)
+    return True
+
+
 async def refetch_event_details(db: AsyncSession) -> dict:
     """Re-fetch detail pages for all future events and reconcile stored fields.
 
-    Single pass, mirrors geocode_pending. Candidates are every event with a
-    ``url`` whose ``starts_at`` is in the future and that has not been synced
-    within REFETCH_MIN_INTERVAL_DAYS — no missing-field filter (all future
-    events are candidates) and no attempt cap. Ordered oldest-synced-first so a
-    capped run prioritizes the least-recently-synced events. Returns a summary
-    dict; the caller commits.
+    Single pass, mirrors geocode_pending. No missing-field filter (all future
+    events are candidates) and no attempt cap. Returns a summary dict; the
+    caller commits (plus periodic mid-loop commits for Neon keep-alive).
     """
     now = datetime.now(TALLINN_TZ)
-    due_before = now - timedelta(days=REFETCH_MIN_INTERVAL_DAYS)
-
-    candidates = (
-        await db.scalars(
-            select(Event)
-            .where(
-                Event.url.is_not(None),
-                Event.starts_at > now,
-                or_(
-                    Event.detail_refetched_at.is_(None),
-                    Event.detail_refetched_at < due_before,
-                ),
-            )
-            .order_by(Event.detail_refetched_at.asc().nulls_first())
-            .limit(REFETCH_MAX_PER_RUN)
-        )
-    ).all()
+    candidates = await _select_candidates(db, now)
 
     summary = {
         "candidates": len(candidates),
@@ -191,182 +352,17 @@ async def refetch_event_details(db: AsyncSession) -> dict:
         return summary
 
     last_commit = time.monotonic()
-    # Follow Fienta's locale 302-redirects with a host-pinning SSRF guard.
-    # Build the allowed-host set from candidate URLs, intersected with the fixed
-    # ALLOWED_SOURCE_HOSTS allowlist — NOT from the raw candidate URLs alone. A
-    # candidate's event.url is untrusted (parsed from third-party page/API
-    # content); deriving the guard purely from it would let a malicious stored
-    # URL simply allowlist itself. The intersection permits every legitimate
-    # source host (candidates are host-checked at ingest by safe_fetchable_url,
-    # so in the normal case this equals the candidate hosts) while refusing to
-    # ever widen the guard beyond known-good hosts. The locale sub-fetch loop
-    # has its own independent same-host guard below.
-    allowed_hosts = frozenset(
-        h
-        for e in candidates
-        if (h := urlsplit(e.url or "").hostname) and host_is_allowed(h)
-    )
+    # Follow Fienta's locale 302-redirects with a host-pinning SSRF guard
+    # (see _allowed_refetch_hosts for why the allowlist is intersected).
     async with httpx.AsyncClient(
         timeout=HTTP_TIMEOUT_SECONDS,
         follow_redirects=True,
-        event_hooks={"request": [host_guard_hook(allowed_hosts)]},
+        event_hooks={"request": [host_guard_hook(_allowed_refetch_hosts(candidates))]},
     ) as client:
         for event in candidates:
-            url = event.url
-            assert url is not None  # guaranteed by the WHERE clause above
-            try:
-                response = await http_get(client, url)
-            except (httpx.HTTPStatusError, httpx.RequestError, ValueError) as exc:
-                # ValueError: host_guard_hook's SSRF guard raises this when url's
-                # host isn't in allowed_hosts (e.g. a row stored before this guard
-                # existed, or a redirect hop off-host) — an expected per-item
-                # rejection, not a bug, so it degrades like any other fetch
-                # failure (mirrors app/ingestion/sources/fienta.py::_fetch_detail).
-                # Don't bump detail_refetched_at on a fetch failure — a transient
-                # error should be retried on the next run, not throttled out.
-                summary["failed"] += 1
-                log.warning("refetch failed url=%s: %s", url, exc)
-                if time.monotonic() - last_commit >= REFETCH_COMMIT_INTERVAL_SECONDS:
-                    await db.commit()
-                    last_commit = time.monotonic()
-                continue
-
-            summary["fetched"] += 1
-            soup = BeautifulSoup(response.text, "html.parser")
-            location = extract_jsonld_event_location(soup)
-            price_min, price_max, currency, has_free_tier = extract_jsonld_event_offers(soup)
-
-            detail_name = location.get("venue_name") if location else None
-            detail_address = location.get("venue_address") if location else None
-            detail_lat = location.get("lat") if location else None
-            detail_lng = location.get("lng") if location else None
-
-            # Backfill localized title/description per-locale.
-            # Runs before the no_data gate so events whose JSON-LD has only text
-            # (no location/offers) still receive localized titles/descriptions.
-            # Gated per-locale (not per-column), merged into the existing dict,
-            # so a partially-filled column self-heals missing locales.
-            base_host = urlsplit(url).hostname
-            normalized_host = (base_host or "").removeprefix("www.")
-            existing_titles: dict[str, str] = (
-                dict(event.title_localized) if event.title_localized else {}
-            )
-            existing_descs: dict[str, str] = (
-                dict(event.description_localized) if event.description_localized else {}
-            )
-            missing_title_locales = {
-                loc for loc in LOCALIZED_TEXT_FIENTA_LOCALES
-                if loc not in existing_titles
-                or _is_suspect_locale_title(existing_titles[loc], normalized_host)
-            }
-            missing_desc_locales = {
-                loc for loc in LOCALIZED_TEXT_FIENTA_LOCALES
-                if loc not in existing_descs
-            }
-            locales_to_fetch = missing_title_locales | missing_desc_locales
-            if locales_to_fetch:
-                locale_urls = localized_detail_urls(
-                    soup, url, LOCALIZED_TEXT_FIENTA_LOCALES
-                )
-                # SSRF guard: only fetch locale URLs on the same hostname as event.url.
-                # Also restrict to only locales that still need data.
-                locale_urls = {
-                    loc: lu
-                    for loc, lu in locale_urls.items()
-                    if urlsplit(lu).hostname == base_host and loc in locales_to_fetch
-                }
-                # Pick the right extractor: JSON-LD for Fienta/Piletilevi; og:title +
-                # CSS selector for KUMU/ECH whose pages carry no Event JSON-LD block.
-                _extract_text = _LOCALE_TEXT_EXTRACTORS.get(
-                    normalized_host, extract_jsonld_event_text
-                )
-                # Detect this page's own locale from its URL path and reuse the
-                # already-loaded soup instead of matching on exact URL string.
-                url_locale = locale_from_url_path(
-                    url, LOCALIZED_TEXT_FIENTA_LOCALES
-                ) or locale_from_html_lang(soup, LOCALIZED_TEXT_FIENTA_LOCALES)
-                loc_titles: dict[str, str] = {}
-                loc_descs: dict[str, str] = {}
-                for locale, loc_url in locale_urls.items():
-                    if locale == url_locale or loc_url == url:
-                        # This page IS the locale variant — reuse in-memory soup
-                        loc_name, loc_desc = _extract_text(soup)
-                    else:
-                        try:
-                            await asyncio.sleep(REFETCH_REQUEST_DELAY_SECONDS)
-                            loc_resp = await http_get(client, loc_url)
-                            # Reject locale pages that redirected off-host or to site root
-                            final_parsed = urlsplit(str(loc_resp.url))
-                            if final_parsed.hostname != base_host:
-                                log.debug(
-                                    "refetch: locale fetch redirected off-host locale=%s url=%s",
-                                    locale, loc_url,
-                                )
-                                continue
-                            if final_parsed.path in ("/", ""):
-                                log.debug(
-                                    "refetch: locale page is site root locale=%s url=%s",
-                                    locale, loc_url,
-                                )
-                                continue
-                            loc_soup = BeautifulSoup(loc_resp.text, "html.parser")
-                            loc_name, loc_desc = _extract_text(loc_soup)
-                        except (httpx.HTTPStatusError, httpx.RequestError) as exc:
-                            log.debug(
-                                "refetch: locale fetch failed locale=%s url=%s: %s",
-                                locale, loc_url, exc,
-                            )
-                            continue
-                        except Exception as exc:
-                            log.warning(
-                                "refetch: locale fetch unexpected error locale=%s url=%s: %s",
-                                locale, loc_url, exc,
-                            )
-                            continue
-                    if loc_name and locale in missing_title_locales:
-                        loc_titles[locale] = loc_name
-                    if loc_desc and locale in missing_desc_locales:
-                        sanitized_desc = sanitize_html(loc_desc)
-                        if sanitized_desc:
-                            loc_descs[locale] = sanitized_desc
-                if loc_titles:
-                    existing_titles.update(loc_titles)
-                    event.title_localized = existing_titles
-                if loc_descs:
-                    existing_descs.update(loc_descs)
-                    event.description_localized = existing_descs
-                if loc_titles or loc_descs:
-                    summary["localized_text_backfilled"] += 1
-
-            parsed_anything = location is not None or any(
-                v is not None for v in (price_min, price_max, currency)
-            )
-            if not parsed_anything:
-                summary["no_data"] += 1
-                _mark_synced(event, now)
+            fetched = await _process_one(client, event, summary, now)
+            if fetched:
                 await asyncio.sleep(REFETCH_REQUEST_DELAY_SECONDS)
-                if time.monotonic() - last_commit >= REFETCH_COMMIT_INTERVAL_SECONDS:
-                    await db.commit()
-                    last_commit = time.monotonic()
-                continue
-
-            changed = _reconcile(
-                event,
-                summary,
-                detail_name=detail_name,
-                detail_address=detail_address,
-                detail_lat=detail_lat,
-                detail_lng=detail_lng,
-                price_min=price_min,
-                price_max=price_max,
-                currency=currency,
-                has_free_tier=has_free_tier,
-            )
-            if not changed:
-                summary["unchanged"] += 1
-
-            _mark_synced(event, now)
-            await asyncio.sleep(REFETCH_REQUEST_DELAY_SECONDS)
             if time.monotonic() - last_commit >= REFETCH_COMMIT_INTERVAL_SECONDS:
                 await db.commit()
                 last_commit = time.monotonic()
@@ -380,26 +376,19 @@ def _mark_synced(event: Event, now: datetime) -> None:
     event.detail_refetched_at = now
 
 
-def _reconcile(
+def _reconcile_price(
     event: Event,
     summary: dict,
-    *,
-    detail_name: object,
-    detail_address: str | None,
-    detail_lat: float | None,
-    detail_lng: float | None,
     price_min: float | None,
     price_max: float | None,
     currency: str | None,
-    has_free_tier: bool = False,
+    has_free_tier: bool,
 ) -> bool:
-    """Apply the reconciliation rules to one event in place. Returns True if any
-    field was changed. Increments the matching ``summary`` counters."""
-    changed = False
+    """Update each price field on drift, fill on empty, never clobber with nothing.
 
-    # --- price: update each field on drift, fill on empty, never clobber with
-    # nothing. Overrides the "ingest-set prices are authoritative" rule — a price
-    # change at the source should win — but a no-offers refetch leaves stored prices.
+    Overrides the "ingest-set prices are authoritative" rule — a price change
+    at the source should win — but a no-offers refetch leaves stored prices.
+    """
     price_changed = False
     if price_min is not None and _price_differs(event.price_min, price_min):
         event.price_min = price_min  # type: ignore[assignment]
@@ -415,17 +404,25 @@ def _reconcile(
         price_changed = True
     if price_changed:
         summary["price_changed"] += 1
-        changed = True
+    return price_changed
 
-    # --- venue_address + lat/lng: reconciled as a coupled unit, never field-
-    # independently, so the two can't drift apart (see geocode.py coexistence).
+
+def _reconcile_location(
+    event: Event,
+    summary: dict,
+    detail_address: str | None,
+    detail_lat: float | None,
+    detail_lng: float | None,
+) -> bool:
+    """Reconcile venue_address + lat/lng as one coupled unit, never
+    field-independently, so the two can't drift apart (see geocode coexistence).
+    """
     address_differs = (
         detail_address is not None and detail_address != event.venue_address
     )
     if address_differs:
         event.venue_address = detail_address
         summary["address_changed"] += 1
-        changed = True
         if detail_lat is not None and detail_lng is not None:
             # Consistent triple straight from the source — beats Nominatim/sibling guess.
             if _coords_differ(event.lat, event.lng, detail_lat, detail_lng):
@@ -433,58 +430,82 @@ def _reconcile(
             event.lat, event.lng = detail_lat, detail_lng
         elif event.lat is not None or event.lng is not None:
             # New address, no source coords — NULL the stale coords (derived from a
-            # *different* address) so geocode_pending re-resolves them. Already-NULL
-            # coords are left as-is (nothing changed, so don't count it).
+            # *different* address) so geocode_pending re-resolves them.
             event.lat, event.lng = None, None
             summary["coords_changed"] += 1
-    elif (
+        return True
+    if (
         detail_lat is not None
         and detail_lng is not None
         and _coords_differ(event.lat, event.lng, detail_lat, detail_lng)
     ):
-        # Address absent/identical but source coords moved — direct geo, update only.
+        # Address absent/identical but source coords moved — direct geo update.
         event.lat, event.lng = detail_lat, detail_lng
         summary["coords_changed"] += 1
-        changed = True
+        return True
+    return False
 
-    # --- venue_name: take the JSON-LD location.name (already split from address).
+
+def _reconcile_venue_name(event: Event, summary: dict, detail_name: object) -> bool:
+    """Take the JSON-LD location.name; re-run content-safety checks on change.
+
+    A clean stored name is only overwritten by a clean (non-suspect) detail
+    name — a glued/suspect name would undo extract_address_from_venue_name.
+    The layer-1 explicit/non-event re-checks run here because a venue_name
+    change is the only post-ingest write path that can land on an
+    already-published event; a newly-flagged published event is demoted to
+    classified so the publish gate keeps it out of the public feed.
+    """
     name = detail_name.strip() if isinstance(detail_name, str) else None
-    name_changed = False
-    if name:
-        if _is_empty_venue_name(event.venue_name):
-            # Fill / replace placeholder — accept any real name.
-            if name != event.venue_name:
-                event.venue_name = name[:VENUE_NAME_MAX_LEN]
-                name_changed = True
-        elif name != event.venue_name and not is_suspect_venue_name(name):
-            # Clean stored name → only overwrite with a clean (non-suspect) detail
-            # name; a glued/suspect name would undo extract_address_from_venue_name.
-            event.venue_name = name[:VENUE_NAME_MAX_LEN]
-            name_changed = True
-    if name_changed:
-        summary["venue_changed"] += 1
-        changed = True
-        # Content-safety layer 1 re-check: a venue_name change is a new write path
-        # that can land on an already-published event, so re-run the explicit-keyword
-        # prefilter over the same fields ingest checks (title/description/venue_name).
-        # A newly-explicit published event is demoted to classified so the publish
-        # gate (which excludes is_explicit) keeps it out of the public feed.
-        if not event.is_explicit and is_explicit_text(
-            event.title_orig, event.description_orig, event.venue_name
-        ):
-            event.is_explicit = True
-            summary["flagged_explicit"] += 1
-            if event.status == EVENT_STATUS_PUBLISHED:
-                event.status = EVENT_STATUS_CLASSIFIED
-        # Non-event layer 1 re-check, same rationale: venue_name is exactly the
-        # field NON_EVENT_VENUE_KEYWORDS inspects, and refetch is the only
-        # post-ingest path that mutates it on an already-published event.
-        if not event.is_non_event and is_non_event_text(
-            event.title_orig, event.venue_name
-        ):
-            event.is_non_event = True
-            summary["flagged_non_event"] += 1
-            if event.status == EVENT_STATUS_PUBLISHED:
-                event.status = EVENT_STATUS_CLASSIFIED
+    if not name:
+        return False
+    if _is_empty_venue_name(event.venue_name):
+        if name == event.venue_name:
+            return False
+        event.venue_name = name[:VENUE_NAME_MAX_LEN]
+    elif name != event.venue_name and not is_suspect_venue_name(name):
+        event.venue_name = name[:VENUE_NAME_MAX_LEN]
+    else:
+        return False
 
-    return changed
+    summary["venue_changed"] += 1
+    if not event.is_explicit and is_explicit_text(
+        event.title_orig, event.description_orig, event.venue_name
+    ):
+        event.is_explicit = True
+        summary["flagged_explicit"] += 1
+        if event.status == EVENT_STATUS_PUBLISHED:
+            event.status = EVENT_STATUS_CLASSIFIED
+    if not event.is_non_event and is_non_event_text(
+        event.title_orig, event.venue_name
+    ):
+        event.is_non_event = True
+        summary["flagged_non_event"] += 1
+        if event.status == EVENT_STATUS_PUBLISHED:
+            event.status = EVENT_STATUS_CLASSIFIED
+    return True
+
+
+def _reconcile(
+    event: Event,
+    summary: dict,
+    *,
+    detail_name: object,
+    detail_address: str | None,
+    detail_lat: float | None,
+    detail_lng: float | None,
+    price_min: float | None,
+    price_max: float | None,
+    currency: str | None,
+    has_free_tier: bool = False,
+) -> bool:
+    """Apply the three reconciliation rules to one event in place. Returns True
+    if any field was changed. Increments the matching ``summary`` counters."""
+    price_changed = _reconcile_price(
+        event, summary, price_min, price_max, currency, has_free_tier
+    )
+    location_changed = _reconcile_location(
+        event, summary, detail_address, detail_lat, detail_lng
+    )
+    name_changed = _reconcile_venue_name(event, summary, detail_name)
+    return price_changed or location_changed or name_changed
