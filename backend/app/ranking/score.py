@@ -281,6 +281,44 @@ def recency_boost(starts_at: datetime, now: datetime) -> float:
     return max(0.0, 1.0 - delta_days / RECENCY_DECAY_DAYS)
 
 
+def _direct_feedback_signal(
+    event_id: int, ctx: FeedbackContext, now: datetime
+) -> list[float]:
+    """Decayed contributions of this event's own like/dislike rows (O(1) lookup)."""
+    signals: list[float] = []
+    for row in ctx.direct_map.get(event_id, []):
+        days = max(0.0, (now - row.created_at).total_seconds() / SECONDS_PER_DAY)
+        decay = FEEDBACK_DECAY_BASE**days
+        if row.signal == SIGNAL_LIKE:
+            signals.append(decay)
+        elif row.signal == SIGNAL_DISLIKE:
+            signals.append(-1.0)
+    return signals
+
+
+def _indirect_feedback_signal(
+    event_id: int, event_cat_set: frozenset[str], ctx: FeedbackContext
+) -> float:
+    """Pre-aggregated decay of liked category-sets overlapping this event's.
+
+    O(distinct liked category-sets) instead of O(all liked rows). The event's
+    own contribution is subtracted (the per-row loop this replaces excluded
+    rows with row.event_id == event_id). That unconditional subtraction
+    assumes a liked row's category_set is identical to the scored event's
+    categories for the same event_id — true today because both reads resolve
+    to the same identity-mapped Event within one build_daily_feeds() call.
+    If reclassification ever runs concurrently with feed building, this could
+    subtract decay that was never added; guarding would need the O(L) per-row
+    scan this aggregation exists to avoid, so it stays a documented assumption.
+    """
+    indirect = sum(
+        decay
+        for cats, decay in ctx.liked_decay_by_catset.items()
+        if cats & event_cat_set
+    )
+    return indirect - ctx.liked_decay_by_event.get(event_id, 0.0)
+
+
 def feedback_signal(
     event_id: int,
     event_categories: list[str],
@@ -297,48 +335,14 @@ def feedback_signal(
     if event_dedup_group is not None and event_dedup_group in ctx.disliked_groups:
         return SCORE_HARD_EXCLUDE
 
-    event_cat_set = frozenset(event_categories)
-    signals: list[float] = []
+    signals = _direct_feedback_signal(event_id, ctx, now)
 
-    # Direct: O(1) dict lookup instead of O(F) full-row scan
-    for row in ctx.direct_map.get(event_id, []):
-        days = max(0.0, (now - row.created_at).total_seconds() / SECONDS_PER_DAY)
-        decay = FEEDBACK_DECAY_BASE**days
-        if row.signal == SIGNAL_LIKE:
-            signals.append(decay)
-        elif row.signal == SIGNAL_DISLIKE:
-            signals.append(-1.0)
-
-    # Indirect: sum pre-aggregated decay for every distinct liked category-set that
-    # overlaps this event's categories — O(distinct liked category-sets) instead of
-    # O(all liked rows). build_liked_aggregates() is a no-op if already built for this
-    # `now` (the normal per-user-per-build case), so calling it here is self-healing
-    # for any caller that forgot to, at negligible extra cost.
+    # No-op if already built for this `now` (the normal per-user-per-build
+    # case) — self-healing for any caller that forgot to build.
     ctx.build_liked_aggregates(now)
+    event_cat_set = frozenset(event_categories)
     if event_cat_set:
-        indirect = sum(
-            decay
-            for cats, decay in ctx.liked_decay_by_catset.items()
-            if cats & event_cat_set
-        )
-        # Drop this event's own contribution — the old loop excluded every row with
-        # row.event_id == event_id, which this event's aggregated share reproduces
-        # exactly (liked_decay_by_event sums all of this event's liked-row decays).
-        # Correctness of this unconditional subtraction depends on an invariant that
-        # holds structurally today but is NOT enforced: a liked row's category_set
-        # (read once in FeedbackContext.from_orm_rows via r.event.classification) is
-        # always identical to — not just overlapping — event_categories for that same
-        # event_id, because both reads resolve to the same identity-mapped Event
-        # object within one build_daily_feeds() call (no reclassification happens
-        # mid-build). If that ever changes (e.g. a future job reclassifies an event
-        # concurrently with feed building, or FeedbackContext starts sourcing
-        # categories from a separately-cached snapshot), this subtraction could pull
-        # out decay that was never added to `indirect` above, driving it negative for
-        # rows whose stored category_set no longer overlaps event_cat_set. Guarding
-        # against that would require an overlap check per liked row, which is exactly
-        # the O(L) scan this aggregation exists to avoid — so this is a documented
-        # assumption, not a runtime-checked one.
-        indirect -= ctx.liked_decay_by_event.get(event_id, 0.0)
+        indirect = _indirect_feedback_signal(event_id, event_cat_set, ctx)
         if indirect:
             signals.append(indirect)
 
@@ -513,134 +517,137 @@ def _select_with_backfill(
 # ---------------------------------------------------------------------------
 
 
-async def build_daily_feeds(db: AsyncSession) -> dict:
-    """
-    Build personalized Daily 5 feeds for all active users.
-    Runs at 06:00 Europe/Tallinn via APScheduler.
+@dataclass
+class _FeedBuildContext:
+    """Everything the per-user scoring loop needs, bulk-loaded up front.
 
-    Bulk-loads all per-user data in a fixed number of queries (independent of
-    user count) and caches per-(user, event) scores in `user_event_scores`.
-    The feedback router invalidates cache rows on signal change so reused
-    scores reflect the latest signal-state at write time.
-    Returns summary dict for logging.
+    A fixed number of queries independent of user count (the no-N+1 batch rule).
     """
-    now = datetime.now(TALLINN_TZ)
-    today = now.date()
-    cutoff = now + timedelta(days=DAILY_5_LOOKAHEAD_DAYS)
 
-    # Load all published events within the lookahead window
-    event_rows = (
+    event_rows: list[Event]
+    candidate_series_key: dict[int, tuple[str, str]]
+    users: list[User]
+    personas_by_user: dict[int, list[tuple[float, dict]]]
+    fb_by_user: dict[int, list[UserEventFeedback]]
+    daily_by_user: dict[int, DailyFeed]
+    recent_series_by_user: dict[int, set[tuple[str, str]]]
+    score_cache: dict[tuple[int, int], float]
+
+
+async def _load_recent_series_by_user(
+    db: AsyncSession, user_ids: list[int], today
+) -> dict[int, set[tuple[str, str]]]:
+    """Series keys each user was shown within the cooldown window.
+
+    Suppresses repeat recommendations of the same recurring series across
+    days — a multi-day series (one canonical event per day) would otherwise
+    score well and be re-picked night after night. Feed-level filter,
+    independent of dedup_group_id (series are intentionally not dedup-grouped).
+    """
+    recent_series_by_user: dict[int, set[tuple[str, str]]] = {}
+    cooldown_start = today - timedelta(days=DAILY5_SERIES_COOLDOWN_DAYS)
+    recent_feed_rows = (
         await db.scalars(
-            select_events_with_classification().where(
-                Event.status == EVENT_STATUS_PUBLISHED,
-                Event.is_explicit.is_(False),
-                Event.is_non_event.is_(False),
-                event_not_ended_filter(now),
-                Event.starts_at <= cutoff,
-                canonical_event_filter(),
+            select(DailyFeed).where(
+                DailyFeed.user_id.in_(user_ids),
+                DailyFeed.feed_date >= cooldown_start,
+                DailyFeed.feed_date < today,
             )
         )
     ).all()
+    # event_id -> set of user_ids who were shown it within the window
+    shown_event_users: dict[int, set[int]] = {}
+    for feed_row in recent_feed_rows:
+        for eid in feed_row.event_ids or []:
+            shown_event_users.setdefault(eid, set()).add(feed_row.user_id)
+    if shown_event_users:
+        # One bulk SELECT — shown events may be outside the current lookahead
+        # window, so resolve them directly rather than from event_rows.
+        shown_event_rows = (
+            await db.scalars(
+                select(Event).where(Event.id.in_(list(shown_event_users.keys())))
+            )
+        ).all()
+        for shown_ev in shown_event_rows:
+            key = event_series_key(shown_ev.title_orig, shown_ev.venue_name)
+            for uid in shown_event_users[shown_ev.id]:
+                recent_series_by_user.setdefault(uid, set()).add(key)
+    return recent_series_by_user
+
+
+async def _load_feed_build_context(
+    db: AsyncSession, now: datetime, today
+) -> _FeedBuildContext | None:
+    """Bulk-load candidates plus all per-user data. None when there are no users."""
+    cutoff = now + timedelta(days=DAILY_5_LOOKAHEAD_DAYS)
+    event_rows = list(
+        (
+            await db.scalars(
+                select_events_with_classification().where(
+                    Event.status == EVENT_STATUS_PUBLISHED,
+                    Event.is_explicit.is_(False),
+                    Event.is_non_event.is_(False),
+                    event_not_ended_filter(now),
+                    Event.starts_at <= cutoff,
+                    canonical_event_filter(),
+                )
+            )
+        ).all()
+    )
     candidate_event_ids = [e.id for e in event_rows]
 
-    users = (await db.scalars(select(User))).all()
+    users = list((await db.scalars(select(User))).all())
     user_ids = [u.id for u in users]
-
     if not users:
-        return {"built": 0, "empty": 0, "total_users": 0, "candidate_events": 0}
+        return None
 
-    # --- Bulk-fetch personas grouped by user_id ---
     personas_by_user: dict[int, list[tuple[float, dict]]] = {uid: [] for uid in user_ids}
-    if user_ids:
-        up_rows = (
-            await db.scalars(
-                select(UserPersona)
-                .where(UserPersona.user_id.in_(user_ids))
-                .options(selectinload(UserPersona.persona))
-            )
-        ).all()
-        for up_row in up_rows:
-            personas_by_user.setdefault(up_row.user_id, []).append(
-                (up_row.weight, up_row.persona.affinity_vector)
-            )
+    up_rows = (
+        await db.scalars(
+            select(UserPersona)
+            .where(UserPersona.user_id.in_(user_ids))
+            .options(selectinload(UserPersona.persona))
+        )
+    ).all()
+    for up_row in up_rows:
+        personas_by_user.setdefault(up_row.user_id, []).append(
+            (up_row.weight, up_row.persona.affinity_vector)
+        )
 
-    # --- Bulk-fetch feedback grouped by user_id ---
     fb_by_user: dict[int, list[UserEventFeedback]] = {uid: [] for uid in user_ids}
-    if user_ids:
-        fb_rows = (
-            await db.scalars(
-                select(UserEventFeedback)
-                .where(UserEventFeedback.user_id.in_(user_ids))
-                .options(
-                    selectinload(UserEventFeedback.event).selectinload(
-                        Event.classification
-                    )
+    fb_rows = (
+        await db.scalars(
+            select(UserEventFeedback)
+            .where(UserEventFeedback.user_id.in_(user_ids))
+            .options(
+                selectinload(UserEventFeedback.event).selectinload(
+                    Event.classification
                 )
             )
-        ).all()
-        for fb_row in fb_rows:
-            fb_by_user.setdefault(fb_row.user_id, []).append(fb_row)
+        )
+    ).all()
+    for fb_row in fb_rows:
+        fb_by_user.setdefault(fb_row.user_id, []).append(fb_row)
 
-    # --- Bulk-fetch today's DailyFeed rows (existing -> update; missing -> insert) ---
+    # Today's DailyFeed rows: existing -> update; missing -> insert.
     daily_by_user: dict[int, DailyFeed] = {}
-    if user_ids:
-        df_rows = (
-            await db.scalars(
-                select(DailyFeed).where(
-                    DailyFeed.user_id.in_(user_ids),
-                    DailyFeed.feed_date == today,
-                )
+    df_rows = (
+        await db.scalars(
+            select(DailyFeed).where(
+                DailyFeed.user_id.in_(user_ids),
+                DailyFeed.feed_date == today,
             )
-        ).all()
-        for df_row in df_rows:
-            daily_by_user[df_row.user_id] = df_row
+        )
+    ).all()
+    for df_row in df_rows:
+        daily_by_user[df_row.user_id] = df_row
 
-    # --- Bulk-fetch the recent cooldown window's feeds to suppress repeat
-    # recommendations of the same recurring series across days. A multi-day
-    # series (one canonical event per day) would otherwise score well and be
-    # re-picked night after night. Independent of dedup_group_id — series are
-    # intentionally not dedup-grouped across days; this is a feed-level filter. ---
-    recent_series_by_user: dict[int, set[tuple[str, str]]] = {}
-    if user_ids:
-        cooldown_start = today - timedelta(days=DAILY5_SERIES_COOLDOWN_DAYS)
-        recent_feed_rows = (
-            await db.scalars(
-                select(DailyFeed).where(
-                    DailyFeed.user_id.in_(user_ids),
-                    DailyFeed.feed_date >= cooldown_start,
-                    DailyFeed.feed_date < today,
-                )
-            )
-        ).all()
-        # event_id -> set of user_ids who were shown it within the window
-        shown_event_users: dict[int, set[int]] = {}
-        for feed_row in recent_feed_rows:
-            for eid in feed_row.event_ids or []:
-                shown_event_users.setdefault(eid, set()).add(feed_row.user_id)
-        if shown_event_users:
-            # One bulk SELECT to resolve each shown event to its series key —
-            # these may be outside the current lookahead window, so resolve them
-            # directly rather than from event_rows.
-            shown_event_rows = (
-                await db.scalars(
-                    select(Event).where(Event.id.in_(list(shown_event_users.keys())))
-                )
-            ).all()
-            for shown_ev in shown_event_rows:
-                key = event_series_key(shown_ev.title_orig, shown_ev.venue_name)
-                for uid in shown_event_users[shown_ev.id]:
-                    recent_series_by_user.setdefault(uid, set()).add(key)
+    recent_series_by_user = await _load_recent_series_by_user(db, user_ids, today)
 
-    # Precompute each candidate's series key once (reused across all users).
-    candidate_series_key: dict[int, tuple[str, str]] = {
-        e.id: event_series_key(e.title_orig, e.venue_name) for e in event_rows
-    }
-
-    # --- Bulk-fetch cached scores for the (user_id, event_id) cartesian we care about ---
-    # The feedback router DELETEs the (user, event) row on signal change, so an
-    # existing row means "score reflects the most recent signal seen for that event".
+    # Cached scores: the feedback router DELETEs the (user, event) row on
+    # signal change, so an existing row reflects the most recent signal.
     score_cache: dict[tuple[int, int], float] = {}
-    if user_ids and candidate_event_ids:
+    if candidate_event_ids:
         ues_rows = (
             await db.scalars(
                 select(UserEventScore).where(
@@ -652,66 +659,117 @@ async def build_daily_feeds(db: AsyncSession) -> dict:
         for ues_row in ues_rows:
             score_cache[(ues_row.user_id, ues_row.event_id)] = ues_row.score
 
+    return _FeedBuildContext(
+        event_rows=event_rows,
+        # Precompute each candidate's series key once (reused across all users).
+        candidate_series_key={
+            e.id: event_series_key(e.title_orig, e.venue_name) for e in event_rows
+        },
+        users=users,
+        personas_by_user=personas_by_user,
+        fb_by_user=fb_by_user,
+        daily_by_user=daily_by_user,
+        recent_series_by_user=recent_series_by_user,
+        score_cache=score_cache,
+    )
+
+
+def _score_user_candidates(
+    user: User,
+    build_ctx: _FeedBuildContext,
+    fb_ctx: FeedbackContext,
+    new_score_rows: list[dict],
+    now: datetime,
+) -> tuple[list[tuple[float, Event]], list[tuple[float, Event]], int]:
+    """Score every candidate for one user, splitting series-cooled events into
+    the backfill-only pool. Appends freshly computed scores to new_score_rows.
+    Returns (scored, cooled_scored, scores_reused)."""
+    user_persona_weights = build_ctx.personas_by_user.get(user.id, [])
+    recent_series = build_ctx.recent_series_by_user.get(user.id, set())
+    scores_reused = 0
+
+    def _score_or_reuse(event: Event) -> float | None:
+        """Cache lookup with a dislike re-check, else fresh score_event + cache write.
+        Returns None when hard-excluded (dedup-group dislike, or cached-and-disliked)."""
+        nonlocal scores_reused
+        cached = build_ctx.score_cache.get((user.id, event.id))
+        if cached is not None:
+            # Re-check dislike independently of cache freshness: covers both
+            # direct event dislikes and dedup_group dislikes so the cache path
+            # stays correct under any future invalidation tightening.
+            if event.id in fb_ctx.disliked_event_ids or (
+                event.dedup_group_id is not None
+                and event.dedup_group_id in fb_ctx.disliked_groups
+            ):
+                return None
+            scores_reused += 1
+            return cached
+
+        s = score_event(user_persona_weights, fb_ctx, event, now)
+        if s is None:
+            return None
+        new_score_rows.append(
+            {"user_id": user.id, "event_id": event.id, "score": s, "computed_at": now}
+        )
+        return s
+
+    scored: list[tuple[float, Event]] = []
+    cooled_scored: list[tuple[float, Event]] = []
+    for event in build_ctx.event_rows:
+        s = _score_or_reuse(event)
+        if s is None:
+            continue
+        # Series cooldown: a candidate whose recurring series this user was
+        # already shown within the window goes to the backfill-only pool —
+        # still scored and cached, only consumed if the fresh pool can't reach n.
+        if build_ctx.candidate_series_key[event.id] in recent_series:
+            cooled_scored.append((s, event))
+        else:
+            scored.append((s, event))
+    return scored, cooled_scored, scores_reused
+
+
+async def _persist_new_scores(db: AsyncSession, new_score_rows: list[dict]) -> None:
+    """Bulk upsert newly computed (user_id, event_id) scores."""
+    if not new_score_rows:
+        return
+    stmt = pg_insert(UserEventScore).values(new_score_rows)
+    stmt = stmt.on_conflict_do_update(
+        index_elements=["user_id", "event_id"],
+        set_={"score": stmt.excluded.score, "computed_at": stmt.excluded.computed_at},
+    )
+    await db.execute(stmt)
+
+
+async def build_daily_feeds(db: AsyncSession) -> dict:
+    """
+    Build personalized Daily 5 feeds for all active users.
+    Runs at 06:00 Europe/Tallinn via APScheduler.
+
+    Bulk-loads all per-user data in a fixed number of queries (independent of
+    user count, see _load_feed_build_context) and caches per-(user, event)
+    scores in `user_event_scores`. The feedback router invalidates cache rows
+    on signal change so reused scores reflect the latest signal-state.
+    Returns summary dict for logging.
+    """
+    now = datetime.now(TALLINN_TZ)
+    today = now.date()
+
+    build_ctx = await _load_feed_build_context(db, now, today)
+    if build_ctx is None:
+        return {"built": 0, "empty": 0, "total_users": 0, "candidate_events": 0}
+
     built = 0
     empty = 0
     new_score_rows: list[dict] = []
     scores_reused = 0
 
-    for user in users:
-        user_persona_weights = personas_by_user.get(user.id, [])
-        ctx = FeedbackContext.from_orm_rows(list(fb_by_user.get(user.id, [])))
-
-        recent_series = recent_series_by_user.get(user.id, set())
-
-        def _score_or_reuse(event: Event) -> float | None:
-            """Cache lookup with a dislike re-check, else fresh score_event + cache write.
-            Returns None when hard-excluded (dedup-group dislike, or cached-and-disliked)."""
-            nonlocal scores_reused
-            cached = score_cache.get((user.id, event.id))
-            if cached is not None:
-                # Re-check dislike independently of cache freshness: covers
-                # both direct event dislikes and dedup_group dislikes so the
-                # cache path stays correct under any future invalidation
-                # tightening.
-                if event.id in ctx.disliked_event_ids or (
-                    event.dedup_group_id is not None
-                    and event.dedup_group_id in ctx.disliked_groups
-                ):
-                    return None
-                scores_reused += 1
-                return cached
-
-            s = score_event(user_persona_weights, ctx, event, now)
-            if s is None:
-                return None
-            new_score_rows.append(
-                {
-                    "user_id": user.id,
-                    "event_id": event.id,
-                    "score": s,
-                    "computed_at": now,
-                }
-            )
-            return s
-
-        scored: list[tuple[float, Event]] = []
-        cooled_scored: list[tuple[float, Event]] = []
-        for event in event_rows:
-            # Series cooldown: route a candidate whose recurring series this
-            # user was already shown within the cooldown window into the
-            # backfill-only pool instead of the normal pool. Still scored and
-            # cached like any other candidate; only consumed by
-            # _select_with_backfill if the fresh pool can't reach n.
-            if candidate_series_key[event.id] in recent_series:
-                s = _score_or_reuse(event)
-                if s is not None:
-                    cooled_scored.append((s, event))
-                continue
-
-            s = _score_or_reuse(event)
-            if s is None:
-                continue
-            scored.append((s, event))
+    for user in build_ctx.users:
+        fb_ctx = FeedbackContext.from_orm_rows(list(build_ctx.fb_by_user.get(user.id, [])))
+        scored, cooled_scored, reused = _score_user_candidates(
+            user, build_ctx, fb_ctx, new_score_rows, now
+        )
+        scores_reused += reused
 
         top_events = _select_with_backfill(
             scored,
@@ -722,7 +780,7 @@ async def build_daily_feeds(db: AsyncSession) -> dict:
         )
         event_ids = [e.id for e in top_events]
 
-        existing = daily_by_user.get(user.id)
+        existing = build_ctx.daily_by_user.get(user.id)
         if existing:
             existing.event_ids = event_ids
             existing.built_at = now
@@ -741,21 +799,13 @@ async def build_daily_feeds(db: AsyncSession) -> dict:
         else:
             empty += 1
 
-    # Bulk upsert newly computed (user_id, event_id) scores.
-    if new_score_rows:
-        stmt = pg_insert(UserEventScore).values(new_score_rows)
-        stmt = stmt.on_conflict_do_update(
-            index_elements=["user_id", "event_id"],
-            set_={"score": stmt.excluded.score, "computed_at": stmt.excluded.computed_at},
-        )
-        await db.execute(stmt)
-
+    await _persist_new_scores(db, new_score_rows)
     await db.commit()
     return {
         "built": built,
         "empty": empty,
-        "total_users": len(users),
-        "candidate_events": len(event_rows),
+        "total_users": len(build_ctx.users),
+        "candidate_events": len(build_ctx.event_rows),
         "scores_written": len(new_score_rows),
         "scores_reused": scores_reused,
     }
