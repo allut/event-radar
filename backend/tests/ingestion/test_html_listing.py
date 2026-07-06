@@ -23,7 +23,7 @@ from app.ingestion.selectors import (
     KUMU_VENUE_LNG,
     KUMU_VENUE_NAME,
 )
-from app.ingestion.base import NormalizedEvent
+from app.ingestion.adapter import NormalizedEvent
 from app.ingestion.sources.html_listing import (
     EstoniaConcertHallAdapter,
     HtmlListingAdapter,

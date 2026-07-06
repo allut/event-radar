@@ -1,4 +1,4 @@
-"""Tests for shared ingestion helpers in app.ingestion.base."""
+"""Tests for the shared ingestion helper modules (http_client, sanitize, pricing, jsonld, adapter)."""
 
 import http
 import socket
@@ -12,29 +12,33 @@ from bs4 import BeautifulSoup
 from tenacity import RetryCallState
 
 from app.constants import HTTP_RETRY_AFTER_MAX_SECONDS, TALLINN_TZ
-from app.ingestion.base import (
-    AsyncRateLimiter,
+from app.ingestion.adapter import (
     NormalizedEvent,
     SourceAdapter,
-    _retry_wait,
-    address_city,
     coords_in_estonia,
     coords_in_tallinn,
-    eur_amounts_from_text,
-    eur_price_bounds_from_text,
-    extract_jsonld_event_location,
-    extract_jsonld_event_offers,
+)
+from app.ingestion.content_filters import is_explicit_text, is_non_event_text
+from app.ingestion.http_client import (
+    AsyncRateLimiter,
+    _retry_wait,
     host_is_allowed,
-    is_explicit_text,
-    is_non_event_text,
-    is_target_city,
-    parse_price_from_string,
-    price_context_digest,
     resolves_to_private_ip,
     retry_after_seconds,
     safe_fetchable_url,
+)
+from app.ingestion.jsonld import (
+    extract_jsonld_event_location,
+    extract_jsonld_event_offers,
+)
+from app.ingestion.pricing import (
+    eur_amounts_from_text,
+    eur_price_bounds_from_text,
+    parse_price_from_string,
+    price_context_digest,
     strip_fee_amounts,
 )
+from app.ingestion.sources.fienta import address_city, is_target_city
 
 
 def _addrinfo(*ips: str) -> list:

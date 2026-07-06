@@ -43,7 +43,8 @@ from app.constants import (
     VENUE_SIBLING_RATIO_THRESHOLD,
 )
 from app.llm.prompts import LLM_VENUE_EXTRACT_PROMPT_TEMPLATE
-from app.ingestion.base import coords_in_tallinn, http_get
+from app.ingestion.adapter import coords_in_tallinn
+from app.ingestion.http_client import http_get
 from app.llm.router import LLMError, content_hash, llm_available, llm_json
 from app.models.models import Event, LlmCall
 

@@ -79,19 +79,14 @@ from app.ingestion.selectors import (
     PILETILEVI_VENUE_SELECTOR,
     WP_THUMBNAIL_HOSTS,
 )
-from app.ingestion.base import (
-    NormalizedEvent,
-    SourceAdapter,
+from app.ingestion.adapter import NormalizedEvent, SourceAdapter
+from app.ingestion.http_client import host_guard_hook, http_get, http_post
+from app.ingestion.jsonld import (
     extract_jsonld_event_location,
     extract_jsonld_event_text,
-    host_guard_hook,
-    html_to_text,
-    http_get,
-    http_post,
-    locale_from_url_path,
-    localized_detail_urls,
-    sanitize_html,
 )
+from app.ingestion.locale_urls import locale_from_url_path, localized_detail_urls
+from app.ingestion.sanitize import html_to_text, sanitize_html
 
 log = logging.getLogger(__name__)
 

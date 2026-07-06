@@ -22,7 +22,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import sqlalchemy as sa
 
 from app.constants import EVENT_STATUS_CLASSIFIED, EVENT_STATUS_PUBLISHED
-from app.ingestion.base import is_explicit_text
+from app.ingestion.content_filters import is_explicit_text
 from app.models.models import Event
 from app.routers.utils import mask_db_url
 

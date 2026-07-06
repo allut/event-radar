@@ -48,20 +48,19 @@ from app.ingestion.selectors import (
     ECH_SITE_NAME_ET,
     KUMU_SITE_NAME_ET,
 )
-from app.ingestion.base import (
+from app.ingestion.content_filters import is_explicit_text, is_non_event_text
+from app.ingestion.http_client import host_guard_hook, host_is_allowed, http_get
+from app.ingestion.jsonld import (
     extract_jsonld_event_location,
     extract_jsonld_event_offers,
     extract_jsonld_event_text,
-    host_guard_hook,
-    host_is_allowed,
-    http_get,
-    is_explicit_text,
-    is_non_event_text,
+)
+from app.ingestion.locale_urls import (
     locale_from_html_lang,
     locale_from_url_path,
     localized_detail_urls,
-    sanitize_html,
 )
+from app.ingestion.sanitize import sanitize_html
 from app.ingestion.geocode import is_suspect_venue_name
 from app.ingestion.sources.html_listing import (
     estonia_concert_hall_localized_text,

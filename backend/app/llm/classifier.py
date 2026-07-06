@@ -45,14 +45,14 @@ from app.constants import (
     VALID_VIBES,
 )
 from app.llm.prompts import LLM_CLASSIFY_PROMPT_TEMPLATE
-from app.ingestion.base import (
+from app.ingestion.pricing import (
     eur_amounts_from_text,
     eur_price_bounds_from_text,
-    html_to_text,
     normalize_currency,
     price_context_digest,
     strip_fee_amounts,
 )
+from app.ingestion.sanitize import html_to_text
 from app.llm.router import llm_json_or_none
 from app.models.models import Event, EventClassification
 from app.routers.utils import (

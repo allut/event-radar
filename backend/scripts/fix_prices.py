@@ -40,7 +40,7 @@ from app.constants import (
     SOURCE_SLUG_FIENTA,
     SOURCE_SLUG_PILETILEVI,
 )
-from app.ingestion.base import parse_price_from_string
+from app.ingestion.pricing import parse_price_from_string
 from app.llm.classifier import classify_event
 from app.models.models import Event, EventClassification, EventSource, RawEvent, Source
 from app.routers.utils import mask_db_url

@@ -36,7 +36,7 @@ from app.constants import (
     TITLE_RATIO_VENUE_BYPASS_THRESHOLD,
     VENUE_RATIO_THRESHOLD,
 )
-from app.ingestion.base import html_to_text
+from app.ingestion.sanitize import html_to_text
 from app.models.models import Event
 from app.routers.utils import normalized_title
 

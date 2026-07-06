@@ -716,7 +716,7 @@ VENUE_NAME_MAX_LEN = 255
 # Booking/service/agent fee keywords — amounts that follow these must NOT be read
 # as ticket prices. Piletilevi glues fee disclaimers into important_info
 # ("agenditasu 3,20 €", "teenustasu 1.40€/ pilet"), causing the LLM to latch onto
-# the fee as price_min. strip_fee_amounts() in ingestion/base.py uses these at
+# the fee as price_min. strip_fee_amounts() in ingestion/pricing.py uses these at
 # prompt-build time to remove the fee clause before the LLM sees the text.
 PRICE_FEE_KEYWORDS: frozenset[str] = frozenset(
     {
@@ -735,7 +735,7 @@ PRICE_FEE_KEYWORDS: frozenset[str] = frozenset(
 # Strips a fee keyword + the amount immediately following it (within a short
 # lookahead window) so the real ticket price that may trail in the same run
 # ("agenditasu 3,20 € Pilet 45 €") survives the substitution.
-# Built from PRICE_FEE_KEYWORDS at module load in ingestion/base.py.
+# Built from PRICE_FEE_KEYWORDS at module load in ingestion/pricing.py.
 PRICE_FEE_CLAUSE_RE = (
     r"(?:{keywords})[^\d€]{{0,25}}?\d+(?:[.,]\d+)?\s*(?:€|eur(?:\b|/))"
 )

@@ -39,7 +39,13 @@ from app.constants import (
     SOURCE_SLUG_KUMU,
     SOURCE_SLUG_PILETILEVI,
 )
-from app.ingestion.base import host_guard_hook, html_to_text, http_get, locale_from_html_lang, locale_from_url_path, localized_detail_urls, sanitize_html
+from app.ingestion.http_client import host_guard_hook, http_get
+from app.ingestion.locale_urls import (
+    locale_from_html_lang,
+    locale_from_url_path,
+    localized_detail_urls,
+)
+from app.ingestion.sanitize import html_to_text, sanitize_html
 from app.ingestion.sources.html_listing import (
     _piletilevi_important_info,
     estonia_concert_hall_localized_text,

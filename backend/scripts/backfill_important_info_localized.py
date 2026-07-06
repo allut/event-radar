@@ -31,7 +31,7 @@ from app.constants import (
     LOCALIZED_TEXT_HTML_LOCALES,
     SOURCE_SLUG_PILETILEVI,
 )
-from app.ingestion.base import host_guard_hook, http_get
+from app.ingestion.http_client import host_guard_hook, http_get
 from app.ingestion.sources.html_listing import (
     _piletilevi_important_info,
     locale_from_url_path,

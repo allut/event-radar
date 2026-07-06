@@ -9,7 +9,7 @@ import httpx
 from app.config import settings
 from app.constants import FIENTA_MAX_PAGES, TALLINN_TZ
 from app.ingestion.sources.fienta import FientaAdapter
-from app.ingestion.base import NormalizedEvent
+from app.ingestion.adapter import NormalizedEvent
 
 # Minimal HTML wrapping a JSON-LD script for detail-page stubs
 _DETAIL_HTML = (

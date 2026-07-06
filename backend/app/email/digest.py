@@ -35,7 +35,7 @@ from app.email.templates import (
     EVENT_VENUE,
 )
 from app.i18n import day_name, month_name, t, ti
-from app.ingestion.base import http_post
+from app.ingestion.http_client import http_post
 from app.models.models import DailyFeed, Event, User
 from app.routers.utils import (
     mask_email,

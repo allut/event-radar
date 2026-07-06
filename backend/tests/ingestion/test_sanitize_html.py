@@ -9,7 +9,9 @@ import pytest
 from bs4 import BeautifulSoup
 
 from app.constants import LOCALIZED_TEXT_FIENTA_LOCALES
-from app.ingestion.base import AsyncRateLimiter, html_to_text, locale_from_html_lang, sanitize_html
+from app.ingestion.http_client import AsyncRateLimiter
+from app.ingestion.locale_urls import locale_from_html_lang
+from app.ingestion.sanitize import html_to_text, sanitize_html
 from app.ingestion.sources.fienta import FientaAdapter
 
 

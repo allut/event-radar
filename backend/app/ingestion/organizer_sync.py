@@ -20,7 +20,7 @@ from app.constants import (
     STALE_ORGANIZER_RETIRE_DAYS,
     TALLINN_TZ,
 )
-from app.ingestion.base import AsyncRateLimiter, http_get
+from app.ingestion.http_client import AsyncRateLimiter, http_get
 from app.models.models import Source
 
 log = logging.getLogger(__name__)

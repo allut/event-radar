@@ -11,32 +11,67 @@ from bs4 import BeautifulSoup
 from app.config import settings
 from app.constants import (
     DETAIL_FETCH_CONCURRENCY,
+    FIENTA_CITY_FILTER,
     FIENTA_MAX_PAGES,
     FIENTA_MIN_REQUEST_INTERVAL_SECONDS,
     HTTP_TIMEOUT_SECONDS,
     LOCALIZED_TEXT_FIENTA_LOCALES,
 )
 from app.ingestion.selectors import FIENTA_DESCRIPTION_SELECTOR
-from app.ingestion.base import (
-    AsyncRateLimiter,
+from app.ingestion.adapter import (
     NormalizedEvent,
     SourceAdapter,
     coords_in_estonia,
+    parse_dt,
+)
+from app.ingestion.http_client import AsyncRateLimiter, host_guard_hook, http_get
+from app.ingestion.jsonld import (
     extract_jsonld_event_location,
     extract_jsonld_event_offers,
     extract_jsonld_event_text,
-    host_guard_hook,
-    http_get,
-    is_target_city,
+)
+from app.ingestion.locale_urls import (
     locale_from_html_lang,
     locale_from_url_path,
     localized_detail_urls,
-    parse_dt,
-    parse_price_from_string,
-    sanitize_html,
 )
+from app.ingestion.pricing import parse_price_from_string
+from app.ingestion.sanitize import sanitize_html
 
 log = logging.getLogger(__name__)
+
+
+# Regex to extract the city token from Fienta-style addresses:
+# "<street>, <postal code> <City>, <county>" — city sits after a postal code.
+# Estonian codes are 5 digits; foreign codes (LV: 4, LT: 5) also covered by 3-6.
+# \w with UNICODE matches any Unicode letter (covers Estonian, Latvian, Lithuanian diacritics).
+_CITY_FROM_ADDRESS_RE = re.compile(r"\b\d{3,6}\s+(\w[\w\-]+)", re.UNICODE)
+
+
+def address_city(address: str) -> str | None:
+    """Extract city token from a Fienta-style address string, or None if not parseable."""
+    m = _CITY_FROM_ADDRESS_RE.search(address)
+    return m.group(1) if m else None
+
+
+def is_target_city(address: str | None) -> bool:
+    """Keep only FIENTA_CITY_FILTER (Tallinn) or city-less, assumed-Tallinn addresses.
+
+    Allowlist, not denylist: drops any address whose parseable city token is not
+    FIENTA_CITY_FILTER, so unknown Estonian towns and foreign cities are excluded
+    without needing to enumerate them. City-less addresses (no postal-code pattern)
+    are kept — usually a Tallinn venue name with no street/postal in the string.
+
+    Known limitation (acceptable — all observed Fienta data carries postal codes):
+    an address with a city but no postal code can't be parsed, so it is kept.
+    """
+    if not address:
+        return True
+    city = address_city(address)
+    if city is None:
+        return True  # unparseable → keep
+    return city == FIENTA_CITY_FILTER
+
 
 # Matches a 5-digit postal code (Estonian format) anywhere in an address string.
 _POSTAL_CODE_RE = re.compile(r"\b\d{5}\b")
@@ -71,7 +106,7 @@ class FientaAdapter(SourceAdapter):
     <slug>); without it every detail fetch raised and was silently dropped.
     httpx's redirect handling has no same-origin restriction on its own — a
     malicious Location header could point a followed redirect at an arbitrary
-    host — so a `request` event hook (`host_guard_hook`, `app/ingestion/base.py`)
+    host — so a `request` event hook (`host_guard_hook`, `app/ingestion/http_client.py`)
     re-validates the host of *every* request the client sends, including each
     redirect hop, against base_host. This is the actual SSRF enforcement for
     the redirect case; the pre-fetch checks in `_fetch_organizer`/`_fetch_detail`
