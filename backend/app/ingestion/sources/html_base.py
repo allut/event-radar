@@ -356,6 +356,7 @@ class HtmlListingAdapter(SourceAdapter):
             price_max=raw.get("price_max"),
             currency=raw.get("currency"),
             price_hint=raw.get("price_hint"),
+            has_free_tier=raw.get("has_free_tier", False),
             title_localized=loc_titles if loc_titles else None,
             description_localized=loc_descs if loc_descs else None,
             important_info_localized=loc_infos if loc_infos else None,

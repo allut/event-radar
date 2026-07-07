@@ -1,5 +1,6 @@
 """Piletilevi adapter — www.piletilevi.ee/en/tickets/all (paginated Nuxt catalog)."""
 
+import asyncio
 import logging
 import re
 from datetime import datetime
@@ -9,7 +10,9 @@ import httpx
 from bs4 import BeautifulSoup, NavigableString, Tag
 
 from app.constants import TALLINN_TZ
+from app.ingestion.http_client import http_get, http_post
 from app.ingestion.jsonld import extract_jsonld_event_location
+from app.ingestion.pricing import normalize_currency
 from app.ingestion.sanitize import sanitize_html
 from app.ingestion.selectors import (
     PILETILEVI_ALL_PATH,
@@ -20,7 +23,10 @@ from app.ingestion.selectors import (
     PILETILEVI_IMAGE_HEIGHT,
     PILETILEVI_IMAGE_SELECTOR,
     PILETILEVI_IMPORTANT_INFO_HEADINGS,
+    PILETILEVI_LOGIN_EXPRESS_URL,
     PILETILEVI_MAX_PAGES,
+    PILETILEVI_PRICES_LANGUAGE,
+    PILETILEVI_PRICES_URL,
     PILETILEVI_TALLINN_FILTER,
     PILETILEVI_TITLE_SELECTOR,
     PILETILEVI_VENUE_SELECTOR,
@@ -30,6 +36,52 @@ from app.ingestion.sources.html_base import HtmlListingAdapter, attr_str
 log = logging.getLogger(__name__)
 
 _PILETILEVI_HEIGHT_RE = re.compile(r"/height=\d+/")
+_PILETILEVI_CODE_RE = re.compile(r"/tickets/([A-Za-z0-9]+)")
+
+
+def _to_float(value: Any) -> float | None:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _price_bounds_from_store(data: dict[str, Any]) -> tuple[float | None, float | None, bool]:
+    """Flatten a Piletilevi store prices response into (min, max, has_free_tier).
+
+    Response shape: {"eventSections": [{"priceZones": [{"ticketTypes": [
+    {"price": 36.9, "fee": 0.0}, ...]}]}]}. price_min/price_max bound the PAID
+    ticket types only (price > 0); has_free_tier flags a zero-priced ticket
+    type existing alongside at least one paid one (e.g. a companion ticket).
+    A genuinely free event (every ticket type priced 0) returns
+    (0.0, 0.0, False) — mirrors extract_jsonld_event_offers's convention:
+    has_free_tier only makes sense alongside a paid price. An event with no
+    usable ticket types at all returns (None, None, False).
+    """
+    paid_prices: list[float] = []
+    has_free = False
+    for section in data.get("eventSections") or []:
+        if not isinstance(section, dict):
+            continue
+        for zone in section.get("priceZones") or []:
+            if not isinstance(zone, dict):
+                continue
+            for ticket_type in zone.get("ticketTypes") or []:
+                if not isinstance(ticket_type, dict):
+                    continue
+                price = _to_float(ticket_type.get("price"))
+                if price is None:
+                    continue
+                if price > 0:
+                    paid_prices.append(price)
+                elif price == 0:
+                    has_free = True
+                # negative price: garbage data, ignore — neither paid nor free
+    if paid_prices:
+        return (min(paid_prices), max(paid_prices), has_free)
+    if has_free:
+        return (0.0, 0.0, False)
+    return (None, None, False)
 
 
 def full_res_piletilevi_image(url: str | None) -> str | None:
@@ -99,10 +151,44 @@ def _piletilevi_important_info(soup: BeautifulSoup, locale: str = "en") -> str |
 
 
 class PiletileviAdapter(HtmlListingAdapter):
-    """piletilevi.ee/en/tickets/all — paginated catalog (Nuxt SSR markup)."""
+    """piletilevi.ee/en/tickets/all — paginated catalog (Nuxt SSR markup).
+
+    parse_detail() resolves price via Piletilevi's own public store API
+    (PILETILEVI_PRICES_URL), which requires a session cookie bootstrapped
+    once per run via an empty-body login POST (PILETILEVI_LOGIN_EXPRESS_URL).
+    Both endpoints live on the listing's own host, so no extra_allowed_hosts
+    entry is needed (unlike EstoniaConcertHallAdapter's cross-host lookup).
+    """
 
     needs_detail = True
     max_pages = PILETILEVI_MAX_PAGES
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self._store_session_ready = False
+        self._store_session_failed = False
+        self._store_session_lock = asyncio.Lock()
+
+    async def _ensure_store_session(self, client: httpx.AsyncClient) -> bool:
+        """Bootstrap (once per run) the Piletilevi store session cookie.
+
+        The client's cookie jar persists across every detail fetch, so one
+        successful login covers the whole run. On failure, caches the
+        failure so later cards don't re-attempt the login call.
+        """
+        async with self._store_session_lock:
+            if self._store_session_ready or self._store_session_failed:
+                return self._store_session_ready
+            try:
+                await http_post(
+                    client,
+                    PILETILEVI_LOGIN_EXPRESS_URL,
+                    headers={"accept": "application/json"},
+                )
+                self._store_session_ready = True
+            except (httpx.HTTPStatusError, httpx.RequestError):
+                self._store_session_failed = True
+            return self._store_session_ready
 
     def listing_url_for_page(self, page: int) -> str | None:
         return f"{self.source.config['url']}{PILETILEVI_ALL_PATH}?page={page}"
@@ -171,3 +257,28 @@ class PiletileviAdapter(HtmlListingAdapter):
             card["venue_address"] = location["venue_address"]
             card["lat"] = location["lat"]
             card["lng"] = location["lng"]
+
+        match = _PILETILEVI_CODE_RE.search(card.get("url") or "")
+        if not match:
+            return
+        if not await self._ensure_store_session(client):
+            return
+
+        try:
+            resp = await http_get(
+                client,
+                PILETILEVI_PRICES_URL.format(code=match.group(1)),
+                params={"language": PILETILEVI_PRICES_LANGUAGE},
+            )
+            price_data = resp.json()
+        except (httpx.HTTPStatusError, httpx.RequestError, ValueError):
+            return
+        if not isinstance(price_data, dict):
+            return
+
+        price_min, price_max, has_free_tier = _price_bounds_from_store(price_data)
+        if price_min is not None:
+            card["price_min"] = price_min
+            card["price_max"] = price_max
+            card["currency"] = normalize_currency(None, price_min > 0)
+            card["has_free_tier"] = has_free_tier

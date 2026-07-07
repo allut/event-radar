@@ -32,6 +32,15 @@ PILETILEVI_IMPORTANT_INFO_HEADINGS: dict[str, str] = {
 # full-resolution variant uses this value in the same /height=N/ path segment.
 PILETILEVI_IMAGE_HEIGHT = 1009
 
+# Piletilevi's own public store price API (same host as the listing, unlike the
+# ECH-via-Piletilevi cross-host lookup below) — an unauthenticated session
+# cookie (bootstrapped once per run via the empty-body login call) then
+# authorizes the per-event prices lookup by event code (the path segment
+# after /tickets/, e.g. "EIHT67B2EC").
+PILETILEVI_LOGIN_EXPRESS_URL = "https://www.piletilevi.ee/api/v1/login/express"
+PILETILEVI_PRICES_URL = "https://www.piletilevi.ee/api/v1/store/events/{code}/prices"
+PILETILEVI_PRICES_LANGUAGE = "en"
+
 # --- KUMU (kumu.ekm.ee) ---
 KUMU_DATE_FORMAT = "%d/%m/%Y | %H:%M"
 KUMU_MAX_PAGES = 15  # safety bound — calendar is ~4 pages today

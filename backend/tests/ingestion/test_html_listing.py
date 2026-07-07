@@ -22,6 +22,8 @@ from app.ingestion.selectors import (
     KUMU_VENUE_LAT,
     KUMU_VENUE_LNG,
     KUMU_VENUE_NAME,
+    PILETILEVI_LOGIN_EXPRESS_URL,
+    PILETILEVI_PRICES_URL,
 )
 from app.ingestion.adapter import NormalizedEvent
 from app.ingestion.sources.estonia_concert_hall import (
@@ -39,6 +41,7 @@ from app.ingestion.sources.piletilevi import (
     PiletileviAdapter,
     _parse_piletilevi_date,
     _piletilevi_important_info,
+    _price_bounds_from_store,
     full_res_piletilevi_image,
 )
 
@@ -699,6 +702,254 @@ class TestPiletileviParseDetail:
         assert not result.startswith("[")
         assert not result.endswith("]")
         assert result == "<p>Ticket prices include fees.</p><p>Age limit: 18+.</p>"
+
+
+class TestPriceBoundsFromStore:
+    def test_single_sector_two_ticket_types(self):
+        # Captured live from GET .../api/v1/store/events/EIHT67B2EC/prices
+        payload = {
+            "planType": "SECTION_BASED",
+            "availableTickets": 22,
+            "eventSections": [
+                {
+                    "id": "1791",
+                    "title": "Raekoda",
+                    "priceZones": [
+                        {
+                            "id": "9",
+                            "ticketTypes": [
+                                {"id": "1", "name": "General admission ticket", "price": 36.9, "fee": 0.0},
+                                {"id": "3735", "name": "SOODUSPILET", "price": 26.9, "fee": 0.0},
+                            ],
+                        }
+                    ],
+                }
+            ],
+        }
+        assert _price_bounds_from_store(payload) == (26.9, 36.9, False)
+
+    def test_multi_sector_flattens_across_sections(self):
+        payload = {
+            "eventSections": [
+                {"priceZones": [{"ticketTypes": [{"price": 93.9}]}]},
+                {"priceZones": [{"ticketTypes": [{"price": 83.9}]}]},
+            ]
+        }
+        assert _price_bounds_from_store(payload) == (83.9, 93.9, False)
+
+    def test_paid_and_free_companion_ticket(self):
+        payload = {
+            "eventSections": [
+                {"priceZones": [{"ticketTypes": [{"price": 20.0}, {"price": 0.0}]}]}
+            ]
+        }
+        assert _price_bounds_from_store(payload) == (20.0, 20.0, True)
+
+    def test_genuinely_free_event(self):
+        payload = {"eventSections": [{"priceZones": [{"ticketTypes": [{"price": 0.0}]}]}]}
+        assert _price_bounds_from_store(payload) == (0.0, 0.0, False)
+
+    def test_no_ticket_types_returns_none(self):
+        assert _price_bounds_from_store({"eventSections": []}) == (None, None, False)
+
+    def test_non_numeric_price_skipped(self):
+        payload = {
+            "eventSections": [
+                {"priceZones": [{"ticketTypes": [{"price": "n/a"}, {"price": 15.0}]}]}
+            ]
+        }
+        assert _price_bounds_from_store(payload) == (15.0, 15.0, False)
+
+    def test_negative_price_ignored_not_treated_as_free(self):
+        # A negative price is garbage data — must not flip has_free_tier True
+        # the way a genuine zero-priced companion ticket would.
+        payload = {
+            "eventSections": [
+                {"priceZones": [{"ticketTypes": [{"price": -5.0}, {"price": 15.0}]}]}
+            ]
+        }
+        assert _price_bounds_from_store(payload) == (15.0, 15.0, False)
+
+    def test_only_negative_price_returns_none(self):
+        payload = {"eventSections": [{"priceZones": [{"ticketTypes": [{"price": -5.0}]}]}]}
+        assert _price_bounds_from_store(payload) == (None, None, False)
+
+
+_PILETILEVI_DETAIL_URL = "https://www.piletilevi.ee/en/tickets/EIHT67B2EC/prantsuse-jazz"
+
+
+class TestPiletileviParseDetailPrice:
+    @pytest.mark.asyncio
+    async def test_single_sector_price_populates_card(self):
+        adapter = _piletilevi_adapter()
+        soup = BeautifulSoup(PILETILEVI_DETAIL_HTML, "html.parser")
+        card: dict = {"url": _PILETILEVI_DETAIL_URL}
+        payload = {
+            "eventSections": [
+                {"priceZones": [{"ticketTypes": [
+                    {"price": 36.9}, {"price": 26.9},
+                ]}]}
+            ]
+        }
+        with (
+            patch("app.ingestion.sources.piletilevi.http_post") as mock_post,
+            patch("app.ingestion.sources.piletilevi.http_get") as mock_get,
+        ):
+            mock_get.return_value = _piletilevi_response(payload)
+            await adapter.parse_detail(MagicMock(), soup, card)
+
+        assert card["price_min"] == 26.9
+        assert card["price_max"] == 36.9
+        assert card["currency"] == "EUR"
+        assert card["has_free_tier"] is False
+        assert mock_post.call_count == 1
+        login_url = mock_post.call_args_list[0].args[1]
+        assert login_url == PILETILEVI_LOGIN_EXPRESS_URL
+        price_url = mock_get.call_args_list[0].args[1]
+        assert price_url == PILETILEVI_PRICES_URL.format(code="EIHT67B2EC")
+
+    @pytest.mark.asyncio
+    async def test_paid_and_free_tier_sets_has_free_tier(self):
+        adapter = _piletilevi_adapter()
+        soup = BeautifulSoup(PILETILEVI_DETAIL_HTML, "html.parser")
+        card: dict = {"url": _PILETILEVI_DETAIL_URL}
+        payload = {
+            "eventSections": [
+                {"priceZones": [{"ticketTypes": [{"price": 20.0}, {"price": 0.0}]}]}
+            ]
+        }
+        with (
+            patch("app.ingestion.sources.piletilevi.http_post") as mock_post,
+            patch("app.ingestion.sources.piletilevi.http_get") as mock_get,
+        ):
+            mock_get.return_value = _piletilevi_response(payload)
+            await adapter.parse_detail(MagicMock(), soup, card)
+
+        assert mock_post.call_count == 1
+        assert card["price_min"] == 20.0
+        assert card["price_max"] == 20.0
+        assert card["currency"] == "EUR"
+        assert card["has_free_tier"] is True
+
+    @pytest.mark.asyncio
+    async def test_genuinely_free_event_zero_price_no_currency(self):
+        adapter = _piletilevi_adapter()
+        soup = BeautifulSoup(PILETILEVI_DETAIL_HTML, "html.parser")
+        card: dict = {"url": _PILETILEVI_DETAIL_URL}
+        payload = {"eventSections": [{"priceZones": [{"ticketTypes": [{"price": 0.0}]}]}]}
+        with (
+            patch("app.ingestion.sources.piletilevi.http_post") as mock_post,
+            patch("app.ingestion.sources.piletilevi.http_get") as mock_get,
+        ):
+            mock_get.return_value = _piletilevi_response(payload)
+            await adapter.parse_detail(MagicMock(), soup, card)
+
+        assert mock_post.call_count == 1
+        assert card["price_min"] == 0.0
+        assert card["price_max"] == 0.0
+        assert card["currency"] is None
+        assert card["has_free_tier"] is False
+
+    @pytest.mark.asyncio
+    async def test_prices_api_error_leaves_price_unset(self):
+        adapter = _piletilevi_adapter()
+        soup = BeautifulSoup(PILETILEVI_DETAIL_HTML, "html.parser")
+        card: dict = {"url": _PILETILEVI_DETAIL_URL}
+        with (
+            patch("app.ingestion.sources.piletilevi.http_post") as mock_post,
+            patch("app.ingestion.sources.piletilevi.http_get") as mock_get,
+        ):
+            mock_get.side_effect = httpx.HTTPStatusError(
+                "error", request=MagicMock(), response=MagicMock()
+            )
+            await adapter.parse_detail(MagicMock(), soup, card)
+
+        assert mock_post.call_count == 1
+        assert "price_min" not in card
+        assert "has_free_tier" not in card
+
+    @pytest.mark.asyncio
+    async def test_session_bootstrap_failure_skips_prices_call(self):
+        adapter = _piletilevi_adapter()
+        soup = BeautifulSoup(PILETILEVI_DETAIL_HTML, "html.parser")
+        card: dict = {"url": _PILETILEVI_DETAIL_URL}
+        with (
+            patch("app.ingestion.sources.piletilevi.http_post") as mock_post,
+            patch("app.ingestion.sources.piletilevi.http_get") as mock_get,
+        ):
+            mock_post.side_effect = httpx.HTTPStatusError(
+                "error", request=MagicMock(), response=MagicMock()
+            )
+            await adapter.parse_detail(MagicMock(), soup, card)
+
+        assert mock_get.call_count == 0
+        assert "price_min" not in card
+
+    @pytest.mark.asyncio
+    async def test_url_without_code_skips_price_lookup_entirely(self):
+        adapter = _piletilevi_adapter()
+        soup = BeautifulSoup(PILETILEVI_DETAIL_HTML, "html.parser")
+        card: dict = {"url": "https://www.piletilevi.ee/en/search"}
+        with (
+            patch("app.ingestion.sources.piletilevi.http_post") as mock_post,
+            patch("app.ingestion.sources.piletilevi.http_get") as mock_get,
+        ):
+            await adapter.parse_detail(MagicMock(), soup, card)
+
+        assert mock_post.call_count == 0
+        assert mock_get.call_count == 0
+        assert "price_min" not in card
+
+    @pytest.mark.asyncio
+    async def test_missing_url_key_skips_price_lookup(self):
+        adapter = _piletilevi_adapter()
+        soup = BeautifulSoup(PILETILEVI_DETAIL_HTML, "html.parser")
+        card: dict = {}
+        with (
+            patch("app.ingestion.sources.piletilevi.http_post") as mock_post,
+            patch("app.ingestion.sources.piletilevi.http_get") as mock_get,
+        ):
+            await adapter.parse_detail(MagicMock(), soup, card)
+
+        assert mock_post.call_count == 0
+        assert mock_get.call_count == 0
+        assert "price_min" not in card
+
+    @pytest.mark.asyncio
+    async def test_empty_sections_leaves_price_unset(self):
+        adapter = _piletilevi_adapter()
+        soup = BeautifulSoup(PILETILEVI_DETAIL_HTML, "html.parser")
+        card: dict = {"url": _PILETILEVI_DETAIL_URL}
+        with (
+            patch("app.ingestion.sources.piletilevi.http_post") as mock_post,
+            patch("app.ingestion.sources.piletilevi.http_get") as mock_get,
+        ):
+            mock_get.return_value = _piletilevi_response({"eventSections": []})
+            await adapter.parse_detail(MagicMock(), soup, card)
+
+        assert mock_post.call_count == 1
+        assert "price_min" not in card
+
+    @pytest.mark.asyncio
+    async def test_session_cached_across_cards(self):
+        adapter = _piletilevi_adapter()
+        soup = BeautifulSoup(PILETILEVI_DETAIL_HTML, "html.parser")
+        payload = {"eventSections": [{"priceZones": [{"ticketTypes": [{"price": 5.0}]}]}]}
+        with (
+            patch("app.ingestion.sources.piletilevi.http_post") as mock_post,
+            patch("app.ingestion.sources.piletilevi.http_get") as mock_get,
+        ):
+            mock_get.return_value = _piletilevi_response(payload)
+            card1: dict = {"url": _PILETILEVI_DETAIL_URL}
+            card2: dict = {"url": "https://www.piletilevi.ee/en/tickets/OTHERCODE/other"}
+            await adapter.parse_detail(MagicMock(), soup, card1)
+            await adapter.parse_detail(MagicMock(), soup, card2)
+
+        # 1 login call total, 2 price calls — session cookie reused across cards.
+        assert mock_post.call_count == 1
+        assert mock_get.call_count == 2
+        assert card1["price_min"] == 5.0
+        assert card2["price_min"] == 5.0
 
 
 # ---------------------------------------------------------------------------
