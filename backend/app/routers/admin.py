@@ -285,9 +285,8 @@ async def admin_cleanup(
     """Trigger data retention cleanup (prunes satellite tables; never events).
 
     Defaults to dry-run, matching every other destructive admin/maintenance
-    tool in this codebase (reset_events.py, demote_non_events.py,
-    demote_explicit_events.py, /admin/pipeline/run) — pass ?dry_run=false to
-    actually delete.
+    tool in this codebase (reset_events.py, /admin/pipeline/run) — pass
+    ?dry_run=false to actually delete.
 
     See app.cleanup.cleanup_stale_data for the per-table retention windows.
     """

@@ -7,8 +7,7 @@ boundary). Marker regexes are too fragile to catch the unmarked cases, so this
 runs per-block language detection instead: split the (already-sanitized) HTML
 into block-level chunks, detect each chunk's language, group by locale, and
 reconstruct one HTML segment per locale. Wired into ingestion (``app.
-ingestion.adapter.SourceAdapter.run``) and the one-off backfill script
-(``scripts/backfill_language_split.py``) to fill in whichever ``*_localized``
+ingestion.adapter.SourceAdapter.run``) to fill in whichever ``*_localized``
 locale keys are still missing — never to overwrite a locale obtained from a
 real per-locale page fetch.
 """

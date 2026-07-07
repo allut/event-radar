@@ -796,20 +796,14 @@ HSTS_HEADER_NAME = "Strict-Transport-Security"
 HSTS_MAX_AGE_SECONDS = 31536000  # 1 year, matches HSTS preload-list minimum
 HSTS_HEADER_VALUE = f"max-age={HSTS_MAX_AGE_SECONDS}; includeSubDomains"
 
-# One-off maintenance scripts (backend/scripts/) — shared defaults so each
-# script doesn't redefine the same sentinel independently.
-BACKFILL_DEFAULT_LIMIT = 5000  # max rows scanned/processed per run, overridable via --limit
-# Mid-loop commit cadence — see GEOCODE_COMMIT_INTERVAL_SECONDS for the rationale.
-FIX_PRICES_COMMIT_INTERVAL_SECONDS: float = 10.0
-
 # Data retention — app/cleanup.py::cleanup_stale_data(), weekly Sun 03:30 EET.
 # These prune satellite/audit tables only; `events` rows are never deleted.
 MAGIC_LINK_RETENTION_DAYS = 7  # expired/used auth_magic_links rows
 LLM_CALLS_RETENTION_DAYS = 90  # also the dedup/classification cache window
-# Trade-off: a one-off forensic/backfill script (e.g. fix_prices.py, which read
-# raw_events.payload["price_from_string"]) cannot recover a row pruned past
-# this window — any future script needing raw payloads must run within 90
-# days of ingest, or this constant must be raised first.
+# Trade-off: a one-off forensic/backfill script reading raw_events.payload
+# cannot recover a row pruned past this window — any future script needing
+# raw payloads must run within 90 days of ingest, or this constant must be
+# raised first.
 RAW_EVENTS_RETENTION_DAYS = 90
 INGESTION_RUNS_RETENTION_DAYS = 90
 RAW_INBOUND_EMAILS_RETENTION_DAYS = 90
