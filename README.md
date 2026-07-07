@@ -19,6 +19,7 @@ The whole platform is designed to run on **free-tier infrastructure** at a stead
 - **Magic-link auth** — passwordless sign-in with short-lived, single-use links and revocable 7-day session tokens. No third-party auth provider.
 - **Full trilingual i18n** — every UI string, email, and LLM output supports `et` / `en` / `ru` from a single shared source of truth.
 - **Security-hardened** — OWASP Top 10 mitigations: per-IP rate limiting, strict security headers, CORS lockdown, external-URL sanitization, and a CVE audit in CI.
+- **Data retention** — a weekly cleanup prunes aged satellite/audit rows (auth tokens, raw ingestion payloads, old feed snapshots, cached scores) while preserving all event history and user feedback indefinitely.
 
 ## Architecture
 
@@ -28,6 +29,7 @@ Vite + React SPA  ──HTTPS / JSON──▶  FastAPI (single process)
                                        │            /feed /feedback /users/me /webhooks
                                        └── APScheduler (embedded, kept warm by a cron ping)
                                            ├── Weekly Sun 03:00: sync_fienta_organizers
+                                           ├── Weekly Sun 03:30: cleanup_stale_data
                                            ├── Hourly:    ingest_all_enabled
                                            ├── 6-hourly:  dedup_pass + classify_pending +
                                            │              publish_pending + geocode_pending
@@ -197,7 +199,7 @@ python scripts/generate_shared.py
 
 ### Manually triggering pipeline jobs (E2E testing)
 
-The scheduled jobs described in [Architecture](#architecture) (`sync_fienta_organizers`, `ingest_all_enabled`, `dedup_pass`, `classify_pending`, `publish_pending`, `build_daily_feeds`, `send_daily_digests`, `geocode_pending`, `refetch_event_details`) can each be run on demand via `/admin/*` endpoints — useful for exercising the full pipeline end to end without waiting for the schedule.
+The scheduled jobs described in [Architecture](#architecture) (`sync_fienta_organizers`, `cleanup_stale_data`, `ingest_all_enabled`, `dedup_pass`, `classify_pending`, `publish_pending`, `build_daily_feeds`, `send_daily_digests`, `geocode_pending`, `refetch_event_details`) can each be run on demand via `/admin/*` endpoints — useful for exercising the full pipeline end to end without waiting for the schedule.
 
 All `/admin/*` endpoints require HTTP Basic auth (`ADMIN_USERNAME` / `ADMIN_PASSWORD`, see `.env.example`). In development with no `ADMIN_PASSWORD` set, any credentials are accepted — the examples below use `admin:admin`. Run them in this order to exercise a full pipeline cycle:
 
@@ -232,10 +234,17 @@ curl -u admin:admin -X POST http://localhost:8000/admin/geocode
 # refetch_event_details — re-fetch each future event's source detail page and
 # reconcile venue/price/coordinates (runs standalone, not part of pipeline/run)
 curl -u admin:admin -X POST http://localhost:8000/admin/refetch
+
+# cleanup_stale_data — prune aged satellite/audit rows (auth tokens, raw payloads,
+# old feed snapshots, cached scores); never deletes events. Dry-run by default
+# (counts candidates, deletes nothing); runs standalone, not part of pipeline/run.
+curl -u admin:admin -X POST http://localhost:8000/admin/cleanup
+# Pass dry_run=false to actually delete:
+curl -u admin:admin -X POST "http://localhost:8000/admin/cleanup?dry_run=false"
 ```
 
 > [!TIP]
-> `POST /admin/pipeline/run` runs all seven stages above in dependency order in a single call, stopping at the first failure — the fastest way to drive a full E2E cycle. It also accepts `?dry_run=false` for the final digest stage. `GET /admin/stats` and `GET /admin/dedup/groups` are useful for inspecting the results afterwards. The geocoding backfill (`geocode_pending`) and the detail-refetch sync (`refetch_event_details`) each run on their own schedule and are not part of `pipeline/run`; trigger them on demand via `POST /admin/geocode` and `POST /admin/refetch` respectively. Run `refetch` before `geocode` if you want coordinates cleared by an address change re-resolved in the same operation.
+> `POST /admin/pipeline/run` runs all seven stages above in dependency order in a single call, stopping at the first failure — the fastest way to drive a full E2E cycle. It also accepts `?dry_run=false` for the final digest stage. `GET /admin/stats` and `GET /admin/dedup/groups` are useful for inspecting the results afterwards. The geocoding backfill (`geocode_pending`), the detail-refetch sync (`refetch_event_details`), and the data-retention cleanup (`cleanup_stale_data`) each run on their own schedule and are not part of `pipeline/run`; trigger them on demand via `POST /admin/geocode`, `POST /admin/refetch`, and `POST /admin/cleanup` respectively. Run `refetch` before `geocode` if you want coordinates cleared by an address change re-resolved in the same operation.
 
 ### Resetting event data
 
