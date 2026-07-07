@@ -20,7 +20,7 @@ DIGEST_DOCUMENT = """\
 <p style="{s_eyebrow}">EVENT RADAR</p>
 <h1 style="{s_h1}">{subject_label}</h1>
 <p style="{s_date}">{date_str}</p>
-<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="{s_feed_btn_wrap}"><tr><td>
+<table role="presentation" align="center" cellpadding="0" cellspacing="0" border="0" style="{s_feed_btn_wrap}"><tr><td>
 <a href="{feed_url}" class="feed-btn" style="{s_feed_btn}">{open_feed_label}</a>
 </td></tr></table>
 </td></tr>

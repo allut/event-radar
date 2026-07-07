@@ -21,7 +21,7 @@ a{text-decoration:none;}
 
 # Page chrome
 S_PAGE = "margin:0;padding:0;background-color:#13161e;"
-S_CONTAINER = "max-width:600px;width:600px;margin:0 auto;"
+S_CONTAINER = "max-width:600px;width:100%;margin:0 auto;"
 S_HEADER_PAD = "padding:40px 24px 24px 24px;text-align:center;"
 S_EYEBROW = (
     "font-family:'DM Sans',Helvetica,Arial,sans-serif;font-size:12px;"
