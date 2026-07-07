@@ -111,6 +111,82 @@ def _has_postal_code(address: str | None) -> bool:
     return bool(address and _POSTAL_CODE_RE.search(address))
 
 
+def _merge_venue(
+    raw: dict[str, Any], detail: dict[str, Any]
+) -> tuple[str | None, str | None]:
+    """Merge listing + detail venue fields per the fixed authority table.
+
+    venue_name: listing wins, detail fallback. venue_address: prefer whichever
+    side carries a 5-digit postal code; else listing wins, detail fills empty.
+    """
+    venue_raw = raw.get("venue") or {}
+    if isinstance(venue_raw, dict):
+        listing_venue_name = venue_raw.get("name")
+        address_candidate = venue_raw.get("address")
+    else:
+        listing_venue_name = str(venue_raw) or None
+        address_candidate = raw.get("address")
+    listing_venue_address = (
+        address_candidate if isinstance(address_candidate, str) else None
+    )
+
+    venue_name = listing_venue_name or detail.get("venue_name") or None
+
+    detail_addr: str | None = detail.get("venue_address")
+    if _has_postal_code(listing_venue_address):
+        venue_address: str | None = listing_venue_address
+    elif _has_postal_code(detail_addr):
+        venue_address = detail_addr
+    else:
+        venue_address = listing_venue_address or detail_addr or None
+    return venue_name, venue_address
+
+
+def _merge_location(detail: dict[str, Any]) -> tuple[float | None, float | None]:
+    """lat/lng come only from detail JSON-LD, bbox-gated to Estonia; None
+    otherwise (the geocode pass fills them later)."""
+    if detail:
+        d_lat: float | None = detail.get("lat")
+        d_lng: float | None = detail.get("lng")
+        if d_lat is not None and d_lng is not None and coords_in_estonia(d_lat, d_lng):
+            return d_lat, d_lng
+    return None, None
+
+
+def _merge_price(
+    raw: dict[str, Any], detail: dict[str, Any]
+) -> tuple[float | None, float | None, str | None, bool]:
+    """Merge listing + detail prices; returns (min, max, currency, has_free_tier).
+
+    The deterministic listing parse is the authoritative baseline, overridden
+    per-bound by a present detail offer price. A listing parsed as plain
+    "Free" (both bounds 0, no paid tier) means admission itself is free — the
+    free floor survives even when the detail page reveals an optional paid
+    ticket (e.g. an open-mic's €10 support ticket): price_min stays 0, only
+    price_max is raised to the detail's paid ceiling.
+    """
+    listing_price_min, listing_price_max, listing_currency, listing_has_free_tier = (
+        parse_price_from_string(raw.get("price_from_string"))
+    )
+    detail_price_min: float | None = detail.get("price_min") if detail else None
+    detail_price_max: float | None = detail.get("price_max") if detail else None
+    detail_has_free_tier = bool(detail.get("has_free_tier")) if detail else False
+
+    has_free_tier = listing_has_free_tier or detail_has_free_tier
+
+    if listing_price_min == 0 and listing_price_max == 0 and not listing_has_free_tier:
+        price_min: float | None = 0.0
+        price_max: float | None = (
+            detail_price_max if detail_price_max is not None else listing_price_max
+        )
+    else:
+        price_min = detail_price_min if detail_price_min is not None else listing_price_min
+        price_max = detail_price_max if detail_price_max is not None else listing_price_max
+
+    currency: str | None = listing_currency or (detail.get("currency") or None)
+    return price_min, price_max, currency, has_free_tier
+
+
 class FientaAdapter(SourceAdapter):
     """Fetches events from Fienta public API for all organizer IDs in source.config.
 
@@ -412,79 +488,15 @@ class FientaAdapter(SourceAdapter):
         raw_end = raw.get("ends_at") or raw.get("end_date") or raw.get("end_time")
         ends_at = parse_dt(str(raw_end)) if raw_end else None
 
-        venue_raw = raw.get("venue") or {}
-        if isinstance(venue_raw, dict):
-            listing_venue_name = venue_raw.get("name")
-            address_candidate = venue_raw.get("address")
-        else:
-            listing_venue_name = str(venue_raw) or None
-            address_candidate = raw.get("address")
-        listing_venue_address = (
-            address_candidate if isinstance(address_candidate, str) else None
-        )
-
         # Merge table — applied when detail is present; listing-only when absent.
         detail: dict[str, Any] = raw.get("_detail") or {}
 
-        # venue_name: listing wins; detail fallback
-        venue_name = listing_venue_name or detail.get("venue_name") or None
-
-        # venue_address: prefer whichever contains a 5-digit postal code; else listing;
-        # detail fills only when listing is empty
-        detail_addr: str | None = detail.get("venue_address")
-        if _has_postal_code(listing_venue_address):
-            venue_address: str | None = listing_venue_address
-        elif _has_postal_code(detail_addr):
-            venue_address = detail_addr
-        else:
-            venue_address = listing_venue_address or detail_addr or None
-
-        # City filter on merged address
+        venue_name, venue_address = _merge_venue(raw, detail)
         if not is_target_city(venue_address):
             return None
 
-        # lat/lng: detail geo, bbox-gated to Estonia; None otherwise (geocode fills later)
-        lat: float | None = None
-        lng: float | None = None
-        if detail:
-            d_lat: float | None = detail.get("lat")
-            d_lng: float | None = detail.get("lng")
-            if (
-                d_lat is not None
-                and d_lng is not None
-                and coords_in_estonia(d_lat, d_lng)
-            ):
-                lat = d_lat
-                lng = d_lng
-
-        # price: listing parse is the authoritative baseline
-        listing_price_min, listing_price_max, listing_currency, listing_has_free_tier = (
-            parse_price_from_string(raw.get("price_from_string"))
-        )
-        detail_price_min: float | None = detail.get("price_min") if detail else None
-        detail_price_max: float | None = detail.get("price_max") if detail else None
-        detail_has_free_tier = bool(detail.get("has_free_tier")) if detail else False
-
-        has_free_tier = listing_has_free_tier or detail_has_free_tier
-
-        # A listing parsed as plain "Free" (both bounds 0, no paid tier at the
-        # listing level) means admission itself is free — the free floor must
-        # survive even when the detail page later reveals an optional paid
-        # ticket (e.g. an open-mic's €10 support ticket): price_min stays 0,
-        # and only price_max is raised to the detail's paid ceiling, if any.
-        if listing_price_min == 0 and listing_price_max == 0 and not listing_has_free_tier:
-            price_min: float | None = 0.0
-            price_max: float | None = (
-                detail_price_max if detail_price_max is not None else listing_price_max
-            )
-        else:
-            # price_min: detail offer floor wins; listing fills when detail has no price
-            price_min = detail_price_min if detail_price_min is not None else listing_price_min
-            # price_max: detail offer ceiling wins; listing fills when detail has no price
-            price_max = detail_price_max if detail_price_max is not None else listing_price_max
-
-        # currency: listing wins; detail fallback
-        currency: str | None = listing_currency or detail.get("currency") or None
+        lat, lng = _merge_location(detail)
+        price_min, price_max, currency, has_free_tier = _merge_price(raw, detail)
 
         detail_localized = raw.get("_detail_localized") or {}
         loc_titles = detail_localized.get("title") or {}
