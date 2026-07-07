@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../../api/client';
-import { clearToken, getLocale, setLocale } from '../../lib/auth';
+import { clearToken, getLocale } from '../../lib/auth';
+import { useLocaleMutation } from '../../hooks/useLocaleMutation';
 import { AUTH_REDIRECT_DELAY_MS, PERSONAS, SAVE_MSG_CLEAR_DELAY_MS, PERSONA_PRIMARY_WEIGHT_THRESHOLD } from '../../constants';
 import { cx } from '../../utils';
 import { t, personaName } from '../../i18n';
@@ -26,6 +27,10 @@ interface SettingsData {
   personas: PersonaEntry[];
 }
 
+type Toast = { status: 'idle' } | { status: 'success' | 'error'; message: string };
+
+const TOAST_IDLE: Toast = { status: 'idle' };
+
 export default function Settings() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -35,48 +40,48 @@ export default function Settings() {
     queryFn: () => api.get<SettingsData>('/users/me'),
   });
 
-  const [locale, setLocaleState] = useState(getLocale());
-  const [saveMsg, setSaveMsg] = useState('');
-  const [saveError, setSaveError] = useState('');
-  const [logoutAllMsg, setLogoutAllMsg] = useState('');
-  const [logoutAllError, setLogoutAllError] = useState('');
+  const [saveToast, setSaveToast] = useState<Toast>(TOAST_IDLE);
+  const [logoutToast, setLogoutToast] = useState<Toast>(TOAST_IDLE);
 
-  const patchMutation = useMutation({
-    mutationFn: (body: Partial<{ locale: string; email_digest_opt_in: boolean }>) =>
-      api.patch<SettingsData>('/users/me', body),
+  function showSaved(currentLocale: string) {
+    setSaveToast({ status: 'success', message: t('saved', currentLocale) });
+    setTimeout(() => setSaveToast(TOAST_IDLE), SAVE_MSG_CLEAR_DELAY_MS);
+  }
+
+  function showSaveError(err: unknown, currentLocale: string) {
+    setSaveToast({
+      status: 'error',
+      message: err instanceof ApiError ? err.message : t('save_failed', currentLocale),
+    });
+  }
+
+  const { locale, handleLocaleChange, isPending: localePending } = useLocaleMutation(
+    ['settings'],
+    {
+      onSuccess: () => showSaved(getLocale()),
+      onError: (err) => showSaveError(err, getLocale()),
+    },
+  );
+
+  const digestMutation = useMutation({
+    mutationFn: (optIn: boolean) =>
+      api.patch<SettingsData>('/users/me', { email_digest_opt_in: optIn }),
     onSuccess: (updated) => {
       queryClient.setQueryData(['settings'], updated);
-      setSaveMsg(t('saved', locale));
-      setSaveError('');
-      setTimeout(() => setSaveMsg(''), SAVE_MSG_CLEAR_DELAY_MS);
+      showSaved(locale);
     },
-    onError: (err, variables) => {
-      setSaveMsg('');
-      setSaveError(err instanceof ApiError ? err.message : t('save_failed', locale));
-      if (variables.locale !== undefined) {
-        setLocaleState(getLocale());
-      }
-    },
+    onError: (err) => showSaveError(err, locale),
   });
-
-  function handleLocaleChange(code: string) {
-    setLocaleState(code);
-    patchMutation.mutate(
-      { locale: code },
-      { onSuccess: () => setLocale(code) },
-    );
-  }
 
   function handleOptInToggle() {
     if (!data) return;
-    patchMutation.mutate({ email_digest_opt_in: !data.email_digest_opt_in });
+    digestMutation.mutate(!data.email_digest_opt_in);
   }
 
   const logoutAllMutation = useMutation({
     mutationFn: () => api.post<{ detail: string }>('/auth/logout-all'),
     onSuccess: () => {
-      setLogoutAllError('');
-      setLogoutAllMsg(t('logout_all_success', locale));
+      setLogoutToast({ status: 'success', message: t('logout_all_success', locale) });
       setTimeout(() => {
         clearToken();
         queryClient.clear();
@@ -84,14 +89,15 @@ export default function Settings() {
       }, AUTH_REDIRECT_DELAY_MS);
     },
     onError: (err) => {
-      setLogoutAllMsg('');
-      setLogoutAllError(err instanceof ApiError ? err.message : t('logout_all_failed', locale));
+      setLogoutToast({
+        status: 'error',
+        message: err instanceof ApiError ? err.message : t('logout_all_failed', locale),
+      });
     },
   });
 
   function handleLogoutAll() {
-    setLogoutAllMsg('');
-    setLogoutAllError('');
+    setLogoutToast(TOAST_IDLE);
     logoutAllMutation.mutate();
   }
 
@@ -112,8 +118,8 @@ export default function Settings() {
 
   return (
     <div className={styles.page}>
-      {saveMsg && <div className={styles.toastSuccess} role="status">{saveMsg}</div>}
-      {saveError && <div className={styles.toastError} role="alert">{saveError}</div>}
+      {saveToast.status === 'success' && <div className={styles.toastSuccess} role="status">{saveToast.message}</div>}
+      {saveToast.status === 'error' && <div className={styles.toastError} role="alert">{saveToast.message}</div>}
 
       <header className={styles.topBar}>
         <Link to="/" className={styles.back} aria-label={t('back_to_feed', locale)}>{t('back_to_feed', locale)}</Link>
@@ -136,7 +142,7 @@ export default function Settings() {
             locale={locale}
             onChange={handleLocaleChange}
             ariaLabel={t('section_language', locale)}
-            disabled={patchMutation.isPending}
+            disabled={localePending}
           />
         </section>
 
@@ -186,7 +192,7 @@ export default function Settings() {
             <button
               className={cx(styles.toggle, data?.email_digest_opt_in ? styles.toggleOn : styles.toggleOff)}
               onClick={handleOptInToggle}
-              disabled={patchMutation.isPending}
+              disabled={digestMutation.isPending}
               aria-pressed={data?.email_digest_opt_in}
               aria-label={data?.email_digest_opt_in ? t('digest_unsubscribe', locale) : t('digest_subscribe', locale)}
             >
@@ -213,8 +219,8 @@ export default function Settings() {
           >
             {t('logout_all_btn', locale)}
           </button>
-          {logoutAllMsg && <p className={styles.saveSuccess} role="status">{logoutAllMsg}</p>}
-          {logoutAllError && <p className={styles.saveError} role="alert">{logoutAllError}</p>}
+          {logoutToast.status === 'success' && <p className={styles.saveSuccess} role="status">{logoutToast.message}</p>}
+          {logoutToast.status === 'error' && <p className={styles.saveError} role="alert">{logoutToast.message}</p>}
         </section>
       </main>
     </div>

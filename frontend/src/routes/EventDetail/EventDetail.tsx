@@ -1,11 +1,9 @@
-import { useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { api } from '../../api/client';
-import { getLocale, setLocale } from '../../lib/auth';
 import { t, ti } from '../../i18n';
-import { categoryGradient, cx, formatEventDateTime, formatHourMinute, formatPrice, safeUrl, sanitizeHtml, trackExternalClick } from '../../utils';
-import { GOOGLE_MAPS_SEARCH_URL } from '../../constants';
+import { buildMapsUrl, categoryGradient, cx, formatEventDateTime, formatHourMinute, formatPrice, safeUrl, sanitizeHtml, trackExternalClick } from '../../utils';
+import { useLocaleMutation } from '../../hooks/useLocaleMutation';
 import { type EventData } from '../../components/EventCard';
 import FeedbackButtonRow from '../../components/FeedbackButtonRow';
 import LocaleSelector from '../../components/LocaleSelector';
@@ -20,22 +18,7 @@ interface EventDetailData extends EventData {
 export default function EventDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
-  const [locale, setLocaleState] = useState(getLocale());
-
-  const localeMutation = useMutation({
-    mutationFn: (code: string) => api.patch('/users/me', { locale: code }),
-    onSuccess: (_data, code) => {
-      setLocale(code);
-      queryClient.invalidateQueries({ queryKey: ['event', id] });
-    },
-    onError: () => { setLocaleState(getLocale()); },
-  });
-
-  function handleLocaleChange(code: string) {
-    setLocaleState(code);
-    localeMutation.mutate(code);
-  }
+  const { locale, handleLocaleChange } = useLocaleMutation(['event', id]);
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['event', id],
@@ -71,11 +54,8 @@ export default function EventDetail() {
 
   const price = formatPrice(data.price_min, data.price_max, data.currency, locale, data.has_free_tier);
   const imageSrc = safeUrl(data.image_url);
-  const mapsUrl = data.lat && data.lng
-    ? `${GOOGLE_MAPS_SEARCH_URL}${data.lat},${data.lng}`
-    : data.venue_address
-    ? `${GOOGLE_MAPS_SEARCH_URL}${encodeURIComponent(data.venue_address)}`
-    : null;
+  const ticketUrl = safeUrl(data.url);
+  const mapsUrl = buildMapsUrl(data.lat, data.lng, data.venue_address);
 
   return (
     <div className={styles.page}>
@@ -190,9 +170,9 @@ export default function EventDetail() {
               locale={locale}
               variant="detail"
             />
-            {safeUrl(data.url) && (
+            {ticketUrl && (
               <a
-                href={safeUrl(data.url) ?? undefined}
+                href={ticketUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className={styles.ticketsBtn}

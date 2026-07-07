@@ -1,9 +1,9 @@
-import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../api/client';
-import { clearToken, getLocale, setLocale } from '../../lib/auth';
+import { clearToken } from '../../lib/auth';
 import { t, ti } from '../../i18n';
+import { useLocaleMutation } from '../../hooks/useLocaleMutation';
 import EventCard, { type EventData } from '../../components/EventCard';
 import EmptyState from '../../components/EmptyState';
 import LocaleSelector from '../../components/LocaleSelector';
@@ -20,21 +20,7 @@ interface FeedResponse {
 export default function Feed() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [locale, setLocaleState] = useState(getLocale());
-
-  const localeMutation = useMutation({
-    mutationFn: (code: string) => api.patch('/users/me', { locale: code }),
-    onSuccess: (_data, code) => {
-      setLocale(code);
-      queryClient.invalidateQueries({ queryKey: ['feed'] });
-    },
-    onError: () => { setLocaleState(getLocale()); },
-  });
-
-  function handleLocaleChange(code: string) {
-    setLocaleState(code);
-    localeMutation.mutate(code);
-  }
+  const { locale, handleLocaleChange } = useLocaleMutation(['feed']);
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['feed'],

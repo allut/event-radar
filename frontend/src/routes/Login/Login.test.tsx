@@ -9,16 +9,10 @@ vi.mock('../../lib/auth', () => ({
   getLocale: vi.fn(() => 'en'),
 }));
 
-vi.mock('../../api/client', () => ({
+vi.mock('../../api/client', async (importOriginal) => ({
+  // Real ApiError (shared class, no network dependency); only api.* stubbed.
+  ...(await importOriginal<typeof import('../../api/client')>()),
   api: { post: vi.fn() },
-  ApiError: class ApiError extends Error {
-    status: number;
-    constructor(status: number, message: string) {
-      super(message);
-      this.status = status;
-      this.name = 'ApiError';
-    }
-  },
 }));
 
 import { api } from '../../api/client';

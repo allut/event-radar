@@ -1,6 +1,6 @@
 import DOMPurify from 'dompurify';
 import { api } from './api/client';
-import { CATEGORY_GRADIENTS, FALLBACK_GRADIENT, EUR_SYMBOL, type Signal, toLocaleCode, SAFE_URL_SCHEMES, SANITIZE_ALLOWED_TAGS, SANITIZE_ALLOWED_ATTR, SIGNAL_TO_CLASS } from './constants';
+import { CATEGORY_GRADIENTS, FALLBACK_GRADIENT, EUR_SYMBOL, GOOGLE_MAPS_SEARCH_URL, type Signal, toLocaleCode, SAFE_URL_SCHEMES, SANITIZE_ALLOWED_TAGS, SANITIZE_ALLOWED_ATTR, SIGNAL_TO_CLASS } from './constants';
 import { t, ti } from './i18n';
 
 export function cx(...classes: (string | false | null | undefined)[]): string {
@@ -84,6 +84,18 @@ export function formatPrice(min: number | null, max: number | null, currency: st
     return `${priceStr} · ${t('price_free_options', locale)}`;
   }
   return priceStr;
+}
+
+/** Google Maps search link: coords when present (most precise), else the
+ * address, else null (no link rendered). */
+export function buildMapsUrl(
+  lat: number | null,
+  lng: number | null,
+  address: string | null,
+): string | null {
+  if (lat && lng) return `${GOOGLE_MAPS_SEARCH_URL}${lat},${lng}`;
+  if (address) return `${GOOGLE_MAPS_SEARCH_URL}${encodeURIComponent(address)}`;
+  return null;
 }
 
 export function formatEventTime(iso: string, locale: string): string {

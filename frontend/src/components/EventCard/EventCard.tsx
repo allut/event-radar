@@ -44,6 +44,7 @@ export default function EventCard({ event, index, locale, onFeedbackSent, varian
 
   const price = formatPrice(event.price_min, event.price_max, event.currency, locale, event.has_free_tier);
   const imageSrc = safeUrl(event.image_url);
+  const ticketUrl = safeUrl(event.url);
 
   return (
     <article
@@ -104,9 +105,9 @@ export default function EventCard({ event, index, locale, onFeedbackSent, varian
           locale={locale}
           variant={isFeatured ? 'detail' : 'card'}
         />
-        {safeUrl(event.url) && (
+        {ticketUrl && (
           <a
-            href={safeUrl(event.url) ?? undefined}
+            href={ticketUrl}
             target="_blank"
             rel="noopener noreferrer"
             className={styles.ticketsLink}
