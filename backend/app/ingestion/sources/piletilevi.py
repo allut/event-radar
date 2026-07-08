@@ -1,6 +1,5 @@
 """Piletilevi adapter — www.piletilevi.ee/en/tickets/all (paginated Nuxt catalog)."""
 
-import asyncio
 import logging
 import re
 from datetime import datetime
@@ -12,7 +11,7 @@ from bs4 import BeautifulSoup, NavigableString, Tag
 from app.constants import TALLINN_TZ
 from app.ingestion.http_client import http_get, http_post
 from app.ingestion.jsonld import extract_jsonld_event_location
-from app.ingestion.pricing import normalize_currency
+from app.ingestion.pricing import normalize_currency, to_float
 from app.ingestion.sanitize import sanitize_html
 from app.ingestion.selectors import (
     PILETILEVI_ALL_PATH,
@@ -31,19 +30,12 @@ from app.ingestion.selectors import (
     PILETILEVI_TITLE_SELECTOR,
     PILETILEVI_VENUE_SELECTOR,
 )
-from app.ingestion.sources.html_base import HtmlListingAdapter, attr_str
+from app.ingestion.sources.html_base import HtmlListingAdapter, OnceAsync, attr_str
 
 log = logging.getLogger(__name__)
 
 _PILETILEVI_HEIGHT_RE = re.compile(r"/height=\d+/")
 _PILETILEVI_CODE_RE = re.compile(r"/tickets/([A-Za-z0-9]+)")
-
-
-def _to_float(value: Any) -> float | None:
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return None
 
 
 def _price_bounds_from_store(data: dict[str, Any]) -> tuple[float | None, float | None, bool]:
@@ -69,7 +61,7 @@ def _price_bounds_from_store(data: dict[str, Any]) -> tuple[float | None, float 
             for ticket_type in zone.get("ticketTypes") or []:
                 if not isinstance(ticket_type, dict):
                     continue
-                price = _to_float(ticket_type.get("price"))
+                price = to_float(ticket_type.get("price"))
                 if price is None:
                     continue
                 if price > 0:
@@ -165,30 +157,25 @@ class PiletileviAdapter(HtmlListingAdapter):
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
-        self._store_session_ready = False
-        self._store_session_failed = False
-        self._store_session_lock = asyncio.Lock()
+        self._store_session: OnceAsync[bool] = OnceAsync(self._bootstrap_store_session)
 
-    async def _ensure_store_session(self, client: httpx.AsyncClient) -> bool:
-        """Bootstrap (once per run) the Piletilevi store session cookie.
+    async def _bootstrap_store_session(self, client: httpx.AsyncClient) -> bool | None:
+        """Login POST establishing the Piletilevi store session cookie.
 
         The client's cookie jar persists across every detail fetch, so one
-        successful login covers the whole run. On failure, caches the
-        failure so later cards don't re-attempt the login call.
+        successful login covers the whole run — the return value only
+        signals success/failure to OnceAsync, the real effect is the
+        side-effecting cookie.
         """
-        async with self._store_session_lock:
-            if self._store_session_ready or self._store_session_failed:
-                return self._store_session_ready
-            try:
-                await http_post(
-                    client,
-                    PILETILEVI_LOGIN_EXPRESS_URL,
-                    headers={"accept": "application/json"},
-                )
-                self._store_session_ready = True
-            except (httpx.HTTPStatusError, httpx.RequestError):
-                self._store_session_failed = True
-            return self._store_session_ready
+        try:
+            await http_post(
+                client,
+                PILETILEVI_LOGIN_EXPRESS_URL,
+                headers={"accept": "application/json"},
+            )
+            return True
+        except (httpx.HTTPStatusError, httpx.RequestError):
+            return None
 
     def listing_url_for_page(self, page: int) -> str | None:
         return f"{self.source.config['url']}{PILETILEVI_ALL_PATH}?page={page}"
@@ -261,7 +248,7 @@ class PiletileviAdapter(HtmlListingAdapter):
         match = _PILETILEVI_CODE_RE.search(card.get("url") or "")
         if not match:
             return
-        if not await self._ensure_store_session(client):
+        if not await self._store_session.get(client):
             return
 
         try:

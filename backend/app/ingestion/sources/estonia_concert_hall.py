@@ -1,6 +1,5 @@
 """Estonia Concert Hall adapter — concert.ee/en/ (AJAX-loaded all-Estonia listing)."""
 
-import asyncio
 import base64
 import json
 import logging
@@ -19,6 +18,7 @@ from app.constants import (
     TALLINN_TZ,
 )
 from app.ingestion.http_client import http_post
+from app.ingestion.pricing import to_float
 from app.ingestion.sanitize import html_to_text, sanitize_html
 from app.ingestion.selectors import (
     ECH_SITE_NAME_ET,
@@ -46,6 +46,7 @@ from app.ingestion.selectors import (
 from app.ingestion.sources.html_base import (
     HtmlListingAdapter,
     ListingRequest,
+    OnceAsync,
     attr_str,
     full_res_wp_image,
     next_occurrence_year,
@@ -89,13 +90,6 @@ def estonia_concert_hall_localized_text(soup: BeautifulSoup) -> tuple[str | None
     return title, desc
 
 
-def _to_float(value: Any) -> float | None:
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return None
-
-
 def _jwt_claim(token: str, claim: str) -> str | None:
     """Read one claim out of a JWT's payload segment, without verifying its signature.
 
@@ -123,7 +117,8 @@ class EstoniaConcertHallAdapter(HtmlListingAdapter):
     to the Piletilevi ticket store (ESTONIA_CONCERT_HALL_PILETILEVI_URL), so
     that host is allow-listed alongside concert.ee for the SSRF guard. The
     store endpoint requires a fresh per-run session key, bootstrapped once via
-    _piletilevi_session_key() and cached on the adapter instance.
+    self._session (OnceAsync wrapping _bootstrap_session_key()) and cached on
+    the adapter instance.
     """
 
     needs_detail = True
@@ -133,43 +128,32 @@ class EstoniaConcertHallAdapter(HtmlListingAdapter):
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
-        self._session_key: str | None = None
-        self._session_failed = False
-        self._session_lock = asyncio.Lock()
+        self._session: OnceAsync[str] = OnceAsync(self._bootstrap_session_key)
 
-    async def _piletilevi_session_key(self, client: httpx.AsyncClient) -> str | None:
-        """Bootstrap (once per run) and cache the Piletilevi store session key.
+    async def _bootstrap_session_key(self, client: httpx.AsyncClient) -> str | None:
+        """Auth POST + JWT-claim extraction for the Piletilevi store session key.
 
-        Token lifetime is ~15 min, comfortably covering one run's detail
-        fetches. On failure, caches the failure so later cards don't re-attempt.
+        Token lifetime is ~15 min, comfortably covering one run's detail fetches.
         """
-        async with self._session_lock:
-            if self._session_key is not None or self._session_failed:
-                return self._session_key
-            try:
-                resp = await http_post(
-                    client,
-                    ESTONIA_CONCERT_HALL_PILETILEVI_AUTH_URL,
-                    json_body={
-                        "centreId": int(ESTONIA_CONCERT_HALL_PILETILEVI_CENTER),
-                        "shopProviderTag": ESTONIA_CONCERT_HALL_PILETILEVI_SHOP_PROVIDER,
-                    },
-                    headers={"accept": "application/json"},
-                )
-                data = resp.json()
-                token = data.get("accessToken") if isinstance(data, dict) else None
-                session_key = (
-                    _jwt_claim(token, ESTONIA_CONCERT_HALL_PILETILEVI_SESSION_CLAIM)
-                    if isinstance(token, str)
-                    else None
-                )
-            except (httpx.HTTPStatusError, httpx.RequestError, ValueError):
-                session_key = None
-
-            if session_key is None:
-                self._session_failed = True
-            self._session_key = session_key
-            return self._session_key
+        try:
+            resp = await http_post(
+                client,
+                ESTONIA_CONCERT_HALL_PILETILEVI_AUTH_URL,
+                json_body={
+                    "centreId": int(ESTONIA_CONCERT_HALL_PILETILEVI_CENTER),
+                    "shopProviderTag": ESTONIA_CONCERT_HALL_PILETILEVI_SHOP_PROVIDER,
+                },
+                headers={"accept": "application/json"},
+            )
+            data = resp.json()
+            token = data.get("accessToken") if isinstance(data, dict) else None
+            return (
+                _jwt_claim(token, ESTONIA_CONCERT_HALL_PILETILEVI_SESSION_CLAIM)
+                if isinstance(token, str)
+                else None
+            )
+        except (httpx.HTTPStatusError, httpx.RequestError, ValueError):
+            return None
 
     def listing_request(self, page: int) -> ListingRequest | None:
         if page != 1:
@@ -289,7 +273,7 @@ class EstoniaConcertHallAdapter(HtmlListingAdapter):
             return
         pid = match.group(1)
 
-        session_key = await self._piletilevi_session_key(client)
+        session_key = await self._session.get(client)
         if session_key is None:
             return
 
@@ -318,12 +302,12 @@ class EstoniaConcertHallAdapter(HtmlListingAdapter):
         min_prices = [
             f
             for s in sections
-            if isinstance(s, dict) and (f := _to_float(s.get("minPrice"))) is not None
+            if isinstance(s, dict) and (f := to_float(s.get("minPrice"))) is not None
         ]
         max_prices = [
             f
             for s in sections
-            if isinstance(s, dict) and (f := _to_float(s.get("maxPrice"))) is not None
+            if isinstance(s, dict) and (f := to_float(s.get("maxPrice"))) is not None
         ]
         if not min_prices or not max_prices:
             return

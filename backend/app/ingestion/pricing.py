@@ -25,6 +25,14 @@ def normalize_currency(raw: Any, has_price: bool) -> str | None:
     return DEFAULT_CURRENCY if has_price else None
 
 
+def to_float(value: Any) -> float | None:
+    """Coerce a raw JSON value to float, or None if not numeric."""
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
 _PRICE_FROM_STRING_RE = re.compile(PRICE_FROM_STRING_RE, re.IGNORECASE)
 
 

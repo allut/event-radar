@@ -9,9 +9,10 @@ subclass it — new HTML-scraped sources should too, per CLAUDE.md.
 import asyncio
 import logging
 import re
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import date, datetime
-from typing import Any
+from typing import Any, Generic, TypeVar
 from urllib.parse import urlsplit
 
 import httpx
@@ -35,6 +36,39 @@ from app.ingestion.selectors import WP_THUMBNAIL_HOSTS
 log = logging.getLogger(__name__)
 
 _WP_THUMB_SUFFIX_RE = re.compile(r"-\d+x\d+(\.\w+)$")
+
+T = TypeVar("T")
+
+
+class OnceAsync(Generic[T]):
+    """Lazy, once-per-run, failure-cached async bootstrap.
+
+    Runs an async factory at most once per adapter instance (lock-guarded),
+    caches success for reuse by every later call, and separately caches
+    failure so subsequent calls don't re-attempt within the same run. Use
+    for a session/token bootstrap that other detail-page fetches depend on
+    (e.g. a login call whose result is a cookie-jar side effect, or a call
+    that returns a session token). The factory must catch its own transient
+    errors and return None on failure.
+    """
+
+    def __init__(
+        self, factory: Callable[[httpx.AsyncClient], Awaitable[T | None]]
+    ) -> None:
+        self._factory = factory
+        self._value: T | None = None
+        self._failed = False
+        self._lock = asyncio.Lock()
+
+    async def get(self, client: httpx.AsyncClient) -> T | None:
+        async with self._lock:
+            if self._value is not None or self._failed:
+                return self._value
+            value = await self._factory(client)
+            if value is None:
+                self._failed = True
+            self._value = value
+            return self._value
 
 
 def full_res_wp_image(url: str | None) -> str | None:
