@@ -259,18 +259,6 @@ LOCALIZED_TEXT_HREFLANG_NORMALIZE: dict[str, str] = {"ru-ru": "ru", "et-ee": "et
 LOCALIZED_TEXT_MAX_TITLE_CHARS = 500
 LOCALIZED_TEXT_MAX_DESC_CHARS = 5000
 
-# app.ingestion.language_split: per-block language detection, used to split a
-# single source field that concatenates two languages in one blob (no
-# hreflang/locale-page fetch to rely on) into per-locale segments.
-# Blocks shorter than this are language-agnostic noise (names/URLs/dates) —
-# skipped for detection, but still kept in the reconstructed output by
-# carrying forward the nearest determined block's locale.
-LANGUAGE_SPLIT_MIN_BLOCK_CHARS = 20
-# A locale must cover more than this share of total detected text to count as
-# a genuine bilingual segment — guards against a single stray foreign phrase
-# fragmenting an otherwise-monolingual description.
-LANGUAGE_SPLIT_MIN_LOCALE_SHARE = 0.15
-
 ORGANIZER_MIN_EVENTS_FOR_AUTO_ADD = 3
 ORGANIZER_NAME_MAX_LEN = 200
 FIENTA_ORGANIZER_SCAN_LIMIT = 1000

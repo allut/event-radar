@@ -4,7 +4,6 @@ NormalizedEvent, slug generation, ingest skip-id loading, geo bbox gates, and
 SourceAdapter.run(): fetch -> raw_events -> normalize -> events(draft).
 """
 
-import asyncio
 import hashlib
 import logging
 import re
@@ -31,7 +30,6 @@ from app.constants import (
 )
 from app.ingestion.content_filters import is_explicit_text, is_non_event_text
 from app.ingestion.http_client import safe_external_url, safe_fetchable_url
-from app.ingestion.language_split import fill_missing_locales
 from app.models.models import Event, EventSource, IngestionRun, RawEvent, Source
 
 log = logging.getLogger(__name__)
@@ -77,23 +75,6 @@ class NormalizedEvent:
         if self.venue_address is None:
             self.lat = None
             self.lng = None
-
-
-def _fill_missing_locales_via_split(normalized: NormalizedEvent) -> None:
-    """Mutate ``normalized`` in place, filling any ``*_localized`` locale keys
-    still missing after the adapter's own per-locale fetch by heuristically
-    splitting a single field that concatenates two languages in one blob.
-    Never overwrites a locale already populated from a real page fetch.
-    """
-    normalized.title_localized = fill_missing_locales(
-        normalized.title_localized, normalized.title
-    )
-    normalized.description_localized = fill_missing_locales(
-        normalized.description_localized, normalized.description
-    )
-    normalized.important_info_localized = fill_missing_locales(
-        normalized.important_info_localized, normalized.important_info
-    )
 
 
 def _make_slug(title: str, starts_at: datetime, external_id: str) -> str:
@@ -160,25 +141,6 @@ class SourceAdapter(ABC):
         """Extract the external ID to store on RawEvent. Override for non-'id' key sources."""
         v = raw.get("id", "")
         return str(v) if v else None
-
-    @staticmethod
-    async def _enrich_locales(normalized: NormalizedEvent) -> None:
-        """Heuristic bilingual-content split for still-missing locale keys.
-
-        Offloaded to a thread: lingua's per-block n-gram detection is
-        CPU-bound and run() shares an event loop with the FastAPI app — left
-        inline it would stall request handling during ingestion. Isolated
-        try/except: one pathological input must not abort the source's batch
-        over a nice-to-have enrichment.
-        """
-        try:
-            await asyncio.to_thread(_fill_missing_locales_via_split, normalized)
-        except Exception:
-            log.warning(
-                "language split failed for external_id=%s, continuing without it",
-                normalized.external_id,
-                exc_info=True,
-            )
 
     async def _insert_event(
         self, db: AsyncSession, normalized: NormalizedEvent
@@ -260,9 +222,7 @@ class SourceAdapter(ABC):
     ) -> bool:
         """Persist one raw item and, when new, its normalized Event.
 
-        Returns True when a new Event row was inserted. Locale enrichment is
-        deferred until after the dup/seen checks — HTML parsing + language
-        detection is wasted work for an item about to be skipped.
+        Returns True when a new Event row was inserted.
         """
         raw_event = RawEvent(
             source_id=self.source.id,
@@ -284,7 +244,6 @@ class SourceAdapter(ABC):
             raw_event.processed_at = datetime.now(tz=TALLINN_TZ)
             return False
 
-        await self._enrich_locales(normalized)
         if not await self._insert_event(db, normalized):
             return False
 
