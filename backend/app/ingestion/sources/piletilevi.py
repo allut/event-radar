@@ -8,11 +8,11 @@ from typing import Any
 import httpx
 from bs4 import BeautifulSoup, NavigableString, Tag
 
-from app.constants import TALLINN_TZ
+from app.constants import LOCALIZED_TEXT_MAX_DESC_CHARS, TALLINN_TZ
 from app.ingestion.http_client import http_get, http_post
-from app.ingestion.jsonld import extract_jsonld_event_location
+from app.ingestion.jsonld import extract_jsonld_event_location, extract_jsonld_event_text
 from app.ingestion.pricing import normalize_currency, to_float
-from app.ingestion.sanitize import sanitize_html
+from app.ingestion.sanitize import html_to_text, sanitize_html
 from app.ingestion.selectors import (
     PILETILEVI_ALL_PATH,
     PILETILEVI_CARD_SELECTOR,
@@ -142,6 +142,28 @@ def _piletilevi_important_info(soup: BeautifulSoup, locale: str = "en") -> str |
     return raw.strip() or None if raw else None
 
 
+def piletilevi_localized_text(soup: BeautifulSoup) -> tuple[str | None, str | None]:
+    """Extract (title, description) from a Piletilevi locale-variant detail page.
+
+    Title comes from schema.org JSON-LD (``<h1>`` fallback inside
+    extract_jsonld_event_text) — Piletilevi's JSON-LD ``name`` is reliable.
+    Description comes from the same ``.event__description`` HTML block
+    ``parse_detail`` already uses, not the JSON-LD ``description`` string —
+    that string is source-flattened plain text with paragraph breaks already
+    collapsed, gluing sentences together (e.g. "...maagia.Lisainfo: ...").
+    """
+    title, _ = extract_jsonld_event_text(soup)
+    desc_tag = soup.select_one(PILETILEVI_DETAIL_DESC_SELECTOR)
+    desc: str | None = None
+    if desc_tag:
+        html = sanitize_html(desc_tag.decode_contents())
+        if html:
+            desc = html if len(html) <= LOCALIZED_TEXT_MAX_DESC_CHARS else (
+                (html_to_text(html) or "")[:LOCALIZED_TEXT_MAX_DESC_CHARS] or None
+            )
+    return title, desc
+
+
 class PiletileviAdapter(HtmlListingAdapter):
     """piletilevi.ee/en/tickets/all — paginated catalog (Nuxt SSR markup).
 
@@ -231,6 +253,11 @@ class PiletileviAdapter(HtmlListingAdapter):
         self, soup: BeautifulSoup, locale: str
     ) -> str | None:
         return _piletilevi_important_info(soup, locale)
+
+    def extract_localized_text(
+        self, soup: BeautifulSoup
+    ) -> tuple[str | None, str | None]:
+        return piletilevi_localized_text(soup)
 
     async def parse_detail(
         self, client: httpx.AsyncClient, soup: BeautifulSoup, card: dict[str, Any]

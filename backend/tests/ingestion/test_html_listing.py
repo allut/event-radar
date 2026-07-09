@@ -43,6 +43,7 @@ from app.ingestion.sources.piletilevi import (
     _piletilevi_important_info,
     _price_bounds_from_store,
     full_res_piletilevi_image,
+    piletilevi_localized_text,
 )
 
 
@@ -472,6 +473,21 @@ PILETILEVI_DETAIL_ET_WITH_IMPORTANT_INFO_HTML = """
 """
 
 
+PILETILEVI_DETAIL_RU_WITH_IMPORTANT_INFO_HTML = """
+<html><body>
+  <div class="event__description">Чудесный джазовый вечер с местными музыкантами.</div>
+  <div class="white-rounded-block">
+    <h2 class="text-20 font-bold pb-6">Дополнительная информация</h2>
+    <div class="collapsable-container">Возрастное ограничение: 18+. Язык: английский. Продолжительность: 2 часа.</div>
+  </div>
+  <div class="white-rounded-block">
+    <h2 class="text-20 font-bold pb-6">Место проведения</h2>
+    <div class="collapsable-container">Джаз-клуб, Таллин</div>
+  </div>
+</body></html>
+"""
+
+
 PILETILEVI_DETAIL_WITH_BRACKET_ARTIFACT_HTML = """
 <html><body>
   <div class="event__description">A wonderful jazz evening with local musicians.</div>
@@ -479,6 +495,18 @@ PILETILEVI_DETAIL_WITH_BRACKET_ARTIFACT_HTML = """
     <h2 class="text-20 font-bold pb-6">Important information</h2>
     [<p>Ticket prices include fees.</p><p>Age limit: 18+.</p>]
   </div>
+</body></html>
+"""
+
+# JSON-LD description is source-flattened, glued plain text (no paragraph
+# breaks) — the .event__description HTML block below is the same content
+# with real <p> structure, as Piletilevi's live pages actually carry both.
+PILETILEVI_DETAIL_WITH_MULTI_PARAGRAPH_DESC_HTML = """
+<html><body>
+<script type="application/ld+json">
+{"@type": "Event", "name": "Summer Flower Ball", "description": "First paragraph text.Second paragraph glued on."}
+</script>
+  <div class="event__description"><p>First paragraph text.</p><p>Second paragraph glued on.</p></div>
 </body></html>
 """
 
@@ -686,9 +714,27 @@ class TestPiletileviParseDetail:
         assert result == "Age limit: 18+. Language: English. Duration: 2 hours."
 
     def test_important_info_unknown_locale_falls_back_to_en(self):
+        # "fi" has no heading mapping in PILETILEVI_IMPORTANT_INFO_HEADINGS,
+        # so it falls back to the en heading text — "ru" now has its own
+        # mapping (see test_important_info_ru_locale_uses_russian_heading)
+        # and is no longer a stand-in for "unmapped locale".
         soup = BeautifulSoup(PILETILEVI_DETAIL_WITH_IMPORTANT_INFO_HTML, "html.parser")
-        result = _piletilevi_important_info(soup, "ru")
+        result = _piletilevi_important_info(soup, "fi")
         assert result == "Age limit: 18+. Language: English. Duration: 2 hours."
+
+    def test_important_info_ru_locale_uses_russian_heading(self):
+        soup = BeautifulSoup(
+            PILETILEVI_DETAIL_RU_WITH_IMPORTANT_INFO_HTML, "html.parser"
+        )
+        result = _piletilevi_important_info(soup, "ru")
+        assert result == (
+            "Возрастное ограничение: 18+. Язык: английский. "
+            "Продолжительность: 2 часа."
+        )
+
+    def test_important_info_ru_locale_absent_returns_none(self):
+        soup = BeautifulSoup(PILETILEVI_DETAIL_WITH_IMPORTANT_INFO_HTML, "html.parser")
+        assert _piletilevi_important_info(soup, "ru") is None
 
     def test_stray_bracket_fragment_artifacts_excluded(self):
         # Piletilevi's Nuxt SSR markup wraps the block's real <p> content in
@@ -702,6 +748,49 @@ class TestPiletileviParseDetail:
         assert not result.startswith("[")
         assert not result.endswith("]")
         assert result == "<p>Ticket prices include fees.</p><p>Age limit: 18+.</p>"
+
+
+class TestPiletileviLocalizedText:
+    def test_description_keeps_paragraph_structure_not_jsonld_glued_text(self):
+        soup = BeautifulSoup(
+            PILETILEVI_DETAIL_WITH_MULTI_PARAGRAPH_DESC_HTML, "html.parser"
+        )
+        title, desc = piletilevi_localized_text(soup)
+        assert title == "Summer Flower Ball"
+        assert desc == "<p>First paragraph text.</p><p>Second paragraph glued on.</p>"
+        # The bug: JSON-LD's own description string glues sentences together.
+        assert desc is not None
+        assert "on.Second" not in desc
+
+    def test_title_from_jsonld_desc_none_when_no_description_selector(self):
+        soup = BeautifulSoup(PILETILEVI_DETAIL_WITH_LOCATION_HTML, "html.parser")
+        title, desc = piletilevi_localized_text(soup)
+        assert title == "Jazz Night"
+        assert desc == "A wonderful jazz evening with local musicians."
+
+    def test_no_jsonld_and_no_description_selector_returns_none_none(self):
+        soup = BeautifulSoup("<html><body><p>Nothing here</p></body></html>", "html.parser")
+        title, desc = piletilevi_localized_text(soup)
+        assert title is None
+        assert desc is None
+
+    def test_oversized_description_truncated_to_plain_text_cap(self):
+        # Mirrors kumu_localized_text/estonia_concert_hall_localized_text: an
+        # over-cap HTML description falls back to plain text truncated at
+        # LOCALIZED_TEXT_MAX_DESC_CHARS, rather than storing unbounded HTML.
+        from app.constants import LOCALIZED_TEXT_MAX_DESC_CHARS
+
+        long_paragraph = "word " * (LOCALIZED_TEXT_MAX_DESC_CHARS // 4)
+        html = (
+            "<html><body>"
+            f'<div class="event__description"><p>{long_paragraph}</p></div>'
+            "</body></html>"
+        )
+        soup = BeautifulSoup(html, "html.parser")
+        _, desc = piletilevi_localized_text(soup)
+        assert desc is not None
+        assert len(desc) <= LOCALIZED_TEXT_MAX_DESC_CHARS
+        assert "<p>" not in desc
 
 
 class TestPriceBoundsFromStore:
@@ -1674,12 +1763,27 @@ class TestEstoniaConcertHallLocalizedText:
 
 class TestExtractLocalizedTextHook:
     def test_base_default_delegates_to_jsonld(self):
-        """HtmlListingAdapter.extract_localized_text uses JSON-LD (Piletilevi path)."""
-        adapter = _piletilevi_adapter()
+        """HtmlListingAdapter.extract_localized_text default uses JSON-LD.
+
+        Uses a bare _StubAdapter (not Piletilevi, which now overrides this
+        hook with piletilevi_localized_text — see TestPiletileviLocalizedText)
+        to exercise the base class's own default behavior in isolation.
+        """
+        adapter = _StubAdapter(_make_source(), pages_cards=[])
         soup = BeautifulSoup(_PILETILEVI_DETAIL_HTML_WITH_JSONLD, "html.parser")
         title, desc = adapter.extract_localized_text(soup)
         assert title == "Jazz Night"
         assert desc == "A jazz evening."
+
+    def test_piletilevi_adapter_uses_html_description_not_jsonld(self):
+        """PiletileviAdapter overrides the hook to avoid the glued JSON-LD text."""
+        adapter = _piletilevi_adapter()
+        soup = BeautifulSoup(
+            PILETILEVI_DETAIL_WITH_MULTI_PARAGRAPH_DESC_HTML, "html.parser"
+        )
+        title, desc = adapter.extract_localized_text(soup)
+        assert title == "Summer Flower Ball"
+        assert desc == "<p>First paragraph text.</p><p>Second paragraph glued on.</p>"
 
     def test_kumu_adapter_uses_og_title(self):
         adapter = _kumu_adapter()

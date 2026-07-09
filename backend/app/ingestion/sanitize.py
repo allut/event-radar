@@ -43,6 +43,9 @@ def _block_tags_to_breaks(html: str) -> str:
 
 
 _WHITESPACE_RUN_RE = re.compile(r"[ \t\n\r\f\v]+")
+# Block containers eligible for empty-block removal — HTML_BLOCK_BOUNDARY_TAGS
+# minus "br" (a void element, never a "container" that can be emptied).
+_EMPTY_BLOCK_TAGS = HTML_BLOCK_BOUNDARY_TAGS - frozenset({"br"})
 
 
 def _at_block_edge(node: Any, inline_tags: frozenset[str], leading: bool) -> bool:
@@ -96,9 +99,33 @@ def _collapse_text_whitespace(html: str) -> str:
         if _at_block_edge(node, inline_tags, leading=False):
             collapsed = collapsed.rstrip(" ")
         node.replace_with(collapsed)
+    _strip_empty_blocks(soup)
     # BeautifulSoup serializes void elements as "<br/>"; normalize back to the
     # bare "<br>" form the rest of sanitize_html and its callers expect.
     return re.sub(r"<br\s*/>", "<br>", str(soup))
+
+
+def _strip_empty_blocks(soup: BeautifulSoup) -> None:
+    """Remove block containers with no visible text, in place.
+
+    nh3 keeps empty allowed tags — a source ending its markup with a bare
+    ``<p></p>``, ``<p><br></p>``, ``<p>&nbsp;</p>``, or ``<p><span></span></p>``
+    (Fienta/Piletilevi/ECH all do this) survives sanitization and renders as a
+    visible blank line under the frontend's ``white-space: pre-wrap``. Iterates
+    to a fixed point so emptying a ``<li>`` can cascade to its now-empty parent
+    ``<ul>``/``<ol>``. ``get_text(strip=True)`` treats U+00A0 (nbsp) as
+    whitespace (unlike the ASCII-only whitespace collapse above), so an
+    nbsp-only block counts as empty here — intentional, since a lone nbsp
+    inside an otherwise-empty container is formatting noise, not content.
+    """
+    while True:
+        removed = False
+        for tag in soup.find_all(list(_EMPTY_BLOCK_TAGS)):
+            if not tag.get_text(strip=True):
+                tag.decompose()
+                removed = True
+        if not removed:
+            break
 
 
 def sanitize_html(text: str | None) -> str | None:
@@ -126,6 +153,13 @@ def sanitize_html(text: str | None) -> str | None:
     if not cleaned:
         return None
     cleaned = _collapse_text_whitespace(cleaned)
+    # Re-strip edge <br> runs — removing a trailing/leading empty block above
+    # can expose a bare <br> that the earlier _EDGE_BR_RE pass ran before it
+    # existed (e.g. "<p>Real content</p><br><p></p>" → removing the empty <p>
+    # leaves a dangling trailing <br>).
+    cleaned = _EDGE_BR_RE.sub("", cleaned)
+    if not cleaned:
+        return None
     # Strip ASCII whitespace only — bare .strip() also treats U+00A0 (nbsp) as
     # whitespace and would delete an intentional leading/trailing &nbsp;.
     return cleaned.strip(" \t\n\r\f\v") or None

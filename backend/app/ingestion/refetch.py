@@ -66,18 +66,24 @@ from app.ingestion.sources.estonia_concert_hall import (
     estonia_concert_hall_localized_text,
 )
 from app.ingestion.sources.kumu import kumu_localized_text
+from app.ingestion.sources.piletilevi import piletilevi_localized_text
 from app.models.models import Event
 
 log = logging.getLogger(__name__)
 
-# Maps event URL hostname → locale-text extractor for sources whose detail pages
-# carry no schema.org Event JSON-LD block (KUMU, ECH). Normalized hostname
-# (leading "www." stripped) so both bare and www variants match.
+# Maps event URL hostname → locale-text extractor. Default (no entry) is the
+# generic JSON-LD reader (extract_jsonld_event_text). KUMU/ECH need a custom
+# extractor because their detail pages carry no schema.org Event JSON-LD block
+# at all; Piletilevi needs one because its JSON-LD description is
+# source-flattened plain text with paragraph breaks collapsed (glues
+# sentences together) — the HTML .event__description block preserves them.
+# Normalized hostname (leading "www." stripped) so both bare and www variants match.
 _LocaleTextExtractor = Callable[[BeautifulSoup], tuple[str | None, str | None]]
 
 _LOCALE_TEXT_EXTRACTORS: dict[str, _LocaleTextExtractor] = {
     "kumu.ekm.ee": kumu_localized_text,
     "concert.ee": estonia_concert_hall_localized_text,
+    "piletilevi.ee": piletilevi_localized_text,
 }
 
 

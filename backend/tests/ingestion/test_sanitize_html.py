@@ -241,6 +241,45 @@ class TestSanitizeHtml:
         assert result2 is not None
         assert result2 == "<p>before <b>trailing space here</b></p>"
 
+    def test_trailing_empty_paragraph_removed(self) -> None:
+        result = sanitize_html("<p>Real content</p><p></p>")
+        assert result == "<p>Real content</p>"
+
+    def test_trailing_empty_paragraph_with_br_removed(self) -> None:
+        result = sanitize_html("<p>Real content</p><p><br></p>")
+        assert result == "<p>Real content</p>"
+
+    def test_trailing_empty_paragraph_with_span_removed(self) -> None:
+        result = sanitize_html("<p>Real content</p><p><span></span></p>")
+        assert result == "<p>Real content</p>"
+
+    def test_trailing_nbsp_only_paragraph_removed(self) -> None:
+        result = sanitize_html("<p>Real content</p><p>&nbsp;</p>")
+        assert result == "<p>Real content</p>"
+
+    def test_leading_and_multiple_trailing_empty_paragraphs_removed(self) -> None:
+        # Regression case matching event id 5: two stacked empty trailing <p>s.
+        result = sanitize_html("<p></p><p>Real content</p><p></p><p><br></p>")
+        assert result == "<p>Real content</p>"
+
+    def test_empty_list_item_and_now_empty_list_both_removed(self) -> None:
+        # Emptying the only <li> must cascade to remove the now-empty <ul>.
+        result = sanitize_html("<p>Before</p><ul><li></li></ul>")
+        assert result == "<p>Before</p>"
+
+    def test_non_empty_list_item_survives_alongside_empty_sibling(self) -> None:
+        result = sanitize_html("<ul><li>Keep me</li><li></li></ul>")
+        assert result is not None
+        assert "<li>Keep me</li>" in result
+        assert result.count("<li>") == 1
+
+    def test_bare_trailing_br_exposed_by_empty_block_removal_is_stripped(self) -> None:
+        # A bare <br> (from a stray div-to-br conversion) immediately before a
+        # trailing empty <p> is not at the string edge until that <p> is
+        # removed — must be re-caught by the second edge-br pass.
+        result = sanitize_html("<p>Real content</p><br><p></p>")
+        assert result == "<p>Real content</p>"
+
     def test_edge_nbsp_preserved(self) -> None:
         # A bare .strip() also treats U+00A0 as whitespace and would delete a
         # leading/trailing &nbsp; — must survive at the string boundary too.

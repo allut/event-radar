@@ -22,10 +22,12 @@ PILETILEVI_IMAGE_SELECTOR = "img.card__image"
 PILETILEVI_DETAIL_DESC_SELECTOR = ".event__description"
 # No stable class on the "Important information" h2 (generic Tailwind
 # utilities) — only two h2s exist on the page, so anchoring on heading text
-# is unambiguous. ET uses "Hinnainfo"; EN uses "Important information".
+# is unambiguous. ET uses "Hinnainfo"; EN uses "Important information"; RU
+# uses "Дополнительная информация" (verified live on piletilevi.ee/ru/tickets/...).
 PILETILEVI_IMPORTANT_INFO_HEADINGS: dict[str, str] = {
     "en": "Important information",
     "et": "Hinnainfo",
+    "ru": "Дополнительная информация",
 }
 
 # Piletilevi image height parameter — the listing page pins height=252; the
