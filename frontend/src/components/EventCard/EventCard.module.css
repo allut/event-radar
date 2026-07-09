@@ -11,10 +11,12 @@
 }
 
 .featured {
+  border-color: var(--accent-hover-border);
   box-shadow: var(--shadow-lead);
 }
 
 .featured:hover {
+  border-color: var(--accent-hover-border);
   box-shadow: var(--shadow-lead);
 }
 

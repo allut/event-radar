@@ -164,15 +164,13 @@
   --shadow-card:        0 4px 20px rgba(0, 0, 0, 0.25);
   --shadow-card-hover:  0 8px 24px rgba(0, 0, 0, 0.3);
   --shadow-accent:      0 8px 32px rgba(200, 146, 42, 0.1);
-  --shadow-lead:        0 24px 64px rgba(0, 0, 0, 0.45), 0 0 60px var(--accent-glow);
+  --shadow-lead:        0 24px 64px rgba(0, 0, 0, 0.45);
 
   /* Ring shadows (geometry + token colors) */
   --shadow-focus-ring:    0 0 0 3px var(--accent-glow);
   --shadow-selected-ring: 0 0 0 1px var(--accent), var(--shadow-accent);
 
   /* Atmosphere */
-  --grain-opacity: 0.035;
-  --noise-bg: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
   --rule: 1px solid var(--border-subtle);
 
   /* Decoration */
@@ -196,20 +194,6 @@ html {
 body {
   min-height: 100vh;
   position: relative;
-  background-image:
-    radial-gradient(ellipse 80% 50% at 20% 10%, rgba(200, 146, 42, 0.04) 0%, transparent 60%),
-    radial-gradient(ellipse 60% 40% at 80% 90%, rgba(200, 146, 42, 0.04) 0%, transparent 60%),
-    radial-gradient(ellipse 50% 40% at 50% 50%, rgba(200, 146, 42, 0.03) 0%, transparent 70%);
-}
-
-body::before {
-  content: '';
-  position: fixed;
-  inset: 0;
-  background-image: var(--noise-bg);
-  opacity: var(--grain-opacity);
-  mix-blend-mode: overlay;
-  pointer-events: none;
 }
 
 #root {
