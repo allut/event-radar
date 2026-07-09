@@ -150,7 +150,7 @@
 }
 
 .featuredTitle {
-  font-size: var(--heading-3xl);
+  font-size: var(--heading-lg);
   margin-bottom: var(--space-4);
 }
 
