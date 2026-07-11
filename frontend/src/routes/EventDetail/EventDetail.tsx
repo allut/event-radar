@@ -88,6 +88,10 @@ export default function EventDetail() {
         </div>
 
         <div className={styles.content}>
+          {data.has_free_tier && (
+            <p className={styles.freeTierHint}>{t('price_free_options_hint', locale)}</p>
+          )}
+
           <div className={styles.meta}>
             <time className={styles.time}>{formatEventDateTime(data.starts_at, locale)}</time>
             {data.ends_at && (
@@ -98,10 +102,6 @@ export default function EventDetail() {
           </div>
 
           <h1 className={styles.title}>{data.title}</h1>
-
-          {data.has_free_tier && (
-            <p className={styles.freeTierHint}>{t('price_free_options_hint', locale)}</p>
-          )}
 
           {data.why_go.length > 0 && (
             <section className={styles.section}>
