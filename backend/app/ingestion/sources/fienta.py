@@ -74,7 +74,8 @@ def _extract_locale_text(
     soup: BeautifulSoup, _locale: str
 ) -> tuple[str | None, str | None, str | None]:
     """Locale-page extractor for fetch_locale_variants: JSON-LD title, and
-    DOM rich-text HTML (preferred) or JSON-LD plain text for the description."""
+    DOM rich-text HTML (preferred) or JSON-LD plain text for the description.
+    """
     title, jsonld_desc = extract_jsonld_event_text(soup)
     rich_text_tag = soup.select_one(FIENTA_DESCRIPTION_SELECTOR)
     if rich_text_tag:

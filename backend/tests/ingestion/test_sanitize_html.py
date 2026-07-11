@@ -11,7 +11,7 @@ from bs4 import BeautifulSoup
 from app.constants import LOCALIZED_TEXT_FIENTA_LOCALES
 from app.ingestion.http_client import AsyncRateLimiter
 from app.ingestion.locale_urls import locale_from_html_lang
-from app.ingestion.sanitize import html_to_text, sanitize_html
+from app.ingestion.sanitize import decode_cfemail, html_to_text, sanitize_html
 from app.ingestion.sources.fienta import FientaAdapter
 
 
@@ -287,6 +287,60 @@ class TestSanitizeHtml:
         assert result == "\xa0Foo"
         result = sanitize_html("Foo&nbsp;")
         assert result == "Foo\xa0"
+
+    def test_decode_cfemail_known_vector(self) -> None:
+        assert (
+            decode_cfemail("d5bfb4bbb4fbb9b0a3bca1bcbbb495b2b8b4bcb9fbb6bab8")
+            == "jana.levitina@gmail.com"
+        )
+
+    def test_decode_cfemail_malformed_returns_none(self) -> None:
+        assert decode_cfemail("") is None
+        assert decode_cfemail("z") is None
+        assert decode_cfemail("abc") is None  # odd length
+        assert decode_cfemail("not-hex-at-all") is None
+
+    def test_cfemail_anchor_form_decoded(self) -> None:
+        # Cloudflare's `__cf_email__`-classed anchor, hex in the href fragment
+        # — the form actually present in Fienta's et-locale pages.
+        html = (
+            '<p>Contact: <a href="/cdn-cgi/l/email-protection'
+            '#d5bfb4bbb4fbb9b0a3bca1bcbbb495b2b8b4bcb9fbb6bab8" '
+            'class="__cf_email__">[email&#160;protected]</a></p>'
+        )
+        result = sanitize_html(html)
+        assert result is not None
+        assert "jana.levitina@gmail.com" in result
+        assert "[email" not in result
+        assert "cdn-cgi" not in result
+
+    def test_cfemail_data_span_form_decoded(self) -> None:
+        html = (
+            '<p>Contact: <span class="__cf_email__" '
+            'data-cfemail="d5bfb4bbb4fbb9b0a3bca1bcbbb495b2b8b4bcb9fbb6bab8">'
+            "[email&#160;protected]</span></p>"
+        )
+        result = sanitize_html(html)
+        assert result is not None
+        assert "jana.levitina@gmail.com" in result
+        assert "[email" not in result
+
+    def test_cfemail_absent_leaves_html_unchanged(self) -> None:
+        html = "<p>No obfuscated email here.</p>"
+        result = sanitize_html(html)
+        assert result == html
+
+    def test_cfemail_malformed_hex_passes_through(self) -> None:
+        # A malformed/garbage hex payload must not raise — the placeholder
+        # anchor is left as-is (nh3 then strips the disallowed class/href
+        # down to a bare anchor).
+        html = (
+            '<a href="/cdn-cgi/l/email-protection#zz" class="__cf_email__">'
+            "[email protected]</a>"
+        )
+        result = sanitize_html(html)
+        assert result is not None
+        assert "[email protected]" in result
 
 
 class TestHtmlToText:

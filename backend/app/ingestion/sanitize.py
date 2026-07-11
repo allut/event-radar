@@ -1,8 +1,9 @@
 """HTML sanitization for stored event text.
 
 Strict nh3 allowlist plus the pre/post passes that keep line structure and
-whitespace sane (block wrappers to <br>, whitespace-run collapsing), and the
-plain-text converter used by every non-HTML consumer.
+whitespace sane (block wrappers to <br>, whitespace-run collapsing, Cloudflare
+email-protection decoding), and the plain-text converter used by every
+non-HTML consumer.
 """
 
 import re
@@ -22,6 +23,60 @@ from app.constants import (
 
 _MULTI_BR_RE = re.compile(r"(?:<br\s*/?>\s*){%d,}" % (HTML_SANITIZE_MAX_CONSECUTIVE_BR + 1))
 _EDGE_BR_RE = re.compile(r"^(?:\s*<br\s*/?>\s*)+|(?:\s*<br\s*/?>\s*)+$")
+
+# Fast-path markers: skip parsing a description that carries neither form of
+# Cloudflare's email obfuscation (most descriptions have none).
+_CF_EMAIL_MARKERS = ("__cf_email__", "email-protection")
+
+
+def decode_cfemail(hex_str: str) -> str | None:
+    """Decode a Cloudflare email-protection hex payload to a plain address.
+
+    Cloudflare XOR-obfuscates the address against naive scrapers: the first
+    byte is the XOR key, applied to every remaining byte. Returns None on
+    malformed input (odd length, non-hex, empty) rather than raising, since
+    the input is arbitrary source-page content.
+    """
+    try:
+        raw = bytes.fromhex(hex_str)
+    except ValueError:
+        return None
+    if len(raw) < 2:
+        return None
+    key = raw[0]
+    return "".join(chr(b ^ key) for b in raw[1:])
+
+
+def deobfuscate_cf_emails(html: str) -> str:
+    """Replace Cloudflare "email protection" markup with the decoded address.
+
+    Cloudflare hides real addresses behind client-side-JS-decoded markup; our
+    scraper never runs that JS, so without this pass only the visible
+    "[email protected]" placeholder text survives sanitization. Handles both
+    forms Cloudflare emits: a <span data-cfemail="hex"> node, and an anchor
+    whose href fragment carries the hex (`/cdn-cgi/l/email-protection#hex`) —
+    the latter covers both the `__cf_email__`-classed anchor and a bare one.
+    Replaces each matched node with the decoded address as a plain-text node
+    (never a link — see sanitize_html's docstring for why).
+    """
+    if not any(marker in html for marker in _CF_EMAIL_MARKERS):
+        return html
+    soup = BeautifulSoup(html, "html.parser")
+    changed = False
+    for span in soup.find_all(attrs={"data-cfemail": True}):
+        decoded = decode_cfemail(str(span["data-cfemail"]))
+        if decoded is not None:
+            span.replace_with(decoded)
+            changed = True
+    for anchor in soup.find_all("a", href=True):
+        href = str(anchor["href"])
+        if "/cdn-cgi/l/email-protection#" not in href:
+            continue
+        decoded = decode_cfemail(href.rsplit("#", 1)[-1])
+        if decoded is not None:
+            anchor.replace_with(decoded)
+            changed = True
+    return str(soup) if changed else html
 
 
 def _block_tags_to_breaks(html: str) -> str:
@@ -131,7 +186,9 @@ def _strip_empty_blocks(soup: BeautifulSoup) -> None:
 def sanitize_html(text: str | None) -> str | None:
     """Sanitize HTML with a strict allowlist; plain text passes through unchanged.
 
-    Safe for storing in description/important_info fields. nh3/ammonia forces
+    Safe for storing in description/important_info fields. Cloudflare
+    email-protection markup is decoded first (see deobfuscate_cf_emails), before
+    nh3 strips the attributes that carry the encoded address. nh3/ammonia forces
     rel="noopener" on links, drops javascript:/event-handler attrs, and HTML-escapes
     any disallowed tags so they render as visible text rather than markup. Block
     wrappers in HTML_BLOCK_TAGS_TO_BREAK are converted to <br> first (see
@@ -139,6 +196,7 @@ def sanitize_html(text: str | None) -> str | None:
     """
     if text is None:
         return None
+    text = deobfuscate_cf_emails(text)
     cleaned = nh3.clean(
         _block_tags_to_breaks(text),
         tags=set(HTML_SANITIZE_ALLOWED_TAGS),
