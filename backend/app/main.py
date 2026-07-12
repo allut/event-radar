@@ -39,6 +39,7 @@ from app.ranking.score import build_daily_feeds
 from app.rate_limit import limiter, rate_limit_exceeded_handler
 from app.routers.admin import router as admin_router
 from app.routers.auth import router as auth_router
+from app.routers.browse import router as browse_router
 from app.routers.events import router as events_router
 from app.routers.feed import router as feed_router
 from app.routers.feedback import router as feedback_router
@@ -300,6 +301,7 @@ app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
 
 app.include_router(admin_router)
 app.include_router(auth_router)
+app.include_router(browse_router)
 app.include_router(events_router)
 app.include_router(feed_router)
 app.include_router(feedback_router)

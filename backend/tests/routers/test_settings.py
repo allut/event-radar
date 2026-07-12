@@ -32,6 +32,8 @@ class TestGetSettings:
         assert result["locale"] == "et"
         assert result["email_digest_opt_in"] is True
         assert result["personas"] == []
+        assert result["preferred_categories"] == []
+        assert result["preferred_vibes"] == []
 
     @pytest.mark.asyncio
     async def test_personas_included(self, mock_db, make_user, make_request):
@@ -42,6 +44,10 @@ class TestGetSettings:
         persona.display_name_en = "Culture Buff"
         persona.display_name_et = "Kultuuriinimene"
         persona.display_name_ru = "Культурный"
+        persona.affinity_vector = {
+            "categories": {"exhibitions": 0.9},
+            "vibes": {"educational": 0.8},
+        }
         up = MagicMock()
         up.weight = PERSONA_PRIMARY_WEIGHT
         result_mock = MagicMock()
@@ -57,6 +63,8 @@ class TestGetSettings:
 
         assert len(result["personas"]) == 1
         assert result["personas"][0]["slug"] == "culture_buff"
+        assert result["preferred_categories"] == ["exhibitions"]
+        assert result["preferred_vibes"] == ["educational"]
         assert result["personas"][0]["weight"] == PERSONA_PRIMARY_WEIGHT
 
 

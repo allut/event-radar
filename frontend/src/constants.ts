@@ -8,9 +8,12 @@ import {
   SAFE_URL_SCHEMES,
   SANITIZE_ALLOWED_TAGS,
   SANITIZE_ALLOWED_ATTR,
+  CATEGORIES,
+  VIBES,
+  BROWSE_PAGE_SIZE,
 } from './_generated/sharedConstants';
 
-export { LOCALES, MAGIC_LINK_EXPIRY_MINUTES, PERSONA_PRIMARY_WEIGHT_THRESHOLD, SAFE_URL_SCHEMES, SANITIZE_ALLOWED_TAGS, SANITIZE_ALLOWED_ATTR };
+export { LOCALES, MAGIC_LINK_EXPIRY_MINUTES, PERSONA_PRIMARY_WEIGHT_THRESHOLD, SAFE_URL_SCHEMES, SANITIZE_ALLOWED_TAGS, SANITIZE_ALLOWED_ATTR, CATEGORIES, VIBES, BROWSE_PAGE_SIZE };
 export type { PersonaData };
 
 // Re-export PERSONAS under the original name so all import sites are unchanged.
@@ -78,3 +81,26 @@ export const FALLBACK_GRADIENT = 'linear-gradient(135deg, #1a1f2e 0%, #13161e 10
 // ─── UI state types ───────────────────────────────────────────────────────────
 export type LoginState = 'idle' | 'loading' | 'success' | 'error';
 export type VerifyState = 'verifying' | 'success' | 'error';
+
+// ─── Explore ─────────────────────────────────────────────────────────────────
+// BROWSE_PAGE_SIZE itself is cross-stack (shared/app-config.json), imported above.
+export const EXPLORE_SEARCH_DEBOUNCE_MS = 400;
+
+export type SortOption = 'relevance' | 'date' | 'price' | 'quality';
+
+export const SORT_OPTIONS: { value: SortOption; labelKey: string }[] = [
+  { value: 'relevance', labelKey: 'sort_relevance' },
+  { value: 'date', labelKey: 'sort_date' },
+  { value: 'price', labelKey: 'sort_price' },
+  { value: 'quality', labelKey: 'sort_quality' },
+];
+
+export type DatePreset = 'any' | 'today' | 'weekend' | '7d' | '30d';
+
+export const DATE_PRESETS: { value: DatePreset; labelKey: string }[] = [
+  { value: 'any', labelKey: 'date_any' },
+  { value: 'today', labelKey: 'date_today' },
+  { value: 'weekend', labelKey: 'date_weekend' },
+  { value: '7d', labelKey: 'date_7d' },
+  { value: '30d', labelKey: 'date_30d' },
+];

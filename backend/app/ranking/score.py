@@ -121,6 +121,22 @@ class FeedbackContext:
     # results instead of a silent all-zero indirect signal.
     _liked_aggregates_built_for: datetime | None = field(default=None, repr=False)
 
+    @property
+    def disliked_categories(self) -> frozenset[str]:
+        """Union of categories across every disliked feedback row.
+
+        Reuses the `_FeedbackRow.categories` data already loaded for indirect
+        feedback scoring — no extra query. Consumed by the /explore For-you
+        soft-filter (browse.py) to hide events in a category the user has
+        actively disliked, independent of the per-event/per-group hard
+        excludes (`disliked_event_ids` / `disliked_groups`).
+        """
+        cats: set[str] = set()
+        for row in self.rows:
+            if row.signal == SIGNAL_DISLIKE:
+                cats.update(row.categories)
+        return frozenset(cats)
+
     def build_liked_aggregates(self, now: datetime) -> None:
         """Populate liked_decay_by_catset / liked_decay_by_event for this `now`.
 

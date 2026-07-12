@@ -18,6 +18,7 @@ from app.constants import (
     DEFAULT_USER_LOCALE,
     EMAIL_MASK_VISIBLE_CHARS,
     EVENT_STATUS_PUBLISHED,
+    PREFERRED_TASTE_MIN_WEIGHT,
 )
 from app.models.models import Event, User
 
@@ -168,6 +169,29 @@ def mask_email(email: str) -> str:
     if not sep:
         return "***"
     return f"{local[:EMAIL_MASK_VISIBLE_CHARS]}***@{domain}"
+
+
+def compute_preferred_taxonomy(
+    user_persona_weights: list[tuple[float, dict]],
+) -> tuple[list[str], list[str]]:
+    """(preferred_categories, preferred_vibes) — the union, across every persona
+    the user has, of category/vibe tags whose affinity_vector weight clears
+    ``PREFERRED_TASTE_MIN_WEIGHT``.
+
+    Drives the /explore For-you⇄All-events auto-flip (frontend): selecting a
+    facet outside this "in taste" set switches the user out of For-you mode.
+    Sorted for a deterministic response.
+    """
+    categories: set[str] = set()
+    vibes: set[str] = set()
+    for _weight, vector in user_persona_weights:
+        cat_map: dict[str, float] = vector.get("categories", {})
+        vibe_map: dict[str, float] = vector.get("vibes", {})
+        categories.update(
+            c for c, w in cat_map.items() if w >= PREFERRED_TASTE_MIN_WEIGHT
+        )
+        vibes.update(v for v, w in vibe_map.items() if w >= PREFERRED_TASTE_MIN_WEIGHT)
+    return sorted(categories), sorted(vibes)
 
 
 def serialize_user(user: User, **extras) -> dict:

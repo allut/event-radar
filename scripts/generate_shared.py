@@ -254,6 +254,7 @@ def write_backend_shared_constants(cfg: dict) -> str:
         f"SAFE_URL_SCHEMES: frozenset[str] = {safe_schemes}",
         f"HTML_SANITIZE_ALLOWED_TAGS: frozenset[str] = {allowed_tags}",
         f"HTML_SANITIZE_ALLOWED_ATTRS: dict[str, set[str]] = {allowed_attrs}",
+        f"BROWSE_PAGE_SIZE: int = {cfg['browse_page_size']}",
         "",
     ]
     return "\n".join(parts)
@@ -302,6 +303,13 @@ def write_frontend_shared_constants(cfg: dict) -> str:
         f"export const SAFE_URL_SCHEMES = {_ts_set(cfg['safe_url_schemes'])};",
         f"export const SANITIZE_ALLOWED_TAGS = {_ts_str_list(san['allowed_tags'])};",
         f"export const SANITIZE_ALLOWED_ATTR = {_ts_str_list(all_attrs)};",
+        "",
+        # Fixed 12-category / 10-vibe taxonomy — single source of truth for the
+        # /explore filter chips (matches backend VALID_CATEGORIES/VALID_VIBES).
+        f"export const CATEGORIES = {_ts_str_list(cfg['categories'])};",
+        f"export const VIBES = {_ts_str_list(cfg['vibes'])};",
+        "",
+        f"export const BROWSE_PAGE_SIZE = {cfg['browse_page_size']};",
         "",
     ]
     return "\n".join(parts)

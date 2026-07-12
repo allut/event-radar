@@ -2,6 +2,7 @@
 from datetime import datetime, timezone
 
 from app.routers.utils import (
+    compute_preferred_taxonomy,
     event_ended_filter,
     event_not_ended_filter,
     event_series_key,
@@ -85,6 +86,23 @@ class TestEventEndedFilter:
         assert "events.ends_at IS NULL" in compiled
         assert "events.starts_at <" in compiled
         assert "2026-06-25" in compiled
+
+
+class TestComputePreferredTaxonomy:
+    def test_no_personas_returns_empty(self):
+        assert compute_preferred_taxonomy([]) == ([], [])
+
+    def test_union_across_personas_above_threshold(self):
+        weights = [
+            (1.0, {"categories": {"music": 0.9, "cinema": 0.2}, "vibes": {"trendy": 0.8}}),
+            (0.4, {"categories": {"theater": 0.6}, "vibes": {"trendy": 0.1, "indie": 0.7}}),
+        ]
+        categories, vibes = compute_preferred_taxonomy(weights)
+        assert categories == ["music", "theater"]
+        assert vibes == ["indie", "trendy"]
+
+    def test_missing_keys_treated_as_empty(self):
+        assert compute_preferred_taxonomy([(1.0, {})]) == ([], [])
 
 
 class TestMaskEmail:

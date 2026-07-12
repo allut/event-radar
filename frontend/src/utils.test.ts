@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { cx, safeUrl, sanitizeHtml, formatPrice, categoryGradient, formatHourMinute, makeActiveClassMap, trackExternalClick } from './utils';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { cx, safeUrl, sanitizeHtml, formatPrice, categoryGradient, formatHourMinute, makeActiveClassMap, trackExternalClick, datePresetRange, parseExploreFilters, exploreFiltersToSearchParams, buildExploreApiQuery, activeFacetCount, DEFAULT_EXPLORE_FILTERS, type ExploreFilters } from './utils';
 import { FALLBACK_GRADIENT } from './constants';
 
 vi.mock('./api/client', () => ({
@@ -220,5 +220,112 @@ describe('trackExternalClick', () => {
       trackExternalClick(1);
       await new Promise((r) => setTimeout(r, 10));
     }).not.toThrow();
+  });
+});
+
+describe('datePresetRange', () => {
+  function mockToday(iso: string) {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(iso));
+  }
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('returns null bounds for "any"', () => {
+    expect(datePresetRange('any')).toEqual({ from: null, to: null });
+  });
+
+  it('"today" returns the same date for from and to', () => {
+    mockToday('2026-07-15T10:00:00');
+    expect(datePresetRange('today')).toEqual({ from: '2026-07-15', to: '2026-07-15' });
+  });
+
+  it('"7d" spans today through +7 days', () => {
+    mockToday('2026-07-15T10:00:00');
+    expect(datePresetRange('7d')).toEqual({ from: '2026-07-15', to: '2026-07-22' });
+  });
+
+  it('"weekend" resolves to the upcoming Saturday/Sunday from a weekday', () => {
+    mockToday('2026-07-15T10:00:00'); // Wednesday
+    expect(datePresetRange('weekend')).toEqual({ from: '2026-07-18', to: '2026-07-19' });
+  });
+
+  it('"weekend" on a Saturday starts today', () => {
+    mockToday('2026-07-18T10:00:00'); // Saturday
+    expect(datePresetRange('weekend')).toEqual({ from: '2026-07-18', to: '2026-07-19' });
+  });
+});
+
+describe('explore filters <-> URL params', () => {
+  it('parses defaults from an empty URLSearchParams', () => {
+    expect(parseExploreFilters(new URLSearchParams())).toEqual(DEFAULT_EXPLORE_FILTERS);
+  });
+
+  it('round-trips a non-default filter set through the URL', () => {
+    const filters: ExploreFilters = {
+      q: 'jazz',
+      category: ['music', 'nightlife'],
+      vibe: ['trendy'],
+      datePreset: '7d',
+      free: true,
+      forYou: false,
+      sort: 'date',
+    };
+    const params = exploreFiltersToSearchParams(filters);
+    expect(parseExploreFilters(params)).toEqual(filters);
+  });
+
+  it('for_you defaults to true when the param is absent', () => {
+    const params = new URLSearchParams('category=music');
+    expect(parseExploreFilters(params).forYou).toBe(true);
+  });
+});
+
+describe('buildExploreApiQuery', () => {
+  it('always includes for_you, sort, limit, offset', () => {
+    const qs = buildExploreApiQuery(DEFAULT_EXPLORE_FILTERS, 0);
+    const params = new URLSearchParams(qs);
+    expect(params.get('for_you')).toBe('true');
+    expect(params.get('sort')).toBe('relevance');
+    expect(params.get('offset')).toBe('0');
+    expect(params.get('limit')).toBeTruthy();
+  });
+
+  it('omits q/category/vibe/free when unset, includes them when set', () => {
+    const withFilters: ExploreFilters = {
+      ...DEFAULT_EXPLORE_FILTERS,
+      q: 'jazz',
+      category: ['music'],
+      free: true,
+    };
+    const params = new URLSearchParams(buildExploreApiQuery(withFilters, 24));
+    expect(params.get('q')).toBe('jazz');
+    expect(params.get('category')).toBe('music');
+    expect(params.get('free')).toBe('true');
+    expect(params.get('offset')).toBe('24');
+
+    const emptyParams = new URLSearchParams(buildExploreApiQuery(DEFAULT_EXPLORE_FILTERS, 0));
+    expect(emptyParams.has('q')).toBe(false);
+    expect(emptyParams.has('category')).toBe(false);
+    expect(emptyParams.has('free')).toBe(false);
+  });
+});
+
+describe('activeFacetCount', () => {
+  it('counts categories, vibes, date preset, and free', () => {
+    const filters: ExploreFilters = {
+      ...DEFAULT_EXPLORE_FILTERS,
+      category: ['music', 'nightlife'],
+      vibe: ['trendy'],
+      datePreset: 'today',
+      free: true,
+    };
+    expect(activeFacetCount(filters)).toBe(5);
+  });
+
+  it('is zero for the default filter set', () => {
+    expect(activeFacetCount(DEFAULT_EXPLORE_FILTERS)).toBe(0);
   });
 });

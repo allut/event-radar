@@ -3,6 +3,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from app._generated.shared_constants import (
+    BROWSE_PAGE_SIZE,
     DEFAULT_CURRENCY,
     DEFAULT_USER_CITY,
     DEFAULT_USER_LOCALE,
@@ -18,6 +19,7 @@ from app._generated.shared_constants import (
 )
 
 __all__ = [
+    "BROWSE_PAGE_SIZE",
     "DEFAULT_CURRENCY",
     "DEFAULT_USER_CITY",
     "DEFAULT_USER_LOCALE",
@@ -364,6 +366,9 @@ RATE_LIMIT_AUTHENTICATED_WRITE = "30/minute"
 # issued session token (including the caller's own) — a higher-value target
 # than ordinary writes.
 RATE_LIMIT_LOGOUT_ALL = "10/minute"
+# Authenticated /explore browsing — mirrors RATE_LIMIT_EVENTS_DETAIL; live filter
+# changes can fire a request per keystroke/chip-toggle, so this stays generous.
+RATE_LIMIT_BROWSE = "120/minute"
 
 # Auth tokens
 AUTH_MAGIC_SALT = "magic-link-v1"
@@ -401,6 +406,29 @@ SCORE_WEIGHT_LOCALITY: float = 0.05
 # don't redo the astimezone conversion. Comfortably above the number of distinct
 # starts_at values in one DAILY_5_LOOKAHEAD_DAYS candidate window.
 TIME_SLOTS_CACHE_MAXSIZE = 4096
+
+# GET /explore (app/routers/browse.py) — event discovery / search page.
+# BROWSE_PAGE_SIZE itself is cross-stack (shared/app-config.json), imported above.
+BROWSE_MAX_PAGE_SIZE: int = 60
+# Candidate cap for the Python-scored path (Path B: for_you=True OR sort=relevance —
+# so also date/price/quality sort *under* for_you=True, not just relevance). Sorted
+# soonest-first before capping, so the cap policy is a deliberate soonest-bias, not
+# an arbitrary truncation: a date sort still yields globally-correct soonest-first
+# results, but price/quality sort under for_you=True is only a true sort within the
+# soonest BROWSE_RELEVANCE_MAX_CANDIDATES matches, not a global one — an accepted
+# Path-B approximation at MVP scale (`total` in the response reflects at most this
+# many rows when the cap is hit; see browse.py docstring).
+BROWSE_RELEVANCE_MAX_CANDIDATES: int = 300
+# For-you soft-filter: events below this persona_affinity() score ([0, 1], see
+# ranking/score.py) are hidden from the For-you pool. Tuned below NEUTRAL_SCORE (0.5)
+# so an event with no strong signal either way still surfaces; only a
+# below-neutral (poor) match is filtered out.
+BROWSE_FORYOU_MIN_AFFINITY: float = 0.4
+VALID_BROWSE_SORTS: frozenset[str] = frozenset({"relevance", "date", "price", "quality"})
+# /users/me preferred_categories/preferred_vibes (serialize_user) — a persona
+# affinity_vector entry counts as "in the user's taste" once its weight clears this
+# bar. Used by the frontend to decide the For-you⇄All-events auto-flip.
+PREFERRED_TASTE_MIN_WEIGHT: float = 0.5
 
 # Publish gate — classified events with quality_score below this stay
 # 'classified' and never reach a feed. Tunable later from real data.

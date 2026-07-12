@@ -4,63 +4,6 @@
   flex-direction: column;
 }
 
-/* ── Top bar ── */
-.topBar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--space-1-125) var(--space-6);
-  border-bottom: 1px solid var(--border);
-  background: var(--bg-overlay);
-  backdrop-filter: blur(var(--blur-overlay));
-  position: sticky;
-  top: 0;
-  z-index: var(--z-sticky);
-}
-
-.back {
-  composes: btnOutline from '../../components/shared/Button.module.css';
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: var(--fs-sm);
-  padding: var(--space-0-375) var(--space-0-875);
-  letter-spacing: var(--tracking-normal);
-  min-width: var(--space-9);
-}
-
-.logoWrap {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  text-decoration: none;
-}
-
-.logoWrap:hover .brand {
-  color: var(--text);
-}
-
-.logoWrap:hover .radar {
-  color: var(--accent-light);
-}
-
-.radar {
-  font-size: var(--fs-lg);
-  color: var(--accent);
-}
-
-.brand {
-  font-family: var(--font-display);
-  font-size: var(--fs-brand-sm);
-  font-weight: 600;
-  letter-spacing: var(--tracking-snug);
-  color: var(--text);
-}
-
-.topBarSpacer {
-  min-width: var(--space-9);
-}
-
 /* ── Main ── */
 .main {
   flex: 1;
@@ -180,49 +123,6 @@
   font-size: var(--fs-sm);
   color: var(--text-muted);
   margin-top: var(--space-0-2);
-}
-
-.toggle {
-  flex-shrink: 0;
-  width: var(--toggle-width);
-  height: var(--toggle-height);
-  border-radius: calc(var(--toggle-height) / 2);
-  border: none;
-  cursor: pointer;
-  position: relative;
-  transition: background var(--transition);
-  padding: 0;
-}
-
-.toggleOn {
-  background: var(--accent);
-}
-
-.toggleOff {
-  background: var(--border);
-}
-
-.toggle:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.toggleKnob {
-  position: absolute;
-  top: var(--toggle-padding);
-  width: var(--toggle-knob-size);
-  height: var(--toggle-knob-size);
-  border-radius: var(--radius-full);
-  background: var(--toggle-knob-color);
-  transition: left var(--transition);
-}
-
-.toggleOn .toggleKnob {
-  left: calc(100% - var(--toggle-knob-size) - var(--toggle-padding));
-}
-
-.toggleOff .toggleKnob {
-  left: var(--toggle-padding);
 }
 
 .unsubMsg {

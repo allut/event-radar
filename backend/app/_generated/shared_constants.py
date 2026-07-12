@@ -19,3 +19,4 @@ VALID_VIBES: frozenset[str] = frozenset({"accessible", "casual", "educational", 
 SAFE_URL_SCHEMES: frozenset[str] = frozenset({"http", "https"})
 HTML_SANITIZE_ALLOWED_TAGS: frozenset[str] = frozenset({"a", "b", "blockquote", "br", "em", "h3", "h4", "i", "li", "ol", "p", "span", "strong", "u", "ul"})
 HTML_SANITIZE_ALLOWED_ATTRS: dict[str, set[str]] = {"a": {"href", "title"}}
+BROWSE_PAGE_SIZE: int = 24

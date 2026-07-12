@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../../api/client';
 import { clearToken, getLocale } from '../../lib/auth';
@@ -9,6 +9,8 @@ import { cx } from '../../utils';
 import { t, personaName } from '../../i18n';
 import LocaleSelector from '../../components/LocaleSelector';
 import PageState from '../../components/PageState';
+import Toggle from '../../components/Toggle';
+import TopBar from '../../components/TopBar';
 import styles from './Settings.module.css';
 
 interface PersonaEntry {
@@ -73,9 +75,8 @@ export default function Settings() {
     onError: (err) => showSaveError(err, locale),
   });
 
-  function handleOptInToggle() {
-    if (!data) return;
-    digestMutation.mutate(!data.email_digest_opt_in);
+  function handleOptInToggle(next: boolean) {
+    digestMutation.mutate(next);
   }
 
   const logoutAllMutation = useMutation({
@@ -101,6 +102,12 @@ export default function Settings() {
     logoutAllMutation.mutate();
   }
 
+  function handleLogout() {
+    clearToken();
+    queryClient.clear();
+    navigate('/login', { replace: true });
+  }
+
   const primaryPersona = data?.personas.find((p) => p.weight >= PERSONA_PRIMARY_WEIGHT_THRESHOLD);
   const secondaryPersona = data?.personas.find((p) => p.weight < PERSONA_PRIMARY_WEIGHT_THRESHOLD);
 
@@ -121,14 +128,7 @@ export default function Settings() {
       {saveToast.status === 'success' && <div className={styles.toastSuccess} role="status">{saveToast.message}</div>}
       {saveToast.status === 'error' && <div className={styles.toastError} role="alert">{saveToast.message}</div>}
 
-      <header className={styles.topBar}>
-        <Link to="/" className={styles.back} aria-label={t('back_to_feed', locale)}>{t('back_to_feed', locale)}</Link>
-        <Link to="/" className={styles.logoWrap}>
-          <span className={styles.radar} aria-hidden>◉</span>
-          <span className={styles.brand}>{t('brand', locale)}</span>
-        </Link>
-        <div className={styles.topBarSpacer} aria-hidden />
-      </header>
+      <TopBar locale={locale} onLocaleChange={handleLocaleChange} onLogout={handleLogout} localeDisabled={localePending} />
 
       <main className={styles.main}>
         <section className={styles.section}>
@@ -189,15 +189,12 @@ export default function Settings() {
               <p className={styles.toggleLabel}>{t('digest_label', locale)}</p>
               <p className={styles.toggleDesc}>{t('digest_desc', locale)}</p>
             </div>
-            <button
-              className={cx(styles.toggle, data?.email_digest_opt_in ? styles.toggleOn : styles.toggleOff)}
-              onClick={handleOptInToggle}
+            <Toggle
+              on={data?.email_digest_opt_in ?? false}
+              onChange={handleOptInToggle}
               disabled={digestMutation.isPending}
-              aria-pressed={data?.email_digest_opt_in}
-              aria-label={data?.email_digest_opt_in ? t('digest_unsubscribe', locale) : t('digest_subscribe', locale)}
-            >
-              <span className={styles.toggleKnob} />
-            </button>
+              ariaLabel={data?.email_digest_opt_in ? t('digest_unsubscribe', locale) : t('digest_subscribe', locale)}
+            />
           </div>
           {!data?.email_digest_opt_in && (
             <p className={styles.unsubMsg}>{t('digest_off', locale)}</p>

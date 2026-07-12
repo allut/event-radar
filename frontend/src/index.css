@@ -30,6 +30,7 @@
   --on-accent: #0f1119;
   --bg-overlay: rgba(19, 22, 30, 0.85);      /* sticky topbars */
   --bg-overlay-soft: rgba(19, 22, 30, 0.82); /* inline overlays (e.g. price chip) */
+  --overlay-scrim: rgba(0, 0, 0, 0.5);       /* modal/drawer backdrop */
   --spinner-border: rgba(15, 17, 25, 0.25);
 
   --accent-hover-border: rgba(200, 146, 42, 0.2);

@@ -1,0 +1,150 @@
+.page {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.main {
+  flex: 1;
+  max-width: 1080px;
+  width: 100%;
+  margin: 0 auto;
+  padding: var(--space-7) var(--space-5) var(--space-8);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.masthead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.heading {
+  font-family: var(--font-display);
+  font-size: var(--heading-2xl);
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: var(--tracking-tighter);
+}
+
+.searchInput {
+  flex: 1;
+  min-width: 240px;
+  max-width: 420px;
+  padding: var(--space-0-6) var(--space-1);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg-overlay-soft);
+  color: var(--text);
+  font-size: var(--fs-base);
+  transition: border-color var(--transition);
+}
+
+.searchInput::placeholder {
+  color: var(--text-soft);
+}
+
+.searchInput:focus {
+  outline: none;
+  border-color: var(--accent-border);
+}
+
+.controlsRow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+}
+
+.forYouControl {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.forYouLabel {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.sortControl {
+  display: flex;
+  align-items: center;
+  gap: var(--space-0-45);
+  margin-left: auto;
+}
+
+.sortLabel {
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+
+.sortSelect {
+  padding: var(--space-0-3125) var(--space-0-625);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg-overlay-soft);
+  color: var(--text);
+  font-size: var(--fs-sm);
+}
+
+.filtersBtn {
+  composes: btnOutline from '../../components/shared/Button.module.css';
+  padding: var(--space-0-3125) var(--space-0-875);
+  font-size: var(--fs-sm);
+  display: none;
+}
+
+.desktopFacets {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2-5);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--space-4);
+}
+
+.loadMoreBtn {
+  composes: btnOutline from '../../components/shared/Button.module.css';
+  align-self: center;
+  padding: var(--space-0-6) var(--space-4);
+  font-size: var(--fs-sm);
+}
+
+.loadMoreBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.clearFiltersBtn {
+  composes: btnOutline from '../../components/shared/Button.module.css';
+  align-self: center;
+  padding: var(--space-0-45) var(--space-4);
+  font-size: var(--fs-sm);
+}
+
+@media (max-width: 640px) {
+  .filtersBtn {
+    display: inline-flex;
+  }
+
+  .desktopFacets {
+    display: none;
+  }
+
+  .sortControl {
+    margin-left: 0;
+  }
+
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}

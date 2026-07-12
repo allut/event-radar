@@ -1,4 +1,4 @@
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../api/client';
 import { clearToken } from '../../lib/auth';
@@ -6,8 +6,8 @@ import { t, ti } from '../../i18n';
 import { useLocaleMutation } from '../../hooks/useLocaleMutation';
 import EventCard, { type EventData } from '../../components/EventCard';
 import EmptyState from '../../components/EmptyState';
-import LocaleSelector from '../../components/LocaleSelector';
 import PageState from '../../components/PageState';
+import TopBar from '../../components/TopBar';
 import { formatHourMinute, formatTodayDate, padIndex } from '../../utils';
 import styles from './Feed.module.css';
 
@@ -50,17 +50,7 @@ export default function Feed() {
 
   return (
     <div className={styles.page}>
-      <header className={styles.topBar}>
-        <div className={styles.logoWrap}>
-          <span className={styles.radar} aria-hidden>◉</span>
-          <span className={styles.brand}>{t('brand', locale)}</span>
-        </div>
-        <div className={styles.topActions}>
-          <Link to="/settings" className={styles.settingsLink}>{t('settings_link', locale)}</Link>
-          <button className={styles.logoutBtn} onClick={handleLogout}>{t('sign_out', locale)}</button>
-          <LocaleSelector locale={locale} onChange={handleLocaleChange} ariaLabel={t('section_language', locale)} />
-        </div>
-      </header>
+      <TopBar locale={locale} onLocaleChange={handleLocaleChange} onLogout={handleLogout} />
 
       <main className={styles.main}>
         <header className={styles.masthead}>

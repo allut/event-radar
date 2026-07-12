@@ -23,6 +23,7 @@
     "trendy", "casual", "intimate", "high_energy", "educational",
     "indie", "underground", "mainstream", "accessible", "niche"
   ],
+  "browse_page_size": 24,
   "safe_url_schemes": ["http", "https"],
   "html_sanitize": {
     "allowed_tags": ["p", "br", "strong", "b", "em", "i", "u", "ul", "ol", "li", "a", "h3", "h4", "blockquote", "span"],

@@ -12,7 +12,7 @@ from app.db import get_db
 from app.models.models import Persona, User, UserPersona
 from app.rate_limit import limiter
 from app.routers.auth import get_current_user
-from app.routers.utils import serialize_user
+from app.routers.utils import compute_preferred_taxonomy, serialize_user
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/users/me", tags=["settings"])
@@ -30,7 +30,12 @@ class PatchSettingsBody(BaseModel):
         return v
 
 
-async def _get_persona_list(user_id: int, db: AsyncSession) -> list[dict]:
+async def _load_persona_data(
+    user_id: int, db: AsyncSession
+) -> tuple[list[dict], list[tuple[float, dict]]]:
+    """(persona display list, [(weight, affinity_vector), ...]) — one query,
+    reused both for the settings persona display and preferred_categories/
+    preferred_vibes (compute_preferred_taxonomy)."""
     rows = (
         await db.execute(
             select(UserPersona, Persona)
@@ -39,7 +44,7 @@ async def _get_persona_list(user_id: int, db: AsyncSession) -> list[dict]:
             .order_by(UserPersona.weight.desc())
         )
     ).all()
-    return [
+    personas = [
         {
             "slug": persona.slug,
             "display_name_en": persona.display_name_en,
@@ -49,6 +54,8 @@ async def _get_persona_list(user_id: int, db: AsyncSession) -> list[dict]:
         }
         for up, persona in rows
     ]
+    weights = [(up.weight, persona.affinity_vector) for up, persona in rows]
+    return personas, weights
 
 
 @router.get("", status_code=status.HTTP_200_OK)
@@ -59,11 +66,14 @@ async def get_settings(
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     """Return current user profile + settings."""
-    personas = await _get_persona_list(current_user.id, db)
+    personas, weights = await _load_persona_data(current_user.id, db)
+    preferred_categories, preferred_vibes = compute_preferred_taxonomy(weights)
     return serialize_user(
         current_user,
         email_digest_opt_in=current_user.email_digest_opt_in,
         personas=personas,
+        preferred_categories=preferred_categories,
+        preferred_vibes=preferred_vibes,
     )
 
 
@@ -90,9 +100,12 @@ async def patch_settings(
     await db.commit()
     await db.refresh(current_user)
 
-    personas = await _get_persona_list(current_user.id, db)
+    personas, weights = await _load_persona_data(current_user.id, db)
+    preferred_categories, preferred_vibes = compute_preferred_taxonomy(weights)
     return serialize_user(
         current_user,
         email_digest_opt_in=current_user.email_digest_opt_in,
         personas=personas,
+        preferred_categories=preferred_categories,
+        preferred_vibes=preferred_vibes,
     )

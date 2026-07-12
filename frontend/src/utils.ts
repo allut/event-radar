@@ -1,6 +1,6 @@
 import DOMPurify from 'dompurify';
 import { api } from './api/client';
-import { CATEGORY_GRADIENTS, FALLBACK_GRADIENT, EUR_SYMBOL, GOOGLE_MAPS_SEARCH_URL, type Signal, toLocaleCode, SAFE_URL_SCHEMES, SANITIZE_ALLOWED_TAGS, SANITIZE_ALLOWED_ATTR, SIGNAL_TO_CLASS } from './constants';
+import { CATEGORY_GRADIENTS, FALLBACK_GRADIENT, EUR_SYMBOL, GOOGLE_MAPS_SEARCH_URL, type Signal, toLocaleCode, SAFE_URL_SCHEMES, SANITIZE_ALLOWED_TAGS, SANITIZE_ALLOWED_ATTR, SIGNAL_TO_CLASS, BROWSE_PAGE_SIZE, type DatePreset, type SortOption } from './constants';
 import { t, ti } from './i18n';
 
 export function cx(...classes: (string | false | null | undefined)[]): string {
@@ -138,4 +138,115 @@ export function makeActiveClassMap(styles: Record<string, string>): Record<Signa
     result[signal] = cls;
   }
   return result;
+}
+
+// ─── Explore ─────────────────────────────────────────────────────────────────
+
+export interface ExploreFilters {
+  q: string;
+  category: string[];
+  vibe: string[];
+  datePreset: DatePreset;
+  free: boolean;
+  forYou: boolean;
+  sort: SortOption;
+}
+
+export const DEFAULT_EXPLORE_FILTERS: ExploreFilters = {
+  q: '',
+  category: [],
+  vibe: [],
+  datePreset: 'any',
+  free: false,
+  forYou: true,
+  sort: 'relevance',
+};
+
+function pad2(n: number): string {
+  return String(n).padStart(2, '0');
+}
+
+function toDateStr(d: Date): string {
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+}
+
+/** Resolve a date preset against the browser's local clock (backend stays
+ * stateless — see plan.md). Uses local date components, not toISOString(),
+ * so the resolved day never shifts across a UTC boundary. */
+export function datePresetRange(preset: DatePreset): { from: string | null; to: string | null } {
+  if (preset === 'any') return { from: null, to: null };
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  if (preset === 'today') {
+    const s = toDateStr(today);
+    return { from: s, to: s };
+  }
+  if (preset === 'weekend') {
+    const day = today.getDay(); // 0 = Sunday .. 6 = Saturday
+    const satOffset = day === 6 ? 0 : day === 0 ? -1 : 6 - day;
+    const sat = new Date(today);
+    sat.setDate(today.getDate() + satOffset);
+    const sun = new Date(sat);
+    sun.setDate(sat.getDate() + 1);
+    return { from: toDateStr(sat), to: toDateStr(sun) };
+  }
+  const days = preset === '7d' ? 7 : 30;
+  const end = new Date(today);
+  end.setDate(today.getDate() + days);
+  return { from: toDateStr(today), to: toDateStr(end) };
+}
+
+/** Filters ⇄ URL query params — the single source of truth for /explore state
+ * (useSearchParams). Only non-default values are written, so a fresh visit
+ * (no params) round-trips to DEFAULT_EXPLORE_FILTERS. */
+export function parseExploreFilters(params: URLSearchParams): ExploreFilters {
+  return {
+    q: params.get('q') ?? '',
+    category: params.get('category')?.split(',').filter(Boolean) ?? [],
+    vibe: params.get('vibe')?.split(',').filter(Boolean) ?? [],
+    datePreset: (params.get('date') as DatePreset | null) ?? 'any',
+    free: params.get('free') === '1',
+    forYou: params.get('for_you') !== '0',
+    sort: (params.get('sort') as SortOption | null) ?? 'relevance',
+  };
+}
+
+export function exploreFiltersToSearchParams(filters: ExploreFilters): URLSearchParams {
+  const params = new URLSearchParams();
+  if (filters.q) params.set('q', filters.q);
+  if (filters.category.length) params.set('category', filters.category.join(','));
+  if (filters.vibe.length) params.set('vibe', filters.vibe.join(','));
+  if (filters.datePreset !== 'any') params.set('date', filters.datePreset);
+  if (filters.free) params.set('free', '1');
+  if (!filters.forYou) params.set('for_you', '0');
+  if (filters.sort !== 'relevance') params.set('sort', filters.sort);
+  return params;
+}
+
+/** Build the GET /explore query string for a given filter set + page offset. */
+export function buildExploreApiQuery(filters: ExploreFilters, offset: number): string {
+  const params = new URLSearchParams();
+  if (filters.q) params.set('q', filters.q);
+  if (filters.category.length) params.set('category', filters.category.join(','));
+  if (filters.vibe.length) params.set('vibe', filters.vibe.join(','));
+  const { from, to } = datePresetRange(filters.datePreset);
+  if (from) params.set('date_from', from);
+  if (to) params.set('date_to', to);
+  if (filters.free) params.set('free', 'true');
+  params.set('for_you', String(filters.forYou));
+  params.set('sort', filters.sort);
+  params.set('limit', String(BROWSE_PAGE_SIZE));
+  params.set('offset', String(offset));
+  return params.toString();
+}
+
+/** Number of active facets — drives the mobile "Filters (n)" badge. Search
+ * text and sort are not facets for this count (matches the plan's badge
+ * scope: category/vibe/date/free). */
+export function activeFacetCount(filters: ExploreFilters): number {
+  let count = filters.category.length + filters.vibe.length;
+  if (filters.datePreset !== 'any') count += 1;
+  if (filters.free) count += 1;
+  return count;
 }
