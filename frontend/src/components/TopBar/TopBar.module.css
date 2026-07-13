@@ -79,7 +79,7 @@
 
 .logoutBtn {
   composes: btnOutline from '../shared/Button.module.css';
-  padding: var(--space-0-3125) var(--space-0-875);
+  padding: var(--space-0-45) var(--space-0-875);
   font-size: var(--fs-sm);
 }
 

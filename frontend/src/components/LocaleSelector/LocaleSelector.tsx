@@ -1,6 +1,5 @@
 import { LOCALES } from '../../constants';
-import { cx } from '../../utils';
-import styles from './LocaleSelector.module.css';
+import SelectMenu from '../SelectMenu';
 
 interface LocaleSelectorProps {
   locale: string;
@@ -11,19 +10,14 @@ interface LocaleSelectorProps {
 
 export default function LocaleSelector({ locale, onChange, ariaLabel, disabled }: LocaleSelectorProps) {
   return (
-    <div className={styles.localePills} role="group" aria-label={ariaLabel}>
-      {LOCALES.map(({ code, label }) => (
-        <button
-          key={code}
-          type="button"
-          className={cx(styles.localePill, locale === code && styles.activeLocale)}
-          onClick={() => onChange(code)}
-          aria-pressed={locale === code}
-          disabled={disabled}
-        >
-          {label}
-        </button>
-      ))}
-    </div>
+    <SelectMenu
+      label=""
+      value={locale}
+      options={LOCALES.map(({ code, label }) => ({ value: code, label }))}
+      onChange={onChange}
+      ariaLabel={ariaLabel}
+      variant="button"
+      disabled={disabled}
+    />
   );
 }

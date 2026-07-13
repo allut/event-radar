@@ -15,6 +15,7 @@ interface SelectMenuProps {
   variant?: 'inline' | 'button';
   /** 'button' variant only — highlights the trigger when a non-default value is selected. */
   active?: boolean;
+  disabled?: boolean;
 }
 
 /** Single-select trigger + popover of a vertical, equal-width option list.
@@ -27,6 +28,7 @@ export default function SelectMenu({
   ariaLabel,
   variant = 'inline',
   active = false,
+  disabled = false,
 }: SelectMenuProps) {
   const { open, setOpen, rootRef, popRef, triggerRef, close } = useDropdown();
   const current = options.find((o) => o.value === value);
@@ -48,13 +50,14 @@ export default function SelectMenu({
         }
         aria-expanded={open}
         aria-haspopup="true"
+        disabled={disabled}
         onClick={() => setOpen((v) => !v)}
       >
         <span className={styles.label}>{label}</span>{' '}
         <span className={styles.value}>{current?.label ?? value}</span>
         <span className={styles.chev} aria-hidden>▾</span>
       </button>
-      {open && (
+      {open && !disabled && (
         <div className={styles.pop} ref={popRef}>
           <div className={styles.optionList} role="group" aria-label={ariaLabel}>
             {options.map((option) => {

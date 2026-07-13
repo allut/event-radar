@@ -64,7 +64,8 @@ describe('Onboarding', () => {
   it('locale change calls setLocale', async () => {
     const { setLocale } = await import('../../lib/auth');
     renderWithProviders(<Onboarding />);
-    await userEvent.click(screen.getByText('RU'));
+    await userEvent.click(screen.getByRole('button', { name: 'EN' }));
+    await userEvent.click(screen.getByRole('button', { name: 'RU' }));
     expect(setLocale).toHaveBeenCalledWith('ru');
   });
 });
