@@ -9,7 +9,6 @@ import EventCard, { type EventData } from '../../components/EventCard';
 import EmptyState from '../../components/EmptyState';
 import PageState from '../../components/PageState';
 import TopBar from '../../components/TopBar';
-import Chip from '../../components/Chip';
 import FacetMenu from '../../components/FacetMenu';
 import SegmentedControl from '../../components/SegmentedControl';
 import SelectMenu from '../../components/SelectMenu';
@@ -25,6 +24,7 @@ import {
 import {
   activeFacetCount,
   buildExploreApiQuery,
+  cx,
   DEFAULT_EXPLORE_FILTERS,
   exploreFiltersToSearchParams,
   parseExploreFilters,
@@ -203,14 +203,16 @@ export default function Explore() {
         </div>
 
         <div className={styles.menuRow}>
-          <div className={styles.cluster}>
+          <div className={styles.switchBox}>
             <SegmentedControl
               options={forYouOptions}
               value={filters.forYou ? 'foryou' : 'all'}
               onChange={(v) => setForYou(v === 'foryou')}
               ariaLabel={`${t('all_events', locale)} / ${t('for_you', locale)}`}
             />
-            <span className={styles.divider} aria-hidden />
+          </div>
+
+          <div className={styles.cluster}>
             <SelectMenu
               variant="inline"
               label={t('sort_by', locale)}
@@ -218,6 +220,15 @@ export default function Explore() {
               options={SORT_OPTIONS.map((opt) => ({ value: opt.value, label: t(opt.labelKey, locale) }))}
               onChange={(v) => setSort(v as SortOption)}
               ariaLabel={t('sort_by', locale)}
+            />
+            <span className={styles.divider} aria-hidden />
+            <SelectMenu
+              variant="inline"
+              label={t('date_prefix', locale)}
+              value={filters.datePreset}
+              options={dateOptions}
+              onChange={(v) => setDatePreset(v as DatePreset)}
+              ariaLabel={t('filter_dates', locale)}
             />
           </div>
 
@@ -235,21 +246,14 @@ export default function Explore() {
             onToggle={(v) => toggleFacet('vibe', v)}
             ariaLabel={t('filter_vibes', locale)}
           />
-          <SelectMenu
-            variant="button"
-            label={t('date_prefix', locale)}
-            value={filters.datePreset}
-            options={dateOptions}
-            onChange={(v) => setDatePreset(v as DatePreset)}
-            active={filters.datePreset !== 'any'}
-            ariaLabel={t('filter_dates', locale)}
-          />
-          <Chip
-            options={[{ value: 'free', label: t('free_only', locale) }]}
-            selected={filters.free ? ['free'] : []}
-            onToggle={toggleFree}
-            ariaLabel={t('free_only', locale)}
-          />
+          <button
+            type="button"
+            className={cx(styles.freeBtn, filters.free && styles.freeBtnActive)}
+            aria-pressed={filters.free}
+            onClick={toggleFree}
+          >
+            {t('free_only', locale)}
+          </button>
         </div>
 
         {isLoading ? (

@@ -7,9 +7,9 @@
   display: flex;
   align-items: center;
   gap: var(--space-0-45);
-  padding: 0 var(--space-0-875);
+  padding: var(--space-0-45) var(--space-0-875);
   background: transparent;
-  border: none;
+  border: 1px solid transparent;
   border-top-right-radius: var(--radius);
   border-bottom-right-radius: var(--radius);
   color: var(--text);

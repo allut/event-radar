@@ -69,6 +69,15 @@
   gap: var(--space-2);
 }
 
+.switchBox {
+  display: inline-flex;
+  align-items: stretch;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-overlay-soft);
+  overflow: hidden;
+}
+
 .cluster {
   display: inline-flex;
   align-items: stretch;
@@ -77,19 +86,18 @@
   background: var(--bg-overlay-soft);
 }
 
-/* Clip only the segmented control (no popover) to the cluster's rounded
-   left corner — SortMenu's popover is a descendant of .cluster and must
-   stay unclipped so it can render below the trigger. */
-.cluster > :first-child {
-  border-top-left-radius: var(--radius);
-  border-bottom-left-radius: var(--radius);
-  overflow: hidden;
-}
-
 .divider {
   width: 1px;
   background: var(--border);
   align-self: stretch;
+}
+
+.freeBtn {
+  composes: triggerButton from '../../components/shared/Menu.module.css';
+}
+
+.freeBtnActive {
+  composes: triggerButtonActive from '../../components/shared/Menu.module.css';
 }
 
 .grid {
