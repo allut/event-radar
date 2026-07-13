@@ -55,7 +55,7 @@ export default function SelectMenu({
         <span className={styles.chev} aria-hidden>▾</span>
       </button>
       {open && (
-        <div className={menuStyles.menuPop} ref={popRef}>
+        <div className={styles.pop} ref={popRef}>
           <div className={styles.optionList} role="group" aria-label={ariaLabel}>
             {options.map((option) => {
               const isActive = option.value === value;

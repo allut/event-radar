@@ -3,6 +3,12 @@
   align-items: stretch;
 }
 
+.pop {
+  composes: menuPop from '../shared/Menu.module.css';
+  min-width: 100%;
+  width: max-content;
+}
+
 .triggerInline {
   composes: triggerInline from '../shared/Menu.module.css';
   border-radius: 0;
@@ -32,7 +38,7 @@
 .option {
   display: block;
   width: 100%;
-  text-align: left;
+  text-align: center;
   padding: var(--space-0-45) var(--space-0-875);
   border-radius: var(--radius);
   border: 1px solid transparent;
