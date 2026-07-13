@@ -106,6 +106,10 @@ export default function Explore() {
     initialPageParam: 0,
     getNextPageParam: (lastPage) =>
       lastPage.has_more ? lastPage.offset + lastPage.events.length : undefined,
+    // A facet emptied down to zero chips means "match nothing" — skip the
+    // request entirely rather than round-tripping to the backend, which
+    // would treat an absent/full param as "all" and return unfiltered results.
+    enabled: filters.category.length > 0 && filters.vibe.length > 0,
   });
 
   function handleLogout() {
@@ -147,7 +151,16 @@ export default function Explore() {
   }
 
   function setForYou(next: boolean) {
-    commitFilters({ ...filters, forYou: next });
+    if (next) {
+      // Fall back to "all" when the persona hasn't loaded yet (or has no
+      // preference set) — avoids an accidental empty-selection/no-results
+      // flash before /users/me resolves.
+      const category = currentUser?.preferred_categories?.length ? currentUser.preferred_categories : [...CATEGORIES];
+      const vibe = currentUser?.preferred_vibes?.length ? currentUser.preferred_vibes : [...VIBES];
+      commitFilters({ ...filters, forYou: true, category, vibe });
+    } else {
+      commitFilters({ ...filters, forYou: false, category: [...CATEGORIES], vibe: [...VIBES] });
+    }
   }
 
   function clearFilters() {
@@ -158,7 +171,7 @@ export default function Explore() {
   const events = data?.pages.flatMap((page) => page.events) ?? [];
   const activeCount = activeFacetCount(filters);
   const hasActiveFilters =
-    activeCount > 0 || filters.q.length > 0 || !filters.forYou || filters.sort !== 'relevance';
+    activeCount > 0 || filters.q.length > 0 || filters.forYou || filters.sort !== 'relevance';
 
   const categoryOptions = CATEGORIES.map((slug) => ({ value: slug, label: t(`category_${slug}`, locale) }));
   const vibeOptions = VIBES.map((slug) => ({ value: slug, label: t(`vibe_${slug}`, locale) }));

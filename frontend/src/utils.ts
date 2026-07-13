@@ -1,6 +1,6 @@
 import DOMPurify from 'dompurify';
 import { api } from './api/client';
-import { CATEGORY_GRADIENTS, FALLBACK_GRADIENT, EUR_SYMBOL, GOOGLE_MAPS_SEARCH_URL, type Signal, toLocaleCode, SAFE_URL_SCHEMES, SANITIZE_ALLOWED_TAGS, SANITIZE_ALLOWED_ATTR, SIGNAL_TO_CLASS, BROWSE_PAGE_SIZE, type DatePreset, type SortOption } from './constants';
+import { CATEGORY_GRADIENTS, FALLBACK_GRADIENT, EUR_SYMBOL, GOOGLE_MAPS_SEARCH_URL, type Signal, toLocaleCode, SAFE_URL_SCHEMES, SANITIZE_ALLOWED_TAGS, SANITIZE_ALLOWED_ATTR, SIGNAL_TO_CLASS, BROWSE_PAGE_SIZE, CATEGORIES, VIBES, type DatePreset, type SortOption } from './constants';
 import { t, ti } from './i18n';
 
 export function cx(...classes: (string | false | null | undefined)[]): string {
@@ -154,13 +154,19 @@ export interface ExploreFilters {
 
 export const DEFAULT_EXPLORE_FILTERS: ExploreFilters = {
   q: '',
-  category: [],
-  vibe: [],
+  category: [...CATEGORIES],
+  vibe: [...VIBES],
   datePreset: 'any',
   free: false,
-  forYou: true,
+  forYou: false,
   sort: 'relevance',
 };
+
+/** True when `sel` holds every slug in `all` — selections only ever contain
+ * valid slugs, so a length match is sufficient (no need to compare content). */
+export function isFullSet(sel: string[], all: readonly string[]): boolean {
+  return sel.length === all.length;
+}
 
 function pad2(n: number): string {
   return String(n).padStart(2, '0');
@@ -197,17 +203,34 @@ export function datePresetRange(preset: DatePreset): { from: string | null; to: 
   return { from: toDateStr(today), to: toDateStr(end) };
 }
 
+/** Comma-split, dedupe, silently drop anything outside `valid` — mirrors the
+ * backend's `_parse_slug_list` (browse.py). Applied to URL-sourced category/
+ * vibe values so a hand-edited or corrupted deep link (duplicate or invalid
+ * slugs padding the list to the full taxonomy length) can't fool isFullSet's
+ * length-only comparison into treating a narrow selection as "select all". */
+function parseSlugList(raw: string, valid: readonly string[]): string[] {
+  const validSet = new Set(valid);
+  const seen: string[] = [];
+  for (const slug of raw.split(',')) {
+    const trimmed = slug.trim();
+    if (trimmed && validSet.has(trimmed) && !seen.includes(trimmed)) seen.push(trimmed);
+  }
+  return seen;
+}
+
 /** Filters ⇄ URL query params — the single source of truth for /explore state
  * (useSearchParams). Only non-default values are written, so a fresh visit
  * (no params) round-trips to DEFAULT_EXPLORE_FILTERS. */
 export function parseExploreFilters(params: URLSearchParams): ExploreFilters {
+  const rawCategory = params.get('category');
+  const rawVibe = params.get('vibe');
   return {
     q: params.get('q') ?? '',
-    category: params.get('category')?.split(',').filter(Boolean) ?? [],
-    vibe: params.get('vibe')?.split(',').filter(Boolean) ?? [],
+    category: rawCategory === null ? [...CATEGORIES] : parseSlugList(rawCategory, CATEGORIES),
+    vibe: rawVibe === null ? [...VIBES] : parseSlugList(rawVibe, VIBES),
     datePreset: (params.get('date') as DatePreset | null) ?? 'any',
     free: params.get('free') === '1',
-    forYou: params.get('for_you') !== '0',
+    forYou: params.get('for_you') === '1',
     sort: (params.get('sort') as SortOption | null) ?? 'relevance',
   };
 }
@@ -215,11 +238,11 @@ export function parseExploreFilters(params: URLSearchParams): ExploreFilters {
 export function exploreFiltersToSearchParams(filters: ExploreFilters): URLSearchParams {
   const params = new URLSearchParams();
   if (filters.q) params.set('q', filters.q);
-  if (filters.category.length) params.set('category', filters.category.join(','));
-  if (filters.vibe.length) params.set('vibe', filters.vibe.join(','));
+  if (!isFullSet(filters.category, CATEGORIES)) params.set('category', filters.category.join(','));
+  if (!isFullSet(filters.vibe, VIBES)) params.set('vibe', filters.vibe.join(','));
   if (filters.datePreset !== 'any') params.set('date', filters.datePreset);
   if (filters.free) params.set('free', '1');
-  if (!filters.forYou) params.set('for_you', '0');
+  if (filters.forYou) params.set('for_you', '1');
   if (filters.sort !== 'relevance') params.set('sort', filters.sort);
   return params;
 }
@@ -228,8 +251,12 @@ export function exploreFiltersToSearchParams(filters: ExploreFilters): URLSearch
 export function buildExploreApiQuery(filters: ExploreFilters, offset: number): string {
   const params = new URLSearchParams();
   if (filters.q) params.set('q', filters.q);
-  if (filters.category.length) params.set('category', filters.category.join(','));
-  if (filters.vibe.length) params.set('vibe', filters.vibe.join(','));
+  if (filters.category.length && !isFullSet(filters.category, CATEGORIES)) {
+    params.set('category', filters.category.join(','));
+  }
+  if (filters.vibe.length && !isFullSet(filters.vibe, VIBES)) {
+    params.set('vibe', filters.vibe.join(','));
+  }
   const { from, to } = datePresetRange(filters.datePreset);
   if (from) params.set('date_from', from);
   if (to) params.set('date_to', to);
@@ -241,11 +268,14 @@ export function buildExploreApiQuery(filters: ExploreFilters, offset: number): s
   return params.toString();
 }
 
-/** Number of active facets — drives the mobile "Filters (n)" badge. Search
- * text and sort are not facets for this count (matches the plan's badge
- * scope: category/vibe/date/free). */
+/** Number of narrowed facets — drives the mobile "Filters (n)" badge. Counts
+ * category/vibe only when not the full set (the all-selected default isn't a
+ * narrowing filter), plus date preset and free. Search text and sort are not
+ * facets for this count. */
 export function activeFacetCount(filters: ExploreFilters): number {
-  let count = filters.category.length + filters.vibe.length;
+  let count = 0;
+  if (!isFullSet(filters.category, CATEGORIES)) count += 1;
+  if (!isFullSet(filters.vibe, VIBES)) count += 1;
   if (filters.datePreset !== 'any') count += 1;
   if (filters.free) count += 1;
   return count;
