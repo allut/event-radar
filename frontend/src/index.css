@@ -105,12 +105,15 @@
   --space-1-1: 1.1rem;
   --space-1-125: 1.125rem;
   --space-1-25: 1.25rem;
+  --space-1-4: 1.4rem;
   --space-1-75: 1.75rem;
   --space-2-5: 2.5rem;
+  --space-2-75: 2.75rem;
 
   /* Shape */
   --radius-pill: 100px;
   --radius-sm: 3px;
+  --radius-lg: 10px;
   --radius-full: 50%; /* circle shape */
 
   /* Layering */
@@ -125,6 +128,7 @@
   /* Image height caps — fit-to-width natural display, bounded for extreme portraits */
   --card-image-max-height: 560px;
   --hero-image-max-height: 600px;
+  --card-image-ratio: 16 / 9; /* fixed letterbox box for the standard EventCard image */
 
   /* Spinner sizes */
   --spinner-size: 40px;
@@ -212,7 +216,7 @@ a:hover {
   color: var(--accent-light);
 }
 
-button {
+button, select {
   cursor: pointer;
   font-family: inherit;
 }

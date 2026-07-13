@@ -17,9 +17,7 @@
 
 .masthead {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
   gap: var(--space-3);
 }
 
@@ -31,12 +29,23 @@
   letter-spacing: var(--tracking-tighter);
 }
 
+.search {
+  position: relative;
+}
+
+.searchIcon {
+  position: absolute;
+  left: var(--space-4);
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
 .searchInput {
-  flex: 1;
-  min-width: 240px;
-  max-width: 420px;
-  padding: var(--space-0-6) var(--space-1);
-  border-radius: var(--radius);
+  width: 100%;
+  padding: var(--space-0-875) var(--space-1-1) var(--space-0-875) var(--space-2-75);
+  border-radius: var(--radius-lg);
   border: 1px solid var(--border);
   background: var(--bg-overlay-soft);
   color: var(--text);
@@ -53,57 +62,34 @@
   border-color: var(--accent-border);
 }
 
-.controlsRow {
+.menuRow {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: var(--space-4);
-}
-
-.forYouControl {
-  display: flex;
-  align-items: center;
   gap: var(--space-2);
 }
 
-.forYouLabel {
-  font-size: var(--fs-sm);
-  font-weight: 600;
-  color: var(--text);
-}
-
-.sortControl {
-  display: flex;
-  align-items: center;
-  gap: var(--space-0-45);
-  margin-left: auto;
-}
-
-.sortLabel {
-  font-size: var(--fs-sm);
-  color: var(--text-muted);
-}
-
-.sortSelect {
-  padding: var(--space-0-3125) var(--space-0-625);
-  border-radius: var(--radius);
+.cluster {
+  display: inline-flex;
+  align-items: stretch;
   border: 1px solid var(--border);
+  border-radius: var(--radius);
   background: var(--bg-overlay-soft);
-  color: var(--text);
-  font-size: var(--fs-sm);
 }
 
-.filtersBtn {
-  composes: btnOutline from '../../components/shared/Button.module.css';
-  padding: var(--space-0-3125) var(--space-0-875);
-  font-size: var(--fs-sm);
-  display: none;
+/* Clip only the segmented control (no popover) to the cluster's rounded
+   left corner — SortMenu's popover is a descendant of .cluster and must
+   stay unclipped so it can render below the trigger. */
+.cluster > :first-child {
+  border-top-left-radius: var(--radius);
+  border-bottom-left-radius: var(--radius);
+  overflow: hidden;
 }
 
-.desktopFacets {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2-5);
+.divider {
+  width: 1px;
+  background: var(--border);
+  align-self: stretch;
 }
 
 .grid {
@@ -132,18 +118,6 @@
 }
 
 @media (max-width: 640px) {
-  .filtersBtn {
-    display: inline-flex;
-  }
-
-  .desktopFacets {
-    display: none;
-  }
-
-  .sortControl {
-    margin-left: 0;
-  }
-
   .grid {
     grid-template-columns: 1fr;
   }

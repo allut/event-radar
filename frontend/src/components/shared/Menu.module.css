@@ -1,0 +1,48 @@
+.menu {
+  position: relative;
+}
+
+.menuPop {
+  position: absolute;
+  top: calc(100% + var(--space-0-45));
+  left: 0;
+  z-index: var(--z-toast);
+  min-width: 230px;
+  max-width: calc(100vw - 2 * var(--space-5));
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lead);
+  padding: var(--space-3);
+}
+
+@media (max-width: 640px) {
+  .menuPop {
+    left: auto;
+    right: 0;
+  }
+}
+
+.triggerButton {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--space-0-45) var(--space-0-875);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text);
+  background: var(--bg-overlay-soft);
+  transition: all var(--transition);
+}
+
+.triggerButton:hover {
+  border-color: var(--accent-hover-border);
+}
+
+.triggerButtonActive {
+  border-color: var(--accent-border);
+  color: var(--accent-light);
+  background: var(--accent-subtle);
+}

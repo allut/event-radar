@@ -10,8 +10,9 @@ import EmptyState from '../../components/EmptyState';
 import PageState from '../../components/PageState';
 import TopBar from '../../components/TopBar';
 import Chip from '../../components/Chip';
-import Toggle from '../../components/Toggle';
-import FilterDrawer from '../../components/FilterDrawer';
+import FacetMenu from '../../components/FacetMenu';
+import SegmentedControl from '../../components/SegmentedControl';
+import SelectMenu from '../../components/SelectMenu';
 import {
   CATEGORIES,
   VIBES,
@@ -52,7 +53,6 @@ export default function Explore() {
   const { locale, handleLocaleChange } = useLocaleMutation(['explore']);
 
   const [searchInput, setSearchInput] = useState(filters.q);
-  const [drawerOpen, setDrawerOpen] = useState(false);
 
   // Keep the input in sync when the URL changes from elsewhere (back/forward).
   // Adjusted during render (React's documented "Adjusting state when a prop
@@ -134,9 +134,8 @@ export default function Explore() {
     commitFilters({ ...filters, [kind]: next, forYou });
   }
 
-  function toggleDatePreset(value: string) {
-    const preset = value as DatePreset;
-    commitFilters({ ...filters, datePreset: filters.datePreset === preset ? 'any' : preset });
+  function setDatePreset(preset: DatePreset) {
+    commitFilters({ ...filters, datePreset: preset });
   }
 
   function toggleFree() {
@@ -157,7 +156,6 @@ export default function Explore() {
   }
 
   const events = data?.pages.flatMap((page) => page.events) ?? [];
-  const total = data?.pages[0]?.total ?? 0;
   const activeCount = activeFacetCount(filters);
   const hasActiveFilters =
     activeCount > 0 || filters.q.length > 0 || !filters.forYou || filters.sort !== 'relevance';
@@ -165,20 +163,10 @@ export default function Explore() {
   const categoryOptions = CATEGORIES.map((slug) => ({ value: slug, label: t(`category_${slug}`, locale) }));
   const vibeOptions = VIBES.map((slug) => ({ value: slug, label: t(`vibe_${slug}`, locale) }));
   const dateOptions = DATE_PRESETS.map((p) => ({ value: p.value, label: t(p.labelKey, locale) }));
-
-  const facetControls = (
-    <>
-      <Chip options={categoryOptions} selected={filters.category} onToggle={(v) => toggleFacet('category', v)} ariaLabel={t('filter_categories', locale)} />
-      <Chip options={vibeOptions} selected={filters.vibe} onToggle={(v) => toggleFacet('vibe', v)} ariaLabel={t('filter_vibes', locale)} />
-      <Chip options={dateOptions} selected={[filters.datePreset]} onToggle={toggleDatePreset} ariaLabel={t('filter_dates', locale)} />
-      <Chip
-        options={[{ value: 'free', label: t('free_only', locale) }]}
-        selected={filters.free ? ['free'] : []}
-        onToggle={toggleFree}
-        ariaLabel={t('free_only', locale)}
-      />
-    </>
-  );
+  const forYouOptions = [
+    { value: 'all', label: t('all_events', locale) },
+    { value: 'foryou', label: t('for_you', locale) },
+  ];
 
   return (
     <div className={styles.page}>
@@ -187,6 +175,23 @@ export default function Explore() {
       <main className={styles.main}>
         <header className={styles.masthead}>
           <h1 className={styles.heading}>{t('nav_explore', locale)}</h1>
+        </header>
+
+        <div className={styles.search}>
+          <svg
+            className={styles.searchIcon}
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            aria-hidden
+          >
+            <circle cx="11" cy="11" r="7" />
+            <path d="M21 21l-4.3-4.3" />
+          </svg>
           <input
             type="search"
             className={styles.searchInput}
@@ -195,39 +200,57 @@ export default function Explore() {
             onChange={(e) => setSearchInput(e.target.value)}
             aria-label={t('explore_search_placeholder', locale)}
           />
-        </header>
-
-        <div className={styles.controlsRow}>
-          <div className={styles.forYouControl}>
-            <Toggle
-              on={filters.forYou}
-              onChange={setForYou}
-              ariaLabel={filters.forYou ? t('for_you', locale) : t('all_events', locale)}
-            />
-            <span className={styles.forYouLabel}>
-              {filters.forYou ? t('for_you', locale) : t('all_events', locale)}
-            </span>
-          </div>
-
-          <label className={styles.sortControl}>
-            <span className={styles.sortLabel}>{t('sort_by', locale)}</span>
-            <select
-              className={styles.sortSelect}
-              value={filters.sort}
-              onChange={(e) => setSort(e.target.value as SortOption)}
-            >
-              {SORT_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>{t(opt.labelKey, locale)}</option>
-              ))}
-            </select>
-          </label>
-
-          <button type="button" className={styles.filtersBtn} onClick={() => setDrawerOpen(true)}>
-            {activeCount > 0 ? `${t('filters', locale)} (${activeCount})` : t('filters', locale)}
-          </button>
         </div>
 
-        <div className={styles.desktopFacets}>{facetControls}</div>
+        <div className={styles.menuRow}>
+          <div className={styles.cluster}>
+            <SegmentedControl
+              options={forYouOptions}
+              value={filters.forYou ? 'foryou' : 'all'}
+              onChange={(v) => setForYou(v === 'foryou')}
+              ariaLabel={`${t('all_events', locale)} / ${t('for_you', locale)}`}
+            />
+            <span className={styles.divider} aria-hidden />
+            <SelectMenu
+              variant="inline"
+              label={t('sort_by', locale)}
+              value={filters.sort}
+              options={SORT_OPTIONS.map((opt) => ({ value: opt.value, label: t(opt.labelKey, locale) }))}
+              onChange={(v) => setSort(v as SortOption)}
+              ariaLabel={t('sort_by', locale)}
+            />
+          </div>
+
+          <FacetMenu
+            label={t('filter_categories', locale)}
+            options={categoryOptions}
+            selected={filters.category}
+            onToggle={(v) => toggleFacet('category', v)}
+            ariaLabel={t('filter_categories', locale)}
+          />
+          <FacetMenu
+            label={t('filter_vibes', locale)}
+            options={vibeOptions}
+            selected={filters.vibe}
+            onToggle={(v) => toggleFacet('vibe', v)}
+            ariaLabel={t('filter_vibes', locale)}
+          />
+          <SelectMenu
+            variant="button"
+            label={t('date_prefix', locale)}
+            value={filters.datePreset}
+            options={dateOptions}
+            onChange={(v) => setDatePreset(v as DatePreset)}
+            active={filters.datePreset !== 'any'}
+            ariaLabel={t('filter_dates', locale)}
+          />
+          <Chip
+            options={[{ value: 'free', label: t('free_only', locale) }]}
+            selected={filters.free ? ['free'] : []}
+            onToggle={toggleFree}
+            ariaLabel={t('free_only', locale)}
+          />
+        </div>
 
         {isLoading ? (
           <PageState kind="loading" message={t('loading', locale)} />
@@ -271,17 +294,6 @@ export default function Explore() {
           </button>
         )}
       </main>
-
-      <FilterDrawer
-        open={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
-        onClear={clearFilters}
-        activeCount={activeCount}
-        resultCount={total}
-        locale={locale}
-      >
-        {facetControls}
-      </FilterDrawer>
     </div>
   );
 }

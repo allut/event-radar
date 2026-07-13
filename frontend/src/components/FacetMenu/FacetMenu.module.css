@@ -1,0 +1,12 @@
+.menuBtn {
+  composes: triggerButton from '../shared/Menu.module.css';
+}
+
+.has {
+  composes: triggerButtonActive from '../shared/Menu.module.css';
+}
+
+.chev {
+  color: var(--text-muted);
+  font-size: var(--fs-icon);
+}

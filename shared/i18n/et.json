@@ -134,7 +134,8 @@
     "explore_error": "Sündmuste laadimine ebaõnnestus. Palun värskenda.",
     "filter_categories": "Kategooriad",
     "filter_vibes": "Meeleolud",
-    "filter_dates": "Kuupäev"
+    "filter_dates": "Kuupäev",
+    "date_prefix": "Näita"
   },
   "email": {
     "email.magic_link.subject": "Sinu Event Radar sisselogimislink",

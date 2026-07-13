@@ -134,7 +134,8 @@
     "explore_error": "Failed to load events. Please refresh.",
     "filter_categories": "Categories",
     "filter_vibes": "Vibes",
-    "filter_dates": "Date"
+    "filter_dates": "Date",
+    "date_prefix": "Show for"
   },
   "email": {
     "email.magic_link.subject": "Your Event Radar sign-in link",

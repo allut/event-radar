@@ -1,0 +1,27 @@
+.seg {
+  display: inline-flex;
+  align-items: stretch;
+}
+
+.segBtn {
+  padding: var(--space-2) var(--space-0-875);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  transition: all var(--transition);
+}
+
+.segBtn:hover {
+  color: var(--text);
+}
+
+.segBtn.active {
+  background: var(--accent-subtle);
+  color: var(--accent-light);
+}
+
+.segBtn + .segBtn {
+  border-left: 1px solid var(--border);
+}

@@ -82,6 +82,7 @@ describe('Explore', () => {
     renderWithProviders(<Explore />, { route: '/explore' });
     await waitFor(() => expect(screen.getAllByTestId('event-card').length).toBe(1));
 
+    await userEvent.click(screen.getByRole('button', { name: /Categories/ }));
     await userEvent.click(screen.getByRole('button', { name: 'Music' }));
 
     await waitFor(() => {
@@ -117,11 +118,13 @@ describe('Explore', () => {
     });
 
     renderWithProviders(<Explore />, { route: '/explore' });
-    await waitFor(() => expect(screen.getByText('For you')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole('button', { name: 'For you' })).toHaveAttribute('aria-pressed', 'true'));
 
+    await userEvent.click(screen.getByRole('button', { name: /Categories/ }));
     await userEvent.click(screen.getByRole('button', { name: 'Theatre' }));
 
-    await waitFor(() => expect(screen.getByText('All events')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole('button', { name: 'For you' })).toHaveAttribute('aria-pressed', 'false'));
+    expect(screen.getByRole('button', { name: 'All events' })).toHaveAttribute('aria-pressed', 'true');
   });
 
   it('selecting an in-taste category keeps For-you on', async () => {
@@ -131,11 +134,12 @@ describe('Explore', () => {
     });
 
     renderWithProviders(<Explore />, { route: '/explore' });
-    await waitFor(() => expect(screen.getByText('For you')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole('button', { name: 'For you' })).toHaveAttribute('aria-pressed', 'true'));
 
+    await userEvent.click(screen.getByRole('button', { name: /Categories/ }));
     await userEvent.click(screen.getByRole('button', { name: 'Music' }));
 
-    expect(screen.getByText('For you')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'For you' })).toHaveAttribute('aria-pressed', 'true');
   });
 
   it('shows error state on fetch failure', async () => {
@@ -158,9 +162,10 @@ describe('Explore', () => {
     const user = userEvent.setup();
 
     renderWithProviders(<Explore />, { route: '/explore' });
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Music' })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole('button', { name: /Categories/ })).toBeInTheDocument());
 
     await user.type(screen.getByPlaceholderText(/search events/i), 'jazz');
+    await user.click(screen.getByRole('button', { name: /Categories/ }));
     await user.click(screen.getByRole('button', { name: 'Music' }));
 
     // Wait past the debounce window — both the typed text and the chip click

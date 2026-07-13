@@ -134,7 +134,8 @@
     "explore_error": "Не удалось загрузить события. Обновите страницу.",
     "filter_categories": "Категории",
     "filter_vibes": "Настроение",
-    "filter_dates": "Дата"
+    "filter_dates": "Дата",
+    "date_prefix": "Показать"
   },
   "email": {
     "email.magic_link.subject": "Ваша ссылка для входа в Event Radar",

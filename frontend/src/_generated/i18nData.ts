@@ -139,6 +139,7 @@ export const TRANSLATIONS: Record<Locale, Record<string, string>> = {
     'filter_categories': 'Categories',
     'filter_vibes': 'Vibes',
     'filter_dates': 'Date',
+    'date_prefix': 'Show for',
   },
   et: {
     'brand': 'Event Radar',
@@ -276,6 +277,7 @@ export const TRANSLATIONS: Record<Locale, Record<string, string>> = {
     'filter_categories': 'Kategooriad',
     'filter_vibes': 'Meeleolud',
     'filter_dates': 'Kuupäev',
+    'date_prefix': 'Näita',
   },
   ru: {
     'brand': 'Event Radar',
@@ -413,6 +415,7 @@ export const TRANSLATIONS: Record<Locale, Record<string, string>> = {
     'filter_categories': 'Категории',
     'filter_vibes': 'Настроение',
     'filter_dates': 'Дата',
+    'date_prefix': 'Показать',
   },
 };
 
