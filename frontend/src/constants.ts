@@ -33,6 +33,10 @@ export const AUTH_REDIRECT_DELAY_MS = 600;
 // ─── Animation ───────────────────────────────────────────────────────────────
 export const CARD_ANIMATION_DELAY_STEP_MS = 80;
 
+// ─── Layout ──────────────────────────────────────────────────────────────────
+// Matches the `max-width: 640px` breakpoint used across component CSS modules.
+export const MOBILE_BREAKPOINT_PX = 640;
+
 // ─── Settings ────────────────────────────────────────────────────────────────
 export const SAVE_MSG_CLEAR_DELAY_MS = 2000;
 

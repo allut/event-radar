@@ -16,6 +16,11 @@
   padding: var(--space-3);
 }
 
+.menuPop[data-flip='true'] {
+  left: auto;
+  right: 0;
+}
+
 @media (max-width: 640px) {
   .menuPop {
     left: auto;

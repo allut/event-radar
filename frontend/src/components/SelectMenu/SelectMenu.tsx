@@ -30,7 +30,7 @@ export default function SelectMenu({
   active = false,
   disabled = false,
 }: SelectMenuProps) {
-  const { open, setOpen, rootRef, popRef, triggerRef, close } = useDropdown();
+  const { open, setOpen, flip, rootRef, popRef, triggerRef, close } = useDropdown();
   const current = options.find((o) => o.value === value);
 
   function handleSelect(next: string) {
@@ -58,7 +58,7 @@ export default function SelectMenu({
         <span className={styles.chev} aria-hidden>▾</span>
       </button>
       {open && !disabled && (
-        <div className={styles.pop} ref={popRef}>
+        <div className={styles.pop} ref={popRef} data-flip={flip || undefined}>
           <div className={styles.optionList} role="group" aria-label={ariaLabel}>
             {options.map((option) => {
               const isActive = option.value === value;

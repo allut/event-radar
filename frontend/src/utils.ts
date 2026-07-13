@@ -140,6 +140,13 @@ export function makeActiveClassMap(styles: Record<string, string>): Record<Signa
   return result;
 }
 
+/** True when a popover of `popWidth` left-anchored at `triggerLeft` (viewport-relative
+ * px) would overflow the viewport's right edge. `marginPx` matches the --space-5
+ * gutter .menuPop's max-width already reserves, for consistency. */
+export function shouldFlipPopover(triggerLeft: number, popWidth: number, viewportWidth: number, marginPx: number): boolean {
+  return triggerLeft + popWidth > viewportWidth - marginPx;
+}
+
 // ─── Explore ─────────────────────────────────────────────────────────────────
 
 export interface ExploreFilters {

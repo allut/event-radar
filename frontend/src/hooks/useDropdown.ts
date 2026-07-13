@@ -1,4 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { MOBILE_BREAKPOINT_PX } from '../constants';
+import { shouldFlipPopover } from '../utils';
 
 /**
  * Shared open/close + outside-click + Escape + focus behavior for a
@@ -6,6 +8,7 @@ import { useEffect, useRef, useState } from 'react';
  */
 export function useDropdown() {
   const [open, setOpen] = useState(false);
+  const [flip, setFlip] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const popRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -35,5 +38,36 @@ export function useDropdown() {
     };
   }, [open]);
 
-  return { open, setOpen, rootRef, popRef, triggerRef, close };
+  // Flip the popover to right-anchor when it would overflow the viewport's
+  // right edge — desktop only, mobile has its own fixed-position layout
+  // (FacetMenu.module.css's mobile media query) that must not be touched.
+  useLayoutEffect(() => {
+    function measure(): boolean {
+      if (!open || !popRef.current || !triggerRef.current) return false;
+      if (window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT_PX}px)`).matches) return false;
+      // --space-5 is a rem token (index.css); getPropertyValue on a custom
+      // property returns the raw specified value ("1.5rem"), not a resolved
+      // px length, so it must be scaled by the root font-size manually.
+      const spaceRem = parseFloat(getComputedStyle(popRef.current).getPropertyValue('--space-5'));
+      const rootFontPx = parseFloat(getComputedStyle(document.documentElement).fontSize);
+      const marginPx = spaceRem * rootFontPx;
+      return shouldFlipPopover(
+        triggerRef.current.getBoundingClientRect().left,
+        popRef.current.getBoundingClientRect().width,
+        window.innerWidth,
+        marginPx,
+      );
+    }
+
+    setFlip(measure());
+    if (!open) return;
+
+    function handleResize() {
+      setFlip(measure());
+    }
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [open]);
+
+  return { open, setOpen, flip, rootRef, popRef, triggerRef, close };
 }

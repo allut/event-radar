@@ -1,3 +1,19 @@
+.pop {
+  composes: menuPop from '../shared/Menu.module.css';
+}
+
+@media (max-width: 640px) {
+  .pop.pop {
+    position: fixed;
+    left: var(--space-3);
+    right: var(--space-3);
+    top: var(--facet-pop-top);
+    width: auto;
+    max-width: none;
+    min-width: 0;
+  }
+}
+
 .menuBtn {
   composes: triggerButton from '../shared/Menu.module.css';
 }

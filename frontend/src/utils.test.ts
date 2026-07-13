@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { cx, safeUrl, sanitizeHtml, formatPrice, categoryGradient, formatHourMinute, makeActiveClassMap, trackExternalClick, datePresetRange, parseExploreFilters, exploreFiltersToSearchParams, buildExploreApiQuery, activeFacetCount, isFullSet, DEFAULT_EXPLORE_FILTERS, type ExploreFilters } from './utils';
+import { cx, safeUrl, sanitizeHtml, formatPrice, categoryGradient, formatHourMinute, makeActiveClassMap, trackExternalClick, datePresetRange, parseExploreFilters, exploreFiltersToSearchParams, buildExploreApiQuery, activeFacetCount, isFullSet, shouldFlipPopover, DEFAULT_EXPLORE_FILTERS, type ExploreFilters } from './utils';
 import { FALLBACK_GRADIENT, CATEGORIES } from './constants';
 
 vi.mock('./api/client', () => ({
@@ -377,5 +377,23 @@ describe('activeFacetCount', () => {
 
   it('counts an emptied facet as narrowed', () => {
     expect(activeFacetCount({ ...DEFAULT_EXPLORE_FILTERS, category: [] })).toBe(1);
+  });
+});
+
+describe('shouldFlipPopover', () => {
+  it('flips when a wide popover near the right edge would overflow', () => {
+    expect(shouldFlipPopover(700, 330, 800, 24)).toBe(true);
+  });
+
+  it('does not flip when the trigger is near the left edge', () => {
+    expect(shouldFlipPopover(20, 330, 800, 24)).toBe(false);
+  });
+
+  it('does not flip exactly at the boundary (viewportWidth - margin)', () => {
+    expect(shouldFlipPopover(446, 330, 800, 24)).toBe(false);
+  });
+
+  it('flips one pixel past the boundary', () => {
+    expect(shouldFlipPopover(447, 330, 800, 24)).toBe(true);
   });
 });
