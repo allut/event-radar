@@ -4,16 +4,10 @@
 }
 
 .triggerInline {
-  display: flex;
-  align-items: center;
-  gap: var(--space-0-45);
-  padding: var(--space-0-45) var(--space-0-875);
-  background: transparent;
-  border: 1px solid transparent;
+  composes: triggerInline from '../shared/Menu.module.css';
+  border-radius: 0;
   border-top-right-radius: var(--radius);
   border-bottom-right-radius: var(--radius);
-  color: var(--text);
-  font-size: var(--fs-sm);
 }
 
 .label {

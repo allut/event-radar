@@ -202,7 +202,7 @@ export default function Explore() {
           />
         </div>
 
-        <div className={styles.menuRow}>
+        <div className={styles.menuRowTop}>
           <div className={styles.switchBox}>
             <SegmentedControl
               options={forYouOptions}
@@ -231,29 +231,37 @@ export default function Explore() {
               ariaLabel={t('filter_dates', locale)}
             />
           </div>
+        </div>
 
-          <FacetMenu
-            label={t('filter_categories', locale)}
-            options={categoryOptions}
-            selected={filters.category}
-            onToggle={(v) => toggleFacet('category', v)}
-            ariaLabel={t('filter_categories', locale)}
-          />
-          <FacetMenu
-            label={t('filter_vibes', locale)}
-            options={vibeOptions}
-            selected={filters.vibe}
-            onToggle={(v) => toggleFacet('vibe', v)}
-            ariaLabel={t('filter_vibes', locale)}
-          />
-          <button
-            type="button"
-            className={cx(styles.freeBtn, filters.free && styles.freeBtnActive)}
-            aria-pressed={filters.free}
-            onClick={toggleFree}
-          >
-            {t('free_only', locale)}
-          </button>
+        <div className={styles.menuRowBottom}>
+          <div className={styles.cluster}>
+            <FacetMenu
+              variant="inline"
+              label={t('filter_categories', locale)}
+              options={categoryOptions}
+              selected={filters.category}
+              onToggle={(v) => toggleFacet('category', v)}
+              ariaLabel={t('filter_categories', locale)}
+            />
+            <span className={styles.divider} aria-hidden />
+            <FacetMenu
+              variant="inline"
+              label={t('filter_vibes', locale)}
+              options={vibeOptions}
+              selected={filters.vibe}
+              onToggle={(v) => toggleFacet('vibe', v)}
+              ariaLabel={t('filter_vibes', locale)}
+            />
+            <span className={styles.divider} aria-hidden />
+            <button
+              type="button"
+              className={cx(styles.freeBtn, filters.free && styles.freeBtnActive)}
+              aria-pressed={filters.free}
+              onClick={toggleFree}
+            >
+              {t('free_only', locale)}
+            </button>
+          </div>
         </div>
 
         {isLoading ? (

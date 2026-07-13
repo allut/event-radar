@@ -10,11 +10,21 @@ interface FacetMenuProps {
   selected: string[];
   onToggle: (value: string) => void;
   ariaLabel: string;
+  /** 'button' is a bordered pill (default); 'inline' blends into a cluster
+   * (e.g. next to another FacetMenu), matching SelectMenu's inline variant. */
+  variant?: 'button' | 'inline';
 }
 
 /** Trigger button + popover for one Explore facet (Category/Vibe/When).
  * Popover options reuse the shared Chip pill component. */
-export default function FacetMenu({ label, options, selected, onToggle, ariaLabel }: FacetMenuProps) {
+export default function FacetMenu({
+  label,
+  options,
+  selected,
+  onToggle,
+  ariaLabel,
+  variant = 'button',
+}: FacetMenuProps) {
   const { open, setOpen, rootRef, popRef, triggerRef } = useDropdown();
   const hasSelection = selected.length > 0;
 
@@ -23,7 +33,11 @@ export default function FacetMenu({ label, options, selected, onToggle, ariaLabe
       <button
         ref={triggerRef}
         type="button"
-        className={cx(styles.menuBtn, hasSelection && styles.has)}
+        className={
+          variant === 'inline'
+            ? cx(styles.menuBtnInline, hasSelection && styles.hasInline)
+            : cx(styles.menuBtn, hasSelection && styles.has)
+        }
         aria-expanded={open}
         aria-haspopup="true"
         onClick={() => setOpen((v) => !v)}

@@ -62,9 +62,18 @@
   border-color: var(--accent-border);
 }
 
-.menuRow {
+.menuRowTop {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.menuRowBottom {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
   flex-wrap: wrap;
   gap: var(--space-2);
 }
@@ -93,11 +102,12 @@
 }
 
 .freeBtn {
-  composes: triggerButton from '../../components/shared/Menu.module.css';
+  composes: triggerInline from '../../components/shared/Menu.module.css';
+  font-weight: 600;
 }
 
 .freeBtnActive {
-  composes: triggerButtonActive from '../../components/shared/Menu.module.css';
+  composes: triggerInlineActive from '../../components/shared/Menu.module.css';
 }
 
 .grid {

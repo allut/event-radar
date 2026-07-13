@@ -6,6 +6,15 @@
   composes: triggerButtonActive from '../shared/Menu.module.css';
 }
 
+.menuBtnInline {
+  composes: triggerInline from '../shared/Menu.module.css';
+  font-weight: 600;
+}
+
+.hasInline {
+  composes: triggerInlineActive from '../shared/Menu.module.css';
+}
+
 .chev {
   color: var(--text-muted);
   font-size: var(--fs-icon);
