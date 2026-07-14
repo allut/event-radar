@@ -83,22 +83,22 @@
   font-size: var(--fs-sm);
 }
 
+.mobileMenuWrap {
+  display: none;
+  justify-content: flex-end;
+}
+
 @media (max-width: 640px) {
   .topBar {
-    grid-template-columns: auto 1fr;
+    grid-template-columns: 1fr auto;
   }
 
-  .brand {
+  .nav,
+  .topActions {
     display: none;
   }
 
-  .nav {
-    justify-content: flex-start;
-    gap: var(--space-0-2);
-  }
-
-  .navLink {
-    padding: var(--space-0-2) var(--space-0-45);
-    font-size: var(--fs-xs);
+  .mobileMenuWrap {
+    display: flex;
   }
 }

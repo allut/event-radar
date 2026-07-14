@@ -2,6 +2,7 @@ import { Link, NavLink } from 'react-router-dom';
 import { t } from '../../i18n';
 import { cx } from '../../utils';
 import LocaleSelector from '../LocaleSelector';
+import MobileMenu from '../MobileMenu';
 import styles from './TopBar.module.css';
 
 interface TopBarProps {
@@ -48,6 +49,15 @@ export default function TopBar({ locale, onLocaleChange, onLogout, localeDisable
           onChange={onLocaleChange}
           ariaLabel={t('section_language', locale)}
           disabled={localeDisabled}
+        />
+      </div>
+
+      <div className={styles.mobileMenuWrap}>
+        <MobileMenu
+          locale={locale}
+          onLocaleChange={onLocaleChange}
+          onLogout={onLogout}
+          localeDisabled={localeDisabled}
         />
       </div>
     </header>
