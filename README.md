@@ -8,7 +8,7 @@ The whole platform is designed to run on **free-tier infrastructure** at a stead
 
 ## Features
 
-- **Multi-source ingestion** — Fienta API, HTML listing scrapers (Piletilevi, KUMU, Estonia Concert Hall) sharing a common adapter, and inbound newsletter parsing via email webhook. A Nominatim geocoding backfill fills in venue coordinates that sources don't provide, a daily detail-refetch sync reconciles venue/price/coordinates against each event's source page, and a bilingual-content splitter breaks apart source pages that concatenate two languages in one field.
+- **Multi-source ingestion** — Fienta API, HTML listing scrapers (Piletilevi, KUMU, Estonia Concert Hall) sharing a common adapter, and inbound newsletter parsing via email webhook. A Nominatim geocoding backfill fills in venue coordinates that sources don't provide, a daily detail-refetch sync reconciles venue/price/coordinates against each event's source page, and per-locale page fetches capture localized `et`/`en`/`ru` titles and descriptions at ingest.
 - **Two-stage deduplication** — a cheap SQL + fuzzy pre-filter narrows candidate pairs, then an LLM tiebreaker resolves only the survivors. Decisions are cached by content hash to avoid repeat LLM calls.
 - **LLM classification** — assigns a fixed 12-category / 10-vibe taxonomy, a quality score, an explicit-content flag, a non-event flag, a parsed price range, and a localized 3-bullet "why go?" rationale, with a Groq → Cerebras → Mistral provider fallback chain.
 - **3-layer NSFW filter** — a keyword prefilter at ingest time, an LLM-assigned explicit-content flag, and a publish gate that excludes flagged events from the published feed.
@@ -16,6 +16,7 @@ The whole platform is designed to run on **free-tier infrastructure** at a stead
 - **Publish gate** — classified events are promoted to `published` only once they clear a minimum quality score, pass the NSFW and non-event checks, pass a location check, haven't already ended, and (if geocoded) fall within the Tallinn region.
 - **Persona-based personalization** — users pick a primary and optional secondary persona at onboarding; like/dislike/bookmark signals continuously retune their ranking.
 - **Daily 5 builder** — a scheduled job scores upcoming events and writes a diverse five-event feed per user each morning, then emails a digest.
+- **Explore discovery grid** — a searchable, filterable (keyword, category/vibe, date, free-only, for-you), and sortable (relevance/date/price/quality) view over all upcoming published events, with an optional personalized ranking path.
 - **Magic-link auth** — passwordless sign-in with short-lived, single-use links and revocable 7-day session tokens. No third-party auth provider.
 - **Full trilingual i18n** — every UI string, email, and LLM output supports `et` / `en` / `ru` from a single shared source of truth.
 - **Security-hardened** — OWASP Top 10 mitigations: per-IP rate limiting, strict security headers, CORS lockdown, external-URL sanitization, and a CVE audit in CI.
@@ -25,7 +26,7 @@ The whole platform is designed to run on **free-tier infrastructure** at a stead
 
 ```
 Vite + React SPA  ──HTTPS / JSON──▶  FastAPI (single process)
-                                       ├── Routers: /auth /admin /onboarding /events
+                                       ├── Routers: /auth /admin /onboarding /events /explore
                                        │            /feed /feedback /users/me /webhooks
                                        └── APScheduler (embedded, kept warm by a cron ping)
                                            ├── Weekly Sun 03:00: sync_fienta_organizers
@@ -136,7 +137,7 @@ Open http://localhost:5173 and sign in with a magic link. Without `RESEND_API_KE
 event-radar/
 ├── backend/                  # FastAPI application
 │   ├── app/
-│   │   ├── routers/          # /auth /admin /onboarding /events /feed /feedback /webhooks ...
+│   │   ├── routers/          # /auth /admin /onboarding /events /explore /feed /feedback /webhooks ...
 │   │   ├── ingestion/        # source adapters (Fienta, HTML listings, newsletter), geocoding backfill, detail-refetch sync
 │   │   ├── dedup/            # rule-based pre-filter + LLM tiebreaker
 │   │   ├── llm/              # provider router, classifier, taxonomy, extractor
@@ -153,7 +154,7 @@ event-radar/
 │   └── tests/               # pytest suite
 ├── frontend/                 # Vite + React SPA
 │   └── src/
-│       ├── routes/          # Login, AuthVerify, Onboarding, Feed, EventDetail, Settings ...
+│       ├── routes/          # Login, AuthVerify, Onboarding, Feed, Explore, EventDetail, Settings ...
 │       ├── components/      # EventCard, PersonaCard, shared CSS base classes ...
 │       ├── api/             # API client
 │       ├── _generated/      # generated constants & i18n (do not edit by hand)
