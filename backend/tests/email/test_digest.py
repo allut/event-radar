@@ -119,7 +119,7 @@ class TestBuildDigestHtml:
 
     def test_et_subject_label(self):
         html = build_digest_html([], date(2026, 5, 20), "et", "https://eventradar.ee")
-        assert "Sinu päevane viisik" in html
+        assert "Sinu päeva 5" in html
 
     def test_ru_subject_label(self):
         html = build_digest_html([], date(2026, 5, 20), "ru", "https://eventradar.ee")
@@ -229,7 +229,7 @@ class TestDigestEmailSubjects:
         assert ti("digest.subject_template", "en", date="Wednesday, May 20") == "Your Daily 5 — Wednesday, May 20"
 
     def test_et_subject_format(self):
-        assert ti("digest.subject_template", "et", date="kolmapäev, 20. mai") == "Sinu päevane viisik — kolmapäev, 20. mai"
+        assert ti("digest.subject_template", "et", date="kolmapäev, 20. mai") == "Sinu päeva 5 — kolmapäev, 20. mai"
 
     def test_ru_subject_format(self):
         assert ti("digest.subject_template", "ru", date="среда, 20 мая") == "Ваша Пятёрка дня — среда, 20 мая"

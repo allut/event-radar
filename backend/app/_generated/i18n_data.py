@@ -21,8 +21,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
     "et": {
         "email.magic_link.subject": "Sinu Event Radar sisselogimislink",
         "email.magic_link.body": "<p>Klõpsa alloleval lingil Event Radarisse sisselogimiseks. Link aegub {ttl_minutes} minuti pärast.</p><p><a href=\"{verify_url}\">Logi sisse Event Radarisse</a></p><p>Kui sa seda ei palunud, ignoreeri seda kirja.</p>",
-        "digest.subject_template": "Sinu päevane viisik — {date}",
-        "digest.subject_label": "Sinu päevane viisik",
+        "digest.subject_template": "Sinu päeva 5 — {date}",
+        "digest.subject_label": "Sinu päeva 5",
         "digest.price_free": "Tasuta",
         "digest.price_free_with_paid": "Tasuta · tasulised piletid kuni €{amount}",
         "digest.price_from": "Alates €{amount}",
