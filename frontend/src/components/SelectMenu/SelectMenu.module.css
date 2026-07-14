@@ -68,4 +68,8 @@
   .chev {
     display: none;
   }
+
+  .label:empty {
+    display: none;
+  }
 }

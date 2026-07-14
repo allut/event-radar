@@ -149,13 +149,32 @@
     align-self: flex-start;
   }
 
-  .menuRowTop .cluster,
-  .menuRowBottom .cluster {
+  .menuRowTop .cluster {
     width: 100%;
   }
 
-  .cluster > *:not(.divider) {
+  .menuRowTop .cluster > *:not(.divider) {
     flex: 1;
     min-width: 0;
+  }
+
+  .menuRowBottom .cluster {
+    /* assumes exactly 3 non-divider children (category, vibe, free-only) — update if that count changes */
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    width: 100%;
+  }
+
+  .menuRowBottom .cluster .divider {
+    display: none;
+  }
+
+  .menuRowBottom .cluster > *:not(.divider) {
+    min-width: 0;
+    border-right: 1px solid var(--border);
+  }
+
+  .menuRowBottom .cluster > *:not(.divider):last-child {
+    border-right: none;
   }
 }
