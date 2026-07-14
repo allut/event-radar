@@ -139,4 +139,23 @@
   .grid {
     grid-template-columns: 1fr;
   }
+
+  .menuRowTop {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .switchBox {
+    align-self: flex-start;
+  }
+
+  .menuRowTop .cluster,
+  .menuRowBottom .cluster {
+    width: 100%;
+  }
+
+  .cluster > *:not(.divider) {
+    flex: 1;
+    min-width: 0;
+  }
 }

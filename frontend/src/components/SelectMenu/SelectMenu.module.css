@@ -63,3 +63,9 @@
   background: var(--accent-subtle);
   border-color: var(--accent-border);
 }
+
+@media (max-width: 640px) {
+  .chev {
+    display: none;
+  }
+}

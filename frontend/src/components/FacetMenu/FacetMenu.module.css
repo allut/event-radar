@@ -35,3 +35,9 @@
   color: var(--text-muted);
   font-size: var(--fs-icon);
 }
+
+@media (max-width: 640px) {
+  .chev {
+    display: none;
+  }
+}
