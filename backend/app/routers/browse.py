@@ -25,6 +25,8 @@ from app.constants import (
     BROWSE_SORT_RELEVANCE,
     BROWSE_SQL_SORTS,
     RATE_LIMIT_BROWSE,
+    SIGNAL_DISLIKE,
+    SIGNAL_LIKE,
     TALLINN_TZ,
     VALID_BROWSE_SORTS,
     VALID_CATEGORIES,
@@ -192,7 +194,10 @@ async def _load_feedback_context(db: AsyncSession, user_id: int) -> FeedbackCont
     rows = (
         await db.scalars(
             select(UserEventFeedback)
-            .where(UserEventFeedback.user_id == user_id)
+            .where(
+                UserEventFeedback.user_id == user_id,
+                UserEventFeedback.signal.in_((SIGNAL_LIKE, SIGNAL_DISLIKE)),
+            )
             .options(
                 selectinload(UserEventFeedback.event).selectinload(
                     Event.classification
@@ -259,6 +264,8 @@ async def _browse_scored_path(
     user_persona_weights = await _load_user_persona_weights(db, current_user.id)
     fb_ctx = await _load_feedback_context(db, current_user.id)
 
+    disliked_categories = fb_ctx.disliked_categories
+
     survivors: list[tuple[float | None, Event]] = []
     for event in candidates:
         cl = event.classification
@@ -271,7 +278,7 @@ async def _browse_scored_path(
             # filters (disliked category, below-affinity) all hide the event.
             if s is None:
                 continue
-            if categories and fb_ctx.disliked_categories.intersection(categories):
+            if categories and disliked_categories.intersection(categories):
                 continue
             # Deliberately time-blind (no time_slots, unlike score_event() below):
             # the soft filter gates on content match (category/vibe) only, so an

@@ -165,7 +165,7 @@ export default function Explore() {
     commitFilters(DEFAULT_EXPLORE_FILTERS);
   }
 
-  const events = data?.pages.flatMap((page) => page.events) ?? [];
+  const events = useMemo(() => data?.pages.flatMap((page) => page.events) ?? [], [data]);
   const activeCount = activeFacetCount(filters);
   const hasActiveFilters =
     activeCount > 0 || filters.q.length > 0 || filters.forYou || filters.sort !== 'relevance';

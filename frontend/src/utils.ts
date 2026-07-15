@@ -217,12 +217,16 @@ export function datePresetRange(preset: DatePreset): { from: string | null; to: 
  * length-only comparison into treating a narrow selection as "select all". */
 function parseSlugList(raw: string, valid: readonly string[]): string[] {
   const validSet = new Set(valid);
-  const seen: string[] = [];
+  const seen = new Set<string>();
+  const result: string[] = [];
   for (const slug of raw.split(',')) {
     const trimmed = slug.trim();
-    if (trimmed && validSet.has(trimmed) && !seen.includes(trimmed)) seen.push(trimmed);
+    if (trimmed && validSet.has(trimmed) && !seen.has(trimmed)) {
+      seen.add(trimmed);
+      result.push(trimmed);
+    }
   }
-  return seen;
+  return result;
 }
 
 /** Filters ⇄ URL query params — the single source of truth for /explore state

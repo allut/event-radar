@@ -636,7 +636,10 @@ async def _load_feed_build_context(
     fb_rows = (
         await db.scalars(
             select(UserEventFeedback)
-            .where(UserEventFeedback.user_id.in_(user_ids))
+            .where(
+                UserEventFeedback.user_id.in_(user_ids),
+                UserEventFeedback.signal.in_((SIGNAL_LIKE, SIGNAL_DISLIKE)),
+            )
             .options(
                 selectinload(UserEventFeedback.event).selectinload(
                     Event.classification

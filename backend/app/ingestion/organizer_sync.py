@@ -159,9 +159,6 @@ def _retire_stale(
         since = datetime.fromisoformat(since_iso)
         if since <= retire_cutoff:
             oid = int(oid_str)
-            if oid in current_id_set:
-                current_ids.remove(oid)
-                current_id_set.discard(oid)
             retired_ids.add(oid)
             retired_now.append(oid)
             stale_since.pop(oid_str, None)
@@ -171,6 +168,10 @@ def _retire_stale(
                 current_names.get(oid_str),
                 since_iso,
             )
+    if retired_now:
+        retired_now_set = set(retired_now)
+        current_ids[:] = [oid for oid in current_ids if oid not in retired_now_set]
+        current_id_set.difference_update(retired_now_set)
     return retired_now
 
 
