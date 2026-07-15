@@ -8,6 +8,7 @@ import AuthVerify from './routes/AuthVerify';
 import Onboarding from './routes/Onboarding';
 import Feed from './routes/Feed';
 import Explore from './routes/Explore';
+import SavedEvents from './routes/SavedEvents';
 import EventDetail from './routes/EventDetail';
 import Settings from './routes/Settings';
 import NotFound from './routes/NotFound';
@@ -42,6 +43,10 @@ export default function App() {
             <Route
               path="/explore"
               element={<Protected><Explore /></Protected>}
+            />
+            <Route
+              path="/saved"
+              element={<Protected><SavedEvents /></Protected>}
             />
             <Route
               path="/events/:id"

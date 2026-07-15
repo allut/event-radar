@@ -110,6 +110,7 @@
     "vibe_niche": "Nišš",
     "nav_daily5": "Päeva 5",
     "nav_explore": "Avasta",
+    "nav_saved": "Salvestatud",
     "nav_settings": "Seaded",
     "explore_search_placeholder": "Otsi sündmusi…",
     "for_you": "Sinu jaoks",
@@ -136,7 +137,13 @@
     "filter_categories": "Kategooriad",
     "filter_vibes": "Meeleolud",
     "filter_dates": "Kuupäev",
-    "date_prefix": "Näita"
+    "date_prefix": "Näita",
+    "saved_tab_bookmark": "Järjehoidjad",
+    "saved_tab_like": "Meeldivad",
+    "saved_tab_dislike": "Ei meeldi",
+    "saved_empty_title": "Siin pole veel midagi",
+    "saved_empty_msg": "Sündmused, mida märgid järjehoidjaga, meeldivaks või mittemeeldivaks, ilmuvad siia.",
+    "saved_error": "Salvestatud sündmuste laadimine ebaõnnestus. Palun värskenda."
   },
   "email": {
     "email.magic_link.subject": "Sinu Event Radar sisselogimislink",

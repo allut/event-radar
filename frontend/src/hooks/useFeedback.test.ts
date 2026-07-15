@@ -1,31 +1,79 @@
+import { createElement, type ReactNode } from 'react';
 import { describe, it, expect, vi } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useFeedback } from './useFeedback';
 
 vi.mock('../api/client', () => ({
   api: {
     post: vi.fn().mockResolvedValue(undefined),
+    delete: vi.fn().mockResolvedValue(undefined),
   },
 }));
 
 import { api } from '../api/client';
 const mockPost = vi.mocked(api.post);
+const mockDelete = vi.mocked(api.delete);
+
+function makeWrapper() {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+  const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+  const wrapper = ({ children }: { children: ReactNode }) =>
+    createElement(QueryClientProvider, { client: queryClient }, children);
+  return { wrapper, invalidateSpy };
+}
 
 describe('useFeedback', () => {
-  it('happy path: sets activeSignal and calls onSent', async () => {
-    const onSent = vi.fn();
-    const { result } = renderHook(() => useFeedback(1, onSent));
+  it('happy path: sets activeSignal and calls onChange', async () => {
+    const onChange = vi.fn();
+    const { wrapper } = makeWrapper();
+    const { result } = renderHook(() => useFeedback(1, { onChange }), { wrapper });
 
     await act(async () => {
       await result.current.sendFeedback('like');
     });
 
     expect(result.current.activeSignal).toBe('like');
-    expect(onSent).toHaveBeenCalled();
+    expect(onChange).toHaveBeenCalled();
+  });
+
+  it('invalidates every feedback-dependent query family on success', async () => {
+    const { wrapper, invalidateSpy } = makeWrapper();
+    const { result } = renderHook(() => useFeedback(1), { wrapper });
+
+    await act(async () => {
+      await result.current.sendFeedback('bookmark');
+    });
+
+    const invalidatedKeys = invalidateSpy.mock.calls.map((c) => c[0]?.queryKey);
+    expect(invalidatedKeys).toEqual(
+      expect.arrayContaining([['saved'], ['feed'], ['explore'], ['event']]),
+    );
+  });
+
+  it('does not invalidate when the API call fails', async () => {
+    mockPost.mockRejectedValueOnce(new Error('network'));
+    const { wrapper, invalidateSpy } = makeWrapper();
+    const { result } = renderHook(() => useFeedback(1), { wrapper });
+
+    await act(async () => {
+      await result.current.sendFeedback('like');
+    });
+
+    expect(invalidateSpy).not.toHaveBeenCalled();
+  });
+
+  it('seeds activeSignal from initialSignal', () => {
+    const { wrapper } = makeWrapper();
+    const { result } = renderHook(() => useFeedback(1, { initialSignal: 'bookmark' }), { wrapper });
+    expect(result.current.activeSignal).toBe('bookmark');
   });
 
   it('pending resets to false after send', async () => {
-    const { result } = renderHook(() => useFeedback(1));
+    const { wrapper } = makeWrapper();
+    const { result } = renderHook(() => useFeedback(1), { wrapper });
 
     await act(async () => {
       await result.current.sendFeedback('bookmark');
@@ -35,7 +83,8 @@ describe('useFeedback', () => {
   });
 
   it('ignores when eventId is falsy (0)', async () => {
-    const { result } = renderHook(() => useFeedback(0));
+    const { wrapper } = makeWrapper();
+    const { result } = renderHook(() => useFeedback(0), { wrapper });
 
     await act(async () => {
       await result.current.sendFeedback('like');
@@ -45,15 +94,31 @@ describe('useFeedback', () => {
     expect(result.current.activeSignal).toBeNull();
   });
 
-  it('ignores when same signal repeated', async () => {
-    const { result } = renderHook(() => useFeedback(1));
+  it('pressing the active signal again unchecks it via DELETE', async () => {
+    const { wrapper } = makeWrapper();
+    const { result } = renderHook(() => useFeedback(1), { wrapper });
+
+    await act(async () => { await result.current.sendFeedback('like'); });
+    expect(result.current.activeSignal).toBe('like');
+
+    await act(async () => { await result.current.sendFeedback('like'); });
+
+    expect(mockDelete).toHaveBeenCalledWith('/feedback/1');
+    expect(result.current.activeSignal).toBeNull();
+  });
+
+  it('pressing a different signal switches (POST), not DELETE', async () => {
+    const { wrapper } = makeWrapper();
+    const { result } = renderHook(() => useFeedback(1), { wrapper });
 
     await act(async () => { await result.current.sendFeedback('like'); });
     mockPost.mockClear();
 
-    await act(async () => { await result.current.sendFeedback('like'); });
+    await act(async () => { await result.current.sendFeedback('dislike'); });
 
-    expect(mockPost).not.toHaveBeenCalled();
+    expect(mockPost).toHaveBeenCalledWith('/feedback', { event_id: 1, signal: 'dislike' });
+    expect(mockDelete).not.toHaveBeenCalled();
+    expect(result.current.activeSignal).toBe('dislike');
   });
 
   it('ignores when pending', async () => {
@@ -62,7 +127,8 @@ describe('useFeedback', () => {
       () => new Promise<undefined>((res) => { resolveFn = () => res(undefined); }),
     );
 
-    const { result } = renderHook(() => useFeedback(1));
+    const { wrapper } = makeWrapper();
+    const { result } = renderHook(() => useFeedback(1), { wrapper });
 
     act(() => { void result.current.sendFeedback('like'); });
     expect(result.current.pending).toBe(true);
@@ -76,7 +142,8 @@ describe('useFeedback', () => {
   it('swallows API error, pending resets, activeSignal unchanged', async () => {
     mockPost.mockRejectedValueOnce(new Error('network'));
 
-    const { result } = renderHook(() => useFeedback(1));
+    const { wrapper } = makeWrapper();
+    const { result } = renderHook(() => useFeedback(1), { wrapper });
 
     await act(async () => {
       await result.current.sendFeedback('dislike');

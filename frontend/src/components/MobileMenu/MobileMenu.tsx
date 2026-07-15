@@ -48,6 +48,13 @@ export default function MobileMenu({ locale, onLocaleChange, onLogout, localeDis
               {t('nav_explore', locale)}
             </NavLink>
             <NavLink
+              to="/saved"
+              className={({ isActive }) => cx(styles.link, isActive && styles.linkActive)}
+              onClick={close}
+            >
+              {t('nav_saved', locale)}
+            </NavLink>
+            <NavLink
               to="/settings"
               className={({ isActive }) => cx(styles.link, isActive && styles.linkActive)}
               onClick={close}

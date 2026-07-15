@@ -34,10 +34,6 @@ export default function Feed() {
     navigate('/login', { replace: true });
   }
 
-  function handleFeedbackSent() {
-    queryClient.invalidateQueries({ queryKey: ['feed'] });
-  }
-
   if (isLoading) {
     return <PageState kind="loading" message={t('loading', locale)} />;
   }
@@ -79,12 +75,12 @@ export default function Feed() {
         ) : (
           <ol className={styles.list} aria-label={t('daily_five', locale)}>
             <li key={events[0].id} className={styles.featuredItem}>
-              <EventCard event={events[0]} index={0} locale={locale} onFeedbackSent={handleFeedbackSent} variant="featured" />
+              <EventCard event={events[0]} index={0} locale={locale} variant="featured" />
             </li>
             {events.slice(1).map((event, i) => (
               <li key={event.id} className={styles.standardItem}>
                 <span className={styles.indexNumeral} aria-hidden>{padIndex(i + 2)}</span>
-                <EventCard event={event} index={i + 1} locale={locale} onFeedbackSent={handleFeedbackSent} />
+                <EventCard event={event} index={i + 1} locale={locale} />
               </li>
             ))}
           </ol>

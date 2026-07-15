@@ -110,6 +110,7 @@
     "vibe_niche": "Niche",
     "nav_daily5": "Daily 5",
     "nav_explore": "Explore",
+    "nav_saved": "Saved",
     "nav_settings": "Settings",
     "explore_search_placeholder": "Search events…",
     "for_you": "For you",
@@ -136,7 +137,13 @@
     "filter_categories": "Categories",
     "filter_vibes": "Vibes",
     "filter_dates": "Date",
-    "date_prefix": "Show for"
+    "date_prefix": "Show for",
+    "saved_tab_bookmark": "Bookmarked",
+    "saved_tab_like": "Liked",
+    "saved_tab_dislike": "Disliked",
+    "saved_empty_title": "Nothing here yet",
+    "saved_empty_msg": "Events you bookmark, like, or dislike will show up here.",
+    "saved_error": "Failed to load saved events. Please refresh."
   },
   "email": {
     "email.magic_link.subject": "Your Event Radar sign-in link",

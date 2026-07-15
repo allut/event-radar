@@ -10,7 +10,11 @@ from app.constants import TALLINN_TZ
 from app.db import get_db
 from app.models.models import DailyFeed, Event, User
 from app.routers.auth import get_current_user
-from app.routers.utils import select_events_with_classification, serialize_event
+from app.routers.utils import (
+    load_user_signals,
+    select_events_with_classification,
+    serialize_event,
+)
 
 router = APIRouter(prefix="/feed", tags=["feed"])
 
@@ -51,8 +55,13 @@ async def get_feed(
     # Preserve the feed ordering from daily_feeds.event_ids
     events = [event_map[eid] for eid in feed.event_ids if eid in event_map]
 
+    sigs = await load_user_signals(db, current_user.id, [e.id for e in events])
+
     return {
         "feed_date": today.isoformat(),
-        "events": [serialize_event(e, locale=current_user.locale) for e in events],
+        "events": [
+            serialize_event(e, locale=current_user.locale, feedback_by_event=sigs)
+            for e in events
+        ],
         "built_at": feed.built_at.isoformat(),
     }

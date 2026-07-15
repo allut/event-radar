@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { CARD_ANIMATION_DELAY_STEP_MS } from '../../constants';
+import { CARD_ANIMATION_DELAY_STEP_MS, type Signal } from '../../constants';
 import { t } from '../../i18n';
 import { categoryGradient, cx, formatEventTime, formatPrice, padIndex, safeUrl, trackExternalClick } from '../../utils';
 import { useFeedback } from '../../hooks/useFeedback';
@@ -28,6 +28,7 @@ export interface EventData {
   vibes: string[];
   why_go: string[];
   quality_score: number | null;
+  my_signal: Signal | null;
 }
 
 interface EventCardProps {
@@ -39,7 +40,10 @@ interface EventCardProps {
 }
 
 export default function EventCard({ event, index, locale, onFeedbackSent, variant = 'standard' }: EventCardProps) {
-  const { activeSignal, pending, sendFeedback } = useFeedback(event.id, onFeedbackSent);
+  const { activeSignal, pending, sendFeedback } = useFeedback(event.id, {
+    initialSignal: event.my_signal,
+    onChange: onFeedbackSent,
+  });
   const isFeatured = variant === 'featured';
 
   const price = formatPrice(event.price_min, event.price_max, event.currency, locale, event.has_free_tier);

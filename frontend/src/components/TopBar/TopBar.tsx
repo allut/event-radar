@@ -35,6 +35,12 @@ export default function TopBar({ locale, onLocaleChange, onLogout, localeDisable
           {t('nav_explore', locale)}
         </NavLink>
         <NavLink
+          to="/saved"
+          className={({ isActive }) => cx(styles.navLink, isActive && styles.navLinkActive)}
+        >
+          {t('nav_saved', locale)}
+        </NavLink>
+        <NavLink
           to="/settings"
           className={({ isActive }) => cx(styles.navLink, isActive && styles.navLinkActive)}
         >

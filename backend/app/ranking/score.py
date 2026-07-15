@@ -156,10 +156,12 @@ class FeedbackContext:
             self.liked_decay_by_catset[row.category_set] = (
                 self.liked_decay_by_catset.get(row.category_set, 0.0) + decay
             )
-            # Sum, not overwrite: user_event_feedback has no unique constraint, so
-            # multiple liked rows can share an event_id — every one of them must be
-            # excluded when scoring that same event (matches the old per-row loop,
-            # which skipped every row with row.event_id == event_id).
+            # Sum, not overwrite: a partial unique index (migration 0019) now
+            # guarantees at most one like/dislike/bookmark row per (user, event),
+            # but this loop still iterates all rows generically — the sum is a
+            # no-op for the single-row case and correctly reproduces the old
+            # per-row loop's behavior otherwise (matches the old loop, which
+            # skipped every row with row.event_id == event_id).
             self.liked_decay_by_event[row.event_id] = (
                 self.liked_decay_by_event.get(row.event_id, 0.0) + decay
             )

@@ -443,9 +443,27 @@ TALLINN_LNG_DELTA: float = 0.10
 # Feedback signals
 SIGNAL_LIKE = "like"
 SIGNAL_DISLIKE = "dislike"
+SIGNAL_BOOKMARK = "bookmark"
+# Explicit preference signals — current-state (one row per user/event), enforced by
+# the partial unique index in migration 0019. "view"/"click_external" (the rest of
+# VALID_SIGNALS) are passive analytics signals that stay append-only/multi-row and
+# must never share that index — see feedback.py::record_feedback.
+PREFERENCE_SIGNALS: frozenset[str] = frozenset(
+    {SIGNAL_LIKE, SIGNAL_DISLIKE, SIGNAL_BOOKMARK}
+)
 # Guard: if shared/app-config.json signals ever diverge from these sentinels, fail fast.
 assert SIGNAL_LIKE in VALID_SIGNALS, f"{SIGNAL_LIKE!r} missing from VALID_SIGNALS in shared/app-config.json"
 assert SIGNAL_DISLIKE in VALID_SIGNALS, f"{SIGNAL_DISLIKE!r} missing from VALID_SIGNALS in shared/app-config.json"
+assert SIGNAL_BOOKMARK in VALID_SIGNALS, f"{SIGNAL_BOOKMARK!r} missing from VALID_SIGNALS in shared/app-config.json"
+assert PREFERENCE_SIGNALS <= VALID_SIGNALS, "PREFERENCE_SIGNALS must be a subset of VALID_SIGNALS"
+# SQL predicate for the migration-0019 partial unique index over preference
+# signals. Derived from PREFERENCE_SIGNALS so the upsert's index_where can never
+# drift from the set of signals it covers. sorted() makes it deterministic;
+# element order is irrelevant to Postgres ON CONFLICT arbiter selection, which
+# matches by predicate implication, so this stays equivalent to migration 0019.
+PREFERENCE_SIGNALS_SQL_PREDICATE = "signal IN ({})".format(
+    ", ".join(f"'{s}'" for s in sorted(PREFERENCE_SIGNALS))
+)
 
 # Time-of-day / day-of-week slots derived from event.starts_at (Europe/Tallinn).
 # An event can match multiple slots simultaneously (e.g. Saturday evening → weekend + evening).

@@ -54,6 +54,7 @@ export function makeEvent(overrides: Partial<EventData> = {}): EventData {
     vibes: ['vibrant'],
     why_go: [],
     quality_score: 0.8,
+    my_signal: null,
     ...overrides,
   };
 }

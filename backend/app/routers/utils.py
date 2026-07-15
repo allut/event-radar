@@ -18,9 +18,10 @@ from app.constants import (
     DEFAULT_USER_LOCALE,
     EMAIL_MASK_VISIBLE_CHARS,
     EVENT_STATUS_PUBLISHED,
+    PREFERENCE_SIGNALS,
     PREFERRED_TASTE_MIN_WEIGHT,
 )
-from app.models.models import Event, User
+from app.models.models import Event, User, UserEventFeedback
 
 log = logging.getLogger(__name__)
 
@@ -217,18 +218,6 @@ def parse_bearer_user(authorization: str | None) -> tuple[int, int] | None:
         return None
 
 
-async def get_optional_user_locale(
-    authorization: str | None,
-    db: AsyncSession,
-) -> str:
-    """Resolve user locale from a Bearer token if present; else DEFAULT_USER_LOCALE."""
-    parsed = parse_bearer_user(authorization)
-    if parsed is None:
-        return DEFAULT_USER_LOCALE
-    user = await db.get(User, parsed[0])
-    return user.locale if user else DEFAULT_USER_LOCALE
-
-
 def select_events_with_classification() -> Select[tuple[Event]]:
     """Base SELECT for Event with classification eager-loaded. Callers add their own .where()."""
     return select(Event).options(selectinload(Event.classification))
@@ -278,7 +267,11 @@ def resolve_why_go(cl, locale: str) -> list[str]:
     return cl.why_go_bullets or []
 
 
-def serialize_event(event: Event, locale: str = DEFAULT_USER_LOCALE) -> dict:
+def serialize_event(
+    event: Event,
+    locale: str = DEFAULT_USER_LOCALE,
+    feedback_by_event: dict[int, str] | None = None,
+) -> dict:
     cl = event.classification
     why_go = resolve_why_go(cl, locale)
     return {
@@ -304,4 +297,34 @@ def serialize_event(event: Event, locale: str = DEFAULT_USER_LOCALE) -> dict:
         "why_go": why_go,
         "quality_score": cl.quality_score if cl else None,
         "language": cl.language_detected if cl else None,
+        "my_signal": feedback_by_event.get(event.id) if feedback_by_event else None,
     }
+
+
+async def load_user_signals(
+    db: AsyncSession, user_id: int, event_ids: list[int]
+) -> dict[int, str]:
+    """(event_id -> signal) for the given user's current *preference* signal
+    (like/dislike/bookmark) on these events.
+
+    One query, no N+1 — shared by feed/browse/events/saved read paths so each
+    hydrates ``serialize_event``'s ``my_signal`` field from a single bulk fetch.
+    Deliberately restricted to ``PREFERENCE_SIGNALS``: "view"/"click_external"
+    are passive analytics signals that can have multiple rows per (user,
+    event) (see feedback.py::record_feedback), so an unfiltered query here
+    could non-deterministically surface one of those instead of the user's
+    actual bookmark/like/dislike — and "click_external" isn't even a valid
+    frontend ``Signal``.
+    """
+    if not event_ids:
+        return {}
+    rows = (
+        await db.execute(
+            select(UserEventFeedback.event_id, UserEventFeedback.signal).where(
+                UserEventFeedback.user_id == user_id,
+                UserEventFeedback.event_id.in_(event_ids),
+                UserEventFeedback.signal.in_(PREFERENCE_SIGNALS),
+            )
+        )
+    ).all()
+    return {row.event_id: row.signal for row in rows}

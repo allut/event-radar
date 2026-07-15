@@ -118,10 +118,6 @@ export default function Explore() {
     navigate('/login', { replace: true });
   }
 
-  function handleFeedbackSent() {
-    queryClient.invalidateQueries({ queryKey: ['explore'] });
-  }
-
   function toggleFacet(kind: 'category' | 'vibe', value: string) {
     const current = filters[kind];
     const isRemoving = current.includes(value);
@@ -295,7 +291,6 @@ export default function Explore() {
                 event={event}
                 index={i}
                 locale={locale}
-                onFeedbackSent={handleFeedbackSent}
                 variant="standard"
               />
             ))}

@@ -109,7 +109,7 @@ class TestBrowseSqlPath:
         mock_db.scalar.return_value = 5
         mock_db.scalars.return_value = _scalars_result([make_event(1), make_event(2)])
 
-        result = await _browse_sql_path(mock_db, [], "date", limit=2, offset=0, locale="en")
+        result = await _browse_sql_path(mock_db, [], "date", limit=2, offset=0, locale="en", user_id=1)
 
         assert result["total"] == 5
         assert result["limit"] == 2
@@ -125,7 +125,7 @@ class TestBrowseSqlPath:
         mock_db.scalars.return_value = _scalars_result([make_event(1)])
 
         result = await _browse_sql_path(
-            mock_db, [], "price", limit=24, offset=0, locale="en"
+            mock_db, [], "price", limit=24, offset=0, locale="en", user_id=1
         )
         assert result["has_more"] is False
 
@@ -137,7 +137,7 @@ class TestBrowseSqlPath:
         mock_db.scalars.return_value = _scalars_result([])
 
         result = await _browse_sql_path(
-            mock_db, [], "quality", limit=24, offset=0, locale="en"
+            mock_db, [], "quality", limit=24, offset=0, locale="en", user_id=1
         )
         assert result["events"] == []
         assert result["total"] == 0
@@ -308,7 +308,7 @@ class TestExploreEventsRouting:
 
         called = {}
 
-        async def fake_sql_path(db, conds, sort, limit, offset, locale):
+        async def fake_sql_path(db, conds, sort, limit, offset, locale, user_id):
             called["path"] = "sql"
             return {"events": [], "total": 0, "limit": limit, "offset": offset, "has_more": False}
 
@@ -337,7 +337,7 @@ class TestExploreEventsRouting:
 
         called = {}
 
-        async def fake_sql_path(db, conds, sort, limit, offset, locale):
+        async def fake_sql_path(db, conds, sort, limit, offset, locale, user_id):
             called["path"] = "sql"
             return {"events": [], "total": 0, "limit": limit, "offset": offset, "has_more": False}
 
@@ -366,7 +366,7 @@ class TestExploreEventsRouting:
 
         called = {}
 
-        async def fake_sql_path(db, conds, sort, limit, offset, locale):
+        async def fake_sql_path(db, conds, sort, limit, offset, locale, user_id):
             called["path"] = "sql"
             return {"events": [], "total": 0, "limit": limit, "offset": offset, "has_more": False}
 

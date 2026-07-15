@@ -108,3 +108,6 @@ export const DATE_PRESETS: { value: DatePreset; labelKey: string }[] = [
   { value: '7d', labelKey: 'date_7d' },
   { value: '30d', labelKey: 'date_30d' },
 ];
+
+// ─── Saved Events ────────────────────────────────────────────────────────────
+export const SAVED_EVENTS_PAGE_SIZE = 24;

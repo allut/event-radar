@@ -25,6 +25,13 @@ def mock_db():
     db.scalar = AsyncMock()
     db.scalars = AsyncMock()
     db.execute = AsyncMock()
+    # Default no-op result for load_user_signals()'s `(await db.execute(...)).all()` —
+    # an explicit MagicMock (not the auto-AsyncMock child unittest.mock would give an
+    # AsyncMock's attributes) so `.all()` returns a plain list, not an unawaited
+    # coroutine. Tests that care about hydrated my_signal override this return value.
+    _execute_result = MagicMock()
+    _execute_result.all.return_value = []
+    db.execute.return_value = _execute_result
     db.add = MagicMock()
     db.flush = AsyncMock()
     db.commit = AsyncMock()

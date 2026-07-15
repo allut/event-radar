@@ -15,6 +15,7 @@ from sqlalchemy import (
     UniqueConstraint,
     false,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -311,6 +312,20 @@ class UserEventFeedback(Base):
     __tablename__ = "user_event_feedback"
     __table_args__ = (
         Index("ix_user_event_feedback_user_created", "user_id", "created_at"),
+        # Partial unique index: current-state model, but ONLY for the explicit
+        # preference signals (like/dislike/bookmark, see PREFERENCE_SIGNALS).
+        # "view"/"click_external" are passive analytics signals fired on every
+        # page view / ticket-link click (routers/feedback.py, frontend
+        # trackExternalClick()) — they must stay append-only/multi-row, so this
+        # index deliberately does NOT cover them (a plain table-wide unique
+        # constraint would let a ticket click silently overwrite a bookmark).
+        Index(
+            "uq_user_event_feedback_preference_signal",
+            "user_id",
+            "event_id",
+            unique=True,
+            postgresql_where=text("signal IN ('like', 'dislike', 'bookmark')"),
+        ),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)

@@ -32,6 +32,7 @@ from app.routers.auth import get_current_user
 from app.routers.utils import (
     canonical_event_filter,
     event_not_ended_filter,
+    load_user_signals,
     public_event_filter,
     select_events_with_classification,
     serialize_event,
@@ -127,6 +128,7 @@ async def _browse_sql_path(
     limit: int,
     offset: int,
     locale: str,
+    user_id: int,
 ) -> dict:
     """Path A — pure SQL. Only reachable for for_you=False with sort in
     {date, price, quality}; relevance sort always needs Python scoring."""
@@ -156,9 +158,12 @@ async def _browse_sql_path(
         .offset(offset)
     )
     events = list((await db.scalars(page_stmt)).all())
+    sigs = await load_user_signals(db, user_id, [e.id for e in events])
 
     return {
-        "events": [serialize_event(e, locale=locale) for e in events],
+        "events": [
+            serialize_event(e, locale=locale, feedback_by_event=sigs) for e in events
+        ],
         "total": total,
         "limit": limit,
         "offset": offset,
@@ -298,10 +303,12 @@ async def _browse_scored_path(
         events_by_id = {e.id: e for e in full_rows}
 
     ordered_events = [events_by_id[eid] for eid in page_ids if eid in events_by_id]
+    sigs = await load_user_signals(db, current_user.id, page_ids)
 
     return {
         "events": [
-            serialize_event(e, locale=current_user.locale) for e in ordered_events
+            serialize_event(e, locale=current_user.locale, feedback_by_event=sigs)
+            for e in ordered_events
         ],
         "total": total,
         "limit": limit,
@@ -340,7 +347,9 @@ async def explore_events(
     conds = _facet_conditions(categories, vibes, free, q, date_from, date_to, now)
 
     if not for_you and sort in {"date", "price", "quality"}:
-        return await _browse_sql_path(db, conds, sort, limit, offset, current_user.locale)
+        return await _browse_sql_path(
+            db, conds, sort, limit, offset, current_user.locale, current_user.id
+        )
 
     return await _browse_scored_path(
         db, conds, for_you, sort, limit, offset, current_user, now
