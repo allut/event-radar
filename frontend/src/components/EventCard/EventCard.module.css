@@ -69,7 +69,8 @@
 }
 
 .featuredImageWrap .image {
-  position: static;
+  position: relative;
+  z-index: 1;
   height: auto;
   max-height: var(--card-image-max-height);
 }

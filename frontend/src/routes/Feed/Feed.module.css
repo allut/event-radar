@@ -94,18 +94,7 @@
   }
 
   .indexNumeral {
-    display: inline-flex;
-    align-self: flex-start;
-    font-size: var(--fs-2xs);
-    font-weight: 700;
-    font-family: var(--font-display);
-    color: var(--accent);
-    background: var(--accent-subtle);
-    border: 1px solid var(--accent-border);
-    border-radius: var(--radius-pill);
-    padding: var(--space-0-125) var(--space-0-625);
-    letter-spacing: var(--tracking-wider);
-    text-transform: uppercase;
+    display: none;
   }
 }
 
