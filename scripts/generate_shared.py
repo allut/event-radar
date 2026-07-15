@@ -293,6 +293,7 @@ def write_frontend_shared_constants(cfg: dict) -> str:
         f"export const SESSION_TTL_DAYS = {cfg['session_ttl_days']};",
         f"export const PERSONA_PRIMARY_WEIGHT_THRESHOLD = {cfg['persona_primary_weight']};",
         f"export const PERSONA_SECONDARY_WEIGHT = {cfg['persona_secondary_weight']};",
+        f"export const DEFAULT_CURRENCY = {_ts_str(cfg['default_currency'])};",
         "",
         _ts_locales(cfg),
         "",

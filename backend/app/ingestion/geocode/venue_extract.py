@@ -12,6 +12,7 @@ from app.constants import (
     LLM_TASK_VENUE_EXTRACT,
     VENUE_EXTRACT_MAX_FRESH_LLM_CALLS_PER_RUN,
     VENUE_NAME_DIRECTION_KEYWORDS,
+    VENUE_NAME_MAX_LEN,
     VENUE_NAME_PROMPT_MAX_CHARS,
     VENUE_NAME_SUSPECT_MAX_LEN,
 )
@@ -158,7 +159,11 @@ async def extract_address_from_venue_name(db: AsyncSession) -> int:
         raw_name = result.get("venue_name")
 
         new_address: str | None = (raw_address.strip() or None) if isinstance(raw_address, str) else None
-        new_name: str | None = (raw_name.strip()[:255] or None) if isinstance(raw_name, str) else None
+        new_name: str | None = (
+            (raw_name.strip()[:VENUE_NAME_MAX_LEN] or None)
+            if isinstance(raw_name, str)
+            else None
+        )
 
         # Only rewrite venue_name when an address was actually mined. Shortening or
         # NULLing the name with no address payoff buys nothing and can break canonical

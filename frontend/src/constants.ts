@@ -5,6 +5,7 @@ import {
   LOCALES,
   MAGIC_LINK_EXPIRY_MINUTES,
   PERSONA_PRIMARY_WEIGHT_THRESHOLD,
+  DEFAULT_CURRENCY,
   SAFE_URL_SCHEMES,
   SANITIZE_ALLOWED_TAGS,
   SANITIZE_ALLOWED_ATTR,
@@ -13,7 +14,7 @@ import {
   BROWSE_PAGE_SIZE,
 } from './_generated/sharedConstants';
 
-export { LOCALES, MAGIC_LINK_EXPIRY_MINUTES, PERSONA_PRIMARY_WEIGHT_THRESHOLD, SAFE_URL_SCHEMES, SANITIZE_ALLOWED_TAGS, SANITIZE_ALLOWED_ATTR, CATEGORIES, VIBES, BROWSE_PAGE_SIZE };
+export { LOCALES, MAGIC_LINK_EXPIRY_MINUTES, PERSONA_PRIMARY_WEIGHT_THRESHOLD, DEFAULT_CURRENCY, SAFE_URL_SCHEMES, SANITIZE_ALLOWED_TAGS, SANITIZE_ALLOWED_ATTR, CATEGORIES, VIBES, BROWSE_PAGE_SIZE };
 export type { PersonaData };
 
 // Re-export PERSONAS under the original name so all import sites are unchanged.
@@ -65,7 +66,7 @@ export const SIGNAL_TO_CLASS: Record<Signal, string> = {
 
 export const EUR_SYMBOL = '€';
 
-// Keys must match the 12-category taxonomy in backend/app/llm/taxonomy.py
+// Keys must match the 12-category taxonomy in shared/app-config.json (VALID_CATEGORIES)
 export const CATEGORY_GRADIENTS: Record<string, string> = {
   nightlife:    'linear-gradient(135deg, #1a0a1f 0%, #2d1040 100%)',
   music:        'linear-gradient(135deg, #0a1020 0%, #1a2060 100%)',
@@ -81,6 +82,17 @@ export const CATEGORY_GRADIENTS: Record<string, string> = {
   alternative:  'linear-gradient(135deg, #100f0a 0%, #201a0a 100%)',
 };
 export const FALLBACK_GRADIENT = 'linear-gradient(135deg, #1a1f2e 0%, #13161e 100%)';
+
+// ─── React Query keys ──────────────────────────────────────────────────────────
+// Query-key root strings shared across routes and useFeedback's invalidation
+// fan-out — a typo in one spot would silently break refresh, so it's centralized.
+export const QUERY_KEYS = {
+  feed: 'feed',
+  explore: 'explore',
+  saved: 'saved',
+  event: 'event',
+  settings: 'settings',
+} as const;
 
 // ─── UI state types ───────────────────────────────────────────────────────────
 export type LoginState = 'idle' | 'loading' | 'success' | 'error';

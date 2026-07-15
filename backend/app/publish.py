@@ -15,7 +15,7 @@ from app.constants import (
     TALLINN_TZ,
 )
 from app.models.models import Event, EventClassification
-from app.routers.utils import event_not_ended_filter
+from app.routers.utils import event_ended_filter, event_not_ended_filter
 
 
 async def publish_pending(db: AsyncSession) -> dict:
@@ -95,7 +95,7 @@ async def publish_pending(db: AsyncSession) -> dict:
             func.sum(case((Event.is_out_of_area.is_(True), 1), else_=0)).label(
                 "fail_out_of_area"
             ),
-            func.sum(case((~event_not_ended_filter(now), 1), else_=0)).label(
+            func.sum(case((event_ended_filter(now), 1), else_=0)).label(
                 "fail_ended"
             ),
             func.sum(

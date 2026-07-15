@@ -28,6 +28,7 @@ from app.constants import (
     TALLINN_TZ,
 )
 from app.ingestion.adapter import NormalizedEvent, SourceAdapter
+from app.ingestion.html_utils import attr_str
 from app.ingestion.http_client import host_guard_hook, http_get, http_post
 from app.ingestion.jsonld import extract_jsonld_event_text
 from app.ingestion.locale_urls import fetch_locale_variants
@@ -91,20 +92,6 @@ def og_title(soup: BeautifulSoup) -> str | None:
         if isinstance(content, str):
             return content.strip() or None
     return None
-
-
-def attr_str(tag: Tag, name: str) -> str:
-    """Return a single-string attribute value.
-
-    bs4 types attribute values as ``str | list[str]`` (multi-valued attributes
-    like ``class`` parse as lists). The attributes we read here (href, src,
-    data-srcset, style) are single-valued, so collapse any list to its first
-    element.
-    """
-    value = tag.get(name)
-    if isinstance(value, list):
-        return value[0] if value else ""
-    return value or ""
 
 
 def first_image_url(img_tag: Tag) -> str | None:

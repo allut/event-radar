@@ -21,7 +21,12 @@ from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.types import UserDefinedType
 
-from app.constants import DEFAULT_USER_CITY, DEFAULT_USER_LOCALE, EVENT_STATUS_DRAFT
+from app.constants import (
+    DEFAULT_USER_CITY,
+    DEFAULT_USER_LOCALE,
+    EVENT_STATUS_DRAFT,
+    PREFERENCE_SIGNALS_SQL_PREDICATE,
+)
 from app.db import Base
 
 
@@ -324,7 +329,7 @@ class UserEventFeedback(Base):
             "user_id",
             "event_id",
             unique=True,
-            postgresql_where=text("signal IN ('like', 'dislike', 'bookmark')"),
+            postgresql_where=text(PREFERENCE_SIGNALS_SQL_PREDICATE),
         ),
     )
 

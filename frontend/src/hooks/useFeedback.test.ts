@@ -1,8 +1,7 @@
-import { createElement, type ReactNode } from 'react';
 import { describe, it, expect, vi } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useFeedback } from './useFeedback';
+import { makeQueryWrapper } from '../test/utils';
 
 vi.mock('../api/client', () => ({
   api: {
@@ -16,12 +15,8 @@ const mockPost = vi.mocked(api.post);
 const mockDelete = vi.mocked(api.delete);
 
 function makeWrapper() {
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-  });
+  const { wrapper, queryClient } = makeQueryWrapper();
   const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
-  const wrapper = ({ children }: { children: ReactNode }) =>
-    createElement(QueryClientProvider, { client: queryClient }, children);
   return { wrapper, invalidateSpy };
 }
 

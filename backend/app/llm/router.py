@@ -124,6 +124,11 @@ async def llm_json(
         payload.update(provider.get("params", {}))
 
         try:
+            # Not routed through the shared retrying http_post: the provider
+            # fallback chain (LLM_PROVIDERS, tried in order below) IS the retry
+            # strategy for this call — tenacity backoff on each provider would
+            # fight the chain by delaying the fallback to the next one instead
+            # of failing fast into it.
             async with httpx.AsyncClient(timeout=LLM_REQUEST_TIMEOUT_SECONDS) as client:
                 resp = await client.post(
                     f"{provider['base_url']}/chat/completions",

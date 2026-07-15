@@ -8,13 +8,13 @@ base adapter, the Fienta adapter, and the daily detail refetch.
 
 import logging
 from collections.abc import Awaitable, Callable
-from typing import Any
-from urllib.parse import urlsplit
+from urllib.parse import urljoin, urlsplit
 
 import httpx
 from bs4 import BeautifulSoup
 
 from app.constants import LOCALIZED_TEXT_HREFLANG_NORMALIZE
+from app.ingestion.html_utils import attr_str
 
 log = logging.getLogger(__name__)
 
@@ -152,33 +152,25 @@ def localized_detail_urls(
     ``<a>`` language-switcher anchors whose ``hreflang`` attribute is set.
     Only locales present in ``target_locales`` are returned.
     """
-    from urllib.parse import urljoin
-
-    def _str_attr(tag: Any, name: str) -> str:
-        val = tag.get(name) or ""
-        if isinstance(val, list):
-            return val[0] if val else ""
-        return val
-
     result: dict[str, str] = {}
     for tag in soup.find_all("link", rel="alternate"):
-        lang = _str_attr(tag, "hreflang")
+        lang = attr_str(tag, "hreflang")
         if not lang:
             continue
         lang_norm = LOCALIZED_TEXT_HREFLANG_NORMALIZE.get(lang.lower(), lang.lower())
         if lang_norm not in target_locales:
             continue
-        href = _str_attr(tag, "href")
+        href = attr_str(tag, "href")
         if href:
             result[lang_norm] = urljoin(base_url, href)
     if not result:
         # Fallback: language-switcher <a hreflang="…"> anchors
         for tag in soup.find_all("a", hreflang=True):
-            lang = _str_attr(tag, "hreflang")
+            lang = attr_str(tag, "hreflang")
             lang_norm = LOCALIZED_TEXT_HREFLANG_NORMALIZE.get(lang.lower(), lang.lower())
             if lang_norm not in target_locales:
                 continue
-            href = _str_attr(tag, "href")
+            href = attr_str(tag, "href")
             if href and lang_norm not in result:
                 result[lang_norm] = urljoin(base_url, href)
     return result

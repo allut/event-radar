@@ -9,6 +9,7 @@ import FeedbackButtonRow from '../../components/FeedbackButtonRow';
 import LocaleSelector from '../../components/LocaleSelector';
 import PageState from '../../components/PageState';
 import { useFeedback } from '../../hooks/useFeedback';
+import { QUERY_KEYS } from '../../constants';
 import styles from './EventDetail.module.css';
 
 interface EventDetailData extends EventData {
@@ -18,10 +19,10 @@ interface EventDetailData extends EventData {
 export default function EventDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { locale, handleLocaleChange } = useLocaleMutation(['event', id]);
+  const { locale, handleLocaleChange } = useLocaleMutation([QUERY_KEYS.event, id]);
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['event', id],
+    queryKey: [QUERY_KEYS.event, id],
     queryFn: () => api.get<EventDetailData>(`/events/${id}`),
     enabled: Boolean(id),
     retry: false,

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { api } from '../api/client';
-import { type Signal } from '../constants';
+import { type Signal, QUERY_KEYS } from '../constants';
 
 interface UseFeedbackOptions {
   initialSignal?: Signal | null;
@@ -27,10 +27,10 @@ export function useFeedback(eventId: number, opts?: UseFeedbackOptions) {
       // A feedback signal shifts every feedback-dependent read surface (Saved
       // lists, Daily 5 feed, Explore scoring, event detail), so invalidate them
       // all here — the single path every feedback action flows through.
-      queryClient.invalidateQueries({ queryKey: ['saved'] });
-      queryClient.invalidateQueries({ queryKey: ['feed'] });
-      queryClient.invalidateQueries({ queryKey: ['explore'] });
-      queryClient.invalidateQueries({ queryKey: ['event'] });
+      queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.saved] });
+      queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.feed] });
+      queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.explore] });
+      queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.event] });
       opts?.onChange?.();
     } catch {
       // best-effort

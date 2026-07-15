@@ -9,6 +9,7 @@ Cross-source tuning knobs (caps, timeouts) stay in app/constants.py.
 from typing import NamedTuple
 
 # --- Piletilevi (www.piletilevi.ee) ---
+PILETILEVI_HOST = "piletilevi.ee"
 PILETILEVI_TALLINN_FILTER = "Tallinn"
 PILETILEVI_DATE_FORMAT = "%d.%m.%Y %H:%M"
 PILETILEVI_ALL_PATH = "/en/tickets/all"
@@ -44,6 +45,7 @@ PILETILEVI_PRICES_URL = "https://www.piletilevi.ee/api/v1/store/events/{code}/pr
 PILETILEVI_PRICES_LANGUAGE = "en"
 
 # --- KUMU (kumu.ekm.ee) ---
+KUMU_HOST = "kumu.ekm.ee"
 KUMU_DATE_FORMAT = "%d/%m/%Y | %H:%M"
 KUMU_MAX_PAGES = 15  # safety bound — calendar is ~4 pages today
 
@@ -69,6 +71,7 @@ KUMU_SITE_TITLE_SUFFIX = " - Kumu kunstimuuseum"
 KUMU_SITE_NAME_ET = "Kumu kunstimuuseum"  # ET site name; homepage og:title starts with this
 
 # --- Estonia Concert Hall (concert.ee) ---
+ESTONIA_CONCERT_HALL_HOST = "concert.ee"
 ESTONIA_CONCERT_HALL_TALLINN_FILTER = "Tallinn"
 ESTONIA_CONCERT_HALL_AJAX_PATH = "/wp-admin/admin-ajax.php"
 ESTONIA_CONCERT_HALL_AJAX_ACTION = "ek_list_display"
@@ -145,4 +148,6 @@ FIENTA_DESCRIPTION_SELECTOR = "div.rich-text"
 
 # WordPress thumbnail suffix stripping — hosts whose image URLs contain a -WxH
 # suffix that can be dropped to get the full-resolution original.
-WP_THUMBNAIL_HOSTS: frozenset[str] = frozenset({"concert.ee", "kumu.ekm.ee"})
+WP_THUMBNAIL_HOSTS: frozenset[str] = frozenset(
+    {ESTONIA_CONCERT_HALL_HOST, KUMU_HOST}
+)

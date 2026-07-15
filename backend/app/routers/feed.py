@@ -12,6 +12,7 @@ from app.models.models import DailyFeed, Event, User
 from app.routers.auth import get_current_user
 from app.routers.utils import (
     load_user_signals,
+    public_event_filter,
     select_events_with_classification,
     serialize_event,
 )
@@ -45,8 +46,7 @@ async def get_feed(
         await db.scalars(
             select_events_with_classification().where(
                 Event.id.in_(feed.event_ids),
-                Event.is_explicit.is_(False),
-                Event.is_non_event.is_(False),
+                public_event_filter(),
             )
         )
     ).all()

@@ -130,4 +130,4 @@ class Settings(BaseSettings):
         return normalized
 
 
-settings = Settings() # type: ignore
+settings = Settings()  # type: ignore[call-arg]

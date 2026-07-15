@@ -9,6 +9,7 @@ import EmptyState from '../../components/EmptyState';
 import PageState from '../../components/PageState';
 import TopBar from '../../components/TopBar';
 import { formatHourMinute, formatTodayDate, padIndex } from '../../utils';
+import { QUERY_KEYS } from '../../constants';
 import styles from './Feed.module.css';
 
 interface FeedResponse {
@@ -20,10 +21,10 @@ interface FeedResponse {
 export default function Feed() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { locale, handleLocaleChange } = useLocaleMutation(['feed']);
+  const { locale, handleLocaleChange } = useLocaleMutation([QUERY_KEYS.feed]);
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['feed'],
+    queryKey: [QUERY_KEYS.feed],
     queryFn: () => api.get<FeedResponse>('/feed'),
     retry: false,
   });

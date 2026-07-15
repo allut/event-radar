@@ -31,11 +31,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.constants import (
+    LLM_CLASSIFY_VENUE_FALLBACK,
     LLM_DEDUP_CONFIDENCE_THRESHOLD,
     LLM_DEDUP_HASH_QUERY_CHUNK_SIZE,
     LLM_DEDUP_MAX_FRESH_LLM_CALLS_PER_PASS,
     LLM_DEDUP_TITLE_MAX_LEN,
     LLM_DEDUP_VENUE_MAX_LEN,
+    LLM_TASK_DEDUP,
 )
 from app.llm.prompts import LLM_DEDUP_PROMPT_TEMPLATE
 from app.dedup.rules import (
@@ -60,10 +62,10 @@ def _build_prompt(a: Event, b: Event) -> str:
     return LLM_DEDUP_PROMPT_TEMPLATE.format(
         title_a=a.title_orig[:LLM_DEDUP_TITLE_MAX_LEN],
         date_a=a.starts_at.strftime("%Y-%m-%d %H:%M"),
-        venue_a=(a.venue_name or "unknown")[:LLM_DEDUP_VENUE_MAX_LEN],
+        venue_a=(a.venue_name or LLM_CLASSIFY_VENUE_FALLBACK)[:LLM_DEDUP_VENUE_MAX_LEN],
         title_b=b.title_orig[:LLM_DEDUP_TITLE_MAX_LEN],
         date_b=b.starts_at.strftime("%Y-%m-%d %H:%M"),
-        venue_b=(b.venue_name or "unknown")[:LLM_DEDUP_VENUE_MAX_LEN],
+        venue_b=(b.venue_name or LLM_CLASSIFY_VENUE_FALLBACK)[:LLM_DEDUP_VENUE_MAX_LEN],
     )
 
 
@@ -101,7 +103,7 @@ async def _llm_confirms_pair(a: Event, b: Event, db: AsyncSession) -> bool:
     """
     prompt = _build_prompt(a, b)
     response = await llm_json_or_none(
-        "dedup",
+        LLM_TASK_DEDUP,
         prompt,
         db,
         event_id=a.id,
@@ -149,7 +151,7 @@ async def _prefetch_cached_decisions(
             await db.execute(
                 select(LlmCall.content_hash, LlmCall.response_json)
                 .where(
-                    LlmCall.task == "dedup",
+                    LlmCall.task == LLM_TASK_DEDUP,
                     LlmCall.content_hash.in_(chunk),
                     LlmCall.response_json.is_not(None),
                 )

@@ -20,6 +20,7 @@ from app.auth.tokens import (
 )
 from app.constants import (
     DEFAULT_USER_LOCALE,
+    MAGIC_LINK_RESEND_COOLDOWN_SECONDS,
     RATE_LIMIT_AUTH_REQUEST_LINK,
     RATE_LIMIT_AUTH_VERIFY,
     RATE_LIMIT_LOGOUT_ALL,
@@ -112,14 +113,16 @@ async def _get_or_create_user(db: AsyncSession, email: str, request: Request) ->
 
 
 async def _recent_unused_link_exists(db: AsyncSession, user_id: int) -> bool:
-    """Per-email cooldown: True if an unused link was issued in the last 2 minutes.
+    """Per-email cooldown: True if an unused link was issued in the last
+    MAGIC_LINK_RESEND_COOLDOWN_SECONDS.
 
     A link created T seconds ago has expires_at = now + (TTL - T), so
-    expires_at > now + TTL - 120 ↔ T < 120. Prevents Resend quota exhaustion
-    from rapid repeats; IP-level throttling is the @limiter.limit decorator.
+    expires_at > now + TTL - cooldown ↔ T < cooldown. Prevents Resend quota
+    exhaustion from rapid repeats; IP-level throttling is the
+    @limiter.limit decorator.
     """
     recent_cutoff = datetime.now(timezone.utc) + timedelta(
-        seconds=magic_ttl_seconds() - 120
+        seconds=magic_ttl_seconds() - MAGIC_LINK_RESEND_COOLDOWN_SECONDS
     )
     already_sent = await db.scalar(
         select(AuthMagicLink)

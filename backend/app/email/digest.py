@@ -39,6 +39,7 @@ from app.ingestion.http_client import http_post
 from app.models.models import DailyFeed, Event, User
 from app.routers.utils import (
     mask_email,
+    public_event_filter,
     resolve_title,
     resolve_why_go,
     select_events_with_classification,
@@ -280,8 +281,7 @@ async def _load_digest_data(
         await db.scalars(
             select_events_with_classification().where(
                 Event.id.in_(all_event_ids),
-                Event.is_explicit.is_(False),
-                Event.is_non_event.is_(False),
+                public_event_filter(),
             )
         )
     ).all()

@@ -27,7 +27,7 @@ from app.models.models import (
     RawInboundEmail,
     UserEventScore,
 )
-from app.routers.utils import event_not_ended_filter
+from app.routers.utils import event_ended_filter
 
 
 async def _count_or_delete(
@@ -99,11 +99,11 @@ async def cleanup_stale_data(db: AsyncSession, *, dry_run: bool = False) -> dict
     )
 
     # Scores for events that ended more than USER_EVENT_SCORES_RETENTION_DAYS
-    # ago — reuses event_not_ended_filter (inverted, evaluated at the
-    # retention cutoff) so "ended" is defined identically to the publish gate
-    # and feed builder.
+    # ago — reuses event_ended_filter (NULL-safe complement of
+    # event_not_ended_filter, evaluated at the retention cutoff) so "ended" is
+    # defined identically to the publish gate and feed builder.
     scores_cutoff = now - timedelta(days=USER_EVENT_SCORES_RETENTION_DAYS)
-    ended_event_ids = select(Event.id).where(~event_not_ended_filter(scores_cutoff))
+    ended_event_ids = select(Event.id).where(event_ended_filter(scores_cutoff))
     summary["user_event_scores"] = await _count_or_delete(
         db,
         UserEventScore,

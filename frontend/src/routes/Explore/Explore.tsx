@@ -17,6 +17,7 @@ import {
   VIBES,
   DATE_PRESETS,
   EXPLORE_SEARCH_DEBOUNCE_MS,
+  QUERY_KEYS,
   SORT_OPTIONS,
   type DatePreset,
   type SortOption,
@@ -82,7 +83,7 @@ export default function Explore() {
   }, [searchInput, filters]);
 
   const { data: currentUser } = useQuery({
-    queryKey: ['settings'],
+    queryKey: [QUERY_KEYS.settings],
     queryFn: () => api.get<CurrentUser>('/users/me'),
   });
 
@@ -100,7 +101,7 @@ export default function Explore() {
     hasNextPage,
     isFetchingNextPage,
   } = useInfiniteQuery({
-    queryKey: ['explore', filters],
+    queryKey: [QUERY_KEYS.explore, filters],
     queryFn: ({ pageParam }) =>
       api.get<ExploreResponse>(`/explore?${buildExploreApiQuery(filters, pageParam)}`),
     initialPageParam: 0,

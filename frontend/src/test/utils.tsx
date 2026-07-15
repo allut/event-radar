@@ -1,8 +1,22 @@
-import { type ReactNode } from 'react';
+import { createElement, type ReactNode } from 'react';
 import { render, type RenderResult } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { type EventData } from '../components/EventCard';
+
+/** Wrapper for renderHook-based tests that need a QueryClientProvider without a
+ * full renderWithProviders() tree (e.g. hook tests with no router dependency). */
+export function makeQueryWrapper(): {
+  wrapper: ({ children }: { children: ReactNode }) => ReactNode;
+  queryClient: QueryClient;
+} {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+  const wrapper = ({ children }: { children: ReactNode }) =>
+    createElement(QueryClientProvider, { client: queryClient }, children);
+  return { wrapper, queryClient };
+}
 
 interface RenderOptions {
   route?: string;

@@ -374,6 +374,10 @@ RATE_LIMIT_BROWSE = "120/minute"
 AUTH_MAGIC_SALT = "magic-link-v1"
 AUTH_SESSION_SALT = "session-v1"
 
+# Per-email magic-link resend cooldown (routers/auth.py::_recent_unused_link_exists) —
+# prevents Resend quota exhaustion from rapid repeat requests for the same address.
+MAGIC_LINK_RESEND_COOLDOWN_SECONDS = 120
+
 # PII masking — number of leading local-part characters kept visible by mask_email()
 # (routers/utils.py) so log lines stay correlatable without persisting raw addresses.
 EMAIL_MASK_VISIBLE_CHARS = 2
@@ -424,7 +428,22 @@ BROWSE_RELEVANCE_MAX_CANDIDATES: int = 300
 # so an event with no strong signal either way still surfaces; only a
 # below-neutral (poor) match is filtered out.
 BROWSE_FORYOU_MIN_AFFINITY: float = 0.4
-VALID_BROWSE_SORTS: frozenset[str] = frozenset({"relevance", "date", "price", "quality"})
+BROWSE_SORT_RELEVANCE = "relevance"
+BROWSE_SORT_DATE = "date"
+BROWSE_SORT_PRICE = "price"
+BROWSE_SORT_QUALITY = "quality"
+VALID_BROWSE_SORTS: frozenset[str] = frozenset(
+    {BROWSE_SORT_RELEVANCE, BROWSE_SORT_DATE, BROWSE_SORT_PRICE, BROWSE_SORT_QUALITY}
+)
+# Sorts expressible as pure SQL ORDER BY — reachable via Path A (_browse_sql_path)
+# when for_you=False. relevance always needs Python scoring (persona affinity),
+# so it's deliberately excluded.
+BROWSE_SQL_SORTS: frozenset[str] = frozenset(
+    {BROWSE_SORT_DATE, BROWSE_SORT_PRICE, BROWSE_SORT_QUALITY}
+)
+# Sentinel for "no comparable value" in a Python sort key (e.g. missing quality_score),
+# so unranked rows always sort last regardless of ascending/descending direction.
+BROWSE_NEG_INF = float("-inf")
 # /users/me preferred_categories/preferred_vibes (serialize_user) — a persona
 # affinity_vector entry counts as "in the user's taste" once its weight clears this
 # bar. Used by the frontend to decide the For-you⇄All-events auto-flip.
@@ -506,6 +525,9 @@ LLM_REQUEST_TIMEOUT_SECONDS: float = 30.0
 
 LLM_DEDUP_TITLE_MAX_LEN = 200
 LLM_DEDUP_VENUE_MAX_LEN = 100
+# llm_calls.task label for the dedup tiebreaker LLM call — shared by the fresh-call
+# site and the cache-prefetch query so they can never drift out of sync.
+LLM_TASK_DEDUP = "dedup"
 # Bounds fresh (cache-miss) network calls per pass — bounds DB session lifetime
 # against slow providers (Cerebras fallback ~1 req/min). Cache hits are cheap
 # indexed lookups and are NOT counted against this cap; see llm_tiebreaker.py.
@@ -544,6 +566,8 @@ LLM_CLASSIFY_HAS_FREE_TIER_DEFAULT = False
 # present in price_hint/price_context — guards against float round-trip noise
 # while still rejecting a genuinely invented number.
 LLM_CLASSIFY_PRICE_MATCH_TOLERANCE = 0.01
+# llm_calls.task label for the classification LLM call.
+LLM_TASK_CLASSIFY = "classify"
 
 # Venue address extraction — LLM pass that mines street addresses out of venue_name
 # into venue_address so the event becomes geocodable.
@@ -777,6 +801,11 @@ PRICE_FEE_CLAUSE_RE = (
 # Parses a Fienta listing price_from_string: "From 9.50 EUR" / "12 EUR" — a number
 # (int or decimal, "." or "," separator) followed by any 3-letter currency code.
 PRICE_FROM_STRING_RE = r"(?:from\s+)?(\d+(?:[.,]\d+)?)\s*([A-Za-z]{3})"
+
+# Free-tier keywords across et/en/ru — a "0" reported by the LLM is only trusted
+# when one of these literally appears in the text; otherwise it's treated as an
+# invented number (llm/classifier.py::_validate_llm_prices).
+FREE_TIER_KEYWORDS: frozenset[str] = frozenset({"free", "tasuta", "бесплатно"})
 
 # Matches a EUR amount in either order: "€16", "16 €", "16€", "EUR 16", "16 EUR".
 # \bEUR\b guards against incidental substrings ("European", "16EURO", "EUR-zone")

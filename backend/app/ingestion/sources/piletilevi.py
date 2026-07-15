@@ -19,6 +19,7 @@ from app.ingestion.selectors import (
     PILETILEVI_DATE_FORMAT,
     PILETILEVI_DATE_SELECTOR,
     PILETILEVI_DETAIL_DESC_SELECTOR,
+    PILETILEVI_HOST,
     PILETILEVI_IMAGE_HEIGHT,
     PILETILEVI_IMAGE_SELECTOR,
     PILETILEVI_IMPORTANT_INFO_HEADINGS,
@@ -81,7 +82,7 @@ def full_res_piletilevi_image(url: str | None) -> str | None:
     full-resolution Piletilevi images. No-op for other hosts or URLs without
     the segment.
     """
-    if not url or "piletilevi.ee" not in url:
+    if not url or PILETILEVI_HOST not in url:
         return url
     return _PILETILEVI_HEIGHT_RE.sub(f"/height={PILETILEVI_IMAGE_HEIGHT}/", url)
 

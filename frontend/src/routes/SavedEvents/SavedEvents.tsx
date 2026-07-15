@@ -10,7 +10,7 @@ import EmptyState from '../../components/EmptyState';
 import PageState from '../../components/PageState';
 import TopBar from '../../components/TopBar';
 import SegmentedControl from '../../components/SegmentedControl';
-import { SIGNAL_CONFIG, SAVED_EVENTS_PAGE_SIZE, type Signal } from '../../constants';
+import { SIGNAL_CONFIG, SAVED_EVENTS_PAGE_SIZE, QUERY_KEYS, type Signal } from '../../constants';
 import styles from './SavedEvents.module.css';
 
 interface SavedEventsResponse {
@@ -30,7 +30,7 @@ const SAVED_TABS: { value: Signal; labelKey: string }[] = [
 export default function SavedEvents() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { locale, handleLocaleChange } = useLocaleMutation(['saved']);
+  const { locale, handleLocaleChange } = useLocaleMutation([QUERY_KEYS.saved]);
   const [signal, setSignal] = useState<Signal>('bookmark');
 
   const {
@@ -41,7 +41,7 @@ export default function SavedEvents() {
     hasNextPage,
     isFetchingNextPage,
   } = useInfiniteQuery({
-    queryKey: ['saved', signal],
+    queryKey: [QUERY_KEYS.saved, signal],
     queryFn: ({ pageParam }) =>
       api.get<SavedEventsResponse>(
         `/feedback/events?signal=${signal}&limit=${SAVED_EVENTS_PAGE_SIZE}&offset=${pageParam}`,

@@ -16,8 +16,14 @@ from sqlalchemy.orm import load_only, selectinload
 from app.constants import (
     BROWSE_FORYOU_MIN_AFFINITY,
     BROWSE_MAX_PAGE_SIZE,
+    BROWSE_NEG_INF,
     BROWSE_PAGE_SIZE,
     BROWSE_RELEVANCE_MAX_CANDIDATES,
+    BROWSE_SORT_DATE,
+    BROWSE_SORT_PRICE,
+    BROWSE_SORT_QUALITY,
+    BROWSE_SORT_RELEVANCE,
+    BROWSE_SQL_SORTS,
     RATE_LIMIT_BROWSE,
     TALLINN_TZ,
     VALID_BROWSE_SORTS,
@@ -39,8 +45,6 @@ from app.routers.utils import (
 )
 
 router = APIRouter(tags=["browse"])
-
-_NEG_INF = float("-inf")
 
 
 def _parse_slug_list(raw: str | None, valid: frozenset[str]) -> list[str]:
@@ -133,9 +137,9 @@ async def _browse_sql_path(
     """Path A — pure SQL. Only reachable for for_you=False with sort in
     {date, price, quality}; relevance sort always needs Python scoring."""
     order_col: ColumnElement
-    if sort == "date":
+    if sort == BROWSE_SORT_DATE:
         order_col = Event.starts_at.asc()
-    elif sort == "price":
+    elif sort == BROWSE_SORT_PRICE:
         order_col = Event.price_min.asc().nulls_last()
     else:
         order_col = EventClassification.quality_score.desc().nulls_last()
@@ -200,22 +204,22 @@ async def _load_feedback_context(db: AsyncSession, user_id: int) -> FeedbackCont
 
 
 def _sort_key_and_reverse(sort: str):
-    if sort == "date":
+    if sort == BROWSE_SORT_DATE:
         return (lambda item: item[1].starts_at), False
-    if sort == "price":
+    if sort == BROWSE_SORT_PRICE:
         return (
             lambda item: (item[1].price_min is None, item[1].price_min or 0)
         ), False
-    if sort == "quality":
+    if sort == BROWSE_SORT_QUALITY:
 
         def _quality_key(item: tuple[float | None, Event]) -> float:
             cl = item[1].classification
-            return cl.quality_score if cl and cl.quality_score is not None else _NEG_INF
+            return cl.quality_score if cl and cl.quality_score is not None else BROWSE_NEG_INF
 
         return _quality_key, True
 
     def _relevance_key(item: tuple[float | None, Event]) -> float:
-        return item[0] if item[0] is not None else _NEG_INF
+        return item[0] if item[0] is not None else BROWSE_NEG_INF
 
     return _relevance_key, True
 
@@ -328,7 +332,7 @@ async def explore_events(
     date_to: date | None = None,
     free: bool = False,
     for_you: bool = True,
-    sort: str = "relevance",
+    sort: str = BROWSE_SORT_RELEVANCE,
     limit: int = Query(BROWSE_PAGE_SIZE, ge=1, le=BROWSE_MAX_PAGE_SIZE),
     offset: int = Query(0, ge=0),
     current_user: User = Depends(get_current_user),
@@ -346,7 +350,7 @@ async def explore_events(
     now = datetime.now(TALLINN_TZ)
     conds = _facet_conditions(categories, vibes, free, q, date_from, date_to, now)
 
-    if not for_you and sort in {"date", "price", "quality"}:
+    if not for_you and sort in BROWSE_SQL_SORTS:
         return await _browse_sql_path(
             db, conds, sort, limit, offset, current_user.locale, current_user.id
         )

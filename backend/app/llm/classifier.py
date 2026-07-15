@@ -19,10 +19,12 @@ from sqlalchemy.orm import aliased
 
 from app.constants import (
     CURRENCY_CODE_MAX_LEN,
+    DEFAULT_CURRENCY,
     DEFAULT_USER_LOCALE,
     EVENT_STATUS_CANCELLED,
     EVENT_STATUS_CLASSIFIED,
     EVENT_STATUS_DRAFT,
+    FREE_TIER_KEYWORDS,
     IMPORTANT_INFO_MAX_CHARS,
     LLM_CLASSIFY_BATCH_SIZE,
     LLM_CLASSIFY_DESC_FALLBACK,
@@ -38,6 +40,7 @@ from app.constants import (
     LLM_CLASSIFY_VENUE_FALLBACK,
     LLM_CLASSIFY_WHY_GO_MAX_BULLETS,
     LLM_MAX_PROMPT_CHARS,
+    LLM_TASK_CLASSIFY,
     PRICE_HINT_MAX_CHARS,
     TALLINN_TZ,
     VALID_CATEGORIES,
@@ -60,11 +63,6 @@ from app.routers.utils import (
     event_ended_filter,
     event_not_ended_filter,
 )
-
-# Free-tier keywords across et/en/ru — a "0" reported by the LLM is only trusted
-# when one of these literally appears in the text; otherwise it's treated as an
-# invented number (see _validate_llm_prices).
-_FREE_KEYWORDS = ("free", "tasuta", "бесплатно")
 
 log = logging.getLogger(__name__)
 
@@ -195,12 +193,12 @@ def _validate_llm_prices(parsed: dict[str, Any], event: Event) -> None:
     matching" a set this function has no way to build for that currency.
     """
     currency_val = parsed["currency"]
-    if currency_val is not None and currency_val.upper() != "EUR":
+    if currency_val is not None and currency_val.upper() != DEFAULT_CURRENCY:
         return
 
     text = f"{event.price_hint or ''}\n{_price_context(event)}"
     amounts = eur_amounts_from_text(strip_fee_amounts(text))
-    is_free_signaled = any(kw in text.lower() for kw in _FREE_KEYWORDS) or 0.0 in amounts
+    is_free_signaled = any(kw in text.lower() for kw in FREE_TIER_KEYWORDS) or 0.0 in amounts
 
     def _is_backed(value: float | None) -> bool:
         if value is None:
@@ -278,7 +276,7 @@ def _reconcile_event_price_fields(event: Event, parsed: dict[str, Any]) -> None:
         return
 
     currency_val = parsed["currency"]
-    if currency_val is None or currency_val.upper() == "EUR":
+    if currency_val is None or currency_val.upper() == DEFAULT_CURRENCY:
         hint_min, hint_max = eur_price_bounds_from_text(
             strip_fee_amounts(event.price_hint)
         )
@@ -295,7 +293,7 @@ def _reconcile_event_price_fields(event: Event, parsed: dict[str, Any]) -> None:
                 else max(parsed["price_max"], hint_max)
             )
         if (hint_min is not None or hint_max is not None) and parsed["currency"] is None:
-            parsed["currency"] = "EUR"
+            parsed["currency"] = DEFAULT_CURRENCY
 
     if parsed["price_min"] is not None:
         event.price_min = parsed["price_min"]
@@ -341,7 +339,7 @@ async def classify_event(
 
     prompt = _build_classify_prompt(event)
     response = await llm_json_or_none(
-        "classify",
+        LLM_TASK_CLASSIFY,
         prompt,
         db,
         event_id=event.id,
