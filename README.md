@@ -17,6 +17,7 @@ The whole platform is designed to run on **free-tier infrastructure** at a stead
 - **Persona-based personalization** — users pick a primary and optional secondary persona at onboarding; like/dislike/bookmark signals continuously retune their ranking.
 - **Daily 5 builder** — a scheduled job scores upcoming events and writes a diverse five-event feed per user each morning, then emails a digest.
 - **Explore discovery grid** — a searchable, filterable (keyword, category/vibe, date, free-only, for-you), and sortable (relevance/date/price/quality) view over all upcoming published events, with an optional personalized ranking path.
+- **Saved Events** — a dedicated page listing the events a user has liked, disliked, or bookmarked, grouped by signal.
 - **Magic-link auth** — passwordless sign-in with short-lived, single-use links and revocable 7-day session tokens. No third-party auth provider.
 - **Full trilingual i18n** — every UI string, email, and LLM output supports `et` / `en` / `ru` from a single shared source of truth.
 - **Security-hardened** — OWASP Top 10 mitigations: per-IP rate limiting, strict security headers, CORS lockdown, external-URL sanitization, and a CVE audit in CI.
@@ -154,7 +155,7 @@ event-radar/
 │   └── tests/               # pytest suite
 ├── frontend/                 # Vite + React SPA
 │   └── src/
-│       ├── routes/          # Login, AuthVerify, Onboarding, Feed, Explore, EventDetail, Settings ...
+│       ├── routes/          # Login, AuthVerify, Onboarding, Feed, Explore, SavedEvents, EventDetail, Settings ...
 │       ├── components/      # EventCard, PersonaCard, shared CSS base classes ...
 │       ├── api/             # API client
 │       ├── _generated/      # generated constants & i18n (do not edit by hand)
