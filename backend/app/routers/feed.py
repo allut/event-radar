@@ -2,13 +2,14 @@
 
 from datetime import datetime
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.constants import TALLINN_TZ
+from app.constants import RATE_LIMIT_BROWSE, TALLINN_TZ
 from app.db import get_db
 from app.models.models import DailyFeed, Event, User
+from app.rate_limit import limiter
 from app.routers.auth import get_current_user
 from app.routers.utils import (
     load_user_signals,
@@ -21,7 +22,9 @@ router = APIRouter(prefix="/feed", tags=["feed"])
 
 
 @router.get("")
+@limiter.limit(RATE_LIMIT_BROWSE)
 async def get_feed(
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict:

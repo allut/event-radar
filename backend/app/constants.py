@@ -98,6 +98,15 @@ ALLOWED_SOURCE_HOSTS: frozenset[str] = frozenset(
     }
 )
 
+# Inbound-mail sender allowlist (domain part of the "from" header, lowercased).
+# The Svix signature on POST /webhooks/inbound-mail only proves the request came
+# from Resend, not who sent the underlying email — anyone able to email the
+# configured inbound address could otherwise inject arbitrary content into the
+# newsletter-extraction LLM prompt. Empty by default: no newsletter adapter is
+# registered yet (app/ingestion/registry.py), so extraction is a no-op regardless;
+# populate with trusted sender domains before wiring up the newsletter adapter.
+NEWSLETTER_SENDER_ALLOWED_DOMAINS: frozenset[str] = frozenset()
+
 # SAFE_URL_SCHEMES, HTML_SANITIZE_ALLOWED_TAGS, HTML_SANITIZE_ALLOWED_ATTRS imported
 # from app._generated.shared_constants (shared/app-config.json → generate_shared.py).
 # Schemes accepted for ingested event url/image_url — anything else (javascript:,
@@ -852,6 +861,9 @@ SECURITY_HEADERS: dict[str, str] = {
     "X-Content-Type-Options": "nosniff",
     "X-Frame-Options": "DENY",
     "Referrer-Policy": "strict-origin-when-cross-origin",
+    # Pure JSON API, nothing should ever be cached by an intermediary — most
+    # importantly, GET /auth/verify returns a bearer session_token in the body.
+    "Cache-Control": "no-store",
 }
 # HSTS is only safe to send over HTTPS — Render terminates TLS in front of the app,
 # so this is gated to production (see app.main) to avoid breaking local http://localhost.

@@ -7,6 +7,7 @@ import hmac
 import json
 import logging
 import time
+from email.utils import parseaddr
 
 from fastapi import (
     APIRouter,
@@ -20,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.constants import (
+    NEWSLETTER_SENDER_ALLOWED_DOMAINS,
     RATE_LIMIT_WEBHOOK_INBOUND_MAIL,
     SVIX_ID_HEADER,
     SVIX_SECRET_PREFIX,
@@ -95,6 +97,18 @@ def _request_signature_valid(request: Request, body: bytes) -> bool:
     )
 
 
+def _sender_domain_allowed(from_addr: str) -> bool:
+    """True when from_addr's domain is in NEWSLETTER_SENDER_ALLOWED_DOMAINS.
+
+    The Svix signature only proves the request came from Resend, not who sent
+    the underlying email — this is the layer that stops an arbitrary sender
+    from injecting content into the newsletter-extraction LLM prompt.
+    """
+    _name, email = parseaddr(from_addr)
+    domain = email.rpartition("@")[2].lower()
+    return bool(domain) and domain in NEWSLETTER_SENDER_ALLOWED_DOMAINS
+
+
 async def _run_extraction(email_id: int, subject: str, text_body: str) -> None:
     """Background task: extract events from email using a fresh DB session."""
     async with AsyncSessionLocal() as db:
@@ -168,7 +182,12 @@ async def inbound_mail(
     email_id: int = email.id
     await db.commit()
 
-    if text_body or subject:
+    if not _sender_domain_allowed(from_addr):
+        log.warning(
+            "inbound-mail %d: sender domain not allowlisted, skipping extraction",
+            email_id,
+        )
+    elif text_body or subject:
         background_tasks.add_task(_run_extraction, email_id, subject, text_body)
     else:
         log.info("inbound-mail %d: no text body, skipping extraction", email_id)

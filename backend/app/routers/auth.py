@@ -23,6 +23,7 @@ from app.constants import (
     MAGIC_LINK_RESEND_COOLDOWN_SECONDS,
     RATE_LIMIT_AUTH_REQUEST_LINK,
     RATE_LIMIT_AUTH_VERIFY,
+    RATE_LIMIT_BROWSE,
     RATE_LIMIT_LOGOUT_ALL,
     VALID_LOCALES,
 )
@@ -271,7 +272,9 @@ async def logout_all(
 
 
 @router.get("/me")
+@limiter.limit(RATE_LIMIT_BROWSE)
 async def get_me(
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict:

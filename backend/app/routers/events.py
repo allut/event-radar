@@ -44,9 +44,13 @@ async def get_event(
     locale = DEFAULT_USER_LOCALE
     sigs: dict[int, str] = {}
     if parsed is not None:
-        user_id, _token_version = parsed
+        user_id, token_version = parsed
         user = await db.get(User, user_id)
-        locale = user.locale if user else DEFAULT_USER_LOCALE
-        sigs = await load_user_signals(db, user_id, [event.id])
+        # A revoked token (post logout-all) must not resolve a user here —
+        # otherwise this optional-auth endpoint leaks locale + my_signal after
+        # the user believed all sessions were signed out.
+        if user is not None and token_version == user.session_token_version:
+            locale = user.locale
+            sigs = await load_user_signals(db, user_id, [event.id])
 
     return serialize_event(event, locale=locale, feedback_by_event=sigs)

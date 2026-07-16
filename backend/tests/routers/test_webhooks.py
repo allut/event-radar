@@ -394,7 +394,8 @@ async def test_inbound_mail_with_text_body_queues_extraction(mock_db):
     bg = BackgroundTasks()
 
     with patch("app.routers.webhooks.settings") as s, \
-         patch("app.routers.webhooks.RawInboundEmail", return_value=email_obj):
+         patch("app.routers.webhooks.RawInboundEmail", return_value=email_obj), \
+         patch("app.routers.webhooks.NEWSLETTER_SENDER_ALLOWED_DOMAINS", frozenset({"example.com"})):
         s.RESEND_WEBHOOK_SECRET = ""
         s.APP_ENV = APP_ENV_DEVELOPMENT
         result = await inbound_mail(
@@ -405,3 +406,46 @@ async def test_inbound_mail_with_text_body_queues_extraction(mock_db):
 
     assert result.status_code == http.HTTPStatus.OK
     assert len(bg.tasks) == 1
+
+
+@pytest.mark.asyncio
+async def test_inbound_mail_sender_not_allowlisted_skips_extraction(mock_db):
+    """Sender domain absent from NEWSLETTER_SENDER_ALLOWED_DOMAINS — email is
+    stored but extraction is not queued, even with a non-empty text body."""
+    email_obj = MagicMock()
+    email_obj.id = 1
+    mock_db.flush.side_effect = lambda: setattr(email_obj, "id", 13)
+
+    import json as _json
+    from starlette.requests import Request
+    from fastapi import BackgroundTasks
+    from app.routers.webhooks import inbound_mail
+
+    scope = {
+        "type": "http",
+        "method": "POST",
+        "path": "/webhooks/inbound-mail",
+        "query_string": b"",
+        "headers": [(b"content-type", b"application/json")],
+    }
+    body = _json.dumps(_email_payload(from_addr="newsletter@untrusted.com")).encode()
+
+    async def receive():
+        return {"type": "http.request", "body": body, "more_body": False}
+
+    request = Request(scope, receive)
+    bg = BackgroundTasks()
+
+    with patch("app.routers.webhooks.settings") as s, \
+         patch("app.routers.webhooks.RawInboundEmail", return_value=email_obj), \
+         patch("app.routers.webhooks.NEWSLETTER_SENDER_ALLOWED_DOMAINS", frozenset({"example.com"})):
+        s.RESEND_WEBHOOK_SECRET = ""
+        s.APP_ENV = APP_ENV_DEVELOPMENT
+        result = await inbound_mail(
+            request=request,
+            background_tasks=bg,
+            db=mock_db,
+        )
+
+    assert result.status_code == http.HTTPStatus.OK
+    assert len(bg.tasks) == 0  # sender domain not allowlisted

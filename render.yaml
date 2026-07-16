@@ -20,6 +20,8 @@ services:
         sync: false
       - key: LOG_SHIP_TOKEN
         sync: false
+      - key: INTERNAL_TOKEN
+        sync: false
 
   - type: cron
     name: event-radar-keepalive
@@ -28,7 +30,9 @@ services:
     schedule: "*/15 * * * *"
     rootDir: backend
     buildCommand: pip install -r requirements.txt
-    startCommand: python -c "import httpx, os; httpx.get(os.environ['API_URL'] + '/internal/tick', timeout=10)"
+    startCommand: python -c "import httpx, os; httpx.get(os.environ['API_URL'] + '/internal/tick', headers={'X-Internal-Token': os.environ['INTERNAL_TOKEN']}, timeout=10)"
     envVars:
       - key: API_URL
+        sync: false
+      - key: INTERNAL_TOKEN
         sync: false

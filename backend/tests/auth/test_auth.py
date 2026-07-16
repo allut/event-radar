@@ -299,7 +299,7 @@ class TestLogoutAll:
 
 class TestGetMe:
     @pytest.mark.asyncio
-    async def test_has_personas_true_when_count_nonzero(self, mock_db):
+    async def test_has_personas_true_when_count_nonzero(self, mock_db, make_request):
         from app.routers.auth import get_me
 
         user = MagicMock()
@@ -310,11 +310,11 @@ class TestGetMe:
         user.created_at = datetime(2024, 1, 1, tzinfo=timezone.utc)
         mock_db.scalar.return_value = 2
 
-        result = await get_me(current_user=user, db=mock_db)
+        result = await get_me(request=make_request(), current_user=user, db=mock_db)
         assert result["has_personas"] is True
 
     @pytest.mark.asyncio
-    async def test_has_personas_false_when_count_zero(self, mock_db):
+    async def test_has_personas_false_when_count_zero(self, mock_db, make_request):
         from app.routers.auth import get_me
 
         user = MagicMock()
@@ -325,11 +325,11 @@ class TestGetMe:
         user.created_at = datetime(2024, 1, 1, tzinfo=timezone.utc)
         mock_db.scalar.return_value = 0
 
-        result = await get_me(current_user=user, db=mock_db)
+        result = await get_me(request=make_request(), current_user=user, db=mock_db)
         assert result["has_personas"] is False
 
     @pytest.mark.asyncio
-    async def test_has_personas_false_when_count_none(self, mock_db):
+    async def test_has_personas_false_when_count_none(self, mock_db, make_request):
         from app.routers.auth import get_me
 
         user = MagicMock()
@@ -340,7 +340,7 @@ class TestGetMe:
         user.created_at = datetime(2024, 1, 1, tzinfo=timezone.utc)
         mock_db.scalar.return_value = None
 
-        result = await get_me(current_user=user, db=mock_db)
+        result = await get_me(request=make_request(), current_user=user, db=mock_db)
         assert result["has_personas"] is False
 
 

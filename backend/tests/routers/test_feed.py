@@ -13,20 +13,20 @@ import pytest
 
 class TestGetFeed:
     @pytest.mark.asyncio
-    async def test_returns_empty_when_no_feed_built(self, mock_db, make_user):
+    async def test_returns_empty_when_no_feed_built(self, mock_db, make_user, make_request):
         from app.routers.feed import get_feed
 
         mock_db.scalar.return_value = None  # no DailyFeed row
         user = make_user()
 
-        result = await get_feed(current_user=user, db=mock_db)
+        result = await get_feed(request=make_request(), current_user=user, db=mock_db)
 
         assert result["events"] == []
         assert result["built_at"] is None
         assert "feed_date" in result
 
     @pytest.mark.asyncio
-    async def test_returns_events_in_feed_order(self, mock_db, make_user, make_event):
+    async def test_returns_events_in_feed_order(self, mock_db, make_user, make_event, make_request):
         from app.routers.feed import get_feed
 
         feed = MagicMock()
@@ -41,7 +41,7 @@ class TestGetFeed:
         mock_db.scalars.return_value = scalars_result
 
         user = make_user()
-        result = await get_feed(current_user=user, db=mock_db)
+        result = await get_feed(request=make_request(), current_user=user, db=mock_db)
 
         assert len(result["events"]) == 2
         assert result["events"][0]["id"] == 10
@@ -49,7 +49,7 @@ class TestGetFeed:
         assert result["built_at"] is not None
 
     @pytest.mark.asyncio
-    async def test_empty_event_ids_returns_empty(self, mock_db, make_user):
+    async def test_empty_event_ids_returns_empty(self, mock_db, make_user, make_request):
         from app.routers.feed import get_feed
 
         feed = MagicMock()
@@ -57,12 +57,12 @@ class TestGetFeed:
         mock_db.scalar.return_value = feed
 
         user = make_user()
-        result = await get_feed(current_user=user, db=mock_db)
+        result = await get_feed(request=make_request(), current_user=user, db=mock_db)
 
         assert result["events"] == []
 
     @pytest.mark.asyncio
-    async def test_event_without_classification(self, mock_db, make_user, make_event):
+    async def test_event_without_classification(self, mock_db, make_user, make_event, make_request):
         from app.routers.feed import get_feed
 
         feed = MagicMock()
@@ -77,13 +77,13 @@ class TestGetFeed:
         mock_db.scalars.return_value = scalars_result
 
         user = make_user()
-        result = await get_feed(current_user=user, db=mock_db)
+        result = await get_feed(request=make_request(), current_user=user, db=mock_db)
 
         assert result["events"][0]["categories"] == []
         assert result["events"][0]["why_go"] == []
 
     @pytest.mark.asyncio
-    async def test_event_query_excludes_explicit_events(self, mock_db, make_user):
+    async def test_event_query_excludes_explicit_events(self, mock_db, make_user, make_request):
         from app.routers.feed import get_feed
 
         feed = MagicMock()
@@ -96,7 +96,7 @@ class TestGetFeed:
         mock_db.scalars.return_value = empty
 
         user = make_user()
-        await get_feed(current_user=user, db=mock_db)
+        await get_feed(request=make_request(), current_user=user, db=mock_db)
 
         stmt = mock_db.scalars.call_args.args[0]
         compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
@@ -148,6 +148,34 @@ class TestGetEvent:
 
         assert result["categories"] == []
         assert result["quality_score"] is None
+
+    @pytest.mark.asyncio
+    async def test_revoked_token_treated_as_anonymous(self, mock_db, make_event, make_request, make_user):
+        """A token whose version no longer matches user.session_token_version
+        (post logout-all) must not resolve the user — no locale/signal leak."""
+        from app.routers.events import get_event
+        from app.auth.tokens import generate_session_token
+
+        event = make_event(42)
+        mock_db.scalar.return_value = event
+
+        user = make_user(user_id=7, locale="ru")
+        user.session_token_version = 2
+        mock_db.get.return_value = user
+
+        stale_token = generate_session_token(7, 1)  # minted at version 1, user now at 2
+
+        result = await get_event(
+            event_id=42,
+            request=make_request(),
+            db=mock_db,
+            authorization=f"Bearer {stale_token}",
+        )
+
+        # Revoked token must not resolve signals for this user — no leak of
+        # my_signal (like/dislike/bookmark) after logout-all.
+        assert result["my_signal"] is None
+        mock_db.execute.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_query_excludes_explicit_events(self, mock_db, make_request):
