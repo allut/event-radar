@@ -29,7 +29,7 @@ The whole platform is designed to run on **free-tier infrastructure** at a stead
 Vite + React SPA  ──HTTPS / JSON──▶  FastAPI (single process)
                                        ├── Routers: /auth /admin /onboarding /events /explore
                                        │            /feed /feedback /users/me /webhooks
-                                       └── APScheduler (embedded, kept warm by a cron ping)
+                                       └── APScheduler (embedded, kept warm by a cron-job.org ping)
                                            ├── Weekly Sun 03:00: sync_fienta_organizers
                                            ├── Weekly Sun 03:30: cleanup_stale_data
                                            ├── Hourly:    ingest_all_enabled
@@ -44,7 +44,7 @@ Vite + React SPA  ──HTTPS / JSON──▶  FastAPI (single process)
                                  LLM Router: Groq → Cerebras → Mistral
 ```
 
-There is intentionally **no Celery/Redis** — an embedded APScheduler is sufficient for a single-process MVP. On free-tier hosting the process sleeps when idle, so an external cron job pings `/internal/tick` every 15 minutes to keep the scheduler alive.
+There is intentionally **no Celery/Redis** — an embedded APScheduler is sufficient for a single-process MVP. On free-tier hosting the process sleeps when idle, so an external scheduled ping (cron-job.org) hits `/internal/tick` every 10 minutes to keep the scheduler alive.
 
 The processing pipeline:
 
@@ -63,7 +63,7 @@ Geocoding runs as a separate backfill alongside this pipeline, filling in `lat`/
 | Database    | Neon Postgres (async via `asyncpg`) |
 | LLM         | Groq (primary), Cerebras, Mistral (fallback chain) |
 | Email       | Resend (magic links + daily digests, inbound newsletter webhook) |
-| Hosting     | Render (backend web + keepalive cron) · Vercel / Cloudflare Pages (frontend) |
+| Hosting     | Render (backend web service) · Vercel (frontend) · cron-job.org (keepalive ping) |
 
 ## Getting started
 
@@ -154,6 +154,7 @@ event-radar/
 │   ├── alembic/             # migrations
 │   └── tests/               # pytest suite
 ├── frontend/                 # Vite + React SPA
+│   ├── vercel.json           # Vercel rewrites (/api proxy + SPA fallback)
 │   └── src/
 │       ├── routes/          # Login, AuthVerify, Onboarding, Feed, Explore, SavedEvents, EventDetail, Settings ...
 │       ├── components/      # EventCard, PersonaCard, shared CSS base classes ...
@@ -163,7 +164,7 @@ event-radar/
 ├── shared/                   # cross-stack source of truth (i18n, personas, config, calendar)
 ├── scripts/generate_shared.py# regenerates the _generated/ files in both stacks
 ├── plan.md                   # authoritative product/architecture spec
-└── render.yaml               # Render deployment (web service + keepalive cron)
+└── render.yaml               # Render deployment (backend web service)
 ```
 
 ## Development
@@ -263,12 +264,11 @@ python scripts/reset_events.py --yes    # actually truncate
 
 ## Deployment
 
-`render.yaml` defines a free-tier deployment:
+Production runs entirely on free tiers, split across three services:
 
-- **`event-radar-api`** — the FastAPI web service. Set `DATABASE_URL` and (in production) the LLM/Resend keys, `ADMIN_PASSWORD`, `INTERNAL_TOKEN`, and `CORS_ORIGINS`. `SECRET_KEY` is auto-generated. Optionally set `LOG_SHIP_URL` (+ `LOG_SHIP_TOKEN`) to ship JSON logs to an external drain such as Axiom.
-- **`event-radar-keepalive`** — a cron job that pings `/internal/tick` every 15 minutes so the embedded scheduler survives free-tier sleep. Set its `API_URL` to the web service URL.
-
-The frontend is a static SPA build (`npm run build`) deployable to Vercel or Cloudflare Pages. The API client issues all requests against a relative `/api` prefix (`frontend/src/api/client.ts`), so the static host must rewrite/proxy `/api/*` to the backend web service URL (e.g. a Vercel rewrite or Cloudflare Pages proxy rule). No build-time API env var is used.
+- **Backend — Render web service** (`render.yaml`): `rootDir: backend`, health check on `/health`. Migrations run on every boot — `startCommand` chains `alembic upgrade head && uvicorn ...`, since Render's `preDeployCommand` is paid-only. Set `DATABASE_URL` (asyncpg form: `postgresql+asyncpg://user:pass@host/db?ssl=require`), `ADMIN_PASSWORD`, `INTERNAL_TOKEN`, the LLM keys (`GROQ_API_KEY`, optionally `CEREBRAS_API_KEY` / `MISTRAL_API_KEY`), `RESEND_API_KEY`, `RESEND_WEBHOOK_SECRET`, `CORS_ORIGINS`, and `FRONTEND_URL`. `SECRET_KEY` is auto-generated. Optionally set `LOG_SHIP_URL` (+ `LOG_SHIP_TOKEN`) to ship JSON logs to an external drain such as Axiom.
+- **Frontend — Vercel** (`frontend/vercel.json`): static Vite build (`npm run build`, output `dist`). The API client issues all requests against a relative `/api` prefix (`frontend/src/api/client.ts`), so a Vercel rewrite proxies `/api/:path*` to the Render URL **and strips the `/api` prefix** (backend routes have no `/api` prefix — this mirrors the dev Vite proxy); a second rewrite provides the SPA fallback to `index.html` for React Router routes. Same-origin proxying also avoids CORS entirely. No build-time API env var is used.
+- **Keepalive — cron-job.org**: Render's free tier sleeps after 15 minutes idle, which would stop the embedded APScheduler. A [cron-job.org](https://cron-job.org) job pings `https://event-radar-api.onrender.com/internal/tick` every 10 minutes with the `X-Internal-Token` header set to the same value as Render's `INTERNAL_TOKEN`. (Render's own cron jobs are paid; GitHub Actions cron proved too imprecise for a keepalive cadence.)
 
 ## Documentation
 

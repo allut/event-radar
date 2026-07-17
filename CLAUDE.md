@@ -51,7 +51,7 @@ Vite + React SPA (frontend, port 5173 in dev)
         ↓
 FastAPI Backend (single process on Render free tier, port 8000 in dev)
   ├── Routers: /auth  /admin  /onboarding  /events  /explore  /feed  /feedback  /users/me  /webhooks
-  └── APScheduler (embedded, kept alive by Render Cron Job ping /internal/tick every 15 min)
+  └── APScheduler (embedded, kept alive by a cron-job.org ping of /internal/tick every 10 min)
       ├── Weekly Sun 03:00: sync_fienta_organizers (auto-discover new organizers, retire long-dead ones)
       ├── Weekly Sun 03:30: cleanup_stale_data (data retention — prunes satellite tables, never events)
       ├── Hourly:   ingest_all_enabled
@@ -66,6 +66,14 @@ LLM Router: Groq (primary) → Cerebras → Mistral (fallback chain)
 ```
 
 **No Celery/Redis** — embedded APScheduler suffices for a single-process MVP.
+
+## Deployment
+
+Production runs on three free-tier services:
+
+- **Backend — Render web service** (`render.yaml`): `rootDir: backend`, health check `/health`, `plan: free`. Migrations run at boot — `startCommand` chains `alembic upgrade head && uvicorn ...` because Render's `preDeployCommand` is paid-only. Secrets (`DATABASE_URL` in asyncpg form `postgresql+asyncpg://...?ssl=require`, `ADMIN_PASSWORD`, `INTERNAL_TOKEN`, LLM/Resend keys, `CORS_ORIGINS`, `FRONTEND_URL`) are `sync: false` env vars; `SECRET_KEY` is auto-generated. There is **no Render cron service** — Render cron jobs are paid.
+- **Frontend — Vercel** (`frontend/vercel.json`): static Vite build. The API client calls a relative `/api` prefix, so a rewrite proxies `/api/:path*` to the Render URL **and strips the `/api` prefix** (backend routes have no `/api` prefix — mirrors the dev Vite proxy); a second rewrite is the SPA fallback to `index.html`. Same-origin proxying also sidesteps CORS.
+- **Keepalive — cron-job.org**: Render free tier sleeps after 15 min idle, which would halt APScheduler. A cron-job.org job pings `https://event-radar-api.onrender.com/internal/tick` every 10 minutes with the `X-Internal-Token` header (same value as Render's `INTERNAL_TOKEN`). GitHub Actions cron was tried and dropped — its schedule is too imprecise for a keepalive cadence.
 
 ## Data Flow
 
