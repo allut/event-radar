@@ -1,6 +1,6 @@
 # Alembic Migration Environment
 
-This directory contains the Alembic migration environment for the Event Radar backend.
+This directory contains the Alembic migration environment for the What's on Radar backend.
 
 ## Configuration
 

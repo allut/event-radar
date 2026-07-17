@@ -1,4 +1,4 @@
-# Event Radar — Plan
+# What's on Radar — Plan
 
 AI-powered event discovery for **Tallinn**. Personalized "Daily 5" curated feed per user, free-tier infra only. Solo Python developer, target steady-state cost **$0/mo**.
 

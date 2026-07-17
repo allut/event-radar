@@ -1,6 +1,6 @@
 {
   "ui": {
-    "brand": "Event Radar",
+    "brand": "What's on Radar",
     "settings_link": "Seaded",
     "back_to_feed": "← Voog",
     "back": "← Tagasi",
@@ -146,8 +146,8 @@
     "saved_error": "Salvestatud sündmuste laadimine ebaõnnestus. Palun värskenda."
   },
   "email": {
-    "email.magic_link.subject": "Sinu Event Radar sisselogimislink",
-    "email.magic_link.body": "<p>Klõpsa alloleval lingil Event Radarisse sisselogimiseks. Link aegub {ttl_minutes} minuti pärast.</p><p><a href=\"{verify_url}\">Logi sisse Event Radarisse</a></p><p>Kui sa seda ei palunud, ignoreeri seda kirja.</p>",
+    "email.magic_link.subject": "Sinu What's on Radar sisselogimislink",
+    "email.magic_link.body": "<p>Klõpsa alloleval lingil rakendusse What's on Radar sisselogimiseks. Link aegub {ttl_minutes} minuti pärast.</p><p><a href=\"{verify_url}\">Logi sisse rakendusse What's on Radar</a></p><p>Kui sa seda ei palunud, ignoreeri seda kirja.</p>",
     "digest.subject_template": "Sinu päeva 5 — {date}",
     "digest.subject_label": "Sinu päeva 5",
     "digest.price_free": "Tasuta",

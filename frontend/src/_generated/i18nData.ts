@@ -4,7 +4,7 @@
 type Locale = 'en' | 'et' | 'ru';
 export const TRANSLATIONS: Record<Locale, Record<string, string>> = {
   en: {
-    'brand': 'Event Radar',
+    'brand': 'What\'s on Radar',
     'settings_link': 'Settings',
     'back_to_feed': '← Feed',
     'back': '← Back',
@@ -150,7 +150,7 @@ export const TRANSLATIONS: Record<Locale, Record<string, string>> = {
     'saved_error': 'Failed to load saved events. Please refresh.',
   },
   et: {
-    'brand': 'Event Radar',
+    'brand': 'What\'s on Radar',
     'settings_link': 'Seaded',
     'back_to_feed': '← Voog',
     'back': '← Tagasi',
@@ -296,7 +296,7 @@ export const TRANSLATIONS: Record<Locale, Record<string, string>> = {
     'saved_error': 'Salvestatud sündmuste laadimine ebaõnnestus. Palun värskenda.',
   },
   ru: {
-    'brand': 'Event Radar',
+    'brand': 'What\'s on Radar',
     'settings_link': 'Настройки',
     'back_to_feed': '← Лента',
     'back': '← Назад',

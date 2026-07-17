@@ -95,7 +95,7 @@ class Settings(BaseSettings):
     RESEND_API_KEY: str = (
         ""  # Resend API key for transactional email; empty = log-only (dev)
     )
-    RESEND_FROM_ADDRESS: str = "Event Radar <onboarding@resend.dev>"
+    RESEND_FROM_ADDRESS: str = "What's on Radar <onboarding@resend.dev>"
     FRONTEND_URL: str = "http://localhost:5173"  # Base URL for magic-link verification
     MAGIC_LINK_TTL_MINUTES: int = _MAGIC_LINK_TTL_DEFAULT
     SESSION_TTL_DAYS: int = _SESSION_TTL_DEFAULT

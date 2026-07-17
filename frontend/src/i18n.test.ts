@@ -3,7 +3,7 @@ import { t, ti, personaName, personaVibe } from './i18n';
 
 describe('t', () => {
   it('returns translation for known key', () => {
-    expect(t('brand', 'en')).toBe('Event Radar');
+    expect(t('brand', 'en')).toBe("What's on Radar");
   });
 
   it('falls back to key for missing key', () => {
@@ -11,7 +11,7 @@ describe('t', () => {
   });
 
   it('falls back to en for invalid locale', () => {
-    expect(t('brand', 'zz')).toBe('Event Radar');
+    expect(t('brand', 'zz')).toBe("What's on Radar");
   });
 
   it('returns et translation when locale is et', () => {
@@ -30,7 +30,7 @@ describe('ti', () => {
 
   it('leaves unknown vars unreplaced', () => {
     const result = ti('brand', 'en', { unknown_var: 'x' });
-    expect(result).toBe('Event Radar');
+    expect(result).toBe("What's on Radar");
   });
 });
 

@@ -17,7 +17,7 @@ DIGEST_DOCUMENT = """\
 <tr><td align="center">
 <table role="presentation" class="container" width="600" cellpadding="0" cellspacing="0" border="0" style="{s_container}">
 <tr><td class="pad" style="{s_header_pad}">
-<p style="{s_eyebrow}">EVENT RADAR</p>
+<p style="{s_eyebrow}">WHAT'S ON RADAR</p>
 <h1 style="{s_h1}">{subject_label}</h1>
 <p style="{s_date}">{date_str}</p>
 <table role="presentation" align="center" cellpadding="0" cellspacing="0" border="0" style="{s_feed_btn_wrap}"><tr><td>
@@ -29,7 +29,7 @@ DIGEST_DOCUMENT = """\
 </td></tr>
 <tr><td class="pad" style="{s_footer}">
 <a href="{unsubscribe_url}" style="{s_footer_link}">{settings_label}</a>
-&nbsp;·&nbsp; Event Radar, Tallinn
+&nbsp;·&nbsp; What's on Radar, Tallinn
 </td></tr>
 </table>
 </td></tr>

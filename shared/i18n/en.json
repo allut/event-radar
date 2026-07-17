@@ -1,6 +1,6 @@
 {
   "ui": {
-    "brand": "Event Radar",
+    "brand": "What's on Radar",
     "settings_link": "Settings",
     "back_to_feed": "← Feed",
     "back": "← Back",
@@ -146,8 +146,8 @@
     "saved_error": "Failed to load saved events. Please refresh."
   },
   "email": {
-    "email.magic_link.subject": "Your Event Radar sign-in link",
-    "email.magic_link.body": "<p>Click the link below to sign in to Event Radar. This link expires in {ttl_minutes} minutes.</p><p><a href=\"{verify_url}\">Sign in to Event Radar</a></p><p>If you didn't request this, ignore this email.</p>",
+    "email.magic_link.subject": "Your What's on Radar sign-in link",
+    "email.magic_link.body": "<p>Click the link below to sign in to What's on Radar. This link expires in {ttl_minutes} minutes.</p><p><a href=\"{verify_url}\">Sign in to What's on Radar</a></p><p>If you didn't request this, ignore this email.</p>",
     "digest.subject_template": "Your Daily 5 — {date}",
     "digest.subject_label": "Your Daily 5",
     "digest.price_free": "Free",
