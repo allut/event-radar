@@ -8,6 +8,7 @@ vi.mock('../../lib/auth', () => ({
   getLocale: vi.fn(() => 'en'),
   setLocale: vi.fn(),
   clearToken: vi.fn(),
+  beginLogout: vi.fn(),
 }));
 
 vi.mock('../../api/client', () => ({
@@ -57,7 +58,7 @@ describe('Feed', () => {
     expect(screen.getByText('Event One')).toBeInTheDocument();
   });
 
-  it('logout clears token and navigates to /login', async () => {
+  it('logout clears token and navigates to landing', async () => {
     mockGet.mockResolvedValueOnce(feedResponse);
     const { clearToken } = await import('../../lib/auth');
     renderWithProviders(<Feed />);

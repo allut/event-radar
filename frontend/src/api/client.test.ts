@@ -5,12 +5,14 @@ import { ApiError, api } from './client';
 vi.mock('../lib/auth', () => ({
   getToken: vi.fn(() => null),
   clearToken: vi.fn(),
+  isLoggingOut: vi.fn(() => false),
 }));
 
-import { getToken, clearToken } from '../lib/auth';
+import { getToken, clearToken, isLoggingOut } from '../lib/auth';
 
 const mockGetToken = vi.mocked(getToken);
 const mockClearToken = vi.mocked(clearToken);
+const mockIsLoggingOut = vi.mocked(isLoggingOut);
 
 function mockFetch(status: number, body: unknown = {}, ok = true) {
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
@@ -92,6 +94,14 @@ describe('api.get', () => {
     await expect(api.get('/protected')).rejects.toThrow(ApiError);
     expect(mockClearToken).toHaveBeenCalled();
     expect(window.location.replace).toHaveBeenCalledWith('/login');
+  });
+
+  it('on 401 during logout: calls clearToken, skips the /login redirect, still throws ApiError', async () => {
+    mockIsLoggingOut.mockReturnValueOnce(true);
+    mockFetch(StatusCodes.UNAUTHORIZED, {}, false);
+    await expect(api.get('/protected')).rejects.toThrow(ApiError);
+    expect(mockClearToken).toHaveBeenCalled();
+    expect(window.location.replace).not.toHaveBeenCalled();
   });
 
   it('resolves undefined on 204', async () => {

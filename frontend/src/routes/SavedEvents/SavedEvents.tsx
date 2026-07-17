@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../api/client';
-import { clearToken } from '../../lib/auth';
+import { beginLogout, clearToken } from '../../lib/auth';
 import { t } from '../../i18n';
 import { useLocaleMutation } from '../../hooks/useLocaleMutation';
 import EventCard, { type EventData } from '../../components/EventCard';
@@ -52,9 +52,10 @@ export default function SavedEvents() {
   });
 
   function handleLogout() {
+    beginLogout();
     clearToken();
     queryClient.clear();
-    navigate('/login', { replace: true });
+    navigate('/', { replace: true });
   }
 
   const events = data?.pages.flatMap((page) => page.events) ?? [];

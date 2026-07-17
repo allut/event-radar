@@ -1,30 +1,12 @@
-import { useState } from 'react';
-import { api, ApiError } from '../../api/client';
 import { getLocale } from '../../lib/auth';
-import { MAGIC_LINK_EXPIRY_MINUTES, type LoginState } from '../../constants';
+import { MAGIC_LINK_EXPIRY_MINUTES } from '../../constants';
 import { t, ti } from '../../i18n';
+import { useMagicLinkRequest } from '../../hooks/useMagicLinkRequest';
 import styles from './Login.module.css';
 
 export default function Login() {
   const locale = getLocale();
-  const [email, setEmail] = useState('');
-  const [state, setState] = useState<LoginState>('idle');
-  const [errorMsg, setErrorMsg] = useState('');
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    const trimmed = email.trim();
-    if (!trimmed) return;
-    setState('loading');
-    setErrorMsg('');
-    try {
-      await api.post('/auth/request-link', { email: trimmed.toLowerCase() });
-      setState('success');
-    } catch (err) {
-      setErrorMsg(err instanceof ApiError ? err.message : t('generic_error', locale));
-      setState('error');
-    }
-  }
+  const { email, setEmail, state, errorMsg, submit, reset } = useMagicLinkRequest(locale);
 
   return (
     <div className={styles.page}>
@@ -47,13 +29,13 @@ export default function Login() {
             </p>
             <button
               className={styles.resend}
-              onClick={() => { setState('idle'); setEmail(''); }}
+              onClick={reset}
             >
               {t('use_different', locale)}
             </button>
           </div>
         ) : (
-          <form onSubmit={handleSubmit} className={styles.form} noValidate>
+          <form onSubmit={submit} className={styles.form} noValidate>
             <label className={styles.label} htmlFor="email">{t('email_label', locale)}</label>
             <input
               id="email"

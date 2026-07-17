@@ -37,9 +37,13 @@ interface EventCardProps {
   locale: string;
   onFeedbackSent?: () => void;
   variant?: 'standard' | 'featured';
+  // Presentational mode for anonymous surfaces (e.g. the public landing showcase):
+  // hides the feedback row and skips click tracking, since both POST to auth-only
+  // /feedback and would bounce a logged-out visitor to /login.
+  readOnly?: boolean;
 }
 
-export default function EventCard({ event, index, locale, onFeedbackSent, variant = 'standard' }: EventCardProps) {
+export default function EventCard({ event, index, locale, onFeedbackSent, variant = 'standard', readOnly = false }: EventCardProps) {
   const { activeSignal, pending, sendFeedback } = useFeedback(event.id, {
     initialSignal: event.my_signal,
     onChange: onFeedbackSent,
@@ -101,26 +105,30 @@ export default function EventCard({ event, index, locale, onFeedbackSent, varian
         )}
       </div>
 
-      <div className={styles.actions}>
-        <FeedbackButtonRow
-          activeSignal={activeSignal}
-          pending={pending}
-          onPress={sendFeedback}
-          locale={locale}
-          variant={isFeatured ? 'detail' : 'card'}
-        />
-        {ticketUrl && (
-          <a
-            href={ticketUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className={styles.ticketsLink}
-            onClick={() => trackExternalClick(event.id)}
-          >
-            {t('tickets', locale)}
-          </a>
-        )}
-      </div>
+      {(!readOnly || ticketUrl) && (
+        <div className={styles.actions}>
+          {!readOnly && (
+            <FeedbackButtonRow
+              activeSignal={activeSignal}
+              pending={pending}
+              onPress={sendFeedback}
+              locale={locale}
+              variant={isFeatured ? 'detail' : 'card'}
+            />
+          )}
+          {ticketUrl && (
+            <a
+              href={ticketUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={styles.ticketsLink}
+              onClick={readOnly ? undefined : () => trackExternalClick(event.id)}
+            >
+              {t('tickets', locale)}
+            </a>
+          )}
+        </div>
+      )}
     </article>
   );
 }

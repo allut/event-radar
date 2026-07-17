@@ -1,5 +1,5 @@
 import { StatusCodes } from 'http-status-codes';
-import { clearToken, getToken } from '../lib/auth';
+import { clearToken, getToken, isLoggingOut } from '../lib/auth';
 
 export class ApiError extends Error {
   constructor(public readonly status: number, message: string) {
@@ -21,7 +21,10 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 
   if (res.status === StatusCodes.UNAUTHORIZED) {
     clearToken();
-    window.location.replace('/login');
+    // A 401 during an explicit logout is an expected side effect of the
+    // cache-clear race described in lib/auth.ts, not a real session expiry —
+    // skip the hard redirect so it doesn't override the logout navigation.
+    if (!isLoggingOut()) window.location.replace('/login');
     throw new ApiError(StatusCodes.UNAUTHORIZED, 'Session expired');
   }
 

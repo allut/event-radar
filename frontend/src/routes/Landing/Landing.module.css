@@ -1,0 +1,393 @@
+.page {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Top bar ─────────────────────────────────────────────────────────── */
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-6);
+  border-bottom: var(--rule);
+  position: sticky;
+  top: 0;
+  z-index: var(--z-sticky);
+  background: var(--bg-overlay);
+  backdrop-filter: blur(var(--blur-overlay));
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.radarMark {
+  color: var(--accent);
+  font-size: var(--fs-lg);
+}
+
+.brandName {
+  font-family: var(--font-display);
+  font-size: var(--fs-brand-md);
+  font-weight: 600;
+  letter-spacing: var(--tracking-snug);
+  color: var(--text);
+}
+
+.topbarRight {
+  display: flex;
+  align-items: center;
+  gap: var(--space-0-625);
+}
+
+.signIn {
+  composes: btnOutline from '../../components/shared/Button.module.css';
+  display: inline-block;
+  padding: var(--space-0-45) var(--space-0-875);
+  font-size: var(--fs-sm);
+  line-height: normal;
+}
+
+/* ── Hero ────────────────────────────────────────────────────────────── */
+.hero {
+  display: grid;
+  grid-template-columns: 1.1fr 0.9fr;
+  align-items: center;
+  gap: var(--space-8);
+  max-width: 1100px;
+  width: 100%;
+  margin: 0 auto;
+  padding: var(--space-9) var(--space-6) var(--space-8);
+}
+
+.heroText {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  animation: rise 0.5s var(--easing) both;
+}
+
+.h1 {
+  font-family: var(--font-display);
+  font-size: var(--heading-3xl);
+  font-weight: 600;
+  line-height: var(--leading-display);
+  letter-spacing: var(--tracking-tighter);
+  color: var(--text);
+}
+
+.sub {
+  font-size: var(--fs-base);
+  color: var(--text-soft);
+  line-height: var(--leading-body);
+  max-width: 46ch;
+}
+
+.heroArt {
+  animation: rise 0.7s var(--easing) both;
+}
+
+/* ── Email capture ───────────────────────────────────────────────────── */
+.emailForm {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin-top: var(--space-2);
+}
+
+.input {
+  flex: 1 1 220px;
+  min-width: 0;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--space-3) var(--space-4);
+  color: var(--text);
+  font-size: var(--fs-base);
+  outline: none;
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+
+.input::placeholder { color: var(--text-dim); }
+
+.input:focus {
+  border-color: var(--accent);
+  box-shadow: var(--shadow-focus-ring);
+}
+
+.input:disabled { opacity: 0.5; }
+
+.submit {
+  composes: btnPrimary from '../../components/shared/Button.module.css';
+  padding: var(--space-3) var(--space-5);
+  font-size: var(--fs-base);
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.spinner {
+  display: inline-block;
+  width: var(--spinner-size-sm);
+  height: var(--spinner-size-sm);
+  border: 2px solid var(--spinner-border);
+  border-top-color: var(--on-accent);
+  border-radius: var(--radius-full);
+  animation: spin var(--anim-base) linear infinite;
+}
+
+.error {
+  flex-basis: 100%;
+  font-size: var(--fs-sm);
+  color: var(--danger);
+  padding: var(--space-2) var(--space-3);
+  background: var(--danger-subtle);
+  border-radius: var(--radius);
+  border-left: 2px solid var(--danger);
+}
+
+.secondaryCta {
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+  letter-spacing: var(--tracking-normal);
+  transition: color var(--transition);
+  align-self: flex-start;
+}
+
+.secondaryCta:hover { color: var(--accent-light); }
+
+.success {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: var(--space-2);
+  padding: var(--space-4) 0;
+  animation: rise var(--anim-fast) var(--easing) both;
+}
+
+.checkCircle {
+  width: 48px;
+  height: 48px;
+  border: 2px solid var(--success);
+  border-radius: var(--radius-full);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--fs-xl);
+  color: var(--success);
+}
+
+.successMsg { font-size: var(--fs-base); color: var(--text); }
+.successMsg strong { color: var(--accent); }
+.successHint { font-size: var(--fs-sm); color: var(--text-muted); }
+
+/* ── Section shells ──────────────────────────────────────────────────── */
+.sectionTitle {
+  font-family: var(--font-display);
+  font-size: var(--heading-xl);
+  font-weight: 600;
+  line-height: var(--leading-display);
+  letter-spacing: var(--tracking-tighter);
+  color: var(--text);
+  text-align: center;
+}
+
+.sectionSub {
+  font-size: var(--fs-md);
+  color: var(--text-muted);
+  text-align: center;
+  margin-top: var(--space-2);
+}
+
+/* ── How it works ────────────────────────────────────────────────────── */
+.steps {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: var(--space-8) var(--space-6);
+  border-top: var(--rule);
+}
+
+.stepList {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-6);
+  margin-top: var(--space-7);
+}
+
+.step {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.stepNum {
+  font-family: var(--font-display);
+  font-size: var(--numeral-lg);
+  font-weight: 300;
+  line-height: 1;
+  color: var(--accent);
+  letter-spacing: var(--tracking-tighter);
+}
+
+.stepTitle {
+  font-size: var(--heading-xs);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.stepBody {
+  font-size: var(--fs-md);
+  color: var(--text-soft);
+  line-height: var(--leading-body);
+}
+
+/* ── Showcase grid ───────────────────────────────────────────────────── */
+.showcase {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: var(--space-8) var(--space-6);
+  border-top: var(--rule);
+  width: 100%;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--space-5);
+  margin-top: var(--space-7);
+}
+
+.showcaseCta {
+  composes: btnOutline from '../../components/shared/Button.module.css';
+  display: inline-flex;
+  margin: var(--space-6) auto 0;
+  padding: var(--space-3) var(--space-6);
+}
+
+/* ── Personas ────────────────────────────────────────────────────────── */
+.personas {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: var(--space-8) var(--space-6);
+  border-top: var(--rule);
+  width: 100%;
+}
+
+.personaRow {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--space-4);
+  margin-top: var(--space-7);
+}
+
+.personaChip {
+  composes: card from '../../components/shared/Card.module.css';
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: var(--space-1);
+  padding: var(--space-5) var(--space-3);
+}
+
+.personaEmoji { font-size: var(--heading-md); }
+.personaName {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text);
+}
+.personaVibe {
+  font-size: var(--fs-2xs);
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+/* ── Trust row ───────────────────────────────────────────────────────── */
+.trust {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  padding: var(--space-6);
+  border-top: var(--rule);
+}
+
+.trustItem {
+  font-size: var(--fs-sm);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  color: var(--text-soft);
+}
+
+.trustDot { color: var(--accent); }
+
+/* ── Final CTA ───────────────────────────────────────────────────────── */
+.finalCta {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-5);
+  max-width: 560px;
+  margin: 0 auto;
+  padding: var(--space-9) var(--space-6);
+  text-align: center;
+}
+
+.finalTitle {
+  font-family: var(--font-display);
+  font-size: var(--heading-2xl);
+  font-weight: 600;
+  line-height: var(--leading-display);
+  letter-spacing: var(--tracking-tighter);
+  color: var(--text);
+}
+
+.finalCta .emailForm { justify-content: center; width: 100%; }
+
+/* ── Footer ──────────────────────────────────────────────────────────── */
+.footer {
+  margin-top: auto;
+  padding: var(--space-6);
+  text-align: center;
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+  border-top: var(--rule);
+}
+
+/* ── Responsive ──────────────────────────────────────────────────────── */
+@media (max-width: 900px) {
+  .hero {
+    grid-template-columns: 1fr;
+    gap: var(--space-6);
+    padding-top: var(--space-7);
+    text-align: center;
+  }
+  .heroText { align-items: center; }
+  .sub { text-align: center; }
+  .emailForm { justify-content: center; }
+  .heroArt { order: -1; }
+  .stepList { grid-template-columns: 1fr; gap: var(--space-5); }
+}
+
+@media (max-width: 640px) {
+  .topbar { padding: var(--space-3) var(--space-4); }
+  .h1 { font-size: var(--heading-xl); }
+  .finalTitle { font-size: var(--heading-xl); }
+  .emailForm {
+    flex-direction: column;
+    gap: var(--space-3);
+    width: 100%;
+  }
+  /* .input's `flex: 1 1 220px` would apply 220px as a *height* basis once the
+     form stacks — reset it so the input keeps its natural height. */
+  .input { flex: none; width: 100%; }
+  .submit { width: 100%; }
+}

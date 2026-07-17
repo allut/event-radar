@@ -378,6 +378,12 @@ RATE_LIMIT_LOGOUT_ALL = "10/minute"
 # Authenticated /explore browsing — mirrors RATE_LIMIT_EVENTS_DETAIL; live filter
 # changes can fire a request per keystroke/chip-toggle, so this stays generous.
 RATE_LIMIT_BROWSE = "120/minute"
+# Public, unauthenticated landing-page showcase (GET /public/showcase). No auth,
+# so throttle scraping abuse; generous enough for real visitors loading the page.
+RATE_LIMIT_PUBLIC = "60/minute"
+# How many events the landing-page showcase returns — a fixed, small teaser grid
+# (top-quality upcoming events), so no pagination is needed.
+SHOWCASE_EVENT_COUNT = 6
 
 # Auth tokens
 AUTH_MAGIC_SALT = "magic-link-v1"

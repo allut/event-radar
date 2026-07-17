@@ -1,9 +1,28 @@
-import { TOKEN_KEY, LOCALES, LOCALE_KEY } from '../constants';
+import { TOKEN_KEY, LOCALES, LOCALE_KEY, LOGOUT_FLAG_TTL_MS } from '../constants';
 
 export function getToken(): string | null { return localStorage.getItem(TOKEN_KEY); }
-export function setToken(t: string): void { localStorage.setItem(TOKEN_KEY, t); }
+export function setToken(t: string): void {
+  loggingOut = false;
+  localStorage.setItem(TOKEN_KEY, t);
+}
 export function clearToken(): void { localStorage.removeItem(TOKEN_KEY); }
 export function isAuthenticated(): boolean { return !!getToken(); }
+
+// Set by an explicit logout action, before clearToken()/queryClient.clear() run.
+// A logout on a route that doesn't change path (e.g. Feed at "/") doesn't
+// unmount its active queries, so clearing the cache can trigger an in-place
+// refetch with no auth token — the resulting 401 must not hard-redirect to
+// /login and clobber the intended post-logout navigation (see api/client.ts).
+// Reset on the next successful sign-in so a genuine session expiry later
+// still redirects normally, and auto-expires after LOGOUT_FLAG_TTL_MS so it
+// can't mask a real session expiry indefinitely if the user never signs
+// back in on this tab.
+let loggingOut = false;
+export function beginLogout(): void {
+  loggingOut = true;
+  setTimeout(() => { loggingOut = false; }, LOGOUT_FLAG_TTL_MS);
+}
+export function isLoggingOut(): boolean { return loggingOut; }
 
 export function getLocale(): string {
   const stored = localStorage.getItem(LOCALE_KEY);

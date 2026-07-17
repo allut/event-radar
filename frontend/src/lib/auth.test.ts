@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { getToken, setToken, clearToken, isAuthenticated, getLocale, setLocale } from './auth';
+import { describe, it, expect, afterEach } from 'vitest';
+import { getToken, setToken, clearToken, isAuthenticated, getLocale, setLocale, beginLogout, isLoggingOut } from './auth';
 import { LOCALES } from '../constants';
 
 describe('token storage', () => {
@@ -21,6 +21,30 @@ describe('token storage', () => {
 
   it('isAuthenticated returns false when no token', () => {
     expect(isAuthenticated()).toBe(false);
+  });
+});
+
+describe('logout flag', () => {
+  // loggingOut is module-level state, not localStorage-backed — reset it
+  // explicitly so a test's beginLogout() can't leak into the next test.
+  afterEach(() => {
+    setToken('reset');
+    clearToken();
+  });
+
+  it('isLoggingOut is false by default', () => {
+    expect(isLoggingOut()).toBe(false);
+  });
+
+  it('beginLogout sets isLoggingOut to true', () => {
+    beginLogout();
+    expect(isLoggingOut()).toBe(true);
+  });
+
+  it('setToken (a fresh sign-in) resets isLoggingOut', () => {
+    beginLogout();
+    setToken('fresh-token');
+    expect(isLoggingOut()).toBe(false);
   });
 });
 

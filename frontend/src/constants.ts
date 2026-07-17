@@ -30,6 +30,11 @@ export const LOCALE_KEY = 'locale';
 
 // ─── Auth / magic link ───────────────────────────────────────────────────────
 export const AUTH_REDIRECT_DELAY_MS = 600;
+// Upper bound on the post-logout 401-redirect suppression window (lib/auth.ts
+// isLoggingOut) — comfortably covers the cache-clear race plus Settings'
+// AUTH_REDIRECT_DELAY_MS-delayed logout-all flow, without masking a genuine
+// session expiry indefinitely if the user never signs back in on this tab.
+export const LOGOUT_FLAG_TTL_MS = 10_000;
 
 // ─── Animation ───────────────────────────────────────────────────────────────
 export const CARD_ANIMATION_DELAY_STEP_MS = 80;
@@ -92,6 +97,7 @@ export const QUERY_KEYS = {
   saved: 'saved',
   event: 'event',
   settings: 'settings',
+  showcase: 'showcase',
 } as const;
 
 // ─── UI state types ───────────────────────────────────────────────────────────

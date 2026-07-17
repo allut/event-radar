@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../../api/client';
-import { clearToken, getLocale } from '../../lib/auth';
+import { beginLogout, clearToken, getLocale } from '../../lib/auth';
 import { useLocaleMutation } from '../../hooks/useLocaleMutation';
 import { AUTH_REDIRECT_DELAY_MS, PERSONAS, SAVE_MSG_CLEAR_DELAY_MS, PERSONA_PRIMARY_WEIGHT_THRESHOLD, QUERY_KEYS } from '../../constants';
 import { cx } from '../../utils';
@@ -83,10 +83,11 @@ export default function Settings() {
     mutationFn: () => api.post<{ detail: string }>('/auth/logout-all'),
     onSuccess: () => {
       setLogoutToast({ status: 'success', message: t('logout_all_success', locale) });
+      beginLogout();
       setTimeout(() => {
         clearToken();
         queryClient.clear();
-        navigate('/login', { replace: true });
+        navigate('/', { replace: true });
       }, AUTH_REDIRECT_DELAY_MS);
     },
     onError: (err) => {
@@ -103,9 +104,10 @@ export default function Settings() {
   }
 
   function handleLogout() {
+    beginLogout();
     clearToken();
     queryClient.clear();
-    navigate('/login', { replace: true });
+    navigate('/', { replace: true });
   }
 
   const primaryPersona = data?.personas.find((p) => p.weight >= PERSONA_PRIMARY_WEIGHT_THRESHOLD);

@@ -1,0 +1,107 @@
+.radar {
+  position: relative;
+  width: 100%;
+  max-width: 420px;
+  aspect-ratio: 1;
+  margin: 0 auto;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--accent-faint);
+  background:
+    repeating-radial-gradient(
+      circle at center,
+      transparent 0,
+      transparent calc(16.6% - 1px),
+      var(--accent-subtle) calc(16.6% - 1px),
+      var(--accent-subtle) 16.6%
+    ),
+    radial-gradient(circle at center, var(--accent-minimal) 0%, transparent 70%);
+  overflow: hidden;
+  box-shadow: var(--shadow-accent);
+}
+
+/* Crosshair lines through the centre. */
+.rings {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(to right, transparent calc(50% - 0.5px), var(--accent-subtle) calc(50% - 0.5px), var(--accent-subtle) calc(50% + 0.5px), transparent calc(50% + 0.5px)),
+    linear-gradient(to bottom, transparent calc(50% - 0.5px), var(--accent-subtle) calc(50% - 0.5px), var(--accent-subtle) calc(50% + 0.5px), transparent calc(50% + 0.5px));
+}
+
+/* Rotating beam — a conic wedge fading from accent to transparent. */
+.sweep {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-full);
+  background: conic-gradient(
+    from 0deg,
+    var(--accent-mid) 0deg,
+    var(--accent-glow) 24deg,
+    transparent 60deg,
+    transparent 360deg
+  );
+  animation: spin 4s linear infinite;
+  transform-origin: center;
+}
+
+.core {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: var(--fs-xl);
+  color: var(--accent);
+  animation: breathe 3s var(--easing-breathe) infinite;
+}
+
+.blip {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  white-space: nowrap;
+}
+
+.dot {
+  width: var(--space-2);
+  height: var(--space-2);
+  border-radius: var(--radius-full);
+  background: var(--accent-light);
+  box-shadow: 0 0 8px var(--accent);
+  flex-shrink: 0;
+  animation: breathe 2.4s var(--easing-breathe) infinite;
+  animation-delay: var(--blip-delay, 0s);
+}
+
+.label {
+  font-size: var(--fs-2xs);
+  letter-spacing: var(--tracking-wider);
+  text-transform: uppercase;
+  color: var(--text-soft);
+  background: var(--bg-overlay-soft);
+  backdrop-filter: blur(var(--blur-chip));
+  padding: var(--space-0-125) var(--space-2);
+  border-radius: var(--radius-pill);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sweep {
+    animation: none;
+    /* Hold a static wedge so the radar still reads as a radar, without motion. */
+    opacity: 0.5;
+  }
+  .core,
+  .dot {
+    animation: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .radar {
+    max-width: 300px;
+  }
+  .label {
+    display: none;
+  }
+}

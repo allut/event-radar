@@ -9,6 +9,7 @@ vi.mock('../../lib/auth', () => ({
   getLocale: vi.fn(() => 'en'),
   setLocale: vi.fn(),
   clearToken: vi.fn(),
+  beginLogout: vi.fn(),
 }));
 
 vi.mock('../../api/client', () => ({
