@@ -14,6 +14,7 @@ from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 from app.config import settings
 from app.constants import (
     APP_ENV_DEVELOPMENT,
+    APP_VERSION,
     CORS_ALLOWED_HEADERS,
     CORS_ALLOWED_METHODS,
     DIGEST_SEND_HOUR,
@@ -239,7 +240,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 _docs_enabled = settings.APP_ENV == APP_ENV_DEVELOPMENT
 app = FastAPI(
     title="What's on Radar API",
-    version="0.1.0",
+    version=APP_VERSION,
     lifespan=lifespan,
     docs_url="/docs" if _docs_enabled else None,
     redoc_url="/redoc" if _docs_enabled else None,
@@ -314,7 +315,7 @@ app.include_router(webhooks_router)
 
 @app.get("/health")
 async def health() -> dict:
-    return {"status": "ok"}
+    return {"status": "ok", "version": APP_VERSION}
 
 
 @app.get("/internal/tick")

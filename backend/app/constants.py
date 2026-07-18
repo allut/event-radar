@@ -3,6 +3,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from app._generated.shared_constants import (
+    APP_VERSION,
     BROWSE_PAGE_SIZE,
     DEFAULT_CURRENCY,
     DEFAULT_USER_CITY,
@@ -19,6 +20,7 @@ from app._generated.shared_constants import (
 )
 
 __all__ = [
+    "APP_VERSION",
     "BROWSE_PAGE_SIZE",
     "DEFAULT_CURRENCY",
     "DEFAULT_USER_CITY",
