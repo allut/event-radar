@@ -50,6 +50,12 @@ export const SAVE_MSG_CLEAR_DELAY_MS = 2000;
 // ─── External links ──────────────────────────────────────────────────────────
 export const GOOGLE_MAPS_SEARCH_URL = 'https://www.google.com/maps/search/?api=1&query=';
 
+// ─── Analytics ───────────────────────────────────────────────────────────────
+// Matches `/events/:id` so Vercel Analytics groups all event detail views
+// under one route instead of one row per event id. Applied to a pathname
+// with query/hash already stripped (see maskAnalyticsUrl in utils.ts).
+export const ANALYTICS_EVENT_PATH_RE = /^\/events\/\d+$/;
+
 // ─── Locale ──────────────────────────────────────────────────────────────────
 export function toLocaleCode(locale: string): string {
   return _LOCALE_CODE_MAP[locale] ?? _DEFAULT_LOCALE_CODE;

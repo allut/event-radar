@@ -1,7 +1,10 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { Analytics } from '@vercel/analytics/react';
+import { SpeedInsights } from '@vercel/speed-insights/react';
 import { isAuthenticated } from './lib/auth';
 import { QUERY_RETRY, QUERY_STALE_TIME } from './constants';
+import { maskAnalyticsUrl } from './utils';
 import ErrorBoundary from './components/ErrorBoundary';
 import Landing from './routes/Landing';
 import Login from './routes/Login';
@@ -69,6 +72,8 @@ export default function App() {
             />
             <Route path="*" element={<Protected><NotFound /></Protected>} />
           </Routes>
+          <Analytics beforeSend={(e) => ({ ...e, url: maskAnalyticsUrl(e.url) })} />
+          <SpeedInsights beforeSend={(e) => ({ ...e, url: maskAnalyticsUrl(e.url) })} />
         </BrowserRouter>
       </QueryClientProvider>
     </ErrorBoundary>
