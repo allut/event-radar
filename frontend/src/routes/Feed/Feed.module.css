@@ -58,6 +58,59 @@
   border-top: var(--rule);
 }
 
+.promo {
+  composes: card from '../../components/shared/Card.module.css';
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-5);
+  margin-bottom: var(--space-6);
+  background: var(--accent-glow);
+  text-decoration: none;
+  transition: border-color var(--transition);
+}
+
+.promo:hover {
+  border-color: var(--accent-hover-border);
+}
+
+/* The CTA is a span inside the band-wide link, so `.btnOutline:hover` only
+   fires when the pointer is over the span itself — light it up from the band. */
+.promo:hover .promoCta {
+  border-color: var(--accent-hover-border);
+  color: var(--text);
+}
+
+/* min-width: 0 lets the long msg wrap instead of overflowing next to the
+   nowrap CTA (a flex item defaults to min-width: auto). */
+.promoText {
+  flex: 1;
+  min-width: 0;
+}
+
+.promoTitle {
+  font-family: var(--font-display);
+  font-size: var(--heading-xs);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.promoMsg {
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+  line-height: var(--leading-body);
+}
+
+.promoCta {
+  composes: btnOutline from '../../components/shared/Button.module.css';
+  display: inline-flex;
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--fs-sm);
+  white-space: nowrap;
+  text-decoration: none;
+}
+
 .list {
   list-style: none;
   display: flex;
@@ -95,6 +148,46 @@
 
   .indexNumeral {
     display: none;
+  }
+
+  /* The whole band is the tap target on mobile — drop the button (its nowrap
+     label ate ~half the row in et/ru) and hang an arrow off the title. */
+  .promo {
+    align-items: flex-start;
+    gap: var(--space-2);
+  }
+
+  /* Visually hidden, NOT display:none — display:none would drop the CTA
+     wording out of the accessible name, leaving the band's name as just the
+     title + msg (the ::after arrow is CSS content, not a reliable label).
+     Absolute positioning takes it out of the flex flow, so the band's visible
+     layout is identical to removing it. Also covers desktop reflow-zoom,
+     which crosses this breakpoint at high zoom (WCAG 1.4.10). */
+  .promoCta {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    border: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+
+  .promoTitle {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-3);
+  }
+
+  /* The `/ ''` alt text keeps this decorative arrow out of the accessible
+     name — the hidden CTA text already ends in the same glyph, so without it
+     Chromium announces the arrow twice. Browsers without alt-text support
+     just ignore it and fall back to including the glyph. */
+  .promoTitle::after {
+    content: '→' / '';
+    color: var(--accent);
   }
 }
 

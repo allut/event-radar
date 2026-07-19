@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../api/client';
 import { beginLogout, clearToken } from '../../lib/auth';
@@ -66,6 +66,14 @@ export default function Feed() {
           <p className={styles.tagline}>{t('tagline', locale)}</p>
           <hr className={styles.rule} />
         </header>
+
+        <Link to="/explore" className={styles.promo}>
+          <div className={styles.promoText}>
+            <h2 className={styles.promoTitle}>{t('feed_promo_title', locale)}</h2>
+            <p className={styles.promoMsg}>{t('feed_promo_msg', locale)}</p>
+          </div>
+          <span className={styles.promoCta}>{t('feed_promo_cta', locale)}</span>
+        </Link>
 
         {events.length === 0 ? (
           <EmptyState
