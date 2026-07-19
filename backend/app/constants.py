@@ -699,6 +699,13 @@ GEOCODE_COMMIT_INTERVAL_SECONDS: float = 120.0
 # window, mirroring REFETCH_MIN_INTERVAL_DAYS's cooldown shape. A transient HTTP
 # failure does NOT start this cooldown — only a definitive no-match/bbox-reject does.
 GEOCODE_RETRY_INTERVAL_DAYS = 7
+# How far back a donor event can be and still seed the geocode cache / sibling
+# copy pass. events rows are never deleted (see CLAUDE.md retention policy), so
+# without this bound both donor queries would scan every event ever ingested,
+# growing without limit. Venue coordinates don't change, so this trades a small
+# amount of donor coverage (a venue whose only past event is older than this
+# window won't donate until it recurs) for a bounded query.
+GEOCODE_DONOR_LOOKBACK_DAYS = 180
 # Decimal places to round (lat, lng) to when counting *distinct* donor coords in the
 # sibling-copy ambiguity guard. 6 ≈ 0.1 m — collapses sub-meter float-representation
 # differences (e.g. 59.43793509999999 vs 59.4379351) that would otherwise read as two

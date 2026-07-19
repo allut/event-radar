@@ -13,12 +13,13 @@ from datetime import datetime, timedelta
 from typing import cast
 
 import httpx
-from sqlalchemy import or_, select, update
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.constants import (
     GEOCODE_COMMIT_INTERVAL_SECONDS,
+    GEOCODE_DONOR_LOOKBACK_DAYS,
     GEOCODE_MAX_PER_RUN,
     GEOCODE_REQUEST_DELAY_SECONDS,
     GEOCODE_RETRY_INTERVAL_DAYS,
@@ -87,27 +88,38 @@ async def _self_heal_out_of_bbox_coords(db: AsyncSession) -> int:
 
 async def _build_geocode_cache(
     db: AsyncSession,
+    now: datetime,
 ) -> dict[str, tuple[float, float] | None]:
-    """Seed a normalized-query → coords cache from all geocoded events.
+    """Seed a normalized-query → coords cache from recently-geocoded events.
 
     Avoids re-hitting Nominatim for venues we already know, including
     spelling/unit variants (the key is the normalized query). Most-common
     coord wins per key (lex tie-break). Donors outside the Tallinn bbox are
     dropped so a bad stored coord can't seed the cache for a sibling address
     (belt-and-suspenders alongside the self-heal pass).
+
+    Bounded to the last GEOCODE_DONOR_LOOKBACK_DAYS — events rows are never
+    deleted, so an unbounded scan here grows with all-time ingestion volume.
+    Grouped in SQL (not hauled into Python row-by-row) so a venue with many
+    events costs one row here, not one per event.
     """
+    cutoff = now - timedelta(days=GEOCODE_DONOR_LOOKBACK_DAYS)
     donor_rows = (
         await db.execute(
-            select(Event.venue_address, Event.lat, Event.lng)
-            .where(Event.venue_address.is_not(None), Event.lat.is_not(None))
-            .distinct()
+            select(Event.venue_address, Event.lat, Event.lng, func.count())
+            .where(
+                Event.venue_address.is_not(None),
+                Event.lat.is_not(None),
+                Event.starts_at >= cutoff,
+            )
+            .group_by(Event.venue_address, Event.lat, Event.lng)
         )
     ).all()
     coords_by_query: dict[str, Counter[tuple[float, float]]] = defaultdict(Counter)
-    for address, lat, lng in donor_rows:
+    for address, lat, lng, count in donor_rows:
         if not coords_in_tallinn(lat, lng):
             continue
-        coords_by_query[normalize_address_for_geocoding(address)][(lat, lng)] += 1
+        coords_by_query[normalize_address_for_geocoding(address)][(lat, lng)] += count
     return {
         query: min(counter.most_common(), key=lambda kv: (-kv[1], kv[0]))[0]
         for query, counter in coords_by_query.items()
@@ -191,11 +203,11 @@ async def geocode_pending(db: AsyncSession) -> dict:
     GEOCODE_RETRY_INTERVAL_DAYS (geocode_attempted_at), so a permanently
     un-resolvable address isn't re-sent to Nominatim every run.
     """
+    now = datetime.now(TALLINN_TZ)
     healed = await _self_heal_out_of_bbox_coords(db)
     extracted = await extract_address_from_venue_name(db)
-    copied = await copy_venue_from_siblings(db)
+    copied = await copy_venue_from_siblings(db, now)
 
-    now = datetime.now(TALLINN_TZ)
     due_before = now - timedelta(days=GEOCODE_RETRY_INTERVAL_DAYS)
     pending = (
         await db.scalars(
@@ -222,7 +234,7 @@ async def geocode_pending(db: AsyncSession) -> dict:
             "healed": healed,
         }
 
-    cache = await _build_geocode_cache(db)
+    cache = await _build_geocode_cache(db, now)
     geocoded, failed = await _run_nominatim_pass(db, list(pending), cache, now)
 
     return {

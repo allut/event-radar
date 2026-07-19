@@ -152,6 +152,7 @@ class Source(Base):
 
 class IngestionRun(Base):
     __tablename__ = "ingestion_runs"
+    __table_args__ = (Index("ix_ingestion_runs_started_at", "started_at"),)
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     source_id: Mapped[int] = mapped_column(ForeignKey("sources.id"), nullable=False)
@@ -170,6 +171,7 @@ class IngestionRun(Base):
 
 class RawEvent(Base):
     __tablename__ = "raw_events"
+    __table_args__ = (Index("ix_raw_events_fetched_at", "fetched_at"),)
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     source_id: Mapped[int] = mapped_column(ForeignKey("sources.id"), nullable=False)
@@ -195,6 +197,36 @@ class Event(Base):
     __table_args__ = (
         Index("ix_events_starts_at_status", "starts_at", "status"),
         Index("ix_events_dedup_group_id", "dedup_group_id"),
+        # Created by migration 0002 but was missing here — a create_all-built
+        # schema (tests) lacked it until this declaration was added back.
+        Index("ix_events_status", "status"),
+        # Explore keyword search (`ILIKE '%q%'`) can't use a B-tree on a
+        # leading wildcard; trigram GIN indexes accelerate it. Requires the
+        # pg_trgm extension (enabled in migration 0020).
+        Index(
+            "ix_events_title_orig_trgm",
+            "title_orig",
+            postgresql_using="gin",
+            postgresql_ops={"title_orig": "gin_trgm_ops"},
+        ),
+        Index(
+            "ix_events_description_orig_trgm",
+            "description_orig",
+            postgresql_using="gin",
+            postgresql_ops={"description_orig": "gin_trgm_ops"},
+        ),
+        # Partial indexes matching the geocode/refetch pending-candidate
+        # queries (ORDER BY ... NULLS FIRST LIMIT N over a narrow predicate).
+        Index(
+            "ix_events_geocode_attempted_at",
+            "geocode_attempted_at",
+            postgresql_where=text("venue_address IS NOT NULL AND lat IS NULL"),
+        ),
+        Index(
+            "ix_events_detail_refetched_at",
+            "detail_refetched_at",
+            postgresql_where=text("url IS NOT NULL"),
+        ),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
@@ -284,6 +316,11 @@ class EventClassification(Base):
         Index(
             "ix_event_classifications_categories",
             "categories",
+            postgresql_using="gin",
+        ),
+        Index(
+            "ix_event_classifications_vibes",
+            "vibes",
             postgresql_using="gin",
         ),
     )
@@ -420,6 +457,9 @@ class LlmCall(Base):
     __table_args__ = (
         Index("ix_llm_calls_content_hash", "content_hash"),
         Index("ix_llm_calls_task_created", "task", "created_at"),
+        # ix_llm_calls_task_created leads with `task`, so the retention
+        # cleanup's date-only predicate (no task filter) can't range-scan it.
+        Index("ix_llm_calls_created_at", "created_at"),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
