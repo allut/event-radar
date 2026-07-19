@@ -386,6 +386,11 @@ RATE_LIMIT_PUBLIC = "60/minute"
 # How many events the landing-page showcase returns — a fixed, small teaser grid
 # (top-quality upcoming events), so no pagination is needed.
 SHOWCASE_EVENT_COUNT = 6
+# The landing showcase promises "what's on right now" — bound candidates to the
+# coming week. If a thin week yields fewer than SHOWCASE_EVENT_COUNT events, the
+# endpoint retries once at the wider window rather than rendering a stub grid.
+SHOWCASE_WINDOW_DAYS = 7
+SHOWCASE_FALLBACK_WINDOW_DAYS = 30
 
 # Auth tokens
 AUTH_MAGIC_SALT = "magic-link-v1"
