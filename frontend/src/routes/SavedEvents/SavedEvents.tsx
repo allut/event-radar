@@ -81,9 +81,9 @@ export default function SavedEvents() {
         />
 
         {isLoading ? (
-          <PageState kind="loading" message={t('loading', locale)} />
+          <PageState kind="loading" message={t('loading', locale)} inline />
         ) : isError ? (
-          <PageState kind="error" message={t('saved_error', locale)} />
+          <PageState kind="error" message={t('saved_error', locale)} inline />
         ) : events.length === 0 ? (
           <EmptyState
             icon={SIGNAL_CONFIG[signal].icon}
