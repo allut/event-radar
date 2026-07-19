@@ -172,7 +172,10 @@
   },
   "email": {
     "email.magic_link.subject": "Ваша ссылка для входа в What's on Radar",
-    "email.magic_link.body": "<p>Нажмите на ссылку ниже, чтобы войти в What's on Radar. Ссылка действительна {ttl_minutes} минут.</p><p><a href=\"{verify_url}\">Войти в What's on Radar</a></p><p>Если вы не запрашивали это, проигнорируйте письмо.</p>",
+    "email.magic_link.heading": "Вход",
+    "email.magic_link.intro": "Нажмите ниже, чтобы войти в What's on Radar. Ссылка действительна {ttl_minutes} минут.",
+    "email.magic_link.cta": "Войти в What's on Radar",
+    "email.magic_link.ignore_note": "Если вы не запрашивали это, проигнорируйте письмо.",
     "digest.subject_template": "Ваша Пятёрка дня — {date}",
     "digest.subject_label": "Ваша Пятёрка дня",
     "digest.price_free": "Бесплатно",

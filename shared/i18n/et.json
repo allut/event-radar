@@ -172,7 +172,10 @@
   },
   "email": {
     "email.magic_link.subject": "Sinu What's on Radar sisselogimislink",
-    "email.magic_link.body": "<p>Klõpsa alloleval lingil rakendusse What's on Radar sisselogimiseks. Link aegub {ttl_minutes} minuti pärast.</p><p><a href=\"{verify_url}\">Logi sisse rakendusse What's on Radar</a></p><p>Kui sa seda ei palunud, ignoreeri seda kirja.</p>",
+    "email.magic_link.heading": "Logi sisse",
+    "email.magic_link.intro": "Klõpsa allpool, et rakendusse What's on Radar sisse logida. Link aegub {ttl_minutes} minuti pärast.",
+    "email.magic_link.cta": "Logi sisse rakendusse What's on Radar",
+    "email.magic_link.ignore_note": "Kui sa seda ei palunud, ignoreeri seda kirja.",
     "digest.subject_template": "Sinu päeva 5 — {date}",
     "digest.subject_label": "Sinu päeva 5",
     "digest.price_free": "Tasuta",

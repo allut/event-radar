@@ -6,7 +6,10 @@ from __future__ import annotations
 TRANSLATIONS: dict[str, dict[str, str]] = {
     "en": {
         "email.magic_link.subject": "Your What's on Radar sign-in link",
-        "email.magic_link.body": "<p>Click the link below to sign in to What's on Radar. This link expires in {ttl_minutes} minutes.</p><p><a href=\"{verify_url}\">Sign in to What's on Radar</a></p><p>If you didn't request this, ignore this email.</p>",
+        "email.magic_link.heading": "Sign in",
+        "email.magic_link.intro": "Click below to sign in. This link expires in {ttl_minutes} minutes.",
+        "email.magic_link.cta": "Sign in to What's on Radar",
+        "email.magic_link.ignore_note": "If you didn't request this, ignore this email.",
         "digest.subject_template": "Your Daily 5 — {date}",
         "digest.subject_label": "Your Daily 5",
         "digest.price_free": "Free",
@@ -20,7 +23,10 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
     },
     "et": {
         "email.magic_link.subject": "Sinu What's on Radar sisselogimislink",
-        "email.magic_link.body": "<p>Klõpsa alloleval lingil rakendusse What's on Radar sisselogimiseks. Link aegub {ttl_minutes} minuti pärast.</p><p><a href=\"{verify_url}\">Logi sisse rakendusse What's on Radar</a></p><p>Kui sa seda ei palunud, ignoreeri seda kirja.</p>",
+        "email.magic_link.heading": "Logi sisse",
+        "email.magic_link.intro": "Klõpsa allpool, et rakendusse What's on Radar sisse logida. Link aegub {ttl_minutes} minuti pärast.",
+        "email.magic_link.cta": "Logi sisse rakendusse What's on Radar",
+        "email.magic_link.ignore_note": "Kui sa seda ei palunud, ignoreeri seda kirja.",
         "digest.subject_template": "Sinu päeva 5 — {date}",
         "digest.subject_label": "Sinu päeva 5",
         "digest.price_free": "Tasuta",
@@ -34,7 +40,10 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
     },
     "ru": {
         "email.magic_link.subject": "Ваша ссылка для входа в What's on Radar",
-        "email.magic_link.body": "<p>Нажмите на ссылку ниже, чтобы войти в What's on Radar. Ссылка действительна {ttl_minutes} минут.</p><p><a href=\"{verify_url}\">Войти в What's on Radar</a></p><p>Если вы не запрашивали это, проигнорируйте письмо.</p>",
+        "email.magic_link.heading": "Вход",
+        "email.magic_link.intro": "Нажмите ниже, чтобы войти в What's on Radar. Ссылка действительна {ttl_minutes} минут.",
+        "email.magic_link.cta": "Войти в What's on Radar",
+        "email.magic_link.ignore_note": "Если вы не запрашивали это, проигнорируйте письмо.",
         "digest.subject_template": "Ваша Пятёрка дня — {date}",
         "digest.subject_label": "Ваша Пятёрка дня",
         "digest.price_free": "Бесплатно",

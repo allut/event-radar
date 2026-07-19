@@ -14,7 +14,8 @@ from app.constants import (
     RESEND_SEND_URL,
     RESEND_TIMEOUT_SECONDS,
 )
-from app.i18n import t, ti
+from app.email.magic_link import build_magic_link_html, build_magic_link_text
+from app.i18n import t
 from app.routers.utils import mask_email
 
 log = logging.getLogger(__name__)
@@ -34,12 +35,8 @@ async def send_magic_link(
         return
 
     subject = t("email.magic_link.subject", locale)
-    html = ti(
-        "email.magic_link.body",
-        locale,
-        ttl_minutes=settings.MAGIC_LINK_TTL_MINUTES,
-        verify_url=verify_url,
-    )
+    html = build_magic_link_html(verify_url, settings.MAGIC_LINK_TTL_MINUTES, locale)
+    text = build_magic_link_text(verify_url, settings.MAGIC_LINK_TTL_MINUTES, locale)
 
     # Not routed through the shared retrying http_post: this call is awaited
     # synchronously inside the rate-limited, user-facing POST /auth/request-link
@@ -55,6 +52,7 @@ async def send_magic_link(
                 "to": [to_email],
                 "subject": subject,
                 "html": html,
+                "text": text,
             },
         )
 

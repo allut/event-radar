@@ -1,13 +1,16 @@
-"""HTML templates for digest emails (markup only — styling lives in styles.py).
+"""HTML templates for emails (markup only — styling lives in styles.py).
 
 Table-based layout with inlined styles so the card design (mirroring the
 website) survives email clients that strip <style> blocks. All style values
 are passed in as {s_*} placeholders sourced from app.email.styles.
+
+EMAIL_DOCUMENT is the shared page shell (header/content/footer rows) used by
+every email type; DIGEST_* and MAGIC_LINK_* templates fill its three slots.
 """
 
 # {css} is inserted as a .format() *value*, so literal braces inside it are not
 # reinterpreted as placeholders — only literal braces in this template string are.
-DIGEST_DOCUMENT = """\
+EMAIL_DOCUMENT = """\
 <!DOCTYPE html>
 <html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -17,24 +20,43 @@ DIGEST_DOCUMENT = """\
 <tr><td align="center">
 <table role="presentation" class="container" width="600" cellpadding="0" cellspacing="0" border="0" style="{s_container}">
 <tr><td class="pad" style="{s_header_pad}">
-<p style="{s_eyebrow}">WHAT'S ON RADAR</p>
-<h1 style="{s_h1}">{subject_label}</h1>
-<p style="{s_date}">{date_str}</p>
-<table role="presentation" align="center" cellpadding="0" cellspacing="0" border="0" style="{s_feed_btn_wrap}"><tr><td>
-<a href="{feed_url}" class="feed-btn" style="{s_feed_btn}">{open_feed_label}</a>
-</td></tr></table>
+{header_html}
 </td></tr>
-<tr><td class="pad" style="{s_events_pad}">
-{events_html}
+<tr><td class="pad" style="{s_content_pad}">
+{content_html}
 </td></tr>
 <tr><td class="pad" style="{s_footer}">
-<a href="{unsubscribe_url}" style="{s_footer_link}">{settings_label}</a>
-&nbsp;·&nbsp; What's on Radar, Tallinn
+{footer_html}
 </td></tr>
 </table>
 </td></tr>
 </table>
 </body></html>"""
+
+DIGEST_HEADER = """\
+<p style="{s_eyebrow}">WHAT'S ON RADAR</p>
+<h1 style="{s_h1}">{subject_label}</h1>
+<p style="{s_date}">{date_str}</p>
+<table role="presentation" align="center" cellpadding="0" cellspacing="0" border="0" style="{s_feed_btn_wrap}"><tr><td>
+<a href="{feed_url}" class="cta-btn" style="{s_feed_btn}">{open_feed_label}</a>
+</td></tr></table>"""
+
+DIGEST_FOOTER = """\
+<a href="{unsubscribe_url}" style="{s_footer_link}">{settings_label}</a>
+&nbsp;·&nbsp; What's on Radar, Tallinn"""
+
+MAGIC_LINK_HEADER = """\
+<p style="{s_eyebrow}">WHAT'S ON RADAR</p>
+<h1 style="{s_h1}">{heading}</h1>"""
+
+MAGIC_LINK_BODY = """\
+<p style="{s_body_text}">{intro}</p>
+<table role="presentation" align="center" cellpadding="0" cellspacing="0" border="0" style="{s_feed_btn_wrap}"><tr><td>
+<a href="{verify_url}" class="cta-btn" style="{s_feed_btn}">{cta_label}</a>
+</td></tr></table>
+<p style="{s_muted_note}">{ignore_note}</p>"""
+
+EMAIL_FOOTER_BRAND = "What's on Radar, Tallinn"
 
 EVENT_BLOCK = (
     '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="{s_card_wrap}">'

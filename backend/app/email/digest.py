@@ -22,9 +22,11 @@ from app.constants import (
     TALLINN_TZ,
 )
 from app.email import styles
-from app.email.styles import DIGEST_CSS
+from app.email.styles import EMAIL_CSS
 from app.email.templates import (
-    DIGEST_DOCUMENT,
+    DIGEST_FOOTER,
+    DIGEST_HEADER,
+    EMAIL_DOCUMENT,
     EVENT_BLOCK,
     EVENT_BULLET,
     EVENT_IMAGE,
@@ -177,11 +179,7 @@ def build_digest_html(
     )
     settings_label = t("digest.unsubscribe", locale)
 
-    return DIGEST_DOCUMENT.format(
-        css=DIGEST_CSS,
-        s_page=styles.S_PAGE,
-        s_container=styles.S_CONTAINER,
-        s_header_pad=styles.S_HEADER_PAD,
+    header_html = DIGEST_HEADER.format(
         s_eyebrow=styles.S_EYEBROW,
         s_h1=styles.S_H1,
         subject_label=subject_label,
@@ -191,12 +189,23 @@ def build_digest_html(
         s_feed_btn=styles.S_FEED_BTN,
         feed_url=frontend_url,
         open_feed_label=t("digest.open_feed", locale),
-        s_events_pad=styles.S_EVENTS_PAD,
-        events_html=events_html,
-        s_footer=styles.S_FOOTER,
-        s_footer_link=styles.S_FOOTER_LINK,
+    )
+    footer_html = DIGEST_FOOTER.format(
         unsubscribe_url=unsubscribe_url,
+        s_footer_link=styles.S_FOOTER_LINK,
         settings_label=settings_label,
+    )
+
+    return EMAIL_DOCUMENT.format(
+        css=EMAIL_CSS,
+        s_page=styles.S_PAGE,
+        s_container=styles.S_CONTAINER,
+        s_header_pad=styles.S_HEADER_PAD,
+        header_html=header_html,
+        s_content_pad=styles.S_CONTENT_PAD,
+        content_html=events_html,
+        s_footer=styles.S_FOOTER,
+        footer_html=footer_html,
     )
 
 
