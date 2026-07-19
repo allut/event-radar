@@ -1,13 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { MemoryRouter, Routes, Route } from 'react-router-dom';
+import { QueryClient } from '@tanstack/react-query';
 import Feed from './Feed';
 import Landing from '../Landing';
 import { useAuth } from '../../hooks/useAuth';
 import { TOKEN_KEY } from '../../constants';
-import { makeEvent } from '../../test/utils';
+import { makeEvent, renderWithProviders } from '../../test/utils';
 
 // Reproduces the real App.tsx `Home` component: Feed for signed-in users,
 // Landing for signed-out ones. Uses the real `../../api/client` and real
@@ -58,16 +57,14 @@ function stubFetch() {
 }
 
 function renderHome(queryClient: QueryClient) {
-  return render(
-    <QueryClientProvider client={queryClient}>
-      <MemoryRouter initialEntries={['/']}>
-        <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/login" element={<div>login page</div>} />
-        </Routes>
-      </MemoryRouter>
-    </QueryClientProvider>,
-  );
+  return renderWithProviders(null, {
+    route: '/',
+    queryClient,
+    routes: [
+      { path: '/', element: <Home /> },
+      { path: '/login', element: <div>login page</div> },
+    ],
+  });
 }
 
 describe('logout redirect from the Feed route (/)', () => {

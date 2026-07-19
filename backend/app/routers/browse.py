@@ -6,7 +6,9 @@ whenever For-you narrowing or relevance ranking is requested, since persona
 affinity and the feedback-based soft-filter aren't expressible as SQL ORDER BY.
 """
 
+from collections.abc import Callable
 from datetime import date, datetime, timedelta
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import ColumnElement, and_, func, or_, select
@@ -41,6 +43,7 @@ from app.routers.utils import (
     canonical_event_filter,
     event_not_ended_filter,
     load_user_signals,
+    persona_weight_tuple,
     public_event_filter,
     select_events_with_classification,
     serialize_event,
@@ -187,7 +190,7 @@ async def _load_user_persona_weights(
             .options(selectinload(UserPersona.persona))
         )
     ).all()
-    return [(row.weight, row.persona.affinity_vector) for row in rows]
+    return [persona_weight_tuple(row) for row in rows]
 
 
 async def _load_feedback_context(db: AsyncSession, user_id: int) -> FeedbackContext:
@@ -208,12 +211,17 @@ async def _load_feedback_context(db: AsyncSession, user_id: int) -> FeedbackCont
     return FeedbackContext.from_orm_rows(list(rows))
 
 
-def _sort_key_and_reverse(sort: str):
+def _sort_key_and_reverse(
+    sort: str,
+) -> tuple[Callable[[tuple[float | None, Event]], Any], bool]:
     if sort == BROWSE_SORT_DATE:
         return (lambda item: item[1].starts_at), False
     if sort == BROWSE_SORT_PRICE:
         return (
-            lambda item: (item[1].price_min is None, item[1].price_min or 0)
+            lambda item: (
+                item[1].price_min is None,
+                item[1].price_min if item[1].price_min is not None else 0.0,
+            )
         ), False
     if sort == BROWSE_SORT_QUALITY:
 

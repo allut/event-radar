@@ -32,6 +32,7 @@ from app.ingestion.html_utils import attr_str
 from app.ingestion.http_client import host_guard_hook, http_get, http_post
 from app.ingestion.jsonld import extract_jsonld_event_text
 from app.ingestion.locale_urls import fetch_locale_variants
+from app.ingestion.sanitize import sanitize_html
 from app.ingestion.selectors import WP_THUMBNAIL_HOSTS
 
 log = logging.getLogger(__name__)
@@ -194,8 +195,11 @@ class HtmlListingAdapter(SourceAdapter):
 
         Default reads schema.org Event JSON-LD (works for Piletilevi/Fienta).
         KUMU and ECH override this to use og:title + CSS selectors instead.
+        The description is sanitized here since it is stored as HTML and
+        rendered via dangerouslySetInnerHTML on the frontend.
         """
-        return extract_jsonld_event_text(soup)
+        title, description = extract_jsonld_event_text(soup)
+        return title, sanitize_html(description)
 
     async def fetch_raw(self, known_ids: set[str]) -> list[dict[str, Any]]:
         seen_ids: set[str] = set()

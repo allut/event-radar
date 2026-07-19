@@ -329,6 +329,18 @@ DEDUP_UNFILTERED_FALLBACK_MAX_EVENTS = 500
 RESEND_SEND_URL = "https://api.resend.com/emails"
 RESEND_TIMEOUT_SECONDS: float = 10.0
 RESEND_ERROR_SNIPPET_LEN = 200
+# Scheduler cadence (see CLAUDE.md Architecture for the full cron schedule)
+ORGANIZER_SYNC_HOUR = 3  # weekly Sunday 03:00 Europe/Tallinn
+ORGANIZER_SYNC_MINUTE = 0
+CLEANUP_HOUR = 3  # weekly Sunday 03:30 Europe/Tallinn, after organizer sync
+CLEANUP_MINUTE = 30
+INGEST_INTERVAL_HOURS = 1
+LLM_PASS_INTERVAL_HOURS = 6  # dedup/classify/publish/geocode
+REFETCH_HOUR = 4  # daily 04:30 Europe/Tallinn, before the 06:00 feed build
+REFETCH_MINUTE = 30
+FEED_BUILD_HOUR = 6  # daily 06:00 Europe/Tallinn
+FEED_BUILD_MINUTE = 0
+
 # Email i18n strings (subjects, labels, templates) live in shared/i18n/*.json.
 DIGEST_SEND_HOUR = 7  # 07:00 Europe/Tallinn, one hour after build_daily_feeds
 DIGEST_MAX_WHY_GO_BULLETS = 3
@@ -675,6 +687,8 @@ HTML_LISTING_MAX_DETAIL_FETCHES = (
 # User-Agent with contact info and a max of 1 request/second.
 NOMINATIM_BASE_URL = "https://nominatim.openstreetmap.org/search"
 NOMINATIM_USER_AGENT = "EventRadarBot/1.0 (+https://eventradar.ee; aleksei.lutkov@gmail.com)"
+# Static Nominatim search params; the "q" param is set per-call with the address.
+NOMINATIM_QUERY_PARAMS: dict[str, str | int] = {"format": "json", "limit": 1}
 GEOCODE_REQUEST_DELAY_SECONDS: float = 1.0
 GEOCODE_MAX_PER_RUN = 200  # ~3.5 min/run at 1 req/s, safely under the 6h cron cadence
 # Commit mid-loop at this wall-clock interval to keep the held DB connection warm

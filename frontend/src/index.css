@@ -119,6 +119,7 @@
   /* Layering */
   --z-sticky: 10;
   --z-toast: 50;
+  --z-card-overlay: 1;
 
   /* Backdrop blur */
   --blur-overlay: 8px;   /* sticky topbars */
@@ -176,6 +177,7 @@
   --shadow-card-hover:  0 8px 24px rgba(0, 0, 0, 0.3);
   --shadow-accent:      0 8px 32px rgba(200, 146, 42, 0.1);
   --shadow-lead:        0 24px 64px rgba(0, 0, 0, 0.45);
+  --shadow-glow:        0 0 8px var(--accent);
 
   /* Ring shadows (geometry + token colors) */
   --shadow-focus-ring:    0 0 0 3px var(--accent-glow);

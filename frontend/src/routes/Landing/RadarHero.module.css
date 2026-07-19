@@ -70,7 +70,7 @@
   height: var(--space-2);
   border-radius: var(--radius-full);
   background: var(--accent-light);
-  box-shadow: 0 0 8px var(--accent);
+  box-shadow: var(--shadow-glow);
   flex-shrink: 0;
   --breathe-duration: var(--anim-breathe-fast);
   --breathe-delay: var(--blip-delay, 0s);

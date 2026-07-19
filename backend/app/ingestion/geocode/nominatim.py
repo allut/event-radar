@@ -14,6 +14,7 @@ from app.constants import (
     GEOCODE_SECONDARY_UNIT_RE,
     GEOCODE_UNIT_SUFFIX_RE,
     NOMINATIM_BASE_URL,
+    NOMINATIM_QUERY_PARAMS,
     NOMINATIM_USER_AGENT,
 )
 from app.ingestion.adapter import coords_in_tallinn
@@ -73,7 +74,7 @@ async def geocode_address(
     response = await http_get(
         client,
         NOMINATIM_BASE_URL,
-        params={"q": address, "format": "json", "limit": 1},
+        params={"q": address, **NOMINATIM_QUERY_PARAMS},
         headers={"User-Agent": NOMINATIM_USER_AGENT},
     )
     try:

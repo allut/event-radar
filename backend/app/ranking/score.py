@@ -72,6 +72,7 @@ from app.routers.utils import (
     canonical_event_filter,
     event_not_ended_filter,
     event_series_key,
+    persona_weight_tuple,
     select_events_with_classification,
 )
 
@@ -629,7 +630,7 @@ async def _load_feed_build_context(
     ).all()
     for up_row in up_rows:
         personas_by_user.setdefault(up_row.user_id, []).append(
-            (up_row.weight, up_row.persona.affinity_vector)
+            persona_weight_tuple(up_row)
         )
 
     fb_by_user: dict[int, list[UserEventFeedback]] = {uid: [] for uid in user_ids}
