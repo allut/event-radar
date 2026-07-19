@@ -29,9 +29,9 @@
 }
 
 .radar {
+  composes: breathe from '../shared/Animations.module.css';
   font-size: var(--fs-lg);
   color: var(--accent);
-  animation: breathe 3s var(--easing-breathe) infinite;
 }
 
 .brand {

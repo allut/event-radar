@@ -1,9 +1,9 @@
-import { useNavigate } from 'react-router-dom';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { api } from '../../api/client';
-import { beginLogout, clearToken } from '../../lib/auth';
 import { t, ti } from '../../i18n';
 import { useLocaleMutation } from '../../hooks/useLocaleMutation';
+import { useLogout } from '../../hooks/useLogout';
 import EventCard, { type EventData } from '../../components/EventCard';
 import EmptyState from '../../components/EmptyState';
 import PageState from '../../components/PageState';
@@ -19,22 +19,14 @@ interface FeedResponse {
 }
 
 export default function Feed() {
-  const navigate = useNavigate();
-  const queryClient = useQueryClient();
   const { locale, handleLocaleChange } = useLocaleMutation([QUERY_KEYS.feed]);
+  const handleLogout = useLogout();
 
   const { data, isLoading, isError } = useQuery({
     queryKey: [QUERY_KEYS.feed],
     queryFn: () => api.get<FeedResponse>('/feed'),
     retry: false,
   });
-
-  function handleLogout() {
-    beginLogout();
-    clearToken();
-    queryClient.clear();
-    navigate('/', { replace: true });
-  }
 
   if (isLoading) {
     return <PageState kind="loading" message={t('loading', locale)} />;
@@ -66,6 +58,14 @@ export default function Feed() {
           <p className={styles.tagline}>{t('tagline', locale)}</p>
           <hr className={styles.rule} />
         </header>
+
+        <Link to="/explore" className={styles.promo}>
+          <div className={styles.promoText}>
+            <h2 className={styles.promoTitle}>{t('feed_promo_title', locale)}</h2>
+            <p className={styles.promoMsg}>{t('feed_promo_msg', locale)}</p>
+          </div>
+          <span className={styles.promoCta}>{t('feed_promo_cta', locale)}</span>
+        </Link>
 
         {events.length === 0 ? (
           <EmptyState

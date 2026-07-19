@@ -3,6 +3,7 @@
 import logging
 import re
 from collections import Counter
+from datetime import datetime, timedelta
 
 from rapidfuzz.fuzz import ratio as fuzz_ratio
 from sqlalchemy import or_, select
@@ -10,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.constants import (
     GEOCODE_COORD_QUANT_DECIMALS,
+    GEOCODE_DONOR_LOOKBACK_DAYS,
     GEOCODE_MAX_PER_RUN,
     NON_GEOCODABLE_VENUE_NAMES,
     VENUE_NAME_PARENS_RE,
@@ -47,15 +49,25 @@ def _representative_address(
 _DonorRow = tuple[str | None, float | None, float | None]
 
 
-async def _load_donor_rows_by_canon(db: AsyncSession) -> dict[str, list[_DonorRow]]:
-    """All geocoded donors, grouped by canonical venue name.
+async def _load_donor_rows_by_canon(
+    db: AsyncSession, now: datetime
+) -> dict[str, list[_DonorRow]]:
+    """Recently-geocoded donors, grouped by canonical venue name.
 
     Grouping bounds the fuzzy loop to distinct cores; non-physical donors
     (NON_GEOCODABLE_VENUE_NAMES) are dropped so virtual events can't donate
     junk coords. Legitimately out-of-area donors are excluded in SQL — the
     self-heal pass never fixes them, so their coord must not propagate onto a
     fuzzy-matched in-area sibling.
+
+    Bounded to the last GEOCODE_DONOR_LOOKBACK_DAYS (events rows are never
+    deleted, so an unbounded scan here grows with all-time ingestion volume;
+    venue coordinates don't change, so this trades a little donor coverage
+    for a bounded query, same rationale as _build_geocode_cache). `now` is
+    threaded in from the caller (mirroring _build_geocode_cache) rather than
+    read locally, for testability and a single consistent cutoff per run.
     """
+    cutoff = now - timedelta(days=GEOCODE_DONOR_LOOKBACK_DAYS)
     donor_rows = (
         await db.execute(
             select(Event.venue_name, Event.venue_address, Event.lat, Event.lng)
@@ -65,6 +77,7 @@ async def _load_donor_rows_by_canon(db: AsyncSession) -> dict[str, list[_DonorRo
                 Event.lat.is_not(None),
                 Event.lng.is_not(None),
                 Event.is_out_of_area.is_(False),
+                Event.starts_at >= cutoff,
             )
             .distinct()
         )
@@ -80,27 +93,58 @@ async def _load_donor_rows_by_canon(db: AsyncSession) -> dict[str, list[_DonorRo
     return donor_addrs_by_canon
 
 
+def _bucket_donor_canons_by_length(
+    donor_addrs_by_canon: dict[str, list[_DonorRow]],
+) -> dict[int, list[str]]:
+    """Group donor canonical names by exact character length, for `_matched_donor_rows`'s
+    length-band block."""
+    buckets: dict[int, list[str]] = {}
+    for canon in donor_addrs_by_canon:
+        buckets.setdefault(len(canon), []).append(canon)
+    return buckets
+
+
+def _max_length_delta(length: int) -> int:
+    """Widest |len(a) - len(b)| that could still clear VENUE_SIBLING_RATIO_THRESHOLD.
+
+    rapidfuzz's ratio is `(1 - dist / (len(a) + len(b))) * 100`, and the edit
+    distance is always >= |len(a) - len(b)| (you need at least that many
+    insertions/deletions just to equalize length). Solving
+    `|len(a)-len(b)| <= (1 - threshold/100) * (len(a) + len(b))` for the worst
+    case (len(b) = length + delta) gives this bound. It is a safe **superset**
+    filter — a donor outside the band provably cannot clear the threshold, so
+    skipping it changes zero matches; +1 covers integer-division rounding.
+    """
+    return (length * 2 * (100 - VENUE_SIBLING_RATIO_THRESHOLD)) // VENUE_SIBLING_RATIO_THRESHOLD + 1
+
+
 def _matched_donor_rows(
-    target_canon: str, donor_addrs_by_canon: dict[str, list[_DonorRow]]
+    target_canon: str,
+    donor_addrs_by_canon: dict[str, list[_DonorRow]],
+    donor_canons_by_length: dict[int, list[str]],
 ) -> list[_DonorRow]:
     """All donor rows whose canonical name fuzzy-matches the target's.
 
-    score_cutoff lets rapidfuzz prove "below cutoff" from a cheap length-bound
-    check and skip the full edit-distance DP for clearly-dissimilar pairs — it
-    never changes whether the true ratio clears the threshold. Every bucket is
-    still checked (a non-identical bucket can independently clear it too).
+    Only donors within `_max_length_delta` of the target's length are even
+    compared (see that function for why this never drops a true match) —
+    bounds the number of fuzz_ratio calls to a length-neighborhood of the
+    donor catalogue instead of its full size. score_cutoff additionally lets
+    rapidfuzz prove "below cutoff" from a cheap length-bound check and skip
+    the full edit-distance DP for the surviving-but-still-dissimilar pairs.
     """
     matched: list[_DonorRow] = []
-    for donor_canon, rows in donor_addrs_by_canon.items():
-        if (
-            fuzz_ratio(
-                target_canon,
-                donor_canon,
-                score_cutoff=VENUE_SIBLING_RATIO_THRESHOLD,
-            )
-            >= VENUE_SIBLING_RATIO_THRESHOLD
-        ):
-            matched.extend(rows)
+    delta = _max_length_delta(len(target_canon))
+    for length in range(len(target_canon) - delta, len(target_canon) + delta + 1):
+        for donor_canon in donor_canons_by_length.get(length, ()):
+            if (
+                fuzz_ratio(
+                    target_canon,
+                    donor_canon,
+                    score_cutoff=VENUE_SIBLING_RATIO_THRESHOLD,
+                )
+                >= VENUE_SIBLING_RATIO_THRESHOLD
+            ):
+                matched.extend(donor_addrs_by_canon[donor_canon])
     return matched
 
 
@@ -139,7 +183,7 @@ def _fill_from_donors(event: Event, matched_rows: list[_DonorRow]) -> bool:
     return False
 
 
-async def copy_venue_from_siblings(db: AsyncSession) -> int:
+async def copy_venue_from_siblings(db: AsyncSession, now: datetime) -> int:
     """Copy venue_address + coords onto under-located events from a sibling venue.
 
     Two queries (no-N+1): targets (venue_name set, lat or address NULL) and
@@ -165,7 +209,8 @@ async def copy_venue_from_siblings(db: AsyncSession) -> int:
     if not targets:
         return 0
 
-    donor_addrs_by_canon = await _load_donor_rows_by_canon(db)
+    donor_addrs_by_canon = await _load_donor_rows_by_canon(db, now)
+    donor_canons_by_length = _bucket_donor_canons_by_length(donor_addrs_by_canon)
 
     copied = 0
     warned_ambiguous: set[str] = set()
@@ -183,7 +228,7 @@ async def copy_venue_from_siblings(db: AsyncSession) -> int:
 
         if target_canon not in matched_by_canon:
             matched_by_canon[target_canon] = _matched_donor_rows(
-                target_canon, donor_addrs_by_canon
+                target_canon, donor_addrs_by_canon, donor_canons_by_length
             )
             coords_by_canon[target_canon] = _distinct_coords(
                 matched_by_canon[target_canon]

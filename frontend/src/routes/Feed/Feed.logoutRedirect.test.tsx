@@ -1,13 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { MemoryRouter, Routes, Route } from 'react-router-dom';
+import { QueryClient } from '@tanstack/react-query';
 import Feed from './Feed';
 import Landing from '../Landing';
-import { isAuthenticated } from '../../lib/auth';
+import { useAuth } from '../../hooks/useAuth';
 import { TOKEN_KEY } from '../../constants';
-import { makeEvent } from '../../test/utils';
+import { makeEvent, renderWithProviders } from '../../test/utils';
 
 // Reproduces the real App.tsx `Home` component: Feed for signed-in users,
 // Landing for signed-out ones. Uses the real `../../api/client` and real
@@ -15,7 +14,8 @@ import { makeEvent } from '../../test/utils';
 // interceptor in client.ts is exercised — this is the only way to observe
 // the logout race that a fully-mocked `api` module would hide.
 function Home() {
-  return isAuthenticated() ? <Feed /> : <Landing />;
+  const authed = useAuth();
+  return authed ? <Feed /> : <Landing />;
 }
 
 const feedResponse = {
@@ -57,16 +57,14 @@ function stubFetch() {
 }
 
 function renderHome(queryClient: QueryClient) {
-  return render(
-    <QueryClientProvider client={queryClient}>
-      <MemoryRouter initialEntries={['/']}>
-        <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/login" element={<div>login page</div>} />
-        </Routes>
-      </MemoryRouter>
-    </QueryClientProvider>,
-  );
+  return renderWithProviders(null, {
+    route: '/',
+    queryClient,
+    routes: [
+      { path: '/', element: <Home /> },
+      { path: '/login', element: <div>login page</div> },
+    ],
+  });
 }
 
 describe('logout redirect from the Feed route (/)', () => {
@@ -79,6 +77,10 @@ describe('logout redirect from the Feed route (/)', () => {
 
     await waitFor(() => expect(screen.getByText('Event One')).toBeInTheDocument());
     await userEvent.click(screen.getByRole('button', { name: /sign out/i }));
+
+    // The user must land on the marketing Landing page, not a stale/broken Feed.
+    await waitFor(() => expect(screen.getByRole('link', { name: /sign in/i })).toBeInTheDocument());
+    expect(screen.queryByText(/failed to load your feed/i)).not.toBeInTheDocument();
 
     // Let any spurious refetch + its 401 handling resolve.
     await waitFor(() => expect(localStorage.getItem(TOKEN_KEY)).toBeNull());

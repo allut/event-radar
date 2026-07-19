@@ -15,11 +15,21 @@ from app.config import settings
 from app.constants import (
     APP_ENV_DEVELOPMENT,
     APP_VERSION,
+    CLEANUP_HOUR,
+    CLEANUP_MINUTE,
     CORS_ALLOWED_HEADERS,
     CORS_ALLOWED_METHODS,
     DIGEST_SEND_HOUR,
+    FEED_BUILD_HOUR,
+    FEED_BUILD_MINUTE,
     HSTS_HEADER_NAME,
     HSTS_HEADER_VALUE,
+    INGEST_INTERVAL_HOURS,
+    LLM_PASS_INTERVAL_HOURS,
+    ORGANIZER_SYNC_HOUR,
+    ORGANIZER_SYNC_MINUTE,
+    REFETCH_HOUR,
+    REFETCH_MINUTE,
     SECURITY_HEADERS,
     TALLINN_TZ_NAME,
 )
@@ -127,8 +137,8 @@ def _register_scheduled_jobs(scheduler: AsyncIOScheduler) -> None:
         _run_organizer_sync,
         trigger="cron",
         day_of_week="sun",
-        hour=3,
-        minute=0,
+        hour=ORGANIZER_SYNC_HOUR,
+        minute=ORGANIZER_SYNC_MINUTE,
         id="sync_fienta_organizers",
         replace_existing=True,
     )
@@ -138,8 +148,8 @@ def _register_scheduled_jobs(scheduler: AsyncIOScheduler) -> None:
         _run_cleanup,
         trigger="cron",
         day_of_week="sun",
-        hour=3,
-        minute=30,
+        hour=CLEANUP_HOUR,
+        minute=CLEANUP_MINUTE,
         id="cleanup_stale_data",
         replace_existing=True,
     )
@@ -148,7 +158,7 @@ def _register_scheduled_jobs(scheduler: AsyncIOScheduler) -> None:
     scheduler.add_job(
         _run_ingest_all,
         trigger="interval",
-        hours=1,
+        hours=INGEST_INTERVAL_HOURS,
         id="ingest_all_sources",
         replace_existing=True,
     )
@@ -157,28 +167,28 @@ def _register_scheduled_jobs(scheduler: AsyncIOScheduler) -> None:
     scheduler.add_job(
         _run_dedup_pass,
         trigger="interval",
-        hours=6,
+        hours=LLM_PASS_INTERVAL_HOURS,
         id="dedup_pass",
         replace_existing=True,
     )
     scheduler.add_job(
         _run_classify_pending,
         trigger="interval",
-        hours=6,
+        hours=LLM_PASS_INTERVAL_HOURS,
         id="classify_pending",
         replace_existing=True,
     )
     scheduler.add_job(
         _run_publish_pending,
         trigger="interval",
-        hours=6,
+        hours=LLM_PASS_INTERVAL_HOURS,
         id="publish_pending",
         replace_existing=True,
     )
     scheduler.add_job(
         _run_geocode_pending,
         trigger="interval",
-        hours=6,
+        hours=LLM_PASS_INTERVAL_HOURS,
         id="geocode_pending",
         replace_existing=True,
     )
@@ -189,8 +199,8 @@ def _register_scheduled_jobs(scheduler: AsyncIOScheduler) -> None:
     scheduler.add_job(
         _run_refetch_details,
         trigger="cron",
-        hour=4,
-        minute=30,
+        hour=REFETCH_HOUR,
+        minute=REFETCH_MINUTE,
         id="refetch_event_details",
         replace_existing=True,
     )
@@ -198,8 +208,8 @@ def _register_scheduled_jobs(scheduler: AsyncIOScheduler) -> None:
     scheduler.add_job(
         _run_build_daily_feeds,
         trigger="cron",
-        hour=6,
-        minute=0,
+        hour=FEED_BUILD_HOUR,
+        minute=FEED_BUILD_MINUTE,
         id="build_daily_feeds",
         replace_existing=True,
     )

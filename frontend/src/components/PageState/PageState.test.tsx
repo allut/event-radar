@@ -23,4 +23,9 @@ describe('PageState', () => {
     render(<PageState kind="error" message="Oops" />);
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
   });
+
+  it('renders spinner via aria-label when inline', () => {
+    render(<PageState kind="loading" message="Loading…" inline />);
+    expect(screen.getByLabelText('Loading…')).toBeInTheDocument();
+  });
 });

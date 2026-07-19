@@ -18,6 +18,7 @@ The whole platform is designed to run on **free-tier infrastructure** at a stead
 - **Daily 5 builder** — a scheduled job scores upcoming events and writes a diverse five-event feed per user each morning, then emails a digest.
 - **Explore discovery grid** — a searchable, filterable (keyword, category/vibe, date, free-only, for-you), and sortable (relevance/date/price/quality) view over all upcoming published events, with an optional personalized ranking path.
 - **Saved Events** — a dedicated page listing the events a user has liked, disliked, or bookmarked, grouped by signal.
+- **Public landing showcase** — the only unauthenticated read path: a fixed-size grid of top-quality published events happening this week, shown on `/` when signed out. No personalization, no PII.
 - **Magic-link auth** — passwordless sign-in with short-lived, single-use links and revocable 7-day session tokens. No third-party auth provider.
 - **Full trilingual i18n** — every UI string, email, and LLM output supports `et` / `en` / `ru` from a single shared source of truth.
 - **Security-hardened** — OWASP Top 10 mitigations: per-IP rate limiting, strict security headers, CORS lockdown, external-URL sanitization, and a CVE audit in CI.
@@ -28,7 +29,7 @@ The whole platform is designed to run on **free-tier infrastructure** at a stead
 ```
 Vite + React SPA  ──HTTPS / JSON──▶  FastAPI (single process)
                                        ├── Routers: /auth /admin /onboarding /events /explore
-                                       │            /feed /feedback /users/me /webhooks
+                                       │            /feed /feedback /public /users/me /webhooks
                                        └── APScheduler (embedded, kept warm by a cron-job.org ping)
                                            ├── Weekly Sun 03:00: sync_fienta_organizers
                                            ├── Weekly Sun 03:30: cleanup_stale_data
@@ -138,7 +139,7 @@ Open http://localhost:5173 and sign in with a magic link. Without `RESEND_API_KE
 event-radar/
 ├── backend/                  # FastAPI application
 │   ├── app/
-│   │   ├── routers/          # /auth /admin /onboarding /events /explore /feed /feedback /webhooks ...
+│   │   ├── routers/          # /auth /admin /onboarding /events /explore /feed /feedback /public /users/me /webhooks
 │   │   ├── ingestion/        # source adapters (Fienta, HTML listings, newsletter), geocoding backfill, detail-refetch sync
 │   │   ├── dedup/            # rule-based pre-filter + LLM tiebreaker
 │   │   ├── llm/              # provider router, classifier, taxonomy, extractor
@@ -156,8 +157,10 @@ event-radar/
 ├── frontend/                 # Vite + React SPA
 │   ├── vercel.json           # Vercel rewrites (/api proxy + SPA fallback)
 │   └── src/
-│       ├── routes/          # Login, AuthVerify, Onboarding, Feed, Explore, SavedEvents, EventDetail, Settings ...
-│       ├── components/      # EventCard, PersonaCard, shared CSS base classes ...
+│       ├── routes/          # Landing, Login, AuthVerify, Onboarding, Feed, Explore, SavedEvents, EventDetail, Settings, NotFound
+│       ├── components/      # EventCard, PersonaCard, TopBar, shared CSS base classes ...
+│       ├── hooks/           # useAuth, useFeedback, useDropdown ...
+│       ├── lib/             # auth token/locale storage + auth-state store
 │       ├── api/             # API client
 │       ├── _generated/      # generated constants & i18n (do not edit by hand)
 │       └── i18n.ts          # i18n helpers

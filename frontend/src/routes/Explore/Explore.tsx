@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useSearchParams } from 'react-router-dom';
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { api } from '../../api/client';
-import { beginLogout, clearToken } from '../../lib/auth';
 import { t } from '../../i18n';
 import { useLocaleMutation } from '../../hooks/useLocaleMutation';
+import { useLogout } from '../../hooks/useLogout';
 import EventCard, { type EventData } from '../../components/EventCard';
 import EmptyState from '../../components/EmptyState';
 import PageState from '../../components/PageState';
@@ -47,8 +47,7 @@ interface CurrentUser {
 }
 
 export default function Explore() {
-  const navigate = useNavigate();
-  const queryClient = useQueryClient();
+  const handleLogout = useLogout();
   const [searchParams, setSearchParams] = useSearchParams();
   const filters = useMemo(() => parseExploreFilters(searchParams), [searchParams]);
   const { locale, handleLocaleChange } = useLocaleMutation(['explore']);
@@ -112,13 +111,6 @@ export default function Explore() {
     // would treat an absent/full param as "all" and return unfiltered results.
     enabled: filters.category.length > 0 && filters.vibe.length > 0,
   });
-
-  function handleLogout() {
-    beginLogout();
-    clearToken();
-    queryClient.clear();
-    navigate('/', { replace: true });
-  }
 
   function toggleFacet(kind: 'category' | 'vibe', value: string) {
     const current = filters[kind];
@@ -276,9 +268,9 @@ export default function Explore() {
         </div>
 
         {isLoading ? (
-          <PageState kind="loading" message={t('loading', locale)} />
+          <PageState kind="loading" message={t('loading', locale)} inline />
         ) : isError ? (
-          <PageState kind="error" message={t('explore_error', locale)} />
+          <PageState kind="error" message={t('explore_error', locale)} inline />
         ) : events.length === 0 ? (
           <EmptyState
             icon="◉"

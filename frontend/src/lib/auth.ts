@@ -1,11 +1,33 @@
 import { TOKEN_KEY, LOCALES, LOCALE_KEY, LOGOUT_FLAG_TTL_MS } from '../constants';
 
+// Auth-change subscriber store, so components can react to setToken()/clearToken()
+// instead of only reading localStorage once at render time — see subscribeAuth().
+const authListeners = new Set<() => void>();
+function emitAuthChange(): void {
+  authListeners.forEach((cb) => cb());
+}
+// Cross-tab sign-out/sign-in propagation: the storage event only fires in
+// OTHER tabs (the tab that made the change never receives its own event).
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', (e) => {
+    if (e.key === TOKEN_KEY) emitAuthChange();
+  });
+}
+export function subscribeAuth(cb: () => void): () => void {
+  authListeners.add(cb);
+  return () => { authListeners.delete(cb); };
+}
+
 export function getToken(): string | null { return localStorage.getItem(TOKEN_KEY); }
 export function setToken(t: string): void {
   loggingOut = false;
   localStorage.setItem(TOKEN_KEY, t);
+  emitAuthChange();
 }
-export function clearToken(): void { localStorage.removeItem(TOKEN_KEY); }
+export function clearToken(): void {
+  localStorage.removeItem(TOKEN_KEY);
+  emitAuthChange();
+}
 export function isAuthenticated(): boolean { return !!getToken(); }
 
 // Set by an explicit logout action, before clearToken()/queryClient.clear() run.

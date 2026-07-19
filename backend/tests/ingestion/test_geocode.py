@@ -1,11 +1,13 @@
 """Tests for Nominatim geocoding (geocode_address, geocode_pending, normalize_address_for_geocoding)."""
 
 import logging
+from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
 
+from app.constants import TALLINN_TZ
 from app.ingestion.geocode import (
     _self_heal_out_of_bbox_coords,
     is_suspect_venue_name,
@@ -16,6 +18,8 @@ from app.ingestion.geocode import (
     geocode_pending,
     normalize_address_for_geocoding,
 )
+
+_NOW = datetime.now(TALLINN_TZ)
 
 
 def _mock_response(json_data):
@@ -204,7 +208,7 @@ class TestGeocodePending:
         )
         # "Address B" was already geocoded on a different event -> seeds the cache
         mock_db.execute.return_value = MagicMock(
-            rowcount=0, all=MagicMock(return_value=[("Address B", 59.43, 24.75)])
+            rowcount=0, all=MagicMock(return_value=[("Address B", 59.43, 24.75, 1)])
         )
 
         with (
@@ -303,6 +307,7 @@ class TestGeocodePending:
                         "Telliskivi tänav 60a/9, 10412 Tallinn, Harju maakond",
                         59.4381936,
                         24.7286398,
+                        1,
                     )
                 ]
             ),
@@ -385,7 +390,7 @@ class TestCopyVenueFromSiblings:
             )
         )
 
-        copied = await copy_venue_from_siblings(mock_db)
+        copied = await copy_venue_from_siblings(mock_db, _NOW)
 
         assert copied == 1
         assert target.venue_address == "Peetri 12, Tallinn"
@@ -413,7 +418,7 @@ class TestCopyVenueFromSiblings:
         )
 
         with caplog.at_level(logging.WARNING, logger="app.ingestion.geocode"):
-            copied = await copy_venue_from_siblings(mock_db)
+            copied = await copy_venue_from_siblings(mock_db, _NOW)
 
         assert copied == 0
         assert target.venue_address is None
@@ -424,7 +429,7 @@ class TestCopyVenueFromSiblings:
         """No address-less events → returns 0 and never runs the donor query."""
         mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=[]))
 
-        copied = await copy_venue_from_siblings(mock_db)
+        copied = await copy_venue_from_siblings(mock_db, _NOW)
 
         assert copied == 0
         mock_db.execute.assert_not_called()
@@ -443,7 +448,7 @@ class TestCopyVenueFromSiblings:
         mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=[target]))
         mock_db.execute.return_value = MagicMock(all=MagicMock(return_value=[]))
 
-        await copy_venue_from_siblings(mock_db)
+        await copy_venue_from_siblings(mock_db, _NOW)
 
         compiled = str(mock_db.execute.call_args.args[0])
         assert "is_out_of_area" in compiled
@@ -462,7 +467,7 @@ class TestCopyVenueFromSiblings:
         mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=[target]))
         mock_db.execute.return_value = MagicMock(all=MagicMock(return_value=[]))
 
-        copied = await copy_venue_from_siblings(mock_db)
+        copied = await copy_venue_from_siblings(mock_db, _NOW)
 
         assert copied == 0
         assert target.venue_address is None
@@ -489,7 +494,7 @@ class TestCopyVenueFromSiblings:
             )
         )
 
-        copied = await copy_venue_from_siblings(mock_db)
+        copied = await copy_venue_from_siblings(mock_db, _NOW)
 
         assert copied == 1
         assert (target.lat, target.lng) == (59.4381936, 24.7286398)
@@ -515,7 +520,7 @@ class TestCopyVenueFromSiblings:
             )
         )
 
-        copied = await copy_venue_from_siblings(mock_db)
+        copied = await copy_venue_from_siblings(mock_db, _NOW)
 
         assert copied == 1
         assert target.venue_address == "Kotzebue 16, Tallinn"
@@ -543,7 +548,7 @@ class TestCopyVenueFromSiblings:
             )
         )
 
-        copied = await copy_venue_from_siblings(mock_db)
+        copied = await copy_venue_from_siblings(mock_db, _NOW)
 
         assert copied == 1
         assert (target.lat, target.lng) == (59.4476026, 24.7049754)
@@ -571,7 +576,7 @@ class TestCopyVenueFromSiblings:
             )
         )
 
-        copied = await copy_venue_from_siblings(mock_db)
+        copied = await copy_venue_from_siblings(mock_db, _NOW)
 
         assert copied == 1
         assert target.venue_address == "Telliskivi 60a, Tallinn"
@@ -598,7 +603,7 @@ class TestCopyVenueFromSiblings:
             )
         )
 
-        copied = await copy_venue_from_siblings(mock_db)
+        copied = await copy_venue_from_siblings(mock_db, _NOW)
 
         assert copied == 1
         assert target.venue_address == "Telliskivi 60a, Tallinn"
@@ -626,7 +631,7 @@ class TestCopyVenueFromSiblings:
             )
         )
 
-        copied = await copy_venue_from_siblings(mock_db)
+        copied = await copy_venue_from_siblings(mock_db, _NOW)
 
         assert copied == 1
         assert target.venue_address == "Kotzebue tänav 16, 10411 Tallinn, Harju maakond"
@@ -655,7 +660,7 @@ class TestCopyVenueFromSiblings:
         )
 
         with caplog.at_level(logging.WARNING, logger="app.ingestion.geocode"):
-            copied = await copy_venue_from_siblings(mock_db)
+            copied = await copy_venue_from_siblings(mock_db, _NOW)
 
         assert copied == 0
         assert target.venue_address is None
@@ -678,7 +683,7 @@ class TestCopyVenueFromSiblings:
             )
         )
 
-        copied = await copy_venue_from_siblings(mock_db)
+        copied = await copy_venue_from_siblings(mock_db, _NOW)
 
         assert copied == 0
         assert target.venue_address is None
@@ -703,7 +708,7 @@ class TestCopyVenueFromSiblings:
         )
 
         with caplog.at_level(logging.WARNING, logger="app.ingestion.geocode"):
-            copied = await copy_venue_from_siblings(mock_db)
+            copied = await copy_venue_from_siblings(mock_db, _NOW)
 
         assert copied == 0
         assert target.venue_address is None
@@ -743,7 +748,7 @@ class TestCopyVenueFromSiblings:
             )
         )
 
-        copied = await copy_venue_from_siblings(mock_db)
+        copied = await copy_venue_from_siblings(mock_db, _NOW)
 
         assert copied == 1
         assert target.venue_address == "Pikk 20, Tallinn"
@@ -1053,7 +1058,7 @@ class TestExtractAddressFromVenueName:
         # Donor address normalizes identically but its stored coord is the
         # mis-geocoded Saaremaa village, outside the Tallinn bbox.
         mock_db.execute.return_value = MagicMock(
-            rowcount=0, all=MagicMock(return_value=[("Kopli 116, Estonia", 58.51, 22.71)])
+            rowcount=0, all=MagicMock(return_value=[("Kopli 116, Estonia", 58.51, 22.71, 1)])
         )
 
         with (

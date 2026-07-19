@@ -119,6 +119,7 @@
   /* Layering */
   --z-sticky: 10;
   --z-toast: 50;
+  --z-card-overlay: 1;
 
   /* Backdrop blur */
   --blur-overlay: 8px;   /* sticky topbars */
@@ -163,6 +164,12 @@
   --anim-fast: 0.3s;
   --anim-base: 0.65s;
   --anim-slow: 0.8s;
+  --anim-rise-xs: 0.35s;
+  --anim-rise-sm: 0.4s;
+  --anim-rise-md: 0.5s;
+  --anim-rise-lg: 0.7s;
+  --anim-breathe-fast: 2.4s;
+  --anim-spin-slow: 4s;
   --rise-distance: 8px;
 
   /* Card shadows */
@@ -170,6 +177,7 @@
   --shadow-card-hover:  0 8px 24px rgba(0, 0, 0, 0.3);
   --shadow-accent:      0 8px 32px rgba(200, 146, 42, 0.1);
   --shadow-lead:        0 24px 64px rgba(0, 0, 0, 0.45);
+  --shadow-glow:        0 0 8px var(--accent);
 
   /* Ring shadows (geometry + token colors) */
   --shadow-focus-ring:    0 0 0 3px var(--accent-glow);
@@ -181,10 +189,6 @@
   /* Decoration */
   --numeral-color: var(--text-dim);
 }
-
-@keyframes spin    { to { transform: rotate(360deg); } }
-@keyframes breathe { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
-@keyframes rise    { from { opacity: 0; transform: translateY(var(--rise-distance, 8px)); } to { opacity: 1; transform: translateY(0); } }
 
 html {
   font-family: 'DM Sans', system-ui, sans-serif;

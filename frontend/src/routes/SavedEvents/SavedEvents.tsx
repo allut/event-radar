@@ -1,10 +1,9 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery } from '@tanstack/react-query';
 import { api } from '../../api/client';
-import { beginLogout, clearToken } from '../../lib/auth';
 import { t } from '../../i18n';
 import { useLocaleMutation } from '../../hooks/useLocaleMutation';
+import { useLogout } from '../../hooks/useLogout';
 import EventCard, { type EventData } from '../../components/EventCard';
 import EmptyState from '../../components/EmptyState';
 import PageState from '../../components/PageState';
@@ -28,8 +27,7 @@ const SAVED_TABS: { value: Signal; labelKey: string }[] = [
 ];
 
 export default function SavedEvents() {
-  const navigate = useNavigate();
-  const queryClient = useQueryClient();
+  const handleLogout = useLogout();
   const { locale, handleLocaleChange } = useLocaleMutation([QUERY_KEYS.saved]);
   const [signal, setSignal] = useState<Signal>('bookmark');
 
@@ -50,13 +48,6 @@ export default function SavedEvents() {
     getNextPageParam: (lastPage) =>
       lastPage.has_more ? lastPage.offset + lastPage.events.length : undefined,
   });
-
-  function handleLogout() {
-    beginLogout();
-    clearToken();
-    queryClient.clear();
-    navigate('/', { replace: true });
-  }
 
   const events = data?.pages.flatMap((page) => page.events) ?? [];
   const tabOptions = SAVED_TABS.map((tab) => ({
@@ -81,9 +72,9 @@ export default function SavedEvents() {
         />
 
         {isLoading ? (
-          <PageState kind="loading" message={t('loading', locale)} />
+          <PageState kind="loading" message={t('loading', locale)} inline />
         ) : isError ? (
-          <PageState kind="error" message={t('saved_error', locale)} />
+          <PageState kind="error" message={t('saved_error', locale)} inline />
         ) : events.length === 0 ? (
           <EmptyState
             icon={SIGNAL_CONFIG[signal].icon}

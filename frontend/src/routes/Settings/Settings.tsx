@@ -2,8 +2,9 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../../api/client';
-import { beginLogout, clearToken, getLocale } from '../../lib/auth';
+import { getLocale } from '../../lib/auth';
 import { useLocaleMutation } from '../../hooks/useLocaleMutation';
+import { useLogout } from '../../hooks/useLogout';
 import { AUTH_REDIRECT_DELAY_MS, PERSONAS, SAVE_MSG_CLEAR_DELAY_MS, PERSONA_PRIMARY_WEIGHT_THRESHOLD, QUERY_KEYS } from '../../constants';
 import { cx } from '../../utils';
 import { t, personaName } from '../../i18n';
@@ -36,6 +37,7 @@ const TOAST_IDLE: Toast = { status: 'idle' };
 export default function Settings() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const handleLogout = useLogout();
 
   const { data, isLoading, isError } = useQuery({
     queryKey: [QUERY_KEYS.settings],
@@ -83,12 +85,7 @@ export default function Settings() {
     mutationFn: () => api.post<{ detail: string }>('/auth/logout-all'),
     onSuccess: () => {
       setLogoutToast({ status: 'success', message: t('logout_all_success', locale) });
-      beginLogout();
-      setTimeout(() => {
-        clearToken();
-        queryClient.clear();
-        navigate('/', { replace: true });
-      }, AUTH_REDIRECT_DELAY_MS);
+      setTimeout(handleLogout, AUTH_REDIRECT_DELAY_MS);
     },
     onError: (err) => {
       setLogoutToast({
@@ -101,13 +98,6 @@ export default function Settings() {
   function handleLogoutAll() {
     setLogoutToast(TOAST_IDLE);
     logoutAllMutation.mutate();
-  }
-
-  function handleLogout() {
-    beginLogout();
-    clearToken();
-    queryClient.clear();
-    navigate('/', { replace: true });
   }
 
   const primaryPersona = data?.personas.find((p) => p.weight >= PERSONA_PRIMARY_WEIGHT_THRESHOLD);

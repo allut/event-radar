@@ -1,10 +1,19 @@
 import DOMPurify from 'dompurify';
 import { api } from './api/client';
-import { CATEGORY_GRADIENTS, FALLBACK_GRADIENT, EUR_SYMBOL, DEFAULT_CURRENCY, GOOGLE_MAPS_SEARCH_URL, type Signal, toLocaleCode, SAFE_URL_SCHEMES, SANITIZE_ALLOWED_TAGS, SANITIZE_ALLOWED_ATTR, SIGNAL_TO_CLASS, BROWSE_PAGE_SIZE, CATEGORIES, VIBES, type DatePreset, type SortOption } from './constants';
+import { CATEGORY_GRADIENTS, FALLBACK_GRADIENT, EUR_SYMBOL, DEFAULT_CURRENCY, GOOGLE_MAPS_SEARCH_URL, type Signal, toLocaleCode, SAFE_URL_SCHEMES, SANITIZE_ALLOWED_TAGS, SANITIZE_ALLOWED_ATTR, SIGNAL_TO_CLASS, BROWSE_PAGE_SIZE, CATEGORIES, VIBES, type DatePreset, type SortOption, ANALYTICS_EVENT_PATH_RE } from './constants';
 import { t, ti } from './i18n';
 
 export function cx(...classes: (string | false | null | undefined)[]): string {
   return classes.filter(Boolean).join(' ');
+}
+
+/** Reshapes a URL before it's forwarded to Vercel Analytics: strips the query string and
+ * hash (query params can carry sensitive values — the /auth/verify magic-link token, an
+ * /explore free-text search — that must never reach a third-party analytics vendor) and
+ * groups `/events/:id` under one row instead of one per event id. */
+export function maskAnalyticsUrl(url: string): string {
+  const pathname = url.split(/[?#]/)[0];
+  return pathname.replace(ANALYTICS_EVENT_PATH_RE, '/events/[id]');
 }
 
 /** Defense-in-depth render guard: only allow http(s) URLs into href/src attributes.

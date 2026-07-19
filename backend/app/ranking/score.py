@@ -19,7 +19,7 @@ from functools import lru_cache
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import load_only, selectinload
 
 from app.constants import (
     DAILY5_SERIES_COOLDOWN_DAYS,
@@ -72,6 +72,7 @@ from app.routers.utils import (
     canonical_event_filter,
     event_not_ended_filter,
     event_series_key,
+    persona_weight_tuple,
     select_events_with_classification,
 )
 
@@ -583,7 +584,11 @@ async def _load_recent_series_by_user(
         # window, so resolve them directly rather than from event_rows.
         shown_event_rows = (
             await db.scalars(
-                select(Event).where(Event.id.in_(list(shown_event_users.keys())))
+                select(Event)
+                .where(Event.id.in_(list(shown_event_users.keys())))
+                .options(
+                    load_only(Event.id, Event.title_orig, Event.venue_name)
+                )
             )
         ).all()
         for shown_ev in shown_event_rows:
@@ -629,7 +634,7 @@ async def _load_feed_build_context(
     ).all()
     for up_row in up_rows:
         personas_by_user.setdefault(up_row.user_id, []).append(
-            (up_row.weight, up_row.persona.affinity_vector)
+            persona_weight_tuple(up_row)
         )
 
     fb_by_user: dict[int, list[UserEventFeedback]] = {uid: [] for uid in user_ids}

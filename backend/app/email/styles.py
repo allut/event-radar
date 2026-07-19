@@ -1,25 +1,25 @@
-"""Static styles for HTML emails (digest, etc.).
+"""Static styles for HTML emails (digest, magic link, etc.).
 
 Colors/type mirror the website's design tokens (frontend/src/index.css :root).
 Structural styling is inlined per-element (S_* constants below) since many email
-clients strip <style> blocks; DIGEST_CSS covers only progressive enhancement
+clients strip <style> blocks; EMAIL_CSS covers only progressive enhancement
 (web fonts, link hover, mobile tweaks) that degrades safely when stripped.
 """
 
-DIGEST_CSS = """
+EMAIL_CSS = """
 @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600&family=DM+Sans:wght@400;500;600&display=swap');
 body{margin:0;padding:0;}
 a{text-decoration:none;}
 .event-title-link:hover{color:#e8a838 !important;}
 .tickets-link:hover{color:#e8a838 !important;}
-.feed-btn:hover{background:#e8a838 !important;}
+.cta-btn:hover{background:#e8a838 !important;}
 @media (max-width:600px){
   .container{width:100% !important;}
   .pad{padding-left:16px !important;padding-right:16px !important;}
 }
 """
 
-# Page chrome
+# Shared page chrome
 S_PAGE = "margin:0;padding:0;background-color:#13161e;"
 S_CONTAINER = "max-width:600px;width:100%;margin:0 auto;"
 S_HEADER_PAD = "padding:40px 24px 24px 24px;text-align:center;"
@@ -41,9 +41,19 @@ S_FEED_BTN = (
     "font-size:14px;font-weight:600;color:#0f1119;background-color:#c8922a;"
     "padding:12px 28px;border-radius:6px;letter-spacing:0.01em;"
 )
+S_CONTENT_PAD = "padding:8px 24px 24px 24px;"
+
+# Magic-link body copy (reuses page-chrome tokens above)
+S_BODY_TEXT = (
+    "font-family:'DM Sans',Helvetica,Arial,sans-serif;font-size:15px;"
+    "color:#e4dfd6;line-height:1.6;text-align:center;margin:0 0 20px 0;"
+)
+S_MUTED_NOTE = (
+    "font-family:'DM Sans',Helvetica,Arial,sans-serif;font-size:13px;"
+    "color:#7a8ba3;line-height:1.5;text-align:center;margin:20px 0 0 0;"
+)
 
 # Event card
-S_EVENTS_PAD = "padding:8px 24px 24px 24px;"
 S_CARD_WRAP = "padding-bottom:20px;"
 S_CARD = (
     "background-color:#1c2230;border:1px solid #252c3d;border-radius:6px;"

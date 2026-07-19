@@ -58,6 +58,20 @@ describe('Feed', () => {
     expect(screen.getByText('Event One')).toBeInTheDocument();
   });
 
+  it('renders the explore promo as one band-wide link', async () => {
+    mockGet.mockResolvedValueOnce(feedResponse);
+    renderWithProviders(<Feed />);
+    const cta = await screen.findByRole('link', { name: /explore all events/i });
+    expect(cta).toHaveAttribute('href', '/explore');
+    // The band itself is the link — title and msg live inside it, so the
+    // mobile layout can drop the button and stay fully tappable.
+    expect(cta).toHaveTextContent(/more than five/i);
+    // jsdom doesn't apply media queries, so this only exercises the desktop
+    // name. Mobile hides the CTA span with clip-path (not display:none)
+    // precisely so the accessible name asserted above holds at every width.
+    expect(screen.getByText('Explore all events →')).toBeInTheDocument();
+  });
+
   it('logout clears token and navigates to landing', async () => {
     mockGet.mockResolvedValueOnce(feedResponse);
     const { clearToken } = await import('../../lib/auth');

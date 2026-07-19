@@ -1,7 +1,10 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { isAuthenticated } from './lib/auth';
+import { Analytics } from '@vercel/analytics/react';
+import { SpeedInsights } from '@vercel/speed-insights/react';
+import { useAuth } from './hooks/useAuth';
 import { QUERY_RETRY, QUERY_STALE_TIME } from './constants';
+import { maskAnalyticsUrl } from './utils';
 import ErrorBoundary from './components/ErrorBoundary';
 import Landing from './routes/Landing';
 import Login from './routes/Login';
@@ -21,18 +24,21 @@ const queryClient = new QueryClient({
 });
 
 function Protected({ children }: { children: React.ReactNode }) {
-  if (!isAuthenticated()) return <Navigate to="/login" replace />;
+  const authed = useAuth();
+  if (!authed) return <Navigate to="/login" replace />;
   return <>{children}</>;
 }
 
 // Root: the marketing Landing for logged-out visitors, the Feed for signed-in
-// users. Must be a component (not an inline ternary in the Route element) so the
-// auth check re-runs each time `/` is navigated to — e.g. after magic-link
-// verify redirects a freshly-authenticated user here. An inline ternary is
-// evaluated once at App render (App never re-renders) and would freeze the
-// logged-out branch, stranding the user on Landing after sign-in.
+// users. Subscribes to auth state via useAuth() (backed by lib/auth's
+// subscribe/emit store) rather than reading localStorage once at render —
+// signing out while already on "/" doesn't change the route, so a plain
+// isAuthenticated() read here would never re-run and would strand a
+// just-signed-out user on a stale Feed. Also covers magic-link verify
+// redirecting a freshly-authenticated user here.
 function Home() {
-  return isAuthenticated() ? <Feed /> : <Landing />;
+  const authed = useAuth();
+  return authed ? <Feed /> : <Landing />;
 }
 
 export default function App() {
@@ -69,6 +75,8 @@ export default function App() {
             />
             <Route path="*" element={<Protected><NotFound /></Protected>} />
           </Routes>
+          <Analytics beforeSend={(e) => ({ ...e, url: maskAnalyticsUrl(e.url) })} />
+          <SpeedInsights beforeSend={(e) => ({ ...e, url: maskAnalyticsUrl(e.url) })} />
         </BrowserRouter>
       </QueryClientProvider>
     </ErrorBoundary>

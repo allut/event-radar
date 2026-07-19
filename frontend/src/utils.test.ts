@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { cx, safeUrl, sanitizeHtml, formatPrice, categoryGradient, formatHourMinute, makeActiveClassMap, trackExternalClick, datePresetRange, parseExploreFilters, exploreFiltersToSearchParams, buildExploreApiQuery, activeFacetCount, isFullSet, shouldFlipPopover, DEFAULT_EXPLORE_FILTERS, type ExploreFilters } from './utils';
+import { cx, safeUrl, sanitizeHtml, formatPrice, categoryGradient, formatHourMinute, makeActiveClassMap, trackExternalClick, datePresetRange, parseExploreFilters, exploreFiltersToSearchParams, buildExploreApiQuery, activeFacetCount, isFullSet, shouldFlipPopover, maskAnalyticsUrl, DEFAULT_EXPLORE_FILTERS, type ExploreFilters } from './utils';
 import { FALLBACK_GRADIENT, CATEGORIES } from './constants';
 
 vi.mock('./api/client', () => ({
@@ -21,6 +21,36 @@ describe('cx', () => {
 
   it('returns empty string when all falsy', () => {
     expect(cx(false, null, undefined)).toBe('');
+  });
+});
+
+describe('maskAnalyticsUrl', () => {
+  it('masks a numeric event id', () => {
+    expect(maskAnalyticsUrl('/events/42')).toBe('/events/[id]');
+  });
+
+  it('strips the query string (may carry the /auth/verify magic-link token)', () => {
+    expect(maskAnalyticsUrl('/auth/verify?token=secret')).toBe('/auth/verify');
+  });
+
+  it('strips the query string on a masked event path', () => {
+    expect(maskAnalyticsUrl('/events/42?x=1')).toBe('/events/[id]');
+  });
+
+  it('strips the hash', () => {
+    expect(maskAnalyticsUrl('/events/42#section')).toBe('/events/[id]');
+  });
+
+  it('strips a free-text search query', () => {
+    expect(maskAnalyticsUrl('/explore?q=jazz+night')).toBe('/explore');
+  });
+
+  it('leaves non-event paths unchanged', () => {
+    expect(maskAnalyticsUrl('/explore')).toBe('/explore');
+  });
+
+  it('does not mask a non-numeric id segment', () => {
+    expect(maskAnalyticsUrl('/events/abc')).toBe('/events/abc');
   });
 });
 

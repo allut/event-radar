@@ -166,21 +166,22 @@ def _strip_empty_blocks(soup: BeautifulSoup) -> None:
     nh3 keeps empty allowed tags — a source ending its markup with a bare
     ``<p></p>``, ``<p><br></p>``, ``<p>&nbsp;</p>``, or ``<p><span></span></p>``
     (Fienta/Piletilevi/ECH all do this) survives sanitization and renders as a
-    visible blank line under the frontend's ``white-space: pre-wrap``. Iterates
-    to a fixed point so emptying a ``<li>`` can cascade to its now-empty parent
-    ``<ul>``/``<ol>``. ``get_text(strip=True)`` treats U+00A0 (nbsp) as
-    whitespace (unlike the ASCII-only whitespace collapse above), so an
-    nbsp-only block counts as empty here — intentional, since a lone nbsp
-    inside an otherwise-empty container is formatting noise, not content.
+    visible blank line under the frontend's ``white-space: pre-wrap``.
+    ``find_all`` returns tags in document order (a parent before its
+    children), so iterating it in reverse visits every child before its
+    parent; a single such bottom-up pass reaches the same fixed point a
+    repeated forward-scanning loop would, since an ancestor is only checked
+    for emptiness after its now-decomposed children have already been
+    removed — emptying a ``<li>`` still cascades to its now-empty parent
+    ``<ul>``/``<ol>`` in this one pass. ``get_text(strip=True)`` treats
+    U+00A0 (nbsp) as whitespace (unlike the ASCII-only whitespace collapse
+    above), so an nbsp-only block counts as empty here — intentional, since a
+    lone nbsp inside an otherwise-empty container is formatting noise, not
+    content.
     """
-    while True:
-        removed = False
-        for tag in soup.find_all(list(_EMPTY_BLOCK_TAGS)):
-            if not tag.get_text(strip=True):
-                tag.decompose()
-                removed = True
-        if not removed:
-            break
+    for tag in reversed(soup.find_all(list(_EMPTY_BLOCK_TAGS))):
+        if not tag.get_text(strip=True):
+            tag.decompose()
 
 
 def sanitize_html(text: str | None) -> str | None:

@@ -13,10 +13,21 @@ from app.constants import (
 )
 from app.ingestion.sanitize import html_to_text
 
-_EXPLICIT_KEYWORD_PATTERNS = [
-    re.compile(r"\b" + re.escape(kw) + r"\b", re.IGNORECASE)
-    for kw in EXPLICIT_KEYWORDS
-]
+def _alternation_pattern(keywords: frozenset[str]) -> re.Pattern[str]:
+    """One word-boundary alternation regex for a keyword group.
+
+    A single-pass alternation is far cheaper than searching the text once per
+    keyword (K separately-compiled regexes over the same text, O(K*L)) — the
+    regex engine's alternation matching finds the same word-boundary hits in
+    one pass over the text.
+    """
+    return re.compile(
+        r"\b(?:" + "|".join(re.escape(kw) for kw in keywords) + r")\b",
+        re.IGNORECASE,
+    )
+
+
+_EXPLICIT_KEYWORD_PATTERN = _alternation_pattern(EXPLICIT_KEYWORDS)
 
 
 def is_explicit_text(*parts: str | None) -> bool:
@@ -32,17 +43,11 @@ def is_explicit_text(*parts: str | None) -> bool:
     """
     text = " ".join(html_to_text(p) or "" for p in parts if p)
     text = re.sub(r"\s+", " ", text)
-    return any(pattern.search(text) for pattern in _EXPLICIT_KEYWORD_PATTERNS)
+    return bool(_EXPLICIT_KEYWORD_PATTERN.search(text))
 
 
-_NON_EVENT_TITLE_PATTERNS = [
-    re.compile(r"\b" + re.escape(kw) + r"\b", re.IGNORECASE)
-    for kw in NON_EVENT_TITLE_KEYWORDS
-]
-_NON_EVENT_VENUE_PATTERNS = [
-    re.compile(r"\b" + re.escape(kw) + r"\b", re.IGNORECASE)
-    for kw in NON_EVENT_VENUE_KEYWORDS
-]
+_NON_EVENT_TITLE_PATTERN = _alternation_pattern(NON_EVENT_TITLE_KEYWORDS)
+_NON_EVENT_VENUE_PATTERN = _alternation_pattern(NON_EVENT_VENUE_KEYWORDS)
 
 
 def is_non_event_text(title: str | None, venue_name: str | None) -> bool:
@@ -55,7 +60,7 @@ def is_non_event_text(title: str | None, venue_name: str | None) -> bool:
     (LLM "non_event" classification flag) catches what this misses.
     """
     title_text = (html_to_text(title) or "") if title else ""
-    if any(p.search(title_text) for p in _NON_EVENT_TITLE_PATTERNS):
+    if _NON_EVENT_TITLE_PATTERN.search(title_text):
         return True
     venue_text = (html_to_text(venue_name) or "") if venue_name else ""
-    return any(p.search(venue_text) for p in _NON_EVENT_VENUE_PATTERNS)
+    return bool(_NON_EVENT_VENUE_PATTERN.search(venue_text))

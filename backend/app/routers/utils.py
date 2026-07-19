@@ -21,7 +21,7 @@ from app.constants import (
     PREFERENCE_SIGNALS,
     PREFERRED_TASTE_MIN_WEIGHT,
 )
-from app.models.models import Event, User, UserEventFeedback
+from app.models.models import Event, User, UserEventFeedback, UserPersona
 
 log = logging.getLogger(__name__)
 
@@ -100,6 +100,16 @@ def event_series_key(title_orig: str, venue_name: str | None) -> tuple[str, str]
     filter, not a correctness gate.
     """
     return (normalized_title(title_orig), normalized_title(venue_name or ""))
+
+
+def persona_weight_tuple(user_persona: UserPersona) -> tuple[float, dict]:
+    """(weight, affinity_vector) shape consumed by ``ranking/score.py::persona_affinity``.
+
+    Shared by the single-user load in browse.py and the bulk multi-user load in
+    ranking/score.py::build_daily_feeds, which query ``UserPersona`` differently
+    (single vs. ``user_id.in_(...)``) but must agree on this row->tuple mapping.
+    """
+    return (user_persona.weight, user_persona.persona.affinity_vector)
 
 
 def canonical_event_filter() -> ColumnElement[bool]:

@@ -5,11 +5,12 @@ interface PageStateProps {
   kind: 'loading' | 'error';
   message: string;
   action?: ReactNode;
+  inline?: boolean;
 }
 
-export default function PageState({ kind, message, action }: PageStateProps) {
+export default function PageState({ kind, message, action, inline = false }: PageStateProps) {
   return (
-    <div className={styles.centered}>
+    <div className={inline ? styles.inline : styles.centered}>
       {kind === 'loading' ? (
         <span className={styles.spinner} aria-label={message} />
       ) : (

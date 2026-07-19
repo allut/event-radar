@@ -36,7 +36,6 @@ from app.constants import (
     TITLE_RATIO_VENUE_BYPASS_THRESHOLD,
     VENUE_RATIO_THRESHOLD,
 )
-from app.ingestion.sanitize import html_to_text
 from app.models.models import Event
 from app.routers.utils import normalized_title
 
@@ -251,12 +250,16 @@ def _event_quality_rank(event: Event) -> tuple[bool, bool, bool, int]:
     already treats as "better details": price, address, coordinates, and
     description length. Title/venue presence is omitted — every clustered member
     already passed the fuzzy title match, so it is a fixed cost across the group.
+
+    Raw (un-stripped) length is used for the description tie-break rather than
+    a full HTML-to-text parse per member per pass — only the relative ordering
+    matters here, not the exact stripped-text length.
     """
     return (
         event.price_min is not None,
         event.venue_address is not None,
         event.lat is not None and event.lng is not None,
-        len(html_to_text(event.description_orig) or ""),
+        len(event.description_orig or ""),
     )
 
 

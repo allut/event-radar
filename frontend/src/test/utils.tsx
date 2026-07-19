@@ -21,19 +21,36 @@ export function makeQueryWrapper(): {
 interface RenderOptions {
   route?: string;
   pathPattern?: string;
+  /** Multiple routes (e.g. a route under test plus a redirect target). Takes
+   * precedence over `pathPattern`; `ui` is ignored when this is set. */
+  routes?: Array<{ path: string; element: ReactNode }>;
+  /** Pass a pre-built QueryClient (e.g. to share/inspect it in the test) instead
+   * of using the default retry-disabled one. */
+  queryClient?: QueryClient;
 }
 
-export function renderWithProviders(ui: ReactNode, { route = '/', pathPattern }: RenderOptions = {}): RenderResult {
-  const queryClient = new QueryClient({
-    defaultOptions: {
-      queries: { retry: false, gcTime: 0, staleTime: 0 },
-      mutations: { retry: false },
-    },
-  });
+export function renderWithProviders(
+  ui: ReactNode,
+  { route = '/', pathPattern, routes, queryClient: providedQueryClient }: RenderOptions = {},
+): RenderResult {
+  const queryClient =
+    providedQueryClient ??
+    new QueryClient({
+      defaultOptions: {
+        queries: { retry: false, gcTime: 0, staleTime: 0 },
+        mutations: { retry: false },
+      },
+    });
   return render(
     <QueryClientProvider client={queryClient}>
       <MemoryRouter initialEntries={[route]}>
-        {pathPattern ? (
+        {routes ? (
+          <Routes>
+            {routes.map(({ path, element }) => (
+              <Route key={path} path={path} element={element} />
+            ))}
+          </Routes>
+        ) : pathPattern ? (
           <Routes>
             <Route path={pathPattern} element={ui} />
           </Routes>

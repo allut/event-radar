@@ -329,6 +329,18 @@ DEDUP_UNFILTERED_FALLBACK_MAX_EVENTS = 500
 RESEND_SEND_URL = "https://api.resend.com/emails"
 RESEND_TIMEOUT_SECONDS: float = 10.0
 RESEND_ERROR_SNIPPET_LEN = 200
+# Scheduler cadence (see CLAUDE.md Architecture for the full cron schedule)
+ORGANIZER_SYNC_HOUR = 3  # weekly Sunday 03:00 Europe/Tallinn
+ORGANIZER_SYNC_MINUTE = 0
+CLEANUP_HOUR = 3  # weekly Sunday 03:30 Europe/Tallinn, after organizer sync
+CLEANUP_MINUTE = 30
+INGEST_INTERVAL_HOURS = 1
+LLM_PASS_INTERVAL_HOURS = 6  # dedup/classify/publish/geocode
+REFETCH_HOUR = 4  # daily 04:30 Europe/Tallinn, before the 06:00 feed build
+REFETCH_MINUTE = 30
+FEED_BUILD_HOUR = 6  # daily 06:00 Europe/Tallinn
+FEED_BUILD_MINUTE = 0
+
 # Email i18n strings (subjects, labels, templates) live in shared/i18n/*.json.
 DIGEST_SEND_HOUR = 7  # 07:00 Europe/Tallinn, one hour after build_daily_feeds
 DIGEST_MAX_WHY_GO_BULLETS = 3
@@ -386,6 +398,11 @@ RATE_LIMIT_PUBLIC = "60/minute"
 # How many events the landing-page showcase returns — a fixed, small teaser grid
 # (top-quality upcoming events), so no pagination is needed.
 SHOWCASE_EVENT_COUNT = 6
+# The landing showcase promises "what's on right now" — bound candidates to the
+# coming week. If a thin week yields fewer than SHOWCASE_EVENT_COUNT events, the
+# endpoint retries once at the wider window rather than rendering a stub grid.
+SHOWCASE_WINDOW_DAYS = 7
+SHOWCASE_FALLBACK_WINDOW_DAYS = 30
 
 # Auth tokens
 AUTH_MAGIC_SALT = "magic-link-v1"
@@ -670,6 +687,8 @@ HTML_LISTING_MAX_DETAIL_FETCHES = (
 # User-Agent with contact info and a max of 1 request/second.
 NOMINATIM_BASE_URL = "https://nominatim.openstreetmap.org/search"
 NOMINATIM_USER_AGENT = "EventRadarBot/1.0 (+https://eventradar.ee; aleksei.lutkov@gmail.com)"
+# Static Nominatim search params; the "q" param is set per-call with the address.
+NOMINATIM_QUERY_PARAMS: dict[str, str | int] = {"format": "json", "limit": 1}
 GEOCODE_REQUEST_DELAY_SECONDS: float = 1.0
 GEOCODE_MAX_PER_RUN = 200  # ~3.5 min/run at 1 req/s, safely under the 6h cron cadence
 # Commit mid-loop at this wall-clock interval to keep the held DB connection warm
@@ -680,6 +699,13 @@ GEOCODE_COMMIT_INTERVAL_SECONDS: float = 120.0
 # window, mirroring REFETCH_MIN_INTERVAL_DAYS's cooldown shape. A transient HTTP
 # failure does NOT start this cooldown — only a definitive no-match/bbox-reject does.
 GEOCODE_RETRY_INTERVAL_DAYS = 7
+# How far back a donor event can be and still seed the geocode cache / sibling
+# copy pass. events rows are never deleted (see CLAUDE.md retention policy), so
+# without this bound both donor queries would scan every event ever ingested,
+# growing without limit. Venue coordinates don't change, so this trades a small
+# amount of donor coverage (a venue whose only past event is older than this
+# window won't donate until it recurs) for a bounded query.
+GEOCODE_DONOR_LOOKBACK_DAYS = 180
 # Decimal places to round (lat, lng) to when counting *distinct* donor coords in the
 # sibling-copy ambiguity guard. 6 ≈ 0.1 m — collapses sub-meter float-representation
 # differences (e.g. 59.43793509999999 vs 59.4379351) that would otherwise read as two
