@@ -59,50 +59,54 @@ export default function EventCard({ event, index, locale, onFeedbackSent, varian
       className={cx(styles.card, isFeatured && styles.featured)}
       style={{ animationDelay: `${index * CARD_ANIMATION_DELAY_STEP_MS}ms` }}
     >
-      <div className={cx(styles.imageWrap, isFeatured && styles.featuredImageWrap)}>
-        {imageSrc ? (
-          <>
-            <img src={imageSrc} alt="" aria-hidden className={styles.backdrop} loading="lazy" />
-            <img src={imageSrc} alt={event.title} className={styles.image} loading="lazy" />
-          </>
-        ) : (
-          <div
-            className={styles.placeholder}
-            style={{ background: categoryGradient(event.categories) }}
-            aria-hidden
-          >
-            {!isFeatured && (
-              <span className={styles.placeholderNum}>{padIndex(index + 1)}</span>
-            )}
-          </div>
-        )}
-        {isFeatured && (
-          <span className={styles.numeral} aria-hidden>{padIndex(index + 1)}</span>
-        )}
-        {price && <span className={styles.price}>{price}</span>}
-      </div>
-
-      <div className={cx(styles.body, isFeatured && styles.featuredBody)}>
-        <div className={cx(styles.meta, isFeatured && styles.featuredMeta)}>
-          <time className={styles.time}>{formatEventTime(event.starts_at, locale)}</time>
-          {event.venue_name && (
-            <span className={styles.venue}>{event.venue_name}</span>
+      <div className={styles.clickable}>
+        <div className={cx(styles.imageWrap, isFeatured && styles.featuredImageWrap)}>
+          {imageSrc ? (
+            <>
+              <img src={imageSrc} alt="" aria-hidden className={styles.backdrop} loading="lazy" />
+              <img src={imageSrc} alt={event.title} className={styles.image} loading="lazy" />
+            </>
+          ) : (
+            <div
+              className={styles.placeholder}
+              style={{ background: categoryGradient(event.categories) }}
+              aria-hidden
+            >
+              {!isFeatured && (
+                <span className={styles.placeholderNum}>{padIndex(index + 1)}</span>
+              )}
+            </div>
           )}
+          {isFeatured && (
+            <span className={styles.numeral} aria-hidden>{padIndex(index + 1)}</span>
+          )}
+          {price && <span className={styles.price}>{price}</span>}
         </div>
 
-        <h2 className={cx(styles.title, isFeatured && styles.featuredTitle)}>
-          <Link to={`/events/${event.id}`} className={styles.titleLink}>
-            {event.title}
-          </Link>
-        </h2>
+        <div className={cx(styles.body, isFeatured && styles.featuredBody)}>
+          <div className={cx(styles.meta, isFeatured && styles.featuredMeta)}>
+            <time className={styles.time}>{formatEventTime(event.starts_at, locale)}</time>
+            {event.venue_name && (
+              <span className={styles.venue}>{event.venue_name}</span>
+            )}
+          </div>
 
-        {event.why_go.length > 0 && (
-          <ul className={cx(styles.bullets, isFeatured && styles.featuredBullets)} aria-label={t('why_go', locale)}>
-            {event.why_go.map(bullet => (
-              <li key={bullet} className={cx(styles.bullet, isFeatured && styles.featuredBullet)}>{bullet}</li>
-            ))}
-          </ul>
-        )}
+          <h2 className={cx(styles.title, isFeatured && styles.featuredTitle)}>
+            <Link to={`/events/${event.id}`} className={cx(styles.titleLink, styles.stretched)}>
+              <span className={cx(styles.titleClamp, isFeatured && styles.featuredTitleClamp)}>
+                {event.title}
+              </span>
+            </Link>
+          </h2>
+
+          {event.why_go.length > 0 && (
+            <ul className={cx(styles.bullets, isFeatured && styles.featuredBullets)} aria-label={t('why_go', locale)}>
+              {event.why_go.map(bullet => (
+                <li key={bullet} className={cx(styles.bullet, isFeatured && styles.featuredBullet)}>{bullet}</li>
+              ))}
+            </ul>
+          )}
+        </div>
       </div>
 
       {(!readOnly || ticketUrl) && (
