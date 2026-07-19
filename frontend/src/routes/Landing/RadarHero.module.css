@@ -30,6 +30,7 @@
 
 /* Rotating beam — a conic wedge fading from accent to transparent. */
 .sweep {
+  composes: spin from '../../components/shared/Animations.module.css';
   position: absolute;
   inset: 0;
   border-radius: var(--radius-full);
@@ -40,18 +41,18 @@
     transparent 60deg,
     transparent 360deg
   );
-  animation: spin 4s linear infinite;
+  --spin-duration: var(--anim-spin-slow);
   transform-origin: center;
 }
 
 .core {
+  composes: breathe from '../../components/shared/Animations.module.css';
   position: absolute;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
   font-size: var(--fs-xl);
   color: var(--accent);
-  animation: breathe 3s var(--easing-breathe) infinite;
 }
 
 .blip {
@@ -64,14 +65,15 @@
 }
 
 .dot {
+  composes: breathe from '../../components/shared/Animations.module.css';
   width: var(--space-2);
   height: var(--space-2);
   border-radius: var(--radius-full);
   background: var(--accent-light);
   box-shadow: 0 0 8px var(--accent);
   flex-shrink: 0;
-  animation: breathe 2.4s var(--easing-breathe) infinite;
-  animation-delay: var(--blip-delay, 0s);
+  --breathe-duration: var(--anim-breathe-fast);
+  --breathe-delay: var(--blip-delay, 0s);
 }
 
 .label {
@@ -85,15 +87,19 @@
   border-radius: var(--radius-pill);
 }
 
+/* !important: CSS Modules bundling can place the composed .spin/.breathe
+   class rules (from Animations.module.css) later in the output than this
+   file's own rules, at equal specificity — this override must win the
+   cascade regardless of that chunk order. */
 @media (prefers-reduced-motion: reduce) {
   .sweep {
-    animation: none;
+    animation: none !important;
     /* Hold a static wedge so the radar still reads as a radar, without motion. */
     opacity: 0.5;
   }
   .core,
   .dot {
-    animation: none;
+    animation: none !important;
   }
 }
 

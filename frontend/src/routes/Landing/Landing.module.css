@@ -65,10 +65,11 @@
 }
 
 .heroText {
+  composes: rise from '../../components/shared/Animations.module.css';
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
-  animation: rise 0.5s var(--easing) both;
+  --rise-duration: var(--anim-rise-md);
 }
 
 .h1 {
@@ -88,7 +89,8 @@
 }
 
 .heroArt {
-  animation: rise 0.7s var(--easing) both;
+  composes: rise from '../../components/shared/Animations.module.css';
+  --rise-duration: var(--anim-rise-lg);
 }
 
 /* ── Email capture ───────────────────────────────────────────────────── */
@@ -132,13 +134,13 @@
 }
 
 .spinner {
+  composes: spin from '../../components/shared/Animations.module.css';
   display: inline-block;
   width: var(--spinner-size-sm);
   height: var(--spinner-size-sm);
   border: 2px solid var(--spinner-border);
   border-top-color: var(--on-accent);
   border-radius: var(--radius-full);
-  animation: spin var(--anim-base) linear infinite;
 }
 
 .error {
@@ -162,13 +164,13 @@
 .secondaryCta:hover { color: var(--accent-light); }
 
 .success {
+  composes: rise from '../../components/shared/Animations.module.css';
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
   gap: var(--space-2);
   padding: var(--space-4) 0;
-  animation: rise var(--anim-fast) var(--easing) both;
 }
 
 .checkCircle {

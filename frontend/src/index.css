@@ -163,6 +163,12 @@
   --anim-fast: 0.3s;
   --anim-base: 0.65s;
   --anim-slow: 0.8s;
+  --anim-rise-xs: 0.35s;
+  --anim-rise-sm: 0.4s;
+  --anim-rise-md: 0.5s;
+  --anim-rise-lg: 0.7s;
+  --anim-breathe-fast: 2.4s;
+  --anim-spin-slow: 4s;
   --rise-distance: 8px;
 
   /* Card shadows */
@@ -181,10 +187,6 @@
   /* Decoration */
   --numeral-color: var(--text-dim);
 }
-
-@keyframes spin    { to { transform: rotate(360deg); } }
-@keyframes breathe { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
-@keyframes rise    { from { opacity: 0; transform: translateY(var(--rise-distance, 8px)); } to { opacity: 1; transform: translateY(0); } }
 
 html {
   font-family: 'DM Sans', system-ui, sans-serif;

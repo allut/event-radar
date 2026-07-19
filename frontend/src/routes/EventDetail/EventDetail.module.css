@@ -120,11 +120,12 @@
 }
 
 .content {
+  composes: rise from '../../components/shared/Animations.module.css';
   --rise-distance: 6px;
+  --rise-duration: var(--anim-rise-sm);
   max-width: 680px;
   margin: 0 auto;
   padding: var(--space-6) var(--space-5) var(--space-8);
-  animation: rise 0.4s var(--easing) both;
 }
 
 .meta {

@@ -8,9 +8,10 @@
 
 .card {
   composes: cardPage from '../../components/shared/Card.module.css';
+  composes: rise from '../../components/shared/Animations.module.css';
   --rise-distance: 12px;
+  --rise-duration: var(--anim-rise-sm);
   text-align: center;
-  animation: rise 0.4s var(--easing) both;
 }
 
 .code {

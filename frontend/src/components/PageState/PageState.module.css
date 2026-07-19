@@ -7,18 +7,14 @@
   gap: var(--space-5);
 }
 
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
 .spinner {
+  composes: spin from '../shared/Animations.module.css';
   display: block;
   width: var(--spinner-size);
   height: var(--spinner-size);
   border: 2px solid var(--border);
   border-top-color: var(--accent);
   border-radius: var(--radius-full);
-  animation: spin var(--anim-base) linear infinite;
 }
 
 .errorMsg {

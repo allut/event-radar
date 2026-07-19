@@ -8,7 +8,9 @@
 
 .card {
   composes: card cardAccentTop from '../../components/shared/Card.module.css';
+  composes: rise from '../../components/shared/Animations.module.css';
   --rise-distance: 10px;
+  --rise-duration: var(--anim-rise-xs);
   width: 100%;
   max-width: 360px;
   padding: var(--space-2-5);
@@ -17,13 +19,12 @@
   align-items: center;
   gap: var(--space-1);
   text-align: center;
-  animation: rise 0.35s var(--easing) both;
 }
 
 .radar {
+  composes: breathe from '../../components/shared/Animations.module.css';
   font-size: var(--heading-lg);
   color: var(--accent);
-  animation: breathe 3s var(--easing-breathe) infinite;
 }
 
 .brand {
@@ -48,13 +49,13 @@
 }
 
 .spinner {
+  composes: spin from '../../components/shared/Animations.module.css';
   display: block;
   width: var(--spinner-size-md);
   height: var(--spinner-size-md);
   border: 2px solid var(--border);
   border-top-color: var(--accent);
   border-radius: var(--radius-full);
-  animation: spin var(--anim-base) linear infinite;
 }
 
 .check {

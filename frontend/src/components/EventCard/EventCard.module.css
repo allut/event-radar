@@ -1,10 +1,11 @@
 .card {
   composes: card from '../shared/Card.module.css';
+  composes: rise from '../shared/Animations.module.css';
   display: flex;
   flex-direction: column;
   height: 100%;
   overflow: hidden;
-  animation: rise 0.5s var(--easing) both;
+  --rise-duration: var(--anim-rise-md);
   transition: border-color var(--transition), box-shadow var(--transition);
 }
 
