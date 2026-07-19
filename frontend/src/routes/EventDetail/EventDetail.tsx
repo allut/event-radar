@@ -155,10 +155,14 @@ export default function EventDetail() {
               {(data.categories.length > 0 || data.vibes.length > 0) && (
                 <div className={styles.tags}>
                   {data.categories.map(cat => (
-                    <span key={cat} className={styles.tag}>{t(`category_${cat}`, locale)}</span>
+                    <Link key={cat} to={`/explore?category=${cat}`} className={styles.tag}>
+                      {t(`category_${cat}`, locale)}
+                    </Link>
                   ))}
                   {data.vibes.map(vibe => (
-                    <span key={vibe} className={cx(styles.tag, styles.tagVibe)}>{t(`vibe_${vibe}`, locale)}</span>
+                    <Link key={vibe} to={`/explore?vibe=${vibe}`} className={cx(styles.tag, styles.tagVibe)}>
+                      {t(`vibe_${vibe}`, locale)}
+                    </Link>
                   ))}
                 </div>
               )}

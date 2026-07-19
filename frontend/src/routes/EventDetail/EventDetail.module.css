@@ -329,12 +329,25 @@
   background: var(--accent-subtle);
   color: var(--accent);
   border: 1px solid var(--accent-border);
+  text-decoration: none;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.tag:hover {
+  background: var(--accent-hover-bg);
+  border-color: var(--accent-hover-border);
 }
 
 .tagVibe {
   background: var(--bg-raised);
   color: var(--text-muted);
   border-color: var(--border);
+}
+
+.tagVibe:hover {
+  background: var(--border);
+  border-color: var(--text-muted);
 }
 
 /* ─── Actions ─────────────────────────────────────────────────────────────── */

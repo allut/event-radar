@@ -131,6 +131,17 @@ describe('EventDetail', () => {
     });
   });
 
+  it('renders category and vibe tags as links to Explore filtered by that slug', async () => {
+    mockGet.mockResolvedValueOnce(eventData);
+    renderWithProviders(<EventDetail />, { route: '/events/1', pathPattern: '/events/:id' });
+    await waitFor(() => {
+      const categoryLink = screen.getByRole('link', { name: /music/i });
+      expect(categoryLink).toHaveAttribute('href', '/explore?category=music');
+    });
+    const vibeLink = screen.getByRole('link', { name: /vibrant/i });
+    expect(vibeLink).toHaveAttribute('href', '/explore?vibe=vibrant');
+  });
+
   it('back button calls navigate(-1)', async () => {
     mockGet.mockResolvedValueOnce(eventData);
     renderWithProviders(<EventDetail />, { route: '/events/1', pathPattern: '/events/:id' });
