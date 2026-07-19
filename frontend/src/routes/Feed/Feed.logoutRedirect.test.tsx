@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import Feed from './Feed';
 import Landing from '../Landing';
-import { isAuthenticated } from '../../lib/auth';
+import { useAuth } from '../../hooks/useAuth';
 import { TOKEN_KEY } from '../../constants';
 import { makeEvent } from '../../test/utils';
 
@@ -15,7 +15,8 @@ import { makeEvent } from '../../test/utils';
 // interceptor in client.ts is exercised — this is the only way to observe
 // the logout race that a fully-mocked `api` module would hide.
 function Home() {
-  return isAuthenticated() ? <Feed /> : <Landing />;
+  const authed = useAuth();
+  return authed ? <Feed /> : <Landing />;
 }
 
 const feedResponse = {
@@ -79,6 +80,10 @@ describe('logout redirect from the Feed route (/)', () => {
 
     await waitFor(() => expect(screen.getByText('Event One')).toBeInTheDocument());
     await userEvent.click(screen.getByRole('button', { name: /sign out/i }));
+
+    // The user must land on the marketing Landing page, not a stale/broken Feed.
+    await waitFor(() => expect(screen.getByRole('link', { name: /sign in/i })).toBeInTheDocument());
+    expect(screen.queryByText(/failed to load your feed/i)).not.toBeInTheDocument();
 
     // Let any spurious refetch + its 401 handling resolve.
     await waitFor(() => expect(localStorage.getItem(TOKEN_KEY)).toBeNull());

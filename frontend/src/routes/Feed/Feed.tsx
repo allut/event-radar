@@ -1,9 +1,9 @@
-import { Link, useNavigate } from 'react-router-dom';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { api } from '../../api/client';
-import { beginLogout, clearToken } from '../../lib/auth';
 import { t, ti } from '../../i18n';
 import { useLocaleMutation } from '../../hooks/useLocaleMutation';
+import { useLogout } from '../../hooks/useLogout';
 import EventCard, { type EventData } from '../../components/EventCard';
 import EmptyState from '../../components/EmptyState';
 import PageState from '../../components/PageState';
@@ -19,22 +19,14 @@ interface FeedResponse {
 }
 
 export default function Feed() {
-  const navigate = useNavigate();
-  const queryClient = useQueryClient();
   const { locale, handleLocaleChange } = useLocaleMutation([QUERY_KEYS.feed]);
+  const handleLogout = useLogout();
 
   const { data, isLoading, isError } = useQuery({
     queryKey: [QUERY_KEYS.feed],
     queryFn: () => api.get<FeedResponse>('/feed'),
     retry: false,
   });
-
-  function handleLogout() {
-    beginLogout();
-    clearToken();
-    queryClient.clear();
-    navigate('/', { replace: true });
-  }
 
   if (isLoading) {
     return <PageState kind="loading" message={t('loading', locale)} />;
