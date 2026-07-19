@@ -165,9 +165,9 @@
     "landing_showcase_error": "Sündmuste laadimine ebaõnnestus. Palun värskenda.",
     "landing_personas_title": "Loodud selle järgi, kuidas sina tegelikult välja lähed",
     "landing_personas_sub": "Vali sisselogimisel persoon — sinu voog õpib sealt edasi.",
-    "landing_trust_nopassword": "Ei mingit parooli",
-    "landing_trust_notracking": "Ei mingit jälgimist",
-    "landing_trust_free": "Tasuta",
+    "landing_trust_nopassword": "Ilma paroolita",
+    "landing_trust_notracking": "Ilma jälgimiseta",
+    "landing_trust_free": "Ilma tasuta",
     "landing_final_title": "Ärka üles viie hea põhjusega välja minna."
   },
   "email": {

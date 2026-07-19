@@ -171,7 +171,7 @@ export const TRANSLATIONS: Record<Locale, Record<string, string>> = {
     'landing_personas_sub': 'Pick a persona when you sign up — your feed learns from there.',
     'landing_trust_nopassword': 'No password',
     'landing_trust_notracking': 'No tracking',
-    'landing_trust_free': 'Free',
+    'landing_trust_free': 'No fee',
     'landing_final_title': 'Wake up to five good reasons to go out.',
   },
   et: {
@@ -340,9 +340,9 @@ export const TRANSLATIONS: Record<Locale, Record<string, string>> = {
     'landing_showcase_error': 'Sündmuste laadimine ebaõnnestus. Palun värskenda.',
     'landing_personas_title': 'Loodud selle järgi, kuidas sina tegelikult välja lähed',
     'landing_personas_sub': 'Vali sisselogimisel persoon — sinu voog õpib sealt edasi.',
-    'landing_trust_nopassword': 'Ei mingit parooli',
-    'landing_trust_notracking': 'Ei mingit jälgimist',
-    'landing_trust_free': 'Tasuta',
+    'landing_trust_nopassword': 'Ilma paroolita',
+    'landing_trust_notracking': 'Ilma jälgimiseta',
+    'landing_trust_free': 'Ilma tasuta',
     'landing_final_title': 'Ärka üles viie hea põhjusega välja minna.',
   },
   ru: {
@@ -513,7 +513,7 @@ export const TRANSLATIONS: Record<Locale, Record<string, string>> = {
     'landing_personas_sub': 'Выберите персону при входе — дальше лента учится сама.',
     'landing_trust_nopassword': 'Без пароля',
     'landing_trust_notracking': 'Без слежки',
-    'landing_trust_free': 'Бесплатно',
+    'landing_trust_free': 'Без платы',
     'landing_final_title': 'Просыпайтесь с пятью хорошими поводами выйти в город.',
   },
 };
