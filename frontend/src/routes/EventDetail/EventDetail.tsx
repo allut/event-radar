@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '../../api/client';
 import { t, ti } from '../../i18n';
 import { buildMapsUrl, categoryGradient, cx, formatEventDateTime, formatHourMinute, formatPrice, safeUrl, sanitizeHtml, trackExternalClick } from '../../utils';
+import { useAuth } from '../../hooks/useAuth';
 import { useLocaleMutation } from '../../hooks/useLocaleMutation';
 import { type EventData } from '../../components/EventCard';
 import FeedbackButtonRow from '../../components/FeedbackButtonRow';
@@ -19,6 +20,7 @@ interface EventDetailData extends EventData {
 export default function EventDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const authed = useAuth();
   const { locale, handleLocaleChange } = useLocaleMutation([QUERY_KEYS.event, id]);
 
   const { data, isLoading, isError } = useQuery({
@@ -33,7 +35,7 @@ export default function EventDetail() {
   });
 
   function handleTicketsClick() {
-    if (!data) return;
+    if (!data || !authed) return;
     trackExternalClick(data.id);
   }
 
@@ -170,13 +172,15 @@ export default function EventDetail() {
           )}
 
           <div className={styles.actions}>
-            <FeedbackButtonRow
-              activeSignal={activeSignal}
-              pending={pending}
-              onPress={sendFeedback}
-              locale={locale}
-              variant="detail"
-            />
+            {authed && (
+              <FeedbackButtonRow
+                activeSignal={activeSignal}
+                pending={pending}
+                onPress={sendFeedback}
+                locale={locale}
+                variant="detail"
+              />
+            )}
             {ticketUrl && (
               <a
                 href={ticketUrl}

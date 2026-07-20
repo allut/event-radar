@@ -13,6 +13,8 @@ vi.mock('react-router-dom', async (importOriginal) => {
 vi.mock('../../lib/auth', () => ({
   getLocale: vi.fn(() => 'en'),
   setLocale: vi.fn(),
+  isAuthenticated: vi.fn(() => true),
+  subscribeAuth: vi.fn(() => () => undefined),
 }));
 
 vi.mock('../../api/client', () => ({
@@ -40,7 +42,9 @@ vi.mock('../../utils', async (importOriginal) => {
 });
 
 import { api } from '../../api/client';
+import { isAuthenticated } from '../../lib/auth';
 const mockGet = vi.mocked(api.get);
+const mockIsAuthenticated = vi.mocked(isAuthenticated);
 
 const eventData = {
   ...makeEvent({
@@ -148,5 +152,48 @@ describe('EventDetail', () => {
     await waitFor(() => screen.getByRole('button', { name: /back/i }));
     await userEvent.click(screen.getByRole('button', { name: /back/i }));
     expect(mockNavigate).toHaveBeenCalledWith(-1);
+  });
+
+  it('renders feedback buttons when authenticated', async () => {
+    mockIsAuthenticated.mockReturnValue(true);
+    mockGet.mockResolvedValueOnce(eventData);
+    renderWithProviders(<EventDetail />, { route: '/events/1', pathPattern: '/events/:id' });
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Like' })).toBeInTheDocument());
+  });
+
+  describe('logged out', () => {
+    beforeEach(() => {
+      mockIsAuthenticated.mockReturnValue(false);
+    });
+    afterEach(() => {
+      mockIsAuthenticated.mockReturnValue(true);
+    });
+
+    it('renders event content with no redirect and no feedback buttons', async () => {
+      mockGet.mockResolvedValueOnce(eventData);
+      renderWithProviders(<EventDetail />, { route: '/events/1', pathPattern: '/events/:id' });
+      await waitFor(() => expect(screen.getByText('Test Concert')).toBeInTheDocument());
+      expect(screen.queryByRole('button', { name: 'Like' })).not.toBeInTheDocument();
+    });
+
+    it('switching locale does not call api.patch', async () => {
+      mockGet.mockResolvedValueOnce(eventData);
+      renderWithProviders(<EventDetail />, { route: '/events/1', pathPattern: '/events/:id' });
+      await waitFor(() => expect(screen.getByText('Test Concert')).toBeInTheDocument());
+      const localeButton = screen.getByRole('button', { name: 'EN' });
+      await userEvent.click(localeButton);
+      const etOption = await screen.findByText('ET');
+      await userEvent.click(etOption);
+      expect(api.patch).not.toHaveBeenCalled();
+    });
+
+    it('clicking tickets link does not call trackExternalClick (avoids 401 redirect)', async () => {
+      const { trackExternalClick } = await import('../../utils');
+      mockGet.mockResolvedValueOnce(eventData);
+      renderWithProviders(<EventDetail />, { route: '/events/1', pathPattern: '/events/:id' });
+      await waitFor(() => screen.getByRole('link', { name: /ticket/i }));
+      await userEvent.click(screen.getByRole('link', { name: /ticket/i }));
+      expect(trackExternalClick).not.toHaveBeenCalled();
+    });
   });
 });

@@ -67,7 +67,7 @@ export default function App() {
             />
             <Route
               path="/events/:id"
-              element={<Protected><EventDetail /></Protected>}
+              element={<EventDetail />}
             />
             <Route
               path="/settings"
