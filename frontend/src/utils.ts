@@ -64,6 +64,17 @@ export function trackExternalClick(eventId: number): void {
   api.post('/feedback', { event_id: eventId, signal: 'click_external' }).catch(() => undefined);
 }
 
+/** Copy text to the clipboard. Returns true on success, false if the
+ * clipboard API is unavailable or blocked (caller surfaces the failure). */
+export async function copyToClipboard(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function categoryGradient(categories: string[]): string {
   const key = categories[0]?.toLowerCase().replace(/\s+/g, '_') ?? '';
   return CATEGORY_GRADIENTS[key] ?? FALLBACK_GRADIENT;

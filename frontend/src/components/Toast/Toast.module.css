@@ -1,0 +1,27 @@
+/* ── Toast (fixed, always visible regardless of scroll) ── */
+.toast {
+  position: fixed;
+  top: var(--space-9);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: var(--z-toast);
+  padding: var(--space-0-6) var(--space-1-25);
+  border-radius: var(--radius);
+  font-size: var(--fs-sm);
+  text-align: center;
+  box-shadow: var(--shadow-card);
+}
+
+.toastSuccess {
+  composes: toast;
+  background: var(--success-faint);
+  border: 1px solid var(--success-border);
+  color: var(--success);
+}
+
+.toastError {
+  composes: toast;
+  background: var(--danger-faint);
+  border: 1px solid var(--danger-border);
+  color: var(--danger);
+}

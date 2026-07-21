@@ -72,6 +72,34 @@
   letter-spacing: var(--tracking-wide);
 }
 
+.shareFab {
+  position: absolute;
+  top: var(--space-3);
+  right: calc(var(--space-5) + var(--space-3));
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-0-2);
+  background: var(--bg-overlay-soft);
+  backdrop-filter: blur(var(--blur-chip));
+  color: var(--accent-light);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-pill);
+  letter-spacing: var(--tracking-wide);
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.shareFab:hover {
+  background: var(--accent-hover-bg);
+}
+
+.shareFabIcon {
+  font-size: var(--fs-icon);
+  line-height: 1;
+}
+
 /* ─── Content ─────────────────────────────────────────────────────────────── */
 
 .main {

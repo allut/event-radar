@@ -5,11 +5,13 @@ import { api, ApiError } from '../../api/client';
 import { getLocale } from '../../lib/auth';
 import { useLocaleMutation } from '../../hooks/useLocaleMutation';
 import { useLogout } from '../../hooks/useLogout';
-import { AUTH_REDIRECT_DELAY_MS, PERSONAS, SAVE_MSG_CLEAR_DELAY_MS, PERSONA_PRIMARY_WEIGHT_THRESHOLD, QUERY_KEYS } from '../../constants';
+import { useToast } from '../../hooks/useToast';
+import { AUTH_REDIRECT_DELAY_MS, PERSONAS, PERSONA_PRIMARY_WEIGHT_THRESHOLD, QUERY_KEYS } from '../../constants';
 import { cx } from '../../utils';
 import { t, personaName } from '../../i18n';
 import LocaleSelector from '../../components/LocaleSelector';
 import PageState from '../../components/PageState';
+import Toast from '../../components/Toast';
 import Toggle from '../../components/Toggle';
 import TopBar from '../../components/TopBar';
 import styles from './Settings.module.css';
@@ -30,9 +32,9 @@ interface SettingsData {
   personas: PersonaEntry[];
 }
 
-type Toast = { status: 'idle' } | { status: 'success' | 'error'; message: string };
+type ToastState = { status: 'idle' } | { status: 'success' | 'error'; message: string };
 
-const TOAST_IDLE: Toast = { status: 'idle' };
+const TOAST_IDLE: ToastState = { status: 'idle' };
 
 export default function Settings() {
   const navigate = useNavigate();
@@ -44,19 +46,15 @@ export default function Settings() {
     queryFn: () => api.get<SettingsData>('/users/me'),
   });
 
-  const [saveToast, setSaveToast] = useState<Toast>(TOAST_IDLE);
-  const [logoutToast, setLogoutToast] = useState<Toast>(TOAST_IDLE);
+  const { toast: saveToast, showToast: showSaveToast } = useToast();
+  const [logoutToast, setLogoutToast] = useState<ToastState>(TOAST_IDLE);
 
   function showSaved(currentLocale: string) {
-    setSaveToast({ status: 'success', message: t('saved', currentLocale) });
-    setTimeout(() => setSaveToast(TOAST_IDLE), SAVE_MSG_CLEAR_DELAY_MS);
+    showSaveToast('success', t('saved', currentLocale));
   }
 
   function showSaveError(err: unknown, currentLocale: string) {
-    setSaveToast({
-      status: 'error',
-      message: err instanceof ApiError ? err.message : t('save_failed', currentLocale),
-    });
+    showSaveToast('error', err instanceof ApiError ? err.message : t('save_failed', currentLocale));
   }
 
   const { locale, handleLocaleChange, isPending: localePending } = useLocaleMutation(
@@ -117,8 +115,7 @@ export default function Settings() {
 
   return (
     <div className={styles.page}>
-      {saveToast.status === 'success' && <div className={styles.toastSuccess} role="status">{saveToast.message}</div>}
-      {saveToast.status === 'error' && <div className={styles.toastError} role="alert">{saveToast.message}</div>}
+      {saveToast.status !== 'idle' && <Toast status={saveToast.status} message={saveToast.message} />}
 
       <TopBar locale={locale} onLocaleChange={handleLocaleChange} onLogout={handleLogout} localeDisabled={localePending} />
 

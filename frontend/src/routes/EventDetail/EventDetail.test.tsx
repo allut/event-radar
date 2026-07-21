@@ -154,6 +154,37 @@ describe('EventDetail', () => {
     expect(mockNavigate).toHaveBeenCalledWith(-1);
   });
 
+  it('renders share button when authenticated', async () => {
+    mockGet.mockResolvedValueOnce(eventData);
+    renderWithProviders(<EventDetail />, { route: '/events/1', pathPattern: '/events/:id' });
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Share' })).toBeInTheDocument());
+  });
+
+  it('does not copy or toast when user cancels the native share sheet', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    const share = vi.fn().mockRejectedValue(new DOMException('cancelled', 'AbortError'));
+    Object.assign(navigator, { clipboard: { writeText }, share });
+    mockGet.mockResolvedValueOnce(eventData);
+    renderWithProviders(<EventDetail />, { route: '/events/1', pathPattern: '/events/:id' });
+    await waitFor(() => screen.getByRole('button', { name: 'Share' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Share' }));
+    await waitFor(() => expect(share).toHaveBeenCalled());
+    expect(writeText).not.toHaveBeenCalled();
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    delete (navigator as { share?: unknown }).share;
+  });
+
+  it('copies link and shows toast when navigator.share is unavailable', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+    mockGet.mockResolvedValueOnce(eventData);
+    renderWithProviders(<EventDetail />, { route: '/events/1', pathPattern: '/events/:id' });
+    await waitFor(() => screen.getByRole('button', { name: 'Share' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Share' }));
+    expect(writeText).toHaveBeenCalledWith(window.location.href);
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Link copied'));
+  });
+
   it('renders feedback buttons when authenticated', async () => {
     mockIsAuthenticated.mockReturnValue(true);
     mockGet.mockResolvedValueOnce(eventData);
@@ -174,6 +205,12 @@ describe('EventDetail', () => {
       renderWithProviders(<EventDetail />, { route: '/events/1', pathPattern: '/events/:id' });
       await waitFor(() => expect(screen.getByText('Test Concert')).toBeInTheDocument());
       expect(screen.queryByRole('button', { name: 'Like' })).not.toBeInTheDocument();
+    });
+
+    it('renders share button even when signed out', async () => {
+      mockGet.mockResolvedValueOnce(eventData);
+      renderWithProviders(<EventDetail />, { route: '/events/1', pathPattern: '/events/:id' });
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Share' })).toBeInTheDocument());
     });
 
     it('switching locale does not call api.patch', async () => {
