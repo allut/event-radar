@@ -166,7 +166,6 @@ event-radar/
 │       └── i18n.ts          # i18n helpers
 ├── shared/                   # cross-stack source of truth (i18n, personas, config, calendar)
 ├── scripts/generate_shared.py# regenerates the _generated/ files in both stacks
-├── plan.md                   # authoritative product/architecture spec
 └── render.yaml               # Render deployment (backend web service)
 ```
 
@@ -275,5 +274,4 @@ Production runs entirely on free tiers, split across three services:
 
 ## Documentation
 
-- **[plan.md](plan.md)** — the authoritative product and architecture specification (data model, pipeline, scoring formula, roadmap).
 - **[CLAUDE.md](CLAUDE.md)** — engineering conventions and codebase guidance.

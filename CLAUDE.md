@@ -6,8 +6,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Event Radar** is an AI-powered event discovery platform for Tallinn, Estonia. It ingests events from multiple sources, deduplicates and classifies them via LLM, then delivers a personalized "Daily 5" curated feed per user. Days 1–20 complete. Day 21 = soft launch (pending E2E QA).
 
-The authoritative spec is `plan.md`.
-
 ## Commands
 
 ```bash

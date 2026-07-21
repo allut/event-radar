@@ -193,7 +193,7 @@ function toDateStr(d: Date): string {
 }
 
 /** Resolve a date preset against the browser's local clock (backend stays
- * stateless — see plan.md). Uses local date components, not toISOString(),
+ * stateless). Uses local date components, not toISOString(),
  * so the resolved day never shifts across a UTC boundary. */
 export function datePresetRange(preset: DatePreset): { from: string | null; to: string | null } {
   if (preset === 'any') return { from: null, to: null };
