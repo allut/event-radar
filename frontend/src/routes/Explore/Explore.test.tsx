@@ -268,8 +268,14 @@ describe('Explore', () => {
     await waitFor(
       () => {
         const calls = mockGet.mock.calls.map((c) => c[0] as string);
-        const exploreCall = calls.find((c) => c.startsWith('/explore') && c.includes('q=jazz'));
-        expect(exploreCall).toBeDefined();
+        // Assert on the *final* committed /explore query, not the first q=jazz
+        // call. Under load the debounce may not coalesce the typed text and the
+        // mid-debounce chip toggle into one window, emitting a transient q=jazz
+        // call before the narrowed category lands. "No clobber" is a property
+        // of the settled query, so check the last committed call.
+        const exploreCalls = calls.filter((c) => c.startsWith('/explore'));
+        const exploreCall = exploreCalls[exploreCalls.length - 1];
+        expect(exploreCall).toContain('q=jazz');
         expect(exploreCall).toMatch(/category=/);
         expect(exploreCall).not.toMatch(/category=[^&]*\bmusic\b/);
       },
