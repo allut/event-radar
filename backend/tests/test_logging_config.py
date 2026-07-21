@@ -8,7 +8,11 @@ import pytest
 
 from app import logging_config
 from app.config import settings
-from app.constants import LOG_FILE_NAME, LOG_FRAMEWORK_LOGGER_NAMES
+from app.constants import (
+    LOG_FILE_NAME,
+    LOG_FRAMEWORK_LOGGER_NAMES,
+    LOG_QUIET_LOGGER_NAMES,
+)
 from app.logging_config import (
     HttpLogShipHandler,
     JsonLogFormatter,
@@ -33,6 +37,9 @@ def _restore_logging():
         )
         for name in LOG_FRAMEWORK_LOGGER_NAMES
     }
+    quiet_state = {
+        name: logging.getLogger(name).level for name in LOG_QUIET_LOGGER_NAMES
+    }
 
     yield
 
@@ -44,6 +51,8 @@ def _restore_logging():
         logger.handlers[:] = handlers
         logger.setLevel(level)
         logger.propagate = propagate
+    for name, level in quiet_state.items():
+        logging.getLogger(name).setLevel(level)
 
 
 def _make_record(msg: str = "hello", exc_info=None) -> logging.LogRecord:
@@ -175,6 +184,24 @@ def test_prod_with_ship_url_starts_queue_listener(monkeypatch) -> None:
     ]
     assert len(queue_handlers) == 1
     assert logging_config._queue_listener is not None
+
+
+def test_ship_mode_silences_httpx_httpcore(monkeypatch) -> None:
+    # httpx/httpcore's own per-request INFO lines would otherwise get shipped,
+    # and the ship POST is itself an httpx request — a self-amplifying loop.
+    monkeypatch.setattr(settings, "APP_ENV", "production")
+    monkeypatch.setattr(settings, "LOG_SHIP_URL", "https://logs.example.com/ingest")
+    monkeypatch.setattr(settings, "LOG_SHIP_TOKEN", "secret-token")
+
+    configure_logging()
+
+    assert logging.getLogger("httpx").level == logging.WARNING
+    assert logging.getLogger("httpcore").level == logging.WARNING
+
+    record = _make_record("HTTP Request: POST https://api.axiom.co/ingest")
+    record.name = "httpx"
+    assert not logging.getLogger("httpx").isEnabledFor(logging.INFO)
+    assert record.levelno < logging.getLogger("httpx").level
 
 
 def test_http_log_ship_handler_emit_posts_json_with_bearer(monkeypatch) -> None:
