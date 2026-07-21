@@ -21,6 +21,7 @@ alembic upgrade head          # apply migrations
 uvicorn app.main:app --reload # dev server (port 8000)
 pytest                        # run all tests
 pytest tests/path/test_foo.py::TestClass::test_name  # single test
+pytest --cov --cov-report=term-missing   # tests + coverage report (config: backend/.coveragerc)
 
 # Dev tooling (pip install -r requirements-dev.txt)
 python -m mypy app             # type-check (mypy not on PATH — always invoke via `python -m mypy`)

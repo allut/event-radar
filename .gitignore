@@ -52,6 +52,7 @@ pip-delete-this-directory.txt
 node_modules/
 frontend/dist/
 frontend/build/
+frontend/coverage/
 .vite/
 
 # Vite convention: anything ending in .local is gitignored
