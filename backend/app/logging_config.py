@@ -61,7 +61,10 @@ class HttpLogShipHandler(logging.Handler):
             body = self.format(record)
             self._client.post(
                 settings.LOG_SHIP_URL,
-                content=body,
+                # Axiom's ingest endpoint expects a JSON array of events, not a
+                # bare object; wrapping one record keeps the handler a valid
+                # array-batch POST (also accepted by other JSON drains).
+                content=f"[{body}]",
                 headers={
                     "Content-Type": "application/json",
                     "Authorization": f"Bearer {settings.LOG_SHIP_TOKEN}",

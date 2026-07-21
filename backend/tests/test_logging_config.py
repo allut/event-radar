@@ -197,7 +197,8 @@ def test_http_log_ship_handler_emit_posts_json_with_bearer(monkeypatch) -> None:
     assert captured["url"] == "https://logs.example.com/ingest"
     assert captured["headers"]["Authorization"] == "Bearer secret-token"
     payload = json.loads(captured["content"])
-    assert payload["msg"] == "shipped"
+    assert isinstance(payload, list)
+    assert payload[0]["msg"] == "shipped"
 
 
 def test_http_log_ship_handler_swallows_network_errors(monkeypatch) -> None:
