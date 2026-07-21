@@ -66,7 +66,9 @@ export default function Onboarding() {
   return (
     <div className={styles.page}>
       <header className={styles.topBar}>
-        <Link to="/settings" className={styles.back}>{t('back', locale)}</Link>
+        <Link to="/settings" className={styles.back}>
+          <span aria-hidden>←</span> {t('back', locale)}
+        </Link>
 
         <Link to="/" className={styles.logoWrap}>
           <span className={styles.radar} aria-hidden>◉</span>

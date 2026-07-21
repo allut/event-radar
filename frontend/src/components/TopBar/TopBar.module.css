@@ -12,6 +12,34 @@
   z-index: var(--z-sticky);
 }
 
+.left {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  grid-column: 1;
+  min-width: 0;
+}
+
+.backBtn {
+  composes: btnOutline from '../shared/Button.module.css';
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-0-3);
+  font-size: var(--fs-sm);
+  padding: var(--space-0-45) var(--space-0-875);
+  line-height: normal;
+  cursor: pointer;
+  letter-spacing: var(--tracking-normal);
+}
+
+/* The "←" glyph isn't covered by the display font, so its "normal" line-height
+   resolves against a taller fallback font. Pinning just this icon's own
+   line-height keeps it from being the tallest flex item and inflating
+   .backBtn past its plain-text siblings (.authBtn, the locale trigger). */
+.backIcon {
+  line-height: 1;
+}
+
 .logoWrap {
   display: flex;
   align-items: center;
@@ -46,6 +74,7 @@
   align-items: center;
   justify-content: center;
   gap: var(--space-1);
+  grid-column: 2;
 }
 
 .navLink {
@@ -69,18 +98,26 @@
   color: var(--accent-light);
 }
 
-.topActions {
+.actions {
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: var(--space-0-625);
   flex-shrink: 0;
+  grid-column: 3;
 }
 
-.logoutBtn {
+.authBtn {
   composes: btnOutline from '../shared/Button.module.css';
   padding: var(--space-0-45) var(--space-0-875);
   font-size: var(--fs-sm);
+  line-height: normal;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.localeWrap {
+  display: contents;
 }
 
 .mobileMenuWrap {
@@ -93,8 +130,16 @@
     grid-template-columns: 1fr auto;
   }
 
-  .nav,
-  .topActions {
+  .nav {
+    display: none;
+  }
+
+  .actions {
+    grid-column: 2;
+  }
+
+  .topBar:not(.minimal) .actions > .authBtn,
+  .topBar:not(.minimal) .actions > .localeWrap {
     display: none;
   }
 

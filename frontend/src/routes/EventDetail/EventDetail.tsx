@@ -5,10 +5,11 @@ import { t, ti } from '../../i18n';
 import { buildMapsUrl, categoryGradient, cx, formatEventDateTime, formatHourMinute, formatPrice, safeUrl, sanitizeHtml, trackExternalClick } from '../../utils';
 import { useAuth } from '../../hooks/useAuth';
 import { useLocaleMutation } from '../../hooks/useLocaleMutation';
+import { useLogout } from '../../hooks/useLogout';
 import { type EventData } from '../../components/EventCard';
 import FeedbackButtonRow from '../../components/FeedbackButtonRow';
-import LocaleSelector from '../../components/LocaleSelector';
 import PageState from '../../components/PageState';
+import TopBar from '../../components/TopBar';
 import { useFeedback } from '../../hooks/useFeedback';
 import { QUERY_KEYS } from '../../constants';
 import styles from './EventDetail.module.css';
@@ -22,6 +23,7 @@ export default function EventDetail() {
   const navigate = useNavigate();
   const authed = useAuth();
   const { locale, handleLocaleChange } = useLocaleMutation([QUERY_KEYS.event, id]);
+  const handleLogout = useLogout();
 
   const { data, isLoading, isError } = useQuery({
     queryKey: [QUERY_KEYS.event, id],
@@ -64,16 +66,13 @@ export default function EventDetail() {
 
   return (
     <div className={styles.page}>
-      <header className={styles.topBar}>
-        <button className={styles.backBtn} onClick={() => navigate(-1)} aria-label={t('back', locale)}>
-          {t('back', locale)}
-        </button>
-        <Link to="/" className={styles.logoWrap}>
-          <span className={styles.radar} aria-hidden>◉</span>
-          <span className={styles.brand}>{t('brand', locale)}</span>
-        </Link>
-        <LocaleSelector locale={locale} onChange={handleLocaleChange} ariaLabel={t('section_language', locale)} />
-      </header>
+      <TopBar
+        locale={locale}
+        onLocaleChange={handleLocaleChange}
+        onLogout={handleLogout}
+        onBack={() => navigate(-1)}
+        authed={authed}
+      />
 
       <main className={styles.main}>
         <div className={styles.hero}>
