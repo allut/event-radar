@@ -2,7 +2,7 @@
 
 import logging
 import secrets
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
@@ -132,7 +132,7 @@ async def admin_dedup_run(request: Request) -> dict:
     return await run_admin_job("Dedup", dedup_pass_drain_now())
 
 
-def _serialize_dedup_groups(rows) -> dict[int, list[dict]]:
+def _serialize_dedup_groups(rows: Sequence[Event]) -> dict[int, list[dict]]:
     """Group event rows by dedup_group_id into response dicts."""
     groups: dict[int, list[dict]] = {}
     for e in rows:

@@ -3,6 +3,7 @@ import { renderHook, act, waitFor } from '@testing-library/react';
 import { useLocaleMutation } from './useLocaleMutation';
 import { makeQueryWrapper } from '../test/utils';
 import { setToken, clearToken, getLocale } from '../lib/auth';
+import { QUERY_KEYS } from '../constants';
 
 vi.mock('../api/client', () => ({
   api: { patch: vi.fn().mockResolvedValue(undefined) },
@@ -29,7 +30,7 @@ describe('useLocaleMutation', () => {
     const onSuccess = vi.fn();
     const { wrapper, invalidateSpy } = makeWrapper();
     const { result } = renderHook(
-      () => useLocaleMutation(['feed'], { onSuccess }),
+      () => useLocaleMutation([QUERY_KEYS.feed], { onSuccess }),
       { wrapper },
     );
 
@@ -39,7 +40,7 @@ describe('useLocaleMutation', () => {
     await waitFor(() => expect(onSuccess).toHaveBeenCalled());
     expect(mockPatch).toHaveBeenCalledWith('/users/me', { locale: 'en' });
     expect(getLocale()).toBe('en');
-    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['feed'] });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: [QUERY_KEYS.feed] });
   });
 
   it('authenticated error: reverts to stored locale and fires onError', async () => {
@@ -48,7 +49,7 @@ describe('useLocaleMutation', () => {
     const onError = vi.fn();
     const { wrapper } = makeWrapper();
     const { result } = renderHook(
-      () => useLocaleMutation(['feed'], { onError }),
+      () => useLocaleMutation([QUERY_KEYS.feed], { onError }),
       { wrapper },
     );
 
@@ -64,7 +65,7 @@ describe('useLocaleMutation', () => {
     const onSuccess = vi.fn();
     const { wrapper, invalidateSpy } = makeWrapper();
     const { result } = renderHook(
-      () => useLocaleMutation(['event'], { onSuccess }),
+      () => useLocaleMutation([QUERY_KEYS.event], { onSuccess }),
       { wrapper },
     );
 
@@ -72,7 +73,7 @@ describe('useLocaleMutation', () => {
 
     expect(mockPatch).not.toHaveBeenCalled();
     expect(getLocale()).toBe('et');
-    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['event'] });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: [QUERY_KEYS.event] });
     expect(onSuccess).toHaveBeenCalled();
   });
 });
