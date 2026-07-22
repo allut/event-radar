@@ -62,6 +62,6 @@ describe('Landing', () => {
     await userEvent.type(input, 'me@example.com');
     await userEvent.click(screen.getAllByRole('button', { name: /Get Daily 5/i })[0]);
     await waitFor(() => expect(screen.getByText(/Check your inbox/i)).toBeInTheDocument());
-    expect(mockPost).toHaveBeenCalledWith('/auth/request-link', { email: 'me@example.com' });
+    expect(mockPost).toHaveBeenCalledWith('/auth/request-link', { email: 'me@example.com', locale: 'en' });
   });
 });

@@ -63,4 +63,17 @@ describe('MobileMenu', () => {
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(screen.queryByText('Daily 5')).not.toBeInTheDocument();
   });
+
+  it('hides nav links but keeps locale + sign out when showNav is false', () => {
+    renderWithProviders(
+      <MobileMenu locale="en" onLocaleChange={vi.fn()} onLogout={vi.fn()} showNav={false} />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
+
+    expect(screen.queryByText('Daily 5')).not.toBeInTheDocument();
+    expect(screen.queryByText('Explore')).not.toBeInTheDocument();
+    expect(screen.getByText('Sign out')).toBeInTheDocument();
+    expect(screen.getByText('ET')).toBeInTheDocument();
+  });
 });

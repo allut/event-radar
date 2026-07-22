@@ -93,6 +93,10 @@
   font-size: var(--fs-sm);
 }
 
+.localeControl {
+  align-self: flex-start;
+}
+
 .repickBtn {
   composes: btnOutline from '../../components/shared/Button.module.css';
   align-self: flex-start;

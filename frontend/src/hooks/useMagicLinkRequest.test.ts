@@ -31,7 +31,7 @@ describe('useMagicLinkRequest', () => {
     act(() => result.current.setEmail('  User@Example.COM '));
     await act(async () => { await result.current.submit(noSubmit); });
 
-    expect(mockPost).toHaveBeenCalledWith('/auth/request-link', { email: 'user@example.com' });
+    expect(mockPost).toHaveBeenCalledWith('/auth/request-link', { email: 'user@example.com', locale: 'en' });
     expect(result.current.state).toBe('success');
   });
 

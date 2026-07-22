@@ -387,3 +387,92 @@ class TestDetectLocale:
             await request_magic_link(body, make_request("et-EE,et;q=0.9"), mock_db)
 
         assert created_user is not None and created_user.locale == "et"
+
+
+class TestRequestLinkBodyLocale:
+    @pytest.mark.asyncio
+    async def test_body_locale_used_for_email(self, mock_db, make_request, make_user):
+        from app.routers.auth import request_magic_link, RequestLinkBody
+
+        existing_user = make_user(user_id=5, locale="en")
+        mock_db.scalar.side_effect = [existing_user, None]
+
+        with patch("app.routers.auth.send_magic_link", new_callable=AsyncMock) as mock_send:
+            body = RequestLinkBody(email="existing@example.com", locale="et")
+            await request_magic_link(body, make_request(), mock_db)
+
+        mock_send.assert_called_once()
+        assert mock_send.call_args.args[2] == "et"
+
+    @pytest.mark.asyncio
+    async def test_invalid_body_locale_falls_back_to_user_locale(
+        self, mock_db, make_request, make_user
+    ):
+        from app.routers.auth import request_magic_link, RequestLinkBody
+
+        existing_user = make_user(user_id=5, locale="ru")
+        mock_db.scalar.side_effect = [existing_user, None]
+
+        with patch("app.routers.auth.send_magic_link", new_callable=AsyncMock) as mock_send:
+            body = RequestLinkBody(email="existing@example.com", locale="xx")
+            await request_magic_link(body, make_request(), mock_db)
+
+        assert mock_send.call_args.args[2] == "ru"
+
+    @pytest.mark.asyncio
+    async def test_absent_body_locale_falls_back_to_user_locale(
+        self, mock_db, make_request, make_user
+    ):
+        from app.routers.auth import request_magic_link, RequestLinkBody
+
+        existing_user = make_user(user_id=5, locale="ru")
+        mock_db.scalar.side_effect = [existing_user, None]
+
+        with patch("app.routers.auth.send_magic_link", new_callable=AsyncMock) as mock_send:
+            body = RequestLinkBody(email="existing@example.com")
+            await request_magic_link(body, make_request(), mock_db)
+
+        assert mock_send.call_args.args[2] == "ru"
+
+    @pytest.mark.asyncio
+    async def test_new_user_seeded_from_body_locale_over_header(
+        self, mock_db, make_request
+    ):
+        from app.routers.auth import request_magic_link, RequestLinkBody
+
+        mock_db.scalar.side_effect = [None, None]
+
+        created_user = None
+
+        def _capture_add(obj):
+            nonlocal created_user
+            if hasattr(obj, "locale"):
+                created_user = obj
+                obj.id = 99
+
+        mock_db.add.side_effect = _capture_add
+        mock_db.flush = AsyncMock()
+
+        with patch("app.routers.auth.send_magic_link", new_callable=AsyncMock) as mock_send:
+            body = RequestLinkBody(email="newuser2@example.com", locale="ru")
+            await request_magic_link(body, make_request("en-US,en;q=0.9"), mock_db)
+
+        assert created_user is not None and created_user.locale == "ru"
+        assert mock_send.call_args.args[2] == "ru"
+
+    @pytest.mark.asyncio
+    async def test_existing_user_locale_not_overwritten_by_body(
+        self, mock_db, make_request, make_user
+    ):
+        from app.routers.auth import request_magic_link, RequestLinkBody
+
+        existing_user = make_user(user_id=5, locale="en")
+        mock_db.scalar.side_effect = [existing_user, None]
+
+        with patch("app.routers.auth.send_magic_link", new_callable=AsyncMock):
+            body = RequestLinkBody(email="existing@example.com", locale="et")
+            await request_magic_link(body, make_request(), mock_db)
+
+        # The email sends in the requested locale, but the stored user row
+        # is never mutated by this unauthenticated endpoint.
+        assert existing_user.locale == "en"

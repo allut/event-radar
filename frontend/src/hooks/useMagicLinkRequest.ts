@@ -18,7 +18,7 @@ export function useMagicLinkRequest(locale: string) {
     setState('loading');
     setErrorMsg('');
     try {
-      await api.post('/auth/request-link', { email: trimmed.toLowerCase() });
+      await api.post('/auth/request-link', { email: trimmed.toLowerCase(), locale });
       setState('success');
     } catch (err) {
       setErrorMsg(err instanceof ApiError ? err.message : t('generic_error', locale));

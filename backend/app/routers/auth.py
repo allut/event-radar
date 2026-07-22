@@ -53,6 +53,7 @@ def _detect_locale(accept_language: str) -> str:
 
 class RequestLinkBody(BaseModel):
     email: EmailStr
+    locale: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -95,7 +96,9 @@ async def get_current_user(
     return user
 
 
-async def _get_or_create_user(db: AsyncSession, email: str, request: Request) -> User:
+async def _get_or_create_user(
+    db: AsyncSession, email: str, request: Request, requested_locale: str | None
+) -> User:
     """Look up (or insert) the user for a magic-link request.
 
     Creates a User row before the email is ever verified, so an
@@ -103,10 +106,18 @@ async def _get_or_create_user(db: AsyncSession, email: str, request: Request) ->
     addresses (mitigated by RATE_LIMIT_AUTH_REQUEST_LINK + the per-email
     cooldown, not eliminated). The distinct greppable log marker lets an
     operator alert on abnormal unverified-account growth via shipped logs.
+
+    A new user's locale is seeded from the requested (already-validated)
+    locale when present, else detected from Accept-Language. An existing
+    user's stored locale is never overwritten here — this endpoint is
+    unauthenticated, so mutating an existing account's locale from it would
+    be an abuse vector.
     """
     user = await db.scalar(select(User).where(User.email == email))
     if user is None:
-        locale = _detect_locale(request.headers.get("Accept-Language", ""))
+        locale = requested_locale or _detect_locale(
+            request.headers.get("Accept-Language", "")
+        )
         user = User(email=email, locale=locale)
         db.add(user)
         await db.flush()  # populate user.id
@@ -152,7 +163,9 @@ async def request_magic_link(
 ) -> dict:
     """Request a magic sign-in link. Always returns 200 to prevent user enumeration."""
     email = body.email.lower()
-    user = await _get_or_create_user(db, email, request)
+    requested_locale = body.locale if body.locale in VALID_LOCALES else None
+    user = await _get_or_create_user(db, email, request, requested_locale)
+    email_locale = requested_locale or user.locale
 
     if await _recent_unused_link_exists(db, user.id):
         return {
@@ -171,7 +184,7 @@ async def request_magic_link(
     await db.commit()
 
     try:
-        await send_magic_link(email, signed_token, user.locale)
+        await send_magic_link(email, signed_token, email_locale)
     except Exception:
         log.exception("Failed to send magic link to %s", mask_email(email))
         # Do not surface email errors to caller — link is in DB, user can retry.

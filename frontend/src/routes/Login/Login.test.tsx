@@ -39,7 +39,7 @@ describe('Login', () => {
     renderWithProviders(<Login />);
     await userEvent.type(screen.getByRole('textbox', { name: /email/i }), 'User@Example.COM');
     await userEvent.click(screen.getByRole('button', { name: /send/i }));
-    await waitFor(() => expect(mockPost).toHaveBeenCalledWith('/auth/request-link', { email: 'user@example.com' }));
+    await waitFor(() => expect(mockPost).toHaveBeenCalledWith('/auth/request-link', { email: 'user@example.com', locale: 'en' }));
   });
 
   it('shows error message on ApiError', async () => {

@@ -4,62 +4,6 @@
   flex-direction: column;
 }
 
-.topBar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-0-6);
-  padding: var(--space-1-25) var(--space-6);
-  border-bottom: 1px solid var(--border);
-  background: var(--bg-overlay);
-  backdrop-filter: blur(var(--blur-overlay));
-  position: sticky;
-  top: 0;
-  z-index: var(--z-sticky);
-}
-
-.back {
-  font-size: var(--fs-sm);
-  color: var(--text-muted);
-  text-decoration: none;
-  letter-spacing: var(--tracking-normal);
-  transition: color var(--transition);
-}
-
-.back:hover {
-  color: var(--accent);
-}
-
-.logoWrap {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  text-decoration: none;
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
-}
-
-.logoWrap:hover .brand {
-  color: var(--text);
-}
-
-.logoWrap:hover .radar {
-  color: var(--accent-light);
-}
-
-.radar {
-  color: var(--accent);
-  font-size: var(--fs-sm);
-}
-
-.brand {
-  font-size: var(--fs-sm);
-  font-weight: 500;
-  color: var(--text-muted);
-  letter-spacing: var(--tracking-snug);
-}
-
 .main {
   flex: 1;
   max-width: 720px;
