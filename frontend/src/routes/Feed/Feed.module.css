@@ -58,6 +58,14 @@
   border-top: var(--rule);
 }
 
+.staleNotice {
+  composes: card cardAccentTop from '../../components/shared/Card.module.css';
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-4);
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+
 .promo {
   composes: card from '../../components/shared/Card.module.css';
   display: flex;

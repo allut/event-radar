@@ -14,6 +14,7 @@ from app.constants import (
 )
 from app.db import get_db
 from app.models.models import Persona, User, UserPersona
+from app.ranking.score import build_daily_feed_for_user
 from app.rate_limit import limiter
 from app.routers.auth import get_current_user
 
@@ -75,6 +76,11 @@ async def set_persona(
         )
 
     await db.commit()
+
+    try:
+        await build_daily_feed_for_user(db, current_user.id)
+    except Exception:
+        log.exception("initial feed build failed for user %s", current_user.id)
 
     result = [{"slug": body.primary_slug, "weight": PERSONA_PRIMARY_WEIGHT}]
     if body.secondary_slug:

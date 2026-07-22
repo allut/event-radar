@@ -690,7 +690,6 @@ class TestBuildDailyFeedsSeriesCooldown:
             _scalar_result([_user(1)]),        # users
             _scalar_result([]),                # personas
             _scalar_result([]),                # feedback
-            _scalar_result([]),                # today's daily feeds
             _scalar_result([df]),              # cooldown-window feeds
             _scalar_result([ev150]),           # shown events resolved
             _scalar_result([]),                # cached scores
@@ -698,9 +697,10 @@ class TestBuildDailyFeedsSeriesCooldown:
 
         await build_daily_feeds(mock_db)
 
-        added = mock_db.add.call_args.args[0]
-        assert added.user_id == 1
-        assert added.event_ids == [200, 201, 202, 203, 204]  # 100 cooled down, never backfilled
+        upsert_stmt = mock_db.execute.call_args.args[0]
+        compiled = str(upsert_stmt.compile(compile_kwargs={"literal_binds": True}))
+        assert "(1, " in compiled
+        assert "ARRAY[200, 201, 202, 203, 204]" in compiled  # 100 cooled down, never backfilled
 
     async def test_no_recent_history_keeps_series(self, mock_db):
         # Empty cooldown window (e.g. the series last appeared outside it) → the
@@ -714,15 +714,15 @@ class TestBuildDailyFeedsSeriesCooldown:
             _scalar_result([_user(1)]),
             _scalar_result([]),        # personas
             _scalar_result([]),        # feedback
-            _scalar_result([]),        # today's daily feeds
             _scalar_result([]),        # cooldown-window feeds (empty → no shown-events query)
             _scalar_result([]),        # cached scores
         ]
 
         await build_daily_feeds(mock_db)
 
-        added = mock_db.add.call_args.args[0]
-        assert added.event_ids == [100]
+        upsert_stmt = mock_db.execute.call_args.args[0]
+        compiled = str(upsert_stmt.compile(compile_kwargs={"literal_binds": True}))
+        assert "ARRAY[100]" in compiled
 
     async def test_other_users_history_does_not_affect_this_user(self, mock_db):
         # Only user 2 was shown the series; user 1's feed must still include it.
@@ -747,7 +747,6 @@ class TestBuildDailyFeedsSeriesCooldown:
             _scalar_result([_user(1), _user(2)]),    # users
             _scalar_result([]),                      # personas
             _scalar_result([]),                      # feedback
-            _scalar_result([]),                      # today's daily feeds
             _scalar_result([df]),                    # cooldown-window feeds (user 2)
             _scalar_result([ev150]),                 # shown events resolved
             _scalar_result([]),                      # cached scores
@@ -755,17 +754,16 @@ class TestBuildDailyFeedsSeriesCooldown:
 
         await build_daily_feeds(mock_db)
 
-        feeds_by_user = {
-            call.args[0].user_id: call.args[0].event_ids
-            for call in mock_db.add.call_args_list
-        }
+        # Both users' rows are batched into one upsert statement.
+        upsert_stmt = mock_db.execute.call_args.args[0]
+        compiled = str(upsert_stmt.compile(compile_kwargs={"literal_binds": True}))
         # user 1 unaffected by user 2's history — keeps 100 among its top 5
-        assert feeds_by_user[1] == [100, 201, 202, 203, 204]
+        assert "(1, " in compiled and "ARRAY[100, 201, 202, 203, 204]" in compiled
         # user 2 cooled down on 100, but its own fresh pool fills 5 → no backfill needed
-        assert feeds_by_user[2] == [201, 202, 203, 204, 205]
+        assert "(2, " in compiled and "ARRAY[201, 202, 203, 204, 205]" in compiled
 
     async def test_cooldown_query_restricts_to_recent_date_window(self, mock_db):
-        # The cooldown feed query (6th scalars call) must bound feed_date to
+        # The cooldown feed query (5th scalars call) must bound feed_date to
         # [today - DAILY5_SERIES_COOLDOWN_DAYS, today).
         from app.ranking.score import build_daily_feeds
 
@@ -775,14 +773,13 @@ class TestBuildDailyFeedsSeriesCooldown:
             _scalar_result([_user(1)]),
             _scalar_result([]),        # personas
             _scalar_result([]),        # feedback
-            _scalar_result([]),        # today's daily feeds
             _scalar_result([]),        # cooldown-window feeds
             _scalar_result([]),        # cached scores
         ]
 
         await build_daily_feeds(mock_db)
 
-        cooldown_stmt = mock_db.scalars.call_args_list[5].args[0]
+        cooldown_stmt = mock_db.scalars.call_args_list[4].args[0]
         compiled = str(cooldown_stmt.compile(compile_kwargs={"literal_binds": True}))
         assert "daily_feeds.feed_date >=" in compiled
         assert "daily_feeds.feed_date <" in compiled
@@ -808,7 +805,6 @@ class TestBuildDailyFeedsSeriesCooldown:
             _scalar_result([_user(1)]),                 # users
             _scalar_result([]),                          # personas
             _scalar_result([]),                          # feedback
-            _scalar_result([]),                          # today's daily feeds
             _scalar_result([df]),                        # cooldown-window feeds
             _scalar_result([ev150]),                      # shown events resolved
             _scalar_result([]),                          # cached scores
@@ -816,8 +812,9 @@ class TestBuildDailyFeedsSeriesCooldown:
 
         await build_daily_feeds(mock_db)
 
-        added = mock_db.add.call_args.args[0]
-        assert added.event_ids == [1, 2, 3, 4, 5]  # ev5 backfilled in despite cooldown
+        upsert_stmt = mock_db.execute.call_args.args[0]
+        compiled = str(upsert_stmt.compile(compile_kwargs={"literal_binds": True}))
+        assert "ARRAY[1, 2, 3, 4, 5]" in compiled  # ev5 backfilled in despite cooldown
 
     async def test_disliked_cooled_event_not_backfilled(self, mock_db):
         # Same shortfall as above, but the cooled candidate is directly
@@ -844,7 +841,6 @@ class TestBuildDailyFeedsSeriesCooldown:
             _scalar_result([_user(1)]),              # users
             _scalar_result([]),                       # personas
             _scalar_result([_dislike_row(5)]),         # feedback: direct dislike of ev5
-            _scalar_result([]),                       # today's daily feeds
             _scalar_result([df]),                     # cooldown-window feeds
             _scalar_result([ev150]),                   # shown events resolved
             _scalar_result([cached_row]),              # cached scores (ev5 cached)
@@ -852,8 +848,9 @@ class TestBuildDailyFeedsSeriesCooldown:
 
         await build_daily_feeds(mock_db)
 
-        added = mock_db.add.call_args.args[0]
-        assert added.event_ids == [1, 2, 3]  # ev5 excluded, feed stays short — no fabrication
+        upsert_stmt = mock_db.execute.call_args.args[0]
+        compiled = str(upsert_stmt.compile(compile_kwargs={"literal_binds": True}))
+        assert "ARRAY[1, 2, 3]" in compiled  # ev5 excluded, feed stays short — no fabrication
 
     async def test_backfilled_cooled_event_persisted_to_score_cache(self, mock_db):
         # The cooled event that gets backfilled in must still be written to
@@ -875,7 +872,6 @@ class TestBuildDailyFeedsSeriesCooldown:
             _scalar_result([_user(1)]),
             _scalar_result([]),
             _scalar_result([]),
-            _scalar_result([]),
             _scalar_result([df]),
             _scalar_result([ev150]),
             _scalar_result([]),
@@ -883,7 +879,62 @@ class TestBuildDailyFeedsSeriesCooldown:
 
         await build_daily_feeds(mock_db)
 
-        execute_stmt = mock_db.execute.call_args.args[0]
+        # The score upsert executes before the daily-feed upsert — first call.
+        execute_stmt = mock_db.execute.call_args_list[0].args[0]
         compiled = str(execute_stmt.compile(compile_kwargs={"literal_binds": True}))
         assert "user_event_scores" in compiled
         assert "(1, 5," in compiled  # backfilled cooled event (user_id=1, event_id=5) was upserted
+
+
+class TestBuildDailyFeedForUser:
+    async def test_builds_feed_for_single_user_only(self, mock_db):
+        # Onboarding-completion build: scopes the user query to one id and
+        # writes exactly one DailyFeed row, reusing the same candidate
+        # loading / scoring / cooldown / caching pipeline as build_daily_feeds.
+        from app.ranking.score import build_daily_feed_for_user
+
+        ev1 = _feed_event(1, "Concert", "Hall", ["music"])
+        ev2 = _feed_event(2, "Play", "Theater", ["theater"])
+
+        mock_db.scalars.side_effect = [
+            _scalar_result([ev1, ev2]),  # candidate events
+            _scalar_result([_user(7)]),  # users (scoped to user_id=7)
+            _scalar_result([]),  # personas
+            _scalar_result([]),  # feedback
+            _scalar_result([]),  # cooldown-window feeds
+            _scalar_result([]),  # cached scores
+        ]
+
+        result = await build_daily_feed_for_user(mock_db, 7)
+
+        upsert_stmt = mock_db.execute.call_args.args[0]
+        compiled = str(upsert_stmt.compile(compile_kwargs={"literal_binds": True}))
+        assert "(7, " in compiled
+        assert "ARRAY[1, 2]" in compiled
+        assert result["total_users"] == 1
+        assert result["built"] == 1
+        mock_db.commit.assert_awaited_once()
+
+        # The users query must scope to the requested id, not select all users.
+        users_stmt = mock_db.scalars.call_args_list[1].args[0]
+        compiled = str(users_stmt.compile(compile_kwargs={"literal_binds": True}))
+        assert "users.id IN (7)" in compiled
+
+    async def test_no_user_found_returns_empty_summary(self, mock_db):
+        from app.ranking.score import build_daily_feed_for_user
+
+        mock_db.scalars.side_effect = [
+            _scalar_result([]),  # candidate events
+            _scalar_result([]),  # users — none found (e.g. deleted mid-request)
+        ]
+
+        result = await build_daily_feed_for_user(mock_db, 999)
+
+        assert result == {
+            "built": 0,
+            "empty": 0,
+            "total_users": 0,
+            "candidate_events": 0,
+        }
+        mock_db.execute.assert_not_awaited()
+        mock_db.commit.assert_not_awaited()

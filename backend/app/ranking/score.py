@@ -548,7 +548,6 @@ class _FeedBuildContext:
     users: list[User]
     personas_by_user: dict[int, list[tuple[float, dict]]]
     fb_by_user: dict[int, list[UserEventFeedback]]
-    daily_by_user: dict[int, DailyFeed]
     recent_series_by_user: dict[int, set[tuple[str, str]]]
     score_cache: dict[tuple[int, int], float]
 
@@ -599,9 +598,14 @@ async def _load_recent_series_by_user(
 
 
 async def _load_feed_build_context(
-    db: AsyncSession, now: datetime, today
+    db: AsyncSession, now: datetime, today, only_user_ids: list[int] | None = None
 ) -> _FeedBuildContext | None:
-    """Bulk-load candidates plus all per-user data. None when there are no users."""
+    """Bulk-load candidates plus all per-user data. None when there are no users.
+
+    `only_user_ids` scopes the user query to a single user (or a small set) —
+    used by `build_daily_feed_for_user` at onboarding completion. Every
+    downstream lookup already filters by the loaded `user_ids`, so no other
+    change is needed to build a feed for a subset of users."""
     cutoff = now + timedelta(days=DAILY_5_LOOKAHEAD_DAYS)
     event_rows = list(
         (
@@ -619,7 +623,10 @@ async def _load_feed_build_context(
     )
     candidate_event_ids = [e.id for e in event_rows]
 
-    users = list((await db.scalars(select(User))).all())
+    users_query = select(User)
+    if only_user_ids is not None:
+        users_query = users_query.where(User.id.in_(only_user_ids))
+    users = list((await db.scalars(users_query)).all())
     user_ids = [u.id for u in users]
     if not users:
         return None
@@ -655,19 +662,6 @@ async def _load_feed_build_context(
     for fb_row in fb_rows:
         fb_by_user.setdefault(fb_row.user_id, []).append(fb_row)
 
-    # Today's DailyFeed rows: existing -> update; missing -> insert.
-    daily_by_user: dict[int, DailyFeed] = {}
-    df_rows = (
-        await db.scalars(
-            select(DailyFeed).where(
-                DailyFeed.user_id.in_(user_ids),
-                DailyFeed.feed_date == today,
-            )
-        )
-    ).all()
-    for df_row in df_rows:
-        daily_by_user[df_row.user_id] = df_row
-
     recent_series_by_user = await _load_recent_series_by_user(db, user_ids, today)
 
     # Cached scores: the feedback router DELETEs the (user, event) row on
@@ -694,7 +688,6 @@ async def _load_feed_build_context(
         users=users,
         personas_by_user=personas_by_user,
         fb_by_user=fb_by_user,
-        daily_by_user=daily_by_user,
         recent_series_by_user=recent_series_by_user,
         score_cache=score_cache,
     )
@@ -767,6 +760,54 @@ async def _persist_new_scores(db: AsyncSession, new_score_rows: list[dict]) -> N
     await db.execute(stmt)
 
 
+async def _persist_daily_feeds(db: AsyncSession, daily_feed_rows: list[dict]) -> None:
+    """Bulk upsert DailyFeed rows keyed on (user_id, feed_date).
+
+    An ON CONFLICT DO UPDATE — rather than a pre-loaded existing-row lookup
+    plus a plain INSERT — so the synchronous onboarding-completion build
+    (`build_daily_feed_for_user`) racing the 06:00 scheduled `build_daily_feeds`
+    job for the same user resolves atomically at the DB level instead of
+    raising a unique-violation on the `(user_id, feed_date)` constraint that
+    would roll back the whole batch's single commit."""
+    if not daily_feed_rows:
+        return
+    stmt = pg_insert(DailyFeed).values(daily_feed_rows)
+    stmt = stmt.on_conflict_do_update(
+        index_elements=["user_id", "feed_date"],
+        set_={
+            "event_ids": stmt.excluded.event_ids,
+            "built_at": stmt.excluded.built_at,
+        },
+    )
+    await db.execute(stmt)
+
+
+def _build_one_user_feed(
+    user: User,
+    build_ctx: _FeedBuildContext,
+    new_score_rows: list[dict],
+    now: datetime,
+) -> tuple[list[int], int]:
+    """Score and select one user's Daily 5 candidates.
+
+    Returns (event_ids, scores_reused). Persisting the resulting DailyFeed
+    row is the caller's job (see `_persist_daily_feeds`) so callers can batch
+    every user's row into a single upsert statement."""
+    fb_ctx = FeedbackContext.from_orm_rows(list(build_ctx.fb_by_user.get(user.id, [])))
+    scored, cooled_scored, reused = _score_user_candidates(
+        user, build_ctx, fb_ctx, new_score_rows, now
+    )
+
+    top_events = _select_with_backfill(
+        scored,
+        cooled_scored,
+        n=DAILY_5_COUNT,
+        max_per_category=DAILY_5_MAX_PER_CATEGORY,
+        backfill_max_per_category=DAILY_5_BACKFILL_MAX_PER_CATEGORY,
+    )
+    return [e.id for e in top_events], reused
+
+
 async def build_daily_feeds(db: AsyncSession) -> dict:
     """
     Build personalized Daily 5 feeds for all active users.
@@ -788,44 +829,27 @@ async def build_daily_feeds(db: AsyncSession) -> dict:
     built = 0
     empty = 0
     new_score_rows: list[dict] = []
+    daily_feed_rows: list[dict] = []
     scores_reused = 0
 
     for user in build_ctx.users:
-        fb_ctx = FeedbackContext.from_orm_rows(list(build_ctx.fb_by_user.get(user.id, [])))
-        scored, cooled_scored, reused = _score_user_candidates(
-            user, build_ctx, fb_ctx, new_score_rows, now
-        )
+        event_ids, reused = _build_one_user_feed(user, build_ctx, new_score_rows, now)
         scores_reused += reused
-
-        top_events = _select_with_backfill(
-            scored,
-            cooled_scored,
-            n=DAILY_5_COUNT,
-            max_per_category=DAILY_5_MAX_PER_CATEGORY,
-            backfill_max_per_category=DAILY_5_BACKFILL_MAX_PER_CATEGORY,
+        daily_feed_rows.append(
+            {
+                "user_id": user.id,
+                "feed_date": today,
+                "event_ids": event_ids,
+                "built_at": now,
+            }
         )
-        event_ids = [e.id for e in top_events]
-
-        existing = build_ctx.daily_by_user.get(user.id)
-        if existing:
-            existing.event_ids = event_ids
-            existing.built_at = now
-        else:
-            db.add(
-                DailyFeed(
-                    user_id=user.id,
-                    feed_date=today,
-                    event_ids=event_ids,
-                    built_at=now,
-                )
-            )
-
         if event_ids:
             built += 1
         else:
             empty += 1
 
     await _persist_new_scores(db, new_score_rows)
+    await _persist_daily_feeds(db, daily_feed_rows)
     await db.commit()
     return {
         "built": built,
@@ -834,4 +858,39 @@ async def build_daily_feeds(db: AsyncSession) -> dict:
         "candidate_events": len(build_ctx.event_rows),
         "scores_written": len(new_score_rows),
         "scores_reused": scores_reused,
+    }
+
+
+async def build_daily_feed_for_user(db: AsyncSession, user_id: int) -> dict:
+    """Build (or rebuild) today's Daily 5 for one user.
+
+    Called synchronously at onboarding completion so a new user sees a
+    populated feed immediately instead of waiting for the 06:00 job. Reuses
+    the same candidate loading, scoring, series-cooldown, and score-caching
+    logic as `build_daily_feeds` — no duplicated ranking logic. The upsert in
+    `_persist_daily_feeds` means this can safely race the scheduled job for
+    the same user without either write failing."""
+    now = datetime.now(TALLINN_TZ)
+    today = now.date()
+
+    build_ctx = await _load_feed_build_context(db, now, today, only_user_ids=[user_id])
+    if build_ctx is None:
+        return {"built": 0, "empty": 0, "total_users": 0, "candidate_events": 0}
+
+    new_score_rows: list[dict] = []
+    user = build_ctx.users[0]
+    event_ids, reused = _build_one_user_feed(user, build_ctx, new_score_rows, now)
+
+    await _persist_new_scores(db, new_score_rows)
+    await _persist_daily_feeds(
+        db, [{"user_id": user.id, "feed_date": today, "event_ids": event_ids, "built_at": now}]
+    )
+    await db.commit()
+    return {
+        "built": 1 if event_ids else 0,
+        "empty": 0 if event_ids else 1,
+        "total_users": 1,
+        "candidate_events": len(build_ctx.event_rows),
+        "scores_written": len(new_score_rows),
+        "scores_reused": reused,
     }

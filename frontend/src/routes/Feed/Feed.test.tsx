@@ -29,6 +29,7 @@ const feedResponse = {
   feed_date: '2024-07-15',
   events: [makeEvent({ id: 1, title: 'Event One' }), makeEvent({ id: 2, title: 'Event Two' })],
   built_at: '2024-07-15T06:00:00Z',
+  is_stale: false,
 };
 
 describe('Feed', () => {
@@ -70,6 +71,20 @@ describe('Feed', () => {
     // name. Mobile hides the CTA span with clip-path (not display:none)
     // precisely so the accessible name asserted above holds at every width.
     expect(screen.getByText('Explore all events →')).toBeInTheDocument();
+  });
+
+  it('shows the stale-feed banner when is_stale is true', async () => {
+    mockGet.mockResolvedValueOnce({ ...feedResponse, is_stale: true });
+    renderWithProviders(<Feed />);
+    await waitFor(() => expect(screen.getAllByTestId('event-card').length).toBe(2));
+    expect(screen.getByText(/showing your latest feed/i)).toBeInTheDocument();
+  });
+
+  it('does not show the stale-feed banner when is_stale is false', async () => {
+    mockGet.mockResolvedValueOnce(feedResponse);
+    renderWithProviders(<Feed />);
+    await waitFor(() => expect(screen.getAllByTestId('event-card').length).toBe(2));
+    expect(screen.queryByText(/showing your latest feed/i)).not.toBeInTheDocument();
   });
 
   it('logout clears token and navigates to landing', async () => {

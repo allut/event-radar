@@ -35,6 +35,7 @@
     "feed_empty_msg": "We're scanning Tallinn's event landscape. Your personalized Daily Five will be ready by 06:00 tomorrow morning.",
     "feed_empty_hint": "In the meantime, new events are being classified and ranked for you.",
     "feed_error": "Failed to load your feed. Please refresh.",
+    "feed_stale_notice": "Showing your latest feed from {date} — today's picks are still being prepared.",
     "feed_promo_title": "More than five",
     "feed_promo_msg": "Browse every upcoming event in Tallinn — filter by category, vibe, date or price.",
     "feed_promo_cta": "Explore all events →",

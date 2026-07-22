@@ -1,5 +1,5 @@
 """Tests for POST /onboarding/persona."""
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -86,3 +86,56 @@ class TestSetPersona:
                 db=mock_db,
             )
         assert exc_info.value.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_builds_initial_feed_after_persona_commit(
+        self, mock_db, make_user, make_request
+    ):
+        """Onboarding completion triggers a synchronous single-user feed build."""
+        from app.routers.onboarding import set_persona, PersonaBody
+
+        culture_buff = _make_persona("culture_buff", 1)
+        mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=[culture_buff]))
+        user = make_user(user_id=42)
+
+        with patch(
+            "app.routers.onboarding.build_daily_feed_for_user", new_callable=AsyncMock
+        ) as mock_build:
+            result = await set_persona(
+                body=PersonaBody(primary_slug="culture_buff"),
+                request=make_request(method="POST", path="/onboarding/persona"),
+                current_user=user,
+                db=mock_db,
+            )
+
+        mock_build.assert_awaited_once_with(mock_db, 42)
+        assert result["personas"] == [
+            {"slug": "culture_buff", "weight": PERSONA_PRIMARY_WEIGHT}
+        ]
+
+    @pytest.mark.asyncio
+    async def test_feed_build_failure_does_not_fail_onboarding(
+        self, mock_db, make_user, make_request
+    ):
+        """A build_daily_feed_for_user exception must not surface to the caller —
+        worst case the user falls back to the stale feed or empty state until 06:00."""
+        from app.routers.onboarding import set_persona, PersonaBody
+
+        culture_buff = _make_persona("culture_buff", 1)
+        mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=[culture_buff]))
+
+        with patch(
+            "app.routers.onboarding.build_daily_feed_for_user",
+            new_callable=AsyncMock,
+            side_effect=RuntimeError("boom"),
+        ):
+            result = await set_persona(
+                body=PersonaBody(primary_slug="culture_buff"),
+                request=make_request(method="POST", path="/onboarding/persona"),
+                current_user=make_user(),
+                db=mock_db,
+            )
+
+        assert result["personas"] == [
+            {"slug": "culture_buff", "weight": PERSONA_PRIMARY_WEIGHT}
+        ]
