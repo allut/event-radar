@@ -16,104 +16,69 @@ describe('PersonaCard', () => {
     render(
       <PersonaCard
         persona={persona}
-        role="none"
-        isPrimaryTaken={false}
+        rank={0}
+        disabled={false}
         locale="en"
-        onClickPrimary={vi.fn()}
-        onClickSecondary={vi.fn()}
+        onToggle={vi.fn()}
       />,
     );
     expect(screen.getByText('Culture Buff')).toBeInTheDocument();
     expect(screen.getByText('🎭')).toBeInTheDocument();
   });
 
-  it('primary role: main button has aria-pressed=true', () => {
+  it('selected: main button has aria-pressed=true and shows rank badge', () => {
     render(
       <PersonaCard
         persona={persona}
-        role="primary"
-        isPrimaryTaken={true}
+        rank={1}
+        disabled={false}
         locale="en"
-        onClickPrimary={vi.fn()}
-        onClickSecondary={vi.fn()}
+        onToggle={vi.fn()}
       />,
     );
-    expect(screen.getAllByRole('button')[0]).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByText('1')).toBeInTheDocument();
   });
 
-  it('none role: main button has aria-pressed=false', () => {
+  it('unselected: main button has aria-pressed=false and no badge', () => {
     render(
       <PersonaCard
         persona={persona}
-        role="none"
-        isPrimaryTaken={false}
+        rank={0}
+        disabled={false}
         locale="en"
-        onClickPrimary={vi.fn()}
-        onClickSecondary={vi.fn()}
+        onToggle={vi.fn()}
       />,
     );
-    const mainBtn = screen.getAllByRole('button')[0];
-    expect(mainBtn).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByRole('button')).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.queryByText('1')).not.toBeInTheDocument();
   });
 
-  it('shows add secondary button when isPrimaryTaken and role is none', () => {
+  it('disabled at cap: button is disabled', () => {
     render(
       <PersonaCard
         persona={persona}
-        role="none"
-        isPrimaryTaken={true}
+        rank={0}
+        disabled={true}
         locale="en"
-        onClickPrimary={vi.fn()}
-        onClickSecondary={vi.fn()}
+        onToggle={vi.fn()}
       />,
     );
-    expect(screen.getAllByRole('button').length).toBe(2);
+    expect(screen.getByRole('button')).toBeDisabled();
   });
 
-  it('does not show add secondary button when isPrimaryTaken is false', () => {
+  it('calls onToggle on click', async () => {
+    const onToggle = vi.fn();
     render(
       <PersonaCard
         persona={persona}
-        role="none"
-        isPrimaryTaken={false}
+        rank={0}
+        disabled={false}
         locale="en"
-        onClickPrimary={vi.fn()}
-        onClickSecondary={vi.fn()}
+        onToggle={onToggle}
       />,
     );
-    expect(screen.getAllByRole('button').length).toBe(1);
-  });
-
-  it('calls onClickPrimary on main button click', async () => {
-    const onClickPrimary = vi.fn();
-    render(
-      <PersonaCard
-        persona={persona}
-        role="none"
-        isPrimaryTaken={false}
-        locale="en"
-        onClickPrimary={onClickPrimary}
-        onClickSecondary={vi.fn()}
-      />,
-    );
-    await userEvent.click(screen.getAllByRole('button')[0]);
-    expect(onClickPrimary).toHaveBeenCalled();
-  });
-
-  it('calls onClickSecondary on secondary button click', async () => {
-    const onClickSecondary = vi.fn();
-    render(
-      <PersonaCard
-        persona={persona}
-        role="none"
-        isPrimaryTaken={true}
-        locale="en"
-        onClickPrimary={vi.fn()}
-        onClickSecondary={onClickSecondary}
-      />,
-    );
-    const btns = screen.getAllByRole('button');
-    await userEvent.click(btns[1]);
-    expect(onClickSecondary).toHaveBeenCalled();
+    await userEvent.click(screen.getByRole('button'));
+    expect(onToggle).toHaveBeenCalled();
   });
 });

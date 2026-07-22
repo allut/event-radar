@@ -30,6 +30,21 @@
   font-size: var(--fs-base);
 }
 
+.meter {
+  composes: card from '../../components/shared/Card.module.css';
+  display: inline-flex;
+  align-items: center;
+  margin-top: var(--space-3);
+  padding: var(--space-0-45) var(--space-3);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--accent);
+  border-color: var(--accent-border);
+  background: var(--accent-subtle);
+  border-radius: var(--radius-pill);
+  width: fit-content;
+}
+
 .grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -58,15 +73,6 @@
   flex-direction: column;
   align-items: flex-start;
   gap: var(--space-3);
-}
-
-.blend {
-  font-size: var(--fs-md);
-  color: var(--text-muted);
-}
-
-.blend strong {
-  color: var(--accent);
 }
 
 .submit {

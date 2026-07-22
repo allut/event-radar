@@ -3,6 +3,8 @@
   "session_ttl_days": 2,
   "persona_primary_weight": 1.0,
   "persona_secondary_weight": 0.4,
+  "persona_tertiary_weight": 0.2,
+  "persona_max_selectable": 3,
   "default_locale": "en",
   "default_currency": "EUR",
   "default_city": "Tallinn",

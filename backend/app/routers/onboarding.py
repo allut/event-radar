@@ -8,8 +8,8 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.constants import (
-    PERSONA_PRIMARY_WEIGHT,
-    PERSONA_SECONDARY_WEIGHT,
+    PERSONA_MAX_SELECTABLE,
+    PERSONA_RANK_WEIGHTS,
     RATE_LIMIT_AUTHENTICATED_WRITE,
 )
 from app.db import get_db
@@ -23,8 +23,7 @@ router = APIRouter(prefix="/onboarding", tags=["onboarding"])
 
 
 class PersonaBody(BaseModel):
-    primary_slug: str
-    secondary_slug: str | None = None
+    persona_slugs: list[str]
 
 
 @router.post("/persona", status_code=status.HTTP_200_OK)
@@ -35,15 +34,20 @@ async def set_persona(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    """Set (or replace) the user's persona selection."""
-    slugs = [body.primary_slug]
-    if body.secondary_slug:
-        if body.secondary_slug == body.primary_slug:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Primary and secondary personas must differ.",
-            )
-        slugs.append(body.secondary_slug)
+    """Set (or replace) the user's ranked persona selection (1-3, first pick leads)."""
+    slugs = body.persona_slugs
+
+    if not 1 <= len(slugs) <= PERSONA_MAX_SELECTABLE:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Select between 1 and {PERSONA_MAX_SELECTABLE} personas.",
+        )
+
+    if len(set(slugs)) != len(slugs):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Persona slugs must not repeat.",
+        )
 
     personas = (await db.scalars(select(Persona).where(Persona.slug.in_(slugs)))).all()
 
@@ -59,21 +63,17 @@ async def set_persona(
     await db.execute(delete(UserPersona).where(UserPersona.user_id == current_user.id))
 
     persona_by_slug = {p.slug: p for p in personas}
-    db.add(
-        UserPersona(
-            user_id=current_user.id,
-            persona_id=persona_by_slug[body.primary_slug].id,
-            weight=PERSONA_PRIMARY_WEIGHT,
-        )
-    )
-    if body.secondary_slug:
+    result = []
+    for i, slug in enumerate(slugs):
+        weight = PERSONA_RANK_WEIGHTS[i]
         db.add(
             UserPersona(
                 user_id=current_user.id,
-                persona_id=persona_by_slug[body.secondary_slug].id,
-                weight=PERSONA_SECONDARY_WEIGHT,
+                persona_id=persona_by_slug[slug].id,
+                weight=weight,
             )
         )
+        result.append({"slug": slug, "weight": weight})
 
     await db.commit()
 
@@ -81,9 +81,5 @@ async def set_persona(
         await build_daily_feed_for_user(db, current_user.id)
     except Exception:
         log.exception("initial feed build failed for user %s", current_user.id)
-
-    result = [{"slug": body.primary_slug, "weight": PERSONA_PRIMARY_WEIGHT}]
-    if body.secondary_slug:
-        result.append({"slug": body.secondary_slug, "weight": PERSONA_SECONDARY_WEIGHT})
 
     return {"personas": result}

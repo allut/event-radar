@@ -6,6 +6,8 @@ export const MAGIC_LINK_EXPIRY_MINUTES = 15;
 export const SESSION_TTL_DAYS = 2;
 export const PERSONA_PRIMARY_WEIGHT_THRESHOLD = 1.0;
 export const PERSONA_SECONDARY_WEIGHT = 0.4;
+export const PERSONA_TERTIARY_WEIGHT = 0.2;
+export const PERSONA_MAX_SELECTABLE = 3;
 export const DEFAULT_CURRENCY = 'EUR';
 
 export const LOCALES = [

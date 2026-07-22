@@ -11,8 +11,10 @@ from app._generated.shared_constants import (
     DEFAULT_USER_LOCALE,
     HTML_SANITIZE_ALLOWED_ATTRS,
     HTML_SANITIZE_ALLOWED_TAGS,
+    PERSONA_MAX_SELECTABLE,
     PERSONA_PRIMARY_WEIGHT,
     PERSONA_SECONDARY_WEIGHT,
+    PERSONA_TERTIARY_WEIGHT,
     SAFE_URL_SCHEMES,
     VALID_CATEGORIES,
     VALID_LOCALES,
@@ -28,14 +30,32 @@ __all__ = [
     "DEFAULT_USER_LOCALE",
     "HTML_SANITIZE_ALLOWED_ATTRS",
     "HTML_SANITIZE_ALLOWED_TAGS",
+    "PERSONA_MAX_SELECTABLE",
     "PERSONA_PRIMARY_WEIGHT",
+    "PERSONA_RANK_WEIGHTS",
     "PERSONA_SECONDARY_WEIGHT",
+    "PERSONA_TERTIARY_WEIGHT",
     "SAFE_URL_SCHEMES",
     "VALID_CATEGORIES",
     "VALID_LOCALES",
     "VALID_SIGNALS",
     "VALID_VIBES",
 ]
+
+# Weight assigned to a persona by its rank (index) in the onboarding selection —
+# index 0 (first pick) leads the feed, subsequent picks mix in at a lower weight.
+PERSONA_RANK_WEIGHTS: tuple[float, ...] = (
+    PERSONA_PRIMARY_WEIGHT,
+    PERSONA_SECONDARY_WEIGHT,
+    PERSONA_TERTIARY_WEIGHT,
+)
+# Guard: onboarding.py indexes PERSONA_RANK_WEIGHTS[i] for i up to PERSONA_MAX_SELECTABLE - 1.
+# If persona_max_selectable is ever raised in shared/app-config.json without adding a
+# matching weight here, that indexing would raise an uncaught IndexError instead of a
+# clean validation error — fail fast at import time instead.
+assert len(PERSONA_RANK_WEIGHTS) == PERSONA_MAX_SELECTABLE, (
+    "PERSONA_RANK_WEIGHTS must have exactly PERSONA_MAX_SELECTABLE entries"
+)
 
 TALLINN_TZ_NAME = "Europe/Tallinn"
 TALLINN_TZ = ZoneInfo(TALLINN_TZ_NAME)

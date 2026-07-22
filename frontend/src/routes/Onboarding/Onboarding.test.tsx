@@ -28,64 +28,83 @@ describe('Onboarding', () => {
     expect(screen.getAllByRole('button').length).toBeGreaterThan(1);
   });
 
-  it('submit is disabled when no primary selected', () => {
+  it('submit is disabled when nothing selected', () => {
     renderWithProviders(<Onboarding />);
     const submitBtn = screen.getAllByRole('button').slice(-1)[0];
     expect(submitBtn).toBeDisabled();
   });
 
-  it('submit enables after selecting a primary persona', async () => {
+  it('submit enables after selecting one persona', async () => {
     renderWithProviders(<Onboarding />);
-    const personaBtn = screen.getAllByTitle('Set as primary')[0];
+    const personaBtn = screen.getAllByTitle('Select')[0];
     await userEvent.click(personaBtn);
     const submitBtn = screen.getAllByRole('button').slice(-1)[0];
     expect(submitBtn).not.toBeDisabled();
   });
 
-  it('on submit: calls api.post /onboarding/persona', async () => {
+  it('on submit: calls api.post /onboarding/persona with ranked slugs', async () => {
     mockPost.mockResolvedValueOnce(undefined);
     renderWithProviders(<Onboarding />);
-    await userEvent.click(screen.getAllByTitle('Set as primary')[0]);
+    await userEvent.click(screen.getAllByTitle('Select')[0]);
     const submitBtn = screen.getAllByRole('button').slice(-1)[0];
     await userEvent.click(submitBtn);
-    await waitFor(() => expect(mockPost).toHaveBeenCalledWith('/onboarding/persona', expect.any(Object)));
+    await waitFor(() =>
+      expect(mockPost).toHaveBeenCalledWith('/onboarding/persona', {
+        persona_slugs: expect.any(Array),
+      }),
+    );
   });
 
   it('shows error on submit failure', async () => {
     const { ApiError: ApiErrorClass } = await import('../../api/client');
     mockPost.mockRejectedValueOnce(new ApiErrorClass(StatusCodes.BAD_REQUEST, 'Bad request'));
     renderWithProviders(<Onboarding />);
-    await userEvent.click(screen.getAllByTitle('Set as primary')[0]);
+    await userEvent.click(screen.getAllByTitle('Select')[0]);
     const submitBtn = screen.getAllByRole('button').slice(-1)[0];
     await userEvent.click(submitBtn);
     await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
   });
 
-  it('clicking the primary persona again deselects it', async () => {
+  it('clicking a selected persona again deselects it', async () => {
     renderWithProviders(<Onboarding />);
-    const setPrimary = screen.getAllByTitle('Set as primary')[0];
-    await userEvent.click(setPrimary);
+    const select = screen.getAllByTitle('Select')[0];
+    await userEvent.click(select);
 
     const submitBtn = screen.getAllByRole('button').slice(-1)[0];
     expect(submitBtn).not.toBeDisabled();
 
-    // same card now offers Deselect — clicking clears the primary
+    // same card now offers Deselect — clicking clears it
     await userEvent.click(screen.getByTitle('Deselect'));
     expect(submitBtn).toBeDisabled();
   });
 
-  it('secondary can be set and toggled off', async () => {
+  it('picking up to 3 ranks them, and a 4th click is a no-op until one is freed', async () => {
     renderWithProviders(<Onboarding />);
-    // set a primary on the first card so other cards expose the secondary action
-    await userEvent.click(screen.getAllByTitle('Set as primary')[0]);
+    await userEvent.click(screen.getAllByTitle('Select')[0]);
+    await userEvent.click(screen.getAllByTitle('Select')[0]);
+    await userEvent.click(screen.getAllByTitle('Select')[0]);
 
-    const setSecondary = screen.getAllByTitle('Set as secondary')[0];
-    await userEvent.click(setSecondary);
+    expect(screen.getByText('1')).toBeInTheDocument();
+    expect(screen.getByText('2')).toBeInTheDocument();
+    expect(screen.getByText('3')).toBeInTheDocument();
 
-    // now a Remove secondary control exists; toggling it off removes the choice
-    const removeSecondary = screen.getByTitle('Remove secondary');
-    await userEvent.click(removeSecondary);
-    expect(screen.queryByTitle('Remove secondary')).not.toBeInTheDocument();
+    // at cap: remaining unselected cards are disabled
+    const remaining = screen.queryAllByTitle('Select');
+    for (const btn of remaining) {
+      expect(btn).toBeDisabled();
+    }
+  });
+
+  it('deselecting the first pick renumbers the rest', async () => {
+    renderWithProviders(<Onboarding />);
+    await userEvent.click(screen.getAllByTitle('Select')[0]);
+    await userEvent.click(screen.getAllByTitle('Select')[0]);
+
+    const deselectButtons = screen.getAllByTitle('Deselect');
+    await userEvent.click(deselectButtons[0]);
+
+    expect(screen.getByText('1')).toBeInTheDocument();
+    expect(screen.queryByText('2')).not.toBeInTheDocument();
   });
 
   it('locale change calls setLocale', async () => {

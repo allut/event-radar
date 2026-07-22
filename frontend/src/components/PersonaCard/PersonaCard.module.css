@@ -13,16 +13,11 @@
   box-shadow: var(--shadow-card-hover);
 }
 
-.card.primary {
+.card.selected {
   border-color: var(--accent);
   background: var(--accent-soft);
   box-shadow: var(--shadow-selected-ring);
   transform: translateY(-2px);
-}
-
-.card.secondary {
-  border-color: var(--accent-border);
-  background: var(--accent-minimal);
 }
 
 .mainBtn {
@@ -39,6 +34,11 @@
   color: inherit;
 }
 
+.mainBtn:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
 .emoji {
   font-size: var(--heading-2xl);
   display: block;
@@ -47,7 +47,7 @@
 }
 
 .card:hover .emoji,
-.card.primary .emoji {
+.card.selected .emoji {
   transform: scale(1.1);
 }
 
@@ -60,7 +60,7 @@
   display: block;
 }
 
-.card.primary .name {
+.card.selected .name {
   color: var(--accent-light);
 }
 
@@ -80,45 +80,12 @@
   font-size: var(--fs-2xs);
   font-weight: 600;
   letter-spacing: var(--tracking-wider);
-  text-transform: uppercase;
   padding: var(--space-0-125) var(--space-2);
   border-radius: var(--radius-pill);
 }
 
-.secondaryBtn {
-  width: 100%;
-  background: none;
-  border: none;
-  border-top: 1px solid var(--border);
-  margin-top: auto;
-  padding: var(--space-3);
-  font-size: var(--fs-sm);
-  color: var(--text-soft);
-  letter-spacing: var(--tracking-wide);
-  transition: background var(--transition), color var(--transition);
-}
-
-.secondaryBtn:hover {
-  background: var(--accent-subtle);
-  color: var(--accent);
-}
-
-.secondaryBadge {
-  position: absolute;
-  top: var(--space-2);
-  right: var(--space-2);
+.badgeSoft {
   background: var(--accent-faint);
   border: 1px solid var(--accent-muted);
   color: var(--accent);
-  font-size: var(--fs-2xs);
-  font-weight: 600;
-  letter-spacing: var(--tracking-wide);
-  padding: var(--space-0-125) var(--space-2);
-  border-radius: var(--radius-pill);
-  cursor: pointer;
-  transition: background var(--transition);
-}
-
-.secondaryBadge:hover {
-  background: var(--accent-hover-bg);
 }
