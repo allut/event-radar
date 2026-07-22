@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQueryClient, type QueryKey } from '@tanstack/react-query';
 import { api } from '../api/client';
-import { getLocale, setLocale } from '../lib/auth';
+import { getLocale, setLocale, isAuthenticated } from '../lib/auth';
 
 /**
  * Locale switcher backed by PATCH /users/me, shared by Feed, EventDetail and
@@ -31,6 +31,15 @@ export function useLocaleMutation(
 
   function handleLocaleChange(code: string) {
     setLocaleState(code);
+    // Anonymous visitors (public EventDetail) have no session to persist
+    // locale to — PATCH /users/me would 401 and trigger the client's
+    // hard redirect to /login. Persist locally only in that case.
+    if (!isAuthenticated()) {
+      setLocale(code);
+      queryClient.invalidateQueries({ queryKey: invalidateKey });
+      callbacks?.onSuccess?.();
+      return;
+    }
     mutation.mutate(code);
   }
 

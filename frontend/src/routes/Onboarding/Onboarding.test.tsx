@@ -61,6 +61,33 @@ describe('Onboarding', () => {
     await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
   });
 
+  it('clicking the primary persona again deselects it', async () => {
+    renderWithProviders(<Onboarding />);
+    const setPrimary = screen.getAllByTitle('Set as primary')[0];
+    await userEvent.click(setPrimary);
+
+    const submitBtn = screen.getAllByRole('button').slice(-1)[0];
+    expect(submitBtn).not.toBeDisabled();
+
+    // same card now offers Deselect — clicking clears the primary
+    await userEvent.click(screen.getByTitle('Deselect'));
+    expect(submitBtn).toBeDisabled();
+  });
+
+  it('secondary can be set and toggled off', async () => {
+    renderWithProviders(<Onboarding />);
+    // set a primary on the first card so other cards expose the secondary action
+    await userEvent.click(screen.getAllByTitle('Set as primary')[0]);
+
+    const setSecondary = screen.getAllByTitle('Set as secondary')[0];
+    await userEvent.click(setSecondary);
+
+    // now a Remove secondary control exists; toggling it off removes the choice
+    const removeSecondary = screen.getByTitle('Remove secondary');
+    await userEvent.click(removeSecondary);
+    expect(screen.queryByTitle('Remove secondary')).not.toBeInTheDocument();
+  });
+
   it('locale change calls setLocale', async () => {
     const { setLocale } = await import('../../lib/auth');
     renderWithProviders(<Onboarding />);

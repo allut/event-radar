@@ -64,6 +64,17 @@ export function trackExternalClick(eventId: number): void {
   api.post('/feedback', { event_id: eventId, signal: 'click_external' }).catch(() => undefined);
 }
 
+/** Copy text to the clipboard. Returns true on success, false if the
+ * clipboard API is unavailable or blocked (caller surfaces the failure). */
+export async function copyToClipboard(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function categoryGradient(categories: string[]): string {
   const key = categories[0]?.toLowerCase().replace(/\s+/g, '_') ?? '';
   return CATEGORY_GRADIENTS[key] ?? FALLBACK_GRADIENT;
@@ -193,7 +204,7 @@ function toDateStr(d: Date): string {
 }
 
 /** Resolve a date preset against the browser's local clock (backend stays
- * stateless — see plan.md). Uses local date components, not toISOString(),
+ * stateless). Uses local date components, not toISOString(),
  * so the resolved day never shifts across a UTC boundary. */
 export function datePresetRange(preset: DatePreset): { from: string | null; to: string | null } {
   if (preset === 'any') return { from: null, to: null };

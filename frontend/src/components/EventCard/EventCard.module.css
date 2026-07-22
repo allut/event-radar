@@ -121,6 +121,10 @@
   letter-spacing: var(--tracking-wide);
 }
 
+.clickable {
+  position: relative;
+}
+
 .body {
   padding: var(--space-1-125) var(--space-1-25) var(--space-3);
 }
@@ -173,18 +177,11 @@
   line-height: var(--leading-display);
   margin-bottom: var(--space-0-875);
   letter-spacing: var(--tracking-tighter);
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  min-height: calc(var(--heading-sm) * var(--leading-display) * 2);
 }
 
 .featuredTitle {
   font-size: var(--heading-lg);
   margin-bottom: var(--space-4);
-  -webkit-line-clamp: unset;
-  min-height: auto;
 }
 
 .titleLink {
@@ -194,6 +191,31 @@
 
 .titleLink:hover {
   color: var(--accent-light);
+}
+
+/* Clamp lives on an inner span (not .title/.titleLink) so its overflow:hidden
+   doesn't clip the .stretched::after overlay, which needs to extend past the
+   title's own box to cover the rest of the card. */
+.titleClamp {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  min-height: calc(var(--heading-sm) * var(--leading-display) * 2);
+}
+
+.featuredTitleClamp {
+  -webkit-line-clamp: unset;
+  overflow: visible;
+  min-height: auto;
+}
+
+.stretched::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: var(--z-card-overlay);
+  cursor: pointer;
 }
 
 .bullets {

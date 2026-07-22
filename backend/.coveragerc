@@ -1,0 +1,7 @@
+[run]
+source = app
+omit =
+    app/_generated/*
+
+[report]
+show_missing = True

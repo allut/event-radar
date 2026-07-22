@@ -19,6 +19,7 @@ from app.constants import (
     LOG_FILE_NAME,
     LOG_FORMAT_TEXT,
     LOG_FRAMEWORK_LOGGER_NAMES,
+    LOG_QUIET_LOGGER_NAMES,
     LOG_SHIP_QUEUE_MAXSIZE,
     LOG_SHIP_TIMEOUT_SECONDS,
 )
@@ -61,7 +62,10 @@ class HttpLogShipHandler(logging.Handler):
             body = self.format(record)
             self._client.post(
                 settings.LOG_SHIP_URL,
-                content=body,
+                # Axiom's ingest endpoint expects a JSON array of events, not a
+                # bare object; wrapping one record keeps the handler a valid
+                # array-batch POST (also accepted by other JSON drains).
+                content=f"[{body}]",
                 headers={
                     "Content-Type": "application/json",
                     "Authorization": f"Bearer {settings.LOG_SHIP_TOKEN}",
@@ -156,6 +160,9 @@ def configure_logging() -> None:
             logger.setLevel(logging.INFO if is_dev else logging.WARNING)
         else:
             logger.setLevel(logging.NOTSET)
+
+    for name in LOG_QUIET_LOGGER_NAMES:
+        logging.getLogger(name).setLevel(logging.WARNING)
 
 
 def shutdown_log_shipping() -> None:

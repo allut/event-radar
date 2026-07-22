@@ -886,6 +886,10 @@ LOG_FRAMEWORK_LOGGER_NAMES: tuple[str, ...] = (
     "uvicorn.access",
     "sqlalchemy.engine",
 )
+# HTTP client loggers pinned to WARNING: their per-request INFO/DEBUG lines are
+# noise, and — critically — shipping one would make the ship POST itself emit a
+# log that gets shipped, a self-amplifying loop. WARNING severs it at any root level.
+LOG_QUIET_LOGGER_NAMES: tuple[str, ...] = ("httpx", "httpcore")
 
 # Security response headers — applied to every response by SecurityHeadersMiddleware
 # (app.main). This is a pure JSON API with no first-party HTML/script surface, so the

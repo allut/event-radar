@@ -94,4 +94,23 @@ describe('EventCard', () => {
     const card = container.querySelector('article');
     expect(card?.className).not.toMatch(/featured/);
   });
+
+  it('stretches the title link over the image/body region so the whole card body is clickable', () => {
+    const event = makeEvent({ id: 7, title: 'Cool Concert', why_go: ['Great music'] });
+    const { container } = renderWithProviders(<EventCard event={event} index={0} locale="en" />);
+    const link = screen.getByRole('link', { name: 'Cool Concert' });
+    expect(link.className).toMatch(/stretched/);
+    const clickable = container.querySelector('[class*="clickable"]');
+    expect(clickable).toBeInTheDocument();
+    expect(clickable?.contains(screen.getByText('Great music'))).toBe(true);
+    expect(clickable?.contains(link)).toBe(true);
+  });
+
+  it('keeps the actions row (feedback + tickets) outside the clickable region', () => {
+    const event = makeEvent({ url: 'https://tickets.example.com' });
+    const { container } = renderWithProviders(<EventCard event={event} index={0} locale="en" />);
+    const clickable = container.querySelector('[class*="clickable"]');
+    const ticketsLink = screen.getByRole('link', { name: /tickets/i });
+    expect(clickable?.contains(ticketsLink)).toBe(false);
+  });
 });

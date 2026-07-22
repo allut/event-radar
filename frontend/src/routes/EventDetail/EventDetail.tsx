@@ -2,12 +2,16 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../../api/client';
 import { t, ti } from '../../i18n';
-import { buildMapsUrl, categoryGradient, cx, formatEventDateTime, formatHourMinute, formatPrice, safeUrl, sanitizeHtml, trackExternalClick } from '../../utils';
+import { buildMapsUrl, categoryGradient, copyToClipboard, cx, formatEventDateTime, formatHourMinute, formatPrice, safeUrl, sanitizeHtml, trackExternalClick } from '../../utils';
+import { useAuth } from '../../hooks/useAuth';
 import { useLocaleMutation } from '../../hooks/useLocaleMutation';
+import { useLogout } from '../../hooks/useLogout';
+import { useToast } from '../../hooks/useToast';
 import { type EventData } from '../../components/EventCard';
 import FeedbackButtonRow from '../../components/FeedbackButtonRow';
-import LocaleSelector from '../../components/LocaleSelector';
 import PageState from '../../components/PageState';
+import Toast from '../../components/Toast';
+import TopBar from '../../components/TopBar';
 import { useFeedback } from '../../hooks/useFeedback';
 import { QUERY_KEYS } from '../../constants';
 import styles from './EventDetail.module.css';
@@ -19,7 +23,10 @@ interface EventDetailData extends EventData {
 export default function EventDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const authed = useAuth();
   const { locale, handleLocaleChange } = useLocaleMutation([QUERY_KEYS.event, id]);
+  const handleLogout = useLogout();
+  const { toast, showToast } = useToast();
 
   const { data, isLoading, isError } = useQuery({
     queryKey: [QUERY_KEYS.event, id],
@@ -33,8 +40,24 @@ export default function EventDetail() {
   });
 
   function handleTicketsClick() {
-    if (!data) return;
+    if (!data || !authed) return;
     trackExternalClick(data.id);
+  }
+
+  async function handleShare() {
+    const url = window.location.href;
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: data?.title, url });
+        return;
+      } catch (err) {
+        // user cancelled — respect that, don't fall through to copy
+        if (err instanceof DOMException && err.name === 'AbortError') return;
+        // unsupported/blocked share — fall through to copy
+      }
+    }
+    const ok = await copyToClipboard(url);
+    showToast(ok ? 'success' : 'error', t(ok ? 'link_copied' : 'share_failed', locale));
   }
 
   if (isLoading) {
@@ -62,16 +85,14 @@ export default function EventDetail() {
 
   return (
     <div className={styles.page}>
-      <header className={styles.topBar}>
-        <button className={styles.backBtn} onClick={() => navigate(-1)} aria-label={t('back', locale)}>
-          {t('back', locale)}
-        </button>
-        <Link to="/" className={styles.logoWrap}>
-          <span className={styles.radar} aria-hidden>◉</span>
-          <span className={styles.brand}>{t('brand', locale)}</span>
-        </Link>
-        <LocaleSelector locale={locale} onChange={handleLocaleChange} ariaLabel={t('section_language', locale)} />
-      </header>
+      {toast.status !== 'idle' && <Toast status={toast.status} message={toast.message} />}
+      <TopBar
+        locale={locale}
+        onLocaleChange={handleLocaleChange}
+        onLogout={handleLogout}
+        onBack={() => navigate(-1)}
+        authed={authed}
+      />
 
       <main className={styles.main}>
         <div className={styles.hero}>
@@ -88,6 +109,10 @@ export default function EventDetail() {
             />
           )}
           {price && <span className={styles.price}>{price}</span>}
+          <button className={styles.shareFab} onClick={handleShare} aria-label={t('share', locale)}>
+            <span className={styles.shareFabIcon} aria-hidden>&#8599;</span>
+            {t('share', locale)}
+          </button>
         </div>
 
         <div className={styles.content}>
@@ -155,36 +180,44 @@ export default function EventDetail() {
               {(data.categories.length > 0 || data.vibes.length > 0) && (
                 <div className={styles.tags}>
                   {data.categories.map(cat => (
-                    <span key={cat} className={styles.tag}>{t(`category_${cat}`, locale)}</span>
+                    <Link key={cat} to={`/explore?category=${cat}`} className={styles.tag}>
+                      {t(`category_${cat}`, locale)}
+                    </Link>
                   ))}
                   {data.vibes.map(vibe => (
-                    <span key={vibe} className={cx(styles.tag, styles.tagVibe)}>{t(`vibe_${vibe}`, locale)}</span>
+                    <Link key={vibe} to={`/explore?vibe=${vibe}`} className={cx(styles.tag, styles.tagVibe)}>
+                      {t(`vibe_${vibe}`, locale)}
+                    </Link>
                   ))}
                 </div>
               )}
             </section>
           )}
 
-          <div className={styles.actions}>
-            <FeedbackButtonRow
-              activeSignal={activeSignal}
-              pending={pending}
-              onPress={sendFeedback}
-              locale={locale}
-              variant="detail"
-            />
-            {ticketUrl && (
-              <a
-                href={ticketUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className={styles.ticketsBtn}
-                onClick={handleTicketsClick}
-              >
-                {t('get_tickets', locale)}
-              </a>
-            )}
-          </div>
+          {(authed || ticketUrl) && (
+            <div className={styles.actions}>
+              {authed && (
+                <FeedbackButtonRow
+                  activeSignal={activeSignal}
+                  pending={pending}
+                  onPress={sendFeedback}
+                  locale={locale}
+                  variant="detail"
+                />
+              )}
+              {ticketUrl && (
+                <a
+                  href={ticketUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={styles.ticketsBtn}
+                  onClick={handleTicketsClick}
+                >
+                  {t('get_tickets', locale)}
+                </a>
+              )}
+            </div>
+          )}
         </div>
       </main>
     </div>

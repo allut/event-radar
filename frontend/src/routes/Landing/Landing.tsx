@@ -6,7 +6,7 @@ import { getLocale, setLocale } from '../../lib/auth';
 import { MAGIC_LINK_EXPIRY_MINUTES, PERSONAS, QUERY_KEYS } from '../../constants';
 import { t, ti, personaName, personaVibe } from '../../i18n';
 import { useMagicLinkRequest } from '../../hooks/useMagicLinkRequest';
-import LocaleSelector from '../../components/LocaleSelector';
+import TopBar from '../../components/TopBar';
 import EventCard, { type EventData } from '../../components/EventCard';
 import RadarHero from './RadarHero';
 import styles from './Landing.module.css';
@@ -79,16 +79,7 @@ export default function Landing() {
 
   return (
     <div className={styles.page}>
-      <header className={styles.topbar}>
-        <div className={styles.brand}>
-          <span className={styles.radarMark} aria-hidden>◉</span>
-          <span className={styles.brandName}>{t('brand', locale)}</span>
-        </div>
-        <div className={styles.topbarRight}>
-          <Link to="/login" className={styles.signIn}>{t('landing_signin', locale)}</Link>
-          <LocaleSelector locale={locale} onChange={handleLocaleChange} ariaLabel={t('section_language', locale)} />
-        </div>
-      </header>
+      <TopBar locale={locale} onLocaleChange={handleLocaleChange} authed={false} />
 
       <main>
         <section className={styles.hero}>

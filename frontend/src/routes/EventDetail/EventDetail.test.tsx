@@ -13,6 +13,8 @@ vi.mock('react-router-dom', async (importOriginal) => {
 vi.mock('../../lib/auth', () => ({
   getLocale: vi.fn(() => 'en'),
   setLocale: vi.fn(),
+  isAuthenticated: vi.fn(() => true),
+  subscribeAuth: vi.fn(() => () => undefined),
 }));
 
 vi.mock('../../api/client', () => ({
@@ -40,7 +42,9 @@ vi.mock('../../utils', async (importOriginal) => {
 });
 
 import { api } from '../../api/client';
+import { isAuthenticated } from '../../lib/auth';
 const mockGet = vi.mocked(api.get);
+const mockIsAuthenticated = vi.mocked(isAuthenticated);
 
 const eventData = {
   ...makeEvent({
@@ -131,11 +135,102 @@ describe('EventDetail', () => {
     });
   });
 
+  it('renders category and vibe tags as links to Explore filtered by that slug', async () => {
+    mockGet.mockResolvedValueOnce(eventData);
+    renderWithProviders(<EventDetail />, { route: '/events/1', pathPattern: '/events/:id' });
+    await waitFor(() => {
+      const categoryLink = screen.getByRole('link', { name: /music/i });
+      expect(categoryLink).toHaveAttribute('href', '/explore?category=music');
+    });
+    const vibeLink = screen.getByRole('link', { name: /vibrant/i });
+    expect(vibeLink).toHaveAttribute('href', '/explore?vibe=vibrant');
+  });
+
   it('back button calls navigate(-1)', async () => {
     mockGet.mockResolvedValueOnce(eventData);
     renderWithProviders(<EventDetail />, { route: '/events/1', pathPattern: '/events/:id' });
     await waitFor(() => screen.getByRole('button', { name: /back/i }));
     await userEvent.click(screen.getByRole('button', { name: /back/i }));
     expect(mockNavigate).toHaveBeenCalledWith(-1);
+  });
+
+  it('renders share button when authenticated', async () => {
+    mockGet.mockResolvedValueOnce(eventData);
+    renderWithProviders(<EventDetail />, { route: '/events/1', pathPattern: '/events/:id' });
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Share' })).toBeInTheDocument());
+  });
+
+  it('does not copy or toast when user cancels the native share sheet', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    const share = vi.fn().mockRejectedValue(new DOMException('cancelled', 'AbortError'));
+    Object.assign(navigator, { clipboard: { writeText }, share });
+    mockGet.mockResolvedValueOnce(eventData);
+    renderWithProviders(<EventDetail />, { route: '/events/1', pathPattern: '/events/:id' });
+    await waitFor(() => screen.getByRole('button', { name: 'Share' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Share' }));
+    await waitFor(() => expect(share).toHaveBeenCalled());
+    expect(writeText).not.toHaveBeenCalled();
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    delete (navigator as { share?: unknown }).share;
+  });
+
+  it('copies link and shows toast when navigator.share is unavailable', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+    mockGet.mockResolvedValueOnce(eventData);
+    renderWithProviders(<EventDetail />, { route: '/events/1', pathPattern: '/events/:id' });
+    await waitFor(() => screen.getByRole('button', { name: 'Share' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Share' }));
+    expect(writeText).toHaveBeenCalledWith(window.location.href);
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Link copied'));
+  });
+
+  it('renders feedback buttons when authenticated', async () => {
+    mockIsAuthenticated.mockReturnValue(true);
+    mockGet.mockResolvedValueOnce(eventData);
+    renderWithProviders(<EventDetail />, { route: '/events/1', pathPattern: '/events/:id' });
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Like' })).toBeInTheDocument());
+  });
+
+  describe('logged out', () => {
+    beforeEach(() => {
+      mockIsAuthenticated.mockReturnValue(false);
+    });
+    afterEach(() => {
+      mockIsAuthenticated.mockReturnValue(true);
+    });
+
+    it('renders event content with no redirect and no feedback buttons', async () => {
+      mockGet.mockResolvedValueOnce(eventData);
+      renderWithProviders(<EventDetail />, { route: '/events/1', pathPattern: '/events/:id' });
+      await waitFor(() => expect(screen.getByText('Test Concert')).toBeInTheDocument());
+      expect(screen.queryByRole('button', { name: 'Like' })).not.toBeInTheDocument();
+    });
+
+    it('renders share button even when signed out', async () => {
+      mockGet.mockResolvedValueOnce(eventData);
+      renderWithProviders(<EventDetail />, { route: '/events/1', pathPattern: '/events/:id' });
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Share' })).toBeInTheDocument());
+    });
+
+    it('switching locale does not call api.patch', async () => {
+      mockGet.mockResolvedValueOnce(eventData);
+      renderWithProviders(<EventDetail />, { route: '/events/1', pathPattern: '/events/:id' });
+      await waitFor(() => expect(screen.getByText('Test Concert')).toBeInTheDocument());
+      const localeButton = screen.getByRole('button', { name: 'EN' });
+      await userEvent.click(localeButton);
+      const etOption = await screen.findByText('ET');
+      await userEvent.click(etOption);
+      expect(api.patch).not.toHaveBeenCalled();
+    });
+
+    it('clicking tickets link does not call trackExternalClick (avoids 401 redirect)', async () => {
+      const { trackExternalClick } = await import('../../utils');
+      mockGet.mockResolvedValueOnce(eventData);
+      renderWithProviders(<EventDetail />, { route: '/events/1', pathPattern: '/events/:id' });
+      await waitFor(() => screen.getByRole('link', { name: /ticket/i }));
+      await userEvent.click(screen.getByRole('link', { name: /ticket/i }));
+      expect(trackExternalClick).not.toHaveBeenCalled();
+    });
   });
 });

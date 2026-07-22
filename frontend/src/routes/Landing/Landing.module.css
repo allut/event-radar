@@ -4,52 +4,9 @@
   flex-direction: column;
 }
 
-/* ── Top bar ─────────────────────────────────────────────────────────── */
-.topbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-4);
-  padding: var(--space-4) var(--space-6);
-  border-bottom: var(--rule);
-  position: sticky;
-  top: 0;
-  z-index: var(--z-sticky);
-  background: var(--bg-overlay);
-  backdrop-filter: blur(var(--blur-overlay));
-}
-
-.brand {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-
 .radarMark {
   color: var(--accent);
   font-size: var(--fs-lg);
-}
-
-.brandName {
-  font-family: var(--font-display);
-  font-size: var(--fs-brand-md);
-  font-weight: 600;
-  letter-spacing: var(--tracking-snug);
-  color: var(--text);
-}
-
-.topbarRight {
-  display: flex;
-  align-items: center;
-  gap: var(--space-0-625);
-}
-
-.signIn {
-  composes: btnOutline from '../../components/shared/Button.module.css';
-  display: inline-block;
-  padding: var(--space-0-45) var(--space-0-875);
-  font-size: var(--fs-sm);
-  line-height: normal;
 }
 
 /* ── Hero ────────────────────────────────────────────────────────────── */
@@ -380,7 +337,6 @@
 }
 
 @media (max-width: 640px) {
-  .topbar { padding: var(--space-3) var(--space-4); }
   .h1 { font-size: var(--heading-xl); }
   .finalTitle { font-size: var(--heading-xl); }
   .emailForm {
