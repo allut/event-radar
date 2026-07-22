@@ -20,6 +20,7 @@ from app.auth.tokens import (
 )
 from app.constants import (
     DEFAULT_USER_LOCALE,
+    LOG_EVENT_AUTH_FAILED,
     MAGIC_LINK_RESEND_COOLDOWN_SECONDS,
     RATE_LIMIT_AUTH_REQUEST_LINK,
     RATE_LIMIT_AUTH_VERIFY,
@@ -189,13 +190,18 @@ async def verify_magic_link(
     try:
         user_id = verify_magic_token(token)
     except SignatureExpired:
-        log.warning("magic-link verify failed: expired")
+        log.warning(
+            "magic-link verify failed: expired", extra={"event": LOG_EVENT_AUTH_FAILED}
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Sign-in link has expired. Please request a new one.",
         )
     except BadSignature:
-        log.warning("magic-link verify failed: bad-signature")
+        log.warning(
+            "magic-link verify failed: bad-signature",
+            extra={"event": LOG_EVENT_AUTH_FAILED},
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid sign-in link.",
@@ -218,7 +224,10 @@ async def verify_magic_link(
         .returning(AuthMagicLink.user_id)
     )
     if result.fetchone() is None:
-        log.warning("magic-link verify failed: already-used or not-found")
+        log.warning(
+            "magic-link verify failed: already-used or not-found",
+            extra={"event": LOG_EVENT_AUTH_FAILED},
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Sign-in link already used, expired, or not found.",

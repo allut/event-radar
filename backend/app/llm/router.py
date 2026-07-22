@@ -21,7 +21,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.constants import LLM_MAX_TOKENS, LLM_PROVIDERS, LLM_REQUEST_TIMEOUT_SECONDS
+from app.constants import (
+    LLM_MAX_TOKENS,
+    LLM_PROVIDERS,
+    LLM_REQUEST_TIMEOUT_SECONDS,
+    LOG_EVENT_LLM_DEGRADED,
+)
 
 log = logging.getLogger(__name__)
 
@@ -214,5 +219,5 @@ async def llm_json_or_none(
     try:
         return await llm_json(task, prompt, db, event_id=event_id)
     except LLMError as exc:
-        log.warning("%s: %s", context, exc)
+        log.warning("%s: %s", context, exc, extra={"event": LOG_EVENT_LLM_DEGRADED})
         return None

@@ -11,6 +11,7 @@ from app.constants import (
     LLM_BACKLOG_MAX_DRAIN_PASSES,
     LLM_BACKLOG_RETRY_SECONDS,
     LLM_CLASSIFY_BATCH_SIZE,
+    LOG_EVENT_LLM_DEGRADED,
 )
 from app.db import AsyncSessionLocal
 from app.dedup.llm_tiebreaker import run_dedup_pass_llm
@@ -220,6 +221,7 @@ async def _drain_backlog(
             label,
             LLM_BACKLOG_MAX_DRAIN_PASSES,
             summary,
+            extra={"event": LOG_EVENT_LLM_DEGRADED},
         )
     return _aggregate_summaries(summaries) if aggregate else summary
 

@@ -20,6 +20,7 @@ from app.constants import (
     LOG_FORMAT_TEXT,
     LOG_FRAMEWORK_LOGGER_NAMES,
     LOG_QUIET_LOGGER_NAMES,
+    LOG_RECORD_RESERVED_ATTRS,
     LOG_SHIP_QUEUE_MAXSIZE,
     LOG_SHIP_TIMEOUT_SECONDS,
 )
@@ -28,7 +29,14 @@ _queue_listener: logging.handlers.QueueListener | None = None
 
 
 class JsonLogFormatter(logging.Formatter):
-    """Renders one JSON object per line: ts/level/logger/msg (+ exc when present)."""
+    """Renders one JSON object per line: ts/level/logger/msg (+ exc when present).
+
+    Any attribute a call site passes via ``extra={...}`` (e.g. event/job/status/
+    duration_ms) is merged in as a top-level key, so log drains can filter on
+    structured fields instead of regex-parsing ``msg``. Reserved keys are never
+    overwritten; ``default=str`` keeps a non-JSON-serializable extra from crashing
+    the formatter (and, in prod, the shipping thread).
+    """
 
     def format(self, record: logging.LogRecord) -> str:
         payload: dict[str, Any] = {
@@ -41,7 +49,10 @@ class JsonLogFormatter(logging.Formatter):
         }
         if record.exc_info:
             payload["exc"] = self.formatException(record.exc_info)
-        return json.dumps(payload)
+        for key, value in record.__dict__.items():
+            if key not in LOG_RECORD_RESERVED_ATTRS and key not in payload:
+                payload[key] = value
+        return json.dumps(payload, default=str)
 
 
 class HttpLogShipHandler(logging.Handler):

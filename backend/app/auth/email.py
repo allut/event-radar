@@ -10,6 +10,7 @@ import httpx
 from app.config import settings
 from app.constants import (
     DEFAULT_USER_LOCALE,
+    LOG_EVENT_EMAIL_SEND_FAILED,
     RESEND_ERROR_SNIPPET_LEN,
     RESEND_SEND_URL,
     RESEND_TIMEOUT_SECONDS,
@@ -62,6 +63,7 @@ async def send_magic_link(
             mask_email(to_email),
             resp.status_code,
             resp.text[:RESEND_ERROR_SNIPPET_LEN],
+            extra={"event": LOG_EVENT_EMAIL_SEND_FAILED},
         )
     else:
         log.info("Magic link sent to %s", mask_email(to_email))

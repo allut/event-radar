@@ -17,6 +17,7 @@ from app.constants import (
     ADMIN_USERNAME_DEFAULT,
     APP_ENV_DEVELOPMENT,
     EVENT_STATUS_CANCELLED,
+    LOG_EVENT_AUTH_FAILED,
     RATE_LIMIT_ADMIN,
 )
 from app.db import AsyncSessionLocal
@@ -89,7 +90,11 @@ def _require_admin(credentials: HTTPBasicCredentials = Depends(_security)) -> No
         password.encode(),
     )
     if not (username_ok and password_ok):
-        log.warning("admin auth failed: username=%r", credentials.username)
+        log.warning(
+            "admin auth failed: username=%r",
+            credentials.username,
+            extra={"event": LOG_EVENT_AUTH_FAILED},
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect credentials",
