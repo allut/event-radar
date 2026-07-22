@@ -16,6 +16,7 @@ from app.constants import (
 from app.logging_config import (
     HttpLogShipHandler,
     JsonLogFormatter,
+    _AccessPathFilter,
     _text_formatter,
     configure_logging,
     shutdown_log_shipping,
@@ -326,3 +327,66 @@ def test_sqlalchemy_engine_logs_at_warning_in_prod(monkeypatch, tmp_path) -> Non
     configure_logging()
 
     assert logging.getLogger("sqlalchemy.engine").level == logging.WARNING
+
+
+def _make_access_record(path: str, args=None) -> logging.LogRecord:
+    record = logging.LogRecord(
+        name="uvicorn.access",
+        level=logging.INFO,
+        pathname=__file__,
+        lineno=1,
+        msg='%s - "%s %s HTTP/%s" %d',
+        args=args if args is not None else ("127.0.0.1", "GET", path, "1.1", 200),
+        exc_info=None,
+    )
+    return record
+
+
+def test_access_path_filter_drops_health_check() -> None:
+    record = _make_access_record("/health")
+    assert _AccessPathFilter().filter(record) is False
+
+
+def test_access_path_filter_keeps_other_paths() -> None:
+    record = _make_access_record("/explore")
+    assert _AccessPathFilter().filter(record) is True
+
+
+def test_access_path_filter_keeps_non_access_records() -> None:
+    record = _make_record("some app log line")
+    assert _AccessPathFilter().filter(record) is True
+
+
+def test_access_path_filter_drops_health_check_with_query_string() -> None:
+    # uvicorn includes the query string in the same args slot as the path.
+    record = _make_access_record("/health?x=1")
+    assert _AccessPathFilter().filter(record) is False
+
+
+def test_access_path_filter_keeps_failing_health_check() -> None:
+    # A failing health check (5xx) must still ship — that's the signal an
+    # ops monitor needs, unlike the routine 200 keepalive noise.
+    record = _make_access_record(
+        "/health", args=("127.0.0.1", "GET", "/health", "1.1", 503)
+    )
+    assert _AccessPathFilter().filter(record) is True
+
+
+def test_access_path_filter_keeps_short_args_defensively() -> None:
+    record = _make_access_record("/health", args=("127.0.0.1", "GET"))
+    assert _AccessPathFilter().filter(record) is True
+
+
+def test_prod_ship_queue_handler_has_access_path_filter(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "APP_ENV", "production")
+    monkeypatch.setattr(settings, "LOG_SHIP_URL", "https://logs.example.com/ingest")
+    monkeypatch.setattr(settings, "LOG_SHIP_TOKEN", "secret-token")
+
+    configure_logging()
+
+    root = logging.getLogger()
+    queue_handlers = [
+        h for h in root.handlers if isinstance(h, logging.handlers.QueueHandler)
+    ]
+    assert len(queue_handlers) == 1
+    assert any(isinstance(f, _AccessPathFilter) for f in queue_handlers[0].filters)

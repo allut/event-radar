@@ -891,6 +891,11 @@ LOG_FRAMEWORK_LOGGER_NAMES: tuple[str, ...] = (
 # noise, and — critically — shipping one would make the ship POST itself emit a
 # log that gets shipped, a self-amplifying loop. WARNING severs it at any root level.
 LOG_QUIET_LOGGER_NAMES: tuple[str, ...] = ("httpx", "httpcore")
+# uvicorn.access paths never worth shipping to the log drain. Render's platform
+# health check hits GET /health every few seconds; shipping each is pure noise.
+# Suppressed on the shipping QueueHandler only — these lines still reach Render's
+# own console logs. Extend this set to silence other high-frequency probe paths.
+LOG_SHIP_SUPPRESS_ACCESS_PATHS: frozenset[str] = frozenset({"/health"})
 # Standard LogRecord attribute names. JsonLogFormatter promotes every record
 # attribute NOT in this set — i.e. anything a call site passed via `extra={...}` —
 # to a top-level JSON key, so Axiom monitors can filter on structured fields
