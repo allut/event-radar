@@ -1,5 +1,6 @@
 import logging
 import secrets
+import time
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager
 
@@ -26,6 +27,10 @@ from app.constants import (
     HSTS_HEADER_VALUE,
     INGEST_INTERVAL_HOURS,
     LLM_PASS_INTERVAL_HOURS,
+    LOG_EVENT_AUTH_FAILED,
+    LOG_EVENT_JOB_RUN,
+    LOG_STATUS_ERROR,
+    LOG_STATUS_OK,
     ORGANIZER_SYNC_HOUR,
     ORGANIZER_SYNC_MINUTE,
     REFETCH_HOUR,
@@ -80,11 +85,31 @@ def _scheduled(
     """
 
     async def _job() -> None:
+        start = time.monotonic()
         try:
             summary = await run()
-            log.info("%s completed: %s", label, summary)
+            log.info(
+                "%s completed: %s",
+                label,
+                summary,
+                extra={
+                    "event": LOG_EVENT_JOB_RUN,
+                    "job": label,
+                    "status": LOG_STATUS_OK,
+                    "duration_ms": round((time.monotonic() - start) * 1000),
+                },
+            )
         except Exception:
-            log.exception("%s failed", label)
+            log.exception(
+                "%s failed",
+                label,
+                extra={
+                    "event": LOG_EVENT_JOB_RUN,
+                    "job": label,
+                    "status": LOG_STATUS_ERROR,
+                    "duration_ms": round((time.monotonic() - start) * 1000),
+                },
+            )
 
     return _job
 
@@ -343,6 +368,7 @@ async def tick(request: Request) -> dict:
             log.warning(
                 "internal/tick: invalid token (client=%s)",
                 request.client.host if request.client else "unknown",
+                extra={"event": LOG_EVENT_AUTH_FAILED},
             )
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN, detail="Invalid token"

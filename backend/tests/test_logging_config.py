@@ -95,6 +95,62 @@ def test_json_formatter_shape() -> None:
     assert "exc" not in payload
 
 
+def test_json_formatter_merges_extra_fields() -> None:
+    # Fields passed via logger.x(..., extra={...}) become top-level JSON keys so
+    # log drains can filter on structured fields instead of regex-parsing msg.
+    record = _make_record("job done")
+    record.event = "job_run"
+    record.job = "build_daily_feeds"
+    record.status = "ok"
+    record.duration_ms = 42
+
+    payload = json.loads(JsonLogFormatter().format(record))
+    assert payload["event"] == "job_run"
+    assert payload["job"] == "build_daily_feeds"
+    assert payload["status"] == "ok"
+    assert payload["duration_ms"] == 42
+    assert payload["msg"] == "job done"
+
+
+def test_json_formatter_extra_cannot_overwrite_reserved_keys() -> None:
+    # A caller-supplied attribute must never clobber ts/level/logger/msg — the
+    # standard-record scan skips reserved names and keys already in the payload.
+    record = _make_record("real message")
+    # "msg" is a standard LogRecord attr (reserved); a stray "logger" extra is not
+    # a standard attr but is already a payload key, so both must be preserved.
+    record.logger = "attacker.controlled"
+
+    payload = json.loads(JsonLogFormatter().format(record))
+    assert payload["logger"] == "app.test"
+    assert payload["msg"] == "real message"
+
+
+def test_json_formatter_no_extras_shape_unchanged() -> None:
+    # Regression guard: a record with no extras yields exactly the original keys.
+    payload = json.loads(JsonLogFormatter().format(_make_record()))
+    assert set(payload.keys()) == {"ts", "level", "logger", "msg"}
+
+
+def test_json_formatter_drops_uvicorn_color_message() -> None:
+    # uvicorn adds extra={"color_message": ...} on its startup/shutdown lines;
+    # it's reserved so it never pollutes the curated shipped schema.
+    record = _make_record("Uvicorn running")
+    record.color_message = "Uvicorn running \x1b[36m..."
+
+    payload = json.loads(JsonLogFormatter().format(record))
+    assert "color_message" not in payload
+
+
+def test_json_formatter_non_serializable_extra_does_not_crash() -> None:
+    # default=str keeps an arbitrary extra value from raising in the formatter
+    # (and, in prod, on the log-shipping thread).
+    record = _make_record("with object")
+    record.obj = object()
+
+    payload = json.loads(JsonLogFormatter().format(record))
+    assert isinstance(payload["obj"], str)
+
+
 def test_json_formatter_includes_exc_info() -> None:
     try:
         raise ValueError("boom")

@@ -1,4 +1,5 @@
 import http
+import logging
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -890,6 +891,29 @@ LOG_FRAMEWORK_LOGGER_NAMES: tuple[str, ...] = (
 # noise, and — critically — shipping one would make the ship POST itself emit a
 # log that gets shipped, a self-amplifying loop. WARNING severs it at any root level.
 LOG_QUIET_LOGGER_NAMES: tuple[str, ...] = ("httpx", "httpcore")
+# Standard LogRecord attribute names. JsonLogFormatter promotes every record
+# attribute NOT in this set — i.e. anything a call site passed via `extra={...}` —
+# to a top-level JSON key, so Axiom monitors can filter on structured fields
+# (event/job/status/duration_ms) instead of regex-parsing the free-text message.
+# Derived from a sample record so it tracks the running Python version (3.12 adds
+# taskName); "message"/"asctime" are set during formatting, not on a fresh record.
+LOG_RECORD_RESERVED_ATTRS: frozenset[str] = frozenset(
+    logging.LogRecord("", 0, "", 0, "", (), None).__dict__
+) | {"message", "asctime", "color_message"}
+# "color_message" is uvicorn's own `extra=` on its startup/shutdown lines — kept
+# reserved so it doesn't leak into the curated shipped schema (docs/observability.md).
+
+# Structured log `event` field values (shipped as a first-class JSON key via
+# `extra={"event": ...}`) — each keys an Axiom monitor. See docs/observability.md.
+LOG_EVENT_JOB_RUN = "job_run"  # scheduled-job completion/failure telemetry
+LOG_EVENT_RATE_LIMIT_BLOCK = "rate_limit_block"  # own per-IP 429 rejection
+LOG_EVENT_LLM_DEGRADED = "llm_degraded"  # provider chain exhausted / backlog deferred
+LOG_EVENT_AUTH_FAILED = "auth_failed"  # magic-link / admin / internal-tick auth reject
+LOG_EVENT_WEBHOOK_REJECTED = "webhook_rejected"  # inbound-mail signature / body reject
+LOG_EVENT_EMAIL_SEND_FAILED = "email_send_failed"  # Resend magic-link / digest failure
+# `status` field values for LOG_EVENT_JOB_RUN.
+LOG_STATUS_OK = "ok"
+LOG_STATUS_ERROR = "error"
 
 # Security response headers — applied to every response by SecurityHeadersMiddleware
 # (app.main). This is a pure JSON API with no first-party HTML/script surface, so the

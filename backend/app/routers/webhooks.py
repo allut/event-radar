@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.constants import (
+    LOG_EVENT_WEBHOOK_REJECTED,
     NEWSLETTER_SENDER_ALLOWED_DOMAINS,
     RATE_LIMIT_WEBHOOK_INBOUND_MAIL,
     SVIX_ID_HEADER,
@@ -151,7 +152,10 @@ async def inbound_mail(
         setting_name="RESEND_WEBHOOK_SECRET",
         app_env=settings.APP_ENV,
     ) and not _request_signature_valid(request, body):
-        log.warning("inbound-mail: invalid or missing webhook signature")
+        log.warning(
+            "inbound-mail: invalid or missing webhook signature",
+            extra={"event": LOG_EVENT_WEBHOOK_REJECTED},
+        )
         return JSONResponse(
             {"status": "rejected"}, status_code=status.HTTP_401_UNAUTHORIZED
         )
@@ -159,7 +163,10 @@ async def inbound_mail(
     try:
         payload = json.loads(body)
     except Exception:
-        log.warning("inbound-mail: invalid JSON body")
+        log.warning(
+            "inbound-mail: invalid JSON body",
+            extra={"event": LOG_EVENT_WEBHOOK_REJECTED},
+        )
         return JSONResponse(
             {"status": "rejected", "reason": "invalid json"},
             status_code=status.HTTP_400_BAD_REQUEST,

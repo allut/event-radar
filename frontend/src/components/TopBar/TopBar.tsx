@@ -12,9 +12,10 @@ interface TopBarProps {
   localeDisabled?: boolean;
   onBack?: () => void;
   authed?: boolean;
+  showNav?: boolean;
 }
 
-export default function TopBar({ locale, onLocaleChange, onLogout, localeDisabled, onBack, authed = true }: TopBarProps) {
+export default function TopBar({ locale, onLocaleChange, onLogout, localeDisabled, onBack, authed = true, showNav = true }: TopBarProps) {
   return (
     <header className={cx(styles.topBar, !authed && styles.minimal)}>
       <div className={styles.left}>
@@ -24,7 +25,7 @@ export default function TopBar({ locale, onLocaleChange, onLogout, localeDisable
         </Link>
       </div>
 
-      {authed && (
+      {authed && showNav && (
         <nav className={styles.nav} aria-label={t('nav_daily5', locale)}>
           <NavLink
             to="/"
@@ -82,6 +83,7 @@ export default function TopBar({ locale, onLocaleChange, onLogout, localeDisable
               onLocaleChange={onLocaleChange}
               onLogout={onLogout ?? (() => undefined)}
               localeDisabled={localeDisabled}
+              showNav={showNav}
             />
           </div>
         )}

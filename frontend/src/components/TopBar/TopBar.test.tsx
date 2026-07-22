@@ -33,4 +33,14 @@ describe('TopBar', () => {
     expect(screen.getByRole('button', { name: /sign out/i })).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /sign in/i })).not.toBeInTheDocument();
   });
+
+  it('hides nav links but keeps Sign out and hamburger when showNav is false', () => {
+    renderWithProviders(
+      <TopBar locale="en" onLocaleChange={vi.fn()} onLogout={vi.fn()} authed showNav={false} />,
+    );
+
+    expect(screen.queryByRole('navigation')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /sign out/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Menu' })).toBeInTheDocument();
+  });
 });

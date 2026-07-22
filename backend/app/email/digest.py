@@ -16,6 +16,7 @@ from app.config import settings
 from app.constants import (
     DIGEST_MAX_WHY_GO_BULLETS,
     DIGEST_SEND_CONCURRENCY,
+    LOG_EVENT_EMAIL_SEND_FAILED,
     RESEND_ERROR_SNIPPET_LEN,
     RESEND_SEND_URL,
     RESEND_TIMEOUT_SECONDS,
@@ -343,7 +344,11 @@ async def send_daily_digests(
                 )
                 return "sent"
             except Exception:
-                log.exception("Failed to send digest to user %d", uid)
+                log.exception(
+                    "Failed to send digest to user %d",
+                    uid,
+                    extra={"event": LOG_EVENT_EMAIL_SEND_FAILED},
+                )
                 return "skipped"
 
     # return_exceptions=True is defence-in-depth: _send_one already catches
@@ -358,7 +363,11 @@ async def send_daily_digests(
     skipped = len(results) - sent - errored
     for r in results:
         if isinstance(r, Exception):
-            log.error("digest fanout coroutine raised", exc_info=r)
+            log.error(
+                "digest fanout coroutine raised",
+                exc_info=r,
+                extra={"event": LOG_EVENT_EMAIL_SEND_FAILED},
+            )
 
     return {
         "sent": sent,

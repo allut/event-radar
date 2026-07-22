@@ -127,12 +127,14 @@ export default function Settings() {
 
         <section className={styles.section}>
           <h2 className={styles.sectionTitle}>{t('section_language', locale)}</h2>
-          <LocaleSelector
-            locale={locale}
-            onChange={handleLocaleChange}
-            ariaLabel={t('section_language', locale)}
-            disabled={localePending}
-          />
+          <div className={styles.localeControl}>
+            <LocaleSelector
+              locale={locale}
+              onChange={handleLocaleChange}
+              ariaLabel={t('section_language', locale)}
+              disabled={localePending}
+            />
+          </div>
         </section>
 
         <section className={styles.section}>

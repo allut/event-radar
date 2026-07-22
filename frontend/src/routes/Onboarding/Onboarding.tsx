@@ -1,15 +1,17 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { api, ApiError } from '../../api/client';
 import { getLocale, setLocale } from '../../lib/auth';
+import { useLogout } from '../../hooks/useLogout';
 import { PERSONAS } from '../../constants';
 import { t, ti, personaName, personaVibe } from '../../i18n';
-import LocaleSelector from '../../components/LocaleSelector';
 import PersonaCard from '../../components/PersonaCard';
+import TopBar from '../../components/TopBar';
 import styles from './Onboarding.module.css';
 
 export default function Onboarding() {
   const navigate = useNavigate();
+  const handleLogout = useLogout();
   const [primarySlug, setPrimarySlug] = useState<string | null>(null);
   const [secondarySlug, setSecondarySlug] = useState<string | null>(null);
   const [locale, setLocaleState] = useState<string>(getLocale());
@@ -65,18 +67,13 @@ export default function Onboarding() {
 
   return (
     <div className={styles.page}>
-      <header className={styles.topBar}>
-        <Link to="/settings" className={styles.back}>
-          <span aria-hidden>←</span> {t('back', locale)}
-        </Link>
-
-        <Link to="/" className={styles.logoWrap}>
-          <span className={styles.radar} aria-hidden>◉</span>
-          <span className={styles.brand}>{t('brand', locale)}</span>
-        </Link>
-
-        <LocaleSelector locale={locale} onChange={handleLocaleChange} ariaLabel={t('section_language', locale)} />
-      </header>
+      <TopBar
+        locale={locale}
+        onLocaleChange={handleLocaleChange}
+        onLogout={handleLogout}
+        onBack={() => navigate('/settings')}
+        showNav={false}
+      />
 
       <main className={styles.main}>
         <div className={styles.intro}>
