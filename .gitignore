@@ -124,6 +124,9 @@ backend/.llm-cache/
 backend/scratch/
 scratch/
 
+# One-time maintenance scripts not meant for version control
+backend/scripts/_*
+
 # Raw newsletter MIME dumps for testing Resend Inbound webhook locally
 inbound-mail-samples/
 *.ics.local

@@ -21,7 +21,7 @@ export const SAFE_URL_SCHEMES = new Set(['http', 'https']);
 export const SANITIZE_ALLOWED_TAGS = ['p', 'br', 'strong', 'b', 'em', 'i', 'u', 'ul', 'ol', 'li', 'a', 'h3', 'h4', 'blockquote', 'span'];
 export const SANITIZE_ALLOWED_ATTR = ['href', 'title'];
 
-export const CATEGORIES = ['music', 'theater', 'exhibitions', 'workshops', 'sports', 'food_drink', 'networking', 'literature', 'family', 'cinema', 'alternative', 'nightlife'];
+export const CATEGORIES = ['music', 'theater', 'exhibitions', 'workshops', 'sports', 'food_drink', 'networking', 'literature', 'family', 'cinema', 'alternative', 'nightlife', 'comedy'];
 export const VIBES = ['trendy', 'casual', 'intimate', 'high_energy', 'educational', 'indie', 'underground', 'mainstream', 'accessible', 'niche'];
 
 export const BROWSE_PAGE_SIZE = 24;

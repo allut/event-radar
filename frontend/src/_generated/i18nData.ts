@@ -108,6 +108,7 @@ export const TRANSLATIONS: Record<Locale, Record<string, string>> = {
     'category_cinema': 'Cinema',
     'category_alternative': 'Alternative',
     'category_nightlife': 'Nightlife',
+    'category_comedy': 'Comedy',
     'vibe_trendy': 'Trendy',
     'vibe_casual': 'Casual',
     'vibe_intimate': 'Intimate',
@@ -282,6 +283,7 @@ export const TRANSLATIONS: Record<Locale, Record<string, string>> = {
     'category_cinema': 'Kino',
     'category_alternative': 'Alternatiiv',
     'category_nightlife': 'Ööelu',
+    'category_comedy': 'Komöödia',
     'vibe_trendy': 'Trendikas',
     'vibe_casual': 'Lõdvestunud',
     'vibe_intimate': 'Intiimne',
@@ -456,6 +458,7 @@ export const TRANSLATIONS: Record<Locale, Record<string, string>> = {
     'category_cinema': 'Кино',
     'category_alternative': 'Альтернатива',
     'category_nightlife': 'Ночная жизнь',
+    'category_comedy': 'Комедия',
     'vibe_trendy': 'Трендовый',
     'vibe_casual': 'Непринуждённый',
     'vibe_intimate': 'Камерный',
@@ -550,6 +553,18 @@ export const PERSONA_TRANSLATIONS:
     et: { name: 'Perepuhkuse harrastaja', vibe: 'Peresõbralik, loodusretked, nädalavahetuse väljasõidud' },
     ru: { name: 'Семейный исследователь', vibe: 'Семейный отдых, прогулки на природе, вылазки на выходных' },
   },
+  'concert_goer': {
+    et: { name: 'Kontserdikülastaja', vibe: 'Live-kontserdid — pop, rock, jazz, klassika; päeval või õhtul' },
+    ru: { name: 'Меломан', vibe: 'Живые концерты — поп, рок, джаз, классика; днём или вечером' },
+  },
+  'cinephile': {
+    et: { name: 'Filmihuviline', vibe: 'Filmiseansid, festivalid, arthouse ja esilinastused' },
+    ru: { name: 'Киноман', vibe: 'Кинопоказы, фестивали, артхаус и премьеры' },
+  },
+  'comedy_fan': {
+    et: { name: 'Komöödiafänn', vibe: 'Stand-up, improteater, sketšid ja komöödiaõhtud' },
+    ru: { name: 'Любитель комедии', vibe: 'Стендап, импровизация, скетчи и комедийные вечера' },
+  },
 };
 
 export interface PersonaData { slug: string; emoji: string; name: string; vibe: string; }
@@ -559,4 +574,7 @@ export const PERSONAS_EN: PersonaData[] = [
   { slug: 'weekend_hobbyist', emoji: '🎨', name: 'Weekend Hobbyist', vibe: 'Workshops, outdoor activities, craft markets' },
   { slug: 'culture_buff', emoji: '🎭', name: 'Culture Buff', vibe: 'Museums, theatre, classical concerts, art openings' },
   { slug: 'family_explorer', emoji: '👨‍👩‍👧', name: 'Family Explorer', vibe: 'Kid-friendly, nature walks, weekend excursions' },
+  { slug: 'concert_goer', emoji: '🎤', name: 'Concert-goer', vibe: 'Live gigs — pop, rock, jazz, classical; day or evening' },
+  { slug: 'cinephile', emoji: '🎬', name: 'Cinephile', vibe: 'Film screenings, festivals, arthouse & premieres' },
+  { slug: 'comedy_fan', emoji: '🎙️', name: 'Comedy Fan', vibe: 'Stand-up, improv, sketch & comedy nights' },
 ];

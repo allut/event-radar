@@ -100,7 +100,7 @@ def _validate_affinity_vector(slug: str, vector: dict) -> None:
 
 
 async def seed_personas(db: AsyncSession) -> None:
-    """Idempotently insert the 5 v0 personas. Updates display names and affinity vectors if changed."""
+    """Idempotently insert the 8 personas. Updates display names and affinity vectors if changed."""
     for p in _persona_seeds():
         _validate_affinity_vector(p["slug"], p["affinity_vector"])
         existing = await db.scalar(select(Persona).where(Persona.slug == p["slug"]))

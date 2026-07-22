@@ -140,4 +140,46 @@ PERSONAS: list[dict] = [
             "ru": "Семейный отдых, прогулки на природе, вылазки на выходных",
         },
     },
+    {
+        "slug": "concert_goer",
+        "emoji": "🎤",
+        "names": {
+            "en": "Concert-goer",
+            "et": "Kontserdikülastaja",
+            "ru": "Меломан",
+        },
+        "vibes": {
+            "en": "Live gigs — pop, rock, jazz, classical; day or evening",
+            "et": "Live-kontserdid — pop, rock, jazz, klassika; päeval või õhtul",
+            "ru": "Живые концерты — поп, рок, джаз, классика; днём или вечером",
+        },
+    },
+    {
+        "slug": "cinephile",
+        "emoji": "🎬",
+        "names": {
+            "en": "Cinephile",
+            "et": "Filmihuviline",
+            "ru": "Киноман",
+        },
+        "vibes": {
+            "en": "Film screenings, festivals, arthouse & premieres",
+            "et": "Filmiseansid, festivalid, arthouse ja esilinastused",
+            "ru": "Кинопоказы, фестивали, артхаус и премьеры",
+        },
+    },
+    {
+        "slug": "comedy_fan",
+        "emoji": "🎙️",
+        "names": {
+            "en": "Comedy Fan",
+            "et": "Komöödiafänn",
+            "ru": "Любитель комедии",
+        },
+        "vibes": {
+            "en": "Stand-up, improv, sketch & comedy nights",
+            "et": "Stand-up, improteater, sketšid ja komöödiaõhtud",
+            "ru": "Стендап, импровизация, скетчи и комедийные вечера",
+        },
+    },
 ]
