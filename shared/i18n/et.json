@@ -172,7 +172,14 @@
     "landing_trust_nopassword": "Ilma paroolita",
     "landing_trust_notracking": "Ilma jälgimiseta",
     "landing_trust_free": "Ilma tasuta",
-    "landing_final_title": "Ärka üles viie hea põhjusega välja minna."
+    "landing_final_title": "Ärka üles viie hea põhjusega välja minna.",
+    "unsubscribe.working": "Tellimuse tühistamine…",
+    "unsubscribe.success": "Oled igapäevase kokkuvõtte tellimusest loobunud.",
+    "unsubscribe.resubscribe": "Võta tagasi",
+    "unsubscribe.resubscribed": "Oled taas igapäevase kokkuvõtte tellinud.",
+    "unsubscribe.expired": "See tellimuse tühistamise link on aegunud.",
+    "unsubscribe.error": "Midagi läks valesti. Palun proovi uuesti.",
+    "unsubscribe.manage_settings": "Halda seadetes →"
   },
   "email": {
     "email.magic_link.subject": "Sinu What's on Radar sisselogimislink",

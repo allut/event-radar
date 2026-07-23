@@ -15,6 +15,7 @@ import Explore from './routes/Explore';
 import SavedEvents from './routes/SavedEvents';
 import EventDetail from './routes/EventDetail';
 import Settings from './routes/Settings';
+import Unsubscribe from './routes/Unsubscribe';
 import NotFound from './routes/NotFound';
 
 const queryClient = new QueryClient({
@@ -73,6 +74,7 @@ export default function App() {
               path="/settings"
               element={<Protected><Settings /></Protected>}
             />
+            <Route path="/unsubscribe" element={<Unsubscribe />} />
             <Route path="*" element={<Protected><NotFound /></Protected>} />
           </Routes>
           <Analytics beforeSend={(e) => ({ ...e, url: maskAnalyticsUrl(e.url) })} />

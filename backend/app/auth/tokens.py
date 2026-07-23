@@ -15,8 +15,10 @@ from app.config import settings
 from app.constants import (
     AUTH_MAGIC_SALT,
     AUTH_SESSION_SALT,
+    AUTH_UNSUBSCRIBE_SALT,
     SECONDS_PER_DAY,
     SECONDS_PER_MINUTE,
+    UNSUBSCRIBE_TOKEN_TTL_DAYS,
 )
 
 
@@ -71,3 +73,20 @@ def verify_session_token(token: str) -> tuple[int, int]:
         max_age=settings.SESSION_TTL_DAYS * SECONDS_PER_DAY,
     )
     return int(payload["uid"]), int(payload.get("v", 1))
+
+
+def generate_unsubscribe_token(user_id: int) -> str:
+    """No-login digest-unsubscribe token — long TTL so an old inbox email's
+    link still works; salted separately from magic-link/session tokens so a
+    leaked one-click-unsubscribe link can never be replayed as a sign-in."""
+    return _serializer().dumps({"uid": user_id}, salt=AUTH_UNSUBSCRIBE_SALT)
+
+
+def verify_unsubscribe_token(token: str) -> int:
+    """Decode and return user_id. Raises SignatureExpired or BadSignature on failure."""
+    payload = _serializer().loads(
+        token,
+        salt=AUTH_UNSUBSCRIBE_SALT,
+        max_age=UNSUBSCRIBE_TOKEN_TTL_DAYS * SECONDS_PER_DAY,
+    )
+    return int(payload["uid"])

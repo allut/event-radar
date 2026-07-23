@@ -172,7 +172,14 @@
     "landing_trust_nopassword": "Без пароля",
     "landing_trust_notracking": "Без слежки",
     "landing_trust_free": "Без платы",
-    "landing_final_title": "Просыпайтесь с пятью хорошими поводами выйти в город."
+    "landing_final_title": "Просыпайтесь с пятью хорошими поводами выйти в город.",
+    "unsubscribe.working": "Отписываем вас…",
+    "unsubscribe.success": "Вы отписались от ежедневной рассылки.",
+    "unsubscribe.resubscribe": "Отменить",
+    "unsubscribe.resubscribed": "Вы снова подписаны на ежедневную рассылку.",
+    "unsubscribe.expired": "Срок действия ссылки для отписки истёк.",
+    "unsubscribe.error": "Что-то пошло не так. Попробуйте снова.",
+    "unsubscribe.manage_settings": "Управлять в настройках →"
   },
   "email": {
     "email.magic_link.subject": "Ваша ссылка для входа в What's on Radar",

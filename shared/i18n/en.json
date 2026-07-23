@@ -172,7 +172,14 @@
     "landing_trust_nopassword": "No password",
     "landing_trust_notracking": "No tracking",
     "landing_trust_free": "No fee",
-    "landing_final_title": "Wake up to five good reasons to go out."
+    "landing_final_title": "Wake up to five good reasons to go out.",
+    "unsubscribe.working": "Unsubscribing you…",
+    "unsubscribe.success": "You're unsubscribed from the daily digest.",
+    "unsubscribe.resubscribe": "Undo",
+    "unsubscribe.resubscribed": "You're subscribed to the daily digest again.",
+    "unsubscribe.expired": "This unsubscribe link has expired.",
+    "unsubscribe.error": "Something went wrong. Please try again.",
+    "unsubscribe.manage_settings": "Manage in Settings →"
   },
   "email": {
     "email.magic_link.subject": "Your What's on Radar sign-in link",

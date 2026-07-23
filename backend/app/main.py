@@ -62,6 +62,7 @@ from app.routers.feedback import router as feedback_router
 from app.routers.onboarding import router as onboarding_router
 from app.routers.public import router as public_router
 from app.routers.settings import router as settings_router
+from app.routers.unsubscribe import router as unsubscribe_router
 from app.routers.utils import require_configured_secret
 from app.routers.webhooks import router as webhooks_router
 from app.seeds import seed_personas, seed_sources
@@ -345,6 +346,7 @@ app.include_router(feedback_router)
 app.include_router(onboarding_router)
 app.include_router(public_router)
 app.include_router(settings_router)
+app.include_router(unsubscribe_router)
 app.include_router(webhooks_router)
 
 

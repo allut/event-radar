@@ -379,6 +379,8 @@ ADMIN_DEDUP_GROUPS_MAX_PAGE_SIZE: int = 500
 RATE_LIMIT_AUTH_REQUEST_LINK = "10/minute"
 RATE_LIMIT_AUTH_VERIFY = "30/minute"
 RATE_LIMIT_WEBHOOK_INBOUND_MAIL = "60/minute"
+# Public digest unsubscribe/resubscribe (routers/unsubscribe.py) — no auth, token-verified.
+RATE_LIMIT_UNSUBSCRIBE = "30/minute"
 
 # Resend inbound-mail webhook signature verification (Svix scheme; see
 # https://resend.com/docs/dashboard/webhooks/verify-webhooks-requests and
@@ -428,10 +430,16 @@ SHOWCASE_FALLBACK_WINDOW_DAYS = 30
 # Auth tokens
 AUTH_MAGIC_SALT = "magic-link-v1"
 AUTH_SESSION_SALT = "session-v1"
+AUTH_UNSUBSCRIBE_SALT = "unsubscribe-v1"
 
 # Per-email magic-link resend cooldown (routers/auth.py::_recent_unused_link_exists) —
 # prevents Resend quota exhaustion from rapid repeat requests for the same address.
 MAGIC_LINK_RESEND_COOLDOWN_SECONDS = 120
+
+# One-click digest unsubscribe (routers/unsubscribe.py). A long TTL so a link in an
+# old, unread inbox email still works; the endpoint is reversible (Undo/resubscribe)
+# so a stale click carries low risk.
+UNSUBSCRIBE_TOKEN_TTL_DAYS = 365
 
 # PII masking — number of leading local-part characters kept visible by mask_email()
 # (routers/utils.py) so log lines stay correlatable without persisting raw addresses.
