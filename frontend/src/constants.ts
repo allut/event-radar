@@ -78,7 +78,7 @@ export const SIGNAL_TO_CLASS: Record<Signal, string> = {
 
 export const EUR_SYMBOL = '€';
 
-// Keys must match the 12-category taxonomy in shared/app-config.json (VALID_CATEGORIES)
+// Keys must match the 14-category taxonomy in shared/app-config.json (VALID_CATEGORIES)
 export const CATEGORY_GRADIENTS: Record<string, string> = {
   nightlife:    'linear-gradient(135deg, #1a0a1f 0%, #2d1040 100%)',
   music:        'linear-gradient(135deg, #0a1020 0%, #1a2060 100%)',
@@ -92,6 +92,7 @@ export const CATEGORY_GRADIENTS: Record<string, string> = {
   family:       'linear-gradient(135deg, #1a0a10 0%, #2a1020 100%)',
   cinema:       'linear-gradient(135deg, #0a1510 0%, #103020 100%)',
   alternative:  'linear-gradient(135deg, #100f0a 0%, #201a0a 100%)',
+  romantic:     'linear-gradient(135deg, #1a0a12 0%, #3a1128 100%)',
 };
 export const FALLBACK_GRADIENT = 'linear-gradient(135deg, #1a1f2e 0%, #13161e 100%)';
 

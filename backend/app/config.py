@@ -98,6 +98,11 @@ class Settings(BaseSettings):
         "vibes": {"casual": 0.8, "high_energy": 0.7, "mainstream": 0.6},
         "times": {"evening": 0.9, "weekend": 0.7, "late_night": 0.4},
     }
+    PERSONA_ROMANCE_SEEKER_AFFINITY: dict[str, Any] = {
+        "categories": {"romantic": 1.0, "food_drink": 0.7, "music": 0.5, "cinema": 0.5, "theater": 0.4},
+        "vibes": {"intimate": 1.0, "trendy": 0.5, "casual": 0.4},
+        "times": {"evening": 0.9, "weekend": 0.7},
+    }
 
     # Admin / internal security
     ADMIN_USERNAME: str = ADMIN_USERNAME_DEFAULT  # Basic-auth username for /admin/* endpoints

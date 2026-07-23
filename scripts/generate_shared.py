@@ -319,7 +319,7 @@ def write_frontend_shared_constants(cfg: dict, version: str) -> str:
         f"export const SANITIZE_ALLOWED_TAGS = {_ts_str_list(san['allowed_tags'])};",
         f"export const SANITIZE_ALLOWED_ATTR = {_ts_str_list(all_attrs)};",
         "",
-        # Fixed 12-category / 10-vibe taxonomy — single source of truth for the
+        # Fixed 14-category / 10-vibe taxonomy — single source of truth for the
         # /explore filter chips (matches backend VALID_CATEGORIES/VALID_VIBES).
         f"export const CATEGORIES = {_ts_str_list(cfg['categories'])};",
         f"export const VIBES = {_ts_str_list(cfg['vibes'])};",

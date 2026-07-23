@@ -110,5 +110,19 @@
       "et": "Stand-up, improteater, sketšid ja komöödiaõhtud",
       "ru": "Стендап, импровизация, скетчи и комедийные вечера"
     }
+  },
+  {
+    "slug": "romance_seeker",
+    "emoji": "🌹",
+    "names": {
+      "en": "Romance Seeker",
+      "et": "Romantika otsija",
+      "ru": "Искатель романтики"
+    },
+    "vibes": {
+      "en": "Romantic dinners, wine tastings, intimate concerts, cosy cinema",
+      "et": "Romantilised õhtusöögid, veinidegustatsioonid, intiimsed kontserdid, hubane kino",
+      "ru": "Романтические ужины, дегустации вин, камерные концерты, уютное кино"
+    }
   }
 ]

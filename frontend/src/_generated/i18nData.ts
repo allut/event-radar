@@ -108,6 +108,7 @@ export const TRANSLATIONS: Record<Locale, Record<string, string>> = {
     'category_alternative': 'Alternative',
     'category_nightlife': 'Nightlife',
     'category_comedy': 'Comedy',
+    'category_romantic': 'Romantic',
     'vibe_trendy': 'Trendy',
     'vibe_casual': 'Casual',
     'vibe_intimate': 'Intimate',
@@ -282,6 +283,7 @@ export const TRANSLATIONS: Record<Locale, Record<string, string>> = {
     'category_alternative': 'Alternatiiv',
     'category_nightlife': 'Ööelu',
     'category_comedy': 'Komöödia',
+    'category_romantic': 'Romantika',
     'vibe_trendy': 'Trendikas',
     'vibe_casual': 'Lõdvestunud',
     'vibe_intimate': 'Intiimne',
@@ -456,6 +458,7 @@ export const TRANSLATIONS: Record<Locale, Record<string, string>> = {
     'category_alternative': 'Альтернатива',
     'category_nightlife': 'Ночная жизнь',
     'category_comedy': 'Комедия',
+    'category_romantic': 'Романтика',
     'vibe_trendy': 'Трендовый',
     'vibe_casual': 'Непринуждённый',
     'vibe_intimate': 'Камерный',
@@ -562,6 +565,10 @@ export const PERSONA_TRANSLATIONS:
     et: { name: 'Komöödiafänn', vibe: 'Stand-up, improteater, sketšid ja komöödiaõhtud' },
     ru: { name: 'Любитель комедии', vibe: 'Стендап, импровизация, скетчи и комедийные вечера' },
   },
+  'romance_seeker': {
+    et: { name: 'Romantika otsija', vibe: 'Romantilised õhtusöögid, veinidegustatsioonid, intiimsed kontserdid, hubane kino' },
+    ru: { name: 'Искатель романтики', vibe: 'Романтические ужины, дегустации вин, камерные концерты, уютное кино' },
+  },
 };
 
 export interface PersonaData { slug: string; emoji: string; name: string; vibe: string; }
@@ -574,4 +581,5 @@ export const PERSONAS_EN: PersonaData[] = [
   { slug: 'concert_goer', emoji: '🎤', name: 'Concert-goer', vibe: 'Live gigs — pop, rock, jazz, classical; day or evening' },
   { slug: 'cinephile', emoji: '🎬', name: 'Cinephile', vibe: 'Film screenings, festivals, arthouse & premieres' },
   { slug: 'comedy_fan', emoji: '🎙️', name: 'Comedy Fan', vibe: 'Stand-up, improv, sketch & comedy nights' },
+  { slug: 'romance_seeker', emoji: '🌹', name: 'Romance Seeker', vibe: 'Romantic dinners, wine tastings, intimate concerts, cosy cinema' },
 ];
