@@ -249,6 +249,8 @@ def write_backend_shared_constants(cfg: dict, version: str) -> str:
         f"SESSION_TTL_DAYS: int = {cfg['session_ttl_days']}",
         f"PERSONA_PRIMARY_WEIGHT: float = {cfg['persona_primary_weight']}",
         f"PERSONA_SECONDARY_WEIGHT: float = {cfg['persona_secondary_weight']}",
+        f"PERSONA_TERTIARY_WEIGHT: float = {cfg['persona_tertiary_weight']}",
+        f"PERSONA_MAX_SELECTABLE: int = {cfg['persona_max_selectable']}",
         f"DEFAULT_USER_LOCALE: str = {_py_str(cfg['default_locale'])}",
         f"DEFAULT_CURRENCY: str = {_py_str(cfg['default_currency'])}",
         f"DEFAULT_USER_CITY: str = {_py_str(cfg['default_city'])}",
@@ -303,6 +305,8 @@ def write_frontend_shared_constants(cfg: dict, version: str) -> str:
         f"export const SESSION_TTL_DAYS = {cfg['session_ttl_days']};",
         f"export const PERSONA_PRIMARY_WEIGHT_THRESHOLD = {cfg['persona_primary_weight']};",
         f"export const PERSONA_SECONDARY_WEIGHT = {cfg['persona_secondary_weight']};",
+        f"export const PERSONA_TERTIARY_WEIGHT = {cfg['persona_tertiary_weight']};",
+        f"export const PERSONA_MAX_SELECTABLE = {cfg['persona_max_selectable']};",
         f"export const DEFAULT_CURRENCY = {_ts_str(cfg['default_currency'])};",
         "",
         _ts_locales(cfg),
@@ -315,7 +319,7 @@ def write_frontend_shared_constants(cfg: dict, version: str) -> str:
         f"export const SANITIZE_ALLOWED_TAGS = {_ts_str_list(san['allowed_tags'])};",
         f"export const SANITIZE_ALLOWED_ATTR = {_ts_str_list(all_attrs)};",
         "",
-        # Fixed 12-category / 10-vibe taxonomy — single source of truth for the
+        # Fixed 14-category / 10-vibe taxonomy — single source of truth for the
         # /explore filter chips (matches backend VALID_CATEGORIES/VALID_VIBES).
         f"export const CATEGORIES = {_ts_str_list(cfg['categories'])};",
         f"export const VIBES = {_ts_str_list(cfg['vibes'])};",

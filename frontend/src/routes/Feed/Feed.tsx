@@ -8,7 +8,7 @@ import EventCard, { type EventData } from '../../components/EventCard';
 import EmptyState from '../../components/EmptyState';
 import PageState from '../../components/PageState';
 import TopBar from '../../components/TopBar';
-import { formatHourMinute, formatTodayDate, padIndex } from '../../utils';
+import { formatHourMinute, formatIsoDate, formatTodayDate, padIndex } from '../../utils';
 import { QUERY_KEYS } from '../../constants';
 import styles from './Feed.module.css';
 
@@ -16,6 +16,7 @@ interface FeedResponse {
   feed_date: string;
   events: EventData[];
   built_at: string | null;
+  is_stale: boolean;
 }
 
 export default function Feed() {
@@ -58,6 +59,12 @@ export default function Feed() {
           <p className={styles.tagline}>{t('tagline', locale)}</p>
           <hr className={styles.rule} />
         </header>
+
+        {data?.is_stale && events.length > 0 && (
+          <p className={styles.staleNotice}>
+            {ti('feed_stale_notice', locale, { date: formatIsoDate(data.feed_date, locale) })}
+          </p>
+        )}
 
         <Link to="/explore" className={styles.promo}>
           <div className={styles.promoText}>

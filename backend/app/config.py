@@ -51,8 +51,10 @@ class Settings(BaseSettings):
 
     # Persona affinity vectors — keys must match VALID_CATEGORIES / VALID_VIBES / VALID_TIMES.
     # Override in .env to retune without code changes.
+    # Retuned: lower music affinity so the concert-goer owns the daytime/evening
+    # gig slot and the clubber stays clearly rave/techno/nightlife-only.
     PERSONA_UNDERGROUND_CLUBBER_AFFINITY: dict[str, Any] = {
-        "categories": {"music": 1.0, "nightlife": 1.0, "alternative": 0.6},
+        "categories": {"nightlife": 1.0, "music": 0.5, "alternative": 0.6},
         "vibes": {"underground": 1.0, "high_energy": 0.8, "indie": 0.6},
         "times": {"late_night": 1.0, "weekend": 0.8},
     }
@@ -80,6 +82,26 @@ class Settings(BaseSettings):
         "categories": {"family": 1.0, "workshops": 0.6, "sports": 0.4},
         "vibes": {"accessible": 1.0, "casual": 0.7, "educational": 0.5},
         "times": {"daytime": 0.9, "weekend": 0.8},
+    }
+    PERSONA_CONCERT_GOER_AFFINITY: dict[str, Any] = {
+        "categories": {"music": 1.0, "theater": 0.3},
+        "vibes": {"mainstream": 0.8, "casual": 0.7, "accessible": 0.6},
+        "times": {"evening": 0.9, "weekend": 0.7, "daytime": 0.6},
+    }
+    PERSONA_CINEPHILE_AFFINITY: dict[str, Any] = {
+        "categories": {"cinema": 1.0, "exhibitions": 0.3, "literature": 0.3},
+        "vibes": {"indie": 0.8, "niche": 0.7, "educational": 0.5},
+        "times": {"evening": 0.8, "weekend": 0.6},
+    }
+    PERSONA_COMEDY_FAN_AFFINITY: dict[str, Any] = {
+        "categories": {"comedy": 1.0, "theater": 0.5, "alternative": 0.3},
+        "vibes": {"casual": 0.8, "high_energy": 0.7, "mainstream": 0.6},
+        "times": {"evening": 0.9, "weekend": 0.7, "late_night": 0.4},
+    }
+    PERSONA_ROMANCE_SEEKER_AFFINITY: dict[str, Any] = {
+        "categories": {"romantic": 1.0, "food_drink": 0.7, "music": 0.5, "cinema": 0.5, "theater": 0.4},
+        "vibes": {"intimate": 1.0, "trendy": 0.5, "casual": 0.4},
+        "times": {"evening": 0.9, "weekend": 0.7},
     }
 
     # Admin / internal security

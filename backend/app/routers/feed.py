@@ -3,7 +3,7 @@
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, Request
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.constants import RATE_LIMIT_BROWSE, TALLINN_TZ
@@ -28,7 +28,8 @@ async def get_feed(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    """Return today's Daily 5 feed. Empty events list if feed has not been built yet."""
+    """Return today's Daily 5 feed. Falls back to the most recent prior non-empty
+    feed (flagged via `is_stale`) if today's has not been built yet."""
     today = datetime.now(TALLINN_TZ).date()
 
     feed = await db.scalar(
@@ -39,11 +40,26 @@ async def get_feed(
     )
 
     if feed is None or not feed.event_ids:
+        feed = await db.scalar(
+            select(DailyFeed)
+            .where(
+                DailyFeed.user_id == current_user.id,
+                DailyFeed.feed_date < today,
+                func.cardinality(DailyFeed.event_ids) > 0,
+            )
+            .order_by(DailyFeed.feed_date.desc())
+            .limit(1)
+        )
+
+    if feed is None or not feed.event_ids:
         return {
             "feed_date": today.isoformat(),
             "events": [],
             "built_at": None,
+            "is_stale": False,
         }
+
+    is_stale = feed.feed_date != today
 
     event_rows = (
         await db.scalars(
@@ -58,13 +74,26 @@ async def get_feed(
     # Preserve the feed ordering from daily_feeds.event_ids
     events = [event_map[eid] for eid in feed.event_ids if eid in event_map]
 
+    if not events:
+        # Every event in this feed has since ended or been unpublished — a
+        # stale feed hydrating to nothing is indistinguishable from "not
+        # built yet" for the caller, so keep the same empty/not-stale shape
+        # rather than returning is_stale: true with an empty events list.
+        return {
+            "feed_date": today.isoformat(),
+            "events": [],
+            "built_at": None,
+            "is_stale": False,
+        }
+
     sigs = await load_user_signals(db, current_user.id, [e.id for e in events])
 
     return {
-        "feed_date": today.isoformat(),
+        "feed_date": feed.feed_date.isoformat(),
         "events": [
             serialize_event(e, locale=current_user.locale, feedback_by_event=sigs)
             for e in events
         ],
         "built_at": feed.built_at.isoformat(),
+        "is_stale": is_stale,
     }

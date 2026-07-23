@@ -84,7 +84,7 @@ describe('Explore', () => {
     await waitFor(() => expect(screen.getAllByTestId('event-card').length).toBe(1));
 
     expect(screen.getByRole('button', { name: 'All events' })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByRole('button', { name: /Categories · 12/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Categories · 14/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Vibes · 10/ })).toBeInTheDocument();
 
     const calls = mockGet.mock.calls.map((c) => c[0] as string);
@@ -228,7 +228,7 @@ describe('Explore', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'All events' }));
 
-    await waitFor(() => expect(screen.getByRole('button', { name: /Categories · 12/ })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole('button', { name: /Categories · 14/ })).toBeInTheDocument());
     expect(screen.getByRole('button', { name: /Vibes · 10/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'For you' })).toHaveAttribute('aria-pressed', 'false');
   });

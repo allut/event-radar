@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 
-APP_VERSION: str = "0.1.3"
+APP_VERSION: str = "0.1.4"
 MAGIC_LINK_TTL_MINUTES: int = 15
 SESSION_TTL_DAYS: int = 2
 PERSONA_PRIMARY_WEIGHT: float = 1.0
 PERSONA_SECONDARY_WEIGHT: float = 0.4
+PERSONA_TERTIARY_WEIGHT: float = 0.2
+PERSONA_MAX_SELECTABLE: int = 3
 DEFAULT_USER_LOCALE: str = "en"
 DEFAULT_CURRENCY: str = "EUR"
 DEFAULT_USER_CITY: str = "Tallinn"
@@ -15,7 +17,7 @@ VALID_LOCALES: frozenset[str] = frozenset({"en", "et", "ru"})
 LOCALE_CODE_MAP: dict[str, str] = {"et": "et-EE", "ru": "ru-RU"}
 DEFAULT_LOCALE_CODE: str = "en-GB"
 VALID_SIGNALS: frozenset[str] = frozenset({"bookmark", "click_external", "dislike", "like", "view"})
-VALID_CATEGORIES: frozenset[str] = frozenset({"alternative", "cinema", "exhibitions", "family", "food_drink", "literature", "music", "networking", "nightlife", "sports", "theater", "workshops"})
+VALID_CATEGORIES: frozenset[str] = frozenset({"alternative", "cinema", "comedy", "exhibitions", "family", "food_drink", "literature", "music", "networking", "nightlife", "romantic", "sports", "theater", "workshops"})
 VALID_VIBES: frozenset[str] = frozenset({"accessible", "casual", "educational", "high_energy", "indie", "intimate", "mainstream", "niche", "trendy", "underground"})
 SAFE_URL_SCHEMES: frozenset[str] = frozenset({"http", "https"})
 HTML_SANITIZE_ALLOWED_TAGS: frozenset[str] = frozenset({"a", "b", "blockquote", "br", "em", "h3", "h4", "i", "li", "ol", "p", "span", "strong", "u", "ul"})

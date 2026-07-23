@@ -4,7 +4,7 @@ One LLM call per canonical event (dedup_group_id IS NULL OR == event.id).
 Writes an ``EventClassification`` row and advances ``event.status`` to
 ``classified``.
 
-Fixed taxonomy (12 categories, 10 vibes) prevents ontology drift.
+Fixed taxonomy (14 categories, 10 vibes) prevents ontology drift.
 Any LLM-returned value not in the taxonomy is silently dropped.
 """
 

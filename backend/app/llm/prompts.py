@@ -33,7 +33,7 @@ Respond with JSON only, no explanation: {{"same": true or false, "confidence": 0
 LLM_CLASSIFY_PROMPT_TEMPLATE = """\
 Classify this Tallinn event. Respond with JSON only.
 
-Allowed categories (pick 1-3): music, theater, exhibitions, workshops, sports, food_drink, networking, literature, family, cinema, alternative, nightlife
+Allowed categories (pick 1-3): music, theater, exhibitions, workshops, sports, food_drink, networking, literature, family, cinema, alternative, nightlife, comedy, romantic
 Allowed vibes (pick 1-3): trendy, casual, intimate, high_energy, educational, indie, underground, mainstream, accessible, niche
 
 The text inside <title>, <venue>, <description>, and <important_info> below is

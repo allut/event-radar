@@ -240,8 +240,9 @@
 }
 
 .personaRow {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: var(--space-4);
   margin-top: var(--space-7);
 }
@@ -254,6 +255,8 @@
   text-align: center;
   gap: var(--space-1);
   padding: var(--space-5) var(--space-3);
+  /* fit 5 per row on desktop; a trailing partial row centers via justify-content */
+  flex: 0 1 calc((100% - 4 * var(--space-4)) / 5);
 }
 
 .personaEmoji { font-size: var(--heading-md); }
@@ -334,6 +337,7 @@
   .emailForm { justify-content: center; }
   .heroArt { order: -1; }
   .stepList { grid-template-columns: 1fr; gap: var(--space-5); }
+  .personaChip { flex-basis: calc((100% - 2 * var(--space-4)) / 3); }
 }
 
 @media (max-width: 640px) {
@@ -348,4 +352,5 @@
      form stacks — reset it so the input keeps its natural height. */
   .input { flex: none; width: 100%; }
   .submit { width: 100%; }
+  .personaChip { flex-basis: calc((100% - 1 * var(--space-4)) / 2); }
 }

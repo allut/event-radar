@@ -22,6 +22,7 @@ from app.constants import (
     LOG_QUIET_LOGGER_NAMES,
     LOG_RECORD_RESERVED_ATTRS,
     LOG_SHIP_QUEUE_MAXSIZE,
+    LOG_SHIP_SUPPRESS_ACCESS_PATHS,
     LOG_SHIP_TIMEOUT_SECONDS,
 )
 
@@ -90,6 +91,38 @@ class HttpLogShipHandler(logging.Handler):
         super().close()
 
 
+class _AccessPathFilter(logging.Filter):
+    """Drops uvicorn.access records for high-frequency probe paths.
+
+    uvicorn.access records carry args = (client_addr, method, path,
+    http_version, status); we match the path (query string stripped, since
+    uvicorn includes it in this arg, e.g. "/health?x=1") against
+    LOG_SHIP_SUPPRESS_ACCESS_PATHS. Only a successful (< 400) response is
+    suppressed — a failing health check is exactly the signal the Axiom
+    monitor should see, so it still ships. Attached only to the shipping
+    QueueHandler, so suppressed lines still reach the console handler
+    (Render logs).
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if (
+            record.name == "uvicorn.access"
+            and isinstance(record.args, tuple)
+            and len(record.args) >= 5
+        ):
+            path = record.args[2]
+            if isinstance(path, str):
+                path = path.split("?", 1)[0]
+            status = record.args[4]
+            if (
+                path in LOG_SHIP_SUPPRESS_ACCESS_PATHS
+                and isinstance(status, int)
+                and status < 400
+            ):
+                return False
+        return True
+
+
 class _DevTextFormatter(logging.Formatter):
     """Text formatter for local dev console output.
 
@@ -156,7 +189,9 @@ def configure_logging() -> None:
 
     if not is_dev and settings.LOG_SHIP_URL:
         ship_queue: queue.Queue = queue.Queue(LOG_SHIP_QUEUE_MAXSIZE)
-        root.addHandler(logging.handlers.QueueHandler(ship_queue))
+        queue_handler = logging.handlers.QueueHandler(ship_queue)
+        queue_handler.addFilter(_AccessPathFilter())
+        root.addHandler(queue_handler)
         global _queue_listener
         _queue_listener = logging.handlers.QueueListener(
             ship_queue, HttpLogShipHandler()

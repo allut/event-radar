@@ -1,9 +1,11 @@
 """Tests for GET /feed and GET /events/{id} endpoints."""
 import http
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from unittest.mock import MagicMock
 
 import pytest
+
+from app.constants import TALLINN_TZ
 
 
 # ---------------------------------------------------------------------------
@@ -47,6 +49,97 @@ class TestGetFeed:
         assert result["events"][0]["id"] == 10
         assert result["events"][1]["id"] == 20
         assert result["built_at"] is not None
+
+    @pytest.mark.asyncio
+    async def test_falls_back_to_prior_feed_when_none_today(
+        self, mock_db, make_user, make_event, make_request
+    ):
+        from app.routers.feed import get_feed
+
+        prior_feed = MagicMock()
+        prior_feed.event_ids = [10]
+        prior_feed.feed_date = date(2026, 5, 9)
+        prior_feed.built_at = datetime(2026, 5, 9, 6, 0, 0, tzinfo=timezone.utc)
+        # First db.scalar() call (today's lookup) -> None; second (fallback) -> prior_feed.
+        mock_db.scalar.side_effect = [None, prior_feed]
+
+        event10 = make_event(10)
+        scalars_result = MagicMock()
+        scalars_result.all.return_value = [event10]
+        mock_db.scalars.return_value = scalars_result
+
+        user = make_user()
+        result = await get_feed(request=make_request(), current_user=user, db=mock_db)
+
+        assert result["is_stale"] is True
+        assert result["feed_date"] == "2026-05-09"
+        assert len(result["events"]) == 1
+        assert result["events"][0]["id"] == 10
+
+    @pytest.mark.asyncio
+    async def test_stale_feed_hydrating_to_nothing_returns_empty_not_stale(
+        self, mock_db, make_user, make_request
+    ):
+        """The fallback feed's events all ended/were unpublished since it was
+        built — public_event_filter() strips them all, hydrated events is
+        empty. Must not report is_stale: true with no events."""
+        from app.routers.feed import get_feed
+
+        prior_feed = MagicMock()
+        prior_feed.event_ids = [10]
+        prior_feed.feed_date = date(2026, 5, 9)
+        prior_feed.built_at = datetime(2026, 5, 9, 6, 0, 0, tzinfo=timezone.utc)
+        mock_db.scalar.side_effect = [None, prior_feed]
+
+        empty = MagicMock()
+        empty.all.return_value = []
+        mock_db.scalars.return_value = empty
+
+        user = make_user()
+        result = await get_feed(request=make_request(), current_user=user, db=mock_db)
+
+        assert result["events"] == []
+        assert result["is_stale"] is False
+        assert result["built_at"] is None
+
+    @pytest.mark.asyncio
+    async def test_no_fallback_available_returns_empty_not_stale(
+        self, mock_db, make_user, make_request
+    ):
+        from app.routers.feed import get_feed
+
+        # Today's lookup -> None; fallback lookup -> also None.
+        mock_db.scalar.side_effect = [None, None]
+
+        user = make_user()
+        result = await get_feed(request=make_request(), current_user=user, db=mock_db)
+
+        assert result["events"] == []
+        assert result["is_stale"] is False
+
+    @pytest.mark.asyncio
+    async def test_todays_feed_present_is_not_stale(
+        self, mock_db, make_user, make_event, make_request
+    ):
+        from app.routers.feed import get_feed
+
+        today = datetime.now(TALLINN_TZ).date()
+        feed = MagicMock()
+        feed.event_ids = [10]
+        feed.feed_date = today
+        feed.built_at = datetime(2026, 5, 10, 6, 0, 0, tzinfo=timezone.utc)
+        mock_db.scalar.return_value = feed
+
+        event10 = make_event(10)
+        scalars_result = MagicMock()
+        scalars_result.all.return_value = [event10]
+        mock_db.scalars.return_value = scalars_result
+
+        user = make_user()
+        result = await get_feed(request=make_request(), current_user=user, db=mock_db)
+
+        assert result["is_stale"] is False
+        assert result["feed_date"] == today.isoformat()
 
     @pytest.mark.asyncio
     async def test_empty_event_ids_returns_empty(self, mock_db, make_user, make_request):

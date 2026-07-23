@@ -3,6 +3,8 @@
   "session_ttl_days": 2,
   "persona_primary_weight": 1.0,
   "persona_secondary_weight": 0.4,
+  "persona_tertiary_weight": 0.2,
+  "persona_max_selectable": 3,
   "default_locale": "en",
   "default_currency": "EUR",
   "default_city": "Tallinn",
@@ -17,7 +19,7 @@
   "categories": [
     "music", "theater", "exhibitions", "workshops", "sports",
     "food_drink", "networking", "literature", "family",
-    "cinema", "alternative", "nightlife"
+    "cinema", "alternative", "nightlife", "comedy", "romantic"
   ],
   "vibes": [
     "trendy", "casual", "intimate", "high_energy", "educational",

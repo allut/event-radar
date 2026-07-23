@@ -136,14 +136,26 @@ export function formatEventDateTime(iso: string, locale: string): string {
   return `${weekday}, ${day} · ${time}`;
 }
 
-export function formatTodayDate(locale: string): string {
+function formatLongDate(date: Date, locale: string): string {
   const localeCode = toLocaleCode(locale);
-  return new Date().toLocaleDateString(localeCode, {
+  return date.toLocaleDateString(localeCode, {
     weekday: 'long',
     day: 'numeric',
     month: 'long',
     year: 'numeric',
   });
+}
+
+export function formatTodayDate(locale: string): string {
+  return formatLongDate(new Date(), locale);
+}
+
+/** Formats a `YYYY-MM-DD` date-only string (e.g. `daily_feeds.feed_date`) using
+ * a local-date constructor rather than `new Date(dateStr)` — the latter parses
+ * a bare date as UTC midnight, which can shift a day off in timezones behind UTC. */
+export function formatIsoDate(dateStr: string, locale: string): string {
+  const [year, month, day] = dateStr.split('-').map(Number);
+  return formatLongDate(new Date(year, month - 1, day), locale);
 }
 
 export function padIndex(n: number): string {
@@ -195,12 +207,8 @@ export function isFullSet(sel: string[], all: readonly string[]): boolean {
   return sel.length === all.length;
 }
 
-function pad2(n: number): string {
-  return String(n).padStart(2, '0');
-}
-
 function toDateStr(d: Date): string {
-  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+  return `${d.getFullYear()}-${padIndex(d.getMonth() + 1)}-${padIndex(d.getDate())}`;
 }
 
 /** Resolve a date preset against the browser's local clock (backend stays

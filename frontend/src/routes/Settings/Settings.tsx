@@ -6,7 +6,7 @@ import { getLocale } from '../../lib/auth';
 import { useLocaleMutation } from '../../hooks/useLocaleMutation';
 import { useLogout } from '../../hooks/useLogout';
 import { useToast } from '../../hooks/useToast';
-import { AUTH_REDIRECT_DELAY_MS, PERSONAS, PERSONA_PRIMARY_WEIGHT_THRESHOLD, QUERY_KEYS } from '../../constants';
+import { AUTH_REDIRECT_DELAY_MS, PERSONAS, QUERY_KEYS } from '../../constants';
 import { cx } from '../../utils';
 import { t, personaName } from '../../i18n';
 import LocaleSelector from '../../components/LocaleSelector';
@@ -98,12 +98,11 @@ export default function Settings() {
     logoutAllMutation.mutate();
   }
 
-  const primaryPersona = data?.personas.find((p) => p.weight >= PERSONA_PRIMARY_WEIGHT_THRESHOLD);
-  const secondaryPersona = data?.personas.find((p) => p.weight < PERSONA_PRIMARY_WEIGHT_THRESHOLD);
-
   function personaEmoji(slug: string): string {
     return PERSONAS.find((p) => p.slug === slug)?.emoji ?? '◉';
   }
+
+  const RANK_LABEL_KEYS = ['persona_primary', 'persona_secondary', 'persona_tertiary'] as const;
 
   if (isLoading) {
     return <PageState kind="loading" message={t('loading', locale)} />;
@@ -140,29 +139,22 @@ export default function Settings() {
         <section className={styles.section}>
           <h2 className={styles.sectionTitle}>{t('section_persona', locale)}</h2>
           <div className={styles.personaDisplay}>
-            {primaryPersona ? (
-              <div className={styles.personaRow}>
-                <span className={styles.personaEmoji}>{personaEmoji(primaryPersona.slug)}</span>
-                <div>
-                  <span className={styles.personaName}>
-                    {personaName(primaryPersona.slug, locale)}
-                  </span>
-                  <span className={styles.personaBadge}>{t('persona_primary', locale)}</span>
+            {data?.personas.length ? (
+              data.personas.map((p, i) => (
+                <div className={styles.personaRow} key={p.slug}>
+                  <span className={styles.personaEmoji}>{personaEmoji(p.slug)}</span>
+                  <div>
+                    <span className={styles.personaName}>
+                      {personaName(p.slug, locale)}
+                    </span>
+                    <span className={cx(styles.personaBadge, i > 0 && styles.secondaryBadge)}>
+                      {t(RANK_LABEL_KEYS[i] ?? RANK_LABEL_KEYS[RANK_LABEL_KEYS.length - 1], locale)}
+                    </span>
+                  </div>
                 </div>
-              </div>
+              ))
             ) : (
               <p className={styles.noPersona}>{t('no_persona', locale)}</p>
-            )}
-            {secondaryPersona && (
-              <div className={styles.personaRow}>
-                <span className={styles.personaEmoji}>{personaEmoji(secondaryPersona.slug)}</span>
-                <div>
-                  <span className={styles.personaName}>
-                    {personaName(secondaryPersona.slug, locale)}
-                  </span>
-                  <span className={cx(styles.personaBadge, styles.secondaryBadge)}>{t('persona_secondary', locale)}</span>
-                </div>
-              </div>
             )}
           </div>
           <button
