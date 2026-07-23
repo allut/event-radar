@@ -99,7 +99,7 @@
 
 .promoTitle {
   font-family: var(--font-display);
-  font-size: var(--heading-xs);
+  font-size: var(--heading-sm);
   font-weight: 600;
   color: var(--text);
 }
