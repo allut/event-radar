@@ -5,6 +5,7 @@ import { api } from '../../api/client';
 import { getLocale, setLocale } from '../../lib/auth';
 import { MAGIC_LINK_EXPIRY_MINUTES, PERSONAS, QUERY_KEYS } from '../../constants';
 import { t, ti, personaName, personaVibe } from '../../i18n';
+import { padIndex } from '../../utils';
 import { useMagicLinkRequest } from '../../hooks/useMagicLinkRequest';
 import TopBar from '../../components/TopBar';
 import EventCard, { type EventData } from '../../components/EventCard';
@@ -99,7 +100,7 @@ export default function Landing() {
           <ol className={styles.stepList}>
             {STEP_KEYS.map((step, i) => (
               <li key={step.title} className={styles.step}>
-                <span className={styles.stepNum} aria-hidden>{String(i + 1).padStart(2, '0')}</span>
+                <span className={styles.stepNum} aria-hidden>{padIndex(i + 1)}</span>
                 <h3 className={styles.stepTitle}>{t(step.title, locale)}</h3>
                 <p className={styles.stepBody}>{t(step.body, locale)}</p>
               </li>
