@@ -14,12 +14,12 @@ The whole platform is designed to run on **free-tier infrastructure** at a stead
 - **3-layer NSFW filter** — a keyword prefilter at ingest time, an LLM-assigned explicit-content flag, and a publish gate that excludes flagged events from the published feed.
 - **3-layer non-event filter** — the same pattern applied to gift cards/merch/webinars, so the published feed only surfaces real attendable events.
 - **Publish gate** — classified events are promoted to `published` only once they clear a minimum quality score, pass the NSFW and non-event checks, pass a location check, haven't already ended, and (if geocoded) fall within the Tallinn region.
-- **Persona-based personalization** — users pick a primary and optional secondary persona at onboarding; like/dislike/bookmark signals continuously retune their ranking.
+- **Persona-based personalization** — users rank 1–3 of 9 personas at onboarding (each pick weighted by position); like/dislike/bookmark signals continuously retune their ranking.
 - **Daily 5 builder** — a scheduled job scores upcoming events and writes a diverse five-event feed per user each morning, then emails a digest.
 - **Explore discovery grid** — a searchable, filterable (keyword, category/vibe, date, free-only, for-you), and sortable (relevance/date/price/quality) view over all upcoming published events, with an optional personalized ranking path.
 - **Saved Events** — a dedicated page listing the events a user has liked, disliked, or bookmarked, grouped by signal.
 - **Public landing showcase** — the only unauthenticated read path: a fixed-size grid of top-quality published events happening this week, shown on `/` when signed out. No personalization, no PII.
-- **Magic-link auth** — passwordless sign-in with short-lived, single-use links and revocable 7-day session tokens. No third-party auth provider.
+- **Magic-link auth** — passwordless sign-in with short-lived, single-use links and revocable 2-day session tokens. No third-party auth provider.
 - **Full trilingual i18n** — every UI string, email, and LLM output supports `et` / `en` / `ru` from a single shared source of truth.
 - **Security-hardened** — OWASP Top 10 mitigations: per-IP rate limiting, strict security headers, CORS lockdown, external-URL sanitization, and a CVE audit in CI.
 - **Data retention** — a weekly cleanup prunes aged satellite/audit rows (auth tokens, raw ingestion payloads, old feed snapshots, cached scores) while preserving all event history and user feedback indefinitely.
