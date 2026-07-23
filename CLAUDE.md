@@ -129,8 +129,8 @@ Four user-facing surfaces read `published` events — three authenticated, one p
 
 - `users` — email (citext unique), locale (et|en|ru), home_city, email_digest_opt_in (bool, gates the daily digest send), session_token_version (int, bumped to revoke all sessions — see Auth)
 - `auth_magic_links` — token_hash (sha256), expires_at, used_at; one-use only
-- `personas` — 5 static personas with JSONB affinity vectors; display names in et/en/ru
-- `user_personas` — M2M join with weight (1.0 primary, 0.4 secondary)
+- `personas` — 9 static personas with JSONB affinity vectors; display names in et/en/ru
+- `user_personas` — M2M join with a per-rank `weight`. Onboarding is a ranked 1–`PERSONA_MAX_SELECTABLE` (3) multi-pick; each pick's weight comes from `PERSONA_RANK_WEIGHTS` by position (1.0 / 0.4 / 0.2), first pick leads (`routers/onboarding.py`)
 - `sources` — ingestion source registry
 - `raw_events` — source payload as JSONB
 - `event_sources` — M2M: links events to source + external_id; unique index on `(source_id, external_id)` enforces ingestion idempotency at the DB level (migration 0007)
@@ -193,7 +193,7 @@ Each component and route lives in its own folder containing `Name.tsx`, `Name.mo
 
 Magic-link email via `itsdangerous` tokens (no third-party auth). Token generation/verification lives in `app/auth/tokens.py`; magic-link delivery in `app/auth/email.py` (Resend, 3k/mo free tier). The signed session token is the credential — it is **not** stored server-side, so there is no per-token row to delete.
 
-Session tokens are issued after magic-link verification and passed as an `Authorization: Bearer <token>` header (`frontend/src/api/client.ts`, `routers/auth.py::get_current_user`). TTL is 7 days (`SESSION_TTL_DAYS`); magic-link TTL is `MAGIC_LINK_TTL_MINUTES`. Both are settings in `app/config.py` defaulting to values in `shared/app-config.json`.
+Session tokens are issued after magic-link verification and passed as an `Authorization: Bearer <token>` header (`frontend/src/api/client.ts`, `routers/auth.py::get_current_user`). TTL is 2 days (`SESSION_TTL_DAYS`); magic-link TTL is `MAGIC_LINK_TTL_MINUTES`. Both are settings in `app/config.py` defaulting to values in `shared/app-config.json`.
 
 **Session revocation:** each session token embeds a `v` (version) claim equal to `users.session_token_version` at issue time; `get_current_user` rejects any token whose `v` no longer matches the stored value. `POST /auth/logout-all` increments that counter (atomic `UPDATE ... RETURNING`, mirroring the magic-link consume pattern), invalidating every previously issued token — including the one making the request. This is the only server-side state in the auth flow.
 
