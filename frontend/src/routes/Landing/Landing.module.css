@@ -241,7 +241,7 @@
 
 .personaRow {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  grid-template-columns: repeat(4, 1fr);
   gap: var(--space-4);
   margin-top: var(--space-7);
 }
@@ -334,6 +334,7 @@
   .emailForm { justify-content: center; }
   .heroArt { order: -1; }
   .stepList { grid-template-columns: 1fr; gap: var(--space-5); }
+  .personaRow { grid-template-columns: repeat(3, 1fr); }
 }
 
 @media (max-width: 640px) {
@@ -348,4 +349,5 @@
      form stacks — reset it so the input keeps its natural height. */
   .input { flex: none; width: 100%; }
   .submit { width: 100%; }
+  .personaRow { grid-template-columns: repeat(2, 1fr); }
 }
