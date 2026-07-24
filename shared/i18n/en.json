@@ -19,6 +19,8 @@
     "link_expires": "The link expires in {minutes} minutes.",
     "use_different": "Use a different address",
     "no_password": "No password. No tracking. Just events.",
+    "login_terms_notice": "By continuing, you agree to our {terms}.",
+    "login_terms_link": "Terms of Service",
     "verifying": "Verifying your sign-in link…",
     "signed_in": "Signed in! Redirecting…",
     "no_token": "No sign-in token found in the URL. Please request a new link.",

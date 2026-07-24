@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { getLocale } from '../../lib/auth';
 import { MAGIC_LINK_EXPIRY_MINUTES } from '../../constants';
 import { t, ti } from '../../i18n';
@@ -7,6 +8,7 @@ import styles from './Login.module.css';
 export default function Login() {
   const locale = getLocale();
   const { email, setEmail, state, errorMsg, submit, reset } = useMagicLinkRequest(locale);
+  const [termsBefore, termsAfter = ''] = t('login_terms_notice', locale).split('{terms}');
 
   return (
     <div className={styles.page}>
@@ -67,6 +69,11 @@ export default function Login() {
         )}
 
         <p className={styles.note}>{t('no_password', locale)}</p>
+        <p className={styles.terms}>
+          {termsBefore}
+          <Link to="/terms" className={styles.termsLink}>{t('login_terms_link', locale)}</Link>
+          {termsAfter}
+        </p>
       </div>
     </div>
   );
