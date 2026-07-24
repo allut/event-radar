@@ -66,7 +66,7 @@ export default function Login() {
           </form>
         )}
 
-        <footer className={styles.footer}>{t('no_password', locale)}</footer>
+        <p className={styles.note}>{t('no_password', locale)}</p>
       </div>
     </div>
   );

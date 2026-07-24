@@ -6,16 +6,28 @@ const authListeners = new Set<() => void>();
 function emitAuthChange(): void {
   authListeners.forEach((cb) => cb());
 }
-// Cross-tab sign-out/sign-in propagation: the storage event only fires in
-// OTHER tabs (the tab that made the change never receives its own event).
+// Locale-change subscriber store, mirroring the auth store above, so globally
+// mounted chrome (the Footer) re-renders when setLocale() runs on any page —
+// locale lives in localStorage with no global React state otherwise.
+const localeListeners = new Set<() => void>();
+function emitLocaleChange(): void {
+  localeListeners.forEach((cb) => cb());
+}
+// Cross-tab sign-out/sign-in + locale propagation: the storage event only fires
+// in OTHER tabs (the tab that made the change never receives its own event).
 if (typeof window !== 'undefined') {
   window.addEventListener('storage', (e) => {
     if (e.key === TOKEN_KEY) emitAuthChange();
+    if (e.key === LOCALE_KEY) emitLocaleChange();
   });
 }
 export function subscribeAuth(cb: () => void): () => void {
   authListeners.add(cb);
   return () => { authListeners.delete(cb); };
+}
+export function subscribeLocale(cb: () => void): () => void {
+  localeListeners.add(cb);
+  return () => { localeListeners.delete(cb); };
 }
 
 export function getToken(): string | null { return localStorage.getItem(TOKEN_KEY); }
@@ -50,4 +62,7 @@ export function getLocale(): string {
   const stored = localStorage.getItem(LOCALE_KEY);
   return LOCALES.some((l) => l.code === stored) ? stored! : LOCALES[0].code;
 }
-export function setLocale(l: string): void { localStorage.setItem(LOCALE_KEY, l); }
+export function setLocale(l: string): void {
+  localStorage.setItem(LOCALE_KEY, l);
+  emitLocaleChange();
+}

@@ -154,10 +154,6 @@ export default function Landing() {
           <EmailCapture locale={locale} />
         </section>
       </main>
-
-      <footer className={styles.footer}>
-        <span className={styles.radarMark} aria-hidden>◉</span> {t('brand', locale)} · Tallinn
-      </footer>
     </div>
   );
 }

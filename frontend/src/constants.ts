@@ -50,6 +50,19 @@ export const SAVE_MSG_CLEAR_DELAY_MS = 2000;
 // ─── External links ──────────────────────────────────────────────────────────
 export const GOOGLE_MAPS_SEARCH_URL = 'https://www.google.com/maps/search/?api=1&query=';
 
+// Published contact / privacy (DSAR) address. Single source for the address used
+// by the Contact page copy and the legal documents.
+export const CONTACT_EMAIL = 'contact@whatsonradar.com';
+
+// Footer social links. Placeholder https URLs (valid so safeUrl() passes) — swap
+// for the real handles later. Frontend-only presentation constant, not cross-stack.
+export type SocialIcon = 'instagram' | 'facebook' | 'twitter';
+export const SOCIAL_LINKS: { label: string; url: string; icon: SocialIcon }[] = [
+  { label: 'Instagram', url: 'https://instagram.com/', icon: 'instagram' },
+  { label: 'Facebook', url: 'https://facebook.com/', icon: 'facebook' },
+  { label: 'X', url: 'https://x.com/', icon: 'twitter' },
+];
+
 // ─── Analytics ───────────────────────────────────────────────────────────────
 // Matches `/events/:id` so Vercel Analytics groups all event detail views
 // under one route instead of one row per event id. Applied to a pathname
