@@ -28,6 +28,8 @@ services:
         sync: false
       - key: RESEND_FROM_ADDRESS
         sync: false
+      - key: CONTACT_TO_ADDRESS
+        sync: false
       - key: RESEND_WEBHOOK_SECRET
         sync: false
       - key: GROQ_API_KEY

@@ -381,6 +381,8 @@ RATE_LIMIT_AUTH_VERIFY = "30/minute"
 RATE_LIMIT_WEBHOOK_INBOUND_MAIL = "60/minute"
 # Public digest unsubscribe/resubscribe (routers/unsubscribe.py) — no auth, token-verified.
 RATE_LIMIT_UNSUBSCRIBE = "30/minute"
+# Public contact form (routers/contact.py) — no auth; tight cap since each hit sends an email.
+RATE_LIMIT_CONTACT = "3/minute"
 
 # Resend inbound-mail webhook signature verification (Svix scheme; see
 # https://resend.com/docs/dashboard/webhooks/verify-webhooks-requests and
@@ -666,6 +668,10 @@ SOURCE_SLUG_NEWSLETTER = "newsletter_inbound"
 NEWSLETTER_SUBJECT_MAX_LEN = 200
 NEWSLETTER_BODY_MAX_LEN = 1500
 
+# Contact form (routers/contact.py)
+CONTACT_NAME_MAX_LEN = 100
+CONTACT_MESSAGE_MAX_LEN = 2000
+
 
 LLM_PROVIDERS: list[dict[str, Any]] = [
     {
@@ -944,6 +950,7 @@ LOG_EVENT_LLM_DEGRADED = "llm_degraded"  # provider chain exhausted / backlog de
 LOG_EVENT_AUTH_FAILED = "auth_failed"  # magic-link / admin / internal-tick auth reject
 LOG_EVENT_WEBHOOK_REJECTED = "webhook_rejected"  # inbound-mail signature / body reject
 LOG_EVENT_EMAIL_SEND_FAILED = "email_send_failed"  # Resend magic-link / digest failure
+LOG_EVENT_CONTACT_HONEYPOT = "contact_honeypot_block"  # contact-form honeypot field tripped
 # `status` field values for LOG_EVENT_JOB_RUN.
 LOG_STATUS_OK = "ok"
 LOG_STATUS_ERROR = "error"
