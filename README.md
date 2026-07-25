@@ -20,6 +20,8 @@ The whole platform is designed to run on **free-tier infrastructure** at a stead
 - **Saved Events** — a dedicated page listing the events a user has liked, disliked, or bookmarked, grouped by signal.
 - **Public landing showcase** — the only unauthenticated read path: a fixed-size grid of top-quality published events happening this week, shown on `/` when signed out. No personalization, no PII.
 - **Magic-link auth** — passwordless sign-in with short-lived, single-use links and revocable 2-day session tokens. No third-party auth provider.
+- **Email digest opt-out** — one-click unsubscribe (RFC 8058 `List-Unsubscribe` header + a token-signed no-login page with an Undo/resubscribe button) toggles the daily digest without a sign-in.
+- **Static pages** — a globally mounted site footer links to localized Privacy and Terms pages plus a Contact form (email-only delivery, honeypot + rate limit, no login).
 - **Full trilingual i18n** — every UI string, email, and LLM output supports `et` / `en` / `ru` from a single shared source of truth.
 - **Security-hardened** — OWASP Top 10 mitigations: per-IP rate limiting, strict security headers, CORS lockdown, external-URL sanitization, and a CVE audit in CI.
 - **Data retention** — a weekly cleanup prunes aged satellite/audit rows (auth tokens, raw ingestion payloads, old feed snapshots, cached scores) while preserving all event history and user feedback indefinitely.
@@ -29,7 +31,8 @@ The whole platform is designed to run on **free-tier infrastructure** at a stead
 ```
 Vite + React SPA  ──HTTPS / JSON──▶  FastAPI (single process)
                                        ├── Routers: /auth /admin /onboarding /events /explore
-                                       │            /feed /feedback /public /users/me /webhooks
+                                       │            /feed /feedback /public /users/me /contact
+                                       │            /email /webhooks
                                        └── APScheduler (embedded, kept warm by a cron-job.org ping)
                                            ├── Weekly Sun 03:00: sync_fienta_organizers
                                            ├── Weekly Sun 03:30: cleanup_stale_data
@@ -63,7 +66,7 @@ Geocoding runs as a separate backfill alongside this pipeline, filling in `lat`/
 | Frontend    | Vite, React 18, TypeScript, TanStack Query, React Router, CSS Modules, Vitest + Testing Library |
 | Database    | Neon Postgres (async via `asyncpg`) |
 | LLM         | Groq (primary), Cerebras, Mistral (fallback chain) |
-| Email       | Resend (magic links + daily digests, inbound newsletter webhook) |
+| Email       | Resend (magic links, daily digests, contact-form relay, inbound newsletter webhook) |
 | Hosting     | Render (backend web service) · Vercel (frontend) · cron-job.org (keepalive ping) |
 
 ## Getting started
@@ -139,12 +142,12 @@ Open http://localhost:5173 and sign in with a magic link. Without `RESEND_API_KE
 event-radar/
 ├── backend/                  # FastAPI application
 │   ├── app/
-│   │   ├── routers/          # /auth /admin /onboarding /events /explore /feed /feedback /public /users/me /webhooks
+│   │   ├── routers/          # /auth /admin /onboarding /events /explore /feed /feedback /public /users/me /contact /email /webhooks
 │   │   ├── ingestion/        # source adapters (Fienta, HTML listings, newsletter), geocoding backfill, detail-refetch sync
 │   │   ├── dedup/            # rule-based pre-filter + LLM tiebreaker
 │   │   ├── llm/              # provider router, classifier, taxonomy, extractor
 │   │   ├── ranking/          # scoring + Daily 5 builder
-│   │   ├── email/            # digest styles / templates / delivery
+│   │   ├── email/            # digest / magic-link / contact styles / templates / delivery
 │   │   ├── auth/             # magic-link tokens + email
 │   │   ├── models/           # SQLAlchemy models
 │   │   ├── _generated/       # generated constants & i18n (do not edit by hand)
@@ -157,7 +160,7 @@ event-radar/
 ├── frontend/                 # Vite + React SPA
 │   ├── vercel.json           # Vercel rewrites (/api proxy + SPA fallback)
 │   └── src/
-│       ├── routes/          # Landing, Login, AuthVerify, Onboarding, Feed, Explore, SavedEvents, EventDetail, Settings, NotFound
+│       ├── routes/          # Landing, Login, AuthVerify, Onboarding, Feed, Explore, SavedEvents, EventDetail, Settings, Unsubscribe, Privacy, Terms, Contact, NotFound
 │       ├── components/      # EventCard, PersonaCard, TopBar, shared CSS base classes ...
 │       ├── hooks/           # useAuth, useFeedback, useDropdown ...
 │       ├── lib/             # auth token/locale storage + auth-state store
@@ -268,7 +271,7 @@ python scripts/reset_events.py --yes    # actually truncate
 
 Production runs entirely on free tiers, split across three services:
 
-- **Backend — Render web service** (`render.yaml`): `rootDir: backend`, health check on `/health`. Migrations run on every boot — `startCommand` chains `alembic upgrade head && uvicorn ...`, since Render's `preDeployCommand` is paid-only. Set `DATABASE_URL` (asyncpg form: `postgresql+asyncpg://user:pass@host/db?ssl=require`), `ADMIN_PASSWORD`, `INTERNAL_TOKEN`, the LLM keys (`GROQ_API_KEY`, optionally `CEREBRAS_API_KEY` / `MISTRAL_API_KEY`), `RESEND_API_KEY`, `RESEND_WEBHOOK_SECRET`, `CORS_ORIGINS`, and `FRONTEND_URL`. `SECRET_KEY` is auto-generated. Optionally set `LOG_SHIP_URL` (+ `LOG_SHIP_TOKEN`) to ship JSON logs to an external drain such as Axiom.
+- **Backend — Render web service** (`render.yaml`): `rootDir: backend`, health check on `/health`. Migrations run on every boot — `startCommand` chains `alembic upgrade head && uvicorn ...`, since Render's `preDeployCommand` is paid-only. Set `DATABASE_URL` (asyncpg form: `postgresql+asyncpg://user:pass@host/db?ssl=require`), `ADMIN_PASSWORD`, `INTERNAL_TOKEN`, the LLM keys (`GROQ_API_KEY`, optionally `CEREBRAS_API_KEY` / `MISTRAL_API_KEY`), `RESEND_API_KEY`, `RESEND_WEBHOOK_SECRET`, `CORS_ORIGINS`, `FRONTEND_URL`, and `BACKEND_URL` (the API's own absolute URL, e.g. `https://event-radar-api.onrender.com` — needed by the digest's server-side-fetched `List-Unsubscribe` header). `SECRET_KEY` is auto-generated. Optionally set `LOG_SHIP_URL` (+ `LOG_SHIP_TOKEN`) to ship JSON logs to an external drain such as Axiom.
 - **Frontend — Vercel** (`frontend/vercel.json`): static Vite build (`npm run build`, output `dist`). The API client issues all requests against a relative `/api` prefix (`frontend/src/api/client.ts`), so a Vercel rewrite proxies `/api/:path*` to the Render URL **and strips the `/api` prefix** (backend routes have no `/api` prefix — this mirrors the dev Vite proxy); a second rewrite provides the SPA fallback to `index.html` for React Router routes. Same-origin proxying also avoids CORS entirely. No build-time API env var is used.
 - **Keepalive — cron-job.org**: Render's free tier sleeps after 15 minutes idle, which would stop the embedded APScheduler. A [cron-job.org](https://cron-job.org) job pings `https://event-radar-api.onrender.com/internal/tick` every 10 minutes with the `X-Internal-Token` header set to the same value as Render's `INTERNAL_TOKEN`. (Render's own cron jobs are paid; GitHub Actions cron proved too imprecise for a keepalive cadence.)
 
