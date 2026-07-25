@@ -26,10 +26,11 @@ from app.constants import (
     VALID_SIGNALS,
 )
 from app.db import get_db
-from app.models.models import Event, User, UserEventFeedback, UserEventScore
+from app.models.models import Event, User, UserEventFeedback
 from app.rate_limit import limiter
 from app.routers.auth import get_current_user
 from app.routers.utils import (
+    invalidate_user_scores,
     public_event_filter,
     select_events_with_classification,
     serialize_event,
@@ -41,15 +42,6 @@ router = APIRouter(prefix="/feedback", tags=["feedback"])
 class FeedbackBody(BaseModel):
     event_id: int
     signal: str
-
-
-async def _invalidate_scores(db: AsyncSession, user_id: int) -> None:
-    """Invalidate ALL cached scores for this user — not just the (user, event)
-    row. A signal on event A also moves the indirect-feedback term on any
-    other event that shares a category with A; per-row invalidation would
-    leave those neighbours' cached scores stale until the next direct signal.
-    """
-    await db.execute(delete(UserEventScore).where(UserEventScore.user_id == user_id))
 
 
 @router.post("", status_code=status.HTTP_200_OK)
@@ -110,7 +102,7 @@ async def record_feedback(
             )
         )
 
-    await _invalidate_scores(db, current_user.id)
+    await invalidate_user_scores(db, current_user.id)
     await db.commit()
     return {"ok": True}
 
@@ -137,7 +129,7 @@ async def delete_feedback(
             UserEventFeedback.signal.in_(PREFERENCE_SIGNALS),
         )
     )
-    await _invalidate_scores(db, current_user.id)
+    await invalidate_user_scores(db, current_user.id)
     await db.commit()
     return {"ok": True}
 

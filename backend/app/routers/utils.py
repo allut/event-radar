@@ -8,7 +8,7 @@ from typing import Any
 
 from fastapi import HTTPException, status
 from itsdangerous import BadSignature, SignatureExpired
-from sqlalchemy import ColumnElement, Select, and_, or_, select
+from sqlalchemy import ColumnElement, Select, and_, delete, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -21,7 +21,7 @@ from app.constants import (
     PREFERENCE_SIGNALS,
     PREFERRED_TASTE_MIN_WEIGHT,
 )
-from app.models.models import Event, User, UserEventFeedback, UserPersona
+from app.models.models import Event, User, UserEventFeedback, UserEventScore, UserPersona
 
 log = logging.getLogger(__name__)
 
@@ -66,6 +66,17 @@ def require_configured_secret(
         "%s not set; %s unprotected (development mode)", setting_name, feature
     )
     return False
+
+
+async def invalidate_user_scores(db: AsyncSession, user_id: int) -> None:
+    """Delete ALL cached ranking scores for a user.
+
+    A change to the user's personas or feedback shifts the affinity /
+    indirect-feedback terms across every co-categorical event, so per-row
+    invalidation would leave neighbours stale. Callers must invalidate before
+    rebuilding the feed.
+    """
+    await db.execute(delete(UserEventScore).where(UserEventScore.user_id == user_id))
 
 
 def mask_db_url(url: str) -> str:
