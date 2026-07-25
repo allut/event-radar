@@ -1,5 +1,6 @@
+import { Link } from 'react-router-dom';
 import { getLocale } from '../../lib/auth';
-import { MAGIC_LINK_EXPIRY_MINUTES } from '../../constants';
+import { MAGIC_LINK_EXPIRY_MINUTES, UI_STATE } from '../../constants';
 import { t, ti } from '../../i18n';
 import { useMagicLinkRequest } from '../../hooks/useMagicLinkRequest';
 import styles from './Login.module.css';
@@ -7,6 +8,7 @@ import styles from './Login.module.css';
 export default function Login() {
   const locale = getLocale();
   const { email, setEmail, state, errorMsg, submit, reset } = useMagicLinkRequest(locale);
+  const [termsBefore, termsAfter = ''] = t('login_terms_notice', locale).split('{terms}');
 
   return (
     <div className={styles.page}>
@@ -18,7 +20,7 @@ export default function Login() {
 
         <p className={styles.tagline}>{t('tagline', locale)}</p>
 
-        {state === 'success' ? (
+        {state === UI_STATE.success ? (
           <div className={styles.success} role="status">
             <div className={styles.checkCircle}>✓</div>
             <p className={styles.successMsg}>
@@ -46,27 +48,32 @@ export default function Login() {
               placeholder={t('email_placeholder', locale)}
               autoFocus
               autoComplete="email"
-              disabled={state === 'loading'}
+              disabled={state === UI_STATE.loading}
               required
             />
 
-            {state === 'error' && (
+            {state === UI_STATE.error && (
               <p className={styles.error} role="alert">{errorMsg}</p>
             )}
 
             <button
               type="submit"
               className={styles.submit}
-              disabled={state === 'loading' || !email.trim()}
+              disabled={state === UI_STATE.loading || !email.trim()}
             >
-              {state === 'loading'
+              {state === UI_STATE.loading
                 ? <span className={styles.spinner} aria-label={t('sending', locale)} />
                 : t('send_link', locale)}
             </button>
           </form>
         )}
 
-        <footer className={styles.footer}>{t('no_password', locale)}</footer>
+        <p className={styles.note}>{t('no_password', locale)}</p>
+        <p className={styles.terms}>
+          {termsBefore}
+          <Link to="/terms" className={styles.termsLink}>{t('login_terms_link', locale)}</Link>
+          {termsAfter}
+        </p>
       </div>
     </div>
   );

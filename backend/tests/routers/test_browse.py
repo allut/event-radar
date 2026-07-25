@@ -175,7 +175,7 @@ class TestBrowseScoredPath:
 
         result = await _browse_scored_path(
             mock_db, [], for_you=True, sort="relevance", limit=24, offset=0,
-            current_user=user, now=now,
+            current_user=user, now=now, locale="en",
         )
 
         assert [e["id"] for e in result["events"]] == [1]
@@ -208,7 +208,7 @@ class TestBrowseScoredPath:
 
         result = await _browse_scored_path(
             mock_db, [], for_you=True, sort="relevance", limit=24, offset=0,
-            current_user=user, now=now,
+            current_user=user, now=now, locale="en",
         )
 
         assert [e["id"] for e in result["events"]] == [1]
@@ -237,7 +237,7 @@ class TestBrowseScoredPath:
 
         result = await _browse_scored_path(
             mock_db, [], for_you=False, sort="relevance", limit=24, offset=0,
-            current_user=user, now=now,
+            current_user=user, now=now, locale="en",
         )
 
         ids = [e["id"] for e in result["events"]]
@@ -265,7 +265,7 @@ class TestBrowseScoredPath:
 
         result = await _browse_scored_path(
             mock_db, [], for_you=False, sort="date", limit=24, offset=0,
-            current_user=user, now=now,
+            current_user=user, now=now, locale="en",
         )
 
         assert [e["id"] for e in result["events"]] == [2, 1]
@@ -290,7 +290,7 @@ class TestBrowseScoredPath:
 
         result = await _browse_scored_path(
             mock_db, [], for_you=False, sort="date", limit=2, offset=2,
-            current_user=user, now=now,
+            current_user=user, now=now, locale="en",
         )
 
         assert result["total"] == 5
@@ -312,7 +312,7 @@ class TestExploreEventsRouting:
             called["path"] = "sql"
             return {"events": [], "total": 0, "limit": limit, "offset": offset, "has_more": False}
 
-        async def fake_scored_path(db, conds, for_you, sort, limit, offset, current_user, now):
+        async def fake_scored_path(db, conds, for_you, sort, limit, offset, current_user, now, locale):
             called["path"] = "scored"
             return {"events": [], "total": 0, "limit": limit, "offset": offset, "has_more": False}
 
@@ -341,7 +341,7 @@ class TestExploreEventsRouting:
             called["path"] = "sql"
             return {"events": [], "total": 0, "limit": limit, "offset": offset, "has_more": False}
 
-        async def fake_scored_path(db, conds, for_you, sort, limit, offset, current_user, now):
+        async def fake_scored_path(db, conds, for_you, sort, limit, offset, current_user, now, locale):
             called["path"] = "scored"
             return {"events": [], "total": 0, "limit": limit, "offset": offset, "has_more": False}
 
@@ -370,7 +370,7 @@ class TestExploreEventsRouting:
             called["path"] = "sql"
             return {"events": [], "total": 0, "limit": limit, "offset": offset, "has_more": False}
 
-        async def fake_scored_path(db, conds, for_you, sort, limit, offset, current_user, now):
+        async def fake_scored_path(db, conds, for_you, sort, limit, offset, current_user, now, locale):
             called["path"] = "scored"
             return {"events": [], "total": 0, "limit": limit, "offset": offset, "has_more": False}
 
@@ -410,7 +410,7 @@ class TestExploreEventsRouting:
 
         seen_conds = {}
 
-        async def fake_scored_path(db, conds, for_you, sort, limit, offset, current_user, now):
+        async def fake_scored_path(db, conds, for_you, sort, limit, offset, current_user, now, locale):
             seen_conds["conds"] = conds
             return {"events": [], "total": 0, "limit": limit, "offset": offset, "has_more": False}
 

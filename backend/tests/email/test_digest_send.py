@@ -25,7 +25,7 @@ async def test_no_api_key_skips_send(monkeypatch, make_event):
     post = AsyncMock()
     monkeypatch.setattr(digest, "http_post", post)
 
-    await send_digest_email("u@example.com", "en", [make_event()], date(2026, 7, 21))
+    await send_digest_email("u@example.com", "en", [make_event()], date(2026, 7, 21), 1)
 
     post.assert_not_awaited()
 
@@ -40,7 +40,7 @@ async def test_success_calls_http_post(monkeypatch, make_event):
     monkeypatch.setattr(digest, "http_post", post)
 
     await send_digest_email(
-        "u@example.com", "en", [make_event(why_go=["a", "b", "c"])], date(2026, 7, 21)
+        "u@example.com", "en", [make_event(why_go=["a", "b", "c"])], date(2026, 7, 21), 7
     )
 
     post.assert_awaited_once()
@@ -50,6 +50,11 @@ async def test_success_calls_http_post(monkeypatch, make_event):
     assert body["to"] == ["u@example.com"]
     assert body["subject"]
     assert body["html"]
+    assert "app.radar.ee/unsubscribe?token=" in body["html"]
+    headers = body["headers"]
+    assert headers["List-Unsubscribe"].startswith("<")
+    assert "/email/unsubscribe?token=" in headers["List-Unsubscribe"]
+    assert headers["List-Unsubscribe-Post"] == "List-Unsubscribe=One-Click"
 
 
 @pytest.mark.asyncio
@@ -63,5 +68,5 @@ async def test_http_error_raises_runtime_error(monkeypatch, make_event):
 
     with pytest.raises(RuntimeError, match="Resend returned 422"):
         await send_digest_email(
-            "u@example.com", "en", [make_event()], date(2026, 7, 21)
+            "u@example.com", "en", [make_event()], date(2026, 7, 21), 1
         )

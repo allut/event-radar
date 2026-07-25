@@ -21,6 +21,10 @@ export type { PersonaData };
 // Re-export PERSONAS under the original name so all import sites are unchanged.
 export const PERSONAS: PersonaData[] = PERSONAS_EN;
 
+// Built once at module load — mirrors i18n.ts's PERSONAS_EN_BY_SLUG: avoids a
+// linear PERSONAS.find() scan on every persona rendered per component render.
+export const PERSONAS_BY_SLUG: Map<string, PersonaData> = new Map(PERSONAS.map((p) => [p.slug, p]));
+
 // ─── React Query ─────────────────────────────────────────────────────────────
 export const QUERY_RETRY = 1;
 export const QUERY_STALE_TIME = 30_000;
@@ -49,6 +53,19 @@ export const SAVE_MSG_CLEAR_DELAY_MS = 2000;
 
 // ─── External links ──────────────────────────────────────────────────────────
 export const GOOGLE_MAPS_SEARCH_URL = 'https://www.google.com/maps/search/?api=1&query=';
+
+// Published contact / privacy (DSAR) address. Single source for the address used
+// by the Contact page copy and the legal documents.
+export const CONTACT_EMAIL = 'contact@whatsonradar.com';
+
+// Footer social links. Placeholder https URLs (valid so safeUrl() passes) — swap
+// for the real handles later. Frontend-only presentation constant, not cross-stack.
+export type SocialIcon = 'instagram' | 'facebook' | 'twitter';
+export const SOCIAL_LINKS: { label: string; url: string; icon: SocialIcon }[] = [
+  { label: 'Instagram', url: 'https://instagram.com/', icon: 'instagram' },
+  { label: 'Facebook', url: 'https://facebook.com/', icon: 'facebook' },
+  { label: 'X', url: 'https://x.com/', icon: 'twitter' },
+];
 
 // ─── Analytics ───────────────────────────────────────────────────────────────
 // Matches `/events/:id` so Vercel Analytics groups all event detail views
@@ -109,8 +126,31 @@ export const QUERY_KEYS = {
 } as const;
 
 // ─── UI state types ───────────────────────────────────────────────────────────
-export type LoginState = 'idle' | 'loading' | 'success' | 'error';
-export type VerifyState = 'verifying' | 'success' | 'error';
+// Single source for every state-machine string value used across the auth /
+// contact / unsubscribe flows and the shared Toast/PageState components — a
+// typo in a raw string literal at a call site would silently miss its compare
+// or set counterpart; referencing UI_STATE.<key> makes it a compile error instead.
+export const UI_STATE = {
+  idle: 'idle',
+  loading: 'loading',
+  success: 'success',
+  error: 'error',
+  verifying: 'verifying',
+  working: 'working',
+  resubscribed: 'resubscribed',
+} as const;
+
+export type LoginState = typeof UI_STATE.idle | typeof UI_STATE.loading | typeof UI_STATE.success | typeof UI_STATE.error;
+export type VerifyState = typeof UI_STATE.verifying | typeof UI_STATE.success | typeof UI_STATE.error;
+export type UnsubscribeState = typeof UI_STATE.working | typeof UI_STATE.success | typeof UI_STATE.resubscribed | typeof UI_STATE.error;
+
+export type ToastState =
+  | { status: typeof UI_STATE.idle }
+  | { status: typeof UI_STATE.success | typeof UI_STATE.error; message: string };
+export const TOAST_IDLE: ToastState = { status: UI_STATE.idle };
+
+// Contact form (routes/Contact/Contact.tsx)
+export const CONTACT_TEXTAREA_ROWS = 6;
 
 // ─── Explore ─────────────────────────────────────────────────────────────────
 // BROWSE_PAGE_SIZE itself is cross-stack (shared/app-config.json), imported above.

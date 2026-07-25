@@ -12,6 +12,7 @@ import httpx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.auth.tokens import generate_unsubscribe_token
 from app.config import settings
 from app.constants import (
     DIGEST_MAX_WHY_GO_BULLETS,
@@ -167,10 +168,12 @@ def build_digest_html(
     feed_date: date,
     locale: str,
     frontend_url: str,
+    unsubscribe_url: str | None = None,
 ) -> str:
     date_str = _format_feed_date(feed_date, locale)
     subject_label = t("digest.subject_label", locale)
-    unsubscribe_url = f"{frontend_url}/settings"
+    if unsubscribe_url is None:
+        unsubscribe_url = f"{frontend_url}/settings"
 
     event_blocks = [_build_event_block(e, locale, frontend_url) for e in events]
     events_html = (
@@ -220,6 +223,7 @@ async def send_digest_email(
     locale: str,
     events: Sequence[Event],
     feed_date: date,
+    user_id: int,
 ) -> None:
     if not settings.RESEND_API_KEY:
         log.warning(
@@ -227,7 +231,13 @@ async def send_digest_email(
         )
         return
 
-    html = build_digest_html(events, feed_date, locale, settings.FRONTEND_URL)
+    unsubscribe_token = generate_unsubscribe_token(user_id)
+    unsubscribe_url = f"{settings.FRONTEND_URL}/unsubscribe?token={unsubscribe_token}"
+    header_url = f"{settings.BACKEND_URL}/email/unsubscribe?token={unsubscribe_token}"
+
+    html = build_digest_html(
+        events, feed_date, locale, settings.FRONTEND_URL, unsubscribe_url
+    )
     subject = ti(
         "digest.subject_template", locale, date=_format_feed_date(feed_date, locale)
     )
@@ -243,6 +253,10 @@ async def send_digest_email(
                     "to": [to_email],
                     "subject": subject,
                     "html": html,
+                    "headers": {
+                        "List-Unsubscribe": f"<{header_url}>",
+                        "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+                    },
                 },
             )
         except httpx.HTTPStatusError as exc:
@@ -340,7 +354,7 @@ async def send_daily_digests(
         async with semaphore:
             try:
                 await send_digest_email(
-                    user.email, user.locale, ordered_events, today
+                    user.email, user.locale, ordered_events, today, user.id
                 )
                 return "sent"
             except Exception:

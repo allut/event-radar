@@ -19,7 +19,6 @@ from app.constants import (
     SHOWCASE_FALLBACK_WINDOW_DAYS,
     SHOWCASE_WINDOW_DAYS,
     TALLINN_TZ,
-    VALID_LOCALES,
 )
 from app.db import get_db
 from app.models.models import Event, EventClassification
@@ -28,6 +27,7 @@ from app.routers.utils import (
     canonical_event_filter,
     event_not_ended_filter,
     public_event_filter,
+    resolve_locale_param,
     select_events_with_classification,
     serialize_event,
 )
@@ -72,8 +72,7 @@ async def showcase(
     A thin week (fewer than SHOWCASE_EVENT_COUNT candidates) falls back to a
     wider window so the section never renders a near-empty grid.
     """
-    if locale not in VALID_LOCALES:
-        locale = DEFAULT_USER_LOCALE
+    locale = resolve_locale_param(locale, DEFAULT_USER_LOCALE)
 
     now = datetime.now(TALLINN_TZ)
     events = list((await db.scalars(_showcase_stmt(now, SHOWCASE_WINDOW_DAYS))).all())

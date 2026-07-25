@@ -52,12 +52,22 @@ export function sanitizeHtml(html: string): string {
   });
 }
 
+// Formatters below are built once per locale and cached at module scope —
+// Intl constructors are comparatively expensive, and EventCard (rendered N-up
+// in a grid) calls these per card per render.
+const HOUR_MINUTE_FORMATTERS = new Map<string, Intl.DateTimeFormat>();
+function hourMinuteFormatter(locale: string): Intl.DateTimeFormat {
+  const localeCode = toLocaleCode(locale);
+  let fmt = HOUR_MINUTE_FORMATTERS.get(localeCode);
+  if (!fmt) {
+    fmt = new Intl.DateTimeFormat(localeCode, { hour: '2-digit', minute: '2-digit', hour12: false });
+    HOUR_MINUTE_FORMATTERS.set(localeCode, fmt);
+  }
+  return fmt;
+}
+
 export function formatHourMinute(iso: string, locale: string): string {
-  return new Date(iso).toLocaleTimeString(toLocaleCode(locale), {
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  });
+  return hourMinuteFormatter(locale).format(new Date(iso));
 }
 
 export function trackExternalClick(eventId: number): void {
@@ -118,21 +128,34 @@ export function buildMapsUrl(
   return null;
 }
 
+/** Builds (and caches at module scope, keyed by a joined-options cache key) an
+ * Intl.DateTimeFormat — same rationale as hourMinuteFormatter above. */
+const DATE_TIME_FORMATTERS = new Map<string, Intl.DateTimeFormat>();
+function dateTimeFormatter(localeCode: string, options: Intl.DateTimeFormatOptions): Intl.DateTimeFormat {
+  const key = `${localeCode}|${JSON.stringify(options)}`;
+  let fmt = DATE_TIME_FORMATTERS.get(key);
+  if (!fmt) {
+    fmt = new Intl.DateTimeFormat(localeCode, options);
+    DATE_TIME_FORMATTERS.set(key, fmt);
+  }
+  return fmt;
+}
+
 export function formatEventTime(iso: string, locale: string): string {
   const localeCode = toLocaleCode(locale);
   const date = new Date(iso);
-  const weekday = date.toLocaleDateString(localeCode, { weekday: 'short' });
-  const day = date.toLocaleDateString(localeCode, { day: 'numeric', month: 'short' });
-  const time = date.toLocaleTimeString(localeCode, { hour: '2-digit', minute: '2-digit', hour12: false });
+  const weekday = dateTimeFormatter(localeCode, { weekday: 'short' }).format(date);
+  const day = dateTimeFormatter(localeCode, { day: 'numeric', month: 'short' }).format(date);
+  const time = hourMinuteFormatter(locale).format(date);
   return `${weekday}, ${day} · ${time}`;
 }
 
 export function formatEventDateTime(iso: string, locale: string): string {
   const localeCode = toLocaleCode(locale);
   const date = new Date(iso);
-  const weekday = date.toLocaleDateString(localeCode, { weekday: 'long' });
-  const day = date.toLocaleDateString(localeCode, { day: 'numeric', month: 'long', year: 'numeric' });
-  const time = date.toLocaleTimeString(localeCode, { hour: '2-digit', minute: '2-digit', hour12: false });
+  const weekday = dateTimeFormatter(localeCode, { weekday: 'long' }).format(date);
+  const day = dateTimeFormatter(localeCode, { day: 'numeric', month: 'long', year: 'numeric' }).format(date);
+  const time = hourMinuteFormatter(locale).format(date);
   return `${weekday}, ${day} · ${time}`;
 }
 

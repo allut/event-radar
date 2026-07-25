@@ -55,9 +55,11 @@ from app.ingestion.pricing import (
     price_context_digest,
     strip_fee_amounts,
 )
+import httpx
+
 from app.ingestion.sanitize import html_to_text
-from app.llm.router import llm_json_or_none
-from app.models.models import Event, EventClassification
+from app.llm.router import content_hash, llm_http_client, llm_json_or_none
+from app.models.models import Event, EventClassification, LlmCall
 from app.routers.utils import (
     canonical_event_filter,
     event_ended_filter,
@@ -316,6 +318,9 @@ async def classify_event(
     db: AsyncSession,
     existing_classification: EventClassification | None = None,
     prefetched: bool = False,
+    prompt: str | None = None,
+    prefetched_cache: dict[str, tuple[dict[str, Any], str]] | None = None,
+    http_client: httpx.AsyncClient | None = None,
 ) -> bool:
     """Classify a single event and persist the result.
 
@@ -327,6 +332,13 @@ async def classify_event(
     per-event ``SELECT EventClassification`` is issued — the N+1 in the batch
     path collapses to one bulk prefetch.
 
+    ``prompt``, when supplied by a batch caller that already built it for
+    cache-key hashing (see ``classify_pending``), is reused instead of being
+    rebuilt. ``prefetched_cache`` and ``http_client``, when supplied, are
+    forwarded to ``llm_json`` so a batch run consults one bulk-loaded cache map
+    and one shared HTTP client instead of a per-event ``SELECT`` and connection
+    pool — mirrors the dedup tiebreaker's cache-aware batch loop.
+
     Events already flagged ``is_explicit`` or ``is_non_event`` (Layer 1 keyword
     prefilters) skip the LLM call entirely — token saving — but still advance to
     ``classified`` so a flagged dedup-group representative doesn't strand the
@@ -337,13 +349,16 @@ async def classify_event(
         event.status = EVENT_STATUS_CLASSIFIED
         return True
 
-    prompt = _build_classify_prompt(event)
+    if prompt is None:
+        prompt = _build_classify_prompt(event)
     response = await llm_json_or_none(
         LLM_TASK_CLASSIFY,
         prompt,
         db,
         event_id=event.id,
         context=f"classify failed for event_id={event.id}",
+        prefetched_cache=prefetched_cache,
+        http_client=http_client,
     )
     if response is None:
         return False
@@ -438,6 +453,40 @@ async def _prefetch_existing_classifications(
     return {row.event_id: row for row in existing_rows}
 
 
+async def _prefetch_classify_cache(
+    db: AsyncSession, prompts_by_event_id: dict[int, str]
+) -> dict[str, tuple[dict[str, Any], str]]:
+    """Bulk-fetch cached classify LLM responses by content hash — the
+    classify-batch analogue of the dedup tiebreaker's
+    ``_prefetch_cached_decisions``/venue-extract's ``_prefetch_venue_extract_cache``.
+    Passed to ``llm_json`` as ``prefetched_cache`` so each event's cache lookup
+    is a local dict access instead of a per-event ``SELECT``.
+
+    A classify prompt embeds title+description+price, so each hash is
+    effectively unique across events — a batch rarely finds a hit here. Still
+    worth doing for symmetry with the other two LLM passes and because
+    ``LLM_CLASSIFY_BATCH_SIZE`` keeps the ``IN (...)`` list small (no chunking
+    needed, unlike the dedup pass's much larger candidate-pair hash list).
+    """
+    if not prompts_by_event_id:
+        return {}
+    hashes = list({content_hash(p) for p in prompts_by_event_id.values()})
+    rows = (
+        await db.execute(
+            select(LlmCall.content_hash, LlmCall.response_json, LlmCall.provider, LlmCall.model)
+            .where(
+                LlmCall.content_hash.in_(hashes),
+                LlmCall.response_json.is_not(None),
+            )
+            .order_by(LlmCall.created_at)
+        )
+    ).all()
+    return {
+        row_hash: (response_json, f"{provider}/{model}")
+        for row_hash, response_json, provider, model in rows
+    }
+
+
 async def classify_pending(
     db: AsyncSession, *, batch_size: int = LLM_CLASSIFY_BATCH_SIZE
 ) -> dict[str, Any]:
@@ -481,17 +530,31 @@ async def classify_pending(
 
     existing_map = await _prefetch_existing_classifications(db, events)
 
-    for event in events:
-        ok = await classify_event(
-            event,
-            db,
-            existing_classification=existing_map.get(event.id),
-            prefetched=True,
-        )
-        if ok:
-            succeeded += 1
-        else:
-            failed += 1
+    # Built once here (not inside classify_event) so the same prompt string
+    # backs both the cache prefetch below and the per-event LLM call —
+    # skipped for already-flagged events, which never reach the LLM.
+    prompts_by_event_id = {
+        event.id: _build_classify_prompt(event)
+        for event in events
+        if not (event.is_explicit or event.is_non_event)
+    }
+    prefetched_cache = await _prefetch_classify_cache(db, prompts_by_event_id)
+
+    async with llm_http_client() as http_client:
+        for event in events:
+            ok = await classify_event(
+                event,
+                db,
+                existing_classification=existing_map.get(event.id),
+                prefetched=True,
+                prompt=prompts_by_event_id.get(event.id),
+                prefetched_cache=prefetched_cache,
+                http_client=http_client,
+            )
+            if ok:
+                succeeded += 1
+            else:
+                failed += 1
 
     log.info(
         "classify_pending: attempted=%d succeeded=%d failed=%d cancelled=%d",

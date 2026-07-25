@@ -56,12 +56,14 @@ from app.rate_limit import limiter, rate_limit_exceeded_handler
 from app.routers.admin import router as admin_router
 from app.routers.auth import router as auth_router
 from app.routers.browse import router as browse_router
+from app.routers.contact import router as contact_router
 from app.routers.events import router as events_router
 from app.routers.feed import router as feed_router
 from app.routers.feedback import router as feedback_router
 from app.routers.onboarding import router as onboarding_router
 from app.routers.public import router as public_router
 from app.routers.settings import router as settings_router
+from app.routers.unsubscribe import router as unsubscribe_router
 from app.routers.utils import require_configured_secret
 from app.routers.webhooks import router as webhooks_router
 from app.seeds import seed_personas, seed_sources
@@ -339,12 +341,14 @@ app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
 app.include_router(admin_router)
 app.include_router(auth_router)
 app.include_router(browse_router)
+app.include_router(contact_router)
 app.include_router(events_router)
 app.include_router(feed_router)
 app.include_router(feedback_router)
 app.include_router(onboarding_router)
 app.include_router(public_router)
 app.include_router(settings_router)
+app.include_router(unsubscribe_router)
 app.include_router(webhooks_router)
 
 

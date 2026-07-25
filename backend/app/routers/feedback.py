@@ -20,17 +20,21 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.constants import (
     BROWSE_MAX_PAGE_SIZE,
     BROWSE_PAGE_SIZE,
+    PAGINATION_MIN_LIMIT,
+    PAGINATION_MIN_OFFSET,
     PREFERENCE_SIGNALS,
     PREFERENCE_SIGNALS_SQL_PREDICATE,
     RATE_LIMIT_FEEDBACK,
     VALID_SIGNALS,
 )
 from app.db import get_db
-from app.models.models import Event, User, UserEventFeedback, UserEventScore
+from app.models.models import Event, User, UserEventFeedback
 from app.rate_limit import limiter
 from app.routers.auth import get_current_user
 from app.routers.utils import (
+    invalidate_user_scores,
     public_event_filter,
+    resolve_locale_param,
     select_events_with_classification,
     serialize_event,
 )
@@ -41,15 +45,6 @@ router = APIRouter(prefix="/feedback", tags=["feedback"])
 class FeedbackBody(BaseModel):
     event_id: int
     signal: str
-
-
-async def _invalidate_scores(db: AsyncSession, user_id: int) -> None:
-    """Invalidate ALL cached scores for this user — not just the (user, event)
-    row. A signal on event A also moves the indirect-feedback term on any
-    other event that shares a category with A; per-row invalidation would
-    leave those neighbours' cached scores stale until the next direct signal.
-    """
-    await db.execute(delete(UserEventScore).where(UserEventScore.user_id == user_id))
 
 
 @router.post("", status_code=status.HTTP_200_OK)
@@ -110,7 +105,7 @@ async def record_feedback(
             )
         )
 
-    await _invalidate_scores(db, current_user.id)
+    await invalidate_user_scores(db, current_user.id)
     await db.commit()
     return {"ok": True}
 
@@ -137,7 +132,7 @@ async def delete_feedback(
             UserEventFeedback.signal.in_(PREFERENCE_SIGNALS),
         )
     )
-    await _invalidate_scores(db, current_user.id)
+    await invalidate_user_scores(db, current_user.id)
     await db.commit()
     return {"ok": True}
 
@@ -147,8 +142,9 @@ async def delete_feedback(
 async def list_feedback_events(
     request: Request,
     signal: str,
-    limit: int = Query(BROWSE_PAGE_SIZE, ge=1, le=BROWSE_MAX_PAGE_SIZE),
-    offset: int = Query(0, ge=0),
+    limit: int = Query(BROWSE_PAGE_SIZE, ge=PAGINATION_MIN_LIMIT, le=BROWSE_MAX_PAGE_SIZE),
+    offset: int = Query(PAGINATION_MIN_OFFSET, ge=PAGINATION_MIN_OFFSET),
+    locale: str | None = Query(None),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
@@ -196,10 +192,11 @@ async def list_feedback_events(
     events = list((await db.scalars(page_stmt)).all())
 
     feedback_by_event = {e.id: signal for e in events}
+    effective_locale = resolve_locale_param(locale, current_user.locale)
 
     return {
         "events": [
-            serialize_event(e, locale=current_user.locale, feedback_by_event=feedback_by_event)
+            serialize_event(e, locale=effective_locale, feedback_by_event=feedback_by_event)
             for e in events
         ],
         "total": total,

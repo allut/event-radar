@@ -52,6 +52,12 @@ describe('Login', () => {
     expect(screen.getByText('Invalid email')).toBeInTheDocument();
   });
 
+  it('renders a Terms of Service link pointing to /terms', () => {
+    renderWithProviders(<Login />);
+    const link = screen.getByRole('link', { name: /terms of service/i });
+    expect(link).toHaveAttribute('href', '/terms');
+  });
+
   it('"use different" button resets to idle form', async () => {
     mockPost.mockResolvedValueOnce(undefined);
     renderWithProviders(<Login />);

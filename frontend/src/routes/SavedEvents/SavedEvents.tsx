@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { api } from '../../api/client';
 import { t } from '../../i18n';
@@ -28,7 +28,7 @@ const SAVED_TABS: { value: Signal; labelKey: string }[] = [
 
 export default function SavedEvents() {
   const handleLogout = useLogout();
-  const { locale, handleLocaleChange } = useLocaleMutation([QUERY_KEYS.saved]);
+  const { locale, handleLocaleChange } = useLocaleMutation();
   const [signal, setSignal] = useState<Signal>('bookmark');
 
   const {
@@ -39,21 +39,25 @@ export default function SavedEvents() {
     hasNextPage,
     isFetchingNextPage,
   } = useInfiniteQuery({
-    queryKey: [QUERY_KEYS.saved, signal],
+    queryKey: [QUERY_KEYS.saved, locale, signal],
     queryFn: ({ pageParam }) =>
       api.get<SavedEventsResponse>(
-        `/feedback/events?signal=${signal}&limit=${SAVED_EVENTS_PAGE_SIZE}&offset=${pageParam}`,
+        `/feedback/events?signal=${signal}&limit=${SAVED_EVENTS_PAGE_SIZE}&offset=${pageParam}&locale=${encodeURIComponent(locale)}`,
       ),
     initialPageParam: 0,
     getNextPageParam: (lastPage) =>
       lastPage.has_more ? lastPage.offset + lastPage.events.length : undefined,
   });
 
-  const events = data?.pages.flatMap((page) => page.events) ?? [];
-  const tabOptions = SAVED_TABS.map((tab) => ({
-    value: tab.value,
-    label: `${SIGNAL_CONFIG[tab.value].icon} ${t(tab.labelKey, locale)}`,
-  }));
+  const events = useMemo(() => data?.pages.flatMap((page) => page.events) ?? [], [data]);
+  const tabOptions = useMemo(
+    () =>
+      SAVED_TABS.map((tab) => ({
+        value: tab.value,
+        label: `${SIGNAL_CONFIG[tab.value].icon} ${t(tab.labelKey, locale)}`,
+      })),
+    [locale],
+  );
 
   return (
     <div className={styles.page}>

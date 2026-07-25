@@ -27,6 +27,7 @@ reaches 0 and every run is fully correct.
 import logging
 from datetime import datetime
 
+import httpx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -52,7 +53,7 @@ from app.dedup.rules import (
     run_dedup_pass,
     same_group,
 )
-from app.llm.router import content_hash, llm_available, llm_json_or_none
+from app.llm.router import content_hash, llm_available, llm_http_client, llm_json_or_none
 from app.models.models import Event, LlmCall
 
 log = logging.getLogger(__name__)
@@ -95,7 +96,9 @@ def _verdict_confirms(result: dict) -> bool:
     return bool(same) and confidence >= LLM_DEDUP_CONFIDENCE_THRESHOLD
 
 
-async def _llm_confirms_pair(a: Event, b: Event, db: AsyncSession) -> bool:
+async def _llm_confirms_pair(
+    a: Event, b: Event, db: AsyncSession, http_client: httpx.AsyncClient | None = None
+) -> bool:
     """Return True if the LLM says the pair is the same event with sufficient confidence.
 
     Note: event_id=a.id is stored in llm_calls for audit; the pair identity is
@@ -108,6 +111,7 @@ async def _llm_confirms_pair(a: Event, b: Event, db: AsyncSession) -> bool:
         db,
         event_id=a.id,
         context=f"llm dedup failed for pair ({a.id}, {b.id}) — treating as distinct",
+        http_client=http_client,
     )
     if response is None:
         return False
@@ -200,6 +204,7 @@ async def _resolve_survivor_pairs(
     survivors: list[tuple[Event, Event, str]],
     cached_decisions: dict[str, bool],
     parent: dict[int, int],
+    http_client: httpx.AsyncClient,
 ) -> tuple[int, int, int]:
     """Stage 2: resolve each survivor via the cache, else a fresh LLM call
     (bounded by LLM_DEDUP_MAX_FRESH_LLM_CALLS_PER_PASS). Unions confirmed
@@ -218,7 +223,7 @@ async def _resolve_survivor_pairs(
             deferred_pairs += 1
             continue
         fresh_calls += 1
-        if await _llm_confirms_pair(a, b, db):
+        if await _llm_confirms_pair(a, b, db, http_client):
             union(parent, a.id, b.id)
             llm_confirmed += 1
 
@@ -300,9 +305,10 @@ async def run_dedup_pass_llm(db: AsyncSession) -> dict:
         db, [pair_hash for _, _, pair_hash in survivors]
     )
 
-    llm_confirmed, fresh_calls, deferred_pairs = await _resolve_survivor_pairs(
-        db, survivors, cached_decisions, parent
-    )
+    async with llm_http_client() as http_client:
+        llm_confirmed, fresh_calls, deferred_pairs = await _resolve_survivor_pairs(
+            db, survivors, cached_decisions, parent, http_client
+        )
 
     assignments = build_cluster_assignments(parent, ids, events_by_id)
 

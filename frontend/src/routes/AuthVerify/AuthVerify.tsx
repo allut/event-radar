@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api, ApiError } from '../../api/client';
 import { setToken, getLocale } from '../../lib/auth';
-import { AUTH_REDIRECT_DELAY_MS, type VerifyState } from '../../constants';
+import { AUTH_REDIRECT_DELAY_MS, UI_STATE, type VerifyState } from '../../constants';
 import { t } from '../../i18n';
 import styles from './AuthVerify.module.css';
 
@@ -19,7 +19,7 @@ export default function AuthVerify() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const token = searchParams.get('token');
-  const [state, setState] = useState<VerifyState>(token ? 'verifying' : 'error');
+  const [state, setState] = useState<VerifyState>(token ? UI_STATE.verifying : UI_STATE.error);
   const [errorMsg, setErrorMsg] = useState(token ? '' : t('no_token', locale));
   const called = useRef(false);
 
@@ -38,7 +38,7 @@ export default function AuthVerify() {
       try {
         const data = await api.get<VerifyResponse>(`/auth/verify?token=${encodeURIComponent(tok)}`);
         setToken(data.session_token);
-        setState('success');
+        setState(UI_STATE.success);
         let dest = '/onboarding';
         try {
           const me = await api.get<MeResponse>('/auth/me');
@@ -48,7 +48,7 @@ export default function AuthVerify() {
         }
         setTimeout(() => navigate(dest, { replace: true }), AUTH_REDIRECT_DELAY_MS);
       } catch (err) {
-        setState('error');
+        setState(UI_STATE.error);
         setErrorMsg(
           err instanceof ApiError
             ? err.message
@@ -65,21 +65,21 @@ export default function AuthVerify() {
         <span className={styles.radar} aria-hidden>◉</span>
         <h1 className={styles.brand}>{t('brand', locale)}</h1>
 
-        {state === 'verifying' && (
+        {state === UI_STATE.verifying && (
           <div className={styles.status} role="status" aria-live="polite">
             <span className={styles.spinner} aria-label={t('verifying', locale)} />
             <p className={styles.message}>{t('verifying', locale)}</p>
           </div>
         )}
 
-        {state === 'success' && (
+        {state === UI_STATE.success && (
           <div className={styles.status} role="status">
             <div className={styles.check}>✓</div>
             <p className={styles.message}>{t('signed_in', locale)}</p>
           </div>
         )}
 
-        {state === 'error' && (
+        {state === UI_STATE.error && (
           <div className={styles.status} role="alert">
             <div className={styles.errorIcon}>✕</div>
             <p className={styles.message}>{errorMsg}</p>

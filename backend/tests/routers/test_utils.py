@@ -8,6 +8,7 @@ from app.routers.utils import (
     event_series_key,
     mask_email,
     normalized_title,
+    resolve_locale_param,
 )
 
 
@@ -21,6 +22,17 @@ class TestNormalizedTitle:
     def test_idempotent(self):
         once = normalized_title("Jazz   Night")
         assert normalized_title(once) == once
+
+
+class TestResolveLocaleParam:
+    def test_valid_locale_wins_over_fallback(self):
+        assert resolve_locale_param("et", "en") == "et"
+
+    def test_none_falls_back(self):
+        assert resolve_locale_param(None, "en") == "en"
+
+    def test_invalid_falls_back(self):
+        assert resolve_locale_param("xx", "en") == "en"
 
 
 class TestEventSeriesKey:

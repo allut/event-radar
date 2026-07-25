@@ -15,7 +15,12 @@ import Explore from './routes/Explore';
 import SavedEvents from './routes/SavedEvents';
 import EventDetail from './routes/EventDetail';
 import Settings from './routes/Settings';
+import Unsubscribe from './routes/Unsubscribe';
+import Privacy from './routes/Privacy';
+import Terms from './routes/Terms';
+import Contact from './routes/Contact';
 import NotFound from './routes/NotFound';
+import Footer from './components/Footer';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -73,8 +78,13 @@ export default function App() {
               path="/settings"
               element={<Protected><Settings /></Protected>}
             />
+            <Route path="/unsubscribe" element={<Unsubscribe />} />
+            <Route path="/privacy" element={<Privacy />} />
+            <Route path="/terms" element={<Terms />} />
+            <Route path="/contact" element={<Contact />} />
             <Route path="*" element={<Protected><NotFound /></Protected>} />
           </Routes>
+          <Footer />
           <Analytics beforeSend={(e) => ({ ...e, url: maskAnalyticsUrl(e.url) })} />
           <SpeedInsights beforeSend={(e) => ({ ...e, url: maskAnalyticsUrl(e.url) })} />
         </BrowserRouter>

@@ -176,6 +176,55 @@ class TestGetFeed:
         assert result["events"][0]["why_go"] == []
 
     @pytest.mark.asyncio
+    async def test_locale_query_param_overrides_persisted_locale(
+        self, mock_db, make_user, make_event, make_request
+    ):
+        """?locale=et must win over the user's persisted EN locale — this is
+        the fix for the cross-page stale-language bug (see the-language-
+        switch-on-tender-snowflake plan)."""
+        from app.routers.feed import get_feed
+
+        feed = MagicMock()
+        feed.event_ids = [10]
+        feed.built_at = datetime(2026, 5, 10, 6, 0, 0, tzinfo=timezone.utc)
+        mock_db.scalar.return_value = feed
+
+        event = make_event(10, why_go_localized={"et": ["ET bullet"], "en": ["EN bullet"]})
+        scalars_result = MagicMock()
+        scalars_result.all.return_value = [event]
+        mock_db.scalars.return_value = scalars_result
+
+        user = make_user(locale="en")
+        result = await get_feed(
+            request=make_request(), locale="et", current_user=user, db=mock_db
+        )
+
+        assert result["events"][0]["why_go"] == ["ET bullet"]
+
+    @pytest.mark.asyncio
+    async def test_absent_locale_query_param_falls_back_to_persisted(
+        self, mock_db, make_user, make_event, make_request
+    ):
+        from app.routers.feed import get_feed
+
+        feed = MagicMock()
+        feed.event_ids = [10]
+        feed.built_at = datetime(2026, 5, 10, 6, 0, 0, tzinfo=timezone.utc)
+        mock_db.scalar.return_value = feed
+
+        event = make_event(10, why_go_localized={"et": ["ET bullet"], "en": ["EN bullet"]})
+        scalars_result = MagicMock()
+        scalars_result.all.return_value = [event]
+        mock_db.scalars.return_value = scalars_result
+
+        user = make_user(locale="en")
+        result = await get_feed(
+            request=make_request(), locale=None, current_user=user, db=mock_db
+        )
+
+        assert result["events"][0]["why_go"] == ["EN bullet"]
+
+    @pytest.mark.asyncio
     async def test_event_query_excludes_explicit_events(self, mock_db, make_user, make_request):
         from app.routers.feed import get_feed
 
@@ -285,3 +334,55 @@ class TestGetEvent:
         assert "is_explicit" in compiled
         assert "is_non_event" in compiled
         assert "false" in compiled.lower()
+
+    @pytest.mark.asyncio
+    async def test_locale_query_param_overrides_token_locale(
+        self, mock_db, make_event, make_request, make_user
+    ):
+        """?locale=et must win even for an authenticated caller whose
+        persisted locale is EN — same fix as GET /feed."""
+        from app.routers.events import get_event
+        from app.auth.tokens import generate_session_token
+
+        event = make_event(42, why_go_localized={"et": ["ET bullet"], "en": ["EN bullet"]})
+        mock_db.scalar.return_value = event
+
+        user = make_user(user_id=7, locale="en")
+        user.session_token_version = 1
+        mock_db.get.return_value = user
+        token = generate_session_token(7, 1)
+
+        result = await get_event(
+            event_id=42,
+            request=make_request(),
+            locale_query="et",
+            db=mock_db,
+            authorization=f"Bearer {token}",
+        )
+
+        assert result["why_go"] == ["ET bullet"]
+
+    @pytest.mark.asyncio
+    async def test_absent_locale_query_param_falls_back_to_token_locale(
+        self, mock_db, make_event, make_request, make_user
+    ):
+        from app.routers.events import get_event
+        from app.auth.tokens import generate_session_token
+
+        event = make_event(42, why_go_localized={"et": ["ET bullet"], "en": ["EN bullet"]})
+        mock_db.scalar.return_value = event
+
+        user = make_user(user_id=7, locale="en")
+        user.session_token_version = 1
+        mock_db.get.return_value = user
+        token = generate_session_token(7, 1)
+
+        result = await get_event(
+            event_id=42,
+            request=make_request(),
+            locale_query=None,
+            db=mock_db,
+            authorization=f"Bearer {token}",
+        )
+
+        assert result["why_go"] == ["EN bullet"]

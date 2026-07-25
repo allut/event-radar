@@ -15,9 +15,11 @@ from itsdangerous import BadSignature
 from app.auth.tokens import (
     generate_magic_token,
     generate_session_token,
+    generate_unsubscribe_token,
     hash_token,
     verify_magic_token,
     verify_session_token,
+    verify_unsubscribe_token,
 )
 
 
@@ -89,6 +91,37 @@ class TestSessionToken:
         magic_token, _, _ = generate_magic_token(1)
         with pytest.raises(BadSignature):
             verify_session_token(magic_token)
+
+
+class TestUnsubscribeToken:
+    def test_roundtrip(self):
+        token = generate_unsubscribe_token(42)
+        assert verify_unsubscribe_token(token) == 42
+
+    def test_bad_signature_raises(self):
+        token = generate_unsubscribe_token(1)
+        with pytest.raises(BadSignature):
+            verify_unsubscribe_token(token + "x")
+
+    def test_wrong_salt_rejects_magic_token(self):
+        magic_token, _, _ = generate_magic_token(1)
+        with pytest.raises(BadSignature):
+            verify_unsubscribe_token(magic_token)
+
+    def test_wrong_salt_rejects_session_token(self):
+        session_token = generate_session_token(1, 1)
+        with pytest.raises(BadSignature):
+            verify_unsubscribe_token(session_token)
+
+    def test_magic_token_rejects_unsubscribe_token(self):
+        unsub_token = generate_unsubscribe_token(1)
+        with pytest.raises(BadSignature):
+            verify_magic_token(unsub_token)
+
+    def test_different_users_different_tokens(self):
+        t1 = generate_unsubscribe_token(1)
+        t2 = generate_unsubscribe_token(2)
+        assert t1 != t2
 
 
 # ---------------------------------------------------------------------------

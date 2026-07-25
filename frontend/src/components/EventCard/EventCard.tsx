@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { Link } from 'react-router-dom';
 import { CARD_ANIMATION_DELAY_STEP_MS, type Signal } from '../../constants';
 import { t } from '../../i18n';
@@ -43,7 +44,7 @@ interface EventCardProps {
   readOnly?: boolean;
 }
 
-export default function EventCard({ event, index, locale, onFeedbackSent, variant = 'standard', readOnly = false }: EventCardProps) {
+function EventCard({ event, index, locale, onFeedbackSent, variant = 'standard', readOnly = false }: EventCardProps) {
   const { activeSignal, pending, sendFeedback } = useFeedback(event.id, {
     initialSignal: event.my_signal,
     onChange: onFeedbackSent,
@@ -136,3 +137,9 @@ export default function EventCard({ event, index, locale, onFeedbackSent, varian
     </article>
   );
 }
+
+// event.my_signal drives useFeedback's initial state internally, so the card
+// only needs to re-render when the event object reference or the display
+// props change — not on every parent re-render (e.g. Explore's search input
+// keystrokes), since the event list is stable while typing.
+export default memo(EventCard);

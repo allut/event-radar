@@ -8,7 +8,7 @@ from typing import Any
 
 from fastapi import HTTPException, status
 from itsdangerous import BadSignature, SignatureExpired
-from sqlalchemy import ColumnElement, Select, and_, or_, select
+from sqlalchemy import ColumnElement, Select, and_, delete, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -20,8 +20,9 @@ from app.constants import (
     EVENT_STATUS_PUBLISHED,
     PREFERENCE_SIGNALS,
     PREFERRED_TASTE_MIN_WEIGHT,
+    VALID_LOCALES,
 )
-from app.models.models import Event, User, UserEventFeedback, UserPersona
+from app.models.models import Event, User, UserEventFeedback, UserEventScore, UserPersona
 
 log = logging.getLogger(__name__)
 
@@ -66,6 +67,17 @@ def require_configured_secret(
         "%s not set; %s unprotected (development mode)", setting_name, feature
     )
     return False
+
+
+async def invalidate_user_scores(db: AsyncSession, user_id: int) -> None:
+    """Delete ALL cached ranking scores for a user.
+
+    A change to the user's personas or feedback shifts the affinity /
+    indirect-feedback terms across every co-categorical event, so per-row
+    invalidation would leave neighbours stale. Callers must invalidate before
+    rebuilding the feed.
+    """
+    await db.execute(delete(UserEventScore).where(UserEventScore.user_id == user_id))
 
 
 def mask_db_url(url: str) -> str:
@@ -231,6 +243,11 @@ def parse_bearer_user(authorization: str | None) -> tuple[int, int] | None:
 def select_events_with_classification() -> Select[tuple[Event]]:
     """Base SELECT for Event with classification eager-loaded. Callers add their own .where()."""
     return select(Event).options(selectinload(Event.classification))
+
+
+def resolve_locale_param(locale: str | None, fallback: str) -> str:
+    """Validate an optional ?locale= param, falling back when absent/invalid."""
+    return locale if locale in VALID_LOCALES else fallback
 
 
 def resolve_title(event: Event, locale: str) -> str:

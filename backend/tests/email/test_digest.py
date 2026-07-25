@@ -138,6 +138,14 @@ class TestBuildDigestHtml:
         html = build_digest_html([], date(2026, 5, 20), "en", "https://eventradar.ee")
         assert "https://eventradar.ee/settings" in html
 
+    def test_explicit_unsubscribe_url_overrides_default(self):
+        html = build_digest_html(
+            [], date(2026, 5, 20), "en", "https://eventradar.ee",
+            "https://eventradar.ee/unsubscribe?token=abc123",
+        )
+        assert "https://eventradar.ee/unsubscribe?token=abc123" in html
+        assert "https://eventradar.ee/settings" not in html
+
     def test_multiple_events_all_rendered(self, make_event):
         events = [make_event(event_id=i, title=f"Event {i}") for i in range(1, 6)]
         html = build_digest_html(events, date(2026, 5, 20), "en", "https://eventradar.ee")

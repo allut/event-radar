@@ -3,7 +3,6 @@ import { renderHook, act, waitFor } from '@testing-library/react';
 import { useLocaleMutation } from './useLocaleMutation';
 import { makeQueryWrapper } from '../test/utils';
 import { setToken, clearToken, getLocale } from '../lib/auth';
-import { QUERY_KEYS } from '../constants';
 
 vi.mock('../api/client', () => ({
   api: { patch: vi.fn().mockResolvedValue(undefined) },
@@ -19,20 +18,16 @@ beforeEach(() => {
 });
 
 function makeWrapper() {
-  const { wrapper, queryClient } = makeQueryWrapper();
-  const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
-  return { wrapper, invalidateSpy };
+  const { wrapper } = makeQueryWrapper();
+  return { wrapper };
 }
 
 describe('useLocaleMutation', () => {
-  it('authenticated: PATCHes, persists locale, invalidates, fires onSuccess', async () => {
+  it('authenticated: PATCHes, persists locale, fires onSuccess', async () => {
     setToken('tok');
     const onSuccess = vi.fn();
-    const { wrapper, invalidateSpy } = makeWrapper();
-    const { result } = renderHook(
-      () => useLocaleMutation([QUERY_KEYS.feed], { onSuccess }),
-      { wrapper },
-    );
+    const { wrapper } = makeWrapper();
+    const { result } = renderHook(() => useLocaleMutation({ onSuccess }), { wrapper });
 
     act(() => result.current.handleLocaleChange('en'));
 
@@ -40,7 +35,6 @@ describe('useLocaleMutation', () => {
     await waitFor(() => expect(onSuccess).toHaveBeenCalled());
     expect(mockPatch).toHaveBeenCalledWith('/users/me', { locale: 'en' });
     expect(getLocale()).toBe('en');
-    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: [QUERY_KEYS.feed] });
   });
 
   it('authenticated error: reverts to stored locale and fires onError', async () => {
@@ -48,10 +42,7 @@ describe('useLocaleMutation', () => {
     mockPatch.mockRejectedValueOnce(new Error('network'));
     const onError = vi.fn();
     const { wrapper } = makeWrapper();
-    const { result } = renderHook(
-      () => useLocaleMutation([QUERY_KEYS.feed], { onError }),
-      { wrapper },
-    );
+    const { result } = renderHook(() => useLocaleMutation({ onError }), { wrapper });
 
     act(() => result.current.handleLocaleChange('ru'));
 
@@ -60,20 +51,16 @@ describe('useLocaleMutation', () => {
     expect(result.current.locale).toBe(getLocale());
   });
 
-  it('anonymous: persists locally, no PATCH, still invalidates + onSuccess', async () => {
+  it('anonymous: persists locally, no PATCH, still fires onSuccess', async () => {
     clearToken();
     const onSuccess = vi.fn();
-    const { wrapper, invalidateSpy } = makeWrapper();
-    const { result } = renderHook(
-      () => useLocaleMutation([QUERY_KEYS.event], { onSuccess }),
-      { wrapper },
-    );
+    const { wrapper } = makeWrapper();
+    const { result } = renderHook(() => useLocaleMutation({ onSuccess }), { wrapper });
 
     act(() => result.current.handleLocaleChange('et'));
 
     expect(mockPatch).not.toHaveBeenCalled();
     expect(getLocale()).toBe('et');
-    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: [QUERY_KEYS.event] });
     expect(onSuccess).toHaveBeenCalled();
   });
 });

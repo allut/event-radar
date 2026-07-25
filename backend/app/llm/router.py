@@ -45,6 +45,14 @@ def content_hash(text: str) -> str:
     return _content_hash(text)
 
 
+def llm_http_client() -> httpx.AsyncClient:
+    """Build an ``httpx.AsyncClient`` configured for LLM calls, for a batch
+    caller (``classify_pending``, ``run_dedup_pass_llm``) to open once and
+    reuse across its loop via ``llm_json``'s ``http_client`` param — instead
+    of a fresh connection pool + TLS context per event/pair."""
+    return httpx.AsyncClient(timeout=LLM_REQUEST_TIMEOUT_SECONDS)
+
+
 def llm_available() -> bool:
     """True if at least one provider in the chain has an API key configured.
 
@@ -61,20 +69,32 @@ async def llm_json(
     db: AsyncSession,
     *,
     event_id: int | None = None,
+    prefetched_cache: dict[str, tuple[dict[str, Any], str]] | None = None,
+    http_client: httpx.AsyncClient | None = None,
 ) -> tuple[dict[str, Any], str]:
     """Call the LLM provider chain and return ``(result_dict, model_label)``.
 
     ``model_label`` is ``"{provider}/{model}"`` (e.g. ``"groq/llama-3.3-70b-versatile"``).
     On a cache hit the label reflects the provider that originally answered.
 
-    Checks the ``llm_calls`` cache first. On a cache miss, tries each provider
-    in order, records the attempt, and returns the first successful result.
+    Checks the ``llm_calls`` cache first — either a caller-supplied
+    ``prefetched_cache`` dict (keyed by content hash, a plain in-memory lookup
+    with no round trip) when a batch caller has already bulk-loaded the cache
+    for its whole run, or a per-call ``SELECT`` when it hasn't. On a cache
+    miss, tries each provider in order, records the attempt, and returns the
+    first successful result.
 
     Args:
         task: Short label stored in ``llm_calls.task`` (``"dedup"`` or ``"classify"``).
         prompt: Full prompt text (keep ≤600 tokens per project constraints).
         db: Active async DB session. Caller is responsible for committing.
         event_id: Optional event FK for audit traceability.
+        prefetched_cache: Optional bulk-loaded cache map from a batch caller —
+            when provided, skips the per-call cache ``SELECT`` entirely (see
+            ``classify_pending``'s ``_prefetch_classify_cache``).
+        http_client: Optional shared ``httpx.AsyncClient`` from a batch caller —
+            when provided, reused instead of opening a fresh connection pool /
+            TLS context per call.
 
     Returns:
         Tuple of (parsed JSON dict, model_label string).
@@ -86,20 +106,26 @@ async def llm_json(
 
     content_hash = _content_hash(prompt)
 
-    # Cache lookup — only consider rows with a successful response; newest first
-    cached: LlmCall | None = await db.scalar(
-        select(LlmCall)
-        .where(
-            LlmCall.content_hash == content_hash,
-            LlmCall.response_json.is_not(None),
+    if prefetched_cache is not None:
+        hit = prefetched_cache.get(content_hash)
+        if hit is not None:
+            log.debug("llm cache hit (prefetched): task=%s hash=%.8s", task, content_hash)
+            return hit
+    else:
+        # Cache lookup — only consider rows with a successful response; newest first
+        cached: LlmCall | None = await db.scalar(
+            select(LlmCall)
+            .where(
+                LlmCall.content_hash == content_hash,
+                LlmCall.response_json.is_not(None),
+            )
+            .order_by(LlmCall.created_at.desc())
+            .limit(1)
         )
-        .order_by(LlmCall.created_at.desc())
-        .limit(1)
-    )
-    if cached is not None:
-        log.debug("llm cache hit: task=%s hash=%.8s", task, content_hash)
-        model_label = f"{cached.provider}/{cached.model}"
-        return cached.response_json, model_label  # type: ignore[return-value]
+        if cached is not None:
+            log.debug("llm cache hit: task=%s hash=%.8s", task, content_hash)
+            model_label = f"{cached.provider}/{cached.model}"
+            return cached.response_json, model_label  # type: ignore[return-value]
 
     errors: list[str] = []
 
@@ -134,12 +160,19 @@ async def llm_json(
             # strategy for this call — tenacity backoff on each provider would
             # fight the chain by delaying the fallback to the next one instead
             # of failing fast into it.
-            async with httpx.AsyncClient(timeout=LLM_REQUEST_TIMEOUT_SECONDS) as client:
-                resp = await client.post(
+            if http_client is not None:
+                resp = await http_client.post(
                     f"{provider['base_url']}/chat/completions",
                     headers={"Authorization": f"Bearer {api_key}"},
                     json=payload,
                 )
+            else:
+                async with httpx.AsyncClient(timeout=LLM_REQUEST_TIMEOUT_SECONDS) as client:
+                    resp = await client.post(
+                        f"{provider['base_url']}/chat/completions",
+                        headers={"Authorization": f"Bearer {api_key}"},
+                        json=payload,
+                    )
 
             if resp.status_code == http.HTTPStatus.TOO_MANY_REQUESTS:
                 log.warning(
@@ -209,6 +242,8 @@ async def llm_json_or_none(
     *,
     event_id: int | None = None,
     context: str,
+    prefetched_cache: dict[str, tuple[dict[str, Any], str]] | None = None,
+    http_client: httpx.AsyncClient | None = None,
 ) -> tuple[dict[str, Any], str] | None:
     """``llm_json`` for callers that degrade gracefully on total LLM failure.
 
@@ -217,7 +252,14 @@ async def llm_json_or_none(
     newsletter extractor so each doesn't hand-roll the same try/except.
     """
     try:
-        return await llm_json(task, prompt, db, event_id=event_id)
+        return await llm_json(
+            task,
+            prompt,
+            db,
+            event_id=event_id,
+            prefetched_cache=prefetched_cache,
+            http_client=http_client,
+        )
     except LLMError as exc:
         log.warning("%s: %s", context, exc, extra={"event": LOG_EVENT_LLM_DEGRADED})
         return None
