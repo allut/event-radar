@@ -21,6 +21,10 @@ export type { PersonaData };
 // Re-export PERSONAS under the original name so all import sites are unchanged.
 export const PERSONAS: PersonaData[] = PERSONAS_EN;
 
+// Built once at module load — mirrors i18n.ts's PERSONAS_EN_BY_SLUG: avoids a
+// linear PERSONAS.find() scan on every persona rendered per component render.
+export const PERSONAS_BY_SLUG: Map<string, PersonaData> = new Map(PERSONAS.map((p) => [p.slug, p]));
+
 // ─── React Query ─────────────────────────────────────────────────────────────
 export const QUERY_RETRY = 1;
 export const QUERY_STALE_TIME = 30_000;

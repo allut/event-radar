@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { api } from '../../api/client';
 import { t } from '../../i18n';
@@ -49,11 +49,15 @@ export default function SavedEvents() {
       lastPage.has_more ? lastPage.offset + lastPage.events.length : undefined,
   });
 
-  const events = data?.pages.flatMap((page) => page.events) ?? [];
-  const tabOptions = SAVED_TABS.map((tab) => ({
-    value: tab.value,
-    label: `${SIGNAL_CONFIG[tab.value].icon} ${t(tab.labelKey, locale)}`,
-  }));
+  const events = useMemo(() => data?.pages.flatMap((page) => page.events) ?? [], [data]);
+  const tabOptions = useMemo(
+    () =>
+      SAVED_TABS.map((tab) => ({
+        value: tab.value,
+        label: `${SIGNAL_CONFIG[tab.value].icon} ${t(tab.labelKey, locale)}`,
+      })),
+    [locale],
+  );
 
   return (
     <div className={styles.page}>

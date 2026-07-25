@@ -6,7 +6,7 @@ import { getLocale } from '../../lib/auth';
 import { useLocaleMutation } from '../../hooks/useLocaleMutation';
 import { useLogout } from '../../hooks/useLogout';
 import { useToast } from '../../hooks/useToast';
-import { AUTH_REDIRECT_DELAY_MS, PERSONAS, QUERY_KEYS, UI_STATE, TOAST_IDLE, type ToastState } from '../../constants';
+import { AUTH_REDIRECT_DELAY_MS, PERSONAS_BY_SLUG, QUERY_KEYS, UI_STATE, TOAST_IDLE, type ToastState } from '../../constants';
 import { cx } from '../../utils';
 import { t, personaName } from '../../i18n';
 import LocaleSelector from '../../components/LocaleSelector';
@@ -95,7 +95,7 @@ export default function Settings() {
   }
 
   function personaEmoji(slug: string): string {
-    return PERSONAS.find((p) => p.slug === slug)?.emoji ?? '◉';
+    return PERSONAS_BY_SLUG.get(slug)?.emoji ?? '◉';
   }
 
   const RANK_LABEL_KEYS = ['persona_primary', 'persona_secondary', 'persona_tertiary'] as const;

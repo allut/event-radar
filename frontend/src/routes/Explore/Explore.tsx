@@ -163,13 +163,29 @@ export default function Explore() {
   const hasActiveFilters =
     activeCount > 0 || filters.q.length > 0 || filters.forYou || filters.sort !== 'relevance';
 
-  const categoryOptions = CATEGORIES.map((slug) => ({ value: slug, label: t(`category_${slug}`, locale) }));
-  const vibeOptions = VIBES.map((slug) => ({ value: slug, label: t(`vibe_${slug}`, locale) }));
-  const dateOptions = DATE_PRESETS.map((p) => ({ value: p.value, label: t(p.labelKey, locale) }));
-  const forYouOptions = [
-    { value: 'all', label: t('all_events', locale) },
-    { value: 'foryou', label: t('for_you', locale) },
-  ];
+  const categoryOptions = useMemo(
+    () => CATEGORIES.map((slug) => ({ value: slug, label: t(`category_${slug}`, locale) })),
+    [locale],
+  );
+  const vibeOptions = useMemo(
+    () => VIBES.map((slug) => ({ value: slug, label: t(`vibe_${slug}`, locale) })),
+    [locale],
+  );
+  const dateOptions = useMemo(
+    () => DATE_PRESETS.map((p) => ({ value: p.value, label: t(p.labelKey, locale) })),
+    [locale],
+  );
+  const forYouOptions = useMemo(
+    () => [
+      { value: 'all', label: t('all_events', locale) },
+      { value: 'foryou', label: t('for_you', locale) },
+    ],
+    [locale],
+  );
+  const sortOptions = useMemo(
+    () => SORT_OPTIONS.map((opt) => ({ value: opt.value, label: t(opt.labelKey, locale) })),
+    [locale],
+  );
 
   return (
     <div className={styles.page}>
@@ -220,7 +236,7 @@ export default function Explore() {
               variant="inline"
               label={t('sort_by', locale)}
               value={filters.sort}
-              options={SORT_OPTIONS.map((opt) => ({ value: opt.value, label: t(opt.labelKey, locale) }))}
+              options={sortOptions}
               onChange={(v) => setSort(v as SortOption)}
               ariaLabel={t('sort_by', locale)}
             />
