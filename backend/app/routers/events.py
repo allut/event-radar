@@ -1,6 +1,6 @@
 """GET /events/{event_id} — full event detail."""
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.constants import DEFAULT_USER_LOCALE, RATE_LIMIT_EVENTS_DETAIL
@@ -11,6 +11,7 @@ from app.routers.utils import (
     load_user_signals,
     parse_bearer_user,
     public_event_filter,
+    resolve_locale_param,
     select_events_with_classification,
     serialize_event,
 )
@@ -23,6 +24,7 @@ router = APIRouter(prefix="/events", tags=["events"])
 async def get_event(
     event_id: int,
     request: Request,
+    locale_query: str | None = Query(None, alias="locale"),
     db: AsyncSession = Depends(get_db),
     authorization: str | None = Header(default=None),
 ) -> dict:
@@ -53,4 +55,6 @@ async def get_event(
             locale = user.locale
             sigs = await load_user_signals(db, user_id, [event.id])
 
-    return serialize_event(event, locale=locale, feedback_by_event=sigs)
+    effective_locale = resolve_locale_param(locale_query, locale)
+
+    return serialize_event(event, locale=effective_locale, feedback_by_event=sigs)

@@ -67,7 +67,7 @@ export default function LegalPage({ docId, titleKey }: LegalPageProps) {
   const handleLogout = useLogout();
   // No server data keyed to locale — the doc is re-loaded by the effect below —
   // so the invalidation key is an inert sentinel (matches StaticPage).
-  const { locale, handleLocaleChange } = useLocaleMutation(['legal-page']);
+  const { locale, handleLocaleChange } = useLocaleMutation();
   // Keyed by `${docId}:${locale}` so a stale-key load renders as loading without
   // a synchronous setState(null) in the effect (react-hooks/set-state-in-effect).
   const [result, setResult] = useState<

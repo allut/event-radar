@@ -13,7 +13,7 @@ import styles from './Contact.module.css';
 export default function Contact() {
   const authed = useAuth();
   const handleLogout = useLogout();
-  const { locale, handleLocaleChange } = useLocaleMutation(['contact']);
+  const { locale, handleLocaleChange } = useLocaleMutation();
   const {
     name, setName,
     email, setEmail,

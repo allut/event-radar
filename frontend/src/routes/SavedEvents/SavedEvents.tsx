@@ -28,7 +28,7 @@ const SAVED_TABS: { value: Signal; labelKey: string }[] = [
 
 export default function SavedEvents() {
   const handleLogout = useLogout();
-  const { locale, handleLocaleChange } = useLocaleMutation([QUERY_KEYS.saved]);
+  const { locale, handleLocaleChange } = useLocaleMutation();
   const [signal, setSignal] = useState<Signal>('bookmark');
 
   const {
@@ -39,10 +39,10 @@ export default function SavedEvents() {
     hasNextPage,
     isFetchingNextPage,
   } = useInfiniteQuery({
-    queryKey: [QUERY_KEYS.saved, signal],
+    queryKey: [QUERY_KEYS.saved, locale, signal],
     queryFn: ({ pageParam }) =>
       api.get<SavedEventsResponse>(
-        `/feedback/events?signal=${signal}&limit=${SAVED_EVENTS_PAGE_SIZE}&offset=${pageParam}`,
+        `/feedback/events?signal=${signal}&limit=${SAVED_EVENTS_PAGE_SIZE}&offset=${pageParam}&locale=${encodeURIComponent(locale)}`,
       ),
     initialPageParam: 0,
     getNextPageParam: (lastPage) =>

@@ -34,6 +34,7 @@ from app.routers.auth import get_current_user
 from app.routers.utils import (
     invalidate_user_scores,
     public_event_filter,
+    resolve_locale_param,
     select_events_with_classification,
     serialize_event,
 )
@@ -143,6 +144,7 @@ async def list_feedback_events(
     signal: str,
     limit: int = Query(BROWSE_PAGE_SIZE, ge=PAGINATION_MIN_LIMIT, le=BROWSE_MAX_PAGE_SIZE),
     offset: int = Query(PAGINATION_MIN_OFFSET, ge=PAGINATION_MIN_OFFSET),
+    locale: str | None = Query(None),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
@@ -190,10 +192,11 @@ async def list_feedback_events(
     events = list((await db.scalars(page_stmt)).all())
 
     feedback_by_event = {e.id: signal for e in events}
+    effective_locale = resolve_locale_param(locale, current_user.locale)
 
     return {
         "events": [
-            serialize_event(e, locale=current_user.locale, feedback_by_event=feedback_by_event)
+            serialize_event(e, locale=effective_locale, feedback_by_event=feedback_by_event)
             for e in events
         ],
         "total": total,

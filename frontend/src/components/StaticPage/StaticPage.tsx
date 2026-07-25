@@ -22,7 +22,7 @@ export default function StaticPage({ titleKey, bodyKeys }: StaticPageProps) {
   const handleLogout = useLogout();
   // No server data to refetch on a locale switch — the page text re-renders off
   // the returned `locale` state — so the invalidation key is an inert sentinel.
-  const { locale, handleLocaleChange } = useLocaleMutation(['static-page']);
+  const { locale, handleLocaleChange } = useLocaleMutation();
 
   return (
     <div className={styles.page}>

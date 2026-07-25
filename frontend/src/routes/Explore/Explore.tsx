@@ -50,7 +50,7 @@ export default function Explore() {
   const handleLogout = useLogout();
   const [searchParams, setSearchParams] = useSearchParams();
   const filters = useMemo(() => parseExploreFilters(searchParams), [searchParams]);
-  const { locale, handleLocaleChange } = useLocaleMutation(['explore']);
+  const { locale, handleLocaleChange } = useLocaleMutation();
 
   const [searchInput, setSearchInput] = useState(filters.q);
 
@@ -100,9 +100,11 @@ export default function Explore() {
     hasNextPage,
     isFetchingNextPage,
   } = useInfiniteQuery({
-    queryKey: [QUERY_KEYS.explore, filters],
+    queryKey: [QUERY_KEYS.explore, locale, filters],
     queryFn: ({ pageParam }) =>
-      api.get<ExploreResponse>(`/explore?${buildExploreApiQuery(filters, pageParam)}`),
+      api.get<ExploreResponse>(
+        `/explore?${buildExploreApiQuery(filters, pageParam)}&locale=${encodeURIComponent(locale)}`,
+      ),
     initialPageParam: 0,
     getNextPageParam: (lastPage) =>
       lastPage.has_more ? lastPage.offset + lastPage.events.length : undefined,

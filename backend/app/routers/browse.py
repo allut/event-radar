@@ -47,6 +47,7 @@ from app.routers.utils import (
     load_user_signals,
     persona_weight_tuple,
     public_event_filter,
+    resolve_locale_param,
     select_events_with_classification,
     serialize_event,
 )
@@ -248,6 +249,7 @@ async def _browse_scored_path(
     offset: int,
     current_user: User,
     now: datetime,
+    locale: str,
 ) -> dict:
     """Path B — Python scoring. Used whenever for_you=True or sort=relevance."""
     candidate_stmt = (
@@ -328,7 +330,7 @@ async def _browse_scored_path(
 
     return {
         "events": [
-            serialize_event(e, locale=current_user.locale, feedback_by_event=sigs)
+            serialize_event(e, locale=locale, feedback_by_event=sigs)
             for e in ordered_events
         ],
         "total": total,
@@ -352,6 +354,7 @@ async def explore_events(
     sort: str = BROWSE_SORT_RELEVANCE,
     limit: int = Query(BROWSE_PAGE_SIZE, ge=PAGINATION_MIN_LIMIT, le=BROWSE_MAX_PAGE_SIZE),
     offset: int = Query(PAGINATION_MIN_OFFSET, ge=PAGINATION_MIN_OFFSET),
+    locale: str | None = Query(None),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
@@ -366,12 +369,13 @@ async def explore_events(
     vibes = _parse_slug_list(vibe, VALID_VIBES)
     now = datetime.now(TALLINN_TZ)
     conds = _facet_conditions(categories, vibes, free, q, date_from, date_to, now)
+    effective_locale = resolve_locale_param(locale, current_user.locale)
 
     if not for_you and sort in BROWSE_SQL_SORTS:
         return await _browse_sql_path(
-            db, conds, sort, limit, offset, current_user.locale, current_user.id
+            db, conds, sort, limit, offset, effective_locale, current_user.id
         )
 
     return await _browse_scored_path(
-        db, conds, for_you, sort, limit, offset, current_user, now
+        db, conds, for_you, sort, limit, offset, current_user, now, effective_locale
     )

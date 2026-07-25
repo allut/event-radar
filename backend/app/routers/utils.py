@@ -20,6 +20,7 @@ from app.constants import (
     EVENT_STATUS_PUBLISHED,
     PREFERENCE_SIGNALS,
     PREFERRED_TASTE_MIN_WEIGHT,
+    VALID_LOCALES,
 )
 from app.models.models import Event, User, UserEventFeedback, UserEventScore, UserPersona
 
@@ -242,6 +243,11 @@ def parse_bearer_user(authorization: str | None) -> tuple[int, int] | None:
 def select_events_with_classification() -> Select[tuple[Event]]:
     """Base SELECT for Event with classification eager-loaded. Callers add their own .where()."""
     return select(Event).options(selectinload(Event.classification))
+
+
+def resolve_locale_param(locale: str | None, fallback: str) -> str:
+    """Validate an optional ?locale= param, falling back when absent/invalid."""
+    return locale if locale in VALID_LOCALES else fallback
 
 
 def resolve_title(event: Event, locale: str) -> str:

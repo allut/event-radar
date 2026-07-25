@@ -20,12 +20,12 @@ interface FeedResponse {
 }
 
 export default function Feed() {
-  const { locale, handleLocaleChange } = useLocaleMutation([QUERY_KEYS.feed]);
+  const { locale, handleLocaleChange } = useLocaleMutation();
   const handleLogout = useLogout();
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: [QUERY_KEYS.feed],
-    queryFn: () => api.get<FeedResponse>('/feed'),
+    queryKey: [QUERY_KEYS.feed, locale],
+    queryFn: () => api.get<FeedResponse>(`/feed?locale=${encodeURIComponent(locale)}`),
     retry: false,
   });
 

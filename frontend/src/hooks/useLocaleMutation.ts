@@ -1,26 +1,25 @@
 import { useState } from 'react';
-import { useMutation, useQueryClient, type QueryKey } from '@tanstack/react-query';
+import { useMutation } from '@tanstack/react-query';
 import { api } from '../api/client';
 import { getLocale, setLocale, isAuthenticated } from '../lib/auth';
 
 /**
- * Locale switcher backed by PATCH /users/me, shared by Feed, EventDetail and
- * Settings. Optimistically updates local state, persists on success (and
- * invalidates the given query key so localized content refetches), reverts to
- * the stored locale on failure.
+ * Locale switcher backed by PATCH /users/me, shared by Feed, Explore, Saved,
+ * EventDetail and Settings. Optimistically updates local state, persists on
+ * success, reverts to the stored locale on failure. Server-localized queries
+ * carry `locale` in their own query key + request param, so switching locale
+ * naturally refetches (and separately caches) each page's content — no
+ * cross-query invalidation needed here.
  */
 export function useLocaleMutation(
-  invalidateKey: QueryKey,
   callbacks?: { onSuccess?: () => void; onError?: (err: unknown) => void },
 ) {
-  const queryClient = useQueryClient();
   const [locale, setLocaleState] = useState(getLocale());
 
   const mutation = useMutation({
     mutationFn: (code: string) => api.patch('/users/me', { locale: code }),
     onSuccess: (_data, code) => {
       setLocale(code);
-      queryClient.invalidateQueries({ queryKey: invalidateKey });
       callbacks?.onSuccess?.();
     },
     onError: (err) => {
@@ -36,7 +35,6 @@ export function useLocaleMutation(
     // hard redirect to /login. Persist locally only in that case.
     if (!isAuthenticated()) {
       setLocale(code);
-      queryClient.invalidateQueries({ queryKey: invalidateKey });
       callbacks?.onSuccess?.();
       return;
     }

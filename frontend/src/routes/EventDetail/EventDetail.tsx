@@ -24,13 +24,13 @@ export default function EventDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const authed = useAuth();
-  const { locale, handleLocaleChange } = useLocaleMutation([QUERY_KEYS.event, id]);
+  const { locale, handleLocaleChange } = useLocaleMutation();
   const handleLogout = useLogout();
   const { toast, showToast } = useToast();
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: [QUERY_KEYS.event, id],
-    queryFn: () => api.get<EventDetailData>(`/events/${id}`),
+    queryKey: [QUERY_KEYS.event, id, locale],
+    queryFn: () => api.get<EventDetailData>(`/events/${id}?locale=${encodeURIComponent(locale)}`),
     enabled: Boolean(id),
     retry: false,
   });

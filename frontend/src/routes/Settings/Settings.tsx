@@ -53,13 +53,10 @@ export default function Settings() {
     showSaveToast('error', err instanceof ApiError ? err.message : t('save_failed', currentLocale));
   }
 
-  const { locale, handleLocaleChange, isPending: localePending } = useLocaleMutation(
-    ['settings'],
-    {
-      onSuccess: () => showSaved(getLocale()),
-      onError: (err) => showSaveError(err, getLocale()),
-    },
-  );
+  const { locale, handleLocaleChange, isPending: localePending } = useLocaleMutation({
+    onSuccess: () => showSaved(getLocale()),
+    onError: (err) => showSaveError(err, getLocale()),
+  });
 
   const digestMutation = useMutation({
     mutationFn: (optIn: boolean) =>
