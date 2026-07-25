@@ -479,6 +479,12 @@ TIME_SLOTS_CACHE_MAXSIZE = 4096
 # GET /explore (app/routers/browse.py) — event discovery / search page.
 # BROWSE_PAGE_SIZE itself is cross-stack (shared/app-config.json), imported above.
 BROWSE_MAX_PAGE_SIZE: int = 60
+
+# Shared pagination validation floors — every `limit`/`offset` Query() across
+# admin.py/browse.py/feedback.py enforces the same lower bound; centralized so
+# it can't drift per-endpoint.
+PAGINATION_MIN_LIMIT: int = 1
+PAGINATION_MIN_OFFSET: int = 0
 # Candidate cap for the Python-scored path (Path B: for_you=True OR sort=relevance —
 # so also date/price/quality sort *under* for_you=True, not just relevance). Sorted
 # soonest-first before capping, so the cap policy is a deliberate soonest-bias, not
@@ -671,6 +677,7 @@ NEWSLETTER_BODY_MAX_LEN = 1500
 # Contact form (routers/contact.py)
 CONTACT_NAME_MAX_LEN = 100
 CONTACT_MESSAGE_MAX_LEN = 2000
+CONTACT_FIELD_MIN_LEN = 1
 
 
 LLM_PROVIDERS: list[dict[str, Any]] = [

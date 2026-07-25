@@ -18,6 +18,8 @@ from app.constants import (
     APP_ENV_DEVELOPMENT,
     EVENT_STATUS_CANCELLED,
     LOG_EVENT_AUTH_FAILED,
+    PAGINATION_MIN_LIMIT,
+    PAGINATION_MIN_OFFSET,
     RATE_LIMIT_ADMIN,
 )
 from app.db import AsyncSessionLocal
@@ -163,10 +165,10 @@ async def admin_dedup_groups(
     request: Request,
     limit: int = Query(
         ADMIN_DEDUP_GROUPS_PAGE_SIZE,
-        ge=1,
+        ge=PAGINATION_MIN_LIMIT,
         le=ADMIN_DEDUP_GROUPS_MAX_PAGE_SIZE,
     ),
-    offset: int = Query(0, ge=0),
+    offset: int = Query(PAGINATION_MIN_OFFSET, ge=PAGINATION_MIN_OFFSET),
 ) -> dict:
     """Return events grouped by dedup_group_id for manual eyeballing.
 

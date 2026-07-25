@@ -122,8 +122,31 @@ export const QUERY_KEYS = {
 } as const;
 
 // ─── UI state types ───────────────────────────────────────────────────────────
-export type LoginState = 'idle' | 'loading' | 'success' | 'error';
-export type VerifyState = 'verifying' | 'success' | 'error';
+// Single source for every state-machine string value used across the auth /
+// contact / unsubscribe flows and the shared Toast/PageState components — a
+// typo in a raw string literal at a call site would silently miss its compare
+// or set counterpart; referencing UI_STATE.<key> makes it a compile error instead.
+export const UI_STATE = {
+  idle: 'idle',
+  loading: 'loading',
+  success: 'success',
+  error: 'error',
+  verifying: 'verifying',
+  working: 'working',
+  resubscribed: 'resubscribed',
+} as const;
+
+export type LoginState = typeof UI_STATE.idle | typeof UI_STATE.loading | typeof UI_STATE.success | typeof UI_STATE.error;
+export type VerifyState = typeof UI_STATE.verifying | typeof UI_STATE.success | typeof UI_STATE.error;
+export type UnsubscribeState = typeof UI_STATE.working | typeof UI_STATE.success | typeof UI_STATE.resubscribed | typeof UI_STATE.error;
+
+export type ToastState =
+  | { status: typeof UI_STATE.idle }
+  | { status: typeof UI_STATE.success | typeof UI_STATE.error; message: string };
+export const TOAST_IDLE: ToastState = { status: UI_STATE.idle };
+
+// Contact form (routes/Contact/Contact.tsx)
+export const CONTACT_TEXTAREA_ROWS = 6;
 
 // ─── Explore ─────────────────────────────────────────────────────────────────
 // BROWSE_PAGE_SIZE itself is cross-stack (shared/app-config.json), imported above.

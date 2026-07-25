@@ -6,7 +6,7 @@ import { getLocale } from '../../lib/auth';
 import { useLocaleMutation } from '../../hooks/useLocaleMutation';
 import { useLogout } from '../../hooks/useLogout';
 import { useToast } from '../../hooks/useToast';
-import { AUTH_REDIRECT_DELAY_MS, PERSONAS, QUERY_KEYS } from '../../constants';
+import { AUTH_REDIRECT_DELAY_MS, PERSONAS, QUERY_KEYS, UI_STATE, TOAST_IDLE, type ToastState } from '../../constants';
 import { cx } from '../../utils';
 import { t, personaName } from '../../i18n';
 import LocaleSelector from '../../components/LocaleSelector';
@@ -31,10 +31,6 @@ interface SettingsData {
   created_at: string;
   personas: PersonaEntry[];
 }
-
-type ToastState = { status: 'idle' } | { status: 'success' | 'error'; message: string };
-
-const TOAST_IDLE: ToastState = { status: 'idle' };
 
 export default function Settings() {
   const navigate = useNavigate();
@@ -82,12 +78,12 @@ export default function Settings() {
   const logoutAllMutation = useMutation({
     mutationFn: () => api.post<{ detail: string }>('/auth/logout-all'),
     onSuccess: () => {
-      setLogoutToast({ status: 'success', message: t('logout_all_success', locale) });
+      setLogoutToast({ status: UI_STATE.success, message: t('logout_all_success', locale) });
       setTimeout(handleLogout, AUTH_REDIRECT_DELAY_MS);
     },
     onError: (err) => {
       setLogoutToast({
-        status: 'error',
+        status: UI_STATE.error,
         message: err instanceof ApiError ? err.message : t('logout_all_failed', locale),
       });
     },
@@ -105,16 +101,16 @@ export default function Settings() {
   const RANK_LABEL_KEYS = ['persona_primary', 'persona_secondary', 'persona_tertiary'] as const;
 
   if (isLoading) {
-    return <PageState kind="loading" message={t('loading', locale)} />;
+    return <PageState kind={UI_STATE.loading} message={t('loading', locale)} />;
   }
 
   if (isError) {
-    return <PageState kind="error" message={t('settings_error', locale)} />;
+    return <PageState kind={UI_STATE.error} message={t('settings_error', locale)} />;
   }
 
   return (
     <div className={styles.page}>
-      {saveToast.status !== 'idle' && <Toast status={saveToast.status} message={saveToast.message} />}
+      {saveToast.status !== UI_STATE.idle && <Toast status={saveToast.status} message={saveToast.message} />}
 
       <TopBar locale={locale} onLocaleChange={handleLocaleChange} onLogout={handleLogout} localeDisabled={localePending} />
 
@@ -199,8 +195,8 @@ export default function Settings() {
           >
             {t('logout_all_btn', locale)}
           </button>
-          {logoutToast.status === 'success' && <p className={styles.saveSuccess} role="status">{logoutToast.message}</p>}
-          {logoutToast.status === 'error' && <p className={styles.saveError} role="alert">{logoutToast.message}</p>}
+          {logoutToast.status === UI_STATE.success && <p className={styles.saveSuccess} role="status">{logoutToast.message}</p>}
+          {logoutToast.status === UI_STATE.error && <p className={styles.saveError} role="alert">{logoutToast.message}</p>}
         </section>
       </main>
     </div>

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { api, ApiError } from '../api/client';
-import { type LoginState } from '../constants';
+import { UI_STATE, type LoginState } from '../constants';
 import { t } from '../i18n';
 
 /** Contact-form submit state machine, mirroring useMagicLinkRequest's
@@ -11,25 +11,25 @@ export function useContactSubmit(locale: string) {
   const [email, setEmail] = useState('');
   const [message, setMessage] = useState('');
   const [website, setWebsite] = useState('');
-  const [state, setState] = useState<LoginState>('idle');
+  const [state, setState] = useState<LoginState>(UI_STATE.idle);
   const [errorMsg, setErrorMsg] = useState('');
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!name.trim() || !email.trim() || !message.trim()) return;
-    setState('loading');
+    setState(UI_STATE.loading);
     setErrorMsg('');
     try {
       await api.post('/contact', { name: name.trim(), email: email.trim(), message: message.trim(), website });
-      setState('success');
+      setState(UI_STATE.success);
     } catch (err) {
       setErrorMsg(err instanceof ApiError ? err.message : t('generic_error', locale));
-      setState('error');
+      setState(UI_STATE.error);
     }
   }
 
   function reset() {
-    setState('idle');
+    setState(UI_STATE.idle);
     setName('');
     setEmail('');
     setMessage('');

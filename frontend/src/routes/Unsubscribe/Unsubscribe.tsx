@@ -4,15 +4,14 @@ import { StatusCodes } from 'http-status-codes';
 import { api, ApiError } from '../../api/client';
 import { getLocale } from '../../lib/auth';
 import { t } from '../../i18n';
+import { UI_STATE, type UnsubscribeState } from '../../constants';
 import styles from './Unsubscribe.module.css';
-
-type UnsubscribeState = 'working' | 'success' | 'resubscribed' | 'error';
 
 export default function Unsubscribe() {
   const locale = getLocale();
   const [searchParams] = useSearchParams();
   const token = searchParams.get('token');
-  const [state, setState] = useState<UnsubscribeState>(token ? 'working' : 'error');
+  const [state, setState] = useState<UnsubscribeState>(token ? UI_STATE.working : UI_STATE.error);
   const [errorMsg, setErrorMsg] = useState(token ? '' : t('unsubscribe.error', locale));
   const [resubscribePending, setResubscribePending] = useState(false);
   const called = useRef(false);
@@ -25,9 +24,9 @@ export default function Unsubscribe() {
     async function run(tok: string) {
       try {
         await api.post(`/email/unsubscribe?token=${encodeURIComponent(tok)}`);
-        setState('success');
+        setState(UI_STATE.success);
       } catch (err) {
-        setState('error');
+        setState(UI_STATE.error);
         setErrorMsg(
           err instanceof ApiError && err.status === StatusCodes.BAD_REQUEST
             ? t('unsubscribe.expired', locale)
@@ -43,7 +42,7 @@ export default function Unsubscribe() {
     setResubscribePending(true);
     try {
       await api.post(`/email/resubscribe?token=${encodeURIComponent(token)}`);
-      setState('resubscribed');
+      setState(UI_STATE.resubscribed);
     } catch {
       setErrorMsg(t('unsubscribe.error', locale));
     } finally {
@@ -57,14 +56,14 @@ export default function Unsubscribe() {
         <span className={styles.radar} aria-hidden>◉</span>
         <h1 className={styles.brand}>{t('brand', locale)}</h1>
 
-        {state === 'working' && (
+        {state === UI_STATE.working && (
           <div className={styles.status} role="status" aria-live="polite">
             <span className={styles.spinner} aria-label={t('unsubscribe.working', locale)} />
             <p className={styles.message}>{t('unsubscribe.working', locale)}</p>
           </div>
         )}
 
-        {state === 'success' && (
+        {state === UI_STATE.success && (
           <div className={styles.status} role="status">
             <div className={styles.check}>✓</div>
             <p className={styles.message}>{t('unsubscribe.success', locale)}</p>
@@ -79,14 +78,14 @@ export default function Unsubscribe() {
           </div>
         )}
 
-        {state === 'resubscribed' && (
+        {state === UI_STATE.resubscribed && (
           <div className={styles.status} role="status">
             <div className={styles.check}>✓</div>
             <p className={styles.message}>{t('unsubscribe.resubscribed', locale)}</p>
           </div>
         )}
 
-        {state === 'error' && (
+        {state === UI_STATE.error && (
           <div className={styles.status} role="alert">
             <div className={styles.errorIcon}>✕</div>
             <p className={styles.message}>{errorMsg}</p>

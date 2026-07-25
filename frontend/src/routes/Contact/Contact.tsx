@@ -5,7 +5,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { useLogout } from '../../hooks/useLogout';
 import { useLocaleMutation } from '../../hooks/useLocaleMutation';
 import { useContactSubmit } from '../../hooks/useContactSubmit';
-import { QUERY_KEYS } from '../../constants';
+import { QUERY_KEYS, UI_STATE, CONTACT_TEXTAREA_ROWS } from '../../constants';
 import { t } from '../../i18n';
 import TopBar from '../../components/TopBar';
 import styles from './Contact.module.css';
@@ -54,7 +54,7 @@ export default function Contact() {
         <h1 className={styles.title}>{t('contact_title', locale)}</h1>
         <p className={styles.body}>{t('contact_intro', locale)}</p>
 
-        {state === 'success' ? (
+        {state === UI_STATE.success ? (
           <div className={styles.success} role="status">
             <div className={styles.checkCircle}>✓</div>
             <p className={styles.successTitle}>{t('contact_success_title', locale)}</p>
@@ -73,7 +73,7 @@ export default function Contact() {
               value={name}
               onChange={(e) => setName(e.target.value)}
               autoComplete="name"
-              disabled={state === 'loading'}
+              disabled={state === UI_STATE.loading}
               required
             />
 
@@ -86,7 +86,7 @@ export default function Contact() {
               onChange={(e) => setEmail(e.target.value)}
               placeholder={t('email_placeholder', locale)}
               autoComplete="email"
-              disabled={state === 'loading'}
+              disabled={state === UI_STATE.loading}
               required
             />
 
@@ -96,8 +96,8 @@ export default function Contact() {
               className={styles.textarea}
               value={message}
               onChange={(e) => setMessage(e.target.value)}
-              rows={6}
-              disabled={state === 'loading'}
+              rows={CONTACT_TEXTAREA_ROWS}
+              disabled={state === UI_STATE.loading}
               required
             />
 
@@ -113,16 +113,16 @@ export default function Contact() {
               onChange={(e) => setWebsite(e.target.value)}
             />
 
-            {state === 'error' && (
+            {state === UI_STATE.error && (
               <p className={styles.error} role="alert">{errorMsg}</p>
             )}
 
             <button
               type="submit"
               className={styles.submit}
-              disabled={state === 'loading' || !name.trim() || !email.trim() || !message.trim()}
+              disabled={state === UI_STATE.loading || !name.trim() || !email.trim() || !message.trim()}
             >
-              {state === 'loading'
+              {state === UI_STATE.loading
                 ? <span className={styles.spinner} aria-label={t('sending', locale)} />
                 : t('contact_send', locale)}
             </button>

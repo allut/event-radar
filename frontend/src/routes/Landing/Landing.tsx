@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../../api/client';
 import { getLocale, setLocale } from '../../lib/auth';
-import { MAGIC_LINK_EXPIRY_MINUTES, PERSONAS, QUERY_KEYS } from '../../constants';
+import { MAGIC_LINK_EXPIRY_MINUTES, PERSONAS, QUERY_KEYS, UI_STATE } from '../../constants';
 import { t, ti, personaName, personaVibe } from '../../i18n';
 import { padIndex } from '../../utils';
 import { useMagicLinkRequest } from '../../hooks/useMagicLinkRequest';
@@ -25,7 +25,7 @@ const STEP_KEYS = [
 function EmailCapture({ locale }: { locale: string }) {
   const { email, setEmail, state, errorMsg, submit } = useMagicLinkRequest(locale);
 
-  if (state === 'success') {
+  if (state === UI_STATE.success) {
     return (
       <div className={styles.success} role="status">
         <div className={styles.checkCircle}>✓</div>
@@ -48,16 +48,16 @@ function EmailCapture({ locale }: { locale: string }) {
         onChange={(e) => setEmail(e.target.value)}
         placeholder={t('email_placeholder', locale)}
         autoComplete="email"
-        disabled={state === 'loading'}
+        disabled={state === UI_STATE.loading}
         aria-label={t('email_label', locale)}
         required
       />
-      <button type="submit" className={styles.submit} disabled={state === 'loading' || !email.trim()}>
-        {state === 'loading'
+      <button type="submit" className={styles.submit} disabled={state === UI_STATE.loading || !email.trim()}>
+        {state === UI_STATE.loading
           ? <span className={styles.spinner} aria-label={t('sending', locale)} />
           : t('landing_cta_primary', locale)}
       </button>
-      {state === 'error' && <p className={styles.error} role="alert">{errorMsg}</p>}
+      {state === UI_STATE.error && <p className={styles.error} role="alert">{errorMsg}</p>}
     </form>
   );
 }

@@ -20,6 +20,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.constants import (
     BROWSE_MAX_PAGE_SIZE,
     BROWSE_PAGE_SIZE,
+    PAGINATION_MIN_LIMIT,
+    PAGINATION_MIN_OFFSET,
     PREFERENCE_SIGNALS,
     PREFERENCE_SIGNALS_SQL_PREDICATE,
     RATE_LIMIT_FEEDBACK,
@@ -139,8 +141,8 @@ async def delete_feedback(
 async def list_feedback_events(
     request: Request,
     signal: str,
-    limit: int = Query(BROWSE_PAGE_SIZE, ge=1, le=BROWSE_MAX_PAGE_SIZE),
-    offset: int = Query(0, ge=0),
+    limit: int = Query(BROWSE_PAGE_SIZE, ge=PAGINATION_MIN_LIMIT, le=BROWSE_MAX_PAGE_SIZE),
+    offset: int = Query(PAGINATION_MIN_OFFSET, ge=PAGINATION_MIN_OFFSET),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict:

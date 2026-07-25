@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { api, ApiError } from '../api/client';
-import { type LoginState } from '../constants';
+import { UI_STATE, type LoginState } from '../constants';
 import { t } from '../i18n';
 
 /** Magic-link request state machine, shared by the Login page and the landing
@@ -8,26 +8,26 @@ import { t } from '../i18n';
  * loading → success | error. Centralized so the two entry points can't drift. */
 export function useMagicLinkRequest(locale: string) {
   const [email, setEmail] = useState('');
-  const [state, setState] = useState<LoginState>('idle');
+  const [state, setState] = useState<LoginState>(UI_STATE.idle);
   const [errorMsg, setErrorMsg] = useState('');
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     const trimmed = email.trim();
     if (!trimmed) return;
-    setState('loading');
+    setState(UI_STATE.loading);
     setErrorMsg('');
     try {
       await api.post('/auth/request-link', { email: trimmed.toLowerCase(), locale });
-      setState('success');
+      setState(UI_STATE.success);
     } catch (err) {
       setErrorMsg(err instanceof ApiError ? err.message : t('generic_error', locale));
-      setState('error');
+      setState(UI_STATE.error);
     }
   }
 
   function reset() {
-    setState('idle');
+    setState(UI_STATE.idle);
     setEmail('');
     setErrorMsg('');
   }

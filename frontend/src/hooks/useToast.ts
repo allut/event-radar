@@ -1,9 +1,5 @@
 import { useState } from 'react';
-import { SAVE_MSG_CLEAR_DELAY_MS } from '../constants';
-
-type ToastState = { status: 'idle' } | { status: 'success' | 'error'; message: string };
-
-const TOAST_IDLE: ToastState = { status: 'idle' };
+import { SAVE_MSG_CLEAR_DELAY_MS, UI_STATE, TOAST_IDLE, type ToastState } from '../constants';
 
 /** Local toast state with auto-clear, shared by any page that needs a
  * transient success/error confirmation (mirrors the pattern Settings used
@@ -11,9 +7,9 @@ const TOAST_IDLE: ToastState = { status: 'idle' };
 export function useToast() {
   const [toast, setToast] = useState<ToastState>(TOAST_IDLE);
 
-  function showToast(status: 'success' | 'error', message: string) {
+  function showToast(status: typeof UI_STATE.success | typeof UI_STATE.error, message: string) {
     setToast({ status, message });
-    if (status === 'success') {
+    if (status === UI_STATE.success) {
       setTimeout(() => setToast(TOAST_IDLE), SAVE_MSG_CLEAR_DELAY_MS);
     }
   }
