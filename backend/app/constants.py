@@ -904,7 +904,7 @@ CURRENCY_AMOUNT_RE = (
 # CORS — restricted to the methods/headers the SPA actually sends (see
 # frontend/src/api/client.ts and routers/*.py route decorators). Credentials are
 # never used (auth is a Bearer header, not a cookie), so allow_credentials=False.
-CORS_ALLOWED_METHODS: list[str] = ["GET", "POST", "PATCH"]
+CORS_ALLOWED_METHODS: list[str] = ["GET", "POST", "PATCH", "DELETE"]
 CORS_ALLOWED_HEADERS: list[str] = ["Authorization", "Content-Type"]
 
 # Logging — configure_logging() in app.logging_config wires these into the root
