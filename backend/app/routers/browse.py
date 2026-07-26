@@ -1,6 +1,6 @@
 """GET /explore — searchable, filterable, personalized event discovery grid.
 
-Two execution paths (see plan): Path A is pure SQL for the "All events" view
+Two execution paths: Path A is pure SQL for the "All events" view
 sorted by date/price/quality. Path B does Python-side scoring (ranking/score.py)
 whenever For-you narrowing or relevance ranking is requested, since persona
 affinity and the feedback-based soft-filter aren't expressible as SQL ORDER BY.

@@ -1,7 +1,7 @@
 """Rule-based deduplication pre-filter for Event Radar.
 
 Stage 1 of the two-stage dedup pipeline:
-  rule-based → (Day 9) LLM tiebreaker on candidate pairs only
+  rule-based → LLM tiebreaker on candidate pairs only
 
 Merge criteria (ALL three must pass):
   1. Title fuzzy match: rapidfuzz token_set_ratio > TITLE_RATIO_THRESHOLD
