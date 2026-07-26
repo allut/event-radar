@@ -75,7 +75,7 @@ Geocoding runs as a separate backfill alongside this pipeline, filling in `lat`/
 
 - **Python 3.12**
 - **Node.js 18+** and npm
-- A **PostgreSQL** database — a free [Neon](https://neon.tech) project works out of the box, or run Postgres locally.
+- A **PostgreSQL** database — [Docker Compose](#2-set-up-the-database) is the recommended local path (see below); a free [Neon](https://neon.tech) project also works out of the box for production-like testing.
 
 > [!NOTE]
 > External API keys (Groq/Cerebras/Mistral for LLM, Resend for email) are **optional for local development**. Without them, classification degrades gracefully to a rule-only dedup pass and emails are logged to the console instead of being sent. Provide them when you want the full pipeline.
@@ -94,14 +94,29 @@ cd backend
 cp .env.example .env
 ```
 
-Edit `backend/.env` and set at minimum:
+`backend/.env` now defaults to a local Postgres `DATABASE_URL` matching the Docker Compose service below, so no edit is needed there. Set at minimum:
 
-- `DATABASE_URL` — your Postgres connection string (async driver, e.g. `postgresql+asyncpg://user:pass@host/db`)
 - `SECRET_KEY` — a random secret; generate one with `python -c "import secrets; print(secrets.token_hex(32))"`
 
 Optionally add `GROQ_API_KEY` / `CEREBRAS_API_KEY` / `MISTRAL_API_KEY` and `RESEND_API_KEY` to enable LLM classification and real email delivery. See `.env.example` for the full list of overridable settings (data sources, persona vectors, admin auth, CORS).
 
-### 2. Run the backend
+> [!IMPORTANT]
+> If you already have a `backend/.env` from before, pointing at a shared Neon database, change its `DATABASE_URL` to the local form shown in `.env.example` — otherwise you'll keep hitting the shared remote DB instead of your local one.
+
+### 2. Set up the database
+
+**Option A — Docker Compose (recommended):**
+
+```bash
+docker compose up -d db      # starts local Postgres on :5432
+docker compose ps            # wait for db to report "healthy"
+```
+
+Credentials and DB name already match the local `DATABASE_URL` in `.env.example`, so no further `.env` edit is needed. The official `postgres:16` image bundles the `citext` and `pg_trgm` extensions the migrations need and runs as superuser, so `CREATE EXTENSION` succeeds with no extra setup.
+
+**Option B — native install (fallback):** install Postgres **with contrib** (the Windows EDB installer includes it), then `createdb eventradar`. Point `DATABASE_URL` at your local instance (no `?ssl=require`). Run migrations as a **superuser role** (e.g. `postgres`) — `alembic upgrade head` issues `CREATE EXTENSION citext` / `pg_trgm`, which a non-privileged role can't do.
+
+### 3. Run the backend
 
 ```bash
 cd backend
@@ -113,16 +128,16 @@ venv\Scripts\Activate.ps1      # Windows PowerShell
 # source venv/bin/activate     # macOS / Linux
 
 pip install -r requirements.txt
-alembic upgrade head            # apply database migrations
+alembic upgrade head            # apply database migrations — do this before uvicorn
 uvicorn app.main:app --reload   # dev server on http://localhost:8000
 ```
 
-The app seeds personas and ingestion sources automatically on startup. Once running:
+The app seeds personas and ingestion sources automatically on startup, but does **not** run migrations — `alembic upgrade head` must complete first or startup will crash on missing tables. Once running:
 
 - Health check: http://localhost:8000/health
 - Interactive API docs (development only): http://localhost:8000/docs
 
-### 3. Run the frontend
+### 4. Run the frontend
 
 In a second terminal:
 
