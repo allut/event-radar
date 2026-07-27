@@ -127,6 +127,83 @@ def coords_in_tallinn(lat: float, lng: float) -> bool:
     return lat_min <= lat <= lat_max and lng_min <= lng <= lng_max
 
 
+async def insert_normalized_event(
+    db: AsyncSession, source: Source, normalized: NormalizedEvent
+) -> Event | None:
+    """Insert the Event + EventSource rows inside a savepoint.
+
+    Shared by every ingestion write path: scraper adapters (via
+    SourceAdapter._insert_event below) and the organizer direct-submission
+    router (routers/organizer_events.py), which has no adapter/normalize()
+    step of its own but still needs the same slug/SSRF-guard/content-flag/
+    collision-handling behavior.
+
+    Returns None on a slug collision (IntegrityError) — the savepoint rolls
+    back just this event, not the whole batch. Callers that need description/
+    important_info sanitized must call sanitize_html() before building
+    ``normalized`` — this function does not sanitize (that lives in each
+    adapter's normalize(), see the module docstring above).
+    """
+    slug = _make_slug(normalized.title, normalized.starts_at, normalized.external_id)
+    # SSRF guard: event.url is fetched server-side by the daily refetch
+    # job, so — unlike image_url, which is only ever rendered client-side —
+    # it must be host-pinned, not just scheme-checked.
+    safe_url = await safe_fetchable_url(normalized.url, source.slug)
+    try:
+        async with db.begin_nested():
+            event = Event(
+                slug=slug,
+                title_orig=normalized.title,
+                description_orig=normalized.description,
+                important_info=normalized.important_info,
+                starts_at=normalized.starts_at,
+                ends_at=normalized.ends_at,
+                venue_name=normalized.venue_name,
+                venue_address=normalized.venue_address,
+                lat=normalized.lat,
+                lng=normalized.lng,
+                url=safe_url,
+                image_url=safe_external_url(normalized.image_url, source.slug),
+                price_min=normalized.price_min,
+                price_max=normalized.price_max,
+                currency=normalized.currency,
+                price_hint=normalized.price_hint,
+                has_free_tier=normalized.has_free_tier,
+                title_localized=normalized.title_localized,
+                description_localized=normalized.description_localized,
+                important_info_localized=normalized.important_info_localized,
+                status=EVENT_STATUS_DRAFT,
+                is_explicit=is_explicit_text(
+                    normalized.title,
+                    normalized.description,
+                    normalized.venue_name,
+                    normalized.important_info,
+                ),
+                is_non_event=is_non_event_text(
+                    normalized.title,
+                    normalized.venue_name,
+                ),
+            )
+            db.add(event)
+            await db.flush()
+            db.add(
+                EventSource(
+                    event_id=event.id,
+                    source_id=source.id,
+                    external_id=normalized.external_id,
+                )
+            )
+    except IntegrityError:
+        log.warning(
+            "slug collision source=%s external_id=%s slug=%s — skipped",
+            source.slug,
+            normalized.external_id,
+            slug,
+        )
+        return None
+    return event
+
+
 class SourceAdapter(ABC):
     def __init__(self, source: Source) -> None:
         self.source = source
@@ -144,74 +221,10 @@ class SourceAdapter(ABC):
 
     async def _insert_event(
         self, db: AsyncSession, normalized: NormalizedEvent
-    ) -> bool:
-        """Insert the Event + EventSource rows inside a savepoint.
-
-        Returns False on a slug collision (IntegrityError) — the savepoint
-        rolls back just this event, not the whole batch.
-        """
-        slug = _make_slug(
-            normalized.title, normalized.starts_at, normalized.external_id
-        )
-        # SSRF guard: event.url is fetched server-side by the daily refetch
-        # job, so — unlike image_url, which is only ever rendered client-side —
-        # it must be host-pinned, not just scheme-checked.
-        safe_url = await safe_fetchable_url(normalized.url, self.source.slug)
-        try:
-            async with db.begin_nested():
-                event = Event(
-                    slug=slug,
-                    title_orig=normalized.title,
-                    description_orig=normalized.description,
-                    important_info=normalized.important_info,
-                    starts_at=normalized.starts_at,
-                    ends_at=normalized.ends_at,
-                    venue_name=normalized.venue_name,
-                    venue_address=normalized.venue_address,
-                    lat=normalized.lat,
-                    lng=normalized.lng,
-                    url=safe_url,
-                    image_url=safe_external_url(
-                        normalized.image_url, self.source.slug
-                    ),
-                    price_min=normalized.price_min,
-                    price_max=normalized.price_max,
-                    currency=normalized.currency,
-                    price_hint=normalized.price_hint,
-                    has_free_tier=normalized.has_free_tier,
-                    title_localized=normalized.title_localized,
-                    description_localized=normalized.description_localized,
-                    important_info_localized=normalized.important_info_localized,
-                    status=EVENT_STATUS_DRAFT,
-                    is_explicit=is_explicit_text(
-                        normalized.title,
-                        normalized.description,
-                        normalized.venue_name,
-                        normalized.important_info,
-                    ),
-                    is_non_event=is_non_event_text(
-                        normalized.title,
-                        normalized.venue_name,
-                    ),
-                )
-                db.add(event)
-                await db.flush()
-                db.add(
-                    EventSource(
-                        event_id=event.id,
-                        source_id=self.source.id,
-                        external_id=normalized.external_id,
-                    )
-                )
-        except IntegrityError:
-            log.warning(
-                "slug collision source=%s external_id=%s slug=%s — skipped",
-                self.source.slug,
-                normalized.external_id,
-                slug,
-            )
-            return False
-        return True
+    ) -> Event | None:
+        """Insert via the shared insert_normalized_event() helper, bound to
+        this adapter's source. Returns None on a slug collision."""
+        return await insert_normalized_event(db, self.source, normalized)
 
     async def _process_raw_item(
         self,

@@ -95,6 +95,56 @@ class AuthMagicLink(Base):
 
 
 # ---------------------------------------------------------------------------
+# Organizers (direct event submission)
+# ---------------------------------------------------------------------------
+
+
+class Organizer(Base):
+    """A separate account track from User — organizers submit events directly,
+    authenticated via their own magic-link stack (distinct salts, see
+    app/auth/tokens.py), never consumer sign-in."""
+
+    __tablename__ = "organizers"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    email: Mapped[str] = mapped_column(CIText(), nullable=False, unique=True)
+    locale: Mapped[str] = mapped_column(
+        String(2), nullable=False, default=DEFAULT_USER_LOCALE
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    # Bumped by /organizer/auth/logout-all to invalidate every previously-issued
+    # organizer session token at once — mirrors User.session_token_version.
+    session_token_version: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="1"
+    )
+
+    magic_links: Mapped[list["OrganizerMagicLink"]] = relationship(
+        back_populates="organizer"
+    )
+
+
+class OrganizerMagicLink(Base):
+    __tablename__ = "organizer_magic_links"
+    __table_args__ = (Index("ix_organizer_magic_links_organizer_id", "organizer_id"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    organizer_id: Mapped[int] = mapped_column(
+        ForeignKey("organizers.id", ondelete="CASCADE"), nullable=False
+    )
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    used_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    organizer: Mapped["Organizer"] = relationship(back_populates="magic_links")
+
+
+# ---------------------------------------------------------------------------
 # Personas
 # ---------------------------------------------------------------------------
 
@@ -227,6 +277,13 @@ class Event(Base):
             "detail_refetched_at",
             postgresql_where=text("url IS NOT NULL"),
         ),
+        Index("ix_events_submitted_by_organizer_id", "submitted_by_organizer_id"),
+        # Admin review-queue candidate query (Phase 2): needs_review IS TRUE.
+        Index(
+            "ix_events_needs_review",
+            "needs_review",
+            postgresql_where=text("needs_review"),
+        ),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
@@ -278,6 +335,17 @@ class Event(Base):
     dedup_group_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    # Organizer direct-submission fields (Phase 1). NULL for every
+    # scraper-ingested event. See CLAUDE.md Data Flow for the submit ->
+    # inline classify -> inline publish -> post-hoc review lifecycle.
+    submitted_by_organizer_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("organizers.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    needs_review: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=false(), default=False
     )
 
     sources: Mapped[list["EventSource"]] = relationship(back_populates="event")

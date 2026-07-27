@@ -11,11 +11,13 @@ from app._generated.shared_constants import (
     DEFAULT_USER_LOCALE,
     HTML_SANITIZE_ALLOWED_ATTRS,
     HTML_SANITIZE_ALLOWED_TAGS,
+    MAGIC_LINK_TTL_MINUTES as _MAGIC_LINK_TTL_MINUTES_SHARED,
     PERSONA_MAX_SELECTABLE,
     PERSONA_PRIMARY_WEIGHT,
     PERSONA_SECONDARY_WEIGHT,
     PERSONA_TERTIARY_WEIGHT,
     SAFE_URL_SCHEMES,
+    SESSION_TTL_DAYS as _SESSION_TTL_DAYS_SHARED,
     VALID_CATEGORIES,
     VALID_LOCALES,
     VALID_SIGNALS,
@@ -383,6 +385,11 @@ RATE_LIMIT_WEBHOOK_INBOUND_MAIL = "60/minute"
 RATE_LIMIT_UNSUBSCRIBE = "30/minute"
 # Public contact form (routers/contact.py) — no auth; tight cap since each hit sends an email.
 RATE_LIMIT_CONTACT = "3/minute"
+# Organizer event submission/edit/image-upload (routers/organizer_events.py) —
+# modeled on RATE_LIMIT_CONTACT: authenticated, but each hit runs a full
+# inline classify+publish pass, so keep it tight per-IP; the DB-backed
+# ORGANIZER_DAILY_SUBMISSION_CAP is the per-organizer ceiling.
+RATE_LIMIT_SUBMIT = "10/minute"
 
 # Resend inbound-mail webhook signature verification (Svix scheme; see
 # https://resend.com/docs/dashboard/webhooks/verify-webhooks-requests and
@@ -433,6 +440,19 @@ SHOWCASE_FALLBACK_WINDOW_DAYS = 30
 AUTH_MAGIC_SALT = "magic-link-v1"
 AUTH_SESSION_SALT = "session-v1"
 AUTH_UNSUBSCRIBE_SALT = "unsubscribe-v1"
+# Organizer auth — distinct salts from the user stack above so a user's magic-link
+# or session token can never verify as an organizer token (and vice versa), even
+# though both use the same URLSafeTimedSerializer(settings.SECRET_KEY).
+AUTH_ORGANIZER_MAGIC_SALT = "organizer-magic-v1"
+AUTH_ORGANIZER_SESSION_SALT = "organizer-session-v1"
+# Organizer TTLs mirror the user-facing defaults (no separate settings override —
+# organizers are not expected to need a different cadence than consumers).
+ORGANIZER_MAGIC_LINK_TTL_MINUTES = _MAGIC_LINK_TTL_MINUTES_SHARED
+ORGANIZER_SESSION_TTL_DAYS = _SESSION_TTL_DAYS_SHARED
+# Per-organizer daily submission ceiling (routers/organizer_events.py), computed
+# from Tallinn calendar-day start — an IP rate limit alone can't cap a single
+# organizer account across multiple IPs.
+ORGANIZER_DAILY_SUBMISSION_CAP = 20
 
 # Per-email magic-link resend cooldown (routers/auth.py::_recent_unused_link_exists) —
 # prevents Resend quota exhaustion from rapid repeat requests for the same address.
@@ -713,11 +733,16 @@ SOURCE_SLUG_FOTOGRAFISKA = "fotografiska"
 SOURCE_SLUG_KUMU = "kumu"
 SOURCE_SLUG_ESTONIA_CONCERT_HALL = "estonia_concert_hall"
 SOURCE_SLUG_PILETILEVI = "piletilevi"
+# Adapter-less source for direct organizer submission (routers/organizer_events.py) —
+# no fetch_raw/normalize, so it carries no ADAPTER_REGISTRY entry (see registry.py)
+# and ingest_all_enabled skips it, same as the newsletter source above.
+SOURCE_SLUG_USER_SUBMISSION = "user_submission"
 
 # Source kinds
 SOURCE_KIND_API = "api"
 SOURCE_KIND_HTML_SCRAPE = "html_scrape"
 SOURCE_KIND_INBOUND_EMAIL = "inbound_email"
+SOURCE_KIND_USER_SUBMISSION = "user_submission"
 
 HTML_LISTING_MAX_DETAIL_FETCHES = (
     300  # cap per ingestion run on capped-detail sources (piletilevi) — headroom

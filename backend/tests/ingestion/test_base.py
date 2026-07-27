@@ -17,6 +17,7 @@ from app.ingestion.adapter import (
     SourceAdapter,
     coords_in_estonia,
     coords_in_tallinn,
+    insert_normalized_event,
 )
 from app.ingestion.content_filters import is_explicit_text, is_non_event_text
 from app.ingestion.http_client import (
@@ -907,6 +908,79 @@ class TestNormalizedEventAddressGate:
         )
         assert event.lat == 59.43
         assert event.lng == 24.75
+
+
+class TestInsertNormalizedEvent:
+    """insert_normalized_event() is the shared write path extracted from
+    SourceAdapter._insert_event (P1 organizer-submission refactor) — used by
+    every scraper adapter *and* the organizer direct-submission router, which
+    has no adapter/normalize() step of its own."""
+
+    def _nested_cm(self, mock_db):
+        nested_cm = MagicMock()
+        nested_cm.__aenter__ = AsyncMock(return_value=None)
+        nested_cm.__aexit__ = AsyncMock(return_value=False)
+        mock_db.begin_nested = MagicMock(return_value=nested_cm)
+        return nested_cm
+
+    @pytest.mark.asyncio
+    async def test_returns_event_on_success(self, mock_db):
+        self._nested_cm(mock_db)
+        source = MagicMock(id=1, slug="test-source")
+        normalized = NormalizedEvent(
+            external_id="ext-1",
+            title="Test Event",
+            starts_at=datetime(2026, 6, 1, 18, 0, tzinfo=TALLINN_TZ),
+        )
+
+        result = await insert_normalized_event(mock_db, source, normalized)
+
+        assert result is not None
+        assert result.title_orig == "Test Event"
+        mock_db.flush.assert_awaited()
+
+    @pytest.mark.asyncio
+    async def test_returns_none_on_slug_collision(self, mock_db):
+        from sqlalchemy.exc import IntegrityError
+
+        self._nested_cm(mock_db)
+        mock_db.flush.side_effect = IntegrityError("stmt", {}, Exception("dup key"))
+        source = MagicMock(id=1, slug="test-source")
+        normalized = NormalizedEvent(
+            external_id="ext-1",
+            title="Test Event",
+            starts_at=datetime(2026, 6, 1, 18, 0, tzinfo=TALLINN_TZ),
+        )
+
+        result = await insert_normalized_event(mock_db, source, normalized)
+
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_source_adapter_insert_event_delegates(self, mock_db):
+        """SourceAdapter._insert_event now delegates to insert_normalized_event
+        bound to self.source, preserving the pre-refactor call site's behavior."""
+        self._nested_cm(mock_db)
+        source = MagicMock(id=1, slug="test-source")
+
+        class _FakeAdapterForInsert(SourceAdapter):
+            async def fetch_raw(self, known_ids):
+                return []
+
+            def normalize(self, raw):
+                return None
+
+        adapter = _FakeAdapterForInsert(source)
+        normalized = NormalizedEvent(
+            external_id="ext-2",
+            title="Delegate Test",
+            starts_at=datetime(2026, 6, 1, 18, 0, tzinfo=TALLINN_TZ),
+        )
+
+        result = await adapter._insert_event(mock_db, normalized)
+
+        assert result is not None
+        assert result.title_orig == "Delegate Test"
 
 
 class TestStripFeeAmounts:

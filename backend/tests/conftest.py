@@ -60,6 +60,24 @@ def make_user():
 
 
 @pytest.fixture
+def make_organizer():
+    def _factory(
+        organizer_id: int = 1,
+        locale: str = DEFAULT_USER_LOCALE,
+        session_token_version: int = 1,
+    ) -> MagicMock:
+        o = MagicMock()
+        o.id = organizer_id
+        o.email = "organizer@example.com"
+        o.locale = locale
+        o.session_token_version = session_token_version
+        o.created_at = MagicMock()
+        o.created_at.isoformat.return_value = "2026-05-13T06:00:00+00:00"
+        return o
+    return _factory
+
+
+@pytest.fixture
 def make_event():
     def _factory(
         event_id: int = 10,
