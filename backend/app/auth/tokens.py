@@ -18,6 +18,7 @@ from app.constants import (
     AUTH_ORGANIZER_SESSION_SALT,
     AUTH_SESSION_SALT,
     AUTH_UNSUBSCRIBE_SALT,
+    DEFAULT_SESSION_TOKEN_VERSION,
     ORGANIZER_MAGIC_LINK_TTL_MINUTES,
     ORGANIZER_SESSION_TTL_DAYS,
     SECONDS_PER_DAY,
@@ -80,7 +81,7 @@ def verify_session_token(token: str) -> tuple[int, int]:
         salt=AUTH_SESSION_SALT,
         max_age=settings.SESSION_TTL_DAYS * SECONDS_PER_DAY,
     )
-    return int(payload["uid"]), int(payload.get("v", 1))
+    return int(payload["uid"]), int(payload.get("v", DEFAULT_SESSION_TOKEN_VERSION))
 
 
 def generate_organizer_magic_token(organizer_id: int) -> tuple[str, str, datetime]:
@@ -119,7 +120,7 @@ def verify_organizer_session_token(token: str) -> tuple[int, int]:
         salt=AUTH_ORGANIZER_SESSION_SALT,
         max_age=ORGANIZER_SESSION_TTL_DAYS * SECONDS_PER_DAY,
     )
-    return int(payload["oid"]), int(payload.get("v", 1))
+    return int(payload["oid"]), int(payload.get("v", DEFAULT_SESSION_TOKEN_VERSION))
 
 
 def generate_unsubscribe_token(user_id: int) -> str:

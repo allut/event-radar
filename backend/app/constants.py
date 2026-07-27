@@ -11,6 +11,7 @@ from app._generated.shared_constants import (
     DEFAULT_USER_LOCALE,
     HTML_SANITIZE_ALLOWED_ATTRS,
     HTML_SANITIZE_ALLOWED_TAGS,
+    IMAGE_UPLOAD_ALLOWED_MIME,
     MAGIC_LINK_TTL_MINUTES as _MAGIC_LINK_TTL_MINUTES_SHARED,
     PERSONA_MAX_SELECTABLE,
     PERSONA_PRIMARY_WEIGHT,
@@ -32,6 +33,7 @@ __all__ = [
     "DEFAULT_USER_LOCALE",
     "HTML_SANITIZE_ALLOWED_ATTRS",
     "HTML_SANITIZE_ALLOWED_TAGS",
+    "IMAGE_UPLOAD_ALLOWED_MIME",
     "PERSONA_MAX_SELECTABLE",
     "PERSONA_PRIMARY_WEIGHT",
     "PERSONA_RANK_WEIGHTS",
@@ -439,6 +441,10 @@ SHOWCASE_FALLBACK_WINDOW_DAYS = 30
 # Auth tokens
 AUTH_MAGIC_SALT = "magic-link-v1"
 AUTH_SESSION_SALT = "session-v1"
+# Fallback "v" claim for session/organizer-session tokens minted before that
+# claim existed (auth/tokens.py) — mirrors the session_token_version column's
+# server_default/model default.
+DEFAULT_SESSION_TOKEN_VERSION = 1
 AUTH_UNSUBSCRIBE_SALT = "unsubscribe-v1"
 # Organizer auth — distinct salts from the user stack above so a user's magic-link
 # or session token can never verify as an organizer token (and vice versa), even
@@ -455,13 +461,24 @@ ORGANIZER_SESSION_TTL_DAYS = _SESSION_TTL_DAYS_SHARED
 ORGANIZER_DAILY_SUBMISSION_CAP = 20
 
 # Organizer image upload (routers/organizer_events.py -> Cloudinary signed upload).
+# IMAGE_UPLOAD_ALLOWED_MIME itself comes from shared/app-config.json (imported
+# above) — mirrors the frontend's ORGANIZER_IMAGE_ALLOWED_MIME so both stacks
+# stay in sync via the generator instead of two hand-maintained literals.
 IMAGE_UPLOAD_MAX_BYTES = 8 * 1024 * 1024  # 8 MiB
-IMAGE_UPLOAD_ALLOWED_MIME: frozenset[str] = frozenset(
-    {"image/jpeg", "image/png", "image/webp"}
-)
 CLOUDINARY_UPLOAD_URL_TEMPLATE = (
     "https://api.cloudinary.com/v1_1/{cloud_name}/image/upload"
 )
+
+# Namespace prefix for organizer-submitted events' synthetic external_id
+# (routers/organizer_events.py) — distinguishes user-submission rows from any
+# other source's external ids in event_sources.
+ORGANIZER_SUBMISSION_EXTERNAL_ID_PREFIX = "org:"
+
+# Named locale codes for the fixed et/en/ru vocabulary (VALID_LOCALES above) —
+# used where code refers to one specific locale rather than iterating the set.
+LOCALE_ET = "et"
+LOCALE_EN = "en"
+LOCALE_RU = "ru"
 
 # Admin review-queue pagination (routers/admin.py GET /admin/submissions) — mirrors
 # ADMIN_DEDUP_GROUPS_PAGE_SIZE's sizing rationale (small default page, generous cap).

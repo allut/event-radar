@@ -43,7 +43,7 @@ export default function OrganizerDashboard() {
   const { data, isLoading, isError } = useQuery({
     queryKey: [QUERY_KEYS.organizerEvents, locale],
     queryFn: () =>
-      organizerApi.get<OrganizerEventsResponse>(`/organizer/events?limit=${ORGANIZER_EVENTS_PAGE_SIZE}&offset=0`),
+      organizerApi.get<OrganizerEventsResponse>(`/organizer/events?limit=${ORGANIZER_EVENTS_PAGE_SIZE}`),
   });
 
   const deleteMutation = useMutation({

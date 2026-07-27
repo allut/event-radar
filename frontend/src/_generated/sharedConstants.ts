@@ -27,3 +27,5 @@ export const CATEGORIES = ['music', 'theater', 'exhibitions', 'workshops', 'spor
 export const VIBES = ['trendy', 'casual', 'intimate', 'high_energy', 'educational', 'indie', 'underground', 'mainstream', 'accessible', 'niche'];
 
 export const BROWSE_PAGE_SIZE = 24;
+
+export const ORGANIZER_IMAGE_ALLOWED_MIME: readonly string[] = ['image/jpeg', 'image/png', 'image/webp'];

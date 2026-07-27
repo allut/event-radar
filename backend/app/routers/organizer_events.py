@@ -31,7 +31,13 @@ from app.constants import (
     HTTP_TIMEOUT_SECONDS,
     IMAGE_UPLOAD_ALLOWED_MIME,
     IMAGE_UPLOAD_MAX_BYTES,
+    LOCALE_EN,
+    LOCALE_ET,
+    LOCALE_RU,
     ORGANIZER_DAILY_SUBMISSION_CAP,
+    ORGANIZER_SUBMISSION_EXTERNAL_ID_PREFIX,
+    PAGINATION_MIN_LIMIT,
+    PAGINATION_MIN_OFFSET,
     RATE_LIMIT_SUBMIT,
     SOURCE_SLUG_USER_SUBMISSION,
     TALLINN_TZ,
@@ -133,7 +139,7 @@ def _localized(
     dropping absent locales. et is required upstream (see title validation)."""
     out = {
         loc: val
-        for loc, val in (("et", et), ("en", en), ("ru", ru))
+        for loc, val in ((LOCALE_ET, et), (LOCALE_EN, en), (LOCALE_RU, ru))
         if val is not None and val.strip()
     }
     return out or None
@@ -226,7 +232,7 @@ async def submit_event(
 
     has_price = body.price_min is not None or body.price_max is not None
     normalized = NormalizedEvent(
-        external_id=f"org:{current_organizer.id}:{uuid4()}",
+        external_id=f"{ORGANIZER_SUBMISSION_EXTERNAL_ID_PREFIX}{current_organizer.id}:{uuid4()}",
         title=body.title,
         starts_at=body.starts_at,
         description=sanitize_html(body.description),
@@ -371,8 +377,8 @@ async def update_own_event(
         existing = event.title_localized or {}
         event.title_localized = _localized(
             event.title_orig,
-            body.title_en if "title_en" in fields_set else existing.get("en"),
-            body.title_ru if "title_ru" in fields_set else existing.get("ru"),
+            body.title_en if "title_en" in fields_set else existing.get(LOCALE_EN),
+            body.title_ru if "title_ru" in fields_set else existing.get(LOCALE_RU),
         )
     if fields_set & {"description", "description_en", "description_ru"}:
         existing = event.description_localized or {}
@@ -380,10 +386,10 @@ async def update_own_event(
             event.description_orig,
             sanitize_html(body.description_en)
             if "description_en" in fields_set
-            else existing.get("en"),
+            else existing.get(LOCALE_EN),
             sanitize_html(body.description_ru)
             if "description_ru" in fields_set
-            else existing.get("ru"),
+            else existing.get(LOCALE_RU),
         )
     if fields_set & {"important_info", "important_info_en", "important_info_ru"}:
         existing = event.important_info_localized or {}
@@ -391,10 +397,10 @@ async def update_own_event(
             event.important_info,
             sanitize_html(body.important_info_en)
             if "important_info_en" in fields_set
-            else existing.get("en"),
+            else existing.get(LOCALE_EN),
             sanitize_html(body.important_info_ru)
             if "important_info_ru" in fields_set
-            else existing.get("ru"),
+            else existing.get(LOCALE_RU),
         )
 
     event.needs_review = True
@@ -440,8 +446,8 @@ async def list_own_events(
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     """List the organizer's own submitted events, most recent first."""
-    limit = max(1, min(limit, BROWSE_MAX_PAGE_SIZE))
-    offset = max(0, offset)
+    limit = max(PAGINATION_MIN_LIMIT, min(limit, BROWSE_MAX_PAGE_SIZE))
+    offset = max(PAGINATION_MIN_OFFSET, offset)
 
     stmt = (
         select_events_with_classification()

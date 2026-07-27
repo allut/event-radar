@@ -13,9 +13,10 @@ import {
   CATEGORIES,
   VIBES,
   BROWSE_PAGE_SIZE,
+  ORGANIZER_IMAGE_ALLOWED_MIME,
 } from './_generated/sharedConstants';
 
-export { LOCALES, APP_VERSION, MAGIC_LINK_EXPIRY_MINUTES, PERSONA_MAX_SELECTABLE, DEFAULT_CURRENCY, SAFE_URL_SCHEMES, SANITIZE_ALLOWED_TAGS, SANITIZE_ALLOWED_ATTR, CATEGORIES, VIBES, BROWSE_PAGE_SIZE };
+export { LOCALES, APP_VERSION, MAGIC_LINK_EXPIRY_MINUTES, PERSONA_MAX_SELECTABLE, DEFAULT_CURRENCY, SAFE_URL_SCHEMES, SANITIZE_ALLOWED_TAGS, SANITIZE_ALLOWED_ATTR, CATEGORIES, VIBES, BROWSE_PAGE_SIZE, ORGANIZER_IMAGE_ALLOWED_MIME };
 export type { PersonaData };
 
 // Re-export PERSONAS under the original name so all import sites are unchanged.
@@ -187,11 +188,11 @@ export const DATE_PRESETS: { value: DatePreset; labelKey: string }[] = [
 export const SAVED_EVENTS_PAGE_SIZE = 24;
 
 // ─── Organizer submission ────────────────────────────────────────────────────
-// Mirrors the backend's IMAGE_UPLOAD_ALLOWED_MIME (app/constants.py). The
-// server re-validates the MIME type itself and is the actual security
-// boundary — ORGANIZER_IMAGE_ALLOWED_MIME only lets the picker reject an
-// obviously-wrong file before spending a network round trip on it.
-export const ORGANIZER_IMAGE_ALLOWED_MIME: readonly string[] = ['image/jpeg', 'image/png', 'image/webp'];
+// ORGANIZER_IMAGE_ALLOWED_MIME (re-exported above) is sourced from
+// shared/app-config.json, mirroring the backend's IMAGE_UPLOAD_ALLOWED_MIME.
+// The server re-validates the MIME type itself and is the actual security
+// boundary — this only lets the picker reject an obviously-wrong file before
+// spending a network round trip on it.
 export const ORGANIZER_IMAGE_ACCEPT = ORGANIZER_IMAGE_ALLOWED_MIME.join(',');
 export const ORGANIZER_TEXTAREA_ROWS = 6;
 export const ORGANIZER_EVENTS_PAGE_SIZE = 24;

@@ -124,7 +124,7 @@ export function useOrganizerEventForm(locale: string, eventId?: number) {
   const { data: listData } = useQuery({
     queryKey: [QUERY_KEYS.organizerEvents, locale],
     queryFn: () =>
-      organizerApi.get<OrganizerEventsResponse>(`/organizer/events?limit=${ORGANIZER_EVENTS_PAGE_SIZE}&offset=0`),
+      organizerApi.get<OrganizerEventsResponse>(`/organizer/events?limit=${ORGANIZER_EVENTS_PAGE_SIZE}`),
     enabled: isEditMode,
   });
 
