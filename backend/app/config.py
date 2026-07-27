@@ -126,6 +126,13 @@ class Settings(BaseSettings):
     MAGIC_LINK_TTL_MINUTES: int = _MAGIC_LINK_TTL_DEFAULT
     SESSION_TTL_DAYS: int = _SESSION_TTL_DEFAULT
 
+    # Cloudinary — organizer event-image upload (POST /organizer/events/image). Signed
+    # server-side upload only; the API secret must never reach the SPA. Empty
+    # CLOUD_NAME = feature disabled (log-only/501, dev without keys still runs).
+    CLOUDINARY_CLOUD_NAME: str = ""
+    CLOUDINARY_API_KEY: str = ""
+    CLOUDINARY_API_SECRET: str = ""
+
     # Webhooks — Svix signing secret ("whsec_...") shown on the webhook's page in the
     # Resend dashboard. Verifies the svix-id/svix-timestamp/svix-signature headers
     # over the raw request body; do NOT pass it as a URL query param.

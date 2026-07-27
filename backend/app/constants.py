@@ -454,6 +454,20 @@ ORGANIZER_SESSION_TTL_DAYS = _SESSION_TTL_DAYS_SHARED
 # organizer account across multiple IPs.
 ORGANIZER_DAILY_SUBMISSION_CAP = 20
 
+# Organizer image upload (routers/organizer_events.py -> Cloudinary signed upload).
+IMAGE_UPLOAD_MAX_BYTES = 8 * 1024 * 1024  # 8 MiB
+IMAGE_UPLOAD_ALLOWED_MIME: frozenset[str] = frozenset(
+    {"image/jpeg", "image/png", "image/webp"}
+)
+CLOUDINARY_UPLOAD_URL_TEMPLATE = (
+    "https://api.cloudinary.com/v1_1/{cloud_name}/image/upload"
+)
+
+# Admin review-queue pagination (routers/admin.py GET /admin/submissions) — mirrors
+# ADMIN_DEDUP_GROUPS_PAGE_SIZE's sizing rationale (small default page, generous cap).
+ADMIN_REVIEW_QUEUE_PAGE_SIZE: int = 50
+ADMIN_REVIEW_QUEUE_MAX_PAGE_SIZE: int = 500
+
 # Per-email magic-link resend cooldown (routers/auth.py::_recent_unused_link_exists) —
 # prevents Resend quota exhaustion from rapid repeat requests for the same address.
 MAGIC_LINK_RESEND_COOLDOWN_SECONDS = 120

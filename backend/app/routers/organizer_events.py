@@ -8,34 +8,43 @@ flagged needs_review so it still surfaces in the Phase-2 admin review queue
 after going live (auto-publish + retractable post-hoc review — see CLAUDE.md).
 """
 
+import hashlib
 import logging
+import time
 from datetime import datetime
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+import httpx
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 from pydantic import BaseModel, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.constants import (
     BROWSE_MAX_PAGE_SIZE,
     BROWSE_PAGE_SIZE,
+    CLOUDINARY_UPLOAD_URL_TEMPLATE,
     EVENT_STATUS_CANCELLED,
     EVENT_STATUS_CLASSIFIED,
     EVENT_STATUS_PUBLISHED,
+    HTTP_TIMEOUT_SECONDS,
+    IMAGE_UPLOAD_ALLOWED_MIME,
+    IMAGE_UPLOAD_MAX_BYTES,
     ORGANIZER_DAILY_SUBMISSION_CAP,
     RATE_LIMIT_SUBMIT,
     SOURCE_SLUG_USER_SUBMISSION,
     TALLINN_TZ,
+    VALID_CATEGORIES,
 )
 from app.db import get_db
 from app.ingestion.adapter import NormalizedEvent, insert_normalized_event
 from app.ingestion.content_filters import is_explicit_text, is_non_event_text
-from app.ingestion.http_client import safe_external_url, safe_fetchable_url
+from app.ingestion.http_client import http_post, safe_external_url, safe_fetchable_url
 from app.ingestion.pricing import normalize_currency
 from app.ingestion.sanitize import sanitize_html
 from app.llm.classifier import classify_event
-from app.models.models import Event, Organizer, Source
+from app.models.models import Event, EventClassification, Organizer, Source
 from app.publish import publish_pending
 from app.rate_limit import limiter
 from app.routers.organizer_auth import get_current_organizer
@@ -64,12 +73,20 @@ class SubmitEventBody(BaseModel):
     price_min: float | None = None
     price_max: float | None = None
     currency: str | None = None
+    category: str | None = None
 
     @field_validator("starts_at", "ends_at")
     @classmethod
     def _tz_aware(cls, v: datetime | None) -> datetime | None:
         if v is not None and v.tzinfo is None:
             raise ValueError("must be timezone-aware")
+        return v
+
+    @field_validator("category")
+    @classmethod
+    def _valid_category(cls, v: str | None) -> str | None:
+        if v is not None and v not in VALID_CATEGORIES:
+            raise ValueError(f"invalid category: {v!r}")
         return v
 
 
@@ -92,12 +109,20 @@ class PatchEventBody(BaseModel):
     price_min: float | None = None
     price_max: float | None = None
     currency: str | None = None
+    category: str | None = None
 
     @field_validator("starts_at", "ends_at")
     @classmethod
     def _tz_aware(cls, v: datetime | None) -> datetime | None:
         if v is not None and v.tzinfo is None:
             raise ValueError("must be timezone-aware")
+        return v
+
+    @field_validator("category")
+    @classmethod
+    def _valid_category(cls, v: str | None) -> str | None:
+        if v is not None and v not in VALID_CATEGORIES:
+            raise ValueError(f"invalid category: {v!r}")
         return v
 
 
@@ -126,6 +151,26 @@ async def _get_user_submission_source(db: AsyncSession) -> Source:
             detail="Submission source not configured; contact support.",
         )
     return source
+
+
+async def _apply_organizer_category(
+    db: AsyncSession, event_id: int, category: str
+) -> None:
+    """Prepend an organizer-chosen category onto the event's classification.
+
+    Categories are LLM-derived (Event.classification.categories, an array) —
+    there is no dedicated organizer-facing column. An explicit organizer pick
+    leads the list (any LLM-derived categories, if present, follow); if no
+    classification row exists yet (e.g. classify_event's LLM call failed), a
+    bare one is created so the pick isn't silently dropped."""
+    classification = await db.scalar(
+        select(EventClassification).where(EventClassification.event_id == event_id)
+    )
+    if classification is None:
+        db.add(EventClassification(event_id=event_id, categories=[category]))
+        return
+    if category not in classification.categories:
+        classification.categories = [category, *classification.categories]
 
 
 async def _own_event_or_404(
@@ -253,6 +298,8 @@ async def submit_event(
         # from the normal "not yet reviewed" case; classify_pending's 6h
         # backlog drain will retry it, but this is worth surfacing in ops.
         log.warning("organizer submission event_id=%d classify failed", event.id)
+    if body.category:
+        await _apply_organizer_category(db, event_id, body.category)
     await publish_pending(db)
     final_status = await db.scalar(select(Event.status).where(Event.id == event_id))
     await db.commit()
@@ -313,6 +360,8 @@ async def update_own_event(
         event.price_max = body.price_max
     if "currency" in fields_set:
         event.currency = body.currency
+    if "category" in fields_set and body.category is not None:
+        await _apply_organizer_category(db, event.id, body.category)
     if "description" in fields_set:
         event.description_orig = sanitize_html(body.description)
     if "important_info" in fields_set:
@@ -417,3 +466,95 @@ async def list_own_events(
         "limit": limit,
         "offset": offset,
     }
+
+
+def _cloudinary_signature(params: dict[str, str | int], api_secret: str) -> str:
+    """Cloudinary signed-upload signature: SHA-1 over the sorted
+    `key=value&...` param string with the API secret appended — per
+    https://cloudinary.com/documentation/authentication_signatures. Only
+    params actually sent to the upload API are signed; `file`, `cloud_name`,
+    and `api_key` are excluded per that spec."""
+    to_sign = "&".join(f"{k}={params[k]}" for k in sorted(params))
+    return hashlib.sha1((to_sign + api_secret).encode()).hexdigest()
+
+
+@router.post("/image")
+@limiter.limit(RATE_LIMIT_SUBMIT)
+async def upload_event_image(
+    request: Request,
+    file: UploadFile = File(...),
+    current_organizer: Organizer = Depends(get_current_organizer),
+) -> dict:
+    """Upload an event image to Cloudinary via a signed server-side upload —
+    the API secret never reaches the SPA, unlike an unsigned upload preset.
+    Returns {url: secure_url} for the organizer to pass as image_url on
+    submit/edit. Log-only/501 when Cloudinary is unconfigured, mirroring
+    app/email/contact.py's RESEND_API_KEY fallback — dev without keys still
+    runs."""
+    if file.content_type not in IMAGE_UPLOAD_ALLOWED_MIME:
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail=f"Unsupported image type: {file.content_type!r}",
+        )
+
+    # Starlette has already spooled the full multipart body by the time this
+    # handler runs (this cap only bounds what the handler itself holds, not
+    # what was received) — a request-level max-body-size limit would be
+    # needed to bound that earlier stage; not added here since it applies
+    # ASGI-server-wide, beyond this one route's scope.
+    body = await file.read(IMAGE_UPLOAD_MAX_BYTES + 1)
+    if len(body) > IMAGE_UPLOAD_MAX_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"Image exceeds {IMAGE_UPLOAD_MAX_BYTES} bytes.",
+        )
+
+    if not settings.CLOUDINARY_CLOUD_NAME:
+        log.warning(
+            "CLOUDINARY_CLOUD_NAME not set — image upload skipped (organizer_id=%d)",
+            current_organizer.id,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_501_NOT_IMPLEMENTED,
+            detail="Image upload is not configured.",
+        )
+
+    timestamp = int(time.time())
+    signature = _cloudinary_signature(
+        {"timestamp": timestamp}, settings.CLOUDINARY_API_SECRET
+    )
+    upload_url = CLOUDINARY_UPLOAD_URL_TEMPLATE.format(
+        cloud_name=settings.CLOUDINARY_CLOUD_NAME
+    )
+
+    async with httpx.AsyncClient(timeout=HTTP_TIMEOUT_SECONDS) as client:
+        try:
+            resp = await http_post(
+                client,
+                upload_url,
+                data={
+                    "api_key": settings.CLOUDINARY_API_KEY,
+                    "timestamp": timestamp,
+                    "signature": signature,
+                },
+                files={"file": (file.filename, body, file.content_type)},
+            )
+        except httpx.HTTPError:
+            log.exception(
+                "Cloudinary upload failed (organizer_id=%d)", current_organizer.id
+            )
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="Image upload failed; please try again.",
+            ) from None
+
+    try:
+        secure_url = resp.json().get("secure_url")
+    except ValueError:
+        secure_url = None
+    if not secure_url:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Image upload failed; please try again.",
+        )
+    return {"url": secure_url}

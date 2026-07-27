@@ -194,9 +194,14 @@ async def http_post(
     data: dict | None = None,
     json_body: dict | None = None,
     headers: dict | None = None,
+    files: dict[str, Any] | None = None,
 ) -> httpx.Response:
-    """Shared HTTP POST with exponential-backoff retry for transient failures."""
-    r = await client.post(url, data=data, json=json_body, headers=headers)
+    """Shared HTTP POST with exponential-backoff retry for transient failures.
+
+    `files` is httpx's multipart mapping (e.g. Cloudinary's signed image upload) —
+    kept alongside `data`/`json_body` rather than a separate helper so every
+    outbound POST shares one retry/Retry-After policy."""
+    r = await client.post(url, data=data, json=json_body, headers=headers, files=files)
     r.raise_for_status()
     return r
 

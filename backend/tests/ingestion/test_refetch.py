@@ -456,6 +456,37 @@ class TestSsrfHostGuard:
         assert good.detail_refetched_at is not None
 
 
+class TestOrganizerSubmissionNoJsonld:
+    """An organizer-submitted event's own ticketing page (if it even has a
+    url — an allowlisted one, per safe_fetchable_url) generally carries no
+    schema.org Event JSON-LD. This is not Fienta-specific special-casing —
+    refetch already no-ops cleanly on any page with nothing to parse; this
+    test pins that behavior for the submission source (CLAUDE.md Phase 2
+    §2.3)."""
+
+    @pytest.mark.asyncio
+    async def test_no_jsonld_leaves_stored_fields_untouched_and_marks_synced(
+        self, mock_db
+    ):
+        event = _future_event(
+            url="https://fienta.com/org-submission-page",
+            venue_name="Original Venue",
+            venue_address="Old Street 1, Tallinn",
+            price_min=15.0,
+        )
+        event.submitted_by_organizer_id = 7
+        no_jsonld_html = "<html><head></head><body>No structured data here.</body></html>"
+
+        summary = await _run(mock_db, event, no_jsonld_html)
+
+        assert summary["no_data"] == 1
+        assert summary["unchanged"] == 0  # _reconcile never runs — nothing to reconcile
+        assert event.venue_name == "Original Venue"
+        assert event.venue_address == "Old Street 1, Tallinn"
+        assert event.price_min == 15.0
+        assert event.detail_refetched_at is not None  # still marked synced
+
+
 # --- candidate query ---------------------------------------------------------
 
 

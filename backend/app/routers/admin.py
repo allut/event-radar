@@ -14,6 +14,8 @@ from app.config import settings
 from app.constants import (
     ADMIN_DEDUP_GROUPS_MAX_PAGE_SIZE,
     ADMIN_DEDUP_GROUPS_PAGE_SIZE,
+    ADMIN_REVIEW_QUEUE_MAX_PAGE_SIZE,
+    ADMIN_REVIEW_QUEUE_PAGE_SIZE,
     ADMIN_USERNAME_DEFAULT,
     APP_ENV_DEVELOPMENT,
     EVENT_STATUS_CANCELLED,
@@ -42,6 +44,8 @@ from app.routers.utils import (
     canonical_event_filter,
     require_configured_secret,
     run_admin_job,
+    select_events_with_classification,
+    serialize_event,
 )
 
 log = logging.getLogger(__name__)
@@ -236,6 +240,104 @@ async def admin_dedup_groups(
             for gid, members in sorted(groups.items())
         ],
     }
+
+
+@router.get("/submissions", dependencies=[Depends(_require_admin)])
+@limiter.limit(RATE_LIMIT_ADMIN)
+async def admin_list_submissions(
+    request: Request,
+    limit: int = Query(
+        ADMIN_REVIEW_QUEUE_PAGE_SIZE,
+        ge=PAGINATION_MIN_LIMIT,
+        le=ADMIN_REVIEW_QUEUE_MAX_PAGE_SIZE,
+    ),
+    offset: int = Query(PAGINATION_MIN_OFFSET, ge=PAGINATION_MIN_OFFSET),
+) -> dict:
+    """Post-hoc review queue: organizer-submitted events still flagged
+    ``needs_review`` (set on submit/edit — see routers/organizer_events.py).
+    These are already live (auto-publish); this is eyeballing, not a gate.
+    Excludes cancelled submissions — retract already clears ``needs_review``,
+    but this filter is defense-in-depth so a cancelled row can never clutter
+    the queue regardless of that flag's state. Most recently submitted/edited
+    first.
+    """
+    async with AsyncSessionLocal() as db:
+        queue_filter = (Event.needs_review.is_(True), Event.status != EVENT_STATUS_CANCELLED)
+        total = (
+            await db.scalar(select(func.count(Event.id)).where(*queue_filter))
+        ) or 0
+
+        stmt = (
+            select_events_with_classification()
+            .where(*queue_filter)
+            .order_by(Event.created_at.desc())
+            .limit(limit)
+            .offset(offset)
+        )
+        events = (await db.scalars(stmt)).all()
+
+    return {
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+        "has_more": offset + len(events) < total,
+        "events": [
+            {
+                **serialize_event(e),
+                "status": e.status,
+                "submitted_by_organizer_id": e.submitted_by_organizer_id,
+            }
+            for e in events
+        ],
+    }
+
+
+async def _submission_or_404(db: AsyncSession, event_id: int) -> Event:
+    event = await db.get(Event, event_id)
+    if event is None or event.submitted_by_organizer_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Submission not found."
+        )
+    return event
+
+
+@router.post(
+    "/submissions/{event_id}/retract", dependencies=[Depends(_require_admin)]
+)
+@limiter.limit(RATE_LIMIT_ADMIN)
+async def admin_retract_submission(event_id: int, request: Request) -> dict:
+    """Cancel an organizer-submitted event (soft delete — mirrors organizer's
+    own DELETE /organizer/events/{id}; events are never hard-deleted). Also
+    clears needs_review so this resolves the review-queue entry outright —
+    admin_list_submissions additionally excludes cancelled events regardless."""
+
+    async def _run() -> dict:
+        async with AsyncSessionLocal() as db:
+            event = await _submission_or_404(db, event_id)
+            event.status = EVENT_STATUS_CANCELLED
+            event.needs_review = False
+            await db.commit()
+            return {"id": event.id, "status": event.status}
+
+    return await run_admin_job("Retract submission", _run())
+
+
+@router.post(
+    "/submissions/{event_id}/approve", dependencies=[Depends(_require_admin)]
+)
+@limiter.limit(RATE_LIMIT_ADMIN)
+async def admin_approve_submission(event_id: int, request: Request) -> dict:
+    """Clear needs_review — an admin has eyeballed the submission and it's fine
+    as-is. Does not otherwise change the event."""
+
+    async def _run() -> dict:
+        async with AsyncSessionLocal() as db:
+            event = await _submission_or_404(db, event_id)
+            event.needs_review = False
+            await db.commit()
+            return {"id": event.id, "needs_review": event.needs_review}
+
+    return await run_admin_job("Approve submission", _run())
 
 
 @router.post("/classify", dependencies=[Depends(_require_admin)])
