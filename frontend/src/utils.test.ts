@@ -52,6 +52,10 @@ describe('maskAnalyticsUrl', () => {
   it('does not mask a non-numeric id segment', () => {
     expect(maskAnalyticsUrl('/events/abc')).toBe('/events/abc');
   });
+
+  it('masks an organizer edit-form event id', () => {
+    expect(maskAnalyticsUrl('/organizer/events/7/edit')).toBe('/organizer/events/[id]/edit');
+  });
 });
 
 describe('safeUrl', () => {

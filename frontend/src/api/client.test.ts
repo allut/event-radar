@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { StatusCodes } from 'http-status-codes';
-import { ApiError, api } from './client';
+import { ApiError, api, organizerApi } from './client';
 
 vi.mock('../lib/auth', () => ({
   getToken: vi.fn(() => null),
@@ -8,11 +8,21 @@ vi.mock('../lib/auth', () => ({
   isLoggingOut: vi.fn(() => false),
 }));
 
+vi.mock('../lib/organizerAuth', () => ({
+  getOrganizerToken: vi.fn(() => null),
+  clearOrganizerToken: vi.fn(),
+  isOrganizerLoggingOut: vi.fn(() => false),
+}));
+
 import { getToken, clearToken, isLoggingOut } from '../lib/auth';
+import { getOrganizerToken, clearOrganizerToken, isOrganizerLoggingOut } from '../lib/organizerAuth';
 
 const mockGetToken = vi.mocked(getToken);
 const mockClearToken = vi.mocked(clearToken);
 const mockIsLoggingOut = vi.mocked(isLoggingOut);
+const mockGetOrganizerToken = vi.mocked(getOrganizerToken);
+const mockClearOrganizerToken = vi.mocked(clearOrganizerToken);
+const mockIsOrganizerLoggingOut = vi.mocked(isOrganizerLoggingOut);
 
 function mockFetch(status: number, body: unknown = {}, ok = true) {
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
@@ -138,5 +148,47 @@ describe('api.patch', () => {
     await api.patch('/users/me', { locale: 'et' });
     const call = vi.mocked(fetch).mock.calls[0];
     expect((call[1] as RequestInit).method).toBe('PATCH');
+  });
+});
+
+describe('FormData bodies', () => {
+  it('sends FormData body as-is without JSON.stringify or a Content-Type header', async () => {
+    mockFetch(StatusCodes.OK, {});
+    const form = new FormData();
+    form.append('file', new Blob(['x']), 'test.png');
+    await api.post('/organizer/events/image', form, { organizer: true });
+    const call = vi.mocked(fetch).mock.calls[0];
+    const init = call[1] as RequestInit;
+    expect(init.body).toBe(form);
+    const headers = init.headers as Record<string, string>;
+    expect(headers['Content-Type']).toBeUndefined();
+  });
+});
+
+describe('organizer requests', () => {
+  it('attaches the organizer token, not the consumer token', async () => {
+    mockGetOrganizerToken.mockReturnValueOnce('org-token');
+    mockFetch(StatusCodes.OK, {});
+    await organizerApi.get('/organizer/events');
+    const call = vi.mocked(fetch).mock.calls[0];
+    const headers = (call[1] as RequestInit).headers as Record<string, string>;
+    expect(headers['Authorization']).toBe('Bearer org-token');
+    expect(mockGetToken).not.toHaveBeenCalled();
+  });
+
+  it('on 401: clears the organizer token and redirects to /organizer/login', async () => {
+    mockFetch(StatusCodes.UNAUTHORIZED, {}, false);
+    await expect(organizerApi.get('/organizer/events')).rejects.toThrow(ApiError);
+    expect(mockClearOrganizerToken).toHaveBeenCalled();
+    expect(mockClearToken).not.toHaveBeenCalled();
+    expect(window.location.replace).toHaveBeenCalledWith('/organizer/login');
+  });
+
+  it('on 401 during organizer logout: skips the redirect', async () => {
+    mockIsOrganizerLoggingOut.mockReturnValueOnce(true);
+    mockFetch(StatusCodes.UNAUTHORIZED, {}, false);
+    await expect(organizerApi.get('/organizer/events')).rejects.toThrow(ApiError);
+    expect(mockClearOrganizerToken).toHaveBeenCalled();
+    expect(window.location.replace).not.toHaveBeenCalled();
   });
 });

@@ -32,6 +32,10 @@ export const QUERY_STALE_TIME = 30_000;
 // ─── Local storage keys ──────────────────────────────────────────────────────
 export const TOKEN_KEY = 'session_token';
 export const LOCALE_KEY = 'locale';
+// Separate key from TOKEN_KEY — organizer and consumer sessions are two
+// independent auth tracks (own account table, own token salts on the
+// backend) that must never be confused for one another. See lib/organizerAuth.ts.
+export const ORGANIZER_TOKEN_KEY = 'organizer_session_token';
 
 // ─── Auth / magic link ───────────────────────────────────────────────────────
 export const AUTH_REDIRECT_DELAY_MS = 600;
@@ -72,6 +76,9 @@ export const SOCIAL_LINKS: { label: string; url: string; icon: SocialIcon }[] = 
 // under one route instead of one row per event id. Applied to a pathname
 // with query/hash already stripped (see maskAnalyticsUrl in utils.ts).
 export const ANALYTICS_EVENT_PATH_RE = /^\/events\/\d+$/;
+// Groups every organizer edit-form URL under one analytics row, mirroring
+// ANALYTICS_EVENT_PATH_RE above — same rationale, new dynamic route.
+export const ANALYTICS_ORGANIZER_EDIT_PATH_RE = /^\/organizer\/events\/\d+\/edit$/;
 
 // ─── Locale ──────────────────────────────────────────────────────────────────
 export function toLocaleCode(locale: string): string {
@@ -123,6 +130,7 @@ export const QUERY_KEYS = {
   event: 'event',
   settings: 'settings',
   showcase: 'showcase',
+  organizerEvents: 'organizerEvents',
 } as const;
 
 // ─── UI state types ───────────────────────────────────────────────────────────
@@ -177,3 +185,21 @@ export const DATE_PRESETS: { value: DatePreset; labelKey: string }[] = [
 
 // ─── Saved Events ────────────────────────────────────────────────────────────
 export const SAVED_EVENTS_PAGE_SIZE = 24;
+
+// ─── Organizer submission ────────────────────────────────────────────────────
+// Mirrors the backend's IMAGE_UPLOAD_ALLOWED_MIME (app/constants.py). The
+// server re-validates the MIME type itself and is the actual security
+// boundary — ORGANIZER_IMAGE_ALLOWED_MIME only lets the picker reject an
+// obviously-wrong file before spending a network round trip on it.
+export const ORGANIZER_IMAGE_ALLOWED_MIME: readonly string[] = ['image/jpeg', 'image/png', 'image/webp'];
+export const ORGANIZER_IMAGE_ACCEPT = ORGANIZER_IMAGE_ALLOWED_MIME.join(',');
+export const ORGANIZER_TEXTAREA_ROWS = 6;
+export const ORGANIZER_EVENTS_PAGE_SIZE = 24;
+
+export const ORGANIZER_EVENT_STATUS = {
+  draft: 'draft',
+  classified: 'classified',
+  published: 'published',
+  cancelled: 'cancelled',
+} as const;
+export type OrganizerEventStatus = typeof ORGANIZER_EVENT_STATUS[keyof typeof ORGANIZER_EVENT_STATUS];

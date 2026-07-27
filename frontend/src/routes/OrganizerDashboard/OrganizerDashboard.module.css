@@ -1,0 +1,153 @@
+.page {
+  flex: 1 0 auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.main {
+  width: 100%;
+  max-width: 840px;
+  margin: 0 auto;
+  padding: var(--space-8) var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.masthead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.heading {
+  font-family: var(--font-display);
+  font-size: var(--heading-xl);
+  font-weight: 600;
+  letter-spacing: var(--tracking-tighter);
+  color: var(--text);
+}
+
+.newBtn {
+  composes: btnPrimary from '../../components/shared/Button.module.css';
+  padding: var(--space-0-6) var(--space-2);
+  font-size: var(--fs-sm);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.row {
+  composes: card from '../../components/shared/Card.module.css';
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+}
+
+.rowMain {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-0-3);
+  flex: 1 1 240px;
+  min-width: 0;
+}
+
+.rowTitle {
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rowMeta {
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+
+.rowBadges {
+  display: flex;
+  align-items: center;
+  gap: var(--space-0-5);
+}
+
+.statusBadge {
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+  padding: var(--space-0-3) var(--space-0-6);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+}
+
+.status_published {
+  color: var(--success);
+  border-color: var(--success-border);
+  background: var(--success-faint);
+}
+
+.status_classified {
+  color: var(--accent-light);
+  border-color: var(--accent-border);
+  background: var(--accent-subtle);
+}
+
+.status_draft {
+  color: var(--text-soft);
+}
+
+.status_cancelled {
+  color: var(--danger);
+  border-color: var(--danger-border);
+  background: var(--danger-faint);
+}
+
+.reviewBadge {
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  padding: var(--space-0-3) var(--space-0-6);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  color: var(--text-soft);
+}
+
+.rowActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-0-5);
+}
+
+.editBtn {
+  composes: btnOutline from '../../components/shared/Button.module.css';
+  padding: var(--space-0-45) var(--space-0-875);
+  font-size: var(--fs-sm);
+  text-decoration: none;
+}
+
+.deleteBtn {
+  composes: btnOutline from '../../components/shared/Button.module.css';
+  padding: var(--space-0-45) var(--space-0-875);
+  font-size: var(--fs-sm);
+  color: var(--danger);
+}
+
+.deleteBtn:hover {
+  border-color: var(--danger-border);
+  color: var(--danger);
+}
+
+.deleteBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

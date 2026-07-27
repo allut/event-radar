@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Analytics } from '@vercel/analytics/react';
 import { SpeedInsights } from '@vercel/speed-insights/react';
 import { useAuth } from './hooks/useAuth';
+import { useOrganizerAuth } from './hooks/useOrganizerAuth';
 import { QUERY_RETRY, QUERY_STALE_TIME } from './constants';
 import { maskAnalyticsUrl } from './utils';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -19,6 +20,10 @@ import Unsubscribe from './routes/Unsubscribe';
 import Privacy from './routes/Privacy';
 import Terms from './routes/Terms';
 import Contact from './routes/Contact';
+import OrganizerLogin from './routes/OrganizerLogin';
+import OrganizerVerify from './routes/OrganizerVerify';
+import OrganizerDashboard from './routes/OrganizerDashboard';
+import EventSubmit from './routes/EventSubmit';
 import NotFound from './routes/NotFound';
 import Footer from './components/Footer';
 
@@ -31,6 +36,14 @@ const queryClient = new QueryClient({
 function Protected({ children }: { children: React.ReactNode }) {
   const authed = useAuth();
   if (!authed) return <Navigate to="/login" replace />;
+  return <>{children}</>;
+}
+
+// Mirrors Protected but on the organizer session track (useOrganizerAuth,
+// redirect to /organizer/login) — the two auth tracks never share a guard.
+function OrganizerProtected({ children }: { children: React.ReactNode }) {
+  const authed = useOrganizerAuth();
+  if (!authed) return <Navigate to="/organizer/login" replace />;
   return <>{children}</>;
 }
 
@@ -82,6 +95,20 @@ export default function App() {
             <Route path="/privacy" element={<Privacy />} />
             <Route path="/terms" element={<Terms />} />
             <Route path="/contact" element={<Contact />} />
+            <Route path="/organizer/login" element={<OrganizerLogin />} />
+            <Route path="/organizer/verify" element={<OrganizerVerify />} />
+            <Route
+              path="/organizer/dashboard"
+              element={<OrganizerProtected><OrganizerDashboard /></OrganizerProtected>}
+            />
+            <Route
+              path="/organizer/submit"
+              element={<OrganizerProtected><EventSubmit /></OrganizerProtected>}
+            />
+            <Route
+              path="/organizer/events/:id/edit"
+              element={<OrganizerProtected><EventSubmit /></OrganizerProtected>}
+            />
             <Route path="*" element={<Protected><NotFound /></Protected>} />
           </Routes>
           <Footer />
