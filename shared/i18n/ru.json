@@ -208,7 +208,7 @@
     "organizer_empty_title": "Пока нет событий",
     "organizer_empty_msg": "Отправьте своё первое событие — оно появится за секунды.",
     "organizer_status_draft": "Черновик",
-    "organizer_status_classified": "На проверке",
+    "organizer_status_classified": "Обработка",
     "organizer_status_published": "Опубликовано",
     "organizer_status_cancelled": "Отменено",
     "organizer_needs_review": "Ожидает проверки",

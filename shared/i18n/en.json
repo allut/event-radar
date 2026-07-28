@@ -208,7 +208,7 @@
     "organizer_empty_title": "No events yet",
     "organizer_empty_msg": "Submit your first event and it'll go live within seconds.",
     "organizer_status_draft": "Draft",
-    "organizer_status_classified": "In review",
+    "organizer_status_classified": "Processing",
     "organizer_status_published": "Published",
     "organizer_status_cancelled": "Cancelled",
     "organizer_needs_review": "Pending review",

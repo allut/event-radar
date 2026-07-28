@@ -208,7 +208,7 @@
     "organizer_empty_title": "Üritusi pole veel",
     "organizer_empty_msg": "Esita oma esimene üritus ja see ilmub mõne sekundiga.",
     "organizer_status_draft": "Mustand",
-    "organizer_status_classified": "Ülevaatamisel",
+    "organizer_status_classified": "Töötlemisel",
     "organizer_status_published": "Avaldatud",
     "organizer_status_cancelled": "Tühistatud",
     "organizer_needs_review": "Ootab ülevaatust",
