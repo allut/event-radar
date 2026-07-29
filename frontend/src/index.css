@@ -143,6 +143,9 @@
   --toggle-padding: 3px;
   --toggle-knob-color: #fff;
 
+  /* Segmented control — dial variant */
+  --seg-blip-size: 6px;
+
   /* Heading scale */
   --heading-3xl: 3rem;
   --heading-2xl: 2.5rem;

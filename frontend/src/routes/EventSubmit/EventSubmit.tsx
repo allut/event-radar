@@ -4,10 +4,23 @@ import { getLocale, setLocale } from '../../lib/auth';
 import { useOrganizerLogout } from '../../hooks/useOrganizerLogout';
 import { useOrganizerEventForm } from '../../hooks/useOrganizerEventForm';
 import OrganizerTopBar from '../../components/OrganizerTopBar';
+import SegmentedControl from '../../components/SegmentedControl';
 import { t } from '../../i18n';
-import { CATEGORIES, DEFAULT_CURRENCY, EUR_SYMBOL, ORGANIZER_IMAGE_ACCEPT, ORGANIZER_TEXTAREA_ROWS } from '../../constants';
+import { CATEGORIES, DEFAULT_CURRENCY, EUR_SYMBOL, LOCALES, ORGANIZER_IMAGE_ACCEPT, ORGANIZER_TEXTAREA_ROWS } from '../../constants';
 import { safeUrl } from '../../utils';
 import styles from './EventSubmit.module.css';
+
+type ContentLang = 'et' | 'en' | 'ru';
+
+interface ContentSlot {
+  title: string;
+  setTitle: (v: string) => void;
+  description: string;
+  setDescription: (v: string) => void;
+  importantInfo: string;
+  setImportantInfo: (v: string) => void;
+  hasContent: boolean;
+}
 
 export default function EventSubmit() {
   const params = useParams();
@@ -21,6 +34,35 @@ export default function EventSubmit() {
   }
 
   const form = useOrganizerEventForm(locale, eventId);
+  const [contentLang, setContentLang] = useState<ContentLang>('et');
+
+  const slots: Record<ContentLang, ContentSlot> = {
+    et: {
+      title: form.title, setTitle: form.setTitle,
+      description: form.description, setDescription: form.setDescription,
+      importantInfo: form.importantInfo, setImportantInfo: form.setImportantInfo,
+      hasContent: Boolean(form.title.trim() || form.description.trim() || form.importantInfo.trim()),
+    },
+    en: {
+      title: form.titleEn, setTitle: form.setTitleEn,
+      description: form.descriptionEn, setDescription: form.setDescriptionEn,
+      importantInfo: form.importantInfoEn, setImportantInfo: form.setImportantInfoEn,
+      hasContent: Boolean(form.titleEn.trim() || form.descriptionEn.trim() || form.importantInfoEn.trim()),
+    },
+    ru: {
+      title: form.titleRu, setTitle: form.setTitleRu,
+      description: form.descriptionRu, setDescription: form.setDescriptionRu,
+      importantInfo: form.importantInfoRu, setImportantInfo: form.setImportantInfoRu,
+      hasContent: Boolean(form.titleRu.trim() || form.descriptionRu.trim() || form.importantInfoRu.trim()),
+    },
+  };
+  const activeSlot = slots[contentLang];
+  const CONTENT_LANG_ORDER: ContentLang[] = ['et', 'en', 'ru'];
+  const langTabOptions = CONTENT_LANG_ORDER.map((code) => ({
+    value: code,
+    label: LOCALES.find((l) => l.code === code)?.label ?? code.toUpperCase(),
+    dot: code !== 'et' && slots[code].hasContent,
+  }));
 
   return (
     <div className={styles.page}>
@@ -32,61 +74,55 @@ export default function EventSubmit() {
         </h1>
 
         <form onSubmit={form.submit} className={styles.form} noValidate>
-          <label className={styles.label} htmlFor="title">{t('organizer_field_title', locale)}</label>
-          <input
-            id="title"
-            type="text"
-            className={styles.input}
-            value={form.title}
-            onChange={(e) => form.setTitle(e.target.value)}
-            disabled={form.isSubmitting}
-            required
-          />
+          <div className={styles.contentGroup}>
+            <div className={styles.contentHead}>
+              <h2 className={styles.contentEyebrow}>{t('organizer_content_heading', locale)}</h2>
+              <SegmentedControl
+                variant="dial"
+                options={langTabOptions}
+                value={contentLang}
+                onChange={(v) => setContentLang(v as ContentLang)}
+                ariaLabel={t('organizer_language_tabs_label', locale)}
+              />
+            </div>
 
-          <div className={styles.fieldRow}>
-            <div className={styles.fieldCol}>
-              <label className={styles.label} htmlFor="title_en">{t('organizer_field_title_en', locale)}</label>
-              <input
-                id="title_en"
-                type="text"
-                className={styles.input}
-                value={form.titleEn}
-                onChange={(e) => form.setTitleEn(e.target.value)}
-                disabled={form.isSubmitting}
-              />
-            </div>
-            <div className={styles.fieldCol}>
-              <label className={styles.label} htmlFor="title_ru">{t('organizer_field_title_ru', locale)}</label>
-              <input
-                id="title_ru"
-                type="text"
-                className={styles.input}
-                value={form.titleRu}
-                onChange={(e) => form.setTitleRu(e.target.value)}
-                disabled={form.isSubmitting}
-              />
-            </div>
+            <label className={styles.label} htmlFor="content_title">
+              {t('organizer_field_title', locale)}
+            </label>
+            <input
+              id="content_title"
+              type="text"
+              className={styles.input}
+              value={activeSlot.title}
+              onChange={(e) => activeSlot.setTitle(e.target.value)}
+              disabled={form.isSubmitting}
+              required={contentLang === 'et'}
+            />
+
+            <label className={styles.label} htmlFor="content_description">
+              {t('organizer_field_description', locale)}
+            </label>
+            <textarea
+              id="content_description"
+              className={styles.textarea}
+              value={activeSlot.description}
+              onChange={(e) => activeSlot.setDescription(e.target.value)}
+              rows={ORGANIZER_TEXTAREA_ROWS}
+              disabled={form.isSubmitting}
+            />
+
+            <label className={styles.label} htmlFor="content_important_info">
+              {t('organizer_field_important_info', locale)}
+            </label>
+            <textarea
+              id="content_important_info"
+              className={styles.textarea}
+              value={activeSlot.importantInfo}
+              onChange={(e) => activeSlot.setImportantInfo(e.target.value)}
+              rows={ORGANIZER_TEXTAREA_ROWS}
+              disabled={form.isSubmitting}
+            />
           </div>
-
-          <label className={styles.label} htmlFor="description">{t('organizer_field_description', locale)}</label>
-          <textarea
-            id="description"
-            className={styles.textarea}
-            value={form.description}
-            onChange={(e) => form.setDescription(e.target.value)}
-            rows={ORGANIZER_TEXTAREA_ROWS}
-            disabled={form.isSubmitting}
-          />
-
-          <label className={styles.label} htmlFor="important_info">{t('organizer_field_important_info', locale)}</label>
-          <textarea
-            id="important_info"
-            className={styles.textarea}
-            value={form.importantInfo}
-            onChange={(e) => form.setImportantInfo(e.target.value)}
-            rows={ORGANIZER_TEXTAREA_ROWS}
-            disabled={form.isSubmitting}
-          />
 
           <div className={styles.fieldRow}>
             <div className={styles.fieldCol}>

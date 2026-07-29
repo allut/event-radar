@@ -27,4 +27,54 @@ describe('SegmentedControl', () => {
     await userEvent.click(screen.getByRole('button', { name: 'For you' }));
     expect(onChange).toHaveBeenCalledWith('foryou');
   });
+
+  it('renders a dot on an option flagged with dot: true', () => {
+    const dotOptions = [
+      { value: 'et', label: 'ET' },
+      { value: 'en', label: 'EN', dot: true },
+    ];
+    render(<SegmentedControl options={dotOptions} value="et" onChange={vi.fn()} ariaLabel="Language" />);
+    const enButton = screen.getByRole('button', { name: /EN/ });
+    expect(enButton.querySelector('[aria-hidden="true"]')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'ET' }).querySelector('[aria-hidden="true"]')).not.toBeInTheDocument();
+  });
+
+  describe('dial variant', () => {
+    it('renders the sliding indicator with --seg-count/--seg-index set for the active option', () => {
+      const { container } = render(
+        <SegmentedControl variant="dial" options={options} value="foryou" onChange={vi.fn()} ariaLabel="Mode" />
+      );
+      const track = container.querySelector('[role="group"]') as HTMLElement;
+      expect(track.style.getPropertyValue('--seg-count')).toBe('2');
+      expect(track.style.getPropertyValue('--seg-index')).toBe('1');
+      expect(track.querySelector('[aria-hidden]')).toBeInTheDocument();
+    });
+
+    it('moves --seg-index when value changes', () => {
+      const { container, rerender } = render(
+        <SegmentedControl variant="dial" options={options} value="all" onChange={vi.fn()} ariaLabel="Mode" />
+      );
+      const track = container.querySelector('[role="group"]') as HTMLElement;
+      expect(track.style.getPropertyValue('--seg-index')).toBe('0');
+
+      rerender(<SegmentedControl variant="dial" options={options} value="foryou" onChange={vi.fn()} ariaLabel="Mode" />);
+      expect(track.style.getPropertyValue('--seg-index')).toBe('1');
+    });
+
+    it('gives the dot the blip class under variant="dial" and not under the default variant', () => {
+      const dotOptions = [
+        { value: 'et', label: 'ET' },
+        { value: 'en', label: 'EN', dot: true },
+      ];
+      const { rerender } = render(
+        <SegmentedControl variant="dial" options={dotOptions} value="et" onChange={vi.fn()} ariaLabel="Language" />
+      );
+      const dialDot = screen.getByRole('button', { name: /EN/ }).querySelector('[aria-hidden="true"]');
+      expect(dialDot?.className).toMatch(/blip/);
+
+      rerender(<SegmentedControl options={dotOptions} value="et" onChange={vi.fn()} ariaLabel="Language" />);
+      const plainDot = screen.getByRole('button', { name: /EN/ }).querySelector('[aria-hidden="true"]');
+      expect(plainDot?.className).not.toMatch(/blip/);
+    });
+  });
 });

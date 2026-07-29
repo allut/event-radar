@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import EventSubmit from './EventSubmit';
 import { renderWithProviders } from '../../test/utils';
@@ -29,7 +29,7 @@ describe('EventSubmit (create)', () => {
   it('renders the create-mode title and required fields', () => {
     renderWithProviders(<EventSubmit />, { route: '/organizer/submit', pathPattern: '/organizer/submit' });
     expect(screen.getByText(/submit an event/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/title \(estonian\)/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/^title$/i)).toBeInTheDocument();
   });
 
   it('disables submit until title and start time are filled', () => {
@@ -41,7 +41,7 @@ describe('EventSubmit (create)', () => {
     mockPost.mockResolvedValueOnce({ id: 5, slug: 'new-event', status: 'published' });
     renderWithProviders(<EventSubmit />, { route: '/organizer/submit', pathPattern: '/organizer/submit' });
 
-    await userEvent.type(screen.getByLabelText(/title \(estonian\)/i), 'Jazz Night');
+    await userEvent.type(screen.getByLabelText(/^title$/i), 'Jazz Night');
     const startsInput = screen.getByLabelText(/starts/i);
     await userEvent.type(startsInput, '2026-08-01T18:00');
 
@@ -52,6 +52,30 @@ describe('EventSubmit (create)', () => {
     const [path, body] = mockPost.mock.calls[0];
     expect(path).toBe('/organizer/events');
     expect(body).toMatchObject({ title: 'Jazz Night' });
+  });
+
+  it('switches to the EN tab and submits description_en/important_info_en', async () => {
+    mockPost.mockResolvedValueOnce({ id: 6, slug: 'new-event-2', status: 'published' });
+    renderWithProviders(<EventSubmit />, { route: '/organizer/submit', pathPattern: '/organizer/submit' });
+
+    await userEvent.type(screen.getByLabelText(/^title$/i), 'Jazz Night');
+    await userEvent.type(screen.getByLabelText(/starts/i), '2026-08-01T18:00');
+
+    const langTabs = screen.getByRole('group', { name: /content language/i });
+    await userEvent.click(within(langTabs).getByRole('button', { name: 'EN' }));
+    await userEvent.type(screen.getByLabelText(/description/i), 'An English description');
+    await userEvent.type(screen.getByLabelText(/important info/i), 'English ticket info');
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /submit event/i })).not.toBeDisabled());
+    await userEvent.click(screen.getByRole('button', { name: /submit event/i }));
+
+    await waitFor(() => expect(mockPost).toHaveBeenCalledTimes(1));
+    const [, body] = mockPost.mock.calls[0];
+    expect(body).toMatchObject({
+      title: 'Jazz Night',
+      description_en: 'An English description',
+      important_info_en: 'English ticket info',
+    });
   });
 });
 

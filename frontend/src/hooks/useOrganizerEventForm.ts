@@ -19,6 +19,9 @@ interface OrganizerEventFull {
   price_min: number | null;
   price_max: number | null;
   categories: string[];
+  title_localized?: Record<string, string> | null;
+  description_localized?: Record<string, string> | null;
+  important_info_localized?: Record<string, string> | null;
 }
 
 interface OrganizerEventsResponse {
@@ -38,7 +41,11 @@ interface FormFields {
   titleEn: string;
   titleRu: string;
   description: string;
+  descriptionEn: string;
+  descriptionRu: string;
   importantInfo: string;
+  importantInfoEn: string;
+  importantInfoRu: string;
   startsAt: string;
   endsAt: string;
   venueName: string;
@@ -52,8 +59,8 @@ interface FormFields {
 
 const EMPTY_FIELDS: FormFields = {
   title: '', titleEn: '', titleRu: '',
-  description: '',
-  importantInfo: '',
+  description: '', descriptionEn: '', descriptionRu: '',
+  importantInfo: '', importantInfoEn: '', importantInfoRu: '',
   startsAt: '', endsAt: '',
   venueName: '', venueAddress: '',
   url: '', imageUrl: '',
@@ -80,11 +87,26 @@ function toLocalInput(iso: string | null): string {
 }
 
 function fieldsFromExisting(existing: OrganizerEventFull): FormFields {
+  // Prefill from the raw *_localized maps (not the display-locale-resolved
+  // `title`/`description`/`important_info`) — the ET slot must always show
+  // the Estonian base text, regardless of which locale the organizer is
+  // currently browsing in. Each ET slot falls back to its resolved field
+  // (title/description/important_info) when the localized map has no `et`
+  // entry, covering events submitted before localized maps existed.
+  const titleLoc = existing.title_localized ?? {};
+  const descLoc = existing.description_localized ?? {};
+  const infoLoc = existing.important_info_localized ?? {};
   return {
     ...EMPTY_FIELDS,
-    title: existing.title,
-    description: existing.description ?? '',
-    importantInfo: existing.important_info ?? '',
+    title: titleLoc.et ?? existing.title,
+    titleEn: titleLoc.en ?? '',
+    titleRu: titleLoc.ru ?? '',
+    description: descLoc.et ?? existing.description ?? '',
+    descriptionEn: descLoc.en ?? '',
+    descriptionRu: descLoc.ru ?? '',
+    importantInfo: infoLoc.et ?? existing.important_info ?? '',
+    importantInfoEn: infoLoc.en ?? '',
+    importantInfoRu: infoLoc.ru ?? '',
     startsAt: toLocalInput(existing.starts_at),
     endsAt: toLocalInput(existing.ends_at),
     venueName: existing.venue_name ?? '',
@@ -118,9 +140,7 @@ export function useOrganizerEventForm(locale: string, eventId?: number) {
   // endpoint — the dashboard's own list is the only read path, so prefill
   // only finds the event within its first page (ORGANIZER_EVENTS_PAGE_SIZE).
   // Accepted MVP trade-off: an organizer with more submissions than that
-  // retypes an edit beyond the first page from scratch. Locale-variant
-  // fields (title_en/ru etc.) also aren't returned by the list endpoint
-  // (it resolves a single display locale), so those start blank on edit.
+  // retypes an edit beyond the first page from scratch.
   const { data: listData } = useQuery({
     queryKey: [QUERY_KEYS.organizerEvents, locale],
     queryFn: () =>
@@ -170,7 +190,11 @@ export function useOrganizerEventForm(locale: string, eventId?: number) {
     if (f.titleEn.trim()) body.title_en = f.titleEn.trim();
     if (f.titleRu.trim()) body.title_ru = f.titleRu.trim();
     if (f.description.trim()) body.description = f.description.trim();
+    if (f.descriptionEn.trim()) body.description_en = f.descriptionEn.trim();
+    if (f.descriptionRu.trim()) body.description_ru = f.descriptionRu.trim();
     if (f.importantInfo.trim()) body.important_info = f.importantInfo.trim();
+    if (f.importantInfoEn.trim()) body.important_info_en = f.importantInfoEn.trim();
+    if (f.importantInfoRu.trim()) body.important_info_ru = f.importantInfoRu.trim();
     const startsIso = toIsoOrUndefined(f.startsAt);
     if (startsIso) body.starts_at = startsIso;
     const endsIso = toIsoOrUndefined(f.endsAt);
@@ -213,7 +237,11 @@ export function useOrganizerEventForm(locale: string, eventId?: number) {
     titleEn: fields.titleEn, setTitleEn: (v: string) => setField('titleEn', v),
     titleRu: fields.titleRu, setTitleRu: (v: string) => setField('titleRu', v),
     description: fields.description, setDescription: (v: string) => setField('description', v),
+    descriptionEn: fields.descriptionEn, setDescriptionEn: (v: string) => setField('descriptionEn', v),
+    descriptionRu: fields.descriptionRu, setDescriptionRu: (v: string) => setField('descriptionRu', v),
     importantInfo: fields.importantInfo, setImportantInfo: (v: string) => setField('importantInfo', v),
+    importantInfoEn: fields.importantInfoEn, setImportantInfoEn: (v: string) => setField('importantInfoEn', v),
+    importantInfoRu: fields.importantInfoRu, setImportantInfoRu: (v: string) => setField('importantInfoRu', v),
     startsAt: fields.startsAt, setStartsAt: (v: string) => setField('startsAt', v),
     endsAt: fields.endsAt, setEndsAt: (v: string) => setField('endsAt', v),
     venueName: fields.venueName, setVenueName: (v: string) => setField('venueName', v),

@@ -604,6 +604,9 @@ class TestListOwnEvents:
             submitted_by_organizer_id=5,
             status=EVENT_STATUS_CLASSIFIED,
             needs_review=True,
+            title_localized={"et": "Pealkiri", "en": "Title"},
+            description_localized={"et": "Kirjeldus"},
+            important_info_localized=None,
         )
         mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=[event]))
 
@@ -613,6 +616,9 @@ class TestListOwnEvents:
 
         assert result["events"][0]["status"] == EVENT_STATUS_CLASSIFIED
         assert result["events"][0]["needs_review"] is True
+        assert result["events"][0]["title_localized"] == {"et": "Pealkiri", "en": "Title"}
+        assert result["events"][0]["description_localized"] == {"et": "Kirjeldus"}
+        assert result["events"][0]["important_info_localized"] is None
 
 
 class TestDeleteOwnEvent:

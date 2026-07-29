@@ -25,3 +25,67 @@
 .segBtn + .segBtn {
   border-left: 1px solid var(--border);
 }
+
+.dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: var(--space-1);
+  border-radius: var(--radius-full);
+  background: currentColor;
+  vertical-align: middle;
+}
+
+.segDial {
+  position: relative;
+  padding: var(--space-1);
+  background: var(--bg-overlay-soft);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+}
+
+.indicator {
+  position: absolute;
+  top: var(--space-1);
+  bottom: var(--space-1);
+  left: var(--space-1);
+  width: calc((100% - 2 * var(--space-1)) / var(--seg-count));
+  border-radius: var(--radius-pill);
+  background: linear-gradient(180deg, var(--accent-faint), var(--accent-subtle));
+  border: 1px solid var(--accent-border);
+  transform: translateX(calc(var(--seg-index) * 100%));
+  transition: transform var(--transition);
+  pointer-events: none;
+}
+
+.segDial .segBtn {
+  position: relative;   /* + z-index: 1 — keeps labels above the indicator without a */
+  z-index: 1;           /* negative z-index / stacking-context trick */
+  flex: 1 1 0;
+  min-width: 0;
+  padding: var(--space-0-45) var(--space-0-875);
+  font-size: var(--fs-xs);
+  letter-spacing: var(--tracking-wider);
+  text-transform: uppercase;
+  border-radius: var(--radius-pill);
+}
+
+.segDial .segBtn + .segBtn { border-left: none; }
+.segDial .segBtn.active { background: transparent; color: var(--accent-light); }
+.segDial .segBtn:focus-visible { outline: none; box-shadow: var(--shadow-focus-ring); }
+
+.blip {
+  composes: breathe from '../shared/Animations.module.css';
+  width: var(--seg-blip-size);
+  height: var(--seg-blip-size);
+  background: var(--accent-light);
+  --breathe-duration: var(--anim-breathe-fast);
+}
+
+/* !important: CSS-Modules chunk order can place the composed .breathe rule
+   (from Animations.module.css) after this file's rules at equal specificity —
+   this override must win the cascade regardless of that chunk order. */
+@media (prefers-reduced-motion: reduce) {
+  .indicator { transition: none; }
+  .blip { animation: none !important; }
+}
