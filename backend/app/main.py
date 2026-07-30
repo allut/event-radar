@@ -363,7 +363,9 @@ async def health() -> dict:
 
 @app.get("/internal/tick")
 async def tick(request: Request) -> dict:
-    """Called by Render Cron Job every 15 min to keep the dyno alive."""
+    """Keepalive ping — hit by a cron-job.org job every 10 min so Render's free
+    tier never idles out (it sleeps after 15 min), which would halt the embedded
+    APScheduler. Render cron services are paid, hence the external pinger."""
     token = settings.INTERNAL_TOKEN
     if require_configured_secret(
         token,
