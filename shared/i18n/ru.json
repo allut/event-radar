@@ -233,6 +233,7 @@
     "organizer_field_price_max": "Цена до",
     "organizer_field_url": "Ссылка на событие / билет",
     "organizer_field_image": "Изображение",
+    "organizer_field_lang_suffix": "{field} ({lang})",
     "organizer_image_uploading": "Загрузка изображения…",
     "organizer_submit_button": "Отправить событие",
     "organizer_save_button": "Сохранить изменения"

@@ -29,7 +29,7 @@ describe('EventSubmit (create)', () => {
   it('renders the create-mode title and required fields', () => {
     renderWithProviders(<EventSubmit />, { route: '/organizer/submit', pathPattern: '/organizer/submit' });
     expect(screen.getByText(/submit an event/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/^title$/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/^title \(et\)$/i)).toBeInTheDocument();
   });
 
   it('disables submit until title and start time are filled', () => {
@@ -41,7 +41,7 @@ describe('EventSubmit (create)', () => {
     mockPost.mockResolvedValueOnce({ id: 5, slug: 'new-event', status: 'published' });
     renderWithProviders(<EventSubmit />, { route: '/organizer/submit', pathPattern: '/organizer/submit' });
 
-    await userEvent.type(screen.getByLabelText(/^title$/i), 'Jazz Night');
+    await userEvent.type(screen.getByLabelText(/^title \(et\)$/i), 'Jazz Night');
     const startsInput = screen.getByLabelText(/starts/i);
     await userEvent.type(startsInput, '2026-08-01T18:00');
 
@@ -58,13 +58,13 @@ describe('EventSubmit (create)', () => {
     mockPost.mockResolvedValueOnce({ id: 6, slug: 'new-event-2', status: 'published' });
     renderWithProviders(<EventSubmit />, { route: '/organizer/submit', pathPattern: '/organizer/submit' });
 
-    await userEvent.type(screen.getByLabelText(/^title$/i), 'Jazz Night');
+    await userEvent.type(screen.getByLabelText(/^title \(et\)$/i), 'Jazz Night');
     await userEvent.type(screen.getByLabelText(/starts/i), '2026-08-01T18:00');
 
     const langTabs = screen.getByRole('group', { name: /content language/i });
     await userEvent.click(within(langTabs).getByRole('button', { name: 'EN' }));
-    await userEvent.type(screen.getByLabelText(/description/i), 'An English description');
-    await userEvent.type(screen.getByLabelText(/important info/i), 'English ticket info');
+    await userEvent.type(screen.getByLabelText(/^description \(en\)$/i), 'An English description');
+    await userEvent.type(screen.getByLabelText(/important info .*\(en\)$/i), 'English ticket info');
 
     await waitFor(() => expect(screen.getByRole('button', { name: /submit event/i })).not.toBeDisabled());
     await userEvent.click(screen.getByRole('button', { name: /submit event/i }));

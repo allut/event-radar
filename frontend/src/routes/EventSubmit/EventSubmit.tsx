@@ -5,7 +5,7 @@ import { useOrganizerLogout } from '../../hooks/useOrganizerLogout';
 import { useOrganizerEventForm } from '../../hooks/useOrganizerEventForm';
 import OrganizerTopBar from '../../components/OrganizerTopBar';
 import SegmentedControl from '../../components/SegmentedControl';
-import { t } from '../../i18n';
+import { t, ti } from '../../i18n';
 import {
   CATEGORIES, CONTENT_LANG_ORDER, DEFAULT_CURRENCY, EUR_SYMBOL, LOCALES,
   ORGANIZER_BASE_CONTENT_LANG, ORGANIZER_IMAGE_ACCEPT, ORGANIZER_TEXTAREA_ROWS,
@@ -59,11 +59,18 @@ export default function EventSubmit() {
     },
   };
   const activeSlot = slots[contentLang];
+  const contentLangLabel = (code: ContentLang) =>
+    LOCALES.find((l) => l.code === code)?.label ?? code.toUpperCase();
   const langTabOptions = CONTENT_LANG_ORDER.map((code) => ({
     value: code,
-    label: LOCALES.find((l) => l.code === code)?.label ?? code.toUpperCase(),
+    label: contentLangLabel(code),
     dot: code !== ORGANIZER_BASE_CONTENT_LANG && slots[code].hasContent,
   }));
+  const langField = (key: string) =>
+    ti('organizer_field_lang_suffix', locale, {
+      field: t(key, locale),
+      lang: contentLangLabel(contentLang),
+    });
 
   return (
     <div className={styles.page}>
@@ -88,7 +95,7 @@ export default function EventSubmit() {
             </div>
 
             <label className={styles.label} htmlFor="content_title">
-              {t('organizer_field_title', locale)}
+              {langField('organizer_field_title')}
             </label>
             <input
               id="content_title"
@@ -101,7 +108,7 @@ export default function EventSubmit() {
             />
 
             <label className={styles.label} htmlFor="content_description">
-              {t('organizer_field_description', locale)}
+              {langField('organizer_field_description')}
             </label>
             <textarea
               id="content_description"
@@ -113,7 +120,7 @@ export default function EventSubmit() {
             />
 
             <label className={styles.label} htmlFor="content_important_info">
-              {t('organizer_field_important_info', locale)}
+              {langField('organizer_field_important_info')}
             </label>
             <textarea
               id="content_important_info"

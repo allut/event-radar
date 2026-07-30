@@ -233,6 +233,7 @@
     "organizer_field_price_max": "Hind kuni",
     "organizer_field_url": "Ürituse / pileti link",
     "organizer_field_image": "Pilt",
+    "organizer_field_lang_suffix": "{field} ({lang})",
     "organizer_image_uploading": "Pildi üleslaadimine…",
     "organizer_submit_button": "Esita üritus",
     "organizer_save_button": "Salvesta muudatused"
