@@ -23,6 +23,7 @@ from app.models.models import (
     Event,
     IngestionRun,
     LlmCall,
+    OrganizerMagicLink,
     RawEvent,
     RawInboundEmail,
     UserEventScore,
@@ -44,7 +45,8 @@ async def cleanup_stale_data(db: AsyncSession, *, dry_run: bool = False) -> dict
     """Prune aged rows from satellite/audit tables.
 
     Never deletes ``events`` — only satellite data (audit logs, raw payloads,
-    expired auth tokens, old feed snapshots, stale cached scores). Preserves
+    expired user/organizer auth tokens, old feed snapshots, stale cached
+    scores). Preserves
     event rows and ``user_event_feedback`` indefinitely so the ranking
     indirect-feedback signal and event history are never lost.
 
@@ -63,6 +65,12 @@ async def cleanup_stale_data(db: AsyncSession, *, dry_run: bool = False) -> dict
         db,
         AuthMagicLink,
         AuthMagicLink.expires_at < now - timedelta(days=MAGIC_LINK_RETENTION_DAYS),
+        dry_run=dry_run,
+    )
+    summary["organizer_magic_links"] = await _count_or_delete(
+        db,
+        OrganizerMagicLink,
+        OrganizerMagicLink.expires_at < now - timedelta(days=MAGIC_LINK_RETENTION_DAYS),
         dry_run=dry_run,
     )
     summary["llm_calls"] = await _count_or_delete(

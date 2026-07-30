@@ -134,14 +134,13 @@ Four user-facing surfaces read `published` events — three authenticated, one p
 | Table | Retention window (`app/constants.py`) | Notes |
 |---|---|---|
 | `auth_magic_links` | `MAGIC_LINK_RETENTION_DAYS` (7) | sweeps both expired-unused and long-used rows |
+| `organizer_magic_links` | `MAGIC_LINK_RETENTION_DAYS` (7) | mirrors `auth_magic_links` (organizer auth track) |
 | `llm_calls` | `LLM_CALLS_RETENTION_DAYS` (90) | also the dedup/classification cache window — a content hash re-seen after 90 days costs one fresh LLM call instead of a cache hit |
 | `raw_events` | `RAW_EVENTS_RETENTION_DAYS` (90) | a one-off forensic/backfill script that reads `raw_events.payload` cannot recover a row pruned past this window |
 | `ingestion_runs` | `INGESTION_RUNS_RETENTION_DAYS` (90) | |
 | `raw_inbound_emails` | `RAW_INBOUND_EMAILS_RETENTION_DAYS` (90) | |
 | `daily_feeds` | `DAILY_FEEDS_RETENTION_DAYS` (30) | |
 | `user_event_scores` | `USER_EVENT_SCORES_RETENTION_DAYS` (30) | keyed on the underlying event's end date via `event_not_ended_filter` (inverted, evaluated at the retention cutoff), not the score's own `computed_at` |
-
-**Not currently swept:** `organizer_magic_links` — the organizer auth track mirrors `auth_magic_links` in schema and consume-once semantics, but the retention pass has no `DELETE` for it, so used/expired organizer links accumulate. Low volume today; add a sweep here (same `MAGIC_LINK_RETENTION_DAYS` window) rather than assuming the mirror already covers it.
 
 `POST /admin/cleanup` triggers this on demand — like every other destructive admin/maintenance tool in this codebase, it **defaults to dry-run** (`?dry_run=false` to actually delete).
 
