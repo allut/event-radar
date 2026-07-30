@@ -6,6 +6,7 @@ import { useOrganizerEventForm } from '../../hooks/useOrganizerEventForm';
 import OrganizerTopBar from '../../components/OrganizerTopBar';
 import SegmentedControl from '../../components/SegmentedControl';
 import DatePicker from '../../components/DatePicker';
+import SelectField from '../../components/SelectField';
 import { t, ti } from '../../i18n';
 import {
   CATEGORIES, CONTENT_LANG_ORDER, DEFAULT_CURRENCY, EUR_SYMBOL, LOCALES,
@@ -186,18 +187,15 @@ export default function EventSubmit() {
           </div>
 
           <label className={styles.label} htmlFor="category">{t('organizer_field_category', locale)}</label>
-          <select
+          <SelectField
             id="category"
-            className={styles.input}
             value={form.category}
-            onChange={(e) => form.setCategory(e.target.value)}
+            options={CATEGORIES.map((slug) => ({ value: slug, label: t(`category_${slug}`, locale) }))}
+            onChange={form.setCategory}
+            placeholder={t('organizer_category_none', locale)}
+            ariaLabel={t('organizer_field_category', locale)}
             disabled={form.isSubmitting}
-          >
-            <option value="">{t('organizer_category_none', locale)}</option>
-            {CATEGORIES.map((slug) => (
-              <option key={slug} value={slug}>{t(`category_${slug}`, locale)}</option>
-            ))}
-          </select>
+          />
 
           <div className={styles.fieldRow}>
             <div className={styles.fieldCol}>

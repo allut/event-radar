@@ -54,6 +54,24 @@ describe('EventSubmit (create)', () => {
     expect(body).toMatchObject({ title: 'Jazz Night' });
   });
 
+  it('picks a category from SelectField and submits it', async () => {
+    mockPost.mockResolvedValueOnce({ id: 7, slug: 'new-event-3', status: 'published' });
+    renderWithProviders(<EventSubmit />, { route: '/organizer/submit', pathPattern: '/organizer/submit' });
+
+    await userEvent.type(screen.getByLabelText(/^title \(et\)$/i), 'Jazz Night');
+    await userEvent.type(screen.getByLabelText(/starts/i), '2026-08-01 18:00');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Category' }));
+    await userEvent.click(screen.getByRole('option', { name: 'Music' }));
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /submit event/i })).not.toBeDisabled());
+    await userEvent.click(screen.getByRole('button', { name: /submit event/i }));
+
+    await waitFor(() => expect(mockPost).toHaveBeenCalledTimes(1));
+    const [, body] = mockPost.mock.calls[0];
+    expect(body).toMatchObject({ category: 'music' });
+  });
+
   it('switches to the EN tab and submits description_en/important_info_en', async () => {
     mockPost.mockResolvedValueOnce({ id: 6, slug: 'new-event-2', status: 'published' });
     renderWithProviders(<EventSubmit />, { route: '/organizer/submit', pathPattern: '/organizer/submit' });

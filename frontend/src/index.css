@@ -153,6 +153,10 @@
   --time-field-width: 3rem;
   --time-field-height: 2.75rem;
 
+  /* SelectField */
+  --select-pop-max-height: 280px;
+  --field-icon-size: 18px;
+
   /* Heading scale */
   --heading-3xl: 3rem;
   --heading-2xl: 2.5rem;
