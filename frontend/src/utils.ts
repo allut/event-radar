@@ -1,6 +1,6 @@
 import DOMPurify from 'dompurify';
 import { api } from './api/client';
-import { CATEGORY_GRADIENTS, FALLBACK_GRADIENT, EUR_SYMBOL, DEFAULT_CURRENCY, GOOGLE_MAPS_SEARCH_URL, type Signal, toLocaleCode, SAFE_URL_SCHEMES, SANITIZE_ALLOWED_TAGS, SANITIZE_ALLOWED_ATTR, SIGNAL_TO_CLASS, BROWSE_PAGE_SIZE, CATEGORIES, VIBES, type DatePreset, type SortOption, ANALYTICS_EVENT_PATH_RE, ANALYTICS_ORGANIZER_EDIT_PATH_RE, CALENDAR_WEEK_START, CALENDAR_WEEKS_SHOWN, CALENDAR_DAYS_PER_WEEK } from './constants';
+import { CATEGORY_GRADIENTS, FALLBACK_GRADIENT, EUR_SYMBOL, DEFAULT_CURRENCY, GOOGLE_MAPS_SEARCH_URL, type Signal, toLocaleCode, SAFE_URL_SCHEMES, SANITIZE_ALLOWED_TAGS, SANITIZE_ALLOWED_ATTR, SIGNAL_TO_CLASS, BROWSE_PAGE_SIZE, CATEGORIES, VIBES, type DatePreset, type SortOption, ANALYTICS_EVENT_PATH_RE, ANALYTICS_ORGANIZER_EDIT_PATH_RE, CALENDAR_WEEK_START, CALENDAR_WEEKS_SHOWN, CALENDAR_DAYS_PER_WEEK, CALENDAR_REFERENCE_MONDAY, MAX_HOUR, MAX_MINUTE } from './constants';
 import { t, ti } from './i18n';
 
 export function cx(...classes: (string | false | null | undefined)[]): string {
@@ -161,6 +161,38 @@ export function formatEventDateTime(iso: string, locale: string): string {
   return `${weekday}, ${day} · ${time}`;
 }
 
+// ─── Date / number helpers ───────────────────────────────────────────────────
+
+/** Constrains `n` to the inclusive [lo, hi] range. */
+export function clamp(n: number, lo: number, hi: number): number {
+  return Math.min(hi, Math.max(lo, n));
+}
+
+/** Midnight (local time) of `d`'s calendar day. */
+export function startOfDay(d: Date): Date {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
+/** True when both dates fall on the same local calendar day. */
+export function isSameDay(a: Date, b: Date): boolean {
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+}
+
+export function addDays(d: Date, n: number): Date {
+  const r = new Date(d);
+  r.setDate(r.getDate() + n);
+  return r;
+}
+
+/** Shifts by whole months, clamping the day-of-month into the target month so
+ * e.g. Jan 31 + 1 month lands on Feb 28/29 rather than spilling into March. */
+export function addMonths(d: Date, n: number): Date {
+  const r = new Date(d.getFullYear(), d.getMonth() + n, 1);
+  const daysInTarget = new Date(r.getFullYear(), r.getMonth() + 1, 0).getDate();
+  r.setDate(Math.min(d.getDate(), daysInTarget));
+  return r;
+}
+
 // ─── DatePicker ──────────────────────────────────────────────────────────────
 
 export interface CalendarCell {
@@ -174,7 +206,7 @@ export interface CalendarCell {
  * including leading/trailing days spilling in from adjacent months. */
 export function monthGridDays(year: number, month: number, weekStart: number): CalendarCell[] {
   const first = new Date(year, month, 1);
-  const startOffset = (first.getDay() - weekStart + 7) % 7;
+  const startOffset = (first.getDay() - weekStart + CALENDAR_DAYS_PER_WEEK) % CALENDAR_DAYS_PER_WEEK;
   const gridStart = new Date(year, month, 1 - startOffset);
   const totalCells = CALENDAR_WEEKS_SHOWN * CALENDAR_DAYS_PER_WEEK;
   const cells: CalendarCell[] = [];
@@ -188,8 +220,8 @@ export function monthGridDays(year: number, month: number, weekStart: number): C
 
 const WEEKDAY_HEADER_FORMATTERS = new Map<string, Intl.DateTimeFormat>();
 /** Localized short weekday headers ordered starting at CALENDAR_WEEK_START, e.g.
- * ['Mo','Tu',...]. Built off a fixed known-Monday reference date (2024-01-01)
- * rather than `new Date()`, so the labels don't depend on when this runs. */
+ * ['Mo','Tu',...]. Built off CALENDAR_REFERENCE_MONDAY rather than `new Date()`,
+ * so the labels don't depend on when this runs. */
 export function weekdayHeaders(locale: string): string[] {
   const localeCode = toLocaleCode(locale);
   let fmt = WEEKDAY_HEADER_FORMATTERS.get(localeCode);
@@ -197,12 +229,14 @@ export function weekdayHeaders(locale: string): string[] {
     fmt = new Intl.DateTimeFormat(localeCode, { weekday: 'short' });
     WEEKDAY_HEADER_FORMATTERS.set(localeCode, fmt);
   }
-  const referenceMonday = new Date(2024, 0, 1);
+  const [refYear, refMonth, refDay] = CALENDAR_REFERENCE_MONDAY;
+  const reference = new Date(refYear, refMonth, refDay);
+  // Offset off the reference's own weekday rather than a hardcoded index, so
+  // the loop stays correct if CALENDAR_REFERENCE_MONDAY ever moves.
+  const toWeekStart = (CALENDAR_WEEK_START - reference.getDay() + CALENDAR_DAYS_PER_WEEK) % CALENDAR_DAYS_PER_WEEK;
   const labels: string[] = [];
   for (let i = 0; i < CALENDAR_DAYS_PER_WEEK; i++) {
-    const d = new Date(referenceMonday);
-    d.setDate(referenceMonday.getDate() + ((CALENDAR_WEEK_START - 1 + i + 7) % 7));
-    labels.push(fmt.format(d));
+    labels.push(fmt.format(addDays(reference, toWeekStart + i)));
   }
   return labels;
 }
@@ -230,13 +264,12 @@ export function splitDateTimeValue(value: string): PickerDateTime | null {
   const minute = Number(m[5]);
   const date = new Date(year, month, day, hour, minute);
   if (date.getFullYear() !== year || date.getMonth() !== month || date.getDate() !== day) return null;
-  if (hour > 23 || minute > 59) return null;
+  if (hour > MAX_HOUR || minute > MAX_MINUTE) return null;
   return { year, month, day, hour, minute };
 }
 
 export function joinDateTimeValue(date: Date, hour: number, minute: number): string {
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(hour)}:${pad(minute)}`;
+  return `${date.getFullYear()}-${padIndex(date.getMonth() + 1)}-${padIndex(date.getDate())}T${padIndex(hour)}:${padIndex(minute)}`;
 }
 
 /** Validates free-typed text against the canonical wire format, returning it

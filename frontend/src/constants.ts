@@ -222,4 +222,29 @@ export type OrganizerEventStatus = typeof ORGANIZER_EVENT_STATUS[keyof typeof OR
 export const CALENDAR_WEEK_START = 1; // Monday — Estonia
 export const CALENDAR_WEEKS_SHOWN = 6;
 export const CALENDAR_DAYS_PER_WEEK = 7;
-export const TIME_STEP_MINUTES = 5; // arrow-key increment/decrement step for the minute field
+
+// Fixed known-Monday reference date [year, month (0-indexed), day] used to
+// derive localized weekday header labels. Held as numeric parts (not an ISO
+// string) because `new Date('2024-01-01')` parses as UTC midnight, which lands
+// on the previous day in timezones behind UTC.
+export const CALENDAR_REFERENCE_MONDAY: readonly [number, number, number] = [2024, 0, 1];
+
+// Time-of-day bounds for the picker's hour/minute fields. MAX_* are derived so
+// the day/hour lengths stay the single source of truth.
+export const HOURS_PER_DAY = 24;
+export const MINUTES_PER_HOUR = 60;
+export const MIN_HOUR = 0;
+export const MAX_HOUR = HOURS_PER_DAY - 1;
+export const MIN_MINUTE = 0;
+export const MAX_MINUTE = MINUTES_PER_HOUR - 1;
+
+// Arrow-key increment/decrement step per time field.
+export const TIME_STEP_HOURS = 1;
+export const TIME_STEP_MINUTES = 5;
+
+// Two digits — the hour/minute fields hold 'HH' / 'mm'.
+export const TIME_FIELD_MAX_LENGTH = 2;
+
+// Placeholder for the picker's typeable field. Mirrors the 'YYYY-MM-DDTHH:mm'
+// wire format with a space in place of the literal 'T' — see toDisplayDateTime.
+export const PICKER_VALUE_PLACEHOLDER = 'YYYY-MM-DD HH:mm';

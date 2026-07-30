@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { organizerApi, ApiError } from '../api/client';
 import { QUERY_KEYS, ORGANIZER_EVENTS_PAGE_SIZE, DEFAULT_CURRENCY, ORGANIZER_IMAGE_ALLOWED_MIME } from '../constants';
 import { t } from '../i18n';
+import { joinDateTimeValue } from '../utils';
 
 interface OrganizerEventFull {
   id: number;
@@ -74,16 +75,15 @@ function toIsoOrUndefined(local: string): string | undefined {
   return Number.isNaN(d.getTime()) ? undefined : d.toISOString();
 }
 
-// datetime-local has no timezone of its own — the browser's local offset is
-// used both when parsing (toIsoOrUndefined) and here, so round-tripping an
-// existing ISO value back into the input reproduces the same wall-clock time
+// The picker's wire value has no timezone of its own — the browser's local
+// offset is used both when parsing (toIsoOrUndefined) and here, so round-tripping
+// an existing ISO value back into the field reproduces the same wall-clock time
 // the organizer originally entered.
 function toLocalInput(iso: string | null): string {
   if (!iso) return '';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  return joinDateTimeValue(d, d.getHours(), d.getMinutes());
 }
 
 function fieldsFromExisting(existing: OrganizerEventFull): FormFields {

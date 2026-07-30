@@ -2,9 +2,14 @@ import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, 
 import {
   cx, monthGridDays, weekdayHeaders, splitDateTimeValue, joinDateTimeValue,
   formatPickerValue, formatMonthYearLabel, parseTypedDate, toDisplayDateTime, fromDisplayDateTime,
+  clamp, startOfDay, isSameDay, addDays, addMonths, padIndex,
 } from '../../utils';
 import { useDropdown } from '../../hooks/useDropdown';
-import { CALENDAR_WEEK_START, CALENDAR_DAYS_PER_WEEK, TIME_STEP_MINUTES } from '../../constants';
+import {
+  CALENDAR_WEEK_START, CALENDAR_DAYS_PER_WEEK, HOURS_PER_DAY, MINUTES_PER_HOUR,
+  MIN_HOUR, MAX_HOUR, MIN_MINUTE, MAX_MINUTE, TIME_STEP_HOURS, TIME_STEP_MINUTES,
+  TIME_FIELD_MAX_LENGTH, PICKER_VALUE_PLACEHOLDER,
+} from '../../constants';
 import { t, ti } from '../../i18n';
 import styles from './DatePicker.module.css';
 
@@ -21,29 +26,22 @@ interface DatePickerProps {
   ariaLabel: string;
 }
 
-function clamp(n: number, lo: number, hi: number): number {
-  return Math.min(hi, Math.max(lo, n));
+/** Reads the hour/minute text fields back as bounded numbers — empty or
+ * non-numeric text falls back to the field's minimum, matching what the field
+ * displays once it re-pads on blur. */
+function parseHourText(text: string): number {
+  return clamp(Number(text) || MIN_HOUR, MIN_HOUR, MAX_HOUR);
 }
 
-function startOfDay(d: Date): Date {
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+function parseMinuteText(text: string): number {
+  return clamp(Number(text) || MIN_MINUTE, MIN_MINUTE, MAX_MINUTE);
 }
 
-function sameDay(a: Date, b: Date): boolean {
-  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
-}
-
-function addDays(d: Date, n: number): Date {
-  const r = new Date(d);
-  r.setDate(r.getDate() + n);
-  return r;
-}
-
-function addMonths(d: Date, n: number): Date {
-  const r = new Date(d.getFullYear(), d.getMonth() + n, 1);
-  const daysInTarget = new Date(r.getFullYear(), r.getMonth() + 1, 0).getDate();
-  r.setDate(Math.min(d.getDate(), daysInTarget));
-  return r;
+/** Days elapsed since the start of `d`'s week — 0 on the week's first day
+ * (CALENDAR_WEEK_START), CALENDAR_DAYS_PER_WEEK - 1 on its last. Backs the
+ * Home/End grid keys. */
+function weekdayOffset(d: Date): number {
+  return (d.getDay() - CALENDAR_WEEK_START + CALENDAR_DAYS_PER_WEEK) % CALENDAR_DAYS_PER_WEEK;
 }
 
 const PrevIcon = () => (
@@ -93,8 +91,8 @@ function PopoverBody({ id, value, onChange, min, locale, required, disabled, pop
   const [viewYear, setViewYear] = useState(initialDay.getFullYear());
   const [viewMonth, setViewMonth] = useState(initialDay.getMonth());
   const [focusedDay, setFocusedDay] = useState(initialDay);
-  const [hourText, setHourText] = useState(parsed ? String(parsed.hour).padStart(2, '0') : '00');
-  const [minuteText, setMinuteText] = useState(parsed ? String(parsed.minute).padStart(2, '0') : '00');
+  const [hourText, setHourText] = useState(padIndex(parsed ? parsed.hour : MIN_HOUR));
+  const [minuteText, setMinuteText] = useState(padIndex(parsed ? parsed.minute : MIN_MINUTE));
 
   const gridRef = useRef<HTMLDivElement>(null);
   const focusPendingRef = useRef(false);
@@ -112,7 +110,7 @@ function PopoverBody({ id, value, onChange, min, locale, required, disabled, pop
   // earlier day is disabled) while still guaranteeing the committed value
   // never lands before `min` to the minute.
   function clampToMin(date: Date, h: number, m: number): [number, number] {
-    if (!minDateTime || !sameDay(date, minDateTime)) return [h, m];
+    if (!minDateTime || !isSameDay(date, minDateTime)) return [h, m];
     const candidate = new Date(date.getFullYear(), date.getMonth(), date.getDate(), h, m);
     if (candidate >= minDateTime) return [h, m];
     return [minDateTime.getHours(), minDateTime.getMinutes()];
@@ -120,9 +118,9 @@ function PopoverBody({ id, value, onChange, min, locale, required, disabled, pop
 
   function commitDay(date: Date) {
     if (disabled || (minDay && date < minDay)) return;
-    const [h, m] = clampToMin(date, clamp(Number(hourText) || 0, 0, 23), clamp(Number(minuteText) || 0, 0, 59));
-    setHourText(String(h).padStart(2, '0'));
-    setMinuteText(String(m).padStart(2, '0'));
+    const [h, m] = clampToMin(date, parseHourText(hourText), parseMinuteText(minuteText));
+    setHourText(padIndex(h));
+    setMinuteText(padIndex(m));
     onChange(joinDateTimeValue(date, h, m));
   }
 
@@ -131,8 +129,8 @@ function PopoverBody({ id, value, onChange, min, locale, required, disabled, pop
     if (disabled || (minDay && base < minDay)) return;
     const [ch, cm] = clampToMin(base, h, m);
     if (ch !== h || cm !== m) {
-      setHourText(String(ch).padStart(2, '0'));
-      setMinuteText(String(cm).padStart(2, '0'));
+      setHourText(padIndex(ch));
+      setMinuteText(padIndex(cm));
     }
     onChange(joinDateTimeValue(base, ch, cm));
   }
@@ -168,8 +166,8 @@ function PopoverBody({ id, value, onChange, min, locale, required, disabled, pop
       case 'ArrowDown': next = addDays(d, CALENDAR_DAYS_PER_WEEK); break;
       case 'PageUp': next = addMonths(d, -1); break;
       case 'PageDown': next = addMonths(d, 1); break;
-      case 'Home': next = addDays(d, -((d.getDay() - CALENDAR_WEEK_START + 7) % 7)); break;
-      case 'End': next = addDays(d, 6 - ((d.getDay() - CALENDAR_WEEK_START + 7) % 7)); break;
+      case 'Home': next = addDays(d, -weekdayOffset(d)); break;
+      case 'End': next = addDays(d, CALENDAR_DAYS_PER_WEEK - 1 - weekdayOffset(d)); break;
       case 'Enter':
       case ' ':
         e.preventDefault();
@@ -186,15 +184,15 @@ function PopoverBody({ id, value, onChange, min, locale, required, disabled, pop
     if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
     e.preventDefault();
     const delta = e.key === 'ArrowUp' ? 1 : -1;
-    const h = clamp(Number(hourText) || 0, 0, 23);
-    const m = clamp(Number(minuteText) || 0, 0, 59);
+    const h = parseHourText(hourText);
+    const m = parseMinuteText(minuteText);
     if (unit === 'hour') {
-      const next = (h + delta + 24) % 24;
-      setHourText(String(next).padStart(2, '0'));
+      const next = (h + delta * TIME_STEP_HOURS + HOURS_PER_DAY) % HOURS_PER_DAY;
+      setHourText(padIndex(next));
       commitTime(next, m);
     } else {
-      const next = (m + delta * TIME_STEP_MINUTES + 60) % 60;
-      setMinuteText(String(next).padStart(2, '0'));
+      const next = (m + delta * TIME_STEP_MINUTES + MINUTES_PER_HOUR) % MINUTES_PER_HOUR;
+      setMinuteText(padIndex(next));
       commitTime(h, next);
     }
   }
@@ -224,9 +222,9 @@ function PopoverBody({ id, value, onChange, min, locale, required, disabled, pop
       </div>
       <div className={styles.calGrid} role="grid" ref={gridRef} onKeyDown={handleGridKeyDown}>
         {cells.map((c) => {
-          const isToday = sameDay(c.date, today);
-          const isSelected = selectedDay ? sameDay(c.date, selectedDay) : false;
-          const isFocused = sameDay(c.date, focusedDay);
+          const isToday = isSameDay(c.date, today);
+          const isSelected = selectedDay ? isSameDay(c.date, selectedDay) : false;
+          const isFocused = isSameDay(c.date, focusedDay);
           const isDisabled = disabled || Boolean(minDay && c.date < minDay);
           return (
             <button
@@ -253,42 +251,42 @@ function PopoverBody({ id, value, onChange, min, locale, required, disabled, pop
             <input
               type="text"
               inputMode="numeric"
-              maxLength={2}
+              maxLength={TIME_FIELD_MAX_LENGTH}
               className={styles.timeInput}
               value={hourText}
               aria-label={t('picker_hour_label', locale)}
               disabled={disabled}
               onChange={(e) => {
-                const next = e.target.value.replace(/\D/g, '').slice(0, 2);
+                const next = e.target.value.replace(/\D/g, '').slice(0, TIME_FIELD_MAX_LENGTH);
                 setHourText(next);
-                commitTime(clamp(Number(next) || 0, 0, 23), clamp(Number(minuteText) || 0, 0, 59));
+                commitTime(parseHourText(next), parseMinuteText(minuteText));
               }}
               onKeyDown={(e) => handleTimeKeyDown(e, 'hour')}
               onBlur={() => {
-                const h = clamp(Number(hourText) || 0, 0, 23);
-                setHourText(String(h).padStart(2, '0'));
-                commitTime(h, clamp(Number(minuteText) || 0, 0, 59));
+                const h = parseHourText(hourText);
+                setHourText(padIndex(h));
+                commitTime(h, parseMinuteText(minuteText));
               }}
             />
             <span className={styles.timeSeparator} aria-hidden>:</span>
             <input
               type="text"
               inputMode="numeric"
-              maxLength={2}
+              maxLength={TIME_FIELD_MAX_LENGTH}
               className={styles.timeInput}
               value={minuteText}
               aria-label={t('picker_minute_label', locale)}
               disabled={disabled}
               onChange={(e) => {
-                const next = e.target.value.replace(/\D/g, '').slice(0, 2);
+                const next = e.target.value.replace(/\D/g, '').slice(0, TIME_FIELD_MAX_LENGTH);
                 setMinuteText(next);
-                commitTime(clamp(Number(hourText) || 0, 0, 23), clamp(Number(next) || 0, 0, 59));
+                commitTime(parseHourText(hourText), parseMinuteText(next));
               }}
               onKeyDown={(e) => handleTimeKeyDown(e, 'minute')}
               onBlur={() => {
-                const m = clamp(Number(minuteText) || 0, 0, 59);
-                setMinuteText(String(m).padStart(2, '0'));
-                commitTime(clamp(Number(hourText) || 0, 0, 23), m);
+                const m = parseMinuteText(minuteText);
+                setMinuteText(padIndex(m));
+                commitTime(parseHourText(hourText), m);
               }}
             />
           </div>
@@ -358,7 +356,7 @@ export default function DatePicker({ id, value, onChange, locale, disabled = fal
           onChange={(e) => { setTypedValue(e.target.value); commitTyped(fromDisplayDateTime(e.target.value)); }}
           onBlur={(e) => { if (!commitTyped(fromDisplayDateTime(e.target.value))) setTypedValue(toDisplayDateTime(value)); }}
           aria-label={ariaLabel}
-          placeholder="YYYY-MM-DD HH:mm"
+          placeholder={PICKER_VALUE_PLACEHOLDER}
           disabled={disabled}
           required={required}
         />
