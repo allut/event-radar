@@ -1,0 +1,150 @@
+.field {
+  display: flex;
+  align-items: stretch;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+
+.field:hover:not([data-disabled]) {
+  border-color: var(--accent-hover-border);
+}
+
+.field:focus-within {
+  border-color: var(--accent);
+  box-shadow: var(--shadow-focus-ring);
+}
+
+.field[data-disabled] {
+  opacity: 0.5;
+}
+
+.pickButton {
+  composes: btnOutline from '../shared/Button.module.css';
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 1 auto;
+  min-width: 0;
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  line-height: var(--leading-tight);
+  letter-spacing: var(--tracking-snug);
+  text-align: center;
+  border: none;
+  border-right: 1px solid var(--border);
+  border-radius: var(--radius) 0 0 var(--radius);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.pickButton:hover {
+  color: var(--accent-light);
+  background: var(--accent-subtle);
+}
+
+.pickButton:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus-ring);
+}
+
+.pickButtonDisabled {
+  cursor: default;
+  pointer-events: none;
+}
+
+.fileName {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--fs-sm);
+  color: var(--text);
+  padding: 0 var(--space-3);
+}
+
+.fileNameText {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fileNamePlaceholder {
+  color: var(--text-muted);
+}
+
+.removeButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 44px;
+  border: none;
+  border-left: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: 0 var(--radius) var(--radius) 0;
+  transition: color var(--transition), background var(--transition);
+}
+
+.removeButton:hover:not(:disabled) {
+  color: var(--danger);
+  background: var(--danger-subtle);
+}
+
+.removeButton:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus-ring);
+}
+
+.removeButton svg {
+  width: 18px;
+  height: 18px;
+}
+
+.spinner {
+  composes: spin from '../shared/Animations.module.css';
+  flex: 0 0 auto;
+  display: inline-block;
+  width: var(--spinner-size-sm);
+  height: var(--spinner-size-sm);
+  border: 2px solid var(--spinner-border);
+  border-top-color: var(--accent);
+  border-radius: var(--radius-full);
+}
+
+.preview {
+  width: 100%;
+  max-width: var(--file-preview-max-width);
+  margin-top: var(--space-2);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (max-width: 640px) {
+  .pickButton {
+    padding: var(--space-2) var(--space-3);
+    font-size: var(--fs-xs);
+  }
+
+  .fileName {
+    padding: 0 var(--space-2);
+    font-size: var(--fs-xs);
+  }
+}

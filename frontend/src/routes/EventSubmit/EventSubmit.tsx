@@ -7,13 +7,13 @@ import OrganizerTopBar from '../../components/OrganizerTopBar';
 import SegmentedControl from '../../components/SegmentedControl';
 import DatePicker from '../../components/DatePicker';
 import SelectField from '../../components/SelectField';
+import FileField from '../../components/FileField';
 import { t, ti } from '../../i18n';
 import {
   CATEGORIES, CONTENT_LANG_ORDER, DEFAULT_CURRENCY, EUR_SYMBOL, LOCALES,
   ORGANIZER_BASE_CONTENT_LANG, ORGANIZER_IMAGE_ACCEPT, ORGANIZER_TEXTAREA_ROWS,
   type ContentLang,
 } from '../../constants';
-import { safeUrl } from '../../utils';
 import styles from './EventSubmit.module.css';
 
 interface ContentSlot {
@@ -241,22 +241,21 @@ export default function EventSubmit() {
           />
 
           <label className={styles.label} htmlFor="image">{t('organizer_field_image', locale)}</label>
-          <input
+          <FileField
             id="image"
-            type="file"
             accept={ORGANIZER_IMAGE_ACCEPT}
-            className={styles.fileInput}
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) form.uploadImage(file);
-            }}
+            onSelect={form.uploadImage}
+            onClear={form.clearImage}
+            previewUrl={form.imageUrl}
+            uploading={form.imageUploading}
             disabled={form.isSubmitting || form.imageUploading}
+            chooseLabel={t('organizer_image_choose', locale)}
+            replaceLabel={t('organizer_image_replace', locale)}
+            emptyLabel={t('organizer_image_none', locale)}
+            uploadingLabel={t('organizer_image_uploading', locale)}
+            removeLabel={t('organizer_image_remove', locale)}
           />
-          {form.imageUploading && <p className={styles.hint}>{t('organizer_image_uploading', locale)}</p>}
           {form.imageError && <p className={styles.error} role="alert">{form.imageError}</p>}
-          {safeUrl(form.imageUrl) && (
-            <img src={safeUrl(form.imageUrl) as string} alt="" className={styles.imagePreview} />
-          )}
 
           {form.submitError && (
             <p className={styles.error} role="alert">{form.submitError}</p>

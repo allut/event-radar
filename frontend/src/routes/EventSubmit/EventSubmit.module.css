@@ -108,23 +108,6 @@
   opacity: 0.5;
 }
 
-.fileInput {
-  color: var(--text-muted);
-  font-size: var(--fs-sm);
-}
-
-.hint {
-  font-size: var(--fs-sm);
-  color: var(--text-muted);
-}
-
-.imagePreview {
-  width: 100%;
-  max-width: 320px;
-  border-radius: var(--radius);
-  border: 1px solid var(--border);
-}
-
 .error {
   font-size: var(--fs-sm);
   color: var(--danger);

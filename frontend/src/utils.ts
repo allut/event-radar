@@ -349,6 +349,20 @@ export function makeActiveClassMap(styles: Record<string, string>): Record<Signa
   return result;
 }
 
+/** Last path segment of a URL, decoded, with any query/hash stripped — used to
+ * derive a displayable filename from a stored Cloudinary image URL when no
+ * File object (and thus no original filename) is available, e.g. FileField's
+ * edit-mode prefill. Returns '' on an unparseable URL or an empty path. */
+export function fileNameFromUrl(url: string): string {
+  try {
+    const pathname = new URL(url).pathname;
+    const last = pathname.split('/').filter(Boolean).pop() ?? '';
+    return last ? decodeURIComponent(last) : '';
+  } catch {
+    return '';
+  }
+}
+
 /** True when a popover of `popWidth` left-anchored at `triggerLeft` (viewport-relative
  * px) would overflow the viewport's right edge. `marginPx` matches the --space-5
  * gutter .menuPop's max-width already reserves, for consistency. */

@@ -202,7 +202,15 @@ export function useOrganizerEventForm(locale: string, eventId?: number) {
     if (f.venueName.trim()) body.venue_name = f.venueName.trim();
     if (f.venueAddress.trim()) body.venue_address = f.venueAddress.trim();
     if (f.url.trim()) body.url = f.url.trim();
-    if (f.imageUrl.trim()) body.image_url = f.imageUrl.trim();
+    // In edit mode, always send image_url (even '') so a Remove-image save can
+    // clear the stored value — the PATCH handler gates the update on the key's
+    // *presence* (fields_set), not its truthiness, so omitting it here (as a
+    // plain truthy check would) leaves the previous image silently in place.
+    if (isEditMode) {
+      body.image_url = f.imageUrl.trim();
+    } else if (f.imageUrl.trim()) {
+      body.image_url = f.imageUrl.trim();
+    }
     if (f.priceMin.trim()) body.price_min = Number(f.priceMin);
     if (f.priceMax.trim()) body.price_max = Number(f.priceMax);
     if (f.priceMin.trim() || f.priceMax.trim()) body.currency = DEFAULT_CURRENCY;
@@ -248,6 +256,7 @@ export function useOrganizerEventForm(locale: string, eventId?: number) {
     venueAddress: fields.venueAddress, setVenueAddress: (v: string) => setField('venueAddress', v),
     url: fields.url, setUrl: (v: string) => setField('url', v),
     imageUrl: fields.imageUrl,
+    clearImage: () => { setField('imageUrl', ''); imageMutation.reset(); },
     priceMin: fields.priceMin, setPriceMin: (v: string) => setField('priceMin', v),
     priceMax: fields.priceMax, setPriceMax: (v: string) => setField('priceMax', v),
     category: fields.category, setCategory: (v: string) => setField('category', v),

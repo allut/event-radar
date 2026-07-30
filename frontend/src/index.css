@@ -157,6 +157,9 @@
   --select-pop-max-height: 280px;
   --field-icon-size: 18px;
 
+  /* FileField */
+  --file-preview-max-width: 320px;
+
   /* Heading scale */
   --heading-3xl: 3rem;
   --heading-2xl: 2.5rem;
@@ -173,6 +176,7 @@
   /* Leading (line-height) */
   --leading-display: 1.15;
   --leading-body: 1.6;
+  --leading-tight: 1.2;
 
   /* Animation durations */
   --anim-fast: 0.3s;
