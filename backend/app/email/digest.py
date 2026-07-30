@@ -17,6 +17,8 @@ from app.config import settings
 from app.constants import (
     DIGEST_MAX_WHY_GO_BULLETS,
     DIGEST_SEND_CONCURRENCY,
+    LOCALE_ET,
+    LOCALE_RU,
     LOG_EVENT_EMAIL_SEND_FAILED,
     RESEND_ERROR_SNIPPET_LEN,
     RESEND_SEND_URL,
@@ -55,9 +57,9 @@ log = logging.getLogger(__name__)
 def _format_feed_date(d: date, locale: str) -> str:
     dow = d.weekday()  # 0=Mon
     # Grammar differs per locale; the order of day/month/day-number is not key→string.
-    if locale == "et":
+    if locale == LOCALE_ET:
         return f"{day_name(dow, locale)}, {d.day}. {month_name(d.month, locale)}"
-    if locale == "ru":
+    if locale == LOCALE_RU:
         return f"{day_name(dow, locale)}, {d.day} {month_name(d.month, locale)}"
     return f"{day_name(dow, locale)}, {month_name(d.month, locale)} {d.day}"
 

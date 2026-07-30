@@ -1,4 +1,4 @@
-import { LOCALES } from './constants';
+import { LOCALE_EN, LOCALE_ET, LOCALE_RU, LOCALES } from './constants';
 import { PERSONA_TRANSLATIONS, TRANSLATIONS } from './_generated/i18nData';
 import { PERSONAS_EN } from './_generated/i18nData';
 
@@ -14,14 +14,16 @@ function _enPersona(slug: string): { name: string; vibe: string } {
   return { name: p?.name ?? slug, vibe: p?.vibe ?? '' };
 }
 
+type NonEnglishLocale = typeof LOCALE_ET | typeof LOCALE_RU;
+
 export function personaName(slug: string, locale: string): string {
-  if (locale === 'en') return _enPersona(slug).name;
-  return PERSONA_TRANSLATIONS[slug]?.[locale as 'et' | 'ru']?.name ?? _enPersona(slug).name;
+  if (locale === LOCALE_EN) return _enPersona(slug).name;
+  return PERSONA_TRANSLATIONS[slug]?.[locale as NonEnglishLocale]?.name ?? _enPersona(slug).name;
 }
 
 export function personaVibe(slug: string, locale: string): string {
-  if (locale === 'en') return _enPersona(slug).vibe;
-  return PERSONA_TRANSLATIONS[slug]?.[locale as 'et' | 'ru']?.vibe ?? _enPersona(slug).vibe;
+  if (locale === LOCALE_EN) return _enPersona(slug).vibe;
+  return PERSONA_TRANSLATIONS[slug]?.[locale as NonEnglishLocale]?.vibe ?? _enPersona(slug).vibe;
 }
 
 export function t(key: string, locale: string): string {

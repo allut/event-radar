@@ -6,11 +6,13 @@ import { useOrganizerEventForm } from '../../hooks/useOrganizerEventForm';
 import OrganizerTopBar from '../../components/OrganizerTopBar';
 import SegmentedControl from '../../components/SegmentedControl';
 import { t } from '../../i18n';
-import { CATEGORIES, DEFAULT_CURRENCY, EUR_SYMBOL, LOCALES, ORGANIZER_IMAGE_ACCEPT, ORGANIZER_TEXTAREA_ROWS } from '../../constants';
+import {
+  CATEGORIES, CONTENT_LANG_ORDER, DEFAULT_CURRENCY, EUR_SYMBOL, LOCALES,
+  ORGANIZER_BASE_CONTENT_LANG, ORGANIZER_IMAGE_ACCEPT, ORGANIZER_TEXTAREA_ROWS,
+  type ContentLang,
+} from '../../constants';
 import { safeUrl } from '../../utils';
 import styles from './EventSubmit.module.css';
-
-type ContentLang = 'et' | 'en' | 'ru';
 
 interface ContentSlot {
   title: string;
@@ -34,7 +36,7 @@ export default function EventSubmit() {
   }
 
   const form = useOrganizerEventForm(locale, eventId);
-  const [contentLang, setContentLang] = useState<ContentLang>('et');
+  const [contentLang, setContentLang] = useState<ContentLang>(ORGANIZER_BASE_CONTENT_LANG);
 
   const slots: Record<ContentLang, ContentSlot> = {
     et: {
@@ -57,11 +59,10 @@ export default function EventSubmit() {
     },
   };
   const activeSlot = slots[contentLang];
-  const CONTENT_LANG_ORDER: ContentLang[] = ['et', 'en', 'ru'];
   const langTabOptions = CONTENT_LANG_ORDER.map((code) => ({
     value: code,
     label: LOCALES.find((l) => l.code === code)?.label ?? code.toUpperCase(),
-    dot: code !== 'et' && slots[code].hasContent,
+    dot: code !== ORGANIZER_BASE_CONTENT_LANG && slots[code].hasContent,
   }));
 
   return (
@@ -96,7 +97,7 @@ export default function EventSubmit() {
               value={activeSlot.title}
               onChange={(e) => activeSlot.setTitle(e.target.value)}
               disabled={form.isSubmitting}
-              required={contentLang === 'et'}
+              required={contentLang === ORGANIZER_BASE_CONTENT_LANG}
             />
 
             <label className={styles.label} htmlFor="content_description">

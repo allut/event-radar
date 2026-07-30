@@ -82,6 +82,11 @@ export const ANALYTICS_EVENT_PATH_RE = /^\/events\/\d+$/;
 export const ANALYTICS_ORGANIZER_EDIT_PATH_RE = /^\/organizer\/events\/\d+\/edit$/;
 
 // ─── Locale ──────────────────────────────────────────────────────────────────
+export type LocaleCode = (typeof LOCALES)[number]['code'];
+export const LOCALE_EN = 'en' as const;
+export const LOCALE_ET = 'et' as const;
+export const LOCALE_RU = 'ru' as const;
+
 export function toLocaleCode(locale: string): string {
   return _LOCALE_CODE_MAP[locale] ?? _DEFAULT_LOCALE_CODE;
 }
@@ -196,6 +201,14 @@ export const SAVED_EVENTS_PAGE_SIZE = 24;
 export const ORGANIZER_IMAGE_ACCEPT = ORGANIZER_IMAGE_ALLOWED_MIME.join(',');
 export const ORGANIZER_TEXTAREA_ROWS = 6;
 export const ORGANIZER_EVENTS_PAGE_SIZE = 24;
+
+// Organizer submission content-language tabs (EventSubmit.tsx). ET is always
+// the base/required slot regardless of the app's default_locale ('en') — the
+// platform's canonical language for event content is Estonian — so this is a
+// dedicated constant, not derived from LOCALES' app-UI order (en, et, ru).
+export type ContentLang = LocaleCode;
+export const CONTENT_LANG_ORDER: ContentLang[] = [LOCALE_ET, LOCALE_EN, LOCALE_RU];
+export const ORGANIZER_BASE_CONTENT_LANG: ContentLang = LOCALE_ET;
 
 export const ORGANIZER_EVENT_STATUS = {
   draft: 'draft',
