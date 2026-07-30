@@ -43,7 +43,7 @@ describe('EventSubmit (create)', () => {
 
     await userEvent.type(screen.getByLabelText(/^title \(et\)$/i), 'Jazz Night');
     const startsInput = screen.getByLabelText(/starts/i);
-    await userEvent.type(startsInput, '2026-08-01T18:00');
+    await userEvent.type(startsInput, '2026-08-01 18:00');
 
     await waitFor(() => expect(screen.getByRole('button', { name: /submit event/i })).not.toBeDisabled());
     await userEvent.click(screen.getByRole('button', { name: /submit event/i }));
@@ -59,7 +59,7 @@ describe('EventSubmit (create)', () => {
     renderWithProviders(<EventSubmit />, { route: '/organizer/submit', pathPattern: '/organizer/submit' });
 
     await userEvent.type(screen.getByLabelText(/^title \(et\)$/i), 'Jazz Night');
-    await userEvent.type(screen.getByLabelText(/starts/i), '2026-08-01T18:00');
+    await userEvent.type(screen.getByLabelText(/starts/i), '2026-08-01 18:00');
 
     const langTabs = screen.getByRole('group', { name: /content language/i });
     await userEvent.click(within(langTabs).getByRole('button', { name: 'EN' }));

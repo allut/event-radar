@@ -1,0 +1,336 @@
+.datePicker {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.field {
+  display: flex;
+  align-items: stretch;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+
+.field:focus-within {
+  border-color: var(--accent);
+  box-shadow: var(--shadow-focus-ring);
+}
+
+.fieldDisabled {
+  opacity: 0.5;
+}
+
+.textInput {
+  flex: 1 1 auto;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  outline: none;
+  padding: var(--space-3) var(--space-4);
+  color: var(--text);
+  font-size: var(--fs-base);
+  font-family: inherit;
+  font-variant-numeric: tabular-nums;
+}
+
+.textInput::placeholder {
+  color: var(--text-dim);
+}
+
+.textInput:disabled {
+  cursor: default;
+}
+
+.calendarButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  border: none;
+  border-left: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: 0 var(--radius) var(--radius) 0;
+  transition: color var(--transition), background var(--transition);
+}
+
+.calendarButton:hover:not(:disabled) {
+  color: var(--accent-light);
+  background: var(--accent-subtle);
+}
+
+.calendarButton:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus-ring);
+}
+
+.calendarButton:disabled {
+  cursor: default;
+}
+
+.calendarButton svg {
+  width: 18px;
+  height: 18px;
+}
+
+.preview {
+  padding-left: var(--space-1);
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.pop {
+  composes: menuPop from '../shared/Menu.module.css';
+  width: var(--picker-pop-width);
+  min-width: var(--picker-pop-width);
+}
+
+.calHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-3);
+}
+
+.calNavBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  transition: all var(--transition);
+}
+
+.calNavBtn:hover {
+  color: var(--accent-light);
+  border-color: var(--accent-hover-border);
+  background: var(--accent-subtle);
+}
+
+.calNavBtn:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus-ring);
+}
+
+.calNavBtn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.calMonthLabel {
+  font-family: var(--font-display);
+  font-size: var(--fs-lg);
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: 0.01em;
+}
+
+.calWeekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  margin-bottom: var(--space-1);
+}
+
+.calWeekdays span {
+  text-align: center;
+  font-size: var(--fs-2xs);
+  font-weight: 600;
+  letter-spacing: var(--tracking-wider);
+  text-transform: uppercase;
+  color: var(--text-dim);
+  padding: var(--space-1) 0;
+}
+
+.calGrid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: var(--calendar-grid-gap);
+}
+
+.calDay {
+  position: relative;
+  aspect-ratio: 1;
+  min-height: var(--calendar-cell-size);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--fs-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-soft);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  border: 1px solid transparent;
+  transition: all var(--transition);
+}
+
+.calDay:hover:not(:disabled) {
+  background: var(--bg-card-hover);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+.calDay:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus-ring);
+}
+
+.calDay:disabled {
+  color: var(--text-dim);
+  cursor: default;
+}
+
+.spill {
+  color: var(--text-dim);
+}
+
+.today::after {
+  content: '';
+  position: absolute;
+  bottom: 4px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--accent-light);
+}
+
+.selected {
+  background: var(--accent-subtle);
+  border-color: var(--accent-border);
+  color: var(--accent-light);
+  font-weight: 700;
+}
+
+.selected::after {
+  display: none;
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: var(--rule);
+}
+
+.timeGroup {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.timeLabel {
+  font-size: var(--fs-2xs);
+  font-weight: 600;
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.timeRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+/* Bigger, instrument-panel-styled time fields — larger tabular numerals in a
+   raised box, matching the calendar grid's visual register instead of the
+   generic small text inputs the earlier pass used. */
+.timeInput {
+  width: var(--time-field-width);
+  height: var(--time-field-height);
+  background: var(--bg-overlay-soft);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--accent-light);
+  font-family: inherit;
+  font-size: var(--fs-xl);
+  font-weight: 700;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  transition: border-color var(--transition), box-shadow var(--transition), background var(--transition);
+}
+
+.timeInput:hover {
+  border-color: var(--accent-hover-border);
+}
+
+.timeInput:focus-visible,
+.timeInput:focus {
+  outline: none;
+  border-color: var(--accent-border);
+  box-shadow: var(--shadow-focus-ring);
+  background: var(--bg-card-hover);
+}
+
+.timeInput:disabled {
+  opacity: 0.5;
+}
+
+.timeSeparator {
+  font-size: var(--fs-xl);
+  font-weight: 700;
+  color: var(--text-dim);
+}
+
+.footerActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.todayBtn {
+  font-size: var(--fs-xs);
+  color: var(--accent-light);
+  background: transparent;
+  border: none;
+  font-weight: 600;
+  letter-spacing: var(--tracking-wide);
+}
+
+.todayBtn:hover {
+  text-decoration: underline;
+}
+
+.clearBtn {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  font-weight: 600;
+  letter-spacing: var(--tracking-wide);
+}
+
+.clearBtn:hover {
+  color: var(--danger);
+  text-decoration: underline;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (max-width: 640px) {
+  .pop {
+    left: auto;
+    right: 0;
+  }
+}

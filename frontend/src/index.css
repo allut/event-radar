@@ -146,6 +146,13 @@
   /* Segmented control — dial variant */
   --seg-blip-size: 6px;
 
+  /* DatePicker */
+  --calendar-cell-size: 36px;
+  --calendar-grid-gap: 2px;
+  --picker-pop-width: 336px;
+  --time-field-width: 3rem;
+  --time-field-height: 2.75rem;
+
   /* Heading scale */
   --heading-3xl: 3rem;
   --heading-2xl: 2.5rem;

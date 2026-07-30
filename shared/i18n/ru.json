@@ -236,7 +236,16 @@
     "organizer_field_lang_suffix": "{field} ({lang})",
     "organizer_image_uploading": "Загрузка изображения…",
     "organizer_submit_button": "Отправить событие",
-    "organizer_save_button": "Сохранить изменения"
+    "organizer_save_button": "Сохранить изменения",
+    "picker_today": "Сегодня",
+    "picker_clear": "Очистить",
+    "picker_prev_month": "Предыдущий месяц",
+    "picker_next_month": "Следующий месяц",
+    "picker_time_label": "Время",
+"picker_hour_label": "Час",
+"picker_minute_label": "Минута",
+    "picker_month_year_label": "Показан {value}",
+    "picker_open_calendar": "Открыть календарь"
   },
   "email": {
     "email.magic_link.subject": "Ваша ссылка для входа в What's on Radar",

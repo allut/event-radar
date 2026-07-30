@@ -217,3 +217,9 @@ export const ORGANIZER_EVENT_STATUS = {
   cancelled: 'cancelled',
 } as const;
 export type OrganizerEventStatus = typeof ORGANIZER_EVENT_STATUS[keyof typeof ORGANIZER_EVENT_STATUS];
+
+// ─── DatePicker (components/DatePicker) ─────────────────────────────────────
+export const CALENDAR_WEEK_START = 1; // Monday — Estonia
+export const CALENDAR_WEEKS_SHOWN = 6;
+export const CALENDAR_DAYS_PER_WEEK = 7;
+export const TIME_STEP_MINUTES = 5; // arrow-key increment/decrement step for the minute field

@@ -1,6 +1,6 @@
 import DOMPurify from 'dompurify';
 import { api } from './api/client';
-import { CATEGORY_GRADIENTS, FALLBACK_GRADIENT, EUR_SYMBOL, DEFAULT_CURRENCY, GOOGLE_MAPS_SEARCH_URL, type Signal, toLocaleCode, SAFE_URL_SCHEMES, SANITIZE_ALLOWED_TAGS, SANITIZE_ALLOWED_ATTR, SIGNAL_TO_CLASS, BROWSE_PAGE_SIZE, CATEGORIES, VIBES, type DatePreset, type SortOption, ANALYTICS_EVENT_PATH_RE, ANALYTICS_ORGANIZER_EDIT_PATH_RE } from './constants';
+import { CATEGORY_GRADIENTS, FALLBACK_GRADIENT, EUR_SYMBOL, DEFAULT_CURRENCY, GOOGLE_MAPS_SEARCH_URL, type Signal, toLocaleCode, SAFE_URL_SCHEMES, SANITIZE_ALLOWED_TAGS, SANITIZE_ALLOWED_ATTR, SIGNAL_TO_CLASS, BROWSE_PAGE_SIZE, CATEGORIES, VIBES, type DatePreset, type SortOption, ANALYTICS_EVENT_PATH_RE, ANALYTICS_ORGANIZER_EDIT_PATH_RE, CALENDAR_WEEK_START, CALENDAR_WEEKS_SHOWN, CALENDAR_DAYS_PER_WEEK } from './constants';
 import { t, ti } from './i18n';
 
 export function cx(...classes: (string | false | null | undefined)[]): string {
@@ -159,6 +159,125 @@ export function formatEventDateTime(iso: string, locale: string): string {
   const day = dateTimeFormatter(localeCode, { day: 'numeric', month: 'long', year: 'numeric' }).format(date);
   const time = hourMinuteFormatter(locale).format(date);
   return `${weekday}, ${day} · ${time}`;
+}
+
+// ─── DatePicker ──────────────────────────────────────────────────────────────
+
+export interface CalendarCell {
+  date: Date;
+  day: number;
+  spill: boolean;
+}
+
+/** Returns a fixed CALENDAR_WEEKS_SHOWN × CALENDAR_DAYS_PER_WEEK grid of days for
+ * `month` (0-indexed) of `year`, starting on `weekStart` (0 = Sunday, 1 = Monday),
+ * including leading/trailing days spilling in from adjacent months. */
+export function monthGridDays(year: number, month: number, weekStart: number): CalendarCell[] {
+  const first = new Date(year, month, 1);
+  const startOffset = (first.getDay() - weekStart + 7) % 7;
+  const gridStart = new Date(year, month, 1 - startOffset);
+  const totalCells = CALENDAR_WEEKS_SHOWN * CALENDAR_DAYS_PER_WEEK;
+  const cells: CalendarCell[] = [];
+  for (let i = 0; i < totalCells; i++) {
+    const d = new Date(gridStart);
+    d.setDate(gridStart.getDate() + i);
+    cells.push({ date: d, day: d.getDate(), spill: d.getMonth() !== month });
+  }
+  return cells;
+}
+
+const WEEKDAY_HEADER_FORMATTERS = new Map<string, Intl.DateTimeFormat>();
+/** Localized short weekday headers ordered starting at CALENDAR_WEEK_START, e.g.
+ * ['Mo','Tu',...]. Built off a fixed known-Monday reference date (2024-01-01)
+ * rather than `new Date()`, so the labels don't depend on when this runs. */
+export function weekdayHeaders(locale: string): string[] {
+  const localeCode = toLocaleCode(locale);
+  let fmt = WEEKDAY_HEADER_FORMATTERS.get(localeCode);
+  if (!fmt) {
+    fmt = new Intl.DateTimeFormat(localeCode, { weekday: 'short' });
+    WEEKDAY_HEADER_FORMATTERS.set(localeCode, fmt);
+  }
+  const referenceMonday = new Date(2024, 0, 1);
+  const labels: string[] = [];
+  for (let i = 0; i < CALENDAR_DAYS_PER_WEEK; i++) {
+    const d = new Date(referenceMonday);
+    d.setDate(referenceMonday.getDate() + ((CALENDAR_WEEK_START - 1 + i + 7) % 7));
+    labels.push(fmt.format(d));
+  }
+  return labels;
+}
+
+export interface PickerDateTime {
+  year: number;
+  month: number; // 0-indexed
+  day: number;
+  hour: number;
+  minute: number;
+}
+
+const PICKER_VALUE_RE = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/;
+
+/** Splits the 'YYYY-MM-DDTHH:mm' wire value (the same format the native
+ * datetime-local input this component replaces used) into components, or
+ * null when empty/malformed/not a real calendar date. */
+export function splitDateTimeValue(value: string): PickerDateTime | null {
+  const m = PICKER_VALUE_RE.exec(value);
+  if (!m) return null;
+  const year = Number(m[1]);
+  const month = Number(m[2]) - 1;
+  const day = Number(m[3]);
+  const hour = Number(m[4]);
+  const minute = Number(m[5]);
+  const date = new Date(year, month, day, hour, minute);
+  if (date.getFullYear() !== year || date.getMonth() !== month || date.getDate() !== day) return null;
+  if (hour > 23 || minute > 59) return null;
+  return { year, month, day, hour, minute };
+}
+
+export function joinDateTimeValue(date: Date, hour: number, minute: number): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(hour)}:${pad(minute)}`;
+}
+
+/** Validates free-typed text against the canonical wire format, returning it
+ * unchanged when valid or null otherwise — kept strict since the popover also
+ * writes this same canonical format back into the field, so there's no
+ * locale-specific format to parse leniently. */
+export function parseTypedDate(text: string): string | null {
+  return splitDateTimeValue(text) ? text : null;
+}
+
+/** Cosmetic-only transform for the picker's text field: the wire format's
+ * literal 'T' separator (`YYYY-MM-DDTHH:mm`, required for `toIsoOrUndefined`'s
+ * `new Date(local)` parse in useOrganizerEventForm.ts) reads as noise to a
+ * non-technical user, so the field displays a space instead. Only the display
+ * layer changes — the committed `value`/`onChange` contract stays 'T'-joined. */
+export function toDisplayDateTime(value: string): string {
+  return value.replace('T', ' ');
+}
+
+/** Inverse of toDisplayDateTime — converts a typed display string back to the
+ * canonical 'T'-joined wire format before it's validated/parsed. */
+export function fromDisplayDateTime(text: string): string {
+  return text.replace(' ', 'T');
+}
+
+/** Localized "Month Year" heading for a calendar grid's header, e.g. "July 2026". */
+export function formatMonthYearLabel(year: number, month: number, locale: string): string {
+  const localeCode = toLocaleCode(locale);
+  const date = new Date(year, month, 1);
+  return dateTimeFormatter(localeCode, { month: 'long', year: 'numeric' }).format(date);
+}
+
+/** Human-readable trigger label for a valid picker value, e.g. "24 Jul, 19:00". */
+export function formatPickerValue(value: string, locale: string): string {
+  const parts = splitDateTimeValue(value);
+  if (!parts) return '';
+  const localeCode = toLocaleCode(locale);
+  const date = new Date(parts.year, parts.month, parts.day, parts.hour, parts.minute);
+  const day = dateTimeFormatter(localeCode, { day: 'numeric', month: 'short' }).format(date);
+  const time = hourMinuteFormatter(locale).format(date);
+  return `${day}, ${time}`;
 }
 
 function formatLongDate(date: Date, locale: string): string {

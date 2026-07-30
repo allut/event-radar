@@ -4,9 +4,15 @@ import { shouldFlipPopover } from '../utils';
 
 /**
  * Shared open/close + outside-click + Escape + focus behavior for a
- * trigger-button + popover dropdown (FacetMenu, SelectMenu).
+ * trigger-button + popover dropdown (FacetMenu, SelectMenu, DatePicker).
+ *
+ * @param initialFocusSelector CSS selector for the element to focus when the
+ *   popover opens. Defaults to the popover's first `<button>` (FacetMenu/
+ *   SelectMenu behavior). DatePicker passes a selector for the selected-day
+ *   cell instead, so opening the calendar doesn't land focus on the
+ *   previous-month arrow.
  */
-export function useDropdown() {
+export function useDropdown(initialFocusSelector = 'button') {
   const [open, setOpen] = useState(false);
   const [flip, setFlip] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -21,7 +27,7 @@ export function useDropdown() {
   useEffect(() => {
     if (!open) return;
 
-    popRef.current?.querySelector<HTMLButtonElement>('button')?.focus();
+    popRef.current?.querySelector<HTMLElement>(initialFocusSelector)?.focus();
 
     function handleKeyDown(e: KeyboardEvent) {
       if (e.key === 'Escape') close();
@@ -36,7 +42,7 @@ export function useDropdown() {
       document.removeEventListener('keydown', handleKeyDown);
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [open]);
+  }, [open, initialFocusSelector]);
 
   // Flip the popover to right-anchor when it would overflow the viewport's
   // right edge — desktop only, mobile has its own fixed-position layout

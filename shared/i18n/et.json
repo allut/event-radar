@@ -236,7 +236,16 @@
     "organizer_field_lang_suffix": "{field} ({lang})",
     "organizer_image_uploading": "Pildi üleslaadimine…",
     "organizer_submit_button": "Esita üritus",
-    "organizer_save_button": "Salvesta muudatused"
+    "organizer_save_button": "Salvesta muudatused",
+    "picker_today": "Täna",
+    "picker_clear": "Tühjenda",
+    "picker_prev_month": "Eelmine kuu",
+    "picker_next_month": "Järgmine kuu",
+    "picker_time_label": "Kellaaeg",
+"picker_hour_label": "Tund",
+"picker_minute_label": "Minut",
+    "picker_month_year_label": "Kuvatakse {value}",
+    "picker_open_calendar": "Ava kalender"
   },
   "email": {
     "email.magic_link.subject": "Sinu What's on Radar sisselogimislink",

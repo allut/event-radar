@@ -5,6 +5,7 @@ import { useOrganizerLogout } from '../../hooks/useOrganizerLogout';
 import { useOrganizerEventForm } from '../../hooks/useOrganizerEventForm';
 import OrganizerTopBar from '../../components/OrganizerTopBar';
 import SegmentedControl from '../../components/SegmentedControl';
+import DatePicker from '../../components/DatePicker';
 import { t, ti } from '../../i18n';
 import {
   CATEGORIES, CONTENT_LANG_ORDER, DEFAULT_CURRENCY, EUR_SYMBOL, LOCALES,
@@ -135,25 +136,26 @@ export default function EventSubmit() {
           <div className={styles.fieldRow}>
             <div className={styles.fieldCol}>
               <label className={styles.label} htmlFor="starts_at">{t('organizer_field_starts_at', locale)}</label>
-              <input
+              <DatePicker
                 id="starts_at"
-                type="datetime-local"
-                className={styles.input}
                 value={form.startsAt}
-                onChange={(e) => form.setStartsAt(e.target.value)}
+                onChange={form.setStartsAt}
+                locale={locale}
                 disabled={form.isSubmitting}
                 required
+                ariaLabel={t('organizer_field_starts_at', locale)}
               />
             </div>
             <div className={styles.fieldCol}>
               <label className={styles.label} htmlFor="ends_at">{t('organizer_field_ends_at', locale)}</label>
-              <input
+              <DatePicker
                 id="ends_at"
-                type="datetime-local"
-                className={styles.input}
                 value={form.endsAt}
-                onChange={(e) => form.setEndsAt(e.target.value)}
+                onChange={form.setEndsAt}
+                locale={locale}
                 disabled={form.isSubmitting}
+                min={form.startsAt}
+                ariaLabel={t('organizer_field_ends_at', locale)}
               />
             </div>
           </div>
