@@ -7,6 +7,7 @@ import { MAGIC_LINK_EXPIRY_MINUTES, PERSONAS, QUERY_KEYS, UI_STATE } from '../..
 import { t, ti, personaName, personaVibe } from '../../i18n';
 import { padIndex } from '../../utils';
 import { useMagicLinkRequest } from '../../hooks/useMagicLinkRequest';
+import { useOrganizerAuth } from '../../hooks/useOrganizerAuth';
 import TopBar from '../../components/TopBar';
 import EventCard, { type EventData } from '../../components/EventCard';
 import RadarHero from './RadarHero';
@@ -64,6 +65,7 @@ function EmailCapture({ locale }: { locale: string }) {
 
 export default function Landing() {
   const [locale, setLocaleState] = useState(getLocale());
+  const isOrganizer = useOrganizerAuth();
 
   function handleLocaleChange(code: string) {
     setLocale(code);
@@ -139,6 +141,20 @@ export default function Landing() {
               </div>
             ))}
           </div>
+        </section>
+
+        <section className={styles.organizer} aria-labelledby="organizer-cta">
+          <div className={styles.organizerText}>
+            <p className={styles.organizerEyebrow}>
+              <span className={styles.organizerMark} aria-hidden>◉</span>
+              {t('landing_organizer_eyebrow', locale)}
+            </p>
+            <h2 id="organizer-cta" className={styles.organizerTitle}>{t('landing_organizer_title', locale)}</h2>
+            <p className={styles.organizerBody}>{t('landing_organizer_body', locale)}</p>
+          </div>
+          <Link to={isOrganizer ? '/organizer/dashboard' : '/organizer/login'} className={styles.organizerCta}>
+            {t('landing_organizer_cta', locale)}
+          </Link>
         </section>
 
         <section className={styles.trust}>

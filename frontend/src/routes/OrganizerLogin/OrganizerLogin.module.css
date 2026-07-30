@@ -169,3 +169,16 @@
   font-size: var(--fs-xs);
   color: var(--text-soft);
 }
+
+.backLink {
+  display: block;
+  margin-top: var(--space-2);
+  text-align: center;
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  transition: color var(--transition);
+}
+
+.backLink:hover {
+  color: var(--accent-light);
+}

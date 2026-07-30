@@ -4,6 +4,7 @@ import { t, ti } from '../../i18n';
 import { safeUrl } from '../../utils';
 import { SOCIAL_LINKS, type SocialIcon } from '../../constants';
 import { useLocale } from '../../hooks/useLocale';
+import { useOrganizerAuth } from '../../hooks/useOrganizerAuth';
 import styles from './Footer.module.css';
 
 // Self-contained brand glyphs — no external assets, so the footer works under
@@ -30,18 +31,25 @@ const SOCIAL_ICONS: Record<SocialIcon, ReactNode> = {
 
 export default function Footer() {
   const locale = useLocale();
+  const isOrganizer = useOrganizerAuth();
   return (
     <footer className={styles.footer}>
       <div className={styles.inner}>
         <div className={styles.brandRow}>
-          <span className={styles.radarMark} aria-hidden>◉</span>
-          <span>{t('brand', locale)} · Tallinn, Estonia</span>
+          <Link to="/" className={styles.brandLink}>
+            <span className={styles.radarMark} aria-hidden>◉</span>
+            <span>{t('brand', locale)}</span>
+          </Link>
+          <span>· Tallinn, Estonia</span>
         </div>
 
         <nav className={styles.links} aria-label={t('footer_nav', locale)}>
           <Link to="/privacy" className={styles.link}>{t('footer_privacy', locale)}</Link>
           <Link to="/terms" className={styles.link}>{t('footer_terms', locale)}</Link>
           <Link to="/contact" className={styles.link}>{t('footer_contact', locale)}</Link>
+          <Link to={isOrganizer ? '/organizer/dashboard' : '/organizer/login'} className={styles.link}>
+            {t(isOrganizer ? 'footer_organizer_dashboard' : 'footer_organizers', locale)}
+          </Link>
         </nav>
 
         <div className={styles.social} aria-label={t('footer_social', locale)}>

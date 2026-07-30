@@ -44,4 +44,10 @@ describe('OrganizerLogin', () => {
     await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
     expect(screen.getByText('Invalid email')).toBeInTheDocument();
   });
+
+  it('renders a back-to-site link pointing to /', () => {
+    renderWithProviders(<OrganizerLogin />);
+    const link = screen.getByRole('link', { name: /back to what's on radar/i });
+    expect(link).toHaveAttribute('href', '/');
+  });
 });

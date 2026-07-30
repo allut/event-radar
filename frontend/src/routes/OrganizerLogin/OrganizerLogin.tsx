@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { getLocale } from '../../lib/auth';
 import { MAGIC_LINK_EXPIRY_MINUTES, UI_STATE } from '../../constants';
 import { t, ti } from '../../i18n';
@@ -65,6 +66,7 @@ export default function OrganizerLogin() {
         )}
 
         <p className={styles.note}>{t('no_password', locale)}</p>
+        <Link to="/" className={styles.backLink}>{t('organizer_back_to_site', locale)}</Link>
       </div>
     </div>
   );

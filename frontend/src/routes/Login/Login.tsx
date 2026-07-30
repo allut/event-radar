@@ -3,10 +3,12 @@ import { getLocale } from '../../lib/auth';
 import { MAGIC_LINK_EXPIRY_MINUTES, UI_STATE } from '../../constants';
 import { t, ti } from '../../i18n';
 import { useMagicLinkRequest } from '../../hooks/useMagicLinkRequest';
+import { useOrganizerAuth } from '../../hooks/useOrganizerAuth';
 import styles from './Login.module.css';
 
 export default function Login() {
   const locale = getLocale();
+  const isOrganizer = useOrganizerAuth();
   const { email, setEmail, state, errorMsg, submit, reset } = useMagicLinkRequest(locale);
   const [termsBefore, termsAfter = ''] = t('login_terms_notice', locale).split('{terms}');
 
@@ -73,6 +75,11 @@ export default function Login() {
           {termsBefore}
           <Link to="/terms" className={styles.termsLink}>{t('login_terms_link', locale)}</Link>
           {termsAfter}
+        </p>
+        <p className={styles.terms}>
+          <Link to={isOrganizer ? '/organizer/dashboard' : '/organizer/login'} className={styles.termsLink}>
+            {t('organizer_entry_link', locale)}
+          </Link>
         </p>
       </div>
     </div>

@@ -309,6 +309,69 @@
 
 .finalCta .emailForm { justify-content: center; width: 100%; }
 
+/* ── For organizers ──────────────────────────────────────────────────── */
+.organizer {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: var(--space-8) var(--space-6);
+  border-top: var(--rule);
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: var(--space-6);
+}
+
+.organizerText {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.organizerEyebrow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--fs-2xs);
+  text-transform: uppercase;
+  letter-spacing: var(--eyebrow-tracking);
+  color: var(--text-muted);
+}
+
+.organizerMark {
+  composes: breathe from '../../components/shared/Animations.module.css';
+  color: var(--accent);
+  --breathe-duration: var(--anim-breathe-fast);
+}
+
+.organizerTitle {
+  composes: sectionTitle;
+  font-size: var(--heading-lg);
+  text-align: left;
+}
+
+.organizerBody {
+  font-size: var(--fs-md);
+  color: var(--text-soft);
+  max-width: 46ch;
+}
+
+.organizerCta {
+  composes: btnOutline from '../../components/shared/Button.module.css';
+  display: inline-flex;
+  padding: var(--space-3) var(--space-6);
+  align-self: center;
+  white-space: nowrap;
+}
+
+/* !important: CSS Modules bundling can place the composed .breathe class
+   rules (from Animations.module.css) later in the output than this file's
+   own rules, at equal specificity — this override must win the cascade
+   regardless of that chunk order. */
+@media (prefers-reduced-motion: reduce) {
+  .organizerMark { animation: none !important; }
+}
+
 /* ── Responsive ──────────────────────────────────────────────────────── */
 @media (max-width: 900px) {
   .hero {
@@ -323,6 +386,8 @@
   .heroArt { order: -1; }
   .stepList { grid-template-columns: 1fr; gap: var(--space-5); }
   .personaChip { flex-basis: calc((100% - 2 * var(--space-4)) / 3); }
+  .organizer { grid-template-columns: 1fr; row-gap: var(--space-5); }
+  .organizerCta { justify-self: start; }
 }
 
 @media (max-width: 640px) {

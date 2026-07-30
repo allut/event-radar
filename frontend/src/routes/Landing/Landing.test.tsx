@@ -64,4 +64,10 @@ describe('Landing', () => {
     await waitFor(() => expect(screen.getByText(/Check your inbox/i)).toBeInTheDocument());
     expect(mockPost).toHaveBeenCalledWith('/auth/request-link', { email: 'me@example.com', locale: 'en' });
   });
+
+  it('renders the organizer band linking to the organizer login', () => {
+    renderWithProviders(<Landing />);
+    expect(screen.getByRole('heading', { name: /Put your event on the radar/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /List your event/i })).toHaveAttribute('href', '/organizer/login');
+  });
 });

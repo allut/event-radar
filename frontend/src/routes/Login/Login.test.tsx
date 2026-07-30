@@ -67,4 +67,10 @@ describe('Login', () => {
     await userEvent.click(screen.getByRole('button', { name: /different/i }));
     expect(screen.getByRole('textbox', { name: /email/i })).toBeInTheDocument();
   });
+
+  it('renders an organizer entry link pointing to /organizer/login', () => {
+    renderWithProviders(<Login />);
+    const link = screen.getByRole('link', { name: /organizing an event/i });
+    expect(link).toHaveAttribute('href', '/organizer/login');
+  });
 });
