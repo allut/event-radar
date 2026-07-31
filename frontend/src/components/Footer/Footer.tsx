@@ -2,7 +2,7 @@ import { type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { t, ti } from '../../i18n';
 import { safeUrl } from '../../utils';
-import { SOCIAL_LINKS, type SocialIcon } from '../../constants';
+import { BRAND_GLYPH, SOCIAL_LINKS, type SocialIcon } from '../../constants';
 import { useLocale } from '../../hooks/useLocale';
 import { useOrganizerAuth } from '../../hooks/useOrganizerAuth';
 import styles from './Footer.module.css';
@@ -37,10 +37,10 @@ export default function Footer() {
       <div className={styles.inner}>
         <div className={styles.brandRow}>
           <Link to="/" className={styles.brandLink}>
-            <span className={styles.radarMark} aria-hidden>◉</span>
+            <span className={styles.radarMark} aria-hidden>{BRAND_GLYPH}</span>
             <span>{t('brand', locale)}</span>
           </Link>
-          <span>· Tallinn, Estonia</span>
+          <span>{t('footer_location', locale)}</span>
         </div>
 
         <nav className={styles.links} aria-label={t('footer_nav', locale)}>

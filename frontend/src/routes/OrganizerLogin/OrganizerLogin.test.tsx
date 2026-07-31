@@ -11,11 +11,11 @@ vi.mock('../../lib/auth', () => ({
 
 vi.mock('../../api/client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../api/client')>()),
-  api: { post: vi.fn() },
+  organizerApi: { post: vi.fn() },
 }));
 
-import { api } from '../../api/client';
-const mockPost = vi.mocked(api.post);
+import { organizerApi } from '../../api/client';
+const mockPost = vi.mocked(organizerApi.post);
 
 describe('OrganizerLogin', () => {
   it('renders email input and submit button', () => {

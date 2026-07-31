@@ -9,7 +9,7 @@ import EmptyState from '../../components/EmptyState';
 import PageState from '../../components/PageState';
 import TopBar from '../../components/TopBar';
 import { formatHourMinute, formatIsoDate, formatTodayDate, padIndex } from '../../utils';
-import { QUERY_KEYS } from '../../constants';
+import { BRAND_GLYPH, QUERY_KEYS, UI_STATE } from '../../constants';
 import styles from './Feed.module.css';
 
 interface FeedResponse {
@@ -30,11 +30,11 @@ export default function Feed() {
   });
 
   if (isLoading) {
-    return <PageState kind="loading" message={t('loading', locale)} />;
+    return <PageState kind={UI_STATE.loading} message={t('loading', locale)} />;
   }
 
   if (isError) {
-    return <PageState kind="error" message={t('feed_error', locale)} />;
+    return <PageState kind={UI_STATE.error} message={t('feed_error', locale)} />;
   }
 
   const events = data?.events ?? [];
@@ -76,7 +76,7 @@ export default function Feed() {
 
         {events.length === 0 ? (
           <EmptyState
-            icon="◉"
+            icon={BRAND_GLYPH}
             title={t('feed_empty_title', locale)}
             message={t('feed_empty_msg', locale)}
             hint={t('feed_empty_hint', locale)}

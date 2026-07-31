@@ -14,14 +14,14 @@ vi.mock('../../lib/organizerAuth', () => ({
 
 vi.mock('../../api/client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../api/client')>()),
-  api: {
+  organizerApi: {
     get: vi.fn(),
   },
 }));
 
-import { api } from '../../api/client';
+import { organizerApi } from '../../api/client';
 import { setOrganizerToken } from '../../lib/organizerAuth';
-const mockGet = vi.mocked(api.get);
+const mockGet = vi.mocked(organizerApi.get);
 const mockSetOrganizerToken = vi.mocked(setOrganizerToken);
 
 describe('OrganizerVerify', () => {
@@ -42,10 +42,7 @@ describe('OrganizerVerify', () => {
     renderWithProviders(<OrganizerVerify />, { route: '/organizer/verify?token=valid' });
 
     await waitFor(() => expect(mockSetOrganizerToken).toHaveBeenCalledWith('org-tok'));
-    expect(mockGet).toHaveBeenCalledWith(
-      '/organizer/auth/verify?token=valid',
-      { organizer: true },
-    );
+    expect(mockGet).toHaveBeenCalledWith('/organizer/auth/verify?token=valid');
   });
 
   it('on verify failure: shows error state', async () => {

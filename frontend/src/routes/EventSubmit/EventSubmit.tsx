@@ -10,10 +10,12 @@ import SelectField from '../../components/SelectField';
 import FileField from '../../components/FileField';
 import { t, ti } from '../../i18n';
 import {
-  CATEGORIES, CONTENT_LANG_ORDER, DEFAULT_CURRENCY, EUR_SYMBOL, LOCALES,
+  CATEGORIES, CONTENT_LANG_ORDER, DEFAULT_CURRENCY, LOCALE_EN, LOCALE_ET, LOCALE_RU, LOCALES,
   ORGANIZER_BASE_CONTENT_LANG, ORGANIZER_IMAGE_ACCEPT, ORGANIZER_TEXTAREA_ROWS,
+  PRICE_INPUT_MIN, PRICE_INPUT_STEP,
   type ContentLang,
 } from '../../constants';
+import { currencySymbol } from '../../utils';
 import styles from './EventSubmit.module.css';
 
 interface ContentSlot {
@@ -41,19 +43,19 @@ export default function EventSubmit() {
   const [contentLang, setContentLang] = useState<ContentLang>(ORGANIZER_BASE_CONTENT_LANG);
 
   const slots: Record<ContentLang, ContentSlot> = {
-    et: {
+    [LOCALE_ET]: {
       title: form.title, setTitle: form.setTitle,
       description: form.description, setDescription: form.setDescription,
       importantInfo: form.importantInfo, setImportantInfo: form.setImportantInfo,
       hasContent: Boolean(form.title.trim() || form.description.trim() || form.importantInfo.trim()),
     },
-    en: {
+    [LOCALE_EN]: {
       title: form.titleEn, setTitle: form.setTitleEn,
       description: form.descriptionEn, setDescription: form.setDescriptionEn,
       importantInfo: form.importantInfoEn, setImportantInfo: form.setImportantInfoEn,
       hasContent: Boolean(form.titleEn.trim() || form.descriptionEn.trim() || form.importantInfoEn.trim()),
     },
-    ru: {
+    [LOCALE_RU]: {
       title: form.titleRu, setTitle: form.setTitleRu,
       description: form.descriptionRu, setDescription: form.setDescriptionRu,
       importantInfo: form.importantInfoRu, setImportantInfo: form.setImportantInfoRu,
@@ -200,13 +202,13 @@ export default function EventSubmit() {
           <div className={styles.fieldRow}>
             <div className={styles.fieldCol}>
               <label className={styles.label} htmlFor="price_min">
-                {t('organizer_field_price_min', locale)} ({DEFAULT_CURRENCY === 'EUR' ? EUR_SYMBOL : DEFAULT_CURRENCY})
+                {t('organizer_field_price_min', locale)} ({currencySymbol(DEFAULT_CURRENCY)})
               </label>
               <input
                 id="price_min"
                 type="number"
-                min="0"
-                step="0.01"
+                min={PRICE_INPUT_MIN}
+                step={PRICE_INPUT_STEP}
                 className={styles.input}
                 value={form.priceMin}
                 onChange={(e) => form.setPriceMin(e.target.value)}
@@ -215,13 +217,13 @@ export default function EventSubmit() {
             </div>
             <div className={styles.fieldCol}>
               <label className={styles.label} htmlFor="price_max">
-                {t('organizer_field_price_max', locale)} ({DEFAULT_CURRENCY === 'EUR' ? EUR_SYMBOL : DEFAULT_CURRENCY})
+                {t('organizer_field_price_max', locale)} ({currencySymbol(DEFAULT_CURRENCY)})
               </label>
               <input
                 id="price_max"
                 type="number"
-                min="0"
-                step="0.01"
+                min={PRICE_INPUT_MIN}
+                step={PRICE_INPUT_STEP}
                 className={styles.input}
                 value={form.priceMax}
                 onChange={(e) => form.setPriceMax(e.target.value)}

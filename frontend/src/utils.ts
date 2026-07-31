@@ -1,6 +1,6 @@
 import DOMPurify from 'dompurify';
 import { api } from './api/client';
-import { CATEGORY_GRADIENTS, FALLBACK_GRADIENT, EUR_SYMBOL, DEFAULT_CURRENCY, GOOGLE_MAPS_SEARCH_URL, type Signal, toLocaleCode, SAFE_URL_SCHEMES, SANITIZE_ALLOWED_TAGS, SANITIZE_ALLOWED_ATTR, SIGNAL_TO_CLASS, BROWSE_PAGE_SIZE, CATEGORIES, VIBES, type DatePreset, type SortOption, ANALYTICS_EVENT_PATH_RE, ANALYTICS_ORGANIZER_EDIT_PATH_RE, CALENDAR_WEEK_START, CALENDAR_WEEKS_SHOWN, CALENDAR_DAYS_PER_WEEK, CALENDAR_REFERENCE_MONDAY, MAX_HOUR, MAX_MINUTE } from './constants';
+import { CATEGORY_GRADIENTS, FALLBACK_GRADIENT, EUR_SYMBOL, DEFAULT_CURRENCY, GOOGLE_MAPS_SEARCH_URL, type Signal, toLocaleCode, SAFE_URL_SCHEMES, SANITIZE_ALLOWED_TAGS, SANITIZE_ALLOWED_ATTR, SIGNAL_TO_CLASS, BROWSE_PAGE_SIZE, CATEGORIES, VIBES, type DatePreset, type SortOption, ANALYTICS_EVENT_PATH_RE, ANALYTICS_ORGANIZER_EDIT_PATH_RE, CALENDAR_WEEK_START, CALENDAR_WEEKS_SHOWN, CALENDAR_DAYS_PER_WEEK, CALENDAR_REFERENCE_MONDAY, MAX_HOUR, MAX_MINUTE, DATE_PRESET_DAYS, DATE_PRESET_DEFAULT, SORT_DEFAULT } from './constants';
 import { t, ti } from './i18n';
 
 export function cx(...classes: (string | false | null | undefined)[]): string {
@@ -18,14 +18,17 @@ export function maskAnalyticsUrl(url: string): string {
     .replace(ANALYTICS_ORGANIZER_EDIT_PATH_RE, '/organizer/events/[id]/edit');
 }
 
-/** Defense-in-depth render guard: only allow http(s) URLs into href/src attributes.
- * The backend already drops non-http(s) schemes at ingest time (safe_external_url),
- * but this protects against any other path that might surface a raw URL. */
-export function safeUrl(url: string | null | undefined): string | null {
+/** Defense-in-depth render guard: only allow the given URL schemes (http(s) by
+ * default) into href/src attributes. The backend already drops non-http(s)
+ * schemes at ingest time (safe_external_url) for scraped event data, but this
+ * protects against any other path that might surface a raw URL. Callers with
+ * a legitimately wider scheme set (e.g. LegalPage's first-party `mailto:`
+ * links) can pass their own allowlist rather than widening the default. */
+export function safeUrl(url: string | null | undefined, allowedSchemes: ReadonlySet<string> = SAFE_URL_SCHEMES): string | null {
   if (!url) return null;
   try {
     const proto = new URL(url).protocol.replace(/:$/, '');
-    return SAFE_URL_SCHEMES.has(proto) ? url : null;
+    return allowedSchemes.has(proto) ? url : null;
   } catch {
     return null;
   }
@@ -92,9 +95,15 @@ export function categoryGradient(categories: string[]): string {
   return CATEGORY_GRADIENTS[key] ?? FALLBACK_GRADIENT;
 }
 
+/** Displayable currency symbol: the app's EUR glyph for the default currency,
+ * else the raw currency code (or '' when absent). */
+export function currencySymbol(currency: string | null): string {
+  return currency === DEFAULT_CURRENCY ? EUR_SYMBOL : currency ?? '';
+}
+
 export function formatPrice(min: number | null, max: number | null, currency: string | null, locale: string, hasFreeTier = false): string | null {
   if (min === null && max === null) return null;
-  const sym = currency === DEFAULT_CURRENCY ? EUR_SYMBOL : currency ?? '';
+  const sym = currencySymbol(currency);
   if (min === 0) {
     // Base admission is free; a positive max means an optional paid tier exists
     // (e.g. an open-mic's support ticket) — surface it rather than showing a
@@ -386,14 +395,16 @@ export const DEFAULT_EXPLORE_FILTERS: ExploreFilters = {
   q: '',
   category: [...CATEGORIES],
   vibe: [...VIBES],
-  datePreset: 'any',
+  datePreset: DATE_PRESET_DEFAULT,
   free: false,
   forYou: false,
-  sort: 'relevance',
+  sort: SORT_DEFAULT,
 };
 
 /** True when `sel` holds every slug in `all` — selections only ever contain
- * valid slugs, so a length match is sufficient (no need to compare content). */
+ * valid slugs, so a length match is sufficient (no need to compare content).
+ * Exported only so utils.test.ts can exercise it directly; every production
+ * call site is within this module. */
 export function isFullSet(sel: string[], all: readonly string[]): boolean {
   return sel.length === all.length;
 }
@@ -406,7 +417,7 @@ function toDateStr(d: Date): string {
  * stateless). Uses local date components, not toISOString(),
  * so the resolved day never shifts across a UTC boundary. */
 export function datePresetRange(preset: DatePreset): { from: string | null; to: string | null } {
-  if (preset === 'any') return { from: null, to: null };
+  if (preset === DATE_PRESET_DEFAULT) return { from: null, to: null };
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
@@ -423,7 +434,7 @@ export function datePresetRange(preset: DatePreset): { from: string | null; to: 
     sun.setDate(sat.getDate() + 1);
     return { from: toDateStr(sat), to: toDateStr(sun) };
   }
-  const days = preset === '7d' ? 7 : 30;
+  const days = DATE_PRESET_DAYS[preset] ?? 30;
   const end = new Date(today);
   end.setDate(today.getDate() + days);
   return { from: toDateStr(today), to: toDateStr(end) };
@@ -458,10 +469,10 @@ export function parseExploreFilters(params: URLSearchParams): ExploreFilters {
     q: params.get('q') ?? '',
     category: rawCategory === null ? [...CATEGORIES] : parseSlugList(rawCategory, CATEGORIES),
     vibe: rawVibe === null ? [...VIBES] : parseSlugList(rawVibe, VIBES),
-    datePreset: (params.get('date') as DatePreset | null) ?? 'any',
+    datePreset: (params.get('date') as DatePreset | null) ?? DATE_PRESET_DEFAULT,
     free: params.get('free') === '1',
     forYou: params.get('for_you') === '1',
-    sort: (params.get('sort') as SortOption | null) ?? 'relevance',
+    sort: (params.get('sort') as SortOption | null) ?? SORT_DEFAULT,
   };
 }
 
@@ -470,10 +481,10 @@ export function exploreFiltersToSearchParams(filters: ExploreFilters): URLSearch
   if (filters.q) params.set('q', filters.q);
   if (!isFullSet(filters.category, CATEGORIES)) params.set('category', filters.category.join(','));
   if (!isFullSet(filters.vibe, VIBES)) params.set('vibe', filters.vibe.join(','));
-  if (filters.datePreset !== 'any') params.set('date', filters.datePreset);
+  if (filters.datePreset !== DATE_PRESET_DEFAULT) params.set('date', filters.datePreset);
   if (filters.free) params.set('free', '1');
   if (filters.forYou) params.set('for_you', '1');
-  if (filters.sort !== 'relevance') params.set('sort', filters.sort);
+  if (filters.sort !== SORT_DEFAULT) params.set('sort', filters.sort);
   return params;
 }
 
@@ -506,7 +517,7 @@ export function activeFacetCount(filters: ExploreFilters): number {
   let count = 0;
   if (!isFullSet(filters.category, CATEGORIES)) count += 1;
   if (!isFullSet(filters.vibe, VIBES)) count += 1;
-  if (filters.datePreset !== 'any') count += 1;
+  if (filters.datePreset !== DATE_PRESET_DEFAULT) count += 1;
   if (filters.free) count += 1;
   return count;
 }

@@ -9,7 +9,7 @@ import EmptyState from '../../components/EmptyState';
 import PageState from '../../components/PageState';
 import TopBar from '../../components/TopBar';
 import SegmentedControl from '../../components/SegmentedControl';
-import { SIGNAL_CONFIG, SAVED_EVENTS_PAGE_SIZE, QUERY_KEYS, type Signal } from '../../constants';
+import { SAVED_TABS, SIGNAL_CONFIG, SAVED_EVENTS_PAGE_SIZE, QUERY_KEYS, UI_STATE, type Signal } from '../../constants';
 import styles from './SavedEvents.module.css';
 
 interface SavedEventsResponse {
@@ -19,12 +19,6 @@ interface SavedEventsResponse {
   offset: number;
   has_more: boolean;
 }
-
-const SAVED_TABS: { value: Signal; labelKey: string }[] = [
-  { value: 'bookmark', labelKey: 'saved_tab_bookmark' },
-  { value: 'like', labelKey: 'saved_tab_like' },
-  { value: 'dislike', labelKey: 'saved_tab_dislike' },
-];
 
 export default function SavedEvents() {
   const handleLogout = useLogout();
@@ -76,9 +70,9 @@ export default function SavedEvents() {
         />
 
         {isLoading ? (
-          <PageState kind="loading" message={t('loading', locale)} inline />
+          <PageState kind={UI_STATE.loading} message={t('loading', locale)} inline />
         ) : isError ? (
-          <PageState kind="error" message={t('saved_error', locale)} inline />
+          <PageState kind={UI_STATE.error} message={t('saved_error', locale)} inline />
         ) : events.length === 0 ? (
           <EmptyState
             icon={SIGNAL_CONFIG[signal].icon}

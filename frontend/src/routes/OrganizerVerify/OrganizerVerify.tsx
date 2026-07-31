@@ -1,15 +1,22 @@
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import { api, ApiError } from '../../api/client';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { organizerApi, ApiError } from '../../api/client';
 import { setOrganizerToken } from '../../lib/organizerAuth';
 import { getLocale } from '../../lib/auth';
 import { AUTH_REDIRECT_DELAY_MS, UI_STATE, type VerifyState } from '../../constants';
 import { t } from '../../i18n';
+import AuthCard, { type AuthCardKind } from '../../components/AuthCard';
 import styles from './OrganizerVerify.module.css';
 
 interface VerifyResponse {
   session_token: string;
 }
+
+const STATE_TO_KIND: Record<VerifyState, AuthCardKind> = {
+  [UI_STATE.verifying]: 'pending',
+  [UI_STATE.success]: 'success',
+  [UI_STATE.error]: 'error',
+};
 
 export default function OrganizerVerify() {
   const locale = getLocale();
@@ -31,10 +38,7 @@ export default function OrganizerVerify() {
 
     async function verify(tok: string) {
       try {
-        const data = await api.get<VerifyResponse>(
-          `/organizer/auth/verify?token=${encodeURIComponent(tok)}`,
-          { organizer: true },
-        );
+        const data = await organizerApi.get<VerifyResponse>(`/organizer/auth/verify?token=${encodeURIComponent(tok)}`);
         setOrganizerToken(data.session_token);
         setState(UI_STATE.success);
         setTimeout(() => navigate('/organizer/dashboard', { replace: true }), AUTH_REDIRECT_DELAY_MS);
@@ -50,34 +54,19 @@ export default function OrganizerVerify() {
     void verify(token);
   }, [navigate, token, locale]);
 
+  const message =
+    state === UI_STATE.verifying ? t('verifying', locale)
+    : state === UI_STATE.success ? t('signed_in', locale)
+    : errorMsg;
+
   return (
-    <div className={styles.page}>
-      <div className={styles.card}>
-        <span className={styles.radar} aria-hidden>◉</span>
-        <h1 className={styles.brand}>{t('brand', locale)}</h1>
-
-        {state === UI_STATE.verifying && (
-          <div className={styles.status} role="status" aria-live="polite">
-            <span className={styles.spinner} aria-label={t('verifying', locale)} />
-            <p className={styles.message}>{t('verifying', locale)}</p>
-          </div>
-        )}
-
-        {state === UI_STATE.success && (
-          <div className={styles.status} role="status">
-            <div className={styles.check}>✓</div>
-            <p className={styles.message}>{t('signed_in', locale)}</p>
-          </div>
-        )}
-
-        {state === UI_STATE.error && (
-          <div className={styles.status} role="alert">
-            <div className={styles.errorIcon}>✕</div>
-            <p className={styles.message}>{errorMsg}</p>
-            <a href="/organizer/login" className={styles.retry}>{t('request_new_link', locale)}</a>
-          </div>
-        )}
-      </div>
-    </div>
+    <AuthCard
+      locale={locale}
+      kind={STATE_TO_KIND[state]}
+      message={message}
+      action={state === UI_STATE.error && (
+        <Link to="/organizer/login" className={styles.retry}>{t('request_new_link', locale)}</Link>
+      )}
+    />
   );
 }

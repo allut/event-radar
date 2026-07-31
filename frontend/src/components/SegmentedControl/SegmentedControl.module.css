@@ -28,8 +28,8 @@
 
 .dot {
   display: inline-block;
-  width: 6px;
-  height: 6px;
+  width: var(--seg-blip-size);
+  height: var(--seg-blip-size);
   margin-left: var(--space-1);
   border-radius: var(--radius-full);
   background: currentColor;

@@ -210,14 +210,6 @@ export type ContentLang = LocaleCode;
 export const CONTENT_LANG_ORDER: ContentLang[] = [LOCALE_ET, LOCALE_EN, LOCALE_RU];
 export const ORGANIZER_BASE_CONTENT_LANG: ContentLang = LOCALE_ET;
 
-export const ORGANIZER_EVENT_STATUS = {
-  draft: 'draft',
-  classified: 'classified',
-  published: 'published',
-  cancelled: 'cancelled',
-} as const;
-export type OrganizerEventStatus = typeof ORGANIZER_EVENT_STATUS[keyof typeof ORGANIZER_EVENT_STATUS];
-
 // ─── DatePicker (components/DatePicker) ─────────────────────────────────────
 export const CALENDAR_WEEK_START = 1; // Monday — Estonia
 export const CALENDAR_WEEKS_SHOWN = 6;
@@ -248,3 +240,44 @@ export const TIME_FIELD_MAX_LENGTH = 2;
 // Placeholder for the picker's typeable field. Mirrors the 'YYYY-MM-DDTHH:mm'
 // wire format with a space in place of the literal 'T' — see toDisplayDateTime.
 export const PICKER_VALUE_PLACEHOLDER = 'YYYY-MM-DD HH:mm';
+
+// ─── Settings ────────────────────────────────────────────────────────────────
+// Ordered to match a user's ranked persona picks (see PERSONA_RANK_WEIGHTS on
+// the backend) — index i labels the i-th persona in data.personas.
+export const RANK_LABEL_KEYS = ['persona_primary', 'persona_secondary', 'persona_tertiary'] as const;
+
+// ─── Saved Events (route-local tab config, mirrors SORT_OPTIONS/DATE_PRESETS) ─
+export const SAVED_TABS: { value: Signal; labelKey: string }[] = [
+  { value: 'bookmark', labelKey: 'saved_tab_bookmark' },
+  { value: 'like', labelKey: 'saved_tab_like' },
+  { value: 'dislike', labelKey: 'saved_tab_dislike' },
+];
+
+// ─── Landing ─────────────────────────────────────────────────────────────────
+export const STEP_KEYS = [
+  { title: 'landing_step1_title', body: 'landing_step1_body' },
+  { title: 'landing_step2_title', body: 'landing_step2_body' },
+  { title: 'landing_step3_title', body: 'landing_step3_body' },
+];
+
+// ─── Brand ───────────────────────────────────────────────────────────────────
+// Self-contained radar-mark glyph used across TopBar/OrganizerTopBar/Footer/
+// Landing/auth cards — no external asset, matches the app's same-origin CSP.
+export const BRAND_GLYPH = '◉';
+// Organizer dashboard's empty-state icon.
+export const ORGANIZER_EMPTY_ICON = '📅';
+
+// ─── Explore ─────────────────────────────────────────────────────────────────
+export const EXPLORE_AUDIENCE_ALL = 'all';
+export const EXPLORE_AUDIENCE_FOR_YOU = 'foryou';
+export const SORT_DEFAULT: SortOption = 'relevance';
+export const DATE_PRESET_DEFAULT: DatePreset = 'any';
+// Day-window per short-range date preset — keys mirror DATE_PRESETS' values.
+export const DATE_PRESET_DAYS: Partial<Record<DatePreset, number>> = {
+  '7d': 7,
+  '30d': 30,
+};
+
+// ─── Organizer submission — price inputs ────────────────────────────────────
+export const PRICE_INPUT_MIN = '0';
+export const PRICE_INPUT_STEP = '0.01';

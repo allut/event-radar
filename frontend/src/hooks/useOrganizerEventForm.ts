@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { organizerApi, ApiError } from '../api/client';
-import { QUERY_KEYS, ORGANIZER_EVENTS_PAGE_SIZE, DEFAULT_CURRENCY, ORGANIZER_IMAGE_ALLOWED_MIME } from '../constants';
+import { QUERY_KEYS, ORGANIZER_EVENTS_PAGE_SIZE, DEFAULT_CURRENCY, ORGANIZER_IMAGE_ALLOWED_MIME, LOCALE_EN, LOCALE_ET, LOCALE_RU } from '../constants';
 import { t } from '../i18n';
 import { joinDateTimeValue } from '../utils';
 
@@ -98,15 +98,15 @@ function fieldsFromExisting(existing: OrganizerEventFull): FormFields {
   const infoLoc = existing.important_info_localized ?? {};
   return {
     ...EMPTY_FIELDS,
-    title: titleLoc.et ?? existing.title,
-    titleEn: titleLoc.en ?? '',
-    titleRu: titleLoc.ru ?? '',
-    description: descLoc.et ?? existing.description ?? '',
-    descriptionEn: descLoc.en ?? '',
-    descriptionRu: descLoc.ru ?? '',
-    importantInfo: infoLoc.et ?? existing.important_info ?? '',
-    importantInfoEn: infoLoc.en ?? '',
-    importantInfoRu: infoLoc.ru ?? '',
+    title: titleLoc[LOCALE_ET] ?? existing.title,
+    titleEn: titleLoc[LOCALE_EN] ?? '',
+    titleRu: titleLoc[LOCALE_RU] ?? '',
+    description: descLoc[LOCALE_ET] ?? existing.description ?? '',
+    descriptionEn: descLoc[LOCALE_EN] ?? '',
+    descriptionRu: descLoc[LOCALE_RU] ?? '',
+    importantInfo: infoLoc[LOCALE_ET] ?? existing.important_info ?? '',
+    importantInfoEn: infoLoc[LOCALE_EN] ?? '',
+    importantInfoRu: infoLoc[LOCALE_RU] ?? '',
     startsAt: toLocalInput(existing.starts_at),
     endsAt: toLocalInput(existing.ends_at),
     venueName: existing.venue_name ?? '',

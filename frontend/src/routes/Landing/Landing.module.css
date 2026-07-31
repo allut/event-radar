@@ -86,13 +86,7 @@
 }
 
 .spinner {
-  composes: spin from '../../components/shared/Animations.module.css';
-  display: inline-block;
-  width: var(--spinner-size-sm);
-  height: var(--spinner-size-sm);
-  border: 2px solid var(--spinner-border);
-  border-top-color: var(--on-accent);
-  border-radius: var(--radius-full);
+  composes: spinner from '../../components/shared/Spinner.module.css';
 }
 
 .error {
@@ -126,15 +120,8 @@
 }
 
 .checkCircle {
-  width: 48px;
-  height: 48px;
-  border: 2px solid var(--success);
-  border-radius: var(--radius-full);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  composes: statusCircle statusCircleSuccess from '../../components/shared/StatusCircle.module.css';
   font-size: var(--fs-xl);
-  color: var(--success);
 }
 
 .successMsg { font-size: var(--fs-base); color: var(--text); }

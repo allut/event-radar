@@ -1,0 +1,20 @@
+/* Bordered circle icon (check/error) shared by auth-verify/login/contact
+   success-error states. Color comes from the success/error modifier via
+   currentColor; font-size and margin stay call-site-local since they vary. */
+.statusCircle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--status-circle-size);
+  height: var(--status-circle-size);
+  border: 2px solid currentColor;
+  border-radius: var(--radius-full);
+}
+
+.statusCircleSuccess { color: var(--success); }
+.statusCircleError   { color: var(--danger); }
+
+.statusCircleLg {
+  width: var(--status-circle-size-lg);
+  height: var(--status-circle-size-lg);
+}

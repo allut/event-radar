@@ -73,8 +73,8 @@
 }
 
 .socialLink svg {
-  width: 20px;
-  height: 20px;
+  width: var(--social-icon-size);
+  height: var(--social-icon-size);
   display: block;
 }
 

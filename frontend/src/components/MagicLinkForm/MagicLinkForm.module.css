@@ -1,0 +1,116 @@
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.label {
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  color: var(--text-muted);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+}
+
+.input {
+  width: 100%;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--space-3) var(--space-4);
+  color: var(--text);
+  font-size: var(--fs-base);
+  outline: none;
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+
+.input::placeholder {
+  color: var(--text-dim);
+}
+
+.input:focus {
+  border-color: var(--accent);
+  box-shadow: var(--shadow-focus-ring);
+}
+
+.input:disabled {
+  opacity: 0.5;
+}
+
+.error {
+  font-size: var(--fs-sm);
+  color: var(--danger);
+  padding: var(--space-2) var(--space-3);
+  background: var(--danger-subtle);
+  border-radius: var(--radius);
+  border-left: 2px solid var(--danger);
+}
+
+.submit {
+  composes: btnPrimary from '../shared/Button.module.css';
+  padding: var(--space-0-8125) var(--space-5);
+  font-size: var(--fs-base);
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: var(--space-1);
+}
+
+.spinner {
+  composes: spinner from '../shared/Spinner.module.css';
+}
+
+.success {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-0-6);
+  padding: var(--space-5) 0;
+  text-align: center;
+}
+
+/* Login opts into this fade-in; OrganizerLogin's original design didn't have it. */
+.successAnimated {
+  animation: fadeIn var(--anim-fast) var(--easing);
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: scale(0.97); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+.checkCircle {
+  composes: statusCircle statusCircleSuccess statusCircleLg from '../shared/StatusCircle.module.css';
+  font-size: var(--fs-xl);
+  margin-bottom: var(--space-2);
+}
+
+.successMsg {
+  font-size: var(--fs-base);
+  color: var(--text);
+}
+
+.successMsg strong {
+  color: var(--accent);
+}
+
+.successHint {
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+
+.resend {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  margin-top: var(--space-2);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  transition: color var(--transition);
+}
+
+.resend:hover {
+  color: var(--text);
+}

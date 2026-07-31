@@ -11,7 +11,7 @@ import PageState from '../../components/PageState';
 import EmptyState from '../../components/EmptyState';
 import Toast from '../../components/Toast';
 import { useToast } from '../../hooks/useToast';
-import { QUERY_KEYS, ORGANIZER_EVENTS_PAGE_SIZE, UI_STATE } from '../../constants';
+import { ORGANIZER_EMPTY_ICON, QUERY_KEYS, ORGANIZER_EVENTS_PAGE_SIZE, UI_STATE } from '../../constants';
 import styles from './OrganizerDashboard.module.css';
 
 interface OrganizerEvent {
@@ -75,12 +75,12 @@ export default function OrganizerDashboard() {
         </header>
 
         {isLoading ? (
-          <PageState kind="loading" message={t('loading', locale)} inline />
+          <PageState kind={UI_STATE.loading} message={t('loading', locale)} inline />
         ) : isError ? (
-          <PageState kind="error" message={t('generic_error', locale)} inline />
+          <PageState kind={UI_STATE.error} message={t('generic_error', locale)} inline />
         ) : events.length === 0 ? (
           <EmptyState
-            icon="📅"
+            icon={ORGANIZER_EMPTY_ICON}
             title={t('organizer_empty_title', locale)}
             message={t('organizer_empty_msg', locale)}
           />

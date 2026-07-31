@@ -130,6 +130,6 @@
 .blip {
   width: var(--seg-blip-size);
   height: var(--seg-blip-size);
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   background: var(--accent-light);
 }

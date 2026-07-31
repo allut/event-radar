@@ -1,5 +1,6 @@
 import { t } from '../../i18n';
 import { cx } from '../../utils';
+import { BRAND_GLYPH } from '../../constants';
 import styles from './RadarHero.module.css';
 
 // Six taxonomy categories placed as radar blips, positioned (top/left %) around
@@ -23,7 +24,7 @@ export default function RadarHero({ locale }: RadarHeroProps) {
     <div className={styles.radar} aria-hidden>
       <div className={styles.rings} />
       <div className={styles.sweep} />
-      <span className={styles.core}>◉</span>
+      <span className={styles.core}>{BRAND_GLYPH}</span>
       {BLIPS.map((blip) => (
         <div
           key={blip.slug}

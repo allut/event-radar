@@ -1,11 +1,19 @@
 import { useEffect, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { StatusCodes } from 'http-status-codes';
 import { api, ApiError } from '../../api/client';
 import { getLocale } from '../../lib/auth';
 import { t } from '../../i18n';
 import { UI_STATE, type UnsubscribeState } from '../../constants';
+import AuthCard, { type AuthCardKind } from '../../components/AuthCard';
 import styles from './Unsubscribe.module.css';
+
+const STATE_TO_KIND: Record<UnsubscribeState, AuthCardKind> = {
+  [UI_STATE.working]: 'pending',
+  [UI_STATE.success]: 'success',
+  [UI_STATE.resubscribed]: 'success',
+  [UI_STATE.error]: 'error',
+};
 
 export default function Unsubscribe() {
   const locale = getLocale();
@@ -50,51 +58,34 @@ export default function Unsubscribe() {
     }
   }
 
+  const message =
+    state === UI_STATE.working ? t('unsubscribe.working', locale)
+    : state === UI_STATE.success ? t('unsubscribe.success', locale)
+    : state === UI_STATE.resubscribed ? t('unsubscribe.resubscribed', locale)
+    : errorMsg;
+
   return (
-    <div className={styles.page}>
-      <div className={styles.card}>
-        <span className={styles.radar} aria-hidden>◉</span>
-        <h1 className={styles.brand}>{t('brand', locale)}</h1>
-
-        {state === UI_STATE.working && (
-          <div className={styles.status} role="status" aria-live="polite">
-            <span className={styles.spinner} aria-label={t('unsubscribe.working', locale)} />
-            <p className={styles.message}>{t('unsubscribe.working', locale)}</p>
-          </div>
-        )}
-
-        {state === UI_STATE.success && (
-          <div className={styles.status} role="status">
-            <div className={styles.check}>✓</div>
-            <p className={styles.message}>{t('unsubscribe.success', locale)}</p>
-            <button
-              type="button"
-              className={styles.resubscribeBtn}
-              onClick={() => void handleResubscribe()}
-              disabled={resubscribePending}
-            >
-              {t('unsubscribe.resubscribe', locale)}
-            </button>
-          </div>
-        )}
-
-        {state === UI_STATE.resubscribed && (
-          <div className={styles.status} role="status">
-            <div className={styles.check}>✓</div>
-            <p className={styles.message}>{t('unsubscribe.resubscribed', locale)}</p>
-          </div>
-        )}
-
-        {state === UI_STATE.error && (
-          <div className={styles.status} role="alert">
-            <div className={styles.errorIcon}>✕</div>
-            <p className={styles.message}>{errorMsg}</p>
-            <a href="/settings" className={styles.settingsLink}>
-              {t('unsubscribe.manage_settings', locale)}
-            </a>
-          </div>
-        )}
-      </div>
-    </div>
+    <AuthCard
+      locale={locale}
+      kind={STATE_TO_KIND[state]}
+      message={message}
+      animated={false}
+      action={
+        state === UI_STATE.success ? (
+          <button
+            type="button"
+            className={styles.resubscribeBtn}
+            onClick={() => void handleResubscribe()}
+            disabled={resubscribePending}
+          >
+            {t('unsubscribe.resubscribe', locale)}
+          </button>
+        ) : state === UI_STATE.error ? (
+          <Link to="/settings" className={styles.settingsLink}>
+            {t('unsubscribe.manage_settings', locale)}
+          </Link>
+        ) : undefined
+      }
+    />
   );
 }

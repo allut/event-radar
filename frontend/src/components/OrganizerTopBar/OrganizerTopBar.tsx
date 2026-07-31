@@ -1,6 +1,7 @@
 import { Link, NavLink } from 'react-router-dom';
 import { t } from '../../i18n';
 import { cx } from '../../utils';
+import { BRAND_GLYPH } from '../../constants';
 import LocaleSelector from '../LocaleSelector';
 import styles from './OrganizerTopBar.module.css';
 
@@ -19,7 +20,7 @@ export default function OrganizerTopBar({ locale, onLocaleChange, onLogout }: Or
     <header className={styles.topBar}>
       <div className={styles.left}>
         <Link to="/" className={styles.logoWrap}>
-          <span className={styles.radar} aria-hidden>◉</span>
+          <span className={styles.radar} aria-hidden>{BRAND_GLYPH}</span>
           <span className={styles.brand}>{t('brand', locale)}</span>
         </Link>
       </div>

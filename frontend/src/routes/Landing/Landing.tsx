@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../../api/client';
 import { getLocale, setLocale } from '../../lib/auth';
-import { MAGIC_LINK_EXPIRY_MINUTES, PERSONAS, QUERY_KEYS, UI_STATE } from '../../constants';
+import { BRAND_GLYPH, MAGIC_LINK_EXPIRY_MINUTES, PERSONAS, QUERY_KEYS, STEP_KEYS, UI_STATE } from '../../constants';
 import { t, ti, personaName, personaVibe } from '../../i18n';
 import { padIndex } from '../../utils';
 import { useMagicLinkRequest } from '../../hooks/useMagicLinkRequest';
@@ -16,12 +16,6 @@ import styles from './Landing.module.css';
 interface ShowcaseResponse {
   events: EventData[];
 }
-
-const STEP_KEYS = [
-  { title: 'landing_step1_title', body: 'landing_step1_body' },
-  { title: 'landing_step2_title', body: 'landing_step2_body' },
-  { title: 'landing_step3_title', body: 'landing_step3_body' },
-];
 
 function EmailCapture({ locale }: { locale: string }) {
   const { email, setEmail, state, errorMsg, submit } = useMagicLinkRequest(locale);
@@ -146,7 +140,7 @@ export default function Landing() {
         <section className={styles.organizer} aria-labelledby="organizer-cta">
           <div className={styles.organizerText}>
             <p className={styles.organizerEyebrow}>
-              <span className={styles.organizerMark} aria-hidden>◉</span>
+              <span className={styles.organizerMark} aria-hidden>{BRAND_GLYPH}</span>
               {t('landing_organizer_eyebrow', locale)}
             </p>
             <h2 id="organizer-cta" className={styles.organizerTitle}>{t('landing_organizer_title', locale)}</h2>

@@ -13,7 +13,7 @@ import PageState from '../../components/PageState';
 import Toast from '../../components/Toast';
 import TopBar from '../../components/TopBar';
 import { useFeedback } from '../../hooks/useFeedback';
-import { QUERY_KEYS } from '../../constants';
+import { QUERY_KEYS, UI_STATE } from '../../constants';
 import styles from './EventDetail.module.css';
 
 interface EventDetailData extends EventData {
@@ -57,17 +57,17 @@ export default function EventDetail() {
       }
     }
     const ok = await copyToClipboard(url);
-    showToast(ok ? 'success' : 'error', t(ok ? 'link_copied' : 'share_failed', locale));
+    showToast(ok ? UI_STATE.success : UI_STATE.error, t(ok ? 'link_copied' : 'share_failed', locale));
   }
 
   if (isLoading) {
-    return <PageState kind="loading" message={t('loading_event', locale)} />;
+    return <PageState kind={UI_STATE.loading} message={t('loading_event', locale)} />;
   }
 
   if (isError || !data) {
     return (
       <PageState
-        kind="error"
+        kind={UI_STATE.error}
         message={t('event_not_found', locale)}
         action={
           <button className={styles.backBtn} onClick={() => navigate('/')}>
@@ -85,7 +85,7 @@ export default function EventDetail() {
 
   return (
     <div className={styles.page}>
-      {toast.status !== 'idle' && <Toast status={toast.status} message={toast.message} />}
+      {toast.status !== UI_STATE.idle && <Toast status={toast.status} message={toast.message} />}
       <TopBar
         locale={locale}
         onLocaleChange={handleLocaleChange}
