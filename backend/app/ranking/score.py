@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from collections.abc import Sequence
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from functools import lru_cache
 
 from sqlalchemy import select
@@ -553,7 +553,7 @@ class _FeedBuildContext:
 
 
 async def _load_recent_series_by_user(
-    db: AsyncSession, user_ids: list[int], today
+    db: AsyncSession, user_ids: list[int], today: date
 ) -> dict[int, set[tuple[str, str]]]:
     """Series keys each user was shown within the cooldown window.
 
@@ -598,7 +598,7 @@ async def _load_recent_series_by_user(
 
 
 async def _load_feed_build_context(
-    db: AsyncSession, now: datetime, today, only_user_ids: list[int] | None = None
+    db: AsyncSession, now: datetime, today: date, only_user_ids: list[int] | None = None
 ) -> _FeedBuildContext | None:
     """Bulk-load candidates plus all per-user data. None when there are no users.
 

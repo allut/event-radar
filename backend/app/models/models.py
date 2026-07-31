@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from typing import Any
 
 from sqlalchemy import (
     BigInteger,
@@ -35,7 +36,7 @@ class CIText(UserDefinedType):
 
     cache_ok = True
 
-    def get_col_spec(self, **kw):
+    def get_col_spec(self, **kw: Any) -> str:
         return "CITEXT"
 
 

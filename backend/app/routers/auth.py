@@ -1,11 +1,10 @@
 """Auth endpoints — magic-link request + verification + current-user."""
 
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from itsdangerous import BadSignature, SignatureExpired
-from pydantic import BaseModel, EmailStr
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -21,7 +20,6 @@ from app.auth.tokens import (
 from app.constants import (
     DEFAULT_USER_LOCALE,
     LOG_EVENT_AUTH_FAILED,
-    MAGIC_LINK_RESEND_COOLDOWN_SECONDS,
     RATE_LIMIT_AUTH_REQUEST_LINK,
     RATE_LIMIT_AUTH_VERIFY,
     RATE_LIMIT_BROWSE,
@@ -31,7 +29,12 @@ from app.constants import (
 from app.db import get_db
 from app.models.models import AuthMagicLink, User, UserPersona
 from app.rate_limit import limiter
-from app.routers.utils import mask_email, serialize_user
+from app.routers.utils import (
+    RequestLinkBody,
+    mask_email,
+    recent_unused_link_exists,
+    serialize_user,
+)
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -44,16 +47,6 @@ def _detect_locale(accept_language: str) -> str:
         if lang in VALID_LOCALES:
             return lang
     return DEFAULT_USER_LOCALE
-
-
-# ---------------------------------------------------------------------------
-# Request models
-# ---------------------------------------------------------------------------
-
-
-class RequestLinkBody(BaseModel):
-    email: EmailStr
-    locale: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -125,30 +118,6 @@ async def _get_or_create_user(
     return user
 
 
-async def _recent_unused_link_exists(db: AsyncSession, user_id: int) -> bool:
-    """Per-email cooldown: True if an unused link was issued in the last
-    MAGIC_LINK_RESEND_COOLDOWN_SECONDS.
-
-    A link created T seconds ago has expires_at = now + (TTL - T), so
-    expires_at > now + TTL - cooldown ↔ T < cooldown. Prevents Resend quota
-    exhaustion from rapid repeats; IP-level throttling is the
-    @limiter.limit decorator.
-    """
-    recent_cutoff = datetime.now(timezone.utc) + timedelta(
-        seconds=magic_ttl_seconds() - MAGIC_LINK_RESEND_COOLDOWN_SECONDS
-    )
-    already_sent = await db.scalar(
-        select(AuthMagicLink)
-        .where(
-            AuthMagicLink.user_id == user_id,
-            AuthMagicLink.used_at.is_(None),
-            AuthMagicLink.expires_at > recent_cutoff,
-        )
-        .limit(1)
-    )
-    return already_sent is not None
-
-
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
@@ -167,7 +136,9 @@ async def request_magic_link(
     user = await _get_or_create_user(db, email, request, requested_locale)
     email_locale = requested_locale or user.locale
 
-    if await _recent_unused_link_exists(db, user.id):
+    if await recent_unused_link_exists(
+        db, AuthMagicLink, AuthMagicLink.user_id, user.id, magic_ttl_seconds()
+    ):
         return {
             "detail": "If that address is registered, a sign-in link has been sent."
         }

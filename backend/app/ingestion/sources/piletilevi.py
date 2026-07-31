@@ -16,9 +16,11 @@ from app.ingestion.sanitize import html_to_text, sanitize_html
 from app.ingestion.selectors import (
     PILETILEVI_ALL_PATH,
     PILETILEVI_CARD_SELECTOR,
+    PILETILEVI_CODE_RE,
     PILETILEVI_DATE_FORMAT,
     PILETILEVI_DATE_SELECTOR,
     PILETILEVI_DETAIL_DESC_SELECTOR,
+    PILETILEVI_HEIGHT_PATH_RE,
     PILETILEVI_HOST,
     PILETILEVI_IMAGE_HEIGHT,
     PILETILEVI_IMAGE_SELECTOR,
@@ -35,8 +37,8 @@ from app.ingestion.sources.html_base import HtmlListingAdapter, OnceAsync, attr_
 
 log = logging.getLogger(__name__)
 
-_PILETILEVI_HEIGHT_RE = re.compile(r"/height=\d+/")
-_PILETILEVI_CODE_RE = re.compile(r"/tickets/([A-Za-z0-9]+)")
+_PILETILEVI_HEIGHT_RE = re.compile(PILETILEVI_HEIGHT_PATH_RE)
+_PILETILEVI_CODE_RE = re.compile(PILETILEVI_CODE_RE)
 
 
 def _price_bounds_from_store(data: dict[str, Any]) -> tuple[float | None, float | None, bool]:

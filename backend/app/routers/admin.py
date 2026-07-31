@@ -44,6 +44,7 @@ from app.routers.utils import (
     canonical_event_filter,
     require_configured_secret,
     run_admin_job,
+    run_in_session,
     select_events_with_classification,
     serialize_event,
 )
@@ -51,21 +52,6 @@ from app.routers.utils import (
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/admin")
 _security = HTTPBasic()
-
-
-async def _run_in_session(
-    func: Callable[[AsyncSession], Awaitable[dict]], *, commit: bool
-) -> dict:
-    """Run a session-scoped job; commit when asked, roll back on failure."""
-    async with AsyncSessionLocal() as db:
-        try:
-            result = await func(db)
-            if commit:
-                await db.commit()
-            return result
-        except Exception:
-            await db.rollback()
-            raise
 
 
 def _require_admin(credentials: HTTPBasicCredentials = Depends(_security)) -> None:
@@ -108,12 +94,15 @@ def _require_admin(credentials: HTTPBasicCredentials = Depends(_security)) -> No
         )
 
 
-@router.get("/ingest", dependencies=[Depends(_require_admin)])
+@router.post("/ingest", dependencies=[Depends(_require_admin)])
 @limiter.limit(RATE_LIMIT_ADMIN)
 async def admin_ingest_all(request: Request) -> dict:
     """Trigger ingestion for all enabled sources."""
-    results = await ingest_all_enabled()
-    return {"results": results}
+
+    async def _run() -> dict:
+        return {"results": await ingest_all_enabled()}
+
+    return await run_admin_job("Ingestion", _run())
 
 
 @router.post("/ingest/{slug}", dependencies=[Depends(_require_admin)])
@@ -378,7 +367,7 @@ async def admin_refetch(request: Request) -> dict:
 async def admin_sync_organizers(request: Request) -> dict:
     """Trigger Fienta organizer sync (discover new organizers, flag stale ones)."""
     return await run_admin_job(
-        "Organizer sync", _run_in_session(sync_fienta_organizers, commit=True)
+        "Organizer sync", run_in_session(sync_fienta_organizers, commit=True)
     )
 
 
@@ -401,7 +390,7 @@ async def admin_cleanup(
     """
     return await run_admin_job(
         "Cleanup",
-        _run_in_session(
+        run_in_session(
             lambda db: cleanup_stale_data(db, dry_run=dry_run), commit=not dry_run
         ),
     )
@@ -413,7 +402,7 @@ async def admin_build_feeds(request: Request) -> dict:
     """Trigger daily feed builder for all active users (writes to daily_feeds)."""
     # build_daily_feeds commits internally (score.py); no second commit needed.
     return await run_admin_job(
-        "Feed build", _run_in_session(build_daily_feeds, commit=False)
+        "Feed build", run_in_session(build_daily_feeds, commit=False)
     )
 
 
@@ -426,7 +415,7 @@ async def admin_send_digests(
     """Trigger daily digest send. Defaults to dry-run — pass ?dry_run=false to actually send."""
     return await run_admin_job(
         "Digest send",
-        _run_in_session(lambda db: send_daily_digests(db, dry_run=dry_run), commit=False),
+        run_in_session(lambda db: send_daily_digests(db, dry_run=dry_run), commit=False),
     )
 
 
@@ -444,17 +433,17 @@ async def admin_pipeline_run(
     stage_runners: list[tuple[str, Callable[[], Awaitable[object]]]] = [
         (
             "sync_organizers",
-            lambda: _run_in_session(sync_fienta_organizers, commit=True),
+            lambda: run_in_session(sync_fienta_organizers, commit=True),
         ),
         ("ingest", ingest_all_enabled),
         ("dedup", dedup_pass_drain_now),
         ("classify", classify_pending_drain_now),
         ("publish", publish_pending_job),
         # build_daily_feeds commits internally (score.py)
-        ("build_feeds", lambda: _run_in_session(build_daily_feeds, commit=False)),
+        ("build_feeds", lambda: run_in_session(build_daily_feeds, commit=False)),
         (
             "send_digests",
-            lambda: _run_in_session(
+            lambda: run_in_session(
                 lambda db: send_daily_digests(db, dry_run=dry_run), commit=False
             ),
         ),

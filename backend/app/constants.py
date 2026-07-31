@@ -729,6 +729,9 @@ NEWSLETTER_BODY_MAX_LEN = 1500
 CONTACT_NAME_MAX_LEN = 100
 CONTACT_MESSAGE_MAX_LEN = 2000
 CONTACT_FIELD_MIN_LEN = 1
+# Always returned on success, even when the honeypot is tripped — a bot must
+# get no signal that it was caught.
+CONTACT_SUCCESS_DETAIL = "Message sent."
 
 
 LLM_PROVIDERS: list[dict[str, Any]] = [
@@ -1048,4 +1051,39 @@ RAW_EVENTS_RETENTION_DAYS = 90
 INGESTION_RUNS_RETENTION_DAYS = 90
 RAW_INBOUND_EMAILS_RETENTION_DAYS = 90
 DAILY_FEEDS_RETENTION_DAYS = 30
+
+# HTTP verbs used as literal method tags outside the httpx client calls
+# themselves (e.g. ListingRequest.method) — the retrying http_get/http_post
+# wrappers already encode the verb in their function name.
+HTTP_METHOD_GET = "GET"
+HTTP_METHOD_POST = "POST"
+
+# Magic-link verify path defaults — app/auth/email.py::send_magic_link's
+# verify_path parameter, and organizer_auth.py's override of it.
+AUTH_VERIFY_PATH = "/auth/verify"
+ORGANIZER_AUTH_VERIFY_PATH = "/organizer/verify"
+
+# app/routers/utils.py::mask_db_url — redacts the password in a DB URL
+# ("user:pass@host" -> "user:***@host") for safe logging.
+MASK_DB_URL_PASSWORD_RE = r":[^@/]+@"
+
+# app/ingestion/adapter.py::_make_slug — collapses any non a-z0-9 run to "-".
+SLUG_SANITIZE_RE = r"[^a-z0-9]+"
+
+# app/ingestion/content_filters.py::is_explicit_text — collapses whitespace
+# runs (incl. literal newlines within a text node) before keyword matching,
+# so a multi-word keyword still matches across them.
+CONTENT_FILTER_WHITESPACE_COLLAPSE_RE = r"\s+"
+
+# app/ingestion/sanitize.py — HTML post-processing regexes.
+# _MULTI_BR_RE: collapses a run of more than HTML_SANITIZE_MAX_CONSECUTIVE_BR
+# <br> tags; %d is filled in with HTML_SANITIZE_MAX_CONSECUTIVE_BR + 1.
+HTML_MULTI_BR_TEMPLATE_RE = r"(?:<br\s*/?>\s*){%d,}"
+# _EDGE_BR_RE: strips leading/trailing <br> runs left after block-tag conversion.
+HTML_EDGE_BR_RE = r"^(?:\s*<br\s*/?>\s*)+|(?:\s*<br\s*/?>\s*)+$"
+# _WHITESPACE_RUN_RE: collapses ASCII whitespace runs within text nodes
+# (deliberately excludes U+00A0/nbsp — see sanitize.py's docstring).
+HTML_WHITESPACE_RUN_RE = r"[ \t\n\r\f\v]+"
+# Normalizes BeautifulSoup's self-closed "<br/>" serialization back to "<br>".
+HTML_SELF_CLOSING_BR_RE = r"<br\s*/>"
 USER_EVENT_SCORES_RETENTION_DAYS = 30  # keyed on the underlying event's end date

@@ -87,6 +87,7 @@ def _future_event(**overrides) -> MagicMock:
     e.description_orig = "A test event description"
     e.title_localized = None
     e.description_localized = None
+    e.important_info = None
     e.venue_name = "Test Venue"
     e.venue_address = "Old Street 1, Tallinn"
     e.lat = TALLINN_CENTER_LAT

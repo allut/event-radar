@@ -40,6 +40,12 @@ async def send_contact_message(name: str, email: str, message: str) -> None:
     )
     text_body = f"From: {name} ({email})\n\n{message}"
 
+    # Not routed through the shared retrying http_post: like
+    # app/auth/email.py::send_magic_link, this call is awaited synchronously
+    # inside the rate-limited, user-facing POST /contact request — a 5-attempt
+    # exponential backoff on a Resend hiccup would stall that request up to
+    # ~150s instead of failing fast (the caller, routers/contact.py, already
+    # swallows the error and always returns 200 regardless).
     async with httpx.AsyncClient(timeout=RESEND_TIMEOUT_SECONDS) as client:
         resp = await client.post(
             RESEND_SEND_URL,

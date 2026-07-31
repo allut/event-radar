@@ -9,6 +9,7 @@ import httpx
 
 from app.config import settings
 from app.constants import (
+    AUTH_VERIFY_PATH,
     DEFAULT_USER_LOCALE,
     LOG_EVENT_EMAIL_SEND_FAILED,
     RESEND_ERROR_SNIPPET_LEN,
@@ -26,7 +27,7 @@ async def send_magic_link(
     to_email: str,
     magic_token: str,
     locale: str = DEFAULT_USER_LOCALE,
-    verify_path: str = "/auth/verify",
+    verify_path: str = AUTH_VERIFY_PATH,
 ) -> None:
     """Send a magic-link sign-in email. ``verify_path`` lets the organizer auth
     flow (routers/organizer_auth.py) point the link at ``/organizer/verify``

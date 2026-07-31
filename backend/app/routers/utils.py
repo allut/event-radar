@@ -2,15 +2,16 @@
 
 import logging
 import re
-from collections.abc import Awaitable
-from datetime import datetime
+from collections.abc import Awaitable, Callable
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from fastapi import HTTPException, status
 from itsdangerous import BadSignature, SignatureExpired
+from pydantic import BaseModel, EmailStr
 from sqlalchemy import ColumnElement, Select, and_, delete, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import InstrumentedAttribute, selectinload
 
 from app.auth.tokens import verify_session_token
 from app.constants import (
@@ -18,13 +19,86 @@ from app.constants import (
     DEFAULT_USER_LOCALE,
     EMAIL_MASK_VISIBLE_CHARS,
     EVENT_STATUS_PUBLISHED,
+    MASK_DB_URL_PASSWORD_RE,
+    MAGIC_LINK_RESEND_COOLDOWN_SECONDS,
     PREFERENCE_SIGNALS,
     PREFERRED_TASTE_MIN_WEIGHT,
     VALID_LOCALES,
 )
-from app.models.models import Event, User, UserEventFeedback, UserEventScore, UserPersona
+from app.db import AsyncSessionLocal
+from app.models.models import (
+    Event,
+    Persona,
+    User,
+    UserEventFeedback,
+    UserEventScore,
+    UserPersona,
+)
 
 log = logging.getLogger(__name__)
+
+
+class RequestLinkBody(BaseModel):
+    """Shared magic-link request body — consumer (routers/auth.py) and
+    organizer (routers/organizer_auth.py) tracks use the identical shape."""
+
+    email: EmailStr
+    locale: str | None = None
+
+
+async def run_in_session(
+    func: Callable[[AsyncSession], Awaitable[dict]], *, commit: bool
+) -> dict:
+    """Run a session-scoped job: open a session, run ``func(db)``, commit when
+    asked, roll back and re-raise on failure.
+
+    Shared by every scheduler/admin entry point that needs its own session
+    (app/main.py's scheduled jobs and app/routers/admin.py's manual triggers).
+    """
+    async with AsyncSessionLocal() as db:
+        try:
+            result = await func(db)
+            if commit:
+                await db.commit()
+            return result
+        except Exception:
+            await db.rollback()
+            raise
+
+
+async def recent_unused_link_exists(
+    db: AsyncSession,
+    model: type[Any],
+    fk_column: InstrumentedAttribute[Any],
+    fk_value: int,
+    ttl_seconds: int,
+) -> bool:
+    """Per-account magic-link resend cooldown, shared by the consumer
+    (routers/auth.py) and organizer (routers/organizer_auth.py) auth tracks.
+
+    True if an unused link (identified by ``fk_column == fk_value`` on
+    ``model``, which must carry ``used_at``/``expires_at`` columns like
+    AuthMagicLink/OrganizerMagicLink) was issued within
+    MAGIC_LINK_RESEND_COOLDOWN_SECONDS of now.
+
+    A link created T seconds ago has expires_at = now + (ttl_seconds - T), so
+    expires_at > now + ttl_seconds - cooldown <-> T < cooldown. Prevents
+    Resend quota exhaustion from rapid repeats; IP-level throttling is the
+    separate @limiter.limit decorator on the request-link endpoint.
+    """
+    recent_cutoff = datetime.now(timezone.utc) + timedelta(
+        seconds=ttl_seconds - MAGIC_LINK_RESEND_COOLDOWN_SECONDS
+    )
+    already_sent = await db.scalar(
+        select(model)
+        .where(
+            fk_column == fk_value,
+            model.used_at.is_(None),
+            model.expires_at > recent_cutoff,
+        )
+        .limit(1)
+    )
+    return already_sent is not None
 
 
 async def run_admin_job(name: str, coro: Awaitable[dict]) -> dict:
@@ -83,7 +157,7 @@ async def invalidate_user_scores(db: AsyncSession, user_id: int) -> None:
 def mask_db_url(url: str) -> str:
     """Redact the password in a DB URL for safe logging (``user:pass@host`` ->
     ``user:***@host``). Shared by the maintenance scripts in ``backend/scripts``."""
-    return re.sub(r":[^@/]+@", ":***@", url)
+    return re.sub(MASK_DB_URL_PASSWORD_RE, ":***@", url)
 
 
 def normalized_title(title: str) -> str:
@@ -114,14 +188,23 @@ def event_series_key(title_orig: str, venue_name: str | None) -> tuple[str, str]
     return (normalized_title(title_orig), normalized_title(venue_name or ""))
 
 
-def persona_weight_tuple(user_persona: UserPersona) -> tuple[float, dict]:
+def persona_weight_tuple(
+    user_persona: UserPersona, persona: Persona | None = None
+) -> tuple[float, dict]:
     """(weight, affinity_vector) shape consumed by ``ranking/score.py::persona_affinity``.
 
     Shared by the single-user load in browse.py and the bulk multi-user load in
     ranking/score.py::build_daily_feeds, which query ``UserPersona`` differently
     (single vs. ``user_id.in_(...)``) but must agree on this row->tuple mapping.
+    ``persona`` covers routers/settings.py's ``(UserPersona, Persona)``-tuple
+    join query, which loads the row directly rather than via the
+    ``UserPersona.persona`` relationship; omit it when that relationship is
+    already eager-loaded (browse.py/score.py both ``selectinload`` it).
     """
-    return (user_persona.weight, user_persona.persona.affinity_vector)
+    return (
+        user_persona.weight,
+        (persona if persona is not None else user_persona.persona).affinity_vector,
+    )
 
 
 def canonical_event_filter() -> ColumnElement[bool]:

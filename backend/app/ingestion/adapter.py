@@ -22,6 +22,7 @@ from app.constants import (
     INGEST_REJECT_RECHECK_DAYS,
     INGESTION_ERROR_MAX_LEN,
     SLUG_HASH_HEX_LEN,
+    SLUG_SANITIZE_RE,
     SLUG_TITLE_MAX_LEN,
     SOURCE_KIND_USER_SUBMISSION,
     SOURCE_STATUS_ERROR,
@@ -79,7 +80,7 @@ class NormalizedEvent:
 
 
 def _make_slug(title: str, starts_at: datetime, external_id: str) -> str:
-    safe = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")
+    safe = re.sub(SLUG_SANITIZE_RE, "-", title.lower()).strip("-")
     date_part = starts_at.strftime("%Y%m%d")
     # short hex keeps collision probability <0.1% up to ~10k events/run
     h = hashlib.md5(external_id.encode(), usedforsecurity=False).hexdigest()[

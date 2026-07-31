@@ -12,7 +12,11 @@ from app.db import get_db
 from app.models.models import Persona, User, UserPersona
 from app.rate_limit import limiter
 from app.routers.auth import get_current_user
-from app.routers.utils import compute_preferred_taxonomy, serialize_user
+from app.routers.utils import (
+    compute_preferred_taxonomy,
+    persona_weight_tuple,
+    serialize_user,
+)
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/users/me", tags=["settings"])
@@ -54,7 +58,7 @@ async def _load_persona_data(
         }
         for up, persona in rows
     ]
-    weights = [(up.weight, persona.affinity_vector) for up, persona in rows]
+    weights = [persona_weight_tuple(up, persona) for up, persona in rows]
     return personas, weights
 
 

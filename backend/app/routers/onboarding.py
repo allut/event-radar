@@ -76,10 +76,10 @@ async def set_persona(
         )
         result.append({"slug": slug, "weight": weight})
 
+    await invalidate_user_scores(db, current_user.id)
     await db.commit()
 
     try:
-        await invalidate_user_scores(db, current_user.id)
         await build_daily_feed_for_user(db, current_user.id)
     except Exception:
         log.exception("initial feed build failed for user %s", current_user.id)

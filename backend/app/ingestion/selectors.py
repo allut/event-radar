@@ -151,3 +151,35 @@ FIENTA_DESCRIPTION_SELECTOR = "div.rich-text"
 WP_THUMBNAIL_HOSTS: frozenset[str] = frozenset(
     {ESTONIA_CONCERT_HALL_HOST, KUMU_HOST}
 )
+WP_THUMBNAIL_SUFFIX_RE = r"-\d+x\d+(\.\w+)$"
+
+# --- Piletilevi image/price scraping regexes ---
+PILETILEVI_HEIGHT_PATH_RE = r"/height=\d+/"
+PILETILEVI_CODE_RE = r"/tickets/([A-Za-z0-9]+)"
+
+# --- Estonia Concert Hall scraping regexes ---
+ESTONIA_CONCERT_HALL_DATE_RE = r"(\d{1,2})\.(\d{1,2})"
+ESTONIA_CONCERT_HALL_IMAGE_URL_RE = r"url\((.*?)\)"
+ESTONIA_CONCERT_HALL_PID_RE = r"pid=(\d+)"
+
+# --- Fienta address-parsing regexes ---
+# "<street>, <postal code> <City>, <county>" — city sits after a postal code.
+# Estonian codes are 5 digits; foreign codes (LV: 4, LT: 5) also covered by 3-6.
+# \w with UNICODE matches any Unicode letter (Estonian/Latvian/Lithuanian diacritics).
+FIENTA_CITY_FROM_ADDRESS_RE = r"\b\d{3,6}\s+(\w[\w\-]+)"
+# Matches a 5-digit postal code (Estonian format) anywhere in an address string.
+FIENTA_POSTAL_CODE_RE = r"\b\d{5}\b"
+
+# --- schema.org JSON-LD scraping constants ---
+# Shared by app/ingestion/jsonld.py (Fienta/Piletilevi detail pages + the
+# daily detail-refetch sync) and any future adapter reading Event JSON-LD.
+JSONLD_SCRIPT_TYPE = "application/ld+json"
+JSONLD_EVENT_TYPE = "Event"
+# A zero-priced offer whose availability ends in this suffix is a sold-out
+# placeholder, not a real free tier — see extract_jsonld_event_offers.
+JSONLD_SOLD_OUT_SUFFIX = "SoldOut"
+JSONLD_ADDRESS_FIELDS: tuple[str, ...] = (
+    "streetAddress",
+    "addressLocality",
+    "addressRegion",
+)

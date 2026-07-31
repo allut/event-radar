@@ -362,8 +362,15 @@ async def update_own_event(
         event.price_min = body.price_min
     if "price_max" in fields_set:
         event.price_max = body.price_max
-    if "currency" in fields_set:
-        event.currency = body.currency
+    if fields_set & {"price_min", "price_max", "currency"}:
+        # Mirrors the submit path's normalize_currency(body.currency, has_price)
+        # (see submit_event above): coerces a raw currency value and fills the
+        # default only when the event now carries a price, so a price-only
+        # PATCH doesn't leave currency NULL and an un-coerced value never
+        # lands straight on the String(3) column.
+        has_price = event.price_min is not None or event.price_max is not None
+        raw_currency = body.currency if "currency" in fields_set else event.currency
+        event.currency = normalize_currency(raw_currency, has_price)
     if "category" in fields_set and body.category is not None:
         await _apply_organizer_category(db, event.id, body.category)
     if "description" in fields_set:

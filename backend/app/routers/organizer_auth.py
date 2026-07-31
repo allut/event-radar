@@ -6,11 +6,10 @@ so a user token and an organizer token can never be confused for one another.
 """
 
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from itsdangerous import BadSignature, SignatureExpired
-from pydantic import BaseModel, EmailStr
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -26,7 +25,7 @@ from app.auth.tokens import (
 from app.constants import (
     DEFAULT_USER_LOCALE,
     LOG_EVENT_AUTH_FAILED,
-    MAGIC_LINK_RESEND_COOLDOWN_SECONDS,
+    ORGANIZER_AUTH_VERIFY_PATH,
     RATE_LIMIT_AUTH_REQUEST_LINK,
     RATE_LIMIT_AUTH_VERIFY,
     RATE_LIMIT_LOGOUT_ALL,
@@ -35,15 +34,10 @@ from app.constants import (
 from app.db import get_db
 from app.models.models import Organizer, OrganizerMagicLink
 from app.rate_limit import limiter
-from app.routers.utils import mask_email
+from app.routers.utils import RequestLinkBody, mask_email, recent_unused_link_exists
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/organizer/auth", tags=["organizer-auth"])
-
-
-class RequestLinkBody(BaseModel):
-    email: EmailStr
-    locale: str | None = None
 
 
 async def get_current_organizer(
@@ -99,23 +93,6 @@ async def _get_or_create_organizer(
     return organizer
 
 
-async def _recent_unused_link_exists(db: AsyncSession, organizer_id: int) -> bool:
-    """Per-email cooldown, mirroring auth.py's function of the same name."""
-    recent_cutoff = datetime.now(timezone.utc) + timedelta(
-        seconds=organizer_magic_ttl_seconds() - MAGIC_LINK_RESEND_COOLDOWN_SECONDS
-    )
-    already_sent = await db.scalar(
-        select(OrganizerMagicLink)
-        .where(
-            OrganizerMagicLink.organizer_id == organizer_id,
-            OrganizerMagicLink.used_at.is_(None),
-            OrganizerMagicLink.expires_at > recent_cutoff,
-        )
-        .limit(1)
-    )
-    return already_sent is not None
-
-
 @router.post("/request-link", status_code=status.HTTP_200_OK)
 @limiter.limit(RATE_LIMIT_AUTH_REQUEST_LINK)
 async def request_organizer_magic_link(
@@ -129,7 +106,13 @@ async def request_organizer_magic_link(
     organizer = await _get_or_create_organizer(db, email, requested_locale)
     email_locale = requested_locale or organizer.locale
 
-    if await _recent_unused_link_exists(db, organizer.id):
+    if await recent_unused_link_exists(
+        db,
+        OrganizerMagicLink,
+        OrganizerMagicLink.organizer_id,
+        organizer.id,
+        organizer_magic_ttl_seconds(),
+    ):
         return {
             "detail": "If that address is registered, a sign-in link has been sent."
         }
@@ -147,7 +130,7 @@ async def request_organizer_magic_link(
 
     try:
         await send_magic_link(
-            email, signed_token, email_locale, verify_path="/organizer/verify"
+            email, signed_token, email_locale, verify_path=ORGANIZER_AUTH_VERIFY_PATH
         )
     except Exception:
         log.exception("Failed to send organizer magic link to %s", mask_email(email))

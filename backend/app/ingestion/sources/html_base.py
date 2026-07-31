@@ -22,6 +22,8 @@ from app.constants import (
     DETAIL_FETCH_CONCURRENCY,
     HTML_LISTING_LOCALE_FETCH_DELAY_SECONDS,
     HTML_LISTING_MAX_DETAIL_FETCHES,
+    HTTP_METHOD_GET,
+    HTTP_METHOD_POST,
     HTTP_TIMEOUT_SECONDS,
     HTTP_USER_AGENT,
     LOCALIZED_TEXT_HTML_LOCALES,
@@ -33,11 +35,11 @@ from app.ingestion.http_client import host_guard_hook, http_get, http_post
 from app.ingestion.jsonld import extract_jsonld_event_text
 from app.ingestion.locale_urls import fetch_locale_variants
 from app.ingestion.sanitize import sanitize_html
-from app.ingestion.selectors import WP_THUMBNAIL_HOSTS
+from app.ingestion.selectors import WP_THUMBNAIL_HOSTS, WP_THUMBNAIL_SUFFIX_RE
 
 log = logging.getLogger(__name__)
 
-_WP_THUMB_SUFFIX_RE = re.compile(r"-\d+x\d+(\.\w+)$")
+_WP_THUMB_SUFFIX_RE = re.compile(WP_THUMBNAIL_SUFFIX_RE)
 
 T = TypeVar("T")
 
@@ -129,7 +131,7 @@ def next_occurrence_year(month: int, day: int, today: date | None = None) -> int
 @dataclass
 class ListingRequest:
     url: str
-    method: str = "GET"
+    method: str = HTTP_METHOD_GET
     data: dict[str, Any] | None = None
 
 
@@ -221,7 +223,7 @@ class HtmlListingAdapter(SourceAdapter):
                     break
 
                 try:
-                    if req.method == "POST":
+                    if req.method == HTTP_METHOD_POST:
                         resp = await http_post(client, req.url, data=req.data)
                     else:
                         resp = await http_get(client, req.url)

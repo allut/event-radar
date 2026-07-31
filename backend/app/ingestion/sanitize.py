@@ -15,14 +15,18 @@ from bs4 import BeautifulSoup, Tag
 from app.constants import (
     HTML_BLOCK_BOUNDARY_TAGS,
     HTML_BLOCK_TAGS_TO_BREAK,
+    HTML_EDGE_BR_RE,
+    HTML_MULTI_BR_TEMPLATE_RE,
     HTML_SANITIZE_ALLOWED_ATTRS,
     HTML_SANITIZE_ALLOWED_TAGS,
     HTML_SANITIZE_MAX_CONSECUTIVE_BR,
+    HTML_SELF_CLOSING_BR_RE,
+    HTML_WHITESPACE_RUN_RE,
     SAFE_URL_SCHEMES,
 )
 
-_MULTI_BR_RE = re.compile(r"(?:<br\s*/?>\s*){%d,}" % (HTML_SANITIZE_MAX_CONSECUTIVE_BR + 1))
-_EDGE_BR_RE = re.compile(r"^(?:\s*<br\s*/?>\s*)+|(?:\s*<br\s*/?>\s*)+$")
+_MULTI_BR_RE = re.compile(HTML_MULTI_BR_TEMPLATE_RE % (HTML_SANITIZE_MAX_CONSECUTIVE_BR + 1))
+_EDGE_BR_RE = re.compile(HTML_EDGE_BR_RE)
 
 # Fast-path markers: skip parsing a description that carries neither form of
 # Cloudflare's email obfuscation (most descriptions have none).
@@ -97,7 +101,7 @@ def _block_tags_to_breaks(html: str) -> str:
     return str(soup)
 
 
-_WHITESPACE_RUN_RE = re.compile(r"[ \t\n\r\f\v]+")
+_WHITESPACE_RUN_RE = re.compile(HTML_WHITESPACE_RUN_RE)
 # Block containers eligible for empty-block removal — HTML_BLOCK_BOUNDARY_TAGS
 # minus "br" (a void element, never a "container" that can be emptied).
 _EMPTY_BLOCK_TAGS = HTML_BLOCK_BOUNDARY_TAGS - frozenset({"br"})
@@ -157,7 +161,7 @@ def _collapse_text_whitespace(html: str) -> str:
     _strip_empty_blocks(soup)
     # BeautifulSoup serializes void elements as "<br/>"; normalize back to the
     # bare "<br>" form the rest of sanitize_html and its callers expect.
-    return re.sub(r"<br\s*/>", "<br>", str(soup))
+    return re.sub(HTML_SELF_CLOSING_BR_RE, "<br>", str(soup))
 
 
 def _strip_empty_blocks(soup: BeautifulSoup) -> None:

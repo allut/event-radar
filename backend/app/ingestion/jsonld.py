@@ -13,6 +13,12 @@ from app.constants import (
     LOCALIZED_TEXT_MAX_DESC_CHARS,
     LOCALIZED_TEXT_MAX_TITLE_CHARS,
 )
+from app.ingestion.selectors import (
+    JSONLD_ADDRESS_FIELDS,
+    JSONLD_EVENT_TYPE,
+    JSONLD_SCRIPT_TYPE,
+    JSONLD_SOLD_OUT_SUFFIX,
+)
 
 def _coerce_float(value: Any) -> float | None:
     """Coerce a JSON-LD numeric field (number or numeric string) to float."""
@@ -45,7 +51,7 @@ def extract_jsonld_event_location(soup: BeautifulSoup) -> dict[str, Any] | None:
     ``None`` if no such block is found. ``venue_address`` joins
     ``streetAddress``/``addressLocality``/``addressRegion`` with ", ".
     """
-    for script in soup.find_all("script", type="application/ld+json"):
+    for script in soup.find_all("script", type=JSONLD_SCRIPT_TYPE):
         try:
             data = json.loads(script.string or "")
         except (TypeError, ValueError):
@@ -53,7 +59,7 @@ def extract_jsonld_event_location(soup: BeautifulSoup) -> dict[str, Any] | None:
         for item in _jsonld_event_items(data):
             item_type = item.get("@type")
             types = item_type if isinstance(item_type, list) else [item_type]
-            if "Event" not in types:
+            if JSONLD_EVENT_TYPE not in types:
                 continue
             location = item.get("location")
             if not isinstance(location, dict):
@@ -61,7 +67,7 @@ def extract_jsonld_event_location(soup: BeautifulSoup) -> dict[str, Any] | None:
             address = location.get("address")
             address_parts: list[str] = []
             if isinstance(address, dict):
-                for key in ("streetAddress", "addressLocality", "addressRegion"):
+                for key in JSONLD_ADDRESS_FIELDS:
                     value = address.get(key)
                     if value:
                         address_parts.append(str(value))
@@ -96,7 +102,7 @@ def extract_jsonld_event_offers(
     Returns ``(None, None, None, False)`` when no offers or no usable prices are
     found in any Event block.
     """
-    for script in soup.find_all("script", type="application/ld+json"):
+    for script in soup.find_all("script", type=JSONLD_SCRIPT_TYPE):
         try:
             data = json.loads(script.string or "")
         except (TypeError, ValueError):
@@ -104,7 +110,7 @@ def extract_jsonld_event_offers(
         for item in _jsonld_event_items(data):
             item_type = item.get("@type")
             types = item_type if isinstance(item_type, list) else [item_type]
-            if "Event" not in types:
+            if JSONLD_EVENT_TYPE not in types:
                 continue
             offers_raw = item.get("offers") or []
             if isinstance(offers_raw, dict):
@@ -119,7 +125,7 @@ def extract_jsonld_event_offers(
                 if price is None:
                     continue
                 availability = str(offer.get("availability") or "")
-                sold_out = availability.endswith("SoldOut")
+                sold_out = availability.endswith(JSONLD_SOLD_OUT_SUFFIX)
                 if price == 0 and sold_out:
                     continue  # placeholder — not a real offer
                 if price > 0:
@@ -144,7 +150,7 @@ def extract_jsonld_event_text(soup: BeautifulSoup) -> tuple[str | None, str | No
     Falls back to the page ``<h1>`` for name when the JSON-LD block has no ``name``
     field. Returns ``(None, None)`` when no ``Event`` block is found.
     """
-    for script in soup.find_all("script", type="application/ld+json"):
+    for script in soup.find_all("script", type=JSONLD_SCRIPT_TYPE):
         try:
             data = json.loads(script.string or "")
         except (TypeError, ValueError):
@@ -152,7 +158,7 @@ def extract_jsonld_event_text(soup: BeautifulSoup) -> tuple[str | None, str | No
         for item in _jsonld_event_items(data):
             item_type = item.get("@type")
             types = item_type if isinstance(item_type, list) else [item_type]
-            if "Event" not in types:
+            if JSONLD_EVENT_TYPE not in types:
                 continue
             name_raw = item.get("name")
             name: str | None = name_raw.strip()[:LOCALIZED_TEXT_MAX_TITLE_CHARS] or None if isinstance(name_raw, str) else None

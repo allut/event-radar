@@ -7,6 +7,7 @@ before any LLM call — see CLAUDE.md "Content Safety" and "Non-Event Filter".
 import re
 
 from app.constants import (
+    CONTENT_FILTER_WHITESPACE_COLLAPSE_RE,
     EXPLICIT_KEYWORDS,
     NON_EVENT_TITLE_KEYWORDS,
     NON_EVENT_VENUE_KEYWORDS,
@@ -42,7 +43,7 @@ def is_explicit_text(*parts: str | None) -> bool:
     unflagged-but-explicit events both skip straight past the LLM call.
     """
     text = " ".join(html_to_text(p) or "" for p in parts if p)
-    text = re.sub(r"\s+", " ", text)
+    text = re.sub(CONTENT_FILTER_WHITESPACE_COLLAPSE_RE, " ", text)
     return bool(_EXPLICIT_KEYWORD_PATTERN.search(text))
 
 

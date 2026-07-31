@@ -17,7 +17,11 @@ from app.constants import (
     HTTP_TIMEOUT_SECONDS,
     LOCALIZED_TEXT_FIENTA_LOCALES,
 )
-from app.ingestion.selectors import FIENTA_DESCRIPTION_SELECTOR
+from app.ingestion.selectors import (
+    FIENTA_CITY_FROM_ADDRESS_RE,
+    FIENTA_DESCRIPTION_SELECTOR,
+    FIENTA_POSTAL_CODE_RE,
+)
 from app.ingestion.adapter import (
     NormalizedEvent,
     SourceAdapter,
@@ -41,11 +45,8 @@ from app.ingestion.sanitize import sanitize_html
 log = logging.getLogger(__name__)
 
 
-# Regex to extract the city token from Fienta-style addresses:
-# "<street>, <postal code> <City>, <county>" — city sits after a postal code.
-# Estonian codes are 5 digits; foreign codes (LV: 4, LT: 5) also covered by 3-6.
 # \w with UNICODE matches any Unicode letter (covers Estonian, Latvian, Lithuanian diacritics).
-_CITY_FROM_ADDRESS_RE = re.compile(r"\b\d{3,6}\s+(\w[\w\-]+)", re.UNICODE)
+_CITY_FROM_ADDRESS_RE = re.compile(FIENTA_CITY_FROM_ADDRESS_RE, re.UNICODE)
 
 
 def address_city(address: str) -> str | None:
@@ -104,8 +105,7 @@ def is_target_city(address: str | None) -> bool:
     return city == FIENTA_CITY_FILTER
 
 
-# Matches a 5-digit postal code (Estonian format) anywhere in an address string.
-_POSTAL_CODE_RE = re.compile(r"\b\d{5}\b")
+_POSTAL_CODE_RE = re.compile(FIENTA_POSTAL_CODE_RE)
 
 
 def _has_postal_code(address: str | None) -> bool:

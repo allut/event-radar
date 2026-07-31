@@ -502,7 +502,7 @@ def _reconcile_venue_name(event: Event, summary: dict, detail_name: object) -> b
 
     summary["venue_changed"] += 1
     if not event.is_explicit and is_explicit_text(
-        event.title_orig, event.description_orig, event.venue_name
+        event.title_orig, event.description_orig, event.venue_name, event.important_info
     ):
         event.is_explicit = True
         summary["flagged_explicit"] += 1

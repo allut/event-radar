@@ -66,7 +66,7 @@ from app.routers.organizer_events import router as organizer_events_router
 from app.routers.public import router as public_router
 from app.routers.settings import router as settings_router
 from app.routers.unsubscribe import router as unsubscribe_router
-from app.routers.utils import require_configured_secret
+from app.routers.utils import require_configured_secret, run_in_session
 from app.routers.webhooks import router as webhooks_router
 from app.seeds import seed_personas, seed_sources
 
@@ -119,21 +119,13 @@ def _scheduled(
 
 
 def _in_session(
-    func: Callable[..., Awaitable[object]], *, commit: bool
-) -> Callable[[], Awaitable[object]]:
-    """Session-scoped job runner: open a session, run, commit when asked,
-    roll back on failure (the error still propagates to _scheduled's logger)."""
+    func: Callable[..., Awaitable[dict]], *, commit: bool
+) -> Callable[[], Awaitable[dict]]:
+    """Bind a DB-scoped job function to the shared ``run_in_session`` runner
+    (routers/utils.py) so _scheduled's wrapper can call it with no arguments."""
 
-    async def _run() -> object:
-        async with AsyncSessionLocal() as db:
-            try:
-                result = await func(db)
-                if commit:
-                    await db.commit()
-                return result
-            except Exception:
-                await db.rollback()
-                raise
+    async def _run() -> dict:
+        return await run_in_session(func, commit=commit)
 
     return _run
 
