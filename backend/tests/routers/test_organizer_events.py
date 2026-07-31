@@ -214,12 +214,14 @@ class TestSubmitEvent:
         )
 
     @pytest.mark.asyncio
-    async def test_rejects_url_silently_dropped_by_ssrf_guard(
+    async def test_rejects_url_with_bad_scheme(
         self, mock_db, make_request, make_organizer
     ):
-        """insert_normalized_event drops a url whose host isn't in
-        ALLOWED_SOURCE_HOSTS — the organizer must get a clear 400, not a
-        silently-vanished field."""
+        """insert_normalized_event drops a url with a non-http(s) scheme —
+        the organizer must get a clear 400, not a silently-vanished field.
+        Host is no longer pinned: organizer urls are render-only (never
+        server-fetched, see refetch.py's submitted_by_organizer_id exclusion),
+        so only the scheme check (safe_external_url) applies."""
         from fastapi import HTTPException
         from app.routers.organizer_events import SubmitEventBody, submit_event
 
@@ -245,7 +247,7 @@ class TestSubmitEvent:
             body = SubmitEventBody(
                 title="Kontsert",
                 starts_at="2026-06-01T18:00:00+03:00",
-                url="https://not-an-allowed-host.example.com/tickets",
+                url="javascript:alert(1)",
             )
             with pytest.raises(HTTPException) as exc_info:
                 await submit_event(
@@ -255,6 +257,50 @@ class TestSubmitEvent:
                     mock_db,
                 )
         assert exc_info.value.status_code == http.HTTPStatus.BAD_REQUEST
+
+    @pytest.mark.asyncio
+    async def test_accepts_url_on_arbitrary_host(
+        self, mock_db, make_request, make_organizer
+    ):
+        """An organizer's own ticketing domain — never in ALLOWED_SOURCE_HOSTS —
+        is accepted now that submitted urls are scheme-checked only."""
+        from app.routers.organizer_events import SubmitEventBody, submit_event
+
+        organizer = make_organizer(organizer_id=5)
+        fake_event = _fake_event(url="https://mytheatre.ee/tickets/42")
+        source = MagicMock(id=1, slug="user_submission")
+        mock_db.scalar.side_effect = [0, source, EVENT_STATUS_PUBLISHED]
+        mock_db.commit = AsyncMock()
+
+        with (
+            patch(
+                "app.routers.organizer_events.insert_normalized_event",
+                new_callable=AsyncMock,
+                return_value=fake_event,
+            ),
+            patch(
+                "app.routers.organizer_events.classify_event",
+                new_callable=AsyncMock,
+                return_value=True,
+            ),
+            patch(
+                "app.routers.organizer_events.publish_pending",
+                new_callable=AsyncMock,
+                return_value={"published": 1},
+            ),
+        ):
+            body = SubmitEventBody(
+                title="Kontsert",
+                starts_at="2026-06-01T18:00:00+03:00",
+                url="https://mytheatre.ee/tickets/42",
+            )
+            result = await submit_event(
+                body,
+                make_request(method="POST", path="/organizer/events"),
+                organizer,
+                mock_db,
+            )
+        assert result["id"] == fake_event.id
 
 
 class TestUpdateOwnEvent:
@@ -363,9 +409,8 @@ class TestUpdateOwnEvent:
     async def test_url_edit_goes_through_ssrf_guard_and_is_rejected(
         self, mock_db, make_request, make_organizer
     ):
-        """A PATCH-supplied url must be pinned through the same
-        safe_fetchable_url() host-allowlist as the insert path — not
-        assigned straight from the request body."""
+        """A PATCH-supplied url must still be scheme-checked via
+        safe_external_url() — not assigned straight from the request body."""
         from fastapi import HTTPException
         from app.routers.organizer_events import PatchEventBody, update_own_event
 
@@ -375,11 +420,10 @@ class TestUpdateOwnEvent:
         mock_db.commit = AsyncMock()
 
         with patch(
-            "app.routers.organizer_events.safe_fetchable_url",
-            new_callable=AsyncMock,
+            "app.routers.organizer_events.safe_external_url",
             return_value=None,
         ) as mock_guard:
-            body = PatchEventBody(url="https://attacker.internal/rebind")
+            body = PatchEventBody(url="javascript:alert(1)")
             with pytest.raises(HTTPException) as exc_info:
                 await update_own_event(
                     10,
@@ -388,13 +432,15 @@ class TestUpdateOwnEvent:
                     organizer,
                     mock_db,
                 )
-        mock_guard.assert_awaited_once()
+        mock_guard.assert_called_once()
         assert exc_info.value.status_code == http.HTTPStatus.BAD_REQUEST
 
     @pytest.mark.asyncio
     async def test_url_edit_accepted_when_guard_passes(
         self, mock_db, make_request, make_organizer
     ):
+        """A non-allowlisted host is accepted — organizer urls are no longer
+        host-pinned, only scheme-checked."""
         from app.routers.organizer_events import PatchEventBody, update_own_event
 
         organizer = make_organizer(organizer_id=5)
@@ -403,11 +449,10 @@ class TestUpdateOwnEvent:
         mock_db.commit = AsyncMock()
 
         with patch(
-            "app.routers.organizer_events.safe_fetchable_url",
-            new_callable=AsyncMock,
-            return_value="https://fienta.com/e/some-event",
+            "app.routers.organizer_events.safe_external_url",
+            return_value="https://mytheatre.ee/tickets/42",
         ):
-            body = PatchEventBody(url="https://fienta.com/e/some-event")
+            body = PatchEventBody(url="https://mytheatre.ee/tickets/42")
             result = await update_own_event(
                 10,
                 body,
@@ -415,7 +460,7 @@ class TestUpdateOwnEvent:
                 organizer,
                 mock_db,
             )
-        assert event.url == "https://fienta.com/e/some-event"
+        assert event.url == "https://mytheatre.ee/tickets/42"
         assert result["status"] == EVENT_STATUS_PUBLISHED
 
 

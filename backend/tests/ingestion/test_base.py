@@ -11,7 +11,12 @@ import pytest
 from bs4 import BeautifulSoup
 from tenacity import RetryCallState
 
-from app.constants import HTTP_RETRY_AFTER_MAX_SECONDS, TALLINN_TZ
+from app.constants import (
+    HTTP_RETRY_AFTER_MAX_SECONDS,
+    SOURCE_KIND_API,
+    SOURCE_KIND_USER_SUBMISSION,
+    TALLINN_TZ,
+)
 from app.ingestion.adapter import (
     NormalizedEvent,
     SourceAdapter,
@@ -981,6 +986,44 @@ class TestInsertNormalizedEvent:
 
         assert result is not None
         assert result.title_orig == "Delegate Test"
+
+    @pytest.mark.asyncio
+    async def test_user_submission_kind_keeps_arbitrary_host_url(self, mock_db):
+        """A user_submission source's url is never server-fetched (refetch.py
+        excludes organizer submissions), so it only needs the scheme-only
+        safe_external_url check — an off-allowlist host is kept."""
+        self._nested_cm(mock_db)
+        source = MagicMock(id=1, slug="user_submission", kind=SOURCE_KIND_USER_SUBMISSION)
+        normalized = NormalizedEvent(
+            external_id="ext-3",
+            title="Organizer Event",
+            starts_at=datetime(2026, 6, 1, 18, 0, tzinfo=TALLINN_TZ),
+            url="https://mytheatre.ee/tickets/42",
+        )
+
+        result = await insert_normalized_event(mock_db, source, normalized)
+
+        assert result is not None
+        assert result.url == "https://mytheatre.ee/tickets/42"
+
+    @pytest.mark.asyncio
+    async def test_adapter_kind_drops_arbitrary_host_url(self, mock_db):
+        """An adapter-kind source keeps the host-pinned safe_fetchable_url
+        guard: the same off-allowlist host that a user_submission source
+        keeps is dropped to None here."""
+        self._nested_cm(mock_db)
+        source = MagicMock(id=1, slug="test-source", kind=SOURCE_KIND_API)
+        normalized = NormalizedEvent(
+            external_id="ext-4",
+            title="Scraped Event",
+            starts_at=datetime(2026, 6, 1, 18, 0, tzinfo=TALLINN_TZ),
+            url="https://mytheatre.ee/tickets/42",
+        )
+
+        result = await insert_normalized_event(mock_db, source, normalized)
+
+        assert result is not None
+        assert result.url is None
 
 
 class TestStripFeeAmounts:

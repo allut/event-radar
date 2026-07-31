@@ -456,35 +456,32 @@ class TestSsrfHostGuard:
         assert good.detail_refetched_at is not None
 
 
-class TestOrganizerSubmissionNoJsonld:
-    """An organizer-submitted event's own ticketing page (if it even has a
-    url — an allowlisted one, per safe_fetchable_url) generally carries no
-    schema.org Event JSON-LD. This is not Fienta-specific special-casing —
-    refetch already no-ops cleanly on any page with nothing to parse; this
-    test pins that behavior for the submission source (CLAUDE.md Phase 2
-    §2.3)."""
+class TestOrganizerSubmissionExcludedFromCandidates:
+    """An organizer-submitted event is never a refetch candidate: the
+    organizer owns their row and edits it directly via PATCH, and never
+    fetching an organizer-controlled url is what lets the submit path drop
+    the SSRF host allowlist (see adapter.py::insert_normalized_event)."""
 
     @pytest.mark.asyncio
-    async def test_no_jsonld_leaves_stored_fields_untouched_and_marks_synced(
+    async def test_submitted_by_organizer_excluded_from_candidate_query(
         self, mock_db
     ):
-        event = _future_event(
-            url="https://fienta.com/org-submission-page",
-            venue_name="Original Venue",
-            venue_address="Old Street 1, Tallinn",
-            price_min=15.0,
-        )
-        event.submitted_by_organizer_id = 7
-        no_jsonld_html = "<html><head></head><body>No structured data here.</body></html>"
+        captured: dict = {}
 
-        summary = await _run(mock_db, event, no_jsonld_html)
+        def _capture(stmt):
+            captured["stmt"] = stmt
+            return MagicMock(all=MagicMock(return_value=[]))
 
-        assert summary["no_data"] == 1
-        assert summary["unchanged"] == 0  # _reconcile never runs — nothing to reconcile
-        assert event.venue_name == "Original Venue"
-        assert event.venue_address == "Old Street 1, Tallinn"
-        assert event.price_min == 15.0
-        assert event.detail_refetched_at is not None  # still marked synced
+        mock_db.scalars.side_effect = _capture
+        await refetch_event_details(mock_db)
+
+        sql = str(captured["stmt"])
+        assert "events.submitted_by_organizer_id IS NULL" in sql
+        # Belt-and-suspenders: excluded independently by source.kind too, so
+        # a future insert that forgets to set submitted_by_organizer_id on a
+        # user_submission-kind event still can't reach the fetch loop below.
+        assert "NOT (EXISTS" in sql
+        assert "sources.kind = :kind_1" in sql
 
 
 # --- candidate query ---------------------------------------------------------

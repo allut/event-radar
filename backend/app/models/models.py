@@ -365,6 +365,10 @@ class EventSource(Base):
             "external_id",
             unique=True,
         ),
+        # Backs the NOT EXISTS(event_id=...) correlated subquery in
+        # refetch.py::_select_candidates (organizer-submission exclusion) —
+        # without it that lookup is a per-candidate sequential scan.
+        Index("ix_event_sources_event_id", "event_id"),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)

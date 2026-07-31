@@ -23,6 +23,7 @@ from app.constants import (
     INGESTION_ERROR_MAX_LEN,
     SLUG_HASH_HEX_LEN,
     SLUG_TITLE_MAX_LEN,
+    SOURCE_KIND_USER_SUBMISSION,
     SOURCE_STATUS_ERROR,
     SOURCE_STATUS_OK,
     TALLINN_REGION_BBOX,
@@ -145,10 +146,15 @@ async def insert_normalized_event(
     adapter's normalize(), see the module docstring above).
     """
     slug = _make_slug(normalized.title, normalized.starts_at, normalized.external_id)
-    # SSRF guard: event.url is fetched server-side by the daily refetch
-    # job, so — unlike image_url, which is only ever rendered client-side —
-    # it must be host-pinned, not just scheme-checked.
-    safe_url = await safe_fetchable_url(normalized.url, source.slug)
+    # event.url is host-pinned only when something fetches it server-side.
+    # Adapter sources are refetched daily (refetch.py), so they keep the SSRF
+    # guard; user submissions are excluded from refetch (see
+    # refetch.py::_select_candidates), so their url is render-only and gets
+    # the same scheme-only check as image_url.
+    if source.kind == SOURCE_KIND_USER_SUBMISSION:
+        safe_url = safe_external_url(normalized.url, source.slug)
+    else:
+        safe_url = await safe_fetchable_url(normalized.url, source.slug)
     try:
         async with db.begin_nested():
             event = Event(

@@ -46,7 +46,7 @@ from app.constants import (
 from app.db import get_db
 from app.ingestion.adapter import NormalizedEvent, insert_normalized_event
 from app.ingestion.content_filters import is_explicit_text, is_non_event_text
-from app.ingestion.http_client import http_post, safe_external_url, safe_fetchable_url
+from app.ingestion.http_client import http_post, safe_external_url
 from app.ingestion.pricing import normalize_currency
 from app.ingestion.sanitize import sanitize_html
 from app.llm.classifier import classify_event
@@ -242,12 +242,10 @@ async def submit_event(
         venue_address=body.venue_address,
         lat=None,
         lng=None,
-        # safe_fetchable_url (inside insert_normalized_event) only allows the
-        # fixed scraper-source host allowlist (ALLOWED_SOURCE_HOSTS) — an
-        # organizer's own ticketing domain won't be on it, so this is silently
-        # dropped to None rather than stored. Accepted for Phase 1: widening
-        # that allowlist to arbitrary organizer domains would reopen the SSRF
-        # surface it exists to close.
+        # insert_normalized_event applies safe_external_url (scheme-only) for
+        # a user_submission source, not the host-pinned safe_fetchable_url —
+        # this event.url is never fetched server-side (refetch.py excludes
+        # organizer submissions), so it's render-only like image_url.
         url=body.url,
         image_url=body.image_url,
         price_min=body.price_min,
@@ -278,7 +276,7 @@ async def submit_event(
     if body.url and not event.url:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Event URL is not allowed (unsupported host or scheme).",
+            detail="Event URL is not allowed (unsupported scheme).",
         )
     if body.image_url and not event.image_url:
         raise HTTPException(
@@ -342,14 +340,14 @@ async def update_own_event(
     if "venue_address" in fields_set:
         event.venue_address = body.venue_address
     if "url" in fields_set:
-        # Same SSRF guard insert_normalized_event applies at submit time —
-        # event.url is fetched server-side by the daily refetch job, so an
-        # edit must not be able to bypass the host allowlist it enforces.
-        safe_url = await safe_fetchable_url(body.url, SOURCE_SLUG_USER_SUBMISSION)
+        # Same scheme-only guard insert_normalized_event applies at submit
+        # time — this event.url is never fetched server-side (refetch.py
+        # excludes organizer submissions), so it needs no host pin.
+        safe_url = safe_external_url(body.url, SOURCE_SLUG_USER_SUBMISSION)
         if body.url and not safe_url:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Event URL is not allowed (unsupported host or scheme).",
+                detail="Event URL is not allowed (unsupported scheme).",
             )
         event.url = safe_url
     if "image_url" in fields_set:
