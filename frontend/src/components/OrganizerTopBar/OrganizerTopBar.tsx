@@ -18,7 +18,7 @@ export default function OrganizerTopBar({ locale, onLocaleChange, onLogout }: Or
   return (
     <header className={styles.topBar}>
       <div className={styles.left}>
-        <Link to="/organizer/dashboard" className={styles.logoWrap}>
+        <Link to="/" className={styles.logoWrap}>
           <span className={styles.radar} aria-hidden>◉</span>
           <span className={styles.brand}>{t('brand', locale)}</span>
         </Link>
