@@ -602,14 +602,16 @@ class TestBuildDailyFeedsExplicitFilter:
     async def test_event_query_excludes_explicit_events(self, mock_db):
         from app.ranking.score import build_daily_feeds
 
-        empty = MagicMock()
-        empty.all.return_value = []
-        mock_db.scalars.return_value = empty
+        mock_db.scalars.side_effect = [
+            _scalar_result([1]),  # user ids (all registered)
+            _scalar_result([]),  # candidate events
+            _scalar_result([]),  # users (page query) — none found, build_ctx None
+        ]
 
         result = await build_daily_feeds(mock_db)
 
         assert result["total_users"] == 0
-        stmt = mock_db.scalars.call_args_list[0].args[0]
+        stmt = mock_db.scalars.call_args_list[1].args[0]
         compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
         assert "is_explicit" in compiled
         assert "is_non_event" in compiled
@@ -621,17 +623,35 @@ class TestBuildDailyFeedsExplicitFilter:
         # ends_at) still reaches the Daily 5 pool.
         from app.ranking.score import build_daily_feeds
 
-        empty = MagicMock()
-        empty.all.return_value = []
-        mock_db.scalars.return_value = empty
+        mock_db.scalars.side_effect = [
+            _scalar_result([1]),  # user ids (all registered)
+            _scalar_result([]),  # candidate events
+            _scalar_result([]),  # users (page query)
+        ]
 
         await build_daily_feeds(mock_db)
 
-        stmt = mock_db.scalars.call_args_list[0].args[0]
+        stmt = mock_db.scalars.call_args_list[1].args[0]
         compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
         assert "events.ends_at >=" in compiled
         assert "events.ends_at IS NULL" in compiled
         assert "events.starts_at >=" in compiled
+
+    async def test_all_user_ids_query_is_unfiltered(self, mock_db):
+        # Deliberately no persona-based pre-filter — a zero-persona user (e.g.
+        # verified but not yet onboarded) can still get a non-empty feed and
+        # is opted into the digest by default, so excluding them here would
+        # silently drop both. See _all_user_ids' docstring.
+        from app.ranking.score import _all_user_ids
+
+        mock_db.scalars.return_value = _scalar_result([])
+
+        await _all_user_ids(mock_db)
+
+        stmt = mock_db.scalars.call_args_list[0].args[0]
+        compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+        assert "user_personas" not in compiled
+        assert "SELECT users.id" in compiled
 
 
 def _scalar_result(items: list) -> MagicMock:
@@ -686,6 +706,7 @@ class TestBuildDailyFeedsSeriesCooldown:
         df.event_ids = [150]
 
         mock_db.scalars.side_effect = [
+            _scalar_result([1]),               # user ids (all registered)
             _scalar_result([ev100, ev200, ev201, ev202, ev203, ev204]),  # candidate events
             _scalar_result([_user(1)]),        # users
             _scalar_result([]),                # personas
@@ -710,6 +731,7 @@ class TestBuildDailyFeedsSeriesCooldown:
         ev100 = _feed_event(100, "Van Gogh", "Vaba Lava")
 
         mock_db.scalars.side_effect = [
+            _scalar_result([1]),       # user ids (all registered)
             _scalar_result([ev100]),   # candidate events
             _scalar_result([_user(1)]),
             _scalar_result([]),        # personas
@@ -743,6 +765,7 @@ class TestBuildDailyFeedsSeriesCooldown:
         df.event_ids = [150]
 
         mock_db.scalars.side_effect = [
+            _scalar_result([1, 2]),                  # user ids (all registered)
             _scalar_result([ev100, ev201, ev202, ev203, ev204, ev205]),  # candidate events
             _scalar_result([_user(1), _user(2)]),    # users
             _scalar_result([]),                      # personas
@@ -769,6 +792,7 @@ class TestBuildDailyFeedsSeriesCooldown:
 
         ev100 = _feed_event(100, "Van Gogh", "Vaba Lava")
         mock_db.scalars.side_effect = [
+            _scalar_result([1]),       # user ids (all registered)
             _scalar_result([ev100]),   # candidate events
             _scalar_result([_user(1)]),
             _scalar_result([]),        # personas
@@ -779,7 +803,7 @@ class TestBuildDailyFeedsSeriesCooldown:
 
         await build_daily_feeds(mock_db)
 
-        cooldown_stmt = mock_db.scalars.call_args_list[4].args[0]
+        cooldown_stmt = mock_db.scalars.call_args_list[5].args[0]
         compiled = str(cooldown_stmt.compile(compile_kwargs={"literal_binds": True}))
         assert "daily_feeds.feed_date >=" in compiled
         assert "daily_feeds.feed_date <" in compiled
@@ -801,6 +825,7 @@ class TestBuildDailyFeedsSeriesCooldown:
         df.event_ids = [150]
 
         mock_db.scalars.side_effect = [
+            _scalar_result([1]),                        # user ids (all registered)
             _scalar_result([ev1, ev2, ev3, ev4, ev5]),  # candidate events
             _scalar_result([_user(1)]),                 # users
             _scalar_result([]),                          # personas
@@ -837,6 +862,7 @@ class TestBuildDailyFeedsSeriesCooldown:
         cached_row.score = 0.9
 
         mock_db.scalars.side_effect = [
+            _scalar_result([1]),                     # user ids (all registered)
             _scalar_result([ev1, ev2, ev3, ev5]),   # candidate events
             _scalar_result([_user(1)]),              # users
             _scalar_result([]),                       # personas
@@ -868,6 +894,7 @@ class TestBuildDailyFeedsSeriesCooldown:
         df.event_ids = [150]
 
         mock_db.scalars.side_effect = [
+            _scalar_result([1]),
             _scalar_result([ev1, ev2, ev3, ev4, ev5]),
             _scalar_result([_user(1)]),
             _scalar_result([]),
@@ -887,6 +914,9 @@ class TestBuildDailyFeedsSeriesCooldown:
 
 
 class TestBuildDailyFeedForUser:
+    # build_daily_feed_for_user calls _load_feed_build_context with shared=None
+    # (the default), so it still loads candidate events itself in one query —
+    # no eligibility query, no _SharedFeedContext reuse. Call sequence unchanged.
     async def test_builds_feed_for_single_user_only(self, mock_db):
         # Onboarding-completion build: scopes the user query to one id and
         # writes exactly one DailyFeed row, reusing the same candidate
@@ -938,3 +968,70 @@ class TestBuildDailyFeedForUser:
         }
         mock_db.execute.assert_not_awaited()
         mock_db.commit.assert_not_awaited()
+
+
+class TestBuildDailyFeedsBatching:
+    """FEED_BUILD_USER_BATCH_SIZE pages the user loop — candidate events must
+    still be loaded exactly once (the RAM-savings claim), each page commits
+    independently, and the aggregate summary must match a hand-computed
+    single-pass expectation over the same users/events."""
+
+    async def test_pages_users_reusing_shared_candidates(self, mock_db, monkeypatch):
+        import app.ranking.score as score_module
+
+        monkeypatch.setattr(score_module, "FEED_BUILD_USER_BATCH_SIZE", 2)
+
+        ev1 = _feed_event(1, "Concert", "Hall", ["music"])
+        ev2 = _feed_event(2, "Play", "Theater", ["theater"])
+
+        # 5 registered users, batch size 2 → pages of [1,2], [3,4], [5].
+        # Each page: users, personas, feedback, cooldown-window feeds, cached
+        # scores (5 scalars calls/page, no shown-events query — cooldown
+        # windows are empty). all-user-ids + candidate-events precede all pages.
+        mock_db.scalars.side_effect = [
+            _scalar_result([1, 2, 3, 4, 5]),  # user ids (all registered)
+            _scalar_result([ev1, ev2]),  # candidate events (loaded once)
+            _scalar_result([_user(1), _user(2)]),
+            _scalar_result([]),
+            _scalar_result([]),
+            _scalar_result([]),
+            _scalar_result([]),
+            _scalar_result([_user(3), _user(4)]),
+            _scalar_result([]),
+            _scalar_result([]),
+            _scalar_result([]),
+            _scalar_result([]),
+            _scalar_result([_user(5)]),
+            _scalar_result([]),
+            _scalar_result([]),
+            _scalar_result([]),
+            _scalar_result([]),
+        ]
+
+        result = await score_module.build_daily_feeds(mock_db)
+
+        assert mock_db.commit.await_count == 3  # one per page
+
+        # Candidate-events query ran exactly once regardless of page count —
+        # the core RAM-savings claim (identified by its is_explicit marker).
+        event_query_calls = [
+            call
+            for call in mock_db.scalars.call_args_list
+            if "is_explicit"
+            in str(call.args[0].compile(compile_kwargs={"literal_binds": True}))
+        ]
+        assert len(event_query_calls) == 1
+
+        # Hand-computed single-pass expectation: 5 users, each scored against
+        # the same 2 candidates with no feedback/cooldown/cache — every user
+        # gets a 2-event feed (built), no empties, 10 fresh score writes,
+        # zero reuse (score_cache is empty on every page — paging by user_id
+        # cannot change which scores are cache hits/misses for a given user).
+        assert result == {
+            "built": 5,
+            "empty": 0,
+            "total_users": 5,
+            "candidate_events": 2,
+            "scores_written": 10,
+            "scores_reused": 0,
+        }

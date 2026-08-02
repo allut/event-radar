@@ -380,6 +380,10 @@ REFETCH_HOUR = 4  # daily 04:30 Europe/Tallinn, before the 06:00 feed build
 REFETCH_MINUTE = 30
 FEED_BUILD_HOUR = 6  # daily 06:00 Europe/Tallinn
 FEED_BUILD_MINUTE = 0
+# Users per page in build_daily_feeds (score.py) — bounds the per-page
+# personas_by_user/fb_by_user/score_cache dicts and the event_rows x users
+# scoring loop in RAM regardless of total registered-user count.
+FEED_BUILD_USER_BATCH_SIZE = 500
 
 # Email i18n strings (subjects, labels, templates) live in shared/i18n/*.json.
 DIGEST_SEND_HOUR = 7  # 07:00 Europe/Tallinn, one hour after build_daily_feeds
