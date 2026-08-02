@@ -46,6 +46,7 @@ def make_user():
         user_id: int = 1,
         locale: str = DEFAULT_USER_LOCALE,
         opt_in: bool = True,
+        email_verified: bool = True,
     ) -> MagicMock:
         u = MagicMock()
         u.id = user_id
@@ -53,6 +54,7 @@ def make_user():
         u.locale = locale
         u.home_city = DEFAULT_USER_CITY
         u.email_digest_opt_in = opt_in
+        u.email_verified = email_verified
         u.created_at = MagicMock()
         u.created_at.isoformat.return_value = "2026-05-13T06:00:00+00:00"
         return u

@@ -217,22 +217,36 @@ async def verify_magic_link(
             detail="Sign-in link already used, expired, or not found.",
         )
 
+    # Same transaction as the link-consume UPDATE above, one shared commit below:
+    # marks the account durably verified — a session token can only ever be
+    # issued from here, so this is the one place that gates build_daily_feeds/
+    # send_daily_digests on a real login having happened. Unconditional SET is
+    # idempotent for a user who already verified before. Sharing the
+    # transaction (rather than an intermediate commit) means a failure here
+    # rolls back the link-consume too, instead of leaving the link durably
+    # spent with the user never marked verified.
+    user_result = await db.execute(
+        update(User)
+        .where(User.id == user_id)
+        .values(email_verified=True)
+        .returning(User.id, User.email, User.locale, User.session_token_version)
+    )
+    user_row = user_result.fetchone()
     await db.commit()
 
-    user = await db.get(User, user_id)
-    if user is None:
+    if user_row is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="User not found.",
         )
 
-    session_token = generate_session_token(user.id, user.session_token_version)
+    session_token = generate_session_token(user_row.id, user_row.session_token_version)
     return {
         "session_token": session_token,
         "user": {
-            "id": user.id,
-            "email": user.email,
-            "locale": user.locale,
+            "id": user_row.id,
+            "email": user_row.email,
+            "locale": user_row.locale,
         },
     }
 

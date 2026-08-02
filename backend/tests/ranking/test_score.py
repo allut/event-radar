@@ -637,20 +637,20 @@ class TestBuildDailyFeedsExplicitFilter:
         assert "events.ends_at IS NULL" in compiled
         assert "events.starts_at >=" in compiled
 
-    async def test_all_user_ids_query_is_unfiltered(self, mock_db):
-        # Deliberately no persona-based pre-filter — a zero-persona user (e.g.
-        # verified but not yet onboarded) can still get a non-empty feed and
-        # is opted into the digest by default, so excluding them here would
-        # silently drop both. See _all_user_ids' docstring.
-        from app.ranking.score import _all_user_ids
+    async def test_verified_user_ids_query_filters_on_email_verified(self, mock_db):
+        # Filters on email_verified (a user with zero UserPersona rows can
+        # still get a non-empty feed, so no persona-based pre-filter — see
+        # _verified_user_ids' docstring for why the two are different).
+        from app.ranking.score import _verified_user_ids
 
         mock_db.scalars.return_value = _scalar_result([])
 
-        await _all_user_ids(mock_db)
+        await _verified_user_ids(mock_db)
 
         stmt = mock_db.scalars.call_args_list[0].args[0]
         compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
         assert "user_personas" not in compiled
+        assert "email_verified" in compiled
         assert "SELECT users.id" in compiled
 
 

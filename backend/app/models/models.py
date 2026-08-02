@@ -50,6 +50,9 @@ class User(Base):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     email: Mapped[str] = mapped_column(CIText(), nullable=False, unique=True)
+    email_verified: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false"
+    )
     locale: Mapped[str] = mapped_column(
         String(2), nullable=False, default=DEFAULT_USER_LOCALE
     )

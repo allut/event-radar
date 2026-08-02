@@ -325,7 +325,12 @@ async def send_daily_digests(
     today = datetime.now(TALLINN_TZ).date()
 
     users = (
-        await db.scalars(select(User).where(User.email_digest_opt_in.is_(True)))
+        await db.scalars(
+            select(User).where(
+                User.email_digest_opt_in.is_(True),
+                User.email_verified.is_(True),
+            )
+        )
     ).all()
 
     if not users:

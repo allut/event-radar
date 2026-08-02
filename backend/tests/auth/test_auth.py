@@ -4,6 +4,7 @@ Uses AsyncMock to stub DB and email so no real DB is needed.
 """
 import http
 import hashlib
+from collections import namedtuple
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -200,6 +201,24 @@ def _mock_execute_returning(row):
     return execute_mock
 
 
+# Mirrors the column order of verify_magic_link's
+# `.returning(User.id, User.email, User.locale, User.session_token_version)` —
+# a real SQLAlchemy Row supports attribute access; a plain tuple does not.
+_UserRow = namedtuple("_UserRow", ["id", "email", "locale", "session_token_version"])
+
+
+def _mock_execute_returning_sequence(rows: list):
+    """Return an AsyncMock whose successive calls' .fetchone() return each
+    row in `rows`, in order — for functions that call db.execute() more
+    than once (e.g. verify_magic_link's link-consume then user-verify)."""
+    results = []
+    for row in rows:
+        result = MagicMock()
+        result.fetchone.return_value = row
+        results.append(result)
+    return AsyncMock(side_effect=results)
+
+
 class TestVerifyMagicLink:
     @pytest.mark.asyncio
     async def test_valid_token_returns_session(self, mock_db, make_request):
@@ -207,21 +226,35 @@ class TestVerifyMagicLink:
 
         token, _, _ = generate_magic_token(3)
 
-        # Atomic UPDATE returns a row (success)
-        mock_db.execute = _mock_execute_returning((3,))
-
-        user = MagicMock()
-        user.id = 3
-        user.email = "user@example.com"
-        user.locale = "en"
-        user.session_token_version = 1
-        mock_db.get.return_value = user
+        # Atomic UPDATEs: first the magic-link consume, then the user
+        # email_verified update — both return a row (success).
+        mock_db.execute = _mock_execute_returning_sequence(
+            [(3,), _UserRow(3, "user@example.com", "en", 1)]
+        )
 
         result = await verify_magic_link(make_request(), token, mock_db)
 
         assert "session_token" in result
         assert result["user"]["id"] == 3
         assert verify_session_token(result["session_token"]) == (3, 1)
+
+    @pytest.mark.asyncio
+    async def test_valid_token_marks_email_verified(self, mock_db, make_request):
+        from app.routers.auth import verify_magic_link
+
+        token, _, _ = generate_magic_token(3)
+
+        mock_db.execute = _mock_execute_returning_sequence(
+            [(3,), _UserRow(3, "user@example.com", "en", 1)]
+        )
+
+        await verify_magic_link(make_request(), token, mock_db)
+
+        # Second db.execute call is the User email_verified UPDATE.
+        second_call_stmt = mock_db.execute.call_args_list[1].args[0]
+        compiled = second_call_stmt.compile(compile_kwargs={"literal_binds": True})
+        assert "email_verified" in str(compiled)
+        assert "true" in str(compiled).lower()
 
     @pytest.mark.asyncio
     async def test_used_or_expired_link_raises_400(self, mock_db, make_request):

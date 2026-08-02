@@ -636,20 +636,18 @@ async def _load_candidate_events(db: AsyncSession, now: datetime) -> list[Event]
     )
 
 
-async def _all_user_ids(db: AsyncSession) -> list[int]:
-    """All registered user ids, paged by build_daily_feeds — see
-    FEED_BUILD_USER_BATCH_SIZE. Deliberately unfiltered: a user with zero
-    UserPersona rows is not necessarily a guaranteed-empty feed. That
-    includes not just stray unverified rows from an unauthenticated
-    /auth/request-link (auth.py:_get_or_create_user creates the row before
-    verification) but also verified users who haven't completed onboarding
-    yet — the frontend's `Protected` route guard does not force onboarding
-    first. persona_affinity() returns NEUTRAL_SCORE (not zero) with no
-    personas, so such a user can still get a non-empty feed from
-    recency/quality/locality alone, and email_digest_opt_in defaults to true
-    at row creation — filtering them out here would silently drop both their
-    feed and their daily digest email."""
-    return list((await db.scalars(select(User.id))).all())
+async def _verified_user_ids(db: AsyncSession) -> list[int]:
+    """Verified user ids, paged by build_daily_feeds — see FEED_BUILD_USER_BATCH_SIZE.
+    Filters on email_verified, not on persona/onboarding state — see the reverted
+    _eligible_user_ids attempt in git history for why a persona-based filter is
+    wrong (NEUTRAL_SCORE means a zero-persona user can still get a real feed).
+    email_verified is different: a session token can only be issued from inside
+    verify_magic_link, so an unverified row is provably one nobody has ever been
+    able to log into — no feed or digest is reachable for it, so skipping it here
+    wastes no legitimate value and closes the unverified-signup digest-spam gap."""
+    return list(
+        (await db.scalars(select(User.id).where(User.email_verified.is_(True)))).all()
+    )
 
 
 async def _load_feed_build_context(
@@ -881,16 +879,17 @@ async def build_daily_feeds(db: AsyncSession) -> dict:
     bounded by a batch size instead of total registered users — candidate
     events + series keys are loaded once (_SharedFeedContext) and reused
     across every page; only personas/feedback/score-cache are reloaded
-    per page. No persona-based pre-filtering: a user with zero personas can
-    still get a non-empty feed and is opted into the digest by default (see
-    _all_user_ids). Caches per-(user, event) scores in `user_event_scores`.
-    The feedback router invalidates cache rows on signal change so reused
-    scores reflect the latest signal-state. Returns summary dict for logging.
+    per page. Filtered to verified users only (see _verified_user_ids); no
+    persona-based pre-filtering beyond that — a user with zero personas can
+    still get a non-empty feed and is opted into the digest by default.
+    Caches per-(user, event) scores in `user_event_scores`. The feedback
+    router invalidates cache rows on signal change so reused scores reflect
+    the latest signal-state. Returns summary dict for logging.
     """
     now = datetime.now(TALLINN_TZ)
     today = now.date()
 
-    user_ids = await _all_user_ids(db)
+    user_ids = await _verified_user_ids(db)
     if not user_ids:
         return {
             "built": 0,
