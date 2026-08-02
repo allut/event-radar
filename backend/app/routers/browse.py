@@ -20,6 +20,7 @@ from app.constants import (
     BROWSE_MAX_PAGE_SIZE,
     BROWSE_NEG_INF,
     BROWSE_PAGE_SIZE,
+    BROWSE_QUERY_MAX_LEN,
     BROWSE_RELEVANCE_MAX_CANDIDATES,
     BROWSE_SORT_DATE,
     BROWSE_SORT_PRICE,
@@ -356,7 +357,7 @@ async def _browse_scored_path(
 @limiter.limit(RATE_LIMIT_BROWSE)
 async def explore_events(
     request: Request,
-    q: str | None = None,
+    q: str | None = Query(None, max_length=BROWSE_QUERY_MAX_LEN),
     category: str | None = None,
     vibe: str | None = None,
     date_from: date | None = None,

@@ -199,19 +199,34 @@ async def test_retract_non_submission_returns_404():
 
 
 @pytest.mark.asyncio
-async def test_approve_submission_clears_needs_review(make_event):
+async def test_approve_submission_clears_needs_review(make_event, make_organizer):
     app = _build_app()
     event = make_event(event_id=42, status="published")
     event.submitted_by_organizer_id = 7
     event.needs_review = True
+    organizer = make_organizer(organizer_id=7)
+    organizer.verified = False
 
     db = AsyncMock()
-    db.get = AsyncMock(return_value=event)
+
+    async def _get(model, pk):
+        from app.models.models import Event, Organizer
+
+        if model is Event:
+            return event
+        if model is Organizer:
+            return organizer
+        raise AssertionError(f"unexpected db.get({model!r}, {pk!r})")
+
+    db.get = AsyncMock(side_effect=_get)
     db.commit = AsyncMock()
 
     with (
         patch("app.routers.admin.settings") as mock_settings,
         patch("app.routers.admin.AsyncSessionLocal", return_value=_make_db_ctx(db)),
+        patch(
+            "app.routers.admin.publish_pending", new_callable=AsyncMock
+        ) as mock_publish,
     ):
         mock_settings.ADMIN_PASSWORD = ""
         mock_settings.APP_ENV = APP_ENV_DEVELOPMENT
@@ -226,3 +241,56 @@ async def test_approve_submission_clears_needs_review(make_event):
     assert resp.status_code == http.HTTPStatus.OK
     assert event.needs_review is False
     assert resp.json() == {"id": 42, "needs_review": False}
+    # M2: a first approval is what makes the organizer trusted going forward.
+    assert organizer.verified is True
+    # The publish gate must run inline so this event (now eligible) goes live
+    # immediately rather than waiting for the next scheduled pass.
+    mock_publish.assert_awaited_once_with(db)
+
+
+@pytest.mark.asyncio
+async def test_approve_submission_with_no_submitting_organizer_still_publishes(
+    make_event,
+):
+    """Defense-in-depth: submitted_by_organizer_id is set (this event passed
+    _submission_or_404's filter), but the referenced Organizer row is
+    somehow already gone — the handler must not crash and must still run
+    the publish gate."""
+    app = _build_app()
+    event = make_event(event_id=42, status="published")
+    event.submitted_by_organizer_id = 7
+    event.needs_review = True
+
+    db = AsyncMock()
+
+    async def _get(model, pk):
+        from app.models.models import Event, Organizer
+
+        if model is Event:
+            return event
+        if model is Organizer:
+            return None
+        raise AssertionError(f"unexpected db.get({model!r}, {pk!r})")
+
+    db.get = AsyncMock(side_effect=_get)
+    db.commit = AsyncMock()
+
+    with (
+        patch("app.routers.admin.settings") as mock_settings,
+        patch("app.routers.admin.AsyncSessionLocal", return_value=_make_db_ctx(db)),
+        patch(
+            "app.routers.admin.publish_pending", new_callable=AsyncMock
+        ) as mock_publish,
+    ):
+        mock_settings.ADMIN_PASSWORD = ""
+        mock_settings.APP_ENV = APP_ENV_DEVELOPMENT
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            resp = await client.post(
+                "/admin/submissions/42/approve", auth=("admin", "")
+            )
+
+    assert resp.status_code == http.HTTPStatus.OK
+    mock_publish.assert_awaited_once_with(db)

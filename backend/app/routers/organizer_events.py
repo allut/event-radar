@@ -12,6 +12,7 @@ import hashlib
 import logging
 import time
 from datetime import datetime
+from urllib.parse import urlsplit
 from uuid import uuid4
 
 import httpx
@@ -22,6 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.constants import (
+    ALLOWED_IMAGE_HOSTS,
     BROWSE_MAX_PAGE_SIZE,
     BROWSE_PAGE_SIZE,
     CLOUDINARY_UPLOAD_URL_TEMPLATE,
@@ -34,6 +36,7 @@ from app.constants import (
     LOCALE_EN,
     LOCALE_ET,
     LOCALE_RU,
+    ORGANIZER_DAILY_IMAGE_UPLOAD_CAP,
     ORGANIZER_DAILY_SUBMISSION_CAP,
     ORGANIZER_SUBMISSION_EXTERNAL_ID_PREFIX,
     PAGINATION_MAX_OFFSET,
@@ -51,7 +54,13 @@ from app.ingestion.http_client import http_post, safe_external_url
 from app.ingestion.pricing import normalize_currency
 from app.ingestion.sanitize import sanitize_html
 from app.llm.classifier import classify_event
-from app.models.models import Event, EventClassification, Organizer, Source
+from app.models.models import (
+    Event,
+    EventClassification,
+    Organizer,
+    OrganizerImageUpload,
+    Source,
+)
 from app.publish import publish_pending
 from app.rate_limit import limiter
 from app.routers.organizer_auth import get_current_organizer
@@ -180,6 +189,21 @@ async def _apply_organizer_category(
         classification.categories = [category, *classification.categories]
 
 
+def _check_image_host(image_url: str | None) -> None:
+    """Reject an organizer-submission image_url whose host isn't the signed
+    Cloudinary upload endpoint's delivery domain (see ALLOWED_IMAGE_HOSTS) —
+    otherwise an arbitrary https host becomes a tracking pixel once the
+    digest embeds it as an <img> (see app/email/digest.py)."""
+    if image_url and urlsplit(image_url).hostname not in ALLOWED_IMAGE_HOSTS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "Image URL must be uploaded via POST /organizer/events/image "
+                "(res.cloudinary.com)."
+            ),
+        )
+
+
 async def _own_event_or_404(
     db: AsyncSession, event_id: int, organizer_id: int
 ) -> Event:
@@ -230,6 +254,7 @@ async def submit_event(
         )
 
     source = await _get_user_submission_source(db)
+    _check_image_host(body.image_url)
 
     has_price = body.price_min is not None or body.price_max is not None
     normalized = NormalizedEvent(
@@ -352,6 +377,7 @@ async def update_own_event(
             )
         event.url = safe_url
     if "image_url" in fields_set:
+        _check_image_host(body.image_url)
         safe_image_url = safe_external_url(body.image_url, SOURCE_SLUG_USER_SUBMISSION)
         if body.image_url and not safe_image_url:
             raise HTTPException(
@@ -499,6 +525,7 @@ async def upload_event_image(
     request: Request,
     file: UploadFile = File(...),
     current_organizer: Organizer = Depends(get_current_organizer),
+    db: AsyncSession = Depends(get_db),
 ) -> dict:
     """Upload an event image to Cloudinary via a signed server-side upload —
     the API secret never reaches the SPA, unlike an unsigned upload preset.
@@ -512,11 +539,36 @@ async def upload_event_image(
             detail=f"Unsupported image type: {file.content_type!r}",
         )
 
+    # ORGANIZER_DAILY_SUBMISSION_CAP counts Event.created_at, which can't cover
+    # this route — an upload can happen before the organizer ever completes a
+    # submission. Same count-then-act soft ceiling (no row lock): concurrent
+    # requests from one organizer could overshoot slightly. Protects Cloudinary
+    # free-tier quota, not the request itself.
+    day_start = datetime.now(TALLINN_TZ).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
+    uploaded_today = (
+        await db.scalar(
+            select(func.count())
+            .select_from(OrganizerImageUpload)
+            .where(
+                OrganizerImageUpload.organizer_id == current_organizer.id,
+                OrganizerImageUpload.created_at >= day_start,
+            )
+        )
+        or 0
+    )
+    if uploaded_today >= ORGANIZER_DAILY_IMAGE_UPLOAD_CAP:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Daily image upload limit reached. Try again tomorrow.",
+        )
+
     # Starlette has already spooled the full multipart body by the time this
     # handler runs (this cap only bounds what the handler itself holds, not
-    # what was received) — a request-level max-body-size limit would be
-    # needed to bound that earlier stage; not added here since it applies
-    # ASGI-server-wide, beyond this one route's scope.
+    # what was received). app.main.MaxBodySizeMiddleware bounds the earlier,
+    # ASGI-server-wide stage (MAX_REQUEST_BODY_BYTES); this narrower check
+    # stays as the image-specific limit.
     body = await file.read(IMAGE_UPLOAD_MAX_BYTES + 1)
     if len(body) > IMAGE_UPLOAD_MAX_BYTES:
         raise HTTPException(
@@ -572,4 +624,6 @@ async def upload_event_image(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Image upload failed; please try again.",
         )
+    db.add(OrganizerImageUpload(organizer_id=current_organizer.id))
+    await db.commit()
     return {"url": secure_url}

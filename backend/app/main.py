@@ -3,6 +3,7 @@ import secrets
 import time
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager
+from urllib.parse import urlsplit
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler  # type: ignore[import-untyped]
 from fastapi import FastAPI, HTTPException, Request, Response, status
@@ -10,6 +11,10 @@ from starlette.middleware.base import RequestResponseEndpoint
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
+from starlette.datastructures import Headers
+from starlette.middleware.trustedhost import TrustedHostMiddleware
+from starlette.responses import JSONResponse
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from app.config import settings
@@ -20,6 +25,7 @@ from app.constants import (
     CLEANUP_MINUTE,
     CORS_ALLOWED_HEADERS,
     CORS_ALLOWED_METHODS,
+    DEV_DB_LOCAL_HOSTS,
     DIGEST_SEND_HOUR,
     FEED_BUILD_HOUR,
     FEED_BUILD_MINUTE,
@@ -31,6 +37,7 @@ from app.constants import (
     LOG_EVENT_JOB_RUN,
     LOG_STATUS_ERROR,
     LOG_STATUS_OK,
+    MAX_REQUEST_BODY_BYTES,
     ORGANIZER_SYNC_HOUR,
     ORGANIZER_SYNC_MINUTE,
     REFETCH_HOUR,
@@ -52,7 +59,7 @@ from app.ingestion.jobs import (
 from app.ingestion.organizer_sync import sync_fienta_organizers
 from app.logging_config import configure_logging, shutdown_log_shipping
 from app.ranking.score import build_daily_feeds
-from app.rate_limit import limiter, rate_limit_exceeded_handler
+from app.rate_limit import client_key, limiter, rate_limit_exceeded_handler
 from app.routers.admin import router as admin_router
 from app.routers.auth import router as auth_router
 from app.routers.browse import router as browse_router
@@ -245,8 +252,91 @@ def _register_scheduled_jobs(scheduler: AsyncIOScheduler) -> None:
     )
 
 
+class _BodyTooLarge(Exception):
+    """Internal sentinel — never escapes MaxBodySizeMiddleware.__call__."""
+
+
+class MaxBodySizeMiddleware:
+    """Reject a request body over MAX_REQUEST_BODY_BYTES with 413.
+
+    Nothing else in the stack caps request size — IMAGE_UPLOAD_MAX_BYTES only
+    bounds what the upload handler reads after Starlette has already received
+    and spooled the full multipart body. A ``Content-Length`` request is
+    rejected up front, before the body is read at all; a chunked request (no
+    ``Content-Length``) is rejected mid-stream once the running total crosses
+    the limit, via the wrapped ``receive`` callable.
+
+    This sends the 413 response itself (an ASGI ``Response.__call__``) rather
+    than raising ``HTTPException`` — Starlette places every ``add_middleware``
+    entry *outside* its internal ``ExceptionMiddleware`` (which is innermost,
+    right next to the router), so an ``HTTPException`` raised from here would
+    never reach it and would surface as a generic 500 from
+    ``ServerErrorMiddleware`` instead of the intended 413.
+    """
+
+    def __init__(self, app: ASGIApp, max_bytes: int) -> None:
+        self.app = app
+        self.max_bytes = max_bytes
+
+    async def _reject(self, scope: Scope, receive: Receive, send: Send) -> None:
+        response = JSONResponse(
+            {"detail": f"Request body exceeds {self.max_bytes} bytes."},
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+        )
+        await response(scope, receive, send)
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        content_length = Headers(scope=scope).get("content-length")
+        if content_length is not None:
+            try:
+                too_large = int(content_length) > self.max_bytes
+            except ValueError:
+                too_large = False
+            if too_large:
+                await self._reject(scope, receive, send)
+                return
+
+        seen = 0
+
+        async def limited_receive() -> Message:
+            nonlocal seen
+            message = await receive()
+            if message["type"] == "http.request":
+                seen += len(message.get("body", b""))
+                if seen > self.max_bytes:
+                    raise _BodyTooLarge()
+            return message
+
+        try:
+            await self.app(scope, limited_receive, send)
+        except _BodyTooLarge:
+            await self._reject(scope, receive, send)
+
+
+def _check_dev_database_host() -> None:
+    """Log an ERROR if APP_ENV=development but DATABASE_URL points at a
+    non-local host — likely a stray/never-overridden env var pointed at a
+    real (staging/prod) database, which combined with ALLOW_INSECURE_DEV
+    would leave that real database's admin surface unprotected (see M1,
+    require_configured_secret)."""
+    if settings.APP_ENV != APP_ENV_DEVELOPMENT:
+        return
+    host = urlsplit(settings.DATABASE_URL).hostname
+    if host and host not in DEV_DB_LOCAL_HOSTS:
+        log.error(
+            "APP_ENV=development but DATABASE_URL host=%r is not local — "
+            "this looks like a misconfigured environment pointed at a real database",
+            host,
+        )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    _check_dev_database_host()
     async with AsyncSessionLocal() as db:
         await seed_sources(db)
         await seed_personas(db)
@@ -330,7 +420,30 @@ async def add_security_headers(
 # directly (a public port, a misconfigured internal network, a non-Render host),
 # or fronted by another CDN/proxy in addition to Render's. Re-derive this trade-off
 # if the deployment topology changes.
+#
+# Registered before (i.e. wraps *inside*) ProxyHeadersMiddleware so a rejected
+# oversized request still gets logged/rate-limited against its real client
+# address rather than the raw proxy connection.
+app.add_middleware(MaxBodySizeMiddleware, max_bytes=MAX_REQUEST_BODY_BYTES)
+#
+# HOP-COUNT ASSUMPTION: ProxyHeadersMiddleware itself trusts the *leftmost* XFF
+# hop (attacker-controlled if forwarded verbatim), so app.rate_limit.client_key
+# derives the limiter/audit-log key from the *rightmost* XFF entry instead — the
+# one appended by the single trusted hop (Render's proxy) — which is correct only
+# if there is exactly one trusted hop between the client and this process. Adding
+# another proxy/CDN in front of Render breaks this the same way it would break
+# trusted_hosts="*" above.
 app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
+
+# Host header validation — nothing today builds an absolute URL from the
+# request Host (FRONTEND_URL/BACKEND_URL are config, not derived from it), so
+# impact is limited to intermediary cache-poisoning scenarios, but rejecting
+# an unexpected Host outright is a one-line hardening. Skipped in development
+# (no fixed BACKEND_URL host, e.g. localhost with a changing port in tests).
+if settings.APP_ENV != APP_ENV_DEVELOPMENT:
+    _backend_host = urlsplit(settings.BACKEND_URL).hostname
+    if _backend_host:
+        app.add_middleware(TrustedHostMiddleware, allowed_hosts=[_backend_host])
 
 app.include_router(admin_router)
 app.include_router(auth_router)
@@ -364,12 +477,13 @@ async def tick(request: Request) -> dict:
         feature="Internal tick",
         setting_name="INTERNAL_TOKEN",
         app_env=settings.APP_ENV,
+        allow_insecure_dev=settings.ALLOW_INSECURE_DEV,
     ):
         received = request.headers.get("X-Internal-Token", "")
         if not secrets.compare_digest(received, token):
             log.warning(
                 "internal/tick: invalid token (client=%s)",
-                request.client.host if request.client else "unknown",
+                client_key(request),
                 extra={"event": LOG_EVENT_AUTH_FAILED},
             )
             raise HTTPException(

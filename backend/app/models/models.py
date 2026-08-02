@@ -123,6 +123,14 @@ class Organizer(Base):
     session_token_version: Mapped[int] = mapped_column(
         Integer, nullable=False, server_default="1"
     )
+    # False until an admin approves this organizer's first submission
+    # (POST /admin/submissions/{id}/approve). An unverified organizer's events
+    # are excluded from the publish gate (app/publish.py) regardless of
+    # otherwise clearing it, so a brand-new self-registered account can't push
+    # a live event into every user's feed/inbox with no human in the loop.
+    verified: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false"
+    )
 
     magic_links: Mapped[list["OrganizerMagicLink"]] = relationship(
         back_populates="organizer"
@@ -146,6 +154,31 @@ class OrganizerMagicLink(Base):
     )
 
     organizer: Mapped["Organizer"] = relationship(back_populates="magic_links")
+
+
+class OrganizerImageUpload(Base):
+    """One row per successful Cloudinary upload (POST /organizer/events/image).
+
+    Exists purely to count-then-act against ORGANIZER_DAILY_IMAGE_UPLOAD_CAP —
+    an upload can happen before the organizer ever submits/edits an event, so
+    it can't be derived from Event rows the way ORGANIZER_DAILY_SUBMISSION_CAP
+    counts Event.created_at. Never read back, no retention sweep — cheap
+    enough to keep indefinitely, and its count feeds a rolling day-window
+    query rather than an aggregate that would grow stale.
+    """
+
+    __tablename__ = "organizer_image_uploads"
+    __table_args__ = (
+        Index("ix_organizer_image_uploads_organizer_id", "organizer_id"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    organizer_id: Mapped[int] = mapped_column(
+        ForeignKey("organizers.id", ondelete="CASCADE"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
 
 
 # ---------------------------------------------------------------------------

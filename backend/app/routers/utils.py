@@ -120,25 +120,37 @@ async def run_admin_job(name: str, coro: Awaitable[dict]) -> dict:
 
 
 def require_configured_secret(
-    secret: str | None, *, feature: str, setting_name: str, app_env: str
+    secret: str | None,
+    *,
+    feature: str,
+    setting_name: str,
+    app_env: str,
+    allow_insecure_dev: bool = False,
 ) -> bool:
     """Fail-closed gate shared by every secret-protected surface (admin auth,
     inbound webhook, /internal/tick).
 
     Returns True when the secret is configured — the caller must then verify
-    it. When unset: 503 outside development; in development, log a warning and
-    return False (caller skips verification). Callers pass their own module's
-    ``settings`` values so tests that patch the caller's settings keep working.
+    it. When unset: 503 unless BOTH ``app_env == development`` AND
+    ``allow_insecure_dev`` are true, in which case a warning is logged and
+    False is returned (caller skips verification). Requiring the second,
+    explicit opt-in (settings.ALLOW_INSECURE_DEV) means a dev-shaped APP_ENV
+    alone — e.g. a misconfigured or never-overridden env var on a real
+    deployment — can never silently open the admin surface, the inbound
+    webhook, or /internal/tick. Callers pass their own module's ``settings``
+    values so tests that patch the caller's settings keep working.
     """
     if secret:
         return True
-    if app_env != APP_ENV_DEVELOPMENT:
+    if not (app_env == APP_ENV_DEVELOPMENT and allow_insecure_dev):
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=f"{feature} disabled: {setting_name} not configured",
         )
     log.warning(
-        "%s not set; %s unprotected (development mode)", setting_name, feature
+        "%s not set; %s unprotected (development mode, ALLOW_INSECURE_DEV=true)",
+        setting_name,
+        feature,
     )
     return False
 

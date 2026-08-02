@@ -32,6 +32,40 @@ def _fake_event(**overrides):
     return e
 
 
+class TestCheckImageHost:
+    """L4: organizer-submission image_url must be the signed Cloudinary
+    upload's own delivery domain — otherwise the digest's <img> embed becomes
+    an arbitrary-host tracking pixel."""
+
+    def test_none_is_a_noop(self):
+        from app.routers.organizer_events import _check_image_host
+
+        _check_image_host(None)  # must not raise
+
+    def test_cloudinary_host_accepted(self):
+        from app.routers.organizer_events import _check_image_host
+
+        _check_image_host("https://res.cloudinary.com/demo/image/upload/x.png")
+
+    def test_arbitrary_host_rejected(self):
+        from fastapi import HTTPException
+        from app.routers.organizer_events import _check_image_host
+
+        with pytest.raises(HTTPException) as exc_info:
+            _check_image_host("https://evil.example.com/tracker.png")
+        assert exc_info.value.status_code == http.HTTPStatus.BAD_REQUEST
+
+    def test_lookalike_host_rejected(self):
+        """A host merely containing the trusted domain as a substring/suffix
+        (e.g. a subdomain trick) must not slip through — hostname must match
+        exactly, not via substring containment."""
+        from fastapi import HTTPException
+        from app.routers.organizer_events import _check_image_host
+
+        with pytest.raises(HTTPException):
+            _check_image_host("https://res.cloudinary.com.evil.com/x.png")
+
+
 class TestApplyOrganizerCategory:
     @pytest.mark.asyncio
     async def test_creates_classification_when_none_exists(self, mock_db):
@@ -127,6 +161,33 @@ class TestSubmitEvent:
             "slug": fake_event.slug,
             "status": EVENT_STATUS_PUBLISHED,
         }
+
+    @pytest.mark.asyncio
+    async def test_rejects_image_url_off_cloudinary_host(
+        self, mock_db, make_request, make_organizer
+    ):
+        """L4: submit must reject an image_url that isn't the signed upload's
+        own domain, before ever touching the DB."""
+        from fastapi import HTTPException
+        from app.routers.organizer_events import SubmitEventBody, submit_event
+
+        organizer = make_organizer(organizer_id=5)
+        source = MagicMock(id=1, slug="user_submission")
+        mock_db.scalar.side_effect = [0, source]  # daily-cap count, source lookup
+
+        body = SubmitEventBody(
+            title="Kontsert",
+            starts_at="2026-06-01T18:00:00+03:00",
+            image_url="https://evil.example.com/tracker.png",
+        )
+        with pytest.raises(HTTPException) as exc_info:
+            await submit_event(
+                body,
+                make_request(method="POST", path="/organizer/events"),
+                organizer,
+                mock_db,
+            )
+        assert exc_info.value.status_code == http.HTTPStatus.BAD_REQUEST
 
     @pytest.mark.asyncio
     async def test_daily_cap_returns_429(self, mock_db, make_request, make_organizer):
@@ -475,7 +536,9 @@ class TestUploadEventImage:
         return f
 
     @pytest.mark.asyncio
-    async def test_rejects_unsupported_mime(self, make_request, make_organizer):
+    async def test_rejects_unsupported_mime(
+        self, mock_db, make_request, make_organizer
+    ):
         from fastapi import HTTPException
         from app.routers.organizer_events import upload_event_image
 
@@ -487,15 +550,17 @@ class TestUploadEventImage:
                 make_request(method="POST", path="/organizer/events/image"),
                 file,
                 organizer,
+                mock_db,
             )
         assert exc_info.value.status_code == http.HTTPStatus.UNSUPPORTED_MEDIA_TYPE
 
     @pytest.mark.asyncio
-    async def test_rejects_oversized_file(self, make_request, make_organizer):
+    async def test_rejects_oversized_file(self, mock_db, make_request, make_organizer):
         from fastapi import HTTPException
         from app.constants import IMAGE_UPLOAD_MAX_BYTES
         from app.routers.organizer_events import upload_event_image
 
+        mock_db.scalar.return_value = 0
         organizer = make_organizer(organizer_id=5)
         file = self._fake_upload(body=b"x" * (IMAGE_UPLOAD_MAX_BYTES + 1))
 
@@ -504,16 +569,41 @@ class TestUploadEventImage:
                 make_request(method="POST", path="/organizer/events/image"),
                 file,
                 organizer,
+                mock_db,
             )
         assert exc_info.value.status_code == http.HTTPStatus.REQUEST_ENTITY_TOO_LARGE
 
     @pytest.mark.asyncio
+    async def test_daily_upload_cap_returns_429(
+        self, mock_db, make_request, make_organizer
+    ):
+        """L5: a per-account daily image-upload cap, independent of the
+        per-IP rate limiter (which an account can sidestep across IPs)."""
+        from fastapi import HTTPException
+        from app.constants import ORGANIZER_DAILY_IMAGE_UPLOAD_CAP
+        from app.routers.organizer_events import upload_event_image
+
+        mock_db.scalar.return_value = ORGANIZER_DAILY_IMAGE_UPLOAD_CAP
+        organizer = make_organizer(organizer_id=5)
+        file = self._fake_upload()
+
+        with pytest.raises(HTTPException) as exc_info:
+            await upload_event_image(
+                make_request(method="POST", path="/organizer/events/image"),
+                file,
+                organizer,
+                mock_db,
+            )
+        assert exc_info.value.status_code == http.HTTPStatus.TOO_MANY_REQUESTS
+
+    @pytest.mark.asyncio
     async def test_returns_501_when_cloudinary_unconfigured(
-        self, make_request, make_organizer
+        self, mock_db, make_request, make_organizer
     ):
         from fastapi import HTTPException
         from app.routers.organizer_events import upload_event_image
 
+        mock_db.scalar.return_value = 0
         organizer = make_organizer(organizer_id=5)
         file = self._fake_upload()
 
@@ -524,15 +614,18 @@ class TestUploadEventImage:
                     make_request(method="POST", path="/organizer/events/image"),
                     file,
                     organizer,
+                    mock_db,
                 )
         assert exc_info.value.status_code == http.HTTPStatus.NOT_IMPLEMENTED
 
     @pytest.mark.asyncio
     async def test_successful_upload_returns_secure_url(
-        self, make_request, make_organizer
+        self, mock_db, make_request, make_organizer
     ):
+        from app.models.models import OrganizerImageUpload
         from app.routers.organizer_events import upload_event_image
 
+        mock_db.scalar.return_value = 0
         organizer = make_organizer(organizer_id=5)
         file = self._fake_upload()
 
@@ -557,6 +650,7 @@ class TestUploadEventImage:
                 make_request(method="POST", path="/organizer/events/image"),
                 file,
                 organizer,
+                mock_db,
             )
 
         assert result == {
@@ -567,13 +661,19 @@ class TestUploadEventImage:
         assert kwargs["data"]["api_key"] == "key123"
         assert "signature" in kwargs["data"]
         assert kwargs["files"]["file"][0] == "photo.png"
+        # L5: a successful upload is recorded so the daily cap can count it.
+        added = mock_db.add.call_args[0][0]
+        assert isinstance(added, OrganizerImageUpload)
+        assert added.organizer_id == 5
+        mock_db.commit.assert_awaited()
 
     @pytest.mark.asyncio
-    async def test_upload_failure_returns_502(self, make_request, make_organizer):
+    async def test_upload_failure_returns_502(self, mock_db, make_request, make_organizer):
         import httpx
         from fastapi import HTTPException
         from app.routers.organizer_events import upload_event_image
 
+        mock_db.scalar.return_value = 0
         organizer = make_organizer(organizer_id=5)
         file = self._fake_upload()
 
@@ -594,12 +694,13 @@ class TestUploadEventImage:
                     make_request(method="POST", path="/organizer/events/image"),
                     file,
                     organizer,
+                    mock_db,
                 )
         assert exc_info.value.status_code == http.HTTPStatus.BAD_GATEWAY
 
     @pytest.mark.asyncio
     async def test_malformed_json_response_returns_502_not_500(
-        self, make_request, make_organizer
+        self, mock_db, make_request, make_organizer
     ):
         """A 200 response whose body isn't valid JSON (e.g. Cloudinary returning
         an HTML error page) must translate to the same clean 502, not an
@@ -607,6 +708,7 @@ class TestUploadEventImage:
         from fastapi import HTTPException
         from app.routers.organizer_events import upload_event_image
 
+        mock_db.scalar.return_value = 0
         organizer = make_organizer(organizer_id=5)
         file = self._fake_upload()
 
@@ -630,6 +732,7 @@ class TestUploadEventImage:
                     make_request(method="POST", path="/organizer/events/image"),
                     file,
                     organizer,
+                    mock_db,
                 )
         assert exc_info.value.status_code == http.HTTPStatus.BAD_GATEWAY
 

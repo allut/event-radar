@@ -17,6 +17,11 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "postgresql+asyncpg://localhost/eventradar"
     SECRET_KEY: str  # required — no default; app fails at startup if unset
     APP_ENV: str = APP_ENV_DEVELOPMENT
+    # Second, explicit opt-in required (alongside APP_ENV == development) before
+    # require_configured_secret() fails open on an unset secret. A dev-shaped
+    # APP_ENV alone must never be sufficient to unprotect /admin/*, the inbound
+    # webhook, or /internal/tick — see routers/utils.py::require_configured_secret.
+    ALLOW_INSECURE_DEV: bool = False
 
     FIENTA_BASE_URL: str = "https://fienta.com/api/v1/public/events"
     KULTUURIKATEL_URL: str = "https://kultuurikatel.ee/en/events/"

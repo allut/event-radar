@@ -19,7 +19,27 @@ from app.constants import LOG_EVENT_RATE_LIMIT_BLOCK
 
 log = logging.getLogger(__name__)
 
-limiter = Limiter(key_func=get_remote_address)
+
+def client_key(request: Request) -> str:
+    """Rate-limit / audit-log key: the rightmost X-Forwarded-For entry.
+
+    ProxyHeadersMiddleware(trusted_hosts="*") rewrites request.client from the
+    *leftmost* XFF hop (uvicorn's _TrustedHosts.get_trusted_client_address),
+    which is attacker-controlled — a client can prepend an arbitrary
+    X-Forwarded-For value and every @limiter.limit(...) becomes a no-op. The
+    rightmost entry is the one appended by the single trusted hop immediately
+    adjacent to this process (Render's proxy), so it is correct whether Render
+    appends to or overwrites the header, given exactly one trusted hop between
+    the client and this process (see the deployment-invariant comment in
+    app/main.py next to ProxyHeadersMiddleware).
+    """
+    xff = request.headers.get("x-forwarded-for", "")
+    if xff:
+        return xff.rsplit(",", 1)[-1].strip()
+    return get_remote_address(request)
+
+
+limiter = Limiter(key_func=client_key)
 
 
 def _logging_rate_limit_handler(request: Request, exc: RateLimitExceeded) -> Response:

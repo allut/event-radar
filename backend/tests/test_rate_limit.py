@@ -13,9 +13,54 @@ from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
+from starlette.requests import Request
 
 from app.constants import RATE_LIMIT_AUTH_REQUEST_LINK
-from app.rate_limit import limiter, rate_limit_exceeded_handler
+from app.rate_limit import client_key, limiter, rate_limit_exceeded_handler
+
+
+def _request(headers: list[tuple[bytes, bytes]], client: tuple[str, int] | None = ("203.0.113.9", 12345)) -> Request:
+    return Request({"type": "http", "method": "GET", "path": "/", "query_string": b"", "headers": headers, "client": client})
+
+
+# ---------------------------------------------------------------------------
+# H1: client_key must derive from the rightmost X-Forwarded-For entry, not
+# request.client (which ProxyHeadersMiddleware rewrites from the leftmost,
+# attacker-controlled, XFF hop) and not the naive leftmost XFF entry.
+# ---------------------------------------------------------------------------
+
+
+def test_client_key_uses_rightmost_xff_entry_when_present():
+    req = _request([(b"x-forwarded-for", b"1.2.3.4, 9.9.9.9, 5.5.5.5")])
+    assert client_key(req) == "5.5.5.5"
+
+
+def test_client_key_strips_whitespace_around_rightmost_entry():
+    req = _request([(b"x-forwarded-for", b"1.2.3.4,  9.9.9.9 ")])
+    assert client_key(req) == "9.9.9.9"
+
+
+def test_client_key_single_xff_entry():
+    req = _request([(b"x-forwarded-for", b"9.9.9.9")])
+    assert client_key(req) == "9.9.9.9"
+
+
+def test_client_key_falls_back_to_remote_address_without_xff():
+    req = _request([], client=("203.0.113.9", 12345))
+    assert client_key(req) == "203.0.113.9"
+
+
+def test_client_key_attacker_prepended_leftmost_entry_does_not_win():
+    """An attacker prepending their own X-Forwarded-For value must not be
+    able to control the rate-limit/audit-log key — only the rightmost entry
+    (appended by the trusted proxy hop) is trusted."""
+    attacker_supplied = "9.9.9.9"
+    real_client_as_seen_by_proxy = "203.0.113.9"
+    req = _request(
+        [(b"x-forwarded-for", f"{attacker_supplied}, {real_client_as_seen_by_proxy}".encode())]
+    )
+    assert client_key(req) != attacker_supplied
+    assert client_key(req) == real_client_as_seen_by_proxy
 
 
 def _build_app() -> FastAPI:

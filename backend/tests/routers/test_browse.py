@@ -322,6 +322,7 @@ class TestExploreEventsRouting:
         user = make_user()
         await browse.explore_events(
             request=make_request(method="GET", path="/explore"),
+            q=None,
             sort="date",
             for_you=False,
             current_user=user,
@@ -351,6 +352,7 @@ class TestExploreEventsRouting:
         user = make_user()
         await browse.explore_events(
             request=make_request(method="GET", path="/explore"),
+            q=None,
             sort="relevance",
             for_you=False,
             current_user=user,
@@ -380,6 +382,7 @@ class TestExploreEventsRouting:
         user = make_user()
         await browse.explore_events(
             request=make_request(method="GET", path="/explore"),
+            q=None,
             sort="date",
             for_you=True,
             current_user=user,
@@ -396,6 +399,7 @@ class TestExploreEventsRouting:
         with pytest.raises(HTTPException) as exc_info:
             await explore_events(
                 request=make_request(method="GET", path="/explore"),
+                q=None,
                 sort="bogus",
                 current_user=user,
                 db=mock_db,
@@ -419,6 +423,7 @@ class TestExploreEventsRouting:
         user = make_user()
         await browse.explore_events(
             request=make_request(method="GET", path="/explore"),
+            q=None,
             category="bogus-category",
             current_user=user,
             db=mock_db,

@@ -14,7 +14,7 @@ from app.constants import (
     TALLINN_REGION_BBOX,
     TALLINN_TZ,
 )
-from app.models.models import Event, EventClassification
+from app.models.models import Event, EventClassification, Organizer
 from app.routers.utils import event_ended_filter, event_not_ended_filter
 
 
@@ -31,8 +31,13 @@ async def publish_pending(db: AsyncSession) -> dict:
     or ``starts_at`` when ``ends_at`` is unset — see ``event_not_ended_filter``),
     title_orig present, is_explicit is false, is_non_event is false (gift
     cards, merch, online webinars — keyword prefilter + LLM signal), is_out_of_area
-    is false (LLM location signal), and present lat/lng coords must fall within
-    the Tallinn region bbox (defense-in-depth; coords-less events pass).
+    is false (LLM location signal), present lat/lng coords must fall within
+    the Tallinn region bbox (defense-in-depth; coords-less events pass), and —
+    for an organizer submission — the submitting ``Organizer.verified`` is
+    true (a brand-new self-registered organizer's first submission stays
+    ``classified``/``needs_review`` until an admin approves it via
+    ``POST /admin/submissions/{id}/approve``, which flips ``verified``; every
+    non-organizer event is unaffected).
 
     After the UPDATE, a diagnostic SELECT over the events still left in
     'classified' (the rejects) breaks down per-reason counts. Reasons are
@@ -53,6 +58,17 @@ async def publish_pending(db: AsyncSession) -> dict:
     qualifying_ids = select(EventClassification.event_id).where(
         EventClassification.quality_score >= PUBLISH_MIN_QUALITY_SCORE
     )
+    unverified_organizer_ids = select(Organizer.id).where(
+        Organizer.verified.is_(False)
+    )
+    # NULL-safe: a non-organizer event's submitted_by_organizer_id is NULL, and
+    # "NULL NOT IN (...)" evaluates to SQL NULL (not TRUE) regardless of the
+    # subquery's contents, which would silently exclude every non-organizer
+    # event from the gate — the explicit IS NULL branch avoids that.
+    organizer_ok = or_(
+        Event.submitted_by_organizer_id.is_(None),
+        Event.submitted_by_organizer_id.not_in(unverified_organizer_ids),
+    )
     stmt = (
         update(Event)
         .where(
@@ -64,6 +80,7 @@ async def publish_pending(db: AsyncSession) -> dict:
             func.trim(Event.title_orig) != "",
             Event.id.in_(qualifying_ids),
             bbox_ok,
+            organizer_ok,
         )
         .values(status=EVENT_STATUS_PUBLISHED)
     )
@@ -111,6 +128,9 @@ async def publish_pending(db: AsyncSession) -> dict:
                 )
             ).label("fail_no_title"),
             func.sum(case((~bbox_ok, 1), else_=0)).label("fail_coords_bbox"),
+            func.sum(case((~organizer_ok, 1), else_=0)).label(
+                "fail_unverified_organizer"
+            ),
         )
         .select_from(Event)
         .outerjoin(EventClassification, EventClassification.event_id == Event.id)
@@ -124,6 +144,7 @@ async def publish_pending(db: AsyncSession) -> dict:
             "fail_explicit": reject_row.fail_explicit or 0,
             "fail_non_event": reject_row.fail_non_event or 0,
             "fail_out_of_area": reject_row.fail_out_of_area or 0,
+            "fail_unverified_organizer": reject_row.fail_unverified_organizer or 0,
             "fail_ended": reject_row.fail_ended or 0,
             "fail_no_title": reject_row.fail_no_title or 0,
             "fail_coords_bbox": reject_row.fail_coords_bbox or 0,

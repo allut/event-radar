@@ -75,6 +75,12 @@ APP_ENV_DEVELOPMENT = "development"
 # username removes half of the credential pair an attacker needs to brute-force.
 ADMIN_USERNAME_DEFAULT = "admin"
 
+# Hostnames treated as "local" by the dev/prod-DB startup sanity check
+# (app/main.py's lifespan) — a DATABASE_URL host outside this set while
+# APP_ENV=development suggests a misconfigured env var pointed at a real
+# database, logged at ERROR rather than silently proceeding.
+DEV_DB_LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
+
 SECONDS_PER_MINUTE = 60
 SECONDS_PER_HOUR = 3600
 SECONDS_PER_DAY = 86400
@@ -428,10 +434,18 @@ WEBHOOK_TIMESTAMP_TOLERANCE_SECONDS = 300
 # Public read endpoint — generous enough for normal browsing while throttling
 # ID-enumeration / scraping abuse (GET /events/{id} takes no auth).
 RATE_LIMIT_EVENTS_DETAIL = "120/minute"
-# Admin Basic-auth surface — per-endpoint cap; with 11 admin routes an attacker
-# cycling all endpoints could attempt up to ~110/minute, so this is a speed-bump
-# rather than a hard brute-force ceiling. Pair with a strong ADMIN_PASSWORD.
+# Admin Basic-auth surface — applied via limiter.shared_limit(..., scope="admin")
+# so every /admin/* route shares ONE bucket per client, not one bucket each
+# (a per-route @limiter.limit would let an attacker cycling all admin routes
+# attempt far more than this per minute). Pair with a strong ADMIN_PASSWORD.
 RATE_LIMIT_ADMIN = "10/minute"
+# Consecutive-failure lockout on top of RATE_LIMIT_ADMIN (routers/admin.py::
+# _require_admin) — a static username/password pair has no other brute-force
+# damper. In-memory (single Render process, no Redis — matches the rest of
+# this codebase's "no Celery/Redis" design), so it resets on deploy/restart;
+# accepted since this pairs with, not replaces, a strong ADMIN_PASSWORD.
+ADMIN_AUTH_MAX_FAILURES = 5
+ADMIN_AUTH_LOCKOUT_SECONDS = 300
 # Authenticated feedback writes — generous cap; prevents cache-rebuild DoS
 # (every signal wipes all user_event_scores rows for that user).
 RATE_LIMIT_FEEDBACK = "60/minute"
@@ -478,6 +492,11 @@ ORGANIZER_SESSION_TTL_DAYS = _SESSION_TTL_DAYS_SHARED
 # from Tallinn calendar-day start — an IP rate limit alone can't cap a single
 # organizer account across multiple IPs.
 ORGANIZER_DAILY_SUBMISSION_CAP = 20
+# Same count-then-act soft ceiling as ORGANIZER_DAILY_SUBMISSION_CAP, but for
+# POST /organizer/events/image — submissions alone don't bound Cloudinary
+# free-tier upload quota, since an upload can happen without ever completing
+# a submission (organizer_image_uploads, app/models/models.py).
+ORGANIZER_DAILY_IMAGE_UPLOAD_CAP = 20
 
 # Organizer image upload (routers/organizer_events.py -> Cloudinary signed upload).
 # IMAGE_UPLOAD_ALLOWED_MIME itself comes from shared/app-config.json (imported
@@ -487,6 +506,21 @@ IMAGE_UPLOAD_MAX_BYTES = 8 * 1024 * 1024  # 8 MiB
 CLOUDINARY_UPLOAD_URL_TEMPLATE = (
     "https://api.cloudinary.com/v1_1/{cloud_name}/image/upload"
 )
+# Hosts an organizer-submission event.image_url is allowed to point at — the
+# signed Cloudinary upload endpoint (POST /organizer/events/image) always
+# returns a res.cloudinary.com secure_url. Without this, an organizer could
+# set image_url to an arbitrary https host; the digest embeds it as an <img>,
+# turning it into a tracking pixel that leaks each recipient's IP/open-time to
+# a third party the recipient never consented to. Scraped (non-organizer)
+# sources are unaffected — this only gates SOURCE_KIND_USER_SUBMISSION.
+ALLOWED_IMAGE_HOSTS = frozenset({"res.cloudinary.com"})
+
+# Whole-request body ceiling (app.main.MaxBodySizeMiddleware) — above
+# IMAGE_UPLOAD_MAX_BYTES (the largest legitimate body today) since multipart
+# form overhead adds a little on top of the raw file. Nothing else in the
+# stack caps request size: Starlette receives and spools the full body before
+# any handler-level check (e.g. IMAGE_UPLOAD_MAX_BYTES) ever runs.
+MAX_REQUEST_BODY_BYTES = 10 * 1024 * 1024  # 10 MiB
 
 # Namespace prefix for organizer-submitted events' synthetic external_id
 # (routers/organizer_events.py) — distinguishes user-submission rows from any
@@ -558,6 +592,10 @@ SCORE_INSERT_CHUNK_SIZE = 1000
 # GET /explore (app/routers/browse.py) — event discovery / search page.
 # BROWSE_PAGE_SIZE itself is cross-stack (shared/app-config.json), imported above.
 BROWSE_MAX_PAGE_SIZE: int = 60
+# ?q= keyword search — _keyword_filter builds a %...% pattern against two
+# trigram GIN indexes; an unbounded string is cheap to send and expensive to
+# scan, and RATE_LIMIT_BROWSE alone doesn't bound the per-request cost.
+BROWSE_QUERY_MAX_LEN: int = 200
 
 # Shared pagination validation floors — every `limit`/`offset` Query() across
 # admin.py/browse.py/feedback.py enforces the same lower bound; centralized so
@@ -1112,6 +1150,12 @@ RAW_EVENTS_RETENTION_DAYS = 90
 INGESTION_RUNS_RETENTION_DAYS = 90
 RAW_INBOUND_EMAILS_RETENTION_DAYS = 90
 DAILY_FEEDS_RETENTION_DAYS = 30
+# Unverified users/organizers — a row inserted on an unauthenticated
+# POST .../request-link before the address is proven reachable (see CLAUDE.md
+# Auth → Email verification gate). Retained this long in case a slow/late
+# click on a still-valid link would otherwise orphan it, then pruned so an
+# address nobody ever proved they own isn't retained indefinitely.
+UNVERIFIED_ACCOUNT_RETENTION_DAYS = 30
 
 # HTTP verbs used as literal method tags outside the httpx client calls
 # themselves (e.g. ListingRequest.method) — the retrying http_get/http_post
