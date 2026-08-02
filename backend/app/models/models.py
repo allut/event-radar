@@ -222,7 +222,13 @@ class IngestionRun(Base):
 
 class RawEvent(Base):
     __tablename__ = "raw_events"
-    __table_args__ = (Index("ix_raw_events_fetched_at", "fetched_at"),)
+    __table_args__ = (
+        Index("ix_raw_events_fetched_at", "fetched_at"),
+        # Created by migration 0002 but was missing here — a create_all-built
+        # schema (tests) lacked it until this declaration was added back,
+        # mirroring the identical ix_events_status fix on Event below.
+        Index("ix_raw_events_source_id", "source_id"),
+    )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     source_id: Mapped[int] = mapped_column(ForeignKey("sources.id"), nullable=False)
@@ -278,13 +284,34 @@ class Event(Base):
             "detail_refetched_at",
             postgresql_where=text("url IS NOT NULL"),
         ),
-        Index("ix_events_submitted_by_organizer_id", "submitted_by_organizer_id"),
+        # Composite, not single-column: serves both organizer_events.py's daily
+        # submission-cap query (submitted_by_organizer_id = X AND created_at >=
+        # day_start) and list_own_events's (submitted_by_organizer_id = X ORDER
+        # BY created_at DESC) — a single-column index on submitted_by_organizer_id
+        # alone would leave created_at as a heap filter/sort on the organizer's
+        # entire history.
+        Index(
+            "ix_events_organizer_created",
+            "submitted_by_organizer_id",
+            "created_at",
+        ),
         # Admin review-queue candidate query (Phase 2): needs_review IS TRUE.
         Index(
             "ix_events_needs_review",
             "needs_review",
             postgresql_where=text("needs_review"),
         ),
+        # event_not_ended_filter()'s OR (ends_at >= now) / (ends_at IS NULL AND
+        # starts_at >= now) can't use a plain B-tree — this expression index
+        # backs it (and _date_range_filter's identical coalesce(ends_at,
+        # starts_at) >= date_from_start in browse.py), on the largest table in
+        # the schema, which grows forever since events rows are never deleted.
+        Index(
+            "ix_events_live_until",
+            text("coalesce(ends_at, starts_at)"),
+        ),
+        # ORDER BY events.price_min ASC NULLS LAST (browse.py's price sort, Path A).
+        Index("ix_events_price_min", "price_min"),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
@@ -396,6 +423,10 @@ class EventClassification(Base):
             "vibes",
             postgresql_using="gin",
         ),
+        # ORDER BY quality_score DESC NULLS LAST — public.py showcase,
+        # browse.py's quality sort (Path A) and For-you pool ordering, and the
+        # publish gate's quality_score >= PUBLISH_MIN_QUALITY_SCORE subquery.
+        Index("ix_event_classifications_quality_score", "quality_score"),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
@@ -461,7 +492,14 @@ class UserEventFeedback(Base):
 
 class UserEventScore(Base):
     __tablename__ = "user_event_scores"
-    __table_args__ = (UniqueConstraint("user_id", "event_id"),)
+    __table_args__ = (
+        UniqueConstraint("user_id", "event_id"),
+        # cleanup.py's UserEventScore.event_id.in_(ended_event_ids) leads with
+        # event_id — the UniqueConstraint above only backs (user_id, event_id),
+        # leading with user_id, so this table (the largest by row count) was
+        # seq-scanned by that weekly cleanup query without this.
+        Index("ix_user_event_scores_event_id", "event_id"),
+    )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     user_id: Mapped[int] = mapped_column(
@@ -481,7 +519,13 @@ class UserEventScore(Base):
 
 class DailyFeed(Base):
     __tablename__ = "daily_feeds"
-    __table_args__ = (UniqueConstraint("user_id", "feed_date"),)
+    __table_args__ = (
+        UniqueConstraint("user_id", "feed_date"),
+        # cleanup.py's DailyFeed.feed_date < cutoff has no user_id filter — the
+        # UniqueConstraint above leads with user_id, so this indexless-for-that-
+        # predicate query was unusable by it.
+        Index("ix_daily_feeds_feed_date", "feed_date"),
+    )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     user_id: Mapped[int] = mapped_column(

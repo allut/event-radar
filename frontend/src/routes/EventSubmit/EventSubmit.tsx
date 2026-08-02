@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { getLocale, setLocale } from '../../lib/auth';
 import { useOrganizerLogout } from '../../hooks/useOrganizerLogout';
@@ -42,7 +42,9 @@ export default function EventSubmit() {
   const form = useOrganizerEventForm(locale, eventId);
   const [contentLang, setContentLang] = useState<ContentLang>(ORGANIZER_BASE_CONTENT_LANG);
 
-  const slots: Record<ContentLang, ContentSlot> = {
+  // Re-trims all 9 text fields (multi-KB organizer prose) only when one of
+  // them actually changes, not on every unrelated keystroke (price, venue, etc).
+  const slots: Record<ContentLang, ContentSlot> = useMemo(() => ({
     [LOCALE_ET]: {
       title: form.title, setTitle: form.setTitle,
       description: form.description, setDescription: form.setDescription,
@@ -61,7 +63,11 @@ export default function EventSubmit() {
       importantInfo: form.importantInfoRu, setImportantInfo: form.setImportantInfoRu,
       hasContent: Boolean(form.titleRu.trim() || form.descriptionRu.trim() || form.importantInfoRu.trim()),
     },
-  };
+  }), [
+    form.title, form.setTitle, form.description, form.setDescription, form.importantInfo, form.setImportantInfo,
+    form.titleEn, form.setTitleEn, form.descriptionEn, form.setDescriptionEn, form.importantInfoEn, form.setImportantInfoEn,
+    form.titleRu, form.setTitleRu, form.descriptionRu, form.setDescriptionRu, form.importantInfoRu, form.setImportantInfoRu,
+  ]);
   const activeSlot = slots[contentLang];
   const contentLangLabel = (code: ContentLang) =>
     LOCALES.find((l) => l.code === code)?.label ?? code.toUpperCase();
@@ -70,6 +76,12 @@ export default function EventSubmit() {
     label: contentLangLabel(code),
     dot: code !== ORGANIZER_BASE_CONTENT_LANG && slots[code].hasContent,
   }));
+  // Rebuilding this 14-option list (+14 t() lookups) only needs to happen when
+  // the locale changes, not on every keystroke elsewhere in the form.
+  const categoryOptions = useMemo(
+    () => CATEGORIES.map((slug) => ({ value: slug, label: t(`category_${slug}`, locale) })),
+    [locale],
+  );
   const langField = (key: string) =>
     ti('organizer_field_lang_suffix', locale, {
       field: t(key, locale),
@@ -192,7 +204,7 @@ export default function EventSubmit() {
           <SelectField
             id="category"
             value={form.category}
-            options={CATEGORIES.map((slug) => ({ value: slug, label: t(`category_${slug}`, locale) }))}
+            options={categoryOptions}
             onChange={form.setCategory}
             placeholder={t('organizer_category_none', locale)}
             ariaLabel={t('organizer_field_category', locale)}

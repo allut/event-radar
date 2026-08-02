@@ -20,6 +20,7 @@ from app.constants import (
     ESTONIA_BBOX,
     EVENT_STATUS_DRAFT,
     INGEST_REJECT_RECHECK_DAYS,
+    INGEST_SKIP_ID_LOOKBACK_DAYS,
     INGESTION_ERROR_MAX_LEN,
     SLUG_HASH_HEX_LEN,
     SLUG_SANITIZE_RE,
@@ -90,13 +91,23 @@ def _make_slug(title: str, starts_at: datetime, external_id: str) -> str:
 
 
 async def existing_external_ids(db: AsyncSession, source_id: int) -> set[str]:
-    """Return external_ids already stored in event_sources for this source.
+    """Return external_ids already stored in event_sources for this source,
+    for events that started within INGEST_SKIP_ID_LOOKBACK_DAYS (or later).
 
     Lets adapters skip detail fetches for already-ingested events (forward-only
-    + self-healing: new events get fetched every run until stored).
+    + self-healing: new events get fetched every run until stored). Bounded by
+    join to Event.starts_at — a source's live listing never re-surfaces an
+    external_id belonging to an event that started long ago, and events rows
+    are never deleted, so an unbounded query here grows forever (see
+    INGEST_SKIP_ID_LOOKBACK_DAYS). Correctness is unaffected if a stale
+    external_id drops out of this set: the event_sources unique index plus the
+    IntegrityError handler in insert_normalized_event still catch a re-insert.
     """
+    cutoff = datetime.now(tz=TALLINN_TZ) - timedelta(days=INGEST_SKIP_ID_LOOKBACK_DAYS)
     rows = await db.scalars(
-        select(EventSource.external_id).where(EventSource.source_id == source_id)
+        select(EventSource.external_id)
+        .join(Event, Event.id == EventSource.event_id)
+        .where(EventSource.source_id == source_id, Event.starts_at >= cutoff)
     )
     return {r for r in rows.all() if r is not None}
 

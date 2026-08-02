@@ -139,11 +139,20 @@ export function buildMapsUrl(
   return null;
 }
 
-/** Builds (and caches at module scope, keyed by a joined-options cache key) an
- * Intl.DateTimeFormat — same rationale as hourMinuteFormatter above. */
+/** Builds (and caches at module scope, keyed by locale + a literal format-shape
+ * key) an Intl.DateTimeFormat — same rationale as hourMinuteFormatter above.
+ * `shapeKey` must uniquely identify `options`; call sites pass one of the
+ * DTF_* constants below for both, so the cache key is a cheap string literal
+ * join instead of a fresh JSON.stringify(options) on every call (options
+ * itself is also a hoisted module constant, not a fresh object literal per
+ * call). */
 const DATE_TIME_FORMATTERS = new Map<string, Intl.DateTimeFormat>();
-function dateTimeFormatter(localeCode: string, options: Intl.DateTimeFormatOptions): Intl.DateTimeFormat {
-  const key = `${localeCode}|${JSON.stringify(options)}`;
+function dateTimeFormatter(
+  localeCode: string,
+  shapeKey: string,
+  options: Intl.DateTimeFormatOptions,
+): Intl.DateTimeFormat {
+  const key = `${localeCode}|${shapeKey}`;
   let fmt = DATE_TIME_FORMATTERS.get(key);
   if (!fmt) {
     fmt = new Intl.DateTimeFormat(localeCode, options);
@@ -152,11 +161,19 @@ function dateTimeFormatter(localeCode: string, options: Intl.DateTimeFormatOptio
   return fmt;
 }
 
+const DTF_WEEKDAY_SHORT: Intl.DateTimeFormatOptions = { weekday: 'short' };
+const DTF_DAY_MONTH_SHORT: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short' };
+const DTF_WEEKDAY_LONG: Intl.DateTimeFormatOptions = { weekday: 'long' };
+const DTF_DAY_MONTH_YEAR_LONG: Intl.DateTimeFormatOptions = {
+  day: 'numeric', month: 'long', year: 'numeric',
+};
+const DTF_MONTH_YEAR: Intl.DateTimeFormatOptions = { month: 'long', year: 'numeric' };
+
 export function formatEventTime(iso: string, locale: string): string {
   const localeCode = toLocaleCode(locale);
   const date = new Date(iso);
-  const weekday = dateTimeFormatter(localeCode, { weekday: 'short' }).format(date);
-  const day = dateTimeFormatter(localeCode, { day: 'numeric', month: 'short' }).format(date);
+  const weekday = dateTimeFormatter(localeCode, 'weekday-short', DTF_WEEKDAY_SHORT).format(date);
+  const day = dateTimeFormatter(localeCode, 'day-month-short', DTF_DAY_MONTH_SHORT).format(date);
   const time = hourMinuteFormatter(locale).format(date);
   return `${weekday}, ${day} · ${time}`;
 }
@@ -164,8 +181,8 @@ export function formatEventTime(iso: string, locale: string): string {
 export function formatEventDateTime(iso: string, locale: string): string {
   const localeCode = toLocaleCode(locale);
   const date = new Date(iso);
-  const weekday = dateTimeFormatter(localeCode, { weekday: 'long' }).format(date);
-  const day = dateTimeFormatter(localeCode, { day: 'numeric', month: 'long', year: 'numeric' }).format(date);
+  const weekday = dateTimeFormatter(localeCode, 'weekday-long', DTF_WEEKDAY_LONG).format(date);
+  const day = dateTimeFormatter(localeCode, 'day-month-year-long', DTF_DAY_MONTH_YEAR_LONG).format(date);
   const time = hourMinuteFormatter(locale).format(date);
   return `${weekday}, ${day} · ${time}`;
 }
@@ -208,6 +225,12 @@ export interface CalendarCell {
   date: Date;
   day: number;
   spill: boolean;
+  /** Stable React list key — precomputed here instead of calling the
+   * expensive Date.toISOString() per cell per render. */
+  key: string;
+  /** Same identity string as `date.toDateString()`, precomputed once — used
+   * for both the grid's `data-date` attribute and the focus-restore lookup. */
+  dataDate: string;
 }
 
 /** Returns a fixed CALENDAR_WEEKS_SHOWN × CALENDAR_DAYS_PER_WEEK grid of days for
@@ -222,7 +245,8 @@ export function monthGridDays(year: number, month: number, weekStart: number): C
   for (let i = 0; i < totalCells; i++) {
     const d = new Date(gridStart);
     d.setDate(gridStart.getDate() + i);
-    cells.push({ date: d, day: d.getDate(), spill: d.getMonth() !== month });
+    const dataDate = d.toDateString();
+    cells.push({ date: d, day: d.getDate(), spill: d.getMonth() !== month, key: dataDate, dataDate });
   }
   return cells;
 }
@@ -308,7 +332,7 @@ export function fromDisplayDateTime(text: string): string {
 export function formatMonthYearLabel(year: number, month: number, locale: string): string {
   const localeCode = toLocaleCode(locale);
   const date = new Date(year, month, 1);
-  return dateTimeFormatter(localeCode, { month: 'long', year: 'numeric' }).format(date);
+  return dateTimeFormatter(localeCode, 'month-year', DTF_MONTH_YEAR).format(date);
 }
 
 /** Human-readable trigger label for a valid picker value, e.g. "24 Jul, 19:00". */
@@ -317,7 +341,7 @@ export function formatPickerValue(value: string, locale: string): string {
   if (!parts) return '';
   const localeCode = toLocaleCode(locale);
   const date = new Date(parts.year, parts.month, parts.day, parts.hour, parts.minute);
-  const day = dateTimeFormatter(localeCode, { day: 'numeric', month: 'short' }).format(date);
+  const day = dateTimeFormatter(localeCode, 'day-month-short', DTF_DAY_MONTH_SHORT).format(date);
   const time = hourMinuteFormatter(locale).format(date);
   return `${day}, ${time}`;
 }

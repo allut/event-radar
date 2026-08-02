@@ -55,9 +55,10 @@ from app.ingestion.selectors import (
 from app.ingestion.content_filters import is_explicit_text, is_non_event_text
 from app.ingestion.http_client import host_guard_hook, host_is_allowed, http_get
 from app.ingestion.jsonld import (
-    extract_jsonld_event_location,
-    extract_jsonld_event_offers,
     extract_jsonld_event_text,
+    location_from_jsonld_items,
+    offers_from_jsonld_items,
+    parse_jsonld_event_items,
 )
 from app.ingestion.locale_urls import (
     fetch_locale_variants,
@@ -323,8 +324,9 @@ async def _process_one(
 
     summary["fetched"] += 1
     soup = BeautifulSoup(response.text, "html.parser")
-    location = extract_jsonld_event_location(soup)
-    price_min, price_max, currency, has_free_tier = extract_jsonld_event_offers(soup)
+    jsonld_items = parse_jsonld_event_items(soup)
+    location = location_from_jsonld_items(jsonld_items)
+    price_min, price_max, currency, has_free_tier = offers_from_jsonld_items(jsonld_items)
 
     # Runs before the no_data gate so events whose JSON-LD has only text
     # (no location/offers) still receive localized titles/descriptions.

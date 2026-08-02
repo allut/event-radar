@@ -78,6 +78,20 @@ class TestHostIsAllowed:
         assert host_is_allowed("") is False
 
 
+@pytest.fixture(autouse=True)
+def _clear_dns_verdict_cache():
+    """resolves_to_private_ip() now caches verdicts per-hostname (see
+    http_client.DNS_RESOLVE_CACHE_TTL_SECONDS) — several tests below and in
+    TestSafeFetchableUrl re-resolve the same hostname with a different mocked
+    getaddrinfo result, which would otherwise read back the first test's
+    cached verdict instead of exercising the new mock."""
+    from app.ingestion import http_client
+
+    http_client._dns_verdict_cache.clear()
+    yield
+    http_client._dns_verdict_cache.clear()
+
+
 class TestResolvesToPrivateIp:
     def test_public_ip_is_not_private(self):
         with patch("socket.getaddrinfo", return_value=_addrinfo("93.184.216.34")):

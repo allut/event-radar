@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type RefObject } from 'react';
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type RefObject } from 'react';
 import {
   cx, monthGridDays, weekdayHeaders, splitDateTimeValue, joinDateTimeValue,
   formatPickerValue, formatMonthYearLabel, parseTypedDate, toDisplayDateTime, fromDisplayDateTime,
@@ -97,11 +97,13 @@ function PopoverBody({ id, value, onChange, min, locale, required, disabled, pop
   const gridRef = useRef<HTMLDivElement>(null);
   const focusPendingRef = useRef(false);
 
+  const focusedDayKey = focusedDay.toDateString();
+
   useEffect(() => {
     if (!focusPendingRef.current || !gridRef.current) return;
     focusPendingRef.current = false;
-    gridRef.current.querySelector<HTMLButtonElement>(`[data-date="${focusedDay.toDateString()}"]`)?.focus();
-  }, [focusedDay]);
+    gridRef.current.querySelector<HTMLButtonElement>(`[data-date="${focusedDayKey}"]`)?.focus();
+  }, [focusedDayKey]);
 
   const selectedDay = parsed ? new Date(parsed.year, parsed.month, parsed.day) : null;
 
@@ -197,7 +199,12 @@ function PopoverBody({ id, value, onChange, min, locale, required, disabled, pop
     }
   }
 
-  const cells = monthGridDays(viewYear, viewMonth, CALENDAR_WEEK_START);
+  // Re-runs only when the visible month changes, not on every hour/minute
+  // keystroke (each ~250 Date operations, incl. toDateString() per cell).
+  const cells = useMemo(
+    () => monthGridDays(viewYear, viewMonth, CALENDAR_WEEK_START),
+    [viewYear, viewMonth],
+  );
   const headers = weekdayHeaders(locale);
   const monthYearLabel = formatMonthYearLabel(viewYear, viewMonth, locale);
 
@@ -228,12 +235,12 @@ function PopoverBody({ id, value, onChange, min, locale, required, disabled, pop
           const isDisabled = disabled || Boolean(minDay && c.date < minDay);
           return (
             <button
-              key={c.date.toISOString()}
+              key={c.key}
               type="button"
               role="gridcell"
               aria-selected={isSelected}
               tabIndex={isFocused ? 0 : -1}
-              data-date={c.date.toDateString()}
+              data-date={c.dataDate}
               data-selected-day={isFocused || undefined}
               disabled={isDisabled}
               className={cx(styles.calDay, c.spill && styles.spill, isToday && styles.today, isSelected && styles.selected)}

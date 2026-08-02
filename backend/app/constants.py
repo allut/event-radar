@@ -113,6 +113,15 @@ PRICE_HINT_MAX_CHARS = 300  # cap on Event.price_hint, kept short for the LLM pr
 # (app/ingestion/refetch.py), so it must be pinned to known-good hosts rather
 # than trusted at face value. Suffix-matched (see host_is_allowed) so a
 # legitimate subdomain (e.g. "en.fienta.com") still passes.
+# TTL for resolves_to_private_ip()'s host->verdict cache (http_client.py). One
+# ingest run fetches many events from the same 1-4 hostnames — each uncached
+# call is a thread hand-off plus a real DNS round trip. Short enough that a
+# DNS-rebinding attack against an allowlisted host is still caught well within
+# one scheduled run's lifetime; the check was already documented as
+# TOCTOU-racy against httpx's own re-resolution (see resolves_to_private_ip's
+# docstring), so this doesn't weaken that existing trade-off.
+DNS_RESOLVE_CACHE_TTL_SECONDS: float = 300.0
+
 ALLOWED_SOURCE_HOSTS: frozenset[str] = frozenset(
     {
         "fienta.com",
@@ -336,6 +345,12 @@ EVENT_STATUS_CANCELLED = "cancelled"
 
 # Deduplication
 DEDUP_LOOKBACK_DAYS = 30  # only re-cluster events that started within this window
+# Upper bound on load_dedup_candidate_events — without it, an event scheduled
+# arbitrarily far in the future is loaded as a full ORM object on every dedup
+# pass (events rows are never deleted, so nothing else bounds this). Set well
+# above any real event's lead time; a future event beyond this window simply
+# isn't dedup-clustered until it comes within range on a later run.
+DEDUP_LOOKAHEAD_DAYS = 400
 TITLE_RATIO_THRESHOLD = 70  # rapidfuzz token_set_ratio threshold for title match
 TITLE_RATIO_VENUE_BYPASS_THRESHOLD = 85  # near-exact title; on the LLM path, bypass
 # the venue gate at/above this so cross-source dupes with differently-spelled venues
@@ -527,6 +542,15 @@ SCORE_WEIGHT_LOCALITY: float = 0.05
 # starts_at values in one DAILY_5_LOOKAHEAD_DAYS candidate window.
 TIME_SLOTS_CACHE_MAXSIZE = 4096
 
+# Chunk size for the bulk pg_insert(...).on_conflict_do_update(...) upserts in
+# build_daily_feeds (_persist_new_scores / _persist_daily_feeds). The Postgres
+# wire protocol caps bind parameters at 32767 (int16); with 4 params/row and a
+# realistic ~30 users x ~300 candidate events, a single unchunked statement can
+# exceed that limit and raise at execute time. 1000 rows/chunk stays comfortably
+# under the limit at either table's column count and mirrors the chunking
+# already used for the LLM dedup hash IN-list (LLM_DEDUP_HASH_QUERY_CHUNK_SIZE).
+SCORE_INSERT_CHUNK_SIZE = 1000
+
 # GET /explore (app/routers/browse.py) — event discovery / search page.
 # BROWSE_PAGE_SIZE itself is cross-stack (shared/app-config.json), imported above.
 BROWSE_MAX_PAGE_SIZE: int = 60
@@ -536,6 +560,12 @@ BROWSE_MAX_PAGE_SIZE: int = 60
 # it can't drift per-endpoint.
 PAGINATION_MIN_LIMIT: int = 1
 PAGINATION_MIN_OFFSET: int = 0
+# Ceiling on `offset` across every paginated list endpoint (browse.py, feedback.py,
+# admin.py, organizer_events.py) — `ge=` alone leaves offset unbounded, so an
+# offset like 5_000_000 makes Postgres walk and discard that many rows on every
+# request at the endpoint's full rate limit. High enough that no legitimate
+# pagination depth is ever affected.
+PAGINATION_MAX_OFFSET: int = 100_000
 # Candidate cap for the Python-scored path (Path B: for_you=True OR sort=relevance —
 # so also date/price/quality sort *under* for_you=True, not just relevance). Sorted
 # soonest-first before capping, so the cap policy is a deliberate soonest-bias, not
@@ -545,6 +575,15 @@ PAGINATION_MIN_OFFSET: int = 0
 # Path-B approximation at MVP scale (`total` in the response reflects at most this
 # many rows when the cap is hit; see browse.py docstring).
 BROWSE_RELEVANCE_MAX_CANDIDATES: int = 300
+# How far back browse.py::_load_feedback_context looks for a user's like/dislike
+# history when scoring /explore (Path B). user_event_feedback is preserved
+# indefinitely by policy (see CLAUDE.md Data Retention), so an unbounded load
+# grows with the user's lifetime activity on every /explore request. The
+# FEEDBACK_DECAY_BASE (0.9) decay makes a signal this old numerically
+# negligible (0.9^90 ~= 0.0000265) to score_event() anyway, so the cutoff drops
+# no meaningfully-weighted signal.
+FEEDBACK_HISTORY_LOOKBACK_DAYS = 90
+
 # For-you soft-filter: events below this persona_affinity() score ([0, 1], see
 # ranking/score.py) are hidden from the For-you pool. Tuned below NEUTRAL_SCORE (0.5)
 # so an event with no strong signal either way still surfaces; only a
@@ -592,6 +631,16 @@ SIGNAL_BOOKMARK = "bookmark"
 PREFERENCE_SIGNALS: frozenset[str] = frozenset(
     {SIGNAL_LIKE, SIGNAL_DISLIKE, SIGNAL_BOOKMARK}
 )
+# Signals that actually feed ranking/score.py's like/dislike-based scoring
+# (both ranking/score.py::_load_feedback_context-equivalent loads and
+# browse.py::_load_feedback_context filter on signal IN (like, dislike)).
+# bookmark is never read by the scorer and click_external/view are passive
+# analytics — invalidating the score cache on those wastes the entire cache
+# (every ticket click or bookmark otherwise wiped a user's cached scores,
+# forcing build_daily_feeds to recompute from scratch). Only these two signals
+# should trigger invalidate_user_scores; see feedback.py::record_feedback/
+# delete_feedback.
+SCORE_AFFECTING_SIGNALS: frozenset[str] = frozenset({SIGNAL_LIKE, SIGNAL_DISLIKE})
 # Guard: if shared/app-config.json signals ever diverge from these sentinels, fail fast.
 assert SIGNAL_LIKE in VALID_SIGNALS, f"{SIGNAL_LIKE!r} missing from VALID_SIGNALS in shared/app-config.json"
 assert SIGNAL_DISLIKE in VALID_SIGNALS, f"{SIGNAL_DISLIKE!r} missing from VALID_SIGNALS in shared/app-config.json"
@@ -904,6 +953,14 @@ REFETCH_COMMIT_INTERVAL_SECONDS: float = 120.0
 # re-fetched/re-saved on every run; it is retried once after this window so a
 # transient rejection still self-heals. Pure backend scalar — not cross-stack.
 INGEST_REJECT_RECHECK_DAYS = 7
+# Lower bound on existing_external_ids' EventSource->Event join. Without it,
+# every external_id ever stored for a source is loaded into a Python set on
+# every hourly ingest run, growing monotonically since events rows are never
+# deleted. A source's live listing never re-surfaces an external_id belonging
+# to an event that started this long ago, so dropping it from the skip set
+# costs nothing beyond the event_sources unique index + IntegrityError handler
+# already guarding against a duplicate insert (see insert_normalized_event).
+INGEST_SKIP_ID_LOOKBACK_DAYS = 180
 # venue_name values treated as empty/placeholder, so a real detail name replaces
 # them. Matched case-insensitively. Deliberately excludes "online"/"MamaOnline" —
 # those are real (online) venue names, not placeholders (NON_GEOCODABLE_VENUE_NAMES

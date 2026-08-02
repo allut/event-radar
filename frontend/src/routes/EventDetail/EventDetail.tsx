@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../../api/client';
@@ -38,6 +39,15 @@ export default function EventDetail() {
   const { activeSignal, pending, sendFeedback } = useFeedback(data?.id ?? 0, {
     initialSignal: data?.my_signal ?? null,
   });
+
+  const sanitizedDescription = useMemo(
+    () => (data?.description ? sanitizeHtml(data.description) : null),
+    [data],
+  );
+  const sanitizedImportantInfo = useMemo(
+    () => (data?.important_info ? sanitizeHtml(data.important_info) : null),
+    [data],
+  );
 
   function handleTicketsClick() {
     if (!data || !authed) return;
@@ -143,19 +153,19 @@ export default function EventDetail() {
             </section>
           )}
 
-          {data.description && (
+          {sanitizedDescription && (
             <section className={styles.section}>
               <h2 className={styles.eyebrow}>{t('eyebrow_about', locale)}</h2>
               <hr className={styles.rule} />
-              <div className={styles.description} dangerouslySetInnerHTML={{ __html: sanitizeHtml(data.description) }} />
+              <div className={styles.description} dangerouslySetInnerHTML={{ __html: sanitizedDescription }} />
             </section>
           )}
 
-          {data.important_info && (
+          {sanitizedImportantInfo && (
             <section className={styles.section}>
               <h2 className={styles.eyebrow}>{t('eyebrow_important_info', locale)}</h2>
               <hr className={styles.rule} />
-              <div className={styles.description} dangerouslySetInnerHTML={{ __html: sanitizeHtml(data.important_info) }} />
+              <div className={styles.description} dangerouslySetInnerHTML={{ __html: sanitizedImportantInfo }} />
             </section>
           )}
 

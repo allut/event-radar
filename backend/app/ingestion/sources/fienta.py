@@ -30,9 +30,10 @@ from app.ingestion.adapter import (
 )
 from app.ingestion.http_client import AsyncRateLimiter, host_guard_hook, http_get
 from app.ingestion.jsonld import (
-    extract_jsonld_event_location,
-    extract_jsonld_event_offers,
     extract_jsonld_event_text,
+    location_from_jsonld_items,
+    offers_from_jsonld_items,
+    parse_jsonld_event_items,
 )
 from app.ingestion.locale_urls import (
     locale_from_html_lang,
@@ -57,8 +58,9 @@ def address_city(address: str) -> str | None:
 
 def _parse_detail_fields(soup: BeautifulSoup) -> dict[str, Any]:
     """Parse a detail page's JSON-LD location + offers into the _detail dict."""
-    loc = extract_jsonld_event_location(soup)
-    price_min, price_max, currency, has_free_tier = extract_jsonld_event_offers(soup)
+    items = parse_jsonld_event_items(soup)
+    loc = location_from_jsonld_items(items)
+    price_min, price_max, currency, has_free_tier = offers_from_jsonld_items(items)
     return {
         "venue_name": loc.get("venue_name") if loc else None,
         "venue_address": loc.get("venue_address") if loc else None,

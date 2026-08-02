@@ -20,6 +20,7 @@ from app.constants import (
     APP_ENV_DEVELOPMENT,
     EVENT_STATUS_CANCELLED,
     LOG_EVENT_AUTH_FAILED,
+    PAGINATION_MAX_OFFSET,
     PAGINATION_MIN_LIMIT,
     PAGINATION_MIN_OFFSET,
     RATE_LIMIT_ADMIN,
@@ -161,7 +162,9 @@ async def admin_dedup_groups(
         ge=PAGINATION_MIN_LIMIT,
         le=ADMIN_DEDUP_GROUPS_MAX_PAGE_SIZE,
     ),
-    offset: int = Query(PAGINATION_MIN_OFFSET, ge=PAGINATION_MIN_OFFSET),
+    offset: int = Query(
+        PAGINATION_MIN_OFFSET, ge=PAGINATION_MIN_OFFSET, le=PAGINATION_MAX_OFFSET
+    ),
 ) -> dict:
     """Return events grouped by dedup_group_id for manual eyeballing.
 
@@ -240,7 +243,9 @@ async def admin_list_submissions(
         ge=PAGINATION_MIN_LIMIT,
         le=ADMIN_REVIEW_QUEUE_MAX_PAGE_SIZE,
     ),
-    offset: int = Query(PAGINATION_MIN_OFFSET, ge=PAGINATION_MIN_OFFSET),
+    offset: int = Query(
+        PAGINATION_MIN_OFFSET, ge=PAGINATION_MIN_OFFSET, le=PAGINATION_MAX_OFFSET
+    ),
 ) -> dict:
     """Post-hoc review queue: organizer-submitted events still flagged
     ``needs_review`` (set on submit/edit — see routers/organizer_events.py).

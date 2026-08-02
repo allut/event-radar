@@ -33,6 +33,7 @@ from app.constants import (
     NEUTRAL_SCORE,
     RECENCY_DECAY_DAYS,
     SCORE_HARD_EXCLUDE,
+    SCORE_INSERT_CHUNK_SIZE,
     SCORE_WEIGHT_AFFINITY,
     SCORE_WEIGHT_FEEDBACK,
     SCORE_WEIGHT_LOCALITY,
@@ -749,15 +750,21 @@ def _score_user_candidates(
 
 
 async def _persist_new_scores(db: AsyncSession, new_score_rows: list[dict]) -> None:
-    """Bulk upsert newly computed (user_id, event_id) scores."""
-    if not new_score_rows:
-        return
-    stmt = pg_insert(UserEventScore).values(new_score_rows)
-    stmt = stmt.on_conflict_do_update(
-        index_elements=["user_id", "event_id"],
-        set_={"score": stmt.excluded.score, "computed_at": stmt.excluded.computed_at},
-    )
-    await db.execute(stmt)
+    """Bulk upsert newly computed (user_id, event_id) scores.
+
+    Chunked at SCORE_INSERT_CHUNK_SIZE rows/statement — new_score_rows
+    accumulates one row per (user x cache-missing candidate event) across the
+    whole build_daily_feeds run, and a single unchunked statement can exceed
+    the Postgres wire protocol's ~32767 bind-parameter cap (4 params/row) once
+    the score cache is mostly cold (see SCORE_INSERT_CHUNK_SIZE)."""
+    for i in range(0, len(new_score_rows), SCORE_INSERT_CHUNK_SIZE):
+        chunk = new_score_rows[i : i + SCORE_INSERT_CHUNK_SIZE]
+        stmt = pg_insert(UserEventScore).values(chunk)
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["user_id", "event_id"],
+            set_={"score": stmt.excluded.score, "computed_at": stmt.excluded.computed_at},
+        )
+        await db.execute(stmt)
 
 
 async def _persist_daily_feeds(db: AsyncSession, daily_feed_rows: list[dict]) -> None:
@@ -768,18 +775,23 @@ async def _persist_daily_feeds(db: AsyncSession, daily_feed_rows: list[dict]) ->
     (`build_daily_feed_for_user`) racing the 06:00 scheduled `build_daily_feeds`
     job for the same user resolves atomically at the DB level instead of
     raising a unique-violation on the `(user_id, feed_date)` constraint that
-    would roll back the whole batch's single commit."""
-    if not daily_feed_rows:
-        return
-    stmt = pg_insert(DailyFeed).values(daily_feed_rows)
-    stmt = stmt.on_conflict_do_update(
-        index_elements=["user_id", "feed_date"],
-        set_={
-            "event_ids": stmt.excluded.event_ids,
-            "built_at": stmt.excluded.built_at,
-        },
-    )
-    await db.execute(stmt)
+    would roll back the whole batch's single commit.
+
+    Chunked at SCORE_INSERT_CHUNK_SIZE rows/statement for the same
+    bind-parameter-limit reason as _persist_new_scores — this table has fewer
+    params/row (3 vs 4) so it survives longer, but the chunking is kept
+    uniform across both callers rather than only guarding the tighter one."""
+    for i in range(0, len(daily_feed_rows), SCORE_INSERT_CHUNK_SIZE):
+        chunk = daily_feed_rows[i : i + SCORE_INSERT_CHUNK_SIZE]
+        stmt = pg_insert(DailyFeed).values(chunk)
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["user_id", "feed_date"],
+            set_={
+                "event_ids": stmt.excluded.event_ids,
+                "built_at": stmt.excluded.built_at,
+            },
+        )
+        await db.execute(stmt)
 
 
 def _build_one_user_feed(

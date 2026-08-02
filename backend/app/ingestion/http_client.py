@@ -30,6 +30,7 @@ from tenacity import (
 
 from app.constants import (
     ALLOWED_SOURCE_HOSTS,
+    DNS_RESOLVE_CACHE_TTL_SECONDS,
     HTTP_RETRY_AFTER_MAX_SECONDS,
     HTTP_RETRYABLE_STATUS_CODES,
     HTTP_RETRY_JITTER_MAX,
@@ -237,6 +238,16 @@ def host_is_allowed(hostname: str | None) -> bool:
     )
 
 
+# host -> (verdict, expires_at monotonic time). A source's event batch shares
+# 1-4 hostnames, so this turns O(N_new) redundant getaddrinfo() calls per
+# ingest run into effectively O(distinct hosts). Not thread-safe against a
+# torn read/write under true multi-threading, but this process is single
+# event-loop asyncio (each caller reaches this via asyncio.to_thread from the
+# same loop), so a stale-by-one-TTL read is the only realistic race — no worse
+# than the TOCTOU window already documented below.
+_dns_verdict_cache: dict[str | None, tuple[bool, float]] = {}
+
+
 def resolves_to_private_ip(hostname: str | None) -> bool:
     """True when hostname has no public-routable address (or fails to resolve).
 
@@ -246,29 +257,45 @@ def resolves_to_private_ip(hostname: str | None) -> bool:
     failure is treated as "private" (fail closed) rather than "unknown, so
     allow" — a source we can't resolve isn't one we should be fetching.
 
+    Verdicts are cached per-hostname for DNS_RESOLVE_CACHE_TTL_SECONDS — an
+    ingest run fetches many events from the same 1-4 hostnames, and each
+    uncached call is a thread hand-off plus a real DNS round trip.
+
     Known trade-off (documented, not fixed here): this resolves once at
-    check time. httpx re-resolves the host itself when it opens the
-    connection, so a narrow TOCTOU window remains between this check and the
-    actual request if a resolver returns a different address a moment later.
-    Closing that fully would require pinning the resolved IP for the
+    check time (now up to DNS_RESOLVE_CACHE_TTL_SECONDS stale). httpx
+    re-resolves the host itself when it opens the connection, so a TOCTOU
+    window remains between this check and the actual request if a resolver
+    returns a different address in the meantime — the cache widens that
+    existing window somewhat but does not introduce a new class of risk.
+    Closing it fully would require pinning the resolved IP for the
     connection (e.g. a custom httpx transport), which is out of scope here.
     """
+    cached = _dns_verdict_cache.get(hostname)
+    now = time.monotonic()
+    if cached is not None and cached[1] > now:
+        return cached[0]
+
     try:
         infos = socket.getaddrinfo(hostname, None)
     except socket.gaierror:
-        return True
-    for family, _type, _proto, _canonname, sockaddr in infos:
-        ip = ipaddress.ip_address(sockaddr[0])
-        if not (
-            ip.is_private
-            or ip.is_loopback
-            or ip.is_link_local
-            or ip.is_reserved
-            or ip.is_multicast
-            or ip.is_unspecified
-        ):
-            return False  # at least one public address — good enough to allow
-    return True  # every resolved address was non-public
+        verdict = True
+    else:
+        verdict = True  # every resolved address was non-public, unless proven otherwise below
+        for family, _type, _proto, _canonname, sockaddr in infos:
+            ip = ipaddress.ip_address(sockaddr[0])
+            if not (
+                ip.is_private
+                or ip.is_loopback
+                or ip.is_link_local
+                or ip.is_reserved
+                or ip.is_multicast
+                or ip.is_unspecified
+            ):
+                verdict = False  # at least one public address — good enough to allow
+                break
+
+    _dns_verdict_cache[hostname] = (verdict, now + DNS_RESOLVE_CACHE_TTL_SECONDS)
+    return verdict
 
 
 async def safe_fetchable_url(url: str | None, source: str | None = None) -> str | None:

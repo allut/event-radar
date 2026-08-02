@@ -36,6 +36,7 @@ from app.constants import (
     LOCALE_RU,
     ORGANIZER_DAILY_SUBMISSION_CAP,
     ORGANIZER_SUBMISSION_EXTERNAL_ID_PREFIX,
+    PAGINATION_MAX_OFFSET,
     PAGINATION_MIN_LIMIT,
     PAGINATION_MIN_OFFSET,
     RATE_LIMIT_SUBMIT,
@@ -452,7 +453,7 @@ async def list_own_events(
 ) -> dict:
     """List the organizer's own submitted events, most recent first."""
     limit = max(PAGINATION_MIN_LIMIT, min(limit, BROWSE_MAX_PAGE_SIZE))
-    offset = max(PAGINATION_MIN_OFFSET, offset)
+    offset = max(PAGINATION_MIN_OFFSET, min(offset, PAGINATION_MAX_OFFSET))
 
     stmt = (
         select_events_with_classification()
