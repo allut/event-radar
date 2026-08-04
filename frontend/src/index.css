@@ -174,6 +174,9 @@
   /* Footer social icons */
   --social-icon-size: 20px;
 
+  /* EventDetail action bar (share icon) */
+  --action-icon-size: 15px;
+
   /* Heading scale */
   --heading-3xl: 3rem;
   --heading-2xl: 2.5rem;

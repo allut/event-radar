@@ -21,6 +21,15 @@ interface EventDetailData extends EventData {
   language: string | null;
 }
 
+const ShareIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
+       strokeLinecap="round" strokeLinejoin="round" aria-hidden focusable="false">
+    <path d="M12 15V3" />
+    <path d="M8 7l4-4 4 4" />
+    <path d="M4 13v6a2 2 0 002 2h12a2 2 0 002-2v-6" />
+  </svg>
+);
+
 export default function EventDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -119,10 +128,6 @@ export default function EventDetail() {
             />
           )}
           {price && <span className={styles.price}>{price}</span>}
-          <button className={styles.shareFab} onClick={handleShare} aria-label={t('share', locale)}>
-            <span className={styles.shareFabIcon} aria-hidden>&#8599;</span>
-            {t('share', locale)}
-          </button>
         </div>
 
         <div className={styles.content}>
@@ -140,6 +145,33 @@ export default function EventDetail() {
           </div>
 
           <h1 className={styles.title}>{data.title}</h1>
+
+          <div className={styles.actions}>
+            {authed && (
+              <FeedbackButtonRow
+                activeSignal={activeSignal}
+                pending={pending}
+                onPress={sendFeedback}
+                locale={locale}
+                variant="detail"
+              />
+            )}
+            <button className={styles.shareBtn} onClick={handleShare} aria-label={t('share', locale)}>
+              <ShareIcon />
+              {t('share', locale)}
+            </button>
+            {ticketUrl && (
+              <a
+                href={ticketUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={styles.ticketsBtn}
+                onClick={handleTicketsClick}
+              >
+                {t('get_tickets', locale)}
+              </a>
+            )}
+          </div>
 
           {data.why_go.length > 0 && (
             <section className={styles.section}>
@@ -204,30 +236,6 @@ export default function EventDetail() {
             </section>
           )}
 
-          {(authed || ticketUrl) && (
-            <div className={styles.actions}>
-              {authed && (
-                <FeedbackButtonRow
-                  activeSignal={activeSignal}
-                  pending={pending}
-                  onPress={sendFeedback}
-                  locale={locale}
-                  variant="detail"
-                />
-              )}
-              {ticketUrl && (
-                <a
-                  href={ticketUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={styles.ticketsBtn}
-                  onClick={handleTicketsClick}
-                >
-                  {t('get_tickets', locale)}
-                </a>
-              )}
-            </div>
-          )}
         </div>
       </main>
     </div>
