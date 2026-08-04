@@ -358,3 +358,29 @@
 .ticketsBtn:hover {
   color: var(--on-accent);
 }
+
+@media (max-width: 640px) {
+  .ticketsBtn {
+    order: -1;
+    flex: 1 0 100%;
+    margin-left: 0;
+    justify-content: center;
+  }
+
+  .shareBtn {
+    margin-left: auto;
+    padding-block: var(--space-2);
+  }
+}
+
+@media (max-width: 400px) {
+  .shareLabel {
+    display: none;
+  }
+
+  .shareBtn {
+    gap: 0;
+    padding-left: var(--space-0-625);
+    padding-right: var(--space-0-625);
+  }
+}

@@ -158,7 +158,7 @@ export default function EventDetail() {
             )}
             <button className={styles.shareBtn} onClick={handleShare} aria-label={t('share', locale)}>
               <ShareIcon />
-              {t('share', locale)}
+              <span className={styles.shareLabel}>{t('share', locale)}</span>
             </button>
             {ticketUrl && (
               <a
