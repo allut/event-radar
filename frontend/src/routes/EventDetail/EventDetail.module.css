@@ -361,7 +361,6 @@
 
 @media (max-width: 640px) {
   .ticketsBtn {
-    order: -1;
     flex: 1 0 100%;
     margin-left: 0;
     justify-content: center;
