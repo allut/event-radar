@@ -18,7 +18,7 @@ interface TopBarProps {
 
 export default function TopBar({ locale, onLocaleChange, onLogout, localeDisabled, onBack, authed = true, showNav = true }: TopBarProps) {
   return (
-    <header className={cx(styles.topBar, !authed && styles.minimal)}>
+    <header className={styles.topBar}>
       <div className={styles.left}>
         <Link to="/" className={styles.logoWrap}>
           <span className={styles.radar} aria-hidden>{BRAND_GLYPH}</span>
@@ -77,17 +77,16 @@ export default function TopBar({ locale, onLocaleChange, onLogout, localeDisable
             disabled={localeDisabled}
           />
         </div>
-        {authed && (
-          <div className={styles.mobileMenuWrap}>
-            <MobileMenu
-              locale={locale}
-              onLocaleChange={onLocaleChange}
-              onLogout={onLogout ?? (() => undefined)}
-              localeDisabled={localeDisabled}
-              showNav={showNav}
-            />
-          </div>
-        )}
+        <div className={styles.mobileMenuWrap}>
+          <MobileMenu
+            locale={locale}
+            onLocaleChange={onLocaleChange}
+            onLogout={onLogout}
+            localeDisabled={localeDisabled}
+            showNav={showNav}
+            authed={authed}
+          />
+        </div>
       </div>
     </header>
   );
