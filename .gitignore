@@ -136,3 +136,6 @@ inbound-mail-samples/
 
 # Playwright MCP temporary files
 .playwright-mcp/
+
+# Misc
+notes.md
