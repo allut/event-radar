@@ -26,6 +26,11 @@ ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 RUN mkdir -p /workspaces/event-radar/frontend/node_modules \
     && chown -R vscode:vscode /workspaces
 
+# Same reasoning for the Claude Code config volume: a named volume with no
+# pre-existing mount point comes up root-owned, but `claude` runs as vscode.
+RUN mkdir -p /home/vscode/.claude \
+    && chown -R vscode:vscode /home/vscode/.claude
+
 # A Windows bind mount reports every path as root:root, but we run as vscode
 # (uid 1000), so git's safe.directory check rejects the worktree with "detected
 # dubious ownership" and every git command fails -- including step 1 of

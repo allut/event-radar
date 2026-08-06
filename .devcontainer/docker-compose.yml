@@ -15,6 +15,10 @@ services:
       # node_modules in a named volume: the host copy is a Windows install
       # (win32 esbuild/rollup binaries) and would break Vite under Linux.
       - eventradar-node-modules:/workspaces/event-radar/frontend/node_modules
+      # Claude Code config/credentials in a named volume: survives rebuild,
+      # and stays isolated from the host's Windows ~/.claude (which wires in
+      # the RTK git hook -- the `rtk` binary does not exist in this image).
+      - claude-code-config:/home/vscode/.claude
     environment:
       # OS env outranks backend/.env in pydantic-settings, so this wins over the
       # host's localhost DSN without editing that (gitignored) file. Declared in
@@ -32,9 +36,13 @@ services:
       ENABLE_SCHEDULER: "false"
       PYTHONUNBUFFERED: "1"
       PIP_DISABLE_PIP_VERSION_CHECK: "1"
+      # ~/.claude.json (OAuth account, per-project trust) lives outside ~/.claude,
+      # so the volume mount alone would not keep `claude` signed in across rebuilds.
+      CLAUDE_CONFIG_DIR: /home/vscode/.claude
     depends_on:
       db:
         condition: service_healthy
 
 volumes:
   eventradar-node-modules:
+  claude-code-config:
