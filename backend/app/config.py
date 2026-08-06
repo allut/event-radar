@@ -23,6 +23,15 @@ class Settings(BaseSettings):
     # webhook, or /internal/tick — see routers/utils.py::require_configured_secret.
     ALLOW_INSECURE_DEV: bool = False
 
+    # Development-only kill switch for the embedded APScheduler
+    # (app/main.py::_start_scheduler). The schedule drives live HTTP scrapes of
+    # third-party sites, real LLM spend, and real digest email on a timer — the
+    # dev container sets this false (.devcontainer/docker-compose.yml) so
+    # `uvicorn --reload` left running overnight can't arm all of it. Ignored
+    # unless APP_ENV == development, so a stray env var can never stop the
+    # pipeline in production. Manual POST /admin/* triggers are unaffected.
+    ENABLE_SCHEDULER: bool = True
+
     FIENTA_BASE_URL: str = "https://fienta.com/api/v1/public/events"
     KULTUURIKATEL_URL: str = "https://kultuurikatel.ee/en/events/"
     FOTOGRAFISKA_URL: str = "https://tallinn.fotografiska.com/en/events"

@@ -104,6 +104,7 @@ Notes:
 - `DATABASE_URL` comes from the container environment and overrides `backend/.env` — no `.env` edit needed for the database.
 - The container's Postgres is a **separate volume** from the host's `docker-compose.yml` `db` service; data doesn't carry over automatically.
 - The interpreter is always `/opt/venv/bin/python` — no activation step, ever.
+- The embedded scheduler is **off** in the container (`ENABLE_SCHEDULER=false`) so `uvicorn --reload` left running overnight can't arm hourly scrapes, real LLM spend, or a real digest send. Run `ENABLE_SCHEDULER=true uvicorn app.main:app --reload` for one session to exercise the real cadence. With it off, `GET /feed` stays empty until you run `POST /admin/build-feeds` — that's expected, not a bug.
 
 Skip to [Development](#development) once both servers are up. The steps below are for running natively instead.
 

@@ -20,6 +20,13 @@ services:
       # reach `docker compose exec` shells.
       DATABASE_URL: postgresql+asyncpg://eventradar:eventradar@db:5432/eventradar
       APP_ENV: development
+      # Kill switch for the embedded APScheduler. Off by default here: the
+      # schedule scrapes live third-party sites hourly, spends real LLM budget,
+      # and can send real digest email on a timer — unacceptable for a scratch
+      # environment left running under `uvicorn --reload`. Every job still has a
+      # manual POST /admin/* trigger. To run the real cadence for one session:
+      #   ENABLE_SCHEDULER=true uvicorn app.main:app --reload
+      ENABLE_SCHEDULER: "false"
       PYTHONUNBUFFERED: "1"
       PIP_DISABLE_PIP_VERSION_CHECK: "1"
     depends_on:

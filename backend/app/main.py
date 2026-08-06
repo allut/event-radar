@@ -334,6 +334,42 @@ def _check_dev_database_host() -> None:
         )
 
 
+def _start_scheduler() -> AsyncIOScheduler | None:
+    """Construct, wire and start the embedded scheduler, or return None when the
+    development-only ENABLE_SCHEDULER kill switch is off.
+
+    Off is for throwaway environments (the dev container defaults to it): the
+    schedule drives real HTTP scrapes of live third-party sites, real LLM calls,
+    and real digest email, and `uvicorn --reload` left running overnight arms all
+    of it. Every job here also has a manual POST /admin/* trigger, so nothing
+    becomes unreachable; and with no persistent jobstore there is no missed-run
+    backlog to catch up on afterwards.
+
+    Outside development the flag is ignored and the scheduler starts anyway — a
+    stray env var must never be able to stop the pipeline in production. Same
+    double-gate reasoning as routers/utils.py::require_configured_secret.
+    """
+    if not settings.ENABLE_SCHEDULER:
+        if settings.APP_ENV == APP_ENV_DEVELOPMENT:
+            log.warning(
+                "ENABLE_SCHEDULER=false — the embedded scheduler is NOT running. "
+                "No ingest, dedup, classify, publish, geocode, refetch, feed "
+                "build, digest or cleanup will fire on a schedule; trigger them "
+                "manually via POST /admin/*."
+            )
+            return None
+        log.warning(
+            "ENABLE_SCHEDULER=false ignored outside development (APP_ENV=%r) — "
+            "starting the scheduler anyway",
+            settings.APP_ENV,
+        )
+
+    scheduler = AsyncIOScheduler(timezone=TALLINN_TZ_NAME)
+    _register_scheduled_jobs(scheduler)
+    scheduler.start()
+    return scheduler
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     _check_dev_database_host()
@@ -342,13 +378,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         await seed_personas(db)
         await db.commit()
 
-    scheduler = AsyncIOScheduler(timezone=TALLINN_TZ_NAME)
-    _register_scheduled_jobs(scheduler)
-    scheduler.start()
+    scheduler = _start_scheduler()
     try:
         yield
     finally:
-        scheduler.shutdown(wait=False)
+        if scheduler is not None:
+            scheduler.shutdown(wait=False)
         await engine.dispose()
         shutdown_log_shipping()
 

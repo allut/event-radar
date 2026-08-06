@@ -23,7 +23,7 @@ Deep-dive docs live in `docs/` and are **not** auto-loaded — read the relevant
 
 ## Commands
 
-A `.devcontainer/` (VS Code Dev Containers) is available for Windows dev — Python 3.12 + Node 20 + Postgres 16 matching CI exactly. Inside it: the venv creation/activation lines below are skipped (interpreter is always `/opt/venv/bin/python`, already on `PATH`), `python -m ruff` / `python -m mypy` are unchanged, and `docker compose up -d db` is unnecessary since `db` comes up with the container. `DATABASE_URL` is injected via `.devcontainer/docker-compose.yml` and overrides `backend/.env`.
+A `.devcontainer/` (VS Code Dev Containers) is available for Windows dev — Python 3.12 + Node 20 + Postgres 16 matching CI exactly. Inside it: the venv creation/activation lines below are skipped (interpreter is always `/opt/venv/bin/python`, already on `PATH`), `python -m ruff` / `python -m mypy` are unchanged, and `docker compose up -d db` is unnecessary since `db` comes up with the container. `DATABASE_URL` is injected via `.devcontainer/docker-compose.yml` and overrides `backend/.env`. The embedded APScheduler is off by default in the container (`ENABLE_SCHEDULER=false`, dev-only — see `app/config.py`) so `uvicorn --reload` left running overnight can't arm live scrapes/LLM spend/digest email on a timer; run `ENABLE_SCHEDULER=true uvicorn app.main:app --reload` for one session to exercise the real cadence.
 
 ```bash
 # Backend (Python 3.12, FastAPI)
