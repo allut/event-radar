@@ -134,6 +134,9 @@ inbound-mail-samples/
 # Claude Code per-user settings
 .claude/settings.local.json
 
+# Claude Code plans
+.claude/plans/
+
 # Playwright MCP temporary files
 .playwright-mcp/
 
