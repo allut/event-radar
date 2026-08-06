@@ -78,8 +78,9 @@ ADMIN_USERNAME_DEFAULT = "admin"
 # Hostnames treated as "local" by the dev/prod-DB startup sanity check
 # (app/main.py's lifespan) — a DATABASE_URL host outside this set while
 # APP_ENV=development suggests a misconfigured env var pointed at a real
-# database, logged at ERROR rather than silently proceeding.
-DEV_DB_LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
+# database, logged at ERROR rather than silently proceeding. "db" is the
+# Postgres service name in .devcontainer/docker-compose.yml.
+DEV_DB_LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1", "db"})
 
 SECONDS_PER_MINUTE = 60
 SECONDS_PER_HOUR = 3600

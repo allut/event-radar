@@ -1,0 +1,30 @@
+# Overlay on the repo-root docker-compose.yml. The root file stays the single
+# source of truth for `db` (image, credentials, volume, healthcheck, port).
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: .devcontainer/Dockerfile
+    init: true
+    command: sleep infinity
+    volumes:
+      - ..:/workspaces/event-radar:cached
+      # node_modules in a named volume: the host copy is a Windows install
+      # (win32 esbuild/rollup binaries) and would break Vite under Linux.
+      - eventradar-node-modules:/workspaces/event-radar/frontend/node_modules
+    environment:
+      # OS env outranks backend/.env in pydantic-settings, so this wins over the
+      # host's localhost DSN without editing that (gitignored) file. Declared in
+      # compose rather than devcontainer.json because containerEnv is not
+      # supported for compose-based dev containers, and remoteEnv would not
+      # reach `docker compose exec` shells.
+      DATABASE_URL: postgresql+asyncpg://eventradar:eventradar@db:5432/eventradar
+      APP_ENV: development
+      PYTHONUNBUFFERED: "1"
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  eventradar-node-modules:

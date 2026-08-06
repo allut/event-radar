@@ -23,6 +23,8 @@ Deep-dive docs live in `docs/` and are **not** auto-loaded — read the relevant
 
 ## Commands
 
+A `.devcontainer/` (VS Code Dev Containers) is available for Windows dev — Python 3.12 + Node 20 + Postgres 16 matching CI exactly. Inside it: the venv creation/activation lines below are skipped (interpreter is always `/opt/venv/bin/python`, already on `PATH`), `python -m ruff` / `python -m mypy` are unchanged, and `docker compose up -d db` is unnecessary since `db` comes up with the container. `DATABASE_URL` is injected via `.devcontainer/docker-compose.yml` and overrides `backend/.env`.
+
 ```bash
 # Backend (Python 3.12, FastAPI)
 cd backend

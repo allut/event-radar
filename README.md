@@ -83,6 +83,30 @@ Geocoding runs as a separate backfill alongside this pipeline, filling in `lat`/
 > [!NOTE]
 > External API keys (Groq/Cerebras/Mistral for LLM, Resend for email) are **optional for local development**. Without them, classification degrades gracefully to a rule-only dedup pass and emails are logged to the console instead of being sent. Provide them when you want the full pipeline.
 
+### Option 0 — VS Code Dev Container (recommended on Windows)
+
+One-click Python 3.12 + Node 20 + Postgres 16, matching CI exactly — no local venv, no Windows/Linux `node_modules` conflicts.
+
+Prerequisites: Docker Desktop (WSL2 backend) and the VS Code [Dev Containers](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers) extension.
+
+```bash
+docker compose down   # free port 5432 if a host `db` container is already running
+```
+
+Then **F1 → Dev Containers: Reopen in Container**. `postCreateCommand` (`.devcontainer/post-create.sh`) handles venv creation, `pip install`, `npm install`, and `alembic upgrade head` automatically — skip step 1 and step 3's venv/install lines below. Once it finishes:
+
+```bash
+cd backend && uvicorn app.main:app --reload   # terminal 1
+cd frontend && npm run dev                     # terminal 2
+```
+
+Notes:
+- `DATABASE_URL` comes from the container environment and overrides `backend/.env` — no `.env` edit needed for the database.
+- The container's Postgres is a **separate volume** from the host's `docker-compose.yml` `db` service; data doesn't carry over automatically.
+- The interpreter is always `/opt/venv/bin/python` — no activation step, ever.
+
+Skip to [Development](#development) once both servers are up. The steps below are for running natively instead.
+
 ### 1. Clone and configure
 
 ```bash
@@ -158,6 +182,7 @@ Open http://localhost:5173 and sign in with a magic link. Without `RESEND_API_KE
 
 ```
 event-radar/
+├── .devcontainer/             # VS Code Dev Container (Python 3.12 + Node 20 + Postgres 16)
 ├── backend/                  # FastAPI application
 │   ├── app/
 │   │   ├── routers/          # /auth /admin /onboarding /events /explore /feed /feedback /public /users/me /contact /email /webhooks /organizer/auth /organizer/events
