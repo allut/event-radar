@@ -8,7 +8,9 @@ cd "$REPO_ROOT"
 echo "==> [1/5] git line-ending config"
 # Host has core.autocrlf=true, so the worktree is CRLF while the index is LF;
 # without this, `git status` in Linux reports every text file as modified.
-# `input` converts on commit only -- it rewrites nothing on disk.
+# `input` converts on commit only -- it rewrites nothing on disk. NOTE: --local
+# writes to .git/config, which is bind-mounted from the host -- this setting
+# is NOT container-scoped and takes effect in your host repo too.
 git config --local core.autocrlf input
 
 echo "==> [2/5] node_modules volume ownership"

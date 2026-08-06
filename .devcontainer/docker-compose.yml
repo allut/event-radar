@@ -3,12 +3,15 @@
 services:
   app:
     build:
-      context: ..
+      # Paths here resolve against the COMPOSE PROJECT DIRECTORY (the repo root,
+      # taken from the first -f file), not against this file's own directory.
+      # `..` would therefore point one level above the repo.
+      context: .
       dockerfile: .devcontainer/Dockerfile
     init: true
     command: sleep infinity
     volumes:
-      - ..:/workspaces/event-radar:cached
+      - .:/workspaces/event-radar:cached
       # node_modules in a named volume: the host copy is a Windows install
       # (win32 esbuild/rollup binaries) and would break Vite under Linux.
       - eventradar-node-modules:/workspaces/event-radar/frontend/node_modules
