@@ -42,18 +42,23 @@ RUN git config --system --add safe.directory /workspaces/event-radar
 # sync-claude-config.sh declares a global PreToolUse hook `rtk hook claude`;
 # without the binary the hook exits non-zero and every Bash tool call fails.
 # Pinned deliberately -- bump when the host binary is upgraded.
+#
+# amd64 takes the musl tarball, not the .deb: the deb declares
+# `Depends: libc6 (>= 2.39)` and this bookworm base ships libc6 2.36, so
+# `dpkg -i` fails the build. The musl build is fully static -- no glibc floor.
+# arm64 has no musl asset; the gnu tarball needs GLIBC_2.39 and will therefore
+# fail the `rtk --version` check below on bookworm. Deliberate: fail at build
+# time, loudly, rather than ship a hook that breaks every Bash call.
 ARG RTK_VERSION=0.45.0
 RUN arch="$(dpkg --print-architecture)" \
     && case "$arch" in \
-         amd64) \
-           curl -fsSL -o /tmp/rtk.deb \
-             "https://github.com/rtk-ai/rtk/releases/download/v${RTK_VERSION}/rtk_${RTK_VERSION}-1_amd64.deb" \
-           && dpkg -i /tmp/rtk.deb && rm -f /tmp/rtk.deb ;; \
-         arm64) \
-           curl -fsSL "https://github.com/rtk-ai/rtk/releases/download/v${RTK_VERSION}/rtk-aarch64-unknown-linux-gnu.tar.gz" \
-             | tar -xz -C /usr/local/bin rtk ;; \
-         *) echo "rtk: no prebuilt package for $arch" >&2; exit 1 ;; \
+         amd64) target=x86_64-unknown-linux-musl ;; \
+         arm64) target=aarch64-unknown-linux-gnu ;; \
+         *) echo "rtk: no prebuilt binary for $arch" >&2; exit 1 ;; \
        esac \
+    && curl -fsSL "https://github.com/rtk-ai/rtk/releases/download/v${RTK_VERSION}/rtk-${target}.tar.gz" \
+         | tar -xz -C /usr/local/bin rtk \
+    && chmod 755 /usr/local/bin/rtk \
     && rtk --version
 
 # Same reasoning as the .claude mount point above: a named volume with no
