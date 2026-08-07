@@ -134,6 +134,9 @@ inbound-mail-samples/
 # Claude Code per-user settings
 .claude/settings.local.json
 
+# Devcontainer: plaintext anvil reviewer API keys, host DPAPI-bound and unrecoverable in-container
+/.devcontainer/anvil.env
+
 # Claude Code plans
 plans/
 

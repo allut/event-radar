@@ -26,6 +26,23 @@
   // Invoked via bash: the +x bit does not survive a Windows checkout.
   "postCreateCommand": "bash .devcontainer/post-create.sh",
 
+  "mounts": [
+    // Host Claude Code config, read-only -- the sync script only reads from it.
+    "source=${localEnv:USERPROFILE}/.claude,target=/mnt/host-claude,type=bind,readonly",
+    // User skills. ~/.claude/skills on the host is 7 NTFS junctions into
+    // ~/.agents/skills, and Docker does not follow junctions, so mount the real
+    // directory straight onto the container's skills path. Nested inside the
+    // claude-code-config volume, which is fine: Docker applies the deeper
+    // mount target last.
+    "source=${localEnv:USERPROFILE}/.agents/skills,target=/home/vscode/.claude/skills,type=bind,readonly",
+    // anvil config (reviewer/roster/caveman choices) and the ccstatusline
+    // layout, both read-only sources for the sync script.
+    "source=${localEnv:USERPROFILE}/.claude-anvil,target=/mnt/host-anvil,type=bind,readonly",
+    "source=${localEnv:USERPROFILE}/.config/ccstatusline,target=/mnt/host-ccstatusline,type=bind,readonly"
+  ],
+
+  "postStartCommand": "bash .devcontainer/post-start.sh",
+
   "customizations": {
     "vscode": {
       "extensions": [

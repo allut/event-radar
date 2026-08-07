@@ -57,4 +57,7 @@ Dev container ready.
   Backend :  cd backend && uvicorn app.main:app --reload
   Frontend:  cd frontend && npm run dev
   Tests   :  (cd backend && pytest)   |   (cd frontend && npm test)
+  Claude  :  config, plugins, skills, status line mirrored from host each start
+  Anvil   :  put ANVIL_GEMINI_API_KEY / ANVIL_OPENAI_API_KEY in
+             .devcontainer/anvil.env (gitignored) -- host keys are DPAPI-bound
 EOF
