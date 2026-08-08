@@ -93,7 +93,7 @@ Prerequisites: Docker Desktop (WSL2 backend) and the VS Code [Dev Containers](ht
 docker compose down   # free port 5432 if a host `db` container is already running
 ```
 
-Then **F1 → Dev Containers: Reopen in Container**. `postCreateCommand` (`.devcontainer/post-create.sh`) handles venv creation, `pip install`, `npm install`, and `alembic upgrade head` automatically — skip step 1 and step 3's venv/install lines below. Once it finishes, the backend and frontend dev servers start automatically (VS Code tasks on `folderOpen`, `.vscode/tasks.json`) — no manual commands needed. If you need to restart one, use Command Palette → *Tasks: Run Task* → `dev: backend (uvicorn)` / `dev: frontend (vite)`, or run manually:
+Then **F1 → Dev Containers: Reopen in Container**. `postCreateCommand` (`.devcontainer/post-create.sh`) handles venv creation, `pip install`, `npm install`, and `alembic upgrade head` automatically — skip step 1 and step 3's venv/install lines below. The backend and frontend dev servers then start automatically from the container lifecycle (`postStartCommand` → `.devcontainer/dev-server.sh start`, on every container start) — no manual commands, no VS Code task/trust preconditions. Logs land in `/tmp/event-radar-dev/{backend,frontend}.log` inside the container; check `bash .devcontainer/dev-server.sh status`, or `restart`/`stop` a service the same way. If you need to run one in the foreground instead, use Command Palette → *Tasks: Run Task* → `dev: backend (uvicorn)` / `dev: frontend (vite)`, or run manually:
 
 ```bash
 cd backend && uvicorn app.main:app --reload   # terminal 1
@@ -103,8 +103,8 @@ cd frontend && npm run dev                     # terminal 2
 Notes:
 - `DATABASE_URL` comes from the container environment and overrides `backend/.env` — no `.env` edit needed for the database.
 - The container's Postgres is a **separate volume** from the host's `docker-compose.yml` `db` service; data doesn't carry over automatically.
-- The interpreter is always `/opt/venv/bin/python` — no activation step, ever.
-- The embedded scheduler is **off** in the container (`ENABLE_SCHEDULER=false`) so `uvicorn --reload` left running overnight can't arm hourly scrapes, real LLM spend, or a real digest send. Run `ENABLE_SCHEDULER=true uvicorn app.main:app --reload` for one session to exercise the real cadence. With it off, `GET /feed` stays empty until you run `POST /admin/build-feeds` — that's expected, not a bug.
+- The interpreter is always `/opt/venv/bin/python` — no activation step, ever. VS Code's Python extension may still surface a stale interpreter path carried over from the host via Settings Sync; if so, one-time fix with *Python: Select Interpreter* → `/opt/venv/bin/python`.
+- The embedded scheduler is **off** in the container (`ENABLE_SCHEDULER=false`) so `uvicorn --reload` left running overnight can't arm hourly scrapes, real LLM spend, or a real digest send. To exercise the real cadence for one session: `bash .devcontainer/dev-server.sh stop backend`, then run `ENABLE_SCHEDULER=true uvicorn app.main:app --reload` by hand. With it off, `GET /feed` stays empty until you run `POST /admin/build-feeds` — that's expected, not a bug.
 
 Skip to [Development](#development) once both servers are up. The steps below are for running natively instead.
 

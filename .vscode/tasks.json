@@ -4,7 +4,7 @@
     {
       "label": "dev: backend (uvicorn)",
       "type": "shell",
-      "command": "bash .devcontainer/dev-server.sh backend",
+      "command": "bash .devcontainer/dev-server.sh run backend",
       "isBackground": true,
       "problemMatcher": [],
       "presentation": {
@@ -15,7 +15,7 @@
     {
       "label": "dev: frontend (vite)",
       "type": "shell",
-      "command": "bash .devcontainer/dev-server.sh frontend",
+      "command": "bash .devcontainer/dev-server.sh run frontend",
       "isBackground": true,
       "problemMatcher": [],
       "presentation": {
@@ -26,10 +26,7 @@
     {
       "label": "dev: all",
       "dependsOn": ["dev: backend (uvicorn)", "dev: frontend (vite)"],
-      "dependsOrder": "parallel",
-      "runOptions": {
-        "runOn": "folderOpen"
-      }
+      "dependsOrder": "parallel"
     }
   ]
 }

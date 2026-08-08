@@ -54,10 +54,11 @@ done
 cat <<'EOF'
 
 Dev container ready.
-  Backend :  auto-starts on window open (VS Code task "dev: backend (uvicorn)")
-  Frontend:  auto-starts on window open (VS Code task "dev: frontend (vite)")
-             Fallback / restart: run the task from the Command Palette
-             ("Tasks: Run Task"), or manually:
+  Backend :  auto-starts from the container lifecycle (postStartCommand)
+  Frontend:  auto-starts from the container lifecycle (postStartCommand)
+             Status / restart / stop: bash .devcontainer/dev-server.sh status|restart|stop
+             Logs: /tmp/event-radar-dev/{backend,frontend}.log
+             Or run manually:
                cd backend && uvicorn app.main:app --reload
                cd frontend && npm run dev
   Tests   :  (cd backend && pytest)   |   (cd frontend && npm test)
