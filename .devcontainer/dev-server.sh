@@ -9,6 +9,7 @@
 #   dev-server.sh restart [backend|frontend]
 #   dev-server.sh status
 #   dev-server.sh run     <backend|frontend>   # foreground exec
+#   dev-server.sh logs    <backend|frontend>   # foreground tail -F
 set -uo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -70,6 +71,20 @@ run_service() {
     exit 0
   fi
   svc_command "$svc"
+}
+
+logs_service() {
+  local svc="$1"
+  local log_file
+  log_file="$(log_file_for "$svc")"
+  if [ -z "$(port_for "$svc")" ]; then
+    echo "usage: dev-server.sh logs <backend|frontend>"
+    exit 1
+  fi
+  # The tail may start before the server has ever written the file.
+  touch "$log_file"
+  # -F (not -f) survives start_service's truncating redirect on restart.
+  exec tail -n 200 -F "$log_file"
 }
 
 start_service() {
@@ -181,8 +196,17 @@ case "${1:-}" in
         ;;
     esac
     ;;
+  logs)
+    case "${2:-}" in
+      backend|frontend) logs_service "$2" ;;
+      *)
+        echo "usage: dev-server.sh logs <backend|frontend>"
+        exit 1
+        ;;
+    esac
+    ;;
   *)
-    echo "usage: dev-server.sh start|stop|restart|status|run [backend|frontend]"
+    echo "usage: dev-server.sh start|stop|restart|status|run|logs [backend|frontend]"
     exit 1
     ;;
 esac
