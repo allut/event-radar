@@ -93,7 +93,7 @@ Prerequisites: Docker Desktop (WSL2 backend) and the VS Code [Dev Containers](ht
 docker compose down   # free port 5432 if a host `db` container is already running
 ```
 
-Then **F1 → Dev Containers: Reopen in Container**. `postCreateCommand` (`.devcontainer/post-create.sh`) handles venv creation, `pip install`, `npm install`, and `alembic upgrade head` automatically — skip step 1 and step 3's venv/install lines below. Once it finishes:
+Then **F1 → Dev Containers: Reopen in Container**. `postCreateCommand` (`.devcontainer/post-create.sh`) handles venv creation, `pip install`, `npm install`, and `alembic upgrade head` automatically — skip step 1 and step 3's venv/install lines below. Once it finishes, the backend and frontend dev servers start automatically (VS Code tasks on `folderOpen`, `.vscode/tasks.json`) — no manual commands needed. If you need to restart one, use Command Palette → *Tasks: Run Task* → `dev: backend (uvicorn)` / `dev: frontend (vite)`, or run manually:
 
 ```bash
 cd backend && uvicorn app.main:app --reload   # terminal 1

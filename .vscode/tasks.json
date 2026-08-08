@@ -1,0 +1,35 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "dev: backend (uvicorn)",
+      "type": "shell",
+      "command": "bash .devcontainer/dev-server.sh backend",
+      "isBackground": true,
+      "problemMatcher": [],
+      "presentation": {
+        "panel": "dedicated",
+        "reveal": "never"
+      }
+    },
+    {
+      "label": "dev: frontend (vite)",
+      "type": "shell",
+      "command": "bash .devcontainer/dev-server.sh frontend",
+      "isBackground": true,
+      "problemMatcher": [],
+      "presentation": {
+        "panel": "dedicated",
+        "reveal": "never"
+      }
+    },
+    {
+      "label": "dev: all",
+      "dependsOn": ["dev: backend (uvicorn)", "dev: frontend (vite)"],
+      "dependsOrder": "parallel",
+      "runOptions": {
+        "runOn": "folderOpen"
+      }
+    }
+  ]
+}

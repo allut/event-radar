@@ -54,8 +54,12 @@ done
 cat <<'EOF'
 
 Dev container ready.
-  Backend :  cd backend && uvicorn app.main:app --reload
-  Frontend:  cd frontend && npm run dev
+  Backend :  auto-starts on window open (VS Code task "dev: backend (uvicorn)")
+  Frontend:  auto-starts on window open (VS Code task "dev: frontend (vite)")
+             Fallback / restart: run the task from the Command Palette
+             ("Tasks: Run Task"), or manually:
+               cd backend && uvicorn app.main:app --reload
+               cd frontend && npm run dev
   Tests   :  (cd backend && pytest)   |   (cd frontend && npm test)
   Claude  :  config, plugins, skills, status line mirrored from host each start
   Anvil   :  put ANVIL_GEMINI_API_KEY / ANVIL_OPENAI_API_KEY in

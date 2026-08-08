@@ -58,6 +58,7 @@
         "mtxr.sqltools-driver-pg"
       ],
       "settings": {
+        "task.allowAutomaticTasks": "on",
         "python.defaultInterpreterPath": "/opt/venv/bin/python",
         "python.terminal.activateEnvironment": false,
         "python.testing.pytestEnabled": true,
