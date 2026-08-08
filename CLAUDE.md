@@ -164,3 +164,17 @@ Full rationale for each rule (why it works this way, trade-offs accepted) is in 
 ## MVP Scope (do not cut)
 
 All MVP scope implemented: dedup, LLM classification, persona-based personalization, magic-link auth, Daily 5 builder, email digest, bookmarks, i18n (et/en/ru), Settings page.
+
+## Agent skills
+
+### Issue tracker
+
+Issues live in GitHub Issues (github.com/allut/event-radar), via the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default label vocabulary (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context layout — `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.
