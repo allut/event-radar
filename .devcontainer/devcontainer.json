@@ -11,7 +11,11 @@
     "ghcr.io/devcontainers/features/node:1": { "version": "20" },
     // CLI only -- `claude` in the terminal. The feature also contributes the
     // anthropic.claude-code VS Code extension, so it stays out of the list below.
-    "ghcr.io/anthropics/devcontainer-features/claude-code:1.0": {}
+    "ghcr.io/anthropics/devcontainer-features/claude-code:1.0": {},
+    // GitHub CLI. Required by docs/agents/issue-tracker.md -- every issue/PR
+    // operation in this repo goes through `gh`. The feature tracks GitHub's own
+    // apt repo; bookworm's own `gh` is 2.23.0 (2023) and too old to trust.
+    "ghcr.io/devcontainers/features/github-cli:1": {}
   },
 
   // 5432 is deliberately absent: the root compose already publishes it to
@@ -42,6 +46,7 @@
   ],
 
   "postStartCommand": "bash .devcontainer/post-start.sh",
+  "postAttachCommand": "bash .devcontainer/gh-auth.sh",
 
   "customizations": {
     "vscode": {

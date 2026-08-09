@@ -15,3 +15,9 @@ claude --version || true
 
 echo "==> claude config sync"
 bash "$(dirname "${BASH_SOURCE[0]}")/sync-claude-config.sh"
+
+echo "==> gh auth"
+# postAttachCommand is the reliable point for this (VS Code writes the
+# forwarded credential-helper shim during attach, not start), but run it here
+# too so a start without a following attach still gets a shot at it.
+bash "$(dirname "${BASH_SOURCE[0]}")/gh-auth.sh"
