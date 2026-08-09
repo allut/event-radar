@@ -105,6 +105,7 @@ Notes:
 - The container's Postgres is a **separate volume** from the host's `docker-compose.yml` `db` service; data doesn't carry over automatically.
 - The interpreter is always `/opt/venv/bin/python` — no activation step, ever. VS Code's Python extension may still surface a stale interpreter path carried over from the host via Settings Sync; if so, one-time fix with *Python: Select Interpreter* → `/opt/venv/bin/python`.
 - The embedded scheduler is **off** in the container (`ENABLE_SCHEDULER=false`) so `uvicorn --reload` left running overnight can't arm hourly scrapes, real LLM spend, or a real digest send. To exercise the real cadence for one session: `bash .devcontainer/dev-server.sh stop backend`, then run `ENABLE_SCHEDULER=true uvicorn app.main:app --reload` by hand. With it off, `GET /feed` stays empty until you run `POST /admin/build-feeds` — that's expected, not a bug.
+- `.devcontainer/claude-plugins.json` declares Claude Code plugins that are enabled only inside the container (currently `mattpocock-skills`); `sync-claude-config.sh` merges it into the container's `~/.claude/settings.json` on every start, never touching the host's config.
 
 Skip to [Development](#development) once both servers are up. The steps below are for running natively instead.
 

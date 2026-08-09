@@ -20,6 +20,29 @@ for f in settings.json CLAUDE.md RTK.md; do
   [ -f "$HOST_CLAUDE/$f" ] && install -m 644 "$HOST_CLAUDE/$f" "$DEST/$f"
 done
 
+# 1b. Container-only plugin declarations. The copy above is verbatim, so anything
+# enabled only in the container is wiped on every start -- and step 4 re-derives
+# its install list from this same file. Merging the repo's overlay back on top
+# keeps these plugins working without putting them in the host's ~/.claude.
+OVERLAY="$(dirname "${BASH_SOURCE[0]}")/claude-plugins.json"
+if [ -f "$OVERLAY" ]; then
+  python3 - "$DEST/settings.json" "$OVERLAY" <<'PY' \
+    || echo "    WARN: could not merge claude-plugins.json"
+import json, pathlib, sys
+dst, ov = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2])
+try:
+    s = json.loads(dst.read_text(encoding="utf-8")) if dst.exists() else {}
+    o = json.loads(ov.read_text(encoding="utf-8"))
+except json.JSONDecodeError as e:
+    print(f"malformed json: {e}", file=sys.stderr)
+    sys.exit(1)
+for key in ("extraKnownMarketplaces", "enabledPlugins"):
+    if o.get(key):
+        s.setdefault(key, {}).update(o[key])
+dst.write_text(json.dumps(s, indent=2) + "\n", encoding="utf-8")
+PY
+fi
+
 # 2. Personal slash commands. anvil.md / anvil-setup.md come across with
 #    C:/Users/... paths baked in; step 5 regenerates those two in place.
 if [ -d "$HOST_CLAUDE/commands" ]; then

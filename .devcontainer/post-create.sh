@@ -63,6 +63,8 @@ Dev container ready.
                cd frontend && npm run dev
   Tests   :  (cd backend && pytest)   |   (cd frontend && npm test)
   Claude  :  config, plugins, skills, status line mirrored from host each start
+             Container-only plugins: .devcontainer/claude-plugins.json (merged
+             into settings.json each start, never written back to host)
   Anvil   :  put ANVIL_GEMINI_API_KEY / ANVIL_OPENAI_API_KEY in
              .devcontainer/anvil.env (gitignored) -- host keys are DPAPI-bound
 EOF
