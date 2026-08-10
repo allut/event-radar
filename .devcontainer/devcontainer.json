@@ -60,7 +60,8 @@
         "ms-azuretools.vscode-docker",
         "tamasfe.even-better-toml",
         "mtxr.sqltools",
-        "mtxr.sqltools-driver-pg"
+        "mtxr.sqltools-driver-pg",
+        "ms-ossdata.vscode-pgsql"
       ],
       "settings": {
         "python.defaultInterpreterPath": "/opt/venv/bin/python",
@@ -117,6 +118,25 @@
             "database": "eventradar",
             "username": "eventradar",
             "password": "eventradar"
+          }
+        ],
+
+        // ms-ossdata.vscode-pgsql. authenticationType/emptyPasswordInput are
+        // required fields even for a plain password login -- omitting them
+        // fails schema validation on load.
+        "pgsql.connections": [
+          {
+            "id": "event-radar-devcontainer",
+            "profileName": "Event Radar (dev container)",
+            "server": "db",
+            "port": 5432,
+            "database": "eventradar",
+            "user": "eventradar",
+            "password": "eventradar",
+            "authenticationType": "SqlLogin",
+            "emptyPasswordInput": false,
+            "savePassword": false,
+            "sslmode": "prefer"
           }
         ]
       }
