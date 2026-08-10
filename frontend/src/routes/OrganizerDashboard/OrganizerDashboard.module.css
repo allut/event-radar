@@ -31,8 +31,9 @@
 
 .newBtn {
   composes: btnPrimary from '../../components/shared/Button.module.css';
-  padding: var(--space-0-6) var(--space-2);
+  padding: var(--space-0-625) var(--space-5);
   font-size: var(--fs-sm);
+  font-weight: 700;
   text-decoration: none;
   display: inline-flex;
   align-items: center;
