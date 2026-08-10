@@ -137,6 +137,20 @@ function PopoverBody({ id, value, onChange, min, locale, required, disabled, pop
     onChange(joinDateTimeValue(base, ch, cm));
   }
 
+  // Keystroke-time commit: skips values clampToMin would rewrite, so a value
+  // mid-typed below min (e.g. Ends' hour on the same day as Starts) stays on
+  // screen instead of being silently snapped back on every keystroke — that
+  // snap made the field un-typeable, since each new digit landed on top of
+  // the just-reverted one. Blur (commitTime above) still clamps, so an
+  // invalid value never lands on the committed value. Defers to commitTime
+  // for the actual base/clamp logic so the two can't drift apart.
+  function commitTimeIfValid(h: number, m: number) {
+    const base = selectedDay ?? focusedDay;
+    const [ch, cm] = clampToMin(base, h, m);
+    if (ch !== h || cm !== m) return;
+    commitTime(h, m);
+  }
+
   function moveFocus(next: Date) {
     focusPendingRef.current = true;
     setFocusedDay(next);
@@ -266,7 +280,7 @@ function PopoverBody({ id, value, onChange, min, locale, required, disabled, pop
               onChange={(e) => {
                 const next = e.target.value.replace(/\D/g, '').slice(0, TIME_FIELD_MAX_LENGTH);
                 setHourText(next);
-                commitTime(parseHourText(next), parseMinuteText(minuteText));
+                commitTimeIfValid(parseHourText(next), parseMinuteText(minuteText));
               }}
               onKeyDown={(e) => handleTimeKeyDown(e, 'hour')}
               onBlur={() => {
@@ -287,7 +301,7 @@ function PopoverBody({ id, value, onChange, min, locale, required, disabled, pop
               onChange={(e) => {
                 const next = e.target.value.replace(/\D/g, '').slice(0, TIME_FIELD_MAX_LENGTH);
                 setMinuteText(next);
-                commitTime(parseHourText(hourText), parseMinuteText(next));
+                commitTimeIfValid(parseHourText(hourText), parseMinuteText(next));
               }}
               onKeyDown={(e) => handleTimeKeyDown(e, 'minute')}
               onBlur={() => {

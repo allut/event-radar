@@ -69,6 +69,22 @@ describe('DatePicker', () => {
     expect(screen.getByLabelText('Starts')).toHaveValue('2026-08-15 20:00');
   });
 
+  it('allows free typing of an hour before validating against a same-day min, clamping only on blur', async () => {
+    renderWithProviders(<Harness initial="2026-08-15T18:00" min="2026-08-15T18:00" />);
+    await userEvent.click(screen.getByRole('button', { name: /open calendar/i }));
+
+    const hourInput = screen.getByLabelText('Hour');
+    await userEvent.clear(hourInput);
+    await userEvent.type(hourInput, '14');
+    // Mid-type, below min's hour — must not snap back and eat keystrokes.
+    expect(hourInput).toHaveValue('14');
+    expect(screen.getByLabelText('Starts')).toHaveValue('2026-08-15 18:00');
+
+    await userEvent.tab();
+    expect(hourInput).toHaveValue('18');
+    expect(screen.getByLabelText('Starts')).toHaveValue('2026-08-15 18:00');
+  });
+
   it('updates the trigger field live while typing the hour/minute, not only on blur', async () => {
     renderWithProviders(<Harness initial="2026-08-15T18:00" />);
     await userEvent.click(screen.getByRole('button', { name: /open calendar/i }));
