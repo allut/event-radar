@@ -25,6 +25,7 @@ from app.constants import (
     CLEANUP_MINUTE,
     CORS_ALLOWED_HEADERS,
     CORS_ALLOWED_METHODS,
+    CSRF_UNSAFE_METHODS,
     DEV_DB_LOCAL_HOSTS,
     DIGEST_SEND_HOUR,
     FEED_BUILD_HOUR,
@@ -252,6 +253,46 @@ def _register_scheduled_jobs(scheduler: AsyncIOScheduler) -> None:
     )
 
 
+class CsrfOriginCheckMiddleware:
+    """Reject a mutating request whose Origin header doesn't match a trusted
+    origin, with 403.
+
+    Prefactoring step ahead of #24's session-cookie migration: CSRF isn't yet
+    a live risk while auth is a Bearer header (nothing a foreign page can
+    attach to a fetch/form submission carries it), but this is harmless to
+    land now and independently verifiable on its own.
+
+    A request with no Origin header is let through — browsers omit it on
+    simple/no-CORS navigations for some methods, and server-to-server callers
+    (the Resend inbound-mail webhook, RFC 8058 one-click unsubscribe POSTs
+    from mail clients) never send one either. Non-mutating methods (GET,
+    HEAD, OPTIONS, ...) are never checked.
+    """
+
+    def __init__(self, app: ASGIApp, trusted_origins: frozenset[str]) -> None:
+        self.app = app
+        self.trusted_origins = trusted_origins
+
+    async def _reject(self, scope: Scope, receive: Receive, send: Send) -> None:
+        response = JSONResponse(
+            {"detail": "Origin header does not match a trusted origin."},
+            status_code=status.HTTP_403_FORBIDDEN,
+        )
+        await response(scope, receive, send)
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http" or scope["method"] not in CSRF_UNSAFE_METHODS:
+            await self.app(scope, receive, send)
+            return
+
+        origin = Headers(scope=scope).get("origin")
+        if origin is not None and origin not in self.trusted_origins:
+            await self._reject(scope, receive, send)
+            return
+
+        await self.app(scope, receive, send)
+
+
 class _BodyTooLarge(Exception):
     """Internal sentinel — never escapes MaxBodySizeMiddleware.__call__."""
 
@@ -415,6 +456,14 @@ app.add_middleware(
     allow_credentials=False,
     allow_methods=CORS_ALLOWED_METHODS,
     allow_headers=CORS_ALLOWED_HEADERS,
+)
+
+# CORS_ORIGINS now serves double duty — CORS (above) and CSRF trust (below).
+# Widening it for one purpose widens the other too; a value added here to let a
+# new frontend deployment through CORS also becomes a trusted CSRF origin.
+app.add_middleware(
+    CsrfOriginCheckMiddleware,
+    trusted_origins=frozenset(settings.CORS_ORIGINS) | {settings.FRONTEND_URL},
 )
 
 

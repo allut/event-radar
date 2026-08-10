@@ -1066,6 +1066,12 @@ CURRENCY_AMOUNT_RE = (
 CORS_ALLOWED_METHODS: list[str] = ["GET", "POST", "PATCH", "DELETE"]
 CORS_ALLOWED_HEADERS: list[str] = ["Authorization", "Content-Type"]
 
+# CSRF — methods CsrfOriginCheckMiddleware (app/main.py) enforces the Origin
+# check against. Deliberately includes PUT even though the API never routes
+# it today (CORS_ALLOWED_METHODS above omits it) — this is a defense-in-depth
+# check ahead of #24's cookie migration, not a mirror of what's currently wired up.
+CSRF_UNSAFE_METHODS: frozenset[str] = frozenset({"POST", "PATCH", "DELETE", "PUT"})
+
 # Logging — configure_logging() in app.logging_config wires these into the root
 # logger. Format/date strings render UTC ISO 8601 timestamps on every line (app,
 # uvicorn, and SQL echo alike).

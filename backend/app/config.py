@@ -159,6 +159,9 @@ class Settings(BaseSettings):
 
     # CORS — pydantic-settings parses a JSON array from the env var (e.g. '["https://eventradar.ee"]')
     # In Render: set CORS_ORIGINS to your Vercel/CF Pages URL before deploying.
+    # Dual role: this set also seeds CsrfOriginCheckMiddleware's trusted-origin
+    # allowlist (app/main.py, CORS_ORIGINS ∪ {FRONTEND_URL}) — widening it for CORS
+    # also widens which Origins are trusted for the CSRF check.
     CORS_ORIGINS: list[str] = ["http://localhost:5173", "http://localhost:4173"]
 
     # Logging
