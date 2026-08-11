@@ -18,6 +18,7 @@ from app.auth.tokens import (
     verify_organizer_session_token,
     verify_session_token,
 )
+from tests.conftest import assert_hardened_cookie
 
 
 class TestOrganizerMagicToken:
@@ -144,8 +145,9 @@ class TestRequestOrganizerMagicLink:
 
 class TestVerifyOrganizerMagicLink:
     @pytest.mark.asyncio
-    async def test_valid_token_returns_session(self, mock_db, make_request):
-        from app.routers.organizer_auth import verify_organizer_magic_link
+    async def test_valid_token_sets_organizer_session_cookie(self, mock_db, make_request):
+        from fastapi import Response
+        from app.routers.organizer_auth import VerifyTokenBody, verify_organizer_magic_link
 
         token, _, _ = generate_organizer_magic_token(3)
         mock_db.execute = _mock_execute_returning((3,))
@@ -157,61 +159,75 @@ class TestVerifyOrganizerMagicLink:
         organizer.session_token_version = 1
         mock_db.get.return_value = organizer
 
+        response = Response()
         result = await verify_organizer_magic_link(
-            make_request(path="/organizer/auth/verify"), token, mock_db
+            make_request(path="/organizer/auth/verify"),
+            VerifyTokenBody(token=token),
+            response,
+            mock_db,
         )
 
-        assert "session_token" in result
+        assert "session_token" not in result
         assert result["organizer"]["id"] == 3
-        assert verify_organizer_session_token(result["session_token"]) == (3, 1)
+
+        set_cookie = response.headers["set-cookie"]
+        assert_hardened_cookie(set_cookie, name="organizer_session", path="/api/organizer")
+        cookie_value = set_cookie.split("organizer_session=", 1)[1].split(";", 1)[0]
+        assert verify_organizer_session_token(cookie_value) == (3, 1)
 
     @pytest.mark.asyncio
     async def test_second_use_raises_400(self, mock_db, make_request):
         """Single-use: the atomic UPDATE finds no matching row the second time
         (used_at already set), so a token replay is rejected."""
-        from fastapi import HTTPException
-        from app.routers.organizer_auth import verify_organizer_magic_link
+        from fastapi import HTTPException, Response
+        from app.routers.organizer_auth import VerifyTokenBody, verify_organizer_magic_link
 
         token, _, _ = generate_organizer_magic_token(3)
         mock_db.execute = _mock_execute_returning(None)
 
         with pytest.raises(HTTPException) as exc_info:
             await verify_organizer_magic_link(
-                make_request(path="/organizer/auth/verify"), token, mock_db
+                make_request(path="/organizer/auth/verify"),
+                VerifyTokenBody(token=token),
+                Response(),
+                mock_db,
             )
         assert exc_info.value.status_code == http.HTTPStatus.BAD_REQUEST
 
     @pytest.mark.asyncio
     async def test_bad_signature_raises_400(self, mock_db, make_request):
-        from fastapi import HTTPException
-        from app.routers.organizer_auth import verify_organizer_magic_link
+        from fastapi import HTTPException, Response
+        from app.routers.organizer_auth import VerifyTokenBody, verify_organizer_magic_link
 
         with pytest.raises(HTTPException) as exc_info:
             await verify_organizer_magic_link(
-                make_request(path="/organizer/auth/verify"), "garbage", mock_db
+                make_request(path="/organizer/auth/verify"),
+                VerifyTokenBody(token="garbage"),
+                Response(),
+                mock_db,
             )
         assert exc_info.value.status_code == http.HTTPStatus.BAD_REQUEST
 
 
 class TestGetCurrentOrganizer:
     @pytest.mark.asyncio
-    async def test_valid_session_token_returns_organizer(self, mock_db, make_organizer):
+    async def test_valid_session_cookie_returns_organizer(self, mock_db, make_organizer):
         from app.routers.organizer_auth import get_current_organizer
 
         organizer = make_organizer(organizer_id=7)
         mock_db.get.return_value = organizer
 
         token = generate_organizer_session_token(7, 1)
-        result = await get_current_organizer(authorization=f"Bearer {token}", db=mock_db)
+        result = await get_current_organizer(organizer_session=token, db=mock_db)
         assert result.id == 7
 
     @pytest.mark.asyncio
-    async def test_missing_header_raises_401(self, mock_db):
+    async def test_missing_cookie_raises_401(self, mock_db):
         from fastapi import HTTPException
         from app.routers.organizer_auth import get_current_organizer
 
         with pytest.raises(HTTPException) as exc_info:
-            await get_current_organizer(authorization=None, db=mock_db)
+            await get_current_organizer(organizer_session=None, db=mock_db)
         assert exc_info.value.status_code == http.HTTPStatus.UNAUTHORIZED
 
     @pytest.mark.asyncio
@@ -223,9 +239,7 @@ class TestGetCurrentOrganizer:
 
         user_token = generate_session_token(7, 1)
         with pytest.raises(HTTPException) as exc_info:
-            await get_current_organizer(
-                authorization=f"Bearer {user_token}", db=mock_db
-            )
+            await get_current_organizer(organizer_session=user_token, db=mock_db)
         assert exc_info.value.status_code == http.HTTPStatus.UNAUTHORIZED
 
     @pytest.mark.asyncio
@@ -238,15 +252,43 @@ class TestGetCurrentOrganizer:
 
         token = generate_organizer_session_token(7, 1)
         with pytest.raises(HTTPException) as exc_info:
-            await get_current_organizer(authorization=f"Bearer {token}", db=mock_db)
+            await get_current_organizer(organizer_session=token, db=mock_db)
         assert exc_info.value.status_code == http.HTTPStatus.UNAUTHORIZED
+
+
+class TestOrganizerLogout:
+    @pytest.mark.asyncio
+    async def test_expires_organizer_cookie_without_bumping_version(
+        self, mock_db, make_request, make_organizer
+    ):
+        from fastapi import Response
+        from app.routers.organizer_auth import organizer_logout
+
+        organizer = make_organizer(organizer_id=7)
+
+        response = Response()
+        result = await organizer_logout(
+            request=make_request(method="POST", path="/organizer/auth/logout"),
+            response=response,
+            current_organizer=organizer,
+        )
+
+        assert organizer.session_token_version == 1  # untouched
+        assert_hardened_cookie(
+            response.headers["set-cookie"],
+            name="organizer_session",
+            path="/api/organizer",
+            cleared=True,
+        )
+        assert "detail" in result
 
 
 class TestOrganizerLogoutAll:
     @pytest.mark.asyncio
-    async def test_increments_session_token_version(
+    async def test_increments_session_token_version_and_clears_cookie(
         self, mock_db, make_request, make_organizer
     ):
+        from fastapi import Response
         from app.routers.organizer_auth import organizer_logout_all
 
         organizer = make_organizer(organizer_id=7)
@@ -255,8 +297,10 @@ class TestOrganizerLogoutAll:
         mock_db.execute = AsyncMock(return_value=execute_result)
         mock_db.commit = AsyncMock()
 
+        response = Response()
         result = await organizer_logout_all(
             request=make_request(method="POST", path="/organizer/auth/logout-all"),
+            response=response,
             current_organizer=organizer,
             db=mock_db,
         )
@@ -265,3 +309,9 @@ class TestOrganizerLogoutAll:
         mock_db.execute.assert_awaited_once()
         mock_db.commit.assert_awaited_once()
         assert "detail" in result
+        assert_hardened_cookie(
+            response.headers["set-cookie"],
+            name="organizer_session",
+            path="/api/organizer",
+            cleared=True,
+        )

@@ -1,15 +1,15 @@
 """GET /events/{event_id} — full event detail."""
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.constants import DEFAULT_USER_LOCALE, RATE_LIMIT_EVENTS_DETAIL
+from app.constants import DEFAULT_USER_LOCALE, RATE_LIMIT_EVENTS_DETAIL, SESSION_COOKIE_NAME
 from app.db import get_db
 from app.models.models import Event, User
 from app.rate_limit import limiter
 from app.routers.utils import (
     load_user_signals,
-    parse_bearer_user,
+    parse_session_cookie_user,
     public_event_filter,
     resolve_locale_param,
     select_events_with_classification,
@@ -26,7 +26,7 @@ async def get_event(
     request: Request,
     locale_query: str | None = Query(None, alias="locale"),
     db: AsyncSession = Depends(get_db),
-    authorization: str | None = Header(default=None),
+    session: str | None = Cookie(default=None, alias=SESSION_COOKIE_NAME),
 ) -> dict:
     """Return full event detail by ID. No auth required — events are public."""
     event = await db.scalar(
@@ -40,9 +40,9 @@ async def get_event(
             status_code=status.HTTP_404_NOT_FOUND, detail="Event not found"
         )
 
-    # Parse the bearer token once and reuse it for both locale and signal
+    # Parse the session cookie once and reuse it for both locale and signal
     # hydration — avoids a second token parse and a second user lookup.
-    parsed = parse_bearer_user(authorization)
+    parsed = parse_session_cookie_user(session)
     locale = DEFAULT_USER_LOCALE
     sigs: dict[int, str] = {}
     if parsed is not None:

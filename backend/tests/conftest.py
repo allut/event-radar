@@ -171,3 +171,18 @@ def make_request():
             }
         )
     return _factory
+
+
+def assert_hardened_cookie(
+    set_cookie: str, *, name: str, path: str, cleared: bool = False
+) -> None:
+    """Assert a Set-Cookie header carries the full hardened attribute set
+    (HttpOnly, Secure, SameSite=strict, Path) — shared by every auth-router
+    test asserting a session/organizer_session cookie (set or cleared)."""
+    assert f"{name}=" in set_cookie
+    assert "HttpOnly" in set_cookie
+    assert "Secure" in set_cookie
+    assert "SameSite=strict" in set_cookie
+    assert f"Path={path}" in set_cookie
+    if cleared:
+        assert "Max-Age=0" in set_cookie

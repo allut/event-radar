@@ -257,10 +257,9 @@ class CsrfOriginCheckMiddleware:
     """Reject a mutating request whose Origin header doesn't match a trusted
     origin, with 403.
 
-    Prefactoring step ahead of #24's session-cookie migration: CSRF isn't yet
-    a live risk while auth is a Bearer header (nothing a foreign page can
-    attach to a fetch/form submission carries it), but this is harmless to
-    land now and independently verifiable on its own.
+    Second CSRF layer behind SameSite=Strict now that #26 has moved session
+    auth to a cookie — a foreign page's fetch/form submission carries the
+    cookie automatically, which a Bearer header never did.
 
     A request with no Origin header is let through — browsers omit it on
     simple/no-CORS navigations for some methods, and server-to-server callers
@@ -451,8 +450,12 @@ app.add_middleware(SlowAPIMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
-    # Auth is a Bearer token in a header, never a cookie — credentialed CORS would
-    # only widen the attack surface (and browsers reject `*` origins with it anyway).
+    # Auth is now a Set-Cookie session (see #26 / docs/adr/0001), but
+    # allow_credentials stays False deliberately: the cookie is scoped to this
+    # API's own origin and only ever travels through the same-origin Vercel
+    # `/api` rewrite the SPA is served behind, never via a cross-origin
+    # browser fetch/XHR — so credentialed CORS would only widen the attack
+    # surface for no functional gain, regardless of what CORS_ORIGINS lists.
     allow_credentials=False,
     allow_methods=CORS_ALLOWED_METHODS,
     allow_headers=CORS_ALLOWED_HEADERS,

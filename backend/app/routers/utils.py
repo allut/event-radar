@@ -6,7 +6,7 @@ from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from fastapi import HTTPException, status
+from fastapi import HTTPException, Response, status
 from itsdangerous import BadSignature, SignatureExpired
 from pydantic import BaseModel, EmailStr
 from sqlalchemy import ColumnElement, Select, and_, delete, or_, select
@@ -23,6 +23,10 @@ from app.constants import (
     MAGIC_LINK_RESEND_COOLDOWN_SECONDS,
     PREFERENCE_SIGNALS,
     PREFERRED_TASTE_MIN_WEIGHT,
+    SECONDS_PER_DAY,
+    SESSION_COOKIE_HTTPONLY,
+    SESSION_COOKIE_SAMESITE,
+    SESSION_COOKIE_SECURE,
     VALID_LOCALES,
 )
 from app.db import AsyncSessionLocal
@@ -44,6 +48,45 @@ class RequestLinkBody(BaseModel):
 
     email: EmailStr
     locale: str | None = None
+
+
+class VerifyTokenBody(BaseModel):
+    """Shared /verify request body — the magic-link token moves from a query
+    parameter to the body so it stops landing in server access logs (Vercel
+    edge, Render). Identical shape for both auth tracks, mirroring
+    RequestLinkBody."""
+
+    token: str
+
+
+def set_session_cookie(
+    response: Response, *, name: str, token: str, path: str, ttl_days: int
+) -> None:
+    """Set a hardened session cookie — shared by the consumer and organizer
+    /verify endpoints. Secure is unconditional (never gated on APP_ENV): see
+    docs/adr/0001-session-tokens-in-httponly-cookies.md."""
+    response.set_cookie(
+        key=name,
+        value=token,
+        max_age=ttl_days * SECONDS_PER_DAY,
+        path=path,
+        secure=SESSION_COOKIE_SECURE,
+        httponly=SESSION_COOKIE_HTTPONLY,
+        samesite=SESSION_COOKIE_SAMESITE,
+    )
+
+
+def clear_session_cookie(response: Response, *, name: str, path: str) -> None:
+    """Expire a session cookie (sign-out and logout-all). Attributes must
+    match set_session_cookie's for the browser to actually replace/clear the
+    cookie rather than setting a second, distinct one."""
+    response.delete_cookie(
+        key=name,
+        path=path,
+        secure=SESSION_COOKIE_SECURE,
+        httponly=SESSION_COOKIE_HTTPONLY,
+        samesite=SESSION_COOKIE_SAMESITE,
+    )
 
 
 async def run_in_session(
@@ -324,13 +367,13 @@ def serialize_user(user: User, **extras) -> dict:
     }
 
 
-def parse_bearer_user(authorization: str | None) -> tuple[int, int] | None:
-    """(user_id, token_version) from an ``Authorization: Bearer`` header, or
-    None when the header is missing/malformed or the token is expired/invalid."""
-    if not isinstance(authorization, str) or not authorization.startswith("Bearer "):
+def parse_session_cookie_user(session: str | None) -> tuple[int, int] | None:
+    """(user_id, token_version) from the session cookie value, or None when
+    the cookie is absent or the token is expired/invalid."""
+    if not isinstance(session, str):
         return None
     try:
-        return verify_session_token(authorization[len("Bearer ") :])
+        return verify_session_token(session)
     except (SignatureExpired, BadSignature):
         return None
 

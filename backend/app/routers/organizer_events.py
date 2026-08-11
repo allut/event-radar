@@ -67,6 +67,10 @@ from app.routers.organizer_auth import get_current_organizer
 from app.routers.utils import select_events_with_classification, serialize_event
 
 log = logging.getLogger(__name__)
+# Stays under /organizer/* deliberately: ORGANIZER_SESSION_COOKIE_PATH (app/
+# constants.py) scopes the organizer_session cookie to Path=/api/organizer —
+# a route added outside that prefix would silently never receive the cookie
+# and 401 on every call, however correct get_current_organizer's logic is.
 router = APIRouter(prefix="/organizer/events", tags=["organizer-events"])
 
 

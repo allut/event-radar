@@ -3,7 +3,7 @@
 import logging
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response, status
 from itsdangerous import BadSignature, SignatureExpired
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,13 +17,17 @@ from app.auth.tokens import (
     verify_magic_token,
     verify_session_token,
 )
+from app.config import settings
 from app.constants import (
     DEFAULT_USER_LOCALE,
     LOG_EVENT_AUTH_FAILED,
     RATE_LIMIT_AUTH_REQUEST_LINK,
     RATE_LIMIT_AUTH_VERIFY,
     RATE_LIMIT_BROWSE,
+    RATE_LIMIT_LOGOUT,
     RATE_LIMIT_LOGOUT_ALL,
+    SESSION_COOKIE_NAME,
+    SESSION_COOKIE_PATH,
     VALID_LOCALES,
 )
 from app.db import get_db
@@ -31,9 +35,12 @@ from app.models.models import AuthMagicLink, User, UserPersona
 from app.rate_limit import limiter
 from app.routers.utils import (
     RequestLinkBody,
+    VerifyTokenBody,
+    clear_session_cookie,
     mask_email,
     recent_unused_link_exists,
     serialize_user,
+    set_session_cookie,
 )
 
 log = logging.getLogger(__name__)
@@ -55,36 +62,31 @@ def _detect_locale(accept_language: str) -> str:
 
 
 async def get_current_user(
-    authorization: str | None = Header(default=None),
+    session: str | None = Cookie(default=None, alias=SESSION_COOKIE_NAME),
     db: AsyncSession = Depends(get_db),
 ) -> User:
-    if not authorization or not authorization.startswith("Bearer "):
+    if not session:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing or invalid Authorization header",
-            headers={"WWW-Authenticate": "Bearer"},
+            detail="Missing session cookie",
         )
-    token = authorization[len("Bearer ") :]
     try:
-        user_id, token_version = verify_session_token(token)
+        user_id, token_version = verify_session_token(session)
     except (SignatureExpired, BadSignature):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Session token expired or invalid",
-            headers={"WWW-Authenticate": "Bearer"},
         )
     user = await db.get(User, user_id)
     if user is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User not found",
-            headers={"WWW-Authenticate": "Bearer"},
         )
     if token_version != user.session_token_version:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Session revoked. Please sign in again.",
-            headers={"WWW-Authenticate": "Bearer"},
         )
     return user
 
@@ -163,14 +165,18 @@ async def request_magic_link(
     return {"detail": "If that address is registered, a sign-in link has been sent."}
 
 
-@router.get("/verify")
+@router.post("/verify")
 @limiter.limit(RATE_LIMIT_AUTH_VERIFY)
 async def verify_magic_link(
     request: Request,
-    token: str,
+    body: VerifyTokenBody,
+    response: Response,
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    """Verify a magic-link token. Returns a session token on success."""
+    """Verify a magic-link token. Sets the session cookie on success; the
+    token itself moves in the request body (was a query parameter) so it
+    stops landing in access logs."""
+    token = body.token
     try:
         user_id = verify_magic_token(token)
     except SignatureExpired:
@@ -241,8 +247,14 @@ async def verify_magic_link(
         )
 
     session_token = generate_session_token(user_row.id, user_row.session_token_version)
+    set_session_cookie(
+        response,
+        name=SESSION_COOKIE_NAME,
+        token=session_token,
+        path=SESSION_COOKIE_PATH,
+        ttl_days=settings.SESSION_TTL_DAYS,
+    )
     return {
-        "session_token": session_token,
         "user": {
             "id": user_row.id,
             "email": user_row.email,
@@ -251,17 +263,35 @@ async def verify_magic_link(
     }
 
 
+@router.post("/logout", status_code=status.HTTP_200_OK)
+@limiter.limit(RATE_LIMIT_LOGOUT)
+async def logout(
+    request: Request,
+    response: Response,
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Sign out this device only: expires the session cookie without
+    touching session_token_version, leaving every other device's session
+    intact. The server-side counterpart "sign out" previously lacked — until
+    now it was pure client-side localStorage.removeItem."""
+    clear_session_cookie(response, name=SESSION_COOKIE_NAME, path=SESSION_COOKIE_PATH)
+    return {"detail": "Signed out."}
+
+
 @router.post("/logout-all", status_code=status.HTTP_200_OK)
 @limiter.limit(RATE_LIMIT_LOGOUT_ALL)
 async def logout_all(
     request: Request,
+    response: Response,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     """Invalidate every session token issued so far ("log out everywhere") by
     bumping session_token_version — get_current_user rejects any token whose
     embedded "v" claim no longer matches the stored value, including the one
-    used to make this very request.
+    used to make this very request. Also expires this device's cookie
+    directly, rather than relying on the client to notice the next rejected
+    request.
 
     Atomic UPDATE ... RETURNING (mirrors verify_magic_link's token-consume
     pattern) rather than ORM read-modify-write, so two concurrent calls can't
@@ -275,6 +305,7 @@ async def logout_all(
     new_version = result.scalar_one()
     await db.commit()
     current_user.session_token_version = new_version
+    clear_session_cookie(response, name=SESSION_COOKIE_NAME, path=SESSION_COOKIE_PATH)
     return {"detail": "Signed out of all devices."}
 
 

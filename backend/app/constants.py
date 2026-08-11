@@ -1,6 +1,6 @@
 import http
 import logging
-from typing import Any
+from typing import Any, Literal
 from zoneinfo import ZoneInfo
 
 from app._generated.shared_constants import (
@@ -457,6 +457,10 @@ RATE_LIMIT_AUTHENTICATED_WRITE = "30/minute"
 # issued session token (including the caller's own) — a higher-value target
 # than ordinary writes.
 RATE_LIMIT_LOGOUT_ALL = "10/minute"
+# Plain "sign out" (clears only the caller's own cookie, no session_token_version
+# bump) — lower stakes than logout-all, so a more generous cap; shared by both
+# the consumer and organizer logout endpoints, mirroring RATE_LIMIT_LOGOUT_ALL.
+RATE_LIMIT_LOGOUT = "20/minute"
 # Authenticated /explore browsing — mirrors RATE_LIMIT_EVENTS_DETAIL; live filter
 # changes can fire a request per keystroke/chip-toggle, so this stays generous.
 RATE_LIMIT_BROWSE = "120/minute"
@@ -475,6 +479,22 @@ SHOWCASE_FALLBACK_WINDOW_DAYS = 30
 # Auth tokens
 AUTH_MAGIC_SALT = "magic-link-v1"
 AUTH_SESSION_SALT = "session-v1"
+# Session-cookie transport (issue #26 / docs/adr/0001). Path scoping is what
+# keeps the higher-value organizer credential off ordinary consumer requests —
+# both paths sit under the Vercel `/api` rewrite that makes the SPA same-origin
+# with this API, so a browser only ever attaches SESSION_COOKIE_NAME under
+# /api and ORGANIZER_SESSION_COOKIE_NAME under /api/organizer.
+SESSION_COOKIE_NAME = "session"
+SESSION_COOKIE_PATH = "/api"
+ORGANIZER_SESSION_COOKIE_NAME = "organizer_session"
+ORGANIZER_SESSION_COOKIE_PATH = "/api/organizer"
+# Shared by routers/utils.py::set_session_cookie/clear_session_cookie — a single
+# source of truth so the two functions can never drift apart (clear_session_cookie
+# only actually clears the cookie in the browser if every attribute here matches
+# what set_session_cookie used to set it).
+SESSION_COOKIE_SECURE = True
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE: Literal["strict"] = "strict"
 # Fallback "v" claim for session/organizer-session tokens minted before that
 # claim existed (auth/tokens.py) — mirrors the session_token_version column's
 # server_default/model default.
@@ -1061,8 +1081,10 @@ CURRENCY_AMOUNT_RE = (
 )
 
 # CORS — restricted to the methods/headers the SPA actually sends (see
-# frontend/src/api/client.ts and routers/*.py route decorators). Credentials are
-# never used (auth is a Bearer header, not a cookie), so allow_credentials=False.
+# frontend/src/api/client.ts and routers/*.py route decorators). allow_credentials
+# stays False regardless (see main.py's CORSMiddleware call site) — the session
+# cookie only ever travels same-origin through the Vercel `/api` rewrite, never
+# via a credentialed cross-origin request.
 CORS_ALLOWED_METHODS: list[str] = ["GET", "POST", "PATCH", "DELETE"]
 CORS_ALLOWED_HEADERS: list[str] = ["Authorization", "Content-Type"]
 
@@ -1136,7 +1158,7 @@ SECURITY_HEADERS: dict[str, str] = {
     "X-Frame-Options": "DENY",
     "Referrer-Policy": "strict-origin-when-cross-origin",
     # Pure JSON API, nothing should ever be cached by an intermediary — most
-    # importantly, GET /auth/verify returns a bearer session_token in the body.
+    # importantly, POST /auth/verify sets the session cookie via Set-Cookie.
     "Cache-Control": "no-store",
 }
 # HSTS is only safe to send over HTTPS — Render terminates TLS in front of the app,
