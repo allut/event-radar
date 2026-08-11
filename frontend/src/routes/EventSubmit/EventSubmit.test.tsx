@@ -72,6 +72,35 @@ describe('EventSubmit (create)', () => {
     expect(body).toMatchObject({ category: 'music' });
   });
 
+  it('shows the empty marker state on a lang tab with no content', () => {
+    renderWithProviders(<EventSubmit />, { route: '/organizer/submit', pathPattern: '/organizer/submit' });
+    const langTabs = screen.getByRole('group', { name: /content language/i });
+    expect(within(langTabs).getByRole('button', { name: /^EN, empty$/ })).toBeInTheDocument();
+  });
+
+  it('shows the partial marker state when ET has a field EN lacks', async () => {
+    renderWithProviders(<EventSubmit />, { route: '/organizer/submit', pathPattern: '/organizer/submit' });
+    const langTabs = screen.getByRole('group', { name: /content language/i });
+
+    await userEvent.type(screen.getByLabelText(/^title \(et\)$/i), 'Jazz Night');
+    await userEvent.type(screen.getByLabelText(/^description \(et\)$/i), 'ET description');
+    await userEvent.click(within(langTabs).getByRole('button', { name: /^EN,/ }));
+    await userEvent.type(screen.getByLabelText(/^title \(en\)$/i), 'Jazz Night');
+
+    expect(within(langTabs).getByRole('button', { name: /^EN, partially translated$/ })).toBeInTheDocument();
+  });
+
+  it('shows the matched marker state once every ET field has an EN counterpart', async () => {
+    renderWithProviders(<EventSubmit />, { route: '/organizer/submit', pathPattern: '/organizer/submit' });
+    const langTabs = screen.getByRole('group', { name: /content language/i });
+
+    await userEvent.type(screen.getByLabelText(/^title \(et\)$/i), 'Jazz Night');
+    await userEvent.click(within(langTabs).getByRole('button', { name: /^EN,/ }));
+    await userEvent.type(screen.getByLabelText(/^title \(en\)$/i), 'Jazz Night');
+
+    expect(within(langTabs).getByRole('button', { name: /^EN, translated$/ })).toBeInTheDocument();
+  });
+
   it('switches to the EN tab and submits description_en/important_info_en', async () => {
     mockPost.mockResolvedValueOnce({ id: 6, slug: 'new-event-2', status: 'published' });
     renderWithProviders(<EventSubmit />, { route: '/organizer/submit', pathPattern: '/organizer/submit' });
@@ -80,7 +109,7 @@ describe('EventSubmit (create)', () => {
     await userEvent.type(screen.getByLabelText(/starts/i), '2026-08-01 18:00');
 
     const langTabs = screen.getByRole('group', { name: /content language/i });
-    await userEvent.click(within(langTabs).getByRole('button', { name: 'EN' }));
+    await userEvent.click(within(langTabs).getByRole('button', { name: /^EN,/ }));
     await userEvent.type(screen.getByLabelText(/^description \(en\)$/i), 'An English description');
     await userEvent.type(screen.getByLabelText(/important info .*\(en\)$/i), 'English ticket info');
 

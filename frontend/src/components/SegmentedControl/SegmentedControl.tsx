@@ -1,12 +1,13 @@
 import { cx } from '../../utils';
+import type { ContentMarkerState } from '../../constants';
 import styles from './SegmentedControl.module.css';
 
 export interface SegmentedOption {
   value: string;
   label: string;
-  /** Renders a small filled dot after the label — e.g. to signal an
-   * optional-but-filled-in language tab has content. */
-  dot?: boolean;
+  /** Renders a three-state translation-progress marker after the label, plus
+   * visually-hidden state text folded into the button's accessible name. */
+  marker?: { state: ContentMarkerState; stateLabel: string };
 }
 
 interface SegmentedControlProps {
@@ -36,12 +37,17 @@ export default function SegmentedControl({ options, value, onChange, ariaLabel, 
           <button
             key={opt.value}
             type="button"
-            className={cx(styles.segBtn, isActive && styles.active)}
+            className={cx(styles.segBtn, opt.marker && styles.hasMarker, isActive && styles.active)}
             aria-pressed={isActive}
             onClick={() => onChange(opt.value)}
           >
             {opt.label}
-            {opt.dot && <span className={cx(styles.dot, isDial && styles.blip)} aria-hidden="true" />}
+            {opt.marker && (
+              <>
+                <span className={cx(styles.marker, styles[opt.marker.state])} aria-hidden="true" />
+                <span className={styles.srOnly}>, {opt.marker.stateLabel}</span>
+              </>
+            )}
           </button>
         );
       })}

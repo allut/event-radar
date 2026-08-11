@@ -216,6 +216,10 @@ export type ContentLang = LocaleCode;
 export const CONTENT_LANG_ORDER: ContentLang[] = [LOCALE_ET, LOCALE_EN, LOCALE_RU];
 export const ORGANIZER_BASE_CONTENT_LANG: ContentLang = LOCALE_ET;
 
+// Per-tab translation-progress marker (EventSubmit.tsx), measured field-by-field
+// against the ET base slot — see SegmentedControl's `marker` option.
+export type ContentMarkerState = 'empty' | 'partial' | 'matched';
+
 // ─── DatePicker (components/DatePicker) ─────────────────────────────────────
 export const CALENDAR_WEEK_START = 1; // Monday — Estonia
 export const CALENDAR_WEEKS_SHOWN = 6;

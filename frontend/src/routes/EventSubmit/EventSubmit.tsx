@@ -13,7 +13,7 @@ import {
   CATEGORIES, CONTENT_LANG_ORDER, DEFAULT_CURRENCY, LOCALE_EN, LOCALE_ET, LOCALE_RU, LOCALES,
   ORGANIZER_BASE_CONTENT_LANG, ORGANIZER_IMAGE_ACCEPT, ORGANIZER_TEXTAREA_ROWS,
   PRICE_INPUT_MIN, PRICE_INPUT_STEP,
-  type ContentLang,
+  type ContentLang, type ContentMarkerState,
 } from '../../constants';
 import { currencySymbol } from '../../utils';
 import styles from './EventSubmit.module.css';
@@ -71,11 +71,26 @@ export default function EventSubmit() {
   const activeSlot = slots[contentLang];
   const contentLangLabel = (code: ContentLang) =>
     LOCALES.find((l) => l.code === code)?.label ?? code.toUpperCase();
-  const langTabOptions = CONTENT_LANG_ORDER.map((code) => ({
-    value: code,
-    label: contentLangLabel(code),
-    dot: code !== ORGANIZER_BASE_CONTENT_LANG && slots[code].hasContent,
-  }));
+  // Field-by-field against the ET base slot.
+  const markerState = (code: ContentLang): ContentMarkerState => {
+    const slot = slots[code];
+    if (!slot.hasContent) return 'empty';
+    if (code === ORGANIZER_BASE_CONTENT_LANG) return 'matched';
+    const base = slots[ORGANIZER_BASE_CONTENT_LANG];
+    const missesBaseField =
+      (base.title.trim() && !slot.title.trim()) ||
+      (base.description.trim() && !slot.description.trim()) ||
+      (base.importantInfo.trim() && !slot.importantInfo.trim());
+    return missesBaseField ? 'partial' : 'matched';
+  };
+  const langTabOptions = CONTENT_LANG_ORDER.map((code) => {
+    const state = markerState(code);
+    return {
+      value: code,
+      label: contentLangLabel(code),
+      marker: { state, stateLabel: t(`organizer_lang_state_${state}`, locale) },
+    };
+  });
   // Rebuilding this 14-option list (+14 t() lookups) only needs to happen when
   // the locale changes, not on every keystroke elsewhere in the form.
   const categoryOptions = useMemo(
@@ -109,6 +124,9 @@ export default function EventSubmit() {
                 ariaLabel={t('organizer_language_tabs_label', locale)}
               />
             </div>
+            <p className={styles.contentHint}>
+              {ti('organizer_lang_hint', locale, { base: contentLangLabel(ORGANIZER_BASE_CONTENT_LANG) })}
+            </p>
 
             <label className={styles.label} htmlFor="content_title">
               {langField('organizer_field_title')}

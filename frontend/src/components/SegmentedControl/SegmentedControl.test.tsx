@@ -28,14 +28,13 @@ describe('SegmentedControl', () => {
     expect(onChange).toHaveBeenCalledWith('foryou');
   });
 
-  it('renders a dot on an option flagged with dot: true', () => {
-    const dotOptions = [
+  it('renders a marker on an option flagged with marker, and folds the state into its accessible name', () => {
+    const markerOptions = [
       { value: 'et', label: 'ET' },
-      { value: 'en', label: 'EN', dot: true },
+      { value: 'en', label: 'EN', marker: { state: 'partial' as const, stateLabel: 'partially translated' } },
     ];
-    render(<SegmentedControl options={dotOptions} value="et" onChange={vi.fn()} ariaLabel="Language" />);
-    const enButton = screen.getByRole('button', { name: /EN/ });
-    expect(enButton.querySelector('[aria-hidden="true"]')).toBeInTheDocument();
+    render(<SegmentedControl options={markerOptions} value="et" onChange={vi.fn()} ariaLabel="Language" />);
+    expect(screen.getByRole('button', { name: 'EN, partially translated' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'ET' }).querySelector('[aria-hidden="true"]')).not.toBeInTheDocument();
   });
 
@@ -59,22 +58,6 @@ describe('SegmentedControl', () => {
 
       rerender(<SegmentedControl variant="dial" options={options} value="foryou" onChange={vi.fn()} ariaLabel="Mode" />);
       expect(track.style.getPropertyValue('--seg-index')).toBe('1');
-    });
-
-    it('gives the dot the blip class under variant="dial" and not under the default variant', () => {
-      const dotOptions = [
-        { value: 'et', label: 'ET' },
-        { value: 'en', label: 'EN', dot: true },
-      ];
-      const { rerender } = render(
-        <SegmentedControl variant="dial" options={dotOptions} value="et" onChange={vi.fn()} ariaLabel="Language" />
-      );
-      const dialDot = screen.getByRole('button', { name: /EN/ }).querySelector('[aria-hidden="true"]');
-      expect(dialDot?.className).toMatch(/blip/);
-
-      rerender(<SegmentedControl options={dotOptions} value="et" onChange={vi.fn()} ariaLabel="Language" />);
-      const plainDot = screen.getByRole('button', { name: /EN/ }).querySelector('[aria-hidden="true"]');
-      expect(plainDot?.className).not.toMatch(/blip/);
     });
   });
 });

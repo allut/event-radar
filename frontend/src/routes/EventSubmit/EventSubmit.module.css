@@ -57,6 +57,12 @@
   text-transform: uppercase;
 }
 
+.contentHint {
+  margin-top: calc(-1 * var(--space-1));
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+
 .fieldRow {
   display: flex;
   gap: var(--space-3);

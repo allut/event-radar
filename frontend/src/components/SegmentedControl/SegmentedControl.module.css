@@ -13,6 +13,13 @@
   transition: all var(--transition);
 }
 
+/* Reserves a fixed right-hand slot so the marker docks to the same x
+   position on every tab, regardless of the label's own width. */
+.hasMarker {
+  position: relative;
+  padding-right: calc(var(--space-0-875) + var(--seg-blip-size) + var(--space-1));
+}
+
 .segBtn:hover {
   color: var(--text);
 }
@@ -26,14 +33,31 @@
   border-left: 1px solid var(--border);
 }
 
-.dot {
-  display: inline-block;
+.marker {
+  position: absolute;
+  top: 50%;
+  right: var(--space-0-875);
   width: var(--seg-blip-size);
   height: var(--seg-blip-size);
-  margin-left: var(--space-1);
   border-radius: var(--radius-full);
+  border: 1px solid currentColor;
+  transform: translateY(-50%);
+}
+
+.empty {
+  background: transparent;
+}
+
+.partial {
+  background: linear-gradient(90deg, currentColor 50%, transparent 50%);
+}
+
+.matched {
   background: currentColor;
-  vertical-align: middle;
+}
+
+.srOnly {
+  composes: srOnly from '../shared/Visually.module.css';
 }
 
 .segDial {
@@ -70,22 +94,14 @@
   border-radius: var(--radius-pill);
 }
 
+/* .segDial .segBtn's padding shorthand above would otherwise clobber
+   .hasMarker's padding-right (equal specificity, source order wins) —
+   restate it here so the marker's reserved slot survives under variant="dial". */
+.segDial .hasMarker { padding-right: calc(var(--space-0-875) + var(--seg-blip-size) + var(--space-1)); }
 .segDial .segBtn + .segBtn { border-left: none; }
 .segDial .segBtn.active { background: transparent; color: var(--accent-light); }
 .segDial .segBtn:focus-visible { outline: none; box-shadow: var(--shadow-focus-ring); }
 
-.blip {
-  composes: breathe from '../shared/Animations.module.css';
-  width: var(--seg-blip-size);
-  height: var(--seg-blip-size);
-  background: var(--accent-light);
-  --breathe-duration: var(--anim-breathe-fast);
-}
-
-/* !important: CSS-Modules chunk order can place the composed .breathe rule
-   (from Animations.module.css) after this file's rules at equal specificity —
-   this override must win the cascade regardless of that chunk order. */
 @media (prefers-reduced-motion: reduce) {
   .indicator { transition: none; }
-  .blip { animation: none !important; }
 }
