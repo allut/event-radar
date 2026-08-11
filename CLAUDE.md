@@ -74,7 +74,7 @@ Vite + React SPA (frontend, port 5173 in dev)
   │           Organizer portal: /organizer/login  /organizer/verify  /organizer/dashboard
   │                             /organizer/submit  /organizer/events/:id/edit
   ├── State: React Query (@tanstack/react-query) for server state
-  └── API client: frontend/src/api/client.ts (Authorization: Bearer session-token auth)
+  └── API client: frontend/src/api/client.ts (httpOnly session-cookie auth, `credentials: "include"`)
         ↓
 FastAPI Backend (single process on Render free tier, port 8000 in dev)
   ├── Routers: /auth  /admin  /onboarding  /events  /explore  /feed  /feedback  /public  /users/me  /contact  /email  /webhooks  /organizer/auth  /organizer/events
@@ -108,7 +108,7 @@ Four read paths (Daily 5 feed, Explore, Saved Events, public Landing showcase) a
 
 ## Auth, Security & the Organizer Portal
 
-- **Auth** — magic-link email (`itsdangerous` tokens, no third-party auth), Bearer session tokens (2-day TTL), `session_token_version` revocation, `email_verified` gate on the digest/feed builder. Full flow, residual-risk trade-offs, and the digest unsubscribe token in `docs/security.md`.
+- **Auth** — magic-link email (`itsdangerous` tokens, no third-party auth), httpOnly/Secure/`SameSite=Strict` session cookies (2-day TTL), `session_token_version` revocation, `email_verified` gate on the digest/feed builder. Full flow, residual-risk trade-offs, and the digest unsubscribe token in `docs/security.md`.
 - **Security hardening** — rate limiting (every endpoint gets a `RATE_LIMIT_*`), security headers, CSP, body-size ceiling, `require_configured_secret` dev-fail-open double gate, admin auth lockout, external-URL sanitization (`safe_external_url()` vs `safe_fetchable_url()`, keyed on fetched-vs-rendered), stored-HTML sanitization (`sanitize_html()`/`html_to_text()`), redirect SSRF guard, webhook signature verification. Full detail in `docs/security.md` — read it before adding any new endpoint or external-facing URL field.
 - **Organizer portal** — self-service submission with its own auth track (separate salts/tables from user auth), auto-publish gated on organizer trust (`verified` flag), admin post-hoc review queue. Full detail in `docs/organizer-portal.md`.
 - **Admin endpoints** — `/admin/*`, HTTP Basic auth, shared rate-limit bucket, `run_admin_job()` helper. Full detail in `docs/backend-ops.md`.
