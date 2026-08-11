@@ -32,6 +32,7 @@
     "persona_count_full": "{max} of {max} — tap a card to swap",
     "lets_go": "Let's go →",
     "saving": "Saving…",
+    "onboarding_saving_msg": "Setting up your personas and warming up your feed…",
     "daily_five": "Your Daily Five",
     "curated_at": "Curated at {time}",
     "feed_empty_title": "Your feed is being prepared…",

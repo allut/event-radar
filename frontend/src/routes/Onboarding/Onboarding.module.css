@@ -96,3 +96,35 @@
   composes: spinner from '../../components/shared/Spinner.module.css';
 }
 
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--overlay-scrim);
+  backdrop-filter: blur(var(--blur-overlay));
+}
+
+.overlayPanel {
+  composes: card from '../../components/shared/Card.module.css';
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-7) var(--space-6);
+  max-width: 320px;
+  text-align: center;
+}
+
+.overlaySpinner {
+  composes: spinnerPage from '../../components/shared/Spinner.module.css';
+}
+
+.overlayMsg {
+  font-size: var(--fs-base);
+  color: var(--text);
+  font-weight: 500;
+}
+

@@ -109,6 +109,15 @@ export default function Onboarding() {
           </div>
         </form>
       </main>
+
+      {isLoading && (
+        <div className={styles.overlay} role="status" aria-live="polite">
+          <div className={styles.overlayPanel}>
+            <span className={styles.overlaySpinner} />
+            <p className={styles.overlayMsg}>{t('onboarding_saving_msg', locale)}</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

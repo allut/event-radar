@@ -32,6 +32,7 @@
     "persona_count_full": "{max}/{max} — puuduta kaarti vahetamiseks",
     "lets_go": "Edasi →",
     "saving": "Salvestamine…",
+    "onboarding_saving_msg": "Seadistame sinu profiili ja soojendame voogu…",
     "daily_five": "Sinu päeva 5",
     "curated_at": "Koostatud kell {time}",
     "feed_empty_title": "Sinu voog koostatakse…",

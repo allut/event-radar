@@ -121,6 +121,7 @@
   --z-sticky: 10;
   --z-toast: 50;
   --z-card-overlay: 1;
+  --z-modal: 100;
 
   /* Backdrop blur */
   --blur-overlay: 8px;   /* sticky topbars */
