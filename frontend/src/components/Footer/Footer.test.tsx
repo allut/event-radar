@@ -2,8 +2,8 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { act, screen } from '@testing-library/react';
 import { renderWithProviders } from '../../test/utils';
 import { setLocale } from '../../lib/auth';
-import { setOrganizerToken } from '../../lib/organizerAuth';
-import { LOCALE_KEY, ORGANIZER_TOKEN_KEY } from '../../constants';
+import { setOrganizerSignedInHint } from '../../lib/organizerAuth';
+import { LOCALE_KEY, ORGANIZER_SIGNED_IN_HINT_KEY } from '../../constants';
 import Footer from './Footer';
 
 describe('Footer', () => {
@@ -57,12 +57,12 @@ describe('Footer', () => {
     renderWithProviders(<Footer />);
     expect(screen.getByRole('link', { name: 'For organizers' })).toHaveAttribute('href', '/organizer/login');
 
-    act(() => setOrganizerToken('fake-organizer-token'));
+    act(() => setOrganizerSignedInHint());
     expect(screen.getByRole('link', { name: 'Organizer dashboard' })).toHaveAttribute('href', '/organizer/dashboard');
   });
 
   it('reads an already-active organizer session on first render', () => {
-    localStorage.setItem(ORGANIZER_TOKEN_KEY, 'fake-organizer-token');
+    localStorage.setItem(ORGANIZER_SIGNED_IN_HINT_KEY, '1');
     renderWithProviders(<Footer />);
     expect(screen.getByRole('link', { name: 'Organizer dashboard' })).toHaveAttribute('href', '/organizer/dashboard');
   });

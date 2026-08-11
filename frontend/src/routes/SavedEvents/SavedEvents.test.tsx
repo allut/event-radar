@@ -8,7 +8,7 @@ import type { EventData } from '../../components/EventCard';
 vi.mock('../../lib/auth', () => ({
   getLocale: vi.fn(() => 'en'),
   setLocale: vi.fn(),
-  clearToken: vi.fn(),
+  clearSignedInHint: vi.fn(),
   beginLogout: vi.fn(),
 }));
 
@@ -16,7 +16,7 @@ vi.mock('../../api/client', () => ({
   api: {
     get: vi.fn(),
     patch: vi.fn(),
-    post: vi.fn(),
+    post: vi.fn().mockResolvedValue(undefined),
     delete: vi.fn(),
   },
 }));

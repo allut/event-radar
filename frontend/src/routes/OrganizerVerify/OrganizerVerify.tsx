@@ -1,16 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { organizerApi, ApiError } from '../../api/client';
-import { setOrganizerToken } from '../../lib/organizerAuth';
+import { setOrganizerSignedInHint } from '../../lib/organizerAuth';
 import { getLocale } from '../../lib/auth';
 import { AUTH_REDIRECT_DELAY_MS, UI_STATE, type VerifyState } from '../../constants';
 import { t } from '../../i18n';
 import AuthCard, { type AuthCardKind } from '../../components/AuthCard';
 import styles from './OrganizerVerify.module.css';
-
-interface VerifyResponse {
-  session_token: string;
-}
 
 const STATE_TO_KIND: Record<VerifyState, AuthCardKind> = {
   [UI_STATE.verifying]: 'pending',
@@ -38,8 +34,8 @@ export default function OrganizerVerify() {
 
     async function verify(tok: string) {
       try {
-        const data = await organizerApi.get<VerifyResponse>(`/organizer/auth/verify?token=${encodeURIComponent(tok)}`);
-        setOrganizerToken(data.session_token);
+        await organizerApi.post('/organizer/auth/verify', { token: tok });
+        setOrganizerSignedInHint();
         setState(UI_STATE.success);
         setTimeout(() => navigate('/organizer/dashboard', { replace: true }), AUTH_REDIRECT_DELAY_MS);
       } catch (err) {

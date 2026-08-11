@@ -1,6 +1,6 @@
 import { StatusCodes } from 'http-status-codes';
-import { clearToken, getToken, isLoggingOut } from '../lib/auth';
-import { clearOrganizerToken, getOrganizerToken, isOrganizerLoggingOut } from '../lib/organizerAuth';
+import { clearSignedInHint, isLoggingOut } from '../lib/auth';
+import { clearOrganizerSignedInHint, isOrganizerLoggingOut } from '../lib/organizerAuth';
 
 export class ApiError extends Error {
   constructor(public readonly status: number, message: string) {
@@ -10,15 +10,16 @@ export class ApiError extends Error {
 }
 
 interface RequestOptions extends RequestInit {
-  /** Attach the organizer session token instead of the consumer one, and
-   * redirect to /organizer/login (not /login) on a 401 — see
-   * lib/organizerAuth.ts for why the two tracks are kept separate. */
+  /** Use the organizer session cookie's clear/redirect targets instead of the
+   * consumer ones on a 401 — see lib/organizerAuth.ts for why the two tracks
+   * are kept separate. The session credential itself travels as an httpOnly
+   * cookie the browser attaches automatically; this flag no longer selects a
+   * token. */
   organizer?: boolean;
 }
 
 async function request<T>(path: string, init: RequestOptions = {}): Promise<T> {
   const { organizer, ...fetchInit } = init;
-  const token = organizer ? getOrganizerToken() : getToken();
   const hasBody = fetchInit.body !== undefined;
   // FormData (the image-upload path) must not be JSON.stringify'd or given
   // an explicit Content-Type — the browser sets the multipart boundary itself.
@@ -27,16 +28,15 @@ async function request<T>(path: string, init: RequestOptions = {}): Promise<T> {
     ...(hasBody && !isFormData ? { 'Content-Type': 'application/json' } : {}),
     ...(fetchInit.headers as Record<string, string> | undefined ?? {}),
   };
-  if (token) headers['Authorization'] = `Bearer ${token}`;
 
-  const res = await fetch(`/api${path}`, { ...fetchInit, headers });
+  const res = await fetch(`/api${path}`, { ...fetchInit, headers, credentials: 'include' });
 
   if (res.status === StatusCodes.UNAUTHORIZED) {
     if (organizer) {
-      clearOrganizerToken();
+      clearOrganizerSignedInHint();
       if (!isOrganizerLoggingOut()) window.location.replace('/organizer/login');
     } else {
-      clearToken();
+      clearSignedInHint();
       // A 401 during an explicit logout is an expected side effect of the
       // cache-clear race described in lib/auth.ts, not a real session expiry —
       // skip the hard redirect so it doesn't override the logout navigation.

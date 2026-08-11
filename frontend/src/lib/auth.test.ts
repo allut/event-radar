@@ -1,25 +1,20 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { getToken, setToken, clearToken, isAuthenticated, getLocale, setLocale, beginLogout, isLoggingOut } from './auth';
+import { setSignedInHint, clearSignedInHint, isAuthenticated, getLocale, setLocale, beginLogout, isLoggingOut } from './auth';
 import { LOCALES } from '../constants';
 
-describe('token storage', () => {
-  it('setToken stores token, getToken retrieves it', () => {
-    setToken('abc123');
-    expect(getToken()).toBe('abc123');
-  });
-
-  it('clearToken removes token', () => {
-    setToken('abc123');
-    clearToken();
-    expect(getToken()).toBeNull();
-  });
-
-  it('isAuthenticated returns true when token set', () => {
-    setToken('tok');
+describe('signed-in hint storage', () => {
+  it('setSignedInHint sets the hint, isAuthenticated reflects it', () => {
+    setSignedInHint();
     expect(isAuthenticated()).toBe(true);
   });
 
-  it('isAuthenticated returns false when no token', () => {
+  it('clearSignedInHint removes the hint', () => {
+    setSignedInHint();
+    clearSignedInHint();
+    expect(isAuthenticated()).toBe(false);
+  });
+
+  it('isAuthenticated returns false when no hint set', () => {
     expect(isAuthenticated()).toBe(false);
   });
 });
@@ -28,8 +23,8 @@ describe('logout flag', () => {
   // loggingOut is module-level state, not localStorage-backed — reset it
   // explicitly so a test's beginLogout() can't leak into the next test.
   afterEach(() => {
-    setToken('reset');
-    clearToken();
+    setSignedInHint();
+    clearSignedInHint();
   });
 
   it('isLoggingOut is false by default', () => {
@@ -41,9 +36,9 @@ describe('logout flag', () => {
     expect(isLoggingOut()).toBe(true);
   });
 
-  it('setToken (a fresh sign-in) resets isLoggingOut', () => {
+  it('setSignedInHint (a fresh sign-in) resets isLoggingOut', () => {
     beginLogout();
-    setToken('fresh-token');
+    setSignedInHint();
     expect(isLoggingOut()).toBe(false);
   });
 });

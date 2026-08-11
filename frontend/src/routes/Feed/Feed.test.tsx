@@ -7,7 +7,7 @@ import { renderWithProviders, makeEvent } from '../../test/utils';
 vi.mock('../../lib/auth', () => ({
   getLocale: vi.fn(() => 'en'),
   setLocale: vi.fn(),
-  clearToken: vi.fn(),
+  clearSignedInHint: vi.fn(),
   beginLogout: vi.fn(),
 }));
 
@@ -15,6 +15,7 @@ vi.mock('../../api/client', () => ({
   api: {
     get: vi.fn(),
     patch: vi.fn(),
+    post: vi.fn().mockResolvedValue(undefined),
   },
 }));
 
@@ -87,12 +88,12 @@ describe('Feed', () => {
     expect(screen.queryByText(/showing your latest feed/i)).not.toBeInTheDocument();
   });
 
-  it('logout clears token and navigates to landing', async () => {
+  it('logout clears the signed-in hint and navigates to landing', async () => {
     mockGet.mockResolvedValueOnce(feedResponse);
-    const { clearToken } = await import('../../lib/auth');
+    const { clearSignedInHint } = await import('../../lib/auth');
     renderWithProviders(<Feed />);
     await waitFor(() => screen.getByRole('button', { name: /sign out/i }));
     await userEvent.click(screen.getByRole('button', { name: /sign out/i }));
-    expect(clearToken).toHaveBeenCalled();
+    expect(clearSignedInHint).toHaveBeenCalled();
   });
 });

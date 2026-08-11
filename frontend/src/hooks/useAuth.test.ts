@@ -1,31 +1,31 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useAuth } from './useAuth';
-import { setToken, clearToken } from '../lib/auth';
-import { TOKEN_KEY } from '../constants';
+import { setSignedInHint, clearSignedInHint } from '../lib/auth';
+import { SIGNED_IN_HINT_KEY } from '../constants';
 
 beforeEach(() => {
   localStorage.clear();
 });
 
 describe('useAuth', () => {
-  it('reflects the current token state and updates on setToken/clearToken', () => {
+  it('reflects the current signed-in state and updates on setSignedInHint/clearSignedInHint', () => {
     const { result } = renderHook(() => useAuth());
     expect(result.current).toBe(false);
 
-    act(() => setToken('test-token'));
+    act(() => setSignedInHint());
     expect(result.current).toBe(true);
 
-    act(() => clearToken());
+    act(() => clearSignedInHint());
     expect(result.current).toBe(false);
   });
 
   it('stops updating after unmount', () => {
     const { unmount } = renderHook(() => useAuth());
     unmount();
-    act(() => setToken('test-token'));
+    act(() => setSignedInHint());
     // No assertion possible on a stale hook result post-unmount; this just
-    // verifies clearToken/setToken don't throw when the last subscriber is gone.
-    expect(localStorage.getItem(TOKEN_KEY)).toBe('test-token');
+    // verifies clearSignedInHint/setSignedInHint don't throw when the last subscriber is gone.
+    expect(localStorage.getItem(SIGNED_IN_HINT_KEY)).not.toBeNull();
   });
 });

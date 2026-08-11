@@ -1,27 +1,23 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { StatusCodes } from 'http-status-codes';
 import { ApiError, api, organizerApi } from './client';
 
 vi.mock('../lib/auth', () => ({
-  getToken: vi.fn(() => null),
-  clearToken: vi.fn(),
+  clearSignedInHint: vi.fn(),
   isLoggingOut: vi.fn(() => false),
 }));
 
 vi.mock('../lib/organizerAuth', () => ({
-  getOrganizerToken: vi.fn(() => null),
-  clearOrganizerToken: vi.fn(),
+  clearOrganizerSignedInHint: vi.fn(),
   isOrganizerLoggingOut: vi.fn(() => false),
 }));
 
-import { getToken, clearToken, isLoggingOut } from '../lib/auth';
-import { getOrganizerToken, clearOrganizerToken, isOrganizerLoggingOut } from '../lib/organizerAuth';
+import { clearSignedInHint, isLoggingOut } from '../lib/auth';
+import { clearOrganizerSignedInHint, isOrganizerLoggingOut } from '../lib/organizerAuth';
 
-const mockGetToken = vi.mocked(getToken);
-const mockClearToken = vi.mocked(clearToken);
+const mockClearSignedInHint = vi.mocked(clearSignedInHint);
 const mockIsLoggingOut = vi.mocked(isLoggingOut);
-const mockGetOrganizerToken = vi.mocked(getOrganizerToken);
-const mockClearOrganizerToken = vi.mocked(clearOrganizerToken);
+const mockClearOrganizerSignedInHint = vi.mocked(clearOrganizerSignedInHint);
 const mockIsOrganizerLoggingOut = vi.mocked(isOrganizerLoggingOut);
 
 function mockFetch(status: number, body: unknown = {}, ok = true) {
@@ -64,22 +60,12 @@ describe('api.get', () => {
     expect(headers['Content-Type']).toBeUndefined();
   });
 
-  it('does not set Authorization when no token', async () => {
-    mockGetToken.mockReturnValueOnce(null);
+  it('sends credentials: include so the browser attaches the session cookie', async () => {
     mockFetch(StatusCodes.OK, {});
     await api.get('/events');
     const call = vi.mocked(fetch).mock.calls[0];
-    const headers = (call[1] as RequestInit).headers as Record<string, string>;
-    expect(headers['Authorization']).toBeUndefined();
-  });
-
-  it('sets Authorization when token present', async () => {
-    mockGetToken.mockReturnValueOnce('mytoken');
-    mockFetch(StatusCodes.OK, {});
-    await api.get('/events');
-    const call = vi.mocked(fetch).mock.calls[0];
-    const headers = (call[1] as RequestInit).headers as Record<string, string>;
-    expect(headers['Authorization']).toBe('Bearer mytoken');
+    const init = call[1] as RequestInit;
+    expect(init.credentials).toBe('include');
   });
 
   it('returns parsed JSON on success', async () => {
@@ -99,18 +85,18 @@ describe('api.get', () => {
     await expect(api.get('/fail')).rejects.toMatchObject({ message: `HTTP ${StatusCodes.INTERNAL_SERVER_ERROR}` });
   });
 
-  it('on 401: calls clearToken, redirects to /login, throws ApiError', async () => {
+  it('on 401: calls clearSignedInHint, redirects to /login, throws ApiError', async () => {
     mockFetch(StatusCodes.UNAUTHORIZED, {}, false);
     await expect(api.get('/protected')).rejects.toThrow(ApiError);
-    expect(mockClearToken).toHaveBeenCalled();
+    expect(mockClearSignedInHint).toHaveBeenCalled();
     expect(window.location.replace).toHaveBeenCalledWith('/login');
   });
 
-  it('on 401 during logout: calls clearToken, skips the /login redirect, still throws ApiError', async () => {
+  it('on 401 during logout: calls clearSignedInHint, skips the /login redirect, still throws ApiError', async () => {
     mockIsLoggingOut.mockReturnValueOnce(true);
     mockFetch(StatusCodes.UNAUTHORIZED, {}, false);
     await expect(api.get('/protected')).rejects.toThrow(ApiError);
-    expect(mockClearToken).toHaveBeenCalled();
+    expect(mockClearSignedInHint).toHaveBeenCalled();
     expect(window.location.replace).not.toHaveBeenCalled();
   });
 
@@ -166,21 +152,19 @@ describe('FormData bodies', () => {
 });
 
 describe('organizer requests', () => {
-  it('attaches the organizer token, not the consumer token', async () => {
-    mockGetOrganizerToken.mockReturnValueOnce('org-token');
+  it('sends credentials: include for organizer requests too', async () => {
     mockFetch(StatusCodes.OK, {});
     await organizerApi.get('/organizer/events');
     const call = vi.mocked(fetch).mock.calls[0];
-    const headers = (call[1] as RequestInit).headers as Record<string, string>;
-    expect(headers['Authorization']).toBe('Bearer org-token');
-    expect(mockGetToken).not.toHaveBeenCalled();
+    const init = call[1] as RequestInit;
+    expect(init.credentials).toBe('include');
   });
 
-  it('on 401: clears the organizer token and redirects to /organizer/login', async () => {
+  it('on 401: clears the organizer hint and redirects to /organizer/login', async () => {
     mockFetch(StatusCodes.UNAUTHORIZED, {}, false);
     await expect(organizerApi.get('/organizer/events')).rejects.toThrow(ApiError);
-    expect(mockClearOrganizerToken).toHaveBeenCalled();
-    expect(mockClearToken).not.toHaveBeenCalled();
+    expect(mockClearOrganizerSignedInHint).toHaveBeenCalled();
+    expect(mockClearSignedInHint).not.toHaveBeenCalled();
     expect(window.location.replace).toHaveBeenCalledWith('/organizer/login');
   });
 
@@ -188,7 +172,7 @@ describe('organizer requests', () => {
     mockIsOrganizerLoggingOut.mockReturnValueOnce(true);
     mockFetch(StatusCodes.UNAUTHORIZED, {}, false);
     await expect(organizerApi.get('/organizer/events')).rejects.toThrow(ApiError);
-    expect(mockClearOrganizerToken).toHaveBeenCalled();
+    expect(mockClearOrganizerSignedInHint).toHaveBeenCalled();
     expect(window.location.replace).not.toHaveBeenCalled();
   });
 });

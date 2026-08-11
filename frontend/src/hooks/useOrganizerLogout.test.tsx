@@ -13,10 +13,17 @@ vi.mock('react-router-dom', async (importOriginal) => ({
 
 vi.mock('../lib/organizerAuth', () => ({
   beginOrganizerLogout: vi.fn(),
-  clearOrganizerToken: vi.fn(),
+  clearOrganizerSignedInHint: vi.fn(),
 }));
 
-import { beginOrganizerLogout, clearOrganizerToken } from '../lib/organizerAuth';
+vi.mock('../api/client', () => ({
+  organizerApi: {
+    post: vi.fn().mockResolvedValue(undefined),
+  },
+}));
+
+import { beginOrganizerLogout, clearOrganizerSignedInHint } from '../lib/organizerAuth';
+import { organizerApi } from '../api/client';
 
 function wrapper({ children }: { children: ReactNode }) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -31,15 +38,17 @@ describe('useOrganizerLogout', () => {
   beforeEach(() => {
     mockNavigate.mockClear();
     vi.mocked(beginOrganizerLogout).mockClear();
-    vi.mocked(clearOrganizerToken).mockClear();
+    vi.mocked(clearOrganizerSignedInHint).mockClear();
+    vi.mocked(organizerApi.post).mockClear();
   });
 
-  it('flags logout, clears the organizer token, and navigates to /organizer/login', () => {
+  it('flags logout, calls the server-side logout endpoint, clears the organizer hint, and navigates to /organizer/login', () => {
     const { result } = renderHook(() => useOrganizerLogout(), { wrapper });
     act(() => result.current());
 
     expect(beginOrganizerLogout).toHaveBeenCalled();
-    expect(clearOrganizerToken).toHaveBeenCalled();
+    expect(organizerApi.post).toHaveBeenCalledWith('/organizer/auth/logout');
+    expect(clearOrganizerSignedInHint).toHaveBeenCalled();
     expect(mockNavigate).toHaveBeenCalledWith('/organizer/login', { replace: true });
   });
 });

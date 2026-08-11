@@ -5,7 +5,7 @@ import { QueryClient } from '@tanstack/react-query';
 import Feed from './Feed';
 import Landing from '../Landing';
 import { useAuth } from '../../hooks/useAuth';
-import { TOKEN_KEY } from '../../constants';
+import { SIGNED_IN_HINT_KEY } from '../../constants';
 import { makeEvent, renderWithProviders } from '../../test/utils';
 
 // Reproduces the real App.tsx `Home` component: Feed for signed-in users,
@@ -42,11 +42,19 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+// Stands in for the real session cookie: fetch has no visibility into
+// localStorage, so this closure flag tracks "does the browser still have a
+// live session cookie" the same way a real cookie jar would, flipped by the
+// stubbed /auth/logout call below.
 function stubFetch() {
-  vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
-    const headers = (init?.headers ?? {}) as Record<string, string>;
+  let authed = true;
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    if (url.startsWith('/api/auth/logout')) {
+      authed = false;
+      return { ok: true, status: 200, json: async () => ({}), text: async () => '' };
+    }
     if (url.startsWith('/api/feed')) {
-      if (headers['Authorization']) {
+      if (authed) {
         return { ok: true, status: 200, json: async () => feedResponse, text: async () => '' };
       }
       return { ok: false, status: 401, json: async () => ({}), text: async () => '' };
@@ -69,7 +77,7 @@ function renderHome(queryClient: QueryClient) {
 
 describe('logout redirect from the Feed route (/)', () => {
   it('does not hard-redirect to /login when signing out while on the feed', async () => {
-    localStorage.setItem(TOKEN_KEY, 'test-session-token');
+    localStorage.setItem(SIGNED_IN_HINT_KEY, '1');
     stubFetch();
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 
@@ -83,7 +91,7 @@ describe('logout redirect from the Feed route (/)', () => {
     expect(screen.queryByText(/failed to load your feed/i)).not.toBeInTheDocument();
 
     // Let any spurious refetch + its 401 handling resolve.
-    await waitFor(() => expect(localStorage.getItem(TOKEN_KEY)).toBeNull());
+    await waitFor(() => expect(localStorage.getItem(SIGNED_IN_HINT_KEY)).toBeNull());
     await new Promise((resolve) => setTimeout(resolve, 50));
 
     expect(window.location.replace).not.toHaveBeenCalledWith('/login');

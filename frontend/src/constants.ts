@@ -31,12 +31,18 @@ export const QUERY_RETRY = 1;
 export const QUERY_STALE_TIME = 30_000;
 
 // ─── Local storage keys ──────────────────────────────────────────────────────
-export const TOKEN_KEY = 'session_token';
+// These hold a boolean "signed-in hint", not a credential — the real session
+// token lives only in an httpOnly cookie, unreadable by page JS. The hint
+// exists purely so isAuthenticated()/isAuthenticatedOrganizer() can answer
+// synchronously at first paint. Key names are unchanged from the pre-cookie
+// token-storage era so existing localStorage entries/cross-tab listeners
+// keep working.
+export const SIGNED_IN_HINT_KEY = 'session_token';
 export const LOCALE_KEY = 'locale';
-// Separate key from TOKEN_KEY — organizer and consumer sessions are two
-// independent auth tracks (own account table, own token salts on the
+// Separate key from SIGNED_IN_HINT_KEY — organizer and consumer sessions are
+// two independent auth tracks (own account table, own token salts on the
 // backend) that must never be confused for one another. See lib/organizerAuth.ts.
-export const ORGANIZER_TOKEN_KEY = 'organizer_session_token';
+export const ORGANIZER_SIGNED_IN_HINT_KEY = 'organizer_session_token';
 
 // ─── Auth / magic link ───────────────────────────────────────────────────────
 export const AUTH_REDIRECT_DELAY_MS = 600;

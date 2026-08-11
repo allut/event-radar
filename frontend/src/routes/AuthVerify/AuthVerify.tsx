@@ -1,15 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { api, ApiError } from '../../api/client';
-import { setToken, getLocale } from '../../lib/auth';
+import { setSignedInHint, getLocale } from '../../lib/auth';
 import { AUTH_REDIRECT_DELAY_MS, UI_STATE, type VerifyState } from '../../constants';
 import { t } from '../../i18n';
 import AuthCard, { type AuthCardKind } from '../../components/AuthCard';
 import styles from './AuthVerify.module.css';
-
-interface VerifyResponse {
-  session_token: string;
-}
 
 interface MeResponse {
   has_personas: boolean;
@@ -43,8 +39,8 @@ export default function AuthVerify() {
 
     async function verify(tok: string) {
       try {
-        const data = await api.get<VerifyResponse>(`/auth/verify?token=${encodeURIComponent(tok)}`);
-        setToken(data.session_token);
+        await api.post('/auth/verify', { token: tok });
+        setSignedInHint();
         setState(UI_STATE.success);
         let dest = '/onboarding';
         try {

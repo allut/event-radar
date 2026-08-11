@@ -7,7 +7,7 @@ import { renderWithProviders } from '../../test/utils';
 vi.mock('../../lib/auth', () => ({
   getLocale: vi.fn(() => 'en'),
   setLocale: vi.fn(),
-  clearToken: vi.fn(),
+  clearSignedInHint: vi.fn(),
   beginLogout: vi.fn(),
 }));
 
@@ -17,7 +17,10 @@ vi.mock('../../api/client', async (importOriginal) => ({
   api: {
     get: vi.fn(),
     patch: vi.fn(),
-    post: vi.fn(),
+    // Default-resolved so useLogout's fire-and-forget POST /auth/logout call
+    // (fired alongside every logout-all's follow-up handleLogout) never hits
+    // an unmocked call with no return value.
+    post: vi.fn().mockResolvedValue({}),
   },
 }));
 
@@ -111,18 +114,18 @@ describe('Settings', () => {
     expect(mockPost).toHaveBeenCalledWith('/auth/logout-all');
   });
 
-  it('logout-all shows success message then clears token after delay', async () => {
+  it('logout-all shows success message then clears the signed-in hint after delay', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime.bind(vi) });
     mockGet.mockResolvedValueOnce(settingsData);
     mockPost.mockResolvedValueOnce({ detail: 'Logged out' });
-    const { clearToken } = await import('../../lib/auth');
+    const { clearSignedInHint } = await import('../../lib/auth');
     renderWithProviders(<Settings />);
     await waitFor(() => screen.getByRole('button', { name: /log out everywhere/i }));
     await user.click(screen.getByRole('button', { name: /log out everywhere/i }));
     await waitFor(() => expect(screen.getByRole('status')).toBeInTheDocument());
     vi.runAllTimers();
-    await waitFor(() => expect(clearToken).toHaveBeenCalled());
+    await waitFor(() => expect(clearSignedInHint).toHaveBeenCalled());
     vi.useRealTimers();
   });
 });

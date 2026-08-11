@@ -1,4 +1,4 @@
-import { ORGANIZER_TOKEN_KEY, LOGOUT_FLAG_TTL_MS } from '../constants';
+import { ORGANIZER_SIGNED_IN_HINT_KEY, LOGOUT_FLAG_TTL_MS } from '../constants';
 
 // Parallel session store to lib/auth.ts's consumer track — separate listener
 // set, separate storage key, separate logout flag. Two independent auth
@@ -9,7 +9,7 @@ function emitOrganizerAuthChange(): void {
 }
 if (typeof window !== 'undefined') {
   window.addEventListener('storage', (e) => {
-    if (e.key === ORGANIZER_TOKEN_KEY) emitOrganizerAuthChange();
+    if (e.key === ORGANIZER_SIGNED_IN_HINT_KEY) emitOrganizerAuthChange();
   });
 }
 export function subscribeOrganizerAuth(cb: () => void): () => void {
@@ -17,17 +17,19 @@ export function subscribeOrganizerAuth(cb: () => void): () => void {
   return () => { organizerAuthListeners.delete(cb); };
 }
 
-export function getOrganizerToken(): string | null { return localStorage.getItem(ORGANIZER_TOKEN_KEY); }
-export function setOrganizerToken(t: string): void {
+// The hint carries no credential value and grants no access — the real
+// organizer session token lives only in an httpOnly cookie. It exists purely
+// so isAuthenticatedOrganizer() can answer synchronously at first paint.
+export function setOrganizerSignedInHint(): void {
   organizerLoggingOut = false;
-  localStorage.setItem(ORGANIZER_TOKEN_KEY, t);
+  localStorage.setItem(ORGANIZER_SIGNED_IN_HINT_KEY, '1');
   emitOrganizerAuthChange();
 }
-export function clearOrganizerToken(): void {
-  localStorage.removeItem(ORGANIZER_TOKEN_KEY);
+export function clearOrganizerSignedInHint(): void {
+  localStorage.removeItem(ORGANIZER_SIGNED_IN_HINT_KEY);
   emitOrganizerAuthChange();
 }
-export function isAuthenticatedOrganizer(): boolean { return !!getOrganizerToken(); }
+export function isAuthenticatedOrganizer(): boolean { return localStorage.getItem(ORGANIZER_SIGNED_IN_HINT_KEY) !== null; }
 
 // Mirrors lib/auth.ts's loggingOut flag — see that file for the full
 // rationale (cache-clear race on a same-path logout must not trigger a

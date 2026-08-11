@@ -42,7 +42,7 @@ const loaders = vi.hoisted(() => {
 vi.mock('../../lib/auth', () => ({
   getLocale: vi.fn(() => 'en'),
   setLocale: vi.fn(),
-  clearToken: vi.fn(),
+  clearSignedInHint: vi.fn(),
   beginLogout: vi.fn(),
   isAuthenticated: vi.fn(() => false),
   subscribeAuth: vi.fn(() => () => {}),
