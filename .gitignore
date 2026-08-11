@@ -138,9 +138,6 @@ inbound-mail-samples/
 # Devcontainer: plaintext anvil reviewer API keys, host DPAPI-bound and unrecoverable in-container
 /.devcontainer/anvil.env
 
-# Claude Code plans
-plans/
-
 # Playwright MCP temporary files
 .playwright-mcp/
 

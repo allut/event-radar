@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**What's on Radar** (repo/working dir `event-radar`; the product name in every user-facing string, the FastAPI app title, and the README is "What's on Radar") is an AI-powered event discovery platform for Tallinn, Estonia. It ingests events from multiple sources, deduplicates and classifies them via LLM, then delivers a personalized "Daily 5" curated feed per user. MVP complete plus a post-MVP self-service organizer portal (see `docs/organizer-portal.md`); soft launch pending E2E QA.
+**What's on Radar** (repo/working dir `event-radar`; the product name in every user-facing string, the FastAPI app title, and the README is "What's on Radar") is an AI-powered event discovery platform for Tallinn, Estonia. It ingests events from multiple sources, deduplicates and classifies them via LLM, then delivers a personalized "Daily 5" curated feed per user. MVP complete plus a post-MVP self-service organizer portal (see `docs/organizer-portal.md`); soft launch pending E2E QA — there is no Playwright/Cypress suite; QA is done via the Playwright MCP server, whose scratch output lands in `.playwright-mcp/` (disposable).
 
 ## Documentation Map
 
@@ -14,16 +14,19 @@ Deep-dive docs live in `docs/` and are **not** auto-loaded — read the relevant
 |---|---|
 | `docs/pipeline.md` | `app/ingestion/`, `app/dedup/`, `app/llm/`, `app/publish.py`, `app/ranking/`, `app/routers/browse.py`, `app/routers/public.py`, `app/routers/feedback.py` |
 | `docs/security.md` | `app/main.py`, `app/rate_limit.py`, `app/routers/auth.py`, `app/routers/organizer_auth.py`, `app/routers/utils.py`, `app/ingestion/http_client.py`, or any new endpoint |
-| `docs/backend-ops.md` | `render.yaml`, `vercel.json`, `app/routers/admin.py`, `app/cleanup.py`, `app/logging_config.py`, `backend/scripts/` |
+| `docs/backend-ops.md` | `render.yaml`, `frontend/vercel.json`, `app/routers/admin.py`, `app/cleanup.py`, `app/logging_config.py`, `backend/scripts/` |
 | `docs/frontend.md` | `frontend/src/routes/`, `frontend/src/components/`, `frontend/src/hooks/`, `frontend/src/lib/`, `shared/i18n/`, `backend/app/email/` |
 | `docs/conventions.md` | the *why* behind a Code Quality Rule below (full rationale + examples) |
 | `docs/data-model.md` | writing a migration, a query touching a new column, or a serializer |
 | `docs/organizer-portal.md` | `app/routers/organizer_auth.py`, `app/routers/organizer_events.py`, `frontend/src/routes/EventSubmit/` |
 | `docs/observability.md` | the Axiom monitoring spec (linked from `docs/backend-ops.md`'s Logging section) |
+| `CONTEXT.md` | before naming a new domain concept — repo-root domain glossary |
+| `docs/adr/` | architectural decisions (currently one: `0001-session-tokens-in-httponly-cookies.md`) |
+| `docs/agents/` | agent-facing workflow docs (issue tracker, triage labels, domain docs) — see Agent skills below |
 
 ## Commands
 
-A `.devcontainer/` (VS Code Dev Containers) is available for Windows dev — Python 3.12 + Node 20 + Postgres 16 matching CI exactly. Inside it: the venv creation/activation lines below are skipped (interpreter is always `/opt/venv/bin/python`, already on `PATH`), `python -m ruff` / `python -m mypy` are unchanged, and `docker compose up -d db` is unnecessary since `db` comes up with the container. `DATABASE_URL` is injected via `.devcontainer/docker-compose.yml` and overrides `backend/.env`. The embedded APScheduler is off by default in the container (`ENABLE_SCHEDULER=false`, dev-only — see `app/config.py`) so `uvicorn --reload` left running overnight can't arm live scrapes/LLM spend/digest email on a timer; to exercise the real cadence for one session, `bash .devcontainer/dev-server.sh stop backend` then run `ENABLE_SCHEDULER=true uvicorn app.main:app --reload` by hand. The `claude` CLI is available in the container terminal (installed via the `claude-code` devcontainer feature) and signs in once against a persistent named volume, separate from the host's `~/.claude` — `.devcontainer/sync-claude-config.sh` mirrors host settings, hooks, commands and skills in on every start (plus the Dockerfile's RTK install), so those *do* apply inside the container. `.devcontainer/claude-plugins.json` declares container-only Claude plugins (currently `mattpocock-skills`) that `sync-claude-config.sh` merges into the container's `~/.claude/settings.json` on every start, without ever writing to the host. `gh` is installed via the `github-cli` devcontainer feature and auto-authenticated on start/attach by deriving a token from the host's forwarded git credential helper (`.devcontainer/gh-auth.sh`); if `gh auth status` comes back red, re-run that script or `gh auth login`. Backend and frontend dev servers auto-start from the container lifecycle (`postStartCommand` → `.devcontainer/dev-server.sh start`, on every container start — not a VS Code task); status/restart/stop via `bash .devcontainer/dev-server.sh status|restart|stop`, logs in `/tmp/event-radar-dev/`; tail via `bash .devcontainer/dev-server.sh logs backend|frontend`, auto-opened split in VS Code by the `logs: backend`/`logs: frontend` tasks (`.vscode/tasks.json`).
+A `.devcontainer/` (VS Code Dev Containers) is available for Windows dev — Python 3.12 + Node 20 match CI; Postgres 16 matches the root `docker-compose.yml`/Render, not CI (CI runs no Postgres service at all). Inside it: the venv creation/activation lines below are skipped (interpreter is always `/opt/venv/bin/python`, already on `PATH`), `python -m ruff` / `python -m mypy` are unchanged, and `docker compose up -d db` is unnecessary since `db` comes up with the container. `DATABASE_URL` is injected via `.devcontainer/docker-compose.yml` and overrides `backend/.env`. The embedded APScheduler is off by default in the container (`ENABLE_SCHEDULER=false`, dev-only — see `app/config.py`) so `uvicorn --reload` left running overnight can't arm live scrapes/LLM spend/digest email on a timer; to exercise the real cadence for one session, `bash .devcontainer/dev-server.sh stop backend` then run `ENABLE_SCHEDULER=true uvicorn app.main:app --reload` by hand. The `claude` CLI is available in the container terminal (installed via the `claude-code` devcontainer feature) and signs in once against a persistent named volume, separate from the host's `~/.claude` — `.devcontainer/sync-claude-config.sh` mirrors host settings, hooks, commands and skills in on every start (plus the Dockerfile's RTK install), so those *do* apply inside the container. `.devcontainer/claude-plugins.json` declares container-only Claude plugins (currently `mattpocock-skills`) that `sync-claude-config.sh` merges into the container's `~/.claude/settings.json` on every start, without ever writing to the host. `gh` is installed via the `github-cli` devcontainer feature and auto-authenticated on start/attach by deriving a token from the host's forwarded git credential helper (`.devcontainer/gh-auth.sh`); if `gh auth status` comes back red, re-run that script or `gh auth login`. Backend and frontend dev servers auto-start from the container lifecycle (`postStartCommand` → `.devcontainer/dev-server.sh start`, on every container start — not a VS Code task); status/restart/stop via `bash .devcontainer/dev-server.sh status|restart|stop`, logs in `/tmp/event-radar-dev/`; tail via `bash .devcontainer/dev-server.sh logs backend|frontend`, auto-opened split in VS Code by the `logs: backend`/`logs: frontend` tasks (`.vscode/tasks.json`).
 
 ```bash
 # Backend (Python 3.12, FastAPI)
@@ -65,6 +68,8 @@ npm run test:watch # vitest watch mode
 npm run test:coverage # coverage report (v8, html + text)
 ```
 
+**CI** (`.github/workflows/tests.yml`, push/PR to `master`): `pytest --cov` (Python 3.12) + `npm run test:coverage` (Node 20) only. `dependency-audit.yml` runs `pip-audit` + `npm audit --audit-level=high`, plus weekly cron Mon 04:00 UTC. **Ruff/mypy/eslint/type-check are house rules with no CI enforcement** — a green PR does not mean they were run; run them locally before committing.
+
 ## Architecture
 
 ```
@@ -80,7 +85,7 @@ FastAPI Backend (single process on Render free tier, port 8000 in dev)
   ├── Routers: /auth  /admin  /onboarding  /events  /explore  /feed  /feedback  /public  /users/me  /contact  /email  /webhooks  /organizer/auth  /organizer/events
   └── APScheduler (embedded, kept alive by a cron-job.org ping of /internal/tick every 10 min)
       ├── Weekly Sun 03:00: sync_fienta_organizers   ├── Weekly Sun 03:30: cleanup_stale_data
-      ├── Hourly: ingest_all_enabled                 ├── 6-hourly: dedup_pass + classify_pending + publish_pending + geocode_pending
+      ├── Hourly: ingest_all_sources (job id; callable is ingest_all_enabled) ├── 6-hourly: dedup_pass + classify_pending + publish_pending + geocode_pending
       ├── Daily 04:30: refetch_event_details          ├── Daily 06:00: build_daily_feeds
       └── Daily 07:00: send_daily_digests
         ↓
@@ -95,21 +100,21 @@ LLM Router: Groq (primary) → Cerebras → Mistral (fallback chain)
 
 Full detail (field-level authority tables, sub-pass ordering, tiering) in `docs/pipeline.md`.
 
-1. **Ingestion** — Fienta API, HTML listing scrapers (Piletilevi/KUMU/Estonia Concert Hall), organizer self-submission. Newsletter inbound is landed but dormant (no adapter wired up yet).
+1. **Ingestion** — Fienta API, HTML listing scrapers (Piletilevi/KUMU/Estonia Concert Hall), organizer self-submission. Newsletter inbound (`POST /webhooks/inbound-mail`, Svix-signature-verified, `extract_events_from_email()`) is fully wired up but dormant — `NEWSLETTER_SENDER_ALLOWED_DOMAINS` is an empty frozenset, so no sender is allowlisted yet.
 2. **Deduplication** — rule-based pre-filter + LLM tiebreaker on surviving pairs; same-day title unions collapse timed-entry slots with no LLM call.
 3. **Classification** — LLM assigns categories/vibes/quality/price/flags against a fixed 14-category/10-vibe taxonomy; ingest-set prices are authoritative over LLM-derived ones.
-4. **Ranking** — `score = 0.45·persona_affinity + 0.20·recency_boost + 0.20·feedback_signal + 0.10·quality_score + 0.05·locality_bonus`
+4. **Ranking** — `score = 0.45·persona_affinity + 0.20·recency_boost + 0.20·feedback_signal + 0.10·quality_score + 0.05·locality_bonus` (feedback_signal is `fb_normalized`, the raw [-1,1] feedback score mapped to [0,1] before weighting)
 5. **Daily 5 builder** — 06:00 Europe/Tallinn; MMR-lite diversity capped at `DAILY_5_MAX_PER_CATEGORY` (2); series cooldown + backfill tiers guarantee `n=5`.
 6. **Publish gate** — `app/publish.py::publish_pending()` promotes `classified` → `published` on quality/explicit/non-event/area/ended/title/bbox/organizer-trust checks; runs every 6h.
 7. **Geocoding backfill** — Nominatim + venue-name extraction + sibling-copy sub-passes; runs every 6h.
 8. **Detail-refetch sync** — daily 04:30, reconciles venue/price/coords/localized text from source detail pages before the 06:00 feed build.
 
-Four read paths (Daily 5 feed, Explore, Saved Events, public Landing showcase) and the Fienta organizer lifecycle (detect/skip/revive/retire/discover) are documented in `docs/pipeline.md`. LLM usage constraints (≤600 tok/call, dedup content-hash cache, Groq→Cerebras→Mistral fallback, backlog drain) and the three-layer NSFW/non-event content filters are also there.
+Four read paths (Daily 5 feed, Explore, Saved Events, public Landing showcase) and the Fienta organizer lifecycle (detect/skip/revive/retire/discover) are documented in `docs/pipeline.md`. LLM usage constraints (`LLM_MAX_TOKENS = 400` per call, `LLM_REASONING_MAX_TOKENS = 600` hard-cap ceiling used by the Cerebras entry, dedup content-hash cache, Groq→Cerebras→Mistral fallback, backlog drain) and the three-layer NSFW/non-event content filters are also there.
 
 ## Auth, Security & the Organizer Portal
 
 - **Auth** — magic-link email (`itsdangerous` tokens, no third-party auth), httpOnly/Secure/`SameSite=Strict` session cookies (2-day TTL), `session_token_version` revocation, `email_verified` gate on the digest/feed builder. Full flow, residual-risk trade-offs, and the digest unsubscribe token in `docs/security.md`.
-- **Security hardening** — rate limiting (every endpoint gets a `RATE_LIMIT_*`), security headers, CSP, body-size ceiling, `require_configured_secret` dev-fail-open double gate, admin auth lockout, external-URL sanitization (`safe_external_url()` vs `safe_fetchable_url()`, keyed on fetched-vs-rendered), stored-HTML sanitization (`sanitize_html()`/`html_to_text()`), redirect SSRF guard, webhook signature verification. Full detail in `docs/security.md` — read it before adding any new endpoint or external-facing URL field.
+- **Security hardening** — rate limiting (every endpoint gets a `RATE_LIMIT_*`), security headers, CSP, body-size ceiling, `require_configured_secret` dev-fail-open double gate, admin auth lockout, external-URL sanitization (`safe_external_url()` vs `safe_fetchable_url()`, keyed on fetched-vs-rendered), stored-HTML sanitization (`sanitize_html()`/`html_to_text()`), redirect SSRF guard, webhook signature verification, CSRF (`CsrfOriginCheckMiddleware`, `app/main.py`, rejects mutating requests whose `Origin` isn't in `CORS_ORIGINS ∪ {FRONTEND_URL}` — second layer behind `SameSite=Strict`). Full detail in `docs/security.md` — read it before adding any new endpoint or external-facing URL field.
 - **Organizer portal** — self-service submission with its own auth track (separate salts/tables from user auth), auto-publish gated on organizer trust (`verified` flag), admin post-hoc review queue. Full detail in `docs/organizer-portal.md`.
 - **Admin endpoints** — `/admin/*`, HTTP Basic auth, shared rate-limit bucket, `run_admin_job()` helper. Full detail in `docs/backend-ops.md`.
 
@@ -147,7 +152,7 @@ Full rationale for each rule (why it works this way, trade-offs accepted) is in 
 - **External-API fan-out** — bounded concurrency via `asyncio.gather(..., return_exceptions=True)` + a `Semaphore` (limit in `app/constants.py`). Never unbounded-gather.
 - **Dedup self-join pre-filter** — time-window check stays in SQL (`candidate_pair_ids_in_window()`); fuzzy check stays in Python, only on pre-filtered pairs.
 - **Quote style** — backend Python: double quotes (Ruff `Q` rules). Frontend TS: single quotes for strings, double for JSX attributes (ESLint). Run `ruff check --fix`/`eslint --fix` before committing.
-- **Python lint** — `python -m ruff check backend` must pass clean (`select = ["E","F","W","Q"]`, `line-length = 88`, `E501` ignored).
+- **Python lint** — `python -m ruff check backend` must pass clean, config in `backend/ruff.toml` (no `backend/pyproject.toml` — don't create one) (`select = ["E","F","W","Q"]`, `line-length = 88`, `E501` ignored, `extend-exclude = ["app/_generated"]`).
 - **Type checking** — `python -m mypy app` from `backend/` must pass clean. Give structurally-incompatible reused loop variables their own names.
 - **Type annotations** — modern PEP 604/585 syntax (`X | None`, `list[T]`), annotate all public return types.
 - **Shared test fixtures** — backend: `backend/tests/conftest.py` (`mock_db`, `make_user`, `make_event`). Frontend: `frontend/src/test/utils.tsx` (`renderWithProviders`, `makeEvent`); mock the `api` module, not `fetch`.
@@ -177,4 +182,4 @@ Default label vocabulary (`needs-triage`, `needs-info`, `ready-for-agent`, `read
 
 ### Domain docs
 
-Single-context layout — `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.
+Single-context layout — `CONTEXT.md` at the repo root, `docs/adr/` under `docs/`. See `docs/agents/domain.md`.
