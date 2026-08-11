@@ -1,6 +1,11 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
+// 127.0.0.1, not localhost: uvicorn binds IPv4-only by default and the proxy
+// would otherwise hit the same ::1 resolution trap noted below for the dev
+// server's own bind address.
+const BACKEND_TARGET = 'http://127.0.0.1:8000';
+
 export default defineConfig({
   plugins: [react()],
   server: {
@@ -15,11 +20,24 @@ export default defineConfig({
     strictPort: true,
     proxy: {
       '/api': {
-        // 127.0.0.1, not localhost: uvicorn binds IPv4-only by default and this
-        // proxy would otherwise hit the same ::1 resolution trap.
-        target: 'http://127.0.0.1:8000',
+        target: BACKEND_TARGET,
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, ''),
+      },
+      // Dev-only docs (Swagger, ReDoc, the raw spec): proxied so they're
+      // same-origin with the SPA and the session cookie (Path=/api, belongs
+      // to :5173) rides along automatically.
+      '/docs': {
+        target: BACKEND_TARGET,
+        changeOrigin: true,
+      },
+      '/redoc': {
+        target: BACKEND_TARGET,
+        changeOrigin: true,
+      },
+      '/openapi.json': {
+        target: BACKEND_TARGET,
+        changeOrigin: true,
       },
     },
   },

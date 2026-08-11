@@ -441,6 +441,12 @@ app = FastAPI(
     docs_url="/docs" if _docs_enabled else None,
     redoc_url="/redoc" if _docs_enabled else None,
     openapi_url="/openapi.json" if _docs_enabled else None,
+    # Swagger is served from :8000 but the session cookie is Path=/api and
+    # belongs to the Vite dev server's origin (localhost:5173) — pointing
+    # "Try it out" at this relative /api path instead of the bare backend
+    # origin routes its requests through the Vite proxy (see vite.config.ts),
+    # so the browser attaches the cookie automatically. See #28.
+    servers=[{"url": "/api"}] if _docs_enabled else None,
 )
 
 app.state.limiter = limiter
