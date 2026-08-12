@@ -30,6 +30,7 @@ from app.constants import (
     DIGEST_SEND_HOUR,
     FEED_BUILD_HOUR,
     FEED_BUILD_MINUTE,
+    HOST_CHECK_EXEMPT_PATHS,
     HSTS_HEADER_NAME,
     HSTS_HEADER_VALUE,
     INGEST_INTERVAL_HOURS,
@@ -304,6 +305,27 @@ class CsrfOriginCheckMiddleware:
         await self.app(scope, receive, send)
 
 
+class HostCheckMiddleware:
+    """TrustedHostMiddleware with path exemptions — Render's health probe hits
+    this process over the private network, so its Host header is the
+    instance's internal address, not BACKEND_URL's hostname. That IP rotates
+    per deploy and Starlette's allowed_hosts takes no CIDR, so the probe path
+    is exempted instead."""
+
+    def __init__(
+        self, app: ASGIApp, allowed_hosts: list[str], exempt_paths: frozenset[str]
+    ) -> None:
+        self._app = app
+        self._guarded = TrustedHostMiddleware(app, allowed_hosts=allowed_hosts)
+        self._exempt_paths = exempt_paths
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] == "http" and scope.get("path") in self._exempt_paths:
+            await self._app(scope, receive, send)
+            return
+        await self._guarded(scope, receive, send)
+
+
 class _BodyTooLarge(Exception):
     """Internal sentinel — never escapes MaxBodySizeMiddleware.__call__."""
 
@@ -545,10 +567,26 @@ app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
 # impact is limited to intermediary cache-poisoning scenarios, but rejecting
 # an unexpected Host outright is a one-line hardening. Skipped in development
 # (no fixed BACKEND_URL host, e.g. localhost with a changing port in tests).
+# /health is exempted (HOST_CHECK_EXEMPT_PATHS) — Render's health probe hits
+# this process over the private network with the instance's internal address
+# as Host, not BACKEND_URL's hostname.
 if settings.APP_ENV != APP_ENV_DEVELOPMENT:
     _backend_host = urlsplit(settings.BACKEND_URL).hostname
+    if _backend_host in DEV_DB_LOCAL_HOSTS:
+        log.error(
+            "APP_ENV=%r but BACKEND_URL host=%r is a local/dev default — "
+            "BACKEND_URL is sync:false on Render and must be set by hand; "
+            "an unset one defaults to http://localhost:8000 and would 400 "
+            "all public traffic with a foreign Host header",
+            settings.APP_ENV,
+            _backend_host,
+        )
     if _backend_host:
-        app.add_middleware(TrustedHostMiddleware, allowed_hosts=[_backend_host])
+        app.add_middleware(
+            HostCheckMiddleware,
+            allowed_hosts=[_backend_host],
+            exempt_paths=HOST_CHECK_EXEMPT_PATHS,
+        )
 
 app.include_router(admin_router)
 app.include_router(auth_router)
