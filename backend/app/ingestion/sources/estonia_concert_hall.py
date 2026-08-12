@@ -47,11 +47,11 @@ from app.ingestion.selectors import (
     ESTONIA_CONCERT_HALL_VENUES,
     ESTONIA_CONCERT_HALL_VENUE_SELECTOR,
 )
+from app.ingestion.html_utils import attr_str
 from app.ingestion.sources.html_base import (
     HtmlListingAdapter,
     ListingRequest,
     OnceAsync,
-    attr_str,
     full_res_wp_image,
     next_occurrence_year,
     og_title,

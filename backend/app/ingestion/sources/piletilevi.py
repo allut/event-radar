@@ -33,7 +33,8 @@ from app.ingestion.selectors import (
     PILETILEVI_TITLE_SELECTOR,
     PILETILEVI_VENUE_SELECTOR,
 )
-from app.ingestion.sources.html_base import HtmlListingAdapter, OnceAsync, attr_str
+from app.ingestion.html_utils import attr_str
+from app.ingestion.sources.html_base import HtmlListingAdapter, OnceAsync
 
 log = logging.getLogger(__name__)
 

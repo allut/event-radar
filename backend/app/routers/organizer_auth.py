@@ -24,6 +24,13 @@ from app.auth.tokens import (
 )
 from app.constants import (
     DEFAULT_USER_LOCALE,
+    ERROR_MAGIC_LINK_CONSUMED,
+    ERROR_MAGIC_LINK_EXPIRED,
+    ERROR_MAGIC_LINK_INVALID,
+    ERROR_MISSING_SESSION_COOKIE,
+    ERROR_ORGANIZER_NOT_FOUND,
+    ERROR_SESSION_INVALID,
+    ERROR_SESSION_REVOKED,
     LOG_EVENT_AUTH_FAILED,
     ORGANIZER_AUTH_VERIFY_PATH,
     ORGANIZER_SESSION_COOKIE_NAME,
@@ -64,25 +71,25 @@ async def get_current_organizer(
     if not organizer_session:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing session cookie",
+            detail=ERROR_MISSING_SESSION_COOKIE,
         )
     try:
         organizer_id, token_version = verify_organizer_session_token(organizer_session)
     except (SignatureExpired, BadSignature):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Session token expired or invalid",
+            detail=ERROR_SESSION_INVALID,
         )
     organizer = await db.get(Organizer, organizer_id)
     if organizer is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Organizer not found",
+            detail=ERROR_ORGANIZER_NOT_FOUND,
         )
     if token_version != organizer.session_token_version:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Session revoked. Please sign in again.",
+            detail=ERROR_SESSION_REVOKED,
         )
     return organizer
 
@@ -172,7 +179,7 @@ async def verify_organizer_magic_link(
         )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Sign-in link has expired. Please request a new one.",
+            detail=ERROR_MAGIC_LINK_EXPIRED,
         )
     except BadSignature:
         log.warning(
@@ -181,7 +188,7 @@ async def verify_organizer_magic_link(
         )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid sign-in link.",
+            detail=ERROR_MAGIC_LINK_INVALID,
         )
 
     token_hash = hash_token(token)
@@ -206,7 +213,7 @@ async def verify_organizer_magic_link(
         )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Sign-in link already used, expired, or not found.",
+            detail=ERROR_MAGIC_LINK_CONSUMED,
         )
 
     await db.commit()
@@ -215,7 +222,7 @@ async def verify_organizer_magic_link(
     if organizer is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Organizer not found.",
+            detail=ERROR_ORGANIZER_NOT_FOUND,
         )
 
     session_token = generate_organizer_session_token(

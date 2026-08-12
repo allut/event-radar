@@ -20,6 +20,13 @@ from app.auth.tokens import (
 from app.config import settings
 from app.constants import (
     DEFAULT_USER_LOCALE,
+    ERROR_MAGIC_LINK_CONSUMED,
+    ERROR_MAGIC_LINK_EXPIRED,
+    ERROR_MAGIC_LINK_INVALID,
+    ERROR_MISSING_SESSION_COOKIE,
+    ERROR_SESSION_INVALID,
+    ERROR_SESSION_REVOKED,
+    ERROR_USER_NOT_FOUND,
     LOG_EVENT_AUTH_FAILED,
     RATE_LIMIT_AUTH_REQUEST_LINK,
     RATE_LIMIT_AUTH_VERIFY,
@@ -68,25 +75,25 @@ async def get_current_user(
     if not session:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing session cookie",
+            detail=ERROR_MISSING_SESSION_COOKIE,
         )
     try:
         user_id, token_version = verify_session_token(session)
     except (SignatureExpired, BadSignature):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Session token expired or invalid",
+            detail=ERROR_SESSION_INVALID,
         )
     user = await db.get(User, user_id)
     if user is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found",
+            detail=ERROR_USER_NOT_FOUND,
         )
     if token_version != user.session_token_version:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Session revoked. Please sign in again.",
+            detail=ERROR_SESSION_REVOKED,
         )
     return user
 
@@ -185,7 +192,7 @@ async def verify_magic_link(
         )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Sign-in link has expired. Please request a new one.",
+            detail=ERROR_MAGIC_LINK_EXPIRED,
         )
     except BadSignature:
         log.warning(
@@ -194,7 +201,7 @@ async def verify_magic_link(
         )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid sign-in link.",
+            detail=ERROR_MAGIC_LINK_INVALID,
         )
 
     token_hash = hash_token(token)
@@ -220,7 +227,7 @@ async def verify_magic_link(
         )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Sign-in link already used, expired, or not found.",
+            detail=ERROR_MAGIC_LINK_CONSUMED,
         )
 
     # Same transaction as the link-consume UPDATE above, one shared commit below:
@@ -243,7 +250,7 @@ async def verify_magic_link(
     if user_row is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="User not found.",
+            detail=ERROR_USER_NOT_FOUND,
         )
 
     session_token = generate_session_token(user_row.id, user_row.session_token_version)

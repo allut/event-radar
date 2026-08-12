@@ -18,6 +18,8 @@ from app.constants import (
     APP_ENV_DEVELOPMENT,
     DEFAULT_USER_LOCALE,
     EMAIL_MASK_VISIBLE_CHARS,
+    ERROR_ADMIN_JOB_FAILED,
+    ERROR_FEATURE_DISABLED,
     EVENT_STATUS_PUBLISHED,
     MASK_DB_URL_PASSWORD_RE,
     MAGIC_LINK_RESEND_COOLDOWN_SECONDS,
@@ -32,6 +34,7 @@ from app.constants import (
 from app.db import AsyncSessionLocal
 from app.models.models import (
     Event,
+    EventClassification,
     Persona,
     User,
     UserEventFeedback,
@@ -158,7 +161,7 @@ async def run_admin_job(name: str, coro: Awaitable[dict]) -> dict:
         log.exception("admin %s failed", name)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"{name} failed; see server logs",
+            detail=ERROR_ADMIN_JOB_FAILED.format(name=name),
         )
 
 
@@ -188,7 +191,9 @@ def require_configured_secret(
     if not (app_env == APP_ENV_DEVELOPMENT and allow_insecure_dev):
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"{feature} disabled: {setting_name} not configured",
+            detail=ERROR_FEATURE_DISABLED.format(
+                feature=feature, setting_name=setting_name
+            ),
         )
     log.warning(
         "%s not set; %s unprotected (development mode, ALLOW_INSECURE_DEV=true)",
@@ -418,7 +423,7 @@ def resolve_important_info(event: Event, locale: str) -> str | None:
     return event.important_info
 
 
-def resolve_why_go(cl, locale: str) -> list[str]:
+def resolve_why_go(cl: EventClassification | None, locale: str) -> list[str]:
     """Return localized why_go bullets for a classification, with locale → en → raw fallback."""
     if cl is None:
         return []

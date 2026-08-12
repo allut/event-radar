@@ -27,6 +27,18 @@ from app.constants import (
     BROWSE_MAX_PAGE_SIZE,
     BROWSE_PAGE_SIZE,
     CLOUDINARY_UPLOAD_URL_TEMPLATE,
+    ERROR_DAILY_IMAGE_UPLOAD_LIMIT,
+    ERROR_DAILY_SUBMISSION_LIMIT,
+    ERROR_EVENT_CREATE_FAILED,
+    ERROR_EVENT_NOT_FOUND,
+    ERROR_EVENT_URL_SCHEME,
+    ERROR_IMAGE_HOST_NOT_ALLOWED,
+    ERROR_IMAGE_TOO_LARGE,
+    ERROR_IMAGE_UPLOAD_FAILED,
+    ERROR_IMAGE_UPLOAD_NOT_CONFIGURED,
+    ERROR_IMAGE_URL_SCHEME,
+    ERROR_SUBMISSION_SOURCE_NOT_CONFIGURED,
+    ERROR_UNSUPPORTED_IMAGE_TYPE,
     EVENT_STATUS_CANCELLED,
     EVENT_STATUS_CLASSIFIED,
     EVENT_STATUS_PUBLISHED,
@@ -168,7 +180,7 @@ async def _get_user_submission_source(db: AsyncSession) -> Source:
         # booted with the current registry.py, not a caller error.
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Submission source not configured; contact support.",
+            detail=ERROR_SUBMISSION_SOURCE_NOT_CONFIGURED,
         )
     return source
 
@@ -201,10 +213,7 @@ def _check_image_host(image_url: str | None) -> None:
     if image_url and urlsplit(image_url).hostname not in ALLOWED_IMAGE_HOSTS:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=(
-                "Image URL must be uploaded via POST /organizer/events/image "
-                "(res.cloudinary.com)."
-            ),
+            detail=ERROR_IMAGE_HOST_NOT_ALLOWED,
         )
 
 
@@ -218,7 +227,7 @@ async def _own_event_or_404(
     )
     if event is None:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Event not found."
+            status_code=status.HTTP_404_NOT_FOUND, detail=ERROR_EVENT_NOT_FOUND
         )
     return event
 
@@ -254,7 +263,7 @@ async def submit_event(
     if submitted_today >= ORGANIZER_DAILY_SUBMISSION_CAP:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail="Daily submission limit reached. Try again tomorrow.",
+            detail=ERROR_DAILY_SUBMISSION_LIMIT,
         )
 
     source = await _get_user_submission_source(db)
@@ -298,7 +307,7 @@ async def submit_event(
     if event is None:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Could not create event; please try again.",
+            detail=ERROR_EVENT_CREATE_FAILED,
         )
     # insert_normalized_event silently drops a url/image_url the SSRF/scheme
     # guards reject (host not in ALLOWED_SOURCE_HOSTS, bad scheme) — give the
@@ -306,12 +315,12 @@ async def submit_event(
     if body.url and not event.url:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Event URL is not allowed (unsupported scheme).",
+            detail=ERROR_EVENT_URL_SCHEME,
         )
     if body.image_url and not event.image_url:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Image URL is not allowed (unsupported scheme).",
+            detail=ERROR_IMAGE_URL_SCHEME,
         )
 
     event.submitted_by_organizer_id = current_organizer.id
@@ -540,7 +549,7 @@ async def upload_event_image(
     if file.content_type not in IMAGE_UPLOAD_ALLOWED_MIME:
         raise HTTPException(
             status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-            detail=f"Unsupported image type: {file.content_type!r}",
+            detail=ERROR_UNSUPPORTED_IMAGE_TYPE.format(content_type=file.content_type),
         )
 
     # ORGANIZER_DAILY_SUBMISSION_CAP counts Event.created_at, which can't cover
@@ -565,7 +574,7 @@ async def upload_event_image(
     if uploaded_today >= ORGANIZER_DAILY_IMAGE_UPLOAD_CAP:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail="Daily image upload limit reached. Try again tomorrow.",
+            detail=ERROR_DAILY_IMAGE_UPLOAD_LIMIT,
         )
 
     # Starlette has already spooled the full multipart body by the time this
@@ -576,8 +585,8 @@ async def upload_event_image(
     body = await file.read(IMAGE_UPLOAD_MAX_BYTES + 1)
     if len(body) > IMAGE_UPLOAD_MAX_BYTES:
         raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail=f"Image exceeds {IMAGE_UPLOAD_MAX_BYTES} bytes.",
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+            detail=ERROR_IMAGE_TOO_LARGE.format(max_bytes=IMAGE_UPLOAD_MAX_BYTES),
         )
 
     if not settings.CLOUDINARY_CLOUD_NAME:
@@ -587,7 +596,7 @@ async def upload_event_image(
         )
         raise HTTPException(
             status_code=status.HTTP_501_NOT_IMPLEMENTED,
-            detail="Image upload is not configured.",
+            detail=ERROR_IMAGE_UPLOAD_NOT_CONFIGURED,
         )
 
     timestamp = int(time.time())
@@ -616,7 +625,7 @@ async def upload_event_image(
             )
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
-                detail="Image upload failed; please try again.",
+                detail=ERROR_IMAGE_UPLOAD_FAILED,
             ) from None
 
     try:
@@ -626,7 +635,7 @@ async def upload_event_image(
     if not secure_url:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Image upload failed; please try again.",
+            detail=ERROR_IMAGE_UPLOAD_FAILED,
         )
     db.add(OrganizerImageUpload(organizer_id=current_organizer.id))
     await db.commit()

@@ -1221,3 +1221,88 @@ HTML_WHITESPACE_RUN_RE = r"[ \t\n\r\f\v]+"
 # Normalizes BeautifulSoup's self-closed "<br/>" serialization back to "<br>".
 HTML_SELF_CLOSING_BR_RE = r"<br\s*/>"
 USER_EVENT_SCORES_RETENTION_DAYS = 30  # keyed on the underlying event's end date
+
+# APScheduler job ids (app/main.py::_register_scheduled_jobs) — also reasoned
+# about in docs/backend-ops.md and /admin/pipeline/run, so a typo in one of
+# the two call sites that share a string (the log label passed to _scheduled
+# and the id= kwarg on scheduler.add_job) would silently misregister a job.
+JOB_ID_SYNC_FIENTA_ORGANIZERS = "sync_fienta_organizers"
+JOB_ID_CLEANUP_STALE_DATA = "cleanup_stale_data"
+JOB_ID_INGEST_ALL_SOURCES = "ingest_all_sources"
+JOB_ID_DEDUP_PASS = "dedup_pass"
+JOB_ID_CLASSIFY_PENDING = "classify_pending"
+JOB_ID_PUBLISH_PENDING = "publish_pending"
+JOB_ID_GEOCODE_PENDING = "geocode_pending"
+JOB_ID_REFETCH_EVENT_DETAILS = "refetch_event_details"
+JOB_ID_BUILD_DAILY_FEEDS = "build_daily_feeds"
+JOB_ID_SEND_DAILY_DIGESTS = "send_daily_digests"
+
+# HTTP error `detail` strings (app/routers/*). English-only server strings,
+# not i18n keys (contrast shared/i18n/*.json, the user-facing string source
+# of truth) — these are internal API error text, not rendered UI copy.
+# f"…{var}…" details stay as {placeholder} format templates here, .format()'d
+# at the call site.
+
+# Auth (routers/auth.py + routers/organizer_auth.py) — identical wording on
+# both the user and organizer auth tracks; duplicated verbatim before this.
+ERROR_MISSING_SESSION_COOKIE = "Missing session cookie"
+ERROR_SESSION_INVALID = "Session token expired or invalid"
+ERROR_SESSION_REVOKED = "Session revoked. Please sign in again."
+ERROR_MAGIC_LINK_EXPIRED = "Sign-in link has expired. Please request a new one."
+ERROR_MAGIC_LINK_INVALID = "Invalid sign-in link."
+ERROR_MAGIC_LINK_CONSUMED = "Sign-in link already used, expired, or not found."
+
+# Not-found 404s, punctuation normalized to the trailing-period form.
+ERROR_EVENT_NOT_FOUND = "Event not found."
+ERROR_USER_NOT_FOUND = "User not found."
+ERROR_ORGANIZER_NOT_FOUND = "Organizer not found."
+ERROR_SUBMISSION_NOT_FOUND = "Submission not found."
+
+# routers/admin.py
+ERROR_ADMIN_LOCKOUT = "Too many failed admin login attempts; try again later."
+ERROR_ADMIN_DISABLED = (
+    "Admin endpoints disabled: ADMIN_USERNAME left at its default value"
+)
+ERROR_ADMIN_INCORRECT_CREDENTIALS = "Incorrect credentials"
+ERROR_UNKNOWN_SOURCE = "Unknown source: {slug!r}"
+
+# routers/browse.py, routers/feedback.py
+ERROR_INVALID_SORT = "sort must be one of {sorts}"
+ERROR_INVALID_SIGNAL = "Invalid signal. Must be one of: {signals}"
+ERROR_INVALID_PREFERENCE_SIGNAL = "signal must be one of: {signals}"
+
+# routers/settings.py
+ERROR_NO_UPDATE_FIELDS = "Provide at least one field to update."
+
+# routers/unsubscribe.py
+ERROR_UNSUBSCRIBE_LINK_EXPIRED = (
+    "Unsubscribe link has expired. Please use Settings instead."
+)
+ERROR_UNSUBSCRIBE_LINK_INVALID = "Invalid unsubscribe link."
+
+# routers/onboarding.py
+ERROR_PERSONA_COUNT = "Select between 1 and {max_selectable} personas."
+ERROR_PERSONA_DUPLICATE = "Persona slugs must not repeat."
+ERROR_PERSONA_UNKNOWN = "Unknown persona slug(s): {missing}"
+
+# routers/organizer_events.py
+ERROR_SUBMISSION_SOURCE_NOT_CONFIGURED = (
+    "Submission source not configured; contact support."
+)
+ERROR_IMAGE_HOST_NOT_ALLOWED = (
+    "Image URL must be uploaded via POST /organizer/events/image "
+    "(res.cloudinary.com)."
+)
+ERROR_DAILY_SUBMISSION_LIMIT = "Daily submission limit reached. Try again tomorrow."
+ERROR_EVENT_CREATE_FAILED = "Could not create event; please try again."
+ERROR_EVENT_URL_SCHEME = "Event URL is not allowed (unsupported scheme)."
+ERROR_IMAGE_URL_SCHEME = "Image URL is not allowed (unsupported scheme)."
+ERROR_UNSUPPORTED_IMAGE_TYPE = "Unsupported image type: {content_type!r}"
+ERROR_DAILY_IMAGE_UPLOAD_LIMIT = "Daily image upload limit reached. Try again tomorrow."
+ERROR_IMAGE_TOO_LARGE = "Image exceeds {max_bytes} bytes."
+ERROR_IMAGE_UPLOAD_NOT_CONFIGURED = "Image upload is not configured."
+ERROR_IMAGE_UPLOAD_FAILED = "Image upload failed; please try again."
+
+# routers/utils.py
+ERROR_ADMIN_JOB_FAILED = "{name} failed; see server logs"
+ERROR_FEATURE_DISABLED = "{feature} disabled: {setting_name} not configured"

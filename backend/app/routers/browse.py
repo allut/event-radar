@@ -27,6 +27,7 @@ from app.constants import (
     BROWSE_SORT_QUALITY,
     BROWSE_SORT_RELEVANCE,
     BROWSE_SQL_SORTS,
+    ERROR_INVALID_SORT,
     FEEDBACK_HISTORY_LOOKBACK_DAYS,
     PAGINATION_MAX_OFFSET,
     PAGINATION_MIN_LIMIT,
@@ -377,7 +378,7 @@ async def explore_events(
     if sort not in VALID_BROWSE_SORTS:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"sort must be one of {sorted(VALID_BROWSE_SORTS)}",
+            detail=ERROR_INVALID_SORT.format(sorts=sorted(VALID_BROWSE_SORTS)),
         )
 
     categories = _parse_slug_list(category, VALID_CATEGORIES)

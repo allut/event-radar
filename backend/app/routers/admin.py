@@ -21,6 +21,11 @@ from app.constants import (
     ADMIN_REVIEW_QUEUE_PAGE_SIZE,
     ADMIN_USERNAME_DEFAULT,
     APP_ENV_DEVELOPMENT,
+    ERROR_ADMIN_DISABLED,
+    ERROR_ADMIN_INCORRECT_CREDENTIALS,
+    ERROR_ADMIN_LOCKOUT,
+    ERROR_SUBMISSION_NOT_FOUND,
+    ERROR_UNKNOWN_SOURCE,
     EVENT_STATUS_CANCELLED,
     LOG_EVENT_AUTH_FAILED,
     PAGINATION_MAX_OFFSET,
@@ -72,7 +77,7 @@ def _require_admin(
     if now < locked_until:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail="Too many failed admin login attempts; try again later.",
+            detail=ERROR_ADMIN_LOCKOUT,
         )
 
     password = settings.ADMIN_PASSWORD
@@ -92,7 +97,7 @@ def _require_admin(
         # credential pair an attacker needs to brute-force.
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Admin endpoints disabled: ADMIN_USERNAME left at its default value",
+            detail=ERROR_ADMIN_DISABLED,
         )
     username_ok = secrets.compare_digest(
         credentials.username.encode(),
@@ -118,7 +123,7 @@ def _require_admin(
         )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect credentials",
+            detail=ERROR_ADMIN_INCORRECT_CREDENTIALS,
             headers={"WWW-Authenticate": "Basic"},
         )
     _admin_auth_failures.pop(key, None)
@@ -141,7 +146,8 @@ async def admin_ingest_source(slug: str, request: Request) -> dict:
     """Trigger ingestion for a single source by slug."""
     if slug not in ADAPTER_REGISTRY:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail=f"Unknown source: {slug!r}"
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=ERROR_UNKNOWN_SOURCE.format(slug=slug),
         )
 
     async def _run() -> dict:
@@ -319,7 +325,7 @@ async def _submission_or_404(db: AsyncSession, event_id: int) -> Event:
     event = await db.get(Event, event_id)
     if event is None or event.submitted_by_organizer_id is None:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Submission not found."
+            status_code=status.HTTP_404_NOT_FOUND, detail=ERROR_SUBMISSION_NOT_FOUND
         )
     return event
 

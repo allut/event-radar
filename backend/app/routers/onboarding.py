@@ -8,6 +8,9 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.constants import (
+    ERROR_PERSONA_COUNT,
+    ERROR_PERSONA_DUPLICATE,
+    ERROR_PERSONA_UNKNOWN,
     PERSONA_MAX_SELECTABLE,
     PERSONA_RANK_WEIGHTS,
     RATE_LIMIT_AUTHENTICATED_WRITE,
@@ -41,13 +44,13 @@ async def set_persona(
     if not 1 <= len(slugs) <= PERSONA_MAX_SELECTABLE:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Select between 1 and {PERSONA_MAX_SELECTABLE} personas.",
+            detail=ERROR_PERSONA_COUNT.format(max_selectable=PERSONA_MAX_SELECTABLE),
         )
 
     if len(set(slugs)) != len(slugs):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Persona slugs must not repeat.",
+            detail=ERROR_PERSONA_DUPLICATE,
         )
 
     personas = (await db.scalars(select(Persona).where(Persona.slug.in_(slugs)))).all()
@@ -57,7 +60,7 @@ async def set_persona(
     if missing:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Unknown persona slug(s): {sorted(missing)}",
+            detail=ERROR_PERSONA_UNKNOWN.format(missing=sorted(missing)),
         )
 
     # Replace existing selections atomically

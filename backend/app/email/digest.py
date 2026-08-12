@@ -28,6 +28,7 @@ from app.constants import (
 from app.email import styles
 from app.email.styles import EMAIL_CSS
 from app.email.templates import (
+    DIGEST_EMPTY_STATE,
     DIGEST_FOOTER,
     DIGEST_HEADER,
     EMAIL_DOCUMENT,
@@ -181,7 +182,7 @@ def build_digest_html(
     events_html = (
         "\n".join(event_blocks)
         if event_blocks
-        else f"<p>{t('digest.no_events', locale)}</p>"
+        else DIGEST_EMPTY_STATE.format(text=t("digest.no_events", locale))
     )
     settings_label = t("digest.unsubscribe", locale)
 

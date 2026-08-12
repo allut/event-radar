@@ -7,7 +7,11 @@ from pydantic import BaseModel, field_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.constants import RATE_LIMIT_AUTHENTICATED_WRITE, VALID_LOCALES
+from app.constants import (
+    ERROR_NO_UPDATE_FIELDS,
+    RATE_LIMIT_AUTHENTICATED_WRITE,
+    VALID_LOCALES,
+)
 from app.db import get_db
 from app.models.models import Persona, User, UserPersona
 from app.rate_limit import limiter
@@ -93,7 +97,7 @@ async def patch_settings(
     if body.locale is None and body.email_digest_opt_in is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Provide at least one field to update.",
+            detail=ERROR_NO_UPDATE_FIELDS,
         )
 
     if body.locale is not None:

@@ -68,6 +68,11 @@ async def fetch_locale_variants(
     titles: dict[str, str] = {}
     descs: dict[str, str] = {}
     infos: dict[str, str] = {}
+    # Unexpected (non-httpx) exceptions must still surface — per the "never
+    # swallow exceptions in fetch_raw()" invariant enforced two frames up in
+    # html_base.py/fienta.py's _fetch_detail — but one bad locale shouldn't
+    # abort the others, so collect and re-raise the first only after the loop.
+    unexpected_errors: list[Exception] = []
     for locale, loc_url in locale_urls.items():
         if locale == own_locale or loc_url == base_url:
             # This page IS the locale variant — reuse the in-memory soup.
@@ -103,6 +108,7 @@ async def fetch_locale_variants(
                     "%s: locale fetch unexpected error locale=%s url=%s: %s",
                     source_label, locale, loc_url, exc,
                 )
+                unexpected_errors.append(exc)
                 continue
         if title:
             titles[locale] = title
@@ -110,6 +116,8 @@ async def fetch_locale_variants(
             descs[locale] = desc
         if info:
             infos[locale] = info
+    if unexpected_errors:
+        raise unexpected_errors[0]
     return titles, descs, infos
 
 

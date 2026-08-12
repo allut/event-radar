@@ -165,6 +165,40 @@ class TestFetchLocaleVariants:
         assert titles == {"ru": "RU title"}
 
     @pytest.mark.asyncio
+    async def test_unexpected_extract_error_reraises_after_loop(self):
+        """An unexpected (non-httpx) exception from the extract callback must
+        still surface (never swallow exceptions in fetch_raw() — see
+        html_base.py/fienta.py's _fetch_detail for the same invariant), but
+        only after every locale has been attempted — one bad locale must not
+        abort the others."""
+
+        def _flaky_extract(soup: BeautifulSoup, locale: str):
+            if locale == "ru":
+                raise ValueError("boom")
+            return _extract(soup, locale)
+
+        fetch = AsyncMock(
+            side_effect=[
+                _response("https://example.test/et/event", "<h1>ET title</h1>"),
+                _response("https://example.test/ru/event", "<h1>RU title</h1>"),
+            ]
+        )
+        with pytest.raises(ValueError, match="boom"):
+            await fetch_locale_variants(
+                MagicMock(),
+                _base_soup(),
+                "https://example.test/en/event",
+                _LOCALES,
+                _flaky_extract,
+                fetch=fetch,
+                wait=_no_wait,
+                source_label="test",
+            )
+        # Both locales were attempted (et succeeded, ru raised) — the ru
+        # failure didn't short-circuit et's fetch.
+        assert fetch.await_count == 2
+
+    @pytest.mark.asyncio
     async def test_wanted_locales_filters_fetches(self):
         fetch = AsyncMock(
             return_value=_response("https://example.test/et/event", "<h1>ET</h1>")

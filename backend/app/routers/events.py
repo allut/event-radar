@@ -3,7 +3,12 @@
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.constants import DEFAULT_USER_LOCALE, RATE_LIMIT_EVENTS_DETAIL, SESSION_COOKIE_NAME
+from app.constants import (
+    DEFAULT_USER_LOCALE,
+    ERROR_EVENT_NOT_FOUND,
+    RATE_LIMIT_EVENTS_DETAIL,
+    SESSION_COOKIE_NAME,
+)
 from app.db import get_db
 from app.models.models import Event, User
 from app.rate_limit import limiter
@@ -37,7 +42,7 @@ async def get_event(
     )
     if event is None:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Event not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail=ERROR_EVENT_NOT_FOUND
         )
 
     # Parse the session cookie once and reuse it for both locale and signal

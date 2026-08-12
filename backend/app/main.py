@@ -33,6 +33,16 @@ from app.constants import (
     HSTS_HEADER_NAME,
     HSTS_HEADER_VALUE,
     INGEST_INTERVAL_HOURS,
+    JOB_ID_BUILD_DAILY_FEEDS,
+    JOB_ID_CLASSIFY_PENDING,
+    JOB_ID_CLEANUP_STALE_DATA,
+    JOB_ID_DEDUP_PASS,
+    JOB_ID_GEOCODE_PENDING,
+    JOB_ID_INGEST_ALL_SOURCES,
+    JOB_ID_PUBLISH_PENDING,
+    JOB_ID_REFETCH_EVENT_DETAILS,
+    JOB_ID_SEND_DAILY_DIGESTS,
+    JOB_ID_SYNC_FIENTA_ORGANIZERS,
     LLM_PASS_INTERVAL_HOURS,
     LOG_EVENT_AUTH_FAILED,
     LOG_EVENT_JOB_RUN,
@@ -142,20 +152,22 @@ _run_organizer_sync = _scheduled(
     "organizer sync", _in_session(sync_fienta_organizers, commit=True)
 )
 _run_cleanup = _scheduled(
-    "cleanup_stale_data", _in_session(cleanup_stale_data, commit=True)
+    JOB_ID_CLEANUP_STALE_DATA, _in_session(cleanup_stale_data, commit=True)
 )
 _run_ingest_all = _scheduled("hourly ingest", ingest_all_enabled)
 _run_dedup_pass = _scheduled("dedup pass", dedup_pass_drained)
-_run_classify_pending = _scheduled("classify_pending", classify_pending_drained)
-_run_publish_pending = _scheduled("publish_pending", publish_pending_job)
-_run_geocode_pending = _scheduled("geocode_pending", geocode_pending_job)
-_run_refetch_details = _scheduled("refetch_event_details", refetch_event_details_job)
+_run_classify_pending = _scheduled(JOB_ID_CLASSIFY_PENDING, classify_pending_drained)
+_run_publish_pending = _scheduled(JOB_ID_PUBLISH_PENDING, publish_pending_job)
+_run_geocode_pending = _scheduled(JOB_ID_GEOCODE_PENDING, geocode_pending_job)
+_run_refetch_details = _scheduled(
+    JOB_ID_REFETCH_EVENT_DETAILS, refetch_event_details_job
+)
 # build_daily_feeds and send_daily_digests commit internally / send only.
 _run_build_daily_feeds = _scheduled(
-    "build_daily_feeds", _in_session(build_daily_feeds, commit=False)
+    JOB_ID_BUILD_DAILY_FEEDS, _in_session(build_daily_feeds, commit=False)
 )
 _run_send_daily_digests = _scheduled(
-    "send_daily_digests", _in_session(send_daily_digests, commit=False)
+    JOB_ID_SEND_DAILY_DIGESTS, _in_session(send_daily_digests, commit=False)
 )
 
 
@@ -168,7 +180,7 @@ def _register_scheduled_jobs(scheduler: AsyncIOScheduler) -> None:
         day_of_week="sun",
         hour=ORGANIZER_SYNC_HOUR,
         minute=ORGANIZER_SYNC_MINUTE,
-        id="sync_fienta_organizers",
+        id=JOB_ID_SYNC_FIENTA_ORGANIZERS,
         replace_existing=True,
     )
 
@@ -179,7 +191,7 @@ def _register_scheduled_jobs(scheduler: AsyncIOScheduler) -> None:
         day_of_week="sun",
         hour=CLEANUP_HOUR,
         minute=CLEANUP_MINUTE,
-        id="cleanup_stale_data",
+        id=JOB_ID_CLEANUP_STALE_DATA,
         replace_existing=True,
     )
 
@@ -188,7 +200,7 @@ def _register_scheduled_jobs(scheduler: AsyncIOScheduler) -> None:
         _run_ingest_all,
         trigger="interval",
         hours=INGEST_INTERVAL_HOURS,
-        id="ingest_all_sources",
+        id=JOB_ID_INGEST_ALL_SOURCES,
         replace_existing=True,
     )
 
@@ -197,28 +209,28 @@ def _register_scheduled_jobs(scheduler: AsyncIOScheduler) -> None:
         _run_dedup_pass,
         trigger="interval",
         hours=LLM_PASS_INTERVAL_HOURS,
-        id="dedup_pass",
+        id=JOB_ID_DEDUP_PASS,
         replace_existing=True,
     )
     scheduler.add_job(
         _run_classify_pending,
         trigger="interval",
         hours=LLM_PASS_INTERVAL_HOURS,
-        id="classify_pending",
+        id=JOB_ID_CLASSIFY_PENDING,
         replace_existing=True,
     )
     scheduler.add_job(
         _run_publish_pending,
         trigger="interval",
         hours=LLM_PASS_INTERVAL_HOURS,
-        id="publish_pending",
+        id=JOB_ID_PUBLISH_PENDING,
         replace_existing=True,
     )
     scheduler.add_job(
         _run_geocode_pending,
         trigger="interval",
         hours=LLM_PASS_INTERVAL_HOURS,
-        id="geocode_pending",
+        id=JOB_ID_GEOCODE_PENDING,
         replace_existing=True,
     )
     # Daily 04:30 EET: re-fetch every future event's detail page and reconcile
@@ -230,7 +242,7 @@ def _register_scheduled_jobs(scheduler: AsyncIOScheduler) -> None:
         trigger="cron",
         hour=REFETCH_HOUR,
         minute=REFETCH_MINUTE,
-        id="refetch_event_details",
+        id=JOB_ID_REFETCH_EVENT_DETAILS,
         replace_existing=True,
     )
     # Daily 06:00 EET: build personalized feeds for all users
@@ -239,7 +251,7 @@ def _register_scheduled_jobs(scheduler: AsyncIOScheduler) -> None:
         trigger="cron",
         hour=FEED_BUILD_HOUR,
         minute=FEED_BUILD_MINUTE,
-        id="build_daily_feeds",
+        id=JOB_ID_BUILD_DAILY_FEEDS,
         replace_existing=True,
     )
     # Daily 07:00 EET: send digest emails to opted-in users (one hour after feeds are built)
@@ -248,7 +260,7 @@ def _register_scheduled_jobs(scheduler: AsyncIOScheduler) -> None:
         trigger="cron",
         hour=DIGEST_SEND_HOUR,
         minute=0,
-        id="send_daily_digests",
+        id=JOB_ID_SEND_DAILY_DIGESTS,
         replace_existing=True,
     )
 
@@ -321,7 +333,7 @@ class MaxBodySizeMiddleware:
     async def _reject(self, scope: Scope, receive: Receive, send: Send) -> None:
         response = JSONResponse(
             {"detail": f"Request body exceeds {self.max_bytes} bytes."},
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
         )
         await response(scope, receive, send)
 
