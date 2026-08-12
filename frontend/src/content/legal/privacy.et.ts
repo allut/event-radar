@@ -6,7 +6,7 @@ const AKI_URL = 'https://www.aki.ee';
 
 const doc: LegalDoc = {
   title: 'Privaatsuspoliitika',
-  lastUpdated: '2026-07-24',
+  lastUpdated: '2026-08-11',
   intro: [
     {
       kind: 'p',
@@ -71,7 +71,7 @@ const doc: LegalDoc = {
         {
           kind: 'p',
           content: [
-            'Me ei kasuta reklaami- ega jälgimisküpsiseid. Salvestame sinu brauseri kohalikku salvestusruumi sisselogimise loa ja keelevaliku — need on teenuse toimimiseks rangelt vajalikud. Meie kasutus- ja jõudlusanalüütika (Vercel Web Analytics ja Speed Insights) on küpsisevaba ja koondatud; lehe URL-id maskeeritakse enne analüütikapakkujani jõudmist, nii et ühtki sündmuse tunnust ega sisselogimise luba ei saadeta kunagi. Kuna me ei sea ühtki mittevajalikku küpsist, ei ole küpsiste nõusolekuriba vaja.',
+            'Kasutame üht rangelt vajalikku küpsist: allkirjastatud, httpOnly sessiooniküpsist, mis hoiab sind sisse logituna. Sellel pole reklaami- ega jälgimiseesmärki ja lehel töötavad skriptid ei saa seda lugeda. Kuna see on teenuse toimimiseks rangelt vajalik, ei ole küpsiste nõusolekuriba vaja. Sinu keelevalik ja tõeväärtuslipp "oled sisse logitud", mis ei sisalda mandaati, salvestatakse sinu brauseri kohalikku salvestusruumi. Meie kasutus- ja jõudlusanalüütika (Vercel Web Analytics ja Speed Insights) on küpsisevaba ja koondatud; lehe URL-id maskeeritakse enne analüütikapakkujani jõudmist, nii et ühtki sündmuse tunnust ega sessiooni mandaati ei saadeta kunagi.',
           ],
         },
       ],

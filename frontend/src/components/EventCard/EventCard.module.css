@@ -103,7 +103,7 @@
   font-weight: 300;
   color: var(--bg-placeholder);
   line-height: 1;
-  letter-spacing: -0.03em;
+  letter-spacing: var(--tracking-tightest);
   user-select: none;
 }
 
@@ -230,7 +230,7 @@
   color: var(--text-muted);
   padding-left: var(--space-1-1);
   position: relative;
-  line-height: 1.5;
+  line-height: var(--leading-body);
   display: -webkit-box;
   -webkit-line-clamp: 1;
   -webkit-box-orient: vertical;

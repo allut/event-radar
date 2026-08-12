@@ -1,6 +1,6 @@
 """GET /explore — searchable, filterable, personalized event discovery grid.
 
-Two execution paths (see plan): Path A is pure SQL for the "All events" view
+Two execution paths: Path A is pure SQL for the "All events" view
 sorted by date/price/quality. Path B does Python-side scoring (ranking/score.py)
 whenever For-you narrowing or relevance ranking is requested, since persona
 affinity and the feedback-based soft-filter aren't expressible as SQL ORDER BY.
@@ -20,12 +20,16 @@ from app.constants import (
     BROWSE_MAX_PAGE_SIZE,
     BROWSE_NEG_INF,
     BROWSE_PAGE_SIZE,
+    BROWSE_QUERY_MAX_LEN,
     BROWSE_RELEVANCE_MAX_CANDIDATES,
     BROWSE_SORT_DATE,
     BROWSE_SORT_PRICE,
     BROWSE_SORT_QUALITY,
     BROWSE_SORT_RELEVANCE,
     BROWSE_SQL_SORTS,
+    ERROR_INVALID_SORT,
+    FEEDBACK_HISTORY_LOOKBACK_DAYS,
+    PAGINATION_MAX_OFFSET,
     PAGINATION_MIN_LIMIT,
     PAGINATION_MIN_OFFSET,
     RATE_LIMIT_BROWSE,
@@ -196,13 +200,23 @@ async def _load_user_persona_weights(
     return [persona_weight_tuple(row) for row in rows]
 
 
-async def _load_feedback_context(db: AsyncSession, user_id: int) -> FeedbackContext:
+async def _load_feedback_context(
+    db: AsyncSession, user_id: int, now: datetime
+) -> FeedbackContext:
+    """Bounded to the last FEEDBACK_HISTORY_LOOKBACK_DAYS — user_event_feedback is
+    preserved indefinitely (see CLAUDE.md Data Retention), so an unbounded load
+    here grows with the user's lifetime activity on every /explore request.
+    FEEDBACK_DECAY_BASE's per-day decay makes older signals numerically
+    negligible to score_event() anyway, so this drops no meaningfully-weighted
+    signal."""
+    cutoff = now - timedelta(days=FEEDBACK_HISTORY_LOOKBACK_DAYS)
     rows = (
         await db.scalars(
             select(UserEventFeedback)
             .where(
                 UserEventFeedback.user_id == user_id,
                 UserEventFeedback.signal.in_((SIGNAL_LIKE, SIGNAL_DISLIKE)),
+                UserEventFeedback.created_at >= cutoff,
             )
             .options(
                 selectinload(UserEventFeedback.event).selectinload(
@@ -274,7 +288,7 @@ async def _browse_scored_path(
     candidates = list((await db.scalars(candidate_stmt)).all())
 
     user_persona_weights = await _load_user_persona_weights(db, current_user.id)
-    fb_ctx = await _load_feedback_context(db, current_user.id)
+    fb_ctx = await _load_feedback_context(db, current_user.id, now)
 
     disliked_categories = fb_ctx.disliked_categories
 
@@ -344,7 +358,7 @@ async def _browse_scored_path(
 @limiter.limit(RATE_LIMIT_BROWSE)
 async def explore_events(
     request: Request,
-    q: str | None = None,
+    q: str | None = Query(None, max_length=BROWSE_QUERY_MAX_LEN),
     category: str | None = None,
     vibe: str | None = None,
     date_from: date | None = None,
@@ -353,7 +367,9 @@ async def explore_events(
     for_you: bool = True,
     sort: str = BROWSE_SORT_RELEVANCE,
     limit: int = Query(BROWSE_PAGE_SIZE, ge=PAGINATION_MIN_LIMIT, le=BROWSE_MAX_PAGE_SIZE),
-    offset: int = Query(PAGINATION_MIN_OFFSET, ge=PAGINATION_MIN_OFFSET),
+    offset: int = Query(
+        PAGINATION_MIN_OFFSET, ge=PAGINATION_MIN_OFFSET, le=PAGINATION_MAX_OFFSET
+    ),
     locale: str | None = Query(None),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -362,7 +378,7 @@ async def explore_events(
     if sort not in VALID_BROWSE_SORTS:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"sort must be one of {sorted(VALID_BROWSE_SORTS)}",
+            detail=ERROR_INVALID_SORT.format(sorts=sorted(VALID_BROWSE_SORTS)),
         )
 
     categories = _parse_slug_list(category, VALID_CATEGORIES)

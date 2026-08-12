@@ -130,7 +130,6 @@ async def extract_address_from_venue_name(db: AsyncSession) -> int:
     cached_decisions = await _prefetch_venue_extract_cache(
         db, list(hashes.values())
     )
-    # Invert: hash → name for cache lookup
     fresh_calls = 0
     mutated = 0
     mutated_names = 0

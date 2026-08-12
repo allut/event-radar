@@ -2,29 +2,149 @@
 
 import logging
 import re
-from collections.abc import Awaitable
-from datetime import datetime
+from collections.abc import Awaitable, Callable
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from fastapi import HTTPException, status
+from fastapi import HTTPException, Response, status
 from itsdangerous import BadSignature, SignatureExpired
+from pydantic import BaseModel, EmailStr
 from sqlalchemy import ColumnElement, Select, and_, delete, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import InstrumentedAttribute, selectinload
 
 from app.auth.tokens import verify_session_token
 from app.constants import (
     APP_ENV_DEVELOPMENT,
     DEFAULT_USER_LOCALE,
     EMAIL_MASK_VISIBLE_CHARS,
+    ERROR_ADMIN_JOB_FAILED,
+    ERROR_FEATURE_DISABLED,
     EVENT_STATUS_PUBLISHED,
+    MASK_DB_URL_PASSWORD_RE,
+    MAGIC_LINK_RESEND_COOLDOWN_SECONDS,
     PREFERENCE_SIGNALS,
     PREFERRED_TASTE_MIN_WEIGHT,
+    SECONDS_PER_DAY,
+    SESSION_COOKIE_HTTPONLY,
+    SESSION_COOKIE_SAMESITE,
+    SESSION_COOKIE_SECURE,
     VALID_LOCALES,
 )
-from app.models.models import Event, User, UserEventFeedback, UserEventScore, UserPersona
+from app.db import AsyncSessionLocal
+from app.models.models import (
+    Event,
+    EventClassification,
+    Persona,
+    User,
+    UserEventFeedback,
+    UserEventScore,
+    UserPersona,
+)
 
 log = logging.getLogger(__name__)
+
+
+class RequestLinkBody(BaseModel):
+    """Shared magic-link request body — consumer (routers/auth.py) and
+    organizer (routers/organizer_auth.py) tracks use the identical shape."""
+
+    email: EmailStr
+    locale: str | None = None
+
+
+class VerifyTokenBody(BaseModel):
+    """Shared /verify request body — the magic-link token moves from a query
+    parameter to the body so it stops landing in server access logs (Vercel
+    edge, Render). Identical shape for both auth tracks, mirroring
+    RequestLinkBody."""
+
+    token: str
+
+
+def set_session_cookie(
+    response: Response, *, name: str, token: str, path: str, ttl_days: int
+) -> None:
+    """Set a hardened session cookie — shared by the consumer and organizer
+    /verify endpoints. Secure is unconditional (never gated on APP_ENV): see
+    docs/adr/0001-session-tokens-in-httponly-cookies.md."""
+    response.set_cookie(
+        key=name,
+        value=token,
+        max_age=ttl_days * SECONDS_PER_DAY,
+        path=path,
+        secure=SESSION_COOKIE_SECURE,
+        httponly=SESSION_COOKIE_HTTPONLY,
+        samesite=SESSION_COOKIE_SAMESITE,
+    )
+
+
+def clear_session_cookie(response: Response, *, name: str, path: str) -> None:
+    """Expire a session cookie (sign-out and logout-all). Attributes must
+    match set_session_cookie's for the browser to actually replace/clear the
+    cookie rather than setting a second, distinct one."""
+    response.delete_cookie(
+        key=name,
+        path=path,
+        secure=SESSION_COOKIE_SECURE,
+        httponly=SESSION_COOKIE_HTTPONLY,
+        samesite=SESSION_COOKIE_SAMESITE,
+    )
+
+
+async def run_in_session(
+    func: Callable[[AsyncSession], Awaitable[dict]], *, commit: bool
+) -> dict:
+    """Run a session-scoped job: open a session, run ``func(db)``, commit when
+    asked, roll back and re-raise on failure.
+
+    Shared by every scheduler/admin entry point that needs its own session
+    (app/main.py's scheduled jobs and app/routers/admin.py's manual triggers).
+    """
+    async with AsyncSessionLocal() as db:
+        try:
+            result = await func(db)
+            if commit:
+                await db.commit()
+            return result
+        except Exception:
+            await db.rollback()
+            raise
+
+
+async def recent_unused_link_exists(
+    db: AsyncSession,
+    model: type[Any],
+    fk_column: InstrumentedAttribute[Any],
+    fk_value: int,
+    ttl_seconds: int,
+) -> bool:
+    """Per-account magic-link resend cooldown, shared by the consumer
+    (routers/auth.py) and organizer (routers/organizer_auth.py) auth tracks.
+
+    True if an unused link (identified by ``fk_column == fk_value`` on
+    ``model``, which must carry ``used_at``/``expires_at`` columns like
+    AuthMagicLink/OrganizerMagicLink) was issued within
+    MAGIC_LINK_RESEND_COOLDOWN_SECONDS of now.
+
+    A link created T seconds ago has expires_at = now + (ttl_seconds - T), so
+    expires_at > now + ttl_seconds - cooldown <-> T < cooldown. Prevents
+    Resend quota exhaustion from rapid repeats; IP-level throttling is the
+    separate @limiter.limit decorator on the request-link endpoint.
+    """
+    recent_cutoff = datetime.now(timezone.utc) + timedelta(
+        seconds=ttl_seconds - MAGIC_LINK_RESEND_COOLDOWN_SECONDS
+    )
+    already_sent = await db.scalar(
+        select(model)
+        .where(
+            fk_column == fk_value,
+            model.used_at.is_(None),
+            model.expires_at > recent_cutoff,
+        )
+        .limit(1)
+    )
+    return already_sent is not None
 
 
 async def run_admin_job(name: str, coro: Awaitable[dict]) -> dict:
@@ -41,30 +161,44 @@ async def run_admin_job(name: str, coro: Awaitable[dict]) -> dict:
         log.exception("admin %s failed", name)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"{name} failed; see server logs",
+            detail=ERROR_ADMIN_JOB_FAILED.format(name=name),
         )
 
 
 def require_configured_secret(
-    secret: str | None, *, feature: str, setting_name: str, app_env: str
+    secret: str | None,
+    *,
+    feature: str,
+    setting_name: str,
+    app_env: str,
+    allow_insecure_dev: bool = False,
 ) -> bool:
     """Fail-closed gate shared by every secret-protected surface (admin auth,
     inbound webhook, /internal/tick).
 
     Returns True when the secret is configured — the caller must then verify
-    it. When unset: 503 outside development; in development, log a warning and
-    return False (caller skips verification). Callers pass their own module's
-    ``settings`` values so tests that patch the caller's settings keep working.
+    it. When unset: 503 unless BOTH ``app_env == development`` AND
+    ``allow_insecure_dev`` are true, in which case a warning is logged and
+    False is returned (caller skips verification). Requiring the second,
+    explicit opt-in (settings.ALLOW_INSECURE_DEV) means a dev-shaped APP_ENV
+    alone — e.g. a misconfigured or never-overridden env var on a real
+    deployment — can never silently open the admin surface, the inbound
+    webhook, or /internal/tick. Callers pass their own module's ``settings``
+    values so tests that patch the caller's settings keep working.
     """
     if secret:
         return True
-    if app_env != APP_ENV_DEVELOPMENT:
+    if not (app_env == APP_ENV_DEVELOPMENT and allow_insecure_dev):
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"{feature} disabled: {setting_name} not configured",
+            detail=ERROR_FEATURE_DISABLED.format(
+                feature=feature, setting_name=setting_name
+            ),
         )
     log.warning(
-        "%s not set; %s unprotected (development mode)", setting_name, feature
+        "%s not set; %s unprotected (development mode, ALLOW_INSECURE_DEV=true)",
+        setting_name,
+        feature,
     )
     return False
 
@@ -83,7 +217,7 @@ async def invalidate_user_scores(db: AsyncSession, user_id: int) -> None:
 def mask_db_url(url: str) -> str:
     """Redact the password in a DB URL for safe logging (``user:pass@host`` ->
     ``user:***@host``). Shared by the maintenance scripts in ``backend/scripts``."""
-    return re.sub(r":[^@/]+@", ":***@", url)
+    return re.sub(MASK_DB_URL_PASSWORD_RE, ":***@", url)
 
 
 def normalized_title(title: str) -> str:
@@ -114,14 +248,23 @@ def event_series_key(title_orig: str, venue_name: str | None) -> tuple[str, str]
     return (normalized_title(title_orig), normalized_title(venue_name or ""))
 
 
-def persona_weight_tuple(user_persona: UserPersona) -> tuple[float, dict]:
+def persona_weight_tuple(
+    user_persona: UserPersona, persona: Persona | None = None
+) -> tuple[float, dict]:
     """(weight, affinity_vector) shape consumed by ``ranking/score.py::persona_affinity``.
 
     Shared by the single-user load in browse.py and the bulk multi-user load in
     ranking/score.py::build_daily_feeds, which query ``UserPersona`` differently
     (single vs. ``user_id.in_(...)``) but must agree on this row->tuple mapping.
+    ``persona`` covers routers/settings.py's ``(UserPersona, Persona)``-tuple
+    join query, which loads the row directly rather than via the
+    ``UserPersona.persona`` relationship; omit it when that relationship is
+    already eager-loaded (browse.py/score.py both ``selectinload`` it).
     """
-    return (user_persona.weight, user_persona.persona.affinity_vector)
+    return (
+        user_persona.weight,
+        (persona if persona is not None else user_persona.persona).affinity_vector,
+    )
 
 
 def canonical_event_filter() -> ColumnElement[bool]:
@@ -229,13 +372,13 @@ def serialize_user(user: User, **extras) -> dict:
     }
 
 
-def parse_bearer_user(authorization: str | None) -> tuple[int, int] | None:
-    """(user_id, token_version) from an ``Authorization: Bearer`` header, or
-    None when the header is missing/malformed or the token is expired/invalid."""
-    if not isinstance(authorization, str) or not authorization.startswith("Bearer "):
+def parse_session_cookie_user(session: str | None) -> tuple[int, int] | None:
+    """(user_id, token_version) from the session cookie value, or None when
+    the cookie is absent or the token is expired/invalid."""
+    if not isinstance(session, str):
         return None
     try:
-        return verify_session_token(authorization[len("Bearer ") :])
+        return verify_session_token(session)
     except (SignatureExpired, BadSignature):
         return None
 
@@ -280,7 +423,7 @@ def resolve_important_info(event: Event, locale: str) -> str | None:
     return event.important_info
 
 
-def resolve_why_go(cl, locale: str) -> list[str]:
+def resolve_why_go(cl: EventClassification | None, locale: str) -> list[str]:
     """Return localized why_go bullets for a classification, with locale → en → raw fallback."""
     if cl is None:
         return []

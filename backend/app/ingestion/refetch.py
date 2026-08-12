@@ -26,7 +26,7 @@ from urllib.parse import urlsplit
 
 import httpx
 from bs4 import BeautifulSoup
-from sqlalchemy import or_, select
+from sqlalchemy import exists, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.constants import (
@@ -41,6 +41,7 @@ from app.constants import (
     REFETCH_PLACEHOLDER_VENUE_NAMES,
     REFETCH_PRICE_TOLERANCE,
     REFETCH_REQUEST_DELAY_SECONDS,
+    SOURCE_KIND_USER_SUBMISSION,
     TALLINN_TZ,
     VENUE_NAME_MAX_LEN,
 )
@@ -54,9 +55,10 @@ from app.ingestion.selectors import (
 from app.ingestion.content_filters import is_explicit_text, is_non_event_text
 from app.ingestion.http_client import host_guard_hook, host_is_allowed, http_get
 from app.ingestion.jsonld import (
-    extract_jsonld_event_location,
-    extract_jsonld_event_offers,
     extract_jsonld_event_text,
+    location_from_jsonld_items,
+    offers_from_jsonld_items,
+    parse_jsonld_event_items,
 )
 from app.ingestion.locale_urls import (
     fetch_locale_variants,
@@ -70,7 +72,7 @@ from app.ingestion.sources.estonia_concert_hall import (
 )
 from app.ingestion.sources.kumu import kumu_localized_text
 from app.ingestion.sources.piletilevi import piletilevi_localized_text
-from app.models.models import Event
+from app.models.models import Event, EventSource, Source
 
 log = logging.getLogger(__name__)
 
@@ -157,14 +159,36 @@ async def _select_candidates(db: AsyncSession, now: datetime) -> list[Event]:
     """Future events with a URL, not synced within REFETCH_MIN_INTERVAL_DAYS.
 
     Ordered oldest-synced-first so a capped run prioritizes the
-    least-recently-synced events.
+    least-recently-synced events. Organizer submissions are excluded twice,
+    on independent signals: refetch reconciles third-party scraped detail
+    pages, but an organizer owns their row and edits it directly via PATCH —
+    never fetching an organizer-controlled url is what lets the submit path
+    drop the host allowlist (see adapter.py::insert_normalized_event, which
+    decides that same drop off `source.kind`). Excluding only by
+    `submitted_by_organizer_id` would leave the two guards coupled by
+    convention alone: a future insert against a user_submission-kind source
+    that forgot to set `submitted_by_organizer_id` would still pass this
+    filter and get its host-unchecked url fetched here. The `NOT EXISTS`
+    clause below excludes by the same `source.kind` adapter.py keys off,
+    independent of whether the organizer attribution column got set.
     """
     due_before = now - timedelta(days=REFETCH_MIN_INTERVAL_DAYS)
+    from_user_submission_source = exists(
+        select(1)
+        .select_from(EventSource)
+        .join(Source, Source.id == EventSource.source_id)
+        .where(
+            EventSource.event_id == Event.id,
+            Source.kind == SOURCE_KIND_USER_SUBMISSION,
+        )
+    )
     rows = await db.scalars(
         select(Event)
         .where(
             Event.url.is_not(None),
             Event.starts_at > now,
+            Event.submitted_by_organizer_id.is_(None),
+            ~from_user_submission_source,
             or_(
                 Event.detail_refetched_at.is_(None),
                 Event.detail_refetched_at < due_before,
@@ -300,8 +324,9 @@ async def _process_one(
 
     summary["fetched"] += 1
     soup = BeautifulSoup(response.text, "html.parser")
-    location = extract_jsonld_event_location(soup)
-    price_min, price_max, currency, has_free_tier = extract_jsonld_event_offers(soup)
+    jsonld_items = parse_jsonld_event_items(soup)
+    location = location_from_jsonld_items(jsonld_items)
+    price_min, price_max, currency, has_free_tier = offers_from_jsonld_items(jsonld_items)
 
     # Runs before the no_data gate so events whose JSON-LD has only text
     # (no location/offers) still receive localized titles/descriptions.
@@ -479,7 +504,7 @@ def _reconcile_venue_name(event: Event, summary: dict, detail_name: object) -> b
 
     summary["venue_changed"] += 1
     if not event.is_explicit and is_explicit_text(
-        event.title_orig, event.description_orig, event.venue_name
+        event.title_orig, event.description_orig, event.venue_name, event.important_info
     ):
         event.is_explicit = True
         summary["flagged_explicit"] += 1

@@ -1,6 +1,7 @@
 import { Link, NavLink } from 'react-router-dom';
 import { t } from '../../i18n';
 import { cx } from '../../utils';
+import { BRAND_GLYPH, ROUTES } from '../../constants';
 import LocaleSelector from '../LocaleSelector';
 import MobileMenu from '../MobileMenu';
 import styles from './TopBar.module.css';
@@ -17,10 +18,10 @@ interface TopBarProps {
 
 export default function TopBar({ locale, onLocaleChange, onLogout, localeDisabled, onBack, authed = true, showNav = true }: TopBarProps) {
   return (
-    <header className={cx(styles.topBar, !authed && styles.minimal)}>
+    <header className={styles.topBar}>
       <div className={styles.left}>
-        <Link to="/" className={styles.logoWrap}>
-          <span className={styles.radar} aria-hidden>◉</span>
+        <Link to={ROUTES.home} className={styles.logoWrap}>
+          <span className={styles.radar} aria-hidden>{BRAND_GLYPH}</span>
           <span className={styles.brand}>{t('brand', locale)}</span>
         </Link>
       </div>
@@ -28,26 +29,26 @@ export default function TopBar({ locale, onLocaleChange, onLogout, localeDisable
       {authed && showNav && (
         <nav className={styles.nav} aria-label={t('nav_daily5', locale)}>
           <NavLink
-            to="/"
+            to={ROUTES.home}
             end
             className={({ isActive }) => cx(styles.navLink, isActive && styles.navLinkActive)}
           >
             {t('nav_daily5', locale)}
           </NavLink>
           <NavLink
-            to="/explore"
+            to={ROUTES.explore}
             className={({ isActive }) => cx(styles.navLink, isActive && styles.navLinkActive)}
           >
             {t('nav_explore', locale)}
           </NavLink>
           <NavLink
-            to="/saved"
+            to={ROUTES.saved}
             className={({ isActive }) => cx(styles.navLink, isActive && styles.navLinkActive)}
           >
             {t('nav_saved', locale)}
           </NavLink>
           <NavLink
-            to="/settings"
+            to={ROUTES.settings}
             className={({ isActive }) => cx(styles.navLink, isActive && styles.navLinkActive)}
           >
             {t('nav_settings', locale)}
@@ -66,7 +67,7 @@ export default function TopBar({ locale, onLocaleChange, onLogout, localeDisable
           <button className={styles.authBtn} onClick={onLogout}>{t('sign_out', locale)}</button>
         )}
         {!authed && (
-          <Link to="/login" className={styles.authBtn}>{t('sign_in', locale)}</Link>
+          <Link to={ROUTES.login} className={styles.authBtn}>{t('sign_in', locale)}</Link>
         )}
         <div className={styles.localeWrap}>
           <LocaleSelector
@@ -76,17 +77,16 @@ export default function TopBar({ locale, onLocaleChange, onLogout, localeDisable
             disabled={localeDisabled}
           />
         </div>
-        {authed && (
-          <div className={styles.mobileMenuWrap}>
-            <MobileMenu
-              locale={locale}
-              onLocaleChange={onLocaleChange}
-              onLogout={onLogout ?? (() => undefined)}
-              localeDisabled={localeDisabled}
-              showNav={showNav}
-            />
-          </div>
-        )}
+        <div className={styles.mobileMenuWrap}>
+          <MobileMenu
+            locale={locale}
+            onLocaleChange={onLocaleChange}
+            onLogout={onLogout}
+            localeDisabled={localeDisabled}
+            showNav={showNav}
+            authed={authed}
+          />
+        </div>
       </div>
     </header>
   );

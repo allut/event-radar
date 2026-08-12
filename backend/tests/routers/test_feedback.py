@@ -1,5 +1,6 @@
 """Tests for POST /feedback, DELETE /feedback/{event_id}, GET /feedback/events."""
 import http
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -65,8 +66,9 @@ class TestRecordFeedback:
         mock_db.add.assert_called_once()
         added_row = mock_db.add.call_args.args[0]
         assert added_row.signal == "click_external"
-        # Only the score-invalidation DELETE goes through execute() — no upsert.
-        assert mock_db.execute.call_count == 1
+        # click_external isn't in SCORE_AFFECTING_SIGNALS (like/dislike only) —
+        # no score-cache invalidation, so execute() is never called at all.
+        assert mock_db.execute.call_count == 0
 
     @pytest.mark.asyncio
     async def test_view_appends_not_upserts(
@@ -83,7 +85,9 @@ class TestRecordFeedback:
             db=mock_db,
         )
         mock_db.add.assert_called_once()
-        assert mock_db.execute.call_count == 1
+        # view isn't in SCORE_AFFECTING_SIGNALS (like/dislike only) — no
+        # score-cache invalidation, so execute() is never called at all.
+        assert mock_db.execute.call_count == 0
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("signal", sorted(VALID_SIGNALS))
@@ -157,9 +161,15 @@ class TestRecordFeedback:
 class TestDeleteFeedback:
     @pytest.mark.asyncio
     async def test_delete_removes_signal(self, mock_db, make_user, make_request):
+        """A deleted like/dislike (a SCORE_AFFECTING_SIGNALS member) triggers
+        score-cache invalidation — the DELETE's RETURNING reports which
+        signal(s) were actually removed."""
         from app.routers.feedback import delete_feedback
 
         user = make_user(user_id=3)
+        returning_result = MagicMock()
+        returning_result.scalars.return_value.all.return_value = ["like"]
+        mock_db.execute.return_value = returning_result
 
         result = await delete_feedback(
             event_id=10,
@@ -171,6 +181,28 @@ class TestDeleteFeedback:
         # One execute() for the DELETE, one for score invalidation.
         assert mock_db.execute.call_count == 2
         mock_db.commit.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_delete_bookmark_only_skips_invalidation(
+        self, mock_db, make_user, make_request
+    ):
+        """Deleting a bookmark (not in SCORE_AFFECTING_SIGNALS) must not wipe the
+        score cache — bookmark is never read by the scorer."""
+        from app.routers.feedback import delete_feedback
+
+        returning_result = MagicMock()
+        returning_result.scalars.return_value.all.return_value = ["bookmark"]
+        mock_db.execute.return_value = returning_result
+
+        result = await delete_feedback(
+            event_id=10,
+            request=make_request(method="DELETE", path="/feedback/10"),
+            current_user=make_user(user_id=3),
+            db=mock_db,
+        )
+        assert result == {"ok": True}
+        # Only the DELETE — no second execute() for invalidation.
+        assert mock_db.execute.call_count == 1
 
     @pytest.mark.asyncio
     async def test_delete_is_idempotent_no_404(self, mock_db, make_user, make_request):

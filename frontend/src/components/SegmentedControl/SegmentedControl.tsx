@@ -1,9 +1,13 @@
 import { cx } from '../../utils';
+import type { ContentMarkerState } from '../../constants';
 import styles from './SegmentedControl.module.css';
 
 export interface SegmentedOption {
   value: string;
   label: string;
+  /** Renders a three-state translation-progress marker after the label, plus
+   * visually-hidden state text folded into the button's accessible name. */
+  marker?: { state: ContentMarkerState; stateLabel: string };
 }
 
 interface SegmentedControlProps {
@@ -11,23 +15,39 @@ interface SegmentedControlProps {
   value: string;
   onChange: (value: string) => void;
   ariaLabel: string;
+  /** 'plain' (default) is today's bare-hairline look. 'dial' is the gold sliding-pill treatment. */
+  variant?: 'plain' | 'dial';
 }
 
 /** Two(+)-segment mode switch — used for Explore's All events / For you control. */
-export default function SegmentedControl({ options, value, onChange, ariaLabel }: SegmentedControlProps) {
+export default function SegmentedControl({ options, value, onChange, ariaLabel, variant = 'plain' }: SegmentedControlProps) {
+  const isDial = variant === 'dial';
+  const activeIndex = options.findIndex((o) => o.value === value);
   return (
-    <div className={styles.seg} role="group" aria-label={ariaLabel}>
+    <div
+      className={cx(styles.seg, isDial && styles.segDial)}
+      role="group"
+      aria-label={ariaLabel}
+      style={isDial ? ({ '--seg-count': options.length, '--seg-index': activeIndex } as React.CSSProperties) : undefined}
+    >
+      {isDial && activeIndex >= 0 && <span className={styles.indicator} aria-hidden />}
       {options.map((opt) => {
         const isActive = opt.value === value;
         return (
           <button
             key={opt.value}
             type="button"
-            className={cx(styles.segBtn, isActive && styles.active)}
+            className={cx(styles.segBtn, opt.marker && styles.hasMarker, isActive && styles.active)}
             aria-pressed={isActive}
             onClick={() => onChange(opt.value)}
           >
             {opt.label}
+            {opt.marker && (
+              <>
+                <span className={cx(styles.marker, styles[opt.marker.state])} aria-hidden="true" />
+                <span className={styles.srOnly}>, {opt.marker.stateLabel}</span>
+              </>
+            )}
           </button>
         );
       })}

@@ -1,6 +1,6 @@
 import DOMPurify from 'dompurify';
 import { api } from './api/client';
-import { CATEGORY_GRADIENTS, FALLBACK_GRADIENT, EUR_SYMBOL, DEFAULT_CURRENCY, GOOGLE_MAPS_SEARCH_URL, type Signal, toLocaleCode, SAFE_URL_SCHEMES, SANITIZE_ALLOWED_TAGS, SANITIZE_ALLOWED_ATTR, SIGNAL_TO_CLASS, BROWSE_PAGE_SIZE, CATEGORIES, VIBES, type DatePreset, type SortOption, ANALYTICS_EVENT_PATH_RE } from './constants';
+import { API, CATEGORY_GRADIENTS, FALLBACK_GRADIENT, EUR_SYMBOL, DEFAULT_CURRENCY, GOOGLE_MAPS_SEARCH_URL, type Signal, toLocaleCode, SAFE_URL_SCHEMES, SANITIZE_ALLOWED_TAGS, SANITIZE_ALLOWED_ATTR, SIGNAL_TO_CLASS, BROWSE_PAGE_SIZE, CATEGORIES, VIBES, type DatePreset, type SortOption, ANALYTICS_EVENT_PATH_RE, ANALYTICS_ORGANIZER_EDIT_PATH_RE, CALENDAR_WEEK_START, CALENDAR_WEEKS_SHOWN, CALENDAR_DAYS_PER_WEEK, CALENDAR_REFERENCE_MONDAY, MAX_HOUR, MAX_MINUTE, DATE_PRESET_DAYS, DATE_PRESET_DAYS_FALLBACK, DATE_PRESET_DEFAULT, DATE_PRESET_TODAY, DATE_PRESET_WEEKEND, EXPLORE_PARAM, EXPLORE_URL_FLAG_TRUE, EXPLORE_API_FLAG_TRUE, SORT_DEFAULT, TIME_FIELD_MAX_LENGTH } from './constants';
 import { t, ti } from './i18n';
 
 export function cx(...classes: (string | false | null | undefined)[]): string {
@@ -13,17 +13,22 @@ export function cx(...classes: (string | false | null | undefined)[]): string {
  * groups `/events/:id` under one row instead of one per event id. */
 export function maskAnalyticsUrl(url: string): string {
   const pathname = url.split(/[?#]/)[0];
-  return pathname.replace(ANALYTICS_EVENT_PATH_RE, '/events/[id]');
+  return pathname
+    .replace(ANALYTICS_EVENT_PATH_RE, '/events/[id]')
+    .replace(ANALYTICS_ORGANIZER_EDIT_PATH_RE, '/organizer/events/[id]/edit');
 }
 
-/** Defense-in-depth render guard: only allow http(s) URLs into href/src attributes.
- * The backend already drops non-http(s) schemes at ingest time (safe_external_url),
- * but this protects against any other path that might surface a raw URL. */
-export function safeUrl(url: string | null | undefined): string | null {
+/** Defense-in-depth render guard: only allow the given URL schemes (http(s) by
+ * default) into href/src attributes. The backend already drops non-http(s)
+ * schemes at ingest time (safe_external_url) for scraped event data, but this
+ * protects against any other path that might surface a raw URL. Callers with
+ * a legitimately wider scheme set (e.g. LegalPage's first-party `mailto:`
+ * links) can pass their own allowlist rather than widening the default. */
+export function safeUrl(url: string | null | undefined, allowedSchemes: ReadonlySet<string> = SAFE_URL_SCHEMES): string | null {
   if (!url) return null;
   try {
     const proto = new URL(url).protocol.replace(/:$/, '');
-    return SAFE_URL_SCHEMES.has(proto) ? url : null;
+    return allowedSchemes.has(proto) ? url : null;
   } catch {
     return null;
   }
@@ -71,7 +76,7 @@ export function formatHourMinute(iso: string, locale: string): string {
 }
 
 export function trackExternalClick(eventId: number): void {
-  api.post('/feedback', { event_id: eventId, signal: 'click_external' }).catch(() => undefined);
+  api.post(API.feedback, { event_id: eventId, signal: 'click_external' }).catch(() => undefined);
 }
 
 /** Copy text to the clipboard. Returns true on success, false if the
@@ -90,9 +95,15 @@ export function categoryGradient(categories: string[]): string {
   return CATEGORY_GRADIENTS[key] ?? FALLBACK_GRADIENT;
 }
 
+/** Displayable currency symbol: the app's EUR glyph for the default currency,
+ * else the raw currency code (or '' when absent). */
+export function currencySymbol(currency: string | null): string {
+  return currency === DEFAULT_CURRENCY ? EUR_SYMBOL : currency ?? '';
+}
+
 export function formatPrice(min: number | null, max: number | null, currency: string | null, locale: string, hasFreeTier = false): string | null {
   if (min === null && max === null) return null;
-  const sym = currency === DEFAULT_CURRENCY ? EUR_SYMBOL : currency ?? '';
+  const sym = currencySymbol(currency);
   if (min === 0) {
     // Base admission is free; a positive max means an optional paid tier exists
     // (e.g. an open-mic's support ticket) — surface it rather than showing a
@@ -123,16 +134,25 @@ export function buildMapsUrl(
   lng: number | null,
   address: string | null,
 ): string | null {
-  if (lat && lng) return `${GOOGLE_MAPS_SEARCH_URL}${lat},${lng}`;
+  if (lat !== null && lng !== null) return `${GOOGLE_MAPS_SEARCH_URL}${lat},${lng}`;
   if (address) return `${GOOGLE_MAPS_SEARCH_URL}${encodeURIComponent(address)}`;
   return null;
 }
 
-/** Builds (and caches at module scope, keyed by a joined-options cache key) an
- * Intl.DateTimeFormat — same rationale as hourMinuteFormatter above. */
+/** Builds (and caches at module scope, keyed by locale + a literal format-shape
+ * key) an Intl.DateTimeFormat — same rationale as hourMinuteFormatter above.
+ * `shapeKey` must uniquely identify `options`; call sites pass one of the
+ * DTF_* constants below for both, so the cache key is a cheap string literal
+ * join instead of a fresh JSON.stringify(options) on every call (options
+ * itself is also a hoisted module constant, not a fresh object literal per
+ * call). */
 const DATE_TIME_FORMATTERS = new Map<string, Intl.DateTimeFormat>();
-function dateTimeFormatter(localeCode: string, options: Intl.DateTimeFormatOptions): Intl.DateTimeFormat {
-  const key = `${localeCode}|${JSON.stringify(options)}`;
+function dateTimeFormatter(
+  localeCode: string,
+  shapeKey: string,
+  options: Intl.DateTimeFormatOptions,
+): Intl.DateTimeFormat {
+  const key = `${localeCode}|${shapeKey}`;
   let fmt = DATE_TIME_FORMATTERS.get(key);
   if (!fmt) {
     fmt = new Intl.DateTimeFormat(localeCode, options);
@@ -141,11 +161,19 @@ function dateTimeFormatter(localeCode: string, options: Intl.DateTimeFormatOptio
   return fmt;
 }
 
+const DTF_WEEKDAY_SHORT: Intl.DateTimeFormatOptions = { weekday: 'short' };
+const DTF_DAY_MONTH_SHORT: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short' };
+const DTF_WEEKDAY_LONG: Intl.DateTimeFormatOptions = { weekday: 'long' };
+const DTF_DAY_MONTH_YEAR_LONG: Intl.DateTimeFormatOptions = {
+  day: 'numeric', month: 'long', year: 'numeric',
+};
+const DTF_MONTH_YEAR: Intl.DateTimeFormatOptions = { month: 'long', year: 'numeric' };
+
 export function formatEventTime(iso: string, locale: string): string {
   const localeCode = toLocaleCode(locale);
   const date = new Date(iso);
-  const weekday = dateTimeFormatter(localeCode, { weekday: 'short' }).format(date);
-  const day = dateTimeFormatter(localeCode, { day: 'numeric', month: 'short' }).format(date);
+  const weekday = dateTimeFormatter(localeCode, 'weekday-short', DTF_WEEKDAY_SHORT).format(date);
+  const day = dateTimeFormatter(localeCode, 'day-month-short', DTF_DAY_MONTH_SHORT).format(date);
   const time = hourMinuteFormatter(locale).format(date);
   return `${weekday}, ${day} · ${time}`;
 }
@@ -153,10 +181,169 @@ export function formatEventTime(iso: string, locale: string): string {
 export function formatEventDateTime(iso: string, locale: string): string {
   const localeCode = toLocaleCode(locale);
   const date = new Date(iso);
-  const weekday = dateTimeFormatter(localeCode, { weekday: 'long' }).format(date);
-  const day = dateTimeFormatter(localeCode, { day: 'numeric', month: 'long', year: 'numeric' }).format(date);
+  const weekday = dateTimeFormatter(localeCode, 'weekday-long', DTF_WEEKDAY_LONG).format(date);
+  const day = dateTimeFormatter(localeCode, 'day-month-year-long', DTF_DAY_MONTH_YEAR_LONG).format(date);
   const time = hourMinuteFormatter(locale).format(date);
   return `${weekday}, ${day} · ${time}`;
+}
+
+// ─── Date / number helpers ───────────────────────────────────────────────────
+
+/** Constrains `n` to the inclusive [lo, hi] range. */
+export function clamp(n: number, lo: number, hi: number): number {
+  return Math.min(hi, Math.max(lo, n));
+}
+
+/** Midnight (local time) of `d`'s calendar day. */
+export function startOfDay(d: Date): Date {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
+/** True when both dates fall on the same local calendar day. */
+export function isSameDay(a: Date, b: Date): boolean {
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+}
+
+export function addDays(d: Date, n: number): Date {
+  const r = new Date(d);
+  r.setDate(r.getDate() + n);
+  return r;
+}
+
+/** Shifts by whole months, clamping the day-of-month into the target month so
+ * e.g. Jan 31 + 1 month lands on Feb 28/29 rather than spilling into March. */
+export function addMonths(d: Date, n: number): Date {
+  const r = new Date(d.getFullYear(), d.getMonth() + n, 1);
+  const daysInTarget = new Date(r.getFullYear(), r.getMonth() + 1, 0).getDate();
+  r.setDate(Math.min(d.getDate(), daysInTarget));
+  return r;
+}
+
+// ─── DatePicker ──────────────────────────────────────────────────────────────
+
+export interface CalendarCell {
+  date: Date;
+  day: number;
+  spill: boolean;
+  /** Stable React list key — precomputed here instead of calling the
+   * expensive Date.toISOString() per cell per render. */
+  key: string;
+  /** Same identity string as `date.toDateString()`, precomputed once — used
+   * for both the grid's `data-date` attribute and the focus-restore lookup. */
+  dataDate: string;
+}
+
+/** Returns a fixed CALENDAR_WEEKS_SHOWN × CALENDAR_DAYS_PER_WEEK grid of days for
+ * `month` (0-indexed) of `year`, starting on `weekStart` (0 = Sunday, 1 = Monday),
+ * including leading/trailing days spilling in from adjacent months. */
+export function monthGridDays(year: number, month: number, weekStart: number): CalendarCell[] {
+  const first = new Date(year, month, 1);
+  const startOffset = (first.getDay() - weekStart + CALENDAR_DAYS_PER_WEEK) % CALENDAR_DAYS_PER_WEEK;
+  const gridStart = new Date(year, month, 1 - startOffset);
+  const totalCells = CALENDAR_WEEKS_SHOWN * CALENDAR_DAYS_PER_WEEK;
+  const cells: CalendarCell[] = [];
+  for (let i = 0; i < totalCells; i++) {
+    const d = new Date(gridStart);
+    d.setDate(gridStart.getDate() + i);
+    const dataDate = d.toDateString();
+    cells.push({ date: d, day: d.getDate(), spill: d.getMonth() !== month, key: dataDate, dataDate });
+  }
+  return cells;
+}
+
+const WEEKDAY_HEADER_FORMATTERS = new Map<string, Intl.DateTimeFormat>();
+/** Localized short weekday headers ordered starting at CALENDAR_WEEK_START, e.g.
+ * ['Mo','Tu',...]. Built off CALENDAR_REFERENCE_MONDAY rather than `new Date()`,
+ * so the labels don't depend on when this runs. */
+export function weekdayHeaders(locale: string): string[] {
+  const localeCode = toLocaleCode(locale);
+  let fmt = WEEKDAY_HEADER_FORMATTERS.get(localeCode);
+  if (!fmt) {
+    fmt = new Intl.DateTimeFormat(localeCode, { weekday: 'short' });
+    WEEKDAY_HEADER_FORMATTERS.set(localeCode, fmt);
+  }
+  const [refYear, refMonth, refDay] = CALENDAR_REFERENCE_MONDAY;
+  const reference = new Date(refYear, refMonth, refDay);
+  // Offset off the reference's own weekday rather than a hardcoded index, so
+  // the loop stays correct if CALENDAR_REFERENCE_MONDAY ever moves.
+  const toWeekStart = (CALENDAR_WEEK_START - reference.getDay() + CALENDAR_DAYS_PER_WEEK) % CALENDAR_DAYS_PER_WEEK;
+  const labels: string[] = [];
+  for (let i = 0; i < CALENDAR_DAYS_PER_WEEK; i++) {
+    labels.push(fmt.format(addDays(reference, toWeekStart + i)));
+  }
+  return labels;
+}
+
+export interface PickerDateTime {
+  year: number;
+  month: number; // 0-indexed
+  day: number;
+  hour: number;
+  minute: number;
+}
+
+const PICKER_VALUE_RE = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/;
+
+/** Splits the 'YYYY-MM-DDTHH:mm' wire value (the same format the native
+ * datetime-local input this component replaces used) into components, or
+ * null when empty/malformed/not a real calendar date. */
+export function splitDateTimeValue(value: string): PickerDateTime | null {
+  const m = PICKER_VALUE_RE.exec(value);
+  if (!m) return null;
+  const year = Number(m[1]);
+  const month = Number(m[2]) - 1;
+  const day = Number(m[3]);
+  const hour = Number(m[4]);
+  const minute = Number(m[5]);
+  const date = new Date(year, month, day, hour, minute);
+  if (date.getFullYear() !== year || date.getMonth() !== month || date.getDate() !== day) return null;
+  if (hour > MAX_HOUR || minute > MAX_MINUTE) return null;
+  return { year, month, day, hour, minute };
+}
+
+export function joinDateTimeValue(date: Date, hour: number, minute: number): string {
+  return `${date.getFullYear()}-${padIndex(date.getMonth() + 1)}-${padIndex(date.getDate())}T${padIndex(hour)}:${padIndex(minute)}`;
+}
+
+/** Validates free-typed text against the canonical wire format, returning it
+ * unchanged when valid or null otherwise — kept strict since the popover also
+ * writes this same canonical format back into the field, so there's no
+ * locale-specific format to parse leniently. */
+export function parseTypedDate(text: string): string | null {
+  return splitDateTimeValue(text) ? text : null;
+}
+
+/** Cosmetic-only transform for the picker's text field: the wire format's
+ * literal 'T' separator (`YYYY-MM-DDTHH:mm`, required for `toIsoOrUndefined`'s
+ * `new Date(local)` parse in useOrganizerEventForm.ts) reads as noise to a
+ * non-technical user, so the field displays a space instead. Only the display
+ * layer changes — the committed `value`/`onChange` contract stays 'T'-joined. */
+export function toDisplayDateTime(value: string): string {
+  return value.replace('T', ' ');
+}
+
+/** Inverse of toDisplayDateTime — converts a typed display string back to the
+ * canonical 'T'-joined wire format before it's validated/parsed. */
+export function fromDisplayDateTime(text: string): string {
+  return text.replace(' ', 'T');
+}
+
+/** Localized "Month Year" heading for a calendar grid's header, e.g. "July 2026". */
+export function formatMonthYearLabel(year: number, month: number, locale: string): string {
+  const localeCode = toLocaleCode(locale);
+  const date = new Date(year, month, 1);
+  return dateTimeFormatter(localeCode, 'month-year', DTF_MONTH_YEAR).format(date);
+}
+
+/** Human-readable trigger label for a valid picker value, e.g. "24 Jul, 19:00". */
+export function formatPickerValue(value: string, locale: string): string {
+  const parts = splitDateTimeValue(value);
+  if (!parts) return '';
+  const localeCode = toLocaleCode(locale);
+  const date = new Date(parts.year, parts.month, parts.day, parts.hour, parts.minute);
+  const day = dateTimeFormatter(localeCode, 'day-month-short', DTF_DAY_MONTH_SHORT).format(date);
+  const time = hourMinuteFormatter(locale).format(date);
+  return `${day}, ${time}`;
 }
 
 function formatLongDate(date: Date, locale: string): string {
@@ -182,7 +369,7 @@ export function formatIsoDate(dateStr: string, locale: string): string {
 }
 
 export function padIndex(n: number): string {
-  return String(n).padStart(2, '0');
+  return String(n).padStart(TIME_FIELD_MAX_LENGTH, '0');
 }
 
 export function makeActiveClassMap(styles: Record<string, string>): Record<Signal, string> {
@@ -193,6 +380,20 @@ export function makeActiveClassMap(styles: Record<string, string>): Record<Signa
     result[signal] = cls;
   }
   return result;
+}
+
+/** Last path segment of a URL, decoded, with any query/hash stripped — used to
+ * derive a displayable filename from a stored Cloudinary image URL when no
+ * File object (and thus no original filename) is available, e.g. FileField's
+ * edit-mode prefill. Returns '' on an unparseable URL or an empty path. */
+export function fileNameFromUrl(url: string): string {
+  try {
+    const pathname = new URL(url).pathname;
+    const last = pathname.split('/').filter(Boolean).pop() ?? '';
+    return last ? decodeURIComponent(last) : '';
+  } catch {
+    return '';
+  }
 }
 
 /** True when a popover of `popWidth` left-anchored at `triggerLeft` (viewport-relative
@@ -218,14 +419,16 @@ export const DEFAULT_EXPLORE_FILTERS: ExploreFilters = {
   q: '',
   category: [...CATEGORIES],
   vibe: [...VIBES],
-  datePreset: 'any',
+  datePreset: DATE_PRESET_DEFAULT,
   free: false,
   forYou: false,
-  sort: 'relevance',
+  sort: SORT_DEFAULT,
 };
 
 /** True when `sel` holds every slug in `all` — selections only ever contain
- * valid slugs, so a length match is sufficient (no need to compare content). */
+ * valid slugs, so a length match is sufficient (no need to compare content).
+ * Exported only so utils.test.ts can exercise it directly; every production
+ * call site is within this module. */
 export function isFullSet(sel: string[], all: readonly string[]): boolean {
   return sel.length === all.length;
 }
@@ -238,15 +441,15 @@ function toDateStr(d: Date): string {
  * stateless). Uses local date components, not toISOString(),
  * so the resolved day never shifts across a UTC boundary. */
 export function datePresetRange(preset: DatePreset): { from: string | null; to: string | null } {
-  if (preset === 'any') return { from: null, to: null };
+  if (preset === DATE_PRESET_DEFAULT) return { from: null, to: null };
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  if (preset === 'today') {
+  if (preset === DATE_PRESET_TODAY) {
     const s = toDateStr(today);
     return { from: s, to: s };
   }
-  if (preset === 'weekend') {
+  if (preset === DATE_PRESET_WEEKEND) {
     const day = today.getDay(); // 0 = Sunday .. 6 = Saturday
     const satOffset = day === 6 ? 0 : day === 0 ? -1 : 6 - day;
     const sat = new Date(today);
@@ -255,7 +458,7 @@ export function datePresetRange(preset: DatePreset): { from: string | null; to: 
     sun.setDate(sat.getDate() + 1);
     return { from: toDateStr(sat), to: toDateStr(sun) };
   }
-  const days = preset === '7d' ? 7 : 30;
+  const days = DATE_PRESET_DAYS[preset] ?? DATE_PRESET_DAYS_FALLBACK;
   const end = new Date(today);
   end.setDate(today.getDate() + days);
   return { from: toDateStr(today), to: toDateStr(end) };
@@ -284,49 +487,49 @@ function parseSlugList(raw: string, valid: readonly string[]): string[] {
  * (useSearchParams). Only non-default values are written, so a fresh visit
  * (no params) round-trips to DEFAULT_EXPLORE_FILTERS. */
 export function parseExploreFilters(params: URLSearchParams): ExploreFilters {
-  const rawCategory = params.get('category');
-  const rawVibe = params.get('vibe');
+  const rawCategory = params.get(EXPLORE_PARAM.category);
+  const rawVibe = params.get(EXPLORE_PARAM.vibe);
   return {
-    q: params.get('q') ?? '',
+    q: params.get(EXPLORE_PARAM.q) ?? '',
     category: rawCategory === null ? [...CATEGORIES] : parseSlugList(rawCategory, CATEGORIES),
     vibe: rawVibe === null ? [...VIBES] : parseSlugList(rawVibe, VIBES),
-    datePreset: (params.get('date') as DatePreset | null) ?? 'any',
-    free: params.get('free') === '1',
-    forYou: params.get('for_you') === '1',
-    sort: (params.get('sort') as SortOption | null) ?? 'relevance',
+    datePreset: (params.get(EXPLORE_PARAM.date) as DatePreset | null) ?? DATE_PRESET_DEFAULT,
+    free: params.get(EXPLORE_PARAM.free) === EXPLORE_URL_FLAG_TRUE,
+    forYou: params.get(EXPLORE_PARAM.forYou) === EXPLORE_URL_FLAG_TRUE,
+    sort: (params.get(EXPLORE_PARAM.sort) as SortOption | null) ?? SORT_DEFAULT,
   };
 }
 
 export function exploreFiltersToSearchParams(filters: ExploreFilters): URLSearchParams {
   const params = new URLSearchParams();
-  if (filters.q) params.set('q', filters.q);
-  if (!isFullSet(filters.category, CATEGORIES)) params.set('category', filters.category.join(','));
-  if (!isFullSet(filters.vibe, VIBES)) params.set('vibe', filters.vibe.join(','));
-  if (filters.datePreset !== 'any') params.set('date', filters.datePreset);
-  if (filters.free) params.set('free', '1');
-  if (filters.forYou) params.set('for_you', '1');
-  if (filters.sort !== 'relevance') params.set('sort', filters.sort);
+  if (filters.q) params.set(EXPLORE_PARAM.q, filters.q);
+  if (!isFullSet(filters.category, CATEGORIES)) params.set(EXPLORE_PARAM.category, filters.category.join(','));
+  if (!isFullSet(filters.vibe, VIBES)) params.set(EXPLORE_PARAM.vibe, filters.vibe.join(','));
+  if (filters.datePreset !== DATE_PRESET_DEFAULT) params.set(EXPLORE_PARAM.date, filters.datePreset);
+  if (filters.free) params.set(EXPLORE_PARAM.free, EXPLORE_URL_FLAG_TRUE);
+  if (filters.forYou) params.set(EXPLORE_PARAM.forYou, EXPLORE_URL_FLAG_TRUE);
+  if (filters.sort !== SORT_DEFAULT) params.set(EXPLORE_PARAM.sort, filters.sort);
   return params;
 }
 
 /** Build the GET /explore query string for a given filter set + page offset. */
 export function buildExploreApiQuery(filters: ExploreFilters, offset: number): string {
   const params = new URLSearchParams();
-  if (filters.q) params.set('q', filters.q);
+  if (filters.q) params.set(EXPLORE_PARAM.q, filters.q);
   if (filters.category.length && !isFullSet(filters.category, CATEGORIES)) {
-    params.set('category', filters.category.join(','));
+    params.set(EXPLORE_PARAM.category, filters.category.join(','));
   }
   if (filters.vibe.length && !isFullSet(filters.vibe, VIBES)) {
-    params.set('vibe', filters.vibe.join(','));
+    params.set(EXPLORE_PARAM.vibe, filters.vibe.join(','));
   }
   const { from, to } = datePresetRange(filters.datePreset);
-  if (from) params.set('date_from', from);
-  if (to) params.set('date_to', to);
-  if (filters.free) params.set('free', 'true');
-  params.set('for_you', String(filters.forYou));
-  params.set('sort', filters.sort);
-  params.set('limit', String(BROWSE_PAGE_SIZE));
-  params.set('offset', String(offset));
+  if (from) params.set(EXPLORE_PARAM.dateFrom, from);
+  if (to) params.set(EXPLORE_PARAM.dateTo, to);
+  if (filters.free) params.set(EXPLORE_PARAM.free, EXPLORE_API_FLAG_TRUE);
+  params.set(EXPLORE_PARAM.forYou, String(filters.forYou));
+  params.set(EXPLORE_PARAM.sort, filters.sort);
+  params.set(EXPLORE_PARAM.limit, String(BROWSE_PAGE_SIZE));
+  params.set(EXPLORE_PARAM.offset, String(offset));
   return params.toString();
 }
 
@@ -338,7 +541,7 @@ export function activeFacetCount(filters: ExploreFilters): number {
   let count = 0;
   if (!isFullSet(filters.category, CATEGORIES)) count += 1;
   if (!isFullSet(filters.vibe, VIBES)) count += 1;
-  if (filters.datePreset !== 'any') count += 1;
+  if (filters.datePreset !== DATE_PRESET_DEFAULT) count += 1;
   if (filters.free) count += 1;
   return count;
 }

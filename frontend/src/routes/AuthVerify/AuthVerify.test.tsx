@@ -6,7 +6,7 @@ import { renderWithProviders } from '../../test/utils';
 
 vi.mock('../../lib/auth', () => ({
   getLocale: vi.fn(() => 'en'),
-  setToken: vi.fn(),
+  setSignedInHint: vi.fn(),
 }));
 
 vi.mock('../../api/client', async (importOriginal) => ({
@@ -14,13 +14,15 @@ vi.mock('../../api/client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../api/client')>()),
   api: {
     get: vi.fn(),
+    post: vi.fn(),
   },
 }));
 
 import { api } from '../../api/client';
-import { setToken } from '../../lib/auth';
+import { setSignedInHint } from '../../lib/auth';
 const mockGet = vi.mocked(api.get);
-const mockSetToken = vi.mocked(setToken);
+const mockPost = vi.mocked(api.post);
+const mockSetSignedInHint = vi.mocked(setSignedInHint);
 
 describe('AuthVerify', () => {
   it('shows error when no token in URL', () => {
@@ -29,25 +31,25 @@ describe('AuthVerify', () => {
   });
 
   it('shows verifying state initially when token present', () => {
-    mockGet.mockReturnValue(new Promise(() => undefined));
+    mockPost.mockReturnValue(new Promise(() => undefined));
     renderWithProviders(<AuthVerify />, { route: '/auth/verify?token=abc' });
     expect(screen.getByRole('status')).toBeInTheDocument();
   });
 
-  it('on success: calls setToken and shows success state', async () => {
-    mockGet
-      .mockResolvedValueOnce({ session_token: 'tok123' })
-      .mockResolvedValueOnce({ has_personas: true });
+  it('on success: POSTs the token in the body, calls setSignedInHint, and shows success state', async () => {
+    mockPost.mockResolvedValueOnce(undefined);
+    mockGet.mockResolvedValueOnce({ has_personas: true });
 
     renderWithProviders(<AuthVerify />, { route: '/auth/verify?token=valid' });
 
-    await waitFor(() => expect(mockSetToken).toHaveBeenCalledWith('tok123'));
+    await waitFor(() => expect(mockPost).toHaveBeenCalledWith('/auth/verify', { token: 'valid' }));
+    await waitFor(() => expect(mockSetSignedInHint).toHaveBeenCalled());
     await waitFor(() => expect(screen.getByRole('status')).toBeInTheDocument());
   });
 
   it('strips the token from the address bar before verifying', () => {
     const replaceStateSpy = vi.spyOn(window.history, 'replaceState');
-    mockGet.mockReturnValue(new Promise(() => undefined));
+    mockPost.mockReturnValue(new Promise(() => undefined));
 
     renderWithProviders(<AuthVerify />, { route: '/auth/verify?token=valid' });
 
@@ -57,7 +59,7 @@ describe('AuthVerify', () => {
 
   it('on verify failure: shows error state', async () => {
     const { ApiError: ApiErrorClass } = await import('../../api/client');
-    mockGet.mockRejectedValueOnce(new ApiErrorClass(StatusCodes.UNAUTHORIZED, 'Link expired'));
+    mockPost.mockRejectedValueOnce(new ApiErrorClass(StatusCodes.UNAUTHORIZED, 'Link expired'));
 
     renderWithProviders(<AuthVerify />, { route: '/auth/verify?token=expired' });
 

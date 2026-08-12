@@ -7,12 +7,20 @@ from pydantic import BaseModel, field_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.constants import RATE_LIMIT_AUTHENTICATED_WRITE, VALID_LOCALES
+from app.constants import (
+    ERROR_NO_UPDATE_FIELDS,
+    RATE_LIMIT_AUTHENTICATED_WRITE,
+    VALID_LOCALES,
+)
 from app.db import get_db
 from app.models.models import Persona, User, UserPersona
 from app.rate_limit import limiter
 from app.routers.auth import get_current_user
-from app.routers.utils import compute_preferred_taxonomy, serialize_user
+from app.routers.utils import (
+    compute_preferred_taxonomy,
+    persona_weight_tuple,
+    serialize_user,
+)
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/users/me", tags=["settings"])
@@ -54,7 +62,7 @@ async def _load_persona_data(
         }
         for up, persona in rows
     ]
-    weights = [(up.weight, persona.affinity_vector) for up, persona in rows]
+    weights = [persona_weight_tuple(up, persona) for up, persona in rows]
     return personas, weights
 
 
@@ -89,7 +97,7 @@ async def patch_settings(
     if body.locale is None and body.email_digest_opt_in is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Provide at least one field to update.",
+            detail=ERROR_NO_UPDATE_FIELDS,
         )
 
     if body.locale is not None:

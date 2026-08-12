@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { cx, safeUrl, sanitizeHtml, formatPrice, categoryGradient, formatHourMinute, makeActiveClassMap, trackExternalClick, datePresetRange, parseExploreFilters, exploreFiltersToSearchParams, buildExploreApiQuery, activeFacetCount, isFullSet, shouldFlipPopover, maskAnalyticsUrl, DEFAULT_EXPLORE_FILTERS, type ExploreFilters } from './utils';
-import { FALLBACK_GRADIENT, CATEGORIES } from './constants';
+import { cx, safeUrl, sanitizeHtml, formatPrice, categoryGradient, formatHourMinute, makeActiveClassMap, trackExternalClick, datePresetRange, parseExploreFilters, exploreFiltersToSearchParams, buildExploreApiQuery, activeFacetCount, isFullSet, shouldFlipPopover, maskAnalyticsUrl, DEFAULT_EXPLORE_FILTERS, type ExploreFilters, monthGridDays, weekdayHeaders, splitDateTimeValue, joinDateTimeValue, parseTypedDate, formatPickerValue, formatMonthYearLabel, toDisplayDateTime, fromDisplayDateTime, buildMapsUrl } from './utils';
+import { FALLBACK_GRADIENT, CATEGORIES, GOOGLE_MAPS_SEARCH_URL } from './constants';
 
 vi.mock('./api/client', () => ({
   api: {
@@ -51,6 +51,10 @@ describe('maskAnalyticsUrl', () => {
 
   it('does not mask a non-numeric id segment', () => {
     expect(maskAnalyticsUrl('/events/abc')).toBe('/events/abc');
+  });
+
+  it('masks an organizer edit-form event id', () => {
+    expect(maskAnalyticsUrl('/organizer/events/7/edit')).toBe('/organizer/events/[id]/edit');
   });
 });
 
@@ -425,5 +429,121 @@ describe('shouldFlipPopover', () => {
 
   it('flips one pixel past the boundary', () => {
     expect(shouldFlipPopover(447, 330, 800, 24)).toBe(true);
+  });
+});
+
+describe('monthGridDays', () => {
+  it('produces a 6x7 grid starting on the configured week start', () => {
+    // July 2024 starts on a Monday — with weekStart=1 the grid should start
+    // exactly on 1 Jul with no leading spill.
+    const cells = monthGridDays(2024, 6, 1);
+    expect(cells).toHaveLength(42);
+    expect(cells[0].date.getDate()).toBe(1);
+    expect(cells[0].spill).toBe(false);
+  });
+
+  it('spills leading days from the previous month when the 1st is not the week start', () => {
+    // February 2024 (leap year) starts on a Thursday.
+    const cells = monthGridDays(2024, 1, 1);
+    expect(cells[0].spill).toBe(true);
+    expect(cells[0].date.getMonth()).toBe(0);
+    // 29 Feb 2024 exists (leap year) and is not spill.
+    const leapDay = cells.find((c) => c.date.getMonth() === 1 && c.day === 29);
+    expect(leapDay?.spill).toBe(false);
+  });
+
+  it('spills trailing days into the next month to fill the fixed 42-cell grid', () => {
+    const cells = monthGridDays(2024, 6, 1);
+    const last = cells[cells.length - 1];
+    expect(last.spill).toBe(true);
+  });
+});
+
+describe('weekdayHeaders', () => {
+  it('returns 7 labels starting on Monday', () => {
+    const labels = weekdayHeaders('en');
+    expect(labels).toHaveLength(7);
+  });
+});
+
+describe('splitDateTimeValue / joinDateTimeValue', () => {
+  it('round-trips a canonical value', () => {
+    const parts = splitDateTimeValue('2026-08-01T18:00');
+    expect(parts).toEqual({ year: 2026, month: 7, day: 1, hour: 18, minute: 0 });
+    expect(joinDateTimeValue(new Date(2026, 7, 1), 18, 0)).toBe('2026-08-01T18:00');
+  });
+
+  it('rejects an impossible calendar date', () => {
+    expect(splitDateTimeValue('2026-02-30T10:00')).toBeNull();
+  });
+
+  it('rejects malformed text', () => {
+    expect(splitDateTimeValue('not a date')).toBeNull();
+    expect(splitDateTimeValue('')).toBeNull();
+  });
+});
+
+describe('parseTypedDate', () => {
+  it('accepts a valid canonical value', () => {
+    expect(parseTypedDate('2026-08-01T18:00')).toBe('2026-08-01T18:00');
+  });
+
+  it('rejects a partial or invalid value', () => {
+    expect(parseTypedDate('2026-08-01')).toBeNull();
+    expect(parseTypedDate('2026-08-01T18')).toBeNull();
+  });
+});
+
+describe('formatPickerValue', () => {
+  it('formats a valid value', () => {
+    expect(formatPickerValue('2026-08-01T18:00', 'en')).toBe('1 Aug, 18:00');
+  });
+
+  it('returns an empty string for an empty/invalid value', () => {
+    expect(formatPickerValue('', 'en')).toBe('');
+    expect(formatPickerValue('garbage', 'en')).toBe('');
+  });
+});
+
+describe('formatMonthYearLabel', () => {
+  it('formats a month and year', () => {
+    expect(formatMonthYearLabel(2026, 6, 'en')).toBe('July 2026');
+  });
+});
+
+describe('toDisplayDateTime / fromDisplayDateTime', () => {
+  it('replaces the T separator with a space for display', () => {
+    expect(toDisplayDateTime('2026-08-01T18:00')).toBe('2026-08-01 18:00');
+  });
+
+  it('leaves an empty string unchanged', () => {
+    expect(toDisplayDateTime('')).toBe('');
+  });
+
+  it('round-trips back to the canonical T-joined format', () => {
+    expect(fromDisplayDateTime('2026-08-01 18:00')).toBe('2026-08-01T18:00');
+    expect(fromDisplayDateTime(toDisplayDateTime('2026-08-01T18:00'))).toBe('2026-08-01T18:00');
+  });
+
+  it('leaves malformed text without a space unchanged', () => {
+    expect(fromDisplayDateTime('garbage')).toBe('garbage');
+  });
+});
+
+describe('buildMapsUrl', () => {
+  it('prefers coordinates over address', () => {
+    expect(buildMapsUrl(59.437, 24.7536, 'Vabaduse väljak')).toBe(`${GOOGLE_MAPS_SEARCH_URL}59.437,24.7536`);
+  });
+
+  it('handles equator/meridian coordinates (0,0) instead of falling through to address', () => {
+    expect(buildMapsUrl(0, 0, 'Null Island')).toBe(`${GOOGLE_MAPS_SEARCH_URL}0,0`);
+  });
+
+  it('falls back to the address when coordinates are missing', () => {
+    expect(buildMapsUrl(null, null, 'Vabaduse väljak')).toBe(`${GOOGLE_MAPS_SEARCH_URL}${encodeURIComponent('Vabaduse väljak')}`);
+  });
+
+  it('returns null when neither coordinates nor address are available', () => {
+    expect(buildMapsUrl(null, null, null)).toBeNull();
   });
 });

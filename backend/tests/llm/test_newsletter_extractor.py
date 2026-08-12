@@ -51,7 +51,7 @@ class TestIsValidEvent:
 
 
 @pytest.fixture()
-def mock_db():
+def newsletter_db():
     """Newsletter-specific DB mock: scalar returns a source, get returns an email_obj."""
     source = MagicMock()
     source.id = 99
@@ -91,66 +91,66 @@ _VALID_EVENTS_RESPONSE = {
 
 
 @pytest.mark.asyncio
-async def test_extract_returns_correct_count(mock_db):
+async def test_extract_returns_correct_count(newsletter_db):
     with patch("app.llm.newsletter_extractor.llm_json_or_none", AsyncMock(return_value=(_VALID_EVENTS_RESPONSE, "groq/llama-3.3-70b-versatile"))):
         count = await extract_events_from_email(
-            mock_db, email_id=1, subject="Weekend events", text_body="Some email body"
+            newsletter_db, email_id=1, subject="Weekend events", text_body="Some email body"
         )
     assert count == 2
 
 
 @pytest.mark.asyncio
-async def test_extract_adds_raw_events_to_db(mock_db):
+async def test_extract_adds_raw_events_to_db(newsletter_db):
     with patch("app.llm.newsletter_extractor.llm_json_or_none", AsyncMock(return_value=(_VALID_EVENTS_RESPONSE, "groq/llama-3.3-70b-versatile"))):
         await extract_events_from_email(
-            mock_db, email_id=5, subject="Events", text_body="body"
+            newsletter_db, email_id=5, subject="Events", text_body="body"
         )
-    assert mock_db.add.call_count == 2
+    assert newsletter_db.add.call_count == 2
 
 
 @pytest.mark.asyncio
-async def test_extract_sets_processed_at(mock_db):
-    email_obj = mock_db.get.return_value
+async def test_extract_sets_processed_at(newsletter_db):
+    email_obj = newsletter_db.get.return_value
     with patch("app.llm.newsletter_extractor.llm_json_or_none", AsyncMock(return_value=(_VALID_EVENTS_RESPONSE, "groq/llama-3.3-70b-versatile"))):
         await extract_events_from_email(
-            mock_db, email_id=1, subject="s", text_body="b"
+            newsletter_db, email_id=1, subject="s", text_body="b"
         )
     assert email_obj.processed_at is not None
     assert email_obj.processed_at.tzinfo is not None
 
 
 @pytest.mark.asyncio
-async def test_extract_empty_events_list_returns_zero(mock_db):
+async def test_extract_empty_events_list_returns_zero(newsletter_db):
     with patch("app.llm.newsletter_extractor.llm_json_or_none", AsyncMock(return_value=({"events": []}, "groq/llama-3.3-70b-versatile"))):
         count = await extract_events_from_email(
-            mock_db, email_id=2, subject="s", text_body="b"
+            newsletter_db, email_id=2, subject="s", text_body="b"
         )
     assert count == 0
-    mock_db.add.assert_not_called()
+    newsletter_db.add.assert_not_called()
 
 
 @pytest.mark.asyncio
-async def test_extract_missing_events_key_returns_zero(mock_db):
+async def test_extract_missing_events_key_returns_zero(newsletter_db):
     """LLM returns a dict without the 'events' key — treat as no events."""
     with patch("app.llm.newsletter_extractor.llm_json_or_none", AsyncMock(return_value=({}, "groq/llama-3.3-70b-versatile"))):
         count = await extract_events_from_email(
-            mock_db, email_id=3, subject="s", text_body="b"
+            newsletter_db, email_id=3, subject="s", text_body="b"
         )
     assert count == 0
 
 
 @pytest.mark.asyncio
-async def test_extract_non_list_events_returns_zero(mock_db):
+async def test_extract_non_list_events_returns_zero(newsletter_db):
     """LLM returns 'events' as a string instead of a list."""
     with patch("app.llm.newsletter_extractor.llm_json_or_none", AsyncMock(return_value=({"events": "oops"}, "groq/llama-3.3-70b-versatile"))):
         count = await extract_events_from_email(
-            mock_db, email_id=4, subject="s", text_body="b"
+            newsletter_db, email_id=4, subject="s", text_body="b"
         )
     assert count == 0
 
 
 @pytest.mark.asyncio
-async def test_extract_filters_out_items_without_title(mock_db):
+async def test_extract_filters_out_items_without_title(newsletter_db):
     """Items missing 'title' or with null title are skipped."""
     events = {
         "events": [
@@ -163,57 +163,57 @@ async def test_extract_filters_out_items_without_title(mock_db):
     }
     with patch("app.llm.newsletter_extractor.llm_json_or_none", AsyncMock(return_value=(events, "groq/llama-3.3-70b-versatile"))):
         count = await extract_events_from_email(
-            mock_db, email_id=6, subject="s", text_body="b"
+            newsletter_db, email_id=6, subject="s", text_body="b"
         )
     assert count == 2
 
 
 @pytest.mark.asyncio
-async def test_extract_on_llm_error_returns_zero(mock_db):
+async def test_extract_on_llm_error_returns_zero(newsletter_db):
     """LLM failure (llm_json_or_none → None) — returns 0 and still marks email processed."""
-    email_obj = mock_db.get.return_value
+    email_obj = newsletter_db.get.return_value
     with patch("app.llm.newsletter_extractor.llm_json_or_none", AsyncMock(return_value=None)):
         count = await extract_events_from_email(
-            mock_db, email_id=7, subject="s", text_body="b"
+            newsletter_db, email_id=7, subject="s", text_body="b"
         )
     assert count == 0
     assert email_obj.processed_at is not None
 
 
 @pytest.mark.asyncio
-async def test_extract_on_llm_error_does_not_add_events(mock_db):
+async def test_extract_on_llm_error_does_not_add_events(newsletter_db):
     """On LLM failure, no RawEvent rows are added."""
     with patch("app.llm.newsletter_extractor.llm_json_or_none", AsyncMock(return_value=None)):
-        await extract_events_from_email(mock_db, email_id=8, subject="s", text_body="b")
-    mock_db.add.assert_not_called()
+        await extract_events_from_email(newsletter_db, email_id=8, subject="s", text_body="b")
+    newsletter_db.add.assert_not_called()
 
 
 @pytest.mark.asyncio
-async def test_extract_payload_includes_email_id(mock_db):
+async def test_extract_payload_includes_email_id(newsletter_db):
     """Each RawEvent payload must carry the inbound_email_id for traceability."""
     with patch("app.llm.newsletter_extractor.llm_json_or_none", AsyncMock(return_value=(_VALID_EVENTS_RESPONSE, "groq/llama-3.3-70b-versatile"))):
         await extract_events_from_email(
-            mock_db, email_id=42, subject="s", text_body="b"
+            newsletter_db, email_id=42, subject="s", text_body="b"
         )
-    added_events = [call.args[0] for call in mock_db.add.call_args_list]
+    added_events = [call.args[0] for call in newsletter_db.add.call_args_list]
     for ev in added_events:
         assert ev.payload["inbound_email_id"] == 42
 
 
 @pytest.mark.asyncio
-async def test_extract_external_id_format(mock_db):
+async def test_extract_external_id_format(newsletter_db):
     """external_id must follow 'email-{email_id}-{idx}' pattern."""
     with patch("app.llm.newsletter_extractor.llm_json_or_none", AsyncMock(return_value=(_VALID_EVENTS_RESPONSE, "groq/llama-3.3-70b-versatile"))):
         await extract_events_from_email(
-            mock_db, email_id=10, subject="s", text_body="b"
+            newsletter_db, email_id=10, subject="s", text_body="b"
         )
-    added_events = [call.args[0] for call in mock_db.add.call_args_list]
+    added_events = [call.args[0] for call in newsletter_db.add.call_args_list]
     assert added_events[0].external_id == "email-10-0"
     assert added_events[1].external_id == "email-10-1"
 
 
 @pytest.mark.asyncio
-async def test_extract_subject_and_body_truncated_to_constants(mock_db):
+async def test_extract_subject_and_body_truncated_to_constants(newsletter_db):
     """Oversized subject/body are truncated before reaching LLM."""
     from app.constants import NEWSLETTER_BODY_MAX_LEN, NEWSLETTER_SUBJECT_MAX_LEN
 
@@ -228,7 +228,7 @@ async def test_extract_subject_and_body_truncated_to_constants(mock_db):
 
     with patch("app.llm.newsletter_extractor.llm_json_or_none", capturing_llm_json):
         await extract_events_from_email(
-            mock_db, email_id=11, subject=long_subject, text_body=long_body
+            newsletter_db, email_id=11, subject=long_subject, text_body=long_body
         )
 
     assert len(captured_prompts) == 1
@@ -238,11 +238,11 @@ async def test_extract_subject_and_body_truncated_to_constants(mock_db):
 
 
 @pytest.mark.asyncio
-async def test_extract_email_not_found_does_not_crash(mock_db):
+async def test_extract_email_not_found_does_not_crash(newsletter_db):
     """If db.get returns None for the email, _mark_processed must not raise."""
-    mock_db.get.return_value = None  # email row missing
+    newsletter_db.get.return_value = None  # email row missing
     with patch("app.llm.newsletter_extractor.llm_json_or_none", AsyncMock(return_value=({"events": []}, "groq/llama-3.3-70b-versatile"))):
         count = await extract_events_from_email(
-            mock_db, email_id=99, subject="s", text_body="b"
+            newsletter_db, email_id=99, subject="s", text_body="b"
         )
     assert count == 0

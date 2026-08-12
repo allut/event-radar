@@ -6,7 +6,7 @@ const AKI_URL = 'https://www.aki.ee';
 
 const doc: LegalDoc = {
   title: 'Privacy Policy',
-  lastUpdated: '2026-07-24',
+  lastUpdated: '2026-08-11',
   intro: [
     {
       kind: 'p',
@@ -71,7 +71,7 @@ const doc: LegalDoc = {
         {
           kind: 'p',
           content: [
-            'We use no advertising or tracking cookies. We store a sign-in token and your language choice in your browser’s local storage — strictly necessary for the Service to function. Our usage and performance analytics (Vercel Web Analytics and Speed Insights) are cookieless and aggregated; page URLs are masked before they reach the analytics provider, so no event identifier or sign-in token is ever sent. Because we set no non-essential cookies, no cookie-consent banner is required.',
+            'We use one strictly-necessary cookie: a signed, httpOnly session cookie that keeps you signed in. It carries no advertising or tracking purpose and cannot be read by scripts running on the page. Because it is strictly necessary for the Service to function, no cookie-consent banner is required. Your language choice, and a boolean "you’re signed in" flag that carries no credential, are stored in your browser’s local storage. Our usage and performance analytics (Vercel Web Analytics and Speed Insights) are cookieless and aggregated; page URLs are masked before they reach the analytics provider, so no event identifier or session credential is ever sent.',
           ],
         },
       ],

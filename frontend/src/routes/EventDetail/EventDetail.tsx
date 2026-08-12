@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../../api/client';
@@ -13,12 +14,21 @@ import PageState from '../../components/PageState';
 import Toast from '../../components/Toast';
 import TopBar from '../../components/TopBar';
 import { useFeedback } from '../../hooks/useFeedback';
-import { QUERY_KEYS } from '../../constants';
+import { API, QUERY_KEYS, ROUTES, UI_STATE } from '../../constants';
 import styles from './EventDetail.module.css';
 
 interface EventDetailData extends EventData {
   language: string | null;
 }
+
+const ShareIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
+       strokeLinecap="round" strokeLinejoin="round" aria-hidden focusable="false">
+    <path d="M12 15V3" />
+    <path d="M8 7l4-4 4 4" />
+    <path d="M4 13v6a2 2 0 002 2h12a2 2 0 002-2v-6" />
+  </svg>
+);
 
 export default function EventDetail() {
   const { id } = useParams<{ id: string }>();
@@ -30,7 +40,7 @@ export default function EventDetail() {
 
   const { data, isLoading, isError } = useQuery({
     queryKey: [QUERY_KEYS.event, id, locale],
-    queryFn: () => api.get<EventDetailData>(`/events/${id}?locale=${encodeURIComponent(locale)}`),
+    queryFn: () => api.get<EventDetailData>(`${API.event(id ?? '')}?locale=${encodeURIComponent(locale)}`),
     enabled: Boolean(id),
     retry: false,
   });
@@ -38,6 +48,15 @@ export default function EventDetail() {
   const { activeSignal, pending, sendFeedback } = useFeedback(data?.id ?? 0, {
     initialSignal: data?.my_signal ?? null,
   });
+
+  const sanitizedDescription = useMemo(
+    () => (data?.description ? sanitizeHtml(data.description) : null),
+    [data],
+  );
+  const sanitizedImportantInfo = useMemo(
+    () => (data?.important_info ? sanitizeHtml(data.important_info) : null),
+    [data],
+  );
 
   function handleTicketsClick() {
     if (!data || !authed) return;
@@ -57,20 +76,20 @@ export default function EventDetail() {
       }
     }
     const ok = await copyToClipboard(url);
-    showToast(ok ? 'success' : 'error', t(ok ? 'link_copied' : 'share_failed', locale));
+    showToast(ok ? UI_STATE.success : UI_STATE.error, t(ok ? 'link_copied' : 'share_failed', locale));
   }
 
   if (isLoading) {
-    return <PageState kind="loading" message={t('loading_event', locale)} />;
+    return <PageState kind={UI_STATE.loading} message={t('loading_event', locale)} />;
   }
 
   if (isError || !data) {
     return (
       <PageState
-        kind="error"
+        kind={UI_STATE.error}
         message={t('event_not_found', locale)}
         action={
-          <button className={styles.backBtn} onClick={() => navigate('/')}>
+          <button className={styles.backBtn} onClick={() => navigate(ROUTES.home)}>
             {t('back_to_feed_link', locale)}
           </button>
         }
@@ -85,7 +104,7 @@ export default function EventDetail() {
 
   return (
     <div className={styles.page}>
-      {toast.status !== 'idle' && <Toast status={toast.status} message={toast.message} />}
+      {toast.status !== UI_STATE.idle && <Toast status={toast.status} message={toast.message} />}
       <TopBar
         locale={locale}
         onLocaleChange={handleLocaleChange}
@@ -109,10 +128,6 @@ export default function EventDetail() {
             />
           )}
           {price && <span className={styles.price}>{price}</span>}
-          <button className={styles.shareFab} onClick={handleShare} aria-label={t('share', locale)}>
-            <span className={styles.shareFabIcon} aria-hidden>&#8599;</span>
-            {t('share', locale)}
-          </button>
         </div>
 
         <div className={styles.content}>
@@ -131,6 +146,33 @@ export default function EventDetail() {
 
           <h1 className={styles.title}>{data.title}</h1>
 
+          <div className={styles.actions}>
+            {authed && (
+              <FeedbackButtonRow
+                activeSignal={activeSignal}
+                pending={pending}
+                onPress={sendFeedback}
+                locale={locale}
+                variant="detail"
+              />
+            )}
+            <button className={styles.shareBtn} onClick={handleShare} aria-label={t('share', locale)}>
+              <ShareIcon />
+              <span className={styles.shareLabel}>{t('share', locale)}</span>
+            </button>
+            {ticketUrl && (
+              <a
+                href={ticketUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={styles.ticketsBtn}
+                onClick={handleTicketsClick}
+              >
+                {t('get_tickets', locale)}
+              </a>
+            )}
+          </div>
+
           {data.why_go.length > 0 && (
             <section className={styles.section}>
               <h2 className={styles.eyebrow}>{t('why_go', locale)}</h2>
@@ -143,19 +185,19 @@ export default function EventDetail() {
             </section>
           )}
 
-          {data.description && (
+          {sanitizedDescription && (
             <section className={styles.section}>
               <h2 className={styles.eyebrow}>{t('eyebrow_about', locale)}</h2>
               <hr className={styles.rule} />
-              <div className={styles.description} dangerouslySetInnerHTML={{ __html: sanitizeHtml(data.description) }} />
+              <div className={styles.description} dangerouslySetInnerHTML={{ __html: sanitizedDescription }} />
             </section>
           )}
 
-          {data.important_info && (
+          {sanitizedImportantInfo && (
             <section className={styles.section}>
               <h2 className={styles.eyebrow}>{t('eyebrow_important_info', locale)}</h2>
               <hr className={styles.rule} />
-              <div className={styles.description} dangerouslySetInnerHTML={{ __html: sanitizeHtml(data.important_info) }} />
+              <div className={styles.description} dangerouslySetInnerHTML={{ __html: sanitizedImportantInfo }} />
             </section>
           )}
 
@@ -194,30 +236,6 @@ export default function EventDetail() {
             </section>
           )}
 
-          {(authed || ticketUrl) && (
-            <div className={styles.actions}>
-              {authed && (
-                <FeedbackButtonRow
-                  activeSignal={activeSignal}
-                  pending={pending}
-                  onPress={sendFeedback}
-                  locale={locale}
-                  variant="detail"
-                />
-              )}
-              {ticketUrl && (
-                <a
-                  href={ticketUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={styles.ticketsBtn}
-                  onClick={handleTicketsClick}
-                >
-                  {t('get_tickets', locale)}
-                </a>
-              )}
-            </div>
-          )}
         </div>
       </main>
     </div>

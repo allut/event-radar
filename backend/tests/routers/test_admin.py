@@ -111,7 +111,7 @@ async def test_cleanup_defaults_to_dry_run_and_does_not_commit():
 
     with (
         patch("app.routers.admin.settings") as mock_settings,
-        patch("app.routers.admin.AsyncSessionLocal", return_value=db_ctx),
+        patch("app.routers.utils.AsyncSessionLocal", return_value=db_ctx),
         patch(
             "app.routers.admin.cleanup_stale_data",
             new_callable=AsyncMock,
@@ -139,7 +139,7 @@ async def test_cleanup_dry_run_false_actually_deletes_and_commits():
 
     with (
         patch("app.routers.admin.settings") as mock_settings,
-        patch("app.routers.admin.AsyncSessionLocal", return_value=db_ctx),
+        patch("app.routers.utils.AsyncSessionLocal", return_value=db_ctx),
         patch(
             "app.routers.admin.cleanup_stale_data",
             new_callable=AsyncMock,
@@ -166,7 +166,7 @@ async def test_cleanup_returns_500_on_job_error():
 
     with (
         patch("app.routers.admin.settings") as mock_settings,
-        patch("app.routers.admin.AsyncSessionLocal", return_value=db_ctx),
+        patch("app.routers.utils.AsyncSessionLocal", return_value=db_ctx),
         patch(
             "app.routers.admin.cleanup_stale_data",
             new_callable=AsyncMock,

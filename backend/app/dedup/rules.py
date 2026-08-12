@@ -1,7 +1,7 @@
 """Rule-based deduplication pre-filter for Event Radar.
 
 Stage 1 of the two-stage dedup pipeline:
-  rule-based → (Day 9) LLM tiebreaker on candidate pairs only
+  rule-based → LLM tiebreaker on candidate pairs only
 
 Merge criteria (ALL three must pass):
   1. Title fuzzy match: rapidfuzz token_set_ratio > TITLE_RATIO_THRESHOLD
@@ -21,9 +21,10 @@ from datetime import date, datetime, timedelta
 from rapidfuzz.fuzz import token_set_ratio
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import aliased
+from sqlalchemy.orm import aliased, load_only
 
 from app.constants import (
+    DEDUP_LOOKAHEAD_DAYS,
     DEDUP_LOOKBACK_DAYS,
     DEDUP_UNFILTERED_FALLBACK_MAX_EVENTS,
     EVENT_STATUS_CANCELLED,
@@ -420,16 +421,42 @@ async def candidate_pair_ids_in_window(
 async def load_dedup_candidate_events(
     db: AsyncSession, cutoff: datetime
 ) -> list[Event]:
-    """Non-cancelled events inside the dedup lookback window, ordered by id.
+    """Non-cancelled events inside the dedup lookback/lookahead window, ordered
+    by id.
 
     Shared by ``run_dedup_pass`` and ``llm_tiebreaker.run_dedup_pass_llm`` so
     both passes always cluster the same population.
+
+    Upper-bounded at DEDUP_LOOKAHEAD_DAYS from now — events rows are never
+    deleted, so without this an event scheduled arbitrarily far in the future
+    would be loaded on every pass. ``load_only`` restricts the SELECT to the
+    columns dedup actually reads/writes (fuzzy title/venue matching, the
+    quality-rank tie-break, and dedup_group_id itself) rather than every Event
+    column, including the large description_localized/important_info/
+    price_hint text and JSONB fields this pass never touches.
     """
+    lookahead_cutoff = datetime.now(tz=TALLINN_TZ) + timedelta(days=DEDUP_LOOKAHEAD_DAYS)
     rows = await db.scalars(
         select(Event)
         .where(Event.status != EVENT_STATUS_CANCELLED)
         .where(Event.starts_at >= cutoff)
+        .where(Event.starts_at <= lookahead_cutoff)
         .order_by(Event.id)
+        .options(
+            load_only(
+                Event.id,
+                Event.starts_at,
+                Event.status,
+                Event.title_orig,
+                Event.venue_name,
+                Event.venue_address,
+                Event.lat,
+                Event.lng,
+                Event.price_min,
+                Event.description_orig,
+                Event.dedup_group_id,
+            )
+        )
     )
     return list(rows.all())
 

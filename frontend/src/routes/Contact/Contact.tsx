@@ -1,17 +1,20 @@
 import { useEffect, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../../api/client';
 import { useAuth } from '../../hooks/useAuth';
 import { useLogout } from '../../hooks/useLogout';
 import { useLocaleMutation } from '../../hooks/useLocaleMutation';
 import { useContactSubmit } from '../../hooks/useContactSubmit';
-import { QUERY_KEYS, UI_STATE, CONTACT_TEXTAREA_ROWS } from '../../constants';
+import { useOrganizerAuth } from '../../hooks/useOrganizerAuth';
+import { API, QUERY_KEYS, ROUTES, UI_STATE, CONTACT_TEXTAREA_ROWS } from '../../constants';
 import { t } from '../../i18n';
 import TopBar from '../../components/TopBar';
 import styles from './Contact.module.css';
 
 export default function Contact() {
   const authed = useAuth();
+  const isOrganizer = useOrganizerAuth();
   const handleLogout = useLogout();
   const { locale, handleLocaleChange } = useLocaleMutation();
   const {
@@ -26,7 +29,7 @@ export default function Contact() {
   // already on file; shares the Settings page's /users/me query cache.
   const { data: me } = useQuery({
     queryKey: [QUERY_KEYS.settings],
-    queryFn: () => api.get<{ email: string }>('/users/me'),
+    queryFn: () => api.get<{ email: string }>(API.me),
     enabled: authed,
   });
 
@@ -53,6 +56,11 @@ export default function Contact() {
       <main className={styles.main}>
         <h1 className={styles.title}>{t('contact_title', locale)}</h1>
         <p className={styles.body}>{t('contact_intro', locale)}</p>
+        <p className={styles.organizerHint}>
+          <Link to={isOrganizer ? ROUTES.organizerDashboard : ROUTES.organizerLogin}>
+            {t('organizer_entry_link', locale)}
+          </Link>
+        </p>
 
         {state === UI_STATE.success ? (
           <div className={styles.success} role="status">

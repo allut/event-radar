@@ -13,6 +13,7 @@ from bs4 import BeautifulSoup
 
 from app.constants import (
     DEFAULT_CURRENCY,
+    HTTP_METHOD_POST,
     LOCALIZED_TEXT_MAX_DESC_CHARS,
     LOCALIZED_TEXT_MAX_TITLE_CHARS,
     TALLINN_TZ,
@@ -25,11 +26,14 @@ from app.ingestion.selectors import (
     ECH_SITE_TITLE_SUFFIX,
     ESTONIA_CONCERT_HALL_AJAX_ACTION,
     ESTONIA_CONCERT_HALL_AJAX_PATH,
+    ESTONIA_CONCERT_HALL_DATE_RE,
     ESTONIA_CONCERT_HALL_DATE_SELECTOR,
     ESTONIA_CONCERT_HALL_DESCRIPTION_SELECTOR,
     ESTONIA_CONCERT_HALL_IMAGE_SELECTOR,
+    ESTONIA_CONCERT_HALL_IMAGE_URL_RE,
     ESTONIA_CONCERT_HALL_LOCATION_SELECTOR,
     ESTONIA_CONCERT_HALL_MAX_EVENTS,
+    ESTONIA_CONCERT_HALL_PID_RE,
     ESTONIA_CONCERT_HALL_PILETILEVI_AUTH_URL,
     ESTONIA_CONCERT_HALL_PILETILEVI_CENTER,
     ESTONIA_CONCERT_HALL_PILETILEVI_PARAMS,
@@ -43,11 +47,11 @@ from app.ingestion.selectors import (
     ESTONIA_CONCERT_HALL_VENUES,
     ESTONIA_CONCERT_HALL_VENUE_SELECTOR,
 )
+from app.ingestion.html_utils import attr_str
 from app.ingestion.sources.html_base import (
     HtmlListingAdapter,
     ListingRequest,
     OnceAsync,
-    attr_str,
     full_res_wp_image,
     next_occurrence_year,
     og_title,
@@ -55,9 +59,9 @@ from app.ingestion.sources.html_base import (
 
 log = logging.getLogger(__name__)
 
-_CONCERT_DATE_RE = re.compile(r"(\d{1,2})\.(\d{1,2})")
-_CONCERT_IMAGE_URL_RE = re.compile(r"url\((.*?)\)")
-_CONCERT_PID_RE = re.compile(r"pid=(\d+)")
+_CONCERT_DATE_RE = re.compile(ESTONIA_CONCERT_HALL_DATE_RE)
+_CONCERT_IMAGE_URL_RE = re.compile(ESTONIA_CONCERT_HALL_IMAGE_URL_RE)
+_CONCERT_PID_RE = re.compile(ESTONIA_CONCERT_HALL_PID_RE)
 
 
 def estonia_concert_hall_localized_text(soup: BeautifulSoup) -> tuple[str | None, str | None]:
@@ -162,7 +166,7 @@ class EstoniaConcertHallAdapter(HtmlListingAdapter):
         ajax_url = f"{parts.scheme}://{parts.netloc}{ESTONIA_CONCERT_HALL_AJAX_PATH}"
         return ListingRequest(
             url=ajax_url,
-            method="POST",
+            method=HTTP_METHOD_POST,
             data={
                 "action": ESTONIA_CONCERT_HALL_AJAX_ACTION,
                 "ek_ajax_count[]": str(ESTONIA_CONCERT_HALL_MAX_EVENTS),

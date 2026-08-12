@@ -17,6 +17,7 @@ from app.db import AsyncSessionLocal
 from app.dedup.llm_tiebreaker import run_dedup_pass_llm
 from app.ingestion.registry import ADAPTER_REGISTRY
 from app.models.models import Source
+from app.routers.utils import run_in_session
 
 log = logging.getLogger(__name__)
 
@@ -92,22 +93,21 @@ async def ingest_all_enabled(kind: str | None = None) -> list[dict]:
 async def _run_db_job(
     label: str, func: Callable[..., Awaitable[dict]]
 ) -> dict:
-    """Open a session, run ``func(db)``, commit, and log the summary.
+    """Run ``func(db)`` via the shared ``run_in_session`` runner
+    (routers/utils.py), always committing, and log the summary.
 
-    Rolls back and re-raises on failure. Shared shape for every scheduler job
-    below except ``ingest_source``, whose contract is commit-on-error (the
-    IngestionRun error record must persist).
+    Rollback-and-reraise-on-failure is handled by run_in_session; this adds
+    only the per-label success/failure logging. Shared shape for every
+    scheduler job below except ``ingest_source``, whose contract is
+    commit-on-error (the IngestionRun error record must persist).
     """
-    async with AsyncSessionLocal() as db:
-        try:
-            summary = await func(db)
-            await db.commit()
-            log.info("%s complete: %s", label, summary)
-            return summary
-        except Exception:
-            await db.rollback()
-            log.exception("%s failed", label)
-            raise
+    try:
+        summary = await run_in_session(func, commit=True)
+    except Exception:
+        log.exception("%s failed", label)
+        raise
+    log.info("%s complete: %s", label, summary)
+    return summary
 
 
 async def dedup_pass() -> dict:

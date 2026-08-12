@@ -22,6 +22,7 @@ REJECT_ROW_ZERO = SimpleNamespace(
     fail_ended=0,
     fail_no_title=0,
     fail_coords_bbox=0,
+    fail_unverified_organizer=0,
 )
 
 
@@ -66,6 +67,7 @@ async def test_publish_pending_returns_reject_breakdown(mock_db):
         fail_ended=4,
         fail_no_title=0,
         fail_coords_bbox=0,
+        fail_unverified_organizer=1,
     )
     _configure_execute(mock_db, rowcount=3, reject_row=reject_row)
 
@@ -81,6 +83,7 @@ async def test_publish_pending_returns_reject_breakdown(mock_db):
         "fail_ended": 4,
         "fail_no_title": 0,
         "fail_coords_bbox": 0,
+        "fail_unverified_organizer": 1,
     }
 
 
@@ -120,3 +123,22 @@ async def test_publish_pending_statement_encodes_gate_criteria(mock_db):
     assert "lng" in compiled
     assert str(lat_min) in compiled
     assert str(lng_max) in compiled
+    # Unverified-organizer gate: NULL-safe OR around a NOT IN over unverified
+    # organizer ids (M2 — see CLAUDE.md Organizer Event Submission).
+    assert "submitted_by_organizer_id" in compiled
+    assert "organizers" in compiled
+    assert "verified" in compiled
+
+
+@pytest.mark.asyncio
+async def test_publish_pending_reject_breakdown_includes_unverified_organizer(mock_db):
+    """The diagnostic reject-count SELECT must report the new
+    fail_unverified_organizer reason like every other gate reason."""
+    _configure_execute(mock_db, rowcount=0)
+
+    result = await publish_pending(mock_db)
+
+    assert "fail_unverified_organizer" in result
+    select_stmt = mock_db.execute.call_args_list[1][0][0]
+    compiled = str(select_stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "fail_unverified_organizer" in compiled

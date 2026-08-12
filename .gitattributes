@@ -1,0 +1,5 @@
+# The dev container executes these under Linux; a CRLF checkout (host has
+# core.autocrlf=true) breaks the shebang: bash: $'\r': command not found.
+*.sh              text eol=lf
+.devcontainer/**  text eol=lf
+Dockerfile        text eol=lf

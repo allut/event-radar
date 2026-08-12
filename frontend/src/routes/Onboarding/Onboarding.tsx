@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { api, ApiError } from '../../api/client';
 import { getLocale, setLocale } from '../../lib/auth';
 import { useLogout } from '../../hooks/useLogout';
-import { PERSONAS, PERSONA_MAX_SELECTABLE } from '../../constants';
+import { API, PERSONAS, PERSONA_MAX_SELECTABLE, ROUTES } from '../../constants';
 import { t, ti, personaName, personaVibe } from '../../i18n';
 import PersonaCard from '../../components/PersonaCard';
 import TopBar from '../../components/TopBar';
@@ -40,9 +40,9 @@ export default function Onboarding() {
     setIsLoading(true);
     setError('');
     try {
-      await api.post('/onboarding/persona', { persona_slugs: selected });
+      await api.post(API.onboardingPersona, { persona_slugs: selected });
       setLocale(locale);
-      navigate('/', { replace: true });
+      navigate(ROUTES.home, { replace: true });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : t('generic_error', locale));
       setIsLoading(false);
@@ -57,7 +57,7 @@ export default function Onboarding() {
         locale={locale}
         onLocaleChange={handleLocaleChange}
         onLogout={handleLogout}
-        onBack={() => navigate('/settings')}
+        onBack={() => navigate(ROUTES.settings)}
         showNav={false}
       />
 
@@ -109,6 +109,15 @@ export default function Onboarding() {
           </div>
         </form>
       </main>
+
+      {isLoading && (
+        <div className={styles.overlay} role="status" aria-live="polite">
+          <div className={styles.overlayPanel}>
+            <span className={styles.overlaySpinner} />
+            <p className={styles.overlayMsg}>{t('onboarding_saving_msg', locale)}</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -6,7 +6,7 @@ import { getLocale } from '../../lib/auth';
 import { useLocaleMutation } from '../../hooks/useLocaleMutation';
 import { useLogout } from '../../hooks/useLogout';
 import { useToast } from '../../hooks/useToast';
-import { AUTH_REDIRECT_DELAY_MS, PERSONAS_BY_SLUG, QUERY_KEYS, UI_STATE, TOAST_IDLE, type ToastState } from '../../constants';
+import { API, AUTH_REDIRECT_DELAY_MS, BRAND_GLYPH, PERSONAS_BY_SLUG, QUERY_KEYS, RANK_LABEL_KEYS, ROUTES, UI_STATE, TOAST_IDLE, type ToastState } from '../../constants';
 import { cx } from '../../utils';
 import { t, personaName } from '../../i18n';
 import LocaleSelector from '../../components/LocaleSelector';
@@ -39,18 +39,18 @@ export default function Settings() {
 
   const { data, isLoading, isError } = useQuery({
     queryKey: [QUERY_KEYS.settings],
-    queryFn: () => api.get<SettingsData>('/users/me'),
+    queryFn: () => api.get<SettingsData>(API.me),
   });
 
   const { toast: saveToast, showToast: showSaveToast } = useToast();
   const [logoutToast, setLogoutToast] = useState<ToastState>(TOAST_IDLE);
 
   function showSaved(currentLocale: string) {
-    showSaveToast('success', t('saved', currentLocale));
+    showSaveToast(UI_STATE.success, t('saved', currentLocale));
   }
 
   function showSaveError(err: unknown, currentLocale: string) {
-    showSaveToast('error', err instanceof ApiError ? err.message : t('save_failed', currentLocale));
+    showSaveToast(UI_STATE.error, err instanceof ApiError ? err.message : t('save_failed', currentLocale));
   }
 
   const { locale, handleLocaleChange, isPending: localePending } = useLocaleMutation({
@@ -60,9 +60,9 @@ export default function Settings() {
 
   const digestMutation = useMutation({
     mutationFn: (optIn: boolean) =>
-      api.patch<SettingsData>('/users/me', { email_digest_opt_in: optIn }),
+      api.patch<SettingsData>(API.me, { email_digest_opt_in: optIn }),
     onSuccess: (updated) => {
-      queryClient.setQueryData(['settings'], updated);
+      queryClient.setQueryData([QUERY_KEYS.settings], updated);
       showSaved(locale);
     },
     onError: (err) => showSaveError(err, locale),
@@ -73,7 +73,7 @@ export default function Settings() {
   }
 
   const logoutAllMutation = useMutation({
-    mutationFn: () => api.post<{ detail: string }>('/auth/logout-all'),
+    mutationFn: () => api.post<{ detail: string }>(API.authLogoutAll),
     onSuccess: () => {
       setLogoutToast({ status: UI_STATE.success, message: t('logout_all_success', locale) });
       setTimeout(handleLogout, AUTH_REDIRECT_DELAY_MS);
@@ -92,10 +92,8 @@ export default function Settings() {
   }
 
   function personaEmoji(slug: string): string {
-    return PERSONAS_BY_SLUG.get(slug)?.emoji ?? '◉';
+    return PERSONAS_BY_SLUG.get(slug)?.emoji ?? BRAND_GLYPH;
   }
-
-  const RANK_LABEL_KEYS = ['persona_primary', 'persona_secondary', 'persona_tertiary'] as const;
 
   if (isLoading) {
     return <PageState kind={UI_STATE.loading} message={t('loading', locale)} />;
@@ -152,7 +150,7 @@ export default function Settings() {
           </div>
           <button
             className={styles.repickBtn}
-            onClick={() => navigate('/onboarding')}
+            onClick={() => navigate(ROUTES.onboarding)}
           >
             {t('change_persona', locale)}
           </button>

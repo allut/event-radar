@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from collections.abc import Sequence
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from functools import lru_cache
 
 from sqlalchemy import select
@@ -28,11 +28,13 @@ from app.constants import (
     DAILY_5_LOOKAHEAD_DAYS,
     DAILY_5_MAX_PER_CATEGORY,
     EVENT_STATUS_PUBLISHED,
+    FEED_BUILD_USER_BATCH_SIZE,
     FEEDBACK_DECAY_BASE,
     FEEDBACK_INDIRECT_WEIGHT,
     NEUTRAL_SCORE,
     RECENCY_DECAY_DAYS,
     SCORE_HARD_EXCLUDE,
+    SCORE_INSERT_CHUNK_SIZE,
     SCORE_WEIGHT_AFFINITY,
     SCORE_WEIGHT_FEEDBACK,
     SCORE_WEIGHT_LOCALITY,
@@ -537,23 +539,39 @@ def _select_with_backfill(
 
 
 @dataclass
+class _SharedFeedContext:
+    """Candidate events + derived series keys — identical for every page of
+    users in one build_daily_feeds run. Loaded once, threaded through."""
+
+    event_rows: list[Event]
+    candidate_series_key: dict[int, tuple[str, str]]
+
+
+@dataclass
 class _FeedBuildContext:
     """Everything the per-user scoring loop needs, bulk-loaded up front.
 
     A fixed number of queries independent of user count (the no-N+1 batch rule).
     """
 
-    event_rows: list[Event]
-    candidate_series_key: dict[int, tuple[str, str]]
+    shared: _SharedFeedContext
     users: list[User]
     personas_by_user: dict[int, list[tuple[float, dict]]]
     fb_by_user: dict[int, list[UserEventFeedback]]
     recent_series_by_user: dict[int, set[tuple[str, str]]]
     score_cache: dict[tuple[int, int], float]
 
+    @property
+    def event_rows(self) -> list[Event]:
+        return self.shared.event_rows
+
+    @property
+    def candidate_series_key(self) -> dict[int, tuple[str, str]]:
+        return self.shared.candidate_series_key
+
 
 async def _load_recent_series_by_user(
-    db: AsyncSession, user_ids: list[int], today
+    db: AsyncSession, user_ids: list[int], today: date
 ) -> dict[int, set[tuple[str, str]]]:
     """Series keys each user was shown within the cooldown window.
 
@@ -597,17 +615,12 @@ async def _load_recent_series_by_user(
     return recent_series_by_user
 
 
-async def _load_feed_build_context(
-    db: AsyncSession, now: datetime, today, only_user_ids: list[int] | None = None
-) -> _FeedBuildContext | None:
-    """Bulk-load candidates plus all per-user data. None when there are no users.
-
-    `only_user_ids` scopes the user query to a single user (or a small set) —
-    used by `build_daily_feed_for_user` at onboarding completion. Every
-    downstream lookup already filters by the loaded `user_ids`, so no other
-    change is needed to build a feed for a subset of users."""
+async def _load_candidate_events(db: AsyncSession, now: datetime) -> list[Event]:
+    """Bulk-load published, non-excluded, upcoming-within-lookahead candidate
+    events. Identical query for every page of users within one
+    build_daily_feeds run — see _SharedFeedContext."""
     cutoff = now + timedelta(days=DAILY_5_LOOKAHEAD_DAYS)
-    event_rows = list(
+    return list(
         (
             await db.scalars(
                 select_events_with_classification().where(
@@ -621,6 +634,48 @@ async def _load_feed_build_context(
             )
         ).all()
     )
+
+
+async def _verified_user_ids(db: AsyncSession) -> list[int]:
+    """Verified user ids, paged by build_daily_feeds — see FEED_BUILD_USER_BATCH_SIZE.
+    Filters on email_verified, not on persona/onboarding state — see the reverted
+    _eligible_user_ids attempt in git history for why a persona-based filter is
+    wrong (NEUTRAL_SCORE means a zero-persona user can still get a real feed).
+    email_verified is different: a session token can only be issued from inside
+    verify_magic_link, so an unverified row is provably one nobody has ever been
+    able to log into — no feed or digest is reachable for it, so skipping it here
+    wastes no legitimate value and closes the unverified-signup digest-spam gap."""
+    return list(
+        (await db.scalars(select(User.id).where(User.email_verified.is_(True)))).all()
+    )
+
+
+async def _load_feed_build_context(
+    db: AsyncSession,
+    now: datetime,
+    today: date,
+    only_user_ids: list[int] | None = None,
+    shared: _SharedFeedContext | None = None,
+) -> _FeedBuildContext | None:
+    """Bulk-load candidates plus all per-user data. None when there are no users.
+
+    `only_user_ids` scopes the user query to a single user (or a small set) —
+    used by `build_daily_feed_for_user` at onboarding completion. Every
+    downstream lookup already filters by the loaded `user_ids`, so no other
+    change is needed to build a feed for a subset of users.
+
+    `shared` lets a paged caller (build_daily_feeds) pass in the candidate
+    events + series keys once instead of re-running the identical query per
+    page; when None (the default), it's loaded here exactly as before."""
+    if shared is None:
+        event_rows = await _load_candidate_events(db, now)
+        shared = _SharedFeedContext(
+            event_rows=event_rows,
+            candidate_series_key={
+                e.id: event_series_key(e.title_orig, e.venue_name) for e in event_rows
+            },
+        )
+    event_rows = shared.event_rows
     candidate_event_ids = [e.id for e in event_rows]
 
     users_query = select(User)
@@ -680,11 +735,7 @@ async def _load_feed_build_context(
             score_cache[(ues_row.user_id, ues_row.event_id)] = ues_row.score
 
     return _FeedBuildContext(
-        event_rows=event_rows,
-        # Precompute each candidate's series key once (reused across all users).
-        candidate_series_key={
-            e.id: event_series_key(e.title_orig, e.venue_name) for e in event_rows
-        },
+        shared=shared,
         users=users,
         personas_by_user=personas_by_user,
         fb_by_user=fb_by_user,
@@ -749,15 +800,21 @@ def _score_user_candidates(
 
 
 async def _persist_new_scores(db: AsyncSession, new_score_rows: list[dict]) -> None:
-    """Bulk upsert newly computed (user_id, event_id) scores."""
-    if not new_score_rows:
-        return
-    stmt = pg_insert(UserEventScore).values(new_score_rows)
-    stmt = stmt.on_conflict_do_update(
-        index_elements=["user_id", "event_id"],
-        set_={"score": stmt.excluded.score, "computed_at": stmt.excluded.computed_at},
-    )
-    await db.execute(stmt)
+    """Bulk upsert newly computed (user_id, event_id) scores.
+
+    Chunked at SCORE_INSERT_CHUNK_SIZE rows/statement — new_score_rows
+    accumulates one row per (user x cache-missing candidate event) across the
+    whole build_daily_feeds run, and a single unchunked statement can exceed
+    the Postgres wire protocol's ~32767 bind-parameter cap (4 params/row) once
+    the score cache is mostly cold (see SCORE_INSERT_CHUNK_SIZE)."""
+    for i in range(0, len(new_score_rows), SCORE_INSERT_CHUNK_SIZE):
+        chunk = new_score_rows[i : i + SCORE_INSERT_CHUNK_SIZE]
+        stmt = pg_insert(UserEventScore).values(chunk)
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["user_id", "event_id"],
+            set_={"score": stmt.excluded.score, "computed_at": stmt.excluded.computed_at},
+        )
+        await db.execute(stmt)
 
 
 async def _persist_daily_feeds(db: AsyncSession, daily_feed_rows: list[dict]) -> None:
@@ -768,18 +825,23 @@ async def _persist_daily_feeds(db: AsyncSession, daily_feed_rows: list[dict]) ->
     (`build_daily_feed_for_user`) racing the 06:00 scheduled `build_daily_feeds`
     job for the same user resolves atomically at the DB level instead of
     raising a unique-violation on the `(user_id, feed_date)` constraint that
-    would roll back the whole batch's single commit."""
-    if not daily_feed_rows:
-        return
-    stmt = pg_insert(DailyFeed).values(daily_feed_rows)
-    stmt = stmt.on_conflict_do_update(
-        index_elements=["user_id", "feed_date"],
-        set_={
-            "event_ids": stmt.excluded.event_ids,
-            "built_at": stmt.excluded.built_at,
-        },
-    )
-    await db.execute(stmt)
+    would roll back the whole batch's single commit.
+
+    Chunked at SCORE_INSERT_CHUNK_SIZE rows/statement for the same
+    bind-parameter-limit reason as _persist_new_scores — this table has fewer
+    params/row (3 vs 4) so it survives longer, but the chunking is kept
+    uniform across both callers rather than only guarding the tighter one."""
+    for i in range(0, len(daily_feed_rows), SCORE_INSERT_CHUNK_SIZE):
+        chunk = daily_feed_rows[i : i + SCORE_INSERT_CHUNK_SIZE]
+        stmt = pg_insert(DailyFeed).values(chunk)
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["user_id", "feed_date"],
+            set_={
+                "event_ids": stmt.excluded.event_ids,
+                "built_at": stmt.excluded.built_at,
+            },
+        )
+        await db.execute(stmt)
 
 
 def _build_one_user_feed(
@@ -813,50 +875,77 @@ async def build_daily_feeds(db: AsyncSession) -> dict:
     Build personalized Daily 5 feeds for all active users.
     Runs at 06:00 Europe/Tallinn via APScheduler.
 
-    Bulk-loads all per-user data in a fixed number of queries (independent of
-    user count, see _load_feed_build_context) and caches per-(user, event)
-    scores in `user_event_scores`. The feedback router invalidates cache rows
-    on signal change so reused scores reflect the latest signal-state.
-    Returns summary dict for logging.
+    Pages the full user loop at FEED_BUILD_USER_BATCH_SIZE so memory is
+    bounded by a batch size instead of total registered users — candidate
+    events + series keys are loaded once (_SharedFeedContext) and reused
+    across every page; only personas/feedback/score-cache are reloaded
+    per page. Filtered to verified users only (see _verified_user_ids); no
+    persona-based pre-filtering beyond that — a user with zero personas can
+    still get a non-empty feed and is opted into the digest by default.
+    Caches per-(user, event) scores in `user_event_scores`. The feedback
+    router invalidates cache rows on signal change so reused scores reflect
+    the latest signal-state. Returns summary dict for logging.
     """
     now = datetime.now(TALLINN_TZ)
     today = now.date()
 
-    build_ctx = await _load_feed_build_context(db, now, today)
-    if build_ctx is None:
-        return {"built": 0, "empty": 0, "total_users": 0, "candidate_events": 0}
+    user_ids = await _verified_user_ids(db)
+    if not user_ids:
+        return {
+            "built": 0,
+            "empty": 0,
+            "total_users": 0,
+            "candidate_events": 0,
+            "scores_written": 0,
+            "scores_reused": 0,
+        }
 
-    built = 0
-    empty = 0
-    new_score_rows: list[dict] = []
-    daily_feed_rows: list[dict] = []
-    scores_reused = 0
+    event_rows = await _load_candidate_events(db, now)
+    shared = _SharedFeedContext(
+        event_rows=event_rows,
+        candidate_series_key={
+            e.id: event_series_key(e.title_orig, e.venue_name) for e in event_rows
+        },
+    )
 
-    for user in build_ctx.users:
-        event_ids, reused = _build_one_user_feed(user, build_ctx, new_score_rows, now)
-        scores_reused += reused
-        daily_feed_rows.append(
-            {
-                "user_id": user.id,
-                "feed_date": today,
-                "event_ids": event_ids,
-                "built_at": now,
-            }
+    built = empty = scores_reused = scores_written = total_users = 0
+
+    for i in range(0, len(user_ids), FEED_BUILD_USER_BATCH_SIZE):
+        page_ids = user_ids[i : i + FEED_BUILD_USER_BATCH_SIZE]
+        build_ctx = await _load_feed_build_context(
+            db, now, today, only_user_ids=page_ids, shared=shared
         )
-        if event_ids:
-            built += 1
-        else:
-            empty += 1
+        if build_ctx is None:
+            continue
+        new_score_rows: list[dict] = []
+        daily_feed_rows: list[dict] = []
+        for user in build_ctx.users:
+            event_ids, reused = _build_one_user_feed(user, build_ctx, new_score_rows, now)
+            scores_reused += reused
+            daily_feed_rows.append(
+                {
+                    "user_id": user.id,
+                    "feed_date": today,
+                    "event_ids": event_ids,
+                    "built_at": now,
+                }
+            )
+            if event_ids:
+                built += 1
+            else:
+                empty += 1
+        await _persist_new_scores(db, new_score_rows)
+        await _persist_daily_feeds(db, daily_feed_rows)
+        await db.commit()
+        total_users += len(build_ctx.users)
+        scores_written += len(new_score_rows)
 
-    await _persist_new_scores(db, new_score_rows)
-    await _persist_daily_feeds(db, daily_feed_rows)
-    await db.commit()
     return {
         "built": built,
         "empty": empty,
-        "total_users": len(build_ctx.users),
-        "candidate_events": len(build_ctx.event_rows),
-        "scores_written": len(new_score_rows),
+        "total_users": total_users,
+        "candidate_events": len(event_rows),
+        "scores_written": scores_written,
         "scores_reused": scores_reused,
     }
 

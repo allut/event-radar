@@ -1,14 +1,19 @@
 import { Fragment, useEffect, useState } from 'react';
 import { t, ti } from '../../i18n';
+import { safeUrl } from '../../utils';
 import { useAuth } from '../../hooks/useAuth';
 import { useLogout } from '../../hooks/useLogout';
 import { useLocaleMutation } from '../../hooks/useLocaleMutation';
 import { LEGAL_LOADERS, type LegalDocId } from '../../content/legal';
 import type { LegalBlock, LegalDoc, LegalInline } from '../../content/legal/types';
-import { LOCALES } from '../../constants';
+import { LOCALE_EN, MAILTO_SCHEME, SAFE_URL_SCHEMES, UI_STATE } from '../../constants';
 import TopBar from '../TopBar';
 import PageState from '../PageState';
 import styles from './LegalPage.module.css';
+
+// Legal content also links out via mailto: (the contact address) alongside
+// ordinary https: links — both are first-party authored, not user data.
+const LEGAL_LINK_SCHEMES = new Set([...SAFE_URL_SCHEMES, MAILTO_SCHEME]);
 
 interface LegalPageProps {
   docId: LegalDocId;
@@ -17,7 +22,7 @@ interface LegalPageProps {
 }
 
 /** Fallback locale for legal chunks (matches t()'s fallback in i18n.ts). */
-const FALLBACK_LOCALE = LOCALES[0].code;
+const FALLBACK_LOCALE = LOCALE_EN;
 
 /** Flatten an inline run to plain text, for building stable React keys off the
  * authored content (the codebase keys lists on their content, not array index —
@@ -30,15 +35,16 @@ function inlineText(content: LegalInline[]): string {
  * data (never raw HTML), so no sanitization is needed for this first-party
  * authored prose. */
 function renderInline(content: LegalInline[]): React.ReactNode[] {
-  return content.map((part) =>
-    typeof part === 'string' ? (
-      <Fragment key={`t:${part}`}>{part}</Fragment>
-    ) : (
-      <a key={`a:${part.href}`} className={styles.link} href={part.href} rel="noopener noreferrer">
+  return content.map((part) => {
+    if (typeof part === 'string') return <Fragment key={`t:${part}`}>{part}</Fragment>;
+    const href = safeUrl(part.href, LEGAL_LINK_SCHEMES);
+    if (!href) return <Fragment key={`a:${part.href}`}>{part.text}</Fragment>;
+    return (
+      <a key={`a:${part.href}`} className={styles.link} href={href} rel="noopener noreferrer">
         {part.text}
       </a>
-    ),
-  );
+    );
+  });
 }
 
 function renderBlock(block: LegalBlock): React.ReactNode {
@@ -117,9 +123,9 @@ export default function LegalPage({ docId, titleKey }: LegalPageProps) {
 
       <main className={styles.main}>
         {failed ? (
-          <PageState kind="error" message={t('generic_error', locale)} />
+          <PageState kind={UI_STATE.error} message={t('generic_error', locale)} />
         ) : doc === null ? (
-          <PageState kind="loading" message={t(titleKey, locale)} />
+          <PageState kind={UI_STATE.loading} message={t(titleKey, locale)} />
         ) : (
           <>
             <h1 className={styles.title}>{doc.title}</h1>

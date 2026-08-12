@@ -35,9 +35,9 @@ from app.ingestion.selectors import (
     KUMU_VENUE_LNG,
     KUMU_VENUE_NAME,
 )
+from app.ingestion.html_utils import attr_str
 from app.ingestion.sources.html_base import (
     HtmlListingAdapter,
-    attr_str,
     first_image_url,
     full_res_wp_image,
     og_title,

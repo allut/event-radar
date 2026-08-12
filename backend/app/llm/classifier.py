@@ -79,14 +79,15 @@ def _price_context(event: Event) -> str:
     return price_context_digest(event.description_orig, event.important_info)
 
 
-def _build_classify_prompt(event: Event) -> str:
+def _build_classify_prompt(event: Event, price_context: str | None = None) -> str:
     desc = (html_to_text(event.description_orig) or "").strip()
     if len(desc) > LLM_MAX_PROMPT_CHARS:
         desc = desc[:LLM_MAX_PROMPT_CHARS]
     price_hint = (event.price_hint or "").strip()[:PRICE_HINT_MAX_CHARS]
     important_info = strip_fee_amounts(html_to_text(event.important_info))
     important_info = (important_info or "").strip()[:IMPORTANT_INFO_MAX_CHARS]
-    price_context = _price_context(event)
+    if price_context is None:
+        price_context = _price_context(event)
     return LLM_CLASSIFY_PROMPT_TEMPLATE.format(
         title=event.title_orig,
         venue=event.venue_name or LLM_CLASSIFY_VENUE_FALLBACK,
@@ -179,7 +180,9 @@ def _parse_price(value: Any) -> float | None:
     return price if price is not None and price >= 0 else None
 
 
-def _validate_llm_prices(parsed: dict[str, Any], event: Event) -> None:
+def _validate_llm_prices(
+    parsed: dict[str, Any], event: Event, price_context: str | None = None
+) -> None:
     """Null out an LLM-reported price_min/price_max not backed by a literal amount
     in the source text. Mutates ``parsed`` in place.
 
@@ -198,7 +201,9 @@ def _validate_llm_prices(parsed: dict[str, Any], event: Event) -> None:
     if currency_val is not None and currency_val.upper() != DEFAULT_CURRENCY:
         return
 
-    text = f"{event.price_hint or ''}\n{_price_context(event)}"
+    if price_context is None:
+        price_context = _price_context(event)
+    text = f"{event.price_hint or ''}\n{price_context}"
     amounts = eur_amounts_from_text(strip_fee_amounts(text))
     is_free_signaled = any(kw in text.lower() for kw in FREE_TIER_KEYWORDS) or 0.0 in amounts
 
@@ -349,8 +354,9 @@ async def classify_event(
         event.status = EVENT_STATUS_CLASSIFIED
         return True
 
+    price_context = _price_context(event)
     if prompt is None:
-        prompt = _build_classify_prompt(event)
+        prompt = _build_classify_prompt(event, price_context=price_context)
     response = await llm_json_or_none(
         LLM_TASK_CLASSIFY,
         prompt,
@@ -369,7 +375,7 @@ async def classify_event(
     except Exception as exc:  # malformed LLM output shape
         log.warning("classify parse failed for event_id=%d: %s", event.id, exc)
         return False
-    _validate_llm_prices(parsed, event)
+    _validate_llm_prices(parsed, event, price_context=price_context)
 
     if prefetched:
         existing = existing_classification

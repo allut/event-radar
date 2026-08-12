@@ -17,6 +17,20 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "postgresql+asyncpg://localhost/eventradar"
     SECRET_KEY: str  # required — no default; app fails at startup if unset
     APP_ENV: str = APP_ENV_DEVELOPMENT
+    # Second, explicit opt-in required (alongside APP_ENV == development) before
+    # require_configured_secret() fails open on an unset secret. A dev-shaped
+    # APP_ENV alone must never be sufficient to unprotect /admin/*, the inbound
+    # webhook, or /internal/tick — see routers/utils.py::require_configured_secret.
+    ALLOW_INSECURE_DEV: bool = False
+
+    # Development-only kill switch for the embedded APScheduler
+    # (app/main.py::_start_scheduler). The schedule drives live HTTP scrapes of
+    # third-party sites, real LLM spend, and real digest email on a timer — the
+    # dev container sets this false (.devcontainer/docker-compose.yml) so
+    # `uvicorn --reload` left running overnight can't arm all of it. Ignored
+    # unless APP_ENV == development, so a stray env var can never stop the
+    # pipeline in production. Manual POST /admin/* triggers are unaffected.
+    ENABLE_SCHEDULER: bool = True
 
     FIENTA_BASE_URL: str = "https://fienta.com/api/v1/public/events"
     KULTUURIKATEL_URL: str = "https://kultuurikatel.ee/en/events/"
@@ -126,6 +140,13 @@ class Settings(BaseSettings):
     MAGIC_LINK_TTL_MINUTES: int = _MAGIC_LINK_TTL_DEFAULT
     SESSION_TTL_DAYS: int = _SESSION_TTL_DEFAULT
 
+    # Cloudinary — organizer event-image upload (POST /organizer/events/image). Signed
+    # server-side upload only; the API secret must never reach the SPA. Empty
+    # CLOUD_NAME = feature disabled (log-only/501, dev without keys still runs).
+    CLOUDINARY_CLOUD_NAME: str = ""
+    CLOUDINARY_API_KEY: str = ""
+    CLOUDINARY_API_SECRET: str = ""
+
     # Webhooks — Svix signing secret ("whsec_...") shown on the webhook's page in the
     # Resend dashboard. Verifies the svix-id/svix-timestamp/svix-signature headers
     # over the raw request body; do NOT pass it as a URL query param.
@@ -138,6 +159,9 @@ class Settings(BaseSettings):
 
     # CORS — pydantic-settings parses a JSON array from the env var (e.g. '["https://eventradar.ee"]')
     # In Render: set CORS_ORIGINS to your Vercel/CF Pages URL before deploying.
+    # Dual role: this set also seeds CsrfOriginCheckMiddleware's trusted-origin
+    # allowlist (app/main.py, CORS_ORIGINS ∪ {FRONTEND_URL}) — widening it for CORS
+    # also widens which Origins are trusted for the CSRF check.
     CORS_ORIGINS: list[str] = ["http://localhost:5173", "http://localhost:4173"]
 
     # Logging

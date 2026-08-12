@@ -17,7 +17,11 @@ from app.constants import (
     HTTP_TIMEOUT_SECONDS,
     LOCALIZED_TEXT_FIENTA_LOCALES,
 )
-from app.ingestion.selectors import FIENTA_DESCRIPTION_SELECTOR
+from app.ingestion.selectors import (
+    FIENTA_CITY_FROM_ADDRESS_RE,
+    FIENTA_DESCRIPTION_SELECTOR,
+    FIENTA_POSTAL_CODE_RE,
+)
 from app.ingestion.adapter import (
     NormalizedEvent,
     SourceAdapter,
@@ -26,9 +30,10 @@ from app.ingestion.adapter import (
 )
 from app.ingestion.http_client import AsyncRateLimiter, host_guard_hook, http_get
 from app.ingestion.jsonld import (
-    extract_jsonld_event_location,
-    extract_jsonld_event_offers,
     extract_jsonld_event_text,
+    location_from_jsonld_items,
+    offers_from_jsonld_items,
+    parse_jsonld_event_items,
 )
 from app.ingestion.locale_urls import (
     locale_from_html_lang,
@@ -41,11 +46,8 @@ from app.ingestion.sanitize import sanitize_html
 log = logging.getLogger(__name__)
 
 
-# Regex to extract the city token from Fienta-style addresses:
-# "<street>, <postal code> <City>, <county>" — city sits after a postal code.
-# Estonian codes are 5 digits; foreign codes (LV: 4, LT: 5) also covered by 3-6.
 # \w with UNICODE matches any Unicode letter (covers Estonian, Latvian, Lithuanian diacritics).
-_CITY_FROM_ADDRESS_RE = re.compile(r"\b\d{3,6}\s+(\w[\w\-]+)", re.UNICODE)
+_CITY_FROM_ADDRESS_RE = re.compile(FIENTA_CITY_FROM_ADDRESS_RE, re.UNICODE)
 
 
 def address_city(address: str) -> str | None:
@@ -56,8 +58,9 @@ def address_city(address: str) -> str | None:
 
 def _parse_detail_fields(soup: BeautifulSoup) -> dict[str, Any]:
     """Parse a detail page's JSON-LD location + offers into the _detail dict."""
-    loc = extract_jsonld_event_location(soup)
-    price_min, price_max, currency, has_free_tier = extract_jsonld_event_offers(soup)
+    items = parse_jsonld_event_items(soup)
+    loc = location_from_jsonld_items(items)
+    price_min, price_max, currency, has_free_tier = offers_from_jsonld_items(items)
     return {
         "venue_name": loc.get("venue_name") if loc else None,
         "venue_address": loc.get("venue_address") if loc else None,
@@ -104,8 +107,7 @@ def is_target_city(address: str | None) -> bool:
     return city == FIENTA_CITY_FILTER
 
 
-# Matches a 5-digit postal code (Estonian format) anywhere in an address string.
-_POSTAL_CODE_RE = re.compile(r"\b\d{5}\b")
+_POSTAL_CODE_RE = re.compile(FIENTA_POSTAL_CODE_RE)
 
 
 def _has_postal_code(address: str | None) -> bool:

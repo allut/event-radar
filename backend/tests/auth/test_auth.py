@@ -4,6 +4,7 @@ Uses AsyncMock to stub DB and email so no real DB is needed.
 """
 import http
 import hashlib
+from collections import namedtuple
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -21,6 +22,7 @@ from app.auth.tokens import (
     verify_session_token,
     verify_unsubscribe_token,
 )
+from tests.conftest import assert_hardened_cookie
 
 
 # ---------------------------------------------------------------------------
@@ -200,33 +202,76 @@ def _mock_execute_returning(row):
     return execute_mock
 
 
+# Mirrors the column order of verify_magic_link's
+# `.returning(User.id, User.email, User.locale, User.session_token_version)` —
+# a real SQLAlchemy Row supports attribute access; a plain tuple does not.
+_UserRow = namedtuple("_UserRow", ["id", "email", "locale", "session_token_version"])
+
+
+def _mock_execute_returning_sequence(rows: list):
+    """Return an AsyncMock whose successive calls' .fetchone() return each
+    row in `rows`, in order — for functions that call db.execute() more
+    than once (e.g. verify_magic_link's link-consume then user-verify)."""
+    results = []
+    for row in rows:
+        result = MagicMock()
+        result.fetchone.return_value = row
+        results.append(result)
+    return AsyncMock(side_effect=results)
+
+
 class TestVerifyMagicLink:
     @pytest.mark.asyncio
-    async def test_valid_token_returns_session(self, mock_db, make_request):
-        from app.routers.auth import verify_magic_link
+    async def test_valid_token_sets_session_cookie(self, mock_db, make_request):
+        from fastapi import Response
+        from app.routers.auth import VerifyTokenBody, verify_magic_link
 
         token, _, _ = generate_magic_token(3)
 
-        # Atomic UPDATE returns a row (success)
-        mock_db.execute = _mock_execute_returning((3,))
+        # Atomic UPDATEs: first the magic-link consume, then the user
+        # email_verified update — both return a row (success).
+        mock_db.execute = _mock_execute_returning_sequence(
+            [(3,), _UserRow(3, "user@example.com", "en", 1)]
+        )
 
-        user = MagicMock()
-        user.id = 3
-        user.email = "user@example.com"
-        user.locale = "en"
-        user.session_token_version = 1
-        mock_db.get.return_value = user
+        response = Response()
+        result = await verify_magic_link(
+            make_request(), VerifyTokenBody(token=token), response, mock_db
+        )
 
-        result = await verify_magic_link(make_request(), token, mock_db)
-
-        assert "session_token" in result
+        assert "session_token" not in result
         assert result["user"]["id"] == 3
-        assert verify_session_token(result["session_token"]) == (3, 1)
+
+        set_cookie = response.headers["set-cookie"]
+        assert_hardened_cookie(set_cookie, name="session", path="/api")
+        cookie_value = set_cookie.split("session=", 1)[1].split(";", 1)[0]
+        assert verify_session_token(cookie_value) == (3, 1)
+
+    @pytest.mark.asyncio
+    async def test_valid_token_marks_email_verified(self, mock_db, make_request):
+        from fastapi import Response
+        from app.routers.auth import VerifyTokenBody, verify_magic_link
+
+        token, _, _ = generate_magic_token(3)
+
+        mock_db.execute = _mock_execute_returning_sequence(
+            [(3,), _UserRow(3, "user@example.com", "en", 1)]
+        )
+
+        await verify_magic_link(
+            make_request(), VerifyTokenBody(token=token), Response(), mock_db
+        )
+
+        # Second db.execute call is the User email_verified UPDATE.
+        second_call_stmt = mock_db.execute.call_args_list[1].args[0]
+        compiled = second_call_stmt.compile(compile_kwargs={"literal_binds": True})
+        assert "email_verified" in str(compiled)
+        assert "true" in str(compiled).lower()
 
     @pytest.mark.asyncio
     async def test_used_or_expired_link_raises_400(self, mock_db, make_request):
-        from fastapi import HTTPException
-        from app.routers.auth import verify_magic_link
+        from fastapi import HTTPException, Response
+        from app.routers.auth import VerifyTokenBody, verify_magic_link
 
         token, _, _ = generate_magic_token(3)
 
@@ -234,22 +279,29 @@ class TestVerifyMagicLink:
         mock_db.execute = _mock_execute_returning(None)
 
         with pytest.raises(HTTPException) as exc_info:
-            await verify_magic_link(make_request(), token, mock_db)
+            await verify_magic_link(
+                make_request(), VerifyTokenBody(token=token), Response(), mock_db
+            )
         assert exc_info.value.status_code == http.HTTPStatus.BAD_REQUEST
 
     @pytest.mark.asyncio
     async def test_bad_signature_raises_400(self, mock_db, make_request):
-        from fastapi import HTTPException
-        from app.routers.auth import verify_magic_link
+        from fastapi import HTTPException, Response
+        from app.routers.auth import VerifyTokenBody, verify_magic_link
 
         with pytest.raises(HTTPException) as exc_info:
-            await verify_magic_link(make_request(), "not-a-valid-token", mock_db)
+            await verify_magic_link(
+                make_request(),
+                VerifyTokenBody(token="not-a-valid-token"),
+                Response(),
+                mock_db,
+            )
         assert exc_info.value.status_code == http.HTTPStatus.BAD_REQUEST
 
 
 class TestGetCurrentUser:
     @pytest.mark.asyncio
-    async def test_valid_session_token_returns_user(self, mock_db):
+    async def test_valid_session_cookie_returns_user(self, mock_db):
         from app.routers.auth import get_current_user
 
         user = MagicMock()
@@ -258,19 +310,16 @@ class TestGetCurrentUser:
         mock_db.get.return_value = user
 
         session_token = generate_session_token(7, 1)
-        result = await get_current_user(
-            authorization=f"Bearer {session_token}",
-            db=mock_db,
-        )
+        result = await get_current_user(session=session_token, db=mock_db)
         assert result.id == 7
 
     @pytest.mark.asyncio
-    async def test_missing_header_raises_401(self, mock_db):
+    async def test_missing_cookie_raises_401(self, mock_db):
         from fastapi import HTTPException
         from app.routers.auth import get_current_user
 
         with pytest.raises(HTTPException) as exc_info:
-            await get_current_user(authorization=None, db=mock_db)
+            await get_current_user(session=None, db=mock_db)
         assert exc_info.value.status_code == http.HTTPStatus.UNAUTHORIZED
 
     @pytest.mark.asyncio
@@ -279,7 +328,7 @@ class TestGetCurrentUser:
         from app.routers.auth import get_current_user
 
         with pytest.raises(HTTPException) as exc_info:
-            await get_current_user(authorization="Bearer garbage", db=mock_db)
+            await get_current_user(session="garbage", db=mock_db)
         assert exc_info.value.status_code == http.HTTPStatus.UNAUTHORIZED
 
     @pytest.mark.asyncio
@@ -297,16 +346,42 @@ class TestGetCurrentUser:
 
         session_token = generate_session_token(7, 1)
         with pytest.raises(HTTPException) as exc_info:
-            await get_current_user(
-                authorization=f"Bearer {session_token}",
-                db=mock_db,
-            )
+            await get_current_user(session=session_token, db=mock_db)
         assert exc_info.value.status_code == http.HTTPStatus.UNAUTHORIZED
+
+
+class TestLogout:
+    @pytest.mark.asyncio
+    async def test_expires_session_cookie_without_bumping_version(
+        self, mock_db, make_request
+    ):
+        from fastapi import Response
+        from app.routers.auth import logout
+
+        user = MagicMock()
+        user.id = 7
+        user.session_token_version = 1
+
+        response = Response()
+        result = await logout(
+            request=make_request(method="POST", path="/auth/logout"),
+            response=response,
+            current_user=user,
+        )
+
+        assert user.session_token_version == 1  # untouched
+        assert_hardened_cookie(
+            response.headers["set-cookie"], name="session", path="/api", cleared=True
+        )
+        assert "detail" in result
 
 
 class TestLogoutAll:
     @pytest.mark.asyncio
-    async def test_increments_session_token_version(self, mock_db, make_request):
+    async def test_increments_session_token_version_and_clears_cookie(
+        self, mock_db, make_request
+    ):
+        from fastapi import Response
         from app.routers.auth import logout_all
 
         user = MagicMock()
@@ -318,8 +393,10 @@ class TestLogoutAll:
         mock_db.execute = AsyncMock(return_value=execute_result)
         mock_db.commit = AsyncMock()
 
+        response = Response()
         result = await logout_all(
             request=make_request(method="POST", path="/auth/logout-all"),
+            response=response,
             current_user=user,
             db=mock_db,
         )
@@ -328,6 +405,9 @@ class TestLogoutAll:
         mock_db.execute.assert_awaited_once()
         mock_db.commit.assert_awaited_once()
         assert "detail" in result
+        assert_hardened_cookie(
+            response.headers["set-cookie"], name="session", path="/api", cleared=True
+        )
 
 
 class TestGetMe:

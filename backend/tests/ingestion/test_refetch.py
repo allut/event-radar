@@ -87,6 +87,7 @@ def _future_event(**overrides) -> MagicMock:
     e.description_orig = "A test event description"
     e.title_localized = None
     e.description_localized = None
+    e.important_info = None
     e.venue_name = "Test Venue"
     e.venue_address = "Old Street 1, Tallinn"
     e.lat = TALLINN_CENTER_LAT
@@ -454,6 +455,34 @@ class TestSsrfHostGuard:
         assert summary["fetched"] == 1  # good, actually reached the transport
         assert evil.detail_refetched_at is None  # not throttled out — retried next run
         assert good.detail_refetched_at is not None
+
+
+class TestOrganizerSubmissionExcludedFromCandidates:
+    """An organizer-submitted event is never a refetch candidate: the
+    organizer owns their row and edits it directly via PATCH, and never
+    fetching an organizer-controlled url is what lets the submit path drop
+    the SSRF host allowlist (see adapter.py::insert_normalized_event)."""
+
+    @pytest.mark.asyncio
+    async def test_submitted_by_organizer_excluded_from_candidate_query(
+        self, mock_db
+    ):
+        captured: dict = {}
+
+        def _capture(stmt):
+            captured["stmt"] = stmt
+            return MagicMock(all=MagicMock(return_value=[]))
+
+        mock_db.scalars.side_effect = _capture
+        await refetch_event_details(mock_db)
+
+        sql = str(captured["stmt"])
+        assert "events.submitted_by_organizer_id IS NULL" in sql
+        # Belt-and-suspenders: excluded independently by source.kind too, so
+        # a future insert that forgets to set submitted_by_organizer_id on a
+        # user_submission-kind event still can't reach the fetch loop below.
+        assert "NOT (EXISTS" in sql
+        assert "sources.kind = :kind_1" in sql
 
 
 # --- candidate query ---------------------------------------------------------

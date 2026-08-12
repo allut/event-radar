@@ -1,21 +1,27 @@
 .btnPrimary {
+  appearance: none;
+  -webkit-appearance: none;
   background: var(--accent);
   color: var(--on-accent);
   border: none;
   border-radius: var(--radius);
   font-weight: 600;
   letter-spacing: var(--tracking-snug);
+  line-height: normal;
   transition: background var(--transition), transform var(--transition), opacity var(--transition);
 }
 
-.btnPrimary:hover:not(:disabled) { background: var(--accent-light); transform: translateY(-1px); }
-.btnPrimary:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+.btnPrimary:hover:not(:disabled) { background: var(--accent-light); color: var(--on-accent); transform: translateY(-1px); }
+.btnPrimary:disabled { opacity: var(--opacity-disabled); cursor: not-allowed; transform: none; }
 
 .btnOutline {
+  appearance: none;
+  -webkit-appearance: none;
   background: none;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   color: var(--text-muted);
+  line-height: normal;
   transition: border-color var(--transition), color var(--transition);
 }
 

@@ -2,6 +2,7 @@
 
 import logging
 import secrets
+import time
 from collections.abc import Awaitable, Callable, Sequence
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -12,12 +13,22 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.cleanup import cleanup_stale_data
 from app.config import settings
 from app.constants import (
+    ADMIN_AUTH_LOCKOUT_SECONDS,
+    ADMIN_AUTH_MAX_FAILURES,
     ADMIN_DEDUP_GROUPS_MAX_PAGE_SIZE,
     ADMIN_DEDUP_GROUPS_PAGE_SIZE,
+    ADMIN_REVIEW_QUEUE_MAX_PAGE_SIZE,
+    ADMIN_REVIEW_QUEUE_PAGE_SIZE,
     ADMIN_USERNAME_DEFAULT,
     APP_ENV_DEVELOPMENT,
+    ERROR_ADMIN_DISABLED,
+    ERROR_ADMIN_INCORRECT_CREDENTIALS,
+    ERROR_ADMIN_LOCKOUT,
+    ERROR_SUBMISSION_NOT_FOUND,
+    ERROR_UNKNOWN_SOURCE,
     EVENT_STATUS_CANCELLED,
     LOG_EVENT_AUTH_FAILED,
+    PAGINATION_MAX_OFFSET,
     PAGINATION_MIN_LIMIT,
     PAGINATION_MIN_OFFSET,
     RATE_LIMIT_ADMIN,
@@ -35,42 +46,47 @@ from app.ingestion.jobs import (
 )
 from app.ingestion.organizer_sync import sync_fienta_organizers
 from app.ingestion.registry import ADAPTER_REGISTRY
-from app.models.models import Event, Source
+from app.models.models import Event, Organizer, Source
+from app.publish import publish_pending
 from app.ranking.score import build_daily_feeds
-from app.rate_limit import limiter
+from app.rate_limit import client_key, limiter
 from app.routers.utils import (
     canonical_event_filter,
     require_configured_secret,
     run_admin_job,
+    run_in_session,
+    select_events_with_classification,
+    serialize_event,
 )
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/admin")
 _security = HTTPBasic()
 
-
-async def _run_in_session(
-    func: Callable[[AsyncSession], Awaitable[dict]], *, commit: bool
-) -> dict:
-    """Run a session-scoped job; commit when asked, roll back on failure."""
-    async with AsyncSessionLocal() as db:
-        try:
-            result = await func(db)
-            if commit:
-                await db.commit()
-            return result
-        except Exception:
-            await db.rollback()
-            raise
+# (client_key -> (consecutive_failure_count, locked_until_monotonic)). In-memory,
+# single-process — see ADMIN_AUTH_MAX_FAILURES in constants.py for the trade-off.
+_admin_auth_failures: dict[str, tuple[int, float]] = {}
 
 
-def _require_admin(credentials: HTTPBasicCredentials = Depends(_security)) -> None:
+def _require_admin(
+    request: Request, credentials: HTTPBasicCredentials = Depends(_security)
+) -> None:
+    key = client_key(request)
+    now = time.monotonic()
+    _count, locked_until = _admin_auth_failures.get(key, (0, 0.0))
+    if now < locked_until:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=ERROR_ADMIN_LOCKOUT,
+        )
+
     password = settings.ADMIN_PASSWORD
     if not require_configured_secret(
         password,
         feature="Admin endpoints",
         setting_name="ADMIN_PASSWORD",
         app_env=settings.APP_ENV,
+        allow_insecure_dev=settings.ALLOW_INSECURE_DEV,
     ):
         return
     if (
@@ -81,7 +97,7 @@ def _require_admin(credentials: HTTPBasicCredentials = Depends(_security)) -> No
         # credential pair an attacker needs to brute-force.
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Admin endpoints disabled: ADMIN_USERNAME left at its default value",
+            detail=ERROR_ADMIN_DISABLED,
         )
     username_ok = secrets.compare_digest(
         credentials.username.encode(),
@@ -92,33 +108,46 @@ def _require_admin(credentials: HTTPBasicCredentials = Depends(_security)) -> No
         password.encode(),
     )
     if not (username_ok and password_ok):
+        failures = _count + 1
+        locked_until = (
+            now + ADMIN_AUTH_LOCKOUT_SECONDS
+            if failures >= ADMIN_AUTH_MAX_FAILURES
+            else 0.0
+        )
+        _admin_auth_failures[key] = (failures, locked_until)
         log.warning(
-            "admin auth failed: username=%r",
+            "admin auth failed: username=%r failures=%d",
             credentials.username,
+            failures,
             extra={"event": LOG_EVENT_AUTH_FAILED},
         )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect credentials",
+            detail=ERROR_ADMIN_INCORRECT_CREDENTIALS,
             headers={"WWW-Authenticate": "Basic"},
         )
+    _admin_auth_failures.pop(key, None)
 
 
-@router.get("/ingest", dependencies=[Depends(_require_admin)])
-@limiter.limit(RATE_LIMIT_ADMIN)
+@router.post("/ingest", dependencies=[Depends(_require_admin)])
+@limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
 async def admin_ingest_all(request: Request) -> dict:
     """Trigger ingestion for all enabled sources."""
-    results = await ingest_all_enabled()
-    return {"results": results}
+
+    async def _run() -> dict:
+        return {"results": await ingest_all_enabled()}
+
+    return await run_admin_job("Ingestion", _run())
 
 
 @router.post("/ingest/{slug}", dependencies=[Depends(_require_admin)])
-@limiter.limit(RATE_LIMIT_ADMIN)
+@limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
 async def admin_ingest_source(slug: str, request: Request) -> dict:
     """Trigger ingestion for a single source by slug."""
     if slug not in ADAPTER_REGISTRY:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail=f"Unknown source: {slug!r}"
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=ERROR_UNKNOWN_SOURCE.format(slug=slug),
         )
 
     async def _run() -> dict:
@@ -133,7 +162,7 @@ async def admin_ingest_source(slug: str, request: Request) -> dict:
 
 
 @router.post("/dedup", dependencies=[Depends(_require_admin)])
-@limiter.limit(RATE_LIMIT_ADMIN)
+@limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
 async def admin_dedup_run(request: Request) -> dict:
     """Trigger a dedup pass, draining the backlog until it clears or the cap is hit."""
     return await run_admin_job("Dedup", dedup_pass_drain_now())
@@ -160,7 +189,7 @@ def _serialize_dedup_groups(rows: Sequence[Event]) -> dict[int, list[dict]]:
 
 
 @router.get("/dedup/groups", dependencies=[Depends(_require_admin)])
-@limiter.limit(RATE_LIMIT_ADMIN)
+@limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
 async def admin_dedup_groups(
     request: Request,
     limit: int = Query(
@@ -168,7 +197,9 @@ async def admin_dedup_groups(
         ge=PAGINATION_MIN_LIMIT,
         le=ADMIN_DEDUP_GROUPS_MAX_PAGE_SIZE,
     ),
-    offset: int = Query(PAGINATION_MIN_OFFSET, ge=PAGINATION_MIN_OFFSET),
+    offset: int = Query(
+        PAGINATION_MIN_OFFSET, ge=PAGINATION_MIN_OFFSET, le=PAGINATION_MAX_OFFSET
+    ),
 ) -> dict:
     """Return events grouped by dedup_group_id for manual eyeballing.
 
@@ -238,29 +269,138 @@ async def admin_dedup_groups(
     }
 
 
+@router.get("/submissions", dependencies=[Depends(_require_admin)])
+@limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
+async def admin_list_submissions(
+    request: Request,
+    limit: int = Query(
+        ADMIN_REVIEW_QUEUE_PAGE_SIZE,
+        ge=PAGINATION_MIN_LIMIT,
+        le=ADMIN_REVIEW_QUEUE_MAX_PAGE_SIZE,
+    ),
+    offset: int = Query(
+        PAGINATION_MIN_OFFSET, ge=PAGINATION_MIN_OFFSET, le=PAGINATION_MAX_OFFSET
+    ),
+) -> dict:
+    """Post-hoc review queue: organizer-submitted events still flagged
+    ``needs_review`` (set on submit/edit — see routers/organizer_events.py).
+    These are already live (auto-publish); this is eyeballing, not a gate.
+    Excludes cancelled submissions — retract already clears ``needs_review``,
+    but this filter is defense-in-depth so a cancelled row can never clutter
+    the queue regardless of that flag's state. Most recently submitted/edited
+    first.
+    """
+    async with AsyncSessionLocal() as db:
+        queue_filter = (Event.needs_review.is_(True), Event.status != EVENT_STATUS_CANCELLED)
+        total = (
+            await db.scalar(select(func.count(Event.id)).where(*queue_filter))
+        ) or 0
+
+        stmt = (
+            select_events_with_classification()
+            .where(*queue_filter)
+            .order_by(Event.created_at.desc())
+            .limit(limit)
+            .offset(offset)
+        )
+        events = (await db.scalars(stmt)).all()
+
+    return {
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+        "has_more": offset + len(events) < total,
+        "events": [
+            {
+                **serialize_event(e),
+                "status": e.status,
+                "submitted_by_organizer_id": e.submitted_by_organizer_id,
+            }
+            for e in events
+        ],
+    }
+
+
+async def _submission_or_404(db: AsyncSession, event_id: int) -> Event:
+    event = await db.get(Event, event_id)
+    if event is None or event.submitted_by_organizer_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=ERROR_SUBMISSION_NOT_FOUND
+        )
+    return event
+
+
+@router.post(
+    "/submissions/{event_id}/retract", dependencies=[Depends(_require_admin)]
+)
+@limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
+async def admin_retract_submission(event_id: int, request: Request) -> dict:
+    """Cancel an organizer-submitted event (soft delete — mirrors organizer's
+    own DELETE /organizer/events/{id}; events are never hard-deleted). Also
+    clears needs_review so this resolves the review-queue entry outright —
+    admin_list_submissions additionally excludes cancelled events regardless."""
+
+    async def _run() -> dict:
+        async with AsyncSessionLocal() as db:
+            event = await _submission_or_404(db, event_id)
+            event.status = EVENT_STATUS_CANCELLED
+            event.needs_review = False
+            await db.commit()
+            return {"id": event.id, "status": event.status}
+
+    return await run_admin_job("Retract submission", _run())
+
+
+@router.post(
+    "/submissions/{event_id}/approve", dependencies=[Depends(_require_admin)]
+)
+@limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
+async def admin_approve_submission(event_id: int, request: Request) -> dict:
+    """Clear needs_review — an admin has eyeballed the submission and it's fine
+    as-is. Also flips the submitting organizer to ``verified`` (a first-time
+    approval is what makes an organizer trusted going forward — see
+    Organizer.verified / app/publish.py) and runs the publish gate so this
+    event (and any other now-eligible backlog) goes live immediately rather
+    than waiting for the next scheduled publish_pending pass."""
+
+    async def _run() -> dict:
+        async with AsyncSessionLocal() as db:
+            event = await _submission_or_404(db, event_id)
+            event.needs_review = False
+            if event.submitted_by_organizer_id is not None:
+                organizer = await db.get(Organizer, event.submitted_by_organizer_id)
+                if organizer is not None:
+                    organizer.verified = True
+            await publish_pending(db)
+            await db.commit()
+            return {"id": event.id, "needs_review": event.needs_review}
+
+    return await run_admin_job("Approve submission", _run())
+
+
 @router.post("/classify", dependencies=[Depends(_require_admin)])
-@limiter.limit(RATE_LIMIT_ADMIN)
+@limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
 async def admin_classify(request: Request) -> dict:
     """Trigger LLM classification, draining the backlog until it clears or the cap is hit."""
     return await run_admin_job("Classification", classify_pending_drain_now())
 
 
 @router.post("/publish", dependencies=[Depends(_require_admin)])
-@limiter.limit(RATE_LIMIT_ADMIN)
+@limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
 async def admin_publish(request: Request) -> dict:
     """Promote qualifying classified events to published (one bulk UPDATE)."""
     return await run_admin_job("Publish", publish_pending_job())
 
 
 @router.post("/geocode", dependencies=[Depends(_require_admin)])
-@limiter.limit(RATE_LIMIT_ADMIN)
+@limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
 async def admin_geocode(request: Request) -> dict:
     """Backfill lat/lng for events with a venue_address but no coordinates (one batch)."""
     return await run_admin_job("Geocoding", geocode_pending_job())
 
 
 @router.post("/refetch", dependencies=[Depends(_require_admin)])
-@limiter.limit(RATE_LIMIT_ADMIN)
+@limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
 async def admin_refetch(request: Request) -> dict:
     """Re-fetch detail pages for all future events and reconcile stored fields (one batch).
 
@@ -272,16 +412,16 @@ async def admin_refetch(request: Request) -> dict:
 
 
 @router.post("/sync-organizers", dependencies=[Depends(_require_admin)])
-@limiter.limit(RATE_LIMIT_ADMIN)
+@limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
 async def admin_sync_organizers(request: Request) -> dict:
     """Trigger Fienta organizer sync (discover new organizers, flag stale ones)."""
     return await run_admin_job(
-        "Organizer sync", _run_in_session(sync_fienta_organizers, commit=True)
+        "Organizer sync", run_in_session(sync_fienta_organizers, commit=True)
     )
 
 
 @router.post("/cleanup", dependencies=[Depends(_require_admin)])
-@limiter.limit(RATE_LIMIT_ADMIN)
+@limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
 async def admin_cleanup(
     request: Request,
     dry_run: bool = Query(
@@ -299,24 +439,24 @@ async def admin_cleanup(
     """
     return await run_admin_job(
         "Cleanup",
-        _run_in_session(
+        run_in_session(
             lambda db: cleanup_stale_data(db, dry_run=dry_run), commit=not dry_run
         ),
     )
 
 
 @router.post("/build-feeds", dependencies=[Depends(_require_admin)])
-@limiter.limit(RATE_LIMIT_ADMIN)
+@limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
 async def admin_build_feeds(request: Request) -> dict:
     """Trigger daily feed builder for all active users (writes to daily_feeds)."""
     # build_daily_feeds commits internally (score.py); no second commit needed.
     return await run_admin_job(
-        "Feed build", _run_in_session(build_daily_feeds, commit=False)
+        "Feed build", run_in_session(build_daily_feeds, commit=False)
     )
 
 
 @router.post("/send-digests", dependencies=[Depends(_require_admin)])
-@limiter.limit(RATE_LIMIT_ADMIN)
+@limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
 async def admin_send_digests(
     request: Request,
     dry_run: bool = Query(True, description="When true (default), counts would-send but skips actual email delivery"),
@@ -324,12 +464,12 @@ async def admin_send_digests(
     """Trigger daily digest send. Defaults to dry-run — pass ?dry_run=false to actually send."""
     return await run_admin_job(
         "Digest send",
-        _run_in_session(lambda db: send_daily_digests(db, dry_run=dry_run), commit=False),
+        run_in_session(lambda db: send_daily_digests(db, dry_run=dry_run), commit=False),
     )
 
 
 @router.post("/pipeline/run", dependencies=[Depends(_require_admin)])
-@limiter.limit(RATE_LIMIT_ADMIN)
+@limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
 async def admin_pipeline_run(
     request: Request,
     dry_run: bool = Query(True, description="When true (default), digest stage counts would-send but skips actual email delivery"),
@@ -342,17 +482,17 @@ async def admin_pipeline_run(
     stage_runners: list[tuple[str, Callable[[], Awaitable[object]]]] = [
         (
             "sync_organizers",
-            lambda: _run_in_session(sync_fienta_organizers, commit=True),
+            lambda: run_in_session(sync_fienta_organizers, commit=True),
         ),
         ("ingest", ingest_all_enabled),
         ("dedup", dedup_pass_drain_now),
         ("classify", classify_pending_drain_now),
         ("publish", publish_pending_job),
         # build_daily_feeds commits internally (score.py)
-        ("build_feeds", lambda: _run_in_session(build_daily_feeds, commit=False)),
+        ("build_feeds", lambda: run_in_session(build_daily_feeds, commit=False)),
         (
             "send_digests",
-            lambda: _run_in_session(
+            lambda: run_in_session(
                 lambda db: send_daily_digests(db, dry_run=dry_run), commit=False
             ),
         ),
@@ -362,16 +502,16 @@ async def admin_pipeline_run(
     for stage_name, runner in stage_runners:
         try:
             stages[stage_name] = await runner()
-        except Exception as exc:
+        except Exception:
             log.exception("pipeline: %s failed", stage_name)
-            stages[stage_name] = {"error": str(exc)}
+            stages[stage_name] = {"error": f"{stage_name} failed; see server logs"}
             return {"ok": False, "stages": stages}
 
     return {"ok": True, "stages": stages}
 
 
 @router.get("/stats", dependencies=[Depends(_require_admin)])
-@limiter.limit(RATE_LIMIT_ADMIN)
+@limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
 async def admin_stats(request: Request) -> dict:
     """Aggregate counts used by checkpoint tests and manual monitoring."""
     async with AsyncSessionLocal() as db:

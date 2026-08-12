@@ -1,7 +1,8 @@
-import { TOKEN_KEY, LOCALES, LOCALE_KEY, LOGOUT_FLAG_TTL_MS } from '../constants';
+import { SIGNED_IN_HINT_KEY, LOCALES, LOCALE_KEY, LOGOUT_FLAG_TTL_MS } from '../constants';
 
-// Auth-change subscriber store, so components can react to setToken()/clearToken()
-// instead of only reading localStorage once at render time — see subscribeAuth().
+// Auth-change subscriber store, so components can react to setSignedInHint()/
+// clearSignedInHint() instead of only reading localStorage once at render
+// time — see subscribeAuth().
 const authListeners = new Set<() => void>();
 function emitAuthChange(): void {
   authListeners.forEach((cb) => cb());
@@ -17,7 +18,7 @@ function emitLocaleChange(): void {
 // in OTHER tabs (the tab that made the change never receives its own event).
 if (typeof window !== 'undefined') {
   window.addEventListener('storage', (e) => {
-    if (e.key === TOKEN_KEY) emitAuthChange();
+    if (e.key === SIGNED_IN_HINT_KEY) emitAuthChange();
     if (e.key === LOCALE_KEY) emitLocaleChange();
   });
 }
@@ -30,22 +31,24 @@ export function subscribeLocale(cb: () => void): () => void {
   return () => { localeListeners.delete(cb); };
 }
 
-export function getToken(): string | null { return localStorage.getItem(TOKEN_KEY); }
-export function setToken(t: string): void {
+// The hint carries no credential value and grants no access — the real
+// session token lives only in an httpOnly cookie. It exists purely so
+// isAuthenticated() can answer synchronously at first paint.
+export function setSignedInHint(): void {
   loggingOut = false;
-  localStorage.setItem(TOKEN_KEY, t);
+  localStorage.setItem(SIGNED_IN_HINT_KEY, '1');
   emitAuthChange();
 }
-export function clearToken(): void {
-  localStorage.removeItem(TOKEN_KEY);
+export function clearSignedInHint(): void {
+  localStorage.removeItem(SIGNED_IN_HINT_KEY);
   emitAuthChange();
 }
-export function isAuthenticated(): boolean { return !!getToken(); }
+export function isAuthenticated(): boolean { return localStorage.getItem(SIGNED_IN_HINT_KEY) !== null; }
 
-// Set by an explicit logout action, before clearToken()/queryClient.clear() run.
-// A logout on a route that doesn't change path (e.g. Feed at "/") doesn't
+// Set by an explicit logout action, before clearSignedInHint()/queryClient.clear()
+// run. A logout on a route that doesn't change path (e.g. Feed at "/") doesn't
 // unmount its active queries, so clearing the cache can trigger an in-place
-// refetch with no auth token — the resulting 401 must not hard-redirect to
+// refetch with no auth cookie — the resulting 401 must not hard-redirect to
 // /login and clobber the intended post-logout navigation (see api/client.ts).
 // Reset on the next successful sign-in so a genuine session expiry later
 // still redirects normally, and auto-expires after LOGOUT_FLAG_TTL_MS so it

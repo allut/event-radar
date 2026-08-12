@@ -20,11 +20,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.constants import (
     BROWSE_MAX_PAGE_SIZE,
     BROWSE_PAGE_SIZE,
+    ERROR_EVENT_NOT_FOUND,
+    ERROR_INVALID_PREFERENCE_SIGNAL,
+    ERROR_INVALID_SIGNAL,
+    PAGINATION_MAX_OFFSET,
     PAGINATION_MIN_LIMIT,
     PAGINATION_MIN_OFFSET,
     PREFERENCE_SIGNALS,
     PREFERENCE_SIGNALS_SQL_PREDICATE,
     RATE_LIMIT_FEEDBACK,
+    SCORE_AFFECTING_SIGNALS,
     VALID_SIGNALS,
 )
 from app.db import get_db
@@ -59,7 +64,7 @@ async def record_feedback(
     if body.signal not in VALID_SIGNALS:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"Invalid signal. Must be one of: {sorted(VALID_SIGNALS)}",
+            detail=ERROR_INVALID_SIGNAL.format(signals=sorted(VALID_SIGNALS)),
         )
 
     # Filtered to the same public-visibility predicate as GET /events/{id} —
@@ -71,7 +76,7 @@ async def record_feedback(
     )
     if event is None:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Event not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail=ERROR_EVENT_NOT_FOUND
         )
 
     if body.signal in PREFERENCE_SIGNALS:
@@ -105,7 +110,12 @@ async def record_feedback(
             )
         )
 
-    await invalidate_user_scores(db, current_user.id)
+    # Only like/dislike feed into ranking/score.py's scoring — a bookmark or a
+    # passive view/click_external signal never changes a score, so gating here
+    # keeps the cache warm across ticket clicks and bookmarks (see
+    # SCORE_AFFECTING_SIGNALS).
+    if body.signal in SCORE_AFFECTING_SIGNALS:
+        await invalidate_user_scores(db, current_user.id)
     await db.commit()
     return {"ok": True}
 
@@ -122,17 +132,23 @@ async def delete_feedback(
 
     Scoped to PREFERENCE_SIGNALS only — this must never delete the
     view/click_external analytics history for the event. Idempotent — no 404
-    if nothing matched. Invalidates cached scores same as a POST, since
-    removing a signal changes ranking too.
+    if nothing matched. Invalidates cached scores only if the removed signal
+    was one that actually affects scoring (see SCORE_AFFECTING_SIGNALS) — the
+    deleted row's signal isn't known up front, so RETURNING reports it.
     """
-    await db.execute(
-        delete(UserEventFeedback).where(
-            UserEventFeedback.user_id == current_user.id,
-            UserEventFeedback.event_id == event_id,
-            UserEventFeedback.signal.in_(PREFERENCE_SIGNALS),
+    deleted_signals = (
+        await db.execute(
+            delete(UserEventFeedback)
+            .where(
+                UserEventFeedback.user_id == current_user.id,
+                UserEventFeedback.event_id == event_id,
+                UserEventFeedback.signal.in_(PREFERENCE_SIGNALS),
+            )
+            .returning(UserEventFeedback.signal)
         )
-    )
-    await invalidate_user_scores(db, current_user.id)
+    ).scalars().all()
+    if SCORE_AFFECTING_SIGNALS.intersection(deleted_signals):
+        await invalidate_user_scores(db, current_user.id)
     await db.commit()
     return {"ok": True}
 
@@ -143,7 +159,9 @@ async def list_feedback_events(
     request: Request,
     signal: str,
     limit: int = Query(BROWSE_PAGE_SIZE, ge=PAGINATION_MIN_LIMIT, le=BROWSE_MAX_PAGE_SIZE),
-    offset: int = Query(PAGINATION_MIN_OFFSET, ge=PAGINATION_MIN_OFFSET),
+    offset: int = Query(
+        PAGINATION_MIN_OFFSET, ge=PAGINATION_MIN_OFFSET, le=PAGINATION_MAX_OFFSET
+    ),
     locale: str | None = Query(None),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -158,7 +176,9 @@ async def list_feedback_events(
     if signal not in PREFERENCE_SIGNALS:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"signal must be one of: {sorted(PREFERENCE_SIGNALS)}",
+            detail=ERROR_INVALID_PREFERENCE_SIGNAL.format(
+                signals=sorted(PREFERENCE_SIGNALS)
+            ),
         )
 
     total = (

@@ -14,6 +14,11 @@
   composes: body from '../../components/StaticPage/StaticPage.module.css';
 }
 
+.organizerHint {
+  font-size: var(--fs-sm);
+  margin-top: var(--space-2);
+}
+
 .form {
   display: flex;
   flex-direction: column;
@@ -60,7 +65,7 @@
 
 .input:disabled,
 .textarea:disabled {
-  opacity: 0.5;
+  opacity: var(--opacity-disabled);
 }
 
 /* Honeypot — off-screen, never shown to sighted users, and excluded from
@@ -86,7 +91,7 @@
   composes: btnPrimary from '../../components/shared/Button.module.css';
   padding: var(--space-0-8125) var(--space-5);
   font-size: var(--fs-base);
-  height: 48px;
+  height: var(--control-height-lg);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -94,13 +99,7 @@
 }
 
 .spinner {
-  composes: spin from '../../components/shared/Animations.module.css';
-  display: inline-block;
-  width: var(--spinner-size-sm);
-  height: var(--spinner-size-sm);
-  border: 2px solid var(--spinner-border);
-  border-top-color: var(--on-accent);
-  border-radius: var(--radius-full);
+  composes: spinner from '../../components/shared/Spinner.module.css';
 }
 
 .success {
@@ -113,15 +112,8 @@
 }
 
 .checkCircle {
-  width: 56px;
-  height: 56px;
-  border: 2px solid var(--success);
-  border-radius: var(--radius-full);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  composes: statusCircle statusCircleSuccess statusCircleLg from '../../components/shared/StatusCircle.module.css';
   font-size: var(--fs-xl);
-  color: var(--success);
   margin-bottom: var(--space-2);
 }
 

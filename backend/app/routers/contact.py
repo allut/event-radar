@@ -9,6 +9,7 @@ from app.constants import (
     CONTACT_FIELD_MIN_LEN,
     CONTACT_MESSAGE_MAX_LEN,
     CONTACT_NAME_MAX_LEN,
+    CONTACT_SUCCESS_DETAIL,
     LOG_EVENT_CONTACT_HONEYPOT,
     RATE_LIMIT_CONTACT,
 )
@@ -18,8 +19,6 @@ from app.routers.utils import mask_email
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/contact", tags=["contact"])
-
-_SUCCESS_DETAIL = "Message sent."
 
 
 class ContactBody(BaseModel):
@@ -40,7 +39,7 @@ async def submit_contact(body: ContactBody, request: Request) -> dict:
             mask_email(body.email),
             extra={"event": LOG_EVENT_CONTACT_HONEYPOT},
         )
-        return {"detail": _SUCCESS_DETAIL}
+        return {"detail": CONTACT_SUCCESS_DETAIL}
 
     try:
         await send_contact_message(body.name, body.email, body.message)
@@ -48,4 +47,4 @@ async def submit_contact(body: ContactBody, request: Request) -> dict:
         log.exception("Failed to send contact message from %s", mask_email(body.email))
         # Do not surface email errors to caller.
 
-    return {"detail": _SUCCESS_DETAIL}
+    return {"detail": CONTACT_SUCCESS_DETAIL}

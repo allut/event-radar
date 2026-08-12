@@ -138,8 +138,8 @@
     grid-column: 2;
   }
 
-  .topBar:not(.minimal) .actions > .authBtn,
-  .topBar:not(.minimal) .actions > .localeWrap {
+  .actions > .authBtn,
+  .actions > .localeWrap {
     display: none;
   }
 

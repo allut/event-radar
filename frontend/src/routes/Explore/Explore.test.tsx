@@ -9,7 +9,7 @@ import type { EventData } from '../../components/EventCard';
 vi.mock('../../lib/auth', () => ({
   getLocale: vi.fn(() => 'en'),
   setLocale: vi.fn(),
-  clearToken: vi.fn(),
+  clearSignedInHint: vi.fn(),
   beginLogout: vi.fn(),
 }));
 

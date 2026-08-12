@@ -9,7 +9,7 @@ import EmptyState from '../../components/EmptyState';
 import PageState from '../../components/PageState';
 import TopBar from '../../components/TopBar';
 import { formatHourMinute, formatIsoDate, formatTodayDate, padIndex } from '../../utils';
-import { QUERY_KEYS } from '../../constants';
+import { API, BRAND_GLYPH, QUERY_KEYS, ROUTES, UI_STATE } from '../../constants';
 import styles from './Feed.module.css';
 
 interface FeedResponse {
@@ -25,16 +25,16 @@ export default function Feed() {
 
   const { data, isLoading, isError } = useQuery({
     queryKey: [QUERY_KEYS.feed, locale],
-    queryFn: () => api.get<FeedResponse>(`/feed?locale=${encodeURIComponent(locale)}`),
+    queryFn: () => api.get<FeedResponse>(`${API.feed}?locale=${encodeURIComponent(locale)}`),
     retry: false,
   });
 
   if (isLoading) {
-    return <PageState kind="loading" message={t('loading', locale)} />;
+    return <PageState kind={UI_STATE.loading} message={t('loading', locale)} />;
   }
 
   if (isError) {
-    return <PageState kind="error" message={t('feed_error', locale)} />;
+    return <PageState kind={UI_STATE.error} message={t('feed_error', locale)} />;
   }
 
   const events = data?.events ?? [];
@@ -66,7 +66,7 @@ export default function Feed() {
           </p>
         )}
 
-        <Link to="/explore" className={styles.promo}>
+        <Link to={ROUTES.explore} className={styles.promo}>
           <div className={styles.promoText}>
             <h2 className={styles.promoTitle}>{t('feed_promo_title', locale)}</h2>
             <p className={styles.promoMsg}>{t('feed_promo_msg', locale)}</p>
@@ -76,7 +76,7 @@ export default function Feed() {
 
         {events.length === 0 ? (
           <EmptyState
-            icon="◉"
+            icon={BRAND_GLYPH}
             title={t('feed_empty_title', locale)}
             message={t('feed_empty_msg', locale)}
             hint={t('feed_empty_hint', locale)}

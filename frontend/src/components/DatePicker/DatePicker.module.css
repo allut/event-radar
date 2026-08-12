@@ -1,0 +1,328 @@
+.datePicker {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.field {
+  display: flex;
+  align-items: stretch;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+
+.field:focus-within {
+  border-color: var(--accent);
+  box-shadow: var(--shadow-focus-ring);
+}
+
+.fieldDisabled {
+  opacity: var(--opacity-disabled);
+}
+
+.textInput {
+  flex: 1 1 auto;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  outline: none;
+  padding: var(--space-3) var(--space-4);
+  color: var(--text);
+  font-size: var(--fs-base);
+  font-family: inherit;
+  font-variant-numeric: tabular-nums;
+}
+
+.textInput::placeholder {
+  color: var(--text-dim);
+}
+
+.textInput:disabled {
+  cursor: default;
+}
+
+.calendarButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--field-affordance-size);
+  border: none;
+  border-left: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: 0 var(--radius) var(--radius) 0;
+  transition: color var(--transition), background var(--transition);
+}
+
+.calendarButton:hover:not(:disabled) {
+  color: var(--accent-light);
+  background: var(--accent-subtle);
+}
+
+.calendarButton:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus-ring);
+}
+
+.calendarButton:disabled {
+  cursor: default;
+}
+
+.calendarButton svg {
+  width: var(--field-icon-size);
+  height: var(--field-icon-size);
+}
+
+.preview {
+  padding-left: var(--space-1);
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.pop {
+  composes: menuPop from '../shared/Menu.module.css';
+  width: var(--picker-pop-width);
+  min-width: var(--picker-pop-width);
+}
+
+.calHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-3);
+}
+
+.calNavBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--cal-nav-size);
+  height: var(--cal-nav-size);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  transition: all var(--transition);
+}
+
+.calNavBtn:hover {
+  color: var(--accent-light);
+  border-color: var(--accent-hover-border);
+  background: var(--accent-subtle);
+}
+
+.calNavBtn:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus-ring);
+}
+
+.calNavBtn svg {
+  width: var(--cal-nav-icon-size);
+  height: var(--cal-nav-icon-size);
+}
+
+.calMonthLabel {
+  font-family: var(--font-display);
+  font-size: var(--fs-lg);
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: var(--tracking-snug);
+}
+
+.calWeekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  margin-bottom: var(--space-1);
+}
+
+.calWeekdays span {
+  text-align: center;
+  font-size: var(--fs-2xs);
+  font-weight: 600;
+  letter-spacing: var(--tracking-wider);
+  text-transform: uppercase;
+  color: var(--text-dim);
+  padding: var(--space-1) 0;
+}
+
+.calGrid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: var(--calendar-grid-gap);
+}
+
+.calDay {
+  position: relative;
+  aspect-ratio: 1;
+  min-height: var(--calendar-cell-size);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--fs-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-soft);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  border: 1px solid transparent;
+  transition: all var(--transition);
+}
+
+.calDay:hover:not(:disabled) {
+  background: var(--bg-card-hover);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+.calDay:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus-ring);
+}
+
+.calDay:disabled {
+  color: var(--text-dim);
+  cursor: default;
+}
+
+.spill {
+  color: var(--text-dim);
+}
+
+.today::after {
+  content: '';
+  position: absolute;
+  bottom: var(--cal-today-dot-size);
+  width: var(--cal-today-dot-size);
+  height: var(--cal-today-dot-size);
+  border-radius: var(--radius-full);
+  background: var(--accent-light);
+}
+
+.selected {
+  background: var(--accent-subtle);
+  border-color: var(--accent-border);
+  color: var(--accent-light);
+  font-weight: 700;
+}
+
+.selected::after {
+  display: none;
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: var(--rule);
+}
+
+.timeGroup {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.timeLabel {
+  font-size: var(--fs-2xs);
+  font-weight: 600;
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.timeRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+/* Bigger, instrument-panel-styled time fields — larger tabular numerals in a
+   raised box, matching the calendar grid's visual register instead of the
+   generic small text inputs the earlier pass used. */
+.timeInput {
+  width: var(--time-field-width);
+  height: var(--time-field-height);
+  background: var(--bg-overlay-soft);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--accent-light);
+  font-family: inherit;
+  font-size: var(--fs-xl);
+  font-weight: 700;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  transition: border-color var(--transition), box-shadow var(--transition), background var(--transition);
+}
+
+.timeInput:hover {
+  border-color: var(--accent-hover-border);
+}
+
+.timeInput:focus-visible,
+.timeInput:focus {
+  outline: none;
+  border-color: var(--accent-border);
+  box-shadow: var(--shadow-focus-ring);
+  background: var(--bg-card-hover);
+}
+
+.timeInput:disabled {
+  opacity: var(--opacity-disabled);
+}
+
+.timeSeparator {
+  font-size: var(--fs-xl);
+  font-weight: 700;
+  color: var(--text-dim);
+}
+
+.footerActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.todayBtn {
+  font-size: var(--fs-xs);
+  color: var(--accent-light);
+  background: transparent;
+  border: none;
+  font-weight: 600;
+  letter-spacing: var(--tracking-wide);
+}
+
+.todayBtn:hover {
+  text-decoration: underline;
+}
+
+.clearBtn {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  font-weight: 600;
+  letter-spacing: var(--tracking-wide);
+}
+
+.clearBtn:hover {
+  color: var(--danger);
+  text-decoration: underline;
+}
+
+.srOnly {
+  composes: srOnly from '../shared/Visually.module.css';
+}
+
+@media (max-width: 640px) {
+  .pop {
+    left: auto;
+    right: 0;
+  }
+}

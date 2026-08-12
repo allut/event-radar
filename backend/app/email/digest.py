@@ -17,6 +17,8 @@ from app.config import settings
 from app.constants import (
     DIGEST_MAX_WHY_GO_BULLETS,
     DIGEST_SEND_CONCURRENCY,
+    LOCALE_ET,
+    LOCALE_RU,
     LOG_EVENT_EMAIL_SEND_FAILED,
     RESEND_ERROR_SNIPPET_LEN,
     RESEND_SEND_URL,
@@ -26,6 +28,7 @@ from app.constants import (
 from app.email import styles
 from app.email.styles import EMAIL_CSS
 from app.email.templates import (
+    DIGEST_EMPTY_STATE,
     DIGEST_FOOTER,
     DIGEST_HEADER,
     EMAIL_DOCUMENT,
@@ -55,9 +58,9 @@ log = logging.getLogger(__name__)
 def _format_feed_date(d: date, locale: str) -> str:
     dow = d.weekday()  # 0=Mon
     # Grammar differs per locale; the order of day/month/day-number is not key→string.
-    if locale == "et":
+    if locale == LOCALE_ET:
         return f"{day_name(dow, locale)}, {d.day}. {month_name(d.month, locale)}"
-    if locale == "ru":
+    if locale == LOCALE_RU:
         return f"{day_name(dow, locale)}, {d.day} {month_name(d.month, locale)}"
     return f"{day_name(dow, locale)}, {month_name(d.month, locale)} {d.day}"
 
@@ -179,7 +182,7 @@ def build_digest_html(
     events_html = (
         "\n".join(event_blocks)
         if event_blocks
-        else f"<p>{t('digest.no_events', locale)}</p>"
+        else DIGEST_EMPTY_STATE.format(text=t("digest.no_events", locale))
     )
     settings_label = t("digest.unsubscribe", locale)
 
@@ -323,7 +326,12 @@ async def send_daily_digests(
     today = datetime.now(TALLINN_TZ).date()
 
     users = (
-        await db.scalars(select(User).where(User.email_digest_opt_in.is_(True)))
+        await db.scalars(
+            select(User).where(
+                User.email_digest_opt_in.is_(True),
+                User.email_verified.is_(True),
+            )
+        )
     ).all()
 
     if not users:

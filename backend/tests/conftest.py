@@ -46,6 +46,7 @@ def make_user():
         user_id: int = 1,
         locale: str = DEFAULT_USER_LOCALE,
         opt_in: bool = True,
+        email_verified: bool = True,
     ) -> MagicMock:
         u = MagicMock()
         u.id = user_id
@@ -53,9 +54,28 @@ def make_user():
         u.locale = locale
         u.home_city = DEFAULT_USER_CITY
         u.email_digest_opt_in = opt_in
+        u.email_verified = email_verified
         u.created_at = MagicMock()
         u.created_at.isoformat.return_value = "2026-05-13T06:00:00+00:00"
         return u
+    return _factory
+
+
+@pytest.fixture
+def make_organizer():
+    def _factory(
+        organizer_id: int = 1,
+        locale: str = DEFAULT_USER_LOCALE,
+        session_token_version: int = 1,
+    ) -> MagicMock:
+        o = MagicMock()
+        o.id = organizer_id
+        o.email = "organizer@example.com"
+        o.locale = locale
+        o.session_token_version = session_token_version
+        o.created_at = MagicMock()
+        o.created_at.isoformat.return_value = "2026-05-13T06:00:00+00:00"
+        return o
     return _factory
 
 
@@ -151,3 +171,18 @@ def make_request():
             }
         )
     return _factory
+
+
+def assert_hardened_cookie(
+    set_cookie: str, *, name: str, path: str, cleared: bool = False
+) -> None:
+    """Assert a Set-Cookie header carries the full hardened attribute set
+    (HttpOnly, Secure, SameSite=strict, Path) — shared by every auth-router
+    test asserting a session/organizer_session cookie (set or cleared)."""
+    assert f"{name}=" in set_cookie
+    assert "HttpOnly" in set_cookie
+    assert "Secure" in set_cookie
+    assert "SameSite=strict" in set_cookie
+    assert f"Path={path}" in set_cookie
+    if cleared:
+        assert "Max-Age=0" in set_cookie

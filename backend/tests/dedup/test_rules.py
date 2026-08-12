@@ -567,3 +567,19 @@ class TestBuildClusterAssignments:
         )
         published = _event(2, "Show", _BASE, status="published")
         assert self._cluster([classified, published]) == {1: 2, 2: 2}
+
+    def test_organizer_submission_merges_with_scraped_duplicate_no_special_casing(self):
+        # An organizer-submitted event (source=user_submission) dedup-merges with
+        # a scraped copy of the same real-world event exactly like any other pair
+        # — representative selection (status pin, then data-quality rank) has no
+        # source-awareness, per CLAUDE.md Phase 2 §2.3 ("no special-casing").
+        submitted = _event(1, "Show", _BASE, status="published")
+        submitted.submitted_by_organizer_id = 7
+        scraped = _event(
+            2, "Show", _BASE, status="draft",
+            price_min=10.0, venue_address="Main St 1",
+            lat=59.4, lng=24.7, description_orig="full description",
+        )
+        scraped.submitted_by_organizer_id = None
+        # Published pin wins regardless of source or the richer scraped data.
+        assert self._cluster([submitted, scraped]) == {1: 1, 2: 1}

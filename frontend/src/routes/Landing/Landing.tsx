@@ -3,10 +3,11 @@ import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../../api/client';
 import { getLocale, setLocale } from '../../lib/auth';
-import { MAGIC_LINK_EXPIRY_MINUTES, PERSONAS, QUERY_KEYS, UI_STATE } from '../../constants';
+import { API, BRAND_GLYPH, MAGIC_LINK_EXPIRY_MINUTES, PERSONAS, QUERY_KEYS, ROUTES, STEP_KEYS, UI_STATE } from '../../constants';
 import { t, ti, personaName, personaVibe } from '../../i18n';
 import { padIndex } from '../../utils';
 import { useMagicLinkRequest } from '../../hooks/useMagicLinkRequest';
+import { useOrganizerAuth } from '../../hooks/useOrganizerAuth';
 import TopBar from '../../components/TopBar';
 import EventCard, { type EventData } from '../../components/EventCard';
 import RadarHero from './RadarHero';
@@ -15,12 +16,6 @@ import styles from './Landing.module.css';
 interface ShowcaseResponse {
   events: EventData[];
 }
-
-const STEP_KEYS = [
-  { title: 'landing_step1_title', body: 'landing_step1_body' },
-  { title: 'landing_step2_title', body: 'landing_step2_body' },
-  { title: 'landing_step3_title', body: 'landing_step3_body' },
-];
 
 function EmailCapture({ locale }: { locale: string }) {
   const { email, setEmail, state, errorMsg, submit } = useMagicLinkRequest(locale);
@@ -64,6 +59,7 @@ function EmailCapture({ locale }: { locale: string }) {
 
 export default function Landing() {
   const [locale, setLocaleState] = useState(getLocale());
+  const isOrganizer = useOrganizerAuth();
 
   function handleLocaleChange(code: string) {
     setLocale(code);
@@ -72,7 +68,7 @@ export default function Landing() {
 
   const { data, isError } = useQuery({
     queryKey: [QUERY_KEYS.showcase, locale],
-    queryFn: () => api.get<ShowcaseResponse>(`/public/showcase?locale=${locale}`),
+    queryFn: () => api.get<ShowcaseResponse>(`${API.publicShowcase}?locale=${locale}`),
     retry: false,
   });
 
@@ -121,7 +117,7 @@ export default function Landing() {
                     <EventCard key={event.id} event={event} index={i} locale={locale} readOnly />
                   ))}
                 </div>
-                <Link to="/login" className={styles.showcaseCta}>{t('landing_showcase_cta', locale)}</Link>
+                <Link to={ROUTES.login} className={styles.showcaseCta}>{t('landing_showcase_cta', locale)}</Link>
               </>
             )}
           </section>
@@ -139,6 +135,20 @@ export default function Landing() {
               </div>
             ))}
           </div>
+        </section>
+
+        <section className={styles.organizer} aria-labelledby="organizer-cta">
+          <div className={styles.organizerText}>
+            <p className={styles.organizerEyebrow}>
+              <span className={styles.organizerMark} aria-hidden>{BRAND_GLYPH}</span>
+              {t('landing_organizer_eyebrow', locale)}
+            </p>
+            <h2 id="organizer-cta" className={styles.organizerTitle}>{t('landing_organizer_title', locale)}</h2>
+            <p className={styles.organizerBody}>{t('landing_organizer_body', locale)}</p>
+          </div>
+          <Link to={isOrganizer ? ROUTES.organizerDashboard : ROUTES.organizerLogin} className={styles.organizerCta}>
+            {t('landing_organizer_cta', locale)}
+          </Link>
         </section>
 
         <section className={styles.trust}>

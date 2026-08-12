@@ -27,4 +27,37 @@ describe('SegmentedControl', () => {
     await userEvent.click(screen.getByRole('button', { name: 'For you' }));
     expect(onChange).toHaveBeenCalledWith('foryou');
   });
+
+  it('renders a marker on an option flagged with marker, and folds the state into its accessible name', () => {
+    const markerOptions = [
+      { value: 'et', label: 'ET' },
+      { value: 'en', label: 'EN', marker: { state: 'partial' as const, stateLabel: 'partially translated' } },
+    ];
+    render(<SegmentedControl options={markerOptions} value="et" onChange={vi.fn()} ariaLabel="Language" />);
+    expect(screen.getByRole('button', { name: 'EN, partially translated' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'ET' }).querySelector('[aria-hidden="true"]')).not.toBeInTheDocument();
+  });
+
+  describe('dial variant', () => {
+    it('renders the sliding indicator with --seg-count/--seg-index set for the active option', () => {
+      const { container } = render(
+        <SegmentedControl variant="dial" options={options} value="foryou" onChange={vi.fn()} ariaLabel="Mode" />
+      );
+      const track = container.querySelector('[role="group"]') as HTMLElement;
+      expect(track.style.getPropertyValue('--seg-count')).toBe('2');
+      expect(track.style.getPropertyValue('--seg-index')).toBe('1');
+      expect(track.querySelector('[aria-hidden]')).toBeInTheDocument();
+    });
+
+    it('moves --seg-index when value changes', () => {
+      const { container, rerender } = render(
+        <SegmentedControl variant="dial" options={options} value="all" onChange={vi.fn()} ariaLabel="Mode" />
+      );
+      const track = container.querySelector('[role="group"]') as HTMLElement;
+      expect(track.style.getPropertyValue('--seg-index')).toBe('0');
+
+      rerender(<SegmentedControl variant="dial" options={options} value="foryou" onChange={vi.fn()} ariaLabel="Mode" />);
+      expect(track.style.getPropertyValue('--seg-index')).toBe('1');
+    });
+  });
 });

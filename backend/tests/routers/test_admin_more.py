@@ -73,7 +73,7 @@ async def test_wrong_credentials_returns_401():
 
 
 # ---------------------------------------------------------------------------
-# GET /admin/ingest  &  POST /admin/ingest/{slug}
+# POST /admin/ingest  &  POST /admin/ingest/{slug}
 # ---------------------------------------------------------------------------
 
 
@@ -94,7 +94,7 @@ async def test_ingest_all_returns_results():
         async with AsyncClient(
             transport=ASGITransport(app=app), base_url="http://test"
         ) as client:
-            resp = await client.get("/admin/ingest", auth=("admin", ""))
+            resp = await client.post("/admin/ingest", auth=("admin", ""))
 
     assert resp.status_code == http.HTTPStatus.OK
     assert resp.json()["results"] == [{"slug": "fienta", "raw_count": 5}]

@@ -13,12 +13,18 @@ import FacetMenu from '../../components/FacetMenu';
 import SegmentedControl from '../../components/SegmentedControl';
 import SelectMenu from '../../components/SelectMenu';
 import {
+  API,
+  BRAND_GLYPH,
   CATEGORIES,
   VIBES,
   DATE_PRESETS,
+  EXPLORE_AUDIENCE_ALL,
+  EXPLORE_AUDIENCE_FOR_YOU,
   EXPLORE_SEARCH_DEBOUNCE_MS,
   QUERY_KEYS,
+  SORT_DEFAULT,
   SORT_OPTIONS,
+  UI_STATE,
   type DatePreset,
   type SortOption,
 } from '../../constants';
@@ -83,7 +89,7 @@ export default function Explore() {
 
   const { data: currentUser } = useQuery({
     queryKey: [QUERY_KEYS.settings],
-    queryFn: () => api.get<CurrentUser>('/users/me'),
+    queryFn: () => api.get<CurrentUser>(API.me),
   });
 
   // Each page is a fresh /explore request — the backend's Path B (For-you /
@@ -163,7 +169,7 @@ export default function Explore() {
   const events = useMemo(() => data?.pages.flatMap((page) => page.events) ?? [], [data]);
   const activeCount = activeFacetCount(filters);
   const hasActiveFilters =
-    activeCount > 0 || filters.q.length > 0 || filters.forYou || filters.sort !== 'relevance';
+    activeCount > 0 || filters.q.length > 0 || filters.forYou || filters.sort !== SORT_DEFAULT;
 
   const categoryOptions = useMemo(
     () => CATEGORIES.map((slug) => ({ value: slug, label: t(`category_${slug}`, locale) })),
@@ -179,8 +185,8 @@ export default function Explore() {
   );
   const forYouOptions = useMemo(
     () => [
-      { value: 'all', label: t('all_events', locale) },
-      { value: 'foryou', label: t('for_you', locale) },
+      { value: EXPLORE_AUDIENCE_ALL, label: t('all_events', locale) },
+      { value: EXPLORE_AUDIENCE_FOR_YOU, label: t('for_you', locale) },
     ],
     [locale],
   );
@@ -227,8 +233,8 @@ export default function Explore() {
           <div className={styles.switchBox}>
             <SegmentedControl
               options={forYouOptions}
-              value={filters.forYou ? 'foryou' : 'all'}
-              onChange={(v) => setForYou(v === 'foryou')}
+              value={filters.forYou ? EXPLORE_AUDIENCE_FOR_YOU : EXPLORE_AUDIENCE_ALL}
+              onChange={(v) => setForYou(v === EXPLORE_AUDIENCE_FOR_YOU)}
               ariaLabel={`${t('all_events', locale)} / ${t('for_you', locale)}`}
             />
           </div>
@@ -286,12 +292,12 @@ export default function Explore() {
         </div>
 
         {isLoading ? (
-          <PageState kind="loading" message={t('loading', locale)} inline />
+          <PageState kind={UI_STATE.loading} message={t('loading', locale)} inline />
         ) : isError ? (
-          <PageState kind="error" message={t('explore_error', locale)} inline />
+          <PageState kind={UI_STATE.error} message={t('explore_error', locale)} inline />
         ) : events.length === 0 ? (
           <EmptyState
-            icon="◉"
+            icon={BRAND_GLYPH}
             title={t('explore_empty_title', locale)}
             message={t('explore_empty_msg', locale)}
           />

@@ -3,7 +3,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Analytics } from '@vercel/analytics/react';
 import { SpeedInsights } from '@vercel/speed-insights/react';
 import { useAuth } from './hooks/useAuth';
-import { QUERY_RETRY, QUERY_STALE_TIME } from './constants';
+import { useOrganizerAuth } from './hooks/useOrganizerAuth';
+import { QUERY_RETRY, QUERY_STALE_TIME, ROUTES } from './constants';
 import { maskAnalyticsUrl } from './utils';
 import ErrorBoundary from './components/ErrorBoundary';
 import Landing from './routes/Landing';
@@ -19,6 +20,10 @@ import Unsubscribe from './routes/Unsubscribe';
 import Privacy from './routes/Privacy';
 import Terms from './routes/Terms';
 import Contact from './routes/Contact';
+import OrganizerLogin from './routes/OrganizerLogin';
+import OrganizerVerify from './routes/OrganizerVerify';
+import OrganizerDashboard from './routes/OrganizerDashboard';
+import EventSubmit from './routes/EventSubmit';
 import NotFound from './routes/NotFound';
 import Footer from './components/Footer';
 
@@ -30,7 +35,15 @@ const queryClient = new QueryClient({
 
 function Protected({ children }: { children: React.ReactNode }) {
   const authed = useAuth();
-  if (!authed) return <Navigate to="/login" replace />;
+  if (!authed) return <Navigate to={ROUTES.login} replace />;
+  return <>{children}</>;
+}
+
+// Mirrors Protected but on the organizer session track (useOrganizerAuth,
+// redirect to /organizer/login) — the two auth tracks never share a guard.
+function OrganizerProtected({ children }: { children: React.ReactNode }) {
+  const authed = useOrganizerAuth();
+  if (!authed) return <Navigate to={ROUTES.organizerLogin} replace />;
   return <>{children}</>;
 }
 
@@ -52,36 +65,50 @@ export default function App() {
       <QueryClientProvider client={queryClient}>
         <BrowserRouter>
           <Routes>
-            <Route path="/login" element={<Login />} />
-            <Route path="/auth/verify" element={<AuthVerify />} />
+            <Route path={ROUTES.login} element={<Login />} />
+            <Route path={ROUTES.authVerify} element={<AuthVerify />} />
             <Route
-              path="/onboarding"
+              path={ROUTES.onboarding}
               element={<Protected><Onboarding /></Protected>}
             />
             <Route
-              path="/"
+              path={ROUTES.home}
               element={<Home />}
             />
             <Route
-              path="/explore"
+              path={ROUTES.explore}
               element={<Protected><Explore /></Protected>}
             />
             <Route
-              path="/saved"
+              path={ROUTES.saved}
               element={<Protected><SavedEvents /></Protected>}
             />
             <Route
-              path="/events/:id"
+              path={ROUTES.eventDetailPattern}
               element={<EventDetail />}
             />
             <Route
-              path="/settings"
+              path={ROUTES.settings}
               element={<Protected><Settings /></Protected>}
             />
-            <Route path="/unsubscribe" element={<Unsubscribe />} />
-            <Route path="/privacy" element={<Privacy />} />
-            <Route path="/terms" element={<Terms />} />
-            <Route path="/contact" element={<Contact />} />
+            <Route path={ROUTES.unsubscribe} element={<Unsubscribe />} />
+            <Route path={ROUTES.privacy} element={<Privacy />} />
+            <Route path={ROUTES.terms} element={<Terms />} />
+            <Route path={ROUTES.contact} element={<Contact />} />
+            <Route path={ROUTES.organizerLogin} element={<OrganizerLogin />} />
+            <Route path={ROUTES.organizerVerify} element={<OrganizerVerify />} />
+            <Route
+              path={ROUTES.organizerDashboard}
+              element={<OrganizerProtected><OrganizerDashboard /></OrganizerProtected>}
+            />
+            <Route
+              path={ROUTES.organizerSubmit}
+              element={<OrganizerProtected><EventSubmit /></OrganizerProtected>}
+            />
+            <Route
+              path={ROUTES.organizerEventEditPattern}
+              element={<OrganizerProtected><EventSubmit /></OrganizerProtected>}
+            />
             <Route path="*" element={<Protected><NotFound /></Protected>} />
           </Routes>
           <Footer />

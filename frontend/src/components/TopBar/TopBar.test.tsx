@@ -4,7 +4,7 @@ import { renderWithProviders } from '../../test/utils';
 import TopBar from './TopBar';
 
 describe('TopBar', () => {
-  it('shows a Sign in link to /login when signed out, no sign-out button/nav/hamburger', () => {
+  it('shows a Sign in link to /login when signed out, no sign-out button/nav, plus hamburger', () => {
     renderWithProviders(
       <TopBar locale="en" onLocaleChange={vi.fn()} authed={false} />,
     );
@@ -13,7 +13,7 @@ describe('TopBar', () => {
     expect(signIn).toHaveAttribute('href', '/login');
     expect(screen.queryByRole('button', { name: /sign out/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('navigation')).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Menu' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Menu' })).toBeInTheDocument();
   });
 
   it('shows Back immediately alongside Sign in when signed out with onBack', () => {

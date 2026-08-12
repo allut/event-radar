@@ -15,7 +15,12 @@ from itsdangerous import BadSignature, SignatureExpired
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.tokens import verify_unsubscribe_token
-from app.constants import RATE_LIMIT_UNSUBSCRIBE
+from app.constants import (
+    ERROR_UNSUBSCRIBE_LINK_EXPIRED,
+    ERROR_UNSUBSCRIBE_LINK_INVALID,
+    ERROR_USER_NOT_FOUND,
+    RATE_LIMIT_UNSUBSCRIBE,
+)
 from app.db import get_db
 from app.models.models import User
 from app.rate_limit import limiter
@@ -31,18 +36,18 @@ async def _load_user_from_token(token: str, db: AsyncSession) -> User:
     except SignatureExpired:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Unsubscribe link has expired. Please use Settings instead.",
+            detail=ERROR_UNSUBSCRIBE_LINK_EXPIRED,
         )
     except BadSignature:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid unsubscribe link.",
+            detail=ERROR_UNSUBSCRIBE_LINK_INVALID,
         )
     user = await db.get(User, user_id)
     if user is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="User not found.",
+            detail=ERROR_USER_NOT_FOUND,
         )
     return user
 

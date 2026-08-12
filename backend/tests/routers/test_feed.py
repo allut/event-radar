@@ -311,7 +311,7 @@ class TestGetEvent:
             event_id=42,
             request=make_request(),
             db=mock_db,
-            authorization=f"Bearer {stale_token}",
+            session=stale_token,
         )
 
         # Revoked token must not resolve signals for this user — no leak of
@@ -357,7 +357,7 @@ class TestGetEvent:
             request=make_request(),
             locale_query="et",
             db=mock_db,
-            authorization=f"Bearer {token}",
+            session=token,
         )
 
         assert result["why_go"] == ["ET bullet"]
@@ -382,7 +382,7 @@ class TestGetEvent:
             request=make_request(),
             locale_query=None,
             db=mock_db,
-            authorization=f"Bearer {token}",
+            session=token,
         )
 
         assert result["why_go"] == ["EN bullet"]

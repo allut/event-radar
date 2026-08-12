@@ -9,7 +9,7 @@ user/feedback/persona concern, plus a symmetric date window (see _showcase_stmt)
 from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, Query, Request
-from sqlalchemy import Select
+from sqlalchemy import Select, case
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.constants import (
@@ -35,11 +35,24 @@ from app.routers.utils import (
 router = APIRouter(prefix="/public", tags=["public"])
 
 
-def _showcase_stmt(now: datetime, window_days: int) -> Select[tuple[Event]]:
-    """Top-quality events starting within `window_days`, or already running and
-    started within that same lookback — bounded on both sides so a long-lived
-    listing (e.g. a museum's year-round entry ticket, valid for months) can't
-    permanently occupy the "this week" grid just because it hasn't ended yet."""
+def _showcase_stmt(now: datetime) -> Select[tuple[Event]]:
+    """Top-quality events within SHOWCASE_FALLBACK_WINDOW_DAYS, preferring ones
+    within the narrower SHOWCASE_WINDOW_DAYS ("this week") — a single query
+    replacing the old narrow-then-fallback two-query shape (the narrow result
+    is always a subset of this wider one: same filters, same tie-break order,
+    just a looser date bound).
+
+    Bounded on both sides so a long-lived listing (e.g. a museum's year-round
+    entry ticket, valid for months) can't permanently occupy the grid just
+    because it hasn't ended yet. ``in_narrow_window`` sorts first so a "this
+    week" event is always preferred over a wider-window one regardless of
+    quality_score, only spilling into the wider window when the narrow week
+    doesn't have enough candidates to fill SHOWCASE_EVENT_COUNT — identical
+    precedence to the old fallback-only-when-thin behavior, in one query.
+    """
+    in_narrow_window = (Event.starts_at >= now - timedelta(days=SHOWCASE_WINDOW_DAYS)) & (
+        Event.starts_at < now + timedelta(days=SHOWCASE_WINDOW_DAYS)
+    )
     return (
         select_events_with_classification()
         .join(Event.classification)
@@ -47,10 +60,11 @@ def _showcase_stmt(now: datetime, window_days: int) -> Select[tuple[Event]]:
             public_event_filter(),
             event_not_ended_filter(now),
             canonical_event_filter(),
-            Event.starts_at < now + timedelta(days=window_days),
-            Event.starts_at >= now - timedelta(days=window_days),
+            Event.starts_at < now + timedelta(days=SHOWCASE_FALLBACK_WINDOW_DAYS),
+            Event.starts_at >= now - timedelta(days=SHOWCASE_FALLBACK_WINDOW_DAYS),
         )
         .order_by(
+            case((in_narrow_window, 0), else_=1),
             EventClassification.quality_score.desc().nulls_last(),
             Event.starts_at.asc(),
         )
@@ -69,17 +83,13 @@ async def showcase(
 
     No auth: anonymous visitors must be able to see real events before signing
     up. serialize_event is called without feedback signals (no user context).
-    A thin week (fewer than SHOWCASE_EVENT_COUNT candidates) falls back to a
-    wider window so the section never renders a near-empty grid.
+    A thin week (fewer than SHOWCASE_EVENT_COUNT candidates) spills into a wider
+    window — one query orders "this week" candidates first, so widening only
+    changes results when the narrow week can't fill the grid on its own (see
+    _showcase_stmt).
     """
     locale = resolve_locale_param(locale, DEFAULT_USER_LOCALE)
 
     now = datetime.now(TALLINN_TZ)
-    events = list((await db.scalars(_showcase_stmt(now, SHOWCASE_WINDOW_DAYS))).all())
-    if len(events) < SHOWCASE_EVENT_COUNT:
-        events = list(
-            (
-                await db.scalars(_showcase_stmt(now, SHOWCASE_FALLBACK_WINDOW_DAYS))
-            ).all()
-        )
+    events = list((await db.scalars(_showcase_stmt(now))).all())
     return {"events": [serialize_event(e, locale=locale) for e in events]}

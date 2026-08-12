@@ -1,3 +1,4 @@
+import http
 import json
 import logging
 import logging.handlers
@@ -117,7 +118,7 @@ class _AccessPathFilter(logging.Filter):
             if (
                 path in LOG_SHIP_SUPPRESS_ACCESS_PATHS
                 and isinstance(status, int)
-                and status < 400
+                and status < http.HTTPStatus.BAD_REQUEST
             ):
                 return False
         return True

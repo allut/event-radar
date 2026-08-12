@@ -172,13 +172,7 @@
      layout is identical to removing it. Also covers desktop reflow-zoom,
      which crosses this breakpoint at high zoom (WCAG 1.4.10). */
   .promoCta {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    padding: 0;
-    margin: -1px;
-    border: 0;
-    overflow: hidden;
+    composes: srOnly from '../../components/shared/Visually.module.css';
     clip-path: inset(50%);
   }
 

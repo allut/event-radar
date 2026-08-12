@@ -11,12 +11,18 @@ import pytest
 from bs4 import BeautifulSoup
 from tenacity import RetryCallState
 
-from app.constants import HTTP_RETRY_AFTER_MAX_SECONDS, TALLINN_TZ
+from app.constants import (
+    HTTP_RETRY_AFTER_MAX_SECONDS,
+    SOURCE_KIND_API,
+    SOURCE_KIND_USER_SUBMISSION,
+    TALLINN_TZ,
+)
 from app.ingestion.adapter import (
     NormalizedEvent,
     SourceAdapter,
     coords_in_estonia,
     coords_in_tallinn,
+    insert_normalized_event,
 )
 from app.ingestion.content_filters import is_explicit_text, is_non_event_text
 from app.ingestion.http_client import (
@@ -70,6 +76,20 @@ class TestHostIsAllowed:
 
     def test_empty_string_rejected(self):
         assert host_is_allowed("") is False
+
+
+@pytest.fixture(autouse=True)
+def _clear_dns_verdict_cache():
+    """resolves_to_private_ip() now caches verdicts per-hostname (see
+    http_client.DNS_RESOLVE_CACHE_TTL_SECONDS) — several tests below and in
+    TestSafeFetchableUrl re-resolve the same hostname with a different mocked
+    getaddrinfo result, which would otherwise read back the first test's
+    cached verdict instead of exercising the new mock."""
+    from app.ingestion import http_client
+
+    http_client._dns_verdict_cache.clear()
+    yield
+    http_client._dns_verdict_cache.clear()
 
 
 class TestResolvesToPrivateIp:
@@ -907,6 +927,117 @@ class TestNormalizedEventAddressGate:
         )
         assert event.lat == 59.43
         assert event.lng == 24.75
+
+
+class TestInsertNormalizedEvent:
+    """insert_normalized_event() is the shared write path extracted from
+    SourceAdapter._insert_event (P1 organizer-submission refactor) — used by
+    every scraper adapter *and* the organizer direct-submission router, which
+    has no adapter/normalize() step of its own."""
+
+    def _nested_cm(self, mock_db):
+        nested_cm = MagicMock()
+        nested_cm.__aenter__ = AsyncMock(return_value=None)
+        nested_cm.__aexit__ = AsyncMock(return_value=False)
+        mock_db.begin_nested = MagicMock(return_value=nested_cm)
+        return nested_cm
+
+    @pytest.mark.asyncio
+    async def test_returns_event_on_success(self, mock_db):
+        self._nested_cm(mock_db)
+        source = MagicMock(id=1, slug="test-source")
+        normalized = NormalizedEvent(
+            external_id="ext-1",
+            title="Test Event",
+            starts_at=datetime(2026, 6, 1, 18, 0, tzinfo=TALLINN_TZ),
+        )
+
+        result = await insert_normalized_event(mock_db, source, normalized)
+
+        assert result is not None
+        assert result.title_orig == "Test Event"
+        mock_db.flush.assert_awaited()
+
+    @pytest.mark.asyncio
+    async def test_returns_none_on_slug_collision(self, mock_db):
+        from sqlalchemy.exc import IntegrityError
+
+        self._nested_cm(mock_db)
+        mock_db.flush.side_effect = IntegrityError("stmt", {}, Exception("dup key"))
+        source = MagicMock(id=1, slug="test-source")
+        normalized = NormalizedEvent(
+            external_id="ext-1",
+            title="Test Event",
+            starts_at=datetime(2026, 6, 1, 18, 0, tzinfo=TALLINN_TZ),
+        )
+
+        result = await insert_normalized_event(mock_db, source, normalized)
+
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_source_adapter_insert_event_delegates(self, mock_db):
+        """SourceAdapter._insert_event now delegates to insert_normalized_event
+        bound to self.source, preserving the pre-refactor call site's behavior."""
+        self._nested_cm(mock_db)
+        source = MagicMock(id=1, slug="test-source")
+
+        class _FakeAdapterForInsert(SourceAdapter):
+            async def fetch_raw(self, known_ids):
+                return []
+
+            def normalize(self, raw):
+                return None
+
+        adapter = _FakeAdapterForInsert(source)
+        normalized = NormalizedEvent(
+            external_id="ext-2",
+            title="Delegate Test",
+            starts_at=datetime(2026, 6, 1, 18, 0, tzinfo=TALLINN_TZ),
+        )
+
+        result = await adapter._insert_event(mock_db, normalized)
+
+        assert result is not None
+        assert result.title_orig == "Delegate Test"
+
+    @pytest.mark.asyncio
+    async def test_user_submission_kind_keeps_arbitrary_host_url(self, mock_db):
+        """A user_submission source's url is never server-fetched (refetch.py
+        excludes organizer submissions), so it only needs the scheme-only
+        safe_external_url check — an off-allowlist host is kept."""
+        self._nested_cm(mock_db)
+        source = MagicMock(id=1, slug="user_submission", kind=SOURCE_KIND_USER_SUBMISSION)
+        normalized = NormalizedEvent(
+            external_id="ext-3",
+            title="Organizer Event",
+            starts_at=datetime(2026, 6, 1, 18, 0, tzinfo=TALLINN_TZ),
+            url="https://mytheatre.ee/tickets/42",
+        )
+
+        result = await insert_normalized_event(mock_db, source, normalized)
+
+        assert result is not None
+        assert result.url == "https://mytheatre.ee/tickets/42"
+
+    @pytest.mark.asyncio
+    async def test_adapter_kind_drops_arbitrary_host_url(self, mock_db):
+        """An adapter-kind source keeps the host-pinned safe_fetchable_url
+        guard: the same off-allowlist host that a user_submission source
+        keeps is dropped to None here."""
+        self._nested_cm(mock_db)
+        source = MagicMock(id=1, slug="test-source", kind=SOURCE_KIND_API)
+        normalized = NormalizedEvent(
+            external_id="ext-4",
+            title="Scraped Event",
+            starts_at=datetime(2026, 6, 1, 18, 0, tzinfo=TALLINN_TZ),
+            url="https://mytheatre.ee/tickets/42",
+        )
+
+        result = await insert_normalized_event(mock_db, source, normalized)
+
+        assert result is not None
+        assert result.url is None
 
 
 class TestStripFeeAmounts:

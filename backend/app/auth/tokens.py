@@ -1,7 +1,8 @@
 """Token utilities for magic-link auth and session management.
 
 Magic-link token: URLSafeTimedSerializer signed payload {user_id}, 15-min TTL.
-Session token: same serializer with a different salt, 7-day TTL.
+Session token: same serializer with a different salt, SESSION_TTL_DAYS TTL
+(2 days as of shared/app-config.json — see CLAUDE.md Auth).
 The magic-link token hash (SHA-256 hex) is stored in auth_magic_links.token_hash
 so a compromised DB row cannot be turned back into a valid token.
 """
@@ -14,8 +15,13 @@ from itsdangerous import URLSafeTimedSerializer
 from app.config import settings
 from app.constants import (
     AUTH_MAGIC_SALT,
+    AUTH_ORGANIZER_MAGIC_SALT,
+    AUTH_ORGANIZER_SESSION_SALT,
     AUTH_SESSION_SALT,
     AUTH_UNSUBSCRIBE_SALT,
+    DEFAULT_SESSION_TOKEN_VERSION,
+    ORGANIZER_MAGIC_LINK_TTL_MINUTES,
+    ORGANIZER_SESSION_TTL_DAYS,
     SECONDS_PER_DAY,
     SECONDS_PER_MINUTE,
     UNSUBSCRIBE_TOKEN_TTL_DAYS,
@@ -24,6 +30,10 @@ from app.constants import (
 
 def magic_ttl_seconds() -> int:
     return settings.MAGIC_LINK_TTL_MINUTES * SECONDS_PER_MINUTE
+
+
+def organizer_magic_ttl_seconds() -> int:
+    return ORGANIZER_MAGIC_LINK_TTL_MINUTES * SECONDS_PER_MINUTE
 
 
 def _serializer() -> URLSafeTimedSerializer:
@@ -72,7 +82,46 @@ def verify_session_token(token: str) -> tuple[int, int]:
         salt=AUTH_SESSION_SALT,
         max_age=settings.SESSION_TTL_DAYS * SECONDS_PER_DAY,
     )
-    return int(payload["uid"]), int(payload.get("v", 1))
+    return int(payload["uid"]), int(payload.get("v", DEFAULT_SESSION_TOKEN_VERSION))
+
+
+def generate_organizer_magic_token(organizer_id: int) -> tuple[str, str, datetime]:
+    """Return (signed_token, sha256_hex_hash, expires_at) for an organizer
+    magic-link — same shape as generate_magic_token, distinct salt (see
+    AUTH_ORGANIZER_MAGIC_SALT) so a user token can never verify as one."""
+    token = _serializer().dumps({"oid": organizer_id}, salt=AUTH_ORGANIZER_MAGIC_SALT)
+    token_hash = hashlib.sha256(token.encode()).hexdigest()
+    expires_at = datetime.now(timezone.utc) + timedelta(
+        seconds=organizer_magic_ttl_seconds()
+    )
+    return token, token_hash, expires_at
+
+
+def verify_organizer_magic_token(token: str) -> int:
+    """Decode and return organizer_id. Raises SignatureExpired or BadSignature."""
+    payload = _serializer().loads(
+        token, salt=AUTH_ORGANIZER_MAGIC_SALT, max_age=organizer_magic_ttl_seconds()
+    )
+    return int(payload["oid"])
+
+
+def generate_organizer_session_token(organizer_id: int, version: int) -> str:
+    """Embed the organizer's current session_token_version ("v") in the signed
+    payload — mirrors generate_session_token for the organizer auth track."""
+    return _serializer().dumps(
+        {"oid": organizer_id, "v": version},
+        salt=AUTH_ORGANIZER_SESSION_SALT,
+    )
+
+
+def verify_organizer_session_token(token: str) -> tuple[int, int]:
+    """Return (organizer_id, version). Raises BadSignature / SignatureExpired."""
+    payload = _serializer().loads(
+        token,
+        salt=AUTH_ORGANIZER_SESSION_SALT,
+        max_age=ORGANIZER_SESSION_TTL_DAYS * SECONDS_PER_DAY,
+    )
+    return int(payload["oid"]), int(payload.get("v", DEFAULT_SESSION_TOKEN_VERSION))
 
 
 def generate_unsubscribe_token(user_id: int) -> str:

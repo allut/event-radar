@@ -9,7 +9,7 @@
   top: calc(100% + var(--space-0-45));
   left: 0;
   z-index: var(--z-toast);
-  min-width: 330px;
+  min-width: var(--menu-pop-min-width);
   max-width: calc(100vw - 2 * var(--space-5));
   background: var(--bg-card);
   border: 1px solid var(--border);

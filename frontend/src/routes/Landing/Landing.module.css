@@ -10,7 +10,7 @@
   grid-template-columns: 1.1fr 0.9fr;
   align-items: center;
   gap: var(--space-8);
-  max-width: 1100px;
+  max-width: var(--page-max-wide);
   width: 100%;
   margin: 0 auto;
   padding: var(--space-9) var(--space-6) var(--space-8);
@@ -86,13 +86,7 @@
 }
 
 .spinner {
-  composes: spin from '../../components/shared/Animations.module.css';
-  display: inline-block;
-  width: var(--spinner-size-sm);
-  height: var(--spinner-size-sm);
-  border: 2px solid var(--spinner-border);
-  border-top-color: var(--on-accent);
-  border-radius: var(--radius-full);
+  composes: spinner from '../../components/shared/Spinner.module.css';
 }
 
 .error {
@@ -126,15 +120,8 @@
 }
 
 .checkCircle {
-  width: 48px;
-  height: 48px;
-  border: 2px solid var(--success);
-  border-radius: var(--radius-full);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  composes: statusCircle statusCircleSuccess from '../../components/shared/StatusCircle.module.css';
   font-size: var(--fs-xl);
-  color: var(--success);
 }
 
 .successMsg { font-size: var(--fs-base); color: var(--text); }
@@ -161,7 +148,7 @@
 
 /* ── How it works ────────────────────────────────────────────────────── */
 .steps {
-  max-width: 1000px;
+  max-width: var(--page-max-medium);
   margin: 0 auto;
   padding: var(--space-8) var(--space-6);
   border-top: var(--rule);
@@ -204,7 +191,7 @@
 
 /* ── Showcase grid ───────────────────────────────────────────────────── */
 .showcase {
-  max-width: 1100px;
+  max-width: var(--page-max-wide);
   margin: 0 auto;
   padding: var(--space-8) var(--space-6);
   border-top: var(--rule);
@@ -227,7 +214,7 @@
 
 /* ── Personas ────────────────────────────────────────────────────────── */
 .personas {
-  max-width: 1000px;
+  max-width: var(--page-max-medium);
   margin: 0 auto;
   padding: var(--space-8) var(--space-6);
   border-top: var(--rule);
@@ -309,6 +296,69 @@
 
 .finalCta .emailForm { justify-content: center; width: 100%; }
 
+/* ── For organizers ──────────────────────────────────────────────────── */
+.organizer {
+  max-width: var(--page-max-medium);
+  margin: 0 auto;
+  padding: var(--space-8) var(--space-6);
+  border-top: var(--rule);
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: var(--space-6);
+}
+
+.organizerText {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.organizerEyebrow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--fs-2xs);
+  text-transform: uppercase;
+  letter-spacing: var(--eyebrow-tracking);
+  color: var(--text-muted);
+}
+
+.organizerMark {
+  composes: breathe from '../../components/shared/Animations.module.css';
+  color: var(--accent);
+  --breathe-duration: var(--anim-breathe-fast);
+}
+
+.organizerTitle {
+  composes: sectionTitle;
+  font-size: var(--heading-lg);
+  text-align: left;
+}
+
+.organizerBody {
+  font-size: var(--fs-md);
+  color: var(--text-soft);
+  max-width: 46ch;
+}
+
+.organizerCta {
+  composes: btnOutline from '../../components/shared/Button.module.css';
+  display: inline-flex;
+  padding: var(--space-3) var(--space-6);
+  align-self: center;
+  white-space: nowrap;
+}
+
+/* !important: CSS Modules bundling can place the composed .breathe class
+   rules (from Animations.module.css) later in the output than this file's
+   own rules, at equal specificity — this override must win the cascade
+   regardless of that chunk order. */
+@media (prefers-reduced-motion: reduce) {
+  .organizerMark { animation: none !important; }
+}
+
 /* ── Responsive ──────────────────────────────────────────────────────── */
 @media (max-width: 900px) {
   .hero {
@@ -323,6 +373,8 @@
   .heroArt { order: -1; }
   .stepList { grid-template-columns: 1fr; gap: var(--space-5); }
   .personaChip { flex-basis: calc((100% - 2 * var(--space-4)) / 3); }
+  .organizer { grid-template-columns: 1fr; row-gap: var(--space-5); }
+  .organizerCta { justify-self: start; }
 }
 
 @media (max-width: 640px) {

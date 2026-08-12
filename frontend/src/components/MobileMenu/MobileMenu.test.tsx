@@ -76,4 +76,18 @@ describe('MobileMenu', () => {
     expect(screen.getByText('Sign out')).toBeInTheDocument();
     expect(screen.getByText('ET')).toBeInTheDocument();
   });
+
+  it('shows a Sign in link and no nav/sign-out when signed out', () => {
+    renderWithProviders(
+      <MobileMenu locale="en" onLocaleChange={vi.fn()} authed={false} />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
+
+    const signIn = screen.getByRole('link', { name: 'Sign in' });
+    expect(signIn).toHaveAttribute('href', '/login');
+    expect(screen.queryByText('Sign out')).not.toBeInTheDocument();
+    expect(screen.queryByRole('navigation')).not.toBeInTheDocument();
+    expect(screen.getByText('ET')).toBeInTheDocument();
+  });
 });

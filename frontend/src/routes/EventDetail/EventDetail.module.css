@@ -22,7 +22,7 @@
 
 .hero {
   position: relative;
-  max-width: 680px;
+  max-width: var(--page-max-narrow);
   margin: var(--space-5) auto 0;
   padding: 0 var(--space-5);
 }
@@ -72,34 +72,6 @@
   letter-spacing: var(--tracking-wide);
 }
 
-.shareFab {
-  position: absolute;
-  top: var(--space-3);
-  right: calc(var(--space-5) + var(--space-3));
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-0-2);
-  background: var(--bg-overlay-soft);
-  backdrop-filter: blur(var(--blur-chip));
-  color: var(--accent-light);
-  font-size: var(--fs-xs);
-  font-weight: 600;
-  padding: var(--space-1) var(--space-3);
-  border-radius: var(--radius-pill);
-  letter-spacing: var(--tracking-wide);
-  cursor: pointer;
-  transition: var(--transition);
-}
-
-.shareFab:hover {
-  background: var(--accent-hover-bg);
-}
-
-.shareFabIcon {
-  font-size: var(--fs-icon);
-  line-height: 1;
-}
-
 /* ─── Content ─────────────────────────────────────────────────────────────── */
 
 .main {
@@ -110,7 +82,7 @@
   composes: rise from '../../components/shared/Animations.module.css';
   --rise-distance: 6px;
   --rise-duration: var(--anim-rise-sm);
-  max-width: 680px;
+  max-width: var(--page-max-narrow);
   margin: 0 auto;
   padding: var(--space-6) var(--space-5) var(--space-8);
 }
@@ -148,7 +120,7 @@
   color: var(--text);
   line-height: var(--leading-display);
   letter-spacing: var(--tracking-tighter);
-  margin-bottom: var(--space-6);
+  margin-bottom: var(--space-4);
 }
 
 /* ─── Section eyebrows ────────────────────────────────────────────────────── */
@@ -224,7 +196,7 @@
   color: var(--text-muted);
   padding-left: var(--space-1-25);
   position: relative;
-  line-height: 1.55;
+  line-height: var(--leading-body);
 }
 
 .bullet::before {
@@ -241,7 +213,7 @@
 .description {
   font-size: var(--fs-base);
   color: var(--text-muted);
-  line-height: 1.7;
+  line-height: var(--leading-relaxed);
   white-space: pre-wrap;
 }
 
@@ -342,9 +314,35 @@
 .actions {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: var(--space-2);
-  padding-top: var(--space-5);
-  border-top: 1px solid var(--border-subtle);
+  padding-bottom: var(--space-5);
+  margin-bottom: var(--space-6);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.shareBtn {
+  composes: btnOutline from '../../components/shared/Button.module.css';
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-0-45);
+  padding: var(--space-0-45) var(--space-0-875);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  line-height: normal;
+  letter-spacing: var(--tracking-normal);
+  cursor: pointer;
+}
+
+.shareBtn svg {
+  width: var(--action-icon-size);
+  height: var(--action-icon-size);
+  flex-shrink: 0;
+}
+
+.shareBtn:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus-ring);
 }
 
 .ticketsBtn {
@@ -359,4 +357,29 @@
 
 .ticketsBtn:hover {
   color: var(--on-accent);
+}
+
+@media (max-width: 640px) {
+  .ticketsBtn {
+    flex: 1 0 100%;
+    margin-left: 0;
+    justify-content: center;
+  }
+
+  .shareBtn {
+    margin-left: auto;
+    padding-block: var(--space-2);
+  }
+}
+
+@media (max-width: 400px) {
+  .shareLabel {
+    display: none;
+  }
+
+  .shareBtn {
+    gap: 0;
+    padding-left: var(--space-0-625);
+    padding-right: var(--space-0-625);
+  }
 }

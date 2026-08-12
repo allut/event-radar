@@ -1,0 +1,40 @@
+# What's on Radar
+
+AI-powered event discovery for Tallinn. This glossary pins the project's
+domain language so code, issues, and docs use one word per concept.
+
+## Authentication
+
+**Magic link**:
+The single-use, short-lived link emailed to an address to prove the recipient
+controls it. Proves control of an address; it is not itself a session.
+_Avoid_: login link, verification link, OTP
+
+**Session token**:
+The signed, self-verifying value that proves an identity for the life of a
+session. Carried in an httpOnly cookie and never readable by client code.
+_Avoid_: access token, auth token, JWT
+
+**Signed-in hint**:
+A client-readable marker that a session token exists in this browser. It
+carries no credential value and grants no access on its own.
+_Avoid_: auth flag, session flag, client token
+
+**Consumer track**:
+The authentication track for people who read the feed. Has its own salts,
+tables, and session lifetime.
+_Avoid_: user auth, main auth
+
+**Organizer track**:
+The authentication track for people who submit events. Structurally mirrors
+the consumer track and is never interchangeable with it.
+_Avoid_: portal auth, submitter auth
+
+**Sign out**:
+Ends the session on the current device only. Other devices keep their
+sessions.
+_Avoid_: logout (when the distinction below matters)
+
+**Sign out everywhere**:
+Invalidates every session for an identity across all devices, immediately.
+_Avoid_: global logout, force logout, revoke all

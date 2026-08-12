@@ -68,6 +68,7 @@
   --fs-status: 1.2rem;  /* check/error icons in bordered circles */
   --fs-btn-detail: 1.05rem; /* detail-view feedback button labels */
 
+  --tracking-tightest: -0.03em; /* placeholder ghost numerals (extra-condensed) */
   --tracking-tighter: -0.01em;  /* display headings (condensed) */
   --tracking-snug:     0.01em;  /* button text, brand (subtle positive) */
   --tracking-normal:   0.02em;  /* event time, links */
@@ -120,6 +121,11 @@
   --z-sticky: 10;
   --z-toast: 50;
   --z-card-overlay: 1;
+  --z-seg-label: 1;
+  --z-modal: 100;
+
+  /* Disabled state */
+  --opacity-disabled: 0.5;
 
   /* Backdrop blur */
   --blur-overlay: 8px;   /* sticky topbars */
@@ -143,6 +149,52 @@
   --toggle-padding: 3px;
   --toggle-knob-color: #fff;
 
+  /* Segmented control — dial variant */
+  --seg-blip-size: 6px;
+
+  /* DatePicker */
+  --calendar-cell-size: 36px;
+  --calendar-grid-gap: 2px;
+  --picker-pop-width: 336px;
+  --time-field-width: 3rem;
+  --time-field-height: 2.75rem;
+
+  /* SelectField */
+  --select-pop-max-height: 280px;
+  --field-icon-size: 18px;
+
+  /* FileField */
+  --file-preview-max-width: 320px;
+
+  /* Shared field/calendar geometry (DatePicker, FileField) */
+  --field-affordance-size: 44px;  /* calendar/remove trigger button */
+  --cal-nav-size: 28px;           /* month prev/next buttons */
+  --cal-nav-icon-size: 14px;
+  --cal-today-dot-size: 4px;
+
+  /* Status circle (auth verify / login / contact success-error icons) */
+  --status-circle-size: 48px;
+  --status-circle-size-lg: 56px;
+
+  /* Footer social icons */
+  --social-icon-size: 20px;
+
+  /* EventDetail action bar (share icon) */
+  --action-icon-size: 15px;
+
+  /* Page container widths */
+  --page-max-narrow: 680px;
+  --page-max-legal: 720px;
+  --page-max-medium: 1000px;
+  --page-max-grid: 1080px;
+  --page-max-wide: 1100px;
+
+  /* Form controls */
+  --control-height-lg: 48px;
+
+  /* Popover/menu geometry */
+  --menu-pop-min-width: 330px;
+
   /* Heading scale */
   --heading-3xl: 3rem;
   --heading-2xl: 2.5rem;
@@ -159,6 +211,9 @@
   /* Leading (line-height) */
   --leading-display: 1.15;
   --leading-body: 1.6;
+  --leading-tight: 1.2;
+  --leading-snug: 1.4;
+  --leading-relaxed: 1.7;
 
   /* Animation durations */
   --anim-fast: 0.3s;
@@ -176,8 +231,7 @@
   --shadow-card:        0 4px 20px rgba(0, 0, 0, 0.25);
   --shadow-card-hover:  0 8px 24px rgba(0, 0, 0, 0.3);
   --shadow-accent:      0 8px 32px rgba(200, 146, 42, 0.1);
-  --shadow-lead:        0 24px 64px rgba(0, 0, 0, 0.45);
-  --shadow-glow:        0 0 8px var(--accent);
+  --shadow-lead:        0 2px 8px rgba(0, 0, 0, 0.2);
 
   /* Ring shadows (geometry + token colors) */
   --shadow-focus-ring:    0 0 0 3px var(--accent-glow);
@@ -188,6 +242,24 @@
 
   /* Decoration */
   --numeral-color: var(--text-dim);
+
+  /* Category card-fallback gradients — keys mirror the 14-category taxonomy
+     in shared/app-config.json (VALID_CATEGORIES); categories with no entry
+     here fall back to --gradient-fallback (categoryGradient() in utils.ts). */
+  --gradient-nightlife:    linear-gradient(135deg, #1a0a1f 0%, #2d1040 100%);
+  --gradient-music:        linear-gradient(135deg, #0a1020 0%, #1a2060 100%);
+  --gradient-theater:      linear-gradient(135deg, #1a100a 0%, #3d2010 100%);
+  --gradient-exhibitions:  linear-gradient(135deg, #100a15 0%, #1a0a2a 100%);
+  --gradient-workshops:    linear-gradient(135deg, #0a100f 0%, #102020 100%);
+  --gradient-food_drink:   linear-gradient(135deg, #0f1a0a 0%, #1a3010 100%);
+  --gradient-sports:       linear-gradient(135deg, #0a1a0f 0%, #102030 100%);
+  --gradient-networking:   linear-gradient(135deg, #0a0f1a 0%, #0a2030 100%);
+  --gradient-literature:   linear-gradient(135deg, #0f100a 0%, #1f2010 100%);
+  --gradient-family:       linear-gradient(135deg, #1a0a10 0%, #2a1020 100%);
+  --gradient-cinema:       linear-gradient(135deg, #0a1510 0%, #103020 100%);
+  --gradient-alternative:  linear-gradient(135deg, #100f0a 0%, #201a0a 100%);
+  --gradient-romantic:     linear-gradient(135deg, #1a0a12 0%, #3a1128 100%);
+  --gradient-fallback:     linear-gradient(135deg, #1a1f2e 0%, #13161e 100%);
 }
 
 html {

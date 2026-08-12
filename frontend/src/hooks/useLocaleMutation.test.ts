@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import { useLocaleMutation } from './useLocaleMutation';
 import { makeQueryWrapper } from '../test/utils';
-import { setToken, clearToken, getLocale } from '../lib/auth';
+import { setSignedInHint, clearSignedInHint, getLocale } from '../lib/auth';
 
 vi.mock('../api/client', () => ({
   api: { patch: vi.fn().mockResolvedValue(undefined) },
@@ -24,7 +24,7 @@ function makeWrapper() {
 
 describe('useLocaleMutation', () => {
   it('authenticated: PATCHes, persists locale, fires onSuccess', async () => {
-    setToken('tok');
+    setSignedInHint();
     const onSuccess = vi.fn();
     const { wrapper } = makeWrapper();
     const { result } = renderHook(() => useLocaleMutation({ onSuccess }), { wrapper });
@@ -38,7 +38,7 @@ describe('useLocaleMutation', () => {
   });
 
   it('authenticated error: reverts to stored locale and fires onError', async () => {
-    setToken('tok');
+    setSignedInHint();
     mockPatch.mockRejectedValueOnce(new Error('network'));
     const onError = vi.fn();
     const { wrapper } = makeWrapper();
@@ -52,7 +52,7 @@ describe('useLocaleMutation', () => {
   });
 
   it('anonymous: persists locally, no PATCH, still fires onSuccess', async () => {
-    clearToken();
+    clearSignedInHint();
     const onSuccess = vi.fn();
     const { wrapper } = makeWrapper();
     const { result } = renderHook(() => useLocaleMutation({ onSuccess }), { wrapper });

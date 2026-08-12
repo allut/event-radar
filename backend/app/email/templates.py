@@ -45,6 +45,8 @@ DIGEST_FOOTER = """\
 <a href="{unsubscribe_url}" style="{s_footer_link}">{settings_label}</a>
 &nbsp;·&nbsp; What's on Radar, Tallinn"""
 
+DIGEST_EMPTY_STATE = "<p>{text}</p>"
+
 MAGIC_LINK_HEADER = """\
 <p style="{s_eyebrow}">WHAT'S ON RADAR</p>
 <h1 style="{s_h1}">{heading}</h1>"""

@@ -1,0 +1,66 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "dev: backend (uvicorn)",
+      "type": "shell",
+      "command": "bash .devcontainer/dev-server.sh run backend",
+      "isBackground": true,
+      "problemMatcher": [],
+      "presentation": {
+        "panel": "dedicated",
+        "reveal": "never"
+      }
+    },
+    {
+      "label": "dev: frontend (vite)",
+      "type": "shell",
+      "command": "bash .devcontainer/dev-server.sh run frontend",
+      "isBackground": true,
+      "problemMatcher": [],
+      "presentation": {
+        "panel": "dedicated",
+        "reveal": "never"
+      }
+    },
+    {
+      "label": "dev: all",
+      "dependsOn": ["dev: backend (uvicorn)", "dev: frontend (vite)"],
+      "dependsOrder": "parallel"
+    },
+    {
+      "label": "logs: backend",
+      "type": "shell",
+      "command": "bash .devcontainer/dev-server.sh logs backend",
+      "isBackground": true,
+      "problemMatcher": [],
+      "runOptions": { "runOn": "folderOpen", "instanceLimit": 1 },
+      "presentation": {
+        "panel": "dedicated",
+        "group": "logs",
+        "reveal": "always",
+        "focus": false,
+        "echo": false,
+        "showReuseMessage": false,
+        "clear": true
+      }
+    },
+    {
+      "label": "logs: frontend",
+      "type": "shell",
+      "command": "bash .devcontainer/dev-server.sh logs frontend",
+      "isBackground": true,
+      "problemMatcher": [],
+      "runOptions": { "runOn": "folderOpen", "instanceLimit": 1 },
+      "presentation": {
+        "panel": "dedicated",
+        "group": "logs",
+        "reveal": "always",
+        "focus": false,
+        "echo": false,
+        "showReuseMessage": false,
+        "clear": true
+      }
+    }
+  ]
+}

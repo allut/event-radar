@@ -6,7 +6,7 @@
 
 .main {
   flex: 1;
-  max-width: 720px;
+  max-width: var(--page-max-legal);
   width: 100%;
   margin: 0 auto;
   padding: var(--space-7) var(--space-6) var(--space-8);
@@ -79,7 +79,7 @@
   composes: btnPrimary from '../../components/shared/Button.module.css';
   padding: var(--space-0-8125) var(--space-6);
   font-size: var(--fs-base);
-  height: 48px;
+  height: var(--control-height-lg);
   min-width: 160px;
   display: flex;
   align-items: center;
@@ -93,12 +93,38 @@
 }
 
 .spinner {
-  composes: spin from '../../components/shared/Animations.module.css';
-  display: inline-block;
-  width: var(--spinner-size-sm);
-  height: var(--spinner-size-sm);
-  border: 2px solid var(--spinner-border);
-  border-top-color: var(--on-accent);
-  border-radius: var(--radius-full);
+  composes: spinner from '../../components/shared/Spinner.module.css';
+}
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--overlay-scrim);
+  backdrop-filter: blur(var(--blur-overlay));
+}
+
+.overlayPanel {
+  composes: card from '../../components/shared/Card.module.css';
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-7) var(--space-6);
+  max-width: 320px;
+  text-align: center;
+}
+
+.overlaySpinner {
+  composes: spinnerPage from '../../components/shared/Spinner.module.css';
+}
+
+.overlayMsg {
+  font-size: var(--fs-base);
+  color: var(--text);
+  font-weight: 500;
 }
 

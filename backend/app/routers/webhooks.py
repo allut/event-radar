@@ -151,6 +151,7 @@ async def inbound_mail(
         feature="Webhook",
         setting_name="RESEND_WEBHOOK_SECRET",
         app_env=settings.APP_ENV,
+        allow_insecure_dev=settings.ALLOW_INSECURE_DEV,
     ) and not _request_signature_valid(request, body):
         log.warning(
             "inbound-mail: invalid or missing webhook signature",

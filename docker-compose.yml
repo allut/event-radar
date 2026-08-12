@@ -1,0 +1,19 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: eventradar
+      POSTGRES_PASSWORD: eventradar
+      POSTGRES_DB: eventradar
+    ports:
+      - "5432:5432"
+    volumes:
+      - eventradar_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U eventradar"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  eventradar_pgdata:

@@ -1,6 +1,6 @@
 import http
 import logging
-from typing import Any
+from typing import Any, Literal
 from zoneinfo import ZoneInfo
 
 from app._generated.shared_constants import (
@@ -11,11 +11,14 @@ from app._generated.shared_constants import (
     DEFAULT_USER_LOCALE,
     HTML_SANITIZE_ALLOWED_ATTRS,
     HTML_SANITIZE_ALLOWED_TAGS,
+    IMAGE_UPLOAD_ALLOWED_MIME,
+    MAGIC_LINK_TTL_MINUTES as _MAGIC_LINK_TTL_MINUTES_SHARED,
     PERSONA_MAX_SELECTABLE,
     PERSONA_PRIMARY_WEIGHT,
     PERSONA_SECONDARY_WEIGHT,
     PERSONA_TERTIARY_WEIGHT,
     SAFE_URL_SCHEMES,
+    SESSION_TTL_DAYS as _SESSION_TTL_DAYS_SHARED,
     VALID_CATEGORIES,
     VALID_LOCALES,
     VALID_SIGNALS,
@@ -30,6 +33,7 @@ __all__ = [
     "DEFAULT_USER_LOCALE",
     "HTML_SANITIZE_ALLOWED_ATTRS",
     "HTML_SANITIZE_ALLOWED_TAGS",
+    "IMAGE_UPLOAD_ALLOWED_MIME",
     "PERSONA_MAX_SELECTABLE",
     "PERSONA_PRIMARY_WEIGHT",
     "PERSONA_RANK_WEIGHTS",
@@ -71,6 +75,13 @@ APP_ENV_DEVELOPMENT = "development"
 # username removes half of the credential pair an attacker needs to brute-force.
 ADMIN_USERNAME_DEFAULT = "admin"
 
+# Hostnames treated as "local" by the dev/prod-DB startup sanity check
+# (app/main.py's lifespan) — a DATABASE_URL host outside this set while
+# APP_ENV=development suggests a misconfigured env var pointed at a real
+# database, logged at ERROR rather than silently proceeding. "db" is the
+# Postgres service name in .devcontainer/docker-compose.yml.
+DEV_DB_LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1", "db"})
+
 SECONDS_PER_MINUTE = 60
 SECONDS_PER_HOUR = 3600
 SECONDS_PER_DAY = 86400
@@ -109,6 +120,15 @@ PRICE_HINT_MAX_CHARS = 300  # cap on Event.price_hint, kept short for the LLM pr
 # (app/ingestion/refetch.py), so it must be pinned to known-good hosts rather
 # than trusted at face value. Suffix-matched (see host_is_allowed) so a
 # legitimate subdomain (e.g. "en.fienta.com") still passes.
+# TTL for resolves_to_private_ip()'s host->verdict cache (http_client.py). One
+# ingest run fetches many events from the same 1-4 hostnames — each uncached
+# call is a thread hand-off plus a real DNS round trip. Short enough that a
+# DNS-rebinding attack against an allowlisted host is still caught well within
+# one scheduled run's lifetime; the check was already documented as
+# TOCTOU-racy against httpx's own re-resolution (see resolves_to_private_ip's
+# docstring), so this doesn't weaken that existing trade-off.
+DNS_RESOLVE_CACHE_TTL_SECONDS: float = 300.0
+
 ALLOWED_SOURCE_HOSTS: frozenset[str] = frozenset(
     {
         "fienta.com",
@@ -332,6 +352,12 @@ EVENT_STATUS_CANCELLED = "cancelled"
 
 # Deduplication
 DEDUP_LOOKBACK_DAYS = 30  # only re-cluster events that started within this window
+# Upper bound on load_dedup_candidate_events — without it, an event scheduled
+# arbitrarily far in the future is loaded as a full ORM object on every dedup
+# pass (events rows are never deleted, so nothing else bounds this). Set well
+# above any real event's lead time; a future event beyond this window simply
+# isn't dedup-clustered until it comes within range on a later run.
+DEDUP_LOOKAHEAD_DAYS = 400
 TITLE_RATIO_THRESHOLD = 70  # rapidfuzz token_set_ratio threshold for title match
 TITLE_RATIO_VENUE_BYPASS_THRESHOLD = 85  # near-exact title; on the LLM path, bypass
 # the venue gate at/above this so cross-source dupes with differently-spelled venues
@@ -361,6 +387,10 @@ REFETCH_HOUR = 4  # daily 04:30 Europe/Tallinn, before the 06:00 feed build
 REFETCH_MINUTE = 30
 FEED_BUILD_HOUR = 6  # daily 06:00 Europe/Tallinn
 FEED_BUILD_MINUTE = 0
+# Users per page in build_daily_feeds (score.py) — bounds the per-page
+# personas_by_user/fb_by_user/score_cache dicts and the event_rows x users
+# scoring loop in RAM regardless of total registered-user count.
+FEED_BUILD_USER_BATCH_SIZE = 500
 
 # Email i18n strings (subjects, labels, templates) live in shared/i18n/*.json.
 DIGEST_SEND_HOUR = 7  # 07:00 Europe/Tallinn, one hour after build_daily_feeds
@@ -383,6 +413,11 @@ RATE_LIMIT_WEBHOOK_INBOUND_MAIL = "60/minute"
 RATE_LIMIT_UNSUBSCRIBE = "30/minute"
 # Public contact form (routers/contact.py) — no auth; tight cap since each hit sends an email.
 RATE_LIMIT_CONTACT = "3/minute"
+# Organizer event submission/edit/image-upload (routers/organizer_events.py) —
+# modeled on RATE_LIMIT_CONTACT: authenticated, but each hit runs a full
+# inline classify+publish pass, so keep it tight per-IP; the DB-backed
+# ORGANIZER_DAILY_SUBMISSION_CAP is the per-organizer ceiling.
+RATE_LIMIT_SUBMIT = "10/minute"
 
 # Resend inbound-mail webhook signature verification (Svix scheme; see
 # https://resend.com/docs/dashboard/webhooks/verify-webhooks-requests and
@@ -400,10 +435,18 @@ WEBHOOK_TIMESTAMP_TOLERANCE_SECONDS = 300
 # Public read endpoint — generous enough for normal browsing while throttling
 # ID-enumeration / scraping abuse (GET /events/{id} takes no auth).
 RATE_LIMIT_EVENTS_DETAIL = "120/minute"
-# Admin Basic-auth surface — per-endpoint cap; with 11 admin routes an attacker
-# cycling all endpoints could attempt up to ~110/minute, so this is a speed-bump
-# rather than a hard brute-force ceiling. Pair with a strong ADMIN_PASSWORD.
+# Admin Basic-auth surface — applied via limiter.shared_limit(..., scope="admin")
+# so every /admin/* route shares ONE bucket per client, not one bucket each
+# (a per-route @limiter.limit would let an attacker cycling all admin routes
+# attempt far more than this per minute). Pair with a strong ADMIN_PASSWORD.
 RATE_LIMIT_ADMIN = "10/minute"
+# Consecutive-failure lockout on top of RATE_LIMIT_ADMIN (routers/admin.py::
+# _require_admin) — a static username/password pair has no other brute-force
+# damper. In-memory (single Render process, no Redis — matches the rest of
+# this codebase's "no Celery/Redis" design), so it resets on deploy/restart;
+# accepted since this pairs with, not replaces, a strong ADMIN_PASSWORD.
+ADMIN_AUTH_MAX_FAILURES = 5
+ADMIN_AUTH_LOCKOUT_SECONDS = 300
 # Authenticated feedback writes — generous cap; prevents cache-rebuild DoS
 # (every signal wipes all user_event_scores rows for that user).
 RATE_LIMIT_FEEDBACK = "60/minute"
@@ -414,6 +457,10 @@ RATE_LIMIT_AUTHENTICATED_WRITE = "30/minute"
 # issued session token (including the caller's own) — a higher-value target
 # than ordinary writes.
 RATE_LIMIT_LOGOUT_ALL = "10/minute"
+# Plain "sign out" (clears only the caller's own cookie, no session_token_version
+# bump) — lower stakes than logout-all, so a more generous cap; shared by both
+# the consumer and organizer logout endpoints, mirroring RATE_LIMIT_LOGOUT_ALL.
+RATE_LIMIT_LOGOUT = "20/minute"
 # Authenticated /explore browsing — mirrors RATE_LIMIT_EVENTS_DETAIL; live filter
 # changes can fire a request per keystroke/chip-toggle, so this stays generous.
 RATE_LIMIT_BROWSE = "120/minute"
@@ -432,7 +479,85 @@ SHOWCASE_FALLBACK_WINDOW_DAYS = 30
 # Auth tokens
 AUTH_MAGIC_SALT = "magic-link-v1"
 AUTH_SESSION_SALT = "session-v1"
+# Session-cookie transport (issue #26 / docs/adr/0001). Path scoping is what
+# keeps the higher-value organizer credential off ordinary consumer requests —
+# both paths sit under the Vercel `/api` rewrite that makes the SPA same-origin
+# with this API, so a browser only ever attaches SESSION_COOKIE_NAME under
+# /api and ORGANIZER_SESSION_COOKIE_NAME under /api/organizer.
+SESSION_COOKIE_NAME = "session"
+SESSION_COOKIE_PATH = "/api"
+ORGANIZER_SESSION_COOKIE_NAME = "organizer_session"
+ORGANIZER_SESSION_COOKIE_PATH = "/api/organizer"
+# Shared by routers/utils.py::set_session_cookie/clear_session_cookie — a single
+# source of truth so the two functions can never drift apart (clear_session_cookie
+# only actually clears the cookie in the browser if every attribute here matches
+# what set_session_cookie used to set it).
+SESSION_COOKIE_SECURE = True
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE: Literal["strict"] = "strict"
+# Fallback "v" claim for session/organizer-session tokens minted before that
+# claim existed (auth/tokens.py) — mirrors the session_token_version column's
+# server_default/model default.
+DEFAULT_SESSION_TOKEN_VERSION = 1
 AUTH_UNSUBSCRIBE_SALT = "unsubscribe-v1"
+# Organizer auth — distinct salts from the user stack above so a user's magic-link
+# or session token can never verify as an organizer token (and vice versa), even
+# though both use the same URLSafeTimedSerializer(settings.SECRET_KEY).
+AUTH_ORGANIZER_MAGIC_SALT = "organizer-magic-v1"
+AUTH_ORGANIZER_SESSION_SALT = "organizer-session-v1"
+# Organizer TTLs mirror the user-facing defaults (no separate settings override —
+# organizers are not expected to need a different cadence than consumers).
+ORGANIZER_MAGIC_LINK_TTL_MINUTES = _MAGIC_LINK_TTL_MINUTES_SHARED
+ORGANIZER_SESSION_TTL_DAYS = _SESSION_TTL_DAYS_SHARED
+# Per-organizer daily submission ceiling (routers/organizer_events.py), computed
+# from Tallinn calendar-day start — an IP rate limit alone can't cap a single
+# organizer account across multiple IPs.
+ORGANIZER_DAILY_SUBMISSION_CAP = 20
+# Same count-then-act soft ceiling as ORGANIZER_DAILY_SUBMISSION_CAP, but for
+# POST /organizer/events/image — submissions alone don't bound Cloudinary
+# free-tier upload quota, since an upload can happen without ever completing
+# a submission (organizer_image_uploads, app/models/models.py).
+ORGANIZER_DAILY_IMAGE_UPLOAD_CAP = 20
+
+# Organizer image upload (routers/organizer_events.py -> Cloudinary signed upload).
+# IMAGE_UPLOAD_ALLOWED_MIME itself comes from shared/app-config.json (imported
+# above) — mirrors the frontend's ORGANIZER_IMAGE_ALLOWED_MIME so both stacks
+# stay in sync via the generator instead of two hand-maintained literals.
+IMAGE_UPLOAD_MAX_BYTES = 8 * 1024 * 1024  # 8 MiB
+CLOUDINARY_UPLOAD_URL_TEMPLATE = (
+    "https://api.cloudinary.com/v1_1/{cloud_name}/image/upload"
+)
+# Hosts an organizer-submission event.image_url is allowed to point at — the
+# signed Cloudinary upload endpoint (POST /organizer/events/image) always
+# returns a res.cloudinary.com secure_url. Without this, an organizer could
+# set image_url to an arbitrary https host; the digest embeds it as an <img>,
+# turning it into a tracking pixel that leaks each recipient's IP/open-time to
+# a third party the recipient never consented to. Scraped (non-organizer)
+# sources are unaffected — this only gates SOURCE_KIND_USER_SUBMISSION.
+ALLOWED_IMAGE_HOSTS = frozenset({"res.cloudinary.com"})
+
+# Whole-request body ceiling (app.main.MaxBodySizeMiddleware) — above
+# IMAGE_UPLOAD_MAX_BYTES (the largest legitimate body today) since multipart
+# form overhead adds a little on top of the raw file. Nothing else in the
+# stack caps request size: Starlette receives and spools the full body before
+# any handler-level check (e.g. IMAGE_UPLOAD_MAX_BYTES) ever runs.
+MAX_REQUEST_BODY_BYTES = 10 * 1024 * 1024  # 10 MiB
+
+# Namespace prefix for organizer-submitted events' synthetic external_id
+# (routers/organizer_events.py) — distinguishes user-submission rows from any
+# other source's external ids in event_sources.
+ORGANIZER_SUBMISSION_EXTERNAL_ID_PREFIX = "org:"
+
+# Named locale codes for the fixed et/en/ru vocabulary (VALID_LOCALES above) —
+# used where code refers to one specific locale rather than iterating the set.
+LOCALE_ET = "et"
+LOCALE_EN = "en"
+LOCALE_RU = "ru"
+
+# Admin review-queue pagination (routers/admin.py GET /admin/submissions) — mirrors
+# ADMIN_DEDUP_GROUPS_PAGE_SIZE's sizing rationale (small default page, generous cap).
+ADMIN_REVIEW_QUEUE_PAGE_SIZE: int = 50
+ADMIN_REVIEW_QUEUE_MAX_PAGE_SIZE: int = 500
 
 # Per-email magic-link resend cooldown (routers/auth.py::_recent_unused_link_exists) —
 # prevents Resend quota exhaustion from rapid repeat requests for the same address.
@@ -476,15 +601,34 @@ SCORE_WEIGHT_LOCALITY: float = 0.05
 # starts_at values in one DAILY_5_LOOKAHEAD_DAYS candidate window.
 TIME_SLOTS_CACHE_MAXSIZE = 4096
 
+# Chunk size for the bulk pg_insert(...).on_conflict_do_update(...) upserts in
+# build_daily_feeds (_persist_new_scores / _persist_daily_feeds). The Postgres
+# wire protocol caps bind parameters at 32767 (int16); with 4 params/row and a
+# realistic ~30 users x ~300 candidate events, a single unchunked statement can
+# exceed that limit and raise at execute time. 1000 rows/chunk stays comfortably
+# under the limit at either table's column count and mirrors the chunking
+# already used for the LLM dedup hash IN-list (LLM_DEDUP_HASH_QUERY_CHUNK_SIZE).
+SCORE_INSERT_CHUNK_SIZE = 1000
+
 # GET /explore (app/routers/browse.py) — event discovery / search page.
 # BROWSE_PAGE_SIZE itself is cross-stack (shared/app-config.json), imported above.
 BROWSE_MAX_PAGE_SIZE: int = 60
+# ?q= keyword search — _keyword_filter builds a %...% pattern against two
+# trigram GIN indexes; an unbounded string is cheap to send and expensive to
+# scan, and RATE_LIMIT_BROWSE alone doesn't bound the per-request cost.
+BROWSE_QUERY_MAX_LEN: int = 200
 
 # Shared pagination validation floors — every `limit`/`offset` Query() across
 # admin.py/browse.py/feedback.py enforces the same lower bound; centralized so
 # it can't drift per-endpoint.
 PAGINATION_MIN_LIMIT: int = 1
 PAGINATION_MIN_OFFSET: int = 0
+# Ceiling on `offset` across every paginated list endpoint (browse.py, feedback.py,
+# admin.py, organizer_events.py) — `ge=` alone leaves offset unbounded, so an
+# offset like 5_000_000 makes Postgres walk and discard that many rows on every
+# request at the endpoint's full rate limit. High enough that no legitimate
+# pagination depth is ever affected.
+PAGINATION_MAX_OFFSET: int = 100_000
 # Candidate cap for the Python-scored path (Path B: for_you=True OR sort=relevance —
 # so also date/price/quality sort *under* for_you=True, not just relevance). Sorted
 # soonest-first before capping, so the cap policy is a deliberate soonest-bias, not
@@ -494,6 +638,15 @@ PAGINATION_MIN_OFFSET: int = 0
 # Path-B approximation at MVP scale (`total` in the response reflects at most this
 # many rows when the cap is hit; see browse.py docstring).
 BROWSE_RELEVANCE_MAX_CANDIDATES: int = 300
+# How far back browse.py::_load_feedback_context looks for a user's like/dislike
+# history when scoring /explore (Path B). user_event_feedback is preserved
+# indefinitely by policy (see CLAUDE.md Data Retention), so an unbounded load
+# grows with the user's lifetime activity on every /explore request. The
+# FEEDBACK_DECAY_BASE (0.9) decay makes a signal this old numerically
+# negligible (0.9^90 ~= 0.0000265) to score_event() anyway, so the cutoff drops
+# no meaningfully-weighted signal.
+FEEDBACK_HISTORY_LOOKBACK_DAYS = 90
+
 # For-you soft-filter: events below this persona_affinity() score ([0, 1], see
 # ranking/score.py) are hidden from the For-you pool. Tuned below NEUTRAL_SCORE (0.5)
 # so an event with no strong signal either way still surfaces; only a
@@ -541,6 +694,16 @@ SIGNAL_BOOKMARK = "bookmark"
 PREFERENCE_SIGNALS: frozenset[str] = frozenset(
     {SIGNAL_LIKE, SIGNAL_DISLIKE, SIGNAL_BOOKMARK}
 )
+# Signals that actually feed ranking/score.py's like/dislike-based scoring
+# (both ranking/score.py::_load_feedback_context-equivalent loads and
+# browse.py::_load_feedback_context filter on signal IN (like, dislike)).
+# bookmark is never read by the scorer and click_external/view are passive
+# analytics — invalidating the score cache on those wastes the entire cache
+# (every ticket click or bookmark otherwise wiped a user's cached scores,
+# forcing build_daily_feeds to recompute from scratch). Only these two signals
+# should trigger invalidate_user_scores; see feedback.py::record_feedback/
+# delete_feedback.
+SCORE_AFFECTING_SIGNALS: frozenset[str] = frozenset({SIGNAL_LIKE, SIGNAL_DISLIKE})
 # Guard: if shared/app-config.json signals ever diverge from these sentinels, fail fast.
 assert SIGNAL_LIKE in VALID_SIGNALS, f"{SIGNAL_LIKE!r} missing from VALID_SIGNALS in shared/app-config.json"
 assert SIGNAL_DISLIKE in VALID_SIGNALS, f"{SIGNAL_DISLIKE!r} missing from VALID_SIGNALS in shared/app-config.json"
@@ -678,6 +841,9 @@ NEWSLETTER_BODY_MAX_LEN = 1500
 CONTACT_NAME_MAX_LEN = 100
 CONTACT_MESSAGE_MAX_LEN = 2000
 CONTACT_FIELD_MIN_LEN = 1
+# Always returned on success, even when the honeypot is tripped — a bot must
+# get no signal that it was caught.
+CONTACT_SUCCESS_DETAIL = "Message sent."
 
 
 LLM_PROVIDERS: list[dict[str, Any]] = [
@@ -713,11 +879,16 @@ SOURCE_SLUG_FOTOGRAFISKA = "fotografiska"
 SOURCE_SLUG_KUMU = "kumu"
 SOURCE_SLUG_ESTONIA_CONCERT_HALL = "estonia_concert_hall"
 SOURCE_SLUG_PILETILEVI = "piletilevi"
+# Adapter-less source for direct organizer submission (routers/organizer_events.py) —
+# no fetch_raw/normalize, so it carries no ADAPTER_REGISTRY entry (see registry.py)
+# and ingest_all_enabled skips it, same as the newsletter source above.
+SOURCE_SLUG_USER_SUBMISSION = "user_submission"
 
 # Source kinds
 SOURCE_KIND_API = "api"
 SOURCE_KIND_HTML_SCRAPE = "html_scrape"
 SOURCE_KIND_INBOUND_EMAIL = "inbound_email"
+SOURCE_KIND_USER_SUBMISSION = "user_submission"
 
 HTML_LISTING_MAX_DETAIL_FETCHES = (
     300  # cap per ingestion run on capped-detail sources (piletilevi) — headroom
@@ -845,6 +1016,14 @@ REFETCH_COMMIT_INTERVAL_SECONDS: float = 120.0
 # re-fetched/re-saved on every run; it is retried once after this window so a
 # transient rejection still self-heals. Pure backend scalar — not cross-stack.
 INGEST_REJECT_RECHECK_DAYS = 7
+# Lower bound on existing_external_ids' EventSource->Event join. Without it,
+# every external_id ever stored for a source is loaded into a Python set on
+# every hourly ingest run, growing monotonically since events rows are never
+# deleted. A source's live listing never re-surfaces an external_id belonging
+# to an event that started this long ago, so dropping it from the skip set
+# costs nothing beyond the event_sources unique index + IntegrityError handler
+# already guarding against a duplicate insert (see insert_normalized_event).
+INGEST_SKIP_ID_LOOKBACK_DAYS = 180
 # venue_name values treated as empty/placeholder, so a real detail name replaces
 # them. Matched case-insensitively. Deliberately excludes "online"/"MamaOnline" —
 # those are real (online) venue names, not placeholders (NON_GEOCODABLE_VENUE_NAMES
@@ -902,10 +1081,18 @@ CURRENCY_AMOUNT_RE = (
 )
 
 # CORS — restricted to the methods/headers the SPA actually sends (see
-# frontend/src/api/client.ts and routers/*.py route decorators). Credentials are
-# never used (auth is a Bearer header, not a cookie), so allow_credentials=False.
+# frontend/src/api/client.ts and routers/*.py route decorators). allow_credentials
+# stays False regardless (see main.py's CORSMiddleware call site) — the session
+# cookie only ever travels same-origin through the Vercel `/api` rewrite, never
+# via a credentialed cross-origin request.
 CORS_ALLOWED_METHODS: list[str] = ["GET", "POST", "PATCH", "DELETE"]
 CORS_ALLOWED_HEADERS: list[str] = ["Authorization", "Content-Type"]
+
+# CSRF — methods CsrfOriginCheckMiddleware (app/main.py) enforces the Origin
+# check against. Deliberately includes PUT even though the API never routes
+# it today (CORS_ALLOWED_METHODS above omits it) — this is a defense-in-depth
+# check ahead of #24's cookie migration, not a mirror of what's currently wired up.
+CSRF_UNSAFE_METHODS: frozenset[str] = frozenset({"POST", "PATCH", "DELETE", "PUT"})
 
 # Logging — configure_logging() in app.logging_config wires these into the root
 # logger. Format/date strings render UTC ISO 8601 timestamps on every line (app,
@@ -971,7 +1158,7 @@ SECURITY_HEADERS: dict[str, str] = {
     "X-Frame-Options": "DENY",
     "Referrer-Policy": "strict-origin-when-cross-origin",
     # Pure JSON API, nothing should ever be cached by an intermediary — most
-    # importantly, GET /auth/verify returns a bearer session_token in the body.
+    # importantly, POST /auth/verify sets the session cookie via Set-Cookie.
     "Cache-Control": "no-store",
 }
 # HSTS is only safe to send over HTTPS — Render terminates TLS in front of the app,
@@ -992,4 +1179,130 @@ RAW_EVENTS_RETENTION_DAYS = 90
 INGESTION_RUNS_RETENTION_DAYS = 90
 RAW_INBOUND_EMAILS_RETENTION_DAYS = 90
 DAILY_FEEDS_RETENTION_DAYS = 30
+# Unverified users/organizers — a row inserted on an unauthenticated
+# POST .../request-link before the address is proven reachable (see CLAUDE.md
+# Auth → Email verification gate). Retained this long in case a slow/late
+# click on a still-valid link would otherwise orphan it, then pruned so an
+# address nobody ever proved they own isn't retained indefinitely.
+UNVERIFIED_ACCOUNT_RETENTION_DAYS = 30
+
+# HTTP verbs used as literal method tags outside the httpx client calls
+# themselves (e.g. ListingRequest.method) — the retrying http_get/http_post
+# wrappers already encode the verb in their function name.
+HTTP_METHOD_GET = "GET"
+HTTP_METHOD_POST = "POST"
+
+# Magic-link verify path defaults — app/auth/email.py::send_magic_link's
+# verify_path parameter, and organizer_auth.py's override of it.
+AUTH_VERIFY_PATH = "/auth/verify"
+ORGANIZER_AUTH_VERIFY_PATH = "/organizer/verify"
+
+# app/routers/utils.py::mask_db_url — redacts the password in a DB URL
+# ("user:pass@host" -> "user:***@host") for safe logging.
+MASK_DB_URL_PASSWORD_RE = r":[^@/]+@"
+
+# app/ingestion/adapter.py::_make_slug — collapses any non a-z0-9 run to "-".
+SLUG_SANITIZE_RE = r"[^a-z0-9]+"
+
+# app/ingestion/content_filters.py::is_explicit_text — collapses whitespace
+# runs (incl. literal newlines within a text node) before keyword matching,
+# so a multi-word keyword still matches across them.
+CONTENT_FILTER_WHITESPACE_COLLAPSE_RE = r"\s+"
+
+# app/ingestion/sanitize.py — HTML post-processing regexes.
+# _MULTI_BR_RE: collapses a run of more than HTML_SANITIZE_MAX_CONSECUTIVE_BR
+# <br> tags; %d is filled in with HTML_SANITIZE_MAX_CONSECUTIVE_BR + 1.
+HTML_MULTI_BR_TEMPLATE_RE = r"(?:<br\s*/?>\s*){%d,}"
+# _EDGE_BR_RE: strips leading/trailing <br> runs left after block-tag conversion.
+HTML_EDGE_BR_RE = r"^(?:\s*<br\s*/?>\s*)+|(?:\s*<br\s*/?>\s*)+$"
+# _WHITESPACE_RUN_RE: collapses ASCII whitespace runs within text nodes
+# (deliberately excludes U+00A0/nbsp — see sanitize.py's docstring).
+HTML_WHITESPACE_RUN_RE = r"[ \t\n\r\f\v]+"
+# Normalizes BeautifulSoup's self-closed "<br/>" serialization back to "<br>".
+HTML_SELF_CLOSING_BR_RE = r"<br\s*/>"
 USER_EVENT_SCORES_RETENTION_DAYS = 30  # keyed on the underlying event's end date
+
+# APScheduler job ids (app/main.py::_register_scheduled_jobs) — also reasoned
+# about in docs/backend-ops.md and /admin/pipeline/run, so a typo in one of
+# the two call sites that share a string (the log label passed to _scheduled
+# and the id= kwarg on scheduler.add_job) would silently misregister a job.
+JOB_ID_SYNC_FIENTA_ORGANIZERS = "sync_fienta_organizers"
+JOB_ID_CLEANUP_STALE_DATA = "cleanup_stale_data"
+JOB_ID_INGEST_ALL_SOURCES = "ingest_all_sources"
+JOB_ID_DEDUP_PASS = "dedup_pass"
+JOB_ID_CLASSIFY_PENDING = "classify_pending"
+JOB_ID_PUBLISH_PENDING = "publish_pending"
+JOB_ID_GEOCODE_PENDING = "geocode_pending"
+JOB_ID_REFETCH_EVENT_DETAILS = "refetch_event_details"
+JOB_ID_BUILD_DAILY_FEEDS = "build_daily_feeds"
+JOB_ID_SEND_DAILY_DIGESTS = "send_daily_digests"
+
+# HTTP error `detail` strings (app/routers/*). English-only server strings,
+# not i18n keys (contrast shared/i18n/*.json, the user-facing string source
+# of truth) — these are internal API error text, not rendered UI copy.
+# f"…{var}…" details stay as {placeholder} format templates here, .format()'d
+# at the call site.
+
+# Auth (routers/auth.py + routers/organizer_auth.py) — identical wording on
+# both the user and organizer auth tracks; duplicated verbatim before this.
+ERROR_MISSING_SESSION_COOKIE = "Missing session cookie"
+ERROR_SESSION_INVALID = "Session token expired or invalid"
+ERROR_SESSION_REVOKED = "Session revoked. Please sign in again."
+ERROR_MAGIC_LINK_EXPIRED = "Sign-in link has expired. Please request a new one."
+ERROR_MAGIC_LINK_INVALID = "Invalid sign-in link."
+ERROR_MAGIC_LINK_CONSUMED = "Sign-in link already used, expired, or not found."
+
+# Not-found 404s, punctuation normalized to the trailing-period form.
+ERROR_EVENT_NOT_FOUND = "Event not found."
+ERROR_USER_NOT_FOUND = "User not found."
+ERROR_ORGANIZER_NOT_FOUND = "Organizer not found."
+ERROR_SUBMISSION_NOT_FOUND = "Submission not found."
+
+# routers/admin.py
+ERROR_ADMIN_LOCKOUT = "Too many failed admin login attempts; try again later."
+ERROR_ADMIN_DISABLED = (
+    "Admin endpoints disabled: ADMIN_USERNAME left at its default value"
+)
+ERROR_ADMIN_INCORRECT_CREDENTIALS = "Incorrect credentials"
+ERROR_UNKNOWN_SOURCE = "Unknown source: {slug!r}"
+
+# routers/browse.py, routers/feedback.py
+ERROR_INVALID_SORT = "sort must be one of {sorts}"
+ERROR_INVALID_SIGNAL = "Invalid signal. Must be one of: {signals}"
+ERROR_INVALID_PREFERENCE_SIGNAL = "signal must be one of: {signals}"
+
+# routers/settings.py
+ERROR_NO_UPDATE_FIELDS = "Provide at least one field to update."
+
+# routers/unsubscribe.py
+ERROR_UNSUBSCRIBE_LINK_EXPIRED = (
+    "Unsubscribe link has expired. Please use Settings instead."
+)
+ERROR_UNSUBSCRIBE_LINK_INVALID = "Invalid unsubscribe link."
+
+# routers/onboarding.py
+ERROR_PERSONA_COUNT = "Select between 1 and {max_selectable} personas."
+ERROR_PERSONA_DUPLICATE = "Persona slugs must not repeat."
+ERROR_PERSONA_UNKNOWN = "Unknown persona slug(s): {missing}"
+
+# routers/organizer_events.py
+ERROR_SUBMISSION_SOURCE_NOT_CONFIGURED = (
+    "Submission source not configured; contact support."
+)
+ERROR_IMAGE_HOST_NOT_ALLOWED = (
+    "Image URL must be uploaded via POST /organizer/events/image "
+    "(res.cloudinary.com)."
+)
+ERROR_DAILY_SUBMISSION_LIMIT = "Daily submission limit reached. Try again tomorrow."
+ERROR_EVENT_CREATE_FAILED = "Could not create event; please try again."
+ERROR_EVENT_URL_SCHEME = "Event URL is not allowed (unsupported scheme)."
+ERROR_IMAGE_URL_SCHEME = "Image URL is not allowed (unsupported scheme)."
+ERROR_UNSUPPORTED_IMAGE_TYPE = "Unsupported image type: {content_type!r}"
+ERROR_DAILY_IMAGE_UPLOAD_LIMIT = "Daily image upload limit reached. Try again tomorrow."
+ERROR_IMAGE_TOO_LARGE = "Image exceeds {max_bytes} bytes."
+ERROR_IMAGE_UPLOAD_NOT_CONFIGURED = "Image upload is not configured."
+ERROR_IMAGE_UPLOAD_FAILED = "Image upload failed; please try again."
+
+# routers/utils.py
+ERROR_ADMIN_JOB_FAILED = "{name} failed; see server logs"
+ERROR_FEATURE_DISABLED = "{feature} disabled: {setting_name} not configured"

@@ -84,4 +84,10 @@ describe('Contact', () => {
     renderWithProviders(<Contact />);
     expect(mockGet).not.toHaveBeenCalled();
   });
+
+  it('renders an organizer entry link pointing to /organizer/login', () => {
+    renderWithProviders(<Contact />);
+    const link = screen.getByRole('link', { name: /organizing an event/i });
+    expect(link).toHaveAttribute('href', '/organizer/login');
+  });
 });
