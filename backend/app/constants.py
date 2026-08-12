@@ -82,6 +82,14 @@ ADMIN_USERNAME_DEFAULT = "admin"
 # Postgres service name in .devcontainer/docker-compose.yml.
 DEV_DB_LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1", "db"})
 
+# Paths exempt from HostCheckMiddleware's Host-header validation (app/main.py).
+# Render's health probe reaches this process over the private network, so its
+# Host header is the instance's rotating internal address, not BACKEND_URL's
+# hostname — allowlisting it isn't viable since Starlette's allowed_hosts has
+# no CIDR support. Only /health: /internal/tick arrives through the public
+# proxy with a correct Host and stays guarded.
+HOST_CHECK_EXEMPT_PATHS: frozenset[str] = frozenset({"/health"})
+
 SECONDS_PER_MINUTE = 60
 SECONDS_PER_HOUR = 3600
 SECONDS_PER_DAY = 86400
