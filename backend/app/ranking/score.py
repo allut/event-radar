@@ -615,12 +615,52 @@ async def _load_recent_series_by_user(
     return recent_series_by_user
 
 
-async def _load_candidate_events(db: AsyncSession, now: datetime) -> list[Event]:
+def _collapse_series_duplicates(
+    event_rows: list[Event],
+) -> tuple[list[Event], dict[int, tuple[str, str]]]:
+    """One representative per event_series_key — nearest (earliest) starts_at
+    wins; ties broken by event id, so the surviving instance is deterministic
+    across builds even when the underlying query has no ORDER BY.
+
+    A multi-date listing (e.g. a workshop running Tue/Thu/Sat) ingests as
+    several Event rows sharing a series key but distinct dedup_group_ids
+    (recurring series are intentionally not dedup-grouped at ingestion), so
+    without this more than one date-instance of the same series could score
+    well and both land in a single user's Daily 5 on the same day. Runs once
+    per build, upstream of scoring/cooldown/MMR, so every downstream
+    mechanism (series cooldown, backfill tiers) operates on an
+    already-deduped pool with no further changes needed.
+
+    Returns the collapsed events plus their series keys (each key computed
+    exactly once here) so callers building `candidate_series_key` don't
+    recompute `event_series_key()` a second time over the same rows.
+    """
+    earliest_by_key: dict[tuple[str, str], Event] = {}
+    for event in event_rows:
+        key = event_series_key(event.title_orig, event.venue_name)
+        current = earliest_by_key.get(key)
+        if current is None or (event.starts_at, event.id) < (
+            current.starts_at,
+            current.id,
+        ):
+            earliest_by_key[key] = event
+    collapsed = list(earliest_by_key.values())
+    series_key_by_event_id = {
+        event.id: key for key, event in earliest_by_key.items()
+    }
+    return collapsed, series_key_by_event_id
+
+
+async def _load_candidate_events(
+    db: AsyncSession, now: datetime
+) -> tuple[list[Event], dict[int, tuple[str, str]]]:
     """Bulk-load published, non-excluded, upcoming-within-lookahead candidate
     events. Identical query for every page of users within one
-    build_daily_feeds run — see _SharedFeedContext."""
+    build_daily_feeds run — see _SharedFeedContext. Collapses same-series
+    duplicates (see _collapse_series_duplicates) before returning, along with
+    each survivor's series key."""
     cutoff = now + timedelta(days=DAILY_5_LOOKAHEAD_DAYS)
-    return list(
+    event_rows = list(
         (
             await db.scalars(
                 select_events_with_classification().where(
@@ -634,6 +674,7 @@ async def _load_candidate_events(db: AsyncSession, now: datetime) -> list[Event]
             )
         ).all()
     )
+    return _collapse_series_duplicates(event_rows)
 
 
 async def _verified_user_ids(db: AsyncSession) -> list[int]:
@@ -668,12 +709,10 @@ async def _load_feed_build_context(
     events + series keys once instead of re-running the identical query per
     page; when None (the default), it's loaded here exactly as before."""
     if shared is None:
-        event_rows = await _load_candidate_events(db, now)
+        event_rows, candidate_series_key = await _load_candidate_events(db, now)
         shared = _SharedFeedContext(
             event_rows=event_rows,
-            candidate_series_key={
-                e.id: event_series_key(e.title_orig, e.venue_name) for e in event_rows
-            },
+            candidate_series_key=candidate_series_key,
         )
     event_rows = shared.event_rows
     candidate_event_ids = [e.id for e in event_rows]
@@ -900,12 +939,10 @@ async def build_daily_feeds(db: AsyncSession) -> dict:
             "scores_reused": 0,
         }
 
-    event_rows = await _load_candidate_events(db, now)
+    event_rows, candidate_series_key = await _load_candidate_events(db, now)
     shared = _SharedFeedContext(
         event_rows=event_rows,
-        candidate_series_key={
-            e.id: event_series_key(e.title_orig, e.venue_name) for e in event_rows
-        },
+        candidate_series_key=candidate_series_key,
     )
 
     built = empty = scores_reused = scores_written = total_users = 0
