@@ -45,7 +45,7 @@ services:
       - key: FRONTEND_URL
         sync: false
       - key: BACKEND_URL
-        sync: false
+        value: https://event-radar-api.onrender.com
       - key: CLOUDINARY_CLOUD_NAME
         sync: false
       - key: CLOUDINARY_API_KEY

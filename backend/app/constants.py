@@ -90,6 +90,15 @@ DEV_DB_LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1", "db"})
 # proxy with a correct Host and stays guarded.
 HOST_CHECK_EXEMPT_PATHS: frozenset[str] = frozenset({"/health"})
 
+# ASGI scope/message "type" values (app/main.py's raw ASGI middleware classes —
+# HostCheckMiddleware, MaxBodySizeMiddleware, CsrfOriginCheckMiddleware). Fixed by
+# the ASGI spec, not application data, but still named here rather than repeated
+# as bare string literals in conditionals.
+ASGI_SCOPE_TYPE_HTTP = "http"
+ASGI_MESSAGE_TYPE_REQUEST = "http.request"
+ASGI_MESSAGE_TYPE_RESPONSE_START = "http.response.start"
+ASGI_MESSAGE_TYPE_RESPONSE_BODY = "http.response.body"
+
 SECONDS_PER_MINUTE = 60
 SECONDS_PER_HOUR = 3600
 SECONDS_PER_DAY = 86400
@@ -1153,6 +1162,7 @@ LOG_EVENT_AUTH_FAILED = "auth_failed"  # magic-link / admin / internal-tick auth
 LOG_EVENT_WEBHOOK_REJECTED = "webhook_rejected"  # inbound-mail signature / body reject
 LOG_EVENT_EMAIL_SEND_FAILED = "email_send_failed"  # Resend magic-link / digest failure
 LOG_EVENT_CONTACT_HONEYPOT = "contact_honeypot_block"  # contact-form honeypot field tripped
+LOG_EVENT_HOST_REJECTED = "host_rejected"  # HostCheckMiddleware Host-header reject
 # `status` field values for LOG_EVENT_JOB_RUN.
 LOG_STATUS_OK = "ok"
 LOG_STATUS_ERROR = "error"
