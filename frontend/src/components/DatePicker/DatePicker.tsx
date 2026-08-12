@@ -30,11 +30,13 @@ interface DatePickerProps {
  * non-numeric text falls back to the field's minimum, matching what the field
  * displays once it re-pads on blur. */
 function parseHourText(text: string): number {
-  return clamp(Number(text) || MIN_HOUR, MIN_HOUR, MAX_HOUR);
+  const n = Number(text);
+  return clamp(Number.isNaN(n) ? MIN_HOUR : n, MIN_HOUR, MAX_HOUR);
 }
 
 function parseMinuteText(text: string): number {
-  return clamp(Number(text) || MIN_MINUTE, MIN_MINUTE, MAX_MINUTE);
+  const n = Number(text);
+  return clamp(Number.isNaN(n) ? MIN_MINUTE : n, MIN_MINUTE, MAX_MINUTE);
 }
 
 /** Days elapsed since the start of `d`'s week — 0 on the week's first day

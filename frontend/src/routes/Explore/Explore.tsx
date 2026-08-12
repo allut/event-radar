@@ -13,6 +13,7 @@ import FacetMenu from '../../components/FacetMenu';
 import SegmentedControl from '../../components/SegmentedControl';
 import SelectMenu from '../../components/SelectMenu';
 import {
+  API,
   BRAND_GLYPH,
   CATEGORIES,
   VIBES,
@@ -88,7 +89,7 @@ export default function Explore() {
 
   const { data: currentUser } = useQuery({
     queryKey: [QUERY_KEYS.settings],
-    queryFn: () => api.get<CurrentUser>('/users/me'),
+    queryFn: () => api.get<CurrentUser>(API.me),
   });
 
   // Each page is a fresh /explore request — the backend's Path B (For-you /

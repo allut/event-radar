@@ -6,7 +6,7 @@
 
 .main {
   width: 100%;
-  max-width: 680px;
+  max-width: var(--page-max-narrow);
   margin: 0 auto;
   padding: var(--space-8) var(--space-6);
   display: flex;
@@ -127,7 +127,7 @@
   composes: btnPrimary from '../../components/shared/Button.module.css';
   padding: var(--space-0-8125) var(--space-5);
   font-size: var(--fs-base);
-  height: 48px;
+  height: var(--control-height-lg);
   display: flex;
   align-items: center;
   justify-content: center;

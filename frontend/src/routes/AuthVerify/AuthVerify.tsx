@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { api, ApiError } from '../../api/client';
 import { setSignedInHint, getLocale } from '../../lib/auth';
-import { AUTH_REDIRECT_DELAY_MS, UI_STATE, type VerifyState } from '../../constants';
+import { API, AUTH_REDIRECT_DELAY_MS, ROUTES, UI_STATE, type VerifyState } from '../../constants';
 import { t } from '../../i18n';
 import AuthCard, { type AuthCardKind } from '../../components/AuthCard';
 import styles from './AuthVerify.module.css';
@@ -35,17 +35,17 @@ export default function AuthVerify() {
     // call — otherwise it persists in browser history (and any history-sync
     // service) for as long as the entry survives, extending its exposure well
     // past the short window a network observer would have.
-    window.history.replaceState({}, '', '/auth/verify');
+    window.history.replaceState({}, '', ROUTES.authVerify);
 
     async function verify(tok: string) {
       try {
-        await api.post('/auth/verify', { token: tok });
+        await api.post(API.authVerify, { token: tok });
         setSignedInHint();
         setState(UI_STATE.success);
-        let dest = '/onboarding';
+        let dest: string = ROUTES.onboarding;
         try {
-          const me = await api.get<MeResponse>('/auth/me');
-          if (me.has_personas) dest = '/';
+          const me = await api.get<MeResponse>(API.authMe);
+          if (me.has_personas) dest = ROUTES.home;
         } catch {
           // /auth/me failure is non-fatal — fall back to /onboarding
         }
@@ -73,7 +73,7 @@ export default function AuthVerify() {
       kind={STATE_TO_KIND[state]}
       message={message}
       action={state === UI_STATE.error && (
-        <Link to="/login" className={styles.retry}>{t('request_new_link', locale)}</Link>
+        <Link to={ROUTES.login} className={styles.retry}>{t('request_new_link', locale)}</Link>
       )}
     />
   );

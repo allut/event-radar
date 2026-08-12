@@ -1,14 +1,20 @@
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { api } from '../api/client';
-import { type Signal, QUERY_KEYS } from '../constants';
+import { API, type Signal, QUERY_KEYS } from '../constants';
 
 interface UseFeedbackOptions {
   initialSignal?: Signal | null;
   onChange?: () => void;
 }
 
-export function useFeedback(eventId: number, opts?: UseFeedbackOptions) {
+export interface UseFeedbackResult {
+  activeSignal: Signal | null;
+  pending: boolean;
+  sendFeedback: (signal: Signal) => Promise<void>;
+}
+
+export function useFeedback(eventId: number, opts?: UseFeedbackOptions): UseFeedbackResult {
   const queryClient = useQueryClient();
   const [activeSignal, setActiveSignal] = useState<Signal | null>(opts?.initialSignal ?? null);
   const [pending, setPending] = useState(false);
@@ -18,10 +24,10 @@ export function useFeedback(eventId: number, opts?: UseFeedbackOptions) {
     setPending(true);
     try {
       if (signal === activeSignal) {
-        await api.delete(`/feedback/${eventId}`);
+        await api.delete(API.feedbackEvent(eventId));
         setActiveSignal(null);
       } else {
-        await api.post('/feedback', { event_id: eventId, signal });
+        await api.post(API.feedback, { event_id: eventId, signal });
         setActiveSignal(signal);
       }
       // A feedback signal shifts every feedback-dependent read surface (Saved

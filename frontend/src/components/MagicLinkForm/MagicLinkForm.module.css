@@ -34,7 +34,7 @@
 }
 
 .input:disabled {
-  opacity: 0.5;
+  opacity: var(--opacity-disabled);
 }
 
 .error {
@@ -50,7 +50,7 @@
   composes: btnPrimary from '../shared/Button.module.css';
   padding: var(--space-0-8125) var(--space-5);
   font-size: var(--fs-base);
-  height: 48px;
+  height: var(--control-height-lg);
   display: flex;
   align-items: center;
   justify-content: center;

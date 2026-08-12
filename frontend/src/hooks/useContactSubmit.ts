@@ -1,12 +1,27 @@
 import { useState } from 'react';
 import { api, ApiError } from '../api/client';
-import { UI_STATE, type LoginState } from '../constants';
+import { API, UI_STATE, type LoginState } from '../constants';
 import { t } from '../i18n';
+
+export interface UseContactSubmitResult {
+  name: string;
+  setName: (v: string) => void;
+  email: string;
+  setEmail: (v: string) => void;
+  message: string;
+  setMessage: (v: string) => void;
+  website: string;
+  setWebsite: (v: string) => void;
+  state: LoginState;
+  errorMsg: string;
+  submit: (e: React.FormEvent) => Promise<void>;
+  reset: () => void;
+}
 
 /** Contact-form submit state machine, mirroring useMagicLinkRequest's
  * idle → loading → success | error shape. `website` is a honeypot field the
  * backend expects to stay blank — never rendered visibly. */
-export function useContactSubmit(locale: string) {
+export function useContactSubmit(locale: string): UseContactSubmitResult {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [message, setMessage] = useState('');
@@ -20,7 +35,7 @@ export function useContactSubmit(locale: string) {
     setState(UI_STATE.loading);
     setErrorMsg('');
     try {
-      await api.post('/contact', { name: name.trim(), email: email.trim(), message: message.trim(), website });
+      await api.post(API.contact, { name: name.trim(), email: email.trim(), message: message.trim(), website });
       setState(UI_STATE.success);
     } catch (err) {
       setErrorMsg(err instanceof ApiError ? err.message : t('generic_error', locale));

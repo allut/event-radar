@@ -1,6 +1,6 @@
 import { memo } from 'react';
 import { Link } from 'react-router-dom';
-import { CARD_ANIMATION_DELAY_STEP_MS, type Signal } from '../../constants';
+import { CARD_ANIMATION_DELAY_STEP_MS, ROUTES, type Signal } from '../../constants';
 import { t } from '../../i18n';
 import { categoryGradient, cx, formatEventTime, formatPrice, padIndex, safeUrl, trackExternalClick } from '../../utils';
 import { useFeedback } from '../../hooks/useFeedback';
@@ -93,7 +93,7 @@ function EventCard({ event, index, locale, onFeedbackSent, variant = 'standard',
           </div>
 
           <h2 className={cx(styles.title, isFeatured && styles.featuredTitle)}>
-            <Link to={`/events/${event.id}`} className={cx(styles.titleLink, styles.stretched)}>
+            <Link to={ROUTES.eventDetail(event.id)} className={cx(styles.titleLink, styles.stretched)}>
               <span className={cx(styles.titleClamp, isFeatured && styles.featuredTitleClamp)}>
                 {event.title}
               </span>

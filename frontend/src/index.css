@@ -121,7 +121,11 @@
   --z-sticky: 10;
   --z-toast: 50;
   --z-card-overlay: 1;
+  --z-seg-label: 1;
   --z-modal: 100;
+
+  /* Disabled state */
+  --opacity-disabled: 0.5;
 
   /* Backdrop blur */
   --blur-overlay: 8px;   /* sticky topbars */
@@ -178,6 +182,19 @@
   /* EventDetail action bar (share icon) */
   --action-icon-size: 15px;
 
+  /* Page container widths */
+  --page-max-narrow: 680px;
+  --page-max-legal: 720px;
+  --page-max-medium: 1000px;
+  --page-max-grid: 1080px;
+  --page-max-wide: 1100px;
+
+  /* Form controls */
+  --control-height-lg: 48px;
+
+  /* Popover/menu geometry */
+  --menu-pop-min-width: 330px;
+
   /* Heading scale */
   --heading-3xl: 3rem;
   --heading-2xl: 2.5rem;
@@ -195,6 +212,8 @@
   --leading-display: 1.15;
   --leading-body: 1.6;
   --leading-tight: 1.2;
+  --leading-snug: 1.4;
+  --leading-relaxed: 1.7;
 
   /* Animation durations */
   --anim-fast: 0.3s;
@@ -223,6 +242,24 @@
 
   /* Decoration */
   --numeral-color: var(--text-dim);
+
+  /* Category card-fallback gradients — keys mirror the 14-category taxonomy
+     in shared/app-config.json (VALID_CATEGORIES); categories with no entry
+     here fall back to --gradient-fallback (categoryGradient() in utils.ts). */
+  --gradient-nightlife:    linear-gradient(135deg, #1a0a1f 0%, #2d1040 100%);
+  --gradient-music:        linear-gradient(135deg, #0a1020 0%, #1a2060 100%);
+  --gradient-theater:      linear-gradient(135deg, #1a100a 0%, #3d2010 100%);
+  --gradient-exhibitions:  linear-gradient(135deg, #100a15 0%, #1a0a2a 100%);
+  --gradient-workshops:    linear-gradient(135deg, #0a100f 0%, #102020 100%);
+  --gradient-food_drink:   linear-gradient(135deg, #0f1a0a 0%, #1a3010 100%);
+  --gradient-sports:       linear-gradient(135deg, #0a1a0f 0%, #102030 100%);
+  --gradient-networking:   linear-gradient(135deg, #0a0f1a 0%, #0a2030 100%);
+  --gradient-literature:   linear-gradient(135deg, #0f100a 0%, #1f2010 100%);
+  --gradient-family:       linear-gradient(135deg, #1a0a10 0%, #2a1020 100%);
+  --gradient-cinema:       linear-gradient(135deg, #0a1510 0%, #103020 100%);
+  --gradient-alternative:  linear-gradient(135deg, #100f0a 0%, #201a0a 100%);
+  --gradient-romantic:     linear-gradient(135deg, #1a0a12 0%, #3a1128 100%);
+  --gradient-fallback:     linear-gradient(135deg, #1a1f2e 0%, #13161e 100%);
 }
 
 html {

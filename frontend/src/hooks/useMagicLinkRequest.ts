@@ -1,14 +1,23 @@
 import { useState } from 'react';
 import { api, organizerApi, ApiError } from '../api/client';
-import { UI_STATE, type LoginState } from '../constants';
+import { API, UI_STATE, type LoginState } from '../constants';
 import { t } from '../i18n';
+
+export interface UseMagicLinkRequestResult {
+  email: string;
+  setEmail: (v: string) => void;
+  state: LoginState;
+  errorMsg: string;
+  submit: (e: React.FormEvent) => Promise<void>;
+  reset: () => void;
+}
 
 /** Magic-link request state machine, shared by the Login page, the landing
  * page's email-capture forms, and OrganizerLogin (via `requestPath` +
  * `organizer`). POSTs `requestPath` (through the organizer-scoped client when
  * `organizer` is set) and tracks idle → loading → success | error. Centralized
  * so the entry points can't drift. */
-export function useMagicLinkRequest(locale: string, requestPath: string = '/auth/request-link', organizer = false) {
+export function useMagicLinkRequest(locale: string, requestPath: string = API.authRequestLink, organizer = false): UseMagicLinkRequestResult {
   const [email, setEmail] = useState('');
   const [state, setState] = useState<LoginState>(UI_STATE.idle);
   const [errorMsg, setErrorMsg] = useState('');

@@ -6,14 +6,14 @@ import { useLogout } from '../../hooks/useLogout';
 import { useLocaleMutation } from '../../hooks/useLocaleMutation';
 import { LEGAL_LOADERS, type LegalDocId } from '../../content/legal';
 import type { LegalBlock, LegalDoc, LegalInline } from '../../content/legal/types';
-import { LOCALE_EN, SAFE_URL_SCHEMES, UI_STATE } from '../../constants';
+import { LOCALE_EN, MAILTO_SCHEME, SAFE_URL_SCHEMES, UI_STATE } from '../../constants';
 import TopBar from '../TopBar';
 import PageState from '../PageState';
 import styles from './LegalPage.module.css';
 
 // Legal content also links out via mailto: (the contact address) alongside
 // ordinary https: links — both are first-party authored, not user data.
-const LEGAL_LINK_SCHEMES = new Set([...SAFE_URL_SCHEMES, 'mailto']);
+const LEGAL_LINK_SCHEMES = new Set([...SAFE_URL_SCHEMES, MAILTO_SCHEME]);
 
 interface LegalPageProps {
   docId: LegalDocId;

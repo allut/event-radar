@@ -14,7 +14,7 @@ import PageState from '../../components/PageState';
 import Toast from '../../components/Toast';
 import TopBar from '../../components/TopBar';
 import { useFeedback } from '../../hooks/useFeedback';
-import { QUERY_KEYS, UI_STATE } from '../../constants';
+import { API, QUERY_KEYS, ROUTES, UI_STATE } from '../../constants';
 import styles from './EventDetail.module.css';
 
 interface EventDetailData extends EventData {
@@ -40,7 +40,7 @@ export default function EventDetail() {
 
   const { data, isLoading, isError } = useQuery({
     queryKey: [QUERY_KEYS.event, id, locale],
-    queryFn: () => api.get<EventDetailData>(`/events/${id}?locale=${encodeURIComponent(locale)}`),
+    queryFn: () => api.get<EventDetailData>(`${API.event(id ?? '')}?locale=${encodeURIComponent(locale)}`),
     enabled: Boolean(id),
     retry: false,
   });
@@ -89,7 +89,7 @@ export default function EventDetail() {
         kind={UI_STATE.error}
         message={t('event_not_found', locale)}
         action={
-          <button className={styles.backBtn} onClick={() => navigate('/')}>
+          <button className={styles.backBtn} onClick={() => navigate(ROUTES.home)}>
             {t('back_to_feed_link', locale)}
           </button>
         }

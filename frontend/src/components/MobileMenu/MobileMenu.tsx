@@ -1,7 +1,7 @@
 import { Link, NavLink } from 'react-router-dom';
 import { t } from '../../i18n';
 import { cx } from '../../utils';
-import { LOCALES } from '../../constants';
+import { LOCALES, ROUTES } from '../../constants';
 import { useDropdown } from '../../hooks/useDropdown';
 import menuStyles from '../shared/Menu.module.css';
 import styles from './MobileMenu.module.css';
@@ -37,7 +37,7 @@ export default function MobileMenu({ locale, onLocaleChange, onLogout, localeDis
             <>
               <nav className={styles.section} aria-label={t('nav_daily5', locale)}>
                 <NavLink
-                  to="/"
+                  to={ROUTES.home}
                   end
                   className={({ isActive }) => cx(styles.link, isActive && styles.linkActive)}
                   onClick={close}
@@ -45,21 +45,21 @@ export default function MobileMenu({ locale, onLocaleChange, onLogout, localeDis
                   {t('nav_daily5', locale)}
                 </NavLink>
                 <NavLink
-                  to="/explore"
+                  to={ROUTES.explore}
                   className={({ isActive }) => cx(styles.link, isActive && styles.linkActive)}
                   onClick={close}
                 >
                   {t('nav_explore', locale)}
                 </NavLink>
                 <NavLink
-                  to="/saved"
+                  to={ROUTES.saved}
                   className={({ isActive }) => cx(styles.link, isActive && styles.linkActive)}
                   onClick={close}
                 >
                   {t('nav_saved', locale)}
                 </NavLink>
                 <NavLink
-                  to="/settings"
+                  to={ROUTES.settings}
                   className={({ isActive }) => cx(styles.link, isActive && styles.linkActive)}
                   onClick={close}
                 >
@@ -110,7 +110,7 @@ export default function MobileMenu({ locale, onLocaleChange, onLogout, localeDis
                 {t('sign_out', locale)}
               </button>
             ) : (
-              <Link to="/login" className={styles.signOut} onClick={close}>
+              <Link to={ROUTES.login} className={styles.signOut} onClick={close}>
                 {t('sign_in', locale)}
               </Link>
             )}

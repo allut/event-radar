@@ -11,7 +11,7 @@ import PageState from '../../components/PageState';
 import EmptyState from '../../components/EmptyState';
 import Toast from '../../components/Toast';
 import { useToast } from '../../hooks/useToast';
-import { ORGANIZER_EMPTY_ICON, QUERY_KEYS, ORGANIZER_EVENTS_PAGE_SIZE, UI_STATE } from '../../constants';
+import { API, ORGANIZER_EMPTY_ICON, QUERY_KEYS, ORGANIZER_EVENTS_PAGE_SIZE, ROUTES, UI_STATE } from '../../constants';
 import styles from './OrganizerDashboard.module.css';
 
 interface OrganizerEvent {
@@ -43,11 +43,11 @@ export default function OrganizerDashboard() {
   const { data, isLoading, isError } = useQuery({
     queryKey: [QUERY_KEYS.organizerEvents, locale],
     queryFn: () =>
-      organizerApi.get<OrganizerEventsResponse>(`/organizer/events?limit=${ORGANIZER_EVENTS_PAGE_SIZE}`),
+      organizerApi.get<OrganizerEventsResponse>(`${API.organizerEvents}?limit=${ORGANIZER_EVENTS_PAGE_SIZE}`),
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (eventId: number) => organizerApi.delete(`/organizer/events/${eventId}`),
+    mutationFn: (eventId: number) => organizerApi.delete(API.organizerEvent(eventId)),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.organizerEvents] });
       showToast(UI_STATE.success, t('organizer_delete_success', locale));
@@ -71,7 +71,7 @@ export default function OrganizerDashboard() {
       <main className={styles.main}>
         <header className={styles.masthead}>
           <h1 className={styles.heading}>{t('organizer_dashboard_title', locale)}</h1>
-          <Link to="/organizer/submit" className={styles.newBtn}>{t('organizer_new_event', locale)}</Link>
+          <Link to={ROUTES.organizerSubmit} className={styles.newBtn}>{t('organizer_new_event', locale)}</Link>
         </header>
 
         {isLoading ? (
@@ -101,7 +101,7 @@ export default function OrganizerDashboard() {
                   )}
                 </div>
                 <div className={styles.rowActions}>
-                  <Link to={`/organizer/events/${event.id}/edit`} className={styles.editBtn}>
+                  <Link to={ROUTES.organizerEventEdit(event.id)} className={styles.editBtn}>
                     {t('organizer_edit', locale)}
                   </Link>
                   <button

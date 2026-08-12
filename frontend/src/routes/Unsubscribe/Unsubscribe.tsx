@@ -4,7 +4,7 @@ import { StatusCodes } from 'http-status-codes';
 import { api, ApiError } from '../../api/client';
 import { getLocale } from '../../lib/auth';
 import { t } from '../../i18n';
-import { UI_STATE, type UnsubscribeState } from '../../constants';
+import { API, ROUTES, UI_STATE, type UnsubscribeState } from '../../constants';
 import AuthCard, { type AuthCardKind } from '../../components/AuthCard';
 import styles from './Unsubscribe.module.css';
 
@@ -31,7 +31,7 @@ export default function Unsubscribe() {
 
     async function run(tok: string) {
       try {
-        await api.post(`/email/unsubscribe?token=${encodeURIComponent(tok)}`);
+        await api.post(`${API.emailUnsubscribe}?token=${encodeURIComponent(tok)}`);
         setState(UI_STATE.success);
       } catch (err) {
         setState(UI_STATE.error);
@@ -49,7 +49,7 @@ export default function Unsubscribe() {
     if (!token || resubscribePending) return;
     setResubscribePending(true);
     try {
-      await api.post(`/email/resubscribe?token=${encodeURIComponent(token)}`);
+      await api.post(`${API.emailResubscribe}?token=${encodeURIComponent(token)}`);
       setState(UI_STATE.resubscribed);
     } catch {
       setErrorMsg(t('unsubscribe.error', locale));
@@ -81,7 +81,7 @@ export default function Unsubscribe() {
             {t('unsubscribe.resubscribe', locale)}
           </button>
         ) : state === UI_STATE.error ? (
-          <Link to="/settings" className={styles.settingsLink}>
+          <Link to={ROUTES.settings} className={styles.settingsLink}>
             {t('unsubscribe.manage_settings', locale)}
           </Link>
         ) : undefined

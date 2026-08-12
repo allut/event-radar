@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { getLocale } from '../../lib/auth';
-import { BRAND_GLYPH } from '../../constants';
+import { API, BRAND_GLYPH, ROUTES } from '../../constants';
 import { t } from '../../i18n';
 import MagicLinkForm from '../../components/MagicLinkForm';
 import styles from './OrganizerLogin.module.css';
@@ -20,13 +20,13 @@ export default function OrganizerLogin() {
 
         <MagicLinkForm
           locale={locale}
-          requestPath="/organizer/auth/request-link"
+          requestPath={API.organizerAuthRequestLink}
           organizer
           emailFieldId="organizer-email"
         />
 
         <p className={styles.note}>{t('no_password', locale)}</p>
-        <Link to="/" className={styles.backLink}>{t('organizer_back_to_site', locale)}</Link>
+        <Link to={ROUTES.home} className={styles.backLink}>{t('organizer_back_to_site', locale)}</Link>
       </div>
     </div>
   );

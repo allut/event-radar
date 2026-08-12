@@ -12,7 +12,7 @@
 }
 
 .btnPrimary:hover:not(:disabled) { background: var(--accent-light); color: var(--on-accent); transform: translateY(-1px); }
-.btnPrimary:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+.btnPrimary:disabled { opacity: var(--opacity-disabled); cursor: not-allowed; transform: none; }
 
 .btnOutline {
   appearance: none;

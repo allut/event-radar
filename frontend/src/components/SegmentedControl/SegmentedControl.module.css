@@ -83,8 +83,8 @@
 }
 
 .segDial .segBtn {
-  position: relative;   /* + z-index: 1 — keeps labels above the indicator without a */
-  z-index: 1;           /* negative z-index / stacking-context trick */
+  position: relative;              /* + z-index — keeps labels above the indicator without a */
+  z-index: var(--z-seg-label);     /* negative z-index / stacking-context trick */
   flex: 1 1 0;
   min-width: 0;
   padding: var(--space-0-45) var(--space-0-875);

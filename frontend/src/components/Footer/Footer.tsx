@@ -2,7 +2,7 @@ import { type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { t, ti } from '../../i18n';
 import { safeUrl } from '../../utils';
-import { BRAND_GLYPH, SOCIAL_LINKS, type SocialIcon } from '../../constants';
+import { BRAND_GLYPH, ROUTES, SOCIAL_LINKS, type SocialIcon } from '../../constants';
 import { useLocale } from '../../hooks/useLocale';
 import { useOrganizerAuth } from '../../hooks/useOrganizerAuth';
 import styles from './Footer.module.css';
@@ -36,7 +36,7 @@ export default function Footer() {
     <footer className={styles.footer}>
       <div className={styles.inner}>
         <div className={styles.brandRow}>
-          <Link to="/" className={styles.brandLink}>
+          <Link to={ROUTES.home} className={styles.brandLink}>
             <span className={styles.radarMark} aria-hidden>{BRAND_GLYPH}</span>
             <span>{t('brand', locale)}</span>
           </Link>
@@ -44,10 +44,10 @@ export default function Footer() {
         </div>
 
         <nav className={styles.links} aria-label={t('footer_nav', locale)}>
-          <Link to="/privacy" className={styles.link}>{t('footer_privacy', locale)}</Link>
-          <Link to="/terms" className={styles.link}>{t('footer_terms', locale)}</Link>
-          <Link to="/contact" className={styles.link}>{t('footer_contact', locale)}</Link>
-          <Link to={isOrganizer ? '/organizer/dashboard' : '/organizer/login'} className={styles.link}>
+          <Link to={ROUTES.privacy} className={styles.link}>{t('footer_privacy', locale)}</Link>
+          <Link to={ROUTES.terms} className={styles.link}>{t('footer_terms', locale)}</Link>
+          <Link to={ROUTES.contact} className={styles.link}>{t('footer_contact', locale)}</Link>
+          <Link to={isOrganizer ? ROUTES.organizerDashboard : ROUTES.organizerLogin} className={styles.link}>
             {t(isOrganizer ? 'footer_organizer_dashboard' : 'footer_organizers', locale)}
           </Link>
         </nav>

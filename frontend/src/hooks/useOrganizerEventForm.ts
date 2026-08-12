@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { organizerApi, ApiError } from '../api/client';
-import { QUERY_KEYS, ORGANIZER_EVENTS_PAGE_SIZE, DEFAULT_CURRENCY, ORGANIZER_IMAGE_ALLOWED_MIME, LOCALE_EN, LOCALE_ET, LOCALE_RU } from '../constants';
+import { API, QUERY_KEYS, ORGANIZER_EVENTS_PAGE_SIZE, DEFAULT_CURRENCY, ORGANIZER_IMAGE_ALLOWED_MIME, ROUTES, LOCALE_EN, LOCALE_ET, LOCALE_RU } from '../constants';
 import { t } from '../i18n';
 import { joinDateTimeValue } from '../utils';
 
@@ -119,9 +119,55 @@ function fieldsFromExisting(existing: OrganizerEventFull): FormFields {
   };
 }
 
+export interface UseOrganizerEventFormResult {
+  isEditMode: boolean;
+  title: string;
+  setTitle: (v: string) => void;
+  titleEn: string;
+  setTitleEn: (v: string) => void;
+  titleRu: string;
+  setTitleRu: (v: string) => void;
+  description: string;
+  setDescription: (v: string) => void;
+  descriptionEn: string;
+  setDescriptionEn: (v: string) => void;
+  descriptionRu: string;
+  setDescriptionRu: (v: string) => void;
+  importantInfo: string;
+  setImportantInfo: (v: string) => void;
+  importantInfoEn: string;
+  setImportantInfoEn: (v: string) => void;
+  importantInfoRu: string;
+  setImportantInfoRu: (v: string) => void;
+  startsAt: string;
+  setStartsAt: (v: string) => void;
+  endsAt: string;
+  setEndsAt: (v: string) => void;
+  venueName: string;
+  setVenueName: (v: string) => void;
+  venueAddress: string;
+  setVenueAddress: (v: string) => void;
+  url: string;
+  setUrl: (v: string) => void;
+  imageUrl: string;
+  clearImage: () => void;
+  priceMin: string;
+  setPriceMin: (v: string) => void;
+  priceMax: string;
+  setPriceMax: (v: string) => void;
+  category: string;
+  setCategory: (v: string) => void;
+  uploadImage: (file: File) => void;
+  imageUploading: boolean;
+  imageError: string;
+  submit: (e: React.FormEvent) => void;
+  isSubmitting: boolean;
+  submitError: string;
+}
+
 /** Submission form state + mutations for both create (POST /organizer/events)
  * and edit (PATCH /organizer/events/{id}), shared by routes/EventSubmit. */
-export function useOrganizerEventForm(locale: string, eventId?: number) {
+export function useOrganizerEventForm(locale: string, eventId?: number): UseOrganizerEventFormResult {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const isEditMode = eventId !== undefined;
@@ -144,7 +190,7 @@ export function useOrganizerEventForm(locale: string, eventId?: number) {
   const { data: listData } = useQuery({
     queryKey: [QUERY_KEYS.organizerEvents, locale],
     queryFn: () =>
-      organizerApi.get<OrganizerEventsResponse>(`/organizer/events?limit=${ORGANIZER_EVENTS_PAGE_SIZE}`),
+      organizerApi.get<OrganizerEventsResponse>(`${API.organizerEvents}?limit=${ORGANIZER_EVENTS_PAGE_SIZE}`),
     enabled: isEditMode,
   });
 
@@ -179,7 +225,7 @@ export function useOrganizerEventForm(locale: string, eventId?: number) {
       }
       const form = new FormData();
       form.append('file', file);
-      return organizerApi.post<{ url: string }>('/organizer/events/image', form);
+      return organizerApi.post<{ url: string }>(API.organizerEventImage, form);
     },
     onSuccess: (data) => setField('imageUrl', data.url),
   });
@@ -221,11 +267,11 @@ export function useOrganizerEventForm(locale: string, eventId?: number) {
   const submitMutation = useMutation({
     mutationFn: () =>
       isEditMode
-        ? organizerApi.patch<SubmitResult>(`/organizer/events/${eventId}`, buildBody())
-        : organizerApi.post<SubmitResult>('/organizer/events', buildBody()),
+        ? organizerApi.patch<SubmitResult>(API.organizerEvent(eventId as number), buildBody())
+        : organizerApi.post<SubmitResult>(API.organizerEvents, buildBody()),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.organizerEvents] });
-      navigate('/organizer/dashboard', { replace: true });
+      navigate(ROUTES.organizerDashboard, { replace: true });
     },
   });
 

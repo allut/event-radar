@@ -22,7 +22,7 @@
 
 .hero {
   position: relative;
-  max-width: 680px;
+  max-width: var(--page-max-narrow);
   margin: var(--space-5) auto 0;
   padding: 0 var(--space-5);
 }
@@ -82,7 +82,7 @@
   composes: rise from '../../components/shared/Animations.module.css';
   --rise-distance: 6px;
   --rise-duration: var(--anim-rise-sm);
-  max-width: 680px;
+  max-width: var(--page-max-narrow);
   margin: 0 auto;
   padding: var(--space-6) var(--space-5) var(--space-8);
 }
@@ -196,7 +196,7 @@
   color: var(--text-muted);
   padding-left: var(--space-1-25);
   position: relative;
-  line-height: 1.55;
+  line-height: var(--leading-body);
 }
 
 .bullet::before {
@@ -213,7 +213,7 @@
 .description {
   font-size: var(--fs-base);
   color: var(--text-muted);
-  line-height: 1.7;
+  line-height: var(--leading-relaxed);
   white-space: pre-wrap;
 }
 

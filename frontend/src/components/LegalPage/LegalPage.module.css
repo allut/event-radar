@@ -6,7 +6,7 @@
 
 .main {
   width: 100%;
-  max-width: 720px;
+  max-width: var(--page-max-legal);
   margin: 0 auto;
   padding: var(--space-8) var(--space-6);
   display: flex;

@@ -65,7 +65,7 @@
 
 .input:disabled,
 .textarea:disabled {
-  opacity: 0.5;
+  opacity: var(--opacity-disabled);
 }
 
 /* Honeypot — off-screen, never shown to sighted users, and excluded from
@@ -91,7 +91,7 @@
   composes: btnPrimary from '../../components/shared/Button.module.css';
   padding: var(--space-0-8125) var(--space-5);
   font-size: var(--fs-base);
-  height: 48px;
+  height: var(--control-height-lg);
   display: flex;
   align-items: center;
   justify-content: center;

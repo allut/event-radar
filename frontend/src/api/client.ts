@@ -1,4 +1,5 @@
 import { StatusCodes } from 'http-status-codes';
+import { ROUTES } from '../constants';
 import { clearSignedInHint, isLoggingOut } from '../lib/auth';
 import { clearOrganizerSignedInHint, isOrganizerLoggingOut } from '../lib/organizerAuth';
 
@@ -34,13 +35,13 @@ async function request<T>(path: string, init: RequestOptions = {}): Promise<T> {
   if (res.status === StatusCodes.UNAUTHORIZED) {
     if (organizer) {
       clearOrganizerSignedInHint();
-      if (!isOrganizerLoggingOut()) window.location.replace('/organizer/login');
+      if (!isOrganizerLoggingOut()) window.location.replace(ROUTES.organizerLogin);
     } else {
       clearSignedInHint();
       // A 401 during an explicit logout is an expected side effect of the
       // cache-clear race described in lib/auth.ts, not a real session expiry —
       // skip the hard redirect so it doesn't override the logout navigation.
-      if (!isLoggingOut()) window.location.replace('/login');
+      if (!isLoggingOut()) window.location.replace(ROUTES.login);
     }
     throw new ApiError(StatusCodes.UNAUTHORIZED, 'Session expired');
   }

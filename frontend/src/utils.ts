@@ -1,6 +1,6 @@
 import DOMPurify from 'dompurify';
 import { api } from './api/client';
-import { CATEGORY_GRADIENTS, FALLBACK_GRADIENT, EUR_SYMBOL, DEFAULT_CURRENCY, GOOGLE_MAPS_SEARCH_URL, type Signal, toLocaleCode, SAFE_URL_SCHEMES, SANITIZE_ALLOWED_TAGS, SANITIZE_ALLOWED_ATTR, SIGNAL_TO_CLASS, BROWSE_PAGE_SIZE, CATEGORIES, VIBES, type DatePreset, type SortOption, ANALYTICS_EVENT_PATH_RE, ANALYTICS_ORGANIZER_EDIT_PATH_RE, CALENDAR_WEEK_START, CALENDAR_WEEKS_SHOWN, CALENDAR_DAYS_PER_WEEK, CALENDAR_REFERENCE_MONDAY, MAX_HOUR, MAX_MINUTE, DATE_PRESET_DAYS, DATE_PRESET_DEFAULT, SORT_DEFAULT } from './constants';
+import { API, CATEGORY_GRADIENTS, FALLBACK_GRADIENT, EUR_SYMBOL, DEFAULT_CURRENCY, GOOGLE_MAPS_SEARCH_URL, type Signal, toLocaleCode, SAFE_URL_SCHEMES, SANITIZE_ALLOWED_TAGS, SANITIZE_ALLOWED_ATTR, SIGNAL_TO_CLASS, BROWSE_PAGE_SIZE, CATEGORIES, VIBES, type DatePreset, type SortOption, ANALYTICS_EVENT_PATH_RE, ANALYTICS_ORGANIZER_EDIT_PATH_RE, CALENDAR_WEEK_START, CALENDAR_WEEKS_SHOWN, CALENDAR_DAYS_PER_WEEK, CALENDAR_REFERENCE_MONDAY, MAX_HOUR, MAX_MINUTE, DATE_PRESET_DAYS, DATE_PRESET_DAYS_FALLBACK, DATE_PRESET_DEFAULT, DATE_PRESET_TODAY, DATE_PRESET_WEEKEND, EXPLORE_PARAM, EXPLORE_URL_FLAG_TRUE, EXPLORE_API_FLAG_TRUE, SORT_DEFAULT, TIME_FIELD_MAX_LENGTH } from './constants';
 import { t, ti } from './i18n';
 
 export function cx(...classes: (string | false | null | undefined)[]): string {
@@ -76,7 +76,7 @@ export function formatHourMinute(iso: string, locale: string): string {
 }
 
 export function trackExternalClick(eventId: number): void {
-  api.post('/feedback', { event_id: eventId, signal: 'click_external' }).catch(() => undefined);
+  api.post(API.feedback, { event_id: eventId, signal: 'click_external' }).catch(() => undefined);
 }
 
 /** Copy text to the clipboard. Returns true on success, false if the
@@ -134,7 +134,7 @@ export function buildMapsUrl(
   lng: number | null,
   address: string | null,
 ): string | null {
-  if (lat && lng) return `${GOOGLE_MAPS_SEARCH_URL}${lat},${lng}`;
+  if (lat !== null && lng !== null) return `${GOOGLE_MAPS_SEARCH_URL}${lat},${lng}`;
   if (address) return `${GOOGLE_MAPS_SEARCH_URL}${encodeURIComponent(address)}`;
   return null;
 }
@@ -369,7 +369,7 @@ export function formatIsoDate(dateStr: string, locale: string): string {
 }
 
 export function padIndex(n: number): string {
-  return String(n).padStart(2, '0');
+  return String(n).padStart(TIME_FIELD_MAX_LENGTH, '0');
 }
 
 export function makeActiveClassMap(styles: Record<string, string>): Record<Signal, string> {
@@ -445,11 +445,11 @@ export function datePresetRange(preset: DatePreset): { from: string | null; to: 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  if (preset === 'today') {
+  if (preset === DATE_PRESET_TODAY) {
     const s = toDateStr(today);
     return { from: s, to: s };
   }
-  if (preset === 'weekend') {
+  if (preset === DATE_PRESET_WEEKEND) {
     const day = today.getDay(); // 0 = Sunday .. 6 = Saturday
     const satOffset = day === 6 ? 0 : day === 0 ? -1 : 6 - day;
     const sat = new Date(today);
@@ -458,7 +458,7 @@ export function datePresetRange(preset: DatePreset): { from: string | null; to: 
     sun.setDate(sat.getDate() + 1);
     return { from: toDateStr(sat), to: toDateStr(sun) };
   }
-  const days = DATE_PRESET_DAYS[preset] ?? 30;
+  const days = DATE_PRESET_DAYS[preset] ?? DATE_PRESET_DAYS_FALLBACK;
   const end = new Date(today);
   end.setDate(today.getDate() + days);
   return { from: toDateStr(today), to: toDateStr(end) };
@@ -487,49 +487,49 @@ function parseSlugList(raw: string, valid: readonly string[]): string[] {
  * (useSearchParams). Only non-default values are written, so a fresh visit
  * (no params) round-trips to DEFAULT_EXPLORE_FILTERS. */
 export function parseExploreFilters(params: URLSearchParams): ExploreFilters {
-  const rawCategory = params.get('category');
-  const rawVibe = params.get('vibe');
+  const rawCategory = params.get(EXPLORE_PARAM.category);
+  const rawVibe = params.get(EXPLORE_PARAM.vibe);
   return {
-    q: params.get('q') ?? '',
+    q: params.get(EXPLORE_PARAM.q) ?? '',
     category: rawCategory === null ? [...CATEGORIES] : parseSlugList(rawCategory, CATEGORIES),
     vibe: rawVibe === null ? [...VIBES] : parseSlugList(rawVibe, VIBES),
-    datePreset: (params.get('date') as DatePreset | null) ?? DATE_PRESET_DEFAULT,
-    free: params.get('free') === '1',
-    forYou: params.get('for_you') === '1',
-    sort: (params.get('sort') as SortOption | null) ?? SORT_DEFAULT,
+    datePreset: (params.get(EXPLORE_PARAM.date) as DatePreset | null) ?? DATE_PRESET_DEFAULT,
+    free: params.get(EXPLORE_PARAM.free) === EXPLORE_URL_FLAG_TRUE,
+    forYou: params.get(EXPLORE_PARAM.forYou) === EXPLORE_URL_FLAG_TRUE,
+    sort: (params.get(EXPLORE_PARAM.sort) as SortOption | null) ?? SORT_DEFAULT,
   };
 }
 
 export function exploreFiltersToSearchParams(filters: ExploreFilters): URLSearchParams {
   const params = new URLSearchParams();
-  if (filters.q) params.set('q', filters.q);
-  if (!isFullSet(filters.category, CATEGORIES)) params.set('category', filters.category.join(','));
-  if (!isFullSet(filters.vibe, VIBES)) params.set('vibe', filters.vibe.join(','));
-  if (filters.datePreset !== DATE_PRESET_DEFAULT) params.set('date', filters.datePreset);
-  if (filters.free) params.set('free', '1');
-  if (filters.forYou) params.set('for_you', '1');
-  if (filters.sort !== SORT_DEFAULT) params.set('sort', filters.sort);
+  if (filters.q) params.set(EXPLORE_PARAM.q, filters.q);
+  if (!isFullSet(filters.category, CATEGORIES)) params.set(EXPLORE_PARAM.category, filters.category.join(','));
+  if (!isFullSet(filters.vibe, VIBES)) params.set(EXPLORE_PARAM.vibe, filters.vibe.join(','));
+  if (filters.datePreset !== DATE_PRESET_DEFAULT) params.set(EXPLORE_PARAM.date, filters.datePreset);
+  if (filters.free) params.set(EXPLORE_PARAM.free, EXPLORE_URL_FLAG_TRUE);
+  if (filters.forYou) params.set(EXPLORE_PARAM.forYou, EXPLORE_URL_FLAG_TRUE);
+  if (filters.sort !== SORT_DEFAULT) params.set(EXPLORE_PARAM.sort, filters.sort);
   return params;
 }
 
 /** Build the GET /explore query string for a given filter set + page offset. */
 export function buildExploreApiQuery(filters: ExploreFilters, offset: number): string {
   const params = new URLSearchParams();
-  if (filters.q) params.set('q', filters.q);
+  if (filters.q) params.set(EXPLORE_PARAM.q, filters.q);
   if (filters.category.length && !isFullSet(filters.category, CATEGORIES)) {
-    params.set('category', filters.category.join(','));
+    params.set(EXPLORE_PARAM.category, filters.category.join(','));
   }
   if (filters.vibe.length && !isFullSet(filters.vibe, VIBES)) {
-    params.set('vibe', filters.vibe.join(','));
+    params.set(EXPLORE_PARAM.vibe, filters.vibe.join(','));
   }
   const { from, to } = datePresetRange(filters.datePreset);
-  if (from) params.set('date_from', from);
-  if (to) params.set('date_to', to);
-  if (filters.free) params.set('free', 'true');
-  params.set('for_you', String(filters.forYou));
-  params.set('sort', filters.sort);
-  params.set('limit', String(BROWSE_PAGE_SIZE));
-  params.set('offset', String(offset));
+  if (from) params.set(EXPLORE_PARAM.dateFrom, from);
+  if (to) params.set(EXPLORE_PARAM.dateTo, to);
+  if (filters.free) params.set(EXPLORE_PARAM.free, EXPLORE_API_FLAG_TRUE);
+  params.set(EXPLORE_PARAM.forYou, String(filters.forYou));
+  params.set(EXPLORE_PARAM.sort, filters.sort);
+  params.set(EXPLORE_PARAM.limit, String(BROWSE_PAGE_SIZE));
+  params.set(EXPLORE_PARAM.offset, String(offset));
   return params.toString();
 }
 

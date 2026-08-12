@@ -20,7 +20,7 @@
 }
 
 .fieldDisabled {
-  opacity: 0.5;
+  opacity: var(--opacity-disabled);
 }
 
 .textInput {
@@ -274,7 +274,7 @@
 }
 
 .timeInput:disabled {
-  opacity: 0.5;
+  opacity: var(--opacity-disabled);
 }
 
 .timeSeparator {

@@ -36,7 +36,7 @@
 
 .mainBtn:disabled {
   cursor: not-allowed;
-  opacity: 0.4;
+  opacity: var(--opacity-disabled);
 }
 
 .emoji {
@@ -68,7 +68,7 @@
   font-size: var(--fs-md);
   color: var(--text-muted);
   display: block;
-  line-height: 1.4;
+  line-height: var(--leading-snug);
 }
 
 .badge {

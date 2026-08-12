@@ -59,6 +59,11 @@ export const CARD_ANIMATION_DELAY_STEP_MS = 80;
 // Matches the `max-width: 640px` breakpoint used across component CSS modules.
 export const MOBILE_BREAKPOINT_PX = 640;
 
+// ─── Dropdown ────────────────────────────────────────────────────────────────
+// useDropdown's default initial-focus target: the popover's first button
+// (FacetMenu/SelectMenu). DatePicker overrides this with a selected-day selector.
+export const DROPDOWN_DEFAULT_FOCUS_SELECTOR = 'button';
+
 // ─── Settings ────────────────────────────────────────────────────────────────
 export const SAVE_MSG_CLEAR_DELAY_MS = 2000;
 
@@ -114,23 +119,25 @@ export const SIGNAL_TO_CLASS: Record<Signal, string> = {
 
 export const EUR_SYMBOL = '€';
 
-// Keys must match the 14-category taxonomy in shared/app-config.json (VALID_CATEGORIES)
+// Keys must match the 14-category taxonomy in shared/app-config.json
+// (VALID_CATEGORIES). Values reference --gradient-<slug> tokens in
+// index.css's :root — the hex values live there, not here.
 export const CATEGORY_GRADIENTS: Record<string, string> = {
-  nightlife:    'linear-gradient(135deg, #1a0a1f 0%, #2d1040 100%)',
-  music:        'linear-gradient(135deg, #0a1020 0%, #1a2060 100%)',
-  theater:      'linear-gradient(135deg, #1a100a 0%, #3d2010 100%)',
-  exhibitions:  'linear-gradient(135deg, #100a15 0%, #1a0a2a 100%)',
-  workshops:    'linear-gradient(135deg, #0a100f 0%, #102020 100%)',
-  food_drink:   'linear-gradient(135deg, #0f1a0a 0%, #1a3010 100%)',
-  sports:       'linear-gradient(135deg, #0a1a0f 0%, #102030 100%)',
-  networking:   'linear-gradient(135deg, #0a0f1a 0%, #0a2030 100%)',
-  literature:   'linear-gradient(135deg, #0f100a 0%, #1f2010 100%)',
-  family:       'linear-gradient(135deg, #1a0a10 0%, #2a1020 100%)',
-  cinema:       'linear-gradient(135deg, #0a1510 0%, #103020 100%)',
-  alternative:  'linear-gradient(135deg, #100f0a 0%, #201a0a 100%)',
-  romantic:     'linear-gradient(135deg, #1a0a12 0%, #3a1128 100%)',
+  nightlife:    'var(--gradient-nightlife)',
+  music:        'var(--gradient-music)',
+  theater:      'var(--gradient-theater)',
+  exhibitions:  'var(--gradient-exhibitions)',
+  workshops:    'var(--gradient-workshops)',
+  food_drink:   'var(--gradient-food_drink)',
+  sports:       'var(--gradient-sports)',
+  networking:   'var(--gradient-networking)',
+  literature:   'var(--gradient-literature)',
+  family:       'var(--gradient-family)',
+  cinema:       'var(--gradient-cinema)',
+  alternative:  'var(--gradient-alternative)',
+  romantic:     'var(--gradient-romantic)',
 };
-export const FALLBACK_GRADIENT = 'linear-gradient(135deg, #1a1f2e 0%, #13161e 100%)';
+export const FALLBACK_GRADIENT = 'var(--gradient-fallback)';
 
 // ─── React Query keys ──────────────────────────────────────────────────────────
 // Query-key root strings shared across routes and useFeedback's invalidation
@@ -276,18 +283,112 @@ export const STEP_KEYS = [
 export const BRAND_GLYPH = '◉';
 // Organizer dashboard's empty-state icon.
 export const ORGANIZER_EMPTY_ICON = '📅';
+// Six taxonomy categories placed as radar blips on the Landing hero, positioned
+// (top/left %) around the sweep. Labels come from the shared category_* i18n keys.
+export const RADAR_BLIPS: { slug: string; top: number; left: number; delay: number }[] = [
+  { slug: 'music', top: 20, left: 30, delay: 0 },
+  { slug: 'theater', top: 32, left: 72, delay: 0.4 },
+  { slug: 'exhibitions', top: 58, left: 80, delay: 0.8 },
+  { slug: 'nightlife', top: 76, left: 52, delay: 1.2 },
+  { slug: 'workshops', top: 66, left: 32, delay: 1.6 },
+  { slug: 'family', top: 40, left: 18, delay: 2.0 },
+];
 
 // ─── Explore ─────────────────────────────────────────────────────────────────
 export const EXPLORE_AUDIENCE_ALL = 'all';
 export const EXPLORE_AUDIENCE_FOR_YOU = 'foryou';
 export const SORT_DEFAULT: SortOption = 'relevance';
 export const DATE_PRESET_DEFAULT: DatePreset = 'any';
+export const DATE_PRESET_TODAY: DatePreset = 'today';
+export const DATE_PRESET_WEEKEND: DatePreset = 'weekend';
 // Day-window per short-range date preset — keys mirror DATE_PRESETS' values.
 export const DATE_PRESET_DAYS: Partial<Record<DatePreset, number>> = {
   '7d': 7,
   '30d': 30,
 };
+// Fallback window (days) for a DatePreset with no DATE_PRESET_DAYS entry.
+export const DATE_PRESET_DAYS_FALLBACK = 30;
+
+// Query-param names shared by parseExploreFilters / exploreFiltersToSearchParams
+// / buildExploreApiQuery — one map so the three can't drift out of sync.
+export const EXPLORE_PARAM = {
+  q: 'q',
+  category: 'category',
+  vibe: 'vibe',
+  date: 'date',
+  free: 'free',
+  forYou: 'for_you',
+  sort: 'sort',
+  dateFrom: 'date_from',
+  dateTo: 'date_to',
+  limit: 'limit',
+  offset: 'offset',
+} as const;
+// URL state uses a terse '1' flag; the /explore API query uses 'true'/'false'.
+export const EXPLORE_URL_FLAG_TRUE = '1';
+export const EXPLORE_API_FLAG_TRUE = 'true';
 
 // ─── Organizer submission — price inputs ────────────────────────────────────
 export const PRICE_INPUT_MIN = '0';
 export const PRICE_INPUT_STEP = '0.01';
+
+// ─── Legal content ───────────────────────────────────────────────────────────
+// Extra URL scheme legal docs link out with (contact address), alongside
+// SAFE_URL_SCHEMES's https:/mailto:-free defaults.
+export const MAILTO_SCHEME = 'mailto';
+
+// ─── Routes ──────────────────────────────────────────────────────────────────
+// Every <Route> path, `navigate()` target and `<Link to>` in App.tsx / the
+// consumer + organizer nav chrome resolves through this map so the two stay
+// in sync. Dynamic segments are builder functions; `*Pattern` entries are the
+// React Router path (with `:param` placeholders) used only in App.tsx's
+// <Route path> table.
+export const ROUTES = {
+  login: '/login',
+  authVerify: '/auth/verify',
+  onboarding: '/onboarding',
+  home: '/',
+  explore: '/explore',
+  saved: '/saved',
+  eventDetail: (id: number | string) => `/events/${id}`,
+  eventDetailPattern: '/events/:id',
+  settings: '/settings',
+  unsubscribe: '/unsubscribe',
+  privacy: '/privacy',
+  terms: '/terms',
+  contact: '/contact',
+  organizerLogin: '/organizer/login',
+  organizerVerify: '/organizer/verify',
+  organizerDashboard: '/organizer/dashboard',
+  organizerSubmit: '/organizer/submit',
+  organizerEventEdit: (id: number | string) => `/organizer/events/${id}/edit`,
+  organizerEventEditPattern: '/organizer/events/:id/edit',
+} as const;
+
+// ─── API endpoints ───────────────────────────────────────────────────────────
+// Every backend request path resolves through this map (or a builder function
+// for a dynamic segment) so a typo can't silently desync a call site from the
+// route it's meant to hit.
+export const API = {
+  me: '/users/me',
+  authMe: '/auth/me',
+  authVerify: '/auth/verify',
+  authLogout: '/auth/logout',
+  authLogoutAll: '/auth/logout-all',
+  authRequestLink: '/auth/request-link',
+  organizerAuthLogout: '/organizer/auth/logout',
+  organizerAuthVerify: '/organizer/auth/verify',
+  organizerAuthRequestLink: '/organizer/auth/request-link',
+  onboardingPersona: '/onboarding/persona',
+  contact: '/contact',
+  feed: '/feed',
+  feedback: '/feedback',
+  feedbackEvent: (id: number) => `/feedback/${id}`,
+  publicShowcase: '/public/showcase',
+  emailUnsubscribe: '/email/unsubscribe',
+  emailResubscribe: '/email/resubscribe',
+  event: (id: number | string) => `/events/${id}`,
+  organizerEvents: '/organizer/events',
+  organizerEvent: (id: number | string) => `/organizer/events/${id}`,
+  organizerEventImage: '/organizer/events/image',
+} as const;

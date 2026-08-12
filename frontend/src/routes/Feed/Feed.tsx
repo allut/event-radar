@@ -9,7 +9,7 @@ import EmptyState from '../../components/EmptyState';
 import PageState from '../../components/PageState';
 import TopBar from '../../components/TopBar';
 import { formatHourMinute, formatIsoDate, formatTodayDate, padIndex } from '../../utils';
-import { BRAND_GLYPH, QUERY_KEYS, UI_STATE } from '../../constants';
+import { API, BRAND_GLYPH, QUERY_KEYS, ROUTES, UI_STATE } from '../../constants';
 import styles from './Feed.module.css';
 
 interface FeedResponse {
@@ -25,7 +25,7 @@ export default function Feed() {
 
   const { data, isLoading, isError } = useQuery({
     queryKey: [QUERY_KEYS.feed, locale],
-    queryFn: () => api.get<FeedResponse>(`/feed?locale=${encodeURIComponent(locale)}`),
+    queryFn: () => api.get<FeedResponse>(`${API.feed}?locale=${encodeURIComponent(locale)}`),
     retry: false,
   });
 
@@ -66,7 +66,7 @@ export default function Feed() {
           </p>
         )}
 
-        <Link to="/explore" className={styles.promo}>
+        <Link to={ROUTES.explore} className={styles.promo}>
           <div className={styles.promoText}>
             <h2 className={styles.promoTitle}>{t('feed_promo_title', locale)}</h2>
             <p className={styles.promoMsg}>{t('feed_promo_msg', locale)}</p>

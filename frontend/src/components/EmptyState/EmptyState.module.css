@@ -25,12 +25,12 @@
   font-size: var(--fs-base);
   color: var(--text-muted);
   max-width: 380px;
-  line-height: 1.65;
+  line-height: var(--leading-relaxed);
 }
 
 .emptyHint {
   font-size: var(--fs-sm);
   color: var(--text-soft);
   max-width: 340px;
-  line-height: 1.6;
+  line-height: var(--leading-body);
 }

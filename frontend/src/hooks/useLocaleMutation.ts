@@ -1,7 +1,14 @@
 import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { api } from '../api/client';
+import { API } from '../constants';
 import { getLocale, setLocale, isAuthenticated } from '../lib/auth';
+
+export interface UseLocaleMutationResult {
+  locale: string;
+  handleLocaleChange: (code: string) => void;
+  isPending: boolean;
+}
 
 /**
  * Locale switcher backed by PATCH /users/me, shared by Feed, Explore, Saved,
@@ -13,11 +20,11 @@ import { getLocale, setLocale, isAuthenticated } from '../lib/auth';
  */
 export function useLocaleMutation(
   callbacks?: { onSuccess?: () => void; onError?: (err: unknown) => void },
-) {
+): UseLocaleMutationResult {
   const [locale, setLocaleState] = useState(getLocale());
 
   const mutation = useMutation({
-    mutationFn: (code: string) => api.patch('/users/me', { locale: code }),
+    mutationFn: (code: string) => api.patch(API.me, { locale: code }),
     onSuccess: (_data, code) => {
       setLocale(code);
       callbacks?.onSuccess?.();

@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../../api/client';
 import { getLocale, setLocale } from '../../lib/auth';
-import { BRAND_GLYPH, MAGIC_LINK_EXPIRY_MINUTES, PERSONAS, QUERY_KEYS, STEP_KEYS, UI_STATE } from '../../constants';
+import { API, BRAND_GLYPH, MAGIC_LINK_EXPIRY_MINUTES, PERSONAS, QUERY_KEYS, ROUTES, STEP_KEYS, UI_STATE } from '../../constants';
 import { t, ti, personaName, personaVibe } from '../../i18n';
 import { padIndex } from '../../utils';
 import { useMagicLinkRequest } from '../../hooks/useMagicLinkRequest';
@@ -68,7 +68,7 @@ export default function Landing() {
 
   const { data, isError } = useQuery({
     queryKey: [QUERY_KEYS.showcase, locale],
-    queryFn: () => api.get<ShowcaseResponse>(`/public/showcase?locale=${locale}`),
+    queryFn: () => api.get<ShowcaseResponse>(`${API.publicShowcase}?locale=${locale}`),
     retry: false,
   });
 
@@ -117,7 +117,7 @@ export default function Landing() {
                     <EventCard key={event.id} event={event} index={i} locale={locale} readOnly />
                   ))}
                 </div>
-                <Link to="/login" className={styles.showcaseCta}>{t('landing_showcase_cta', locale)}</Link>
+                <Link to={ROUTES.login} className={styles.showcaseCta}>{t('landing_showcase_cta', locale)}</Link>
               </>
             )}
           </section>
@@ -146,7 +146,7 @@ export default function Landing() {
             <h2 id="organizer-cta" className={styles.organizerTitle}>{t('landing_organizer_title', locale)}</h2>
             <p className={styles.organizerBody}>{t('landing_organizer_body', locale)}</p>
           </div>
-          <Link to={isOrganizer ? '/organizer/dashboard' : '/organizer/login'} className={styles.organizerCta}>
+          <Link to={isOrganizer ? ROUTES.organizerDashboard : ROUTES.organizerLogin} className={styles.organizerCta}>
             {t('landing_organizer_cta', locale)}
           </Link>
         </section>

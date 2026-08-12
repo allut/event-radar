@@ -1,6 +1,16 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { MOBILE_BREAKPOINT_PX } from '../constants';
+import { useEffect, useLayoutEffect, useRef, useState, type Dispatch, type RefObject, type SetStateAction } from 'react';
+import { DROPDOWN_DEFAULT_FOCUS_SELECTOR, MOBILE_BREAKPOINT_PX } from '../constants';
 import { shouldFlipPopover } from '../utils';
+
+export interface UseDropdownResult {
+  open: boolean;
+  setOpen: Dispatch<SetStateAction<boolean>>;
+  flip: boolean;
+  rootRef: RefObject<HTMLDivElement>;
+  popRef: RefObject<HTMLDivElement>;
+  triggerRef: RefObject<HTMLButtonElement>;
+  close: () => void;
+}
 
 /**
  * Shared open/close + outside-click + Escape + focus behavior for a
@@ -12,7 +22,7 @@ import { shouldFlipPopover } from '../utils';
  *   cell instead, so opening the calendar doesn't land focus on the
  *   previous-month arrow.
  */
-export function useDropdown(initialFocusSelector = 'button') {
+export function useDropdown(initialFocusSelector = DROPDOWN_DEFAULT_FOCUS_SELECTOR): UseDropdownResult {
   const [open, setOpen] = useState(false);
   const [flip, setFlip] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);

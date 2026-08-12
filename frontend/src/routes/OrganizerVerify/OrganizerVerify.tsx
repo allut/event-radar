@@ -3,7 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { organizerApi, ApiError } from '../../api/client';
 import { setOrganizerSignedInHint } from '../../lib/organizerAuth';
 import { getLocale } from '../../lib/auth';
-import { AUTH_REDIRECT_DELAY_MS, UI_STATE, type VerifyState } from '../../constants';
+import { API, AUTH_REDIRECT_DELAY_MS, ROUTES, UI_STATE, type VerifyState } from '../../constants';
 import { t } from '../../i18n';
 import AuthCard, { type AuthCardKind } from '../../components/AuthCard';
 import styles from './OrganizerVerify.module.css';
@@ -30,14 +30,14 @@ export default function OrganizerVerify() {
 
     // Strip the single-use token from the address bar before the async verify
     // call, same rationale as AuthVerify — see that file for the full comment.
-    window.history.replaceState({}, '', '/organizer/verify');
+    window.history.replaceState({}, '', ROUTES.organizerVerify);
 
     async function verify(tok: string) {
       try {
-        await organizerApi.post('/organizer/auth/verify', { token: tok });
+        await organizerApi.post(API.organizerAuthVerify, { token: tok });
         setOrganizerSignedInHint();
         setState(UI_STATE.success);
-        setTimeout(() => navigate('/organizer/dashboard', { replace: true }), AUTH_REDIRECT_DELAY_MS);
+        setTimeout(() => navigate(ROUTES.organizerDashboard, { replace: true }), AUTH_REDIRECT_DELAY_MS);
       } catch (err) {
         setState(UI_STATE.error);
         setErrorMsg(
@@ -61,7 +61,7 @@ export default function OrganizerVerify() {
       kind={STATE_TO_KIND[state]}
       message={message}
       action={state === UI_STATE.error && (
-        <Link to="/organizer/login" className={styles.retry}>{t('request_new_link', locale)}</Link>
+        <Link to={ROUTES.organizerLogin} className={styles.retry}>{t('request_new_link', locale)}</Link>
       )}
     />
   );

@@ -7,7 +7,7 @@ import { useLogout } from '../../hooks/useLogout';
 import { useLocaleMutation } from '../../hooks/useLocaleMutation';
 import { useContactSubmit } from '../../hooks/useContactSubmit';
 import { useOrganizerAuth } from '../../hooks/useOrganizerAuth';
-import { QUERY_KEYS, UI_STATE, CONTACT_TEXTAREA_ROWS } from '../../constants';
+import { API, QUERY_KEYS, ROUTES, UI_STATE, CONTACT_TEXTAREA_ROWS } from '../../constants';
 import { t } from '../../i18n';
 import TopBar from '../../components/TopBar';
 import styles from './Contact.module.css';
@@ -29,7 +29,7 @@ export default function Contact() {
   // already on file; shares the Settings page's /users/me query cache.
   const { data: me } = useQuery({
     queryKey: [QUERY_KEYS.settings],
-    queryFn: () => api.get<{ email: string }>('/users/me'),
+    queryFn: () => api.get<{ email: string }>(API.me),
     enabled: authed,
   });
 
@@ -57,7 +57,7 @@ export default function Contact() {
         <h1 className={styles.title}>{t('contact_title', locale)}</h1>
         <p className={styles.body}>{t('contact_intro', locale)}</p>
         <p className={styles.organizerHint}>
-          <Link to={isOrganizer ? '/organizer/dashboard' : '/organizer/login'}>
+          <Link to={isOrganizer ? ROUTES.organizerDashboard : ROUTES.organizerLogin}>
             {t('organizer_entry_link', locale)}
           </Link>
         </p>

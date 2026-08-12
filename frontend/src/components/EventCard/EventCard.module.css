@@ -230,7 +230,7 @@
   color: var(--text-muted);
   padding-left: var(--space-1-1);
   position: relative;
-  line-height: 1.5;
+  line-height: var(--leading-body);
   display: -webkit-box;
   -webkit-line-clamp: 1;
   -webkit-box-orient: vertical;

@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { getLocale } from '../../lib/auth';
-import { BRAND_GLYPH } from '../../constants';
+import { BRAND_GLYPH, ROUTES } from '../../constants';
 import { t } from '../../i18n';
 import { useOrganizerAuth } from '../../hooks/useOrganizerAuth';
 import MagicLinkForm from '../../components/MagicLinkForm';
@@ -26,11 +26,11 @@ export default function Login() {
         <p className={styles.note}>{t('no_password', locale)}</p>
         <p className={styles.terms}>
           {termsBefore}
-          <Link to="/terms" className={styles.termsLink}>{t('login_terms_link', locale)}</Link>
+          <Link to={ROUTES.terms} className={styles.termsLink}>{t('login_terms_link', locale)}</Link>
           {termsAfter}
         </p>
         <p className={styles.terms}>
-          <Link to={isOrganizer ? '/organizer/dashboard' : '/organizer/login'} className={styles.termsLink}>
+          <Link to={isOrganizer ? ROUTES.organizerDashboard : ROUTES.organizerLogin} className={styles.termsLink}>
             {t('organizer_entry_link', locale)}
           </Link>
         </p>

@@ -6,7 +6,7 @@ import { getLocale } from '../../lib/auth';
 import { useLocaleMutation } from '../../hooks/useLocaleMutation';
 import { useLogout } from '../../hooks/useLogout';
 import { useToast } from '../../hooks/useToast';
-import { AUTH_REDIRECT_DELAY_MS, BRAND_GLYPH, PERSONAS_BY_SLUG, QUERY_KEYS, RANK_LABEL_KEYS, UI_STATE, TOAST_IDLE, type ToastState } from '../../constants';
+import { API, AUTH_REDIRECT_DELAY_MS, BRAND_GLYPH, PERSONAS_BY_SLUG, QUERY_KEYS, RANK_LABEL_KEYS, ROUTES, UI_STATE, TOAST_IDLE, type ToastState } from '../../constants';
 import { cx } from '../../utils';
 import { t, personaName } from '../../i18n';
 import LocaleSelector from '../../components/LocaleSelector';
@@ -39,7 +39,7 @@ export default function Settings() {
 
   const { data, isLoading, isError } = useQuery({
     queryKey: [QUERY_KEYS.settings],
-    queryFn: () => api.get<SettingsData>('/users/me'),
+    queryFn: () => api.get<SettingsData>(API.me),
   });
 
   const { toast: saveToast, showToast: showSaveToast } = useToast();
@@ -60,7 +60,7 @@ export default function Settings() {
 
   const digestMutation = useMutation({
     mutationFn: (optIn: boolean) =>
-      api.patch<SettingsData>('/users/me', { email_digest_opt_in: optIn }),
+      api.patch<SettingsData>(API.me, { email_digest_opt_in: optIn }),
     onSuccess: (updated) => {
       queryClient.setQueryData([QUERY_KEYS.settings], updated);
       showSaved(locale);
@@ -73,7 +73,7 @@ export default function Settings() {
   }
 
   const logoutAllMutation = useMutation({
-    mutationFn: () => api.post<{ detail: string }>('/auth/logout-all'),
+    mutationFn: () => api.post<{ detail: string }>(API.authLogoutAll),
     onSuccess: () => {
       setLogoutToast({ status: UI_STATE.success, message: t('logout_all_success', locale) });
       setTimeout(handleLogout, AUTH_REDIRECT_DELAY_MS);
@@ -150,7 +150,7 @@ export default function Settings() {
           </div>
           <button
             className={styles.repickBtn}
-            onClick={() => navigate('/onboarding')}
+            onClick={() => navigate(ROUTES.onboarding)}
           >
             {t('change_persona', locale)}
           </button>
