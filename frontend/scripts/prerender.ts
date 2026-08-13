@@ -29,6 +29,7 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import sparticuzChromium from '@sparticuz/chromium';
 import { chromium, type Page } from 'playwright';
 import { preview, type PreviewServer } from 'vite';
 import type { EventData } from '../src/components/EventCard';
@@ -253,6 +254,26 @@ async function validateTarget(target: PrerenderTarget): Promise<string[]> {
   return issues.map((issue) => `${localizedPath(target.bare, target.locale)} — ${issue}`);
 }
 
+// Vercel's build image isn't one of Playwright's officially supported OSes,
+// so `chromium.launch()` there falls back to a generic Ubuntu Chromium build
+// that's missing system shared libraries the container has no apt/sudo
+// access to install (see docs/frontend.md's prerender section). `VERCEL` is
+// set on every Vercel build/runtime; @sparticuz/chromium ships a statically
+// linked Chromium built for that exact serverless environment. Local/dev
+// runs keep using Playwright's own managed browser (`playwright install
+// chromium`), since @sparticuz/chromium's binary targets Amazon Linux, not a
+// developer's OS.
+async function launchPrerenderBrowser() {
+  if (!process.env.VERCEL) {
+    return chromium.launch();
+  }
+  return chromium.launch({
+    executablePath: await sparticuzChromium.executablePath(),
+    args: sparticuzChromium.args,
+    headless: true,
+  });
+}
+
 async function main(): Promise<void> {
   const eventIds = await fetchPublishedEventIds();
   const targets = buildTargets(eventIds);
@@ -267,7 +288,7 @@ async function main(): Promise<void> {
   console.log(`prerender: wrote sitemap.xml (${targets.length} url(s)) and robots.txt`);
 
   let server: PreviewServer | undefined;
-  const browser = await chromium.launch();
+  const browser = await launchPrerenderBrowser();
   try {
     server = await preview({ preview: { port: 0, strictPort: false }, logLevel: 'warn' });
     const previewOrigin = server.resolvedUrls?.local[0]?.replace(/\/$/, '');
