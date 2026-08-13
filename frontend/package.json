@@ -8,7 +8,7 @@
     "build": "tsc --noEmit && vite build && cp dist/index.html dist/app-shell.html && playwright install chromium && tsx scripts/prerender.ts",
     "preview": "vite preview",
     "type-check": "tsc --noEmit",
-    "lint": "eslint src",
+    "lint": "eslint src scripts",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage"
