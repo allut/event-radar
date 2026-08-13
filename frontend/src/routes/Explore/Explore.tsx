@@ -5,10 +5,12 @@ import { api } from '../../api/client';
 import { t } from '../../i18n';
 import { useLocaleMutation } from '../../hooks/useLocaleMutation';
 import { useLogout } from '../../hooks/useLogout';
+import { useStaticSeoMeta } from '../../hooks/useStaticSeoMeta';
 import EventCard, { type EventData } from '../../components/EventCard';
 import EmptyState from '../../components/EmptyState';
 import PageState from '../../components/PageState';
 import TopBar from '../../components/TopBar';
+import SeoTags from '../../components/SeoTags';
 import FacetMenu from '../../components/FacetMenu';
 import SegmentedControl from '../../components/SegmentedControl';
 import SelectMenu from '../../components/SelectMenu';
@@ -57,6 +59,7 @@ export default function Explore() {
   const [searchParams, setSearchParams] = useSearchParams();
   const filters = useMemo(() => parseExploreFilters(searchParams), [searchParams]);
   const { locale, handleLocaleChange } = useLocaleMutation();
+  const seoMeta = useStaticSeoMeta('seo_title_explore', locale);
 
   const [searchInput, setSearchInput] = useState(filters.q);
 
@@ -197,6 +200,7 @@ export default function Explore() {
 
   return (
     <div className={styles.page}>
+      <SeoTags meta={seoMeta} />
       <TopBar locale={locale} onLocaleChange={handleLocaleChange} onLogout={handleLogout} />
 
       <main className={styles.main}>

@@ -5,7 +5,9 @@ import { api, ApiError } from '../../api/client';
 import { getLocale } from '../../lib/auth';
 import { t } from '../../i18n';
 import { API, ROUTES, UI_STATE, type UnsubscribeState } from '../../constants';
+import { useStaticSeoMeta } from '../../hooks/useStaticSeoMeta';
 import AuthCard, { type AuthCardKind } from '../../components/AuthCard';
+import SeoTags from '../../components/SeoTags';
 import styles from './Unsubscribe.module.css';
 
 const STATE_TO_KIND: Record<UnsubscribeState, AuthCardKind> = {
@@ -17,6 +19,7 @@ const STATE_TO_KIND: Record<UnsubscribeState, AuthCardKind> = {
 
 export default function Unsubscribe() {
   const locale = getLocale();
+  const seoMeta = useStaticSeoMeta('seo_title_unsubscribe', locale);
   const [searchParams] = useSearchParams();
   const token = searchParams.get('token');
   const [state, setState] = useState<UnsubscribeState>(token ? UI_STATE.working : UI_STATE.error);
@@ -65,27 +68,30 @@ export default function Unsubscribe() {
     : errorMsg;
 
   return (
-    <AuthCard
-      locale={locale}
-      kind={STATE_TO_KIND[state]}
-      message={message}
-      animated={false}
-      action={
-        state === UI_STATE.success ? (
-          <button
-            type="button"
-            className={styles.resubscribeBtn}
-            onClick={() => void handleResubscribe()}
-            disabled={resubscribePending}
-          >
-            {t('unsubscribe.resubscribe', locale)}
-          </button>
-        ) : state === UI_STATE.error ? (
-          <Link to={ROUTES.settings} className={styles.settingsLink}>
-            {t('unsubscribe.manage_settings', locale)}
-          </Link>
-        ) : undefined
-      }
-    />
+    <>
+      <SeoTags meta={seoMeta} />
+      <AuthCard
+        locale={locale}
+        kind={STATE_TO_KIND[state]}
+        message={message}
+        animated={false}
+        action={
+          state === UI_STATE.success ? (
+            <button
+              type="button"
+              className={styles.resubscribeBtn}
+              onClick={() => void handleResubscribe()}
+              disabled={resubscribePending}
+            >
+              {t('unsubscribe.resubscribe', locale)}
+            </button>
+          ) : state === UI_STATE.error ? (
+            <Link to={ROUTES.settings} className={styles.settingsLink}>
+              {t('unsubscribe.manage_settings', locale)}
+            </Link>
+          ) : undefined
+        }
+      />
+    </>
   );
 }

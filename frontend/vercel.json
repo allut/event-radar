@@ -1,7 +1,7 @@
 {
   "rewrites": [
-    { "source": "/api/:path*", "destination": "https://event-radar-api.onrender.com/:path*" },
-    { "source": "/((?!api/|_vercel/).*)", "destination": "/index.html" }
+    { "source": "/api/:path((?!seo-audit/?$).*)", "destination": "https://event-radar-api.onrender.com/:path" },
+    { "source": "/((?!api/|_vercel/).*)", "destination": "/app-shell.html" }
   ],
   "headers": [
     {

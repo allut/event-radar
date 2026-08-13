@@ -7,9 +7,11 @@ import { useLogout } from '../../hooks/useLogout';
 import { useLocaleMutation } from '../../hooks/useLocaleMutation';
 import { useContactSubmit } from '../../hooks/useContactSubmit';
 import { useOrganizerAuth } from '../../hooks/useOrganizerAuth';
+import { useStaticSeoMeta } from '../../hooks/useStaticSeoMeta';
 import { API, QUERY_KEYS, ROUTES, UI_STATE, CONTACT_TEXTAREA_ROWS } from '../../constants';
 import { t } from '../../i18n';
 import TopBar from '../../components/TopBar';
+import SeoTags from '../../components/SeoTags';
 import styles from './Contact.module.css';
 
 export default function Contact() {
@@ -17,6 +19,7 @@ export default function Contact() {
   const isOrganizer = useOrganizerAuth();
   const handleLogout = useLogout();
   const { locale, handleLocaleChange } = useLocaleMutation();
+  const seoMeta = useStaticSeoMeta('contact_title', locale);
   const {
     name, setName,
     email, setEmail,
@@ -46,6 +49,7 @@ export default function Contact() {
 
   return (
     <div className={styles.page}>
+      <SeoTags meta={seoMeta} />
       <TopBar
         locale={locale}
         onLocaleChange={handleLocaleChange}

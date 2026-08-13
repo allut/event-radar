@@ -65,10 +65,15 @@ function stubFetch() {
 }
 
 function renderHome(queryClient: QueryClient) {
+  // Home is one of the two public SEO routes (App.tsx's ROUTE_DEFS): its bare
+  // path always renders Estonian, so this test drives it through an explicit
+  // `/en` locale prefix (mirroring App.tsx's `/:locale` route registration)
+  // to keep asserting against English strings.
   return renderWithProviders(null, {
-    route: '/',
+    route: '/en',
     queryClient,
     routes: [
+      { path: '/:locale', element: <Home /> },
       { path: '/', element: <Home /> },
       { path: '/login', element: <div>login page</div> },
     ],
@@ -86,9 +91,13 @@ describe('logout redirect from the Feed route (/)', () => {
     await waitFor(() => expect(screen.getByText('Event One')).toBeInTheDocument());
     await userEvent.click(screen.getByRole('button', { name: /sign out/i }));
 
-    // The user must land on the marketing Landing page, not a stale/broken Feed.
-    await waitFor(() => expect(screen.getByRole('link', { name: /sign in/i })).toBeInTheDocument());
-    expect(screen.queryByText(/failed to load your feed/i)).not.toBeInTheDocument();
+    // The user must land on the marketing Landing page, not a stale/broken
+    // Feed. Post-logout navigation lands on bare "/" — one of the two public
+    // SEO routes, which always renders Estonian regardless of any earlier
+    // locale — so this asserts on the login link's href, not its (now
+    // Estonian) accessible name.
+    await waitFor(() => expect(screen.getByRole('link', { name: /logi sisse/i })).toHaveAttribute('href', '/login'));
+    expect(screen.queryByText(/voo laadimine ebaõnnestus/i)).not.toBeInTheDocument();
 
     // Let any spurious refetch + its 401 handling resolve.
     await waitFor(() => expect(localStorage.getItem(SIGNED_IN_HINT_KEY)).toBeNull());

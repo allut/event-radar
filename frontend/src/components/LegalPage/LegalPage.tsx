@@ -1,14 +1,17 @@
 import { Fragment, useEffect, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { t, ti } from '../../i18n';
 import { safeUrl } from '../../utils';
 import { useAuth } from '../../hooks/useAuth';
 import { useLogout } from '../../hooks/useLogout';
 import { useLocaleMutation } from '../../hooks/useLocaleMutation';
+import { useSeoMeta } from '../../hooks/useSeoMeta';
 import { LEGAL_LOADERS, type LegalDocId } from '../../content/legal';
 import type { LegalBlock, LegalDoc, LegalInline } from '../../content/legal/types';
 import { LOCALE_EN, MAILTO_SCHEME, SAFE_URL_SCHEMES, UI_STATE } from '../../constants';
 import TopBar from '../TopBar';
 import PageState from '../PageState';
+import SeoTags from '../SeoTags';
 import styles from './LegalPage.module.css';
 
 // Legal content also links out via mailto: (the contact address) alongside
@@ -74,6 +77,8 @@ export default function LegalPage({ docId, titleKey }: LegalPageProps) {
   // No server data keyed to locale — the doc is re-loaded by the effect below —
   // so the invalidation key is an inert sentinel (matches StaticPage).
   const { locale, handleLocaleChange } = useLocaleMutation();
+  const { pathname } = useLocation();
+  const seoMeta = useSeoMeta({ title: `${t(titleKey, locale)} | ${t('brand', locale)}`, locale, path: pathname });
   // Keyed by `${docId}:${locale}` so a stale-key load renders as loading without
   // a synchronous setState(null) in the effect (react-hooks/set-state-in-effect).
   const [result, setResult] = useState<
@@ -114,6 +119,7 @@ export default function LegalPage({ docId, titleKey }: LegalPageProps) {
 
   return (
     <div className={styles.page}>
+      <SeoTags meta={seoMeta} />
       <TopBar
         locale={locale}
         onLocaleChange={handleLocaleChange}

@@ -68,49 +68,49 @@ const eventData = {
 describe('EventDetail', () => {
   it('shows loading state initially', () => {
     mockGet.mockReturnValue(new Promise(() => undefined));
-    renderWithProviders(<EventDetail />, { route: '/events/1', pathPattern: '/events/:id' });
+    renderWithProviders(<EventDetail />, { route: '/en/events/1', pathPattern: '/:locale/events/:id' });
     expect(screen.getByLabelText(/loading/i)).toBeInTheDocument();
   });
 
   it('shows error state on fetch failure', async () => {
     mockGet.mockRejectedValueOnce(new Error('network'));
-    renderWithProviders(<EventDetail />, { route: '/events/1', pathPattern: '/events/:id' });
+    renderWithProviders(<EventDetail />, { route: '/en/events/1', pathPattern: '/:locale/events/:id' });
     await waitFor(() => expect(screen.getByText(/not found/i)).toBeInTheDocument());
   });
 
   it('renders event title on success', async () => {
     mockGet.mockResolvedValueOnce(eventData);
-    renderWithProviders(<EventDetail />, { route: '/events/1', pathPattern: '/events/:id' });
+    renderWithProviders(<EventDetail />, { route: '/en/events/1', pathPattern: '/:locale/events/:id' });
     await waitFor(() => expect(screen.getByText('Test Concert')).toBeInTheDocument());
   });
 
   it('renders why_go bullets', async () => {
     mockGet.mockResolvedValueOnce(eventData);
-    renderWithProviders(<EventDetail />, { route: '/events/1', pathPattern: '/events/:id' });
+    renderWithProviders(<EventDetail />, { route: '/en/events/1', pathPattern: '/:locale/events/:id' });
     await waitFor(() => expect(screen.getByText('Great music')).toBeInTheDocument());
   });
 
   it('renders sanitized description', async () => {
     mockGet.mockResolvedValueOnce(eventData);
-    renderWithProviders(<EventDetail />, { route: '/events/1', pathPattern: '/events/:id' });
+    renderWithProviders(<EventDetail />, { route: '/en/events/1', pathPattern: '/:locale/events/:id' });
     await waitFor(() => expect(screen.getByText('Amazing show')).toBeInTheDocument());
   });
 
   it('renders important_info section', async () => {
     mockGet.mockResolvedValueOnce(eventData);
-    renderWithProviders(<EventDetail />, { route: '/events/1', pathPattern: '/events/:id' });
+    renderWithProviders(<EventDetail />, { route: '/en/events/1', pathPattern: '/:locale/events/:id' });
     await waitFor(() => expect(screen.getByText('Bring ID')).toBeInTheDocument());
   });
 
   it('renders price', async () => {
     mockGet.mockResolvedValueOnce(eventData);
-    renderWithProviders(<EventDetail />, { route: '/events/1', pathPattern: '/events/:id' });
+    renderWithProviders(<EventDetail />, { route: '/en/events/1', pathPattern: '/:locale/events/:id' });
     await waitFor(() => expect(screen.getByText('€15')).toBeInTheDocument());
   });
 
   it('renders tickets link', async () => {
     mockGet.mockResolvedValueOnce(eventData);
-    renderWithProviders(<EventDetail />, { route: '/events/1', pathPattern: '/events/:id' });
+    renderWithProviders(<EventDetail />, { route: '/en/events/1', pathPattern: '/:locale/events/:id' });
     await waitFor(() => {
       const link = screen.getByRole('link', { name: /ticket/i });
       expect(link).toHaveAttribute('href', 'https://tickets.example.com');
@@ -120,7 +120,7 @@ describe('EventDetail', () => {
   it('calls trackExternalClick on tickets link click', async () => {
     const { trackExternalClick } = await import('../../utils');
     mockGet.mockResolvedValueOnce(eventData);
-    renderWithProviders(<EventDetail />, { route: '/events/1', pathPattern: '/events/:id' });
+    renderWithProviders(<EventDetail />, { route: '/en/events/1', pathPattern: '/:locale/events/:id' });
     await waitFor(() => screen.getByRole('link', { name: /ticket/i }));
     await userEvent.click(screen.getByRole('link', { name: /ticket/i }));
     expect(trackExternalClick).toHaveBeenCalledWith(1);
@@ -128,7 +128,7 @@ describe('EventDetail', () => {
 
   it('renders map link when lat/lng present', async () => {
     mockGet.mockResolvedValueOnce(eventData);
-    renderWithProviders(<EventDetail />, { route: '/events/1', pathPattern: '/events/:id' });
+    renderWithProviders(<EventDetail />, { route: '/en/events/1', pathPattern: '/:locale/events/:id' });
     await waitFor(() => {
       const mapLink = screen.getByRole('link', { name: /map/i });
       expect(mapLink).toHaveAttribute('href', expect.stringContaining('maps'));
@@ -137,7 +137,7 @@ describe('EventDetail', () => {
 
   it('renders category and vibe tags as links to Explore filtered by that slug', async () => {
     mockGet.mockResolvedValueOnce(eventData);
-    renderWithProviders(<EventDetail />, { route: '/events/1', pathPattern: '/events/:id' });
+    renderWithProviders(<EventDetail />, { route: '/en/events/1', pathPattern: '/:locale/events/:id' });
     await waitFor(() => {
       const categoryLink = screen.getByRole('link', { name: /music/i });
       expect(categoryLink).toHaveAttribute('href', '/explore?category=music');
@@ -148,7 +148,7 @@ describe('EventDetail', () => {
 
   it('back button calls navigate(-1)', async () => {
     mockGet.mockResolvedValueOnce(eventData);
-    renderWithProviders(<EventDetail />, { route: '/events/1', pathPattern: '/events/:id' });
+    renderWithProviders(<EventDetail />, { route: '/en/events/1', pathPattern: '/:locale/events/:id' });
     await waitFor(() => screen.getByRole('button', { name: /back/i }));
     await userEvent.click(screen.getByRole('button', { name: /back/i }));
     expect(mockNavigate).toHaveBeenCalledWith(-1);
@@ -156,7 +156,7 @@ describe('EventDetail', () => {
 
   it('renders share button when authenticated', async () => {
     mockGet.mockResolvedValueOnce(eventData);
-    renderWithProviders(<EventDetail />, { route: '/events/1', pathPattern: '/events/:id' });
+    renderWithProviders(<EventDetail />, { route: '/en/events/1', pathPattern: '/:locale/events/:id' });
     await waitFor(() => expect(screen.getByRole('button', { name: 'Share' })).toBeInTheDocument());
   });
 
@@ -165,7 +165,7 @@ describe('EventDetail', () => {
     const share = vi.fn().mockRejectedValue(new DOMException('cancelled', 'AbortError'));
     Object.assign(navigator, { clipboard: { writeText }, share });
     mockGet.mockResolvedValueOnce(eventData);
-    renderWithProviders(<EventDetail />, { route: '/events/1', pathPattern: '/events/:id' });
+    renderWithProviders(<EventDetail />, { route: '/en/events/1', pathPattern: '/:locale/events/:id' });
     await waitFor(() => screen.getByRole('button', { name: 'Share' }));
     await userEvent.click(screen.getByRole('button', { name: 'Share' }));
     await waitFor(() => expect(share).toHaveBeenCalled());
@@ -178,7 +178,7 @@ describe('EventDetail', () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.assign(navigator, { clipboard: { writeText } });
     mockGet.mockResolvedValueOnce(eventData);
-    renderWithProviders(<EventDetail />, { route: '/events/1', pathPattern: '/events/:id' });
+    renderWithProviders(<EventDetail />, { route: '/en/events/1', pathPattern: '/:locale/events/:id' });
     await waitFor(() => screen.getByRole('button', { name: 'Share' }));
     await userEvent.click(screen.getByRole('button', { name: 'Share' }));
     expect(writeText).toHaveBeenCalledWith(window.location.href);
@@ -188,7 +188,7 @@ describe('EventDetail', () => {
   it('renders feedback buttons when authenticated', async () => {
     mockIsAuthenticated.mockReturnValue(true);
     mockGet.mockResolvedValueOnce(eventData);
-    renderWithProviders(<EventDetail />, { route: '/events/1', pathPattern: '/events/:id' });
+    renderWithProviders(<EventDetail />, { route: '/en/events/1', pathPattern: '/:locale/events/:id' });
     await waitFor(() => expect(screen.getByRole('button', { name: 'Like' })).toBeInTheDocument());
   });
 
@@ -202,20 +202,20 @@ describe('EventDetail', () => {
 
     it('renders event content with no redirect and no feedback buttons', async () => {
       mockGet.mockResolvedValueOnce(eventData);
-      renderWithProviders(<EventDetail />, { route: '/events/1', pathPattern: '/events/:id' });
+      renderWithProviders(<EventDetail />, { route: '/en/events/1', pathPattern: '/:locale/events/:id' });
       await waitFor(() => expect(screen.getByText('Test Concert')).toBeInTheDocument());
       expect(screen.queryByRole('button', { name: 'Like' })).not.toBeInTheDocument();
     });
 
     it('renders share button even when signed out', async () => {
       mockGet.mockResolvedValueOnce(eventData);
-      renderWithProviders(<EventDetail />, { route: '/events/1', pathPattern: '/events/:id' });
+      renderWithProviders(<EventDetail />, { route: '/en/events/1', pathPattern: '/:locale/events/:id' });
       await waitFor(() => expect(screen.getByRole('button', { name: 'Share' })).toBeInTheDocument());
     });
 
     it('switching locale does not call api.patch', async () => {
       mockGet.mockResolvedValueOnce(eventData);
-      renderWithProviders(<EventDetail />, { route: '/events/1', pathPattern: '/events/:id' });
+      renderWithProviders(<EventDetail />, { route: '/en/events/1', pathPattern: '/:locale/events/:id' });
       await waitFor(() => expect(screen.getByText('Test Concert')).toBeInTheDocument());
       const localeButton = screen.getByRole('button', { name: 'EN' });
       await userEvent.click(localeButton);
@@ -227,7 +227,7 @@ describe('EventDetail', () => {
     it('clicking tickets link does not call trackExternalClick (avoids 401 redirect)', async () => {
       const { trackExternalClick } = await import('../../utils');
       mockGet.mockResolvedValueOnce(eventData);
-      renderWithProviders(<EventDetail />, { route: '/events/1', pathPattern: '/events/:id' });
+      renderWithProviders(<EventDetail />, { route: '/en/events/1', pathPattern: '/:locale/events/:id' });
       await waitFor(() => screen.getByRole('link', { name: /ticket/i }));
       await userEvent.click(screen.getByRole('link', { name: /ticket/i }));
       expect(trackExternalClick).not.toHaveBeenCalled();

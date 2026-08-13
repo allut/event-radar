@@ -3,16 +3,20 @@ import { getLocale } from '../../lib/auth';
 import { BRAND_GLYPH, ROUTES } from '../../constants';
 import { t } from '../../i18n';
 import { useOrganizerAuth } from '../../hooks/useOrganizerAuth';
+import { useStaticSeoMeta } from '../../hooks/useStaticSeoMeta';
 import MagicLinkForm from '../../components/MagicLinkForm';
+import SeoTags from '../../components/SeoTags';
 import styles from './Login.module.css';
 
 export default function Login() {
   const locale = getLocale();
   const isOrganizer = useOrganizerAuth();
+  const seoMeta = useStaticSeoMeta('seo_title_login', locale);
   const [termsBefore, termsAfter = ''] = t('login_terms_notice', locale).split('{terms}');
 
   return (
     <div className={styles.page}>
+      <SeoTags meta={seoMeta} />
       <div className={styles.card}>
         <header className={styles.header}>
           <span className={styles.radar} aria-hidden>{BRAND_GLYPH}</span>

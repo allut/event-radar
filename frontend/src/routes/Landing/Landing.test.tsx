@@ -35,7 +35,7 @@ describe('Landing', () => {
   });
 
   it('renders the hero headline', async () => {
-    renderWithProviders(<Landing />);
+    renderWithProviders(<Landing />, { route: '/en', pathPattern: '/:locale' });
     expect(screen.getByRole('heading', { name: /leaving the house/i })).toBeInTheDocument();
   });
 
@@ -43,7 +43,7 @@ describe('Landing', () => {
     mockGet.mockResolvedValueOnce({
       events: [makeEvent({ id: 1, title: 'Showcase One' }), makeEvent({ id: 2, title: 'Showcase Two' })],
     });
-    renderWithProviders(<Landing />);
+    renderWithProviders(<Landing />, { route: '/en', pathPattern: '/:locale' });
     await waitFor(() => expect(screen.getAllByTestId('event-card').length).toBe(2));
     expect(screen.getByText('Showcase One')).toBeInTheDocument();
     expect(screen.getAllByTestId('event-card')[0]).toHaveAttribute('data-readonly', 'true');
@@ -51,13 +51,13 @@ describe('Landing', () => {
 
   it('shows an error message when the showcase fetch fails', async () => {
     mockGet.mockRejectedValueOnce(new Error('network'));
-    renderWithProviders(<Landing />);
+    renderWithProviders(<Landing />, { route: '/en', pathPattern: '/:locale' });
     await waitFor(() => expect(screen.getByText(/couldn't load events/i)).toBeInTheDocument());
   });
 
   it('submits the email capture and shows the inbox confirmation', async () => {
     mockPost.mockResolvedValueOnce(undefined);
-    renderWithProviders(<Landing />);
+    renderWithProviders(<Landing />, { route: '/en', pathPattern: '/:locale' });
     const input = screen.getAllByPlaceholderText(/you@example.com/i)[0];
     await userEvent.type(input, 'me@example.com');
     await userEvent.click(screen.getAllByRole('button', { name: /Get Daily 5/i })[0]);
@@ -66,7 +66,7 @@ describe('Landing', () => {
   });
 
   it('renders the organizer band linking to the organizer login', () => {
-    renderWithProviders(<Landing />);
+    renderWithProviders(<Landing />, { route: '/en', pathPattern: '/:locale' });
     expect(screen.getByRole('heading', { name: /Put your event on the radar/i })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /List your event/i })).toHaveAttribute('href', '/organizer/login');
   });

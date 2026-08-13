@@ -83,15 +83,6 @@ export const SOCIAL_LINKS: { label: string; url: string; icon: SocialIcon }[] = 
   { label: 'X', url: 'https://x.com/', icon: 'twitter' },
 ];
 
-// ─── Analytics ───────────────────────────────────────────────────────────────
-// Matches `/events/:id` so Vercel Analytics groups all event detail views
-// under one route instead of one row per event id. Applied to a pathname
-// with query/hash already stripped (see maskAnalyticsUrl in utils.ts).
-export const ANALYTICS_EVENT_PATH_RE = /^\/events\/\d+$/;
-// Groups every organizer edit-form URL under one analytics row, mirroring
-// ANALYTICS_EVENT_PATH_RE above — same rationale, new dynamic route.
-export const ANALYTICS_ORGANIZER_EDIT_PATH_RE = /^\/organizer\/events\/\d+\/edit$/;
-
 // ─── Locale ──────────────────────────────────────────────────────────────────
 export type LocaleCode = (typeof LOCALES)[number]['code'];
 export const LOCALE_EN = 'en' as const;
@@ -101,6 +92,55 @@ export const LOCALE_RU = 'ru' as const;
 export function toLocaleCode(locale: string): string {
   return _LOCALE_CODE_MAP[locale] ?? _DEFAULT_LOCALE_CODE;
 }
+
+// Estonian is the bare (unprefixed) URL locale; every other locale gets an
+// `/en`/`/ru`-style path prefix — see docs/frontend.md's locale-routing
+// section (App.tsx's route wrapper, utils.ts's localizedPath/stripLocalePrefix).
+export const LOCALE_URL_PREFIX_CODES: string[] = LOCALES
+  .map((l) => l.code)
+  .filter((code) => code !== LOCALE_ET);
+
+// ─── SEO ─────────────────────────────────────────────────────────────────────
+// Absolute production origin — canonical/hreflang/og:url/og:image values are
+// meaningless as relative URLs (crawlers and link-unfurlers read them with no
+// browser location context), so useSeoMeta always resolves against this.
+export const PRODUCTION_ORIGIN = 'https://whatsonradar.com';
+// Branded 1200×630 fallback OG image (frontend/public/og-fallback.png),
+// served whenever an event has no image_url — same asset for all locales.
+export const OG_FALLBACK_IMAGE_PATH = '/og-fallback.png';
+// og:description/meta description target length — Google truncates around
+// ~155–160 chars; truncateForMeta (utils.ts) cuts at a word boundary under this.
+export const SEO_DESCRIPTION_MAX_LENGTH = 157;
+// Every LOCALES code plus 'x-default', in the order useSeoMeta emits hreflang
+// <link> alternates.
+export const SEO_HREFLANG_CODES: string[] = [...LOCALES.map((l) => l.code), 'x-default'];
+// Live-audit (issue #54, api/seo-audit.ts + src/lib/seoAudit.ts): sitemap.xml's
+// <lastmod> (uniformly the prerender build timestamp — see prerender.ts's
+// buildSitemapXml) older than this is treated as a dead prerender cadence.
+// 6h backend publish/geocode cadence (LLM_PASS_INTERVAL_HOURS, backend
+// app/constants.py) + a 2h buffer.
+export const SEO_AUDIT_STALE_THRESHOLD_HOURS = 8;
+// GitHub repo the live audit files/updates/closes its failure issue against
+// (CLAUDE.md's issue tracker) and the fixed label it searches/tags by.
+export const SEO_AUDIT_GITHUB_REPO = 'allut/event-radar';
+export const SEO_AUDIT_ISSUE_LABEL = 'seo-audit-failure';
+export const GITHUB_API_BASE_URL = 'https://api.github.com';
+// Shared-secret header cron-job.org sends on its seo-audit ping, mirroring
+// the backend's /internal/tick pattern (docs/backend-ops.md).
+export const SEO_AUDIT_TOKEN_HEADER = 'x-internal-token';
+
+// ─── Analytics ───────────────────────────────────────────────────────────────
+// Matches `/events/:id` (bare or locale-prefixed, e.g. `/en/events/:id`) so
+// Vercel Analytics groups all event detail views under one route instead of
+// one row per event id — the locale prefix itself is captured (group 1) and
+// kept by maskAnalyticsUrl's replacement, so en/et/ru still group separately.
+// Applied to a pathname with query/hash already stripped (see
+// maskAnalyticsUrl in utils.ts).
+const _LOCALE_PREFIX_RE_SRC = `(/(?:${LOCALE_URL_PREFIX_CODES.join('|')}))?`;
+export const ANALYTICS_EVENT_PATH_RE = new RegExp(`^${_LOCALE_PREFIX_RE_SRC}/events/\\d+$`);
+// Groups every organizer edit-form URL under one analytics row, mirroring
+// ANALYTICS_EVENT_PATH_RE above — same rationale, new dynamic route.
+export const ANALYTICS_ORGANIZER_EDIT_PATH_RE = new RegExp(`^${_LOCALE_PREFIX_RE_SRC}/organizer/events/\\d+/edit$`);
 
 // ─── Events / feedback ───────────────────────────────────────────────────────
 export type Signal = 'like' | 'dislike' | 'bookmark';
@@ -246,6 +286,9 @@ export const MIN_HOUR = 0;
 export const MAX_HOUR = HOURS_PER_DAY - 1;
 export const MIN_MINUTE = 0;
 export const MAX_MINUTE = MINUTES_PER_HOUR - 1;
+// Milliseconds in an hour — divides a millisecond timestamp delta down to
+// hours, e.g. for SEO_AUDIT_STALE_THRESHOLD_HOURS's staleness comparison.
+export const MS_PER_HOUR = MINUTES_PER_HOUR * 60 * 1000;
 
 // Arrow-key increment/decrement step per time field.
 export const TIME_STEP_HOURS = 1;

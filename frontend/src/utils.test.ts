@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { cx, safeUrl, sanitizeHtml, formatPrice, categoryGradient, formatHourMinute, makeActiveClassMap, trackExternalClick, datePresetRange, parseExploreFilters, exploreFiltersToSearchParams, buildExploreApiQuery, activeFacetCount, isFullSet, shouldFlipPopover, maskAnalyticsUrl, DEFAULT_EXPLORE_FILTERS, type ExploreFilters, monthGridDays, weekdayHeaders, splitDateTimeValue, joinDateTimeValue, parseTypedDate, formatPickerValue, formatMonthYearLabel, toDisplayDateTime, fromDisplayDateTime, buildMapsUrl } from './utils';
+import { cx, safeUrl, sanitizeHtml, formatPrice, categoryGradient, formatHourMinute, formatEventShortDate, makeActiveClassMap, trackExternalClick, datePresetRange, parseExploreFilters, exploreFiltersToSearchParams, buildExploreApiQuery, activeFacetCount, isFullSet, shouldFlipPopover, maskAnalyticsUrl, DEFAULT_EXPLORE_FILTERS, type ExploreFilters, monthGridDays, weekdayHeaders, splitDateTimeValue, joinDateTimeValue, parseTypedDate, formatPickerValue, formatMonthYearLabel, toDisplayDateTime, fromDisplayDateTime, buildMapsUrl, isValidLocale, stripLocalePrefix, localizedPath, truncateForMeta } from './utils';
 import { FALLBACK_GRADIENT, CATEGORIES, GOOGLE_MAPS_SEARCH_URL } from './constants';
 
 vi.mock('./api/client', () => ({
@@ -55,6 +55,68 @@ describe('maskAnalyticsUrl', () => {
 
   it('masks an organizer edit-form event id', () => {
     expect(maskAnalyticsUrl('/organizer/events/7/edit')).toBe('/organizer/events/[id]/edit');
+  });
+
+  it('masks a locale-prefixed event id, keeping the prefix so locales still group separately', () => {
+    expect(maskAnalyticsUrl('/en/events/42')).toBe('/en/events/[id]');
+    expect(maskAnalyticsUrl('/ru/events/42?x=1')).toBe('/ru/events/[id]');
+  });
+
+  it('masks a locale-prefixed organizer edit-form event id', () => {
+    expect(maskAnalyticsUrl('/en/organizer/events/7/edit')).toBe('/en/organizer/events/[id]/edit');
+  });
+});
+
+describe('isValidLocale', () => {
+  it('accepts every configured locale code', () => {
+    expect(isValidLocale('en')).toBe(true);
+    expect(isValidLocale('et')).toBe(true);
+    expect(isValidLocale('ru')).toBe(true);
+  });
+
+  it('rejects an unrecognized or missing code', () => {
+    expect(isValidLocale('xx')).toBe(false);
+    expect(isValidLocale(undefined)).toBe(false);
+  });
+});
+
+describe('stripLocalePrefix', () => {
+  it('strips a recognized locale prefix', () => {
+    expect(stripLocalePrefix('/en/settings')).toBe('/settings');
+    expect(stripLocalePrefix('/ru/events/42')).toBe('/events/42');
+  });
+
+  it('strips a bare locale-prefixed root to "/"', () => {
+    expect(stripLocalePrefix('/en')).toBe('/');
+  });
+
+  it('leaves a bare (Estonian) path unchanged', () => {
+    expect(stripLocalePrefix('/settings')).toBe('/settings');
+    expect(stripLocalePrefix('/')).toBe('/');
+  });
+
+  it('leaves an unrecognized segment unchanged (not a locale prefix)', () => {
+    expect(stripLocalePrefix('/xx/settings')).toBe('/xx/settings');
+  });
+});
+
+describe('localizedPath', () => {
+  it('builds a prefixed path for a non-Estonian locale', () => {
+    expect(localizedPath('/settings', 'en')).toBe('/en/settings');
+    expect(localizedPath('/', 'ru')).toBe('/ru');
+  });
+
+  it('builds the bare path for Estonian', () => {
+    expect(localizedPath('/settings', 'et')).toBe('/settings');
+    expect(localizedPath('/en/settings', 'et')).toBe('/settings');
+  });
+
+  it('re-prefixes a path that already carries a different locale prefix', () => {
+    expect(localizedPath('/en/settings', 'ru')).toBe('/ru/settings');
+  });
+
+  it('falls back to the bare path for an unrecognized target locale', () => {
+    expect(localizedPath('/en/settings', 'xx')).toBe('/settings');
   });
 });
 
@@ -219,6 +281,43 @@ describe('formatHourMinute', () => {
   it('formats time as HH:MM', () => {
     const result = formatHourMinute('2024-07-15T18:30:00Z', 'en');
     expect(result).toMatch(/\d{2}:\d{2}/);
+  });
+});
+
+describe('formatEventShortDate', () => {
+  it('formats a short day-month date', () => {
+    const result = formatEventShortDate('2024-07-15T18:30:00Z', 'en');
+    expect(result).toMatch(/\d{1,2}/);
+    expect(result).not.toMatch(/\d{4}/); // no year in the short form
+  });
+});
+
+describe('truncateForMeta', () => {
+  it('returns text unchanged when already within the limit', () => {
+    expect(truncateForMeta('Short text.', 155)).toBe('Short text.');
+  });
+
+  it('truncates at a word boundary and appends an ellipsis when over the limit', () => {
+    const text = 'This is a fairly long sentence that will definitely exceed a very short limit.';
+    const result = truncateForMeta(text, 20);
+    expect(result.length).toBeLessThanOrEqual(21); // 20 + ellipsis char
+    expect(result.endsWith('…')).toBe(true);
+    expect(result).not.toMatch(/\s…$/); // no dangling space before the ellipsis
+    expect(text.startsWith(result.slice(0, -1))).toBe(true); // never cuts mid-word into a new word
+  });
+
+  it('never cuts a word in half', () => {
+    const result = truncateForMeta('alpha beta gamma delta epsilon', 12);
+    const withoutEllipsis = result.replace(/…$/, '');
+    expect(['alpha', 'alpha beta']).toContain(withoutEllipsis);
+  });
+
+  it('never splits a surrogate pair (emoji) at the cut boundary', () => {
+    const text = '🎉'.repeat(20); // each emoji is a 2-code-unit surrogate pair
+    const result = truncateForMeta(text, 15); // odd limit — would split mid-pair on a raw slice()
+    const withoutEllipsis = result.replace(/…$/, '');
+    expect([...withoutEllipsis].every((ch) => ch === '🎉')).toBe(true);
+    expect(withoutEllipsis).not.toMatch(/�/); // no replacement/mojibake character
   });
 });
 

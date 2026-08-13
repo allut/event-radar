@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**What's on Radar** (repo/working dir `event-radar`; the product name in every user-facing string, the FastAPI app title, and the README is "What's on Radar") is an AI-powered event discovery platform for Tallinn, Estonia. It ingests events from multiple sources, deduplicates and classifies them via LLM, then delivers a personalized "Daily 5" curated feed per user. MVP complete plus a post-MVP self-service organizer portal (see `docs/organizer-portal.md`); soft launch pending E2E QA — there is no Playwright/Cypress suite; QA is done via the Playwright MCP server, whose scratch output lands in `.playwright-mcp/` (disposable).
+**What's on Radar** (repo/working dir `event-radar`; the product name in every user-facing string, the FastAPI app title, and the README is "What's on Radar") is an AI-powered event discovery platform for Tallinn, Estonia. It ingests events from multiple sources, deduplicates and classifies them via LLM, then delivers a personalized "Daily 5" curated feed per user. MVP complete plus a post-MVP self-service organizer portal (see `docs/organizer-portal.md`); soft launch is live — there is no Playwright/Cypress suite; QA is done via the Playwright MCP server, whose scratch output lands in `.playwright-mcp/` (disposable).
 
 ## Documentation Map
 
@@ -15,7 +15,7 @@ Deep-dive docs live in `docs/` and are **not** auto-loaded — read the relevant
 | `docs/pipeline.md` | `app/ingestion/`, `app/dedup/`, `app/llm/`, `app/publish.py`, `app/ranking/`, `app/routers/browse.py`, `app/routers/public.py`, `app/routers/feedback.py` |
 | `docs/security.md` | `app/main.py`, `app/rate_limit.py`, `app/routers/auth.py`, `app/routers/organizer_auth.py`, `app/routers/utils.py`, `app/ingestion/http_client.py`, or any new endpoint |
 | `docs/backend-ops.md` | `render.yaml`, `frontend/vercel.json`, `app/routers/admin.py`, `app/cleanup.py`, `app/logging_config.py`, `backend/scripts/` |
-| `docs/frontend.md` | `frontend/src/routes/`, `frontend/src/components/`, `frontend/src/hooks/`, `frontend/src/lib/`, `shared/i18n/`, `backend/app/email/` |
+| `docs/frontend.md` | `frontend/src/routes/`, `frontend/src/components/`, `frontend/src/hooks/`, `frontend/src/lib/`, `frontend/scripts/`, `shared/i18n/`, `backend/app/email/` |
 | `docs/conventions.md` | the *why* behind a Code Quality Rule below (full rationale + examples) |
 | `docs/data-model.md` | writing a migration, a query touching a new column, or a serializer |
 | `docs/organizer-portal.md` | `app/routers/organizer_auth.py`, `app/routers/organizer_events.py`, `frontend/src/routes/EventSubmit/` |

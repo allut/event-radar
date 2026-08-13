@@ -4,10 +4,12 @@ import { api } from '../../api/client';
 import { t, ti } from '../../i18n';
 import { useLocaleMutation } from '../../hooks/useLocaleMutation';
 import { useLogout } from '../../hooks/useLogout';
+import { useSeoMeta } from '../../hooks/useSeoMeta';
 import EventCard, { type EventData } from '../../components/EventCard';
 import EmptyState from '../../components/EmptyState';
 import PageState from '../../components/PageState';
 import TopBar from '../../components/TopBar';
+import SeoTags from '../../components/SeoTags';
 import { formatHourMinute, formatIsoDate, formatTodayDate, padIndex } from '../../utils';
 import { API, BRAND_GLYPH, QUERY_KEYS, ROUTES, UI_STATE } from '../../constants';
 import styles from './Feed.module.css';
@@ -20,8 +22,9 @@ interface FeedResponse {
 }
 
 export default function Feed() {
-  const { locale, handleLocaleChange } = useLocaleMutation();
+  const { locale, handleLocaleChange } = useLocaleMutation({ publicRoute: true });
   const handleLogout = useLogout();
+  const seoMeta = useSeoMeta({ title: `${t('seo_title_feed', locale)} | ${t('brand', locale)}`, locale, path: ROUTES.home });
 
   const { data, isLoading, isError } = useQuery({
     queryKey: [QUERY_KEYS.feed, locale],
@@ -30,17 +33,28 @@ export default function Feed() {
   });
 
   if (isLoading) {
-    return <PageState kind={UI_STATE.loading} message={t('loading', locale)} />;
+    return (
+      <>
+        <SeoTags meta={seoMeta} />
+        <PageState kind={UI_STATE.loading} message={t('loading', locale)} />
+      </>
+    );
   }
 
   if (isError) {
-    return <PageState kind={UI_STATE.error} message={t('feed_error', locale)} />;
+    return (
+      <>
+        <SeoTags meta={seoMeta} />
+        <PageState kind={UI_STATE.error} message={t('feed_error', locale)} />
+      </>
+    );
   }
 
   const events = data?.events ?? [];
 
   return (
     <div className={styles.page}>
+      <SeoTags meta={seoMeta} />
       <TopBar locale={locale} onLocaleChange={handleLocaleChange} onLogout={handleLogout} />
 
       <main className={styles.main}>

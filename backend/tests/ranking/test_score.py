@@ -913,6 +913,87 @@ class TestBuildDailyFeedsSeriesCooldown:
         assert "(1, 5," in compiled  # backfilled cooled event (user_id=1, event_id=5) was upserted
 
 
+class TestCollapseSeriesDuplicates:
+    def test_keeps_earliest_starts_at_per_series(self):
+        from app.ranking.score import _collapse_series_duplicates
+
+        later = _feed_event(1, "Workshop", "Studio")
+        later.starts_at = _now() + timedelta(days=5)
+        earlier = _feed_event(2, "Workshop", "Studio")
+        earlier.starts_at = _now() + timedelta(days=1)
+        middle = _feed_event(3, "Workshop", "Studio")
+        middle.starts_at = _now() + timedelta(days=3)
+
+        collapsed, series_key_by_event_id = _collapse_series_duplicates(
+            [later, earlier, middle]
+        )
+
+        assert [e.id for e in collapsed] == [2]
+        assert set(series_key_by_event_id) == {2}
+
+    def test_ties_on_starts_at_break_deterministically_by_event_id(self):
+        # Two instances sharing an exact starts_at (e.g. duplicate showtimes)
+        # must resolve to the same survivor every call, independent of input
+        # order or DB row order (the underlying query has no ORDER BY).
+        from app.ranking.score import _collapse_series_duplicates
+
+        same_time = _now() + timedelta(days=2)
+        ev5 = _feed_event(5, "Workshop", "Studio")
+        ev5.starts_at = same_time
+        ev2 = _feed_event(2, "Workshop", "Studio")
+        ev2.starts_at = same_time
+
+        collapsed_a, _ = _collapse_series_duplicates([ev5, ev2])
+        collapsed_b, _ = _collapse_series_duplicates([ev2, ev5])
+
+        assert [e.id for e in collapsed_a] == [2]
+        assert [e.id for e in collapsed_b] == [2]
+
+    def test_distinct_series_all_kept(self):
+        from app.ranking.score import _collapse_series_duplicates
+
+        ev1 = _feed_event(1, "Concert", "Hall")
+        ev2 = _feed_event(2, "Play", "Theater")
+
+        collapsed, series_key_by_event_id = _collapse_series_duplicates([ev1, ev2])
+
+        assert {e.id for e in collapsed} == {1, 2}
+        assert set(series_key_by_event_id) == {1, 2}
+
+
+class TestBuildDailyFeedsSeriesDuplicateCollapse:
+    async def test_only_nearest_date_instance_reaches_candidate_pool(self, mock_db):
+        # A workshop running Tue/Thu/Sat ingests as 3 distinct Event rows
+        # sharing an event_series_key. Only the soonest-starting one (event 2)
+        # should ever reach scoring/selection — the feed must never contain
+        # more than one instance of the same series.
+        from app.ranking.score import build_daily_feeds
+
+        ev1 = _feed_event(1, "Workshop", "Studio", ["workshops"])
+        ev1.starts_at = _now() + timedelta(days=5)
+        ev2 = _feed_event(2, "Workshop", "Studio", ["workshops"])
+        ev2.starts_at = _now() + timedelta(days=1)
+        ev3 = _feed_event(3, "Workshop", "Studio", ["workshops"])
+        ev3.starts_at = _now() + timedelta(days=3)
+
+        mock_db.scalars.side_effect = [
+            _scalar_result([1]),                # user ids (all registered)
+            _scalar_result([ev1, ev2, ev3]),    # candidate events (same series)
+            _scalar_result([_user(1)]),          # users
+            _scalar_result([]),                  # personas
+            _scalar_result([]),                  # feedback
+            _scalar_result([]),                  # cooldown-window feeds
+            _scalar_result([]),                  # cached scores
+        ]
+
+        result = await build_daily_feeds(mock_db)
+
+        assert result["candidate_events"] == 1
+        upsert_stmt = mock_db.execute.call_args.args[0]
+        compiled = str(upsert_stmt.compile(compile_kwargs={"literal_binds": True}))
+        assert "ARRAY[2]" in compiled  # only the nearest-date instance survives
+
+
 class TestBuildDailyFeedForUser:
     # build_daily_feed_for_user calls _load_feed_build_context with shared=None
     # (the default), so it still loads candidate events itself in one query —

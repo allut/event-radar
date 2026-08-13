@@ -4,7 +4,9 @@ import { api, ApiError } from '../../api/client';
 import { setSignedInHint, getLocale } from '../../lib/auth';
 import { API, AUTH_REDIRECT_DELAY_MS, ROUTES, UI_STATE, type VerifyState } from '../../constants';
 import { t } from '../../i18n';
+import { useStaticSeoMeta } from '../../hooks/useStaticSeoMeta';
 import AuthCard, { type AuthCardKind } from '../../components/AuthCard';
+import SeoTags from '../../components/SeoTags';
 import styles from './AuthVerify.module.css';
 
 interface MeResponse {
@@ -19,6 +21,7 @@ const STATE_TO_KIND: Record<VerifyState, AuthCardKind> = {
 
 export default function AuthVerify() {
   const locale = getLocale();
+  const seoMeta = useStaticSeoMeta('seo_title_auth_verify', locale);
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const token = searchParams.get('token');
@@ -68,13 +71,16 @@ export default function AuthVerify() {
     : errorMsg;
 
   return (
-    <AuthCard
-      locale={locale}
-      kind={STATE_TO_KIND[state]}
-      message={message}
-      action={state === UI_STATE.error && (
-        <Link to={ROUTES.login} className={styles.retry}>{t('request_new_link', locale)}</Link>
-      )}
-    />
+    <>
+      <SeoTags meta={seoMeta} />
+      <AuthCard
+        locale={locale}
+        kind={STATE_TO_KIND[state]}
+        message={message}
+        action={state === UI_STATE.error && (
+          <Link to={ROUTES.login} className={styles.retry}>{t('request_new_link', locale)}</Link>
+        )}
+      />
+    </>
   );
 }

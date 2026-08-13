@@ -5,7 +5,9 @@ import { setOrganizerSignedInHint } from '../../lib/organizerAuth';
 import { getLocale } from '../../lib/auth';
 import { API, AUTH_REDIRECT_DELAY_MS, ROUTES, UI_STATE, type VerifyState } from '../../constants';
 import { t } from '../../i18n';
+import { useStaticSeoMeta } from '../../hooks/useStaticSeoMeta';
 import AuthCard, { type AuthCardKind } from '../../components/AuthCard';
+import SeoTags from '../../components/SeoTags';
 import styles from './OrganizerVerify.module.css';
 
 const STATE_TO_KIND: Record<VerifyState, AuthCardKind> = {
@@ -16,6 +18,7 @@ const STATE_TO_KIND: Record<VerifyState, AuthCardKind> = {
 
 export default function OrganizerVerify() {
   const locale = getLocale();
+  const seoMeta = useStaticSeoMeta('seo_title_organizer_verify', locale);
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const token = searchParams.get('token');
@@ -56,13 +59,16 @@ export default function OrganizerVerify() {
     : errorMsg;
 
   return (
-    <AuthCard
-      locale={locale}
-      kind={STATE_TO_KIND[state]}
-      message={message}
-      action={state === UI_STATE.error && (
-        <Link to={ROUTES.organizerLogin} className={styles.retry}>{t('request_new_link', locale)}</Link>
-      )}
-    />
+    <>
+      <SeoTags meta={seoMeta} />
+      <AuthCard
+        locale={locale}
+        kind={STATE_TO_KIND[state]}
+        message={message}
+        action={state === UI_STATE.error && (
+          <Link to={ROUTES.organizerLogin} className={styles.retry}>{t('request_new_link', locale)}</Link>
+        )}
+      />
+    </>
   );
 }

@@ -102,3 +102,41 @@ class TestShowcase:
         # ones, so narrowing only changes results when the narrow week can't
         # fill the grid on its own (see _showcase_stmt docstring).
         assert "CASE" in sql.upper()
+
+
+class TestPrerenderEvents:
+    @pytest.mark.asyncio
+    async def test_returns_ids_only(self, mock_db, make_request):
+        from app.routers.public import prerender_events
+
+        mock_db.scalars.return_value = _scalars_result([1, 2, 3])
+
+        result = await prerender_events(request=make_request(), db=mock_db)
+
+        assert result == {"event_ids": [1, 2, 3]}
+
+    @pytest.mark.asyncio
+    async def test_empty_returns_empty_list(self, mock_db, make_request):
+        from app.routers.public import prerender_events
+
+        mock_db.scalars.return_value = _scalars_result([])
+
+        result = await prerender_events(request=make_request(), db=mock_db)
+
+        assert result == {"event_ids": []}
+
+    def test_query_filters_published_canonical_not_ended(self):
+        from datetime import datetime, timezone
+
+        from app.routers.public import _prerender_event_ids_stmt
+
+        now = datetime(2026, 7, 19, 12, 0, 0, tzinfo=timezone.utc)
+        sql = str(
+            _prerender_event_ids_stmt(now).compile(compile_kwargs={"literal_binds": True})
+        )
+
+        assert "status" in sql
+        assert "is_explicit" in sql
+        assert "is_non_event" in sql
+        assert "dedup_group_id" in sql
+        assert "ends_at" in sql or "starts_at" in sql

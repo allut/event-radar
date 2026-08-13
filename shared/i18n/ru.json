@@ -157,6 +157,8 @@
     "sign_in": "Войти",
     "landing_hero_h1": "Пять событий, ради которых стоит выйти из дома.",
     "landing_hero_sub": "What's on Radar сканирует все площадки, билетные сайты и галереи Таллина и присылает вам на почту пять событий под ваш вкус. Каждое утро.",
+    "seo_landing_title": "What's on Radar — афиша Таллина на каждый день",
+    "seo_landing_description": "Каждый день пять отобранных событий в Таллине — концерты, выставки, мастер-классы и ночная жизнь под ваш вкус. Бесплатная рассылка, без слежки.",
     "landing_cta_primary": "К пятёрке дня →",
     "landing_cta_explore": "Посмотреть события →",
     "landing_how_title": "Как это работает",
@@ -263,7 +265,16 @@
 "picker_hour_label": "Час",
 "picker_minute_label": "Минута",
     "picker_month_year_label": "Показан {value}",
-    "picker_open_calendar": "Открыть календарь"
+    "picker_open_calendar": "Открыть календарь",
+    "seo_title_login": "Вход",
+    "seo_title_auth_verify": "Подтверждение входа",
+    "seo_title_explore": "Все события",
+    "seo_title_saved": "Сохранённые события",
+    "seo_title_settings": "Настройки",
+    "seo_title_unsubscribe": "Отписка от рассылки",
+    "seo_title_organizer_login": "Вход для организаторов",
+    "seo_title_organizer_verify": "Подтверждение входа",
+    "seo_title_feed": "Ваша подборка на день"
   },
   "email": {
     "email.magic_link.subject": "Ваша ссылка для входа в What's on Radar",

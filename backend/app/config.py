@@ -137,6 +137,11 @@ class Settings(BaseSettings):
     BACKEND_URL: str = "http://localhost:8000"  # Absolute API host — needed by the
     # RFC 8058 List-Unsubscribe email header, which mail providers call server-side
     # (can't go through the SPA's relative /api proxy).
+    # Auto-injected by Render for web services (the service's public hostname,
+    # no scheme). Never set by hand — it is the self-correcting second source
+    # for HostCheckMiddleware's allowlist, so a missing BACKEND_URL can't take
+    # the API down. Empty off-Render.
+    RENDER_EXTERNAL_HOSTNAME: str = ""
     MAGIC_LINK_TTL_MINUTES: int = _MAGIC_LINK_TTL_DEFAULT
     SESSION_TTL_DAYS: int = _SESSION_TTL_DEFAULT
 

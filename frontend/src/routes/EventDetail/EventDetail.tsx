@@ -3,18 +3,21 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../../api/client';
 import { t, ti } from '../../i18n';
-import { buildMapsUrl, categoryGradient, copyToClipboard, cx, formatEventDateTime, formatHourMinute, formatPrice, safeUrl, sanitizeHtml, trackExternalClick } from '../../utils';
+import { buildMapsUrl, categoryGradient, copyToClipboard, cx, formatEventDateTime, formatEventShortDate, formatHourMinute, formatPrice, safeUrl, sanitizeHtml, trackExternalClick, truncateForMeta } from '../../utils';
 import { useAuth } from '../../hooks/useAuth';
 import { useLocaleMutation } from '../../hooks/useLocaleMutation';
 import { useLogout } from '../../hooks/useLogout';
 import { useToast } from '../../hooks/useToast';
+import { useSeoMeta } from '../../hooks/useSeoMeta';
+import { buildEventJsonLd } from '../../lib/structuredData';
 import { type EventData } from '../../components/EventCard';
 import FeedbackButtonRow from '../../components/FeedbackButtonRow';
 import PageState from '../../components/PageState';
+import SeoTags from '../../components/SeoTags';
 import Toast from '../../components/Toast';
 import TopBar from '../../components/TopBar';
 import { useFeedback } from '../../hooks/useFeedback';
-import { API, QUERY_KEYS, ROUTES, UI_STATE } from '../../constants';
+import { API, OG_FALLBACK_IMAGE_PATH, PRODUCTION_ORIGIN, QUERY_KEYS, ROUTES, SEO_DESCRIPTION_MAX_LENGTH, UI_STATE } from '../../constants';
 import styles from './EventDetail.module.css';
 
 interface EventDetailData extends EventData {
@@ -34,7 +37,7 @@ export default function EventDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const authed = useAuth();
-  const { locale, handleLocaleChange } = useLocaleMutation();
+  const { locale, handleLocaleChange } = useLocaleMutation({ publicRoute: true });
   const handleLogout = useLogout();
   const { toast, showToast } = useToast();
 
@@ -58,6 +61,21 @@ export default function EventDetail() {
     [data],
   );
 
+  // Only the loaded, real event opts into indexable OG/canonical/hreflang —
+  // a still-loading or not-found page stays noindex rather than claiming a
+  // canonical URL for content that isn't actually there (issue #48).
+  const seoMeta = useSeoMeta({
+    title: data
+      ? `${data.title} – ${data.venue_name || formatEventShortDate(data.starts_at, locale)} | ${t('brand', locale)}`
+      : `${t('event_not_found', locale)} | ${t('brand', locale)}`,
+    locale,
+    path: ROUTES.eventDetail(id ?? ''),
+    indexable: Boolean(data),
+    description: data && data.why_go.length > 0 ? truncateForMeta(data.why_go.join('. '), SEO_DESCRIPTION_MAX_LENGTH) : undefined,
+    image: data ? (safeUrl(data.image_url) ?? `${PRODUCTION_ORIGIN}${OG_FALLBACK_IMAGE_PATH}`) : undefined,
+  });
+  const jsonLd = useMemo(() => (data ? buildEventJsonLd(data) : undefined), [data]);
+
   function handleTicketsClick() {
     if (!data || !authed) return;
     trackExternalClick(data.id);
@@ -80,20 +98,28 @@ export default function EventDetail() {
   }
 
   if (isLoading) {
-    return <PageState kind={UI_STATE.loading} message={t('loading_event', locale)} />;
+    return (
+      <>
+        <SeoTags meta={seoMeta} />
+        <PageState kind={UI_STATE.loading} message={t('loading_event', locale)} />
+      </>
+    );
   }
 
   if (isError || !data) {
     return (
-      <PageState
-        kind={UI_STATE.error}
-        message={t('event_not_found', locale)}
-        action={
-          <button className={styles.backBtn} onClick={() => navigate(ROUTES.home)}>
-            {t('back_to_feed_link', locale)}
-          </button>
-        }
-      />
+      <>
+        <SeoTags meta={seoMeta} />
+        <PageState
+          kind={UI_STATE.error}
+          message={t('event_not_found', locale)}
+          action={
+            <button className={styles.backBtn} onClick={() => navigate(ROUTES.home)}>
+              {t('back_to_feed_link', locale)}
+            </button>
+          }
+        />
+      </>
     );
   }
 
@@ -104,6 +130,7 @@ export default function EventDetail() {
 
   return (
     <div className={styles.page}>
+      <SeoTags meta={seoMeta} jsonLd={jsonLd} />
       {toast.status !== UI_STATE.idle && <Toast status={toast.status} message={toast.message} />}
       <TopBar
         locale={locale}
@@ -127,7 +154,23 @@ export default function EventDetail() {
               aria-hidden
             />
           )}
-          {price && <span className={styles.price}>{price}</span>}
+          {price && (
+            // data-* attrs: read by the in-build SEO validation gate
+            // (src/lib/seoValidation.ts, issue #53) to check this snapshot's
+            // price against what the live API currently returns — price isn't
+            // part of the JSON-LD payload (issue #46 defers AggregateOffer),
+            // so it needs its own marker.
+            <span
+              className={styles.price}
+              data-testid="event-price"
+              data-price-min={data.price_min ?? ''}
+              data-price-max={data.price_max ?? ''}
+              data-currency={data.currency ?? ''}
+              data-has-free-tier={data.has_free_tier}
+            >
+              {price}
+            </span>
+          )}
         </div>
 
         <div className={styles.content}>

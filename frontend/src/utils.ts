@@ -1,10 +1,17 @@
 import DOMPurify from 'dompurify';
 import { api } from './api/client';
-import { API, CATEGORY_GRADIENTS, FALLBACK_GRADIENT, EUR_SYMBOL, DEFAULT_CURRENCY, GOOGLE_MAPS_SEARCH_URL, type Signal, toLocaleCode, SAFE_URL_SCHEMES, SANITIZE_ALLOWED_TAGS, SANITIZE_ALLOWED_ATTR, SIGNAL_TO_CLASS, BROWSE_PAGE_SIZE, CATEGORIES, VIBES, type DatePreset, type SortOption, ANALYTICS_EVENT_PATH_RE, ANALYTICS_ORGANIZER_EDIT_PATH_RE, CALENDAR_WEEK_START, CALENDAR_WEEKS_SHOWN, CALENDAR_DAYS_PER_WEEK, CALENDAR_REFERENCE_MONDAY, MAX_HOUR, MAX_MINUTE, DATE_PRESET_DAYS, DATE_PRESET_DAYS_FALLBACK, DATE_PRESET_DEFAULT, DATE_PRESET_TODAY, DATE_PRESET_WEEKEND, EXPLORE_PARAM, EXPLORE_URL_FLAG_TRUE, EXPLORE_API_FLAG_TRUE, SORT_DEFAULT, TIME_FIELD_MAX_LENGTH } from './constants';
+import { API, CATEGORY_GRADIENTS, FALLBACK_GRADIENT, EUR_SYMBOL, DEFAULT_CURRENCY, GOOGLE_MAPS_SEARCH_URL, type Signal, toLocaleCode, SAFE_URL_SCHEMES, SANITIZE_ALLOWED_TAGS, SANITIZE_ALLOWED_ATTR, SIGNAL_TO_CLASS, BROWSE_PAGE_SIZE, CATEGORIES, VIBES, type DatePreset, type SortOption, ANALYTICS_EVENT_PATH_RE, ANALYTICS_ORGANIZER_EDIT_PATH_RE, CALENDAR_WEEK_START, CALENDAR_WEEKS_SHOWN, CALENDAR_DAYS_PER_WEEK, CALENDAR_REFERENCE_MONDAY, MAX_HOUR, MAX_MINUTE, DATE_PRESET_DAYS, DATE_PRESET_DAYS_FALLBACK, DATE_PRESET_DEFAULT, DATE_PRESET_TODAY, DATE_PRESET_WEEKEND, EXPLORE_PARAM, EXPLORE_URL_FLAG_TRUE, EXPLORE_API_FLAG_TRUE, SORT_DEFAULT, TIME_FIELD_MAX_LENGTH, LOCALES, type LocaleCode } from './constants';
 import { t, ti } from './i18n';
+import { stripLocalePrefix, localizedPath } from './lib/urlLocale';
+
+export { stripLocalePrefix, localizedPath };
 
 export function cx(...classes: (string | false | null | undefined)[]): string {
   return classes.filter(Boolean).join(' ');
+}
+
+export function isValidLocale(code: string | undefined): code is LocaleCode {
+  return !!code && LOCALES.some((l) => l.code === code);
 }
 
 /** Reshapes a URL before it's forwarded to Vercel Analytics: strips the query string and
@@ -14,8 +21,8 @@ export function cx(...classes: (string | false | null | undefined)[]): string {
 export function maskAnalyticsUrl(url: string): string {
   const pathname = url.split(/[?#]/)[0];
   return pathname
-    .replace(ANALYTICS_EVENT_PATH_RE, '/events/[id]')
-    .replace(ANALYTICS_ORGANIZER_EDIT_PATH_RE, '/organizer/events/[id]/edit');
+    .replace(ANALYTICS_EVENT_PATH_RE, '$1/events/[id]')
+    .replace(ANALYTICS_ORGANIZER_EDIT_PATH_RE, '$1/organizer/events/[id]/edit');
 }
 
 /** Defense-in-depth render guard: only allow the given URL schemes (http(s) by
@@ -185,6 +192,13 @@ export function formatEventDateTime(iso: string, locale: string): string {
   const day = dateTimeFormatter(localeCode, 'day-month-year-long', DTF_DAY_MONTH_YEAR_LONG).format(date);
   const time = hourMinuteFormatter(locale).format(date);
   return `${weekday}, ${day} · ${time}`;
+}
+
+/** Short "15 Aug"-style date, used as the event-detail SEO title's
+ * venue-or-date fallback (useSeoMeta) when an event has no venue_name. */
+export function formatEventShortDate(iso: string, locale: string): string {
+  const localeCode = toLocaleCode(locale);
+  return dateTimeFormatter(localeCode, 'day-month-short', DTF_DAY_MONTH_SHORT).format(new Date(iso));
 }
 
 // ─── Date / number helpers ───────────────────────────────────────────────────
@@ -370,6 +384,19 @@ export function formatIsoDate(dateStr: string, locale: string): string {
 
 export function padIndex(n: number): string {
   return String(n).padStart(TIME_FIELD_MAX_LENGTH, '0');
+}
+
+/** Truncates `text` to at most `maxLength` chars for a meta/og:description,
+ * cutting at the last word boundary before the limit (never mid-word) and
+ * appending an ellipsis. Returns `text` unchanged when it already fits.
+ * Splits on code points (Array.from), not raw UTF-16 slice(), so the cut
+ * point can never land inside a surrogate pair (e.g. an emoji). */
+export function truncateForMeta(text: string, maxLength: number): string {
+  if (text.length <= maxLength) return text;
+  const codePoints = Array.from(text);
+  const cut = codePoints.slice(0, maxLength).join('');
+  const lastSpace = cut.lastIndexOf(' ');
+  return `${(lastSpace > 0 ? cut.slice(0, lastSpace) : cut).trimEnd()}…`;
 }
 
 export function makeActiveClassMap(styles: Record<string, string>): Record<Signal, string> {

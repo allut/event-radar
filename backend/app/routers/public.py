@@ -9,7 +9,7 @@ user/feedback/persona concern, plus a symmetric date window (see _showcase_stmt)
 from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, Query, Request
-from sqlalchemy import Select, case
+from sqlalchemy import Select, case, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.constants import (
@@ -93,3 +93,44 @@ async def showcase(
     now = datetime.now(TALLINN_TZ)
     events = list((await db.scalars(_showcase_stmt(now))).all())
     return {"events": [serialize_event(e, locale=locale) for e in events]}
+
+
+def _prerender_event_ids_stmt(now: datetime) -> Select[tuple[int]]:
+    """Every event id that should get a prerendered snapshot / sitemap entry:
+    published + not explicit/non-event (``public_event_filter``), still live
+    (``event_not_ended_filter``), and dedup-canonical (``canonical_event_filter``).
+
+    Deliberately narrower than what GET /events/{id} itself serves — that
+    endpoint applies only ``public_event_filter`` and will keep returning 200
+    for an event that has since ended or fallen out of canonical status (an
+    already-indexed URL shouldn't 404 on its own), so this id set is a subset
+    of what's reachable, not an exact mirror of it. That's intentional: an
+    ended/non-canonical event shouldn't get a *new* snapshot or sitemap entry,
+    even though its last snapshot (if any) is only cleaned up by the next
+    prerender run, per the accepted staleness bound documented in
+    docs/research/prerendering-approach.md.
+    """
+    return (
+        select(Event.id)
+        .where(
+            public_event_filter(),
+            event_not_ended_filter(now),
+            canonical_event_filter(),
+        )
+        .order_by(Event.id)
+    )
+
+
+@router.get("/prerender-events")
+@limiter.limit(RATE_LIMIT_PUBLIC)
+async def prerender_events(request: Request, db: AsyncSession = Depends(get_db)) -> dict:
+    """Event ids eligible for a prerendered snapshot — the build-time
+    prerender script's single source of truth for "which events to
+    prerender" (issue #50), reused as-is by sitemap.xml generation (issue
+    #51) so the sitemap and the prerendered snapshot pages it lists always
+    agree with each other (see _prerender_event_ids_stmt for how this
+    compares to what GET /events/{id} serves).
+    """
+    now = datetime.now(TALLINN_TZ)
+    ids = list((await db.scalars(_prerender_event_ids_stmt(now))).all())
+    return {"event_ids": ids}

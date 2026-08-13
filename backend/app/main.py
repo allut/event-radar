@@ -21,6 +21,10 @@ from app.config import settings
 from app.constants import (
     APP_ENV_DEVELOPMENT,
     APP_VERSION,
+    ASGI_MESSAGE_TYPE_REQUEST,
+    ASGI_MESSAGE_TYPE_RESPONSE_BODY,
+    ASGI_MESSAGE_TYPE_RESPONSE_START,
+    ASGI_SCOPE_TYPE_HTTP,
     CLEANUP_HOUR,
     CLEANUP_MINUTE,
     CORS_ALLOWED_HEADERS,
@@ -46,6 +50,7 @@ from app.constants import (
     JOB_ID_SYNC_FIENTA_ORGANIZERS,
     LLM_PASS_INTERVAL_HOURS,
     LOG_EVENT_AUTH_FAILED,
+    LOG_EVENT_HOST_REJECTED,
     LOG_EVENT_JOB_RUN,
     LOG_STATUS_ERROR,
     LOG_STATUS_OK,
@@ -293,7 +298,10 @@ class CsrfOriginCheckMiddleware:
         await response(scope, receive, send)
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        if scope["type"] != "http" or scope["method"] not in CSRF_UNSAFE_METHODS:
+        if (
+            scope["type"] != ASGI_SCOPE_TYPE_HTTP
+            or scope["method"] not in CSRF_UNSAFE_METHODS
+        ):
             await self.app(scope, receive, send)
             return
 
@@ -303,6 +311,13 @@ class CsrfOriginCheckMiddleware:
             return
 
         await self.app(scope, receive, send)
+
+
+_TRUSTED_HOST_REJECT_BODY = b"Invalid host header"  # Starlette TrustedHostMiddleware's
+# fixed rejection body — matched below to tell an actual Host-header reject apart from
+# an ordinary downstream 400 (bad token, malformed body, ...) passing through the same
+# wrapped `send`. A future Starlette wording change would just silently stop logging
+# rejects, never start false-logging normal 400s — an acceptable degrade.
 
 
 class HostCheckMiddleware:
@@ -320,10 +335,35 @@ class HostCheckMiddleware:
         self._exempt_paths = exempt_paths
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        if scope["type"] == "http" and scope.get("path") in self._exempt_paths:
+        if (
+            scope["type"] == ASGI_SCOPE_TYPE_HTTP
+            and scope.get("path") in self._exempt_paths
+        ):
             await self._app(scope, receive, send)
             return
-        await self._guarded(scope, receive, send)
+
+        saw_400 = False
+        rejected = False
+
+        async def _send(message: Message) -> None:
+            nonlocal saw_400, rejected
+            if message["type"] == ASGI_MESSAGE_TYPE_RESPONSE_START:
+                saw_400 = message["status"] == status.HTTP_400_BAD_REQUEST
+            elif message["type"] == ASGI_MESSAGE_TYPE_RESPONSE_BODY:
+                if saw_400 and _TRUSTED_HOST_REJECT_BODY in message.get("body", b""):
+                    rejected = True
+                saw_400 = False
+            await send(message)
+
+        await self._guarded(scope, receive, _send)
+        if rejected:
+            log.warning(
+                "Host header rejected: host=%r path=%r client=%r",
+                Headers(scope=scope).get("host"),
+                scope.get("path"),
+                client_key(Request(scope)),
+                extra={"event": LOG_EVENT_HOST_REJECTED},
+            )
 
 
 class _BodyTooLarge(Exception):
@@ -360,7 +400,7 @@ class MaxBodySizeMiddleware:
         await response(scope, receive, send)
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        if scope["type"] != "http":
+        if scope["type"] != ASGI_SCOPE_TYPE_HTTP:
             await self.app(scope, receive, send)
             return
 
@@ -379,7 +419,7 @@ class MaxBodySizeMiddleware:
         async def limited_receive() -> Message:
             nonlocal seen
             message = await receive()
-            if message["type"] == "http.request":
+            if message["type"] == ASGI_MESSAGE_TYPE_REQUEST:
                 seen += len(message.get("body", b""))
                 if seen > self.max_bytes:
                     raise _BodyTooLarge()
@@ -406,6 +446,33 @@ def _check_dev_database_host() -> None:
             "this looks like a misconfigured environment pointed at a real database",
             host,
         )
+
+
+def _resolve_allowed_hosts() -> list[str]:
+    """Host allowlist for HostCheckMiddleware: Render's auto-injected public
+    hostname plus BACKEND_URL's. Local/dev hostnames are dropped — outside
+    development they mean the env var was never set, and installing the
+    middleware on that allowlist 400s all public traffic (the 0.1.6 outage).
+    An empty result means the caller skips the middleware entirely: Host
+    validation is cache-poisoning hardening only, so degrading it beats
+    taking the API down."""
+    candidates = [
+        settings.RENDER_EXTERNAL_HOSTNAME.strip().lower(),
+        (urlsplit(settings.BACKEND_URL).hostname or "").lower(),
+    ]
+    hosts: list[str] = []
+    for host in candidates:
+        if host and host not in DEV_DB_LOCAL_HOSTS and host not in hosts:
+            hosts.append(host)
+    if not hosts:
+        log.error(
+            "Host allowlist could not be resolved (RENDER_EXTERNAL_HOSTNAME=%r, "
+            "BACKEND_URL=%r both empty/local) — HostCheckMiddleware will NOT be "
+            "installed; Host-header validation is disabled",
+            settings.RENDER_EXTERNAL_HOSTNAME,
+            settings.BACKEND_URL,
+        )
+    return hosts
 
 
 def _start_scheduler() -> AsyncIOScheduler | None:
@@ -552,6 +619,30 @@ async def add_security_headers(
 # oversized request still gets logged/rate-limited against its real client
 # address rather than the raw proxy connection.
 app.add_middleware(MaxBodySizeMiddleware, max_bytes=MAX_REQUEST_BODY_BYTES)
+
+# Host header validation — nothing today builds an absolute URL from the
+# request Host (FRONTEND_URL/BACKEND_URL are config, not derived from it), so
+# impact is limited to intermediary cache-poisoning scenarios, but rejecting
+# an unexpected Host outright is a one-line hardening. Skipped in development
+# (no fixed BACKEND_URL host, e.g. localhost with a changing port in tests).
+# /health is exempted (HOST_CHECK_EXEMPT_PATHS) — Render's health probe hits
+# this process over the private network with the instance's internal address
+# as Host, not BACKEND_URL's hostname. See _resolve_allowed_hosts() for the
+# fail-open reasoning: an unresolvable allowlist skips this middleware
+# entirely rather than 400ing all public traffic (the 0.1.6 outage).
+#
+# Registered before (i.e. wraps *inside*) ProxyHeadersMiddleware below so a
+# rejected request still gets its real client IP resolved for the
+# LOG_EVENT_HOST_REJECTED log line in HostCheckMiddleware.
+_allowed_hosts = (
+    _resolve_allowed_hosts() if settings.APP_ENV != APP_ENV_DEVELOPMENT else []
+)
+if _allowed_hosts:
+    app.add_middleware(
+        HostCheckMiddleware,
+        allowed_hosts=_allowed_hosts,
+        exempt_paths=HOST_CHECK_EXEMPT_PATHS,
+    )
 #
 # HOP-COUNT ASSUMPTION: ProxyHeadersMiddleware itself trusts the *leftmost* XFF
 # hop (attacker-controlled if forwarded verbatim), so app.rate_limit.client_key
@@ -561,32 +652,6 @@ app.add_middleware(MaxBodySizeMiddleware, max_bytes=MAX_REQUEST_BODY_BYTES)
 # another proxy/CDN in front of Render breaks this the same way it would break
 # trusted_hosts="*" above.
 app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
-
-# Host header validation — nothing today builds an absolute URL from the
-# request Host (FRONTEND_URL/BACKEND_URL are config, not derived from it), so
-# impact is limited to intermediary cache-poisoning scenarios, but rejecting
-# an unexpected Host outright is a one-line hardening. Skipped in development
-# (no fixed BACKEND_URL host, e.g. localhost with a changing port in tests).
-# /health is exempted (HOST_CHECK_EXEMPT_PATHS) — Render's health probe hits
-# this process over the private network with the instance's internal address
-# as Host, not BACKEND_URL's hostname.
-if settings.APP_ENV != APP_ENV_DEVELOPMENT:
-    _backend_host = urlsplit(settings.BACKEND_URL).hostname
-    if _backend_host in DEV_DB_LOCAL_HOSTS:
-        log.error(
-            "APP_ENV=%r but BACKEND_URL host=%r is a local/dev default — "
-            "BACKEND_URL is sync:false on Render and must be set by hand; "
-            "an unset one defaults to http://localhost:8000 and would 400 "
-            "all public traffic with a foreign Host header",
-            settings.APP_ENV,
-            _backend_host,
-        )
-    if _backend_host:
-        app.add_middleware(
-            HostCheckMiddleware,
-            allowed_hosts=[_backend_host],
-            exempt_paths=HOST_CHECK_EXEMPT_PATHS,
-        )
 
 app.include_router(admin_router)
 app.include_router(auth_router)
