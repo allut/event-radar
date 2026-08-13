@@ -114,6 +114,20 @@ export const SEO_DESCRIPTION_MAX_LENGTH = 157;
 // Every LOCALES code plus 'x-default', in the order useSeoMeta emits hreflang
 // <link> alternates.
 export const SEO_HREFLANG_CODES: string[] = [...LOCALES.map((l) => l.code), 'x-default'];
+// Live-audit (issue #54, api/seo-audit.ts + src/lib/seoAudit.ts): sitemap.xml's
+// <lastmod> (uniformly the prerender build timestamp — see prerender.ts's
+// buildSitemapXml) older than this is treated as a dead prerender cadence.
+// 6h backend publish/geocode cadence (LLM_PASS_INTERVAL_HOURS, backend
+// app/constants.py) + a 2h buffer.
+export const SEO_AUDIT_STALE_THRESHOLD_HOURS = 8;
+// GitHub repo the live audit files/updates/closes its failure issue against
+// (CLAUDE.md's issue tracker) and the fixed label it searches/tags by.
+export const SEO_AUDIT_GITHUB_REPO = 'allut/event-radar';
+export const SEO_AUDIT_ISSUE_LABEL = 'seo-audit-failure';
+export const GITHUB_API_BASE_URL = 'https://api.github.com';
+// Shared-secret header cron-job.org sends on its seo-audit ping, mirroring
+// the backend's /internal/tick pattern (docs/backend-ops.md).
+export const SEO_AUDIT_TOKEN_HEADER = 'x-internal-token';
 
 // ─── Analytics ───────────────────────────────────────────────────────────────
 // Matches `/events/:id` (bare or locale-prefixed, e.g. `/en/events/:id`) so
@@ -272,6 +286,9 @@ export const MIN_HOUR = 0;
 export const MAX_HOUR = HOURS_PER_DAY - 1;
 export const MIN_MINUTE = 0;
 export const MAX_MINUTE = MINUTES_PER_HOUR - 1;
+// Milliseconds in an hour — divides a millisecond timestamp delta down to
+// hours, e.g. for SEO_AUDIT_STALE_THRESHOLD_HOURS's staleness comparison.
+export const MS_PER_HOUR = MINUTES_PER_HOUR * 60 * 1000;
 
 // Arrow-key increment/decrement step per time field.
 export const TIME_STEP_HOURS = 1;
