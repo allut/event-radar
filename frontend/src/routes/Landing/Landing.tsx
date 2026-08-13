@@ -1,14 +1,16 @@
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../../api/client';
-import { API, BRAND_GLYPH, MAGIC_LINK_EXPIRY_MINUTES, PERSONAS, QUERY_KEYS, ROUTES, STEP_KEYS, UI_STATE } from '../../constants';
+import { API, BRAND_GLYPH, MAGIC_LINK_EXPIRY_MINUTES, OG_FALLBACK_IMAGE_PATH, PERSONAS, PRODUCTION_ORIGIN, QUERY_KEYS, ROUTES, STEP_KEYS, UI_STATE } from '../../constants';
 import { t, ti, personaName, personaVibe } from '../../i18n';
 import { padIndex } from '../../utils';
 import { useLocaleMutation } from '../../hooks/useLocaleMutation';
 import { useMagicLinkRequest } from '../../hooks/useMagicLinkRequest';
 import { useOrganizerAuth } from '../../hooks/useOrganizerAuth';
+import { useSeoMeta } from '../../hooks/useSeoMeta';
 import TopBar from '../../components/TopBar';
 import EventCard, { type EventData } from '../../components/EventCard';
+import SeoTags from '../../components/SeoTags';
 import RadarHero from './RadarHero';
 import styles from './Landing.module.css';
 
@@ -59,6 +61,14 @@ function EmailCapture({ locale }: { locale: string }) {
 export default function Landing() {
   const { locale, handleLocaleChange } = useLocaleMutation({ publicRoute: true });
   const isOrganizer = useOrganizerAuth();
+  const seoMeta = useSeoMeta({
+    title: t('seo_landing_title', locale),
+    locale,
+    path: ROUTES.home,
+    indexable: true,
+    description: t('seo_landing_description', locale),
+    image: `${PRODUCTION_ORIGIN}${OG_FALLBACK_IMAGE_PATH}`,
+  });
 
   const { data, isError } = useQuery({
     queryKey: [QUERY_KEYS.showcase, locale],
@@ -70,6 +80,7 @@ export default function Landing() {
 
   return (
     <div className={styles.page}>
+      <SeoTags meta={seoMeta} />
       <TopBar locale={locale} onLocaleChange={handleLocaleChange} authed={false} />
 
       <main>

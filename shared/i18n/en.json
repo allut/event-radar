@@ -157,6 +157,8 @@
     "sign_in": "Sign in",
     "landing_hero_h1": "Five events worth leaving the house for.",
     "landing_hero_sub": "What's on Radar scans every venue, ticket site, and gallery in Tallinn, then emails you five events matched to your taste. Every morning.",
+    "seo_landing_title": "What's on Radar — Daily Events Guide for Tallinn",
+    "seo_landing_description": "Discover five hand-picked events in Tallinn every day — concerts, exhibitions, workshops, and nightlife matched to your taste. Free daily email, no tracking.",
     "landing_cta_primary": "Get Daily 5 →",
     "landing_cta_explore": "See what's on →",
     "landing_how_title": "How it works",
@@ -263,7 +265,16 @@
 "picker_hour_label": "Hour",
 "picker_minute_label": "Minute",
     "picker_month_year_label": "Showing {value}",
-    "picker_open_calendar": "Open calendar"
+    "picker_open_calendar": "Open calendar",
+    "seo_title_login": "Sign in",
+    "seo_title_auth_verify": "Verifying sign-in",
+    "seo_title_explore": "Explore",
+    "seo_title_saved": "Saved events",
+    "seo_title_settings": "Settings",
+    "seo_title_unsubscribe": "Unsubscribe",
+    "seo_title_organizer_login": "Organizer sign in",
+    "seo_title_organizer_verify": "Verifying sign-in",
+    "seo_title_feed": "Your Daily 5"
   },
   "email": {
     "email.magic_link.subject": "Your What's on Radar sign-in link",

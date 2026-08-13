@@ -100,6 +100,21 @@ export const LOCALE_URL_PREFIX_CODES: string[] = LOCALES
   .map((l) => l.code)
   .filter((code) => code !== LOCALE_ET);
 
+// ─── SEO ─────────────────────────────────────────────────────────────────────
+// Absolute production origin — canonical/hreflang/og:url/og:image values are
+// meaningless as relative URLs (crawlers and link-unfurlers read them with no
+// browser location context), so useSeoMeta always resolves against this.
+export const PRODUCTION_ORIGIN = 'https://whatsonradar.com';
+// Branded 1200×630 fallback OG image (frontend/public/og-fallback.png),
+// served whenever an event has no image_url — same asset for all locales.
+export const OG_FALLBACK_IMAGE_PATH = '/og-fallback.png';
+// og:description/meta description target length — Google truncates around
+// ~155–160 chars; truncateForMeta (utils.ts) cuts at a word boundary under this.
+export const SEO_DESCRIPTION_MAX_LENGTH = 157;
+// Every LOCALES code plus 'x-default', in the order useSeoMeta emits hreflang
+// <link> alternates.
+export const SEO_HREFLANG_CODES: string[] = [...LOCALES.map((l) => l.code), 'x-default'];
+
 // ─── Analytics ───────────────────────────────────────────────────────────────
 // Matches `/events/:id` (bare or locale-prefixed, e.g. `/en/events/:id`) so
 // Vercel Analytics groups all event detail views under one route instead of

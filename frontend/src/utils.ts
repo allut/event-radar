@@ -212,6 +212,13 @@ export function formatEventDateTime(iso: string, locale: string): string {
   return `${weekday}, ${day} · ${time}`;
 }
 
+/** Short "15 Aug"-style date, used as the event-detail SEO title's
+ * venue-or-date fallback (useSeoMeta) when an event has no venue_name. */
+export function formatEventShortDate(iso: string, locale: string): string {
+  const localeCode = toLocaleCode(locale);
+  return dateTimeFormatter(localeCode, 'day-month-short', DTF_DAY_MONTH_SHORT).format(new Date(iso));
+}
+
 // ─── Date / number helpers ───────────────────────────────────────────────────
 
 /** Constrains `n` to the inclusive [lo, hi] range. */
@@ -395,6 +402,19 @@ export function formatIsoDate(dateStr: string, locale: string): string {
 
 export function padIndex(n: number): string {
   return String(n).padStart(TIME_FIELD_MAX_LENGTH, '0');
+}
+
+/** Truncates `text` to at most `maxLength` chars for a meta/og:description,
+ * cutting at the last word boundary before the limit (never mid-word) and
+ * appending an ellipsis. Returns `text` unchanged when it already fits.
+ * Splits on code points (Array.from), not raw UTF-16 slice(), so the cut
+ * point can never land inside a surrogate pair (e.g. an emoji). */
+export function truncateForMeta(text: string, maxLength: number): string {
+  if (text.length <= maxLength) return text;
+  const codePoints = Array.from(text);
+  const cut = codePoints.slice(0, maxLength).join('');
+  const lastSpace = cut.lastIndexOf(' ');
+  return `${(lastSpace > 0 ? cut.slice(0, lastSpace) : cut).trimEnd()}…`;
 }
 
 export function makeActiveClassMap(styles: Record<string, string>): Record<Signal, string> {

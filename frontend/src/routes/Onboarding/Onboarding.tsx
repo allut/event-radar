@@ -5,8 +5,10 @@ import { getLocale, setLocale } from '../../lib/auth';
 import { useLogout } from '../../hooks/useLogout';
 import { API, PERSONAS, PERSONA_MAX_SELECTABLE, ROUTES } from '../../constants';
 import { t, ti, personaName, personaVibe } from '../../i18n';
+import { useStaticSeoMeta } from '../../hooks/useStaticSeoMeta';
 import PersonaCard from '../../components/PersonaCard';
 import TopBar from '../../components/TopBar';
+import SeoTags from '../../components/SeoTags';
 import styles from './Onboarding.module.css';
 
 export default function Onboarding() {
@@ -14,6 +16,7 @@ export default function Onboarding() {
   const handleLogout = useLogout();
   const [selected, setSelected] = useState<string[]>([]);
   const [locale, setLocaleState] = useState<string>(getLocale());
+  const seoMeta = useStaticSeoMeta('onboarding_heading', locale);
 
   function handleLocaleChange(code: string) {
     setLocaleState(code);
@@ -53,6 +56,7 @@ export default function Onboarding() {
 
   return (
     <div className={styles.page}>
+      <SeoTags meta={seoMeta} />
       <TopBar
         locale={locale}
         onLocaleChange={handleLocaleChange}

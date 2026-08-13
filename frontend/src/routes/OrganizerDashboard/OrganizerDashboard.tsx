@@ -11,7 +11,9 @@ import PageState from '../../components/PageState';
 import EmptyState from '../../components/EmptyState';
 import Toast from '../../components/Toast';
 import { useToast } from '../../hooks/useToast';
+import { useStaticSeoMeta } from '../../hooks/useStaticSeoMeta';
 import { API, ORGANIZER_EMPTY_ICON, QUERY_KEYS, ORGANIZER_EVENTS_PAGE_SIZE, ROUTES, UI_STATE } from '../../constants';
+import SeoTags from '../../components/SeoTags';
 import styles from './OrganizerDashboard.module.css';
 
 interface OrganizerEvent {
@@ -34,6 +36,7 @@ export default function OrganizerDashboard() {
   const handleLogout = useOrganizerLogout();
   const queryClient = useQueryClient();
   const { toast, showToast } = useToast();
+  const seoMeta = useStaticSeoMeta('organizer_dashboard_title', locale);
 
   function handleLocaleChange(code: string) {
     setLocaleState(code);
@@ -66,6 +69,7 @@ export default function OrganizerDashboard() {
 
   return (
     <div className={styles.page}>
+      <SeoTags meta={seoMeta} />
       <OrganizerTopBar locale={locale} onLocaleChange={handleLocaleChange} onLogout={handleLogout} />
 
       <main className={styles.main}>

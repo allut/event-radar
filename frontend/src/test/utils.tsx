@@ -2,6 +2,7 @@ import { createElement, type ReactNode } from 'react';
 import { render, type RenderResult } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
+import { HelmetProvider } from 'react-helmet-async';
 import { type EventData } from '../components/EventCard';
 
 /** Wrapper for renderHook-based tests that need a QueryClientProvider without a
@@ -42,23 +43,25 @@ export function renderWithProviders(
       },
     });
   return render(
-    <QueryClientProvider client={queryClient}>
-      <MemoryRouter initialEntries={[route]}>
-        {routes ? (
-          <Routes>
-            {routes.map(({ path, element }) => (
-              <Route key={path} path={path} element={element} />
-            ))}
-          </Routes>
-        ) : pathPattern ? (
-          <Routes>
-            <Route path={pathPattern} element={ui} />
-          </Routes>
-        ) : (
-          ui
-        )}
-      </MemoryRouter>
-    </QueryClientProvider>,
+    <HelmetProvider>
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={[route]}>
+          {routes ? (
+            <Routes>
+              {routes.map(({ path, element }) => (
+                <Route key={path} path={path} element={element} />
+              ))}
+            </Routes>
+          ) : pathPattern ? (
+            <Routes>
+              <Route path={pathPattern} element={ui} />
+            </Routes>
+          ) : (
+            ui
+          )}
+        </MemoryRouter>
+      </QueryClientProvider>
+    </HelmetProvider>,
   );
 }
 

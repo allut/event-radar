@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useLocation, useParams } from 'react-router-dom';
 import { getLocale, setLocale } from '../../lib/auth';
 import { useOrganizerLogout } from '../../hooks/useOrganizerLogout';
 import { useOrganizerEventForm } from '../../hooks/useOrganizerEventForm';
@@ -16,6 +16,8 @@ import {
   type ContentLang, type ContentMarkerState,
 } from '../../constants';
 import { currencySymbol } from '../../utils';
+import { useSeoMeta } from '../../hooks/useSeoMeta';
+import SeoTags from '../../components/SeoTags';
 import styles from './EventSubmit.module.css';
 
 interface ContentSlot {
@@ -41,6 +43,12 @@ export default function EventSubmit() {
 
   const form = useOrganizerEventForm(locale, eventId);
   const [contentLang, setContentLang] = useState<ContentLang>(ORGANIZER_BASE_CONTENT_LANG);
+  const { pathname } = useLocation();
+  const seoMeta = useSeoMeta({
+    title: `${t(form.isEditMode ? 'organizer_edit_title' : 'organizer_submit_title', locale)} | ${t('brand', locale)}`,
+    locale,
+    path: pathname,
+  });
 
   // Re-trims all 9 text fields (multi-KB organizer prose) only when one of
   // them actually changes, not on every unrelated keystroke (price, venue, etc).
@@ -105,6 +113,7 @@ export default function EventSubmit() {
 
   return (
     <div className={styles.page}>
+      <SeoTags meta={seoMeta} />
       <OrganizerTopBar locale={locale} onLocaleChange={handleLocaleChange} onLogout={handleLogout} />
 
       <main className={styles.main}>

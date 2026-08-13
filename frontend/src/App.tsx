@@ -1,5 +1,6 @@
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { HelmetProvider } from 'react-helmet-async';
 import { Analytics } from '@vercel/analytics/react';
 import { SpeedInsights } from '@vercel/speed-insights/react';
 import { useAuth } from './hooks/useAuth';
@@ -112,27 +113,29 @@ const ROUTE_DEFS: RouteDef[] = [
 export default function App() {
   return (
     <ErrorBoundary>
-      <QueryClientProvider client={queryClient}>
-        <BrowserRouter>
-          <Routes>
-            {ROUTE_DEFS.map(({ path, element, noRedirect }) => (
-              <Route
-                key={path}
-                path={path}
-                element={noRedirect ? element : <BareLocaleGate>{element}</BareLocaleGate>}
-              />
-            ))}
-            {ROUTE_DEFS.map(({ path, element }) => (
-              <Route key={`loc:${path}`} path={localePrefixedPattern(path)} element={element} />
-            ))}
-            <Route path="*" element={<Protected><NotFound /></Protected>} />
-            <Route path="/:locale/*" element={<Protected><NotFound /></Protected>} />
-          </Routes>
-          <Footer />
-          <Analytics beforeSend={(e) => ({ ...e, url: maskAnalyticsUrl(e.url) })} />
-          <SpeedInsights beforeSend={(e) => ({ ...e, url: maskAnalyticsUrl(e.url) })} />
-        </BrowserRouter>
-      </QueryClientProvider>
+      <HelmetProvider>
+        <QueryClientProvider client={queryClient}>
+          <BrowserRouter>
+            <Routes>
+              {ROUTE_DEFS.map(({ path, element, noRedirect }) => (
+                <Route
+                  key={path}
+                  path={path}
+                  element={noRedirect ? element : <BareLocaleGate>{element}</BareLocaleGate>}
+                />
+              ))}
+              {ROUTE_DEFS.map(({ path, element }) => (
+                <Route key={`loc:${path}`} path={localePrefixedPattern(path)} element={element} />
+              ))}
+              <Route path="*" element={<Protected><NotFound /></Protected>} />
+              <Route path="/:locale/*" element={<Protected><NotFound /></Protected>} />
+            </Routes>
+            <Footer />
+            <Analytics beforeSend={(e) => ({ ...e, url: maskAnalyticsUrl(e.url) })} />
+            <SpeedInsights beforeSend={(e) => ({ ...e, url: maskAnalyticsUrl(e.url) })} />
+          </BrowserRouter>
+        </QueryClientProvider>
+      </HelmetProvider>
     </ErrorBoundary>
   );
 }

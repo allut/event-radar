@@ -6,6 +6,7 @@ import { getLocale } from '../../lib/auth';
 import { useLocaleMutation } from '../../hooks/useLocaleMutation';
 import { useLogout } from '../../hooks/useLogout';
 import { useToast } from '../../hooks/useToast';
+import { useStaticSeoMeta } from '../../hooks/useStaticSeoMeta';
 import { API, AUTH_REDIRECT_DELAY_MS, BRAND_GLYPH, PERSONAS_BY_SLUG, QUERY_KEYS, RANK_LABEL_KEYS, ROUTES, UI_STATE, TOAST_IDLE, type ToastState } from '../../constants';
 import { cx } from '../../utils';
 import { t, personaName } from '../../i18n';
@@ -14,6 +15,7 @@ import PageState from '../../components/PageState';
 import Toast from '../../components/Toast';
 import Toggle from '../../components/Toggle';
 import TopBar from '../../components/TopBar';
+import SeoTags from '../../components/SeoTags';
 import styles from './Settings.module.css';
 
 interface PersonaEntry {
@@ -57,6 +59,7 @@ export default function Settings() {
     onSuccess: () => showSaved(getLocale()),
     onError: (err) => showSaveError(err, getLocale()),
   });
+  const seoMeta = useStaticSeoMeta('seo_title_settings', locale);
 
   const digestMutation = useMutation({
     mutationFn: (optIn: boolean) =>
@@ -96,15 +99,26 @@ export default function Settings() {
   }
 
   if (isLoading) {
-    return <PageState kind={UI_STATE.loading} message={t('loading', locale)} />;
+    return (
+      <>
+        <SeoTags meta={seoMeta} />
+        <PageState kind={UI_STATE.loading} message={t('loading', locale)} />
+      </>
+    );
   }
 
   if (isError) {
-    return <PageState kind={UI_STATE.error} message={t('settings_error', locale)} />;
+    return (
+      <>
+        <SeoTags meta={seoMeta} />
+        <PageState kind={UI_STATE.error} message={t('settings_error', locale)} />
+      </>
+    );
   }
 
   return (
     <div className={styles.page}>
+      <SeoTags meta={seoMeta} />
       {saveToast.status !== UI_STATE.idle && <Toast status={saveToast.status} message={saveToast.message} />}
 
       <TopBar locale={locale} onLocaleChange={handleLocaleChange} onLogout={handleLogout} localeDisabled={localePending} />
