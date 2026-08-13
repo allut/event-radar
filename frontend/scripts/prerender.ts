@@ -13,18 +13,25 @@
  * (issue #51), so the sitemap and the snapshot pages it lists can never
  * disagree.
  *
- * Fails loudly (non-zero exit) if the published-events fetch fails or if
- * Playwright can't reach/render any target route — see docs/frontend.md's
- * prerender section. `npm run build` copies dist/index.html to
- * dist/app-shell.html *before* invoking this script (not inside it) so the
- * SPA-fallback rewrite target exists even if this script never runs to
- * completion.
+ * Once every snapshot is written, an in-build validation gate (issue #53,
+ * src/lib/seoValidation.ts) reads each one back off disk and checks
+ * structural correctness (valid JSON-LD, a non-default title, a canonical,
+ * the hreflang alternates) and non-staleness (title/venue/price still match
+ * what GET /events/{id} returns right now) — blocking the deploy on failure.
+ *
+ * Fails loudly (non-zero exit) if the published-events fetch fails, if
+ * Playwright can't reach/render any target route, or if the validation gate
+ * finds a structural/staleness issue — see docs/frontend.md's prerender
+ * section. `npm run build` copies dist/index.html to dist/app-shell.html
+ * *before* invoking this script (not inside it) so the SPA-fallback rewrite
+ * target exists even if this script never runs to completion.
  */
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium, type Page } from 'playwright';
 import { preview, type PreviewServer } from 'vite';
+import type { EventData } from '../src/components/EventCard';
 import {
   LOCALE_URL_PREFIX_CODES,
   LOCALES,
@@ -33,6 +40,7 @@ import {
   SEO_HREFLANG_CODES,
 } from '../src/constants';
 import { localizedPath } from '../src/lib/urlLocale';
+import { compareEventStaleness, parseSnapshotHtml, validateSnapshotStructure } from '../src/lib/seoValidation';
 import { PRERENDER_BACKEND_TARGET } from '../vite.config';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -58,6 +66,9 @@ interface PrerenderTarget {
   /** Bare (Estonian) ROUTES.* path, before locale-prefixing. */
   bare: string;
   locale: string;
+  /** Set for /events/:id targets only — the in-build validation gate's
+   * non-staleness check (validateTarget) uses it to re-fetch the live event. */
+  eventId?: number;
 }
 
 /** Simple sliding-window rate gate — `acquire()` resolves immediately while
@@ -104,7 +115,7 @@ function buildTargets(eventIds: number[]): PrerenderTarget[] {
   for (const locale of localeCodes) {
     targets.push({ bare: ROUTES.home, locale });
     for (const id of eventIds) {
-      targets.push({ bare: ROUTES.eventDetail(id), locale });
+      targets.push({ bare: ROUTES.eventDetail(id), locale, eventId: id });
     }
   }
   return targets;
@@ -182,6 +193,66 @@ async function snapshotTarget(
   await writeFile(outPath, html, 'utf-8');
 }
 
+/** Bounded-concurrency runner shared by the snapshot pass and the
+ * validation-gate pass below (issue #53) — bounded, not unbounded, mirroring
+ * this repo's external-API fan-out convention (CLAUDE.md). */
+async function runPool<T>(items: T[], concurrency: number, worker: (item: T) => Promise<void>): Promise<void> {
+  let cursor = 0;
+  async function run(): Promise<void> {
+    while (cursor < items.length) {
+      await worker(items[cursor++]);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, run));
+}
+
+/** In-build validation gate (issue #53) — reads a just-written snapshot back
+ * off disk and checks it against src/lib/seoValidation.ts's structural
+ * (title/canonical/hreflang/JSON-LD) assertions and, for /events/:id
+ * targets, its non-staleness (title/venue/price vs. the live API right now)
+ * assertions. That module is deliberately filesystem/network-free so the
+ * live-audit ticket (issue #54) can reuse it unchanged against a
+ * fetch()-ed production page instead of a dist/ file. Shares
+ * eventDetailRateGate's budget with the snapshot pass above, since this is
+ * another round of real GET /events/{id} calls against the same
+ * rate-limited backend — deliberately a *second*, independent fetch rather
+ * than reusing the response the browser already got during snapshotTarget:
+ * reusing it would make the staleness comparison vacuous (it'd always match
+ * the very data it was built from), whereas the acceptance criteria call for
+ * comparing against what the live API returns right now. This roughly
+ * doubles the build's GET /events/{id} volume; accepted for now since the
+ * gate still runs sequentially after the snapshot pass under the same
+ * rate-limited budget, bounded rather than unbounded — worth revisiting if
+ * the published-event catalog grows enough to threaten the Vercel
+ * Hobby-plan 45-minute build cap (see PRERENDER_CONCURRENCY above). Returns
+ * one message per violation, prefixed with the target's path — never
+ * throws for a validation failure itself. */
+async function validateTarget(target: PrerenderTarget): Promise<string[]> {
+  const html = await readFile(outputFilePath(target.bare, target.locale), 'utf-8');
+  const parsed = parseSnapshotHtml(html);
+  const isHome = target.bare === ROUTES.home;
+
+  const issues = validateSnapshotStructure(parsed, {
+    kind: isHome ? 'website' : 'event',
+    locale: target.locale,
+    originPrefix: PRODUCTION_ORIGIN,
+  }).map((issue) => `structural: ${issue}`);
+
+  if (target.eventId !== undefined) {
+    await eventDetailRateGate.acquire();
+    const url = `${API_ORIGIN}/events/${target.eventId}?locale=${encodeURIComponent(target.locale)}`;
+    const res = await fetch(url);
+    if (!res.ok) {
+      issues.push(`staleness: failed to fetch live event ${target.eventId} for comparison — ${res.status} ${res.statusText}`);
+    } else {
+      const live = (await res.json()) as EventData;
+      issues.push(...compareEventStaleness(parsed, live).map((issue) => `staleness: ${issue}`));
+    }
+  }
+
+  return issues.map((issue) => `${localizedPath(target.bare, target.locale)} — ${issue}`);
+}
+
 async function main(): Promise<void> {
   const eventIds = await fetchPublishedEventIds();
   const targets = buildTargets(eventIds);
@@ -243,6 +314,23 @@ async function main(): Promise<void> {
     await browser.close();
     await server?.close();
   }
+
+  // In-build validation gate (issue #53) — runs immediately after every
+  // snapshot has been written, blocking the deploy (non-zero exit) on a
+  // structural or non-staleness violation.
+  const validationIssues: string[] = [];
+  await runPool(targets, PRERENDER_CONCURRENCY, async (target) => {
+    validationIssues.push(...(await validateTarget(target)));
+  });
+  if (validationIssues.length > 0) {
+    for (const issue of validationIssues) {
+      console.error(`prerender: validation failed — ${issue}`);
+    }
+    throw new Error(
+      `prerender: ${validationIssues.length} snapshot validation issue(s) — see errors above`,
+    );
+  }
+  console.log(`prerender: validated ${targets.length} snapshot(s), no issues found`);
 }
 
 main().catch((error) => {

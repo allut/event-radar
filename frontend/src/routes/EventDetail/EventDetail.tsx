@@ -154,7 +154,23 @@ export default function EventDetail() {
               aria-hidden
             />
           )}
-          {price && <span className={styles.price}>{price}</span>}
+          {price && (
+            // data-* attrs: read by the in-build SEO validation gate
+            // (src/lib/seoValidation.ts, issue #53) to check this snapshot's
+            // price against what the live API currently returns — price isn't
+            // part of the JSON-LD payload (issue #46 defers AggregateOffer),
+            // so it needs its own marker.
+            <span
+              className={styles.price}
+              data-testid="event-price"
+              data-price-min={data.price_min ?? ''}
+              data-price-max={data.price_max ?? ''}
+              data-currency={data.currency ?? ''}
+              data-has-free-tier={data.has_free_tier}
+            >
+              {price}
+            </span>
+          )}
         </div>
 
         <div className={styles.content}>
