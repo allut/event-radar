@@ -8,7 +8,10 @@
  *
  * This script owns the "list published events" query (via GET
  * /public/prerender-events) as the single source of truth for what gets
- * prerendered — reused as-is by sitemap.xml generation (issue #51).
+ * prerendered, reused as-is (via the same `targets` list `buildTargets`
+ * produces) to also emit sitemap.xml + robots.txt in the same build run
+ * (issue #51), so the sitemap and the snapshot pages it lists can never
+ * disagree.
  *
  * Fails loudly (non-zero exit) if the published-events fetch fails or if
  * Playwright can't reach/render any target route — see docs/frontend.md's
@@ -22,7 +25,13 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium, type Page } from 'playwright';
 import { preview, type PreviewServer } from 'vite';
-import { LOCALES, ROUTES } from '../src/constants';
+import {
+  LOCALE_URL_PREFIX_CODES,
+  LOCALES,
+  PRODUCTION_ORIGIN,
+  ROUTES,
+  SEO_HREFLANG_CODES,
+} from '../src/constants';
 import { localizedPath } from '../src/lib/urlLocale';
 import { PRERENDER_BACKEND_TARGET } from '../vite.config';
 
@@ -101,6 +110,42 @@ function buildTargets(eventIds: number[]): PrerenderTarget[] {
   return targets;
 }
 
+/** sitemap.xml for `targets` (issue #51) — one `<url>` per locale-variant
+ * URL (mirrors `buildTargets`'s flat "every locale × every bare path"
+ * shape), each carrying the same en/et/ru/x-default hreflang cross-references
+ * `useSeoMeta`'s `buildSeoMeta` emits as `<link>` tags, so the sitemap and
+ * the prerendered pages it lists never disagree about locale siblings.
+ * `lastmod` is uniformly `buildTimestamp` — `Event` has no `updated_at`, so
+ * there's no meaningful per-row value to put there instead. */
+function buildSitemapXml(targets: PrerenderTarget[], buildTimestamp: string): string {
+  const urlEntries = targets
+    .map((target) => {
+      const loc = `${PRODUCTION_ORIGIN}${localizedPath(target.bare, target.locale)}`;
+      const alternates = SEO_HREFLANG_CODES.map((code) => {
+        const href =
+          code === 'x-default'
+            ? `${PRODUCTION_ORIGIN}${target.bare}`
+            : `${PRODUCTION_ORIGIN}${localizedPath(target.bare, code)}`;
+        return `    <xhtml:link rel="alternate" hreflang="${code}" href="${href}"/>`;
+      }).join('\n');
+      return `  <url>\n    <loc>${loc}</loc>\n    <lastmod>${buildTimestamp}</lastmod>\n${alternates}\n  </url>`;
+    })
+    .join('\n');
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">\n${urlEntries}\n</urlset>\n`;
+}
+
+/** robots.txt (issue #51) — inverse-allowlist shape (`Disallow: /` first,
+ * then explicit `Allow:`s) so a new authenticated route added later is
+ * excluded by default, with no robots.txt edit required to keep it that way. */
+function buildRobotsTxt(): string {
+  const lines = ['User-agent: *', 'Disallow: /', 'Allow: /$', 'Allow: /events/'];
+  for (const code of LOCALE_URL_PREFIX_CODES) {
+    lines.push(`Allow: /${code}$`, `Allow: /${code}/events/`);
+  }
+  lines.push('', `Sitemap: ${PRODUCTION_ORIGIN}/sitemap.xml`);
+  return lines.join('\n') + '\n';
+}
+
 /** dist-relative output file for a locale-prefixed URL — mirrors how Vercel's
  * static file server resolves a directory path to its index.html. */
 function outputFilePath(bare: string, locale: string): string {
@@ -140,6 +185,15 @@ async function snapshotTarget(
 async function main(): Promise<void> {
   const eventIds = await fetchPublishedEventIds();
   const targets = buildTargets(eventIds);
+
+  const buildTimestamp = new Date().toISOString();
+  await writeFile(
+    path.join(DIST_DIR, 'sitemap.xml'),
+    buildSitemapXml(targets, buildTimestamp),
+    'utf-8',
+  );
+  await writeFile(path.join(DIST_DIR, 'robots.txt'), buildRobotsTxt(), 'utf-8');
+  console.log(`prerender: wrote sitemap.xml (${targets.length} url(s)) and robots.txt`);
 
   let server: PreviewServer | undefined;
   const browser = await chromium.launch();
