@@ -1,11 +1,12 @@
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Analytics } from '@vercel/analytics/react';
 import { SpeedInsights } from '@vercel/speed-insights/react';
 import { useAuth } from './hooks/useAuth';
 import { useOrganizerAuth } from './hooks/useOrganizerAuth';
-import { QUERY_RETRY, QUERY_STALE_TIME, ROUTES } from './constants';
-import { maskAnalyticsUrl } from './utils';
+import { QUERY_RETRY, QUERY_STALE_TIME, ROUTES, LOCALE_ET } from './constants';
+import { maskAnalyticsUrl, localizedPath } from './utils';
+import { getStoredLocale } from './lib/auth';
 import ErrorBoundary from './components/ErrorBoundary';
 import Landing from './routes/Landing';
 import Login from './routes/Login';
@@ -59,57 +60,73 @@ function Home() {
   return authed ? <Feed /> : <Landing />;
 }
 
+// Bare-path locale redirect, applied only to "standard" routes (everything
+// except Home/EventDetail — see NO_REDIRECT below). If the visitor has an
+// explicit, stored non-Estonian locale preference, a bare URL (no `:locale`
+// segment matched) redirects client-side to that preference's prefixed
+// equivalent. No Accept-Language sniffing: a first-time visitor with no
+// stored preference (getStoredLocale() === null) falls through to Estonian,
+// same as an explicit "et" preference — neither redirects.
+function BareLocaleGate({ children }: { children: React.ReactNode }) {
+  const location = useLocation();
+  const preferred = getStoredLocale() ?? LOCALE_ET;
+  if (preferred !== LOCALE_ET) {
+    return <Navigate to={localizedPath(location.pathname, preferred) + location.search} replace />;
+  }
+  return <>{children}</>;
+}
+
+function localePrefixedPattern(path: string): string {
+  return path === ROUTES.home ? '/:locale' : `/:locale${path}`;
+}
+
+interface RouteDef {
+  path: string;
+  element: React.ReactNode;
+  // Home and EventDetail are the two public SEO routes: their bare path
+  // always renders Estonian and never redirects (crawler/prerender
+  // stability), regardless of any stored locale preference.
+  noRedirect?: boolean;
+}
+
+const ROUTE_DEFS: RouteDef[] = [
+  { path: ROUTES.login, element: <Login /> },
+  { path: ROUTES.authVerify, element: <AuthVerify /> },
+  { path: ROUTES.onboarding, element: <Protected><Onboarding /></Protected> },
+  { path: ROUTES.home, element: <Home />, noRedirect: true },
+  { path: ROUTES.explore, element: <Protected><Explore /></Protected> },
+  { path: ROUTES.saved, element: <Protected><SavedEvents /></Protected> },
+  { path: ROUTES.eventDetailPattern, element: <EventDetail />, noRedirect: true },
+  { path: ROUTES.settings, element: <Protected><Settings /></Protected> },
+  { path: ROUTES.unsubscribe, element: <Unsubscribe /> },
+  { path: ROUTES.privacy, element: <Privacy /> },
+  { path: ROUTES.terms, element: <Terms /> },
+  { path: ROUTES.contact, element: <Contact /> },
+  { path: ROUTES.organizerLogin, element: <OrganizerLogin /> },
+  { path: ROUTES.organizerVerify, element: <OrganizerVerify /> },
+  { path: ROUTES.organizerDashboard, element: <OrganizerProtected><OrganizerDashboard /></OrganizerProtected> },
+  { path: ROUTES.organizerSubmit, element: <OrganizerProtected><EventSubmit /></OrganizerProtected> },
+  { path: ROUTES.organizerEventEditPattern, element: <OrganizerProtected><EventSubmit /></OrganizerProtected> },
+];
+
 export default function App() {
   return (
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
         <BrowserRouter>
           <Routes>
-            <Route path={ROUTES.login} element={<Login />} />
-            <Route path={ROUTES.authVerify} element={<AuthVerify />} />
-            <Route
-              path={ROUTES.onboarding}
-              element={<Protected><Onboarding /></Protected>}
-            />
-            <Route
-              path={ROUTES.home}
-              element={<Home />}
-            />
-            <Route
-              path={ROUTES.explore}
-              element={<Protected><Explore /></Protected>}
-            />
-            <Route
-              path={ROUTES.saved}
-              element={<Protected><SavedEvents /></Protected>}
-            />
-            <Route
-              path={ROUTES.eventDetailPattern}
-              element={<EventDetail />}
-            />
-            <Route
-              path={ROUTES.settings}
-              element={<Protected><Settings /></Protected>}
-            />
-            <Route path={ROUTES.unsubscribe} element={<Unsubscribe />} />
-            <Route path={ROUTES.privacy} element={<Privacy />} />
-            <Route path={ROUTES.terms} element={<Terms />} />
-            <Route path={ROUTES.contact} element={<Contact />} />
-            <Route path={ROUTES.organizerLogin} element={<OrganizerLogin />} />
-            <Route path={ROUTES.organizerVerify} element={<OrganizerVerify />} />
-            <Route
-              path={ROUTES.organizerDashboard}
-              element={<OrganizerProtected><OrganizerDashboard /></OrganizerProtected>}
-            />
-            <Route
-              path={ROUTES.organizerSubmit}
-              element={<OrganizerProtected><EventSubmit /></OrganizerProtected>}
-            />
-            <Route
-              path={ROUTES.organizerEventEditPattern}
-              element={<OrganizerProtected><EventSubmit /></OrganizerProtected>}
-            />
+            {ROUTE_DEFS.map(({ path, element, noRedirect }) => (
+              <Route
+                key={path}
+                path={path}
+                element={noRedirect ? element : <BareLocaleGate>{element}</BareLocaleGate>}
+              />
+            ))}
+            {ROUTE_DEFS.map(({ path, element }) => (
+              <Route key={`loc:${path}`} path={localePrefixedPattern(path)} element={element} />
+            ))}
             <Route path="*" element={<Protected><NotFound /></Protected>} />
+            <Route path="/:locale/*" element={<Protected><NotFound /></Protected>} />
           </Routes>
           <Footer />
           <Analytics beforeSend={(e) => ({ ...e, url: maskAnalyticsUrl(e.url) })} />

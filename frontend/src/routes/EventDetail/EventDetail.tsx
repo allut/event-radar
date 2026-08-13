@@ -34,7 +34,7 @@ export default function EventDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const authed = useAuth();
-  const { locale, handleLocaleChange } = useLocaleMutation();
+  const { locale, handleLocaleChange } = useLocaleMutation({ publicRoute: true });
   const handleLogout = useLogout();
   const { toast, showToast } = useToast();
 

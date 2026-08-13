@@ -36,33 +36,33 @@ const feedResponse = {
 describe('Feed', () => {
   it('shows loading state initially', () => {
     mockGet.mockReturnValue(new Promise(() => undefined));
-    renderWithProviders(<Feed />);
+    renderWithProviders(<Feed />, { route: '/en', pathPattern: '/:locale' });
     expect(screen.getByLabelText(/loading/i)).toBeInTheDocument();
   });
 
   it('shows error state on fetch failure', async () => {
     mockGet.mockRejectedValueOnce(new Error('network'));
-    renderWithProviders(<Feed />);
+    renderWithProviders(<Feed />, { route: '/en', pathPattern: '/:locale' });
     await waitFor(() => expect(screen.getByText(/Failed to load your feed/i)).toBeInTheDocument());
   });
 
   it('shows empty state when events array is empty', async () => {
     mockGet.mockResolvedValueOnce({ feed_date: '2024-07-15', events: [], built_at: null });
-    renderWithProviders(<Feed />);
+    renderWithProviders(<Feed />, { route: '/en', pathPattern: '/:locale' });
     await waitFor(() => expect(screen.getByText(/your feed is being prepared/i)).toBeInTheDocument());
     expect(screen.queryAllByTestId('event-card').length).toBe(0);
   });
 
   it('renders event cards on success', async () => {
     mockGet.mockResolvedValueOnce(feedResponse);
-    renderWithProviders(<Feed />);
+    renderWithProviders(<Feed />, { route: '/en', pathPattern: '/:locale' });
     await waitFor(() => expect(screen.getAllByTestId('event-card').length).toBe(2));
     expect(screen.getByText('Event One')).toBeInTheDocument();
   });
 
   it('renders the explore promo as one band-wide link', async () => {
     mockGet.mockResolvedValueOnce(feedResponse);
-    renderWithProviders(<Feed />);
+    renderWithProviders(<Feed />, { route: '/en', pathPattern: '/:locale' });
     const cta = await screen.findByRole('link', { name: /explore all events/i });
     expect(cta).toHaveAttribute('href', '/explore');
     // The band itself is the link — title and msg live inside it, so the
@@ -76,14 +76,14 @@ describe('Feed', () => {
 
   it('shows the stale-feed banner when is_stale is true', async () => {
     mockGet.mockResolvedValueOnce({ ...feedResponse, is_stale: true });
-    renderWithProviders(<Feed />);
+    renderWithProviders(<Feed />, { route: '/en', pathPattern: '/:locale' });
     await waitFor(() => expect(screen.getAllByTestId('event-card').length).toBe(2));
     expect(screen.getByText(/showing your latest feed/i)).toBeInTheDocument();
   });
 
   it('does not show the stale-feed banner when is_stale is false', async () => {
     mockGet.mockResolvedValueOnce(feedResponse);
-    renderWithProviders(<Feed />);
+    renderWithProviders(<Feed />, { route: '/en', pathPattern: '/:locale' });
     await waitFor(() => expect(screen.getAllByTestId('event-card').length).toBe(2));
     expect(screen.queryByText(/showing your latest feed/i)).not.toBeInTheDocument();
   });
@@ -91,7 +91,7 @@ describe('Feed', () => {
   it('logout clears the signed-in hint and navigates to landing', async () => {
     mockGet.mockResolvedValueOnce(feedResponse);
     const { clearSignedInHint } = await import('../../lib/auth');
-    renderWithProviders(<Feed />);
+    renderWithProviders(<Feed />, { route: '/en', pathPattern: '/:locale' });
     await waitFor(() => screen.getByRole('button', { name: /sign out/i }));
     await userEvent.click(screen.getByRole('button', { name: /sign out/i }));
     expect(clearSignedInHint).toHaveBeenCalled();

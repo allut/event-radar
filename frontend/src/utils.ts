@@ -1,10 +1,35 @@
 import DOMPurify from 'dompurify';
 import { api } from './api/client';
-import { API, CATEGORY_GRADIENTS, FALLBACK_GRADIENT, EUR_SYMBOL, DEFAULT_CURRENCY, GOOGLE_MAPS_SEARCH_URL, type Signal, toLocaleCode, SAFE_URL_SCHEMES, SANITIZE_ALLOWED_TAGS, SANITIZE_ALLOWED_ATTR, SIGNAL_TO_CLASS, BROWSE_PAGE_SIZE, CATEGORIES, VIBES, type DatePreset, type SortOption, ANALYTICS_EVENT_PATH_RE, ANALYTICS_ORGANIZER_EDIT_PATH_RE, CALENDAR_WEEK_START, CALENDAR_WEEKS_SHOWN, CALENDAR_DAYS_PER_WEEK, CALENDAR_REFERENCE_MONDAY, MAX_HOUR, MAX_MINUTE, DATE_PRESET_DAYS, DATE_PRESET_DAYS_FALLBACK, DATE_PRESET_DEFAULT, DATE_PRESET_TODAY, DATE_PRESET_WEEKEND, EXPLORE_PARAM, EXPLORE_URL_FLAG_TRUE, EXPLORE_API_FLAG_TRUE, SORT_DEFAULT, TIME_FIELD_MAX_LENGTH } from './constants';
+import { API, CATEGORY_GRADIENTS, FALLBACK_GRADIENT, EUR_SYMBOL, DEFAULT_CURRENCY, GOOGLE_MAPS_SEARCH_URL, type Signal, toLocaleCode, SAFE_URL_SCHEMES, SANITIZE_ALLOWED_TAGS, SANITIZE_ALLOWED_ATTR, SIGNAL_TO_CLASS, BROWSE_PAGE_SIZE, CATEGORIES, VIBES, type DatePreset, type SortOption, ANALYTICS_EVENT_PATH_RE, ANALYTICS_ORGANIZER_EDIT_PATH_RE, CALENDAR_WEEK_START, CALENDAR_WEEKS_SHOWN, CALENDAR_DAYS_PER_WEEK, CALENDAR_REFERENCE_MONDAY, MAX_HOUR, MAX_MINUTE, DATE_PRESET_DAYS, DATE_PRESET_DAYS_FALLBACK, DATE_PRESET_DEFAULT, DATE_PRESET_TODAY, DATE_PRESET_WEEKEND, EXPLORE_PARAM, EXPLORE_URL_FLAG_TRUE, EXPLORE_API_FLAG_TRUE, SORT_DEFAULT, TIME_FIELD_MAX_LENGTH, LOCALES, LOCALE_URL_PREFIX_CODES, type LocaleCode } from './constants';
 import { t, ti } from './i18n';
 
 export function cx(...classes: (string | false | null | undefined)[]): string {
   return classes.filter(Boolean).join(' ');
+}
+
+export function isValidLocale(code: string | undefined): code is LocaleCode {
+  return !!code && LOCALES.some((l) => l.code === code);
+}
+
+/** Strips a leading `/en` or `/ru` locale-prefix segment from a pathname
+ * (Estonian is bare, so there's nothing to strip for it), returning the bare
+ * ROUTES.*-equivalent path. */
+export function stripLocalePrefix(pathname: string): string {
+  const seg = pathname.split('/')[1];
+  if (seg && LOCALE_URL_PREFIX_CODES.includes(seg)) {
+    const rest = pathname.slice(seg.length + 1);
+    return rest === '' ? '/' : rest;
+  }
+  return pathname;
+}
+
+/** Builds the equivalent pathname for `locale`: Estonian is bare, en/ru get a
+ * `/en`/`/ru` prefix. Any existing prefix on `pathname` is stripped first, so
+ * this is safe to call against either a bare or already-prefixed URL. */
+export function localizedPath(pathname: string, locale: string): string {
+  const bare = stripLocalePrefix(pathname);
+  if (!LOCALE_URL_PREFIX_CODES.includes(locale)) return bare;
+  return bare === '/' ? `/${locale}` : `/${locale}${bare}`;
 }
 
 /** Reshapes a URL before it's forwarded to Vercel Analytics: strips the query string and
@@ -14,8 +39,8 @@ export function cx(...classes: (string | false | null | undefined)[]): string {
 export function maskAnalyticsUrl(url: string): string {
   const pathname = url.split(/[?#]/)[0];
   return pathname
-    .replace(ANALYTICS_EVENT_PATH_RE, '/events/[id]')
-    .replace(ANALYTICS_ORGANIZER_EDIT_PATH_RE, '/organizer/events/[id]/edit');
+    .replace(ANALYTICS_EVENT_PATH_RE, '$1/events/[id]')
+    .replace(ANALYTICS_ORGANIZER_EDIT_PATH_RE, '$1/organizer/events/[id]/edit');
 }
 
 /** Defense-in-depth render guard: only allow the given URL schemes (http(s) by

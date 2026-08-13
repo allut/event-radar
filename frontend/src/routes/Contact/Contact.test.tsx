@@ -8,6 +8,7 @@ import { renderWithProviders } from '../../test/utils';
 vi.mock('../../lib/auth', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../lib/auth')>()),
   getLocale: vi.fn(() => 'en'),
+  getStoredLocale: vi.fn(() => 'en'),
 }));
 
 vi.mock('../../api/client', async (importOriginal) => ({

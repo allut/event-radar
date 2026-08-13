@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { cx, safeUrl, sanitizeHtml, formatPrice, categoryGradient, formatHourMinute, makeActiveClassMap, trackExternalClick, datePresetRange, parseExploreFilters, exploreFiltersToSearchParams, buildExploreApiQuery, activeFacetCount, isFullSet, shouldFlipPopover, maskAnalyticsUrl, DEFAULT_EXPLORE_FILTERS, type ExploreFilters, monthGridDays, weekdayHeaders, splitDateTimeValue, joinDateTimeValue, parseTypedDate, formatPickerValue, formatMonthYearLabel, toDisplayDateTime, fromDisplayDateTime, buildMapsUrl } from './utils';
+import { cx, safeUrl, sanitizeHtml, formatPrice, categoryGradient, formatHourMinute, makeActiveClassMap, trackExternalClick, datePresetRange, parseExploreFilters, exploreFiltersToSearchParams, buildExploreApiQuery, activeFacetCount, isFullSet, shouldFlipPopover, maskAnalyticsUrl, DEFAULT_EXPLORE_FILTERS, type ExploreFilters, monthGridDays, weekdayHeaders, splitDateTimeValue, joinDateTimeValue, parseTypedDate, formatPickerValue, formatMonthYearLabel, toDisplayDateTime, fromDisplayDateTime, buildMapsUrl, isValidLocale, stripLocalePrefix, localizedPath } from './utils';
 import { FALLBACK_GRADIENT, CATEGORIES, GOOGLE_MAPS_SEARCH_URL } from './constants';
 
 vi.mock('./api/client', () => ({
@@ -55,6 +55,68 @@ describe('maskAnalyticsUrl', () => {
 
   it('masks an organizer edit-form event id', () => {
     expect(maskAnalyticsUrl('/organizer/events/7/edit')).toBe('/organizer/events/[id]/edit');
+  });
+
+  it('masks a locale-prefixed event id, keeping the prefix so locales still group separately', () => {
+    expect(maskAnalyticsUrl('/en/events/42')).toBe('/en/events/[id]');
+    expect(maskAnalyticsUrl('/ru/events/42?x=1')).toBe('/ru/events/[id]');
+  });
+
+  it('masks a locale-prefixed organizer edit-form event id', () => {
+    expect(maskAnalyticsUrl('/en/organizer/events/7/edit')).toBe('/en/organizer/events/[id]/edit');
+  });
+});
+
+describe('isValidLocale', () => {
+  it('accepts every configured locale code', () => {
+    expect(isValidLocale('en')).toBe(true);
+    expect(isValidLocale('et')).toBe(true);
+    expect(isValidLocale('ru')).toBe(true);
+  });
+
+  it('rejects an unrecognized or missing code', () => {
+    expect(isValidLocale('xx')).toBe(false);
+    expect(isValidLocale(undefined)).toBe(false);
+  });
+});
+
+describe('stripLocalePrefix', () => {
+  it('strips a recognized locale prefix', () => {
+    expect(stripLocalePrefix('/en/settings')).toBe('/settings');
+    expect(stripLocalePrefix('/ru/events/42')).toBe('/events/42');
+  });
+
+  it('strips a bare locale-prefixed root to "/"', () => {
+    expect(stripLocalePrefix('/en')).toBe('/');
+  });
+
+  it('leaves a bare (Estonian) path unchanged', () => {
+    expect(stripLocalePrefix('/settings')).toBe('/settings');
+    expect(stripLocalePrefix('/')).toBe('/');
+  });
+
+  it('leaves an unrecognized segment unchanged (not a locale prefix)', () => {
+    expect(stripLocalePrefix('/xx/settings')).toBe('/xx/settings');
+  });
+});
+
+describe('localizedPath', () => {
+  it('builds a prefixed path for a non-Estonian locale', () => {
+    expect(localizedPath('/settings', 'en')).toBe('/en/settings');
+    expect(localizedPath('/', 'ru')).toBe('/ru');
+  });
+
+  it('builds the bare path for Estonian', () => {
+    expect(localizedPath('/settings', 'et')).toBe('/settings');
+    expect(localizedPath('/en/settings', 'et')).toBe('/settings');
+  });
+
+  it('re-prefixes a path that already carries a different locale prefix', () => {
+    expect(localizedPath('/en/settings', 'ru')).toBe('/ru/settings');
+  });
+
+  it('falls back to the bare path for an unrecognized target locale', () => {
+    expect(localizedPath('/en/settings', 'xx')).toBe('/settings');
   });
 });
 

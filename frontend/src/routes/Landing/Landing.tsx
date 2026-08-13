@@ -1,11 +1,10 @@
-import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../../api/client';
-import { getLocale, setLocale } from '../../lib/auth';
 import { API, BRAND_GLYPH, MAGIC_LINK_EXPIRY_MINUTES, PERSONAS, QUERY_KEYS, ROUTES, STEP_KEYS, UI_STATE } from '../../constants';
 import { t, ti, personaName, personaVibe } from '../../i18n';
 import { padIndex } from '../../utils';
+import { useLocaleMutation } from '../../hooks/useLocaleMutation';
 import { useMagicLinkRequest } from '../../hooks/useMagicLinkRequest';
 import { useOrganizerAuth } from '../../hooks/useOrganizerAuth';
 import TopBar from '../../components/TopBar';
@@ -58,13 +57,8 @@ function EmailCapture({ locale }: { locale: string }) {
 }
 
 export default function Landing() {
-  const [locale, setLocaleState] = useState(getLocale());
+  const { locale, handleLocaleChange } = useLocaleMutation({ publicRoute: true });
   const isOrganizer = useOrganizerAuth();
-
-  function handleLocaleChange(code: string) {
-    setLocale(code);
-    setLocaleState(code);
-  }
 
   const { data, isError } = useQuery({
     queryKey: [QUERY_KEYS.showcase, locale],

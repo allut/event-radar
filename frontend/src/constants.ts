@@ -83,15 +83,6 @@ export const SOCIAL_LINKS: { label: string; url: string; icon: SocialIcon }[] = 
   { label: 'X', url: 'https://x.com/', icon: 'twitter' },
 ];
 
-// ─── Analytics ───────────────────────────────────────────────────────────────
-// Matches `/events/:id` so Vercel Analytics groups all event detail views
-// under one route instead of one row per event id. Applied to a pathname
-// with query/hash already stripped (see maskAnalyticsUrl in utils.ts).
-export const ANALYTICS_EVENT_PATH_RE = /^\/events\/\d+$/;
-// Groups every organizer edit-form URL under one analytics row, mirroring
-// ANALYTICS_EVENT_PATH_RE above — same rationale, new dynamic route.
-export const ANALYTICS_ORGANIZER_EDIT_PATH_RE = /^\/organizer\/events\/\d+\/edit$/;
-
 // ─── Locale ──────────────────────────────────────────────────────────────────
 export type LocaleCode = (typeof LOCALES)[number]['code'];
 export const LOCALE_EN = 'en' as const;
@@ -101,6 +92,26 @@ export const LOCALE_RU = 'ru' as const;
 export function toLocaleCode(locale: string): string {
   return _LOCALE_CODE_MAP[locale] ?? _DEFAULT_LOCALE_CODE;
 }
+
+// Estonian is the bare (unprefixed) URL locale; every other locale gets an
+// `/en`/`/ru`-style path prefix — see docs/frontend.md's locale-routing
+// section (App.tsx's route wrapper, utils.ts's localizedPath/stripLocalePrefix).
+export const LOCALE_URL_PREFIX_CODES: string[] = LOCALES
+  .map((l) => l.code)
+  .filter((code) => code !== LOCALE_ET);
+
+// ─── Analytics ───────────────────────────────────────────────────────────────
+// Matches `/events/:id` (bare or locale-prefixed, e.g. `/en/events/:id`) so
+// Vercel Analytics groups all event detail views under one route instead of
+// one row per event id — the locale prefix itself is captured (group 1) and
+// kept by maskAnalyticsUrl's replacement, so en/et/ru still group separately.
+// Applied to a pathname with query/hash already stripped (see
+// maskAnalyticsUrl in utils.ts).
+const _LOCALE_PREFIX_RE_SRC = `(/(?:${LOCALE_URL_PREFIX_CODES.join('|')}))?`;
+export const ANALYTICS_EVENT_PATH_RE = new RegExp(`^${_LOCALE_PREFIX_RE_SRC}/events/\\d+$`);
+// Groups every organizer edit-form URL under one analytics row, mirroring
+// ANALYTICS_EVENT_PATH_RE above — same rationale, new dynamic route.
+export const ANALYTICS_ORGANIZER_EDIT_PATH_RE = new RegExp(`^${_LOCALE_PREFIX_RE_SRC}/organizer/events/\\d+/edit$`);
 
 // ─── Events / feedback ───────────────────────────────────────────────────────
 export type Signal = 'like' | 'dislike' | 'bookmark';

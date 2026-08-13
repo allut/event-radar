@@ -65,6 +65,15 @@ export function getLocale(): string {
   const stored = localStorage.getItem(LOCALE_KEY);
   return LOCALES.some((l) => l.code === stored) ? stored! : LOCALES[0].code;
 }
+// Raw stored locale preference, or null if never explicitly set — unlike
+// getLocale(), this doesn't fall back to LOCALES[0] ('en'). The locale-routing
+// wrapper (App.tsx) needs to tell "no preference yet" apart from "explicitly
+// en", since only an explicit non-Estonian preference should redirect a bare
+// URL — a first-time visitor with no preference must land on Estonian.
+export function getStoredLocale(): string | null {
+  const stored = localStorage.getItem(LOCALE_KEY);
+  return LOCALES.some((l) => l.code === stored) ? stored : null;
+}
 export function setLocale(l: string): void {
   localStorage.setItem(LOCALE_KEY, l);
   emitLocaleChange();

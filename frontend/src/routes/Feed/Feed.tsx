@@ -20,7 +20,7 @@ interface FeedResponse {
 }
 
 export default function Feed() {
-  const { locale, handleLocaleChange } = useLocaleMutation();
+  const { locale, handleLocaleChange } = useLocaleMutation({ publicRoute: true });
   const handleLogout = useLogout();
 
   const { data, isLoading, isError } = useQuery({
