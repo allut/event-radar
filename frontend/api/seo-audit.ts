@@ -16,12 +16,32 @@
  * or every request here gets proxied to the backend and 404s instead of
  * running this function.
  */
-import type { VercelRequest, VercelResponse } from '@vercel/node';
+import type { IncomingMessage, ServerResponse } from 'node:http';
 import { StatusCodes } from 'http-status-codes';
 import { PRODUCTION_ORIGIN, SEO_AUDIT_TOKEN_HEADER } from '../src/constants';
 import { evaluateLiveAudit, parseSitemapEventUrls } from '../src/lib/seoAudit';
 import { reportAuditFailure, reportAuditRecovery } from '../src/lib/seoAuditIssue';
 import { isValidAuditToken } from '../src/lib/seoAuditAuth';
+
+/**
+ * Minimal stand-in for `@vercel/node`'s request/response types. That package is
+ * the platform's own build toolchain (21 MB, and the sole source of every
+ * `npm audit` finding in this tree) and Vercel supplies it at build time —
+ * listing it locally bought nothing but these two type names, so it was
+ * dropped. `@types/node` is already a devDependency, so the shim costs no new
+ * package. Structurally identical to the real types for the members declared
+ * here; only the members this file (or a plausible sibling) touches are
+ * modelled. If a second function lands under `api/`, lift these into
+ * `frontend/api/vercel.ts` rather than copying them.
+ */
+type VercelRequest = IncomingMessage & {
+  query: Record<string, string | string[]>;
+  body: unknown;
+};
+type VercelResponse = ServerResponse & {
+  status(code: number): VercelResponse;
+  json(body: unknown): VercelResponse;
+};
 
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   const expectedToken = process.env.SEO_AUDIT_TOKEN;
