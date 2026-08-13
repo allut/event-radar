@@ -8,6 +8,7 @@ import { useLocaleMutation } from '../../hooks/useLocaleMutation';
 import { useMagicLinkRequest } from '../../hooks/useMagicLinkRequest';
 import { useOrganizerAuth } from '../../hooks/useOrganizerAuth';
 import { useSeoMeta } from '../../hooks/useSeoMeta';
+import { buildWebsiteJsonLd } from '../../lib/structuredData';
 import TopBar from '../../components/TopBar';
 import EventCard, { type EventData } from '../../components/EventCard';
 import SeoTags from '../../components/SeoTags';
@@ -69,6 +70,7 @@ export default function Landing() {
     description: t('seo_landing_description', locale),
     image: `${PRODUCTION_ORIGIN}${OG_FALLBACK_IMAGE_PATH}`,
   });
+  const jsonLd = buildWebsiteJsonLd(locale);
 
   const { data, isError } = useQuery({
     queryKey: [QUERY_KEYS.showcase, locale],
@@ -80,7 +82,7 @@ export default function Landing() {
 
   return (
     <div className={styles.page}>
-      <SeoTags meta={seoMeta} />
+      <SeoTags meta={seoMeta} jsonLd={jsonLd} />
       <TopBar locale={locale} onLocaleChange={handleLocaleChange} authed={false} />
 
       <main>

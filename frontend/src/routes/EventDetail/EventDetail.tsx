@@ -9,6 +9,7 @@ import { useLocaleMutation } from '../../hooks/useLocaleMutation';
 import { useLogout } from '../../hooks/useLogout';
 import { useToast } from '../../hooks/useToast';
 import { useSeoMeta } from '../../hooks/useSeoMeta';
+import { buildEventJsonLd } from '../../lib/structuredData';
 import { type EventData } from '../../components/EventCard';
 import FeedbackButtonRow from '../../components/FeedbackButtonRow';
 import PageState from '../../components/PageState';
@@ -73,6 +74,7 @@ export default function EventDetail() {
     description: data && data.why_go.length > 0 ? truncateForMeta(data.why_go.join('. '), SEO_DESCRIPTION_MAX_LENGTH) : undefined,
     image: data ? (safeUrl(data.image_url) ?? `${PRODUCTION_ORIGIN}${OG_FALLBACK_IMAGE_PATH}`) : undefined,
   });
+  const jsonLd = useMemo(() => (data ? buildEventJsonLd(data) : undefined), [data]);
 
   function handleTicketsClick() {
     if (!data || !authed) return;
@@ -128,7 +130,7 @@ export default function EventDetail() {
 
   return (
     <div className={styles.page}>
-      <SeoTags meta={seoMeta} />
+      <SeoTags meta={seoMeta} jsonLd={jsonLd} />
       {toast.status !== UI_STATE.idle && <Toast status={toast.status} message={toast.message} />}
       <TopBar
         locale={locale}
