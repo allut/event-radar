@@ -15,7 +15,7 @@ Deep-dive docs live in `docs/` and are **not** auto-loaded — read the relevant
 | `docs/pipeline.md` | `app/ingestion/`, `app/dedup/`, `app/llm/`, `app/publish.py`, `app/ranking/`, `app/routers/browse.py`, `app/routers/public.py`, `app/routers/feedback.py` |
 | `docs/security.md` | `app/main.py`, `app/rate_limit.py`, `app/routers/auth.py`, `app/routers/organizer_auth.py`, `app/routers/utils.py`, `app/ingestion/http_client.py`, or any new endpoint |
 | `docs/backend-ops.md` | `render.yaml`, `frontend/vercel.json`, `app/routers/admin.py`, `app/cleanup.py`, `app/logging_config.py`, `backend/scripts/` |
-| `docs/frontend.md` | `frontend/src/routes/`, `frontend/src/components/`, `frontend/src/hooks/`, `frontend/src/lib/`, `shared/i18n/`, `backend/app/email/` |
+| `docs/frontend.md` | `frontend/src/routes/`, `frontend/src/components/`, `frontend/src/hooks/`, `frontend/src/lib/`, `frontend/scripts/`, `shared/i18n/`, `backend/app/email/` |
 | `docs/conventions.md` | the *why* behind a Code Quality Rule below (full rationale + examples) |
 | `docs/data-model.md` | writing a migration, a query touching a new column, or a serializer |
 | `docs/organizer-portal.md` | `app/routers/organizer_auth.py`, `app/routers/organizer_events.py`, `frontend/src/routes/EventSubmit/` |

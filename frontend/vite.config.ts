@@ -6,6 +6,16 @@ import react from '@vitejs/plugin-react';
 // server's own bind address.
 const BACKEND_TARGET = 'http://127.0.0.1:8000';
 
+// `vite preview`'s target during the prerender build step (scripts/prerender.ts) —
+// there's no dev server proxy at that point, so the built SPA's same-origin
+// `/api` fetches need a real backend to hit. Defaults to the same Render origin
+// vercel.json's `/api/:path*` rewrite already points at in production;
+// overridable via env for a local dry run against a different backend.
+// Exported (not just used below) so scripts/prerender.ts's own direct
+// `fetch()` calls to the backend share this exact value instead of
+// redeclaring the same literal a second place to keep in sync by hand.
+export const PRERENDER_BACKEND_TARGET = process.env.PRERENDER_API_ORIGIN ?? 'https://event-radar-api.onrender.com';
+
 export default defineConfig({
   plugins: [react()],
   server: {
@@ -38,6 +48,19 @@ export default defineConfig({
       '/openapi.json': {
         target: BACKEND_TARGET,
         changeOrigin: true,
+      },
+    },
+  },
+  preview: {
+    // Mirrors `server.proxy`'s `/api` rewrite so scripts/prerender.ts's
+    // `vite preview` instance (serving the built dist/ for Playwright to
+    // navigate) can resolve the same-origin `/api` fetches the SPA makes —
+    // against the real backend, not localhost:8000.
+    proxy: {
+      '/api': {
+        target: PRERENDER_BACKEND_TARGET,
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api/, ''),
       },
     },
   },
