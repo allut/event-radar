@@ -28,7 +28,7 @@
  */
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { JSDOM } from 'jsdom';
 import { chromium, type Browser, type Page } from 'playwright';
 import { preview, type PreviewServer } from 'vite';
@@ -47,6 +47,8 @@ import { compareEventStaleness, parseSnapshotHtml, validateSnapshotStructure } f
 import { createBudgetedCursor, prioritizeRenderQueue } from '../src/lib/prerenderQueue';
 import {
   buildRoundMarker,
+  isChainDepthExceeded,
+  isZeroProgress,
   parseRoundMarker,
   resolveRoundContext,
   serializeRoundMarker,
@@ -453,15 +455,18 @@ async function validateTarget(target: PrerenderTarget): Promise<string[]> {
  * marker embedded in the message changes), so this is effectively an empty
  * commit. No-ops with a log line (not a build failure) when
  * GH_PRERENDER_CHAIN_TOKEN/VERCEL_GIT_COMMIT_REF aren't set, e.g. local/dev
- * builds off Vercel. */
-async function commitRoundMarker(marker: RoundMarker): Promise<void> {
+ * builds off Vercel — returns `false` in that case (as opposed to throwing,
+ * its failure path) so callers that must not proceed without a real ref
+ * advance (see maybeFireDeployHook/main()) can tell "nothing was committed"
+ * apart from "the commit succeeded". */
+async function commitRoundMarker(marker: RoundMarker): Promise<boolean> {
   const token = process.env.GH_PRERENDER_CHAIN_TOKEN;
   const branch = process.env.VERCEL_GIT_COMMIT_REF;
   if (!token || !branch) {
     console.log(
       'prerender: GH_PRERENDER_CHAIN_TOKEN/VERCEL_GIT_COMMIT_REF not set — skipping round-marker commit (not a Vercel build)',
     );
-    return;
+    return false;
   }
 
   const headers = {
@@ -512,6 +517,72 @@ async function commitRoundMarker(marker: RoundMarker): Promise<void> {
     );
   }
   console.log(`prerender: committed round marker ${newSha} to ${branch} — ${summary}`);
+  return true;
+}
+
+/** Fires the chain Deploy Hook to trigger the next round (issue #84) — the
+ * self-triggering half of the chaining loop; `commitRoundMarker` above is
+ * what carries state between rounds. Only ever POSTs for a genuinely
+ * `continuing` marker: `buildRoundMarker` has already folded the
+ * chain-depth cap and the zero-progress check into `marker.status`, so this
+ * only needs to branch on that one field rather than re-deriving either
+ * check itself. Callers must call this only once `commitRoundMarker` has
+ * returned `true` (i.e. actually advanced the git ref — see main()), never
+ * on its `false`/no-op or thrown-error paths: firing the hook without a
+ * real marker commit both risks Vercel's same-version-cancellation behavior
+ * killing the round that just triggered it, and — since the next build's
+ * resume logic only sees a chain via a committed marker — silently defeats
+ * the chain-depth cap by never incrementing the round counter it depends on.
+ *
+ * Logs at WARNING (round/burst context, no separate admin alert per the
+ * spec) specifically when this round was forced to `done` by the
+ * zero-progress abort — `queueRemaining > 0` and not already
+ * `isChainDepthExceeded` is what distinguishes that genuinely-stuck case
+ * from a `done` round that naturally emptied its queue (nothing needed
+ * rendering to begin with, also `newlyRendered === 0` but nothing to warn
+ * about) or hit the chain-depth cap (an expected, routine outcome, not a
+ * stuck catalog, even on the rare round that also rendered nothing new).
+ *
+ * No-ops (does not throw) when PRERENDER_CHAIN_DEPLOY_HOOK_URL isn't set,
+ * mirroring commitRoundMarker's local/dev graceful-skip pattern. A POST
+ * failure is likewise logged and swallowed rather than failing the build —
+ * every snapshot already rendered and passed validation, so the deploy
+ * itself is good; the only cost of a lost hook fire is the chain stalling
+ * until the next 6-hourly cron tick picks it up instead of self-triggering
+ * (the collision guard in issue #83's resume logic treats that the same as
+ * any other fresh-burst start). */
+export async function maybeFireDeployHook(marker: RoundMarker): Promise<void> {
+  if (marker.status !== 'continuing') {
+    if (isZeroProgress(marker) && marker.queueRemaining > 0 && !isChainDepthExceeded(marker.round)) {
+      console.warn(
+        `prerender: zero-progress abort — round ${marker.round} of burst ${marker.burstId} rendered 0 new routes with ${marker.queueRemaining} route(s) still queued; chain forced to done, not firing Deploy Hook`,
+      );
+    }
+    return;
+  }
+
+  const url = process.env.PRERENDER_CHAIN_DEPLOY_HOOK_URL;
+  if (!url) {
+    console.log(
+      'prerender: PRERENDER_CHAIN_DEPLOY_HOOK_URL not set — skipping chain Deploy Hook (not a Vercel build, or chaining disabled)',
+    );
+    return;
+  }
+
+  try {
+    const res = await fetch(url, { method: 'POST' });
+    if (!res.ok) {
+      throw new Error(`${res.status} ${res.statusText}`);
+    }
+    console.log(
+      `prerender: fired chain Deploy Hook for round ${marker.round + 1} of burst ${marker.burstId}`,
+    );
+  } catch (error) {
+    console.error(
+      'prerender: failed to fire chain Deploy Hook — chain will resume via the next cron tick instead:',
+      error,
+    );
+  }
 }
 
 async function main(): Promise<void> {
@@ -695,14 +766,29 @@ async function main(): Promise<void> {
     { newlyRendered, copiedForward, queueRemaining: skippedTargets.length },
     new Date(),
   );
+  // Deploy Hook chaining (issue #84): fired only when commitRoundMarker
+  // actually advanced the git ref (returned `true`) — never on its
+  // `false`/no-op (missing token/branch, e.g. local/dev) or thrown-error
+  // paths. See maybeFireDeployHook's doc comment for why firing against a
+  // commit that never happened is unsafe. If the commit was skipped or
+  // failed, the chain simply resumes via the next 6-hourly cron tick instead
+  // of self-triggering (same degraded-not-broken fallback as a lost marker
+  // commit).
   try {
-    await commitRoundMarker(marker);
+    const committed = await commitRoundMarker(marker);
+    if (committed) {
+      await maybeFireDeployHook(marker);
+    }
   } catch (error) {
     console.error('prerender: failed to commit round marker — deploy proceeds anyway:', error);
   }
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exit(1);
-});
+const isMainModule =
+  process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href;
+if (isMainModule) {
+  main().catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });
+}
