@@ -30,7 +30,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { JSDOM } from 'jsdom';
-import { chromium, type Page } from 'playwright';
+import { chromium, type Browser, type Page } from 'playwright';
 import { preview, type PreviewServer } from 'vite';
 import type { EventData } from '../src/components/EventCard';
 import {
@@ -304,6 +304,37 @@ function outputFilePath(bare: string, locale: string): string {
   return path.join(DIST_DIR, relDir, 'index.html');
 }
 
+/**
+ * On Vercel, launches `@sparticuz/chromium` explicitly rather than falling
+ * through to Playwright-bundled Chromium (issue #87, reusing Wave 1's fix
+ * from issue #72). `vercel build` sets `VERCEL` just like a deployed
+ * Function, but this script only ever runs during the build step, never as a
+ * Function — left alone, `@sparticuz/chromium`'s `isRunningInAmazonLinux2023`
+ * treats `VERCEL`'s presence as proof of a deployed Lambda runtime and points
+ * `LD_LIBRARY_PATH`/extracts AL2023 libs that don't apply to the build
+ * sandbox, hanging the launch. Hiding `VERCEL` for the duration of the import
+ * and `executablePath()` call keeps that detection truthful for a build
+ * context. Off Vercel (local/dev, any OS), Playwright's own bundled Chromium
+ * is used unchanged — `@sparticuz/chromium`'s binary is Linux-only.
+ */
+async function launchBrowser(): Promise<Browser> {
+  if (!process.env.VERCEL) {
+    return chromium.launch();
+  }
+  const savedVercel = process.env.VERCEL;
+  delete process.env.VERCEL;
+  try {
+    const { default: sparticuzChromium } = await import('@sparticuz/chromium');
+    return await chromium.launch({
+      args: sparticuzChromium.args,
+      executablePath: await sparticuzChromium.executablePath(),
+      headless: true,
+    });
+  } finally {
+    process.env.VERCEL = savedVercel;
+  }
+}
+
 async function snapshotTarget(
   page: Page,
   previewOrigin: string,
@@ -548,7 +579,7 @@ async function main(): Promise<void> {
   let skippedTargets: PrerenderTarget[] = [];
   if (renderQueue.length > 0) {
     let server: PreviewServer | undefined;
-    const browser = await chromium.launch();
+    const browser = await launchBrowser();
     try {
       server = await preview({ preview: { port: 0, strictPort: false }, logLevel: 'warn' });
       const previewOrigin = server.resolvedUrls?.local[0]?.replace(/\/$/, '');
