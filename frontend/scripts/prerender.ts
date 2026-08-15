@@ -58,14 +58,50 @@ import { PRERENDER_BACKEND_TARGET } from '../vite.config';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DIST_DIR = path.resolve(__dirname, '../dist');
 const API_ORIGIN = PRERENDER_BACKEND_TARGET;
-const NAV_TIMEOUT_MS = 30_000;
-const CONTENT_READY_TIMEOUT_MS = 15_000;
+// Both timeouts are 3x wider on Vercel. Confirmed via local repro (same
+// @sparticuz/chromium binary, same real backend) that a page which renders
+// in ~3.6s off Vercel can still consistently blow past 15s on Vercel's
+// build machine — every attempted route timed out identically at both
+// concurrency 6 and concurrency 1 (RENDER_POOL_CONCURRENCY above), even the
+// static, no-data-dependency Landing route, which rules out contention or
+// backend latency as the sole cause and points at the shared/throttled
+// 2-core build machine simply running this single-process, software-
+// rendered (SwiftShader) Chromium slower across the board. Widening the
+// timeout costs throughput (fewer routes fit in the render budget per
+// round), which the render-budget/chaining mechanism (issues #82/#84)
+// already exists to absorb across rounds — a hard build failure from a
+// route that would have succeeded given a few more seconds is worse than a
+// slower round.
+const NAV_TIMEOUT_MS = process.env.VERCEL ? 90_000 : 30_000;
+const CONTENT_READY_TIMEOUT_MS = process.env.VERCEL ? 45_000 : 15_000;
 // Targets run through a bounded pool of pages rather than one at a time —
 // with a growing published-event catalog (three locale variants each), a
 // fully sequential run risks Vercel's Hobby-plan 45-minute build cap (see
 // docs/research/prerendering-approach.md). Bounded, not unbounded, mirroring
-// this repo's external-API fan-out convention (CLAUDE.md).
+// this repo's external-API fan-out convention (CLAUDE.md). Used by the
+// filesystem/`fetch()`-only validation pass below, which has no Chromium
+// involvement and so isn't subject to RENDER_POOL_CONCURRENCY's constraint.
 const PRERENDER_CONCURRENCY = 6;
+// Concurrency for the actual Playwright render pool (the `browser.newPage()`
+// pool in main(), below) — narrower than PRERENDER_CONCURRENCY on Vercel.
+// `@sparticuz/chromium`'s launch args always include `--single-process`
+// (required — Lambda's sandbox rejects the `prctl` calls a multi-process
+// Chromium needs), which forces every concurrently-open page through one OS
+// process/thread — multiple pages there compete for that one thread rather
+// than getting Chromium's normal per-page process isolation. (An earlier
+// version of this comment blamed that contention for routes failing in an
+// apparent simultaneous burst; that read the failure *logging* — which is
+// batched into one loop after the whole pool settles, not emitted live — as
+// the failures themselves happening at once. The real cause, confirmed by a
+// follow-up run at concurrency 1 that failed the exact same routes, is
+// CONTENT_READY_TIMEOUT_MS being too tight for Vercel's build machine
+// regardless of concurrency — see the timeout comment above.) Keeping this
+// at 1 on Vercel still avoids adding avoidable single-thread contention on
+// top of that base slowness; the render-budget/chaining mechanism (issues
+// #82/#84) covers the resulting lower single-round throughput across later
+// rounds. Off Vercel, Playwright's own bundled Chromium has no such
+// constraint, so this stays at PRERENDER_CONCURRENCY's original width.
+const RENDER_POOL_CONCURRENCY = process.env.VERCEL ? 1 : PRERENDER_CONCURRENCY;
 // GET /events/{id} is rate-limited server-side to RATE_LIMIT_EVENTS_DETAIL =
 // "120/minute" per IP (backend/app/constants.py) — every worker's build
 // machine shares one IP, so an unthrottled pool would eventually 429 as the
@@ -331,6 +367,31 @@ async function launchBrowser(): Promise<Browser> {
     executablePath: await sparticuzChromium.executablePath(),
     headless: true,
   });
+}
+
+/** Rolling buffer of a page's recent console/pageerror/requestfailed
+ * activity (issue #86 investigation) — three consecutive Vercel-only
+ * `waitForSelector` timeout theories (single-process contention, then a
+ * flat timeout bump) each failed to explain the next production run, always
+ * on the exact same routes including the static, no-fetch Landing page.
+ * Rather than guess a fourth time, capture what the page itself was doing
+ * when a render times out, so the next failure's log says what actually
+ * happened instead of just that it didn't. Attached once per page (workers
+ * reuse one page across many targets), capped so a long-lived page's buffer
+ * can't grow unbounded. */
+function attachPageDiagnostics(page: Page): () => string[] {
+  const MAX_EVENTS = 20;
+  const events: string[] = [];
+  const record = (line: string) => {
+    events.push(line);
+    if (events.length > MAX_EVENTS) events.shift();
+  };
+  page.on('console', (msg) => record(`console.${msg.type()}: ${msg.text().slice(0, 300)}`));
+  page.on('pageerror', (err) => record(`pageerror: ${String(err).slice(0, 300)}`));
+  page.on('requestfailed', (req) =>
+    record(`requestfailed: ${req.url()} — ${req.failure()?.errorText ?? 'unknown'}`),
+  );
+  return () => [...events];
 }
 
 async function snapshotTarget(
@@ -625,7 +686,11 @@ async function main(): Promise<void> {
   // else (never-rendered, changed, or a fetch/parse miss) renders fresh.
   const classification = await mapPool(targets, CHANGE_DETECTION_CONCURRENCY, classifyTarget);
   let copiedForward = 0;
-  const staleFallbackTargets = new Set<PrerenderTarget>();
+  // Stale-but-real fallback (issue #82) content, held in memory rather than
+  // written to dist/ yet — see the write-out below (after the render pool)
+  // for why. Keyed by target so a successfully-rendered or -failed target
+  // can drop its entry once the render loop has an answer for it either way.
+  const staleFallbackHtml = new Map<PrerenderTarget, string>();
   for (const { target, unchanged, liveHtml } of classification) {
     if (unchanged && liveHtml !== null) {
       const outPath = outputFilePath(target.bare, target.locale);
@@ -633,18 +698,26 @@ async function main(): Promise<void> {
       await writeFile(outPath, liveHtml, 'utf-8');
       copiedForward++;
     } else if (liveHtml !== null) {
-      // Needs a fresh render, but a live page exists — write it now as a
-      // provisional stale-but-real fallback (issue #82); snapshotTarget's
-      // writeFile below overwrites it in place if/when this route is
-      // actually reached within the render budget. Writing eagerly rather
-      // than holding every needs-render route's full live HTML in memory
-      // for the whole pass — with a growing catalog that's potentially
-      // hundreds of routes' worth of HTML kept around just in case the
-      // budget runs out before reaching them.
-      const outPath = outputFilePath(target.bare, target.locale);
-      await mkdir(path.dirname(outPath), { recursive: true });
-      await writeFile(outPath, liveHtml, 'utf-8');
-      staleFallbackTargets.add(target);
+      // Needs a fresh render, but a live page exists — held for now rather
+      // than written to its final path immediately (issue #86 investigation:
+      // an earlier version of this wrote it straight to outputFilePath()
+      // here, "eagerly" ahead of the render pool, on the theory that
+      // snapshotTarget's writeFile below would just overwrite it in place
+      // once the route was actually reached. In practice `vite preview`
+      // serves a literal file over its SPA fallback, so the moment this
+      // route's *own* Playwright render attempt navigated to it later in
+      // this same round, it loaded this stale page instead of the CSR shell
+      // — referencing a previous build's JS asset hash, which 404s against
+      // the current build's dist/assets/, so the app never mounts and the
+      // canonical-link wait times out. Every route with existing live
+      // content failed this way, permanently, regardless of concurrency or
+      // timeout width, until this was caught by attachPageDiagnostics
+      // surfacing the 404'd asset in a build log). Deferring the write until
+      // after the render pool — only for targets it never got to — keeps
+      // the memory benefit this was written for (not holding hundreds of
+      // routes' full HTML for the whole pass; entries are freed as the
+      // render loop resolves each one) without the self-sabotage.
+      staleFallbackHtml.set(target, liveHtml);
     }
   }
   // Priority queue (issue #82): home routes (all locales) first, then event
@@ -671,7 +744,7 @@ async function main(): Promise<void> {
       }
 
       const resolvedPreviewOrigin = previewOrigin;
-      const failures: { target: PrerenderTarget; error: unknown }[] = [];
+      const failures: { target: PrerenderTarget; error: unknown; diagnostics: string[] }[] = [];
       // Hard 10-minute (overridable) cap on this pool only (issue #82) — see
       // RENDER_BUDGET_MS. Started once the preview server/browser are up, so
       // the budget covers actual render time, not startup.
@@ -679,6 +752,7 @@ async function main(): Promise<void> {
       const cursor = createBudgetedCursor(renderQueue.length, deadline);
       async function worker(): Promise<void> {
         const page = await browser.newPage();
+        const recentEvents = attachPageDiagnostics(page);
         try {
           for (;;) {
             const i = cursor.next();
@@ -688,7 +762,12 @@ async function main(): Promise<void> {
               await snapshotTarget(page, resolvedPreviewOrigin, target);
               newlyRendered++;
             } catch (error) {
-              failures.push({ target, error });
+              failures.push({ target, error, diagnostics: recentEvents() });
+            } finally {
+              // No longer needed as a fallback either way: a success wrote a
+              // fresh snapshot over any stale content; a failure aborts the
+              // whole build below, so nothing further will ever read this.
+              staleFallbackHtml.delete(target);
             }
           }
         } finally {
@@ -696,16 +775,25 @@ async function main(): Promise<void> {
         }
       }
       await Promise.all(
-        Array.from({ length: Math.min(PRERENDER_CONCURRENCY, renderQueue.length) }, worker),
+        Array.from({ length: Math.min(RENDER_POOL_CONCURRENCY, renderQueue.length) }, worker),
       );
       skippedTargets = cursor.remaining().map((i) => renderQueue[i]);
 
       if (failures.length > 0) {
-        for (const { target, error } of failures) {
+        for (const { target, error, diagnostics } of failures) {
           console.error(
             `prerender: failed to render ${localizedPath(target.bare, target.locale)} —`,
             error,
           );
+          if (diagnostics.length > 0) {
+            console.error(
+              `prerender: recent page activity for ${localizedPath(target.bare, target.locale)}:\n  ${diagnostics.join('\n  ')}`,
+            );
+          } else {
+            console.error(
+              `prerender: no page console/network activity recorded for ${localizedPath(target.bare, target.locale)} before it timed out.`,
+            );
+          }
         }
         throw new Error(
           `prerender: ${failures.length}/${renderQueue.length} route(s) failed to render — see errors above`,
@@ -722,12 +810,21 @@ async function main(): Promise<void> {
   }
 
   // Stale-but-real fallback (issue #82): a route skipped this round because
-  // the budget ran out already has its last-known-good live page written
-  // (eagerly, in the classification loop above), if one existed. A route
-  // with no live page at all (never rendered before) has nothing on disk,
-  // which falls through to the CSR shell via vercel.json's catch-all
-  // rewrite rather than a build failure — see outputFilePath/vercel.json.
-  const staleFallbackWritten = skippedTargets.filter((target) => staleFallbackTargets.has(target)).length;
+  // the budget ran out gets its last-known-good live page written now, if
+  // one existed (held in staleFallbackHtml above — see that block for why
+  // this write is deferred to here instead of happening ahead of the render
+  // pool). A route with no live page at all (never rendered before) has
+  // nothing on disk, which falls through to the CSR shell via vercel.json's
+  // catch-all rewrite rather than a build failure — see outputFilePath/vercel.json.
+  let staleFallbackWritten = 0;
+  for (const target of skippedTargets) {
+    const liveHtml = staleFallbackHtml.get(target);
+    if (liveHtml === undefined) continue;
+    const outPath = outputFilePath(target.bare, target.locale);
+    await mkdir(path.dirname(outPath), { recursive: true });
+    await writeFile(outPath, liveHtml, 'utf-8');
+    staleFallbackWritten++;
+  }
 
   console.log(
     `prerender: round summary — newly-rendered ${newlyRendered}, copied-forward ${copiedForward}, queue-remaining ${skippedTargets.length} (${staleFallbackWritten} of those still serving stale-but-real content)`,
