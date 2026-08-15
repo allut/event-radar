@@ -42,6 +42,7 @@ import {
 } from '../src/constants';
 import { localizedPath } from '../src/lib/urlLocale';
 import { compareEventStaleness, parseSnapshotHtml, validateSnapshotStructure } from '../src/lib/seoValidation';
+import { createBudgetedCursor, prioritizeRenderQueue } from '../src/lib/prerenderQueue';
 import { PRERENDER_BACKEND_TARGET } from '../vite.config';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -75,6 +76,27 @@ const CHANGE_DETECTION_CONCURRENCY = 6;
 // (assertEventJsonLd only checks for required fields) and Google/consumers
 // ignore unrecognized properties.
 const CHANGE_MARKER_JSONLD_FIELD = 'dateModified';
+// Hard wall-clock cap on the Playwright render pass only (issue #82) —
+// excludes tsc/vite build and the in-build validation gate below, both of
+// which run outside main()'s render-pool block. A round that hits this cap
+// stops handing out new routes; unreached routes keep serving whatever's
+// already live (copy-forward doubles as the "stale but real" fallback) or,
+// for a route that's never been rendered at all, the CSR shell that
+// vercel.json's catch-all rewrite falls back to. Overridable so the
+// stop-at-cap behavior is verifiable without a real 10-minute wait (e.g.
+// `PRERENDER_RENDER_BUDGET_MINUTES=0 npm run build`).
+const DEFAULT_RENDER_BUDGET_MINUTES = 10;
+const RENDER_BUDGET_MS = (() => {
+  const raw = process.env.PRERENDER_RENDER_BUDGET_MINUTES;
+  if (raw === undefined) return DEFAULT_RENDER_BUDGET_MINUTES * 60_000;
+  const minutes = Number(raw);
+  if (!Number.isFinite(minutes) || minutes < 0) {
+    throw new Error(
+      `prerender: PRERENDER_RENDER_BUDGET_MINUTES must be a non-negative number, got ${JSON.stringify(raw)}`,
+    );
+  }
+  return minutes * 60_000;
+})();
 
 interface PrerenderTarget {
   /** Bare (Estonian) ROUTES.* path, before locale-prefixing. */
@@ -186,34 +208,46 @@ function extractChangeMarker(html: string): string | null {
 
 interface ChangeDetectionResult {
   target: PrerenderTarget;
-  /** Live production HTML to copy forward as-is, or null to render fresh. */
-  copyForwardHtml: string | null;
+  /** True when the live page's embedded marker matches — the Playwright
+   * render is skipped entirely and `liveHtml` copied forward as-is. */
+  unchanged: boolean;
+  /** The target's currently-live production HTML, if a page exists there at
+   * all (null on fetch failure or a non-2xx, typically 404 for a route
+   * that's never been rendered). Used as-is when `unchanged`; also kept
+   * around as the stale-but-real fallback (issue #82) for a route that
+   * *does* need a fresh render but the render budget runs out before
+   * reaching it — copying the last-known-good page forward beats leaving
+   * the route with nothing this round. A route with no live page at all
+   * (null here) falls through to the CSR shell via vercel.json's catch-all
+   * rewrite instead. */
+  liveHtml: string | null;
 }
 
 /** Change detection (issue #80): fetches `target`'s currently-live
  * production page and diffs its embedded marker against `target.updatedAt`.
- * Copies forward (skips the Playwright render) only on an exact match — a
- * non-2xx response (typically 404) means the route has never been rendered
- * before, which renders fresh rather than copying forward. Home routes have
- * no Event.updated_at to diff against, so they always render fresh. */
+ * `unchanged` is true only on an exact marker match — home routes have no
+ * Event.updated_at to diff against, so they're never `unchanged` and always
+ * render fresh. They still go through this fetch (issue #82): a home route
+ * always renders first (highest queue priority), but if the render budget
+ * is small enough to strand even it, `liveHtml` is what lets it copy
+ * forward its own last-known-good page instead of falling through to the
+ * CSR shell — the same stale-but-real fallback every event route gets. */
 async function classifyTarget(target: PrerenderTarget): Promise<ChangeDetectionResult> {
-  if (target.eventId === undefined || target.updatedAt === undefined) {
-    return { target, copyForwardHtml: null };
-  }
   const url = `${PRODUCTION_ORIGIN}${localizedPath(target.bare, target.locale)}`;
   let res: Response;
   try {
     res = await fetch(url);
   } catch {
-    return { target, copyForwardHtml: null };
+    return { target, unchanged: false, liveHtml: null };
   }
-  if (!res.ok) return { target, copyForwardHtml: null };
+  if (!res.ok) return { target, unchanged: false, liveHtml: null };
   const html = await res.text();
-  const liveMarker = extractChangeMarker(html);
-  if (liveMarker !== null && liveMarker === target.updatedAt) {
-    return { target, copyForwardHtml: html };
+  if (target.eventId === undefined || target.updatedAt === undefined) {
+    return { target, unchanged: false, liveHtml: html };
   }
-  return { target, copyForwardHtml: null };
+  const liveMarker = extractChangeMarker(html);
+  const unchanged = liveMarker !== null && liveMarker === target.updatedAt;
+  return { target, unchanged, liveHtml: html };
 }
 
 /** sitemap.xml for `targets` (issue #51) — one `<url>` per locale-variant
@@ -383,21 +417,34 @@ async function main(): Promise<void> {
   // else (never-rendered, changed, or a fetch/parse miss) renders fresh.
   const classification = await mapPool(targets, CHANGE_DETECTION_CONCURRENCY, classifyTarget);
   let copiedForward = 0;
-  for (const { target, copyForwardHtml } of classification) {
-    if (copyForwardHtml === null) continue;
-    const outPath = outputFilePath(target.bare, target.locale);
-    await mkdir(path.dirname(outPath), { recursive: true });
-    await writeFile(outPath, copyForwardHtml, 'utf-8');
-    copiedForward++;
+  const staleFallbackHtml = new Map<PrerenderTarget, string>();
+  for (const { target, unchanged, liveHtml } of classification) {
+    if (unchanged && liveHtml !== null) {
+      const outPath = outputFilePath(target.bare, target.locale);
+      await mkdir(path.dirname(outPath), { recursive: true });
+      await writeFile(outPath, liveHtml, 'utf-8');
+      copiedForward++;
+    } else if (liveHtml !== null) {
+      // Needs a fresh render, but a live page exists — kept as the
+      // stale-but-real fallback (issue #82) in case the render budget runs
+      // out before this route is reached this round.
+      staleFallbackHtml.set(target, liveHtml);
+    }
   }
-  const renderTargets = classification
-    .filter(({ copyForwardHtml }) => copyForwardHtml === null)
-    .map(({ target }) => target);
+  // Priority queue (issue #82): home routes (all locales) first, then event
+  // routes oldest-unrendered-first — so a large event backlog can never
+  // starve the highest-traffic pages, and among event routes the
+  // longest-stale one always gets budget before a newer one.
+  const renderQueue = prioritizeRenderQueue(classification
+    .filter(({ unchanged }) => !unchanged)
+    .map(({ target }) => target));
   console.log(
-    `prerender: copied forward ${copiedForward}/${targets.length} unchanged route(s), rendering ${renderTargets.length}`,
+    `prerender: copied forward ${copiedForward}/${targets.length} unchanged route(s), rendering ${renderQueue.length}`,
   );
 
-  if (renderTargets.length > 0) {
+  let newlyRendered = 0;
+  let skippedTargets: PrerenderTarget[] = [];
+  if (renderQueue.length > 0) {
     let server: PreviewServer | undefined;
     const browser = await chromium.launch();
     try {
@@ -409,14 +456,21 @@ async function main(): Promise<void> {
 
       const resolvedPreviewOrigin = previewOrigin;
       const failures: { target: PrerenderTarget; error: unknown }[] = [];
-      let cursor = 0;
+      // Hard 10-minute (overridable) cap on this pool only (issue #82) — see
+      // RENDER_BUDGET_MS. Started once the preview server/browser are up, so
+      // the budget covers actual render time, not startup.
+      const deadline = Date.now() + RENDER_BUDGET_MS;
+      const cursor = createBudgetedCursor(renderQueue.length, deadline);
       async function worker(): Promise<void> {
         const page = await browser.newPage();
         try {
-          while (cursor < renderTargets.length) {
-            const target = renderTargets[cursor++];
+          for (;;) {
+            const i = cursor.next();
+            if (i === null) break;
+            const target = renderQueue[i];
             try {
               await snapshotTarget(page, resolvedPreviewOrigin, target);
+              newlyRendered++;
             } catch (error) {
               failures.push({ target, error });
             }
@@ -426,8 +480,9 @@ async function main(): Promise<void> {
         }
       }
       await Promise.all(
-        Array.from({ length: Math.min(PRERENDER_CONCURRENCY, renderTargets.length) }, worker),
+        Array.from({ length: Math.min(PRERENDER_CONCURRENCY, renderQueue.length) }, worker),
       );
+      skippedTargets = cursor.remaining().map((i) => renderQueue[i]);
 
       if (failures.length > 0) {
         for (const { target, error } of failures) {
@@ -437,11 +492,11 @@ async function main(): Promise<void> {
           );
         }
         throw new Error(
-          `prerender: ${failures.length}/${renderTargets.length} route(s) failed to render — see errors above`,
+          `prerender: ${failures.length}/${renderQueue.length} route(s) failed to render — see errors above`,
         );
       }
 
-      console.log(`prerender: wrote ${renderTargets.length} snapshot(s) to ${DIST_DIR}`);
+      console.log(`prerender: wrote ${newlyRendered} snapshot(s) to ${DIST_DIR}`);
     } finally {
       await browser.close();
       await server?.close();
@@ -450,11 +505,41 @@ async function main(): Promise<void> {
     console.log('prerender: no routes require rendering — every route was copied forward');
   }
 
+  // Stale-but-real fallback (issue #82): a route skipped this round because
+  // the budget ran out still gets its last-known-good live page copied
+  // forward, if one exists. A route with no live page at all (never
+  // rendered before) gets nothing written here, which falls through to the
+  // CSR shell via vercel.json's catch-all rewrite rather than a build
+  // failure — see outputFilePath/vercel.json.
+  let staleFallbackWritten = 0;
+  for (const target of skippedTargets) {
+    const html = staleFallbackHtml.get(target);
+    if (html === undefined) continue;
+    const outPath = outputFilePath(target.bare, target.locale);
+    await mkdir(path.dirname(outPath), { recursive: true });
+    await writeFile(outPath, html, 'utf-8');
+    staleFallbackWritten++;
+  }
+
+  console.log(
+    `prerender: round summary — newly-rendered ${newlyRendered}, copied-forward ${copiedForward}, queue-remaining ${skippedTargets.length} (${staleFallbackWritten} of those still serving stale-but-real content)`,
+  );
+  if (skippedTargets.length > 0) {
+    console.log(
+      `prerender: hit the render budget with ${skippedTargets.length} route(s) still queued — they keep serving their previously-live content (or the CSR shell, if never rendered) until a later round/cadence tick.`,
+    );
+  }
+
   // In-build validation gate (issue #53) — runs immediately after every
   // snapshot has been written, blocking the deploy (non-zero exit) on a
-  // structural or non-staleness violation.
+  // structural or non-staleness violation. Routes skipped this round because
+  // the render budget ran out (issue #82) never got a snapshot written, so
+  // they're excluded here rather than failing validation for something this
+  // round never attempted.
+  const skippedTargetSet = new Set(skippedTargets);
+  const validationTargets = targets.filter((target) => !skippedTargetSet.has(target));
   const validationIssues: string[] = [];
-  await runPool(targets, PRERENDER_CONCURRENCY, async (target) => {
+  await runPool(validationTargets, PRERENDER_CONCURRENCY, async (target) => {
     validationIssues.push(...(await validateTarget(target)));
   });
   if (validationIssues.length > 0) {
@@ -465,7 +550,7 @@ async function main(): Promise<void> {
       `prerender: ${validationIssues.length} snapshot validation issue(s) — see errors above`,
     );
   }
-  console.log(`prerender: validated ${targets.length} snapshot(s), no issues found`);
+  console.log(`prerender: validated ${validationTargets.length} snapshot(s), no issues found`);
 }
 
 main().catch((error) => {
