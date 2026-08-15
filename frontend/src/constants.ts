@@ -129,6 +129,20 @@ export const GITHUB_API_BASE_URL = 'https://api.github.com';
 // the backend's /internal/tick pattern (docs/backend-ops.md).
 export const SEO_AUDIT_TOKEN_HEADER = 'x-internal-token';
 
+// ─── Prerender chaining (issue #79/#81) ────────────────────────────────────
+// Round-state marker embedded in the git commit message (VERCEL_GIT_COMMIT_MESSAGE
+// has a 2048-byte cap) a chained round reads back on the next round/cron tick —
+// see src/lib/prerenderChain.ts.
+export const CHAIN_MARKER_PREFIX = 'prerender-chain:';
+// Worst-case ~100 minutes wall-clock at the 10-minute render budget per round,
+// sized with margin against the throughput research's 5–7-round cold-catch-up
+// estimate. Fixed, not dynamic — a pathological catalog can't chain forever.
+export const CHAIN_MAX_ROUNDS = 10;
+// A `continuing` marker older than this is treated as a crashed/abandoned
+// chain rather than an active one, so cron resumes instead of skipping
+// forever and a genuinely active chain isn't mistaken for a stale one.
+export const CHAIN_STALENESS_TIMEOUT_MINUTES = 30;
+
 // ─── Analytics ───────────────────────────────────────────────────────────────
 // Matches `/events/:id` (bare or locale-prefixed, e.g. `/en/events/:id`) so
 // Vercel Analytics groups all event detail views under one route instead of
@@ -286,9 +300,12 @@ export const MIN_HOUR = 0;
 export const MAX_HOUR = HOURS_PER_DAY - 1;
 export const MIN_MINUTE = 0;
 export const MAX_MINUTE = MINUTES_PER_HOUR - 1;
+// Milliseconds in a minute — divides a millisecond timestamp delta down to
+// minutes, e.g. for CHAIN_STALENESS_TIMEOUT_MINUTES's staleness comparison.
+export const MS_PER_MINUTE = 60 * 1000;
 // Milliseconds in an hour — divides a millisecond timestamp delta down to
 // hours, e.g. for SEO_AUDIT_STALE_THRESHOLD_HOURS's staleness comparison.
-export const MS_PER_HOUR = MINUTES_PER_HOUR * 60 * 1000;
+export const MS_PER_HOUR = MINUTES_PER_HOUR * MS_PER_MINUTE;
 
 // Arrow-key increment/decrement step per time field.
 export const TIME_STEP_HOURS = 1;
