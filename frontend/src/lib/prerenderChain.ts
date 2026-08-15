@@ -128,6 +128,40 @@ export function isMarkerStale(marker: RoundMarker, now: Date): boolean {
   return ageMs > CHAIN_STALENESS_TIMEOUT_MINUTES * MS_PER_MINUTE;
 }
 
+export interface RoundStartDecision {
+  /** True when this build should exit immediately without rendering
+   * anything or committing a marker — see resolveRoundStart. */
+  skip: boolean;
+  burstId: string;
+  round: number;
+}
+
+/** Cron/self-trigger collision guard (issue #85) — the very first decision
+ * every build makes, before any rendering. A fresh (<CHAIN_STALENESS_TIMEOUT_MINUTES)
+ * `continuing` marker means a chain is already active in flight (its own
+ * self-triggered continuation, or another build reading the same in-flight
+ * state), so this build skips entirely rather than risk double-rendering.
+ * Anything else — missing, `done`, or a stale `continuing` marker (a
+ * crashed mid-chain build) — is "no active chain": this build proceeds as a
+ * normal round via resolveRoundContext.
+ *
+ * A stale `continuing` marker is deliberately not handed to
+ * resolveRoundContext as-is: that function always resumes on `continuing`
+ * regardless of age (by design — see its own tests, which resume even a
+ * very old marker), because staleness is this guard's responsibility, not
+ * resolveRoundContext's. So a stale marker is treated as absent here before
+ * handing off, starting a fresh burst instead of "resuming" a chain nothing
+ * is actually driving forward. */
+export function resolveRoundStart(commitMessage: string | null | undefined, now: Date): RoundStartDecision {
+  const marker = parseRoundMarker(commitMessage);
+  if (marker && marker.status === 'continuing' && !isMarkerStale(marker, now)) {
+    return { skip: true, burstId: marker.burstId, round: marker.round };
+  }
+  const effectiveMarker = marker && marker.status === 'continuing' ? null : marker;
+  const { burstId, round } = resolveRoundContext(effectiveMarker, now);
+  return { skip: false, burstId, round };
+}
+
 /** Determines which burst/round a build belongs to (issue #83), from the
  * marker (if any) parsed out of this build's VERCEL_GIT_COMMIT_MESSAGE.
  * Only a `continuing` marker resumes the same burst at `round + 1` — a
