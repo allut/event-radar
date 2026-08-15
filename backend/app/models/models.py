@@ -400,6 +400,17 @@ class Event(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
+    # Kept current by a DB trigger (migration 0027), not an ORM-level
+    # `onupdate` — most writers (dedup/classify/publish/geocode) bulk-UPDATE
+    # via SQLAlchemy Core, which bypasses ORM column defaults. The trigger
+    # only bumps this when a column other than detail_refetched_at/
+    # detail_refetch_count/geocode_attempted_at (pure sync-bookkeeping,
+    # written on every daily/6-hourly pass regardless of real change)
+    # actually changed, so the prerender pipeline's change-detection (issue
+    # #80) doesn't see a false "changed" marker on every ingestion pass.
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
     # Organizer direct-submission fields (Phase 1). NULL for every
     # scraper-ingested event. See CLAUDE.md Data Flow for the submit ->
     # inline classify -> inline publish -> post-hoc review lifecycle.

@@ -29,6 +29,7 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { JSDOM } from 'jsdom';
 import { chromium, type Page } from 'playwright';
 import { preview, type PreviewServer } from 'vite';
 import type { EventData } from '../src/components/EventCard';
@@ -61,6 +62,19 @@ const PRERENDER_CONCURRENCY = 6;
 // surfaces as a spurious render "failure" and aborts the whole build.
 // Capped comfortably under the server limit, shared across all workers.
 const EVENT_DETAIL_RATE_LIMIT_PER_MINUTE = 100;
+// Bounded pool for the change-detection fetch pass (issue #80) — real
+// GET requests against PRODUCTION_ORIGIN, one per event route, so this stays
+// bounded rather than unbounded, mirroring this repo's external-API fan-out
+// convention (CLAUDE.md). Separate from PRERENDER_CONCURRENCY/the rate gate
+// above since these are plain page fetches, not the rate-limited
+// GET /events/{id} endpoint.
+const CHANGE_DETECTION_CONCURRENCY = 6;
+// JSON-LD field the change-detection marker (derived from Event.updated_at)
+// is embedded under (issue #80). Not a real schema.org property of Event,
+// but an extra key here doesn't violate the structural validation gate
+// (assertEventJsonLd only checks for required fields) and Google/consumers
+// ignore unrecognized properties.
+const CHANGE_MARKER_JSONLD_FIELD = 'dateModified';
 
 interface PrerenderTarget {
   /** Bare (Estonian) ROUTES.* path, before locale-prefixing. */
@@ -69,6 +83,11 @@ interface PrerenderTarget {
   /** Set for /events/:id targets only — the in-build validation gate's
    * non-staleness check (validateTarget) uses it to re-fetch the live event. */
   eventId?: number;
+  /** ISO Event.updated_at (issue #80) — set alongside eventId only. The
+   * change-detection marker embedded in this route's JSON-LD and diffed
+   * against the currently-live production page's marker. Home routes carry
+   * no Event to diff against, so they're always rendered fresh. */
+  updatedAt?: string;
 }
 
 /** Simple sliding-window rate gate — `acquire()` resolves immediately while
@@ -98,27 +117,103 @@ class RateGate {
 
 const eventDetailRateGate = new RateGate(EVENT_DETAIL_RATE_LIMIT_PER_MINUTE, 60_000);
 
-async function fetchPublishedEventIds(): Promise<number[]> {
+interface PrerenderCandidate {
+  id: number;
+  /** ISO Event.updated_at — see PrerenderTarget.updatedAt (issue #80). */
+  updatedAt: string;
+}
+
+async function fetchPrerenderCandidates(): Promise<PrerenderCandidate[]> {
   const res = await fetch(`${API_ORIGIN}/public/prerender-events`);
   if (!res.ok) {
     throw new Error(
       `prerender: failed to fetch published events from ${API_ORIGIN}/public/prerender-events — ${res.status} ${res.statusText}`,
     );
   }
-  const body = (await res.json()) as { event_ids: number[] };
-  return body.event_ids;
+  const body = (await res.json()) as { events: { id: number; updated_at: string }[] };
+  return body.events.map((e) => ({ id: e.id, updatedAt: e.updated_at }));
 }
 
-function buildTargets(eventIds: number[]): PrerenderTarget[] {
+function buildTargets(candidates: PrerenderCandidate[]): PrerenderTarget[] {
   const localeCodes = LOCALES.map((l) => l.code);
   const targets: PrerenderTarget[] = [];
   for (const locale of localeCodes) {
     targets.push({ bare: ROUTES.home, locale });
-    for (const id of eventIds) {
-      targets.push({ bare: ROUTES.eventDetail(id), locale, eventId: id });
+    for (const candidate of candidates) {
+      targets.push({
+        bare: ROUTES.eventDetail(candidate.id),
+        locale,
+        eventId: candidate.id,
+        updatedAt: candidate.updatedAt,
+      });
     }
   }
   return targets;
+}
+
+/** Embeds `marker` under CHANGE_MARKER_JSONLD_FIELD in `html`'s single
+ * JSON-LD script (issue #80), at render time — after the page's real
+ * content (including its JSON-LD) has already been captured. Leaves `html`
+ * unchanged if there's no JSON-LD script or its body doesn't parse; the
+ * in-build validation gate below is what actually catches/blocks on that. */
+function embedChangeMarker(html: string, marker: string): string {
+  const dom = new JSDOM(html);
+  const script = dom.window.document.querySelector('script[type="application/ld+json"]');
+  if (script) {
+    try {
+      const data = JSON.parse(script.textContent ?? '{}') as Record<string, unknown>;
+      data[CHANGE_MARKER_JSONLD_FIELD] = marker;
+      script.textContent = JSON.stringify(data);
+    } catch {
+      // Malformed JSON-LD — leave untouched, validateTarget() catches it.
+    }
+  }
+  return dom.serialize();
+}
+
+/** Reads the change-detection marker back off a rendered snapshot's JSON-LD
+ * (issue #80) — used both to read the currently-live production page during
+ * change detection, and (via the same parseSnapshotHtml helper the in-build
+ * validation gate uses) to keep the two readers in agreement. */
+function extractChangeMarker(html: string): string | null {
+  const jsonLd = parseSnapshotHtml(html).jsonLd[0];
+  if (jsonLd && typeof jsonLd === 'object') {
+    const marker = (jsonLd as Record<string, unknown>)[CHANGE_MARKER_JSONLD_FIELD];
+    if (typeof marker === 'string') return marker;
+  }
+  return null;
+}
+
+interface ChangeDetectionResult {
+  target: PrerenderTarget;
+  /** Live production HTML to copy forward as-is, or null to render fresh. */
+  copyForwardHtml: string | null;
+}
+
+/** Change detection (issue #80): fetches `target`'s currently-live
+ * production page and diffs its embedded marker against `target.updatedAt`.
+ * Copies forward (skips the Playwright render) only on an exact match — a
+ * non-2xx response (typically 404) means the route has never been rendered
+ * before, which renders fresh rather than copying forward. Home routes have
+ * no Event.updated_at to diff against, so they always render fresh. */
+async function classifyTarget(target: PrerenderTarget): Promise<ChangeDetectionResult> {
+  if (target.eventId === undefined || target.updatedAt === undefined) {
+    return { target, copyForwardHtml: null };
+  }
+  const url = `${PRODUCTION_ORIGIN}${localizedPath(target.bare, target.locale)}`;
+  let res: Response;
+  try {
+    res = await fetch(url);
+  } catch {
+    return { target, copyForwardHtml: null };
+  }
+  if (!res.ok) return { target, copyForwardHtml: null };
+  const html = await res.text();
+  const liveMarker = extractChangeMarker(html);
+  if (liveMarker !== null && liveMarker === target.updatedAt) {
+    return { target, copyForwardHtml: html };
+  }
+  return { target, copyForwardHtml: null };
 }
 
 /** sitemap.xml for `targets` (issue #51) — one `<url>` per locale-variant
@@ -126,8 +221,8 @@ function buildTargets(eventIds: number[]): PrerenderTarget[] {
  * shape), each carrying the same en/et/ru/x-default hreflang cross-references
  * `useSeoMeta`'s `buildSeoMeta` emits as `<link>` tags, so the sitemap and
  * the prerendered pages it lists never disagree about locale siblings.
- * `lastmod` is uniformly `buildTimestamp` — `Event` has no `updated_at`, so
- * there's no meaningful per-row value to put there instead. */
+ * `lastmod` is each event target's real `Event.updated_at` (issue #80) where
+ * available, falling back to `buildTimestamp` for home (no backing Event). */
 function buildSitemapXml(targets: PrerenderTarget[], buildTimestamp: string): string {
   const urlEntries = targets
     .map((target) => {
@@ -139,7 +234,8 @@ function buildSitemapXml(targets: PrerenderTarget[], buildTimestamp: string): st
             : `${PRODUCTION_ORIGIN}${localizedPath(target.bare, code)}`;
         return `    <xhtml:link rel="alternate" hreflang="${code}" href="${href}"/>`;
       }).join('\n');
-      return `  <url>\n    <loc>${loc}</loc>\n    <lastmod>${buildTimestamp}</lastmod>\n${alternates}\n  </url>`;
+      const lastmod = target.updatedAt ?? buildTimestamp;
+      return `  <url>\n    <loc>${loc}</loc>\n    <lastmod>${lastmod}</lastmod>\n${alternates}\n  </url>`;
     })
     .join('\n');
   return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">\n${urlEntries}\n</urlset>\n`;
@@ -187,23 +283,38 @@ async function snapshotTarget(
     state: 'attached',
     timeout: CONTENT_READY_TIMEOUT_MS,
   });
-  const html = await page.content();
+  let html = await page.content();
+  if (target.eventId !== undefined && target.updatedAt !== undefined) {
+    html = embedChangeMarker(html, target.updatedAt);
+  }
   const outPath = outputFilePath(target.bare, target.locale);
   await mkdir(path.dirname(outPath), { recursive: true });
   await writeFile(outPath, html, 'utf-8');
 }
 
-/** Bounded-concurrency runner shared by the snapshot pass and the
- * validation-gate pass below (issue #53) — bounded, not unbounded, mirroring
- * this repo's external-API fan-out convention (CLAUDE.md). */
-async function runPool<T>(items: T[], concurrency: number, worker: (item: T) => Promise<void>): Promise<void> {
+/** Bounded-concurrency runner shared by the change-detection pass, the
+ * snapshot pass, and the validation-gate pass below (issues #53, #80) —
+ * bounded, not unbounded, mirroring this repo's external-API fan-out
+ * convention (CLAUDE.md). */
+async function mapPool<T, R>(
+  items: T[],
+  concurrency: number,
+  worker: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const results: R[] = new Array(items.length);
   let cursor = 0;
   async function run(): Promise<void> {
     while (cursor < items.length) {
-      await worker(items[cursor++]);
+      const i = cursor++;
+      results[i] = await worker(items[i]);
     }
   }
   await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, run));
+  return results;
+}
+
+async function runPool<T>(items: T[], concurrency: number, worker: (item: T) => Promise<void>): Promise<void> {
+  await mapPool(items, concurrency, worker);
 }
 
 /** In-build validation gate (issue #53) — reads a just-written snapshot back
@@ -254,8 +365,8 @@ async function validateTarget(target: PrerenderTarget): Promise<string[]> {
 }
 
 async function main(): Promise<void> {
-  const eventIds = await fetchPublishedEventIds();
-  const targets = buildTargets(eventIds);
+  const candidates = await fetchPrerenderCandidates();
+  const targets = buildTargets(candidates);
 
   const buildTimestamp = new Date().toISOString();
   await writeFile(
@@ -266,53 +377,77 @@ async function main(): Promise<void> {
   await writeFile(path.join(DIST_DIR, 'robots.txt'), buildRobotsTxt(), 'utf-8');
   console.log(`prerender: wrote sitemap.xml (${targets.length} url(s)) and robots.txt`);
 
-  let server: PreviewServer | undefined;
-  const browser = await chromium.launch();
-  try {
-    server = await preview({ preview: { port: 0, strictPort: false }, logLevel: 'warn' });
-    const previewOrigin = server.resolvedUrls?.local[0]?.replace(/\/$/, '');
-    if (!previewOrigin) {
-      throw new Error('prerender: vite preview server did not resolve a local URL');
-    }
+  // Change detection (issue #80): for every event route, diff its embedded
+  // marker against the currently-live production page. An exact match
+  // copies the live page forward as-is (no Playwright render); everything
+  // else (never-rendered, changed, or a fetch/parse miss) renders fresh.
+  const classification = await mapPool(targets, CHANGE_DETECTION_CONCURRENCY, classifyTarget);
+  let copiedForward = 0;
+  for (const { target, copyForwardHtml } of classification) {
+    if (copyForwardHtml === null) continue;
+    const outPath = outputFilePath(target.bare, target.locale);
+    await mkdir(path.dirname(outPath), { recursive: true });
+    await writeFile(outPath, copyForwardHtml, 'utf-8');
+    copiedForward++;
+  }
+  const renderTargets = classification
+    .filter(({ copyForwardHtml }) => copyForwardHtml === null)
+    .map(({ target }) => target);
+  console.log(
+    `prerender: copied forward ${copiedForward}/${targets.length} unchanged route(s), rendering ${renderTargets.length}`,
+  );
 
-    const resolvedPreviewOrigin = previewOrigin;
-    const failures: { target: PrerenderTarget; error: unknown }[] = [];
-    let cursor = 0;
-    async function worker(): Promise<void> {
-      const page = await browser.newPage();
-      try {
-        while (cursor < targets.length) {
-          const target = targets[cursor++];
-          try {
-            await snapshotTarget(page, resolvedPreviewOrigin, target);
-          } catch (error) {
-            failures.push({ target, error });
-          }
-        }
-      } finally {
-        await page.close();
+  if (renderTargets.length > 0) {
+    let server: PreviewServer | undefined;
+    const browser = await chromium.launch();
+    try {
+      server = await preview({ preview: { port: 0, strictPort: false }, logLevel: 'warn' });
+      const previewOrigin = server.resolvedUrls?.local[0]?.replace(/\/$/, '');
+      if (!previewOrigin) {
+        throw new Error('prerender: vite preview server did not resolve a local URL');
       }
-    }
-    await Promise.all(
-      Array.from({ length: Math.min(PRERENDER_CONCURRENCY, targets.length) }, worker),
-    );
 
-    if (failures.length > 0) {
-      for (const { target, error } of failures) {
-        console.error(
-          `prerender: failed to render ${localizedPath(target.bare, target.locale)} —`,
-          error,
+      const resolvedPreviewOrigin = previewOrigin;
+      const failures: { target: PrerenderTarget; error: unknown }[] = [];
+      let cursor = 0;
+      async function worker(): Promise<void> {
+        const page = await browser.newPage();
+        try {
+          while (cursor < renderTargets.length) {
+            const target = renderTargets[cursor++];
+            try {
+              await snapshotTarget(page, resolvedPreviewOrigin, target);
+            } catch (error) {
+              failures.push({ target, error });
+            }
+          }
+        } finally {
+          await page.close();
+        }
+      }
+      await Promise.all(
+        Array.from({ length: Math.min(PRERENDER_CONCURRENCY, renderTargets.length) }, worker),
+      );
+
+      if (failures.length > 0) {
+        for (const { target, error } of failures) {
+          console.error(
+            `prerender: failed to render ${localizedPath(target.bare, target.locale)} —`,
+            error,
+          );
+        }
+        throw new Error(
+          `prerender: ${failures.length}/${renderTargets.length} route(s) failed to render — see errors above`,
         );
       }
-      throw new Error(
-        `prerender: ${failures.length}/${targets.length} route(s) failed to render — see errors above`,
-      );
-    }
 
-    console.log(`prerender: wrote ${targets.length} snapshot(s) to ${DIST_DIR}`);
-  } finally {
-    await browser.close();
-    await server?.close();
+      console.log(`prerender: wrote ${renderTargets.length} snapshot(s) to ${DIST_DIR}`);
+    } finally {
+      await browser.close();
+      await server?.close();
+    }
+  } else {
+    console.log('prerender: no routes require rendering — every route was copied forward');
   }
 
   // In-build validation gate (issue #53) — runs immediately after every
