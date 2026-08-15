@@ -142,6 +142,11 @@ export const CHAIN_MAX_ROUNDS = 10;
 // chain rather than an active one, so cron resumes instead of skipping
 // forever and a genuinely active chain isn't mistaken for a stale one.
 export const CHAIN_STALENESS_TIMEOUT_MINUTES = 30;
+// Repo the round-state marker is committed to (issue #83) via the GitHub Git
+// Data API — the branch the Vercel Deploy Hook targets lives here. Same repo
+// as SEO_AUDIT_GITHUB_REPO (both point at this codebase); kept as a separate
+// constant since the two features are unrelated and may diverge.
+export const PRERENDER_CHAIN_GITHUB_REPO = 'allut/event-radar';
 
 // ─── Analytics ───────────────────────────────────────────────────────────────
 // Matches `/events/:id` (bare or locale-prefixed, e.g. `/en/events/:id`) so

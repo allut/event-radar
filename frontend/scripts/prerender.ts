@@ -34,8 +34,10 @@ import { chromium, type Page } from 'playwright';
 import { preview, type PreviewServer } from 'vite';
 import type { EventData } from '../src/components/EventCard';
 import {
+  GITHUB_API_BASE_URL,
   LOCALE_URL_PREFIX_CODES,
   LOCALES,
+  PRERENDER_CHAIN_GITHUB_REPO,
   PRODUCTION_ORIGIN,
   ROUTES,
   SEO_HREFLANG_CODES,
@@ -43,6 +45,13 @@ import {
 import { localizedPath } from '../src/lib/urlLocale';
 import { compareEventStaleness, parseSnapshotHtml, validateSnapshotStructure } from '../src/lib/seoValidation';
 import { createBudgetedCursor, prioritizeRenderQueue } from '../src/lib/prerenderQueue';
+import {
+  buildRoundMarker,
+  parseRoundMarker,
+  resolveRoundContext,
+  serializeRoundMarker,
+  type RoundMarker,
+} from '../src/lib/prerenderChain';
 import { PRERENDER_BACKEND_TARGET } from '../vite.config';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -329,17 +338,21 @@ async function snapshotTarget(
 /** Bounded-concurrency runner shared by the change-detection pass, the
  * snapshot pass, and the validation-gate pass below (issues #53, #80) —
  * bounded, not unbounded, mirroring this repo's external-API fan-out
- * convention (CLAUDE.md). */
+ * convention (CLAUDE.md). Shares its index-claiming with the render pass's
+ * time-boxed pool via createBudgetedCursor (issue #82) — an unreachable
+ * deadline (`Infinity`) makes it behave as a plain, non-budgeted cursor
+ * rather than a second hand-rolled "claim next index" loop. */
 async function mapPool<T, R>(
   items: T[],
   concurrency: number,
   worker: (item: T) => Promise<R>,
 ): Promise<R[]> {
   const results: R[] = new Array(items.length);
-  let cursor = 0;
+  const cursor = createBudgetedCursor(items.length, Infinity);
   async function run(): Promise<void> {
-    while (cursor < items.length) {
-      const i = cursor++;
+    for (;;) {
+      const i = cursor.next();
+      if (i === null) break;
       results[i] = await worker(items[i]);
     }
   }
@@ -398,7 +411,88 @@ async function validateTarget(target: PrerenderTarget): Promise<string[]> {
   return issues.map((issue) => `${localizedPath(target.bare, target.locale)} — ${issue}`);
 }
 
+/** Commits `marker` to the branch the Vercel Deploy Hook targets (issue #83),
+ * advancing the git ref so a later chained round (issue #84) can re-fire the
+ * hook against a genuinely new version rather than colliding with Vercel's
+ * same-version-cancellation behavior. Uses the GitHub Git Data API — not a
+ * local `git push` — since the Vercel build environment's checkout has no
+ * guaranteed push credentials; mirrors api/seo-audit.ts's plain-fetch
+ * GH_ISSUE_TOKEN pattern rather than adding an SDK dependency. The new
+ * commit reuses the branch tip's tree unchanged (no file diff — only the
+ * marker embedded in the message changes), so this is effectively an empty
+ * commit. No-ops with a log line (not a build failure) when
+ * GH_PRERENDER_CHAIN_TOKEN/VERCEL_GIT_COMMIT_REF aren't set, e.g. local/dev
+ * builds off Vercel. */
+async function commitRoundMarker(marker: RoundMarker): Promise<void> {
+  const token = process.env.GH_PRERENDER_CHAIN_TOKEN;
+  const branch = process.env.VERCEL_GIT_COMMIT_REF;
+  if (!token || !branch) {
+    console.log(
+      'prerender: GH_PRERENDER_CHAIN_TOKEN/VERCEL_GIT_COMMIT_REF not set — skipping round-marker commit (not a Vercel build)',
+    );
+    return;
+  }
+
+  const headers = {
+    Authorization: `Bearer ${token}`,
+    Accept: 'application/vnd.github+json',
+  };
+  const repoBase = `${GITHUB_API_BASE_URL}/repos/${PRERENDER_CHAIN_GITHUB_REPO}`;
+
+  const refRes = await fetch(`${repoBase}/git/ref/heads/${branch}`, { headers });
+  if (!refRes.ok) {
+    throw new Error(
+      `prerender: failed to read ref heads/${branch} — ${refRes.status} ${refRes.statusText}`,
+    );
+  }
+  const parentSha = ((await refRes.json()) as { object: { sha: string } }).object.sha;
+
+  const parentCommitRes = await fetch(`${repoBase}/git/commits/${parentSha}`, { headers });
+  if (!parentCommitRes.ok) {
+    throw new Error(
+      `prerender: failed to read parent commit ${parentSha} — ${parentCommitRes.status} ${parentCommitRes.statusText}`,
+    );
+  }
+  const treeSha = ((await parentCommitRes.json()) as { tree: { sha: string } }).tree.sha;
+
+  const summary = `round ${marker.round} (${marker.status}) — ${marker.newlyRendered} rendered, ${marker.copiedForward} copied, ${marker.queueRemaining} queued`;
+  const message = `prerender: ${summary}\n\n${serializeRoundMarker(marker)}`;
+
+  const commitRes = await fetch(`${repoBase}/git/commits`, {
+    method: 'POST',
+    headers: { ...headers, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message, tree: treeSha, parents: [parentSha] }),
+  });
+  if (!commitRes.ok) {
+    throw new Error(
+      `prerender: failed to create round-marker commit — ${commitRes.status} ${commitRes.statusText}`,
+    );
+  }
+  const newSha = ((await commitRes.json()) as { sha: string }).sha;
+
+  const updateRefRes = await fetch(`${repoBase}/git/refs/heads/${branch}`, {
+    method: 'PATCH',
+    headers: { ...headers, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sha: newSha }),
+  });
+  if (!updateRefRes.ok) {
+    throw new Error(
+      `prerender: failed to advance heads/${branch} to ${newSha} — ${updateRefRes.status} ${updateRefRes.statusText}`,
+    );
+  }
+  console.log(`prerender: committed round marker ${newSha} to ${branch} — ${summary}`);
+}
+
 async function main(): Promise<void> {
+  // Round-state marker (issue #83): read back whatever VERCEL_GIT_COMMIT_MESSAGE
+  // carries from the tip commit at build start, to determine which burst/round
+  // this build continues (or starts fresh) — see src/lib/prerenderChain.ts.
+  const existingMarker = parseRoundMarker(process.env.VERCEL_GIT_COMMIT_MESSAGE);
+  const { burstId, round } = resolveRoundContext(existingMarker, new Date());
+  console.log(
+    `prerender: round ${round} of burst ${burstId}${existingMarker?.status === 'continuing' ? ' (resumed)' : ' (new)'}`,
+  );
+
   const candidates = await fetchPrerenderCandidates();
   const targets = buildTargets(candidates);
 
@@ -417,7 +511,7 @@ async function main(): Promise<void> {
   // else (never-rendered, changed, or a fetch/parse miss) renders fresh.
   const classification = await mapPool(targets, CHANGE_DETECTION_CONCURRENCY, classifyTarget);
   let copiedForward = 0;
-  const staleFallbackHtml = new Map<PrerenderTarget, string>();
+  const staleFallbackTargets = new Set<PrerenderTarget>();
   for (const { target, unchanged, liveHtml } of classification) {
     if (unchanged && liveHtml !== null) {
       const outPath = outputFilePath(target.bare, target.locale);
@@ -425,10 +519,18 @@ async function main(): Promise<void> {
       await writeFile(outPath, liveHtml, 'utf-8');
       copiedForward++;
     } else if (liveHtml !== null) {
-      // Needs a fresh render, but a live page exists — kept as the
-      // stale-but-real fallback (issue #82) in case the render budget runs
-      // out before this route is reached this round.
-      staleFallbackHtml.set(target, liveHtml);
+      // Needs a fresh render, but a live page exists — write it now as a
+      // provisional stale-but-real fallback (issue #82); snapshotTarget's
+      // writeFile below overwrites it in place if/when this route is
+      // actually reached within the render budget. Writing eagerly rather
+      // than holding every needs-render route's full live HTML in memory
+      // for the whole pass — with a growing catalog that's potentially
+      // hundreds of routes' worth of HTML kept around just in case the
+      // budget runs out before reaching them.
+      const outPath = outputFilePath(target.bare, target.locale);
+      await mkdir(path.dirname(outPath), { recursive: true });
+      await writeFile(outPath, liveHtml, 'utf-8');
+      staleFallbackTargets.add(target);
     }
   }
   // Priority queue (issue #82): home routes (all locales) first, then event
@@ -506,20 +608,12 @@ async function main(): Promise<void> {
   }
 
   // Stale-but-real fallback (issue #82): a route skipped this round because
-  // the budget ran out still gets its last-known-good live page copied
-  // forward, if one exists. A route with no live page at all (never
-  // rendered before) gets nothing written here, which falls through to the
-  // CSR shell via vercel.json's catch-all rewrite rather than a build
-  // failure — see outputFilePath/vercel.json.
-  let staleFallbackWritten = 0;
-  for (const target of skippedTargets) {
-    const html = staleFallbackHtml.get(target);
-    if (html === undefined) continue;
-    const outPath = outputFilePath(target.bare, target.locale);
-    await mkdir(path.dirname(outPath), { recursive: true });
-    await writeFile(outPath, html, 'utf-8');
-    staleFallbackWritten++;
-  }
+  // the budget ran out already has its last-known-good live page written
+  // (eagerly, in the classification loop above), if one existed. A route
+  // with no live page at all (never rendered before) has nothing on disk,
+  // which falls through to the CSR shell via vercel.json's catch-all
+  // rewrite rather than a build failure — see outputFilePath/vercel.json.
+  const staleFallbackWritten = skippedTargets.filter((target) => staleFallbackTargets.has(target)).length;
 
   console.log(
     `prerender: round summary — newly-rendered ${newlyRendered}, copied-forward ${copiedForward}, queue-remaining ${skippedTargets.length} (${staleFallbackWritten} of those still serving stale-but-real content)`,
@@ -551,6 +645,30 @@ async function main(): Promise<void> {
     );
   }
   console.log(`prerender: validated ${validationTargets.length} snapshot(s), no issues found`);
+
+  // Round-state marker (issue #83): built from this round's actual outcome
+  // and committed to the branch the Deploy Hook targets, advancing the git
+  // ref before any later round re-fires the hook (issue #84, out of scope
+  // here). `status` already accounts for the chain-depth cap and
+  // zero-progress abort so the committed marker is truthful even before
+  // hook-firing exists. A failure here (bad token, protected branch,
+  // transient GitHub 5xx) must not fail the whole build — every snapshot
+  // was already rendered and passed the validation gate above, so the
+  // deploy is good; the only cost of a lost marker commit is this round's
+  // progress being invisible to the next build's resume logic, which then
+  // just starts a fresh burst (see resolveRoundContext's missing-marker
+  // fallback) rather than resuming — degraded, not broken.
+  const marker = buildRoundMarker(
+    burstId,
+    round,
+    { newlyRendered, copiedForward, queueRemaining: skippedTargets.length },
+    new Date(),
+  );
+  try {
+    await commitRoundMarker(marker);
+  } catch (error) {
+    console.error('prerender: failed to commit round marker — deploy proceeds anyway:', error);
+  }
 }
 
 main().catch((error) => {

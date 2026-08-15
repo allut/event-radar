@@ -3,9 +3,10 @@ import { CHAIN_MARKER_PREFIX, CHAIN_MAX_ROUNDS, CHAIN_STALENESS_TIMEOUT_MINUTES,
 /** Round-state carrier for the time-boxed incremental prerender pipeline
  * (issue #79) — standalone pure functions only (no I/O), so the chaining
  * state machine is unit-testable without a real Playwright browser or Vercel
- * deploy. Not wired into scripts/prerender.ts's `main()` yet; that happens in
- * later tickets (issue #83 reads/writes VERCEL_GIT_COMMIT_MESSAGE and fires
- * the Deploy Hook). Mirrors this file's existing
+ * deploy. Wired into scripts/prerender.ts's `main()` (issue #83: reads
+ * VERCEL_GIT_COMMIT_MESSAGE at build start, builds/commits the round marker
+ * at the end); firing the Deploy Hook itself is a later ticket (issue #84).
+ * Mirrors this repo's existing
  * fetchPublishedEventIds/buildTargets/buildSitemapXml-style decomposition. */
 
 export type RoundStatus = 'continuing' | 'done';
@@ -125,4 +126,50 @@ export function isZeroProgress(progress: { newlyRendered: number; copiedForward:
 export function isMarkerStale(marker: RoundMarker, now: Date): boolean {
   const ageMs = now.getTime() - Date.parse(marker.committedAt);
   return ageMs > CHAIN_STALENESS_TIMEOUT_MINUTES * MS_PER_MINUTE;
+}
+
+/** Determines which burst/round a build belongs to (issue #83), from the
+ * marker (if any) parsed out of this build's VERCEL_GIT_COMMIT_MESSAGE.
+ * Only a `continuing` marker resumes the same burst at `round + 1` — a
+ * missing/unparseable marker (parseRoundMarker already returned `null`) or
+ * one with `status: done` both start a fresh burst at round 1, per the
+ * spec's "no active chain" fallback. `now` seeds a new burst's id (the
+ * spec's burst_id is "the timestamp of the burst's first round"). */
+export function resolveRoundContext(
+  marker: RoundMarker | null,
+  now: Date,
+): { burstId: string; round: number } {
+  if (marker && marker.status === 'continuing') {
+    return { burstId: marker.burstId, round: marker.round + 1 };
+  }
+  return { burstId: now.toISOString(), round: 1 };
+}
+
+/** Builds the marker to commit for the round just completed (issue #83),
+ * deciding `status` per the spec: `continuing` only if the queue isn't
+ * empty *and* neither the chain-depth cap nor the zero-progress check say
+ * otherwise; `done` in every other case (queue emptied, depth exceeded, or
+ * zero progress). Enforcing those checks here — not just in the later
+ * Deploy Hook ticket (#84) — keeps the committed marker's `status` field
+ * truthful on its own, so `git log` reflects the real outcome even before
+ * hook-firing is wired up. */
+export function buildRoundMarker(
+  burstId: string,
+  round: number,
+  progress: { newlyRendered: number; copiedForward: number; queueRemaining: number },
+  now: Date,
+): RoundMarker {
+  const status: RoundStatus =
+    progress.queueRemaining === 0 || isChainDepthExceeded(round) || isZeroProgress(progress)
+      ? 'done'
+      : 'continuing';
+  return {
+    burstId,
+    round,
+    status,
+    newlyRendered: progress.newlyRendered,
+    copiedForward: progress.copiedForward,
+    queueRemaining: progress.queueRemaining,
+    committedAt: now.toISOString(),
+  };
 }

@@ -5,6 +5,8 @@ import {
   isChainDepthExceeded,
   isZeroProgress,
   isMarkerStale,
+  resolveRoundContext,
+  buildRoundMarker,
   type RoundMarker,
 } from './prerenderChain';
 import { CHAIN_MAX_ROUNDS, CHAIN_STALENESS_TIMEOUT_MINUTES } from '../constants';
@@ -119,5 +121,66 @@ describe('isMarkerStale', () => {
     const marker = makeMarker({ committedAt });
     const now = new Date(Date.parse(committedAt) + CHAIN_STALENESS_TIMEOUT_MINUTES * 60 * 1000);
     expect(isMarkerStale(marker, now)).toBe(false);
+  });
+});
+
+describe('resolveRoundContext', () => {
+  const now = new Date('2026-08-15T12:00:00.000Z');
+
+  it('resumes the same burst at round + 1 for a continuing marker', () => {
+    const marker = makeMarker({ burstId: '2026-08-15T10:00:00.000Z', round: 3, status: 'continuing' });
+    expect(resolveRoundContext(marker, now)).toEqual({ burstId: '2026-08-15T10:00:00.000Z', round: 4 });
+  });
+
+  it('starts a fresh burst at round 1 with no marker', () => {
+    expect(resolveRoundContext(null, now)).toEqual({ burstId: now.toISOString(), round: 1 });
+  });
+
+  it('starts a fresh burst at round 1 for a done marker', () => {
+    const marker = makeMarker({ burstId: '2026-08-15T10:00:00.000Z', round: 5, status: 'done' });
+    expect(resolveRoundContext(marker, now)).toEqual({ burstId: now.toISOString(), round: 1 });
+  });
+});
+
+describe('buildRoundMarker', () => {
+  const now = new Date('2026-08-15T12:00:00.000Z');
+  const burstId = '2026-08-15T10:00:00.000Z';
+
+  it('is continuing when the queue is non-empty and under both checks', () => {
+    const marker = buildRoundMarker(burstId, 3, { newlyRendered: 220, copiedForward: 4025, queueRemaining: 1800 }, now);
+    expect(marker).toEqual({
+      burstId,
+      round: 3,
+      status: 'continuing',
+      newlyRendered: 220,
+      copiedForward: 4025,
+      queueRemaining: 1800,
+      committedAt: now.toISOString(),
+    });
+  });
+
+  it('is done when the queue is empty', () => {
+    const marker = buildRoundMarker(burstId, 2, { newlyRendered: 100, copiedForward: 50, queueRemaining: 0 }, now);
+    expect(marker.status).toBe('done');
+  });
+
+  it('is done when the chain-depth cap is exceeded, even with a non-empty queue', () => {
+    const marker = buildRoundMarker(
+      burstId,
+      CHAIN_MAX_ROUNDS + 1,
+      { newlyRendered: 100, copiedForward: 50, queueRemaining: 1000 },
+      now,
+    );
+    expect(marker.status).toBe('done');
+  });
+
+  it('is done on zero progress, even with a non-empty queue', () => {
+    const marker = buildRoundMarker(
+      burstId,
+      3,
+      { newlyRendered: 0, copiedForward: 5000, queueRemaining: 1000 },
+      now,
+    );
+    expect(marker.status).toBe('done');
   });
 });
