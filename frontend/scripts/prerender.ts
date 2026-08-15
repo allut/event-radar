@@ -308,32 +308,29 @@ function outputFilePath(bare: string, locale: string): string {
 /**
  * On Vercel, launches `@sparticuz/chromium` explicitly rather than falling
  * through to Playwright-bundled Chromium (issue #87, reusing Wave 1's fix
- * from issue #72). `vercel build` sets `VERCEL` just like a deployed
- * Function, but this script only ever runs during the build step, never as a
- * Function — left alone, `@sparticuz/chromium`'s `isRunningInAmazonLinux2023`
- * treats `VERCEL`'s presence as proof of a deployed Lambda runtime and points
- * `LD_LIBRARY_PATH`/extracts AL2023 libs that don't apply to the build
- * sandbox, hanging the launch. Hiding `VERCEL` for the duration of the import
- * and `executablePath()` call keeps that detection truthful for a build
- * context. Off Vercel (local/dev, any OS), Playwright's own bundled Chromium
- * is used unchanged — `@sparticuz/chromium`'s binary is Linux-only.
+ * from issue #72) — the build script's `[ -n "$VERCEL" ] || playwright
+ * install chromium` step skips installing Playwright's own browser on
+ * Vercel, so `chromium.launch()` alone would have nothing to launch there.
+ * `@sparticuz/chromium`'s bundled binary is linked against a handful of
+ * AL2023 shared libs (`libnspr4.so`/`libnss3.so`/`libnssutil3.so`) that
+ * aren't present on the build image by default; `executablePath()` only
+ * extracts them and points `LD_LIBRARY_PATH` at the extraction dir when its
+ * own `isRunningInAmazonLinux2023` check sees `VERCEL` set — so `VERCEL`
+ * must stay visible through this call, not hidden, or the launch fails with
+ * `error while loading shared libraries: libnspr4.so: cannot open shared
+ * object file`. Off Vercel (local/dev, any OS), Playwright's own bundled
+ * Chromium is used unchanged — `@sparticuz/chromium`'s binary is Linux-only.
  */
 async function launchBrowser(): Promise<Browser> {
   if (!process.env.VERCEL) {
     return chromium.launch();
   }
-  const savedVercel = process.env.VERCEL;
-  delete process.env.VERCEL;
-  try {
-    const { default: sparticuzChromium } = await import('@sparticuz/chromium');
-    return await chromium.launch({
-      args: sparticuzChromium.args,
-      executablePath: await sparticuzChromium.executablePath(),
-      headless: true,
-    });
-  } finally {
-    process.env.VERCEL = savedVercel;
-  }
+  const { default: sparticuzChromium } = await import('@sparticuz/chromium');
+  return await chromium.launch({
+    args: sparticuzChromium.args,
+    executablePath: await sparticuzChromium.executablePath(),
+    headless: true,
+  });
 }
 
 async function snapshotTarget(
