@@ -24,26 +24,34 @@ import { StatusCodes } from 'http-status-codes';
 // ESM resolver requires explicit .js extensions on every relative import —
 // including transitively, in every local module this file pulls in.
 import {
-  GITHUB_API_BASE_URL,
   PRERENDER_CADENCE_GIT_BRANCH,
   PRERENDER_CADENCE_TOKEN_HEADER,
   PRERENDER_CHAIN_GITHUB_REPO,
 } from '../src/constants.js';
+import { githubRequest } from '../src/lib/githubRequest.js';
 import { shouldSkipCadenceTick } from '../src/lib/prerenderChain.js';
 import { isValidAuditToken } from '../src/lib/seoAuditAuth.js';
 import type { VercelRequest, VercelResponse } from './vercel';
 
-/** Fetches the current tip commit message of PRERENDER_CADENCE_GIT_BRANCH —
- * unauthenticated (the repo is public), same as any other read against the
- * GitHub REST API's commits endpoint. Returns `null` on any fetch/parse
- * failure rather than throwing, so the handler's caller can fail open
- * (fire the hook, same as pre-#92 behavior) instead of a GitHub hiccup
- * silently killing the cadence forever. */
+/** Fetches the current tip commit message of PRERENDER_CADENCE_GIT_BRANCH.
+ * `allut/event-radar` is private, so this must be an authenticated request —
+ * uses the shared `githubRequest` helper (also used by seoAuditIssue.ts).
+ * Reuses `GH_PRERENDER_CHAIN_TOKEN` (already provisioned with
+ * `contents: write` on this repo for commitRoundMarker's git-data-API push
+ * in scripts/prerender.ts) rather than `GH_ISSUE_TOKEN`, whose documented
+ * scope (Issues: write) does not cover reading commits. Returns `null` on
+ * missing token, any fetch/parse failure, or a non-ok response, so the
+ * handler's caller can fail open (fire the hook, same as pre-#92 behavior)
+ * instead of a GitHub hiccup silently killing the cadence forever. */
 async function fetchTipCommitMessage(): Promise<string | null> {
+  const token = process.env.GH_PRERENDER_CHAIN_TOKEN;
+  if (!token) return null;
   try {
-    const res = await fetch(
-      `${GITHUB_API_BASE_URL}/repos/${PRERENDER_CHAIN_GITHUB_REPO}/commits/${PRERENDER_CADENCE_GIT_BRANCH}`,
-      { headers: { Accept: 'application/vnd.github+json' } },
+    const res = await githubRequest(
+      PRERENDER_CHAIN_GITHUB_REPO,
+      `/commits/${PRERENDER_CADENCE_GIT_BRANCH}`,
+      token,
+      'event-radar-prerender-cadence',
     );
     if (!res.ok) return null;
     const body = (await res.json()) as { commit?: { message?: string } };

@@ -1,29 +1,18 @@
 // .js extension required: this module is also imported (transitively) by
 // api/seo-audit.ts, which Vercel runs as unbundled Node ESM.
-import { GITHUB_API_BASE_URL, SEO_AUDIT_GITHUB_REPO, SEO_AUDIT_ISSUE_LABEL } from '../constants.js';
+import { SEO_AUDIT_GITHUB_REPO, SEO_AUDIT_ISSUE_LABEL } from '../constants.js';
+import { githubRequest } from './githubRequest.js';
 
 interface GithubIssue {
   number: number;
 }
 
-async function githubRequest(path: string, token: string, init?: RequestInit): Promise<Response> {
-  return fetch(`${GITHUB_API_BASE_URL}/repos/${SEO_AUDIT_GITHUB_REPO}${path}`, {
-    ...init,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Accept: 'application/vnd.github+json',
-      'X-GitHub-Api-Version': '2022-11-28',
-      // GitHub's REST API rejects any request with no User-Agent (403
-      // "Request forbidden by administrative rules") — Node's built-in
-      // fetch (undici) sets no default, unlike a browser.
-      'User-Agent': 'event-radar-seo-audit',
-      ...(init?.headers ?? {}),
-    },
-  });
+function auditGithubRequest(path: string, token: string, init?: RequestInit): Promise<Response> {
+  return githubRequest(SEO_AUDIT_GITHUB_REPO, path, token, 'event-radar-seo-audit', init);
 }
 
 async function findOpenAuditIssue(token: string): Promise<GithubIssue | null> {
-  const res = await githubRequest(
+  const res = await auditGithubRequest(
     `/issues?state=open&labels=${encodeURIComponent(SEO_AUDIT_ISSUE_LABEL)}&per_page=1`,
     token,
   );
@@ -40,7 +29,7 @@ export async function reportAuditFailure(token: string, issues: string[]): Promi
   const body = `The live SEO audit (issue #54) failed:\n\n${issues.map((issue) => `- ${issue}`).join('\n')}\n\nChecked ${new Date().toISOString()}.`;
   const existing = await findOpenAuditIssue(token);
   if (existing) {
-    const res = await githubRequest(`/issues/${existing.number}/comments`, token, {
+    const res = await auditGithubRequest(`/issues/${existing.number}/comments`, token, {
       method: 'POST',
       body: JSON.stringify({ body }),
     });
@@ -49,7 +38,7 @@ export async function reportAuditFailure(token: string, issues: string[]): Promi
     }
     return;
   }
-  const res = await githubRequest('/issues', token, {
+  const res = await auditGithubRequest('/issues', token, {
     method: 'POST',
     body: JSON.stringify({
       title: 'SEO live audit failing',
@@ -73,7 +62,7 @@ export async function reportAuditRecovery(token: string): Promise<void> {
   const existing = await findOpenAuditIssue(token);
   if (!existing) return;
 
-  const closeRes = await githubRequest(`/issues/${existing.number}`, token, {
+  const closeRes = await auditGithubRequest(`/issues/${existing.number}`, token, {
     method: 'PATCH',
     body: JSON.stringify({ state: 'closed' }),
   });
@@ -81,7 +70,7 @@ export async function reportAuditRecovery(token: string): Promise<void> {
     throw new Error(`GitHub issue #${existing.number} close failed: ${closeRes.status} ${closeRes.statusText}`);
   }
 
-  const commentRes = await githubRequest(`/issues/${existing.number}/comments`, token, {
+  const commentRes = await auditGithubRequest(`/issues/${existing.number}/comments`, token, {
     method: 'POST',
     body: JSON.stringify({
       body: `The live SEO audit is passing again as of ${new Date().toISOString()} — closing.`,
