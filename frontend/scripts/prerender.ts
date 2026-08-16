@@ -605,29 +605,17 @@ export function logZeroProgressAbort(marker: RoundMarker): void {
 }
 
 async function main(): Promise<void> {
-  // Cron/self-trigger collision guard (issue #85): read back whatever
-  // VERCEL_GIT_COMMIT_MESSAGE carries from the tip commit at build start,
-  // before doing any rendering work. A fresh `continuing` marker means a
-  // chain is already active — skip this build entirely rather than risk a
-  // normal 6-hourly cron tick double-rendering a burst already in flight.
-  // See resolveRoundStart's doc comment (src/lib/prerenderChain.ts) for why
-  // a stale `continuing` marker instead falls through to a fresh round 1.
-  const roundStart = resolveRoundStart(process.env.VERCEL_GIT_COMMIT_MESSAGE, new Date());
-  if (roundStart.skip) {
-    // Exits non-zero (not just `return`s) so `npm run build` fails and Vercel
-    // never promotes this build's dist/ — a skipped run never gets past this
-    // point to write sitemap.xml/robots.txt or copy any snapshot forward, so
-    // its dist/ is just the bare `vite build` SPA shell. Deploying that as-is
-    // would wipe out every prerendered page/sitemap/robots.txt already live
-    // in production; failing the build instead leaves the current (good)
-    // deployment untouched until a later round/cadence tick succeeds. This is
-    // an expected, routine outcome of the collision guard (issue #85) — not a
-    // real error — see docs/backend-ops.md's Prerender cadence section.
-    throw new Error(
-      `prerender: active chain in progress (burst ${roundStart.burstId}, round ${roundStart.round}) — skipping this build (cron/self-trigger collision guard) and failing it so Vercel doesn't deploy an empty dist/ over the current production build`,
-    );
-  }
-  const { burstId, round } = roundStart;
+  // Read back whatever VERCEL_GIT_COMMIT_MESSAGE carries from the tip commit
+  // at build start, before doing any rendering work, to resume mid-burst
+  // rather than always starting fresh at round 1 (issue #83). Since the
+  // round marker's git push is the only thing that triggers the next round's
+  // build (issue #89 removed the redundant Deploy Hook that used to fire a
+  // second, competing deployment of the same commit), a fresh `continuing`
+  // marker here is exactly the legitimate continuation it was committed for
+  // — see resolveRoundStart's doc comment (src/lib/prerenderChain.ts) for why
+  // it resumes at round + 1 instead of skipping (issue #90), and why a stale
+  // `continuing` marker still falls through to a fresh round 1.
+  const { burstId, round } = resolveRoundStart(process.env.VERCEL_GIT_COMMIT_MESSAGE, new Date());
   console.log(`prerender: round ${round} of burst ${burstId}${round > 1 ? ' (resumed)' : ' (new)'}`);
 
   const candidates = await fetchPrerenderCandidates();
