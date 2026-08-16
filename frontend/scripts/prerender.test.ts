@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { logZeroProgressAbort, selectValidationTargets } from './prerender';
+import { isPreviewBuild, logZeroProgressAbort, main, selectValidationTargets } from './prerender';
 import type { PrerenderTarget } from './prerender';
 import type { RoundMarker } from '../src/lib/prerenderChain';
 
@@ -117,5 +117,50 @@ describe('logZeroProgressAbort', () => {
     );
 
     expect(warnSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe('isPreviewBuild', () => {
+  it('is true when VERCEL_ENV is preview', () => {
+    expect(isPreviewBuild({ VERCEL_ENV: 'preview' } as NodeJS.ProcessEnv)).toBe(true);
+  });
+
+  it('is false for production', () => {
+    expect(isPreviewBuild({ VERCEL_ENV: 'production' } as NodeJS.ProcessEnv)).toBe(false);
+  });
+
+  it('is false for local/dev runs where VERCEL_ENV is unset', () => {
+    expect(isPreviewBuild({} as NodeJS.ProcessEnv)).toBe(false);
+  });
+});
+
+describe('main — Preview short-circuit (issue #95)', () => {
+  let logSpy: ReturnType<typeof vi.spyOn>;
+  let fetchSpy: ReturnType<typeof vi.spyOn>;
+  const originalVercelEnv = process.env.VERCEL_ENV;
+
+  beforeEach(() => {
+    logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(() => {
+      throw new Error('fetch must not be called on a Preview build');
+    });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    if (originalVercelEnv === undefined) {
+      delete process.env.VERCEL_ENV;
+    } else {
+      process.env.VERCEL_ENV = originalVercelEnv;
+    }
+  });
+
+  it('exits before any rendering, sitemap/robots, validation, or fetch work when VERCEL_ENV=preview', async () => {
+    process.env.VERCEL_ENV = 'preview';
+
+    await expect(main()).resolves.toBeUndefined();
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('skipping prerender pass'));
   });
 });
