@@ -8,6 +8,7 @@ import {
   resolveRoundContext,
   resolveRoundStart,
   buildRoundMarker,
+  shouldSkipCadenceTick,
   type RoundMarker,
 } from './prerenderChain';
 import { CHAIN_MAX_ROUNDS, CHAIN_STALENESS_TIMEOUT_MINUTES } from '../constants';
@@ -228,6 +229,30 @@ describe('resolveRoundStart', () => {
     });
     const round3Start = resolveRoundStart(serializeRoundMarker(round2Marker), now);
     expect(round3Start).toEqual({ burstId: round1Marker.burstId, round: 3 });
+  });
+});
+
+describe('shouldSkipCadenceTick', () => {
+  const now = new Date('2026-08-15T12:00:00.000Z');
+
+  it('skips for a fresh (<30min) continuing marker', () => {
+    const marker = makeMarker({ status: 'continuing', committedAt: '2026-08-15T11:45:00.000Z' });
+    expect(shouldSkipCadenceTick(serializeRoundMarker(marker), now)).toBe(true);
+  });
+
+  it('does not skip for a continuing marker older than 30 minutes', () => {
+    const marker = makeMarker({ status: 'continuing', committedAt: '2026-08-15T11:20:00.000Z' });
+    expect(shouldSkipCadenceTick(serializeRoundMarker(marker), now)).toBe(false);
+  });
+
+  it('does not skip for a done marker', () => {
+    const marker = makeMarker({ status: 'done', committedAt: '2026-08-15T11:59:00.000Z' });
+    expect(shouldSkipCadenceTick(serializeRoundMarker(marker), now)).toBe(false);
+  });
+
+  it('does not skip with no marker at all', () => {
+    expect(shouldSkipCadenceTick(undefined, now)).toBe(false);
+    expect(shouldSkipCadenceTick('unrelated commit message', now)).toBe(false);
   });
 });
 

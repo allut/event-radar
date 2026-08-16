@@ -144,7 +144,7 @@ const RENDER_BUDGET_MS = (() => {
   return minutes * 60_000;
 })();
 
-interface PrerenderTarget {
+export interface PrerenderTarget {
   /** Bare (Estonian) ROUTES.* path, before locale-prefixing. */
   bare: string;
   locale: string;
@@ -593,6 +593,20 @@ async function commitRoundMarker(marker: RoundMarker): Promise<boolean> {
  * Hook here — `commitRoundMarker`'s branch push already triggers Vercel's
  * git-connected auto-deploy, and firing a second hook against the same
  * commit produced two competing deployments (issue #89). */
+/** Scopes the in-build validation gate to this round's newly-rendered
+ * routes only (issue #94) — `renderQueue` minus whatever the render budget
+ * left in `skippedTargets`. Copied-forward routes (never in `renderQueue`)
+ * are byte-identical to what already passed this same gate earlier, so
+ * re-validating them every round is pure waste that grows unboundedly as
+ * the copied-forward set accumulates. */
+export function selectValidationTargets(
+  renderQueue: PrerenderTarget[],
+  skippedTargets: PrerenderTarget[],
+): PrerenderTarget[] {
+  const skippedTargetSet = new Set(skippedTargets);
+  return renderQueue.filter((target) => !skippedTargetSet.has(target));
+}
+
 export function logZeroProgressAbort(marker: RoundMarker): void {
   if (marker.status === 'continuing') {
     return;
@@ -604,7 +618,25 @@ export function logZeroProgressAbort(marker: RoundMarker): void {
   }
 }
 
-async function main(): Promise<void> {
+/** True on a Vercel Preview build (issue #95) — `VERCEL_ENV` is Vercel's own
+ * build-time discriminator (`"production" | "preview" | "development"`),
+ * auto-injected regardless of build type. Preview URLs aren't crawled or
+ * linked externally, and `vercel.json`'s catch-all rewrite already serves
+ * `app-shell.html` for any route with no snapshot, so skipping prerendering
+ * doesn't affect preview functionality. Also sidesteps `commitRoundMarker`
+ * reading `VERCEL_GIT_COMMIT_REF` and committing a chain-state marker
+ * against a preview branch ref. Local/dev runs (`VERCEL` unset) are
+ * unaffected — `VERCEL_ENV` is never set there either. */
+export function isPreviewBuild(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env.VERCEL_ENV === 'preview';
+}
+
+export async function main(): Promise<void> {
+  if (isPreviewBuild()) {
+    console.log('prerender: VERCEL_ENV=preview — skipping prerender pass entirely (issue #95)');
+    return;
+  }
+
   // Read back whatever VERCEL_GIT_COMMIT_MESSAGE carries from the tip commit
   // at build start, before doing any rendering work, to resume mid-burst
   // rather than always starting fresh at round 1 (issue #83). Since the
@@ -790,9 +822,12 @@ async function main(): Promise<void> {
   // structural or non-staleness violation. Routes skipped this round because
   // the render budget ran out (issue #82) never got a snapshot written, so
   // they're excluded here rather than failing validation for something this
-  // round never attempted.
-  const skippedTargetSet = new Set(skippedTargets);
-  const validationTargets = targets.filter((target) => !skippedTargetSet.has(target));
+  // round never attempted. Scoped to this round's renderQueue only (issue
+  // #94) — copied-forward routes are byte-identical to what already passed
+  // this same gate in an earlier round (or the pre-incremental pipeline), so
+  // re-validating them every round is pure waste that grows unboundedly as
+  // the copied-forward set accumulates.
+  const validationTargets = selectValidationTargets(renderQueue, skippedTargets);
   const validationIssues: string[] = [];
   await runPool(validationTargets, PRERENDER_CONCURRENCY, async (target) => {
     validationIssues.push(...(await validateTarget(target)));
