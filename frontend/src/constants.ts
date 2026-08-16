@@ -147,6 +147,14 @@ export const CHAIN_STALENESS_TIMEOUT_MINUTES = 30;
 // as SEO_AUDIT_GITHUB_REPO (both point at this codebase); kept as a separate
 // constant since the two features are unrelated and may diverge.
 export const PRERENDER_CHAIN_GITHUB_REPO = 'allut/event-radar';
+// Production/Vercel-git-connected branch the round-state marker is pushed to
+// and the cadence gate (issue #92, api/prerender-cadence.ts) reads its tip
+// commit from.
+export const PRERENDER_CADENCE_GIT_BRANCH = 'release';
+// Shared-secret header cron-job.org sends on its prerender-cadence ping
+// (issue #92) — same header name as SEO_AUDIT_TOKEN_HEADER by convention, kept
+// as a separate constant since the two secrets (and their env vars) differ.
+export const PRERENDER_CADENCE_TOKEN_HEADER = 'x-internal-token';
 
 // ─── Analytics ───────────────────────────────────────────────────────────────
 // Matches `/events/:id` (bare or locale-prefixed, e.g. `/en/events/:id`) so

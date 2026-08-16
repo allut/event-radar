@@ -128,6 +128,23 @@ export function isMarkerStale(marker: RoundMarker, now: Date): boolean {
   return ageMs > CHAIN_STALENESS_TIMEOUT_MINUTES * MS_PER_MINUTE;
 }
 
+/** Gate for the independent `prerender-cadence` Deploy Hook trigger (issue
+ * #92): true when `commitMessage`'s tip carries a fresh (<
+ * CHAIN_STALENESS_TIMEOUT_MINUTES) `continuing` marker — i.e. a chain round
+ * is genuinely in flight and its own branch push (commitRoundMarker) is
+ * already about to trigger the next round's build. Firing the cadence hook
+ * on top of that would start a second build that reads the very same fresh
+ * marker and, per resolveRoundStart's always-resume rule, treats itself as
+ * that legitimate continuation too — racing the real continuation for
+ * commitRoundMarker's branch push. Skipping here removes that race at its
+ * source instead of relying on the two builds' pushes to sort themselves out
+ * after the fact. A stale/missing/`done` marker returns false — nothing is
+ * in flight, so the cadence hook should fire as normal. */
+export function shouldSkipCadenceTick(commitMessage: string | null | undefined, now: Date): boolean {
+  const marker = parseRoundMarker(commitMessage);
+  return marker !== null && marker.status === 'continuing' && !isMarkerStale(marker, now);
+}
+
 export interface RoundStartDecision {
   burstId: string;
   round: number;
