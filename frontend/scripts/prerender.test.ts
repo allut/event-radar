@@ -1,6 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { logZeroProgressAbort } from './prerender';
+import { logZeroProgressAbort, selectValidationTargets } from './prerender';
+import type { PrerenderTarget } from './prerender';
 import type { RoundMarker } from '../src/lib/prerenderChain';
+
+function makeTarget(bare: string): PrerenderTarget {
+  return { bare, locale: 'en' };
+}
 
 /** Unit tests (issue #89) for the zero-progress diagnostic log —
  * `logZeroProgressAbort` is the sole survivor of what used to be
@@ -21,6 +26,46 @@ function makeMarker(overrides: Partial<RoundMarker> = {}): RoundMarker {
     ...overrides,
   };
 }
+
+describe('selectValidationTargets', () => {
+  it('validates exactly this round\'s newly-rendered routes, excluding copied-forward routes (issue #94)', () => {
+    // renderQueue is this round's candidates for (re-)rendering only —
+    // copied-forward routes never enter it, so they're excluded from the
+    // validation set without needing to be named here.
+    const rendered = [makeTarget('/events/1'), makeTarget('/events/2')];
+    const stillQueued = makeTarget('/events/3');
+    const renderQueue = [...rendered, stillQueued];
+
+    const result = selectValidationTargets(renderQueue, [stillQueued]);
+
+    expect(result).toEqual(rendered);
+  });
+
+  it('excludes routes the render budget left queued this round', () => {
+    const rendered = makeTarget('/events/1');
+    const skipped = makeTarget('/events/2');
+
+    const result = selectValidationTargets([rendered, skipped], [skipped]);
+
+    expect(result).toEqual([rendered]);
+  });
+
+  it('validates nothing when every queued route was skipped', () => {
+    const skipped = [makeTarget('/events/1'), makeTarget('/events/2')];
+
+    const result = selectValidationTargets(skipped, skipped);
+
+    expect(result).toEqual([]);
+  });
+
+  it('validates the whole queue when nothing was skipped', () => {
+    const renderQueue = [makeTarget('/events/1'), makeTarget('/events/2')];
+
+    const result = selectValidationTargets(renderQueue, []);
+
+    expect(result).toEqual(renderQueue);
+  });
+});
 
 describe('logZeroProgressAbort', () => {
   let warnSpy: ReturnType<typeof vi.spyOn>;
