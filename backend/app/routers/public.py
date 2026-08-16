@@ -95,10 +95,11 @@ async def showcase(
     return {"events": [serialize_event(e, locale=locale) for e in events]}
 
 
-def _prerender_event_ids_stmt(now: datetime) -> Select[tuple[int]]:
-    """Every event id that should get a prerendered snapshot / sitemap entry:
-    published + not explicit/non-event (``public_event_filter``), still live
-    (``event_not_ended_filter``), and dedup-canonical (``canonical_event_filter``).
+def _prerender_event_ids_stmt(now: datetime) -> Select[tuple[int, datetime]]:
+    """Every (id, updated_at) pair that should get a prerendered snapshot /
+    sitemap entry: published + not explicit/non-event (``public_event_filter``),
+    still live (``event_not_ended_filter``), and dedup-canonical
+    (``canonical_event_filter``).
 
     Deliberately narrower than what GET /events/{id} itself serves — that
     endpoint applies only ``public_event_filter`` and will keep returning 200
@@ -109,9 +110,14 @@ def _prerender_event_ids_stmt(now: datetime) -> Select[tuple[int]]:
     even though its last snapshot (if any) is only cleaned up by the next
     prerender run, per the accepted staleness bound documented in
     docs/research/prerendering-approach.md.
+
+    ``updated_at`` (issue #80) is the prerender pipeline's change-detection
+    marker — it lets ``prerender.ts`` tell which routes actually need
+    re-rendering versus which can be copied forward from the currently-live
+    production page.
     """
     return (
-        select(Event.id)
+        select(Event.id, Event.updated_at)
         .where(
             public_event_filter(),
             event_not_ended_filter(now),
@@ -124,13 +130,20 @@ def _prerender_event_ids_stmt(now: datetime) -> Select[tuple[int]]:
 @router.get("/prerender-events")
 @limiter.limit(RATE_LIMIT_PUBLIC)
 async def prerender_events(request: Request, db: AsyncSession = Depends(get_db)) -> dict:
-    """Event ids eligible for a prerendered snapshot — the build-time
-    prerender script's single source of truth for "which events to
-    prerender" (issue #50), reused as-is by sitemap.xml generation (issue
-    #51) so the sitemap and the prerendered snapshot pages it lists always
-    agree with each other (see _prerender_event_ids_stmt for how this
-    compares to what GET /events/{id} serves).
+    """Events eligible for a prerendered snapshot — the build-time prerender
+    script's single source of truth for "which events to prerender" (issue
+    #50), reused as-is by sitemap.xml generation (issue #51) so the sitemap
+    and the prerendered snapshot pages it lists always agree with each
+    other (see _prerender_event_ids_stmt for how this compares to what GET
+    /events/{id} serves). Each row's ``updated_at`` (issue #80) is the
+    change-detection marker the pipeline diffs against each route's
+    currently-live snapshot to decide render-vs-copy-forward.
     """
     now = datetime.now(TALLINN_TZ)
-    ids = list((await db.scalars(_prerender_event_ids_stmt(now))).all())
-    return {"event_ids": ids}
+    rows = (await db.execute(_prerender_event_ids_stmt(now))).all()
+    return {
+        "events": [
+            {"id": event_id, "updated_at": updated_at.isoformat()}
+            for event_id, updated_at in rows
+        ]
+    }

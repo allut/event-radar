@@ -106,24 +106,39 @@ class TestShowcase:
 
 class TestPrerenderEvents:
     @pytest.mark.asyncio
-    async def test_returns_ids_only(self, mock_db, make_request):
+    async def test_returns_id_and_updated_at(self, mock_db, make_request):
+        from datetime import datetime, timezone
+
         from app.routers.public import prerender_events
 
-        mock_db.scalars.return_value = _scalars_result([1, 2, 3])
+        rows = [
+            (1, datetime(2026, 8, 1, tzinfo=timezone.utc)),
+            (2, datetime(2026, 8, 2, tzinfo=timezone.utc)),
+        ]
+        execute_result = MagicMock()
+        execute_result.all.return_value = rows
+        mock_db.execute.return_value = execute_result
 
         result = await prerender_events(request=make_request(), db=mock_db)
 
-        assert result == {"event_ids": [1, 2, 3]}
+        assert result == {
+            "events": [
+                {"id": 1, "updated_at": "2026-08-01T00:00:00+00:00"},
+                {"id": 2, "updated_at": "2026-08-02T00:00:00+00:00"},
+            ]
+        }
 
     @pytest.mark.asyncio
     async def test_empty_returns_empty_list(self, mock_db, make_request):
         from app.routers.public import prerender_events
 
-        mock_db.scalars.return_value = _scalars_result([])
+        execute_result = MagicMock()
+        execute_result.all.return_value = []
+        mock_db.execute.return_value = execute_result
 
         result = await prerender_events(request=make_request(), db=mock_db)
 
-        assert result == {"event_ids": []}
+        assert result == {"events": []}
 
     def test_query_filters_published_canonical_not_ended(self):
         from datetime import datetime, timezone
