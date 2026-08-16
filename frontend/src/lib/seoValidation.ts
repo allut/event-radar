@@ -1,7 +1,9 @@
 import { JSDOM } from 'jsdom';
 import type { EventData } from '../components/EventCard';
-import { t } from '../i18n';
-import { SEO_HREFLANG_CODES } from '../constants';
+// .js extensions required: this module is also imported (transitively) by
+// api/seo-audit.ts, which Vercel runs as unbundled Node ESM.
+import { t } from '../i18n.js';
+import { SEO_HREFLANG_CODES } from '../constants.js';
 
 /** In-build validation gate for the prerender pipeline (issue #53) — pure
  * functions only (no filesystem/network access), so the same logic parses

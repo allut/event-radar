@@ -19,14 +19,18 @@
  * running this function.
  */
 import { StatusCodes } from 'http-status-codes';
+// Vercel runs this file as plain Node ESM with no bundler in front (unlike
+// the Vite SPA build or tsx-run scripts elsewhere in this repo), so Node's
+// ESM resolver requires explicit .js extensions on every relative import —
+// including transitively, in every local module this file pulls in.
 import {
   GITHUB_API_BASE_URL,
   PRERENDER_CADENCE_GIT_BRANCH,
   PRERENDER_CADENCE_TOKEN_HEADER,
   PRERENDER_CHAIN_GITHUB_REPO,
-} from '../src/constants';
-import { shouldSkipCadenceTick } from '../src/lib/prerenderChain';
-import { isValidAuditToken } from '../src/lib/seoAuditAuth';
+} from '../src/constants.js';
+import { shouldSkipCadenceTick } from '../src/lib/prerenderChain.js';
+import { isValidAuditToken } from '../src/lib/seoAuditAuth.js';
 import type { VercelRequest, VercelResponse } from './vercel';
 
 /** Fetches the current tip commit message of PRERENDER_CADENCE_GIT_BRANCH —

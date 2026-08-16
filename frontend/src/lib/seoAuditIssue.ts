@@ -1,4 +1,6 @@
-import { GITHUB_API_BASE_URL, SEO_AUDIT_GITHUB_REPO, SEO_AUDIT_ISSUE_LABEL } from '../constants';
+// .js extension required: this module is also imported (transitively) by
+// api/seo-audit.ts, which Vercel runs as unbundled Node ESM.
+import { GITHUB_API_BASE_URL, SEO_AUDIT_GITHUB_REPO, SEO_AUDIT_ISSUE_LABEL } from '../constants.js';
 
 interface GithubIssue {
   number: number;

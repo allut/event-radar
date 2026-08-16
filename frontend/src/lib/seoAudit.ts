@@ -1,5 +1,7 @@
-import { LOCALE_ET, MS_PER_HOUR, PRODUCTION_ORIGIN, SEO_AUDIT_STALE_THRESHOLD_HOURS } from '../constants';
-import { parseSnapshotHtml, validateSnapshotStructure } from './seoValidation';
+// .js extensions required: this module is also imported (transitively) by
+// api/seo-audit.ts, which Vercel runs as unbundled Node ESM.
+import { LOCALE_ET, MS_PER_HOUR, PRODUCTION_ORIGIN, SEO_AUDIT_STALE_THRESHOLD_HOURS } from '../constants.js';
+import { parseSnapshotHtml, validateSnapshotStructure } from './seoValidation.js';
 
 export interface LiveAuditResult {
   ok: boolean;

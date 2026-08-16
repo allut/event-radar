@@ -17,10 +17,14 @@
  * running this function.
  */
 import { StatusCodes } from 'http-status-codes';
-import { PRODUCTION_ORIGIN, SEO_AUDIT_TOKEN_HEADER } from '../src/constants';
-import { evaluateLiveAudit, parseSitemapEventUrls } from '../src/lib/seoAudit';
-import { reportAuditFailure, reportAuditRecovery } from '../src/lib/seoAuditIssue';
-import { isValidAuditToken } from '../src/lib/seoAuditAuth';
+// Vercel runs this file as plain Node ESM with no bundler in front (unlike
+// the Vite SPA build or tsx-run scripts elsewhere in this repo), so Node's
+// ESM resolver requires explicit .js extensions on every relative import —
+// including transitively, in every local module this file pulls in.
+import { PRODUCTION_ORIGIN, SEO_AUDIT_TOKEN_HEADER } from '../src/constants.js';
+import { evaluateLiveAudit, parseSitemapEventUrls } from '../src/lib/seoAudit.js';
+import { reportAuditFailure, reportAuditRecovery } from '../src/lib/seoAuditIssue.js';
+import { isValidAuditToken } from '../src/lib/seoAuditAuth.js';
 import type { VercelRequest, VercelResponse } from './vercel';
 
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
