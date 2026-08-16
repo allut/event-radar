@@ -1,4 +1,7 @@
-import { PERSONAS_EN, type PersonaData } from './_generated/i18nData';
+// .js extensions required: this module is also imported (transitively) by
+// api/prerender-cadence.ts and api/seo-audit.ts, which Vercel runs as
+// unbundled Node ESM.
+import { PERSONAS_EN, type PersonaData } from './_generated/i18nData.js';
 import {
   LOCALE_CODE_MAP as _LOCALE_CODE_MAP,
   DEFAULT_LOCALE_CODE as _DEFAULT_LOCALE_CODE,
@@ -14,7 +17,7 @@ import {
   VIBES,
   BROWSE_PAGE_SIZE,
   ORGANIZER_IMAGE_ALLOWED_MIME,
-} from './_generated/sharedConstants';
+} from './_generated/sharedConstants.js';
 
 export { LOCALES, APP_VERSION, MAGIC_LINK_EXPIRY_MINUTES, PERSONA_MAX_SELECTABLE, DEFAULT_CURRENCY, SAFE_URL_SCHEMES, SANITIZE_ALLOWED_TAGS, SANITIZE_ALLOWED_ATTR, CATEGORIES, VIBES, BROWSE_PAGE_SIZE, ORGANIZER_IMAGE_ALLOWED_MIME };
 export type { PersonaData };

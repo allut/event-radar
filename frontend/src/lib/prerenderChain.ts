@@ -1,4 +1,6 @@
-import { CHAIN_MARKER_PREFIX, CHAIN_MAX_ROUNDS, CHAIN_STALENESS_TIMEOUT_MINUTES, MS_PER_MINUTE } from '../constants';
+// .js extension required: this module is also imported (transitively) by
+// api/prerender-cadence.ts, which Vercel runs as unbundled Node ESM.
+import { CHAIN_MARKER_PREFIX, CHAIN_MAX_ROUNDS, CHAIN_STALENESS_TIMEOUT_MINUTES, MS_PER_MINUTE } from '../constants.js';
 
 /** Round-state carrier for the time-boxed incremental prerender pipeline
  * (issue #79) — standalone pure functions only (no I/O), so the chaining

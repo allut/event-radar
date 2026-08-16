@@ -1,6 +1,8 @@
-import { LOCALE_EN, LOCALE_ET, LOCALE_RU, LOCALES } from './constants';
-import { PERSONA_TRANSLATIONS, TRANSLATIONS } from './_generated/i18nData';
-import { PERSONAS_EN } from './_generated/i18nData';
+// .js extensions required: this module is also imported (transitively) by
+// api/seo-audit.ts, which Vercel runs as unbundled Node ESM.
+import { LOCALE_EN, LOCALE_ET, LOCALE_RU, LOCALES } from './constants.js';
+import { PERSONA_TRANSLATIONS, TRANSLATIONS } from './_generated/i18nData.js';
+import { PERSONAS_EN } from './_generated/i18nData.js';
 
 export { TRANSLATIONS };
 
