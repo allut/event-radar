@@ -62,8 +62,8 @@ function isIsoTimestamp(value: unknown): value is string {
  * around the marker line). Never throws — malformed JSON, a missing marker
  * line, or a structurally invalid payload (wrong types, negative counts, an
  * unrecognized status) all fall back to `null`, which callers treat as "no
- * active chain" (see isMarkerStale's staleness fallback and the spec's
- * cron/self-trigger collision guard). */
+ * active chain" (see isMarkerStale's staleness fallback and
+ * resolveRoundStart's round-resume logic). */
 export function parseRoundMarker(commitMessage: string | null | undefined): RoundMarker | null {
   if (!commitMessage) return null;
   const line = commitMessage.split('\n').find((l) => l.startsWith(CHAIN_MARKER_PREFIX));
@@ -129,37 +129,32 @@ export function isMarkerStale(marker: RoundMarker, now: Date): boolean {
 }
 
 export interface RoundStartDecision {
-  /** True when this build should exit immediately without rendering
-   * anything or committing a marker — see resolveRoundStart. */
-  skip: boolean;
   burstId: string;
   round: number;
 }
 
-/** Cron/self-trigger collision guard (issue #85) — the very first decision
- * every build makes, before any rendering. A fresh (<CHAIN_STALENESS_TIMEOUT_MINUTES)
- * `continuing` marker means a chain is already active in flight (its own
- * self-triggered continuation, or another build reading the same in-flight
- * state), so this build skips entirely rather than risk double-rendering.
- * Anything else — missing, `done`, or a stale `continuing` marker (a
- * crashed mid-chain build) — is "no active chain": this build proceeds as a
- * normal round via resolveRoundContext.
+/** The very first decision every build makes, before any rendering: which
+ * burst/round it belongs to. Now that the round marker's git push is the
+ * *only* trigger for the next round's build (issue #89 removed the
+ * redundant Deploy Hook that used to fire a second, competing deployment of
+ * the same commit), a build that reads a fresh `continuing` marker at its
+ * tip commit is exactly the legitimate continuation that marker was
+ * committed for — there's no other build left in the picture to collide
+ * with, and no way to tell them apart from VERCEL_GIT_COMMIT_MESSAGE alone
+ * anyway. So this always resumes at `round + 1` via resolveRoundContext
+ * rather than skipping (issue #90).
  *
- * A stale `continuing` marker is deliberately not handed to
- * resolveRoundContext as-is: that function always resumes on `continuing`
- * regardless of age (by design — see its own tests, which resume even a
- * very old marker), because staleness is this guard's responsibility, not
- * resolveRoundContext's. So a stale marker is treated as absent here before
- * handing off, starting a fresh burst instead of "resuming" a chain nothing
- * is actually driving forward. */
+ * A stale (>CHAIN_STALENESS_TIMEOUT_MINUTES) `continuing` marker is still
+ * treated as a crashed mid-chain build, not an active one: it's deliberately
+ * not handed to resolveRoundContext as-is, since that function always
+ * resumes on `continuing` regardless of age (by design — see its own tests,
+ * which resume even a very old marker). Nulling it out here before handoff
+ * starts a fresh burst instead of "resuming" a chain nothing is actually
+ * driving forward. */
 export function resolveRoundStart(commitMessage: string | null | undefined, now: Date): RoundStartDecision {
   const marker = parseRoundMarker(commitMessage);
-  if (marker && marker.status === 'continuing' && !isMarkerStale(marker, now)) {
-    return { skip: true, burstId: marker.burstId, round: marker.round };
-  }
-  const effectiveMarker = marker && marker.status === 'continuing' ? null : marker;
-  const { burstId, round } = resolveRoundContext(effectiveMarker, now);
-  return { skip: false, burstId, round };
+  const effectiveMarker = marker && marker.status === 'continuing' && isMarkerStale(marker, now) ? null : marker;
+  return resolveRoundContext(effectiveMarker, now);
 }
 
 /** Determines which burst/round a build belongs to (issue #83), from the

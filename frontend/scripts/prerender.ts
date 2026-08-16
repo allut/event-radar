@@ -513,9 +513,12 @@ async function validateTarget(target: PrerenderTarget): Promise<string[]> {
  * commit. No-ops with a log line (not a build failure) when
  * GH_PRERENDER_CHAIN_TOKEN/VERCEL_GIT_COMMIT_REF aren't set, e.g. local/dev
  * builds off Vercel — returns `false` in that case (as opposed to throwing,
- * its failure path) so callers that must not proceed without a real ref
- * advance (see maybeFireDeployHook/main()) can tell "nothing was committed"
- * apart from "the commit succeeded". */
+ * its failure path) to distinguish "nothing was committed" from "the commit
+ * succeeded"; main() no longer branches on this (issue #89 removed the only
+ * caller that did), but it's kept for tests and future callers. The advanced
+ * ref is this chain's sole continuation trigger (issue #89): the production
+ * branch is Vercel-git-connected, so this push alone fires the next round's
+ * build — no separate Deploy Hook call is needed or made. */
 async function commitRoundMarker(marker: RoundMarker): Promise<boolean> {
   const token = process.env.GH_PRERENDER_CHAIN_TOKEN;
   const branch = process.env.VERCEL_GIT_COMMIT_REF;
@@ -577,95 +580,42 @@ async function commitRoundMarker(marker: RoundMarker): Promise<boolean> {
   return true;
 }
 
-/** Fires the chain Deploy Hook to trigger the next round (issue #84) — the
- * self-triggering half of the chaining loop; `commitRoundMarker` above is
- * what carries state between rounds. Only ever POSTs for a genuinely
- * `continuing` marker: `buildRoundMarker` has already folded the
- * chain-depth cap and the zero-progress check into `marker.status`, so this
- * only needs to branch on that one field rather than re-deriving either
- * check itself. Callers must call this only once `commitRoundMarker` has
- * returned `true` (i.e. actually advanced the git ref — see main()), never
- * on its `false`/no-op or thrown-error paths: firing the hook without a
- * real marker commit both risks Vercel's same-version-cancellation behavior
- * killing the round that just triggered it, and — since the next build's
- * resume logic only sees a chain via a committed marker — silently defeats
- * the chain-depth cap by never incrementing the round counter it depends on.
+/** Diagnostic-only: logs at WARNING (round/burst context, no separate admin
+ * alert per the spec) when a round was forced to `done` by the zero-progress
+ * abort — `queueRemaining > 0` and not already `isChainDepthExceeded` is what
+ * distinguishes that genuinely-stuck case from a `done` round that naturally
+ * emptied its queue (nothing needed rendering to begin with, also
+ * `newlyRendered === 0` but nothing to warn about) or hit the chain-depth cap
+ * (an expected, routine outcome, not a stuck catalog, even on the rare round
+ * that also rendered nothing new). No-op for a `continuing` marker.
  *
- * Logs at WARNING (round/burst context, no separate admin alert per the
- * spec) specifically when this round was forced to `done` by the
- * zero-progress abort — `queueRemaining > 0` and not already
- * `isChainDepthExceeded` is what distinguishes that genuinely-stuck case
- * from a `done` round that naturally emptied its queue (nothing needed
- * rendering to begin with, also `newlyRendered === 0` but nothing to warn
- * about) or hit the chain-depth cap (an expected, routine outcome, not a
- * stuck catalog, even on the rare round that also rendered nothing new).
- *
- * No-ops (does not throw) when PRERENDER_CHAIN_DEPLOY_HOOK_URL isn't set,
- * mirroring commitRoundMarker's local/dev graceful-skip pattern. A POST
- * failure is likewise logged and swallowed rather than failing the build —
- * every snapshot already rendered and passed validation, so the deploy
- * itself is good; the only cost of a lost hook fire is the chain stalling
- * until the next 6-hourly cron tick picks it up instead of self-triggering
- * (the collision guard in issue #83's resume logic treats that the same as
- * any other fresh-burst start). */
-export async function maybeFireDeployHook(marker: RoundMarker): Promise<void> {
-  if (marker.status !== 'continuing') {
-    if (isZeroProgress(marker) && marker.queueRemaining > 0 && !isChainDepthExceeded(marker.round)) {
-      console.warn(
-        `prerender: zero-progress abort — round ${marker.round} of burst ${marker.burstId} rendered 0 new routes with ${marker.queueRemaining} route(s) still queued; chain forced to done, not firing Deploy Hook`,
-      );
-    }
+ * Chaining to the next round (issue #84) no longer fires an explicit Deploy
+ * Hook here — `commitRoundMarker`'s branch push already triggers Vercel's
+ * git-connected auto-deploy, and firing a second hook against the same
+ * commit produced two competing deployments (issue #89). */
+export function logZeroProgressAbort(marker: RoundMarker): void {
+  if (marker.status === 'continuing') {
     return;
   }
-
-  const url = process.env.PRERENDER_CHAIN_DEPLOY_HOOK_URL;
-  if (!url) {
-    console.log(
-      'prerender: PRERENDER_CHAIN_DEPLOY_HOOK_URL not set — skipping chain Deploy Hook (not a Vercel build, or chaining disabled)',
-    );
-    return;
-  }
-
-  try {
-    const res = await fetch(url, { method: 'POST' });
-    if (!res.ok) {
-      throw new Error(`${res.status} ${res.statusText}`);
-    }
-    console.log(
-      `prerender: fired chain Deploy Hook for round ${marker.round + 1} of burst ${marker.burstId}`,
-    );
-  } catch (error) {
-    console.error(
-      'prerender: failed to fire chain Deploy Hook — chain will resume via the next cron tick instead:',
-      error,
+  if (isZeroProgress(marker) && marker.queueRemaining > 0 && !isChainDepthExceeded(marker.round)) {
+    console.warn(
+      `prerender: zero-progress abort — round ${marker.round} of burst ${marker.burstId} rendered 0 new routes with ${marker.queueRemaining} route(s) still queued; chain forced to done`,
     );
   }
 }
 
 async function main(): Promise<void> {
-  // Cron/self-trigger collision guard (issue #85): read back whatever
-  // VERCEL_GIT_COMMIT_MESSAGE carries from the tip commit at build start,
-  // before doing any rendering work. A fresh `continuing` marker means a
-  // chain is already active — skip this build entirely rather than risk a
-  // normal 6-hourly cron tick double-rendering a burst already in flight.
-  // See resolveRoundStart's doc comment (src/lib/prerenderChain.ts) for why
-  // a stale `continuing` marker instead falls through to a fresh round 1.
-  const roundStart = resolveRoundStart(process.env.VERCEL_GIT_COMMIT_MESSAGE, new Date());
-  if (roundStart.skip) {
-    // Exits non-zero (not just `return`s) so `npm run build` fails and Vercel
-    // never promotes this build's dist/ — a skipped run never gets past this
-    // point to write sitemap.xml/robots.txt or copy any snapshot forward, so
-    // its dist/ is just the bare `vite build` SPA shell. Deploying that as-is
-    // would wipe out every prerendered page/sitemap/robots.txt already live
-    // in production; failing the build instead leaves the current (good)
-    // deployment untouched until a later round/cadence tick succeeds. This is
-    // an expected, routine outcome of the collision guard (issue #85) — not a
-    // real error — see docs/backend-ops.md's Prerender cadence section.
-    throw new Error(
-      `prerender: active chain in progress (burst ${roundStart.burstId}, round ${roundStart.round}) — skipping this build (cron/self-trigger collision guard) and failing it so Vercel doesn't deploy an empty dist/ over the current production build`,
-    );
-  }
-  const { burstId, round } = roundStart;
+  // Read back whatever VERCEL_GIT_COMMIT_MESSAGE carries from the tip commit
+  // at build start, before doing any rendering work, to resume mid-burst
+  // rather than always starting fresh at round 1 (issue #83). Since the
+  // round marker's git push is the only thing that triggers the next round's
+  // build (issue #89 removed the redundant Deploy Hook that used to fire a
+  // second, competing deployment of the same commit), a fresh `continuing`
+  // marker here is exactly the legitimate continuation it was committed for
+  // — see resolveRoundStart's doc comment (src/lib/prerenderChain.ts) for why
+  // it resumes at round + 1 instead of skipping (issue #90), and why a stale
+  // `continuing` marker still falls through to a fresh round 1.
+  const { burstId, round } = resolveRoundStart(process.env.VERCEL_GIT_COMMIT_MESSAGE, new Date());
   console.log(`prerender: round ${round} of burst ${burstId}${round > 1 ? ' (resumed)' : ' (new)'}`);
 
   const candidates = await fetchPrerenderCandidates();
@@ -858,11 +808,11 @@ async function main(): Promise<void> {
   console.log(`prerender: validated ${validationTargets.length} snapshot(s), no issues found`);
 
   // Round-state marker (issue #83): built from this round's actual outcome
-  // and committed to the branch the Deploy Hook targets, advancing the git
-  // ref before any later round re-fires the hook (issue #84, out of scope
-  // here). `status` already accounts for the chain-depth cap and
-  // zero-progress abort so the committed marker is truthful even before
-  // hook-firing exists. A failure here (bad token, protected branch,
+  // and committed to the Vercel-git-connected production branch, whose push
+  // is what triggers any later round's build (issue #84/#89 — see the
+  // comment below). `status` already accounts for the chain-depth cap and
+  // zero-progress abort so the committed marker is truthful. A failure here
+  // (bad token, protected branch,
   // transient GitHub 5xx) must not fail the whole build — every snapshot
   // was already rendered and passed the validation gate above, so the
   // deploy is good; the only cost of a lost marker commit is this round's
@@ -875,22 +825,19 @@ async function main(): Promise<void> {
     { newlyRendered, copiedForward, queueRemaining: skippedTargets.length },
     new Date(),
   );
-  // Deploy Hook chaining (issue #84): fired only when commitRoundMarker
-  // actually advanced the git ref (returned `true`) — never on its
-  // `false`/no-op (missing token/branch, e.g. local/dev) or thrown-error
-  // paths. See maybeFireDeployHook's doc comment for why firing against a
-  // commit that never happened is unsafe. If the commit was skipped or
-  // failed, the chain simply resumes via the next 6-hourly cron tick instead
-  // of self-triggering (same degraded-not-broken fallback as a lost marker
-  // commit).
+  // Chaining (issue #84, fixed in #89): the branch push inside
+  // commitRoundMarker is the chain's sole continuation trigger — the
+  // production branch is Vercel-git-connected, so advancing its ref alone
+  // triggers the next round's build. No separate Deploy Hook fire happens
+  // here. If the commit is skipped or fails, the chain simply resumes via
+  // the next 6-hourly cron tick instead of self-triggering (degraded, not
+  // broken — same fallback as any other lost marker commit).
   try {
-    const committed = await commitRoundMarker(marker);
-    if (committed) {
-      await maybeFireDeployHook(marker);
-    }
+    await commitRoundMarker(marker);
   } catch (error) {
     console.error('prerender: failed to commit round marker — deploy proceeds anyway:', error);
   }
+  logZeroProgressAbort(marker);
 }
 
 const isMainModule =

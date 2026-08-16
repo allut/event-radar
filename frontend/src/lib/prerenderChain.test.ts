@@ -144,12 +144,12 @@ describe('resolveRoundContext', () => {
 });
 
 describe('resolveRoundStart', () => {
-  // Cron/self-trigger collision guard (issue #85) — enumerated against the
-  // four acceptance-criteria cases: fresh continuing (skip), stale
-  // continuing (fresh round 1), done (fresh round 1), missing (fresh round 1).
+  // Enumerated against the four acceptance-criteria cases: fresh continuing
+  // (resume at round + 1, issue #90), stale continuing (fresh round 1), done
+  // (fresh round 1), missing (fresh round 1).
   const now = new Date('2026-08-15T12:00:00.000Z');
 
-  it('skips a build invoked while a fresh (<30min) continuing marker exists', () => {
+  it('resumes at round + 1 for a fresh (<30min) continuing marker', () => {
     const marker = makeMarker({
       burstId: '2026-08-15T11:50:00.000Z',
       round: 2,
@@ -157,9 +157,21 @@ describe('resolveRoundStart', () => {
       committedAt: '2026-08-15T11:45:00.000Z', // 15 min old — under the timeout
     });
     expect(resolveRoundStart(serializeRoundMarker(marker), now)).toEqual({
-      skip: true,
       burstId: marker.burstId,
-      round: marker.round,
+      round: marker.round + 1,
+    });
+  });
+
+  it('resumes at round + 1 for a marker committed seconds ago', () => {
+    const marker = makeMarker({
+      burstId: '2026-08-15T11:50:00.000Z',
+      round: 1,
+      status: 'continuing',
+      committedAt: '2026-08-15T11:59:55.000Z', // 5 sec old
+    });
+    expect(resolveRoundStart(serializeRoundMarker(marker), now)).toEqual({
+      burstId: marker.burstId,
+      round: 2,
     });
   });
 
@@ -171,7 +183,6 @@ describe('resolveRoundStart', () => {
       committedAt: '2026-08-15T11:20:00.000Z', // 40 min old — over the timeout
     });
     expect(resolveRoundStart(serializeRoundMarker(marker), now)).toEqual({
-      skip: false,
       burstId: now.toISOString(),
       round: 1,
     });
@@ -180,7 +191,6 @@ describe('resolveRoundStart', () => {
   it('proceeds as a fresh round 1 for a done marker', () => {
     const marker = makeMarker({ status: 'done', committedAt: '2026-08-15T11:59:00.000Z' });
     expect(resolveRoundStart(serializeRoundMarker(marker), now)).toEqual({
-      skip: false,
       burstId: now.toISOString(),
       round: 1,
     });
@@ -188,15 +198,36 @@ describe('resolveRoundStart', () => {
 
   it('proceeds as a fresh round 1 with no marker at all', () => {
     expect(resolveRoundStart(undefined, now)).toEqual({
-      skip: false,
       burstId: now.toISOString(),
       round: 1,
     });
     expect(resolveRoundStart('unrelated commit message, no marker line', now)).toEqual({
-      skip: false,
       burstId: now.toISOString(),
       round: 1,
     });
+  });
+
+  it('advances round on two consecutive resumes, simulating a real chain (local repro)', () => {
+    // Round 1 finishes and commits a fresh `continuing` marker...
+    const round1Marker = makeMarker({
+      burstId: '2026-08-15T11:00:00.000Z',
+      round: 1,
+      status: 'continuing',
+      committedAt: '2026-08-15T11:58:00.000Z',
+    });
+    const round2Start = resolveRoundStart(serializeRoundMarker(round1Marker), now);
+    expect(round2Start).toEqual({ burstId: round1Marker.burstId, round: 2 });
+
+    // ...round 2 runs, still has work queued, and commits its own fresh
+    // `continuing` marker moments later.
+    const round2Marker = makeMarker({
+      burstId: round2Start.burstId,
+      round: round2Start.round,
+      status: 'continuing',
+      committedAt: '2026-08-15T11:59:30.000Z',
+    });
+    const round3Start = resolveRoundStart(serializeRoundMarker(round2Marker), now);
+    expect(round3Start).toEqual({ burstId: round1Marker.burstId, round: 3 });
   });
 });
 
