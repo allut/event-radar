@@ -292,6 +292,16 @@ export type ToastState =
   | { status: typeof UI_STATE.success | typeof UI_STATE.error; message: string };
 export const TOAST_IDLE: ToastState = { status: UI_STATE.idle };
 
+// AuthCard's three presentational kinds — shared by AuthVerify and
+// OrganizerVerify, both magic-link verify flows that map the same
+// three-state machine onto AuthCard's spinner/check/error rendering.
+export type AuthCardKind = 'pending' | 'success' | 'error';
+export const VERIFY_STATE_TO_KIND: Record<VerifyState, AuthCardKind> = {
+  [UI_STATE.verifying]: 'pending',
+  [UI_STATE.success]: 'success',
+  [UI_STATE.error]: 'error',
+};
+
 // Contact form (routes/Contact/Contact.tsx)
 export const CONTACT_TEXTAREA_ROWS = 6;
 
@@ -458,6 +468,7 @@ export const PRICE_INPUT_STEP = '0.01';
 // Extra URL scheme legal docs link out with (contact address), alongside
 // SAFE_URL_SCHEMES's https:/mailto:-free defaults.
 export const MAILTO_SCHEME = 'mailto';
+export const CONTACT_MAILTO = `${MAILTO_SCHEME}:${CONTACT_EMAIL}`;
 
 // ─── Routes ──────────────────────────────────────────────────────────────────
 // Every <Route> path, `navigate()` target and `<Link to>` in App.tsx / the
@@ -486,6 +497,16 @@ export const ROUTES = {
   organizerEventEdit: (id: number | string) => `/organizer/events/${id}/edit`,
   organizerEventEditPattern: '/organizer/events/:id/edit',
 } as const;
+
+// The signed-in primary nav — same four {route, labelKey} pairs rendered by
+// both TopBar (desktop) and MobileMenu (mobile), kept in one place so they
+// can't drift out of sync.
+export const NAV_ITEMS = [
+  { route: ROUTES.home, labelKey: 'nav_daily5' },
+  { route: ROUTES.explore, labelKey: 'nav_explore' },
+  { route: ROUTES.saved, labelKey: 'nav_saved' },
+  { route: ROUTES.settings, labelKey: 'nav_settings' },
+] as const;
 
 // ─── API endpoints ───────────────────────────────────────────────────────────
 // Every backend request path resolves through this map (or a builder function

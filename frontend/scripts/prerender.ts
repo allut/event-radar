@@ -35,7 +35,6 @@ import { preview, type PreviewServer } from 'vite';
 import type { EventData } from '../src/components/EventCard';
 import {
   CANONICAL_LINK_SELECTOR,
-  GITHUB_API_BASE_URL,
   JSONLD_SCRIPT_SELECTOR,
   LOCALE_URL_PREFIX_CODES,
   LOCALES,
@@ -49,6 +48,7 @@ import {
   SITEMAP_PATH,
 } from '../src/constants';
 import { localizedPath } from '../src/lib/urlLocale';
+import { githubRequest } from '../src/lib/githubRequest';
 import { compareEventStaleness, parseSnapshotHtml, validateSnapshotStructure } from '../src/lib/seoValidation';
 import { createBudgetedCursor, prioritizeRenderQueue } from '../src/lib/prerenderQueue';
 import {
@@ -537,13 +537,10 @@ async function commitRoundMarker(marker: RoundMarker): Promise<boolean> {
     return false;
   }
 
-  const headers = {
-    Authorization: `Bearer ${token}`,
-    Accept: 'application/vnd.github+json',
-  };
-  const repoBase = `${GITHUB_API_BASE_URL}/repos/${PRERENDER_CHAIN_GITHUB_REPO}`;
+  const chainGithubRequest = (path: string, init?: RequestInit): Promise<Response> =>
+    githubRequest(PRERENDER_CHAIN_GITHUB_REPO, path, token, 'event-radar-prerender-chain', init);
 
-  const refRes = await fetch(`${repoBase}/git/ref/heads/${branch}`, { headers });
+  const refRes = await chainGithubRequest(`/git/ref/heads/${branch}`);
   if (!refRes.ok) {
     throw new Error(
       `prerender: failed to read ref heads/${branch} — ${refRes.status} ${refRes.statusText}`,
@@ -551,7 +548,7 @@ async function commitRoundMarker(marker: RoundMarker): Promise<boolean> {
   }
   const parentSha = ((await refRes.json()) as { object: { sha: string } }).object.sha;
 
-  const parentCommitRes = await fetch(`${repoBase}/git/commits/${parentSha}`, { headers });
+  const parentCommitRes = await chainGithubRequest(`/git/commits/${parentSha}`);
   if (!parentCommitRes.ok) {
     throw new Error(
       `prerender: failed to read parent commit ${parentSha} — ${parentCommitRes.status} ${parentCommitRes.statusText}`,
@@ -562,9 +559,9 @@ async function commitRoundMarker(marker: RoundMarker): Promise<boolean> {
   const summary = `round ${marker.round} (${marker.status}) — ${marker.newlyRendered} rendered, ${marker.copiedForward} copied, ${marker.queueRemaining} queued`;
   const message = `prerender: ${summary}\n\n${serializeRoundMarker(marker)}`;
 
-  const commitRes = await fetch(`${repoBase}/git/commits`, {
+  const commitRes = await chainGithubRequest('/git/commits', {
     method: 'POST',
-    headers: { ...headers, 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ message, tree: treeSha, parents: [parentSha] }),
   });
   if (!commitRes.ok) {
@@ -574,9 +571,9 @@ async function commitRoundMarker(marker: RoundMarker): Promise<boolean> {
   }
   const newSha = ((await commitRes.json()) as { sha: string }).sha;
 
-  const updateRefRes = await fetch(`${repoBase}/git/refs/heads/${branch}`, {
+  const updateRefRes = await chainGithubRequest(`/git/refs/heads/${branch}`, {
     method: 'PATCH',
-    headers: { ...headers, 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ sha: newSha }),
   });
   if (!updateRefRes.ok) {

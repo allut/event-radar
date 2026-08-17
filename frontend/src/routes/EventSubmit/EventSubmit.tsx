@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react';
 import { useLocation, useParams } from 'react-router-dom';
-import { getLocale, setLocale } from '../../lib/auth';
 import { useOrganizerLogout } from '../../hooks/useOrganizerLogout';
 import { useOrganizerEventForm } from '../../hooks/useOrganizerEventForm';
+import { useLocalLocale } from '../../hooks/useLocalLocale';
 import OrganizerTopBar from '../../components/OrganizerTopBar';
 import SegmentedControl from '../../components/SegmentedControl';
 import DatePicker from '../../components/DatePicker';
@@ -15,7 +15,7 @@ import {
   PRICE_INPUT_MIN, PRICE_INPUT_STEP,
   type ContentLang, type ContentMarkerState,
 } from '../../constants';
-import { currencySymbol } from '../../utils';
+import { currencySymbol, titleWithBrand } from '../../utils';
 import { useSeoMeta } from '../../hooks/useSeoMeta';
 import SeoTags from '../../components/SeoTags';
 import styles from './EventSubmit.module.css';
@@ -33,19 +33,14 @@ interface ContentSlot {
 export default function EventSubmit() {
   const params = useParams();
   const eventId = params.id ? Number(params.id) : undefined;
-  const [locale, setLocaleState] = useState(getLocale());
+  const [locale, handleLocaleChange] = useLocalLocale();
   const handleLogout = useOrganizerLogout();
-
-  function handleLocaleChange(code: string) {
-    setLocaleState(code);
-    setLocale(code);
-  }
 
   const form = useOrganizerEventForm(locale, eventId);
   const [contentLang, setContentLang] = useState<ContentLang>(ORGANIZER_BASE_CONTENT_LANG);
   const { pathname } = useLocation();
   const seoMeta = useSeoMeta({
-    title: `${t(form.isEditMode ? 'organizer_edit_title' : 'organizer_submit_title', locale)} | ${t('brand', locale)}`,
+    title: titleWithBrand(t(form.isEditMode ? 'organizer_edit_title' : 'organizer_submit_title', locale), locale),
     locale,
     path: pathname,
   });

@@ -3,7 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../../api/client';
 import { t, ti } from '../../i18n';
-import { buildMapsUrl, categoryGradient, copyToClipboard, cx, formatEventDateTime, formatEventShortDate, formatHourMinute, formatPrice, safeUrl, sanitizeHtml, trackExternalClick, truncateForMeta } from '../../utils';
+import { buildMapsUrl, categoryGradient, copyToClipboard, cx, formatEventDateTime, formatEventShortDate, formatHourMinute, formatPrice, safeUrl, sanitizeHtml, titleWithBrand, trackExternalClick, truncateForMeta, withLocaleQuery } from '../../utils';
 import { useAuth } from '../../hooks/useAuth';
 import { useLocaleMutation } from '../../hooks/useLocaleMutation';
 import { useLogout } from '../../hooks/useLogout';
@@ -43,7 +43,7 @@ export default function EventDetail() {
 
   const { data, isLoading, isError } = useQuery({
     queryKey: [QUERY_KEYS.event, id, locale],
-    queryFn: () => api.get<EventDetailData>(`${API.event(id ?? '')}?locale=${encodeURIComponent(locale)}`),
+    queryFn: () => api.get<EventDetailData>(withLocaleQuery(API.event(id ?? ''), locale)),
     enabled: Boolean(id),
     retry: false,
   });
@@ -66,8 +66,8 @@ export default function EventDetail() {
   // canonical URL for content that isn't actually there (issue #48).
   const seoMeta = useSeoMeta({
     title: data
-      ? `${data.title} – ${data.venue_name || formatEventShortDate(data.starts_at, locale)} | ${t('brand', locale)}`
-      : `${t('event_not_found', locale)} | ${t('brand', locale)}`,
+      ? titleWithBrand(`${data.title} – ${data.venue_name || formatEventShortDate(data.starts_at, locale)}`, locale)
+      : titleWithBrand(t('event_not_found', locale), locale),
     locale,
     path: ROUTES.eventDetail(id ?? ''),
     indexable: Boolean(data),

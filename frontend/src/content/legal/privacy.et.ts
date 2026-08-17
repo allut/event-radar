@@ -1,7 +1,6 @@
-import { CONTACT_EMAIL } from '../../constants';
+import { CONTACT_EMAIL, CONTACT_MAILTO } from '../../constants';
 import type { LegalDoc } from './types';
 
-const MAILTO = `mailto:${CONTACT_EMAIL}`;
 const AKI_URL = 'https://www.aki.ee';
 
 const doc: LegalDoc = {
@@ -23,7 +22,7 @@ const doc: LegalDoc = {
           kind: 'p',
           content: [
             'Vastutav töötleja on Aleksei Lutkov, kes haldab What’s on Radarit füüsilisest isikust ettevõtjana Eestis. Privaatsusküsimuste või oma õiguste kasutamiseks võta ühendust ',
-            { text: CONTACT_EMAIL, href: MAILTO },
+            { text: CONTACT_EMAIL, href: CONTACT_MAILTO },
             '.',
           ],
         },
@@ -135,7 +134,7 @@ const doc: LegalDoc = {
           kind: 'p',
           content: [
             'GDPR-i alusel on sul õigus: pääseda ligi oma andmetele; parandada ebatäpseid andmeid; kustutada oma andmed ("õigus olla unustatud"); piirata töötlemist või sellele vastu olla; andmete ülekantavus; ja võtta nõusolek igal ajal tagasi (see ei mõjuta juba tehtud töötlemist). Kokkuvõtte tellimuse saad tühistada igast kokkuvõtte e-kirjast või tellimuse tühistamise lehelt. Mis tahes õiguse kasutamiseks kirjuta ',
-            { text: CONTACT_EMAIL, href: MAILTO },
+            { text: CONTACT_EMAIL, href: CONTACT_MAILTO },
             '; me vastame ühe kuu jooksul. Sul on ka õigus esitada kaebus oma järelevalveasutusele — Eestis on selleks Andmekaitse Inspektsioon, ',
             { text: AKI_URL, href: AKI_URL },
             '.',
@@ -183,7 +182,7 @@ const doc: LegalDoc = {
           kind: 'p',
           content: [
             'Küsimused või taotlused: ',
-            { text: CONTACT_EMAIL, href: MAILTO },
+            { text: CONTACT_EMAIL, href: CONTACT_MAILTO },
             '.',
           ],
         },

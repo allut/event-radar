@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, ApiError } from '../../api/client';
-import { getLocale, setLocale } from '../../lib/auth';
+import { setLocale } from '../../lib/auth';
 import { useLogout } from '../../hooks/useLogout';
+import { useLocalLocale } from '../../hooks/useLocalLocale';
 import { API, PERSONAS, PERSONA_MAX_SELECTABLE, ROUTES } from '../../constants';
 import { t, ti, personaName, personaVibe } from '../../i18n';
 import { useStaticSeoMeta } from '../../hooks/useStaticSeoMeta';
@@ -15,13 +16,8 @@ export default function Onboarding() {
   const navigate = useNavigate();
   const handleLogout = useLogout();
   const [selected, setSelected] = useState<string[]>([]);
-  const [locale, setLocaleState] = useState<string>(getLocale());
+  const [locale, handleLocaleChange] = useLocalLocale();
   const seoMeta = useStaticSeoMeta('onboarding_heading', locale);
-
-  function handleLocaleChange(code: string) {
-    setLocaleState(code);
-    setLocale(code);
-  }
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 

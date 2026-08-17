@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '../../api/client';
 import { API, BRAND_GLYPH, MAGIC_LINK_EXPIRY_MINUTES, OG_FALLBACK_IMAGE_PATH, PERSONAS, PRODUCTION_ORIGIN, QUERY_KEYS, ROUTES, STEP_KEYS, UI_STATE } from '../../constants';
 import { t, ti, personaName, personaVibe } from '../../i18n';
-import { padIndex } from '../../utils';
+import { padIndex, withLocaleQuery } from '../../utils';
 import { useLocaleMutation } from '../../hooks/useLocaleMutation';
 import { useMagicLinkRequest } from '../../hooks/useMagicLinkRequest';
 import { useOrganizerAuth } from '../../hooks/useOrganizerAuth';
@@ -74,7 +74,7 @@ export default function Landing() {
 
   const { data, isError } = useQuery({
     queryKey: [QUERY_KEYS.showcase, locale],
-    queryFn: () => api.get<ShowcaseResponse>(`${API.publicShowcase}?locale=${locale}`),
+    queryFn: () => api.get<ShowcaseResponse>(withLocaleQuery(API.publicShowcase, locale)),
     retry: false,
   });
 

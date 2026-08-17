@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { t, ti } from '../../i18n';
-import { safeUrl } from '../../utils';
+import { safeUrl, titleWithBrand } from '../../utils';
 import { useAuth } from '../../hooks/useAuth';
 import { useLogout } from '../../hooks/useLogout';
 import { useLocaleMutation } from '../../hooks/useLocaleMutation';
@@ -78,7 +78,7 @@ export default function LegalPage({ docId, titleKey }: LegalPageProps) {
   // so the invalidation key is an inert sentinel (matches StaticPage).
   const { locale, handleLocaleChange } = useLocaleMutation();
   const { pathname } = useLocation();
-  const seoMeta = useSeoMeta({ title: `${t(titleKey, locale)} | ${t('brand', locale)}`, locale, path: pathname });
+  const seoMeta = useSeoMeta({ title: titleWithBrand(t(titleKey, locale), locale), locale, path: pathname });
   // Keyed by `${docId}:${locale}` so a stale-key load renders as loading without
   // a synchronous setState(null) in the effect (react-hooks/set-state-in-effect).
   const [result, setResult] = useState<

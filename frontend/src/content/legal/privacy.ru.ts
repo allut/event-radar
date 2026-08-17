@@ -1,7 +1,6 @@
-import { CONTACT_EMAIL } from '../../constants';
+import { CONTACT_EMAIL, CONTACT_MAILTO } from '../../constants';
 import type { LegalDoc } from './types';
 
-const MAILTO = `mailto:${CONTACT_EMAIL}`;
 const AKI_URL = 'https://www.aki.ee';
 
 const doc: LegalDoc = {
@@ -23,7 +22,7 @@ const doc: LegalDoc = {
           kind: 'p',
           content: [
             'Контролёр данных — Aleksei Lutkov, ведущий What’s on Radar как индивидуальный предприниматель в Эстонии. По любым вопросам конфиденциальности или для реализации ваших прав свяжитесь по адресу ',
-            { text: CONTACT_EMAIL, href: MAILTO },
+            { text: CONTACT_EMAIL, href: CONTACT_MAILTO },
             '.',
           ],
         },
@@ -135,7 +134,7 @@ const doc: LegalDoc = {
           kind: 'p',
           content: [
             'Согласно GDPR вы имеете право: получить доступ к своим данным; исправить неточные данные; удалить свои данные («право быть забытым»); ограничить обработку или возразить против неё; переносимость данных; и отозвать согласие в любой момент (это не влияет на уже осуществлённую обработку). Вы можете отписаться от рассылки из любого письма рассылки или на странице отписки. Для реализации любого права напишите на ',
-            { text: CONTACT_EMAIL, href: MAILTO },
+            { text: CONTACT_EMAIL, href: CONTACT_MAILTO },
             '; мы отвечаем в течение одного месяца. Вы также имеете право подать жалобу в надзорный орган — в Эстонии это Andmekaitse Inspektsioon (Инспекция по защите данных Эстонии), ',
             { text: AKI_URL, href: AKI_URL },
             '.',
@@ -183,7 +182,7 @@ const doc: LegalDoc = {
           kind: 'p',
           content: [
             'Вопросы или запросы: ',
-            { text: CONTACT_EMAIL, href: MAILTO },
+            { text: CONTACT_EMAIL, href: CONTACT_MAILTO },
             '.',
           ],
         },

@@ -2,22 +2,16 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { api, ApiError } from '../../api/client';
 import { setSignedInHint, getLocale } from '../../lib/auth';
-import { API, AUTH_REDIRECT_DELAY_MS, ROUTES, UI_STATE, type VerifyState } from '../../constants';
+import { API, AUTH_REDIRECT_DELAY_MS, ROUTES, UI_STATE, VERIFY_STATE_TO_KIND, type VerifyState } from '../../constants';
 import { t } from '../../i18n';
 import { useStaticSeoMeta } from '../../hooks/useStaticSeoMeta';
-import AuthCard, { type AuthCardKind } from '../../components/AuthCard';
+import AuthCard from '../../components/AuthCard';
 import SeoTags from '../../components/SeoTags';
 import styles from './AuthVerify.module.css';
 
 interface MeResponse {
   has_personas: boolean;
 }
-
-const STATE_TO_KIND: Record<VerifyState, AuthCardKind> = {
-  [UI_STATE.verifying]: 'pending',
-  [UI_STATE.success]: 'success',
-  [UI_STATE.error]: 'error',
-};
 
 export default function AuthVerify() {
   const locale = getLocale();
@@ -75,7 +69,7 @@ export default function AuthVerify() {
       <SeoTags meta={seoMeta} />
       <AuthCard
         locale={locale}
-        kind={STATE_TO_KIND[state]}
+        kind={VERIFY_STATE_TO_KIND[state]}
         message={message}
         action={state === UI_STATE.error && (
           <Link to={ROUTES.login} className={styles.retry}>{t('request_new_link', locale)}</Link>

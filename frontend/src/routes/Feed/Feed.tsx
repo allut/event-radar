@@ -10,7 +10,7 @@ import EmptyState from '../../components/EmptyState';
 import PageState from '../../components/PageState';
 import TopBar from '../../components/TopBar';
 import SeoTags from '../../components/SeoTags';
-import { formatHourMinute, formatIsoDate, formatTodayDate, padIndex } from '../../utils';
+import { formatHourMinute, formatIsoDate, formatTodayDate, padIndex, titleWithBrand, withLocaleQuery } from '../../utils';
 import { API, BRAND_GLYPH, QUERY_KEYS, ROUTES, UI_STATE } from '../../constants';
 import styles from './Feed.module.css';
 
@@ -24,11 +24,11 @@ interface FeedResponse {
 export default function Feed() {
   const { locale, handleLocaleChange } = useLocaleMutation({ publicRoute: true });
   const handleLogout = useLogout();
-  const seoMeta = useSeoMeta({ title: `${t('seo_title_feed', locale)} | ${t('brand', locale)}`, locale, path: ROUTES.home });
+  const seoMeta = useSeoMeta({ title: titleWithBrand(t('seo_title_feed', locale), locale), locale, path: ROUTES.home });
 
   const { data, isLoading, isError } = useQuery({
     queryKey: [QUERY_KEYS.feed, locale],
-    queryFn: () => api.get<FeedResponse>(`${API.feed}?locale=${encodeURIComponent(locale)}`),
+    queryFn: () => api.get<FeedResponse>(withLocaleQuery(API.feed, locale)),
     retry: false,
   });
 
