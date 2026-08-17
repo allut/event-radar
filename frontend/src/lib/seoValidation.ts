@@ -3,7 +3,14 @@ import type { EventData } from '../components/EventCard';
 // .js extensions required: this module is also imported (transitively) by
 // api/seo-audit.ts, which Vercel runs as unbundled Node ESM.
 import { t } from '../i18n.js';
-import { SEO_HREFLANG_CODES } from '../constants.js';
+import {
+  CANONICAL_LINK_SELECTOR,
+  EVENT_PRICE_SELECTOR,
+  JSONLD_SCRIPT_SELECTOR,
+  PRICE_DATA_ATTR,
+  ROBOTS_INDEX_FOLLOW,
+  SEO_HREFLANG_CODES,
+} from '../constants.js';
 
 /** In-build validation gate for the prerender pipeline (issue #53) — pure
  * functions only (no filesystem/network access), so the same logic parses
@@ -38,7 +45,7 @@ export function parseSnapshotHtml(html: string): ParsedSnapshot {
   const { document } = new JSDOM(html).window;
 
   const title = document.querySelector('title')?.textContent?.trim() ?? null;
-  const canonical = document.querySelector('link[rel="canonical"]')?.getAttribute('href') ?? null;
+  const canonical = document.querySelector(CANONICAL_LINK_SELECTOR)?.getAttribute('href') ?? null;
   const robots = document.querySelector('meta[name="robots"]')?.getAttribute('content') ?? null;
 
   const hreflangs: Record<string, string> = {};
@@ -49,7 +56,7 @@ export function parseSnapshotHtml(html: string): ParsedSnapshot {
   });
 
   const jsonLd: (unknown | undefined)[] = [];
-  document.querySelectorAll('script[type="application/ld+json"]').forEach((el) => {
+  document.querySelectorAll(JSONLD_SCRIPT_SELECTOR).forEach((el) => {
     try {
       jsonLd.push(JSON.parse(el.textContent ?? ''));
     } catch {
@@ -57,15 +64,15 @@ export function parseSnapshotHtml(html: string): ParsedSnapshot {
     }
   });
 
-  const priceEl = document.querySelector('[data-testid="event-price"]');
-  const rawMin = priceEl?.getAttribute('data-price-min') ?? null;
-  const rawMax = priceEl?.getAttribute('data-price-max') ?? null;
+  const priceEl = document.querySelector(EVENT_PRICE_SELECTOR);
+  const rawMin = priceEl?.getAttribute(PRICE_DATA_ATTR.min) ?? null;
+  const rawMax = priceEl?.getAttribute(PRICE_DATA_ATTR.max) ?? null;
   const price: EventPriceSnapshot | null = priceEl
     ? {
         min: rawMin !== null && rawMin !== '' ? Number(rawMin) : null,
         max: rawMax !== null && rawMax !== '' ? Number(rawMax) : null,
-        currency: priceEl.getAttribute('data-currency') || null,
-        hasFreeTier: priceEl.getAttribute('data-has-free-tier') === 'true',
+        currency: priceEl.getAttribute(PRICE_DATA_ATTR.currency) || null,
+        hasFreeTier: priceEl.getAttribute(PRICE_DATA_ATTR.hasFreeTier) === 'true',
       }
     : null;
 
@@ -168,8 +175,8 @@ export function validateSnapshotStructure(
     if (!parsed.hreflangs[code]) issues.push(`missing hreflang alternate for "${code}"`);
   }
 
-  if (parsed.robots !== 'index, follow') {
-    issues.push(`robots meta is "${parsed.robots ?? 'missing'}", expected "index, follow"`);
+  if (parsed.robots !== ROBOTS_INDEX_FOLLOW) {
+    issues.push(`robots meta is "${parsed.robots ?? 'missing'}", expected "${ROBOTS_INDEX_FOLLOW}"`);
   }
 
   if (parsed.jsonLd.length !== 1) {

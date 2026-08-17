@@ -114,9 +114,47 @@ export const OG_FALLBACK_IMAGE_PATH = '/og-fallback.png';
 // og:description/meta description target length — Google truncates around
 // ~155–160 chars; truncateForMeta (utils.ts) cuts at a word boundary under this.
 export const SEO_DESCRIPTION_MAX_LENGTH = 157;
-// Every LOCALES code plus 'x-default', in the order useSeoMeta emits hreflang
-// <link> alternates.
-export const SEO_HREFLANG_CODES: string[] = [...LOCALES.map((l) => l.code), 'x-default'];
+// Hreflang code for "no specific locale matches" — useSeoMeta (producer)
+// and scripts/prerender.ts's buildSitemapXml (producer) both special-case
+// this code to resolve to the bare Estonian URL rather than a localizedPath
+// lookup; kept as one constant since both sites must agree.
+export const SEO_XDEFAULT_CODE = 'x-default';
+// Every LOCALES code plus SEO_XDEFAULT_CODE, in the order useSeoMeta emits
+// hreflang <link> alternates.
+export const SEO_HREFLANG_CODES: string[] = [...LOCALES.map((l) => l.code), SEO_XDEFAULT_CODE];
+// robots meta content emitted by useSeoMeta and checked by seoValidation.ts's
+// in-build validation gate (issue #53) — one pair of constants so the two
+// can't silently drift.
+export const ROBOTS_INDEX_FOLLOW = 'index, follow';
+export const ROBOTS_NOINDEX = 'noindex';
+// <link rel> value useSeoMeta emits for the canonical URL, read back by both
+// seoValidation.ts (in-build gate) and scripts/prerender.ts (content-ready
+// wait selector) as a CSS selector.
+export const CANONICAL_REL = 'canonical';
+export const CANONICAL_LINK_SELECTOR = `link[rel="${CANONICAL_REL}"]`;
+// <script type> SeoTags renders its JSON-LD payload under, read back by
+// seoValidation.ts and scripts/prerender.ts's embedChangeMarker as a CSS
+// selector — one pair so a type-attribute typo can't silently break either.
+export const JSONLD_SCRIPT_TYPE = 'application/ld+json';
+export const JSONLD_SCRIPT_SELECTOR = `script[type="${JSONLD_SCRIPT_TYPE}"]`;
+// Price marker EventDetail.tsx renders on the event-detail page, read back
+// by seoValidation.ts's in-build staleness gate (issue #53) — price isn't
+// part of the JSON-LD payload (issue #46 defers AggregateOffer), so it needs
+// its own marker. One shared map so an attribute-name typo on either side
+// can't silently break the gate.
+export const EVENT_PRICE_TESTID = 'event-price';
+export const EVENT_PRICE_SELECTOR = `[data-testid="${EVENT_PRICE_TESTID}"]`;
+export const PRICE_DATA_ATTR = {
+  min: 'data-price-min',
+  max: 'data-price-max',
+  currency: 'data-currency',
+  hasFreeTier: 'data-has-free-tier',
+} as const;
+// sitemap.xml's dist-relative filename (prerender.ts writes it, api/seo-audit.ts
+// fetches it) and its absolute-origin-relative path (referenced from
+// robots.txt's Sitemap directive and the live audit's production fetch).
+export const SITEMAP_FILENAME = 'sitemap.xml';
+export const SITEMAP_PATH = `/${SITEMAP_FILENAME}`;
 // Live-audit (issue #54, api/seo-audit.ts + src/lib/seoAudit.ts): sitemap.xml's
 // <lastmod> (uniformly the prerender build timestamp — see prerender.ts's
 // buildSitemapXml) older than this is treated as a dead prerender cadence.
@@ -137,6 +175,14 @@ export const SEO_AUDIT_TOKEN_HEADER = 'x-internal-token';
 // has a 2048-byte cap) a chained round reads back on the next round/cron tick —
 // see src/lib/prerenderChain.ts.
 export const CHAIN_MARKER_PREFIX = 'prerender-chain:';
+// RoundMarker.status values (src/lib/prerenderChain.ts's producer,
+// scripts/prerender.ts's consumer) — mirrors UI_STATE's pattern so a typo on
+// either side of the chaining state machine is a compile error, not a
+// silently-missed compare.
+export const ROUND_STATUS = {
+  continuing: 'continuing',
+  done: 'done',
+} as const;
 // Worst-case ~100 minutes wall-clock at the 10-minute render budget per round,
 // sized with margin against the throughput research's 5–7-round cold-catch-up
 // estimate. Fixed, not dynamic — a pathological catalog can't chain forever.

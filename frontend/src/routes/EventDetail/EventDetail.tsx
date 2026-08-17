@@ -17,7 +17,7 @@ import SeoTags from '../../components/SeoTags';
 import Toast from '../../components/Toast';
 import TopBar from '../../components/TopBar';
 import { useFeedback } from '../../hooks/useFeedback';
-import { API, OG_FALLBACK_IMAGE_PATH, PRODUCTION_ORIGIN, QUERY_KEYS, ROUTES, SEO_DESCRIPTION_MAX_LENGTH, UI_STATE } from '../../constants';
+import { API, EVENT_PRICE_TESTID, OG_FALLBACK_IMAGE_PATH, PRICE_DATA_ATTR, PRODUCTION_ORIGIN, QUERY_KEYS, ROUTES, SEO_DESCRIPTION_MAX_LENGTH, UI_STATE } from '../../constants';
 import styles from './EventDetail.module.css';
 
 interface EventDetailData extends EventData {
@@ -155,18 +155,20 @@ export default function EventDetail() {
             />
           )}
           {price && (
-            // data-* attrs: read by the in-build SEO validation gate
-            // (src/lib/seoValidation.ts, issue #53) to check this snapshot's
-            // price against what the live API currently returns — price isn't
-            // part of the JSON-LD payload (issue #46 defers AggregateOffer),
-            // so it needs its own marker.
+            // data-* attrs (PRICE_DATA_ATTR): read by the in-build SEO
+            // validation gate (src/lib/seoValidation.ts, issue #53) to check
+            // this snapshot's price against what the live API currently
+            // returns — price isn't part of the JSON-LD payload (issue #46
+            // defers AggregateOffer), so it needs its own marker.
             <span
               className={styles.price}
-              data-testid="event-price"
-              data-price-min={data.price_min ?? ''}
-              data-price-max={data.price_max ?? ''}
-              data-currency={data.currency ?? ''}
-              data-has-free-tier={data.has_free_tier}
+              data-testid={EVENT_PRICE_TESTID}
+              {...{
+                [PRICE_DATA_ATTR.min]: data.price_min ?? '',
+                [PRICE_DATA_ATTR.max]: data.price_max ?? '',
+                [PRICE_DATA_ATTR.currency]: data.currency ?? '',
+                [PRICE_DATA_ATTR.hasFreeTier]: data.has_free_tier,
+              }}
             >
               {price}
             </span>

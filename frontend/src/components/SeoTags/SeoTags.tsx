@@ -1,4 +1,5 @@
 import { Helmet } from 'react-helmet-async';
+import { JSONLD_SCRIPT_TYPE } from '../../constants';
 import type { SeoMetaResult } from '../../hooks/useSeoMeta';
 
 /** Renders a useSeoMeta() result (plus an optional schema.org JSON-LD object,
@@ -24,7 +25,7 @@ export default function SeoTags({ meta, jsonLd }: { meta: SeoMetaResult; jsonLd?
         // react-helmet-async assigns a <script> child string as raw innerHTML
         // (not HTML-escaped) — an unescaped "</script" inside event-sourced
         // text (title/venue) would otherwise break out of the tag.
-        <script type="application/ld+json">{JSON.stringify(jsonLd).replace(/</g, '\\u003c')}</script>
+        <script type={JSONLD_SCRIPT_TYPE}>{JSON.stringify(jsonLd).replace(/</g, '\\u003c')}</script>
       )}
     </Helmet>
   );

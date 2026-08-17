@@ -34,13 +34,19 @@ import { chromium, type Browser, type Page } from 'playwright';
 import { preview, type PreviewServer } from 'vite';
 import type { EventData } from '../src/components/EventCard';
 import {
+  CANONICAL_LINK_SELECTOR,
   GITHUB_API_BASE_URL,
+  JSONLD_SCRIPT_SELECTOR,
   LOCALE_URL_PREFIX_CODES,
   LOCALES,
   PRERENDER_CHAIN_GITHUB_REPO,
   PRODUCTION_ORIGIN,
+  ROUND_STATUS,
   ROUTES,
   SEO_HREFLANG_CODES,
+  SEO_XDEFAULT_CODE,
+  SITEMAP_FILENAME,
+  SITEMAP_PATH,
 } from '../src/constants';
 import { localizedPath } from '../src/lib/urlLocale';
 import { compareEventStaleness, parseSnapshotHtml, validateSnapshotStructure } from '../src/lib/seoValidation';
@@ -227,7 +233,7 @@ function buildTargets(candidates: PrerenderCandidate[]): PrerenderTarget[] {
  * in-build validation gate below is what actually catches/blocks on that. */
 function embedChangeMarker(html: string, marker: string): string {
   const dom = new JSDOM(html);
-  const script = dom.window.document.querySelector('script[type="application/ld+json"]');
+  const script = dom.window.document.querySelector(JSONLD_SCRIPT_SELECTOR);
   if (script) {
     try {
       const data = JSON.parse(script.textContent ?? '{}') as Record<string, unknown>;
@@ -310,7 +316,7 @@ function buildSitemapXml(targets: PrerenderTarget[], buildTimestamp: string): st
       const loc = `${PRODUCTION_ORIGIN}${localizedPath(target.bare, target.locale)}`;
       const alternates = SEO_HREFLANG_CODES.map((code) => {
         const href =
-          code === 'x-default'
+          code === SEO_XDEFAULT_CODE
             ? `${PRODUCTION_ORIGIN}${target.bare}`
             : `${PRODUCTION_ORIGIN}${localizedPath(target.bare, code)}`;
         return `    <xhtml:link rel="alternate" hreflang="${code}" href="${href}"/>`;
@@ -330,7 +336,7 @@ function buildRobotsTxt(): string {
   for (const code of LOCALE_URL_PREFIX_CODES) {
     lines.push(`Allow: /${code}$`, `Allow: /${code}/events/`);
   }
-  lines.push('', `Sitemap: ${PRODUCTION_ORIGIN}/sitemap.xml`);
+  lines.push('', `Sitemap: ${PRODUCTION_ORIGIN}${SITEMAP_PATH}`);
   return lines.join('\n') + '\n';
 }
 
@@ -413,7 +419,7 @@ async function snapshotTarget(
   // `state: 'attached'`, not the default 'visible' — a <link> element never
   // has a CSS box, so the default visibility check would time out even once
   // Helmet has inserted it.
-  await page.waitForSelector('link[rel="canonical"]', {
+  await page.waitForSelector(CANONICAL_LINK_SELECTOR, {
     state: 'attached',
     timeout: CONTENT_READY_TIMEOUT_MS,
   });
@@ -610,7 +616,7 @@ export function selectValidationTargets(
 }
 
 export function logZeroProgressAbort(marker: RoundMarker): void {
-  if (marker.status === 'continuing') {
+  if (marker.status === ROUND_STATUS.continuing) {
     return;
   }
   if (isZeroProgress(marker) && marker.queueRemaining > 0 && !isChainDepthExceeded(marker.round)) {
@@ -657,7 +663,7 @@ export async function main(): Promise<void> {
 
   const buildTimestamp = new Date().toISOString();
   await writeFile(
-    path.join(DIST_DIR, 'sitemap.xml'),
+    path.join(DIST_DIR, SITEMAP_FILENAME),
     buildSitemapXml(targets, buildTimestamp),
     'utf-8',
   );
