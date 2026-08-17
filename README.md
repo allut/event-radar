@@ -24,6 +24,7 @@ The whole platform is designed to run on **free-tier infrastructure** at a stead
 - **Email digest opt-out** — one-click unsubscribe (RFC 8058 `List-Unsubscribe` header + a token-signed no-login page with an Undo/resubscribe button) toggles the daily digest without a sign-in.
 - **Static pages** — a globally mounted site footer links to localized Privacy and Terms pages plus a Contact form (email-only delivery, honeypot + rate limit, no login).
 - **Full trilingual i18n** — every UI string, email, and LLM output supports `et` / `en` / `ru` from a single shared source of truth.
+- **SEO prerendering + live audit** — a build-time pipeline (`frontend/scripts/prerender.ts`, Playwright) snapshots Landing and every published `/events/:id` (all three locale variants) into static HTML with per-page meta tags/JSON-LD, writes `sitemap.xml`/`robots.txt`, and validates its own output before the build can pass. A cron-job.org-driven "cadence" rebuild keeps snapshots fresh every 6h, chaining continuation rounds when one build can't finish in its time budget; an independent live-audit function checks production directly every 6h and self-files/closes a GitHub issue on failure/recovery, so a silently-dead cadence still gets caught.
 - **Security-hardened** — OWASP Top 10 mitigations: per-IP rate limiting, strict security headers, CORS lockdown, an Origin-checking CSRF layer behind `SameSite=Strict` cookies, external-URL and stored-HTML sanitization, a body-size ceiling, admin auth lockout, webhook signature verification, and a CVE audit in CI.
 - **Data retention** — a weekly cleanup prunes aged satellite/audit rows (auth tokens, raw ingestion payloads, ingestion runs, LLM-call logs, old feed snapshots, cached scores) plus stale never-verified user and organizer accounts, while preserving all event history and feedback from real accounts indefinitely.
 
@@ -70,7 +71,8 @@ Geocoding runs as a separate backfill alongside this pipeline, filling in `lat`/
 | LLM         | Groq (primary), Cerebras, Mistral (fallback chain) |
 | Email       | Resend (magic links, daily digests, contact-form relay, inbound newsletter webhook) |
 | Images      | Cloudinary (signed server-side upload for organizer-submitted event images) |
-| Hosting     | Render (backend web service) · Vercel (frontend) · cron-job.org (keepalive ping) |
+| SEO         | Playwright (build-time prerender snapshots), Vercel Serverless Functions (`frontend/api/`) for the prerender-cadence gate and live SEO audit |
+| Hosting     | Render (backend web service) · Vercel (frontend) · cron-job.org (backend keepalive + prerender-cadence + live SEO audit pings) |
 
 ## Getting started
 
@@ -199,6 +201,8 @@ event-radar/
 │   │   ├── _generated/       # generated constants & i18n (do not edit by hand)
 │   │   ├── constants.py      # single source of truth for backend literals
 │   │   ├── config.py         # environment settings
+│   │   ├── db.py             # async SQLAlchemy engine/session (pool_pre_ping, pool_recycle)
+│   │   ├── i18n.py           # backend-side i18n lookup
 │   │   ├── publish.py        # publish gate (classified → published)
 │   │   ├── cleanup.py        # weekly data-retention pruning
 │   │   ├── rate_limit.py     # slowapi per-IP limiter
@@ -209,6 +213,8 @@ event-radar/
 │   ├── scripts/             # one-off operational scripts (reset_events.py, _reclassify_events.py)
 │   └── tests/               # pytest suite
 ├── frontend/                 # Vite + React SPA
+│   ├── api/                  # Vercel Serverless Functions: prerender-cadence.ts, seo-audit.ts (SEO pipeline, see Deployment)
+│   ├── scripts/prerender.ts  # build-time prerender snapshot pipeline (Playwright)
 │   ├── vercel.json           # Vercel rewrites (/api proxy + SPA fallback) + security headers
 │   └── src/
 │       ├── routes/          # Landing, Login, AuthVerify, Onboarding, Feed, Explore, SavedEvents, EventDetail, Settings, Unsubscribe, Privacy, Terms, Contact, NotFound + organizer portal (OrganizerLogin, OrganizerVerify, OrganizerDashboard, EventSubmit)
@@ -329,11 +335,12 @@ python scripts/reset_events.py --yes    # actually truncate
 
 ## Deployment
 
-Production runs entirely on free tiers, split across three services:
+Production runs entirely on free tiers, split across three services (cron-job.org covers both the backend keepalive and the SEO freshness jobs below):
 
 - **Backend — Render web service** (`render.yaml`): `rootDir: backend`, health check on `/health`. Migrations run on every boot — `startCommand` chains `alembic upgrade head && uvicorn ...`, since Render's `preDeployCommand` is paid-only. Set `DATABASE_URL` (asyncpg form: `postgresql+asyncpg://user:pass@host/db?ssl=require`), `ADMIN_PASSWORD`, `INTERNAL_TOKEN`, the LLM keys (`GROQ_API_KEY`, optionally `CEREBRAS_API_KEY` / `MISTRAL_API_KEY`), `RESEND_API_KEY`, `RESEND_FROM_ADDRESS`, `CONTACT_TO_ADDRESS`, `RESEND_WEBHOOK_SECRET`, `CORS_ORIGINS`, `FRONTEND_URL`, `BACKEND_URL` (the API's own absolute URL, e.g. `https://event-radar-api.onrender.com` — needed by the digest's server-side-fetched `List-Unsubscribe` header), and the Cloudinary trio `CLOUDINARY_CLOUD_NAME` / `CLOUDINARY_API_KEY` / `CLOUDINARY_API_SECRET` (organizer image upload; the endpoint returns 501 when unset). `SECRET_KEY` is auto-generated. Optionally set `LOG_SHIP_URL` (+ `LOG_SHIP_TOKEN`) to ship JSON logs to an external drain such as Axiom.
-- **Frontend — Vercel** (`frontend/vercel.json`): static Vite build (`npm run build`, output `dist`). The API client issues all requests against a relative `/api` prefix (`frontend/src/api/client.ts`), so a Vercel rewrite proxies `/api/:path*` to the Render URL **and strips the `/api` prefix** (backend routes have no `/api` prefix — this mirrors the dev Vite proxy); a second rewrite provides the SPA fallback to `index.html` for React Router routes. Same-origin proxying also avoids CORS entirely. No build-time API env var is used.
+- **Frontend — Vercel** (`frontend/vercel.json`): static Vite build (`npm run build`, output `dist`). The API client issues all requests against a relative `/api` prefix (`frontend/src/api/client.ts`), so a Vercel rewrite proxies `/api/:path*` to the Render URL **and strips the `/api` prefix** (backend routes have no `/api` prefix — this mirrors the dev Vite proxy), except `/api/seo-audit` and `/api/prerender-cadence`, which are excluded by a negative lookahead so they reach Vercel's own serverless functions (see "SEO prerendering" below) instead of being proxied to Render; a second rewrite provides the SPA fallback to `app-shell.html` (a copy of the pre-prerender `dist/index.html`, kept distinct so a prerendered snapshot never overwrites the generic CSR shell other routes fall back to) for React Router routes. Same-origin proxying also avoids CORS entirely. No build-time API env var is used.
 - **Keepalive — cron-job.org**: Render's free tier sleeps after 15 minutes idle, which would stop the embedded APScheduler. A [cron-job.org](https://cron-job.org) job pings `https://event-radar-api.onrender.com/internal/tick` every 10 minutes with the `X-Internal-Token` header set to the same value as Render's `INTERNAL_TOKEN`. (Render's own cron jobs are paid; GitHub Actions cron proved too imprecise for a keepalive cadence.)
+- **SEO prerendering — Vercel Serverless Functions + cron-job.org**: two more cron-job.org jobs, independent of the keepalive above, keep the frontend's prerendered snapshots and `sitemap.xml` fresh. One hits `frontend/api/prerender-cadence.ts` every 6h, which gates a Vercel Deploy Hook rebuild (skipping it when a multi-round prerender chain is already in flight); the other hits `frontend/api/seo-audit.ts` every 6h to check production directly and self-files/closes a GitHub issue if the cadence has gone silently stale. Both endpoints are excluded from `vercel.json`'s `/api/:path*` → Render rewrite by name and authenticate via their own shared-secret headers (`PRERENDER_CADENCE_TOKEN_HEADER` / `SEO_AUDIT_TOKEN_HEADER`), separate from the backend's `X-Internal-Token`. Full detail in `docs/backend-ops.md` and `docs/frontend.md`.
 
 ## Documentation
 
