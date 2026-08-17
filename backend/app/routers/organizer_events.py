@@ -386,7 +386,7 @@ async def update_own_event(
         if body.url and not safe_url:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Event URL is not allowed (unsupported scheme).",
+                detail=ERROR_EVENT_URL_SCHEME,
             )
         event.url = safe_url
     if "image_url" in fields_set:
@@ -395,7 +395,7 @@ async def update_own_event(
         if body.image_url and not safe_image_url:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Image URL is not allowed (unsupported scheme).",
+                detail=ERROR_IMAGE_URL_SCHEME,
             )
         event.image_url = safe_image_url
     if "price_min" in fields_set:

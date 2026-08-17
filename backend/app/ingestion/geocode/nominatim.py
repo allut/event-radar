@@ -18,15 +18,13 @@ from app.constants import (
     NOMINATIM_USER_AGENT,
 )
 from app.ingestion.adapter import coords_in_tallinn
+from app.ingestion.content_filters import alternation_pattern
 from app.ingestion.http_client import http_get
 
 log = logging.getLogger(__name__)
 
 # Pre-compiled patterns built from constants - avoids re-compiling per call.
-_STREET_TYPE_PATTERN = re.compile(
-    r"\b(" + "|".join(re.escape(w) for w in ESTONIAN_STREET_TYPE_WORDS) + r")\b",
-    re.IGNORECASE,
-)
+_STREET_TYPE_PATTERN = alternation_pattern(ESTONIAN_STREET_TYPE_WORDS)
 _INITIAL_RE = re.compile(GEOCODE_INITIAL_RE)
 _UNIT_SUFFIX_RE = re.compile(GEOCODE_UNIT_SUFFIX_RE, re.IGNORECASE)
 _FLOOR_RE = re.compile(GEOCODE_FLOOR_RE, re.IGNORECASE)

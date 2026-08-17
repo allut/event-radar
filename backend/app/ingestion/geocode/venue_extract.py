@@ -1,7 +1,6 @@
 """LLM pass mining street addresses glued into venue_name into venue_address."""
 
 import logging
-import re
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,16 +15,14 @@ from app.constants import (
     VENUE_NAME_PROMPT_MAX_CHARS,
     VENUE_NAME_SUSPECT_MAX_LEN,
 )
+from app.ingestion.content_filters import alternation_pattern
 from app.llm.prompts import LLM_VENUE_EXTRACT_PROMPT_TEMPLATE
 from app.llm.router import LLMError, content_hash, llm_available, llm_json
 from app.models.models import Event, LlmCall
 
 log = logging.getLogger(__name__)
 
-_DIRECTION_KEYWORD_RE = re.compile(
-    r"\b(" + "|".join(re.escape(kw) for kw in sorted(VENUE_NAME_DIRECTION_KEYWORDS, key=len, reverse=True)) + r")\b",
-    re.IGNORECASE,
-)
+_DIRECTION_KEYWORD_RE = alternation_pattern(VENUE_NAME_DIRECTION_KEYWORDS)
 
 
 def is_suspect_venue_name(name: str) -> bool:

@@ -90,6 +90,14 @@ DEV_DB_LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1", "db"})
 # proxy with a correct Host and stays guarded.
 HOST_CHECK_EXEMPT_PATHS: frozenset[str] = frozenset({"/health"})
 
+# Starlette TrustedHostMiddleware's fixed rejection body — app/main.py's
+# HostCheckMiddleware matches this to tell an actual Host-header reject apart
+# from an ordinary downstream 400 (bad token, malformed body, ...) passing
+# through the same wrapped `send`. A future Starlette wording change would
+# just silently stop logging rejects, never start false-logging normal 400s
+# — an acceptable degrade.
+TRUSTED_HOST_REJECT_BODY = b"Invalid host header"
+
 # ASGI scope/message "type" values (app/main.py's raw ASGI middleware classes —
 # HostCheckMiddleware, MaxBodySizeMiddleware, CsrfOriginCheckMiddleware). Fixed by
 # the ASGI spec, not application data, but still named here rather than repeated
@@ -1238,6 +1246,10 @@ HTML_EDGE_BR_RE = r"^(?:\s*<br\s*/?>\s*)+|(?:\s*<br\s*/?>\s*)+$"
 HTML_WHITESPACE_RUN_RE = r"[ \t\n\r\f\v]+"
 # Normalizes BeautifulSoup's self-closed "<br/>" serialization back to "<br>".
 HTML_SELF_CLOSING_BR_RE = r"<br\s*/>"
+# app/ingestion/sanitize.py::decode_cfemail — fast-path markers: skip parsing
+# a description that carries neither form of Cloudflare's email obfuscation
+# (most descriptions have none).
+HTML_CF_EMAIL_MARKERS = ("__cf_email__", "email-protection")
 USER_EVENT_SCORES_RETENTION_DAYS = 30  # keyed on the underlying event's end date
 
 # APScheduler job ids (app/main.py::_register_scheduled_jobs) — also reasoned
@@ -1275,6 +1287,9 @@ ERROR_EVENT_NOT_FOUND = "Event not found."
 ERROR_USER_NOT_FOUND = "User not found."
 ERROR_ORGANIZER_NOT_FOUND = "Organizer not found."
 ERROR_SUBMISSION_NOT_FOUND = "Submission not found."
+
+# main.py (/internal/tick)
+ERROR_INTERNAL_TICK_INVALID_TOKEN = "Invalid token"
 
 # routers/admin.py
 ERROR_ADMIN_LOCKOUT = "Too many failed admin login attempts; try again later."
