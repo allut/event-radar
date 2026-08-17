@@ -167,8 +167,13 @@ export const SEO_AUDIT_GITHUB_REPO = 'allut/event-radar';
 export const SEO_AUDIT_ISSUE_LABEL = 'seo-audit-failure';
 export const GITHUB_API_BASE_URL = 'https://api.github.com';
 // Shared-secret header cron-job.org sends on its seo-audit ping, mirroring
-// the backend's /internal/tick pattern (docs/backend-ops.md).
-export const SEO_AUDIT_TOKEN_HEADER = 'x-internal-token';
+// the backend's /internal/tick pattern (docs/backend-ops.md). Distinct from
+// PRERENDER_CADENCE_TOKEN_HEADER and the backend's own X-Internal-Token: the
+// vercel.json rewrite excludes both of this function's path variants by
+// exact-anchored negative lookahead, so any variant that doesn't match exactly
+// gets proxied to Render carrying this header — a shared name with the
+// backend's header would leak SEO_AUDIT_TOKEN into that proxied request.
+export const SEO_AUDIT_TOKEN_HEADER = 'x-seo-audit-token';
 
 // ─── Prerender chaining (issue #79/#81) ────────────────────────────────────
 // Round-state marker embedded in the git commit message (VERCEL_GIT_COMMIT_MESSAGE
@@ -201,9 +206,10 @@ export const PRERENDER_CHAIN_GITHUB_REPO = 'allut/event-radar';
 // commit from.
 export const PRERENDER_CADENCE_GIT_BRANCH = 'release';
 // Shared-secret header cron-job.org sends on its prerender-cadence ping
-// (issue #92) — same header name as SEO_AUDIT_TOKEN_HEADER by convention, kept
-// as a separate constant since the two secrets (and their env vars) differ.
-export const PRERENDER_CADENCE_TOKEN_HEADER = 'x-internal-token';
+// (issue #92). Distinct name from SEO_AUDIT_TOKEN_HEADER and the backend's own
+// X-Internal-Token — see that constant's comment for why a shared name is a
+// cross-service secret-disclosure risk via the vercel.json rewrite exclusion.
+export const PRERENDER_CADENCE_TOKEN_HEADER = 'x-prerender-cadence-token';
 
 // ─── Analytics ───────────────────────────────────────────────────────────────
 // Matches `/events/:id` (bare or locale-prefixed, e.g. `/en/events/:id`) so

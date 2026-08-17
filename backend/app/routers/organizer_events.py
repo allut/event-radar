@@ -17,7 +17,7 @@ from uuid import uuid4
 
 import httpx
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -48,9 +48,15 @@ from app.constants import (
     LOCALE_EN,
     LOCALE_ET,
     LOCALE_RU,
+    ORGANIZER_CURRENCY_MAX_LEN,
     ORGANIZER_DAILY_IMAGE_UPLOAD_CAP,
     ORGANIZER_DAILY_SUBMISSION_CAP,
+    ORGANIZER_DESCRIPTION_MAX_LEN,
+    ORGANIZER_IMPORTANT_INFO_MAX_LEN,
     ORGANIZER_SUBMISSION_EXTERNAL_ID_PREFIX,
+    ORGANIZER_TITLE_MAX_LEN,
+    ORGANIZER_VENUE_ADDRESS_MAX_LEN,
+    ORGANIZER_VENUE_NAME_MAX_LEN,
     PAGINATION_MAX_OFFSET,
     PAGINATION_MIN_LIMIT,
     PAGINATION_MIN_OFFSET,
@@ -87,24 +93,30 @@ router = APIRouter(prefix="/organizer/events", tags=["organizer-events"])
 
 
 class SubmitEventBody(BaseModel):
-    title: str
-    title_en: str | None = None
-    title_ru: str | None = None
-    description: str | None = None
-    description_en: str | None = None
-    description_ru: str | None = None
-    important_info: str | None = None
-    important_info_en: str | None = None
-    important_info_ru: str | None = None
+    title: str = Field(..., max_length=ORGANIZER_TITLE_MAX_LEN)
+    title_en: str | None = Field(None, max_length=ORGANIZER_TITLE_MAX_LEN)
+    title_ru: str | None = Field(None, max_length=ORGANIZER_TITLE_MAX_LEN)
+    description: str | None = Field(None, max_length=ORGANIZER_DESCRIPTION_MAX_LEN)
+    description_en: str | None = Field(None, max_length=ORGANIZER_DESCRIPTION_MAX_LEN)
+    description_ru: str | None = Field(None, max_length=ORGANIZER_DESCRIPTION_MAX_LEN)
+    important_info: str | None = Field(
+        None, max_length=ORGANIZER_IMPORTANT_INFO_MAX_LEN
+    )
+    important_info_en: str | None = Field(
+        None, max_length=ORGANIZER_IMPORTANT_INFO_MAX_LEN
+    )
+    important_info_ru: str | None = Field(
+        None, max_length=ORGANIZER_IMPORTANT_INFO_MAX_LEN
+    )
     starts_at: datetime
     ends_at: datetime | None = None
-    venue_name: str | None = None
-    venue_address: str | None = None
+    venue_name: str | None = Field(None, max_length=ORGANIZER_VENUE_NAME_MAX_LEN)
+    venue_address: str | None = Field(None, max_length=ORGANIZER_VENUE_ADDRESS_MAX_LEN)
     url: str | None = None
     image_url: str | None = None
-    price_min: float | None = None
-    price_max: float | None = None
-    currency: str | None = None
+    price_min: float | None = Field(None, ge=0)
+    price_max: float | None = Field(None, ge=0)
+    currency: str | None = Field(None, max_length=ORGANIZER_CURRENCY_MAX_LEN)
     category: str | None = None
 
     @field_validator("starts_at", "ends_at")
@@ -120,27 +132,45 @@ class SubmitEventBody(BaseModel):
         if v is not None and v not in VALID_CATEGORIES:
             raise ValueError(f"invalid category: {v!r}")
         return v
+
+    @model_validator(mode="after")
+    def _ordering(self) -> "SubmitEventBody":
+        if self.ends_at is not None and self.ends_at < self.starts_at:
+            raise ValueError("ends_at must not be before starts_at")
+        if (
+            self.price_min is not None
+            and self.price_max is not None
+            and self.price_min > self.price_max
+        ):
+            raise ValueError("price_min must not be greater than price_max")
+        return self
 
 
 class PatchEventBody(BaseModel):
-    title: str | None = None
-    title_en: str | None = None
-    title_ru: str | None = None
-    description: str | None = None
-    description_en: str | None = None
-    description_ru: str | None = None
-    important_info: str | None = None
-    important_info_en: str | None = None
-    important_info_ru: str | None = None
+    title: str | None = Field(None, max_length=ORGANIZER_TITLE_MAX_LEN)
+    title_en: str | None = Field(None, max_length=ORGANIZER_TITLE_MAX_LEN)
+    title_ru: str | None = Field(None, max_length=ORGANIZER_TITLE_MAX_LEN)
+    description: str | None = Field(None, max_length=ORGANIZER_DESCRIPTION_MAX_LEN)
+    description_en: str | None = Field(None, max_length=ORGANIZER_DESCRIPTION_MAX_LEN)
+    description_ru: str | None = Field(None, max_length=ORGANIZER_DESCRIPTION_MAX_LEN)
+    important_info: str | None = Field(
+        None, max_length=ORGANIZER_IMPORTANT_INFO_MAX_LEN
+    )
+    important_info_en: str | None = Field(
+        None, max_length=ORGANIZER_IMPORTANT_INFO_MAX_LEN
+    )
+    important_info_ru: str | None = Field(
+        None, max_length=ORGANIZER_IMPORTANT_INFO_MAX_LEN
+    )
     starts_at: datetime | None = None
     ends_at: datetime | None = None
-    venue_name: str | None = None
-    venue_address: str | None = None
+    venue_name: str | None = Field(None, max_length=ORGANIZER_VENUE_NAME_MAX_LEN)
+    venue_address: str | None = Field(None, max_length=ORGANIZER_VENUE_ADDRESS_MAX_LEN)
     url: str | None = None
     image_url: str | None = None
-    price_min: float | None = None
-    price_max: float | None = None
-    currency: str | None = None
+    price_min: float | None = Field(None, ge=0)
+    price_max: float | None = Field(None, ge=0)
+    currency: str | None = Field(None, max_length=ORGANIZER_CURRENCY_MAX_LEN)
     category: str | None = None
 
     @field_validator("starts_at", "ends_at")
@@ -156,6 +186,26 @@ class PatchEventBody(BaseModel):
         if v is not None and v not in VALID_CATEGORIES:
             raise ValueError(f"invalid category: {v!r}")
         return v
+
+    @model_validator(mode="after")
+    def _ordering(self) -> "PatchEventBody":
+        # Both-present check only — a patch touching just one of the pair can't
+        # be validated against the other without a DB round-trip, and this
+        # model has no DB access; the create-time check (SubmitEventBody)
+        # already guarantees ends_at >= starts_at at row creation.
+        if (
+            self.starts_at is not None
+            and self.ends_at is not None
+            and self.ends_at < self.starts_at
+        ):
+            raise ValueError("ends_at must not be before starts_at")
+        if (
+            self.price_min is not None
+            and self.price_max is not None
+            and self.price_min > self.price_max
+        ):
+            raise ValueError("price_min must not be greater than price_max")
+        return self
 
 
 def _localized(

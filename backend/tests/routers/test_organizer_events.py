@@ -1,13 +1,17 @@
 """Tests for organizer event submission CRUD (routers/organizer_events.py)."""
 import http
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from pydantic import ValidationError
 
 from app.constants import (
     EVENT_STATUS_CLASSIFIED,
     EVENT_STATUS_PUBLISHED,
+    ORGANIZER_CURRENCY_MAX_LEN,
     ORGANIZER_DAILY_SUBMISSION_CAP,
+    ORGANIZER_VENUE_NAME_MAX_LEN,
 )
 
 
@@ -808,3 +812,106 @@ class TestDeleteOwnEvent:
                 mock_db,
             )
         assert exc_info.value.status_code == http.HTTPStatus.NOT_FOUND
+
+
+class TestSubmitEventBodyValidation:
+    """P1-3: over-length venue_name/currency used to reach the DB and raise
+    asyncpg.StringDataRightTruncation (an unhandled 500) instead of failing
+    Pydantic validation with a 422. Also covers the new price/date ordering
+    and non-negative-price checks."""
+
+    def _base_kwargs(self, **overrides):
+        kwargs = dict(
+            title="Test Event",
+            starts_at=datetime(2026, 6, 1, tzinfo=timezone.utc),
+        )
+        kwargs.update(overrides)
+        return kwargs
+
+    def test_valid_body_accepted(self):
+        from app.routers.organizer_events import SubmitEventBody
+
+        body = SubmitEventBody(**self._base_kwargs())
+        assert body.title == "Test Event"
+
+    def test_venue_name_over_column_width_rejected(self):
+        from app.routers.organizer_events import SubmitEventBody
+
+        with pytest.raises(ValidationError):
+            SubmitEventBody(
+                **self._base_kwargs(venue_name="x" * (ORGANIZER_VENUE_NAME_MAX_LEN + 1))
+            )
+
+    def test_currency_over_column_width_rejected(self):
+        from app.routers.organizer_events import SubmitEventBody
+
+        with pytest.raises(ValidationError):
+            SubmitEventBody(
+                **self._base_kwargs(currency="x" * (ORGANIZER_CURRENCY_MAX_LEN + 1))
+            )
+
+    def test_negative_price_min_rejected(self):
+        from app.routers.organizer_events import SubmitEventBody
+
+        with pytest.raises(ValidationError):
+            SubmitEventBody(**self._base_kwargs(price_min=-1.0))
+
+    def test_price_min_greater_than_price_max_rejected(self):
+        from app.routers.organizer_events import SubmitEventBody
+
+        with pytest.raises(ValidationError):
+            SubmitEventBody(**self._base_kwargs(price_min=20.0, price_max=10.0))
+
+    def test_ends_at_before_starts_at_rejected(self):
+        from app.routers.organizer_events import SubmitEventBody
+
+        starts_at = datetime(2026, 6, 1, tzinfo=timezone.utc)
+        with pytest.raises(ValidationError):
+            SubmitEventBody(
+                **self._base_kwargs(
+                    starts_at=starts_at, ends_at=starts_at - timedelta(hours=1)
+                )
+            )
+
+    def test_ends_at_after_starts_at_accepted(self):
+        from app.routers.organizer_events import SubmitEventBody
+
+        starts_at = datetime(2026, 6, 1, tzinfo=timezone.utc)
+        body = SubmitEventBody(
+            **self._base_kwargs(
+                starts_at=starts_at, ends_at=starts_at + timedelta(hours=1)
+            )
+        )
+        assert body.ends_at is not None
+
+
+class TestPatchEventBodyValidation:
+    def test_price_min_greater_than_price_max_rejected(self):
+        from app.routers.organizer_events import PatchEventBody
+
+        with pytest.raises(ValidationError):
+            PatchEventBody(price_min=20.0, price_max=10.0)
+
+    def test_ends_at_before_starts_at_rejected_when_both_present(self):
+        from app.routers.organizer_events import PatchEventBody
+
+        starts_at = datetime(2026, 6, 1, tzinfo=timezone.utc)
+        with pytest.raises(ValidationError):
+            PatchEventBody(
+                starts_at=starts_at, ends_at=starts_at - timedelta(hours=1)
+            )
+
+    def test_only_ends_at_present_is_not_cross_checked(self):
+        """A patch touching only ends_at can't be validated against the
+        existing row's starts_at without a DB round-trip — accepted here,
+        left to the create-time invariant."""
+        from app.routers.organizer_events import PatchEventBody
+
+        body = PatchEventBody(ends_at=datetime(2020, 1, 1, tzinfo=timezone.utc))
+        assert body.ends_at is not None
+
+    def test_venue_name_over_column_width_rejected(self):
+        from app.routers.organizer_events import PatchEventBody
+
+        with pytest.raises(ValidationError):
+            PatchEventBody(venue_name="x" * (ORGANIZER_VENUE_NAME_MAX_LEN + 1))

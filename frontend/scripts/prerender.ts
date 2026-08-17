@@ -206,7 +206,13 @@ async function fetchPrerenderCandidates(): Promise<PrerenderCandidate[]> {
     );
   }
   const body = (await res.json()) as { events: { id: number; updated_at: string }[] };
-  return body.events.map((e) => ({ id: e.id, updatedAt: e.updated_at }));
+  // candidate.id feeds ROUTES.eventDetail(id) -> path.join(DIST_DIR, ...) for the
+  // prerendered file's output path; a non-integer id (e.g. a traversal string from
+  // a compromised backend) could write outside DIST_DIR, so it's runtime-checked
+  // here rather than trusted from the response's declared `number` type.
+  return body.events
+    .filter((e) => Number.isInteger(e.id))
+    .map((e) => ({ id: e.id, updatedAt: e.updated_at }));
 }
 
 function buildTargets(candidates: PrerenderCandidate[]): PrerenderTarget[] {

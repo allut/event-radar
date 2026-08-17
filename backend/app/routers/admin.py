@@ -3,6 +3,7 @@
 import logging
 import secrets
 import time
+from collections import OrderedDict
 from collections.abc import Awaitable, Callable, Sequence
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -13,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.cleanup import cleanup_stale_data
 from app.config import settings
 from app.constants import (
+    ADMIN_AUTH_FAILURES_MAX_ENTRIES,
     ADMIN_AUTH_LOCKOUT_SECONDS,
     ADMIN_AUTH_MAX_FAILURES,
     ADMIN_DEDUP_GROUPS_MAX_PAGE_SIZE,
@@ -65,7 +67,24 @@ _security = HTTPBasic()
 
 # (client_key -> (consecutive_failure_count, locked_until_monotonic)). In-memory,
 # single-process — see ADMIN_AUTH_MAX_FAILURES in constants.py for the trade-off.
-_admin_auth_failures: dict[str, tuple[int, float]] = {}
+# Bounded LRU (ADMIN_AUTH_FAILURES_MAX_ENTRIES) — mirrors browse.py's _score_cache
+# pattern — so sustained scanning/brute-force traffic can't grow this unboundedly.
+_admin_auth_failures: OrderedDict[str, tuple[int, float]] = OrderedDict()
+
+
+def _evict_one_admin_auth_failure(now: float) -> None:
+    """Evict the oldest entry whose lockout has already expired (or was never
+    locked), falling back to the oldest entry overall only if every entry is
+    currently under an active lockout. A blind oldest-first eviction would let
+    a high-cardinality distributed brute-force (>ADMIN_AUTH_FAILURES_MAX_ENTRIES
+    distinct client_keys) evict — and thereby prematurely lift — another
+    client's still-active lockout, undermining the lockout this dict exists
+    to enforce."""
+    for key, (_count, locked_until) in _admin_auth_failures.items():
+        if locked_until <= now:
+            del _admin_auth_failures[key]
+            return
+    _admin_auth_failures.popitem(last=False)
 
 
 def _require_admin(
@@ -115,6 +134,9 @@ def _require_admin(
             else 0.0
         )
         _admin_auth_failures[key] = (failures, locked_until)
+        _admin_auth_failures.move_to_end(key)
+        while len(_admin_auth_failures) > ADMIN_AUTH_FAILURES_MAX_ENTRIES:
+            _evict_one_admin_auth_failure(now)
         log.warning(
             "admin auth failed: username=%r failures=%d",
             credentials.username,

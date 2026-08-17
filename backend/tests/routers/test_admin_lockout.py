@@ -61,6 +61,80 @@ async def test_lockout_after_max_consecutive_failures():
 
 
 @pytest.mark.asyncio
+async def test_admin_auth_failures_dict_is_bounded():
+    """P2-11: _admin_auth_failures is an in-memory dict keyed by client_key()
+    with no prior eviction — sustained scanning traffic from many distinct
+    clients would grow it forever. Bounded LRU (ADMIN_AUTH_FAILURES_MAX_ENTRIES)
+    caps it, mirroring browse.py's _score_cache."""
+    from app.routers import admin as admin_module
+
+    app = _build_app()
+
+    with patch("app.routers.admin.settings") as mock_settings, patch(
+        "app.routers.admin.ADMIN_AUTH_FAILURES_MAX_ENTRIES", 3
+    ):
+        mock_settings.ADMIN_PASSWORD = "s3cret"
+        mock_settings.ADMIN_USERNAME = "realadmin"
+        mock_settings.APP_ENV = "production"
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            for i in range(6):
+                await client.post(
+                    "/admin/publish",
+                    auth=("realadmin", "wrong"),
+                    headers={"X-Forwarded-For": f"10.0.0.{i}"},
+                )
+
+    assert len(admin_module._admin_auth_failures) <= 3
+
+
+@pytest.mark.asyncio
+async def test_eviction_does_not_lift_an_active_lockout():
+    """A blind oldest-first eviction would let a high-cardinality distributed
+    brute-force evict — and thereby prematurely lift — another client's
+    still-active lockout. The victim's locked-until entry must survive being
+    the oldest in the dict as long as other, already-expired entries exist
+    to evict instead."""
+    from app.routers import admin as admin_module
+
+    app = _build_app()
+
+    with patch("app.routers.admin.settings") as mock_settings, patch(
+        "app.routers.admin.ADMIN_AUTH_FAILURES_MAX_ENTRIES", 1
+    ):
+        mock_settings.ADMIN_PASSWORD = "s3cret"
+        mock_settings.ADMIN_USERNAME = "realadmin"
+        mock_settings.APP_ENV = "production"
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            # Victim: lock it out first, so it is both the oldest entry and
+            # currently under an active lockout.
+            for _ in range(ADMIN_AUTH_MAX_FAILURES):
+                await client.post(
+                    "/admin/publish",
+                    auth=("realadmin", "wrong"),
+                    headers={"X-Forwarded-For": "10.0.0.1"},
+                )
+            assert admin_module._admin_auth_failures["10.0.0.1"][1] > 0.0
+
+            # Attacker: fail from a second, expired (never-locked) client —
+            # pushes the dict over the max-entries cap of 2.
+            await client.post(
+                "/admin/publish",
+                auth=("realadmin", "wrong"),
+                headers={"X-Forwarded-For": "10.0.0.2"},
+            )
+
+    # The victim's active lockout must not have been evicted to make room.
+    assert "10.0.0.1" in admin_module._admin_auth_failures
+    assert admin_module._admin_auth_failures["10.0.0.1"][1] > 0.0
+
+
+@pytest.mark.asyncio
 async def test_rate_limit_bucket_shared_across_different_admin_routes():
     """L2: RATE_LIMIT_ADMIN must be ONE bucket per client across the whole
     /admin prefix (limiter.shared_limit(..., scope="admin")), not one bucket

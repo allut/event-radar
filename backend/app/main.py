@@ -58,6 +58,7 @@ from app.constants import (
     MAX_REQUEST_BODY_BYTES,
     ORGANIZER_SYNC_HOUR,
     ORGANIZER_SYNC_MINUTE,
+    RATE_LIMIT_INTERNAL_TICK,
     REFETCH_HOUR,
     REFETCH_MINUTE,
     SECURITY_HEADERS,
@@ -670,6 +671,7 @@ async def health() -> dict:
 
 
 @app.get("/internal/tick")
+@limiter.limit(RATE_LIMIT_INTERNAL_TICK)
 async def tick(request: Request) -> dict:
     """Keepalive ping — hit by a cron-job.org job every 10 min so Render's free
     tier never idles out (it sleeps after 15 min), which would halt the embedded
@@ -683,7 +685,7 @@ async def tick(request: Request) -> dict:
         allow_insecure_dev=settings.ALLOW_INSECURE_DEV,
     ):
         received = request.headers.get("X-Internal-Token", "")
-        if not secrets.compare_digest(received, token):
+        if not secrets.compare_digest(received.encode(), token.encode()):
             log.warning(
                 "internal/tick: invalid token (client=%s)",
                 client_key(request),

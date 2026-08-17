@@ -478,6 +478,10 @@ RATE_LIMIT_ADMIN = "10/minute"
 # accepted since this pairs with, not replaces, a strong ADMIN_PASSWORD.
 ADMIN_AUTH_MAX_FAILURES = 5
 ADMIN_AUTH_LOCKOUT_SECONDS = 300
+# Bounds _admin_auth_failures (routers/admin.py) the same way browse.py bounds
+# _score_cache — an unbounded dict keyed by client_key() would grow forever
+# under sustained scanning/brute-force traffic.
+ADMIN_AUTH_FAILURES_MAX_ENTRIES = 4096
 # Authenticated feedback writes — generous cap; prevents cache-rebuild DoS
 # (every signal wipes all user_event_scores rows for that user).
 RATE_LIMIT_FEEDBACK = "60/minute"
@@ -498,6 +502,9 @@ RATE_LIMIT_BROWSE = "120/minute"
 # Public, unauthenticated landing-page showcase (GET /public/showcase). No auth,
 # so throttle scraping abuse; generous enough for real visitors loading the page.
 RATE_LIMIT_PUBLIC = "60/minute"
+# /internal/tick (cron-job.org keepalive ping, app/main.py) hits 6x/hour by design;
+# generous ceiling exists only to bound token brute-force / abuse, not real traffic.
+RATE_LIMIT_INTERNAL_TICK = "30/minute"
 # How many events the landing-page showcase returns — a fixed, small teaser grid
 # (top-quality upcoming events), so no pagination is needed.
 SHOWCASE_EVENT_COUNT = 6
@@ -549,6 +556,18 @@ ORGANIZER_DAILY_SUBMISSION_CAP = 20
 # free-tier upload quota, since an upload can happen without ever completing
 # a submission (organizer_image_uploads, app/models/models.py).
 ORGANIZER_DAILY_IMAGE_UPLOAD_CAP = 20
+
+# Field length caps for SubmitEventBody/PatchEventBody (routers/organizer_events.py).
+# venue_name and currency mirror the Event column widths (models/models.py) so an
+# over-length value 422s instead of raising asyncpg.StringDataRightTruncation; the
+# Text-column fields (title/description/important_info) have no DB-enforced width,
+# so these are abuse-prevention ceilings, not truncation-avoidance.
+ORGANIZER_TITLE_MAX_LEN = 300
+ORGANIZER_DESCRIPTION_MAX_LEN = 10000
+ORGANIZER_IMPORTANT_INFO_MAX_LEN = 5000
+ORGANIZER_VENUE_NAME_MAX_LEN = 255
+ORGANIZER_VENUE_ADDRESS_MAX_LEN = 500
+ORGANIZER_CURRENCY_MAX_LEN = 3
 
 # Organizer image upload (routers/organizer_events.py -> Cloudinary signed upload).
 # IMAGE_UPLOAD_ALLOWED_MIME itself comes from shared/app-config.json (imported
