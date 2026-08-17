@@ -152,7 +152,7 @@ class TestSubmitEvent:
 
         mock_insert.assert_awaited_once()
         mock_classify.assert_awaited_once_with(fake_event, mock_db)
-        mock_publish.assert_awaited_once_with(mock_db)
+        mock_publish.assert_awaited_once_with(mock_db, event_ids=[10], diagnostics=False)
         assert fake_event.submitted_by_organizer_id == 5
         assert fake_event.needs_review is True
         mock_db.commit.assert_awaited_once()

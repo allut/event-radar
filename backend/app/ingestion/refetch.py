@@ -37,6 +37,7 @@ from app.constants import (
     LOCALIZED_TEXT_FIENTA_LOCALES,
     REFETCH_COMMIT_INTERVAL_SECONDS,
     REFETCH_MAX_PER_RUN,
+    REFETCH_MAX_RUN_SECONDS,
     REFETCH_MIN_INTERVAL_DAYS,
     REFETCH_PLACEHOLDER_VENUE_NAMES,
     REFETCH_PRICE_TOLERANCE,
@@ -386,6 +387,7 @@ async def refetch_event_details(db: AsyncSession) -> dict:
         return summary
 
     last_commit = time.monotonic()
+    run_deadline = time.monotonic() + REFETCH_MAX_RUN_SECONDS
     # Follow Fienta's locale 302-redirects with a host-pinning SSRF guard
     # (see _allowed_refetch_hosts for why the allowlist is intersected).
     async with httpx.AsyncClient(
@@ -394,6 +396,11 @@ async def refetch_event_details(db: AsyncSession) -> dict:
         event_hooks={"request": [host_guard_hook(_allowed_refetch_hosts(candidates))]},
     ) as client:
         for event in candidates:
+            if time.monotonic() >= run_deadline:
+                # detail_refetched_at ordering (_select_candidates) means the
+                # events left unprocessed here sort first next run.
+                summary["deadline_stopped"] = True
+                break
             fetched = await _process_one(client, event, summary, now)
             if fetched:
                 await asyncio.sleep(REFETCH_REQUEST_DELAY_SECONDS)

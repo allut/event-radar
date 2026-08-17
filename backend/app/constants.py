@@ -396,6 +396,12 @@ TIME_WINDOW_HOURS = 12  # max |Δstart| in hours for two events to be dedup cand
 # unfiltered event list fails loudly instead of silently degrading to quadratic time;
 # well above any legitimate test's event count.
 DEDUP_UNFILTERED_FALLBACK_MAX_EVENTS = 500
+# candidate_pair_ids_in_window()'s SQL pair count is roughly N x d (d = events
+# sharing a +/-TIME_WINDOW_HOURS neighbourhood) — quadratic in same-window
+# listing density rather than in the lookback/lookahead window. Not a hard cap
+# (the pass still runs), just a visibility threshold: crossing it logs a
+# warning so a density spike shows up instead of silently growing pass time.
+DEDUP_CANDIDATE_PAIR_WARN_THRESHOLD = 20000
 
 # Resend email delivery
 RESEND_SEND_URL = "https://api.resend.com/emails"
@@ -663,6 +669,16 @@ PAGINATION_MAX_OFFSET: int = 100_000
 # Path-B approximation at MVP scale (`total` in the response reflects at most this
 # many rows when the cap is hit; see browse.py docstring).
 BROWSE_RELEVANCE_MAX_CANDIDATES: int = 300
+# _browse_scored_path scores+sorts the full (capped) candidate pool on every
+# call, then slices a page — so /explore's "Load more" infinite scroll pays
+# O(candidates) again per page even though the ranked order didn't change.
+# Memoizing the scored-and-sorted id list keyed by (user, filters, sort) turns
+# an N-page read into one scoring pass. Short TTL bounds staleness (a like/
+# dislike made mid-scroll takes up to this long to affect ranking); small
+# max-entries bounds process memory — single Render process, no cross-process
+# cache needed.
+BROWSE_SCORE_CACHE_TTL_SECONDS: float = 30.0
+BROWSE_SCORE_CACHE_MAX_ENTRIES: int = 512
 # How far back browse.py::_load_feedback_context looks for a user's like/dislike
 # history when scoring /explore (Path B). user_event_feedback is preserved
 # indefinitely by policy (see CLAUDE.md Data Retention), so an unbounded load
@@ -1029,6 +1045,14 @@ VENUE_SIBLING_RATIO_THRESHOLD = 90
 # ~12 min/run, fine for a 04:30 cron.
 REFETCH_MAX_PER_RUN = 1000
 REFETCH_REQUEST_DELAY_SECONDS: float = 1.0
+# Wall-clock backstop, independent of REFETCH_MAX_PER_RUN: an event that
+# triggers locale-variant fetches (fetch_locale_variants) pays its own
+# REFETCH_REQUEST_DELAY_SECONDS per variant, so REFETCH_MAX_PER_RUN events
+# don't bound run time the way the count alone suggests. Job starts 04:30,
+# build_daily_feeds runs 06:00 — 40 min leaves real margin in that window.
+# detail_refetched_at ordering means anything cut off here is picked up first
+# next run, so this is self-limiting with no coverage loss.
+REFETCH_MAX_RUN_SECONDS: float = 2400.0
 # Flat daily throttle: an event re-synced within this window is not due again.
 # Guards mainly against manual POST /admin/refetch re-runs; the cron fires once daily.
 REFETCH_MIN_INTERVAL_DAYS = 1

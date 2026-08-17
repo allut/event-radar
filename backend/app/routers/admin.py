@@ -371,7 +371,10 @@ async def admin_approve_submission(event_id: int, request: Request) -> dict:
                 organizer = await db.get(Organizer, event.submitted_by_organizer_id)
                 if organizer is not None:
                     organizer.verified = True
-            await publish_pending(db)
+            # organizer.verified flipping True can unlock this organizer's
+            # whole backlog, not just this event — leave event_ids unscoped.
+            # Diagnostic breakdown is unused by this endpoint's response.
+            await publish_pending(db, diagnostics=False)
             await db.commit()
             return {"id": event.id, "needs_review": event.needs_review}
 

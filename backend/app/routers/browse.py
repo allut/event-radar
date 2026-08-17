@@ -6,6 +6,8 @@ whenever For-you narrowing or relevance ranking is requested, since persona
 affinity and the feedback-based soft-filter aren't expressible as SQL ORDER BY.
 """
 
+import time
+from collections import OrderedDict
 from collections.abc import Callable
 from datetime import date, datetime, timedelta
 from typing import Any
@@ -22,6 +24,8 @@ from app.constants import (
     BROWSE_PAGE_SIZE,
     BROWSE_QUERY_MAX_LEN,
     BROWSE_RELEVANCE_MAX_CANDIDATES,
+    BROWSE_SCORE_CACHE_MAX_ENTRIES,
+    BROWSE_SCORE_CACHE_TTL_SECONDS,
     BROWSE_SORT_DATE,
     BROWSE_SORT_PRICE,
     BROWSE_SORT_QUALITY,
@@ -254,18 +258,39 @@ def _sort_key_and_reverse(
     return _relevance_key, True
 
 
-async def _browse_scored_path(
+
+# (user_id, for_you, sort, categories, vibes, free, q, date_from, date_to) ->
+# (cached_at monotonic, ranked id list). See BROWSE_SCORE_CACHE_TTL_SECONDS.
+_score_cache: OrderedDict[tuple, tuple[float, list[int]]] = OrderedDict()
+
+
+def _score_cache_get(key: tuple) -> list[int] | None:
+    entry = _score_cache.get(key)
+    if entry is None:
+        return None
+    cached_at, ids = entry
+    if time.monotonic() - cached_at > BROWSE_SCORE_CACHE_TTL_SECONDS:
+        del _score_cache[key]
+        return None
+    _score_cache.move_to_end(key)
+    return ids
+
+
+def _score_cache_set(key: tuple, ids: list[int]) -> None:
+    _score_cache[key] = (time.monotonic(), ids)
+    _score_cache.move_to_end(key)
+    while len(_score_cache) > BROWSE_SCORE_CACHE_MAX_ENTRIES:
+        _score_cache.popitem(last=False)
+
+
+async def _score_and_rank_candidates(
     db: AsyncSession,
     conds: list[ColumnElement[bool]],
     for_you: bool,
     sort: str,
-    limit: int,
-    offset: int,
     current_user: User,
     now: datetime,
-    locale: str,
-) -> dict:
-    """Path B — Python scoring. Used whenever for_you=True or sort=relevance."""
+) -> list[int]:
     candidate_stmt = (
         select(Event)
         .join(Event.classification)
@@ -323,12 +348,40 @@ async def _browse_scored_path(
 
     key_func, reverse = _sort_key_and_reverse(sort)
     survivors.sort(key=key_func, reverse=reverse)
+    return [event.id for _, event in survivors]
+
+
+async def _browse_scored_path(
+    db: AsyncSession,
+    conds: list[ColumnElement[bool]],
+    for_you: bool,
+    sort: str,
+    limit: int,
+    offset: int,
+    current_user: User,
+    now: datetime,
+    locale: str,
+    cache_key: tuple | None = None,
+) -> dict:
+    """Path B — Python scoring. Used whenever for_you=True or sort=relevance.
+
+    The scored-and-sorted id list is cached (see BROWSE_SCORE_CACHE_TTL_SECONDS)
+    so paging through /explore's infinite scroll re-scores the candidate pool
+    once instead of once per page. ``cache_key=None`` (the default) skips the
+    cache entirely — always re-scores.
+    """
+    ranked_ids = _score_cache_get(cache_key) if cache_key is not None else None
+    if ranked_ids is None:
+        ranked_ids = await _score_and_rank_candidates(
+            db, conds, for_you, sort, current_user, now
+        )
+        if cache_key is not None:
+            _score_cache_set(cache_key, ranked_ids)
 
     # `total` is capped at BROWSE_RELEVANCE_MAX_CANDIDATES when the candidate
     # pool hit the cap — an accepted Path-B approximation.
-    total = len(survivors)
-    page = survivors[offset : offset + limit]
-    page_ids = [event.id for _, event in page]
+    total = len(ranked_ids)
+    page_ids = ranked_ids[offset : offset + limit]
 
     events_by_id: dict[int, Event] = {}
     if page_ids:
@@ -350,7 +403,7 @@ async def _browse_scored_path(
         "total": total,
         "limit": limit,
         "offset": offset,
-        "has_more": offset + len(page) < total,
+        "has_more": offset + len(page_ids) < total,
     }
 
 
@@ -392,6 +445,26 @@ async def explore_events(
             db, conds, sort, limit, offset, effective_locale, current_user.id
         )
 
+    cache_key = (
+        current_user.id,
+        for_you,
+        sort,
+        tuple(sorted(categories)),
+        tuple(sorted(vibes)),
+        free,
+        q,
+        date_from,
+        date_to,
+    )
     return await _browse_scored_path(
-        db, conds, for_you, sort, limit, offset, current_user, now, effective_locale
+        db,
+        conds,
+        for_you,
+        sort,
+        limit,
+        offset,
+        current_user,
+        now,
+        effective_locale,
+        cache_key,
     )

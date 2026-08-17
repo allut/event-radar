@@ -343,7 +343,10 @@ async def submit_event(
         log.warning("organizer submission event_id=%d classify failed", event.id)
     if body.category:
         await _apply_organizer_category(db, event_id, body.category)
-    await publish_pending(db)
+    # Single known event, verified status unchanged by this call — scope the
+    # UPDATE to it and skip the reject-breakdown diagnostic (unused here, and
+    # its cost grows with all-time reject history — see publish_pending()).
+    await publish_pending(db, event_ids=[event_id], diagnostics=False)
     final_status = await db.scalar(select(Event.status).where(Event.id == event_id))
     await db.commit()
 
