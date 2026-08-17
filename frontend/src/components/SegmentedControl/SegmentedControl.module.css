@@ -6,7 +6,7 @@
 .segBtn {
   padding: var(--space-2) var(--space-0-875);
   font-size: var(--fs-sm);
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   color: var(--text-muted);
   background: transparent;
   border: none;

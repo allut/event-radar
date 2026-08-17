@@ -9,7 +9,7 @@
 .card {
   composes: card cardAccentTop cardPage from '../../components/shared/Card.module.css';
   composes: rise from '../../components/shared/Animations.module.css';
-  --rise-distance: 12px;
+  --rise-distance: var(--rise-distance-lg);
   --rise-duration: var(--anim-rise-sm);
   padding: var(--space-7);
 }
@@ -30,7 +30,7 @@
 .brand {
   font-family: var(--font-display);
   font-size: var(--heading-lg);
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   letter-spacing: var(--tracking-normal);
   color: var(--text);
 }
@@ -60,5 +60,5 @@
 .termsLink {
   color: var(--accent);
   text-decoration: underline;
-  text-underline-offset: 3px;
+  text-underline-offset: var(--underline-offset);
 }

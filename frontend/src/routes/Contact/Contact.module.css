@@ -28,7 +28,7 @@
 
 .label {
   font-size: var(--fs-sm);
-  font-weight: 500;
+  font-weight: var(--fw-medium);
   color: var(--text-muted);
   letter-spacing: var(--tracking-wide);
   text-transform: uppercase;
@@ -50,7 +50,7 @@
 
 .textarea {
   resize: vertical;
-  min-height: 120px;
+  min-height: var(--textarea-height-md);
 }
 
 .input::placeholder {
@@ -72,7 +72,7 @@
    both the visual layout and the tab order (tabIndex={-1} on the input). */
 .honeypot {
   position: absolute;
-  left: -9999px;
+  left: var(--offscreen-x);
   width: 1px;
   height: 1px;
   opacity: 0;
@@ -84,7 +84,7 @@
   padding: var(--space-2) var(--space-3);
   background: var(--danger-subtle);
   border-radius: var(--radius);
-  border-left: 2px solid var(--danger);
+  border-left: var(--border-w-alert) solid var(--danger);
 }
 
 .submit {
@@ -119,7 +119,7 @@
 
 .successTitle {
   font-size: var(--fs-base);
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   color: var(--text);
 }
 
@@ -135,7 +135,7 @@
   font-size: var(--fs-sm);
   margin-top: var(--space-2);
   text-decoration: underline;
-  text-underline-offset: 3px;
+  text-underline-offset: var(--underline-offset);
   transition: color var(--transition);
 }
 

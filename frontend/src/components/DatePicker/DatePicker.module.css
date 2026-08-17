@@ -128,7 +128,7 @@
 .calMonthLabel {
   font-family: var(--font-display);
   font-size: var(--fs-lg);
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   color: var(--text);
   letter-spacing: var(--tracking-snug);
 }
@@ -142,7 +142,7 @@
 .calWeekdays span {
   text-align: center;
   font-size: var(--fs-2xs);
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   letter-spacing: var(--tracking-wider);
   text-transform: uppercase;
   color: var(--text-dim);
@@ -205,7 +205,7 @@
   background: var(--accent-subtle);
   border-color: var(--accent-border);
   color: var(--accent-light);
-  font-weight: 700;
+  font-weight: var(--fw-bold);
 }
 
 .selected::after {
@@ -231,7 +231,7 @@
 
 .timeLabel {
   font-size: var(--fs-2xs);
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   letter-spacing: var(--tracking-wide);
   text-transform: uppercase;
   color: var(--text-muted);
@@ -255,7 +255,7 @@
   color: var(--accent-light);
   font-family: inherit;
   font-size: var(--fs-xl);
-  font-weight: 700;
+  font-weight: var(--fw-bold);
   text-align: center;
   font-variant-numeric: tabular-nums;
   transition: border-color var(--transition), box-shadow var(--transition), background var(--transition);
@@ -279,7 +279,7 @@
 
 .timeSeparator {
   font-size: var(--fs-xl);
-  font-weight: 700;
+  font-weight: var(--fw-bold);
   color: var(--text-dim);
 }
 
@@ -294,7 +294,7 @@
   color: var(--accent-light);
   background: transparent;
   border: none;
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   letter-spacing: var(--tracking-wide);
 }
 
@@ -307,7 +307,7 @@
   color: var(--text-muted);
   background: transparent;
   border: none;
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   letter-spacing: var(--tracking-wide);
 }
 

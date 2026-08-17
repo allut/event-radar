@@ -41,10 +41,10 @@
   right: var(--space-4);
   font-family: var(--font-display);
   font-size: var(--numeral-xl);
-  font-weight: 300;
-  line-height: 1;
+  font-weight: var(--fw-light);
+  line-height: var(--leading-none);
   color: var(--numeral-color);
-  opacity: 0.6;
+  opacity: var(--opacity-decorative);
   letter-spacing: var(--tracking-tighter);
   user-select: none;
 }
@@ -56,7 +56,7 @@
   height: 100%;
   object-fit: cover;
   filter: blur(var(--blur-backdrop));
-  transform: scale(1.1);
+  transform: scale(var(--scale-hover));
 }
 
 .image {
@@ -77,7 +77,7 @@
 }
 
 .card:hover .image {
-  transform: scale(1.02);
+  transform: scale(var(--scale-subtle));
 }
 
 .placeholder {
@@ -93,16 +93,16 @@
 
 .featuredImageWrap .placeholder {
   position: static;
-  aspect-ratio: 16 / 7;
+  aspect-ratio: var(--card-image-ratio-featured);
   height: auto;
 }
 
 .placeholderNum {
   font-family: var(--font-display);
   font-size: var(--numeral-md);
-  font-weight: 300;
+  font-weight: var(--fw-light);
   color: var(--bg-placeholder);
-  line-height: 1;
+  line-height: var(--leading-none);
   letter-spacing: var(--tracking-tightest);
   user-select: none;
 }
@@ -115,7 +115,7 @@
   backdrop-filter: blur(var(--blur-chip));
   color: var(--accent-light);
   font-size: var(--fs-xs);
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   padding: var(--space-0-1875) var(--space-0-625);
   border-radius: var(--radius-pill);
   letter-spacing: var(--tracking-wide);
@@ -148,7 +148,7 @@
 .time {
   font-size: var(--fs-sm);
   color: var(--accent);
-  font-weight: 500;
+  font-weight: var(--fw-medium);
   letter-spacing: var(--tracking-normal);
   white-space: nowrap;
   flex-shrink: 0;
@@ -172,7 +172,7 @@
 .title {
   font-family: var(--font-display);
   font-size: var(--heading-sm);
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   color: var(--text);
   line-height: var(--leading-display);
   margin-bottom: var(--space-0-875);
@@ -277,7 +277,7 @@
 .ticketsLink {
   margin-left: auto;
   font-size: var(--fs-sm);
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   color: var(--accent);
   letter-spacing: var(--tracking-normal);
   transition: color var(--transition);

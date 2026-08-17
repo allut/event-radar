@@ -10,7 +10,7 @@
   font-size: var(--fs-base);
   cursor: pointer;
   transition: background var(--transition), border-color var(--transition), transform var(--transition);
-  line-height: 1;
+  line-height: var(--leading-none);
 }
 
 .card {
@@ -25,7 +25,7 @@
 .action:hover:not(:disabled) {
   background: var(--bg-raised);
   border-color: var(--border);
-  transform: scale(1.1);
+  transform: scale(var(--scale-hover));
 }
 
 .action:disabled {

@@ -27,7 +27,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-  min-width: 200px;
+  min-width: var(--mobile-menu-min);
 }
 
 .section {
@@ -38,7 +38,7 @@
 
 .sectionLabel {
   font-size: var(--fs-2xs);
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   text-transform: uppercase;
   letter-spacing: var(--tracking-snug);
   color: var(--text-muted);
@@ -52,7 +52,7 @@
   padding: var(--space-0-45) var(--space-0-875);
   border-radius: var(--radius);
   font-size: var(--fs-sm);
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   color: var(--text-muted);
   text-decoration: none;
   transition: all var(--transition);
@@ -81,7 +81,7 @@
   background: transparent;
   color: var(--text-muted);
   font-size: var(--fs-sm);
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   cursor: pointer;
   transition: all var(--transition);
 }
@@ -101,6 +101,6 @@
   composes: btnOutline from '../shared/Button.module.css';
   padding: var(--space-0-45) var(--space-0-875);
   font-size: var(--fs-sm);
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   text-align: center;
 }

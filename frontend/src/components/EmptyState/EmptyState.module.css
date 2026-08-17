@@ -17,20 +17,20 @@
 .emptyTitle {
   font-family: var(--font-display);
   font-size: var(--heading-md);
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   color: var(--text);
 }
 
 .emptyMsg {
   font-size: var(--fs-base);
   color: var(--text-muted);
-  max-width: 380px;
+  max-width: var(--empty-state-max);
   line-height: var(--leading-relaxed);
 }
 
 .emptyHint {
   font-size: var(--fs-sm);
   color: var(--text-soft);
-  max-width: 340px;
+  max-width: var(--empty-state-max-sm);
   line-height: var(--leading-body);
 }

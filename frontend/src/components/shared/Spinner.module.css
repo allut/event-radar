@@ -5,7 +5,7 @@
   display: inline-block;
   width: var(--spinner-size-sm);
   height: var(--spinner-size-sm);
-  border: 2px solid var(--spinner-border);
+  border: var(--border-w-ring) solid var(--spinner-border);
   border-top-color: var(--on-accent);
   border-radius: var(--radius-full);
 }
@@ -17,7 +17,7 @@
   display: block;
   width: var(--spinner-size-md);
   height: var(--spinner-size-md);
-  border: 2px solid var(--border);
+  border: var(--border-w-ring) solid var(--border);
   border-top-color: var(--accent);
   border-radius: var(--radius-full);
 }

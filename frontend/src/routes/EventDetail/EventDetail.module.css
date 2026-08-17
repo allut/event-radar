@@ -40,7 +40,7 @@
   height: 100%;
   object-fit: cover;
   filter: blur(var(--blur-backdrop));
-  transform: scale(1.1);
+  transform: scale(var(--scale-hover));
 }
 
 .heroImage {
@@ -54,7 +54,7 @@
 
 .heroPlaceholder {
   width: 100%;
-  height: 220px;
+  height: var(--hero-placeholder-height);
   border-radius: var(--radius);
 }
 
@@ -66,7 +66,7 @@
   backdrop-filter: blur(var(--blur-chip));
   color: var(--accent-light);
   font-size: var(--fs-xs);
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   padding: var(--space-1) var(--space-3);
   border-radius: var(--radius-pill);
   letter-spacing: var(--tracking-wide);
@@ -80,7 +80,7 @@
 
 .content {
   composes: rise from '../../components/shared/Animations.module.css';
-  --rise-distance: 6px;
+  --rise-distance: var(--rise-distance-xs);
   --rise-duration: var(--anim-rise-sm);
   max-width: var(--page-max-narrow);
   margin: 0 auto;
@@ -98,7 +98,7 @@
 .time {
   font-size: var(--fs-sm);
   color: var(--accent);
-  font-weight: 500;
+  font-weight: var(--fw-medium);
   letter-spacing: var(--tracking-normal);
 }
 
@@ -116,7 +116,7 @@
 .title {
   font-family: var(--font-display);
   font-size: var(--heading-2xl);
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   color: var(--text);
   line-height: var(--leading-display);
   letter-spacing: var(--tracking-tighter);
@@ -132,7 +132,7 @@
 .eyebrow {
   font-family: var(--font-display);
   font-size: var(--fs-xs);
-  font-weight: 700;
+  font-weight: var(--fw-bold);
   letter-spacing: var(--eyebrow-tracking);
   text-transform: uppercase;
   color: var(--text-soft);
@@ -161,7 +161,7 @@
 .venueName {
   font-size: var(--fs-base);
   color: var(--text);
-  font-weight: 500;
+  font-weight: var(--fw-medium);
 }
 
 .venueAddress {
@@ -172,7 +172,7 @@
 .mapLink {
   font-size: var(--fs-sm);
   color: var(--accent);
-  font-weight: 500;
+  font-weight: var(--fw-medium);
   margin-top: var(--space-0-2);
   transition: color var(--transition);
   letter-spacing: var(--tracking-normal);
@@ -243,7 +243,7 @@
 
 .description strong,
 .description b {
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   color: var(--text);
 }
 
@@ -255,14 +255,14 @@
 .description h3,
 .description h4 {
   font-size: var(--fs-md);
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   color: var(--text);
   margin-top: var(--space-3);
   margin-bottom: var(--space-1);
 }
 
 .description blockquote {
-  border-left: 2px solid var(--border);
+  border-left: var(--border-w-alert) solid var(--border);
   padding-left: var(--space-2);
   color: var(--text-soft);
   margin-top: var(--space-2);
@@ -280,7 +280,7 @@
 
 .tag {
   font-size: var(--fs-xs);
-  font-weight: 500;
+  font-weight: var(--fw-medium);
   letter-spacing: var(--tracking-wider);
   text-transform: uppercase;
   padding: var(--space-0-1875) var(--space-0-625);
@@ -328,7 +328,7 @@
   gap: var(--space-0-45);
   padding: var(--space-0-45) var(--space-0-875);
   font-size: var(--fs-sm);
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   line-height: normal;
   letter-spacing: var(--tracking-normal);
   cursor: pointer;
@@ -352,7 +352,7 @@
   align-items: center;
   padding: var(--space-0-625) var(--space-5);
   font-size: var(--fs-sm);
-  font-weight: 700;
+  font-weight: var(--fw-bold);
 }
 
 .ticketsBtn:hover {

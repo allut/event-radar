@@ -24,7 +24,7 @@
 }
 
 .value {
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
 }
 
 .chev {
@@ -48,7 +48,7 @@
   background: transparent;
   color: var(--text-muted);
   font-size: var(--fs-sm);
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   cursor: pointer;
   transition: all var(--transition);
 }

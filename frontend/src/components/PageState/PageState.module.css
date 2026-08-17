@@ -21,7 +21,7 @@
   display: block;
   width: var(--spinner-size);
   height: var(--spinner-size);
-  border: 2px solid var(--border);
+  border: var(--border-w-ring) solid var(--border);
   border-top-color: var(--accent);
   border-radius: var(--radius-full);
 }

@@ -24,7 +24,7 @@
 
 .menuBtnInline {
   composes: triggerInline from '../shared/Menu.module.css';
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
 }
 
 .hasInline {

@@ -37,7 +37,7 @@
    line-height keeps it from being the tallest flex item and inflating
    .backBtn past its plain-text siblings (.authBtn, the locale trigger). */
 .backIcon {
-  line-height: 1;
+  line-height: var(--leading-none);
 }
 
 .logoWrap {
@@ -65,7 +65,7 @@
 .brand {
   font-family: var(--font-display);
   font-size: var(--fs-brand-md);
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   color: var(--text);
 }
 
@@ -81,7 +81,7 @@
   padding: var(--space-0-35) var(--space-0-875);
   border-radius: var(--radius);
   font-size: var(--fs-sm);
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   letter-spacing: var(--tracking-normal);
   color: var(--text-muted);
   text-decoration: none;

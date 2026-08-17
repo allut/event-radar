@@ -9,7 +9,7 @@
 
 .card:hover {
   border-color: var(--accent-mid);
-  transform: translateY(-2px);
+  transform: translateY(var(--lift-md));
   box-shadow: var(--shadow-card-hover);
 }
 
@@ -17,7 +17,7 @@
   border-color: var(--accent);
   background: var(--accent-soft);
   box-shadow: var(--shadow-selected-ring);
-  transform: translateY(-2px);
+  transform: translateY(var(--lift-md));
 }
 
 .mainBtn {
@@ -48,13 +48,13 @@
 
 .card:hover .emoji,
 .card.selected .emoji {
-  transform: scale(1.1);
+  transform: scale(var(--scale-hover));
 }
 
 .name {
   font-family: var(--font-display);
   font-size: var(--heading-xs);
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   color: var(--text);
   letter-spacing: var(--tracking-snug);
   display: block;
@@ -78,7 +78,7 @@
   background: var(--accent);
   color: var(--on-accent);
   font-size: var(--fs-2xs);
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   letter-spacing: var(--tracking-wider);
   padding: var(--space-0-125) var(--space-2);
   border-radius: var(--radius-pill);

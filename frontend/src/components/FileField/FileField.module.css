@@ -29,7 +29,7 @@
   min-width: 0;
   padding: var(--space-3) var(--space-4);
   font-size: var(--fs-sm);
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   line-height: var(--leading-tight);
   letter-spacing: var(--tracking-snug);
   text-align: center;
@@ -112,7 +112,7 @@
   display: inline-block;
   width: var(--spinner-size-sm);
   height: var(--spinner-size-sm);
-  border: 2px solid var(--spinner-border);
+  border: var(--border-w-ring) solid var(--spinner-border);
   border-top-color: var(--accent);
   border-radius: var(--radius-full);
 }

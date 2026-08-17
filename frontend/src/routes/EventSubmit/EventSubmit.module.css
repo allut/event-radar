@@ -17,7 +17,7 @@
 .title {
   font-family: var(--font-display);
   font-size: var(--heading-xl);
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   line-height: var(--leading-display);
   letter-spacing: var(--tracking-tighter);
   color: var(--text);
@@ -51,7 +51,7 @@
 
 .contentEyebrow {
   font-size: var(--fs-2xs);
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   color: var(--text-soft);
   letter-spacing: var(--eyebrow-tracking);
   text-transform: uppercase;
@@ -70,7 +70,7 @@
 }
 
 .fieldCol {
-  flex: 1 1 200px;
+  flex: 1 1 var(--flex-basis-sm);
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
@@ -78,7 +78,7 @@
 
 .label {
   font-size: var(--fs-sm);
-  font-weight: 500;
+  font-weight: var(--fw-medium);
   color: var(--text-muted);
   letter-spacing: var(--tracking-wide);
   text-transform: uppercase;
@@ -100,7 +100,7 @@
 
 .textarea {
   resize: vertical;
-  min-height: 100px;
+  min-height: var(--textarea-height-sm);
 }
 
 .input:focus,
@@ -111,7 +111,7 @@
 
 .input:disabled,
 .textarea:disabled {
-  opacity: 0.5;
+  opacity: var(--opacity-disabled);
 }
 
 .error {
@@ -120,7 +120,7 @@
   padding: var(--space-2) var(--space-3);
   background: var(--danger-subtle);
   border-radius: var(--radius);
-  border-left: 2px solid var(--danger);
+  border-left: var(--border-w-alert) solid var(--danger);
 }
 
 .submit {
