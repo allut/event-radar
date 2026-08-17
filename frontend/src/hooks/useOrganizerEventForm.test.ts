@@ -1,9 +1,7 @@
-import { createElement, type ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, waitFor, act } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
 import { useOrganizerEventForm } from './useOrganizerEventForm';
-import { makeQueryWrapper } from '../test/utils';
+import { makeRouterQueryWrapper } from '../test/utils';
 
 vi.mock('../api/client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../api/client')>()),
@@ -20,11 +18,7 @@ beforeEach(() => {
 });
 
 function makeWrapper() {
-  const { wrapper: queryWrapper } = makeQueryWrapper();
-  function Wrapper({ children }: { children: ReactNode }) {
-    return createElement(MemoryRouter, null, createElement(queryWrapper, null, children));
-  }
-  return Wrapper;
+  return makeRouterQueryWrapper().wrapper;
 }
 
 describe('useOrganizerEventForm — buildBody', () => {

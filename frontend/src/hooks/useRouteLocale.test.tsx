@@ -1,20 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { renderHook } from '@testing-library/react';
-import { MemoryRouter, Routes, Route } from 'react-router-dom';
-import type { ReactNode } from 'react';
 import { useRouteLocale } from './useRouteLocale';
+import { makeRouterQueryWrapper } from '../test/utils';
 
 function makeWrapper(initialPath: string, pattern: string) {
-  function Wrapper({ children }: { children: ReactNode }) {
-    return (
-      <MemoryRouter initialEntries={[initialPath]}>
-        <Routes>
-          <Route path={pattern} element={<>{children}</>} />
-        </Routes>
-      </MemoryRouter>
-    );
-  }
-  return Wrapper;
+  return makeRouterQueryWrapper({ initialPath, routePatterns: [pattern] }).wrapper;
 }
 
 describe('useRouteLocale', () => {

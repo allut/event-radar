@@ -19,6 +19,47 @@ export function makeQueryWrapper(): {
   return { wrapper, queryClient };
 }
 
+/** Wrapper for renderHook-based tests that need a MemoryRouter + QueryClientProvider
+ * without a full renderWithProviders() tree. Pass `routePatterns` to mount the
+ * hook under one or more `<Route>` entries (e.g. a bare path and its locale-prefixed
+ * sibling); omit it to mount `children` directly under the router. */
+export function makeRouterQueryWrapper({
+  initialPath = '/',
+  routePatterns,
+  queryClient: providedQueryClient,
+}: {
+  initialPath?: string;
+  routePatterns?: string[];
+  queryClient?: QueryClient;
+} = {}): {
+  wrapper: ({ children }: { children: ReactNode }) => ReactNode;
+  queryClient: QueryClient;
+} {
+  const queryClient =
+    providedQueryClient ??
+    new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+  function Wrapper({ children }: { children: ReactNode }) {
+    return (
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={[initialPath]}>
+          {routePatterns ? (
+            <Routes>
+              {routePatterns.map((path) => (
+                <Route key={path} path={path} element={<>{children}</>} />
+              ))}
+            </Routes>
+          ) : (
+            children
+          )}
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+  }
+  return { wrapper: Wrapper, queryClient };
+}
+
 interface RenderOptions {
   route?: string;
   pathPattern?: string;

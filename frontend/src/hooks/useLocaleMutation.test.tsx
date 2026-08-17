@@ -1,10 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { ReactNode } from 'react';
 import { renderHook, act, waitFor } from '@testing-library/react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { useLocaleMutation } from './useLocaleMutation';
 import { setSignedInHint, clearSignedInHint, getLocale, getStoredLocale } from '../lib/auth';
+import { makeRouterQueryWrapper } from '../test/utils';
 
 vi.mock('../api/client', () => ({
   api: { patch: vi.fn().mockResolvedValue(undefined) },
@@ -23,22 +21,10 @@ beforeEach(() => {
 // mirrors App.tsx's dual route registration, so navigate() from
 // handleLocaleChange resolves against a realistic route table.
 function makeWrapper(initialPath: string, bareChildPath: string) {
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  return makeRouterQueryWrapper({
+    initialPath,
+    routePatterns: [bareChildPath, `/:locale${bareChildPath}`],
   });
-  function Wrapper({ children }: { children: ReactNode }) {
-    return (
-      <QueryClientProvider client={queryClient}>
-        <MemoryRouter initialEntries={[initialPath]}>
-          <Routes>
-            <Route path={bareChildPath} element={<>{children}</>} />
-            <Route path={`/:locale${bareChildPath}`} element={<>{children}</>} />
-          </Routes>
-        </MemoryRouter>
-      </QueryClientProvider>
-    );
-  }
-  return { wrapper: Wrapper };
 }
 
 describe('useLocaleMutation', () => {
