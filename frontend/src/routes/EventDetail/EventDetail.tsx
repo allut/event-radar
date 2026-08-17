@@ -48,7 +48,7 @@ export default function EventDetail() {
     retry: false,
   });
 
-  const { activeSignal, pending, sendFeedback } = useFeedback(data?.id ?? 0, {
+  const { activeSignal, pending, sendFeedback } = useFeedback(data?.id, {
     initialSignal: data?.my_signal ?? null,
   });
 

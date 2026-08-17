@@ -14,13 +14,13 @@ export interface UseFeedbackResult {
   sendFeedback: (signal: Signal) => Promise<void>;
 }
 
-export function useFeedback(eventId: number, opts?: UseFeedbackOptions): UseFeedbackResult {
+export function useFeedback(eventId: number | undefined, opts?: UseFeedbackOptions): UseFeedbackResult {
   const queryClient = useQueryClient();
   const [activeSignal, setActiveSignal] = useState<Signal | null>(opts?.initialSignal ?? null);
   const [pending, setPending] = useState(false);
 
   async function sendFeedback(signal: Signal) {
-    if (!eventId || pending) return;
+    if (eventId === undefined || pending) return;
     setPending(true);
     try {
       if (signal === activeSignal) {

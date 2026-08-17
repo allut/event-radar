@@ -77,9 +77,9 @@ describe('useFeedback', () => {
     expect(result.current.pending).toBe(false);
   });
 
-  it('ignores when eventId is falsy (0)', async () => {
+  it('ignores when eventId is not yet loaded (undefined)', async () => {
     const { wrapper } = makeWrapper();
-    const { result } = renderHook(() => useFeedback(0), { wrapper });
+    const { result } = renderHook(() => useFeedback(undefined), { wrapper });
 
     await act(async () => {
       await result.current.sendFeedback('like');
@@ -87,6 +87,18 @@ describe('useFeedback', () => {
 
     expect(mockPost).not.toHaveBeenCalled();
     expect(result.current.activeSignal).toBeNull();
+  });
+
+  it('sends feedback for event id 0 (numeric truthiness must not gate a real id)', async () => {
+    const { wrapper } = makeWrapper();
+    const { result } = renderHook(() => useFeedback(0), { wrapper });
+
+    await act(async () => {
+      await result.current.sendFeedback('like');
+    });
+
+    expect(mockPost).toHaveBeenCalled();
+    expect(result.current.activeSignal).toBe('like');
   });
 
   it('pressing the active signal again unchecks it via DELETE', async () => {

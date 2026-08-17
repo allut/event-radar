@@ -58,10 +58,12 @@ export function parseSnapshotHtml(html: string): ParsedSnapshot {
   });
 
   const priceEl = document.querySelector('[data-testid="event-price"]');
+  const rawMin = priceEl?.getAttribute('data-price-min') ?? null;
+  const rawMax = priceEl?.getAttribute('data-price-max') ?? null;
   const price: EventPriceSnapshot | null = priceEl
     ? {
-        min: priceEl.getAttribute('data-price-min') ? Number(priceEl.getAttribute('data-price-min')) : null,
-        max: priceEl.getAttribute('data-price-max') ? Number(priceEl.getAttribute('data-price-max')) : null,
+        min: rawMin !== null && rawMin !== '' ? Number(rawMin) : null,
+        max: rawMax !== null && rawMax !== '' ? Number(rawMax) : null,
         currency: priceEl.getAttribute('data-currency') || null,
         hasFreeTier: priceEl.getAttribute('data-has-free-tier') === 'true',
       }
