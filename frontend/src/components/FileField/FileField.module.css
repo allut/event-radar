@@ -1,10 +1,5 @@
 .field {
-  display: flex;
-  align-items: stretch;
-  background: var(--bg-raised);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  transition: border-color var(--transition), box-shadow var(--transition);
+  composes: fieldWrap from '../shared/Field.module.css';
 }
 
 .field:hover:not([data-disabled]) {
@@ -107,14 +102,9 @@
 }
 
 .spinner {
-  composes: spin from '../shared/Animations.module.css';
+  composes: ring ringMuted sizeSm from '../shared/Spinner.module.css';
   flex: 0 0 auto;
   display: inline-block;
-  width: var(--spinner-size-sm);
-  height: var(--spinner-size-sm);
-  border: var(--border-w-ring) solid var(--spinner-border);
-  border-top-color: var(--accent);
-  border-radius: var(--radius-full);
 }
 
 .preview {

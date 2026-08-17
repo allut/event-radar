@@ -1,0 +1,43 @@
+.fieldLabel {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  color: var(--text-muted);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+}
+
+.fieldInput {
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--space-3) var(--space-4);
+  color: var(--text);
+  font-size: var(--fs-base);
+  outline: none;
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+
+.fieldInput::placeholder {
+  color: var(--text-dim);
+}
+
+.fieldInput:focus {
+  border-color: var(--accent);
+  box-shadow: var(--shadow-focus-ring);
+}
+
+.fieldInput:disabled {
+  opacity: var(--opacity-disabled);
+}
+
+/* Chrome-only outer box for a composite control (text input + trigger button
+   living inside it, e.g. DatePicker/FileField) — padding stays with the
+   inner elements, not this wrapper. */
+.fieldWrap {
+  display: flex;
+  align-items: stretch;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  transition: border-color var(--transition), box-shadow var(--transition);
+}

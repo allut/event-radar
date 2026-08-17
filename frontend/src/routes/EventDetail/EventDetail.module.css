@@ -1,7 +1,5 @@
 .page {
-  flex: 1 0 auto;
-  display: flex;
-  flex-direction: column;
+  composes: page from '../../components/shared/Page.module.css';
 }
 
 /* ─── Back button (error state) ──────────────────────────────────────────── */

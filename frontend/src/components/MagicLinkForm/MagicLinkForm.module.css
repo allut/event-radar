@@ -5,55 +5,23 @@
 }
 
 .label {
-  font-size: var(--fs-sm);
-  font-weight: var(--fw-medium);
-  color: var(--text-muted);
-  letter-spacing: var(--tracking-wide);
-  text-transform: uppercase;
+  composes: fieldLabel from '../shared/Field.module.css';
 }
 
 .input {
+  composes: fieldInput from '../shared/Field.module.css';
   width: 100%;
-  background: var(--bg-raised);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: var(--space-3) var(--space-4);
-  color: var(--text);
-  font-size: var(--fs-base);
-  outline: none;
-  transition: border-color var(--transition), box-shadow var(--transition);
-}
-
-.input::placeholder {
-  color: var(--text-dim);
-}
-
-.input:focus {
-  border-color: var(--accent);
-  box-shadow: var(--shadow-focus-ring);
-}
-
-.input:disabled {
-  opacity: var(--opacity-disabled);
 }
 
 .error {
+  composes: alert from '../shared/Alert.module.css';
   font-size: var(--fs-sm);
-  color: var(--danger);
   padding: var(--space-2) var(--space-3);
-  background: var(--danger-subtle);
-  border-radius: var(--radius);
-  border-left: var(--border-w-alert) solid var(--danger);
 }
 
 .submit {
-  composes: btnPrimary from '../shared/Button.module.css';
+  composes: btnSubmit from '../shared/Button.module.css';
   padding: var(--space-0-8125) var(--space-5);
-  font-size: var(--fs-base);
-  height: var(--control-height-lg);
-  display: flex;
-  align-items: center;
-  justify-content: center;
   margin-top: var(--space-1);
 }
 
@@ -72,12 +40,7 @@
 
 /* Login opts into this fade-in; OrganizerLogin's original design didn't have it. */
 .successAnimated {
-  animation: fadeIn var(--anim-fast) var(--easing);
-}
-
-@keyframes fadeIn {
-  from { opacity: 0; transform: scale(var(--scale-press)); }
-  to   { opacity: 1; transform: scale(1); }
+  composes: fadeInScale from '../shared/Animations.module.css';
 }
 
 .checkCircle {

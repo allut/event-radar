@@ -1,7 +1,5 @@
 .page {
-  flex: 1 0 auto;
-  display: flex;
-  flex-direction: column;
+  composes: page from '../../components/shared/Page.module.css';
 }
 
 .main {
@@ -59,12 +57,9 @@
 }
 
 .error {
+  composes: alert from '../../components/shared/Alert.module.css';
   font-size: var(--fs-md);
-  color: var(--danger);
-  background: var(--danger-subtle);
-  border-left: var(--border-w-alert) solid var(--danger);
   padding: var(--space-0-625) var(--space-0-875);
-  border-radius: var(--radius);
   margin-bottom: var(--space-4);
 }
 
@@ -76,14 +71,9 @@
 }
 
 .submit {
-  composes: btnPrimary from '../../components/shared/Button.module.css';
+  composes: btnSubmit from '../../components/shared/Button.module.css';
   padding: var(--space-0-8125) var(--space-6);
-  font-size: var(--fs-base);
-  height: var(--control-height-lg);
   min-width: var(--onboarding-submit-min);
-  display: flex;
-  align-items: center;
-  justify-content: center;
 }
 
 .submit:disabled {

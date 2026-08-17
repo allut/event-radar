@@ -10,3 +10,17 @@
   white-space: nowrap;
   border: 0;
 }
+
+/* For honeypot fields, not a general-purpose replacement for .srOnly:
+   .srOnly deliberately keeps content in the accessibility tree (that's its
+   whole point). A honeypot must be invisible to screen-reader users too, or
+   a real user tabbing/reading through the form fills it in and gets flagged
+   as a bot. Pair with tabIndex={-1} on the input to also drop it from the
+   tab order. */
+.offscreen {
+  position: absolute;
+  left: var(--offscreen-x);
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}

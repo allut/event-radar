@@ -1,7 +1,5 @@
 .page {
-  flex: 1 0 auto;
-  display: flex;
-  flex-direction: column;
+  composes: page from '../../components/shared/Page.module.css';
 }
 
 /* ── Hero ────────────────────────────────────────────────────────────── */
@@ -54,26 +52,10 @@
 }
 
 .input {
+  composes: fieldInput from '../../components/shared/Field.module.css';
   flex: 1 1 var(--flex-basis-md);
   min-width: 0;
-  background: var(--bg-raised);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: var(--space-3) var(--space-4);
-  color: var(--text);
-  font-size: var(--fs-base);
-  outline: none;
-  transition: border-color var(--transition), box-shadow var(--transition);
 }
-
-.input::placeholder { color: var(--text-dim); }
-
-.input:focus {
-  border-color: var(--accent);
-  box-shadow: var(--shadow-focus-ring);
-}
-
-.input:disabled { opacity: var(--opacity-disabled); }
 
 .submit {
   composes: btnPrimary from '../../components/shared/Button.module.css';
@@ -90,13 +72,10 @@
 }
 
 .error {
+  composes: alert from '../../components/shared/Alert.module.css';
   flex-basis: 100%;
   font-size: var(--fs-sm);
-  color: var(--danger);
   padding: var(--space-2) var(--space-3);
-  background: var(--danger-subtle);
-  border-radius: var(--radius);
-  border-left: var(--border-w-alert) solid var(--danger);
 }
 
 .secondaryCta {

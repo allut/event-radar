@@ -28,8 +28,7 @@
 }
 
 .chev {
-  color: var(--text-muted);
-  font-size: var(--fs-icon);
+  composes: chev from '../shared/Menu.module.css';
 }
 
 .optionList {
@@ -39,36 +38,22 @@
 }
 
 .option {
+  composes: menuOption from '../shared/Menu.module.css';
   display: block;
   width: 100%;
-  text-align: center;
   padding: var(--space-0-45) var(--space-0-875);
-  border-radius: var(--radius);
-  border: 1px solid transparent;
-  background: transparent;
-  color: var(--text-muted);
-  font-size: var(--fs-sm);
-  font-weight: var(--fw-semibold);
-  cursor: pointer;
-  transition: all var(--transition);
 }
 
-.option:hover {
-  color: var(--text);
-  background: var(--bg-overlay-soft);
-}
-
-.optionActive {
-  color: var(--accent-light);
+/* See MobileMenu.module.css's .linkActive for why this repeats the trio
+   with a doubled selector instead of composing .activePill or relying on
+   source order (Rollup's per-file CSS block order isn't import-order). */
+.optionActive.optionActive {
   background: var(--accent-subtle);
-  border-color: var(--accent-border);
+  border: 1px solid var(--accent-border);
+  color: var(--accent-light);
 }
 
 @media (max-width: 640px) {
-  .chev {
-    display: none;
-  }
-
   .label:empty {
     display: none;
   }

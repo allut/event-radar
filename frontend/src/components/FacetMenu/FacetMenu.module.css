@@ -32,12 +32,5 @@
 }
 
 .chev {
-  color: var(--text-muted);
-  font-size: var(--fs-icon);
-}
-
-@media (max-width: 640px) {
-  .chev {
-    display: none;
-  }
+  composes: chev from '../shared/Menu.module.css';
 }

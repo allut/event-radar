@@ -26,3 +26,12 @@
 }
 
 .btnOutline:hover { border-color: var(--accent-hover-border); color: var(--text); }
+
+.btnSubmit {
+  composes: btnPrimary;
+  font-size: var(--fs-base);
+  height: var(--control-height-lg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}

@@ -1,0 +1,6 @@
+.alert {
+  color: var(--danger);
+  background: var(--danger-subtle);
+  border-radius: var(--radius);
+  border-left: var(--border-w-alert) solid var(--danger);
+}
