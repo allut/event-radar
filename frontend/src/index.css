@@ -126,6 +126,28 @@
 
   /* Disabled state */
   --opacity-disabled: 0.5;
+  --opacity-disabled-soft: 0.35; /* Onboarding submit:disabled */
+  --opacity-decorative: 0.6;     /* EventCard ghost numeral */
+  --opacity-breathe-min: 0.4;    /* breathe keyframe trough */
+
+  /* Border widths */
+  --border-w-ring: 2px;    /* spinner rings, status circles, drop zones */
+  --border-w-alert: 2px;   /* left-rule on inline alert/error banners */
+  --border-w-accent: 3px;  /* top-rule accent/danger card stripe */
+
+  /* Transform lifts + scales */
+  --lift-sm: -1px;
+  --lift-md: -2px;
+  --scale-hover: 1.1;
+  --scale-subtle: 1.02;
+  --scale-press: 0.97;
+
+  /* Grid/flex geometry */
+  --card-grid-min: 280px;
+  --underline-offset: 3px;
+  --measure-prose: 46ch;
+  --offscreen-x: -9999px;
+  --card-image-ratio-featured: 16 / 7;
 
   /* Backdrop blur */
   --blur-overlay: 8px;   /* sticky topbars */
@@ -136,6 +158,7 @@
   --card-image-max-height: 560px;
   --hero-image-max-height: 600px;
   --card-image-ratio: 16 / 9; /* fixed letterbox box for the standard EventCard image */
+  --hero-placeholder-height: 220px; /* EventDetail loading placeholder */
 
   /* Spinner sizes */
   --spinner-size: 40px;
@@ -188,9 +211,32 @@
   --page-max-medium: 1000px;
   --page-max-grid: 1080px;
   --page-max-wide: 1100px;
+  --page-max-feed: 760px;         /* Feed */
+  --page-max-organizer: 840px;    /* OrganizerDashboard */
+  --page-max-settings: 640px;     /* Settings */
+  --page-max-showcase: 560px;     /* Landing showcase panel */
+
+  /* Component max/min-widths */
+  --card-max-narrow: 400px;       /* shared/Card.module.css .cardPage */
+  --card-max-auth: 360px;         /* AuthCard */
+  --card-max-auth-inner: 280px;   /* AuthCard inner content */
+  --empty-state-max: 380px;
+  --empty-state-max-sm: 340px;
+  --onboarding-submit-max: 320px;
+  --onboarding-submit-min: 160px; /* Onboarding .submit min-width */
+  --radar-max: 420px;
+  --radar-max-mobile: 300px;
+  --mobile-menu-min: 200px;       /* MobileMenu .pop min-width */
 
   /* Form controls */
   --control-height-lg: 48px;
+  --textarea-height-sm: 100px;  /* EventSubmit description */
+  --textarea-height-md: 120px;  /* Contact message */
+
+  /* Flex-basis geometry (form-field wrap points) */
+  --flex-basis-sm: 200px;  /* EventSubmit */
+  --flex-basis-md: 220px;  /* Landing */
+  --flex-basis-lg: 240px;  /* OrganizerDashboard */
 
   /* Popover/menu geometry */
   --menu-pop-min-width: 330px;
@@ -214,6 +260,13 @@
   --leading-tight: 1.2;
   --leading-snug: 1.4;
   --leading-relaxed: 1.7;
+  --leading-none: 1;
+
+  /* Font weight */
+  --fw-light: 300;
+  --fw-medium: 500;
+  --fw-semibold: 600;
+  --fw-bold: 700;
 
   /* Animation durations */
   --anim-fast: 0.3s;
@@ -224,8 +277,12 @@
   --anim-rise-md: 0.5s;
   --anim-rise-lg: 0.7s;
   --anim-breathe-fast: 2.4s;
+  --anim-breathe: 3s; /* Animations.module.css .breathe fallback duration */
   --anim-spin-slow: 4s;
   --rise-distance: 8px;
+  --rise-distance-xs: 6px;  /* EventDetail rise-in */
+  --rise-distance-md: 10px; /* AuthCard rise-in */
+  --rise-distance-lg: 12px; /* NotFound / Login / OrganizerLogin rise-in */
 
   /* Card shadows */
   --shadow-card:        0 4px 20px rgba(0, 0, 0, 0.25);

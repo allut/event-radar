@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { api } from '../../api/client';
 import { t } from '../../i18n';
+import { withLocaleQuery } from '../../utils';
 import { useLocaleMutation } from '../../hooks/useLocaleMutation';
 import { useLogout } from '../../hooks/useLogout';
 import { useStaticSeoMeta } from '../../hooks/useStaticSeoMeta';
@@ -112,7 +113,7 @@ export default function Explore() {
     queryKey: [QUERY_KEYS.explore, locale, filters],
     queryFn: ({ pageParam }) =>
       api.get<ExploreResponse>(
-        `/explore?${buildExploreApiQuery(filters, pageParam)}&locale=${encodeURIComponent(locale)}`,
+        withLocaleQuery(`/explore?${buildExploreApiQuery(filters, pageParam)}`, locale),
       ),
     initialPageParam: 0,
     getNextPageParam: (lastPage) =>

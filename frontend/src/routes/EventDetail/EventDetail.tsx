@@ -3,7 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../../api/client';
 import { t, ti } from '../../i18n';
-import { buildMapsUrl, categoryGradient, copyToClipboard, cx, formatEventDateTime, formatEventShortDate, formatHourMinute, formatPrice, safeUrl, sanitizeHtml, trackExternalClick, truncateForMeta } from '../../utils';
+import { buildMapsUrl, categoryGradient, copyToClipboard, cx, formatEventDateTime, formatEventShortDate, formatHourMinute, formatPrice, safeUrl, sanitizeHtml, titleWithBrand, trackExternalClick, truncateForMeta, withLocaleQuery } from '../../utils';
 import { useAuth } from '../../hooks/useAuth';
 import { useLocaleMutation } from '../../hooks/useLocaleMutation';
 import { useLogout } from '../../hooks/useLogout';
@@ -17,7 +17,7 @@ import SeoTags from '../../components/SeoTags';
 import Toast from '../../components/Toast';
 import TopBar from '../../components/TopBar';
 import { useFeedback } from '../../hooks/useFeedback';
-import { API, OG_FALLBACK_IMAGE_PATH, PRODUCTION_ORIGIN, QUERY_KEYS, ROUTES, SEO_DESCRIPTION_MAX_LENGTH, UI_STATE } from '../../constants';
+import { API, EVENT_PRICE_TESTID, OG_FALLBACK_IMAGE_PATH, PRICE_DATA_ATTR, PRODUCTION_ORIGIN, QUERY_KEYS, ROUTES, SEO_DESCRIPTION_MAX_LENGTH, UI_STATE } from '../../constants';
 import styles from './EventDetail.module.css';
 
 interface EventDetailData extends EventData {
@@ -43,12 +43,12 @@ export default function EventDetail() {
 
   const { data, isLoading, isError } = useQuery({
     queryKey: [QUERY_KEYS.event, id, locale],
-    queryFn: () => api.get<EventDetailData>(`${API.event(id ?? '')}?locale=${encodeURIComponent(locale)}`),
+    queryFn: () => api.get<EventDetailData>(withLocaleQuery(API.event(id ?? ''), locale)),
     enabled: Boolean(id),
     retry: false,
   });
 
-  const { activeSignal, pending, sendFeedback } = useFeedback(data?.id ?? 0, {
+  const { activeSignal, pending, sendFeedback } = useFeedback(data?.id, {
     initialSignal: data?.my_signal ?? null,
   });
 
@@ -66,8 +66,8 @@ export default function EventDetail() {
   // canonical URL for content that isn't actually there (issue #48).
   const seoMeta = useSeoMeta({
     title: data
-      ? `${data.title} – ${data.venue_name || formatEventShortDate(data.starts_at, locale)} | ${t('brand', locale)}`
-      : `${t('event_not_found', locale)} | ${t('brand', locale)}`,
+      ? titleWithBrand(`${data.title} – ${data.venue_name || formatEventShortDate(data.starts_at, locale)}`, locale)
+      : titleWithBrand(t('event_not_found', locale), locale),
     locale,
     path: ROUTES.eventDetail(id ?? ''),
     indexable: Boolean(data),
@@ -155,18 +155,20 @@ export default function EventDetail() {
             />
           )}
           {price && (
-            // data-* attrs: read by the in-build SEO validation gate
-            // (src/lib/seoValidation.ts, issue #53) to check this snapshot's
-            // price against what the live API currently returns — price isn't
-            // part of the JSON-LD payload (issue #46 defers AggregateOffer),
-            // so it needs its own marker.
+            // data-* attrs (PRICE_DATA_ATTR): read by the in-build SEO
+            // validation gate (src/lib/seoValidation.ts, issue #53) to check
+            // this snapshot's price against what the live API currently
+            // returns — price isn't part of the JSON-LD payload (issue #46
+            // defers AggregateOffer), so it needs its own marker.
             <span
               className={styles.price}
-              data-testid="event-price"
-              data-price-min={data.price_min ?? ''}
-              data-price-max={data.price_max ?? ''}
-              data-currency={data.currency ?? ''}
-              data-has-free-tier={data.has_free_tier}
+              data-testid={EVENT_PRICE_TESTID}
+              {...{
+                [PRICE_DATA_ATTR.min]: data.price_min ?? '',
+                [PRICE_DATA_ATTR.max]: data.price_max ?? '',
+                [PRICE_DATA_ATTR.currency]: data.currency ?? '',
+                [PRICE_DATA_ATTR.hasFreeTier]: data.has_free_tier,
+              }}
             >
               {price}
             </span>

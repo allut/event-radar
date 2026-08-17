@@ -1,10 +1,5 @@
 .field {
-  display: flex;
-  align-items: stretch;
-  background: var(--bg-raised);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  transition: border-color var(--transition), box-shadow var(--transition);
+  composes: fieldWrap from '../shared/Field.module.css';
 }
 
 .field:hover:not([data-disabled]) {
@@ -29,7 +24,7 @@
   min-width: 0;
   padding: var(--space-3) var(--space-4);
   font-size: var(--fs-sm);
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   line-height: var(--leading-tight);
   letter-spacing: var(--tracking-snug);
   text-align: center;
@@ -107,14 +102,9 @@
 }
 
 .spinner {
-  composes: spin from '../shared/Animations.module.css';
+  composes: ring ringMuted sizeSm from '../shared/Spinner.module.css';
   flex: 0 0 auto;
   display: inline-block;
-  width: var(--spinner-size-sm);
-  height: var(--spinner-size-sm);
-  border: 2px solid var(--spinner-border);
-  border-top-color: var(--accent);
-  border-radius: var(--radius-full);
 }
 
 .preview {

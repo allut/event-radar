@@ -10,7 +10,7 @@
   padding: var(--space-0-35) var(--space-0-875);
   border-radius: var(--radius-pill);
   font-size: var(--fs-xs);
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   letter-spacing: var(--tracking-wider);
   cursor: pointer;
 }

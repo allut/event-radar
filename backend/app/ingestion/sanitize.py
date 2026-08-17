@@ -15,6 +15,7 @@ from bs4 import BeautifulSoup, Tag
 from app.constants import (
     HTML_BLOCK_BOUNDARY_TAGS,
     HTML_BLOCK_TAGS_TO_BREAK,
+    HTML_CF_EMAIL_MARKERS,
     HTML_EDGE_BR_RE,
     HTML_MULTI_BR_TEMPLATE_RE,
     HTML_SANITIZE_ALLOWED_ATTRS,
@@ -27,10 +28,6 @@ from app.constants import (
 
 _MULTI_BR_RE = re.compile(HTML_MULTI_BR_TEMPLATE_RE % (HTML_SANITIZE_MAX_CONSECUTIVE_BR + 1))
 _EDGE_BR_RE = re.compile(HTML_EDGE_BR_RE)
-
-# Fast-path markers: skip parsing a description that carries neither form of
-# Cloudflare's email obfuscation (most descriptions have none).
-_CF_EMAIL_MARKERS = ("__cf_email__", "email-protection")
 
 
 def decode_cfemail(hex_str: str) -> str | None:
@@ -63,7 +60,7 @@ def deobfuscate_cf_emails(html: str) -> str:
     Replaces each matched node with the decoded address as a plain-text node
     (never a link — see sanitize_html's docstring for why).
     """
-    if not any(marker in html for marker in _CF_EMAIL_MARKERS):
+    if not any(marker in html for marker in HTML_CF_EMAIL_MARKERS):
         return html
     soup = BeautifulSoup(html, "html.parser")
     changed = False

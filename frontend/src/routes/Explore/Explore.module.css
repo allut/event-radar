@@ -1,7 +1,5 @@
 .page {
-  flex: 1 0 auto;
-  display: flex;
-  flex-direction: column;
+  composes: page from '../../components/shared/Page.module.css';
 }
 
 .main {
@@ -24,7 +22,7 @@
 .heading {
   font-family: var(--font-display);
   font-size: var(--heading-2xl);
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   color: var(--text);
   letter-spacing: var(--tracking-tighter);
 }
@@ -103,7 +101,7 @@
 
 .freeBtn {
   composes: triggerInline from '../../components/shared/Menu.module.css';
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
 }
 
 .freeBtnActive {
@@ -112,7 +110,7 @@
 
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(var(--card-grid-min), 1fr));
   gap: var(--space-4);
 }
 
@@ -124,7 +122,7 @@
 }
 
 .loadMoreBtn:disabled {
-  opacity: 0.5;
+  opacity: var(--opacity-disabled);
   cursor: not-allowed;
 }
 

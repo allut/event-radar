@@ -7,7 +7,7 @@
   justify-content: center;
   width: var(--status-circle-size);
   height: var(--status-circle-size);
-  border: 2px solid currentColor;
+  border: var(--border-w-ring) solid currentColor;
   border-radius: var(--radius-full);
 }
 

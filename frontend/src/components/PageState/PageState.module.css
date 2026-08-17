@@ -17,13 +17,8 @@
 }
 
 .spinner {
-  composes: spin from '../shared/Animations.module.css';
+  composes: ring ringOnPage sizeLg from '../shared/Spinner.module.css';
   display: block;
-  width: var(--spinner-size);
-  height: var(--spinner-size);
-  border: 2px solid var(--border);
-  border-top-color: var(--accent);
-  border-radius: var(--radius-full);
 }
 
 .errorMsg {

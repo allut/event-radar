@@ -3,7 +3,6 @@ import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import Explore from './Explore';
 import { renderWithProviders, makeEvent } from '../../test/utils';
-import { EXPLORE_SEARCH_DEBOUNCE_MS } from '../../constants';
 import type { EventData } from '../../components/EventCard';
 
 vi.mock('../../lib/auth', () => ({
@@ -251,7 +250,12 @@ describe('Explore', () => {
       return Promise.resolve(exploreResponse([]));
     });
 
-    const user = userEvent.setup();
+    // Real timers made this test's debounce wait flaky under a loaded CI
+    // runner (timeout races against the actual 400ms clock). Fake timers +
+    // userEvent's advanceTimers option drive the debounce deterministically
+    // instead — same pattern as utils.test.ts / useToast.test.ts / Settings.test.tsx.
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime.bind(vi) });
 
     renderWithProviders(<Explore />, { route: '/explore' });
     await waitFor(() => expect(screen.getByRole('button', { name: /Categories/ })).toBeInTheDocument());
@@ -266,21 +270,18 @@ describe('Explore', () => {
     // Deselecting the (default-checked) Music chip narrows the category param;
     // the assertion below just needs to see both the typed text and the
     // narrowed category param land in the same committed query.
-    await waitFor(
-      () => {
-        const calls = mockGet.mock.calls.map((c) => c[0] as string);
-        // Assert on the *final* committed /explore query, not the first q=jazz
-        // call. Under load the debounce may not coalesce the typed text and the
-        // mid-debounce chip toggle into one window, emitting a transient q=jazz
-        // call before the narrowed category lands. "No clobber" is a property
-        // of the settled query, so check the last committed call.
-        const exploreCalls = calls.filter((c) => c.startsWith('/explore'));
-        const exploreCall = exploreCalls[exploreCalls.length - 1];
-        expect(exploreCall).toContain('q=jazz');
-        expect(exploreCall).toMatch(/category=/);
-        expect(exploreCall).not.toMatch(/category=[^&]*\bmusic\b/);
-      },
-      { timeout: EXPLORE_SEARCH_DEBOUNCE_MS + 3000 },
-    );
-  }, EXPLORE_SEARCH_DEBOUNCE_MS + 5000);
+    await waitFor(() => {
+      const calls = mockGet.mock.calls.map((c) => c[0] as string);
+      // Assert on the *final* committed /explore query, not the first q=jazz
+      // call. Under load the debounce may not coalesce the typed text and the
+      // mid-debounce chip toggle into one window, emitting a transient q=jazz
+      // call before the narrowed category lands. "No clobber" is a property
+      // of the settled query, so check the last committed call.
+      const exploreCalls = calls.filter((c) => c.startsWith('/explore'));
+      const exploreCall = exploreCalls[exploreCalls.length - 1];
+      expect(exploreCall).toContain('q=jazz');
+      expect(exploreCall).toMatch(/category=/);
+      expect(exploreCall).not.toMatch(/category=[^&]*\bmusic\b/);
+    });
+  });
 });

@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { organizerApi, ApiError } from '../api/client';
 import { API, QUERY_KEYS, ORGANIZER_EVENTS_PAGE_SIZE, DEFAULT_CURRENCY, ORGANIZER_IMAGE_ALLOWED_MIME, ROUTES, LOCALE_EN, LOCALE_ET, LOCALE_RU } from '../constants';
 import { t } from '../i18n';
-import { joinDateTimeValue } from '../utils';
+import { toIsoOrUndefined, toLocalInput } from '../utils';
 
 interface OrganizerEventFull {
   id: number;
@@ -68,23 +68,6 @@ const EMPTY_FIELDS: FormFields = {
   priceMin: '', priceMax: '',
   category: '',
 };
-
-function toIsoOrUndefined(local: string): string | undefined {
-  if (!local) return undefined;
-  const d = new Date(local);
-  return Number.isNaN(d.getTime()) ? undefined : d.toISOString();
-}
-
-// The picker's wire value has no timezone of its own — the browser's local
-// offset is used both when parsing (toIsoOrUndefined) and here, so round-tripping
-// an existing ISO value back into the field reproduces the same wall-clock time
-// the organizer originally entered.
-function toLocalInput(iso: string | null): string {
-  if (!iso) return '';
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '';
-  return joinDateTimeValue(d, d.getHours(), d.getMinutes());
-}
 
 function fieldsFromExisting(existing: OrganizerEventFull): FormFields {
   // Prefill from the raw *_localized maps (not the display-locale-resolved

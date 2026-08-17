@@ -5,7 +5,6 @@ type Locale = 'en' | 'et' | 'ru';
 export const TRANSLATIONS: Record<Locale, Record<string, string>> = {
   en: {
     'brand': 'What\'s on Radar',
-    'settings_link': 'Settings',
     'back_to_feed': '← Feed',
     'back': 'Back',
     'sign_out': 'Sign out',
@@ -137,8 +136,6 @@ export const TRANSLATIONS: Record<Locale, Record<string, string>> = {
     'load_more': 'Load more',
     'free_only': 'Free only',
     'filters': 'Filters',
-    'filters_clear': 'Clear',
-    'filters_show_results': 'Show {count} results',
     'date_any': 'Any date',
     'date_today': 'Today',
     'date_weekend': 'This weekend',
@@ -282,7 +279,6 @@ export const TRANSLATIONS: Record<Locale, Record<string, string>> = {
   },
   et: {
     'brand': 'What\'s on Radar',
-    'settings_link': 'Seaded',
     'back_to_feed': '← Voog',
     'back': 'Tagasi',
     'sign_out': 'Logi välja',
@@ -414,8 +410,6 @@ export const TRANSLATIONS: Record<Locale, Record<string, string>> = {
     'load_more': 'Laadi rohkem',
     'free_only': 'Ainult tasuta',
     'filters': 'Filtrid',
-    'filters_clear': 'Tühjenda',
-    'filters_show_results': 'Näita {count} tulemust',
     'date_any': 'Iga kuupäev',
     'date_today': 'Täna',
     'date_weekend': 'Sel nädalavahetusel',
@@ -559,7 +553,6 @@ export const TRANSLATIONS: Record<Locale, Record<string, string>> = {
   },
   ru: {
     'brand': 'What\'s on Radar',
-    'settings_link': 'Настройки',
     'back_to_feed': '← Лента',
     'back': 'Назад',
     'sign_out': 'Выйти',
@@ -691,8 +684,6 @@ export const TRANSLATIONS: Record<Locale, Record<string, string>> = {
     'load_more': 'Загрузить ещё',
     'free_only': 'Только бесплатные',
     'filters': 'Фильтры',
-    'filters_clear': 'Очистить',
-    'filters_show_results': 'Показать {count} результатов',
     'date_any': 'Любая дата',
     'date_today': 'Сегодня',
     'date_weekend': 'Эти выходные',

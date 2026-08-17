@@ -1,7 +1,5 @@
 .page {
-  flex: 1 0 auto;
-  display: flex;
-  flex-direction: column;
+  composes: page from '../../components/shared/Page.module.css';
 }
 
 .main {
@@ -19,7 +17,7 @@
 .heading {
   font-family: var(--font-display);
   font-size: var(--heading-2xl);
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   color: var(--text);
   margin-bottom: var(--space-2);
   letter-spacing: var(--tracking-tighter);
@@ -37,7 +35,7 @@
   margin-top: var(--space-3);
   padding: var(--space-0-45) var(--space-3);
   font-size: var(--fs-sm);
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   color: var(--accent);
   border-color: var(--accent-border);
   background: var(--accent-subtle);
@@ -59,12 +57,9 @@
 }
 
 .error {
+  composes: alert from '../../components/shared/Alert.module.css';
   font-size: var(--fs-md);
-  color: var(--danger);
-  background: var(--danger-subtle);
-  border-left: 2px solid var(--danger);
   padding: var(--space-0-625) var(--space-0-875);
-  border-radius: var(--radius);
   margin-bottom: var(--space-4);
 }
 
@@ -76,18 +71,13 @@
 }
 
 .submit {
-  composes: btnPrimary from '../../components/shared/Button.module.css';
+  composes: btnSubmit from '../../components/shared/Button.module.css';
   padding: var(--space-0-8125) var(--space-6);
-  font-size: var(--fs-base);
-  height: var(--control-height-lg);
-  min-width: 160px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  min-width: var(--onboarding-submit-min);
 }
 
 .submit:disabled {
-  opacity: 0.35;
+  opacity: var(--opacity-disabled-soft);
   cursor: not-allowed;
   transform: none;
 }
@@ -114,7 +104,7 @@
   align-items: center;
   gap: var(--space-4);
   padding: var(--space-7) var(--space-6);
-  max-width: 320px;
+  max-width: var(--onboarding-submit-max);
   text-align: center;
 }
 
@@ -125,6 +115,6 @@
 .overlayMsg {
   font-size: var(--fs-base);
   color: var(--text);
-  font-weight: 500;
+  font-weight: var(--fw-medium);
 }
 

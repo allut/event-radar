@@ -101,18 +101,26 @@ def _validate_affinity_vector(slug: str, vector: dict) -> None:
 
 async def seed_personas(db: AsyncSession) -> None:
     """Idempotently insert the 9 personas. Updates display names and affinity vectors if changed."""
-    for p in _persona_seeds():
+    seeds = _persona_seeds()
+    for p in seeds:
         _validate_affinity_vector(p["slug"], p["affinity_vector"])
-        existing = await db.scalar(select(Persona).where(Persona.slug == p["slug"]))
+    slugs = [p["slug"] for p in seeds]
+    existing_by_slug = {
+        persona.slug: persona
+        for persona in (
+            await db.scalars(select(Persona).where(Persona.slug.in_(slugs)))
+        ).all()
+    }
+    for p in seeds:
+        existing = existing_by_slug.get(p["slug"])
         if existing:
             existing.display_name_en = p["display_name_en"]
             existing.display_name_et = p["display_name_et"]
             existing.display_name_ru = p["display_name_ru"]
             existing.affinity_vector = p["affinity_vector"]
-            await db.flush()
         else:
             db.add(Persona(**p))
-            await db.flush()
+    await db.flush()
 
 
 async def _upsert_fienta(db: AsyncSession) -> None:

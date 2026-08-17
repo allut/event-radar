@@ -223,8 +223,9 @@ def _validate_llm_prices(
     # has a free-keyword/€0 mention in the text — otherwise it's an unenforced
     # LLM claim that can survive even after its price_min was just nulled above,
     # surfacing a "free options available" hint with no paid price behind it.
+    price_min = parsed["price_min"]
     if parsed["has_free_tier"] and (
-        not parsed["price_min"] or not is_free_signaled
+        price_min is None or price_min <= 0 or not is_free_signaled
     ):
         parsed["has_free_tier"] = False
 

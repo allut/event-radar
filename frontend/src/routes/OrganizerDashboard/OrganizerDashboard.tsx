@@ -1,9 +1,8 @@
-import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { organizerApi, ApiError } from '../../api/client';
-import { getLocale, setLocale } from '../../lib/auth';
 import { useOrganizerLogout } from '../../hooks/useOrganizerLogout';
+import { useLocalLocale } from '../../hooks/useLocalLocale';
 import { t } from '../../i18n';
 import { formatEventTime } from '../../utils';
 import OrganizerTopBar from '../../components/OrganizerTopBar';
@@ -32,16 +31,11 @@ interface OrganizerEventsResponse {
 }
 
 export default function OrganizerDashboard() {
-  const [locale, setLocaleState] = useState(getLocale());
+  const [locale, handleLocaleChange] = useLocalLocale();
   const handleLogout = useOrganizerLogout();
   const queryClient = useQueryClient();
   const { toast, showToast } = useToast();
   const seoMeta = useStaticSeoMeta('organizer_dashboard_title', locale);
-
-  function handleLocaleChange(code: string) {
-    setLocaleState(code);
-    setLocale(code);
-  }
 
   const { data, isLoading, isError } = useQuery({
     queryKey: [QUERY_KEYS.organizerEvents, locale],

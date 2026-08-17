@@ -1,7 +1,7 @@
 import { Link, NavLink } from 'react-router-dom';
 import { t } from '../../i18n';
 import { cx } from '../../utils';
-import { LOCALES, ROUTES } from '../../constants';
+import { LOCALES, NAV_ITEMS, ROUTES } from '../../constants';
 import { useDropdown } from '../../hooks/useDropdown';
 import menuStyles from '../shared/Menu.module.css';
 import styles from './MobileMenu.module.css';
@@ -36,35 +36,17 @@ export default function MobileMenu({ locale, onLocaleChange, onLogout, localeDis
           {authed && showNav && (
             <>
               <nav className={styles.section} aria-label={t('nav_daily5', locale)}>
-                <NavLink
-                  to={ROUTES.home}
-                  end
-                  className={({ isActive }) => cx(styles.link, isActive && styles.linkActive)}
-                  onClick={close}
-                >
-                  {t('nav_daily5', locale)}
-                </NavLink>
-                <NavLink
-                  to={ROUTES.explore}
-                  className={({ isActive }) => cx(styles.link, isActive && styles.linkActive)}
-                  onClick={close}
-                >
-                  {t('nav_explore', locale)}
-                </NavLink>
-                <NavLink
-                  to={ROUTES.saved}
-                  className={({ isActive }) => cx(styles.link, isActive && styles.linkActive)}
-                  onClick={close}
-                >
-                  {t('nav_saved', locale)}
-                </NavLink>
-                <NavLink
-                  to={ROUTES.settings}
-                  className={({ isActive }) => cx(styles.link, isActive && styles.linkActive)}
-                  onClick={close}
-                >
-                  {t('nav_settings', locale)}
-                </NavLink>
+                {NAV_ITEMS.map(({ route, labelKey }) => (
+                  <NavLink
+                    key={route}
+                    to={route}
+                    end={route === ROUTES.home}
+                    className={({ isActive }) => cx(styles.link, isActive && styles.linkActive)}
+                    onClick={close}
+                  >
+                    {t(labelKey, locale)}
+                  </NavLink>
+                ))}
               </nav>
 
               <div className={styles.divider} />

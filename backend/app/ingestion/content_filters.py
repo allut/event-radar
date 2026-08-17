@@ -14,7 +14,7 @@ from app.constants import (
 )
 from app.ingestion.sanitize import html_to_text
 
-def _alternation_pattern(keywords: frozenset[str]) -> re.Pattern[str]:
+def alternation_pattern(keywords: frozenset[str]) -> re.Pattern[str]:
     """One word-boundary alternation regex for a keyword group.
 
     A single-pass alternation is far cheaper than searching the text once per
@@ -28,7 +28,7 @@ def _alternation_pattern(keywords: frozenset[str]) -> re.Pattern[str]:
     )
 
 
-_EXPLICIT_KEYWORD_PATTERN = _alternation_pattern(EXPLICIT_KEYWORDS)
+_EXPLICIT_KEYWORD_PATTERN = alternation_pattern(EXPLICIT_KEYWORDS)
 
 
 def is_explicit_text(*parts: str | None) -> bool:
@@ -47,8 +47,8 @@ def is_explicit_text(*parts: str | None) -> bool:
     return bool(_EXPLICIT_KEYWORD_PATTERN.search(text))
 
 
-_NON_EVENT_TITLE_PATTERN = _alternation_pattern(NON_EVENT_TITLE_KEYWORDS)
-_NON_EVENT_VENUE_PATTERN = _alternation_pattern(NON_EVENT_VENUE_KEYWORDS)
+_NON_EVENT_TITLE_PATTERN = alternation_pattern(NON_EVENT_TITLE_KEYWORDS)
+_NON_EVENT_VENUE_PATTERN = alternation_pattern(NON_EVENT_VENUE_KEYWORDS)
 
 
 def is_non_event_text(title: str | None, venue_name: str | None) -> bool:

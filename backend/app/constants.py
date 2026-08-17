@@ -90,6 +90,14 @@ DEV_DB_LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1", "db"})
 # proxy with a correct Host and stays guarded.
 HOST_CHECK_EXEMPT_PATHS: frozenset[str] = frozenset({"/health"})
 
+# Starlette TrustedHostMiddleware's fixed rejection body — app/main.py's
+# HostCheckMiddleware matches this to tell an actual Host-header reject apart
+# from an ordinary downstream 400 (bad token, malformed body, ...) passing
+# through the same wrapped `send`. A future Starlette wording change would
+# just silently stop logging rejects, never start false-logging normal 400s
+# — an acceptable degrade.
+TRUSTED_HOST_REJECT_BODY = b"Invalid host header"
+
 # ASGI scope/message "type" values (app/main.py's raw ASGI middleware classes —
 # HostCheckMiddleware, MaxBodySizeMiddleware, CsrfOriginCheckMiddleware). Fixed by
 # the ASGI spec, not application data, but still named here rather than repeated
@@ -388,6 +396,12 @@ TIME_WINDOW_HOURS = 12  # max |Δstart| in hours for two events to be dedup cand
 # unfiltered event list fails loudly instead of silently degrading to quadratic time;
 # well above any legitimate test's event count.
 DEDUP_UNFILTERED_FALLBACK_MAX_EVENTS = 500
+# candidate_pair_ids_in_window()'s SQL pair count is roughly N x d (d = events
+# sharing a +/-TIME_WINDOW_HOURS neighbourhood) — quadratic in same-window
+# listing density rather than in the lookback/lookahead window. Not a hard cap
+# (the pass still runs), just a visibility threshold: crossing it logs a
+# warning so a density spike shows up instead of silently growing pass time.
+DEDUP_CANDIDATE_PAIR_WARN_THRESHOLD = 20000
 
 # Resend email delivery
 RESEND_SEND_URL = "https://api.resend.com/emails"
@@ -464,6 +478,10 @@ RATE_LIMIT_ADMIN = "10/minute"
 # accepted since this pairs with, not replaces, a strong ADMIN_PASSWORD.
 ADMIN_AUTH_MAX_FAILURES = 5
 ADMIN_AUTH_LOCKOUT_SECONDS = 300
+# Bounds _admin_auth_failures (routers/admin.py) the same way browse.py bounds
+# _score_cache — an unbounded dict keyed by client_key() would grow forever
+# under sustained scanning/brute-force traffic.
+ADMIN_AUTH_FAILURES_MAX_ENTRIES = 4096
 # Authenticated feedback writes — generous cap; prevents cache-rebuild DoS
 # (every signal wipes all user_event_scores rows for that user).
 RATE_LIMIT_FEEDBACK = "60/minute"
@@ -484,6 +502,9 @@ RATE_LIMIT_BROWSE = "120/minute"
 # Public, unauthenticated landing-page showcase (GET /public/showcase). No auth,
 # so throttle scraping abuse; generous enough for real visitors loading the page.
 RATE_LIMIT_PUBLIC = "60/minute"
+# /internal/tick (cron-job.org keepalive ping, app/main.py) hits 6x/hour by design;
+# generous ceiling exists only to bound token brute-force / abuse, not real traffic.
+RATE_LIMIT_INTERNAL_TICK = "30/minute"
 # How many events the landing-page showcase returns — a fixed, small teaser grid
 # (top-quality upcoming events), so no pagination is needed.
 SHOWCASE_EVENT_COUNT = 6
@@ -535,6 +556,18 @@ ORGANIZER_DAILY_SUBMISSION_CAP = 20
 # free-tier upload quota, since an upload can happen without ever completing
 # a submission (organizer_image_uploads, app/models/models.py).
 ORGANIZER_DAILY_IMAGE_UPLOAD_CAP = 20
+
+# Field length caps for SubmitEventBody/PatchEventBody (routers/organizer_events.py).
+# venue_name and currency mirror the Event column widths (models/models.py) so an
+# over-length value 422s instead of raising asyncpg.StringDataRightTruncation; the
+# Text-column fields (title/description/important_info) have no DB-enforced width,
+# so these are abuse-prevention ceilings, not truncation-avoidance.
+ORGANIZER_TITLE_MAX_LEN = 300
+ORGANIZER_DESCRIPTION_MAX_LEN = 10000
+ORGANIZER_IMPORTANT_INFO_MAX_LEN = 5000
+ORGANIZER_VENUE_NAME_MAX_LEN = 255
+ORGANIZER_VENUE_ADDRESS_MAX_LEN = 500
+ORGANIZER_CURRENCY_MAX_LEN = 3
 
 # Organizer image upload (routers/organizer_events.py -> Cloudinary signed upload).
 # IMAGE_UPLOAD_ALLOWED_MIME itself comes from shared/app-config.json (imported
@@ -655,6 +688,16 @@ PAGINATION_MAX_OFFSET: int = 100_000
 # Path-B approximation at MVP scale (`total` in the response reflects at most this
 # many rows when the cap is hit; see browse.py docstring).
 BROWSE_RELEVANCE_MAX_CANDIDATES: int = 300
+# _browse_scored_path scores+sorts the full (capped) candidate pool on every
+# call, then slices a page — so /explore's "Load more" infinite scroll pays
+# O(candidates) again per page even though the ranked order didn't change.
+# Memoizing the scored-and-sorted id list keyed by (user, filters, sort) turns
+# an N-page read into one scoring pass. Short TTL bounds staleness (a like/
+# dislike made mid-scroll takes up to this long to affect ranking); small
+# max-entries bounds process memory — single Render process, no cross-process
+# cache needed.
+BROWSE_SCORE_CACHE_TTL_SECONDS: float = 30.0
+BROWSE_SCORE_CACHE_MAX_ENTRIES: int = 512
 # How far back browse.py::_load_feedback_context looks for a user's like/dislike
 # history when scoring /explore (Path B). user_event_feedback is preserved
 # indefinitely by policy (see CLAUDE.md Data Retention), so an unbounded load
@@ -1021,6 +1064,14 @@ VENUE_SIBLING_RATIO_THRESHOLD = 90
 # ~12 min/run, fine for a 04:30 cron.
 REFETCH_MAX_PER_RUN = 1000
 REFETCH_REQUEST_DELAY_SECONDS: float = 1.0
+# Wall-clock backstop, independent of REFETCH_MAX_PER_RUN: an event that
+# triggers locale-variant fetches (fetch_locale_variants) pays its own
+# REFETCH_REQUEST_DELAY_SECONDS per variant, so REFETCH_MAX_PER_RUN events
+# don't bound run time the way the count alone suggests. Job starts 04:30,
+# build_daily_feeds runs 06:00 — 40 min leaves real margin in that window.
+# detail_refetched_at ordering means anything cut off here is picked up first
+# next run, so this is self-limiting with no coverage loss.
+REFETCH_MAX_RUN_SECONDS: float = 2400.0
 # Flat daily throttle: an event re-synced within this window is not due again.
 # Guards mainly against manual POST /admin/refetch re-runs; the cron fires once daily.
 REFETCH_MIN_INTERVAL_DAYS = 1
@@ -1238,6 +1289,10 @@ HTML_EDGE_BR_RE = r"^(?:\s*<br\s*/?>\s*)+|(?:\s*<br\s*/?>\s*)+$"
 HTML_WHITESPACE_RUN_RE = r"[ \t\n\r\f\v]+"
 # Normalizes BeautifulSoup's self-closed "<br/>" serialization back to "<br>".
 HTML_SELF_CLOSING_BR_RE = r"<br\s*/>"
+# app/ingestion/sanitize.py::decode_cfemail — fast-path markers: skip parsing
+# a description that carries neither form of Cloudflare's email obfuscation
+# (most descriptions have none).
+HTML_CF_EMAIL_MARKERS = ("__cf_email__", "email-protection")
 USER_EVENT_SCORES_RETENTION_DAYS = 30  # keyed on the underlying event's end date
 
 # APScheduler job ids (app/main.py::_register_scheduled_jobs) — also reasoned
@@ -1275,6 +1330,9 @@ ERROR_EVENT_NOT_FOUND = "Event not found."
 ERROR_USER_NOT_FOUND = "User not found."
 ERROR_ORGANIZER_NOT_FOUND = "Organizer not found."
 ERROR_SUBMISSION_NOT_FOUND = "Submission not found."
+
+# main.py (/internal/tick)
+ERROR_INTERNAL_TICK_INVALID_TOKEN = "Invalid token"
 
 # routers/admin.py
 ERROR_ADMIN_LOCKOUT = "Too many failed admin login attempts; try again later."

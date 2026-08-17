@@ -1,26 +1,14 @@
 .page {
-  flex: 1 0 auto;
-  display: flex;
-  flex-direction: column;
+  composes: page from '../../components/shared/Page.module.css';
 }
 
 .main {
-  width: 100%;
+  composes: pageMain from '../../components/shared/Page.module.css';
   max-width: var(--page-max-narrow);
-  margin: 0 auto;
-  padding: var(--space-8) var(--space-6);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
 }
 
 .title {
-  font-family: var(--font-display);
-  font-size: var(--heading-xl);
-  font-weight: 600;
-  line-height: var(--leading-display);
-  letter-spacing: var(--tracking-tighter);
-  color: var(--text);
+  composes: pageTitle from '../../components/shared/Page.module.css';
 }
 
 .form {
@@ -51,7 +39,7 @@
 
 .contentEyebrow {
   font-size: var(--fs-2xs);
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   color: var(--text-soft);
   letter-spacing: var(--eyebrow-tracking);
   text-transform: uppercase;
@@ -70,67 +58,39 @@
 }
 
 .fieldCol {
-  flex: 1 1 200px;
+  flex: 1 1 var(--flex-basis-sm);
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
 }
 
 .label {
-  font-size: var(--fs-sm);
-  font-weight: 500;
-  color: var(--text-muted);
-  letter-spacing: var(--tracking-wide);
-  text-transform: uppercase;
+  composes: fieldLabel from '../../components/shared/Field.module.css';
 }
 
-.input,
-.textarea {
+.input {
+  composes: fieldInput from '../../components/shared/Field.module.css';
   width: 100%;
-  background: var(--bg-raised);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: var(--space-3) var(--space-4);
-  color: var(--text);
-  font-size: var(--fs-base);
   font-family: inherit;
-  outline: none;
-  transition: border-color var(--transition), box-shadow var(--transition);
 }
 
 .textarea {
+  composes: fieldInput from '../../components/shared/Field.module.css';
+  width: 100%;
+  font-family: inherit;
   resize: vertical;
-  min-height: 100px;
-}
-
-.input:focus,
-.textarea:focus {
-  border-color: var(--accent);
-  box-shadow: var(--shadow-focus-ring);
-}
-
-.input:disabled,
-.textarea:disabled {
-  opacity: 0.5;
+  min-height: var(--textarea-height-sm);
 }
 
 .error {
+  composes: alert from '../../components/shared/Alert.module.css';
   font-size: var(--fs-sm);
-  color: var(--danger);
   padding: var(--space-2) var(--space-3);
-  background: var(--danger-subtle);
-  border-radius: var(--radius);
-  border-left: 2px solid var(--danger);
 }
 
 .submit {
-  composes: btnPrimary from '../../components/shared/Button.module.css';
+  composes: btnSubmit from '../../components/shared/Button.module.css';
   padding: var(--space-0-8125) var(--space-5);
-  font-size: var(--fs-base);
-  height: var(--control-height-lg);
-  display: flex;
-  align-items: center;
-  justify-content: center;
   margin-top: var(--space-1);
 }
 

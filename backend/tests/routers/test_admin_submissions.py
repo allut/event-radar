@@ -245,7 +245,7 @@ async def test_approve_submission_clears_needs_review(make_event, make_organizer
     assert organizer.verified is True
     # The publish gate must run inline so this event (now eligible) goes live
     # immediately rather than waiting for the next scheduled pass.
-    mock_publish.assert_awaited_once_with(db)
+    mock_publish.assert_awaited_once_with(db, diagnostics=False)
 
 
 @pytest.mark.asyncio
@@ -293,4 +293,4 @@ async def test_approve_submission_with_no_submitting_organizer_still_publishes(
             )
 
     assert resp.status_code == http.HTTPStatus.OK
-    mock_publish.assert_awaited_once_with(db)
+    mock_publish.assert_awaited_once_with(db, diagnostics=False)

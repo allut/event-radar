@@ -1,6 +1,12 @@
 // .js extension required: this module is also imported (transitively) by
 // api/prerender-cadence.ts, which Vercel runs as unbundled Node ESM.
-import { CHAIN_MARKER_PREFIX, CHAIN_MAX_ROUNDS, CHAIN_STALENESS_TIMEOUT_MINUTES, MS_PER_MINUTE } from '../constants.js';
+import {
+  CHAIN_MARKER_PREFIX,
+  CHAIN_MAX_ROUNDS,
+  CHAIN_STALENESS_TIMEOUT_MINUTES,
+  MS_PER_MINUTE,
+  ROUND_STATUS,
+} from '../constants.js';
 
 /** Round-state carrier for the time-boxed incremental prerender pipeline
  * (issue #79) — standalone pure functions only (no I/O), so the chaining
@@ -11,7 +17,7 @@ import { CHAIN_MARKER_PREFIX, CHAIN_MAX_ROUNDS, CHAIN_STALENESS_TIMEOUT_MINUTES,
  * Mirrors this repo's existing
  * fetchPublishedEventIds/buildTargets/buildSitemapXml-style decomposition. */
 
-export type RoundStatus = 'continuing' | 'done';
+export type RoundStatus = typeof ROUND_STATUS.continuing | typeof ROUND_STATUS.done;
 
 export interface RoundMarker {
   /** Timestamp of the burst's first round — identifies which chain a round
@@ -48,7 +54,7 @@ export function serializeRoundMarker(marker: RoundMarker): string {
 }
 
 function isRoundStatus(value: unknown): value is RoundStatus {
-  return value === 'continuing' || value === 'done';
+  return value === ROUND_STATUS.continuing || value === ROUND_STATUS.done;
 }
 
 function isNonNegativeInteger(value: unknown): value is number {
@@ -144,7 +150,7 @@ export function isMarkerStale(marker: RoundMarker, now: Date): boolean {
  * in flight, so the cadence hook should fire as normal. */
 export function shouldSkipCadenceTick(commitMessage: string | null | undefined, now: Date): boolean {
   const marker = parseRoundMarker(commitMessage);
-  return marker !== null && marker.status === 'continuing' && !isMarkerStale(marker, now);
+  return marker !== null && marker.status === ROUND_STATUS.continuing && !isMarkerStale(marker, now);
 }
 
 export interface RoundStartDecision {
@@ -172,7 +178,7 @@ export interface RoundStartDecision {
  * driving forward. */
 export function resolveRoundStart(commitMessage: string | null | undefined, now: Date): RoundStartDecision {
   const marker = parseRoundMarker(commitMessage);
-  const effectiveMarker = marker && marker.status === 'continuing' && isMarkerStale(marker, now) ? null : marker;
+  const effectiveMarker = marker && marker.status === ROUND_STATUS.continuing && isMarkerStale(marker, now) ? null : marker;
   return resolveRoundContext(effectiveMarker, now);
 }
 
@@ -187,7 +193,7 @@ export function resolveRoundContext(
   marker: RoundMarker | null,
   now: Date,
 ): { burstId: string; round: number } {
-  if (marker && marker.status === 'continuing') {
+  if (marker && marker.status === ROUND_STATUS.continuing) {
     return { burstId: marker.burstId, round: marker.round + 1 };
   }
   return { burstId: now.toISOString(), round: 1 };
@@ -201,6 +207,22 @@ export function resolveRoundContext(
  * Deploy Hook ticket (#84) — keeps the committed marker's `status` field
  * truthful on its own, so `git log` reflects the real outcome even before
  * hook-firing is wired up. */
+/** Gate for whether `main()` should push the round marker at all (issue
+ * #101 — the overnight self-triggering incident). The marker commit's git
+ * push is the chain's *only* continuation trigger (docs/backend-ops.md), so
+ * it must fire exactly when there is a next round to trigger — i.e. only for
+ * a `continuing` marker. A `done` marker has nothing left to resume; pushing
+ * it anyway still triggers a new Vercel build (any push to the git-connected
+ * production branch does), and that build starts a *fresh* burst at round 1
+ * (`resolveRoundContext` treats `done` as "no active chain") rather than
+ * stopping — home routes never classify as `unchanged` (see
+ * `classifyTarget` in prerender.ts), so a fresh burst's round 1 always
+ * re-renders them and finishes `done` again, with nothing to ever break the
+ * cycle. Skipping the push on `done` removes the trigger at its source. */
+export function shouldCommitRoundMarker(marker: RoundMarker): boolean {
+  return marker.status === ROUND_STATUS.continuing;
+}
+
 export function buildRoundMarker(
   burstId: string,
   round: number,
@@ -209,8 +231,8 @@ export function buildRoundMarker(
 ): RoundMarker {
   const status: RoundStatus =
     progress.queueRemaining === 0 || isChainDepthExceeded(round) || isZeroProgress(progress)
-      ? 'done'
-      : 'continuing';
+      ? ROUND_STATUS.done
+      : ROUND_STATUS.continuing;
   return {
     burstId,
     round,

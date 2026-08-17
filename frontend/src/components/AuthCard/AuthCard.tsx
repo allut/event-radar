@@ -1,10 +1,10 @@
 import type { ReactNode } from 'react';
 import { t } from '../../i18n';
 import { cx } from '../../utils';
-import { BRAND_GLYPH } from '../../constants';
+import { BRAND_GLYPH, type AuthCardKind } from '../../constants';
 import styles from './AuthCard.module.css';
 
-export type AuthCardKind = 'pending' | 'success' | 'error';
+export type { AuthCardKind };
 
 interface AuthCardProps {
   locale: string;

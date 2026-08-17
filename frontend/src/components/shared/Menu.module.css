@@ -30,28 +30,45 @@
   }
 }
 
-.triggerButton {
+.triggerBase {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-2);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: var(--space-0-45) var(--space-0-875);
-  font-size: var(--fs-sm);
-  font-weight: 600;
   color: var(--text);
   background: var(--bg-overlay-soft);
-  transition: all var(--transition);
 }
 
-.triggerButton:hover {
+.triggerBase:hover {
   border-color: var(--accent-hover-border);
 }
 
-.triggerButtonActive {
-  border-color: var(--accent-border);
-  color: var(--accent-light);
+.triggerButton {
+  composes: triggerBase;
+  gap: var(--space-2);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  transition: all var(--transition);
+}
+
+/* Same-selector-specificity trio for an active/selected pill. Only safe to
+   `composes:` from another rule in the SAME file, declared after the base
+   class it overrides — cascade order across files (via `composes: x from
+   '...'`) depends on the bundler's import-graph order, which is not
+   guaranteed to place this after every base rule it might combine with.
+   Cross-file consumers repeat these three declarations locally instead
+   (see SelectMenu.optionActive, MobileMenu.linkActive/.localeOptionActive,
+   Bar.module.css .navLinkActive) so each stays correct via its own
+   same-file source order, same as this file's own .triggerButtonActive. */
+.activePill {
   background: var(--accent-subtle);
+  border: 1px solid var(--accent-border);
+  color: var(--accent-light);
+}
+
+.triggerButtonActive {
+  composes: activePill;
 }
 
 .triggerInline {
@@ -69,6 +86,34 @@
 
 .triggerInlineActive {
   color: var(--accent-light);
+}
+
+.menuOption {
+  text-align: center;
+  border-radius: var(--radius);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  cursor: pointer;
+  transition: all var(--transition);
+}
+
+.menuOption:hover {
+  color: var(--text);
+  background: var(--bg-overlay-soft);
+}
+
+.chev {
+  color: var(--text-muted);
+  font-size: var(--fs-icon);
+}
+
+@media (max-width: 640px) {
+  .chev {
+    display: none;
+  }
 }
 
 @media (max-width: 640px) {

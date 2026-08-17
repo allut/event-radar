@@ -18,13 +18,33 @@ from app.models.models import Event, EventClassification, Organizer
 from app.routers.utils import event_ended_filter, event_not_ended_filter
 
 
-async def publish_pending(db: AsyncSession) -> dict:
+async def publish_pending(
+    db: AsyncSession,
+    *,
+    event_ids: list[int] | None = None,
+    diagnostics: bool = True,
+) -> dict:
     """Promote classified events that pass the publish gate to published.
 
     Single bulk UPDATE, no N+1. The caller commits. Idempotent: only reads
     'classified' and writes 'published', so re-running after the backlog
     drains is a no-op — scheduler ordering relative to classify_pending
     doesn't matter, stragglers are picked up on the next cycle.
+
+    ``event_ids``, when given, additionally scopes the UPDATE to those rows —
+    used by callers that just inserted/classified a single known event and
+    don't need (or want to pay for) a full-table scan. Leave it ``None`` when
+    other now-eligible rows might also need to flip (e.g. approving an
+    organizer's first submission makes their whole backlog eligible, not just
+    the approved row).
+
+    ``diagnostics=False`` skips the reject-breakdown SELECT below and returns
+    only ``published``. That SELECT aggregates over every event still stuck in
+    'classified' — a set that only grows, since a permanently-failing event
+    never leaves that status — so its cost is proportional to all-time reject
+    history, not to this call's work. Fine on the scheduled job; too expensive
+    to pay inline on a request. Callers that don't consume the breakdown
+    fields should pass ``False``.
 
     Gate (all must hold): quality_score >= PUBLISH_MIN_QUALITY_SCORE (joined
     from event_classifications), event not yet ended (live until ``ends_at``,
@@ -69,23 +89,25 @@ async def publish_pending(db: AsyncSession) -> dict:
         Event.submitted_by_organizer_id.is_(None),
         Event.submitted_by_organizer_id.not_in(unverified_organizer_ids),
     )
-    stmt = (
-        update(Event)
-        .where(
-            Event.status == EVENT_STATUS_CLASSIFIED,
-            Event.is_explicit.is_(False),
-            Event.is_non_event.is_(False),
-            Event.is_out_of_area.is_(False),
-            event_not_ended_filter(now),
-            func.trim(Event.title_orig) != "",
-            Event.id.in_(qualifying_ids),
-            bbox_ok,
-            organizer_ok,
-        )
-        .values(status=EVENT_STATUS_PUBLISHED)
-    )
+    update_conds = [
+        Event.status == EVENT_STATUS_CLASSIFIED,
+        Event.is_explicit.is_(False),
+        Event.is_non_event.is_(False),
+        Event.is_out_of_area.is_(False),
+        event_not_ended_filter(now),
+        func.trim(Event.title_orig) != "",
+        Event.id.in_(qualifying_ids),
+        bbox_ok,
+        organizer_ok,
+    ]
+    if event_ids is not None:
+        update_conds.append(Event.id.in_(event_ids))
+    stmt = update(Event).where(*update_conds).values(status=EVENT_STATUS_PUBLISHED)
     result = await db.execute(stmt)
     summary: dict = {"published": cast(CursorResult, result).rowcount}
+
+    if not diagnostics:
+        return summary
 
     reject_stmt = (
         select(

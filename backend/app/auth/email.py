@@ -9,6 +9,7 @@ import httpx
 
 from app.config import settings
 from app.constants import (
+    APP_ENV_DEVELOPMENT,
     AUTH_VERIFY_PATH,
     DEFAULT_USER_LOCALE,
     LOG_EVENT_EMAIL_SEND_FAILED,
@@ -40,7 +41,12 @@ async def send_magic_link(
         log.warning(
             "RESEND_API_KEY not set — magic link NOT sent to %s", mask_email(to_email)
         )
-        log.debug("Dev-only magic link URL: %s", verify_url)
+        # Gated on APP_ENV, not just log level — a production deployment with
+        # RESEND_API_KEY unset/rotated out plus LOG_LEVEL=DEBUG would otherwise
+        # ship this live auth credential to the Axiom drain (configure_logging
+        # attaches the shipping QueueHandler with no level floor).
+        if settings.APP_ENV == APP_ENV_DEVELOPMENT:
+            log.debug("Dev-only magic link URL: %s", verify_url)
         return
 
     subject = t("email.magic_link.subject", locale)

@@ -27,74 +27,38 @@
 }
 
 .label {
-  font-size: var(--fs-sm);
-  font-weight: 500;
-  color: var(--text-muted);
-  letter-spacing: var(--tracking-wide);
-  text-transform: uppercase;
+  composes: fieldLabel from '../../components/shared/Field.module.css';
 }
 
-.input,
-.textarea {
+.input {
+  composes: fieldInput from '../../components/shared/Field.module.css';
   width: 100%;
-  background: var(--bg-raised);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: var(--space-3) var(--space-4);
-  color: var(--text);
-  font-size: var(--fs-base);
   font-family: inherit;
-  outline: none;
-  transition: border-color var(--transition), box-shadow var(--transition);
 }
 
 .textarea {
+  composes: fieldInput from '../../components/shared/Field.module.css';
+  width: 100%;
+  font-family: inherit;
   resize: vertical;
-  min-height: 120px;
-}
-
-.input::placeholder {
-  color: var(--text-dim);
-}
-
-.input:focus,
-.textarea:focus {
-  border-color: var(--accent);
-  box-shadow: var(--shadow-focus-ring);
-}
-
-.input:disabled,
-.textarea:disabled {
-  opacity: var(--opacity-disabled);
+  min-height: var(--textarea-height-md);
 }
 
 /* Honeypot — off-screen, never shown to sighted users, and excluded from
    both the visual layout and the tab order (tabIndex={-1} on the input). */
 .honeypot {
-  position: absolute;
-  left: -9999px;
-  width: 1px;
-  height: 1px;
-  opacity: 0;
+  composes: offscreen from '../../components/shared/Visually.module.css';
 }
 
 .error {
+  composes: alert from '../../components/shared/Alert.module.css';
   font-size: var(--fs-sm);
-  color: var(--danger);
   padding: var(--space-2) var(--space-3);
-  background: var(--danger-subtle);
-  border-radius: var(--radius);
-  border-left: 2px solid var(--danger);
 }
 
 .submit {
-  composes: btnPrimary from '../../components/shared/Button.module.css';
+  composes: btnSubmit from '../../components/shared/Button.module.css';
   padding: var(--space-0-8125) var(--space-5);
-  font-size: var(--fs-base);
-  height: var(--control-height-lg);
-  display: flex;
-  align-items: center;
-  justify-content: center;
   margin-top: var(--space-1);
 }
 
@@ -119,7 +83,7 @@
 
 .successTitle {
   font-size: var(--fs-base);
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   color: var(--text);
 }
 
@@ -135,7 +99,7 @@
   font-size: var(--fs-sm);
   margin-top: var(--space-2);
   text-decoration: underline;
-  text-underline-offset: 3px;
+  text-underline-offset: var(--underline-offset);
   transition: color var(--transition);
 }
 

@@ -108,8 +108,7 @@ def _prerender_event_ids_stmt(now: datetime) -> Select[tuple[int, datetime]]:
     of what's reachable, not an exact mirror of it. That's intentional: an
     ended/non-canonical event shouldn't get a *new* snapshot or sitemap entry,
     even though its last snapshot (if any) is only cleaned up by the next
-    prerender run, per the accepted staleness bound documented in
-    docs/research/prerendering-approach.md.
+    prerender run — the accepted staleness bound is one prerender cycle.
 
     ``updated_at`` (issue #80) is the prerender pipeline's change-detection
     marker — it lets ``prerender.ts`` tell which routes actually need
@@ -138,6 +137,12 @@ async def prerender_events(request: Request, db: AsyncSession = Depends(get_db))
     /events/{id} serves). Each row's ``updated_at`` (issue #80) is the
     change-detection marker the pipeline diffs against each route's
     currently-live snapshot to decide render-vs-copy-forward.
+
+    Deliberately unpaginated: the build-time consumer needs a single atomic
+    snapshot of the published id set, which paging would break. The payload
+    is small per row (``{id, updated_at}``) and the caller isn't a browser,
+    so this is exempt from the `limit`/`offset` + cap pattern every other
+    list endpoint follows.
     """
     now = datetime.now(TALLINN_TZ)
     rows = (await db.execute(_prerender_event_ids_stmt(now))).all()

@@ -1,7 +1,6 @@
 {
   "ui": {
     "brand": "What's on Radar",
-    "settings_link": "Настройки",
     "back_to_feed": "← Лента",
     "back": "Назад",
     "sign_out": "Выйти",
@@ -133,8 +132,6 @@
     "load_more": "Загрузить ещё",
     "free_only": "Только бесплатные",
     "filters": "Фильтры",
-    "filters_clear": "Очистить",
-    "filters_show_results": "Показать {count} результатов",
     "date_any": "Любая дата",
     "date_today": "Сегодня",
     "date_weekend": "Эти выходные",

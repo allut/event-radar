@@ -1,9 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { type ReactNode } from 'react';
 import { renderHook, act } from '@testing-library/react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { MemoryRouter } from 'react-router-dom';
 import { useOrganizerLogout } from './useOrganizerLogout';
+import { makeRouterQueryWrapper } from '../test/utils';
 
 const mockNavigate = vi.fn();
 vi.mock('react-router-dom', async (importOriginal) => ({
@@ -25,16 +23,9 @@ vi.mock('../api/client', () => ({
 import { beginOrganizerLogout, clearOrganizerSignedInHint } from '../lib/organizerAuth';
 import { organizerApi } from '../api/client';
 
-function wrapper({ children }: { children: ReactNode }) {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return (
-    <QueryClientProvider client={queryClient}>
-      <MemoryRouter>{children}</MemoryRouter>
-    </QueryClientProvider>
-  );
-}
-
 describe('useOrganizerLogout', () => {
+  const { wrapper } = makeRouterQueryWrapper();
+
   beforeEach(() => {
     mockNavigate.mockClear();
     vi.mocked(beginOrganizerLogout).mockClear();

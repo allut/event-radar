@@ -1,23 +1,41 @@
+/* Ring shape + size/color modifiers — combine one of each to build a spinner. */
+.ring {
+  composes: spin from './Animations.module.css';
+  border-radius: var(--radius-full);
+}
+
+.sizeSm { width: var(--spinner-size-sm); height: var(--spinner-size-sm); }
+.sizeMd { width: var(--spinner-size-md); height: var(--spinner-size-md); }
+.sizeLg { width: var(--spinner-size); height: var(--spinner-size); }
+
+/* On a filled accent-colored surface (e.g. a primary submit button). */
+.ringOnAccent {
+  border: var(--border-w-ring) solid var(--spinner-border);
+  border-top-color: var(--on-accent);
+}
+
+/* On the plain page background. */
+.ringOnPage {
+  border: var(--border-w-ring) solid var(--border);
+  border-top-color: var(--accent);
+}
+
+/* Muted border on a neutral surface (e.g. inline next to form controls). */
+.ringMuted {
+  border: var(--border-w-ring) solid var(--spinner-border);
+  border-top-color: var(--accent);
+}
+
 /* Small on-accent spinner — used inside a filled accent-colored submit button
    (Login/OrganizerLogin/Contact/EventSubmit/Onboarding/Landing). */
 .spinner {
-  composes: spin from './Animations.module.css';
+  composes: ring ringOnAccent sizeSm;
   display: inline-block;
-  width: var(--spinner-size-sm);
-  height: var(--spinner-size-sm);
-  border: 2px solid var(--spinner-border);
-  border-top-color: var(--on-accent);
-  border-radius: var(--radius-full);
 }
 
 /* Medium page-level spinner — verify/unsubscribe status cards, on the page
    background rather than an accent button. */
 .spinnerPage {
-  composes: spin from './Animations.module.css';
+  composes: ring ringOnPage sizeMd;
   display: block;
-  width: var(--spinner-size-md);
-  height: var(--spinner-size-md);
-  border: 2px solid var(--border);
-  border-top-color: var(--accent);
-  border-radius: var(--radius-full);
 }

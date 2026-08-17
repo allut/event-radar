@@ -14,6 +14,18 @@ export function isValidLocale(code: string | undefined): code is LocaleCode {
   return !!code && LOCALES.some((l) => l.code === code);
 }
 
+/** `<page title> | <brand>`, the `<title>`/SEO-meta convention every route uses. */
+export function titleWithBrand(pageTitle: string, locale: string): string {
+  return `${pageTitle} | ${t('brand', locale)}`;
+}
+
+/** Appends `locale=` to a path/query string every data-fetching route sends
+ * to the API — `?` when `path` has no query string yet, `&` otherwise. */
+export function withLocaleQuery(path: string, locale: string): string {
+  const sep = path.includes('?') ? '&' : '?';
+  return `${path}${sep}locale=${encodeURIComponent(locale)}`;
+}
+
 /** Reshapes a URL before it's forwarded to Vercel Analytics: strips the query string and
  * hash (query params can carry sensitive values — the /auth/verify magic-link token, an
  * /explore free-text search — that must never reach a third-party analytics vendor) and
@@ -317,6 +329,26 @@ export function splitDateTimeValue(value: string): PickerDateTime | null {
 
 export function joinDateTimeValue(date: Date, hour: number, minute: number): string {
   return `${date.getFullYear()}-${padIndex(date.getMonth() + 1)}-${padIndex(date.getDate())}T${padIndex(hour)}:${padIndex(minute)}`;
+}
+
+/** Organizer-form wire converter: the picker's 'YYYY-MM-DDTHH:mm' local value
+ * has no timezone of its own, so this reads it in the browser's local offset
+ * before converting to the ISO string the API expects. Empty/unparseable
+ * input becomes undefined (field left blank / not yet filled in). */
+export function toIsoOrUndefined(local: string): string | undefined {
+  if (!local) return undefined;
+  const d = new Date(local);
+  return Number.isNaN(d.getTime()) ? undefined : d.toISOString();
+}
+
+/** Inverse of toIsoOrUndefined — the browser's local offset is used both when
+ * parsing and here, so round-tripping an existing ISO value back into the
+ * field reproduces the same wall-clock time the organizer originally entered. */
+export function toLocalInput(iso: string | null): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return joinDateTimeValue(d, d.getHours(), d.getMinutes());
 }
 
 /** Validates free-typed text against the canonical wire format, returning it

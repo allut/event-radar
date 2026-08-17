@@ -21,7 +21,7 @@ import { StatusCodes } from 'http-status-codes';
 // the Vite SPA build or tsx-run scripts elsewhere in this repo), so Node's
 // ESM resolver requires explicit .js extensions on every relative import —
 // including transitively, in every local module this file pulls in.
-import { PRODUCTION_ORIGIN, SEO_AUDIT_TOKEN_HEADER } from '../src/constants.js';
+import { PRODUCTION_ORIGIN, SEO_AUDIT_TOKEN_HEADER, SITEMAP_PATH } from '../src/constants.js';
 import { evaluateLiveAudit, parseSitemapEventUrls } from '../src/lib/seoAudit.js';
 import { reportAuditFailure, reportAuditRecovery } from '../src/lib/seoAuditIssue.js';
 import { isValidAuditToken } from '../src/lib/seoAuditAuth.js';
@@ -45,7 +45,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   let landingHtml: string;
   try {
     const [sitemapRes, landingRes] = await Promise.all([
-      fetch(`${PRODUCTION_ORIGIN}/sitemap.xml`),
+      fetch(`${PRODUCTION_ORIGIN}${SITEMAP_PATH}`),
       fetch(`${PRODUCTION_ORIGIN}/`),
     ]);
     if (!sitemapRes.ok || !landingRes.ok) {

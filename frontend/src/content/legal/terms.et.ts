@@ -1,7 +1,6 @@
-import { CONTACT_EMAIL } from '../../constants';
+import { CONTACT_EMAIL, CONTACT_MAILTO } from '../../constants';
 import type { LegalDoc } from './types';
 
-const MAILTO = `mailto:${CONTACT_EMAIL}`;
 const ODR_URL = 'https://ec.europa.eu/consumers/odr';
 
 const doc: LegalDoc = {
@@ -104,7 +103,7 @@ const doc: LegalDoc = {
           kind: 'p',
           content: [
             'Võime juurdepääsu peatada või lõpetada nende tingimuste rikkumise korral või teenuse kaitsmiseks. Sa võid teenuse kasutamise igal ajal lõpetada ja taotleda oma konto kustutamist (',
-            { text: CONTACT_EMAIL, href: MAILTO },
+            { text: CONTACT_EMAIL, href: CONTACT_MAILTO },
             ').',
           ],
         },
@@ -139,7 +138,7 @@ const doc: LegalDoc = {
       blocks: [
         {
           kind: 'p',
-          content: [{ text: CONTACT_EMAIL, href: MAILTO }, '.'],
+          content: [{ text: CONTACT_EMAIL, href: CONTACT_MAILTO }, '.'],
         },
       ],
     },

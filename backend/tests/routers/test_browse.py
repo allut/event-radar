@@ -299,6 +299,94 @@ class TestBrowseScoredPath:
         assert [e["id"] for e in result["events"]] == [3, 4]
 
 
+class TestScoreCache:
+    """_score_cache_get/_score_cache_set (TTL + LRU eviction), and that
+    _browse_scored_path actually consults them when given a cache_key."""
+
+    @pytest.fixture(autouse=True)
+    def _clear_cache(self):
+        from app.routers.browse import _score_cache
+
+        _score_cache.clear()
+        yield
+        _score_cache.clear()
+
+    def test_miss_then_hit(self, monkeypatch):
+        from app.routers import browse
+
+        monkeypatch.setattr(browse.time, "monotonic", lambda: 100.0)
+        key = (1, True, "relevance", (), (), False, None, None, None)
+
+        assert browse._score_cache_get(key) is None
+        browse._score_cache_set(key, [3, 1, 2])
+        assert browse._score_cache_get(key) == [3, 1, 2]
+
+    def test_expires_after_ttl(self, monkeypatch):
+        from app.routers import browse
+
+        key = (1, True, "relevance", (), (), False, None, None, None)
+        monkeypatch.setattr(browse.time, "monotonic", lambda: 0.0)
+        browse._score_cache_set(key, [1])
+
+        monkeypatch.setattr(
+            browse.time, "monotonic", lambda: browse.BROWSE_SCORE_CACHE_TTL_SECONDS + 1.0
+        )
+        assert browse._score_cache_get(key) is None
+        assert key not in browse._score_cache
+
+    def test_evicts_oldest_past_max_entries(self, monkeypatch):
+        from app.routers import browse
+
+        monkeypatch.setattr(browse, "BROWSE_SCORE_CACHE_MAX_ENTRIES", 2)
+        monkeypatch.setattr(browse.time, "monotonic", lambda: 0.0)
+
+        browse._score_cache_set(("k1",), [1])
+        browse._score_cache_set(("k2",), [2])
+        browse._score_cache_set(("k3",), [3])
+
+        assert len(browse._score_cache) == 2
+        assert ("k1",) not in browse._score_cache
+        assert browse._score_cache_get(("k3",)) == [3]
+
+    @pytest.mark.asyncio
+    async def test_browse_scored_path_hit_skips_rescoring(self, mock_db, make_event):
+        from app.routers.browse import _browse_scored_path
+
+        events = [make_event(1), make_event(2)]
+        # First call needs candidates/personas/feedback/full-row-refetch (4
+        # scalars). A cache hit on the second call must only pay for the
+        # full-row refetch of the (already-ranked) page — one more scalars
+        # call, not another four.
+        mock_db.scalars.side_effect = [
+            _scalars_result(events),
+            _scalars_result([]),
+            _scalars_result([]),
+            _scalars_result(events),
+            _scalars_result(events),
+        ]
+
+        user = MagicMock()
+        user.id = 1
+        user.locale = "en"
+        now = datetime(2026, 4, 1, tzinfo=timezone.utc)
+        cache_key = (1, False, "date", (), (), False, None, None, None)
+
+        first = await _browse_scored_path(
+            mock_db, [], for_you=False, sort="date", limit=24, offset=0,
+            current_user=user, now=now, locale="en", cache_key=cache_key,
+        )
+        second = await _browse_scored_path(
+            mock_db, [], for_you=False, sort="date", limit=24, offset=0,
+            current_user=user, now=now, locale="en", cache_key=cache_key,
+        )
+
+        assert [e["id"] for e in first["events"]] == [1, 2]
+        assert [e["id"] for e in second["events"]] == [1, 2]
+        # Exactly 5 scalars calls total (4 + 1) — proves the second call
+        # skipped candidate load + scoring and only refetched full rows.
+        assert mock_db.scalars.call_count == 5
+
+
 class TestExploreEventsRouting:
     @pytest.mark.asyncio
     async def test_all_events_date_sort_uses_sql_path(
@@ -312,7 +400,7 @@ class TestExploreEventsRouting:
             called["path"] = "sql"
             return {"events": [], "total": 0, "limit": limit, "offset": offset, "has_more": False}
 
-        async def fake_scored_path(db, conds, for_you, sort, limit, offset, current_user, now, locale):
+        async def fake_scored_path(db, conds, for_you, sort, limit, offset, current_user, now, locale, cache_key=None):
             called["path"] = "scored"
             return {"events": [], "total": 0, "limit": limit, "offset": offset, "has_more": False}
 
@@ -342,7 +430,7 @@ class TestExploreEventsRouting:
             called["path"] = "sql"
             return {"events": [], "total": 0, "limit": limit, "offset": offset, "has_more": False}
 
-        async def fake_scored_path(db, conds, for_you, sort, limit, offset, current_user, now, locale):
+        async def fake_scored_path(db, conds, for_you, sort, limit, offset, current_user, now, locale, cache_key=None):
             called["path"] = "scored"
             return {"events": [], "total": 0, "limit": limit, "offset": offset, "has_more": False}
 
@@ -372,7 +460,7 @@ class TestExploreEventsRouting:
             called["path"] = "sql"
             return {"events": [], "total": 0, "limit": limit, "offset": offset, "has_more": False}
 
-        async def fake_scored_path(db, conds, for_you, sort, limit, offset, current_user, now, locale):
+        async def fake_scored_path(db, conds, for_you, sort, limit, offset, current_user, now, locale, cache_key=None):
             called["path"] = "scored"
             return {"events": [], "total": 0, "limit": limit, "offset": offset, "has_more": False}
 
@@ -414,7 +502,7 @@ class TestExploreEventsRouting:
 
         seen_conds = {}
 
-        async def fake_scored_path(db, conds, for_you, sort, limit, offset, current_user, now, locale):
+        async def fake_scored_path(db, conds, for_you, sort, limit, offset, current_user, now, locale, cache_key=None):
             seen_conds["conds"] = conds
             return {"events": [], "total": 0, "limit": limit, "offset": offset, "has_more": False}
 

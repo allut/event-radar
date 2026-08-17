@@ -34,15 +34,21 @@ import { chromium, type Browser, type Page } from 'playwright';
 import { preview, type PreviewServer } from 'vite';
 import type { EventData } from '../src/components/EventCard';
 import {
-  GITHUB_API_BASE_URL,
+  CANONICAL_LINK_SELECTOR,
+  JSONLD_SCRIPT_SELECTOR,
   LOCALE_URL_PREFIX_CODES,
   LOCALES,
   PRERENDER_CHAIN_GITHUB_REPO,
   PRODUCTION_ORIGIN,
+  ROUND_STATUS,
   ROUTES,
   SEO_HREFLANG_CODES,
+  SEO_XDEFAULT_CODE,
+  SITEMAP_FILENAME,
+  SITEMAP_PATH,
 } from '../src/constants';
 import { localizedPath } from '../src/lib/urlLocale';
+import { githubRequest } from '../src/lib/githubRequest';
 import { compareEventStaleness, parseSnapshotHtml, validateSnapshotStructure } from '../src/lib/seoValidation';
 import { createBudgetedCursor, prioritizeRenderQueue } from '../src/lib/prerenderQueue';
 import {
@@ -51,6 +57,7 @@ import {
   isZeroProgress,
   resolveRoundStart,
   serializeRoundMarker,
+  shouldCommitRoundMarker,
   type RoundMarker,
 } from '../src/lib/prerenderChain';
 import { PRERENDER_BACKEND_TARGET } from '../vite.config';
@@ -199,7 +206,13 @@ async function fetchPrerenderCandidates(): Promise<PrerenderCandidate[]> {
     );
   }
   const body = (await res.json()) as { events: { id: number; updated_at: string }[] };
-  return body.events.map((e) => ({ id: e.id, updatedAt: e.updated_at }));
+  // candidate.id feeds ROUTES.eventDetail(id) -> path.join(DIST_DIR, ...) for the
+  // prerendered file's output path; a non-integer id (e.g. a traversal string from
+  // a compromised backend) could write outside DIST_DIR, so it's runtime-checked
+  // here rather than trusted from the response's declared `number` type.
+  return body.events
+    .filter((e) => Number.isInteger(e.id))
+    .map((e) => ({ id: e.id, updatedAt: e.updated_at }));
 }
 
 function buildTargets(candidates: PrerenderCandidate[]): PrerenderTarget[] {
@@ -226,7 +239,7 @@ function buildTargets(candidates: PrerenderCandidate[]): PrerenderTarget[] {
  * in-build validation gate below is what actually catches/blocks on that. */
 function embedChangeMarker(html: string, marker: string): string {
   const dom = new JSDOM(html);
-  const script = dom.window.document.querySelector('script[type="application/ld+json"]');
+  const script = dom.window.document.querySelector(JSONLD_SCRIPT_SELECTOR);
   if (script) {
     try {
       const data = JSON.parse(script.textContent ?? '{}') as Record<string, unknown>;
@@ -309,7 +322,7 @@ function buildSitemapXml(targets: PrerenderTarget[], buildTimestamp: string): st
       const loc = `${PRODUCTION_ORIGIN}${localizedPath(target.bare, target.locale)}`;
       const alternates = SEO_HREFLANG_CODES.map((code) => {
         const href =
-          code === 'x-default'
+          code === SEO_XDEFAULT_CODE
             ? `${PRODUCTION_ORIGIN}${target.bare}`
             : `${PRODUCTION_ORIGIN}${localizedPath(target.bare, code)}`;
         return `    <xhtml:link rel="alternate" hreflang="${code}" href="${href}"/>`;
@@ -329,7 +342,7 @@ function buildRobotsTxt(): string {
   for (const code of LOCALE_URL_PREFIX_CODES) {
     lines.push(`Allow: /${code}$`, `Allow: /${code}/events/`);
   }
-  lines.push('', `Sitemap: ${PRODUCTION_ORIGIN}/sitemap.xml`);
+  lines.push('', `Sitemap: ${PRODUCTION_ORIGIN}${SITEMAP_PATH}`);
   return lines.join('\n') + '\n';
 }
 
@@ -412,7 +425,7 @@ async function snapshotTarget(
   // `state: 'attached'`, not the default 'visible' — a <link> element never
   // has a CSS box, so the default visibility check would time out even once
   // Helmet has inserted it.
-  await page.waitForSelector('link[rel="canonical"]', {
+  await page.waitForSelector(CANONICAL_LINK_SELECTOR, {
     state: 'attached',
     timeout: CONTENT_READY_TIMEOUT_MS,
   });
@@ -514,8 +527,9 @@ async function validateTarget(target: PrerenderTarget): Promise<string[]> {
  * GH_PRERENDER_CHAIN_TOKEN/VERCEL_GIT_COMMIT_REF aren't set, e.g. local/dev
  * builds off Vercel — returns `false` in that case (as opposed to throwing,
  * its failure path) to distinguish "nothing was committed" from "the commit
- * succeeded"; main() no longer branches on this (issue #89 removed the only
- * caller that did), but it's kept for tests and future callers. The advanced
+ * succeeded". main() only calls this when shouldCommitRoundMarker(marker)
+ * says the round is `continuing` (issue #101 — see that function's doc
+ * comment for why a `done` round must never reach this call). The advanced
  * ref is this chain's sole continuation trigger (issue #89): the production
  * branch is Vercel-git-connected, so this push alone fires the next round's
  * build — no separate Deploy Hook call is needed or made. */
@@ -529,13 +543,10 @@ async function commitRoundMarker(marker: RoundMarker): Promise<boolean> {
     return false;
   }
 
-  const headers = {
-    Authorization: `Bearer ${token}`,
-    Accept: 'application/vnd.github+json',
-  };
-  const repoBase = `${GITHUB_API_BASE_URL}/repos/${PRERENDER_CHAIN_GITHUB_REPO}`;
+  const chainGithubRequest = (path: string, init?: RequestInit): Promise<Response> =>
+    githubRequest(PRERENDER_CHAIN_GITHUB_REPO, path, token, 'event-radar-prerender-chain', init);
 
-  const refRes = await fetch(`${repoBase}/git/ref/heads/${branch}`, { headers });
+  const refRes = await chainGithubRequest(`/git/ref/heads/${branch}`);
   if (!refRes.ok) {
     throw new Error(
       `prerender: failed to read ref heads/${branch} — ${refRes.status} ${refRes.statusText}`,
@@ -543,7 +554,7 @@ async function commitRoundMarker(marker: RoundMarker): Promise<boolean> {
   }
   const parentSha = ((await refRes.json()) as { object: { sha: string } }).object.sha;
 
-  const parentCommitRes = await fetch(`${repoBase}/git/commits/${parentSha}`, { headers });
+  const parentCommitRes = await chainGithubRequest(`/git/commits/${parentSha}`);
   if (!parentCommitRes.ok) {
     throw new Error(
       `prerender: failed to read parent commit ${parentSha} — ${parentCommitRes.status} ${parentCommitRes.statusText}`,
@@ -554,9 +565,9 @@ async function commitRoundMarker(marker: RoundMarker): Promise<boolean> {
   const summary = `round ${marker.round} (${marker.status}) — ${marker.newlyRendered} rendered, ${marker.copiedForward} copied, ${marker.queueRemaining} queued`;
   const message = `prerender: ${summary}\n\n${serializeRoundMarker(marker)}`;
 
-  const commitRes = await fetch(`${repoBase}/git/commits`, {
+  const commitRes = await chainGithubRequest('/git/commits', {
     method: 'POST',
-    headers: { ...headers, 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ message, tree: treeSha, parents: [parentSha] }),
   });
   if (!commitRes.ok) {
@@ -566,9 +577,9 @@ async function commitRoundMarker(marker: RoundMarker): Promise<boolean> {
   }
   const newSha = ((await commitRes.json()) as { sha: string }).sha;
 
-  const updateRefRes = await fetch(`${repoBase}/git/refs/heads/${branch}`, {
+  const updateRefRes = await chainGithubRequest(`/git/refs/heads/${branch}`, {
     method: 'PATCH',
-    headers: { ...headers, 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ sha: newSha }),
   });
   if (!updateRefRes.ok) {
@@ -608,7 +619,7 @@ export function selectValidationTargets(
 }
 
 export function logZeroProgressAbort(marker: RoundMarker): void {
-  if (marker.status === 'continuing') {
+  if (marker.status === ROUND_STATUS.continuing) {
     return;
   }
   if (isZeroProgress(marker) && marker.queueRemaining > 0 && !isChainDepthExceeded(marker.round)) {
@@ -655,7 +666,7 @@ export async function main(): Promise<void> {
 
   const buildTimestamp = new Date().toISOString();
   await writeFile(
-    path.join(DIST_DIR, 'sitemap.xml'),
+    path.join(DIST_DIR, SITEMAP_FILENAME),
     buildSitemapXml(targets, buildTimestamp),
     'utf-8',
   );
@@ -860,17 +871,26 @@ export async function main(): Promise<void> {
     { newlyRendered, copiedForward, queueRemaining: skippedTargets.length },
     new Date(),
   );
-  // Chaining (issue #84, fixed in #89): the branch push inside
-  // commitRoundMarker is the chain's sole continuation trigger — the
+  // Chaining (issue #84, fixed in #89, gated in #101): the branch push
+  // inside commitRoundMarker is the chain's sole continuation trigger — the
   // production branch is Vercel-git-connected, so advancing its ref alone
   // triggers the next round's build. No separate Deploy Hook fire happens
-  // here. If the commit is skipped or fails, the chain simply resumes via
-  // the next 6-hourly cron tick instead of self-triggering (degraded, not
-  // broken — same fallback as any other lost marker commit).
-  try {
-    await commitRoundMarker(marker);
-  } catch (error) {
-    console.error('prerender: failed to commit round marker — deploy proceeds anyway:', error);
+  // here. Only push when shouldCommitRoundMarker(marker) says a round is
+  // actually `continuing` — pushing a `done` marker has nothing left to
+  // resume, yet the push itself still triggers a fresh Vercel build (any
+  // push does), which starts a brand-new burst that (home routes never
+  // classify `unchanged` — see classifyTarget) reliably finishes `done`
+  // again, forever. That self-sustaining loop is what shipped overnight
+  // (issue #101) before this gate existed. If the commit is skipped or
+  // fails, the chain simply resumes via the next 6-hourly cron tick instead
+  // of self-triggering (degraded, not broken — same fallback as any other
+  // lost marker commit).
+  if (shouldCommitRoundMarker(marker)) {
+    try {
+      await commitRoundMarker(marker);
+    } catch (error) {
+      console.error('prerender: failed to commit round marker — deploy proceeds anyway:', error);
+    }
   }
   logZeroProgressAbort(marker);
 }

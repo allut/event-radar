@@ -114,12 +114,50 @@ export const OG_FALLBACK_IMAGE_PATH = '/og-fallback.png';
 // og:description/meta description target length — Google truncates around
 // ~155–160 chars; truncateForMeta (utils.ts) cuts at a word boundary under this.
 export const SEO_DESCRIPTION_MAX_LENGTH = 157;
-// Every LOCALES code plus 'x-default', in the order useSeoMeta emits hreflang
-// <link> alternates.
-export const SEO_HREFLANG_CODES: string[] = [...LOCALES.map((l) => l.code), 'x-default'];
+// Hreflang code for "no specific locale matches" — useSeoMeta (producer)
+// and scripts/prerender.ts's buildSitemapXml (producer) both special-case
+// this code to resolve to the bare Estonian URL rather than a localizedPath
+// lookup; kept as one constant since both sites must agree.
+export const SEO_XDEFAULT_CODE = 'x-default';
+// Every LOCALES code plus SEO_XDEFAULT_CODE, in the order useSeoMeta emits
+// hreflang <link> alternates.
+export const SEO_HREFLANG_CODES: string[] = [...LOCALES.map((l) => l.code), SEO_XDEFAULT_CODE];
+// robots meta content emitted by useSeoMeta and checked by seoValidation.ts's
+// in-build validation gate (issue #53) — one pair of constants so the two
+// can't silently drift.
+export const ROBOTS_INDEX_FOLLOW = 'index, follow';
+export const ROBOTS_NOINDEX = 'noindex';
+// <link rel> value useSeoMeta emits for the canonical URL, read back by both
+// seoValidation.ts (in-build gate) and scripts/prerender.ts (content-ready
+// wait selector) as a CSS selector.
+export const CANONICAL_REL = 'canonical';
+export const CANONICAL_LINK_SELECTOR = `link[rel="${CANONICAL_REL}"]`;
+// <script type> SeoTags renders its JSON-LD payload under, read back by
+// seoValidation.ts and scripts/prerender.ts's embedChangeMarker as a CSS
+// selector — one pair so a type-attribute typo can't silently break either.
+export const JSONLD_SCRIPT_TYPE = 'application/ld+json';
+export const JSONLD_SCRIPT_SELECTOR = `script[type="${JSONLD_SCRIPT_TYPE}"]`;
+// Price marker EventDetail.tsx renders on the event-detail page, read back
+// by seoValidation.ts's in-build staleness gate (issue #53) — price isn't
+// part of the JSON-LD payload (issue #46 defers AggregateOffer), so it needs
+// its own marker. One shared map so an attribute-name typo on either side
+// can't silently break the gate.
+export const EVENT_PRICE_TESTID = 'event-price';
+export const EVENT_PRICE_SELECTOR = `[data-testid="${EVENT_PRICE_TESTID}"]`;
+export const PRICE_DATA_ATTR = {
+  min: 'data-price-min',
+  max: 'data-price-max',
+  currency: 'data-currency',
+  hasFreeTier: 'data-has-free-tier',
+} as const;
+// sitemap.xml's dist-relative filename (prerender.ts writes it, api/seo-audit.ts
+// fetches it) and its absolute-origin-relative path (referenced from
+// robots.txt's Sitemap directive and the live audit's production fetch).
+export const SITEMAP_FILENAME = 'sitemap.xml';
+export const SITEMAP_PATH = `/${SITEMAP_FILENAME}`;
 // Live-audit (issue #54, api/seo-audit.ts + src/lib/seoAudit.ts): sitemap.xml's
-// <lastmod> (uniformly the prerender build timestamp — see prerender.ts's
-// buildSitemapXml) older than this is treated as a dead prerender cadence.
+// <lastmod> (target.updatedAt when available, else the build timestamp — see
+// prerender.ts's buildSitemapXml) older than this is treated as a dead prerender cadence.
 // 6h backend publish/geocode cadence (LLM_PASS_INTERVAL_HOURS, backend
 // app/constants.py) + a 2h buffer.
 export const SEO_AUDIT_STALE_THRESHOLD_HOURS = 8;
@@ -129,14 +167,27 @@ export const SEO_AUDIT_GITHUB_REPO = 'allut/event-radar';
 export const SEO_AUDIT_ISSUE_LABEL = 'seo-audit-failure';
 export const GITHUB_API_BASE_URL = 'https://api.github.com';
 // Shared-secret header cron-job.org sends on its seo-audit ping, mirroring
-// the backend's /internal/tick pattern (docs/backend-ops.md).
-export const SEO_AUDIT_TOKEN_HEADER = 'x-internal-token';
+// the backend's /internal/tick pattern (docs/backend-ops.md). Distinct from
+// PRERENDER_CADENCE_TOKEN_HEADER and the backend's own X-Internal-Token: the
+// vercel.json rewrite excludes both of this function's path variants by
+// exact-anchored negative lookahead, so any variant that doesn't match exactly
+// gets proxied to Render carrying this header — a shared name with the
+// backend's header would leak SEO_AUDIT_TOKEN into that proxied request.
+export const SEO_AUDIT_TOKEN_HEADER = 'x-seo-audit-token';
 
 // ─── Prerender chaining (issue #79/#81) ────────────────────────────────────
 // Round-state marker embedded in the git commit message (VERCEL_GIT_COMMIT_MESSAGE
 // has a 2048-byte cap) a chained round reads back on the next round/cron tick —
 // see src/lib/prerenderChain.ts.
 export const CHAIN_MARKER_PREFIX = 'prerender-chain:';
+// RoundMarker.status values (src/lib/prerenderChain.ts's producer,
+// scripts/prerender.ts's consumer) — mirrors UI_STATE's pattern so a typo on
+// either side of the chaining state machine is a compile error, not a
+// silently-missed compare.
+export const ROUND_STATUS = {
+  continuing: 'continuing',
+  done: 'done',
+} as const;
 // Worst-case ~100 minutes wall-clock at the 10-minute render budget per round,
 // sized with margin against the throughput research's 5–7-round cold-catch-up
 // estimate. Fixed, not dynamic — a pathological catalog can't chain forever.
@@ -155,9 +206,10 @@ export const PRERENDER_CHAIN_GITHUB_REPO = 'allut/event-radar';
 // commit from.
 export const PRERENDER_CADENCE_GIT_BRANCH = 'release';
 // Shared-secret header cron-job.org sends on its prerender-cadence ping
-// (issue #92) — same header name as SEO_AUDIT_TOKEN_HEADER by convention, kept
-// as a separate constant since the two secrets (and their env vars) differ.
-export const PRERENDER_CADENCE_TOKEN_HEADER = 'x-internal-token';
+// (issue #92). Distinct name from SEO_AUDIT_TOKEN_HEADER and the backend's own
+// X-Internal-Token — see that constant's comment for why a shared name is a
+// cross-service secret-disclosure risk via the vercel.json rewrite exclusion.
+export const PRERENDER_CADENCE_TOKEN_HEADER = 'x-prerender-cadence-token';
 
 // ─── Analytics ───────────────────────────────────────────────────────────────
 // Matches `/events/:id` (bare or locale-prefixed, e.g. `/en/events/:id`) so
@@ -245,6 +297,16 @@ export type ToastState =
   | { status: typeof UI_STATE.idle }
   | { status: typeof UI_STATE.success | typeof UI_STATE.error; message: string };
 export const TOAST_IDLE: ToastState = { status: UI_STATE.idle };
+
+// AuthCard's three presentational kinds — shared by AuthVerify and
+// OrganizerVerify, both magic-link verify flows that map the same
+// three-state machine onto AuthCard's spinner/check/error rendering.
+export type AuthCardKind = 'pending' | 'success' | 'error';
+export const VERIFY_STATE_TO_KIND: Record<VerifyState, AuthCardKind> = {
+  [UI_STATE.verifying]: 'pending',
+  [UI_STATE.success]: 'success',
+  [UI_STATE.error]: 'error',
+};
 
 // Contact form (routes/Contact/Contact.tsx)
 export const CONTACT_TEXTAREA_ROWS = 6;
@@ -412,6 +474,7 @@ export const PRICE_INPUT_STEP = '0.01';
 // Extra URL scheme legal docs link out with (contact address), alongside
 // SAFE_URL_SCHEMES's https:/mailto:-free defaults.
 export const MAILTO_SCHEME = 'mailto';
+export const CONTACT_MAILTO = `${MAILTO_SCHEME}:${CONTACT_EMAIL}`;
 
 // ─── Routes ──────────────────────────────────────────────────────────────────
 // Every <Route> path, `navigate()` target and `<Link to>` in App.tsx / the
@@ -440,6 +503,16 @@ export const ROUTES = {
   organizerEventEdit: (id: number | string) => `/organizer/events/${id}/edit`,
   organizerEventEditPattern: '/organizer/events/:id/edit',
 } as const;
+
+// The signed-in primary nav — same four {route, labelKey} pairs rendered by
+// both TopBar (desktop) and MobileMenu (mobile), kept in one place so they
+// can't drift out of sync.
+export const NAV_ITEMS = [
+  { route: ROUTES.home, labelKey: 'nav_daily5' },
+  { route: ROUTES.explore, labelKey: 'nav_explore' },
+  { route: ROUTES.saved, labelKey: 'nav_saved' },
+  { route: ROUTES.settings, labelKey: 'nav_settings' },
+] as const;
 
 // ─── API endpoints ───────────────────────────────────────────────────────────
 // Every backend request path resolves through this map (or a builder function

@@ -19,11 +19,12 @@ from collections.abc import Iterable
 from datetime import date, datetime, timedelta
 
 from rapidfuzz.fuzz import token_set_ratio
-from sqlalchemy import select, update
+from sqlalchemy import or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased, load_only
 
 from app.constants import (
+    DEDUP_CANDIDATE_PAIR_WARN_THRESHOLD,
     DEDUP_LOOKAHEAD_DAYS,
     DEDUP_LOOKBACK_DAYS,
     DEDUP_UNFILTERED_FALLBACK_MAX_EVENTS,
@@ -393,6 +394,17 @@ async def candidate_pair_ids_in_window(
     push this time check into Python. The self-join is bounded by the existing
     (starts_at, status) B-tree: the planner can range-scan ``b`` on a sargable
     BETWEEN around ``a.starts_at``.
+
+    Also requires a loose title trigram overlap (``%``, backed by
+    ``ix_events_title_orig_trgm``) OR an exact ``starts_at`` match. This is a
+    superset prefilter, not a replacement for ``is_candidate_pair``'s fuzzy
+    check: the default ``pg_trgm.similarity_threshold`` (0.3) is far looser
+    than ``TITLE_RATIO_THRESHOLD`` (70), so it only prunes pairs
+    ``is_candidate_pair`` could never accept on title grounds. The exact-time
+    arm exists so it doesn't also prune out
+    ``is_candidate_pair(bypass_title_on_exact_time_and_venue=True)`` pairs —
+    same showing, different-language titles at an identical instant — which
+    the LLM tiebreaker deliberately admits without any title match at all.
     """
     a = aliased(Event)
     b = aliased(Event)
@@ -411,11 +423,23 @@ async def candidate_pair_ids_in_window(
                 b.status != EVENT_STATUS_CANCELLED,
                 a.starts_at >= cutoff,
                 b.starts_at >= cutoff,
+                or_(
+                    a.title_orig.op("%")(b.title_orig),
+                    a.starts_at == b.starts_at,
+                ),
             )
             .order_by(a.id, b.id)
         )
     ).all()
-    return [(row[0], row[1]) for row in pair_rows]
+    pairs = [(row[0], row[1]) for row in pair_rows]
+    if len(pairs) > DEDUP_CANDIDATE_PAIR_WARN_THRESHOLD:
+        log.warning(
+            "candidate_pair_ids_in_window: %d candidate pairs (warn threshold %d) "
+            "— same-window listing density is high, dedup pass will take longer",
+            len(pairs),
+            DEDUP_CANDIDATE_PAIR_WARN_THRESHOLD,
+        )
+    return pairs
 
 
 async def load_dedup_candidate_events(

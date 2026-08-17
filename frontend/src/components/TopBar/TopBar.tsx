@@ -1,7 +1,7 @@
 import { Link, NavLink } from 'react-router-dom';
 import { t } from '../../i18n';
 import { cx } from '../../utils';
-import { BRAND_GLYPH, ROUTES } from '../../constants';
+import { BRAND_GLYPH, NAV_ITEMS, ROUTES } from '../../constants';
 import LocaleSelector from '../LocaleSelector';
 import MobileMenu from '../MobileMenu';
 import styles from './TopBar.module.css';
@@ -28,31 +28,16 @@ export default function TopBar({ locale, onLocaleChange, onLogout, localeDisable
 
       {authed && showNav && (
         <nav className={styles.nav} aria-label={t('nav_daily5', locale)}>
-          <NavLink
-            to={ROUTES.home}
-            end
-            className={({ isActive }) => cx(styles.navLink, isActive && styles.navLinkActive)}
-          >
-            {t('nav_daily5', locale)}
-          </NavLink>
-          <NavLink
-            to={ROUTES.explore}
-            className={({ isActive }) => cx(styles.navLink, isActive && styles.navLinkActive)}
-          >
-            {t('nav_explore', locale)}
-          </NavLink>
-          <NavLink
-            to={ROUTES.saved}
-            className={({ isActive }) => cx(styles.navLink, isActive && styles.navLinkActive)}
-          >
-            {t('nav_saved', locale)}
-          </NavLink>
-          <NavLink
-            to={ROUTES.settings}
-            className={({ isActive }) => cx(styles.navLink, isActive && styles.navLinkActive)}
-          >
-            {t('nav_settings', locale)}
-          </NavLink>
+          {NAV_ITEMS.map(({ route, labelKey }) => (
+            <NavLink
+              key={route}
+              to={route}
+              end={route === ROUTES.home}
+              className={({ isActive }) => cx(styles.navLink, isActive && styles.navLinkActive)}
+            >
+              {t(labelKey, locale)}
+            </NavLink>
+          ))}
         </nav>
       )}
 

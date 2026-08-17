@@ -5,13 +5,13 @@
   color: var(--on-accent);
   border: none;
   border-radius: var(--radius);
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   letter-spacing: var(--tracking-snug);
   line-height: normal;
   transition: background var(--transition), transform var(--transition), opacity var(--transition);
 }
 
-.btnPrimary:hover:not(:disabled) { background: var(--accent-light); color: var(--on-accent); transform: translateY(-1px); }
+.btnPrimary:hover:not(:disabled) { background: var(--accent-light); color: var(--on-accent); transform: translateY(var(--lift-sm)); }
 .btnPrimary:disabled { opacity: var(--opacity-disabled); cursor: not-allowed; transform: none; }
 
 .btnOutline {
@@ -26,3 +26,12 @@
 }
 
 .btnOutline:hover { border-color: var(--accent-hover-border); color: var(--text); }
+
+.btnSubmit {
+  composes: btnPrimary;
+  font-size: var(--fs-base);
+  height: var(--control-height-lg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}

@@ -4,6 +4,6 @@
   border-radius: var(--radius);
 }
 
-.cardAccentTop   { border-top: 3px solid var(--accent); }
-.cardDangerTop   { border-top: 3px solid var(--danger); }
-.cardPage        { max-width: 400px; width: 100%; }
+.cardAccentTop   { border-top: var(--border-w-accent) solid var(--accent); }
+.cardDangerTop   { border-top: var(--border-w-accent) solid var(--danger); }
+.cardPage        { max-width: var(--card-max-narrow); width: 100%; }

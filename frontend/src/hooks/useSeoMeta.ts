@@ -1,5 +1,13 @@
 import { useMemo } from 'react';
-import { LOCALE_ET, PRODUCTION_ORIGIN, SEO_HREFLANG_CODES } from '../constants';
+import {
+  CANONICAL_REL,
+  LOCALE_ET,
+  PRODUCTION_ORIGIN,
+  ROBOTS_INDEX_FOLLOW,
+  ROBOTS_NOINDEX,
+  SEO_HREFLANG_CODES,
+  SEO_XDEFAULT_CODE,
+} from '../constants';
 import { localizedPath, stripLocalePrefix } from '../utils';
 
 export interface SeoMetaTag {
@@ -44,19 +52,19 @@ export function buildSeoMeta(input: SeoMetaInput): SeoMetaResult {
   const bare = stripLocalePrefix(path);
 
   const metaTags: SeoMetaTag[] = [
-    { name: 'robots', content: indexable ? 'index, follow' : 'noindex' },
+    { name: 'robots', content: indexable ? ROBOTS_INDEX_FOLLOW : ROBOTS_NOINDEX },
   ];
   const links: SeoMetaLink[] = [];
 
   if (indexable) {
     const canonicalUrl = `${PRODUCTION_ORIGIN}${localizedPath(bare, locale)}`;
-    links.push({ rel: 'canonical', href: canonicalUrl });
+    links.push({ rel: CANONICAL_REL, href: canonicalUrl });
 
     for (const code of SEO_HREFLANG_CODES) {
       // x-default always points at the bare Estonian URL; every other code
       // (including 'et') resolves through localizedPath, which already
       // returns the bare path for Estonian.
-      const href = code === 'x-default' ? `${PRODUCTION_ORIGIN}${bare}` : `${PRODUCTION_ORIGIN}${localizedPath(bare, code)}`;
+      const href = code === SEO_XDEFAULT_CODE ? `${PRODUCTION_ORIGIN}${bare}` : `${PRODUCTION_ORIGIN}${localizedPath(bare, code)}`;
       links.push({ rel: 'alternate', href, hrefLang: code });
     }
 

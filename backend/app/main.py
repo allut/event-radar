@@ -32,6 +32,7 @@ from app.constants import (
     CSRF_UNSAFE_METHODS,
     DEV_DB_LOCAL_HOSTS,
     DIGEST_SEND_HOUR,
+    ERROR_INTERNAL_TICK_INVALID_TOKEN,
     FEED_BUILD_HOUR,
     FEED_BUILD_MINUTE,
     HOST_CHECK_EXEMPT_PATHS,
@@ -57,10 +58,12 @@ from app.constants import (
     MAX_REQUEST_BODY_BYTES,
     ORGANIZER_SYNC_HOUR,
     ORGANIZER_SYNC_MINUTE,
+    RATE_LIMIT_INTERNAL_TICK,
     REFETCH_HOUR,
     REFETCH_MINUTE,
     SECURITY_HEADERS,
     TALLINN_TZ_NAME,
+    TRUSTED_HOST_REJECT_BODY,
 )
 from app.cleanup import cleanup_stale_data
 from app.db import AsyncSessionLocal, engine
@@ -313,13 +316,6 @@ class CsrfOriginCheckMiddleware:
         await self.app(scope, receive, send)
 
 
-_TRUSTED_HOST_REJECT_BODY = b"Invalid host header"  # Starlette TrustedHostMiddleware's
-# fixed rejection body — matched below to tell an actual Host-header reject apart from
-# an ordinary downstream 400 (bad token, malformed body, ...) passing through the same
-# wrapped `send`. A future Starlette wording change would just silently stop logging
-# rejects, never start false-logging normal 400s — an acceptable degrade.
-
-
 class HostCheckMiddleware:
     """TrustedHostMiddleware with path exemptions — Render's health probe hits
     this process over the private network, so its Host header is the
@@ -350,7 +346,7 @@ class HostCheckMiddleware:
             if message["type"] == ASGI_MESSAGE_TYPE_RESPONSE_START:
                 saw_400 = message["status"] == status.HTTP_400_BAD_REQUEST
             elif message["type"] == ASGI_MESSAGE_TYPE_RESPONSE_BODY:
-                if saw_400 and _TRUSTED_HOST_REJECT_BODY in message.get("body", b""):
+                if saw_400 and TRUSTED_HOST_REJECT_BODY in message.get("body", b""):
                     rejected = True
                 saw_400 = False
             await send(message)
@@ -675,6 +671,7 @@ async def health() -> dict:
 
 
 @app.get("/internal/tick")
+@limiter.limit(RATE_LIMIT_INTERNAL_TICK)
 async def tick(request: Request) -> dict:
     """Keepalive ping — hit by a cron-job.org job every 10 min so Render's free
     tier never idles out (it sleeps after 15 min), which would halt the embedded
@@ -688,13 +685,14 @@ async def tick(request: Request) -> dict:
         allow_insecure_dev=settings.ALLOW_INSECURE_DEV,
     ):
         received = request.headers.get("X-Internal-Token", "")
-        if not secrets.compare_digest(received, token):
+        if not secrets.compare_digest(received.encode(), token.encode()):
             log.warning(
                 "internal/tick: invalid token (client=%s)",
                 client_key(request),
                 extra={"event": LOG_EVENT_AUTH_FAILED},
             )
             raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN, detail="Invalid token"
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=ERROR_INTERNAL_TICK_INVALID_TOKEN,
             )
     return {"status": "ok"}

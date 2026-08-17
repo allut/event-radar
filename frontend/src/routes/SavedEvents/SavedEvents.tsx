@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { api } from '../../api/client';
 import { t } from '../../i18n';
+import { withLocaleQuery } from '../../utils';
 import { useLocaleMutation } from '../../hooks/useLocaleMutation';
 import { useLogout } from '../../hooks/useLogout';
 import { useStaticSeoMeta } from '../../hooks/useStaticSeoMeta';
@@ -39,7 +40,7 @@ export default function SavedEvents() {
     queryKey: [QUERY_KEYS.saved, locale, signal],
     queryFn: ({ pageParam }) =>
       api.get<SavedEventsResponse>(
-        `/feedback/events?signal=${signal}&limit=${SAVED_EVENTS_PAGE_SIZE}&offset=${pageParam}&locale=${encodeURIComponent(locale)}`,
+        withLocaleQuery(`/feedback/events?signal=${signal}&limit=${SAVED_EVENTS_PAGE_SIZE}&offset=${pageParam}`, locale),
       ),
     initialPageParam: 0,
     getNextPageParam: (lastPage) =>

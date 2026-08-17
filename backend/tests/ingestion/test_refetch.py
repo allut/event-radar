@@ -418,6 +418,41 @@ class TestThrottleBump:
         assert summary["failed"] == 1
 
 
+class TestRunDeadline:
+    @pytest.mark.asyncio
+    async def test_stops_before_second_candidate_past_deadline(self, mock_db):
+        event1 = _future_event(id=1, url="https://fienta.com/event-1")
+        event2 = _future_event(id=2, url="https://fienta.com/event-2")
+        mock_db.scalars.return_value = MagicMock(
+            all=MagicMock(return_value=[event1, event2])
+        )
+        html = "<html><body>no jsonld here</body></html>"
+        # Calls in order: last_commit, run_deadline base, [event1] deadline
+        # check, commit-interval check, [event2] deadline check (>= deadline
+        # this time -> break before event2 is ever touched).
+        with (
+            patch("app.ingestion.refetch.http_get", new=AsyncMock(return_value=_resp(html))),
+            patch("app.ingestion.refetch.asyncio.sleep", new=AsyncMock()),
+            patch(
+                "app.ingestion.refetch.time.monotonic",
+                side_effect=[0.0, 0.0, 0.0, 1.0, 9999.0],
+            ),
+        ):
+            summary = await refetch_event_details(mock_db)
+
+        assert summary["deadline_stopped"] is True
+        assert summary["no_data"] == 1
+        assert event1.detail_refetched_at is not None
+        assert event2.detail_refetched_at is None
+
+    @pytest.mark.asyncio
+    async def test_no_deadline_stop_when_within_budget(self, mock_db):
+        event = _future_event()
+        summary = await _run(mock_db, event, "<html><body>no jsonld here</body></html>")
+        assert "deadline_stopped" not in summary
+        assert event.detail_refetched_at is not None
+
+
 class TestSsrfHostGuard:
     """The allowed-host set passed to host_guard_hook must come from
     ALLOWED_SOURCE_HOSTS, not from the raw candidate URLs — otherwise a

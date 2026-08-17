@@ -3,18 +3,12 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { organizerApi, ApiError } from '../../api/client';
 import { setOrganizerSignedInHint } from '../../lib/organizerAuth';
 import { getLocale } from '../../lib/auth';
-import { API, AUTH_REDIRECT_DELAY_MS, ROUTES, UI_STATE, type VerifyState } from '../../constants';
+import { API, AUTH_REDIRECT_DELAY_MS, ROUTES, UI_STATE, VERIFY_STATE_TO_KIND, type VerifyState } from '../../constants';
 import { t } from '../../i18n';
 import { useStaticSeoMeta } from '../../hooks/useStaticSeoMeta';
-import AuthCard, { type AuthCardKind } from '../../components/AuthCard';
+import AuthCard from '../../components/AuthCard';
 import SeoTags from '../../components/SeoTags';
 import styles from './OrganizerVerify.module.css';
-
-const STATE_TO_KIND: Record<VerifyState, AuthCardKind> = {
-  [UI_STATE.verifying]: 'pending',
-  [UI_STATE.success]: 'success',
-  [UI_STATE.error]: 'error',
-};
 
 export default function OrganizerVerify() {
   const locale = getLocale();
@@ -63,7 +57,7 @@ export default function OrganizerVerify() {
       <SeoTags meta={seoMeta} />
       <AuthCard
         locale={locale}
-        kind={STATE_TO_KIND[state]}
+        kind={VERIFY_STATE_TO_KIND[state]}
         message={message}
         action={state === UI_STATE.error && (
           <Link to={ROUTES.organizerLogin} className={styles.retry}>{t('request_new_link', locale)}</Link>
