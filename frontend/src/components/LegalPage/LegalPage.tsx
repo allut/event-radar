@@ -6,7 +6,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { useLogout } from '../../hooks/useLogout';
 import { useLocaleMutation } from '../../hooks/useLocaleMutation';
 import { useSeoMeta } from '../../hooks/useSeoMeta';
-import { LEGAL_LOADERS, type LegalDocId } from '../../content/legal';
+import { LEGAL_LOADERS, type LegalDocId } from '../../content/legal/loaders';
 import type { LegalBlock, LegalDoc, LegalInline } from '../../content/legal/types';
 import { LOCALE_EN, MAILTO_SCHEME, SAFE_URL_SCHEMES, UI_STATE } from '../../constants';
 import TopBar from '../TopBar';

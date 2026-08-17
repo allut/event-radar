@@ -156,8 +156,8 @@ export const PRICE_DATA_ATTR = {
 export const SITEMAP_FILENAME = 'sitemap.xml';
 export const SITEMAP_PATH = `/${SITEMAP_FILENAME}`;
 // Live-audit (issue #54, api/seo-audit.ts + src/lib/seoAudit.ts): sitemap.xml's
-// <lastmod> (uniformly the prerender build timestamp — see prerender.ts's
-// buildSitemapXml) older than this is treated as a dead prerender cadence.
+// <lastmod> (target.updatedAt when available, else the build timestamp — see
+// prerender.ts's buildSitemapXml) older than this is treated as a dead prerender cadence.
 // 6h backend publish/geocode cadence (LLM_PASS_INTERVAL_HOURS, backend
 // app/constants.py) + a 2h buffer.
 export const SEO_AUDIT_STALE_THRESHOLD_HOURS = 8;

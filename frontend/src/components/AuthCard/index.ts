@@ -1,2 +1,1 @@
-export { default } from './AuthCard';
-export type { AuthCardKind } from './AuthCard';
+export { default, type AuthCardKind } from './AuthCard';

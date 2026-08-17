@@ -60,7 +60,7 @@ vi.mock('../TopBar', () => ({
   ),
 }));
 
-vi.mock('../../content/legal', () => ({
+vi.mock('../../content/legal/loaders', () => ({
   LEGAL_LOADERS: {
     privacy: { en: loaders.en, et: loaders.et, ru: loaders.en },
     terms: { en: loaders.en, et: loaders.et, ru: loaders.en },

@@ -1,7 +1,6 @@
 {
   "ui": {
     "brand": "What's on Radar",
-    "settings_link": "Settings",
     "back_to_feed": "← Feed",
     "back": "Back",
     "sign_out": "Sign out",
@@ -133,8 +132,6 @@
     "load_more": "Load more",
     "free_only": "Free only",
     "filters": "Filters",
-    "filters_clear": "Clear",
-    "filters_show_results": "Show {count} results",
     "date_any": "Any date",
     "date_today": "Today",
     "date_weekend": "This weekend",
