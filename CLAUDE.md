@@ -135,7 +135,7 @@ Each component/route lives in its own folder: `Name.tsx` + `Name.module.css` + a
 Full rationale for each rule (why it works this way, trade-offs accepted) is in `docs/conventions.md`. These are the imperatives:
 
 - **Backend constants** — all literals in `app/constants.py` (LLM prompts in `app/llm/prompts.py`, scrape selectors in `app/ingestion/selectors.py`; cross-stack via `shared/`). Never define a constant near business logic.
-- **Backend utilities** — all shared helpers in `backend/app/routers/utils.py`. Check there before writing a new one.
+- **Backend utilities** — all shared helpers in `backend/app/routers/utils.py`. Check there before writing a new one. Exception: `get_current_user` (`app/routers/auth.py`) and `get_current_organizer` (`app/routers/organizer_auth.py`) are FastAPI `Depends` auth entry-points, not reusable helpers — each is defined once and consumed via `Depends()` by other routers, so the anti-duplication rationale doesn't apply.
 - **Frontend constants** — all magic values in `frontend/src/constants.ts` (cross-stack via `shared/`). Never inline a literal near component logic.
 - **Frontend utilities** — all shared helpers in `frontend/src/utils.ts`. Check there before writing a new one.
 - **CSS design tokens** — colors, radii, shadows, z-indices, transitions, spacing, typography, component-geometry vars are all tokenized in `:root` (`frontend/src/index.css`). Never hardcode — define the token first, then `var(--token-name)`.
