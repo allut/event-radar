@@ -201,6 +201,22 @@ export function resolveRoundContext(
  * Deploy Hook ticket (#84) — keeps the committed marker's `status` field
  * truthful on its own, so `git log` reflects the real outcome even before
  * hook-firing is wired up. */
+/** Gate for whether `main()` should push the round marker at all (issue
+ * #101 — the overnight self-triggering incident). The marker commit's git
+ * push is the chain's *only* continuation trigger (docs/backend-ops.md), so
+ * it must fire exactly when there is a next round to trigger — i.e. only for
+ * a `continuing` marker. A `done` marker has nothing left to resume; pushing
+ * it anyway still triggers a new Vercel build (any push to the git-connected
+ * production branch does), and that build starts a *fresh* burst at round 1
+ * (`resolveRoundContext` treats `done` as "no active chain") rather than
+ * stopping — home routes never classify as `unchanged` (see
+ * `classifyTarget` in prerender.ts), so a fresh burst's round 1 always
+ * re-renders them and finishes `done` again, with nothing to ever break the
+ * cycle. Skipping the push on `done` removes the trigger at its source. */
+export function shouldCommitRoundMarker(marker: RoundMarker): boolean {
+  return marker.status === 'continuing';
+}
+
 export function buildRoundMarker(
   burstId: string,
   round: number,

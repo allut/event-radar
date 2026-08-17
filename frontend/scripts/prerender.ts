@@ -51,6 +51,7 @@ import {
   isZeroProgress,
   resolveRoundStart,
   serializeRoundMarker,
+  shouldCommitRoundMarker,
   type RoundMarker,
 } from '../src/lib/prerenderChain';
 import { PRERENDER_BACKEND_TARGET } from '../vite.config';
@@ -514,8 +515,9 @@ async function validateTarget(target: PrerenderTarget): Promise<string[]> {
  * GH_PRERENDER_CHAIN_TOKEN/VERCEL_GIT_COMMIT_REF aren't set, e.g. local/dev
  * builds off Vercel — returns `false` in that case (as opposed to throwing,
  * its failure path) to distinguish "nothing was committed" from "the commit
- * succeeded"; main() no longer branches on this (issue #89 removed the only
- * caller that did), but it's kept for tests and future callers. The advanced
+ * succeeded". main() only calls this when shouldCommitRoundMarker(marker)
+ * says the round is `continuing` (issue #101 — see that function's doc
+ * comment for why a `done` round must never reach this call). The advanced
  * ref is this chain's sole continuation trigger (issue #89): the production
  * branch is Vercel-git-connected, so this push alone fires the next round's
  * build — no separate Deploy Hook call is needed or made. */
@@ -860,17 +862,26 @@ export async function main(): Promise<void> {
     { newlyRendered, copiedForward, queueRemaining: skippedTargets.length },
     new Date(),
   );
-  // Chaining (issue #84, fixed in #89): the branch push inside
-  // commitRoundMarker is the chain's sole continuation trigger — the
+  // Chaining (issue #84, fixed in #89, gated in #101): the branch push
+  // inside commitRoundMarker is the chain's sole continuation trigger — the
   // production branch is Vercel-git-connected, so advancing its ref alone
   // triggers the next round's build. No separate Deploy Hook fire happens
-  // here. If the commit is skipped or fails, the chain simply resumes via
-  // the next 6-hourly cron tick instead of self-triggering (degraded, not
-  // broken — same fallback as any other lost marker commit).
-  try {
-    await commitRoundMarker(marker);
-  } catch (error) {
-    console.error('prerender: failed to commit round marker — deploy proceeds anyway:', error);
+  // here. Only push when shouldCommitRoundMarker(marker) says a round is
+  // actually `continuing` — pushing a `done` marker has nothing left to
+  // resume, yet the push itself still triggers a fresh Vercel build (any
+  // push does), which starts a brand-new burst that (home routes never
+  // classify `unchanged` — see classifyTarget) reliably finishes `done`
+  // again, forever. That self-sustaining loop is what shipped overnight
+  // (issue #101) before this gate existed. If the commit is skipped or
+  // fails, the chain simply resumes via the next 6-hourly cron tick instead
+  // of self-triggering (degraded, not broken — same fallback as any other
+  // lost marker commit).
+  if (shouldCommitRoundMarker(marker)) {
+    try {
+      await commitRoundMarker(marker);
+    } catch (error) {
+      console.error('prerender: failed to commit round marker — deploy proceeds anyway:', error);
+    }
   }
   logZeroProgressAbort(marker);
 }

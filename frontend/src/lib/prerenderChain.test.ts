@@ -9,6 +9,7 @@ import {
   resolveRoundStart,
   buildRoundMarker,
   shouldSkipCadenceTick,
+  shouldCommitRoundMarker,
   type RoundMarker,
 } from './prerenderChain';
 import { CHAIN_MAX_ROUNDS, CHAIN_STALENESS_TIMEOUT_MINUTES } from '../constants';
@@ -296,5 +297,51 @@ describe('buildRoundMarker', () => {
       now,
     );
     expect(marker.status).toBe('done');
+  });
+});
+
+describe('shouldCommitRoundMarker', () => {
+  const burstId = '2026-08-15T10:00:00.000Z';
+  const now = new Date('2026-08-15T12:00:00.000Z');
+
+  it('commits (pushes) a continuing marker — the push is what triggers the next round', () => {
+    const marker = buildRoundMarker(burstId, 1, { newlyRendered: 220, copiedForward: 4025, queueRemaining: 1800 }, now);
+    expect(shouldCommitRoundMarker(marker)).toBe(true);
+  });
+
+  it('does not commit a done marker — nothing needs to resume, so no push should fire', () => {
+    const marker = buildRoundMarker(burstId, 1, { newlyRendered: 3, copiedForward: 4269, queueRemaining: 0 }, now);
+    expect(marker.status).toBe('done');
+    expect(shouldCommitRoundMarker(marker)).toBe(false);
+  });
+
+  it('reproduces the overnight incident: unconditionally committing every `done` round self-triggers forever', () => {
+    // Home routes never classify as `unchanged` (no Event.updated_at to diff
+    // against — see classifyTarget in prerender.ts), so every fresh burst
+    // renders exactly the 3 home routes (en/et/ru) and finishes with an
+    // empty queue on round 1 — status is always 'done', never zero-progress.
+    // A `done` marker is "no active chain" to resolveRoundStart, so if it
+    // were pushed anyway, the next build starts a brand-new burst and hits
+    // this exact same steady state — with nothing to ever break the cycle.
+    let commitMessage: string | undefined;
+    let selfTriggeredPushes = 0;
+    for (let build = 0; build < 25; build++) {
+      const { burstId: b, round } = resolveRoundStart(commitMessage, now);
+      const marker = buildRoundMarker(b, round, { newlyRendered: 3, copiedForward: 4269, queueRemaining: 0 }, now);
+      expect(marker.status).toBe('done');
+      expect(round).toBe(1); // never resumes — always a fresh burst, as observed in the logs
+      // This is the bug under test: scripts/prerender.ts's main() used to call
+      // commitRoundMarker(marker) unconditionally here, instead of gating on
+      // shouldCommitRoundMarker(marker) — so it always pushed, and the push
+      // alone triggers the next Vercel build (docs/backend-ops.md).
+      if (shouldCommitRoundMarker(marker)) {
+        selfTriggeredPushes++;
+        commitMessage = `prerender: round ${marker.round} (${marker.status})\n\n${serializeRoundMarker(marker)}`;
+      } else {
+        commitMessage = undefined; // no push — nothing left to trigger the next build
+        break;
+      }
+    }
+    expect(selfTriggeredPushes).toBe(0);
   });
 });
