@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { getLocale } from '../../lib/auth';
 import { API, BRAND_GLYPH, ROUTES } from '../../constants';
 import { t } from '../../i18n';
+import { useLocalePath } from '../../hooks/useLocalePath';
 import { useStaticSeoMeta } from '../../hooks/useStaticSeoMeta';
 import MagicLinkForm from '../../components/MagicLinkForm';
 import SeoTags from '../../components/SeoTags';
@@ -9,6 +10,7 @@ import styles from './OrganizerLogin.module.css';
 
 export default function OrganizerLogin() {
   const locale = getLocale();
+  const localePath = useLocalePath();
   const seoMeta = useStaticSeoMeta('seo_title_organizer_login', locale);
 
   return (
@@ -30,7 +32,7 @@ export default function OrganizerLogin() {
         />
 
         <p className={styles.note}>{t('no_password', locale)}</p>
-        <Link to={ROUTES.home} className={styles.backLink}>{t('organizer_back_to_site', locale)}</Link>
+        <Link to={localePath(ROUTES.home)} className={styles.backLink}>{t('organizer_back_to_site', locale)}</Link>
       </div>
     </div>
   );

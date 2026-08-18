@@ -68,6 +68,6 @@ describe('Landing', () => {
   it('renders the organizer band linking to the organizer login', () => {
     renderWithProviders(<Landing />, { route: '/en', pathPattern: '/:locale' });
     expect(screen.getByRole('heading', { name: /Put your event on the radar/i })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /List your event/i })).toHaveAttribute('href', '/organizer/login');
+    expect(screen.getByRole('link', { name: /List your event/i })).toHaveAttribute('href', '/en/organizer/login');
   });
 });

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { cx, safeUrl, sanitizeHtml, formatPrice, categoryGradient, formatHourMinute, formatEventShortDate, makeActiveClassMap, trackExternalClick, datePresetRange, parseExploreFilters, exploreFiltersToSearchParams, buildExploreApiQuery, activeFacetCount, isFullSet, shouldFlipPopover, maskAnalyticsUrl, DEFAULT_EXPLORE_FILTERS, type ExploreFilters, monthGridDays, weekdayHeaders, splitDateTimeValue, joinDateTimeValue, parseTypedDate, formatPickerValue, formatMonthYearLabel, toDisplayDateTime, fromDisplayDateTime, buildMapsUrl, isValidLocale, stripLocalePrefix, localizedPath, truncateForMeta } from './utils';
+import { cx, safeUrl, sanitizeHtml, formatPrice, categoryGradient, formatHourMinute, formatEventShortDate, makeActiveClassMap, trackExternalClick, datePresetRange, parseExploreFilters, exploreFiltersToSearchParams, buildExploreApiQuery, activeFacetCount, isFullSet, shouldFlipPopover, maskAnalyticsUrl, DEFAULT_EXPLORE_FILTERS, type ExploreFilters, monthGridDays, weekdayHeaders, splitDateTimeValue, joinDateTimeValue, parseTypedDate, formatPickerValue, formatMonthYearLabel, toDisplayDateTime, fromDisplayDateTime, buildMapsUrl, isValidLocale, stripLocalePrefix, localizedPath, localeFromPath, localizedTo, truncateForMeta } from './utils';
 import { FALLBACK_GRADIENT, CATEGORIES, GOOGLE_MAPS_SEARCH_URL } from './constants';
 
 vi.mock('./api/client', () => ({
@@ -117,6 +117,48 @@ describe('localizedPath', () => {
 
   it('falls back to the bare path for an unrecognized target locale', () => {
     expect(localizedPath('/en/settings', 'xx')).toBe('/settings');
+  });
+});
+
+describe('localeFromPath', () => {
+  it('returns the leading locale segment when recognized', () => {
+    expect(localeFromPath('/en/settings')).toBe('en');
+    expect(localeFromPath('/ru')).toBe('ru');
+  });
+
+  it('returns null for a bare (Estonian) path', () => {
+    expect(localeFromPath('/settings')).toBeNull();
+    expect(localeFromPath('/')).toBeNull();
+  });
+
+  it('returns null for an unrecognized leading segment', () => {
+    expect(localeFromPath('/xx/settings')).toBeNull();
+  });
+});
+
+describe('localizedTo', () => {
+  it('prefixes a bare target with no query/hash', () => {
+    expect(localizedTo('/settings', 'ru')).toBe('/ru/settings');
+  });
+
+  it('preserves the query string', () => {
+    expect(localizedTo('/explore?category=music', 'ru')).toBe('/ru/explore?category=music');
+  });
+
+  it('preserves the hash', () => {
+    expect(localizedTo('/contact#form', 'en')).toBe('/en/contact#form');
+  });
+
+  it('preserves both query string and hash, in order', () => {
+    expect(localizedTo('/explore?category=music#top', 'ru')).toBe('/ru/explore?category=music#top');
+  });
+
+  it('strips an existing prefix before re-prefixing', () => {
+    expect(localizedTo('/en/settings?x=1', 'ru')).toBe('/ru/settings?x=1');
+  });
+
+  it('produces the bare path for Estonian, keeping query/hash', () => {
+    expect(localizedTo('/en/explore?category=music', 'et')).toBe('/explore?category=music');
   });
 });
 

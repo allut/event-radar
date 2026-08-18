@@ -6,7 +6,10 @@ import { renderWithProviders, makeEvent } from '../../test/utils';
 
 vi.mock('../../lib/auth', () => ({
   getLocale: vi.fn(() => 'en'),
+  getStoredLocale: vi.fn(() => null),
   setLocale: vi.fn(),
+  clearLocale: vi.fn(),
+  isAuthenticated: vi.fn(() => true),
   clearSignedInHint: vi.fn(),
   beginLogout: vi.fn(),
 }));
@@ -25,6 +28,7 @@ vi.mock('../../components/EventCard', () => ({
 
 import { api } from '../../api/client';
 const mockGet = vi.mocked(api.get);
+const mockPatch = vi.mocked(api.patch);
 
 const feedResponse = {
   feed_date: '2024-07-15',
@@ -64,7 +68,7 @@ describe('Feed', () => {
     mockGet.mockResolvedValueOnce(feedResponse);
     renderWithProviders(<Feed />, { route: '/en', pathPattern: '/:locale' });
     const cta = await screen.findByRole('link', { name: /explore all events/i });
-    expect(cta).toHaveAttribute('href', '/explore');
+    expect(cta).toHaveAttribute('href', '/en/explore');
     // The band itself is the link — title and msg live inside it, so the
     // mobile layout can drop the button and stay fully tappable.
     expect(cta).toHaveTextContent(/more than five/i);
@@ -72,6 +76,26 @@ describe('Feed', () => {
     // name. Mobile hides the CTA span with clip-path (not display:none)
     // precisely so the accessible name asserted above holds at every width.
     expect(screen.getByText('Explore all events →')).toBeInTheDocument();
+  });
+
+  it('disables the locale selector while a locale switch PATCH is pending, guarding against a stale-mutation rollback race', async () => {
+    // A locale switch refetches the feed under a new query key — resolve
+    // every fetch, not just the first, so Feed (and its TopBar) stays
+    // mounted with data across the switch instead of falling back to a
+    // loading state that would unmount the locale selector being asserted on.
+    mockGet.mockResolvedValue(feedResponse);
+    let resolvePatch: () => void = () => undefined;
+    mockPatch.mockReturnValueOnce(new Promise((resolve) => { resolvePatch = () => resolve(undefined); }));
+    renderWithProviders(<Feed />, { route: '/en', pathPattern: '/:locale' });
+    await waitFor(() => expect(screen.getAllByTestId('event-card').length).toBe(2));
+
+    await userEvent.click(screen.getByRole('button', { name: 'EN' }));
+    await userEvent.click(screen.getByRole('button', { name: 'RU' }));
+
+    expect(screen.getByRole('button', { name: 'RU' })).toBeDisabled();
+
+    resolvePatch();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'RU' })).not.toBeDisabled());
   });
 
   it('shows the stale-feed banner when is_stale is true', async () => {

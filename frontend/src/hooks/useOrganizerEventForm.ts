@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
 import { organizerApi, ApiError } from '../api/client';
 import { API, QUERY_KEYS, ORGANIZER_EVENTS_PAGE_SIZE, DEFAULT_CURRENCY, ORGANIZER_IMAGE_ALLOWED_MIME, ROUTES, LOCALE_EN, LOCALE_ET, LOCALE_RU } from '../constants';
 import { t } from '../i18n';
 import { toIsoOrUndefined, toLocalInput } from '../utils';
+import { useLocaleNavigate } from './useLocaleNavigate';
 
 interface OrganizerEventFull {
   id: number;
@@ -151,7 +151,7 @@ export interface UseOrganizerEventFormResult {
 /** Submission form state + mutations for both create (POST /organizer/events)
  * and edit (PATCH /organizer/events/{id}), shared by routes/EventSubmit. */
 export function useOrganizerEventForm(locale: string, eventId?: number): UseOrganizerEventFormResult {
-  const navigate = useNavigate();
+  const navigate = useLocaleNavigate();
   const queryClient = useQueryClient();
   const isEditMode = eventId !== undefined;
 

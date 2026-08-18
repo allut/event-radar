@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { api, ApiError } from '../../api/client';
 import { setLocale } from '../../lib/auth';
+import { useLocaleNavigate } from '../../hooks/useLocaleNavigate';
 import { useLogout } from '../../hooks/useLogout';
 import { useLocalLocale } from '../../hooks/useLocalLocale';
 import { API, PERSONAS, PERSONA_MAX_SELECTABLE, ROUTES } from '../../constants';
@@ -13,7 +13,7 @@ import SeoTags from '../../components/SeoTags';
 import styles from './Onboarding.module.css';
 
 export default function Onboarding() {
-  const navigate = useNavigate();
+  const navigate = useLocaleNavigate();
   const handleLogout = useLogout();
   const [selected, setSelected] = useState<string[]>([]);
   const [locale, handleLocaleChange] = useLocalLocale();

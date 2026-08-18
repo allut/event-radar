@@ -28,6 +28,13 @@ describe('EventCard', () => {
     expect(link).toHaveAttribute('href', '/events/42');
   });
 
+  it('carries the current locale prefix into the event detail link under a prefixed route', () => {
+    const event = makeEvent({ id: 42, title: 'Cool Concert' });
+    renderWithProviders(<EventCard event={event} index={0} locale="ru" />, { route: '/ru/explore' });
+    const link = screen.getByRole('link', { name: 'Cool Concert' });
+    expect(link).toHaveAttribute('href', '/ru/events/42');
+  });
+
   it('shows gradient placeholder when no image', () => {
     const event = makeEvent({ image_url: null });
     const { container } = renderWithProviders(<EventCard event={event} index={0} locale="en" />);

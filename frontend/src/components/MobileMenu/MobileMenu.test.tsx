@@ -77,6 +77,22 @@ describe('MobileMenu', () => {
     expect(screen.getByText('ET')).toBeInTheDocument();
   });
 
+  it('carries the current URL locale prefix into nav link hrefs and keeps the active-nav highlight under a prefixed route', () => {
+    // locale="en" keeps the rendered text in English (independent of the
+    // route) while useLocalePath still reads the prefix from the URL.
+    renderWithProviders(
+      <MobileMenu locale="en" onLocaleChange={vi.fn()} onLogout={vi.fn()} />,
+      { route: '/ru/explore' },
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
+
+    const exploreLink = screen.getByRole('link', { name: 'Explore' });
+    expect(exploreLink).toHaveAttribute('href', '/ru/explore');
+    expect(exploreLink.className).toMatch(/linkActive/);
+    expect(screen.getByRole('link', { name: 'Daily 5' })).toHaveAttribute('href', '/ru');
+  });
+
   it('shows a Sign in link and no nav/sign-out when signed out', () => {
     renderWithProviders(
       <MobileMenu locale="en" onLocaleChange={vi.fn()} authed={false} />,

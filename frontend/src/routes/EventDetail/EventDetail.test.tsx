@@ -12,7 +12,9 @@ vi.mock('react-router-dom', async (importOriginal) => {
 
 vi.mock('../../lib/auth', () => ({
   getLocale: vi.fn(() => 'en'),
+  getStoredLocale: vi.fn(() => null),
   setLocale: vi.fn(),
+  clearLocale: vi.fn(),
   isAuthenticated: vi.fn(() => true),
   subscribeAuth: vi.fn(() => () => undefined),
 }));
@@ -140,10 +142,10 @@ describe('EventDetail', () => {
     renderWithProviders(<EventDetail />, { route: '/en/events/1', pathPattern: '/:locale/events/:id' });
     await waitFor(() => {
       const categoryLink = screen.getByRole('link', { name: /music/i });
-      expect(categoryLink).toHaveAttribute('href', '/explore?category=music');
+      expect(categoryLink).toHaveAttribute('href', '/en/explore?category=music');
     });
     const vibeLink = screen.getByRole('link', { name: /vibrant/i });
-    expect(vibeLink).toHaveAttribute('href', '/explore?vibe=vibrant');
+    expect(vibeLink).toHaveAttribute('href', '/en/explore?vibe=vibrant');
   });
 
   it('back button calls navigate(-1)', async () => {

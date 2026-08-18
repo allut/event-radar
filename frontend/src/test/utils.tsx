@@ -1,9 +1,18 @@
 import { createElement, type ReactNode } from 'react';
 import { render, type RenderResult } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { MemoryRouter, Routes, Route } from 'react-router-dom';
+import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { HelmetProvider } from 'react-helmet-async';
 import { type EventData } from '../components/EventCard';
+
+/** Renders the current router location as text (`pathname + search + hash`)
+ * under `data-testid="location-probe"` — mount alongside `children` in a
+ * `makeRouterQueryWrapper`/`renderWithProviders` tree to assert the router's
+ * location after a `navigate()` call, which neither helper otherwise exposes. */
+export function LocationProbe() {
+  const location = useLocation();
+  return createElement('div', { 'data-testid': 'location-probe' }, location.pathname + location.search + location.hash);
+}
 
 /** Wrapper for renderHook-based tests that need a QueryClientProvider without a
  * full renderWithProviders() tree (e.g. hook tests with no router dependency). */
@@ -27,10 +36,15 @@ export function makeRouterQueryWrapper({
   initialPath = '/',
   routePatterns,
   queryClient: providedQueryClient,
+  withLocationProbe = false,
 }: {
   initialPath?: string;
   routePatterns?: string[];
   queryClient?: QueryClient;
+  /** Mounts LocationProbe alongside `children` so a test can assert the
+   * router's location (`getByTestId('location-probe')`) after a navigate()
+   * the hook under test triggers. */
+  withLocationProbe?: boolean;
 } = {}): {
   wrapper: ({ children }: { children: ReactNode }) => ReactNode;
   queryClient: QueryClient;
@@ -41,17 +55,18 @@ export function makeRouterQueryWrapper({
       defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
     });
   function Wrapper({ children }: { children: ReactNode }) {
+    const content = withLocationProbe ? <>{children}<LocationProbe /></> : <>{children}</>;
     return (
       <QueryClientProvider client={queryClient}>
         <MemoryRouter initialEntries={[initialPath]}>
           {routePatterns ? (
             <Routes>
               {routePatterns.map((path) => (
-                <Route key={path} path={path} element={<>{children}</>} />
+                <Route key={path} path={path} element={content} />
               ))}
             </Routes>
           ) : (
-            children
+            content
           )}
         </MemoryRouter>
       </QueryClientProvider>

@@ -1,12 +1,12 @@
 import { useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { api } from '../api/client';
 import { API, ROUTES } from '../constants';
 import { beginLogout, clearSignedInHint } from '../lib/auth';
+import { useLocaleNavigate } from './useLocaleNavigate';
 
 export function useLogout(): () => void {
-  const navigate = useNavigate();
+  const navigate = useLocaleNavigate();
   const queryClient = useQueryClient();
   return useCallback(() => {
     beginLogout();

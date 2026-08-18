@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { getLocale } from '../../lib/auth';
 import { BRAND_GLYPH, ROUTES } from '../../constants';
 import { t } from '../../i18n';
+import { useLocalePath } from '../../hooks/useLocalePath';
 import { useOrganizerAuth } from '../../hooks/useOrganizerAuth';
 import { useStaticSeoMeta } from '../../hooks/useStaticSeoMeta';
 import MagicLinkForm from '../../components/MagicLinkForm';
@@ -11,6 +12,7 @@ import styles from './Login.module.css';
 export default function Login() {
   const locale = getLocale();
   const isOrganizer = useOrganizerAuth();
+  const localePath = useLocalePath();
   const seoMeta = useStaticSeoMeta('seo_title_login', locale);
   const [termsBefore, termsAfter = ''] = t('login_terms_notice', locale).split('{terms}');
 
@@ -30,11 +32,11 @@ export default function Login() {
         <p className={styles.note}>{t('no_password', locale)}</p>
         <p className={styles.terms}>
           {termsBefore}
-          <Link to={ROUTES.terms} className={styles.termsLink}>{t('login_terms_link', locale)}</Link>
+          <Link to={localePath(ROUTES.terms)} className={styles.termsLink}>{t('login_terms_link', locale)}</Link>
           {termsAfter}
         </p>
         <p className={styles.terms}>
-          <Link to={isOrganizer ? ROUTES.organizerDashboard : ROUTES.organizerLogin} className={styles.termsLink}>
+          <Link to={localePath(isOrganizer ? ROUTES.organizerDashboard : ROUTES.organizerLogin)} className={styles.termsLink}>
             {t('organizer_entry_link', locale)}
           </Link>
         </p>

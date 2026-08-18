@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { organizerApi, ApiError } from '../../api/client';
 import { setOrganizerSignedInHint } from '../../lib/organizerAuth';
 import { getLocale } from '../../lib/auth';
 import { API, AUTH_REDIRECT_DELAY_MS, ROUTES, UI_STATE, VERIFY_STATE_TO_KIND, type VerifyState } from '../../constants';
 import { t } from '../../i18n';
+import { useLocaleNavigate } from '../../hooks/useLocaleNavigate';
+import { useLocalePath } from '../../hooks/useLocalePath';
 import { useStaticSeoMeta } from '../../hooks/useStaticSeoMeta';
 import AuthCard from '../../components/AuthCard';
 import SeoTags from '../../components/SeoTags';
@@ -14,7 +16,8 @@ export default function OrganizerVerify() {
   const locale = getLocale();
   const seoMeta = useStaticSeoMeta('seo_title_organizer_verify', locale);
   const [searchParams] = useSearchParams();
-  const navigate = useNavigate();
+  const navigate = useLocaleNavigate();
+  const localePath = useLocalePath();
   const token = searchParams.get('token');
   const [state, setState] = useState<VerifyState>(token ? UI_STATE.verifying : UI_STATE.error);
   const [errorMsg, setErrorMsg] = useState(token ? '' : t('no_token', locale));
@@ -27,7 +30,7 @@ export default function OrganizerVerify() {
 
     // Strip the single-use token from the address bar before the async verify
     // call, same rationale as AuthVerify — see that file for the full comment.
-    window.history.replaceState({}, '', ROUTES.organizerVerify);
+    window.history.replaceState({}, '', localePath(ROUTES.organizerVerify));
 
     async function verify(tok: string) {
       try {
@@ -45,7 +48,7 @@ export default function OrganizerVerify() {
       }
     }
     void verify(token);
-  }, [navigate, token, locale]);
+  }, [navigate, token, locale, localePath]);
 
   const message =
     state === UI_STATE.verifying ? t('verifying', locale)
@@ -60,7 +63,7 @@ export default function OrganizerVerify() {
         kind={VERIFY_STATE_TO_KIND[state]}
         message={message}
         action={state === UI_STATE.error && (
-          <Link to={ROUTES.organizerLogin} className={styles.retry}>{t('request_new_link', locale)}</Link>
+          <Link to={localePath(ROUTES.organizerLogin)} className={styles.retry}>{t('request_new_link', locale)}</Link>
         )}
       />
     </>

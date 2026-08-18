@@ -2,6 +2,7 @@ import { Link, NavLink } from 'react-router-dom';
 import { t } from '../../i18n';
 import { cx } from '../../utils';
 import { BRAND_GLYPH, ROUTES } from '../../constants';
+import { useLocalePath } from '../../hooks/useLocalePath';
 import LocaleSelector from '../LocaleSelector';
 import styles from './OrganizerTopBar.module.css';
 
@@ -16,10 +17,11 @@ interface OrganizerTopBarProps {
 // consumer track (/login, /explore, /saved, ...). Kept minimal: two nav
 // links instead of TopBar's four, no mobile hamburger menu.
 export default function OrganizerTopBar({ locale, onLocaleChange, onLogout }: OrganizerTopBarProps) {
+  const localePath = useLocalePath();
   return (
     <header className={styles.topBar}>
       <div className={styles.left}>
-        <Link to={ROUTES.home} className={styles.logoWrap}>
+        <Link to={localePath(ROUTES.home)} className={styles.logoWrap}>
           <span className={styles.radar} aria-hidden>{BRAND_GLYPH}</span>
           <span className={styles.brand}>{t('brand', locale)}</span>
         </Link>
@@ -27,13 +29,13 @@ export default function OrganizerTopBar({ locale, onLocaleChange, onLogout }: Or
 
       <nav className={styles.nav} aria-label={t('organizer_dashboard_title', locale)}>
         <NavLink
-          to={ROUTES.organizerDashboard}
+          to={localePath(ROUTES.organizerDashboard)}
           className={({ isActive }) => cx(styles.navLink, isActive && styles.navLinkActive)}
         >
           {t('organizer_dashboard_title', locale)}
         </NavLink>
         <NavLink
-          to={ROUTES.organizerSubmit}
+          to={localePath(ROUTES.organizerSubmit)}
           className={({ isActive }) => cx(styles.navLink, isActive && styles.navLinkActive)}
         >
           {t('organizer_new_event', locale)}

@@ -6,6 +6,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { useLogout } from '../../hooks/useLogout';
 import { useLocaleMutation } from '../../hooks/useLocaleMutation';
 import { useContactSubmit } from '../../hooks/useContactSubmit';
+import { useLocalePath } from '../../hooks/useLocalePath';
 import { useOrganizerAuth } from '../../hooks/useOrganizerAuth';
 import { useStaticSeoMeta } from '../../hooks/useStaticSeoMeta';
 import { API, QUERY_KEYS, ROUTES, UI_STATE, CONTACT_TEXTAREA_ROWS } from '../../constants';
@@ -17,8 +18,9 @@ import styles from './Contact.module.css';
 export default function Contact() {
   const authed = useAuth();
   const isOrganizer = useOrganizerAuth();
+  const localePath = useLocalePath();
   const handleLogout = useLogout();
-  const { locale, handleLocaleChange } = useLocaleMutation();
+  const { locale, handleLocaleChange, isPending: localePending } = useLocaleMutation();
   const seoMeta = useStaticSeoMeta('contact_title', locale);
   const {
     name, setName,
@@ -55,13 +57,14 @@ export default function Contact() {
         onLocaleChange={handleLocaleChange}
         onLogout={handleLogout}
         authed={authed}
+        localeDisabled={localePending}
       />
 
       <main className={styles.main}>
         <h1 className={styles.title}>{t('contact_title', locale)}</h1>
         <p className={styles.body}>{t('contact_intro', locale)}</p>
         <p className={styles.organizerHint}>
-          <Link to={isOrganizer ? ROUTES.organizerDashboard : ROUTES.organizerLogin}>
+          <Link to={localePath(isOrganizer ? ROUTES.organizerDashboard : ROUTES.organizerLogin)}>
             {t('organizer_entry_link', locale)}
           </Link>
         </p>

@@ -1,11 +1,13 @@
 import { useMemo } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../../api/client';
 import { t, ti } from '../../i18n';
 import { buildMapsUrl, categoryGradient, copyToClipboard, cx, formatEventDateTime, formatEventShortDate, formatHourMinute, formatPrice, safeUrl, sanitizeHtml, titleWithBrand, trackExternalClick, truncateForMeta, withLocaleQuery } from '../../utils';
 import { useAuth } from '../../hooks/useAuth';
 import { useLocaleMutation } from '../../hooks/useLocaleMutation';
+import { useLocaleNavigate } from '../../hooks/useLocaleNavigate';
+import { useLocalePath } from '../../hooks/useLocalePath';
 import { useLogout } from '../../hooks/useLogout';
 import { useToast } from '../../hooks/useToast';
 import { useSeoMeta } from '../../hooks/useSeoMeta';
@@ -35,9 +37,10 @@ const ShareIcon = () => (
 
 export default function EventDetail() {
   const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
+  const navigate = useLocaleNavigate();
+  const localePath = useLocalePath();
   const authed = useAuth();
-  const { locale, handleLocaleChange } = useLocaleMutation({ publicRoute: true });
+  const { locale, handleLocaleChange, isPending: localePending } = useLocaleMutation({ publicRoute: true });
   const handleLogout = useLogout();
   const { toast, showToast } = useToast();
 
@@ -138,6 +141,7 @@ export default function EventDetail() {
         onLogout={handleLogout}
         onBack={() => navigate(-1)}
         authed={authed}
+        localeDisabled={localePending}
       />
 
       <main className={styles.main}>
@@ -267,12 +271,12 @@ export default function EventDetail() {
               {(data.categories.length > 0 || data.vibes.length > 0) && (
                 <div className={styles.tags}>
                   {data.categories.map(cat => (
-                    <Link key={cat} to={`/explore?category=${cat}`} className={styles.tag}>
+                    <Link key={cat} to={localePath(`/explore?category=${cat}`)} className={styles.tag}>
                       {t(`category_${cat}`, locale)}
                     </Link>
                   ))}
                   {data.vibes.map(vibe => (
-                    <Link key={vibe} to={`/explore?vibe=${vibe}`} className={cx(styles.tag, styles.tagVibe)}>
+                    <Link key={vibe} to={localePath(`/explore?vibe=${vibe}`)} className={cx(styles.tag, styles.tagVibe)}>
                       {t(`vibe_${vibe}`, locale)}
                     </Link>
                   ))}

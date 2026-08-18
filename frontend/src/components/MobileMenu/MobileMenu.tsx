@@ -3,6 +3,7 @@ import { t } from '../../i18n';
 import { cx } from '../../utils';
 import { LOCALES, NAV_ITEMS, ROUTES } from '../../constants';
 import { useDropdown } from '../../hooks/useDropdown';
+import { useLocalePath } from '../../hooks/useLocalePath';
 import menuStyles from '../shared/Menu.module.css';
 import styles from './MobileMenu.module.css';
 
@@ -17,6 +18,7 @@ interface MobileMenuProps {
 
 export default function MobileMenu({ locale, onLocaleChange, onLogout, localeDisabled, showNav = true, authed = true }: MobileMenuProps) {
   const { open, setOpen, flip, rootRef, popRef, triggerRef, close } = useDropdown();
+  const localePath = useLocalePath();
 
   return (
     <div className={cx(menuStyles.menu, styles.mobileMenu)} ref={rootRef}>
@@ -39,7 +41,7 @@ export default function MobileMenu({ locale, onLocaleChange, onLogout, localeDis
                 {NAV_ITEMS.map(({ route, labelKey }) => (
                   <NavLink
                     key={route}
-                    to={route}
+                    to={localePath(route)}
                     end={route === ROUTES.home}
                     className={({ isActive }) => cx(styles.link, isActive && styles.linkActive)}
                     onClick={close}
@@ -92,7 +94,7 @@ export default function MobileMenu({ locale, onLocaleChange, onLogout, localeDis
                 {t('sign_out', locale)}
               </button>
             ) : (
-              <Link to={ROUTES.login} className={styles.signOut} onClick={close}>
+              <Link to={localePath(ROUTES.login)} className={styles.signOut} onClick={close}>
                 {t('sign_in', locale)}
               </Link>
             )}

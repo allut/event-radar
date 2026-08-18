@@ -2,6 +2,7 @@ import { Link, NavLink } from 'react-router-dom';
 import { t } from '../../i18n';
 import { cx } from '../../utils';
 import { BRAND_GLYPH, NAV_ITEMS, ROUTES } from '../../constants';
+import { useLocalePath } from '../../hooks/useLocalePath';
 import LocaleSelector from '../LocaleSelector';
 import MobileMenu from '../MobileMenu';
 import styles from './TopBar.module.css';
@@ -17,10 +18,11 @@ interface TopBarProps {
 }
 
 export default function TopBar({ locale, onLocaleChange, onLogout, localeDisabled, onBack, authed = true, showNav = true }: TopBarProps) {
+  const localePath = useLocalePath();
   return (
     <header className={styles.topBar}>
       <div className={styles.left}>
-        <Link to={ROUTES.home} className={styles.logoWrap}>
+        <Link to={localePath(ROUTES.home)} className={styles.logoWrap}>
           <span className={styles.radar} aria-hidden>{BRAND_GLYPH}</span>
           <span className={styles.brand}>{t('brand', locale)}</span>
         </Link>
@@ -31,7 +33,7 @@ export default function TopBar({ locale, onLocaleChange, onLogout, localeDisable
           {NAV_ITEMS.map(({ route, labelKey }) => (
             <NavLink
               key={route}
-              to={route}
+              to={localePath(route)}
               end={route === ROUTES.home}
               className={({ isActive }) => cx(styles.navLink, isActive && styles.navLinkActive)}
             >
@@ -52,7 +54,7 @@ export default function TopBar({ locale, onLocaleChange, onLogout, localeDisable
           <button className={styles.authBtn} onClick={onLogout}>{t('sign_out', locale)}</button>
         )}
         {!authed && (
-          <Link to={ROUTES.login} className={styles.authBtn}>{t('sign_in', locale)}</Link>
+          <Link to={localePath(ROUTES.login)} className={styles.authBtn}>{t('sign_in', locale)}</Link>
         )}
         <div className={styles.localeWrap}>
           <LocaleSelector

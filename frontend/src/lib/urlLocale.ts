@@ -24,3 +24,24 @@ export function localizedPath(pathname: string, locale: string): string {
   if (!LOCALE_URL_PREFIX_CODES.includes(locale)) return bare;
   return bare === '/' ? `/${locale}` : `/${locale}${bare}`;
 }
+
+/** Leading `en`/`ru` locale segment of `pathname`, or `null` when the path is
+ * bare (Estonian) or the segment isn't a recognized locale. */
+export function localeFromPath(pathname: string): string | null {
+  const seg = pathname.split('/')[1];
+  return seg && LOCALE_URL_PREFIX_CODES.includes(seg) ? seg : null;
+}
+
+/** Locale-prefixes a full `to` target (path, optionally with `?query`/`#hash`)
+ * for `locale` — `localizedPath` only operates on a bare pathname, so a
+ * target like `/explore?category=music` would otherwise have its query
+ * string swallowed into the path-stripping logic by accident. */
+export function localizedTo(to: string, locale: string): string {
+  const hashIdx = to.indexOf('#');
+  const hash = hashIdx === -1 ? '' : to.slice(hashIdx);
+  const withoutHash = hashIdx === -1 ? to : to.slice(0, hashIdx);
+  const queryIdx = withoutHash.indexOf('?');
+  const pathname = queryIdx === -1 ? withoutHash : withoutHash.slice(0, queryIdx);
+  const query = queryIdx === -1 ? '' : withoutHash.slice(queryIdx);
+  return `${localizedPath(pathname, locale)}${query}${hash}`;
+}

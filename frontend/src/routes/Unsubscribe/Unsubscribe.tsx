@@ -5,6 +5,7 @@ import { api, ApiError } from '../../api/client';
 import { getLocale } from '../../lib/auth';
 import { t } from '../../i18n';
 import { API, ROUTES, UI_STATE, type UnsubscribeState } from '../../constants';
+import { useLocalePath } from '../../hooks/useLocalePath';
 import { useStaticSeoMeta } from '../../hooks/useStaticSeoMeta';
 import AuthCard, { type AuthCardKind } from '../../components/AuthCard';
 import SeoTags from '../../components/SeoTags';
@@ -19,6 +20,7 @@ const STATE_TO_KIND: Record<UnsubscribeState, AuthCardKind> = {
 
 export default function Unsubscribe() {
   const locale = getLocale();
+  const localePath = useLocalePath();
   const seoMeta = useStaticSeoMeta('seo_title_unsubscribe', locale);
   const [searchParams] = useSearchParams();
   const token = searchParams.get('token');
@@ -86,7 +88,7 @@ export default function Unsubscribe() {
               {t('unsubscribe.resubscribe', locale)}
             </button>
           ) : state === UI_STATE.error ? (
-            <Link to={ROUTES.settings} className={styles.settingsLink}>
+            <Link to={localePath(ROUTES.settings)} className={styles.settingsLink}>
               {t('unsubscribe.manage_settings', locale)}
             </Link>
           ) : undefined
