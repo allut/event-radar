@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import App from './App';
 
 // Integration coverage for the app-wide locale-routing wrapper (issue #47):
@@ -81,10 +82,34 @@ describe('App locale-routing wrapper', () => {
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Contact' })).toBeInTheDocument());
   });
 
-  it('keeps the Protected guard enforced inside the locale wrapper for a prefixed route', async () => {
+  it('keeps the Protected guard enforced inside the locale wrapper for a prefixed route, carrying the locale prefix into the redirect', async () => {
     setPath('/en/settings');
     render(<App />);
 
-    await waitFor(() => expect(window.location.pathname).toBe('/login'));
+    await waitFor(() => expect(window.location.pathname).toBe('/en/login'));
+  });
+
+  it('switching to Estonian from a prefixed route lands on the bare path with no bounce back to the prefix', async () => {
+    localStorage.setItem('locale', 'ru');
+    setPath('/ru/contact');
+    render(<App />);
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Контакты' })).toBeInTheDocument());
+
+    await userEvent.click(screen.getByRole('button', { name: 'RU' }));
+    await userEvent.click(screen.getByRole('button', { name: 'ET' }));
+
+    await waitFor(() => expect(window.location.pathname).toBe('/contact'));
+    expect(screen.getByRole('heading', { name: 'Kontakt' })).toBeInTheDocument();
+  });
+
+  it('carries the locale prefix into Footer links on a prefixed route', async () => {
+    // Footer's own display locale comes from useLocale() (localStorage), not
+    // the URL — independent of the page's locale — so with no stored
+    // preference it renders its English strings even under a /ru/ route;
+    // only the href prefixing (from useLocalePath, URL-driven) is under test.
+    setPath('/ru/contact');
+    render(<App />);
+
+    await waitFor(() => expect(screen.getByRole('link', { name: 'Privacy' })).toHaveAttribute('href', '/ru/privacy'));
   });
 });

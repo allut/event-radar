@@ -78,3 +78,11 @@ export function setLocale(l: string): void {
   localStorage.setItem(LOCALE_KEY, l);
   emitLocaleChange();
 }
+// Restores the "no explicit preference" state getStoredLocale()/BareLocaleGate
+// depend on — used to roll back an optimistic locale switch that was never
+// actually stored (e.g. a failed PATCH with no prior preference), since
+// writing 'et' there would fabricate a preference that was never made.
+export function clearLocale(): void {
+  localStorage.removeItem(LOCALE_KEY);
+  emitLocaleChange();
+}

@@ -25,7 +25,7 @@ interface SavedEventsResponse {
 
 export default function SavedEvents() {
   const handleLogout = useLogout();
-  const { locale, handleLocaleChange } = useLocaleMutation();
+  const { locale, handleLocaleChange, isPending: localePending } = useLocaleMutation();
   const seoMeta = useStaticSeoMeta('seo_title_saved', locale);
   const [signal, setSignal] = useState<Signal>('bookmark');
 
@@ -60,7 +60,7 @@ export default function SavedEvents() {
   return (
     <div className={styles.page}>
       <SeoTags meta={seoMeta} />
-      <TopBar locale={locale} onLocaleChange={handleLocaleChange} onLogout={handleLogout} />
+      <TopBar locale={locale} onLocaleChange={handleLocaleChange} onLogout={handleLogout} localeDisabled={localePending} />
 
       <main className={styles.main}>
         <header className={styles.masthead}>

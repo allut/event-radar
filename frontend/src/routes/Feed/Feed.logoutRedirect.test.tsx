@@ -92,11 +92,11 @@ describe('logout redirect from the Feed route (/)', () => {
     await userEvent.click(screen.getByRole('button', { name: /sign out/i }));
 
     // The user must land on the marketing Landing page, not a stale/broken
-    // Feed. Post-logout navigation lands on bare "/" — one of the two public
-    // SEO routes, which always renders Estonian regardless of any earlier
-    // locale — so this asserts on the login link's href, not its (now
-    // Estonian) accessible name.
-    await waitFor(() => expect(screen.getByRole('link', { name: /logi sisse/i })).toHaveAttribute('href', '/login'));
+    // Feed. useLogout now navigates through useLocaleNavigate, which
+    // prefixes ROUTES.home against the current URL ("/en") rather than
+    // bouncing to the bare (Estonian) path — so post-logout Landing stays
+    // in English, with an "/en/login" sign-in link.
+    await waitFor(() => expect(screen.getByRole('link', { name: /sign in/i })).toHaveAttribute('href', '/en/login'));
     expect(screen.queryByText(/voo laadimine ebaõnnestus/i)).not.toBeInTheDocument();
 
     // Let any spurious refetch + its 401 handling resolve.

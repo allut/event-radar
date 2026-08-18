@@ -59,7 +59,7 @@ export default function Explore() {
   const handleLogout = useLogout();
   const [searchParams, setSearchParams] = useSearchParams();
   const filters = useMemo(() => parseExploreFilters(searchParams), [searchParams]);
-  const { locale, handleLocaleChange } = useLocaleMutation();
+  const { locale, handleLocaleChange, isPending: localePending } = useLocaleMutation();
   const seoMeta = useStaticSeoMeta('seo_title_explore', locale);
 
   const [searchInput, setSearchInput] = useState(filters.q);
@@ -202,7 +202,7 @@ export default function Explore() {
   return (
     <div className={styles.page}>
       <SeoTags meta={seoMeta} />
-      <TopBar locale={locale} onLocaleChange={handleLocaleChange} onLogout={handleLogout} />
+      <TopBar locale={locale} onLocaleChange={handleLocaleChange} onLogout={handleLogout} localeDisabled={localePending} />
 
       <main className={styles.main}>
         <header className={styles.masthead}>

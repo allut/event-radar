@@ -3,8 +3,8 @@ import { useMutation } from '@tanstack/react-query';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api/client';
 import { API, LOCALE_ET } from '../constants';
-import { getStoredLocale, setLocale, isAuthenticated } from '../lib/auth';
-import { localizedPath } from '../utils';
+import { getStoredLocale, setLocale, clearLocale, isAuthenticated } from '../lib/auth';
+import { localizedTo } from '../utils';
 import { useRouteLocale } from './useRouteLocale';
 
 export interface UseLocaleMutationResult {
@@ -70,23 +70,40 @@ export function useLocaleMutation(
   });
 
   function handleLocaleChange(code: string) {
+    const prevLocale = locale;
+    const prevStored = getStoredLocale();
+    const prevTo = location.pathname + location.search;
+
     setLocaleState(code);
-    navigate(localizedPath(location.pathname, code) + location.search, { replace: false });
-    // Anonymous visitors (public EventDetail) have no session to persist
-    // locale to — PATCH /users/me would 401 and trigger the client's
-    // hard redirect to /login. Persist locally only in that case.
+    // Persist before navigating, both branches: BareLocaleGate (App.tsx)
+    // reads storage synchronously in the render the navigate below triggers,
+    // so persisting after would leave a stale preference for that read and
+    // bounce an Estonian switch (whose target is a bare path) right back.
+    //
+    // replace: true is intentional — a locale switch re-presents the same
+    // page, so Back should return to the previous page (not the same page in
+    // the old language), and it keeps a failed PATCH from leaving a dead
+    // history entry in the new locale.
     if (!isAuthenticated()) {
+      // Anonymous visitors (public EventDetail) have no session to persist
+      // locale to — PATCH /users/me would 401 and trigger the client's
+      // hard redirect to /login. Persist locally only in that case.
       setLocale(code);
+      navigate(localizedTo(prevTo, code), { replace: true });
       callbacks?.onSuccess?.();
       return;
     }
+    setLocale(code);
+    navigate(localizedTo(prevTo, code), { replace: true });
     mutation.mutate(code, {
       onSuccess: () => {
-        setLocale(code);
         callbacks?.onSuccess?.();
       },
       onError: (err) => {
-        setLocaleState(resolveLocale());
+        if (prevStored === null) clearLocale();
+        else setLocale(prevStored);
+        setLocaleState(prevLocale);
+        navigate(prevTo, { replace: true });
         callbacks?.onError?.(err);
       },
     });

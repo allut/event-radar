@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { organizerApi, ApiError } from '../../api/client';
 import { useOrganizerLogout } from '../../hooks/useOrganizerLogout';
 import { useLocalLocale } from '../../hooks/useLocalLocale';
+import { useLocalePath } from '../../hooks/useLocalePath';
 import { t } from '../../i18n';
 import { formatEventTime } from '../../utils';
 import OrganizerTopBar from '../../components/OrganizerTopBar';
@@ -32,6 +33,7 @@ interface OrganizerEventsResponse {
 
 export default function OrganizerDashboard() {
   const [locale, handleLocaleChange] = useLocalLocale();
+  const localePath = useLocalePath();
   const handleLogout = useOrganizerLogout();
   const queryClient = useQueryClient();
   const { toast, showToast } = useToast();
@@ -69,7 +71,7 @@ export default function OrganizerDashboard() {
       <main className={styles.main}>
         <header className={styles.masthead}>
           <h1 className={styles.heading}>{t('organizer_dashboard_title', locale)}</h1>
-          <Link to={ROUTES.organizerSubmit} className={styles.newBtn}>{t('organizer_new_event', locale)}</Link>
+          <Link to={localePath(ROUTES.organizerSubmit)} className={styles.newBtn}>{t('organizer_new_event', locale)}</Link>
         </header>
 
         {isLoading ? (
@@ -99,7 +101,7 @@ export default function OrganizerDashboard() {
                   )}
                 </div>
                 <div className={styles.rowActions}>
-                  <Link to={ROUTES.organizerEventEdit(event.id)} className={styles.editBtn}>
+                  <Link to={localePath(ROUTES.organizerEventEdit(event.id))} className={styles.editBtn}>
                     {t('organizer_edit', locale)}
                   </Link>
                   <button

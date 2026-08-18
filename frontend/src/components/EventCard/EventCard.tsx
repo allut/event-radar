@@ -4,6 +4,7 @@ import { CARD_ANIMATION_DELAY_STEP_MS, ROUTES, type Signal } from '../../constan
 import { t } from '../../i18n';
 import { categoryGradient, cx, formatEventTime, formatPrice, padIndex, safeUrl, trackExternalClick } from '../../utils';
 import { useFeedback } from '../../hooks/useFeedback';
+import { useLocalePath } from '../../hooks/useLocalePath';
 import FeedbackButtonRow from '../FeedbackButtonRow';
 import styles from './EventCard.module.css';
 
@@ -49,6 +50,7 @@ function EventCard({ event, index, locale, onFeedbackSent, variant = 'standard',
     initialSignal: event.my_signal,
     onChange: onFeedbackSent,
   });
+  const localePath = useLocalePath();
   const isFeatured = variant === 'featured';
 
   const price = formatPrice(event.price_min, event.price_max, event.currency, locale, event.has_free_tier);
@@ -93,7 +95,7 @@ function EventCard({ event, index, locale, onFeedbackSent, variant = 'standard',
           </div>
 
           <h2 className={cx(styles.title, isFeatured && styles.featuredTitle)}>
-            <Link to={ROUTES.eventDetail(event.id)} className={cx(styles.titleLink, styles.stretched)}>
+            <Link to={localePath(ROUTES.eventDetail(event.id))} className={cx(styles.titleLink, styles.stretched)}>
               <span className={cx(styles.titleClamp, isFeatured && styles.featuredTitleClamp)}>
                 {event.title}
               </span>

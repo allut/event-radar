@@ -66,4 +66,14 @@ describe('Footer', () => {
     renderWithProviders(<Footer />);
     expect(screen.getByRole('link', { name: 'Organizer dashboard' })).toHaveAttribute('href', '/organizer/dashboard');
   });
+
+  it('carries the current locale prefix into every link, with no pathPattern (mirrors Footer being mounted outside <Routes> in App.tsx)', () => {
+    renderWithProviders(<Footer />, { route: '/ru/contact' });
+
+    expect(screen.getByRole('link', { name: "What's on Radar" })).toHaveAttribute('href', '/ru');
+    expect(screen.getByRole('link', { name: 'Privacy' })).toHaveAttribute('href', '/ru/privacy');
+    expect(screen.getByRole('link', { name: 'Terms' })).toHaveAttribute('href', '/ru/terms');
+    expect(screen.getByRole('link', { name: 'Contact' })).toHaveAttribute('href', '/ru/contact');
+    expect(screen.getByRole('link', { name: 'For organizers' })).toHaveAttribute('href', '/ru/organizer/login');
+  });
 });

@@ -4,6 +4,7 @@ import { t, ti } from '../../i18n';
 import { safeUrl } from '../../utils';
 import { BRAND_GLYPH, ROUTES, SOCIAL_LINKS, type SocialIcon } from '../../constants';
 import { useLocale } from '../../hooks/useLocale';
+import { useLocalePath } from '../../hooks/useLocalePath';
 import { useOrganizerAuth } from '../../hooks/useOrganizerAuth';
 import styles from './Footer.module.css';
 
@@ -31,12 +32,13 @@ const SOCIAL_ICONS: Record<SocialIcon, ReactNode> = {
 
 export default function Footer() {
   const locale = useLocale();
+  const localePath = useLocalePath();
   const isOrganizer = useOrganizerAuth();
   return (
     <footer className={styles.footer}>
       <div className={styles.inner}>
         <div className={styles.brandRow}>
-          <Link to={ROUTES.home} className={styles.brandLink}>
+          <Link to={localePath(ROUTES.home)} className={styles.brandLink}>
             <span className={styles.radarMark} aria-hidden>{BRAND_GLYPH}</span>
             <span>{t('brand', locale)}</span>
           </Link>
@@ -44,10 +46,10 @@ export default function Footer() {
         </div>
 
         <nav className={styles.links} aria-label={t('footer_nav', locale)}>
-          <Link to={ROUTES.privacy} className={styles.link}>{t('footer_privacy', locale)}</Link>
-          <Link to={ROUTES.terms} className={styles.link}>{t('footer_terms', locale)}</Link>
-          <Link to={ROUTES.contact} className={styles.link}>{t('footer_contact', locale)}</Link>
-          <Link to={isOrganizer ? ROUTES.organizerDashboard : ROUTES.organizerLogin} className={styles.link}>
+          <Link to={localePath(ROUTES.privacy)} className={styles.link}>{t('footer_privacy', locale)}</Link>
+          <Link to={localePath(ROUTES.terms)} className={styles.link}>{t('footer_terms', locale)}</Link>
+          <Link to={localePath(ROUTES.contact)} className={styles.link}>{t('footer_contact', locale)}</Link>
+          <Link to={localePath(isOrganizer ? ROUTES.organizerDashboard : ROUTES.organizerLogin)} className={styles.link}>
             {t(isOrganizer ? 'footer_organizer_dashboard' : 'footer_organizers', locale)}
           </Link>
         </nav>

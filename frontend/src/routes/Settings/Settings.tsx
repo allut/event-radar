@@ -1,9 +1,9 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../../api/client';
 import { getLocale } from '../../lib/auth';
 import { useLocaleMutation } from '../../hooks/useLocaleMutation';
+import { useLocaleNavigate } from '../../hooks/useLocaleNavigate';
 import { useLogout } from '../../hooks/useLogout';
 import { useToast } from '../../hooks/useToast';
 import { useStaticSeoMeta } from '../../hooks/useStaticSeoMeta';
@@ -35,7 +35,7 @@ interface SettingsData {
 }
 
 export default function Settings() {
-  const navigate = useNavigate();
+  const navigate = useLocaleNavigate();
   const queryClient = useQueryClient();
   const handleLogout = useLogout();
 

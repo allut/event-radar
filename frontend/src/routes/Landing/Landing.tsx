@@ -5,6 +5,7 @@ import { API, BRAND_GLYPH, MAGIC_LINK_EXPIRY_MINUTES, OG_FALLBACK_IMAGE_PATH, PE
 import { t, ti, personaName, personaVibe } from '../../i18n';
 import { padIndex, withLocaleQuery } from '../../utils';
 import { useLocaleMutation } from '../../hooks/useLocaleMutation';
+import { useLocalePath } from '../../hooks/useLocalePath';
 import { useMagicLinkRequest } from '../../hooks/useMagicLinkRequest';
 import { useOrganizerAuth } from '../../hooks/useOrganizerAuth';
 import { useSeoMeta } from '../../hooks/useSeoMeta';
@@ -60,7 +61,8 @@ function EmailCapture({ locale }: { locale: string }) {
 }
 
 export default function Landing() {
-  const { locale, handleLocaleChange } = useLocaleMutation({ publicRoute: true });
+  const { locale, handleLocaleChange, isPending: localePending } = useLocaleMutation({ publicRoute: true });
+  const localePath = useLocalePath();
   const isOrganizer = useOrganizerAuth();
   const seoMeta = useSeoMeta({
     title: t('seo_landing_title', locale),
@@ -83,7 +85,7 @@ export default function Landing() {
   return (
     <div className={styles.page}>
       <SeoTags meta={seoMeta} jsonLd={jsonLd} />
-      <TopBar locale={locale} onLocaleChange={handleLocaleChange} authed={false} />
+      <TopBar locale={locale} onLocaleChange={handleLocaleChange} authed={false} localeDisabled={localePending} />
 
       <main>
         <section className={styles.hero}>
@@ -124,7 +126,7 @@ export default function Landing() {
                     <EventCard key={event.id} event={event} index={i} locale={locale} readOnly />
                   ))}
                 </div>
-                <Link to={ROUTES.login} className={styles.showcaseCta}>{t('landing_showcase_cta', locale)}</Link>
+                <Link to={localePath(ROUTES.login)} className={styles.showcaseCta}>{t('landing_showcase_cta', locale)}</Link>
               </>
             )}
           </section>
@@ -153,7 +155,7 @@ export default function Landing() {
             <h2 id="organizer-cta" className={styles.organizerTitle}>{t('landing_organizer_title', locale)}</h2>
             <p className={styles.organizerBody}>{t('landing_organizer_body', locale)}</p>
           </div>
-          <Link to={isOrganizer ? ROUTES.organizerDashboard : ROUTES.organizerLogin} className={styles.organizerCta}>
+          <Link to={localePath(isOrganizer ? ROUTES.organizerDashboard : ROUTES.organizerLogin)} className={styles.organizerCta}>
             {t('landing_organizer_cta', locale)}
           </Link>
         </section>

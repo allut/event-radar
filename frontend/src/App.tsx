@@ -5,8 +5,9 @@ import { Analytics } from '@vercel/analytics/react';
 import { SpeedInsights } from '@vercel/speed-insights/react';
 import { useAuth } from './hooks/useAuth';
 import { useOrganizerAuth } from './hooks/useOrganizerAuth';
+import { useLocalePath } from './hooks/useLocalePath';
 import { QUERY_RETRY, QUERY_STALE_TIME, ROUTES, LOCALE_ET } from './constants';
-import { maskAnalyticsUrl, localizedPath } from './utils';
+import { maskAnalyticsUrl, localizedTo } from './utils';
 import { getStoredLocale } from './lib/auth';
 import ErrorBoundary from './components/ErrorBoundary';
 import Landing from './routes/Landing';
@@ -37,7 +38,8 @@ const queryClient = new QueryClient({
 
 function Protected({ children }: { children: React.ReactNode }) {
   const authed = useAuth();
-  if (!authed) return <Navigate to={ROUTES.login} replace />;
+  const localePath = useLocalePath();
+  if (!authed) return <Navigate to={localePath(ROUTES.login)} replace />;
   return <>{children}</>;
 }
 
@@ -45,7 +47,8 @@ function Protected({ children }: { children: React.ReactNode }) {
 // redirect to /organizer/login) — the two auth tracks never share a guard.
 function OrganizerProtected({ children }: { children: React.ReactNode }) {
   const authed = useOrganizerAuth();
-  if (!authed) return <Navigate to={ROUTES.organizerLogin} replace />;
+  const localePath = useLocalePath();
+  if (!authed) return <Navigate to={localePath(ROUTES.organizerLogin)} replace />;
   return <>{children}</>;
 }
 
@@ -72,7 +75,7 @@ function BareLocaleGate({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   const preferred = getStoredLocale() ?? LOCALE_ET;
   if (preferred !== LOCALE_ET) {
-    return <Navigate to={localizedPath(location.pathname, preferred) + location.search} replace />;
+    return <Navigate to={localizedTo(location.pathname + location.search + location.hash, preferred)} replace />;
   }
   return <>{children}</>;
 }

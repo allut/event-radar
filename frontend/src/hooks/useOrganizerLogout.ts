@@ -1,12 +1,12 @@
 import { useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { organizerApi } from '../api/client';
 import { API, ROUTES } from '../constants';
 import { beginOrganizerLogout, clearOrganizerSignedInHint } from '../lib/organizerAuth';
+import { useLocaleNavigate } from './useLocaleNavigate';
 
 export function useOrganizerLogout(): () => void {
-  const navigate = useNavigate();
+  const navigate = useLocaleNavigate();
   const queryClient = useQueryClient();
   return useCallback(() => {
     beginOrganizerLogout();

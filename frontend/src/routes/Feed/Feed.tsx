@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '../../api/client';
 import { t, ti } from '../../i18n';
 import { useLocaleMutation } from '../../hooks/useLocaleMutation';
+import { useLocalePath } from '../../hooks/useLocalePath';
 import { useLogout } from '../../hooks/useLogout';
 import { useSeoMeta } from '../../hooks/useSeoMeta';
 import EventCard, { type EventData } from '../../components/EventCard';
@@ -22,7 +23,8 @@ interface FeedResponse {
 }
 
 export default function Feed() {
-  const { locale, handleLocaleChange } = useLocaleMutation({ publicRoute: true });
+  const { locale, handleLocaleChange, isPending: localePending } = useLocaleMutation({ publicRoute: true });
+  const localePath = useLocalePath();
   const handleLogout = useLogout();
   const seoMeta = useSeoMeta({ title: titleWithBrand(t('seo_title_feed', locale), locale), locale, path: ROUTES.home });
 
@@ -55,7 +57,7 @@ export default function Feed() {
   return (
     <div className={styles.page}>
       <SeoTags meta={seoMeta} />
-      <TopBar locale={locale} onLocaleChange={handleLocaleChange} onLogout={handleLogout} />
+      <TopBar locale={locale} onLocaleChange={handleLocaleChange} onLogout={handleLogout} localeDisabled={localePending} />
 
       <main className={styles.main}>
         <header className={styles.masthead}>
@@ -80,7 +82,7 @@ export default function Feed() {
           </p>
         )}
 
-        <Link to={ROUTES.explore} className={styles.promo}>
+        <Link to={localePath(ROUTES.explore)} className={styles.promo}>
           <div className={styles.promoText}>
             <h2 className={styles.promoTitle}>{t('feed_promo_title', locale)}</h2>
             <p className={styles.promoMsg}>{t('feed_promo_msg', locale)}</p>

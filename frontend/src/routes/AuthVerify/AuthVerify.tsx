@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { api, ApiError } from '../../api/client';
 import { setSignedInHint, getLocale } from '../../lib/auth';
 import { API, AUTH_REDIRECT_DELAY_MS, ROUTES, UI_STATE, VERIFY_STATE_TO_KIND, type VerifyState } from '../../constants';
 import { t } from '../../i18n';
+import { useLocaleNavigate } from '../../hooks/useLocaleNavigate';
+import { useLocalePath } from '../../hooks/useLocalePath';
 import { useStaticSeoMeta } from '../../hooks/useStaticSeoMeta';
 import AuthCard from '../../components/AuthCard';
 import SeoTags from '../../components/SeoTags';
@@ -17,7 +19,8 @@ export default function AuthVerify() {
   const locale = getLocale();
   const seoMeta = useStaticSeoMeta('seo_title_auth_verify', locale);
   const [searchParams] = useSearchParams();
-  const navigate = useNavigate();
+  const navigate = useLocaleNavigate();
+  const localePath = useLocalePath();
   const token = searchParams.get('token');
   const [state, setState] = useState<VerifyState>(token ? UI_STATE.verifying : UI_STATE.error);
   const [errorMsg, setErrorMsg] = useState(token ? '' : t('no_token', locale));
@@ -32,7 +35,7 @@ export default function AuthVerify() {
     // call — otherwise it persists in browser history (and any history-sync
     // service) for as long as the entry survives, extending its exposure well
     // past the short window a network observer would have.
-    window.history.replaceState({}, '', ROUTES.authVerify);
+    window.history.replaceState({}, '', localePath(ROUTES.authVerify));
 
     async function verify(tok: string) {
       try {
@@ -57,7 +60,7 @@ export default function AuthVerify() {
       }
     }
     void verify(token);
-  }, [navigate, token, locale]);
+  }, [navigate, token, locale, localePath]);
 
   const message =
     state === UI_STATE.verifying ? t('verifying', locale)
@@ -72,7 +75,7 @@ export default function AuthVerify() {
         kind={VERIFY_STATE_TO_KIND[state]}
         message={message}
         action={state === UI_STATE.error && (
-          <Link to={ROUTES.login} className={styles.retry}>{t('request_new_link', locale)}</Link>
+          <Link to={localePath(ROUTES.login)} className={styles.retry}>{t('request_new_link', locale)}</Link>
         )}
       />
     </>
