@@ -43,18 +43,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
 
   let sitemapXml: string;
   let landingHtml: string;
+  let robotsTxt: string;
   try {
-    const [sitemapRes, landingRes] = await Promise.all([
+    const [sitemapRes, landingRes, robotsRes] = await Promise.all([
       fetch(`${PRODUCTION_ORIGIN}${SITEMAP_PATH}`),
       fetch(`${PRODUCTION_ORIGIN}/`),
+      fetch(`${PRODUCTION_ORIGIN}/robots.txt`),
     ]);
-    if (!sitemapRes.ok || !landingRes.ok) {
+    if (!sitemapRes.ok || !landingRes.ok || !robotsRes.ok) {
       res.status(StatusCodes.BAD_GATEWAY).json({
-        error: `failed to fetch production pages: sitemap.xml=${sitemapRes.status}, /=${landingRes.status}`,
+        error: `failed to fetch production pages: sitemap.xml=${sitemapRes.status}, /=${landingRes.status}, robots.txt=${robotsRes.status}`,
       });
       return;
     }
-    [sitemapXml, landingHtml] = await Promise.all([sitemapRes.text(), landingRes.text()]);
+    [sitemapXml, landingHtml, robotsTxt] = await Promise.all([sitemapRes.text(), landingRes.text(), robotsRes.text()]);
   } catch (error) {
     res.status(StatusCodes.BAD_GATEWAY).json({ error: `failed to fetch production pages: ${String(error)}` });
     return;
@@ -79,7 +81,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     }
   }
 
-  const result = evaluateLiveAudit({ sitemapXml, landingHtml, eventHtml });
+  const result = evaluateLiveAudit({ sitemapXml, landingHtml, robotsTxt, eventHtml });
 
   try {
     if (result.ok) {

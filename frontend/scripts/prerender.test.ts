@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { isPreviewBuild, logZeroProgressAbort, main, selectValidationTargets } from './prerender';
+import { buildRobotsTxt, isPreviewBuild, logZeroProgressAbort, main, selectValidationTargets } from './prerender';
 import type { PrerenderTarget } from './prerender';
 import type { RoundMarker } from '../src/lib/prerenderChain';
+import { SITEMAP_PATH } from '../src/constants';
 
 function makeTarget(bare: string): PrerenderTarget {
   return { bare, locale: 'en' };
@@ -131,6 +132,67 @@ describe('isPreviewBuild', () => {
 
   it('is false for local/dev runs where VERCEL_ENV is unset', () => {
     expect(isPreviewBuild({} as NodeJS.ProcessEnv)).toBe(false);
+  });
+});
+
+/** Google's robots.txt matching semantics (`*` wildcard, `$` end-anchor,
+ * longest-match-wins, `Allow` wins ties) — mirrors
+ * src/lib/seoAudit.ts's isPathAllowedByRobots, kept local since that module
+ * pulls in seoValidation.ts which has no place in a scripts/ test. */
+function isAllowed(robotsTxt: string, testPath: string): boolean {
+  const rules: { allow: boolean; regex: RegExp; length: number }[] = [];
+  let inWildcardGroup = false;
+  for (const rawLine of robotsTxt.split('\n')) {
+    const line = rawLine.split('#')[0].trim();
+    if (!line) continue;
+    const [directiveRaw, ...rest] = line.split(':');
+    const directive = directiveRaw.trim().toLowerCase();
+    const value = rest.join(':').trim();
+    if (directive === 'user-agent') {
+      inWildcardGroup = value === '*';
+      continue;
+    }
+    if (!inWildcardGroup || (directive !== 'allow' && directive !== 'disallow')) continue;
+    if (!value) continue;
+    const endAnchored = value.endsWith('$');
+    const body = endAnchored ? value.slice(0, -1) : value;
+    const escaped = body.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*');
+    rules.push({
+      allow: directive === 'allow',
+      regex: new RegExp(`^${escaped}${endAnchored ? '$' : ''}`),
+      length: value.length,
+    });
+  }
+  const matching = rules.filter((rule) => rule.regex.test(testPath));
+  if (matching.length === 0) return true;
+  matching.sort((a, b) => b.length - a.length || (a.allow === b.allow ? 0 : a.allow ? -1 : 1));
+  return matching[0].allow;
+}
+
+describe('buildRobotsTxt', () => {
+  const robotsTxt = buildRobotsTxt();
+
+  it('allows the sitemap, the OG fallback image, and a representative built asset', () => {
+    expect(isAllowed(robotsTxt, SITEMAP_PATH)).toBe(true);
+    expect(isAllowed(robotsTxt, '/og-fallback.png')).toBe(true);
+    expect(isAllowed(robotsTxt, '/assets/index-abc.js')).toBe(true);
+  });
+
+  it('keeps every public route allowed', () => {
+    for (const path of ['/', '/en', '/ru', '/events/1', '/en/events/1', '/ru/events/1']) {
+      expect(isAllowed(robotsTxt, path)).toBe(true);
+    }
+  });
+
+  it('keeps an authenticated route blocked — proves the inverse-allowlist is intact', () => {
+    expect(isAllowed(robotsTxt, '/settings')).toBe(false);
+  });
+
+  it('allows the URL named in its own Sitemap: directive', () => {
+    const sitemapDirective = robotsTxt.split('\n').find((line) => line.startsWith('Sitemap:'));
+    expect(sitemapDirective).toBeDefined();
+    const sitemapUrl = new URL(sitemapDirective!.replace('Sitemap:', '').trim());
+    expect(isAllowed(robotsTxt, sitemapUrl.pathname)).toBe(true);
   });
 });
 

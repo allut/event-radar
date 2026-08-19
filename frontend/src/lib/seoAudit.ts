@@ -1,7 +1,76 @@
 // .js extensions required: this module is also imported (transitively) by
 // api/seo-audit.ts, which Vercel runs as unbundled Node ESM.
-import { LOCALE_ET, MS_PER_HOUR, PRODUCTION_ORIGIN, SEO_AUDIT_STALE_THRESHOLD_HOURS } from '../constants.js';
+import {
+  CRAWLABLE_ASSETS_PATH,
+  LOCALE_ET,
+  MS_PER_HOUR,
+  OG_FALLBACK_IMAGE_PATH,
+  PRODUCTION_ORIGIN,
+  SEO_AUDIT_STALE_THRESHOLD_HOURS,
+  SITEMAP_PATH,
+} from '../constants.js';
 import { parseSnapshotHtml, validateSnapshotStructure } from './seoValidation.js';
+
+/** One `Allow:`/`Disallow:` rule parsed out of a `User-agent: *` group,
+ * carrying its original pattern length for Google's longest-match-wins
+ * tie-break (isPathAllowedByRobots). */
+interface RobotsRule {
+  allow: boolean;
+  regex: RegExp;
+  patternLength: number;
+}
+
+/** Converts one robots.txt pattern (`*` wildcard, optional trailing `$`
+ * end-anchor) into the equivalent prefix-matching RegExp, per Google's
+ * documented robots.txt matching semantics. */
+function robotsPatternToRegex(pattern: string): RegExp {
+  const endAnchored = pattern.endsWith('$');
+  const body = endAnchored ? pattern.slice(0, -1) : pattern;
+  const escaped = body.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*');
+  return new RegExp(`^${escaped}${endAnchored ? '$' : ''}`);
+}
+
+/** Parses the `User-agent: *` group out of a robots.txt body into
+ * Allow/Disallow rules. Other User-agent groups are ignored — Googlebot
+ * (the only crawler this audit cares about) falls back to `*` when no
+ * Googlebot-specific group exists, which is the case for this site's
+ * generated robots.txt (buildRobotsTxt, scripts/prerender.ts). */
+function parseWildcardAgentRules(robotsTxt: string): RobotsRule[] {
+  const rules: RobotsRule[] = [];
+  let inWildcardGroup = false;
+  for (const rawLine of robotsTxt.split('\n')) {
+    const line = rawLine.split('#')[0].trim();
+    if (!line) continue;
+    const [directiveRaw, ...rest] = line.split(':');
+    const directive = directiveRaw.trim().toLowerCase();
+    const value = rest.join(':').trim();
+    if (directive === 'user-agent') {
+      inWildcardGroup = value === '*';
+      continue;
+    }
+    if (!inWildcardGroup) continue;
+    if (directive === 'allow' || directive === 'disallow') {
+      if (!value) continue; // `Disallow:` with an empty value means "allow everything"
+      rules.push({ allow: directive === 'allow', regex: robotsPatternToRegex(value), patternLength: value.length });
+    }
+  }
+  return rules;
+}
+
+/** Google's robots.txt matching semantics (`*` wildcard, `$` end-anchor,
+ * longest-matching-pattern wins, `Allow` wins exact-length ties) — used by
+ * the live audit to catch a robots.txt regression that blocks the sitemap,
+ * the OG fallback image, or the SPA's built assets (the bug this audit
+ * check exists for: robots.txt's `Disallow: /` silently caught
+ * /sitemap.xml, and Google Search Console reported "Couldn't fetch" with
+ * nothing else in the pipeline any wiser). */
+export function isPathAllowedByRobots(robotsTxt: string, path: string): boolean {
+  const rules = parseWildcardAgentRules(robotsTxt);
+  const matching = rules.filter((rule) => rule.regex.test(path));
+  if (matching.length === 0) return true;
+  matching.sort((a, b) => b.patternLength - a.patternLength || (a.allow === b.allow ? 0 : a.allow ? -1 : 1));
+  return matching[0].allow;
+}
 
 export interface LiveAuditResult {
   ok: boolean;
@@ -43,11 +112,22 @@ export function parseSitemapEventUrls(sitemapXml: string): string[] {
 export function evaluateLiveAudit(params: {
   sitemapXml: string;
   landingHtml: string;
+  robotsTxt: string;
   eventHtml?: string;
   now?: Date;
 }): LiveAuditResult {
   const now = params.now ?? new Date();
   const issues: string[] = [];
+
+  if (!isPathAllowedByRobots(params.robotsTxt, SITEMAP_PATH)) {
+    issues.push(`robots.txt blocks ${SITEMAP_PATH} — Google Search Console will report "Couldn't fetch"`);
+  }
+  if (!isPathAllowedByRobots(params.robotsTxt, OG_FALLBACK_IMAGE_PATH)) {
+    issues.push(`robots.txt blocks ${OG_FALLBACK_IMAGE_PATH} — the og:image fallback can't be crawled`);
+  }
+  if (!isPathAllowedByRobots(params.robotsTxt, `${CRAWLABLE_ASSETS_PATH}index.js`)) {
+    issues.push(`robots.txt blocks ${CRAWLABLE_ASSETS_PATH} — Googlebot can't fetch the SPA's built assets`);
+  }
 
   const buildTimestamp = parseSitemapLastmod(params.sitemapXml);
   if (!buildTimestamp) {
