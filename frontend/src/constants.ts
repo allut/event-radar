@@ -111,6 +111,11 @@ export const PRODUCTION_ORIGIN = 'https://whatsonradar.com';
 // Branded 1200×630 fallback OG image (frontend/public/og-fallback.png),
 // served whenever an event has no image_url — same asset for all locales.
 export const OG_FALLBACK_IMAGE_PATH = '/og-fallback.png';
+// Vite's built JS/CSS output dir (must match vite.config.ts's `build.assetsDir`,
+// which is unset there and so defaults to Vite's own 'assets') — robots.txt
+// must explicitly Allow this or Googlebot can't fetch the SPA's own bundle
+// when rendering a route (see buildRobotsTxt in scripts/prerender.ts).
+export const CRAWLABLE_ASSETS_PATH = '/assets/';
 // og:description/meta description target length — Google truncates around
 // ~155–160 chars; truncateForMeta (utils.ts) cuts at a word boundary under this.
 export const SEO_DESCRIPTION_MAX_LENGTH = 157;

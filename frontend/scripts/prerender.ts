@@ -35,9 +35,11 @@ import { preview, type PreviewServer } from 'vite';
 import type { EventData } from '../src/components/EventCard';
 import {
   CANONICAL_LINK_SELECTOR,
+  CRAWLABLE_ASSETS_PATH,
   JSONLD_SCRIPT_SELECTOR,
   LOCALE_URL_PREFIX_CODES,
   LOCALES,
+  OG_FALLBACK_IMAGE_PATH,
   PRERENDER_CHAIN_GITHUB_REPO,
   PRODUCTION_ORIGIN,
   ROUND_STATUS,
@@ -336,12 +338,18 @@ function buildSitemapXml(targets: PrerenderTarget[], buildTimestamp: string): st
 
 /** robots.txt (issue #51) — inverse-allowlist shape (`Disallow: /` first,
  * then explicit `Allow:`s) so a new authenticated route added later is
- * excluded by default, with no robots.txt edit required to keep it that way. */
-function buildRobotsTxt(): string {
+ * excluded by default, with no robots.txt edit required to keep it that way.
+ * Non-route files served straight out of dist/ (the sitemap itself, the OG
+ * fallback image, the SPA's built JS/CSS) fall under that same default-deny
+ * and need their own explicit `Allow:` or Google can't fetch them — this bit
+ * sitemap.xml itself (Google Search Console: "Couldn't fetch") until these
+ * three lines were added. */
+export function buildRobotsTxt(): string {
   const lines = ['User-agent: *', 'Disallow: /', 'Allow: /$', 'Allow: /events/'];
   for (const code of LOCALE_URL_PREFIX_CODES) {
     lines.push(`Allow: /${code}$`, `Allow: /${code}/events/`);
   }
+  lines.push(`Allow: ${SITEMAP_PATH}`, `Allow: ${OG_FALLBACK_IMAGE_PATH}`, `Allow: ${CRAWLABLE_ASSETS_PATH}`);
   lines.push('', `Sitemap: ${PRODUCTION_ORIGIN}${SITEMAP_PATH}`);
   return lines.join('\n') + '\n';
 }
