@@ -6,6 +6,7 @@ import { t } from '../i18n.js';
 import {
   CANONICAL_LINK_SELECTOR,
   EVENT_PRICE_SELECTOR,
+  ICON_LINK_SELECTOR,
   JSONLD_SCRIPT_SELECTOR,
   PRICE_DATA_ATTR,
   ROBOTS_INDEX_FOLLOW,
@@ -51,7 +52,7 @@ export function parseSnapshotHtml(html: string): ParsedSnapshot {
   const title = document.querySelector('title')?.textContent?.trim() ?? null;
   const canonical = document.querySelector(CANONICAL_LINK_SELECTOR)?.getAttribute('href') ?? null;
   const robots = document.querySelector('meta[name="robots"]')?.getAttribute('content') ?? null;
-  const iconHref = document.querySelector('link[rel="icon"]')?.getAttribute('href') ?? null;
+  const iconHref = document.querySelector(ICON_LINK_SELECTOR)?.getAttribute('href') ?? null;
 
   const hreflangs: Record<string, string> = {};
   document.querySelectorAll('link[rel="alternate"][hreflang]').forEach((el) => {

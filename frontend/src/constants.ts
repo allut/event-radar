@@ -130,6 +130,11 @@ export const CRAWLABLE_ICON_PATHS: string[] = [
   '/apple-touch-icon.png',
   '/site.webmanifest',
 ];
+// <link rel> value index.html emits for the site icon, read back by
+// seoValidation.ts's in-build gate as a CSS selector — same
+// selector-from-shared-value pattern as CANONICAL_LINK_SELECTOR below.
+export const ICON_REL = 'icon';
+export const ICON_LINK_SELECTOR = `link[rel="${ICON_REL}"]`;
 // og:description/meta description target length — Google truncates around
 // ~155–160 chars; truncateForMeta (utils.ts) cuts at a word boundary under this.
 export const SEO_DESCRIPTION_MAX_LENGTH = 157;
