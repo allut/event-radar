@@ -21,7 +21,7 @@ import { StatusCodes } from 'http-status-codes';
 // the Vite SPA build or tsx-run scripts elsewhere in this repo), so Node's
 // ESM resolver requires explicit .js extensions on every relative import —
 // including transitively, in every local module this file pulls in.
-import { PRODUCTION_ORIGIN, SEO_AUDIT_TOKEN_HEADER, SITEMAP_PATH } from '../src/constants.js';
+import { FAVICON_ICO_PATH, PRODUCTION_ORIGIN, SEO_AUDIT_TOKEN_HEADER, SITEMAP_PATH } from '../src/constants.js';
 import { evaluateLiveAudit, parseSitemapEventUrls } from '../src/lib/seoAudit.js';
 import { reportAuditFailure, reportAuditRecovery } from '../src/lib/seoAuditIssue.js';
 import { isValidAuditToken } from '../src/lib/seoAuditAuth.js';
@@ -44,19 +44,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   let sitemapXml: string;
   let landingHtml: string;
   let robotsTxt: string;
+  let faviconContentType: string | null;
   try {
-    const [sitemapRes, landingRes, robotsRes] = await Promise.all([
+    const [sitemapRes, landingRes, robotsRes, faviconRes] = await Promise.all([
       fetch(`${PRODUCTION_ORIGIN}${SITEMAP_PATH}`),
       fetch(`${PRODUCTION_ORIGIN}/`),
       fetch(`${PRODUCTION_ORIGIN}/robots.txt`),
+      fetch(`${PRODUCTION_ORIGIN}${FAVICON_ICO_PATH}`),
     ]);
-    if (!sitemapRes.ok || !landingRes.ok || !robotsRes.ok) {
+    if (!sitemapRes.ok || !landingRes.ok || !robotsRes.ok || !faviconRes.ok) {
       res.status(StatusCodes.BAD_GATEWAY).json({
-        error: `failed to fetch production pages: sitemap.xml=${sitemapRes.status}, /=${landingRes.status}, robots.txt=${robotsRes.status}`,
+        error: `failed to fetch production pages: sitemap.xml=${sitemapRes.status}, /=${landingRes.status}, robots.txt=${robotsRes.status}, favicon.ico=${faviconRes.status}`,
       });
       return;
     }
     [sitemapXml, landingHtml, robotsTxt] = await Promise.all([sitemapRes.text(), landingRes.text(), robotsRes.text()]);
+    faviconContentType = faviconRes.headers.get('content-type');
   } catch (error) {
     res.status(StatusCodes.BAD_GATEWAY).json({ error: `failed to fetch production pages: ${String(error)}` });
     return;
@@ -82,6 +85,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   }
 
   const result = evaluateLiveAudit({ sitemapXml, landingHtml, robotsTxt, eventHtml });
+
+  // Catches the app-shell-fallthrough failure mode robots.txt/HTML assertions
+  // can't see: Vercel's SPA catch-all rewrite serves /favicon.ico as a 200
+  // text/html app-shell response whenever no real file exists at that path.
+  if (!faviconContentType || !faviconContentType.startsWith('image/')) {
+    result.issues.push(
+      `favicon.ico content-type is "${faviconContentType ?? 'missing'}", expected an image/* type — Google can't use it as the site icon`,
+    );
+    result.ok = false;
+  }
 
   try {
     if (result.ok) {

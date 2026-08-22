@@ -26,7 +26,7 @@ function renderSnapshotHtml(
   const links = meta.links
     .map((link) => `<link rel="${link.rel}" href="${link.href}"${link.hrefLang ? ` hreflang="${link.hrefLang}"` : ''}>`)
     .join('\n');
-  return `<!doctype html><html lang="${meta.htmlLang}"><head><title>${meta.title}</title>${metaTags}${links}<script type="application/ld+json">${JSON.stringify(jsonLd).replace(/</g, '\\u003c')}</script></head><body>${extraBodyHtml}</body></html>`;
+  return `<!doctype html><html lang="${meta.htmlLang}"><head><title>${meta.title}</title>${metaTags}${links}<link rel="icon" href="/favicon.svg"><script type="application/ld+json">${JSON.stringify(jsonLd).replace(/</g, '\\u003c')}</script></head><body>${extraBodyHtml}</body></html>`;
 }
 
 describe('parseSnapshotHtml', () => {
@@ -167,6 +167,23 @@ describe('validateSnapshotStructure', () => {
     delete parsed.hreflangs.ru;
     const issues = validateSnapshotStructure(parsed, { kind: 'event', locale: 'et', originPrefix: PRODUCTION_ORIGIN });
     expect(issues).toContain('missing hreflang alternate for "ru"');
+  });
+
+  it('catches a missing icon link', () => {
+    const html = validEventHtml().replace('<link rel="icon" href="/favicon.svg">', '');
+    const parsed = parseSnapshotHtml(html);
+    const issues = validateSnapshotStructure(parsed, { kind: 'event', locale: 'et', originPrefix: PRODUCTION_ORIGIN });
+    expect(issues).toContain('icon link is missing');
+  });
+
+  it('catches a data: URI icon href (the exact pre-fix defect)', () => {
+    const html = validEventHtml().replace(
+      '<link rel="icon" href="/favicon.svg">',
+      '<link rel="icon" href="data:image/svg+xml,<svg></svg>">',
+    );
+    const parsed = parseSnapshotHtml(html);
+    const issues = validateSnapshotStructure(parsed, { kind: 'event', locale: 'et', originPrefix: PRODUCTION_ORIGIN });
+    expect(issues.some((i) => i.includes('data: URI'))).toBe(true);
   });
 
   it('catches deliberately malformed JSON-LD injected in a fixture', () => {

@@ -26,6 +26,10 @@ export interface ParsedSnapshot {
   /** hreflang code -> href, from every <link rel="alternate" hreflang> tag. */
   hreflangs: Record<string, string>;
   robots: string | null;
+  /** href of the first <link rel="icon">, or null if none is present — a
+   * `data:` URI here is the exact defect Google's site-icon crawlability
+   * requirement forbids (a crawlable URL is required). */
+  iconHref: string | null;
   /** Parsed contents of every <script type="application/ld+json">; `undefined`
    * entries mark a script whose body failed to JSON.parse. */
   jsonLd: (unknown | undefined)[];
@@ -47,6 +51,7 @@ export function parseSnapshotHtml(html: string): ParsedSnapshot {
   const title = document.querySelector('title')?.textContent?.trim() ?? null;
   const canonical = document.querySelector(CANONICAL_LINK_SELECTOR)?.getAttribute('href') ?? null;
   const robots = document.querySelector('meta[name="robots"]')?.getAttribute('content') ?? null;
+  const iconHref = document.querySelector('link[rel="icon"]')?.getAttribute('href') ?? null;
 
   const hreflangs: Record<string, string> = {};
   document.querySelectorAll('link[rel="alternate"][hreflang]').forEach((el) => {
@@ -76,7 +81,7 @@ export function parseSnapshotHtml(html: string): ParsedSnapshot {
       }
     : null;
 
-  return { title, canonical, hreflangs, robots, jsonLd, price };
+  return { title, canonical, hreflangs, robots, iconHref, jsonLd, price };
 }
 
 function isNonEmptyString(value: unknown): value is string {
@@ -177,6 +182,12 @@ export function validateSnapshotStructure(
 
   if (parsed.robots !== ROBOTS_INDEX_FOLLOW) {
     issues.push(`robots meta is "${parsed.robots ?? 'missing'}", expected "${ROBOTS_INDEX_FOLLOW}"`);
+  }
+
+  if (!parsed.iconHref) {
+    issues.push('icon link is missing');
+  } else if (parsed.iconHref.startsWith('data:')) {
+    issues.push('icon link is a data: URI, not a crawlable URL — Google cannot fetch a site icon from it');
   }
 
   if (parsed.jsonLd.length !== 1) {

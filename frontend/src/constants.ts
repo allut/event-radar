@@ -116,6 +116,20 @@ export const OG_FALLBACK_IMAGE_PATH = '/og-fallback.png';
 // must explicitly Allow this or Googlebot can't fetch the SPA's own bundle
 // when rendering a route (see buildRobotsTxt in scripts/prerender.ts).
 export const CRAWLABLE_ASSETS_PATH = '/assets/';
+// Site icon asset paths (Google Search Console site-icon requirement) — every
+// path Googlebot-Image must be able to fetch, plus favicon.ico which needs
+// its own live-audit content-type check (api/seo-audit.ts) since it's the
+// one that silently 200s as the SPA shell when missing rather than 404ing.
+export const FAVICON_ICO_PATH = '/favicon.ico';
+export const CRAWLABLE_ICON_PATHS: string[] = [
+  FAVICON_ICO_PATH,
+  '/favicon.svg',
+  '/icon-96.png',
+  '/icon-192.png',
+  '/icon-512.png',
+  '/apple-touch-icon.png',
+  '/site.webmanifest',
+];
 // og:description/meta description target length — Google truncates around
 // ~155–160 chars; truncateForMeta (utils.ts) cuts at a word boundary under this.
 export const SEO_DESCRIPTION_MAX_LENGTH = 157;
