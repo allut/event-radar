@@ -8,7 +8,7 @@ afterEach(() => {
 
 describe('githubRequest', () => {
   it('builds the repo-scoped URL and the auth/version/user-agent headers every caller needs', async () => {
-    const fetchMock = vi.fn(async () => ({ ok: true, status: 200 }) as Response);
+    const fetchMock = vi.fn<typeof fetch>(async () => ({ ok: true, status: 200 }) as Response);
     vi.stubGlobal('fetch', fetchMock);
 
     await githubRequest('allut/event-radar', '/issues', 'tok123', 'seo-audit/1.0');
@@ -27,7 +27,7 @@ describe('githubRequest', () => {
   });
 
   it('merges caller-supplied init options and headers without dropping the required ones', async () => {
-    const fetchMock = vi.fn(async () => ({ ok: true, status: 201 }) as Response);
+    const fetchMock = vi.fn<typeof fetch>(async () => ({ ok: true, status: 201 }) as Response);
     vi.stubGlobal('fetch', fetchMock);
 
     await githubRequest('allut/event-radar', '/issues', 'tok123', 'prerender/1.0', {
@@ -51,7 +51,7 @@ describe('githubRequest', () => {
   });
 
   it('lets a caller-supplied header override a default (init headers spread last)', async () => {
-    const fetchMock = vi.fn(async () => ({ ok: true, status: 200 }) as Response);
+    const fetchMock = vi.fn<typeof fetch>(async () => ({ ok: true, status: 200 }) as Response);
     vi.stubGlobal('fetch', fetchMock);
 
     await githubRequest('allut/event-radar', '/issues', 'tok123', 'default-ua/1.0', {
@@ -63,7 +63,7 @@ describe('githubRequest', () => {
   });
 
   it('resolves to the fetch Response so callers can branch on status', async () => {
-    const fetchMock = vi.fn(async () => ({ ok: false, status: 404 }) as Response);
+    const fetchMock = vi.fn<typeof fetch>(async () => ({ ok: false, status: 404 }) as Response);
     vi.stubGlobal('fetch', fetchMock);
 
     const res = await githubRequest('allut/event-radar', '/issues/1', 'tok123', 'ua/1.0');
