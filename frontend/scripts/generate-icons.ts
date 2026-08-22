@@ -30,7 +30,17 @@ const APPLE_TOUCH_ICON_SIZE = 180;
 /** Intermediate raster sizes bundled into favicon.ico (multi-size ICO container). */
 const ICO_SIZES = [16, 32, 48];
 
-async function screenshotSvgAtSize(page: import('playwright').Page, size: number): Promise<Buffer> {
+/** `transparent: true` (the default) drops the page's own white background so
+ * favicon.svg's rounded-rect corners come out alpha-transparent instead of a
+ * baked-in white square — otherwise browser/OS chrome that isn't `--bg` shows
+ * a visible square behind the rounded tile. apple-touch-icon is the one
+ * caller that passes `false`: iOS applies its own rounding/mask and expects a
+ * full-bleed, opaque source (see APPLE_TOUCH_ICON_SIZE's comment). */
+async function screenshotSvgAtSize(
+  page: import('playwright').Page,
+  size: number,
+  transparent = true,
+): Promise<Buffer> {
   await page.setViewportSize({ width: size, height: size });
   const svgMarkup = readFileSync(SVG_PATH, 'utf-8');
   await page.setContent(
@@ -43,7 +53,7 @@ async function screenshotSvgAtSize(page: import('playwright').Page, size: number
       svg.setAttribute('height', String(document.body.clientHeight));
     }
   });
-  return page.screenshot({ omitBackground: false });
+  return page.screenshot({ omitBackground: transparent });
 }
 
 /** Builds a multi-size ICO container (ICONDIR + ICONDIRENTRY[] + PNG payloads),
@@ -86,7 +96,7 @@ async function main(): Promise<void> {
       console.log(`wrote ${name} (${size}x${size})`);
     }
 
-    const appleTouchIcon = await screenshotSvgAtSize(page, APPLE_TOUCH_ICON_SIZE);
+    const appleTouchIcon = await screenshotSvgAtSize(page, APPLE_TOUCH_ICON_SIZE, false);
     writeFileSync(path.join(PUBLIC_DIR, 'apple-touch-icon.png'), appleTouchIcon);
     console.log(`wrote apple-touch-icon.png (${APPLE_TOUCH_ICON_SIZE}x${APPLE_TOUCH_ICON_SIZE})`);
 
