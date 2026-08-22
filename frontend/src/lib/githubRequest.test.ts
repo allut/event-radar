@@ -51,7 +51,7 @@ describe('githubRequest', () => {
   });
 
   it('lets a caller-supplied header override a default (init headers spread last)', async () => {
-    const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) => ({ ok: true, status: 200 }) as Response);
+    const fetchMock = vi.fn(async () => ({ ok: true, status: 200 }) as Response);
     vi.stubGlobal('fetch', fetchMock);
 
     await githubRequest('allut/event-radar', '/issues', 'tok123', 'default-ua/1.0', {
