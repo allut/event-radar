@@ -2,6 +2,7 @@
 // api/seo-audit.ts, which Vercel runs as unbundled Node ESM.
 import {
   CRAWLABLE_ASSETS_PATH,
+  CRAWLABLE_ICON_PATHS,
   LOCALE_ET,
   MS_PER_HOUR,
   OG_FALLBACK_IMAGE_PATH,
@@ -127,6 +128,11 @@ export function evaluateLiveAudit(params: {
   }
   if (!isPathAllowedByRobots(params.robotsTxt, `${CRAWLABLE_ASSETS_PATH}index.js`)) {
     issues.push(`robots.txt blocks ${CRAWLABLE_ASSETS_PATH} — Googlebot can't fetch the SPA's built assets`);
+  }
+  for (const iconPath of CRAWLABLE_ICON_PATHS) {
+    if (!isPathAllowedByRobots(params.robotsTxt, iconPath)) {
+      issues.push(`robots.txt blocks ${iconPath} — Google can't crawl the site icon`);
+    }
   }
 
   const buildTimestamp = parseSitemapLastmod(params.sitemapXml);

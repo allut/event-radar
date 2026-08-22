@@ -116,6 +116,25 @@ export const OG_FALLBACK_IMAGE_PATH = '/og-fallback.png';
 // must explicitly Allow this or Googlebot can't fetch the SPA's own bundle
 // when rendering a route (see buildRobotsTxt in scripts/prerender.ts).
 export const CRAWLABLE_ASSETS_PATH = '/assets/';
+// Site icon asset paths (Google Search Console site-icon requirement) — every
+// path Googlebot-Image must be able to fetch, plus favicon.ico which needs
+// its own live-audit content-type check (api/seo-audit.ts) since it's the
+// one that silently 200s as the SPA shell when missing rather than 404ing.
+export const FAVICON_ICO_PATH = '/favicon.ico';
+export const CRAWLABLE_ICON_PATHS: string[] = [
+  FAVICON_ICO_PATH,
+  '/favicon.svg',
+  '/icon-96.png',
+  '/icon-192.png',
+  '/icon-512.png',
+  '/apple-touch-icon.png',
+  '/site.webmanifest',
+];
+// <link rel> value index.html emits for the site icon, read back by
+// seoValidation.ts's in-build gate as a CSS selector — same
+// selector-from-shared-value pattern as CANONICAL_LINK_SELECTOR below.
+export const ICON_REL = 'icon';
+export const ICON_LINK_SELECTOR = `link[rel="${ICON_REL}"]`;
 // og:description/meta description target length — Google truncates around
 // ~155–160 chars; truncateForMeta (utils.ts) cuts at a word boundary under this.
 export const SEO_DESCRIPTION_MAX_LENGTH = 157;
@@ -228,6 +247,10 @@ export const ANALYTICS_EVENT_PATH_RE = new RegExp(`^${_LOCALE_PREFIX_RE_SRC}/eve
 // Groups every organizer edit-form URL under one analytics row, mirroring
 // ANALYTICS_EVENT_PATH_RE above — same rationale, new dynamic route.
 export const ANALYTICS_ORGANIZER_EDIT_PATH_RE = new RegExp(`^${_LOCALE_PREFIX_RE_SRC}/organizer/events/\\d+/edit$`);
+
+// GA4 loader src — googletagmanager.com only, matching the CSP script-src
+// widened for it (frontend/vercel.json, see docs/security.md).
+export const GTAG_SCRIPT_SRC = 'https://www.googletagmanager.com/gtag/js';
 
 // ─── Events / feedback ───────────────────────────────────────────────────────
 export type Signal = 'like' | 'dislike' | 'bookmark';

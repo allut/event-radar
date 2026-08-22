@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildRobotsTxt, isPreviewBuild, logZeroProgressAbort, main, selectValidationTargets } from './prerender';
 import type { PrerenderTarget } from './prerender';
 import type { RoundMarker } from '../src/lib/prerenderChain';
-import { SITEMAP_PATH } from '../src/constants';
+import { CRAWLABLE_ICON_PATHS, SITEMAP_PATH } from '../src/constants';
 
 function makeTarget(bare: string): PrerenderTarget {
   return { bare, locale: 'en' };
@@ -176,6 +176,12 @@ describe('buildRobotsTxt', () => {
     expect(isAllowed(robotsTxt, SITEMAP_PATH)).toBe(true);
     expect(isAllowed(robotsTxt, '/og-fallback.png')).toBe(true);
     expect(isAllowed(robotsTxt, '/assets/index-abc.js')).toBe(true);
+  });
+
+  it('allows every crawlable site icon path', () => {
+    for (const iconPath of CRAWLABLE_ICON_PATHS) {
+      expect(isAllowed(robotsTxt, iconPath)).toBe(true);
+    }
   });
 
   it('keeps every public route allowed', () => {

@@ -70,7 +70,7 @@ const doc: LegalDoc = {
         {
           kind: 'p',
           content: [
-            'Kasutame üht rangelt vajalikku küpsist: allkirjastatud, httpOnly sessiooniküpsist, mis hoiab sind sisse logituna. Sellel pole reklaami- ega jälgimiseesmärki ja lehel töötavad skriptid ei saa seda lugeda. Kuna see on teenuse toimimiseks rangelt vajalik, ei ole küpsiste nõusolekuriba vaja. Sinu keelevalik ja tõeväärtuslipp "oled sisse logitud", mis ei sisalda mandaati, salvestatakse sinu brauseri kohalikku salvestusruumi. Meie kasutus- ja jõudlusanalüütika (Vercel Web Analytics ja Speed Insights) on küpsisevaba ja koondatud; lehe URL-id maskeeritakse enne analüütikapakkujani jõudmist, nii et ühtki sündmuse tunnust ega sessiooni mandaati ei saadeta kunagi.',
+            'Kasutame üht rangelt vajalikku küpsist: allkirjastatud, httpOnly sessiooniküpsist, mis hoiab sind sisse logituna. Sellel pole reklaami- ega jälgimiseesmärki ja lehel töötavad skriptid ei saa seda lugeda. Kuna see on teenuse toimimiseks rangelt vajalik, ei ole küpsiste nõusolekuriba vaja. Sinu keelevalik ja tõeväärtuslipp "oled sisse logitud", mis ei sisalda mandaati, salvestatakse sinu brauseri kohalikku salvestusruumi. Meie kasutus- ja jõudlusanalüütika (Vercel Web Analytics, Speed Insights ja Google Analytics) on küpsisevaba ja koondatud; lehe URL-id maskeeritakse enne mis tahes analüütikapakkujani jõudmist, nii et ühtki sündmuse tunnust ega sessiooni mandaati ei saadeta kunagi, ning Google Analytics on seadistatud nii, et see ei pane kunagi püsivat identifitseerimisküpsist.',
           ],
         },
       ],
@@ -89,7 +89,8 @@ const doc: LegalDoc = {
           items: [
             ['Neon — andmebaasi majutus (ELi piirkond, Frankfurt, Saksamaa).'],
             ['Render — taustarakenduse majutus.'],
-            ['Vercel — esiliidese majutus ja ülalnimetatud küpsisevaba analüütika.'],
+            ['Vercel — esiliidese majutus ja ülalnimetatud küpsisevaba Vercel analüütika.'],
+            ['Google — ülalnimetatud küpsisevaba Google Analytics.'],
             ['Resend — sisselogimise ja kokkuvõtte e-kirjade edastamine.'],
           ],
         },

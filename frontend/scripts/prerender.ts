@@ -36,6 +36,7 @@ import type { EventData } from '../src/components/EventCard';
 import {
   CANONICAL_LINK_SELECTOR,
   CRAWLABLE_ASSETS_PATH,
+  CRAWLABLE_ICON_PATHS,
   JSONLD_SCRIPT_SELECTOR,
   LOCALE_URL_PREFIX_CODES,
   LOCALES,
@@ -350,6 +351,7 @@ export function buildRobotsTxt(): string {
     lines.push(`Allow: /${code}$`, `Allow: /${code}/events/`);
   }
   lines.push(`Allow: ${SITEMAP_PATH}`, `Allow: ${OG_FALLBACK_IMAGE_PATH}`, `Allow: ${CRAWLABLE_ASSETS_PATH}`);
+  for (const iconPath of CRAWLABLE_ICON_PATHS) lines.push(`Allow: ${iconPath}`);
   lines.push('', `Sitemap: ${PRODUCTION_ORIGIN}${SITEMAP_PATH}`);
   return lines.join('\n') + '\n';
 }
