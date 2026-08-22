@@ -70,7 +70,7 @@ const doc: LegalDoc = {
         {
           kind: 'p',
           content: [
-            'We use one strictly-necessary cookie: a signed, httpOnly session cookie that keeps you signed in. It carries no advertising or tracking purpose and cannot be read by scripts running on the page. Because it is strictly necessary for the Service to function, no cookie-consent banner is required. Your language choice, and a boolean "you’re signed in" flag that carries no credential, are stored in your browser’s local storage. Our usage and performance analytics (Vercel Web Analytics and Speed Insights) are cookieless and aggregated; page URLs are masked before they reach the analytics provider, so no event identifier or session credential is ever sent.',
+            'We use one strictly-necessary cookie: a signed, httpOnly session cookie that keeps you signed in. It carries no advertising or tracking purpose and cannot be read by scripts running on the page. Because it is strictly necessary for the Service to function, no cookie-consent banner is required. Your language choice, and a boolean "you’re signed in" flag that carries no credential, are stored in your browser’s local storage. Our usage and performance analytics (Vercel Web Analytics, Speed Insights, and Google Analytics) are cookieless and aggregated; page URLs are masked before they reach any analytics provider, so no event identifier or session credential is ever sent, and Google Analytics is configured to never set a persistent identifier cookie.',
           ],
         },
       ],
@@ -89,7 +89,8 @@ const doc: LegalDoc = {
           items: [
             ['Neon — database hosting (EU region, Frankfurt, Germany).'],
             ['Render — backend application hosting.'],
-            ['Vercel — frontend hosting and the cookieless analytics above.'],
+            ['Vercel — frontend hosting and the cookieless Vercel analytics above.'],
+            ['Google — the cookieless Google Analytics above.'],
             ['Resend — delivery of sign-in and digest emails.'],
           ],
         },

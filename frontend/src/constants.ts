@@ -229,6 +229,10 @@ export const ANALYTICS_EVENT_PATH_RE = new RegExp(`^${_LOCALE_PREFIX_RE_SRC}/eve
 // ANALYTICS_EVENT_PATH_RE above — same rationale, new dynamic route.
 export const ANALYTICS_ORGANIZER_EDIT_PATH_RE = new RegExp(`^${_LOCALE_PREFIX_RE_SRC}/organizer/events/\\d+/edit$`);
 
+// GA4 loader src — googletagmanager.com only, matching the CSP script-src
+// widened for it (frontend/vercel.json, see docs/security.md).
+export const GTAG_SCRIPT_SRC = 'https://www.googletagmanager.com/gtag/js';
+
 // ─── Events / feedback ───────────────────────────────────────────────────────
 export type Signal = 'like' | 'dislike' | 'bookmark';
 
