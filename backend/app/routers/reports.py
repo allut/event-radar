@@ -11,7 +11,7 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -26,6 +26,7 @@ from app.constants import (
     REPORT_STATUS_OPEN,
 )
 from app.db import get_db
+from app.email.report_notify import send_report_notification
 from app.models.models import Event, EventReport, User
 from app.rate_limit import limiter
 from app.routers.auth import get_current_user
@@ -75,6 +76,20 @@ async def submit_report(
             status_code=status.HTTP_404_NOT_FOUND, detail=ERROR_EVENT_NOT_FOUND
         )
 
+    # Snapshot the open-report count *before* the upsert — the gate for the
+    # first-open-report notification. Counting after the upsert can't tell a
+    # genuine 0-to-1 transition apart from the same user re-submitting an
+    # already-open report (the upsert unconditionally sets status=open, so a
+    # post-commit COUNT would read 1 both times and re-notify on every edit).
+    pre_upsert_open_count = await db.scalar(
+        select(func.count())
+        .select_from(EventReport)
+        .where(
+            EventReport.event_id == body.event_id,
+            EventReport.status == REPORT_STATUS_OPEN,
+        )
+    )
+
     # Upsert against the (user_id, event_id) unique index. Re-reporting an
     # already-open row merges the latest reason/detail into it rather than
     # creating a duplicate; re-reporting a resolved row reopens it — both
@@ -102,6 +117,25 @@ async def submit_report(
     )
     await db.execute(stmt)
     await db.commit()
+
+    # Fires only when this call is the genuine zero-to-one transition —
+    # covers both a brand-new report and one that reopens a previously
+    # fully-resolved event, but not a same-user edit of an already-open
+    # report (pre_upsert_open_count would already be >= 1 in that case).
+    if pre_upsert_open_count == 0:
+        try:
+            await send_report_notification(
+                event,
+                body.reason,
+                detail,
+                body.is_illegal_allegation,
+                1,
+                current_user.email,
+            )
+        except Exception:
+            log.exception(
+                "Failed to send report notification for event_id=%s", body.event_id
+            )
 
     log.info(
         "report submitted: event_id=%s illegal=%s",

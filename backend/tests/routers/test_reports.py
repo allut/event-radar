@@ -1,5 +1,6 @@
 """Tests for POST /reports."""
 import http
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi import HTTPException
@@ -191,3 +192,101 @@ class TestSubmitReport:
             )
         assert exc_info.value.status_code == http.HTTPStatus.NOT_FOUND
         mock_db.execute.assert_not_called()
+
+
+class TestFirstReportNotification:
+    @pytest.mark.asyncio
+    async def test_first_open_report_sends_notification(
+        self, mock_db, make_user, make_event, make_request
+    ):
+        from app.routers.reports import ReportBody, submit_report
+
+        event = make_event(10)
+        mock_db.scalar.side_effect = [event, 0]
+        user = make_user()
+
+        with patch(
+            "app.routers.reports.send_report_notification", new=AsyncMock()
+        ) as mock_send:
+            await submit_report(
+                body=ReportBody(event_id=10, reason="spam_or_scam"),
+                request=make_request(method="POST", path="/reports"),
+                current_user=user,
+                db=mock_db,
+            )
+
+        mock_send.assert_awaited_once_with(
+            event, "spam_or_scam", None, False, 1, user.email
+        )
+
+    @pytest.mark.asyncio
+    async def test_subsequent_open_report_stays_silent(
+        self, mock_db, make_user, make_event, make_request
+    ):
+        """A second report on an event that already has an open report must
+        not re-notify — only the zero-to-one transition fires."""
+        from app.routers.reports import ReportBody, submit_report
+
+        mock_db.scalar.side_effect = [make_event(10), 1]
+
+        with patch(
+            "app.routers.reports.send_report_notification", new=AsyncMock()
+        ) as mock_send:
+            await submit_report(
+                body=ReportBody(event_id=10, reason="spam_or_scam"),
+                request=make_request(method="POST", path="/reports"),
+                current_user=make_user(),
+                db=mock_db,
+            )
+
+        mock_send.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_editing_own_already_open_report_stays_silent(
+        self, mock_db, make_user, make_event, make_request
+    ):
+        """Regression: a user editing their own already-open report (e.g. to
+        fix a typo in `detail`) must not re-fire the notification — the
+        upsert unconditionally sets status=open, so the gate must be read
+        *before* the upsert, not derived from the post-commit open count."""
+        from app.routers.reports import ReportBody, submit_report
+
+        # pre_upsert_open_count == 1: this user's own row was already open.
+        mock_db.scalar.side_effect = [make_event(10), 1]
+
+        with patch(
+            "app.routers.reports.send_report_notification", new=AsyncMock()
+        ) as mock_send:
+            await submit_report(
+                body=ReportBody(
+                    event_id=10, reason="spam_or_scam", detail="typo fix"
+                ),
+                request=make_request(method="POST", path="/reports"),
+                current_user=make_user(),
+                db=mock_db,
+            )
+
+        mock_send.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_notification_failure_is_swallowed(
+        self, mock_db, make_user, make_event, make_request
+    ):
+        """Send failures must not break the request — event_reports remains
+        the durable record regardless of delivery."""
+        from app.routers.reports import ReportBody, submit_report
+
+        mock_db.scalar.side_effect = [make_event(10), 0]
+
+        with patch(
+            "app.routers.reports.send_report_notification",
+            new=AsyncMock(side_effect=RuntimeError("boom")),
+        ):
+            result = await submit_report(
+                body=ReportBody(event_id=10, reason="spam_or_scam"),
+                request=make_request(method="POST", path="/reports"),
+                current_user=make_user(),
+                db=mock_db,
+            )
+
+        assert result == {"ok": True}
