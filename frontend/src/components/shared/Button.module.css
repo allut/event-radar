@@ -3,7 +3,7 @@
   -webkit-appearance: none;
   background: var(--accent);
   color: var(--on-accent);
-  border: none;
+  border: 1px solid transparent;
   border-radius: var(--radius);
   font-weight: var(--fw-semibold);
   letter-spacing: var(--tracking-snug);
