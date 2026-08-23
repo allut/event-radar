@@ -188,22 +188,27 @@ async def test_list_reports_excludes_cancelled():
 
 @pytest.mark.asyncio
 async def test_resolve_reports_closes_open_reports_no_event_mutation(
-    make_event, make_report
+    make_event, make_report, make_user
 ):
     app = _build_app()
     event = make_event(event_id=42, status="published")
     report = make_report(report_id=1, event_id=42, status="open")
+    reporter = make_user(user_id=report.user_id)
 
     db = AsyncMock()
     db.get = AsyncMock(return_value=event)
     db.execute = AsyncMock(
         return_value=MagicMock(scalars=lambda: _scalars_returning([report]))
     )
+    db.scalars = AsyncMock(return_value=_scalars_returning([reporter]))
     db.commit = AsyncMock()
 
     with (
         patch("app.routers.admin.settings") as mock_settings,
         patch("app.routers.admin.AsyncSessionLocal", return_value=_make_db_ctx(db)),
+        patch(
+            "app.routers.utils.send_report_outcome_email", new=AsyncMock()
+        ) as mock_send,
     ):
         mock_settings.ADMIN_PASSWORD = ""
         mock_settings.APP_ENV = APP_ENV_DEVELOPMENT
@@ -223,6 +228,9 @@ async def test_resolve_reports_closes_open_reports_no_event_mutation(
     assert report.resolution_note == "Looked into it, event is fine."
     assert report.resolved_at is not None
     assert event.status == "published"  # resolve never mutates the event
+    mock_send.assert_awaited_once_with(
+        reporter.email, event, "Looked into it, event is fine.", reporter.locale
+    )
 
 
 @pytest.mark.asyncio
@@ -283,21 +291,26 @@ async def test_resolve_reports_event_not_found():
 
 
 @pytest.mark.asyncio
-async def test_takedown_cancels_event_and_resolves_reports(make_event, make_report):
+async def test_takedown_cancels_event_and_resolves_reports(
+    make_event, make_report, make_user
+):
     app = _build_app()
     event = make_event(event_id=42, status="published")
     report = make_report(report_id=1, event_id=42, status="open")
+    reporter = make_user(user_id=report.user_id)
 
     db = AsyncMock()
     db.get = AsyncMock(return_value=event)
     db.execute = AsyncMock(
         return_value=MagicMock(scalars=lambda: _scalars_returning([report]))
     )
+    db.scalars = AsyncMock(return_value=_scalars_returning([reporter]))
     db.commit = AsyncMock()
 
     with (
         patch("app.routers.admin.settings") as mock_settings,
         patch("app.routers.admin.AsyncSessionLocal", return_value=_make_db_ctx(db)),
+        patch("app.routers.utils.send_report_outcome_email", new=AsyncMock()),
     ):
         mock_settings.ADMIN_PASSWORD = ""
         mock_settings.APP_ENV = APP_ENV_DEVELOPMENT

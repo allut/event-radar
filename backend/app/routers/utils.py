@@ -23,6 +23,7 @@ from app.constants import (
     ERROR_INVALID_REPORT_REASON,
     EVENT_STATUS_CANCELLED,
     EVENT_STATUS_PUBLISHED,
+    LOG_EVENT_EMAIL_SEND_FAILED,
     MASK_DB_URL_PASSWORD_RE,
     MAGIC_LINK_RESEND_COOLDOWN_SECONDS,
     PREFERENCE_SIGNALS,
@@ -37,6 +38,7 @@ from app.constants import (
     VALID_REPORT_REASONS,
 )
 from app.db import AsyncSessionLocal
+from app.email.report_reporter import send_report_outcome_email
 from app.models.models import (
     Event,
     EventClassification,
@@ -534,14 +536,16 @@ async def load_user_reported_events(
 
 
 async def resolve_open_reports(
-    db: AsyncSession, event_id: int, resolution_note: str
+    db: AsyncSession, event: Event, resolution_note: str
 ) -> list[EventReport]:
-    """Close every REPORT_STATUS_OPEN row on ``event_id`` with
+    """Close every REPORT_STATUS_OPEN row on ``event`` with
     ``resolution_note``, stamping ``resolved_at``. Shared by
     POST /admin/reports/{event_id}/resolve, .../takedown, and every path that
     cancels an event (admin retract, organizer retract, organizer
-    self-delete) — see issue #125. Caller commits; does not itself send the
-    reporter-outcome email (issue #127 wires that in on top of this helper).
+    self-delete) — see issue #125. Caller commits, then calls
+    ``send_report_resolution_emails`` (issue #127) — deliberately NOT done
+    here, since sending before the caller's commit could notify a reporter
+    of a "resolved" status that a subsequent commit failure then rolls back.
 
     A single UPDATE...RETURNING (not a SELECT followed by in-Python mutation)
     so a report reopened concurrently (e.g. a fresh POST /reports upsert
@@ -552,7 +556,7 @@ async def resolve_open_reports(
     stmt = (
         update(EventReport)
         .where(
-            EventReport.event_id == event_id,
+            EventReport.event_id == event.id,
             EventReport.status == REPORT_STATUS_OPEN,
         )
         .values(
@@ -574,6 +578,38 @@ async def resolve_open_reports(
     return reports
 
 
+async def send_report_resolution_emails(
+    db: AsyncSession, event: Event, reports: list[EventReport], resolution_note: str
+) -> None:
+    """Send one reporter-outcome email per row in ``reports`` (the list
+    ``resolve_open_reports``/``cancel_event_and_resolve_reports`` returned).
+    Call this AFTER the caller's ``db.commit()`` — see issue #127 and
+    ``resolve_open_reports``'s docstring for why the ordering matters. A
+    per-report send failure is swallowed and logged; the ``resolved`` status
+    transition (already committed) is the durable record."""
+    if not reports:
+        return
+    user_ids = {report.user_id for report in reports}
+    users = (await db.scalars(select(User).where(User.id.in_(user_ids)))).all()
+    users_by_id = {u.id: u for u in users}
+    for report in reports:
+        reporter = users_by_id.get(report.user_id)
+        if reporter is None:
+            continue
+        try:
+            await send_report_outcome_email(
+                reporter.email, event, resolution_note, reporter.locale
+            )
+        except Exception:
+            log.error(
+                "Failed to send report outcome email (report_id=%s, event_id=%s)",
+                report.id,
+                event.id,
+                exc_info=True,
+                extra={"event": LOG_EVENT_EMAIL_SEND_FAILED},
+            )
+
+
 async def cancel_event_and_resolve_reports(
     db: AsyncSession, event: Event, cancellation_reason: str, resolution_note: str
 ) -> list[EventReport]:
@@ -585,7 +621,7 @@ async def cancel_event_and_resolve_reports(
     """
     event.status = EVENT_STATUS_CANCELLED
     event.cancellation_reason = cancellation_reason
-    return await resolve_open_reports(db, event.id, resolution_note)
+    return await resolve_open_reports(db, event, resolution_note)
 
 
 def validate_report_reason(reason: str) -> None:

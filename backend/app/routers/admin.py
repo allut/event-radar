@@ -69,6 +69,7 @@ from app.routers.utils import (
     run_admin_job,
     run_in_session,
     select_events_with_classification,
+    send_report_resolution_emails,
     serialize_event,
     validate_report_reason,
 )
@@ -378,13 +379,16 @@ async def admin_retract_submission(event_id: int, request: Request) -> dict:
         async with AsyncSessionLocal() as db:
             event = await _submission_or_404(db, event_id)
             event.needs_review = False
-            await cancel_event_and_resolve_reports(
+            resolved = await cancel_event_and_resolve_reports(
                 db,
                 event,
                 EVENT_CANCELLATION_REASON_ADMIN_RETRACT,
                 REPORT_AUTO_RESOLVE_NOTE,
             )
             await db.commit()
+            await send_report_resolution_emails(
+                db, event, resolved, REPORT_AUTO_RESOLVE_NOTE
+            )
             return {"id": event.id, "status": event.status}
 
     return await run_admin_job("Retract submission", _run())
@@ -591,8 +595,9 @@ async def admin_resolve_reports(
     async def _run() -> dict:
         async with AsyncSessionLocal() as db:
             event = await _event_or_404(db, event_id)
-            resolved = await resolve_open_reports(db, event.id, note)
+            resolved = await resolve_open_reports(db, event, note)
             await db.commit()
+            await send_report_resolution_emails(db, event, resolved, note)
             return {"event_id": event.id, "resolved_count": len(resolved)}
 
     return await run_admin_job("Resolve reports", _run())
@@ -617,6 +622,7 @@ async def admin_takedown_reported_event(
                 db, event, EVENT_CANCELLATION_REASON_REPORT_TAKEDOWN, note
             )
             await db.commit()
+            await send_report_resolution_emails(db, event, resolved, note)
             return {
                 "event_id": event.id,
                 "status": event.status,

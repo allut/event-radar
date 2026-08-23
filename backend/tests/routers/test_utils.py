@@ -15,6 +15,8 @@ from app.routers.utils import (
     normalized_title,
     require_configured_secret,
     resolve_locale_param,
+    resolve_open_reports,
+    send_report_resolution_emails,
     serialize_event,
 )
 
@@ -217,6 +219,103 @@ class TestLoadUserReportedEvents:
 
         result = await load_user_reported_events(mock_db, user_id=1, event_ids=[10, 20])
         assert result == {10}
+
+
+class TestResolveOpenReports:
+    """resolve_open_reports() only mutates EventReport rows — it must not
+    itself send any email (issue #127's send_report_resolution_emails is a
+    separate, explicitly post-commit step; see its own tests below)."""
+
+    @pytest.mark.asyncio
+    async def test_does_not_send_email(self, mock_db, make_event, make_report):
+        from unittest.mock import AsyncMock, patch
+
+        event = make_event(42)
+        report = make_report(report_id=1, user_id=1, event_id=42, status="open")
+        mock_db.execute.return_value.scalars.return_value.all.return_value = [report]
+
+        with patch(
+            "app.routers.utils.send_report_outcome_email", new=AsyncMock()
+        ) as mock_send:
+            resolved = await resolve_open_reports(mock_db, event, "Reviewed.")
+
+        assert len(resolved) == 1
+        mock_send.assert_not_awaited()
+
+
+class TestSendReportResolutionEmails:
+    """send_report_resolution_emails() fires one reporter-outcome email per
+    resolved report (issue #127) — fan-out to multiple reporters, and a
+    per-report swallow-and-log on send failure so one bad address can't
+    block the rest. Callers invoke this AFTER their own db.commit()."""
+
+    @pytest.mark.asyncio
+    async def test_fans_out_one_email_per_reporter(
+        self, mock_db, make_event, make_report, make_user
+    ):
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        event = make_event(42)
+        report_a = make_report(report_id=1, user_id=1, event_id=42, status="open")
+        report_b = make_report(report_id=2, user_id=2, event_id=42, status="open")
+        report_a.status = report_b.status = "resolved"
+        user_a = make_user(user_id=1)
+        user_b = make_user(user_id=2)
+        user_b.email = "other@example.com"
+
+        mock_db.scalars.return_value = MagicMock(
+            all=MagicMock(return_value=[user_a, user_b])
+        )
+
+        with patch(
+            "app.routers.utils.send_report_outcome_email", new=AsyncMock()
+        ) as mock_send:
+            await send_report_resolution_emails(
+                mock_db, event, [report_a, report_b], "Reviewed."
+            )
+
+        assert mock_send.await_count == 2
+        sent_to = {call.args[0] for call in mock_send.await_args_list}
+        assert sent_to == {user_a.email, "other@example.com"}
+
+    @pytest.mark.asyncio
+    async def test_no_reports_short_circuits(self, mock_db, make_event):
+        from unittest.mock import AsyncMock, patch
+
+        with patch(
+            "app.routers.utils.send_report_outcome_email", new=AsyncMock()
+        ) as mock_send:
+            await send_report_resolution_emails(mock_db, make_event(42), [], "note")
+
+        mock_send.assert_not_awaited()
+        mock_db.scalars.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_send_failure_is_swallowed_and_logged(
+        self, mock_db, make_event, make_report, make_user, caplog
+    ):
+        import logging
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        event = make_event(42)
+        report = make_report(report_id=1, user_id=1, event_id=42, status="resolved")
+        user = make_user(user_id=1)
+
+        mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=[user]))
+
+        with (
+            patch(
+                "app.routers.utils.send_report_outcome_email",
+                new=AsyncMock(side_effect=RuntimeError("boom")),
+            ),
+            caplog.at_level(logging.ERROR),
+        ):
+            await send_report_resolution_emails(mock_db, event, [report], "Reviewed.")
+
+        assert any(
+            "Failed to send report outcome email" in r.getMessage()
+            for r in caplog.records
+        )
 
 
 class TestSerializeEventReportedField:

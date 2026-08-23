@@ -167,7 +167,9 @@ async def test_retract_submission_cancels_event(make_event):
 
 
 @pytest.mark.asyncio
-async def test_retract_submission_auto_resolves_open_reports(make_event, make_report):
+async def test_retract_submission_auto_resolves_open_reports(
+    make_event, make_report, make_user
+):
     """Cancelling via retract must auto-resolve the event's open reports
     through the shared resolve_open_reports() helper (issue #125), so a
     reporter isn't left with a permanently "open" report on a dead event."""
@@ -175,17 +177,20 @@ async def test_retract_submission_auto_resolves_open_reports(make_event, make_re
     event = make_event(event_id=42, status="published")
     event.submitted_by_organizer_id = 7
     report = make_report(report_id=1, event_id=42, status="open")
+    reporter = make_user(user_id=report.user_id)
 
     db = AsyncMock()
     db.get = AsyncMock(return_value=event)
     db.execute = AsyncMock(
         return_value=MagicMock(scalars=lambda: _scalars_returning([report]))
     )
+    db.scalars = AsyncMock(return_value=_scalars_returning([reporter]))
     db.commit = AsyncMock()
 
     with (
         patch("app.routers.admin.settings") as mock_settings,
         patch("app.routers.admin.AsyncSessionLocal", return_value=_make_db_ctx(db)),
+        patch("app.routers.utils.send_report_outcome_email", new=AsyncMock()),
     ):
         mock_settings.ADMIN_PASSWORD = ""
         mock_settings.APP_ENV = APP_ENV_DEVELOPMENT

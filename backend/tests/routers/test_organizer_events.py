@@ -796,28 +796,37 @@ class TestDeleteOwnEvent:
 
     @pytest.mark.asyncio
     async def test_deletes_auto_resolves_open_reports(
-        self, mock_db, make_request, make_organizer, make_report
+        self, mock_db, make_request, make_organizer, make_report, make_user
     ):
         """Self-delete must auto-resolve the event's open reports through
-        the shared resolve_open_reports() helper (issue #125)."""
+        the shared resolve_open_reports() helper (issue #125), firing one
+        reporter-outcome email per resolved report (issue #127)."""
         from app.routers.organizer_events import delete_own_event
 
         organizer = make_organizer(organizer_id=5)
         event = _fake_event(submitted_by_organizer_id=5)
         report = make_report(report_id=1, event_id=10, status="open")
+        reporter = make_user(user_id=report.user_id)
         mock_db.scalar.return_value = event
         mock_db.execute.return_value.scalars.return_value.all.return_value = [report]
+        mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=[reporter]))
         mock_db.commit = AsyncMock()
 
-        await delete_own_event(
-            10,
-            make_request(method="DELETE", path="/organizer/events/10"),
-            organizer,
-            mock_db,
-        )
+        with patch(
+            "app.routers.utils.send_report_outcome_email", new=AsyncMock()
+        ) as mock_send:
+            await delete_own_event(
+                10,
+                make_request(method="DELETE", path="/organizer/events/10"),
+                organizer,
+                mock_db,
+            )
 
         assert report.status == "resolved"
         assert report.resolution_note == "auto-resolved: event cancelled"
+        mock_send.assert_awaited_once_with(
+            reporter.email, event, "auto-resolved: event cancelled", reporter.locale
+        )
 
     @pytest.mark.asyncio
     async def test_cross_organizer_delete_raises_404(

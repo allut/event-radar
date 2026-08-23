@@ -60,6 +60,17 @@ MAGIC_LINK_BODY = """\
 
 EMAIL_FOOTER_BRAND = "What's on Radar, Tallinn"
 
+REPORT_OUTCOME_HEADER = """\
+<p style="{s_eyebrow}">WHAT'S ON RADAR</p>
+<h1 style="{s_h1}">{heading}</h1>"""
+
+REPORT_OUTCOME_BODY = """\
+<p style="{s_body_text}">{intro}</p>
+<p style="{s_body_text}">{note}</p>
+<table role="presentation" align="center" cellpadding="0" cellspacing="0" border="0" style="{s_feed_btn_wrap}"><tr><td>
+<a href="{event_url}" class="cta-btn" style="{s_feed_btn}">{cta_label}</a>
+</td></tr></table>"""
+
 EVENT_BLOCK = (
     '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="{s_card_wrap}">'
     "<tr><td>"

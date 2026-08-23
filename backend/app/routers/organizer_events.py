@@ -86,6 +86,7 @@ from app.routers.organizer_auth import get_current_organizer
 from app.routers.utils import (
     cancel_event_and_resolve_reports,
     select_events_with_classification,
+    send_report_resolution_emails,
     serialize_event,
 )
 
@@ -534,10 +535,13 @@ async def delete_own_event(
     """Soft-delete: cancel the event. Events are never hard-deleted (CLAUDE.md
     Data Retention)."""
     event = await _own_event_or_404(db, event_id, current_organizer.id)
-    await cancel_event_and_resolve_reports(
+    resolved = await cancel_event_and_resolve_reports(
         db, event, EVENT_CANCELLATION_REASON_ORGANIZER_RETRACT, REPORT_AUTO_RESOLVE_NOTE
     )
     await db.commit()
+    await send_report_resolution_emails(
+        db, event, resolved, REPORT_AUTO_RESOLVE_NOTE
+    )
     return {"id": event.id, "status": event.status}
 
 
