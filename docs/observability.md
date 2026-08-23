@@ -30,6 +30,7 @@ Every shipped line is one JSON object (`JsonLogFormatter`):
 | `llm_degraded` | LLM provider chain exhausted, or classify/dedup backlog deferred | `app/llm/router.py`, `app/ingestion/jobs.py` |
 | `auth_failed` | magic-link / admin-basic / internal-tick auth rejected | `app/routers/auth.py`, `admin.py`, `main.py` |
 | `webhook_rejected` | inbound-mail bad signature / bad body | `app/routers/webhooks.py` |
+| `report_submitted` | `POST /reports` succeeded | `app/routers/reports.py` |
 | `email_send_failed` | Resend magic-link or digest send failed | `app/auth/email.py`, `app/email/digest.py` |
 
 ## Setup
@@ -60,10 +61,11 @@ thresholds after observing a few days of baseline volume.
 | 6 | Webhook probing | Threshold | `['event-radar'] \| where event == "webhook_rejected" \| summarize count()` over 15 min | count > 5 |
 | 7 | Log-stream silence | Threshold (below) | `['event-radar'] \| summarize count()` over 30 min | count < 1 |
 | 8 | Job-duration anomaly *(optional)* | AnomalyDetection | `['event-radar'] \| where event == "job_run" \| summarize avg(duration_ms) by job, bin_auto(_time)` | auto-baselined drift |
+| 9 | Report abuse spike | Threshold | `['event-radar'] \| where event == "report_submitted" \| summarize count()` over 10 min | placeholder — tune after baseline volume observed |
 
 **Priority if the free tier caps monitor count:** #2 (job failed), #3/#3b (dead
 scheduler), #7 (silence) are the must-haves — they catch the real operational
-failure modes. #1, #4, #5, #6 are next. #8 is a nice-to-have.
+failure modes. #1, #4, #5, #6, #9 are next. #8 is a nice-to-have.
 
 ### Why #3/#3b/#7 matter most
 
