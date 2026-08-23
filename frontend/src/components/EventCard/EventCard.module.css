@@ -302,7 +302,9 @@
   z-index: var(--z-sticky);
 }
 
-.cardOverflowTrigger {
+/* Doubled selector: beats EventOverflowMenu's composed iconAction
+   `background: none` regardless of cross-file stylesheet injection order. */
+.cardOverflowTrigger.cardOverflowTrigger {
   background: var(--bg-overlay-soft);
   backdrop-filter: blur(var(--blur-chip));
 }

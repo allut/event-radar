@@ -1,9 +1,11 @@
 .trigger {
+  composes: iconAction from '../shared/Button.module.css';
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: var(--overflow-trigger-size);
   height: var(--overflow-trigger-size);
+  border: 1px solid transparent;
   border-radius: var(--radius);
   color: var(--text);
   cursor: pointer;
@@ -17,7 +19,6 @@
 
 .trigger:focus-visible {
   outline: none;
-  box-shadow: var(--shadow-focus-ring);
 }
 
 .pop {
