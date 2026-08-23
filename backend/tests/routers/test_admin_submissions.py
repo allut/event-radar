@@ -143,6 +143,7 @@ async def test_retract_submission_cancels_event(make_event):
 
     db = AsyncMock()
     db.get = AsyncMock(return_value=event)
+    db.execute = AsyncMock(return_value=MagicMock(scalars=lambda: _scalars_returning([])))
     db.commit = AsyncMock()
 
     with (
@@ -163,6 +164,42 @@ async def test_retract_submission_cancels_event(make_event):
     assert event.status == EVENT_STATUS_CANCELLED
     assert event.needs_review is False  # resolves the review-queue entry outright
     assert resp.json() == {"id": 42, "status": EVENT_STATUS_CANCELLED}
+
+
+@pytest.mark.asyncio
+async def test_retract_submission_auto_resolves_open_reports(make_event, make_report):
+    """Cancelling via retract must auto-resolve the event's open reports
+    through the shared resolve_open_reports() helper (issue #125), so a
+    reporter isn't left with a permanently "open" report on a dead event."""
+    app = _build_app()
+    event = make_event(event_id=42, status="published")
+    event.submitted_by_organizer_id = 7
+    report = make_report(report_id=1, event_id=42, status="open")
+
+    db = AsyncMock()
+    db.get = AsyncMock(return_value=event)
+    db.execute = AsyncMock(
+        return_value=MagicMock(scalars=lambda: _scalars_returning([report]))
+    )
+    db.commit = AsyncMock()
+
+    with (
+        patch("app.routers.admin.settings") as mock_settings,
+        patch("app.routers.admin.AsyncSessionLocal", return_value=_make_db_ctx(db)),
+    ):
+        mock_settings.ADMIN_PASSWORD = ""
+        mock_settings.APP_ENV = APP_ENV_DEVELOPMENT
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            resp = await client.post(
+                "/admin/submissions/42/retract", auth=("admin", "")
+            )
+
+    assert resp.status_code == http.HTTPStatus.OK
+    assert report.status == "resolved"
+    assert report.resolution_note == "auto-resolved: event cancelled"
 
 
 @pytest.mark.asyncio

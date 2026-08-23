@@ -40,7 +40,6 @@ from app.constants import (
     ERROR_SUBMISSION_SOURCE_NOT_CONFIGURED,
     ERROR_UNSUPPORTED_IMAGE_TYPE,
     EVENT_CANCELLATION_REASON_ORGANIZER_RETRACT,
-    EVENT_STATUS_CANCELLED,
     EVENT_STATUS_CLASSIFIED,
     EVENT_STATUS_PUBLISHED,
     HTTP_TIMEOUT_SECONDS,
@@ -62,6 +61,7 @@ from app.constants import (
     PAGINATION_MIN_LIMIT,
     PAGINATION_MIN_OFFSET,
     RATE_LIMIT_SUBMIT,
+    REPORT_AUTO_RESOLVE_NOTE,
     SOURCE_SLUG_USER_SUBMISSION,
     TALLINN_TZ,
     VALID_CATEGORIES,
@@ -83,7 +83,11 @@ from app.models.models import (
 from app.publish import publish_pending
 from app.rate_limit import limiter
 from app.routers.organizer_auth import get_current_organizer
-from app.routers.utils import select_events_with_classification, serialize_event
+from app.routers.utils import (
+    cancel_event_and_resolve_reports,
+    select_events_with_classification,
+    serialize_event,
+)
 
 log = logging.getLogger(__name__)
 # Stays under /organizer/* deliberately: ORGANIZER_SESSION_COOKIE_PATH (app/
@@ -530,8 +534,9 @@ async def delete_own_event(
     """Soft-delete: cancel the event. Events are never hard-deleted (CLAUDE.md
     Data Retention)."""
     event = await _own_event_or_404(db, event_id, current_organizer.id)
-    event.status = EVENT_STATUS_CANCELLED
-    event.cancellation_reason = EVENT_CANCELLATION_REASON_ORGANIZER_RETRACT
+    await cancel_event_and_resolve_reports(
+        db, event, EVENT_CANCELLATION_REASON_ORGANIZER_RETRACT, REPORT_AUTO_RESOLVE_NOTE
+    )
     await db.commit()
     return {"id": event.id, "status": event.status}
 

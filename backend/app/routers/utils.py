@@ -9,7 +9,7 @@ from typing import Any
 from fastapi import HTTPException, Response, status
 from itsdangerous import BadSignature, SignatureExpired
 from pydantic import BaseModel, EmailStr
-from sqlalchemy import ColumnElement, Select, and_, delete, or_, select
+from sqlalchemy import ColumnElement, Select, and_, delete, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import InstrumentedAttribute, selectinload
 
@@ -20,17 +20,21 @@ from app.constants import (
     EMAIL_MASK_VISIBLE_CHARS,
     ERROR_ADMIN_JOB_FAILED,
     ERROR_FEATURE_DISABLED,
+    ERROR_INVALID_REPORT_REASON,
+    EVENT_STATUS_CANCELLED,
     EVENT_STATUS_PUBLISHED,
     MASK_DB_URL_PASSWORD_RE,
     MAGIC_LINK_RESEND_COOLDOWN_SECONDS,
     PREFERENCE_SIGNALS,
     PREFERRED_TASTE_MIN_WEIGHT,
     REPORT_STATUS_OPEN,
+    REPORT_STATUS_RESOLVED,
     SECONDS_PER_DAY,
     SESSION_COOKIE_HTTPONLY,
     SESSION_COOKIE_SAMESITE,
     SESSION_COOKIE_SECURE,
     VALID_LOCALES,
+    VALID_REPORT_REASONS,
 )
 from app.db import AsyncSessionLocal
 from app.models.models import (
@@ -527,3 +531,68 @@ async def load_user_reported_events(
         )
     ).all()
     return {row.event_id for row in rows}
+
+
+async def resolve_open_reports(
+    db: AsyncSession, event_id: int, resolution_note: str
+) -> list[EventReport]:
+    """Close every REPORT_STATUS_OPEN row on ``event_id`` with
+    ``resolution_note``, stamping ``resolved_at``. Shared by
+    POST /admin/reports/{event_id}/resolve, .../takedown, and every path that
+    cancels an event (admin retract, organizer retract, organizer
+    self-delete) — see issue #125. Caller commits; does not itself send the
+    reporter-outcome email (issue #127 wires that in on top of this helper).
+
+    A single UPDATE...RETURNING (not a SELECT followed by in-Python mutation)
+    so a report reopened concurrently (e.g. a fresh POST /reports upsert
+    landing between this call and the caller's commit) can't be missed —
+    the WHERE clause is evaluated atomically at execution time.
+    """
+    resolved_at = datetime.now(timezone.utc)
+    stmt = (
+        update(EventReport)
+        .where(
+            EventReport.event_id == event_id,
+            EventReport.status == REPORT_STATUS_OPEN,
+        )
+        .values(
+            status=REPORT_STATUS_RESOLVED,
+            resolution_note=resolution_note,
+            resolved_at=resolved_at,
+        )
+        .returning(EventReport)
+    )
+    result = await db.execute(stmt)
+    reports = list(result.scalars().all())
+    # Belt-and-suspenders: reflect the update on the in-memory objects too,
+    # in case the driver's RETURNING rows aren't merged into already
+    # identity-mapped instances still referenced elsewhere in this request.
+    for report in reports:
+        report.status = REPORT_STATUS_RESOLVED
+        report.resolution_note = resolution_note
+        report.resolved_at = resolved_at
+    return reports
+
+
+async def cancel_event_and_resolve_reports(
+    db: AsyncSession, event: Event, cancellation_reason: str, resolution_note: str
+) -> list[EventReport]:
+    """Cancel ``event`` and resolve its open reports in one call — every
+    cancellation path (admin retract, organizer retract, organizer
+    self-delete, report takedown) must keep this pairing atomic so a
+    cancelled event never leaves an open report behind. See issue #125.
+    Caller commits.
+    """
+    event.status = EVENT_STATUS_CANCELLED
+    event.cancellation_reason = cancellation_reason
+    return await resolve_open_reports(db, event.id, resolution_note)
+
+
+def validate_report_reason(reason: str) -> None:
+    """Shared by POST /reports and GET /admin/reports's ``reason`` filter —
+    a single source of truth for the taxonomy check and its error message."""
+    if reason not in VALID_REPORT_REASONS:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=ERROR_INVALID_REPORT_REASON.format(reasons=sorted(VALID_REPORT_REASONS)),
+        )

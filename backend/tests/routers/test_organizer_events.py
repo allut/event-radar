@@ -795,6 +795,31 @@ class TestDeleteOwnEvent:
         assert result["status"] == EVENT_STATUS_CANCELLED
 
     @pytest.mark.asyncio
+    async def test_deletes_auto_resolves_open_reports(
+        self, mock_db, make_request, make_organizer, make_report
+    ):
+        """Self-delete must auto-resolve the event's open reports through
+        the shared resolve_open_reports() helper (issue #125)."""
+        from app.routers.organizer_events import delete_own_event
+
+        organizer = make_organizer(organizer_id=5)
+        event = _fake_event(submitted_by_organizer_id=5)
+        report = make_report(report_id=1, event_id=10, status="open")
+        mock_db.scalar.return_value = event
+        mock_db.execute.return_value.scalars.return_value.all.return_value = [report]
+        mock_db.commit = AsyncMock()
+
+        await delete_own_event(
+            10,
+            make_request(method="DELETE", path="/organizer/events/10"),
+            organizer,
+            mock_db,
+        )
+
+        assert report.status == "resolved"
+        assert report.resolution_note == "auto-resolved: event cancelled"
+
+    @pytest.mark.asyncio
     async def test_cross_organizer_delete_raises_404(
         self, mock_db, make_request, make_organizer
     ):

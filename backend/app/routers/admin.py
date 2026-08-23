@@ -8,6 +8,7 @@ from collections.abc import Awaitable, Callable, Sequence
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
+from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -28,13 +29,20 @@ from app.constants import (
     ERROR_ADMIN_LOCKOUT,
     ERROR_SUBMISSION_NOT_FOUND,
     ERROR_UNKNOWN_SOURCE,
+    ADMIN_REPORTS_QUEUE_MAX_PAGE_SIZE,
+    ADMIN_REPORTS_QUEUE_PAGE_SIZE,
+    ERROR_EVENT_NOT_FOUND,
+    ERROR_RESOLUTION_NOTE_REQUIRED,
     EVENT_CANCELLATION_REASON_ADMIN_RETRACT,
+    EVENT_CANCELLATION_REASON_REPORT_TAKEDOWN,
     EVENT_STATUS_CANCELLED,
     LOG_EVENT_AUTH_FAILED,
     PAGINATION_MAX_OFFSET,
     PAGINATION_MIN_LIMIT,
     PAGINATION_MIN_OFFSET,
     RATE_LIMIT_ADMIN,
+    REPORT_AUTO_RESOLVE_NOTE,
+    REPORT_STATUS_OPEN,
 )
 from app.db import AsyncSessionLocal
 from app.email.digest import send_daily_digests
@@ -49,17 +57,20 @@ from app.ingestion.jobs import (
 )
 from app.ingestion.organizer_sync import sync_fienta_organizers
 from app.ingestion.registry import ADAPTER_REGISTRY
-from app.models.models import Event, Organizer, Source
+from app.models.models import Event, EventReport, Organizer, Source
 from app.publish import publish_pending
 from app.ranking.score import build_daily_feeds
 from app.rate_limit import client_key, limiter
 from app.routers.utils import (
+    cancel_event_and_resolve_reports,
     canonical_event_filter,
     require_configured_secret,
+    resolve_open_reports,
     run_admin_job,
     run_in_session,
     select_events_with_classification,
     serialize_event,
+    validate_report_reason,
 )
 
 log = logging.getLogger(__name__)
@@ -366,9 +377,13 @@ async def admin_retract_submission(event_id: int, request: Request) -> dict:
     async def _run() -> dict:
         async with AsyncSessionLocal() as db:
             event = await _submission_or_404(db, event_id)
-            event.status = EVENT_STATUS_CANCELLED
-            event.cancellation_reason = EVENT_CANCELLATION_REASON_ADMIN_RETRACT
             event.needs_review = False
+            await cancel_event_and_resolve_reports(
+                db,
+                event,
+                EVENT_CANCELLATION_REASON_ADMIN_RETRACT,
+                REPORT_AUTO_RESOLVE_NOTE,
+            )
             await db.commit()
             return {"id": event.id, "status": event.status}
 
@@ -403,6 +418,212 @@ async def admin_approve_submission(event_id: int, request: Request) -> dict:
             return {"id": event.id, "needs_review": event.needs_review}
 
     return await run_admin_job("Approve submission", _run())
+
+
+class _ResolutionBody(BaseModel):
+    resolution_note: str
+
+
+@router.get("/reports", dependencies=[Depends(_require_admin)])
+@limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
+async def admin_list_reports(
+    request: Request,
+    reason: str | None = Query(None),
+    illegal_only: bool = Query(False),
+    limit: int = Query(
+        ADMIN_REPORTS_QUEUE_PAGE_SIZE,
+        ge=PAGINATION_MIN_LIMIT,
+        le=ADMIN_REPORTS_QUEUE_MAX_PAGE_SIZE,
+    ),
+    offset: int = Query(
+        PAGINATION_MIN_OFFSET, ge=PAGINATION_MIN_OFFSET, le=PAGINATION_MAX_OFFSET
+    ),
+) -> dict:
+    """Content-moderation review queue: one row per event aggregating its
+    REPORT_STATUS_OPEN reports (distinct from GET /admin/submissions, which
+    is organizer-trust review — see CONTEXT.md's Report/Resolve glossary).
+    Excludes cancelled events. ``reason``/``illegal_only`` narrow which
+    events qualify for the queue (an event with at least one matching open
+    report); each qualifying event's row still aggregates *all* of its open
+    reports, not just the matching ones. Ordered illegal-first, then by
+    report count, then oldest-waiting first.
+    """
+    if reason is not None:
+        validate_report_reason(reason)
+
+    match_conditions = [EventReport.status == REPORT_STATUS_OPEN]
+    if reason is not None:
+        match_conditions.append(EventReport.reason == reason)
+    if illegal_only:
+        match_conditions.append(EventReport.is_illegal_allegation.is_(True))
+
+    matching_event_ids = select(EventReport.event_id).where(*match_conditions).distinct()
+
+    has_illegal_col = func.bool_or(EventReport.is_illegal_allegation).label(
+        "has_illegal_allegation"
+    )
+    report_count_col = func.count(EventReport.id).label("report_count")
+    oldest_col = func.min(EventReport.created_at).label("oldest_open_report_at")
+
+    agg = (
+        select(
+            EventReport.event_id,
+            has_illegal_col,
+            report_count_col,
+            oldest_col,
+        )
+        .join(Event, Event.id == EventReport.event_id)
+        .where(
+            EventReport.status == REPORT_STATUS_OPEN,
+            Event.status != EVENT_STATUS_CANCELLED,
+            EventReport.event_id.in_(matching_event_ids),
+        )
+        .group_by(EventReport.event_id)
+    )
+
+    async with AsyncSessionLocal() as db:
+        total = (
+            await db.scalar(select(func.count()).select_from(agg.subquery()))
+        ) or 0
+
+        page = (
+            await db.execute(
+                agg.order_by(
+                    has_illegal_col.desc(), report_count_col.desc(), oldest_col.asc()
+                )
+                .limit(limit)
+                .offset(offset)
+            )
+        ).all()
+
+        event_ids = [row.event_id for row in page]
+        events_by_id: dict[int, Event] = {}
+        reports_by_event: dict[int, list[EventReport]] = {}
+        if event_ids:
+            events = (
+                await db.scalars(select(Event).where(Event.id.in_(event_ids)))
+            ).all()
+            events_by_id = {e.id: e for e in events}
+
+            reports = (
+                await db.scalars(
+                    select(EventReport)
+                    .where(
+                        EventReport.event_id.in_(event_ids),
+                        EventReport.status == REPORT_STATUS_OPEN,
+                    )
+                    .order_by(EventReport.created_at.asc())
+                )
+            ).all()
+            for r in reports:
+                reports_by_event.setdefault(r.event_id, []).append(r)
+
+    rows = []
+    for row in page:
+        event = events_by_id.get(row.event_id)
+        if event is None:
+            continue
+        event_reports = reports_by_event.get(row.event_id, [])
+        rows.append(
+            {
+                "event_id": event.id,
+                "title": event.title_orig,
+                "status": event.status,
+                "venue": event.venue_name,
+                "submitted_by_organizer_id": event.submitted_by_organizer_id,
+                "report_count": row.report_count,
+                "reasons": sorted({r.reason for r in event_reports}),
+                "has_illegal_allegation": bool(row.has_illegal_allegation),
+                "reports": [
+                    {
+                        "reason": r.reason,
+                        "detail": r.detail,
+                        "is_illegal_allegation": r.is_illegal_allegation,
+                        "created_at": r.created_at,
+                    }
+                    for r in event_reports
+                ],
+                "oldest_open_report_at": row.oldest_open_report_at,
+            }
+        )
+
+    return {
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+        "has_more": offset + len(rows) < total,
+        "events": rows,
+    }
+
+
+async def _event_or_404(db: AsyncSession, event_id: int) -> Event:
+    event = await db.get(Event, event_id)
+    if event is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=ERROR_EVENT_NOT_FOUND
+        )
+    return event
+
+
+def _validated_resolution_note(body: _ResolutionBody) -> str:
+    note = body.resolution_note.strip()
+    if not note:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=ERROR_RESOLUTION_NOTE_REQUIRED,
+        )
+    return note
+
+
+@router.post(
+    "/reports/{event_id}/resolve", dependencies=[Depends(_require_admin)]
+)
+@limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
+async def admin_resolve_reports(
+    event_id: int, body: _ResolutionBody, request: Request
+) -> dict:
+    """Close every open report on the event with an admin-supplied note.
+    No event mutation — the lightweight "this is fine" action. Never
+    immunizes the event: a fresh report on a resolved row reopens it (see
+    routers/reports.py's upsert-reopen semantics)."""
+    note = _validated_resolution_note(body)
+
+    async def _run() -> dict:
+        async with AsyncSessionLocal() as db:
+            event = await _event_or_404(db, event_id)
+            resolved = await resolve_open_reports(db, event.id, note)
+            await db.commit()
+            return {"event_id": event.id, "resolved_count": len(resolved)}
+
+    return await run_admin_job("Resolve reports", _run())
+
+
+@router.post(
+    "/reports/{event_id}/takedown", dependencies=[Depends(_require_admin)]
+)
+@limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
+async def admin_takedown_reported_event(
+    event_id: int, body: _ResolutionBody, request: Request
+) -> dict:
+    """Cancel the event and auto-resolve its open reports with the same
+    note — the decisive action for content that actually needs to come
+    down. Never touches Organizer.verified."""
+    note = _validated_resolution_note(body)
+
+    async def _run() -> dict:
+        async with AsyncSessionLocal() as db:
+            event = await _event_or_404(db, event_id)
+            resolved = await cancel_event_and_resolve_reports(
+                db, event, EVENT_CANCELLATION_REASON_REPORT_TAKEDOWN, note
+            )
+            await db.commit()
+            return {
+                "event_id": event.id,
+                "status": event.status,
+                "resolved_count": len(resolved),
+            }
+
+    return await run_admin_job("Takedown reported event", _run())
 
 
 @router.post("/classify", dependencies=[Depends(_require_admin)])

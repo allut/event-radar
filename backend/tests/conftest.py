@@ -31,6 +31,10 @@ def mock_db():
     # coroutine. Tests that care about hydrated my_signal override this return value.
     _execute_result = MagicMock()
     _execute_result.all.return_value = []
+    # Also covers resolve_open_reports()'s `(await db.execute(...)).scalars().all()`
+    # (an UPDATE...RETURNING) — defaults to no resolved rows; tests that care
+    # override this return value.
+    _execute_result.scalars.return_value = MagicMock(all=MagicMock(return_value=[]))
     db.execute.return_value = _execute_result
     db.add = MagicMock()
     db.flush = AsyncMock()

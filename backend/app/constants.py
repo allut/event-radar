@@ -412,6 +412,18 @@ REPORT_STATUS_RESOLVED = "resolved"
 VALID_REPORT_STATUSES = frozenset({REPORT_STATUS_OPEN, REPORT_STATUS_RESOLVED})
 REPORT_DETAIL_MAX_CHARS = 500
 
+# System-generated resolution_note for the auto-resolve-on-cancellation cascade
+# (utils.py::resolve_open_reports) — every path that cancels an event (admin
+# retract, organizer retract, organizer self-delete, report takedown's own
+# explicit note) reuses this so the reporter-outcome email (issue #127) has a
+# consistent fallback message regardless of which door triggered it.
+REPORT_AUTO_RESOLVE_NOTE = "auto-resolved: event cancelled"
+
+# Admin report review-queue pagination (routers/admin.py GET /admin/reports) —
+# mirrors ADMIN_REVIEW_QUEUE_PAGE_SIZE's sizing rationale.
+ADMIN_REPORTS_QUEUE_PAGE_SIZE: int = 50
+ADMIN_REPORTS_QUEUE_MAX_PAGE_SIZE: int = 500
+
 # Deduplication
 DEDUP_LOOKBACK_DAYS = 30  # only re-cluster events that started within this window
 # Upper bound on load_dedup_candidate_events — without it, an event scheduled
@@ -1394,6 +1406,7 @@ ERROR_REPORT_DETAIL_REQUIRED = (
     "detail is required when reason is 'other' or is_illegal_allegation is true."
 )
 ERROR_REPORT_DETAIL_TOO_LONG = "detail must be at most {max_chars} characters."
+ERROR_RESOLUTION_NOTE_REQUIRED = "resolution_note is required."
 
 # routers/settings.py
 ERROR_NO_UPDATE_FIELDS = "Provide at least one field to update."

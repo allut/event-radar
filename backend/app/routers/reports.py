@@ -17,7 +17,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.constants import (
     ERROR_EVENT_NOT_FOUND,
-    ERROR_INVALID_REPORT_REASON,
     ERROR_REPORT_DETAIL_REQUIRED,
     ERROR_REPORT_DETAIL_TOO_LONG,
     LOG_EVENT_REPORT_SUBMITTED,
@@ -25,13 +24,12 @@ from app.constants import (
     REPORT_DETAIL_MAX_CHARS,
     REPORT_REASON_OTHER,
     REPORT_STATUS_OPEN,
-    VALID_REPORT_REASONS,
 )
 from app.db import get_db
 from app.models.models import Event, EventReport, User
 from app.rate_limit import limiter
 from app.routers.auth import get_current_user
-from app.routers.utils import public_event_filter
+from app.routers.utils import public_event_filter, validate_report_reason
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/reports", tags=["reports"])
@@ -52,11 +50,7 @@ async def submit_report(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    if body.reason not in VALID_REPORT_REASONS:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=ERROR_INVALID_REPORT_REASON.format(reasons=sorted(VALID_REPORT_REASONS)),
-        )
+    validate_report_reason(body.reason)
 
     detail = (body.detail or "").strip() or None
     if not detail and (body.reason == REPORT_REASON_OTHER or body.is_illegal_allegation):
