@@ -4,12 +4,11 @@
 }
 
 .action {
-  background: none;
+  composes: iconAction from '../shared/Button.module.css';
   border: 1px solid transparent;
   border-radius: var(--radius);
   font-size: var(--fs-base);
   cursor: pointer;
-  transition: background var(--transition), border-color var(--transition), transform var(--transition);
   line-height: var(--leading-none);
 }
 
@@ -20,12 +19,6 @@
 .detail {
   padding: var(--space-2) var(--space-0-875);
   font-size: var(--fs-btn-detail);
-}
-
-.action:hover:not(:disabled) {
-  background: var(--bg-raised);
-  border-color: var(--border);
-  transform: scale(var(--scale-hover));
 }
 
 .action:disabled {

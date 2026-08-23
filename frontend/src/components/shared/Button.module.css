@@ -35,3 +35,18 @@
   align-items: center;
   justify-content: center;
 }
+
+.iconAction {
+  background: none;
+  transition: background var(--transition), border-color var(--transition), transform var(--transition);
+}
+
+.iconAction:hover:not(:disabled) {
+  background: var(--bg-raised);
+  border-color: var(--border);
+  transform: scale(var(--scale-hover));
+}
+
+.iconAction:focus-visible {
+  box-shadow: var(--shadow-focus-ring);
+}
