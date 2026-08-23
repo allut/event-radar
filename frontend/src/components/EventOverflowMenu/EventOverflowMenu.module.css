@@ -30,6 +30,18 @@
   min-width: var(--overflow-pop-min-width);
 }
 
+@media (max-width: 640px) {
+  .pop.pop {
+    position: fixed;
+    left: var(--space-3);
+    right: var(--space-3);
+    top: var(--overflow-pop-top);
+    width: auto;
+    max-width: none;
+    min-width: 0;
+  }
+}
+
 .item {
   composes: menuOption from '../shared/Menu.module.css';
   display: flex;
