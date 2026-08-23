@@ -28,6 +28,7 @@ from app.constants import (
     ERROR_ADMIN_LOCKOUT,
     ERROR_SUBMISSION_NOT_FOUND,
     ERROR_UNKNOWN_SOURCE,
+    EVENT_CANCELLATION_REASON_ADMIN_RETRACT,
     EVENT_STATUS_CANCELLED,
     LOG_EVENT_AUTH_FAILED,
     PAGINATION_MAX_OFFSET,
@@ -366,6 +367,7 @@ async def admin_retract_submission(event_id: int, request: Request) -> dict:
         async with AsyncSessionLocal() as db:
             event = await _submission_or_404(db, event_id)
             event.status = EVENT_STATUS_CANCELLED
+            event.cancellation_reason = EVENT_CANCELLATION_REASON_ADMIN_RETRACT
             event.needs_review = False
             await db.commit()
             return {"id": event.id, "status": event.status}

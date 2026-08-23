@@ -422,6 +422,10 @@ class Event(Base):
     needs_review: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=false(), default=False
     )
+    # Why a cancelled event was cancelled — NULL for events cancelled before
+    # this column existed (no backfill of historical rows) and for events
+    # that were never cancelled. See VALID_EVENT_CANCELLATION_REASONS.
+    cancellation_reason: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
     sources: Mapped[list["EventSource"]] = relationship(back_populates="event")
     classification: Mapped["EventClassification | None"] = relationship(
@@ -429,6 +433,7 @@ class Event(Base):
     )
     feedback: Mapped[list["UserEventFeedback"]] = relationship(back_populates="event")
     scores: Mapped[list["UserEventScore"]] = relationship(back_populates="event")
+    reports: Mapped[list["EventReport"]] = relationship(back_populates="event")
 
 
 class EventSource(Base):
@@ -494,6 +499,48 @@ class EventClassification(Base):
     )
 
     event: Mapped["Event"] = relationship(back_populates="classification")
+
+
+class EventReport(Base):
+    """A user-filed report that an event is inappropriate — distinct from
+    UserEventFeedback (like/dislike/bookmark) and the organizer-submission
+    review queue (needs_review)."""
+
+    __tablename__ = "event_reports"
+    __table_args__ = (
+        Index(
+            "uq_event_reports_user_event",
+            "user_id",
+            "event_id",
+            unique=True,
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    event_id: Mapped[int] = mapped_column(
+        ForeignKey("events.id", ondelete="CASCADE"), nullable=False
+    )
+    reason: Mapped[str] = mapped_column(String(30), nullable=False)
+    is_illegal_allegation: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=false(), default=False
+    )
+    detail: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False, server_default=text("'open'"), default="open"
+    )
+    resolution_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    resolved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    user: Mapped["User"] = relationship()
+    event: Mapped["Event"] = relationship(back_populates="reports")
 
 
 # ---------------------------------------------------------------------------
