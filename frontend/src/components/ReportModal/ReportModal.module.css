@@ -16,7 +16,7 @@
 
 .reasonOption {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: var(--space-2);
   padding: var(--space-0-625) 0;
   cursor: pointer;
@@ -40,7 +40,7 @@
 
 .illegalOption {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: var(--space-2);
   font-size: var(--fs-sm);
   color: var(--text);
