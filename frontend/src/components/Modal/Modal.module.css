@@ -38,16 +38,17 @@
 }
 
 .closeBtn {
+  composes: iconAction from '../shared/Button.module.css';
   color: var(--text-muted);
   font-size: var(--fs-md);
   line-height: 1;
   padding: var(--space-0-45);
+  border: 1px solid transparent;
   border-radius: var(--radius);
   cursor: pointer;
   flex-shrink: 0;
 }
 
-.closeBtn:hover {
+.closeBtn:hover:not(:disabled) {
   color: var(--text);
-  background: var(--bg-overlay-soft);
 }
