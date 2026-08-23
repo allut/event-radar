@@ -1,0 +1,110 @@
+.label {
+  composes: fieldLabel from '../shared/Field.module.css';
+  display: block;
+  margin-bottom: var(--space-1);
+}
+
+.optional {
+  text-transform: none;
+}
+
+.reasonGroup {
+  border: none;
+  padding: 0;
+  margin: 0 0 var(--space-4);
+}
+
+.reasonOption {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-0-625) 0;
+  cursor: pointer;
+}
+
+.reasonText {
+  display: flex;
+  flex-direction: column;
+}
+
+.reasonLabel {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  color: var(--text);
+}
+
+.reasonDescription {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+
+.illegalOption {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  font-size: var(--fs-sm);
+  color: var(--text);
+  cursor: pointer;
+  margin-bottom: var(--space-4);
+}
+
+.detailField {
+  display: block;
+  margin-bottom: var(--space-4);
+}
+
+.textarea {
+  composes: fieldInput from '../shared/Field.module.css';
+  width: 100%;
+  font-family: inherit;
+  resize: vertical;
+  min-height: var(--textarea-height-md);
+}
+
+.error {
+  composes: alert from '../shared/Alert.module.css';
+  font-size: var(--fs-sm);
+  padding: var(--space-2) var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.cancelBtn {
+  composes: btnOutline from '../shared/Button.module.css';
+  padding: var(--space-0-625) var(--space-4);
+  font-size: var(--fs-sm);
+  cursor: pointer;
+}
+
+.submitBtn {
+  composes: btnPrimary from '../shared/Button.module.css';
+  padding: var(--space-0-625) var(--space-4);
+  font-size: var(--fs-sm);
+  cursor: pointer;
+}
+
+.confirmation {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: var(--space-4);
+  padding: var(--space-3) 0;
+}
+
+.confirmation p {
+  font-size: var(--fs-base);
+  color: var(--text);
+}
+
+.doneBtn {
+  composes: btnPrimary from '../shared/Button.module.css';
+  padding: var(--space-0-625) var(--space-5);
+  font-size: var(--fs-sm);
+  cursor: pointer;
+}

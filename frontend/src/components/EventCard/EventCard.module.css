@@ -287,3 +287,22 @@
 .ticketsLink:hover {
   color: var(--accent-light);
 }
+
+/* Positions the whole EventOverflowMenu (not just its trigger) at the image's
+   top-right corner — the trigger's own popover is positioned relative to the
+   menu's internal wrapper, so anchoring the wrapper here keeps the popover
+   correctly placed too. Above the card's full-bleed stretched-link overlay
+   (z-card-overlay) so a click reaches the button, not the card link. Sibling
+   of .imageWrap (not nested in it) so the popover isn't clipped by
+   imageWrap's overflow:hidden. */
+.overflowWrap {
+  position: absolute;
+  top: var(--space-3);
+  right: var(--space-3);
+  z-index: var(--z-sticky);
+}
+
+.cardOverflowTrigger {
+  background: var(--bg-overlay-soft);
+  backdrop-filter: blur(var(--blur-chip));
+}

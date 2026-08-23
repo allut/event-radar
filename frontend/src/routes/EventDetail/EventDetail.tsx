@@ -3,8 +3,9 @@ import { useParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../../api/client';
 import { t, ti } from '../../i18n';
-import { buildMapsUrl, categoryGradient, copyToClipboard, cx, formatEventDateTime, formatEventShortDate, formatHourMinute, formatPrice, safeUrl, sanitizeHtml, titleWithBrand, trackExternalClick, truncateForMeta, withLocaleQuery } from '../../utils';
+import { buildMapsUrl, categoryGradient, cx, formatEventDateTime, formatEventShortDate, formatHourMinute, formatPrice, safeUrl, sanitizeHtml, shareEvent, titleWithBrand, trackExternalClick, truncateForMeta, withLocaleQuery } from '../../utils';
 import { useAuth } from '../../hooks/useAuth';
+import { useEventReport } from '../../hooks/useEventReport';
 import { useLocaleMutation } from '../../hooks/useLocaleMutation';
 import { useLocaleNavigate } from '../../hooks/useLocaleNavigate';
 import { useLocalePath } from '../../hooks/useLocalePath';
@@ -13,8 +14,10 @@ import { useToast } from '../../hooks/useToast';
 import { useSeoMeta } from '../../hooks/useSeoMeta';
 import { buildEventJsonLd } from '../../lib/structuredData';
 import { type EventData } from '../../components/EventCard';
+import EventOverflowMenu from '../../components/EventOverflowMenu';
 import FeedbackButtonRow from '../../components/FeedbackButtonRow';
 import PageState from '../../components/PageState';
+import ReportModal from '../../components/ReportModal';
 import SeoTags from '../../components/SeoTags';
 import Toast from '../../components/Toast';
 import TopBar from '../../components/TopBar';
@@ -25,15 +28,6 @@ import styles from './EventDetail.module.css';
 interface EventDetailData extends EventData {
   language: string | null;
 }
-
-const ShareIcon = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
-       strokeLinecap="round" strokeLinejoin="round" aria-hidden focusable="false">
-    <path d="M12 15V3" />
-    <path d="M8 7l4-4 4 4" />
-    <path d="M4 13v6a2 2 0 002 2h12a2 2 0 002-2v-6" />
-  </svg>
-);
 
 export default function EventDetail() {
   const { id } = useParams<{ id: string }>();
@@ -50,6 +44,8 @@ export default function EventDetail() {
     enabled: Boolean(id),
     retry: false,
   });
+
+  const { reportOpen, reported, openReportModal, closeReportModal, handleReportSubmitted } = useEventReport(data?.reported ?? false);
 
   const { activeSignal, pending, sendFeedback } = useFeedback(data?.id, {
     initialSignal: data?.my_signal ?? null,
@@ -85,19 +81,9 @@ export default function EventDetail() {
   }
 
   async function handleShare() {
-    const url = window.location.href;
-    if (navigator.share) {
-      try {
-        await navigator.share({ title: data?.title, url });
-        return;
-      } catch (err) {
-        // user cancelled — respect that, don't fall through to copy
-        if (err instanceof DOMException && err.name === 'AbortError') return;
-        // unsupported/blocked share — fall through to copy
-      }
-    }
-    const ok = await copyToClipboard(url);
-    showToast(ok ? UI_STATE.success : UI_STATE.error, t(ok ? 'link_copied' : 'share_failed', locale));
+    const result = await shareEvent(data?.title, window.location.href);
+    if (result === 'shared' || result === 'cancelled') return;
+    showToast(result === 'copied' ? UI_STATE.success : UI_STATE.error, t(result === 'copied' ? 'link_copied' : 'share_failed', locale));
   }
 
   if (isLoading) {
@@ -205,10 +191,13 @@ export default function EventDetail() {
                 variant="detail"
               />
             )}
-            <button className={styles.shareBtn} onClick={handleShare} aria-label={t('share', locale)}>
-              <ShareIcon />
-              <span className={styles.shareLabel}>{t('share', locale)}</span>
-            </button>
+            <EventOverflowMenu
+              locale={locale}
+              reported={reported}
+              onShare={handleShare}
+              onReport={openReportModal}
+              triggerClassName={styles.overflowTrigger}
+            />
             {ticketUrl && (
               <a
                 href={ticketUrl}
@@ -287,6 +276,16 @@ export default function EventDetail() {
 
         </div>
       </main>
+
+      {reportOpen && (
+        <ReportModal
+          open={reportOpen}
+          onClose={closeReportModal}
+          eventId={data.id}
+          locale={locale}
+          onSubmitted={handleReportSubmitted}
+        />
+      )}
     </div>
   );
 }

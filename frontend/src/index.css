@@ -218,6 +218,7 @@
 
   /* Component max/min-widths */
   --card-max-narrow: 400px;       /* shared/Card.module.css .cardPage */
+  --modal-max-width: 480px;       /* Modal panel */
   --card-max-auth: 360px;         /* AuthCard */
   --card-max-auth-inner: 280px;   /* AuthCard inner content */
   --empty-state-max: 380px;
@@ -240,6 +241,8 @@
 
   /* Popover/menu geometry */
   --menu-pop-min-width: 330px;
+  --overflow-pop-min-width: 200px;   /* EventOverflowMenu */
+  --overflow-trigger-size: 32px;     /* EventOverflowMenu kebab button */
 
   /* Heading scale */
   --heading-3xl: 3rem;

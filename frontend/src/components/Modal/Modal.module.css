@@ -1,0 +1,53 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  background: var(--overlay-scrim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-5);
+}
+
+.panel {
+  composes: card from '../shared/Card.module.css';
+  width: 100%;
+  max-width: var(--modal-max-width);
+  max-height: calc(100vh - 2 * var(--space-5));
+  overflow-y: auto;
+  padding: var(--space-5);
+}
+
+.panel:focus {
+  outline: none;
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.title {
+  font-family: var(--font-display);
+  font-size: var(--fs-lg);
+  font-weight: var(--fw-semibold);
+  color: var(--text);
+}
+
+.closeBtn {
+  color: var(--text-muted);
+  font-size: var(--fs-md);
+  line-height: 1;
+  padding: var(--space-0-45);
+  border-radius: var(--radius);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.closeBtn:hover {
+  color: var(--text);
+  background: var(--bg-overlay-soft);
+}

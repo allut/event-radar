@@ -109,6 +109,25 @@ export async function copyToClipboard(text: string): Promise<boolean> {
   }
 }
 
+/** Shares a page (native share sheet, falling back to a clipboard copy) — the
+ * logic behind EventDetail's and EventCard's Share menu item, factored out so
+ * both call sites (issue #128) stay in sync. Returns 'shared' when the native
+ * share sheet handled it (no further UI needed), 'copied'/'failed' for the
+ * clipboard-fallback outcome the caller should surface as a toast, or
+ * 'cancelled' when the user dismissed the native share sheet. */
+export async function shareEvent(title: string | undefined, url: string): Promise<'shared' | 'copied' | 'failed' | 'cancelled'> {
+  if (navigator.share) {
+    try {
+      await navigator.share({ title, url });
+      return 'shared';
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') return 'cancelled';
+      // unsupported/blocked share — fall through to copy
+    }
+  }
+  return (await copyToClipboard(url)) ? 'copied' : 'failed';
+}
+
 export function categoryGradient(categories: string[]): string {
   const key = categories[0]?.toLowerCase().replace(/\s+/g, '_') ?? '';
   return CATEGORY_GRADIENTS[key] ?? FALLBACK_GRADIENT;

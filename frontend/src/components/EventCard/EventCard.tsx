@@ -1,11 +1,16 @@
 import { memo } from 'react';
 import { Link } from 'react-router-dom';
-import { CARD_ANIMATION_DELAY_STEP_MS, ROUTES, type Signal } from '../../constants';
+import { CARD_ANIMATION_DELAY_STEP_MS, ROUTES, UI_STATE, type Signal } from '../../constants';
 import { t } from '../../i18n';
-import { categoryGradient, cx, formatEventTime, formatPrice, padIndex, safeUrl, trackExternalClick } from '../../utils';
+import { categoryGradient, cx, formatEventTime, formatPrice, padIndex, safeUrl, shareEvent, trackExternalClick } from '../../utils';
+import { useEventReport } from '../../hooks/useEventReport';
 import { useFeedback } from '../../hooks/useFeedback';
 import { useLocalePath } from '../../hooks/useLocalePath';
+import { useToast } from '../../hooks/useToast';
+import EventOverflowMenu from '../EventOverflowMenu';
 import FeedbackButtonRow from '../FeedbackButtonRow';
+import ReportModal from '../ReportModal';
+import Toast from '../Toast';
 import styles from './EventCard.module.css';
 
 export interface EventData {
@@ -31,6 +36,7 @@ export interface EventData {
   why_go: string[];
   quality_score: number | null;
   my_signal: Signal | null;
+  reported: boolean;
 }
 
 interface EventCardProps {
@@ -51,11 +57,20 @@ function EventCard({ event, index, locale, onFeedbackSent, variant = 'standard',
     onChange: onFeedbackSent,
   });
   const localePath = useLocalePath();
+  const { toast, showToast } = useToast();
+  const { reportOpen, reported, openReportModal, closeReportModal, handleReportSubmitted } = useEventReport(event.reported);
   const isFeatured = variant === 'featured';
 
   const price = formatPrice(event.price_min, event.price_max, event.currency, locale, event.has_free_tier);
   const imageSrc = safeUrl(event.image_url);
   const ticketUrl = safeUrl(event.url);
+
+  async function handleShare() {
+    const url = `${window.location.origin}${localePath(ROUTES.eventDetail(event.id))}`;
+    const result = await shareEvent(event.title, url);
+    if (result === 'shared' || result === 'cancelled') return;
+    showToast(result === 'copied' ? UI_STATE.success : UI_STATE.error, t(result === 'copied' ? 'link_copied' : 'share_failed', locale));
+  }
 
   return (
     <article
@@ -85,6 +100,18 @@ function EventCard({ event, index, locale, onFeedbackSent, variant = 'standard',
           )}
           {price && <span className={styles.price}>{price}</span>}
         </div>
+
+        {!readOnly && (
+          <div className={styles.overflowWrap}>
+            <EventOverflowMenu
+              locale={locale}
+              reported={reported}
+              onShare={handleShare}
+              onReport={openReportModal}
+              triggerClassName={styles.cardOverflowTrigger}
+            />
+          </div>
+        )}
 
         <div className={cx(styles.body, isFeatured && styles.featuredBody)}>
           <div className={cx(styles.meta, isFeatured && styles.featuredMeta)}>
@@ -135,6 +162,17 @@ function EventCard({ event, index, locale, onFeedbackSent, variant = 'standard',
             </a>
           )}
         </div>
+      )}
+
+      {!readOnly && toast.status !== UI_STATE.idle && <Toast status={toast.status} message={toast.message} />}
+      {!readOnly && reportOpen && (
+        <ReportModal
+          open={reportOpen}
+          onClose={closeReportModal}
+          eventId={event.id}
+          locale={locale}
+          onSubmitted={handleReportSubmitted}
+        />
       )}
     </article>
   );
