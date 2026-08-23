@@ -10,10 +10,12 @@ from app.routers.utils import (
     event_ended_filter,
     event_not_ended_filter,
     event_series_key,
+    load_user_reported_events,
     mask_email,
     normalized_title,
     require_configured_secret,
     resolve_locale_param,
+    serialize_event,
 )
 
 
@@ -194,3 +196,38 @@ class TestMaskEmail:
         masked = mask_email("verylongusername@example.com")
         assert "verylongusername" not in masked
         assert masked.endswith("@example.com")
+
+
+class TestLoadUserReportedEvents:
+    @pytest.mark.asyncio
+    async def test_empty_event_ids_short_circuits(self, mock_db):
+        result = await load_user_reported_events(mock_db, user_id=1, event_ids=[])
+        assert result == set()
+        mock_db.execute.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_returns_open_report_event_ids(self, mock_db):
+        from unittest.mock import MagicMock
+
+        row = MagicMock()
+        row.event_id = 10
+        exec_result = MagicMock()
+        exec_result.all.return_value = [row]
+        mock_db.execute.return_value = exec_result
+
+        result = await load_user_reported_events(mock_db, user_id=1, event_ids=[10, 20])
+        assert result == {10}
+
+
+class TestSerializeEventReportedField:
+    def test_defaults_to_false(self, make_event):
+        result = serialize_event(make_event(10))
+        assert result["reported"] is False
+
+    def test_true_when_event_id_in_set(self, make_event):
+        result = serialize_event(make_event(10), reported_event_ids={10})
+        assert result["reported"] is True
+
+    def test_false_when_event_id_not_in_set(self, make_event):
+        result = serialize_event(make_event(10), reported_event_ids={99})
+        assert result["reported"] is False

@@ -148,6 +148,32 @@ def make_event():
 
 
 @pytest.fixture
+def make_report():
+    def _factory(
+        report_id: int = 1,
+        user_id: int = 1,
+        event_id: int = 10,
+        reason: str = "spam_or_scam",
+        is_illegal_allegation: bool = False,
+        detail: str | None = None,
+        status: str = "open",
+    ) -> MagicMock:
+        r = MagicMock()
+        r.id = report_id
+        r.user_id = user_id
+        r.event_id = event_id
+        r.reason = reason
+        r.is_illegal_allegation = is_illegal_allegation
+        r.detail = detail
+        r.status = status
+        r.resolution_note = None
+        r.created_at = datetime(2026, 5, 13, 6, 0, 0, tzinfo=timezone.utc)
+        r.resolved_at = None
+        return r
+    return _factory
+
+
+@pytest.fixture
 def make_request():
     """Factory for a real starlette Request — slowapi's @limiter.limit requires an
     actual Request instance (isinstance check), not a MagicMock. Shared across

@@ -91,6 +91,7 @@ from app.routers.onboarding import router as onboarding_router
 from app.routers.organizer_auth import router as organizer_auth_router
 from app.routers.organizer_events import router as organizer_events_router
 from app.routers.public import router as public_router
+from app.routers.reports import router as reports_router
 from app.routers.settings import router as settings_router
 from app.routers.unsubscribe import router as unsubscribe_router
 from app.routers.utils import require_configured_secret, run_in_session
@@ -660,6 +661,7 @@ app.include_router(onboarding_router)
 app.include_router(organizer_auth_router)
 app.include_router(organizer_events_router)
 app.include_router(public_router)
+app.include_router(reports_router)
 app.include_router(settings_router)
 app.include_router(unsubscribe_router)
 app.include_router(webhooks_router)

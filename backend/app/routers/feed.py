@@ -12,6 +12,7 @@ from app.models.models import DailyFeed, Event, User
 from app.rate_limit import limiter
 from app.routers.auth import get_current_user
 from app.routers.utils import (
+    load_user_reported_events,
     load_user_signals,
     public_event_filter,
     resolve_locale_param,
@@ -88,13 +89,20 @@ async def get_feed(
             "is_stale": False,
         }
 
-    sigs = await load_user_signals(db, current_user.id, [e.id for e in events])
+    event_ids = [e.id for e in events]
+    sigs = await load_user_signals(db, current_user.id, event_ids)
+    reported = await load_user_reported_events(db, current_user.id, event_ids)
     effective_locale = resolve_locale_param(locale, current_user.locale)
 
     return {
         "feed_date": feed.feed_date.isoformat(),
         "events": [
-            serialize_event(e, locale=effective_locale, feedback_by_event=sigs)
+            serialize_event(
+                e,
+                locale=effective_locale,
+                feedback_by_event=sigs,
+                reported_event_ids=reported,
+            )
             for e in events
         ],
         "built_at": feed.built_at.isoformat(),

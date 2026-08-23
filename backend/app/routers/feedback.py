@@ -38,6 +38,7 @@ from app.rate_limit import limiter
 from app.routers.auth import get_current_user
 from app.routers.utils import (
     invalidate_user_scores,
+    load_user_reported_events,
     public_event_filter,
     resolve_locale_param,
     select_events_with_classification,
@@ -212,11 +213,19 @@ async def list_feedback_events(
     events = list((await db.scalars(page_stmt)).all())
 
     feedback_by_event = {e.id: signal for e in events}
+    reported = await load_user_reported_events(
+        db, current_user.id, [e.id for e in events]
+    )
     effective_locale = resolve_locale_param(locale, current_user.locale)
 
     return {
         "events": [
-            serialize_event(e, locale=effective_locale, feedback_by_event=feedback_by_event)
+            serialize_event(
+                e,
+                locale=effective_locale,
+                feedback_by_event=feedback_by_event,
+                reported_event_ids=reported,
+            )
             for e in events
         ],
         "total": total,

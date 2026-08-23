@@ -522,6 +522,9 @@ ADMIN_AUTH_FAILURES_MAX_ENTRIES = 4096
 # Authenticated feedback writes — generous cap; prevents cache-rebuild DoS
 # (every signal wipes all user_event_scores rows for that user).
 RATE_LIMIT_FEEDBACK = "60/minute"
+# POST /reports — content-moderation write, tighter than RATE_LIMIT_FEEDBACK
+# since it creates a row an admin must triage (see LOG_EVENT_REPORT_SUBMITTED).
+RATE_LIMIT_REPORT = "10/minute"
 # Authenticated state-changing writes (onboarding persona, settings GET/PATCH) —
 # damps self-inflicted DB write spam from a valid session token.
 RATE_LIMIT_AUTHENTICATED_WRITE = "30/minute"
@@ -1251,6 +1254,7 @@ LOG_EVENT_WEBHOOK_REJECTED = "webhook_rejected"  # inbound-mail signature / body
 LOG_EVENT_EMAIL_SEND_FAILED = "email_send_failed"  # Resend magic-link / digest failure
 LOG_EVENT_CONTACT_HONEYPOT = "contact_honeypot_block"  # contact-form honeypot field tripped
 LOG_EVENT_HOST_REJECTED = "host_rejected"  # HostCheckMiddleware Host-header reject
+LOG_EVENT_REPORT_SUBMITTED = "report_submitted"  # POST /reports success
 # `status` field values for LOG_EVENT_JOB_RUN.
 LOG_STATUS_OK = "ok"
 LOG_STATUS_ERROR = "error"
@@ -1383,6 +1387,13 @@ ERROR_UNKNOWN_SOURCE = "Unknown source: {slug!r}"
 ERROR_INVALID_SORT = "sort must be one of {sorts}"
 ERROR_INVALID_SIGNAL = "Invalid signal. Must be one of: {signals}"
 ERROR_INVALID_PREFERENCE_SIGNAL = "signal must be one of: {signals}"
+
+# routers/reports.py
+ERROR_INVALID_REPORT_REASON = "reason must be one of: {reasons}"
+ERROR_REPORT_DETAIL_REQUIRED = (
+    "detail is required when reason is 'other' or is_illegal_allegation is true."
+)
+ERROR_REPORT_DETAIL_TOO_LONG = "detail must be at most {max_chars} characters."
 
 # routers/settings.py
 ERROR_NO_UPDATE_FIELDS = "Provide at least one field to update."

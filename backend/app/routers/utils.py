@@ -25,6 +25,7 @@ from app.constants import (
     MAGIC_LINK_RESEND_COOLDOWN_SECONDS,
     PREFERENCE_SIGNALS,
     PREFERRED_TASTE_MIN_WEIGHT,
+    REPORT_STATUS_OPEN,
     SECONDS_PER_DAY,
     SESSION_COOKIE_HTTPONLY,
     SESSION_COOKIE_SAMESITE,
@@ -35,6 +36,7 @@ from app.db import AsyncSessionLocal
 from app.models.models import (
     Event,
     EventClassification,
+    EventReport,
     Persona,
     User,
     UserEventFeedback,
@@ -441,6 +443,7 @@ def serialize_event(
     event: Event,
     locale: str = DEFAULT_USER_LOCALE,
     feedback_by_event: dict[int, str] | None = None,
+    reported_event_ids: set[int] | None = None,
 ) -> dict:
     cl = event.classification
     why_go = resolve_why_go(cl, locale)
@@ -468,6 +471,7 @@ def serialize_event(
         "quality_score": cl.quality_score if cl else None,
         "language": cl.language_detected if cl else None,
         "my_signal": feedback_by_event.get(event.id) if feedback_by_event else None,
+        "reported": event.id in reported_event_ids if reported_event_ids else False,
     }
 
 
@@ -498,3 +502,28 @@ async def load_user_signals(
         )
     ).all()
     return {row.event_id: row.signal for row in rows}
+
+
+async def load_user_reported_events(
+    db: AsyncSession, user_id: int, event_ids: list[int]
+) -> set[int]:
+    """Event IDs among ``event_ids`` the given user currently has an *open*
+    report on — feeds ``serialize_event``'s ``reported`` field.
+
+    Restricted to ``REPORT_STATUS_OPEN`` (not any status): a resolved report
+    must not render as "Reported" in the frontend menu, since a resolved
+    report is deliberately re-reportable (see event_reports upsert/reopen
+    semantics in routers/reports.py).
+    """
+    if not event_ids:
+        return set()
+    rows = (
+        await db.execute(
+            select(EventReport.event_id).where(
+                EventReport.user_id == user_id,
+                EventReport.event_id.in_(event_ids),
+                EventReport.status == REPORT_STATUS_OPEN,
+            )
+        )
+    ).all()
+    return {row.event_id for row in rows}
