@@ -7,6 +7,7 @@ from collections import OrderedDict
 from collections.abc import Awaitable, Callable, Sequence
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from pydantic import BaseModel
 from sqlalchemy import func, select
@@ -797,3 +798,31 @@ async def admin_stats(request: Request) -> dict:
         "events": {"total": total, "canonical": canonical},
         "sources": {"total": sources_total, "enabled": sources_enabled},
     }
+
+
+# --- TEMPORARY: proxy-buffering probe for issue #145 — remove after use. ---
+
+
+@router.get("/_probe/stream", dependencies=[Depends(_require_admin)])
+@limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
+async def admin_probe_stream(request: Request) -> StreamingResponse:
+    import asyncio
+    from collections.abc import AsyncIterator
+    from datetime import datetime, timezone
+
+    async def _lines() -> AsyncIterator[str]:
+        for i in range(5):
+            yield f"line {i} at {datetime.now(timezone.utc).isoformat()}\n"
+            if i < 4:
+                await asyncio.sleep(20)
+
+    return StreamingResponse(_lines(), media_type="text/plain")
+
+
+@router.get("/_probe/sleep130", dependencies=[Depends(_require_admin)])
+@limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
+async def admin_probe_sleep130(request: Request) -> dict:
+    import asyncio
+
+    await asyncio.sleep(130)
+    return {"ok": True}
