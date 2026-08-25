@@ -1294,6 +1294,8 @@ LOG_EVENT_ADMIN_ACTION = "admin_action"  # /admin/auth/* login/logout (issue #15
 # `action` field values for LOG_EVENT_ADMIN_ACTION (issue #155).
 ADMIN_ACTION_RESOLVE_REPORTS = "resolve_reports"
 ADMIN_ACTION_TAKEDOWN_REPORTED_EVENT = "takedown_reported_event"
+ADMIN_ACTION_APPROVE_SUBMISSION = "approve_submission"
+ADMIN_ACTION_RETRACT_SUBMISSION = "retract_submission"
 # `status` field values for LOG_EVENT_JOB_RUN.
 LOG_STATUS_OK = "ok"
 LOG_STATUS_ERROR = "error"

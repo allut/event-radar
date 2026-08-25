@@ -128,6 +128,8 @@ def make_event():
         e.is_out_of_area = False
         e.has_free_tier = False
         e.dedup_group_id = None
+        e.created_at = MagicMock()
+        e.created_at.isoformat.return_value = "2026-05-13T06:00:00+00:00"
 
         if why_go is not None or why_go_localized is not None:
             cl = MagicMock()

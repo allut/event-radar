@@ -17,7 +17,9 @@ from app.auth.tokens import verify_admin_session_token
 from app.cleanup import cleanup_stale_data
 from app.config import settings
 from app.constants import (
+    ADMIN_ACTION_APPROVE_SUBMISSION,
     ADMIN_ACTION_RESOLVE_REPORTS,
+    ADMIN_ACTION_RETRACT_SUBMISSION,
     ADMIN_ACTION_TAKEDOWN_REPORTED_EVENT,
     ADMIN_AUTH_FAILURES_MAX_ENTRIES,
     ADMIN_AUTH_LOCKOUT_SECONDS,
@@ -375,6 +377,20 @@ async def admin_dedup_groups(
     }
 
 
+class _ResolutionBody(BaseModel):
+    resolution_note: str
+
+
+def _validated_resolution_note(body: _ResolutionBody) -> str:
+    note = body.resolution_note.strip()
+    if not note:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=ERROR_RESOLUTION_NOTE_REQUIRED,
+        )
+    return note
+
+
 @router.get("/submissions", dependencies=[Depends(_require_admin)])
 @limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
 async def admin_list_submissions(
@@ -421,6 +437,7 @@ async def admin_list_submissions(
                 **serialize_event(e),
                 "status": e.status,
                 "submitted_by_organizer_id": e.submitted_by_organizer_id,
+                "created_at": e.created_at.isoformat(),
             }
             for e in events
         ],
@@ -440,11 +457,14 @@ async def _submission_or_404(db: AsyncSession, event_id: int) -> Event:
     "/submissions/{event_id}/retract", dependencies=[Depends(_require_admin)]
 )
 @limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
-async def admin_retract_submission(event_id: int, request: Request) -> dict:
+async def admin_retract_submission(
+    event_id: int, body: _ResolutionBody, request: Request
+) -> dict:
     """Cancel an organizer-submitted event (soft delete — mirrors organizer's
     own DELETE /organizer/events/{id}; events are never hard-deleted). Also
     clears needs_review so this resolves the review-queue entry outright —
     admin_list_submissions additionally excludes cancelled events regardless."""
+    note = _validated_resolution_note(body)
 
     async def _run() -> dict:
         async with AsyncSessionLocal() as db:
@@ -460,22 +480,27 @@ async def admin_retract_submission(event_id: int, request: Request) -> dict:
             await send_report_resolution_emails(
                 db, event, resolved, REPORT_AUTO_RESOLVE_NOTE
             )
-            return {"id": event.id, "status": event.status}
+            return {"id": event.id, "status": event.status, "note": note}
 
-    return await run_admin_job("Retract submission", _run())
+    result = await run_admin_job("Retract submission", _run())
+    log_admin_action(ADMIN_ACTION_RETRACT_SUBMISSION, event_id, result)
+    return result
 
 
 @router.post(
     "/submissions/{event_id}/approve", dependencies=[Depends(_require_admin)]
 )
 @limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
-async def admin_approve_submission(event_id: int, request: Request) -> dict:
+async def admin_approve_submission(
+    event_id: int, body: _ResolutionBody, request: Request
+) -> dict:
     """Clear needs_review — an admin has eyeballed the submission and it's fine
     as-is. Also flips the submitting organizer to ``verified`` (a first-time
     approval is what makes an organizer trusted going forward — see
     Organizer.verified / app/publish.py) and runs the publish gate so this
     event (and any other now-eligible backlog) goes live immediately rather
     than waiting for the next scheduled publish_pending pass."""
+    note = _validated_resolution_note(body)
 
     async def _run() -> dict:
         async with AsyncSessionLocal() as db:
@@ -490,13 +515,11 @@ async def admin_approve_submission(event_id: int, request: Request) -> dict:
             # Diagnostic breakdown is unused by this endpoint's response.
             await publish_pending(db, diagnostics=False)
             await db.commit()
-            return {"id": event.id, "needs_review": event.needs_review}
+            return {"id": event.id, "needs_review": event.needs_review, "note": note}
 
-    return await run_admin_job("Approve submission", _run())
-
-
-class _ResolutionBody(BaseModel):
-    resolution_note: str
+    result = await run_admin_job("Approve submission", _run())
+    log_admin_action(ADMIN_ACTION_APPROVE_SUBMISSION, event_id, result)
+    return result
 
 
 @router.get("/reports", dependencies=[Depends(_require_admin)])
@@ -638,16 +661,6 @@ async def _event_or_404(db: AsyncSession, event_id: int) -> Event:
             status_code=status.HTTP_404_NOT_FOUND, detail=ERROR_EVENT_NOT_FOUND
         )
     return event
-
-
-def _validated_resolution_note(body: _ResolutionBody) -> str:
-    note = body.resolution_note.strip()
-    if not note:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=ERROR_RESOLUTION_NOTE_REQUIRED,
-        )
-    return note
 
 
 @router.post(

@@ -9,7 +9,12 @@ import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
-from app.constants import APP_ENV_DEVELOPMENT, EVENT_STATUS_CANCELLED
+from app.constants import (
+    ADMIN_ACTION_APPROVE_SUBMISSION,
+    ADMIN_ACTION_RETRACT_SUBMISSION,
+    APP_ENV_DEVELOPMENT,
+    EVENT_STATUS_CANCELLED,
+)
 
 
 def _build_app() -> FastAPI:
@@ -136,7 +141,7 @@ async def test_list_submissions_excludes_cancelled():
 
 
 @pytest.mark.asyncio
-async def test_retract_submission_cancels_event(make_event):
+async def test_retract_submission_cancels_event(make_event, caplog):
     app = _build_app()
     event = make_event(event_id=42, status="published")
     event.submitted_by_organizer_id = 7
@@ -149,6 +154,7 @@ async def test_retract_submission_cancels_event(make_event):
     with (
         patch("app.routers.admin.settings") as mock_settings,
         patch("app.routers.admin.AsyncSessionLocal", return_value=_make_db_ctx(db)),
+        caplog.at_level("INFO"),
     ):
         mock_settings.ADMIN_PASSWORD = ""
         mock_settings.APP_ENV = APP_ENV_DEVELOPMENT
@@ -157,13 +163,26 @@ async def test_retract_submission_cancels_event(make_event):
             transport=ASGITransport(app=app), base_url="http://test"
         ) as client:
             resp = await client.post(
-                "/admin/submissions/42/retract", auth=("admin", "")
+                "/admin/submissions/42/retract",
+                json={"resolution_note": "Duplicate of an existing listing."},
+                auth=("admin", ""),
             )
 
     assert resp.status_code == http.HTTPStatus.OK
     assert event.status == EVENT_STATUS_CANCELLED
     assert event.needs_review is False  # resolves the review-queue entry outright
-    assert resp.json() == {"id": 42, "status": EVENT_STATUS_CANCELLED}
+    assert resp.json() == {
+        "id": 42,
+        "status": EVENT_STATUS_CANCELLED,
+        "note": "Duplicate of an existing listing.",
+    }
+
+    admin_action_records = [
+        r for r in caplog.records if getattr(r, "event", None) == "admin_action"
+    ]
+    assert len(admin_action_records) == 1
+    assert admin_action_records[0].action == ADMIN_ACTION_RETRACT_SUBMISSION
+    assert admin_action_records[0].target == 42
 
 
 @pytest.mark.asyncio
@@ -199,7 +218,9 @@ async def test_retract_submission_auto_resolves_open_reports(
             transport=ASGITransport(app=app), base_url="http://test"
         ) as client:
             resp = await client.post(
-                "/admin/submissions/42/retract", auth=("admin", "")
+                "/admin/submissions/42/retract",
+                json={"resolution_note": "Duplicate of an existing listing."},
+                auth=("admin", ""),
             )
 
     assert resp.status_code == http.HTTPStatus.OK
@@ -229,10 +250,40 @@ async def test_retract_non_submission_returns_404():
             transport=ASGITransport(app=app), base_url="http://test"
         ) as client:
             resp = await client.post(
-                "/admin/submissions/42/retract", auth=("admin", "")
+                "/admin/submissions/42/retract",
+                json={"resolution_note": "Duplicate of an existing listing."},
+                auth=("admin", ""),
             )
 
     assert resp.status_code == http.HTTPStatus.NOT_FOUND
+
+
+@pytest.mark.asyncio
+async def test_retract_submission_requires_nonblank_note(make_event):
+    app = _build_app()
+    event = make_event(event_id=42, status="published")
+    event.submitted_by_organizer_id = 7
+
+    db = AsyncMock()
+    db.get = AsyncMock(return_value=event)
+
+    with (
+        patch("app.routers.admin.settings") as mock_settings,
+        patch("app.routers.admin.AsyncSessionLocal", return_value=_make_db_ctx(db)),
+    ):
+        mock_settings.ADMIN_PASSWORD = ""
+        mock_settings.APP_ENV = APP_ENV_DEVELOPMENT
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            resp = await client.post(
+                "/admin/submissions/42/retract",
+                json={"resolution_note": "   "},
+                auth=("admin", ""),
+            )
+
+    assert resp.status_code == http.HTTPStatus.UNPROCESSABLE_ENTITY
 
 
 # ---------------------------------------------------------------------------
@@ -241,7 +292,7 @@ async def test_retract_non_submission_returns_404():
 
 
 @pytest.mark.asyncio
-async def test_approve_submission_clears_needs_review(make_event, make_organizer):
+async def test_approve_submission_clears_needs_review(make_event, make_organizer, caplog):
     app = _build_app()
     event = make_event(event_id=42, status="published")
     event.submitted_by_organizer_id = 7
@@ -269,6 +320,7 @@ async def test_approve_submission_clears_needs_review(make_event, make_organizer
         patch(
             "app.routers.admin.publish_pending", new_callable=AsyncMock
         ) as mock_publish,
+        caplog.at_level("INFO"),
     ):
         mock_settings.ADMIN_PASSWORD = ""
         mock_settings.APP_ENV = APP_ENV_DEVELOPMENT
@@ -277,17 +329,54 @@ async def test_approve_submission_clears_needs_review(make_event, make_organizer
             transport=ASGITransport(app=app), base_url="http://test"
         ) as client:
             resp = await client.post(
-                "/admin/submissions/42/approve", auth=("admin", "")
+                "/admin/submissions/42/approve",
+                json={"resolution_note": "Looks good."},
+                auth=("admin", ""),
             )
 
     assert resp.status_code == http.HTTPStatus.OK
     assert event.needs_review is False
-    assert resp.json() == {"id": 42, "needs_review": False}
+    assert resp.json() == {"id": 42, "needs_review": False, "note": "Looks good."}
     # M2: a first approval is what makes the organizer trusted going forward.
     assert organizer.verified is True
     # The publish gate must run inline so this event (now eligible) goes live
     # immediately rather than waiting for the next scheduled pass.
     mock_publish.assert_awaited_once_with(db, diagnostics=False)
+
+    admin_action_records = [
+        r for r in caplog.records if getattr(r, "event", None) == "admin_action"
+    ]
+    assert len(admin_action_records) == 1
+    assert admin_action_records[0].action == ADMIN_ACTION_APPROVE_SUBMISSION
+    assert admin_action_records[0].target == 42
+
+
+@pytest.mark.asyncio
+async def test_approve_submission_requires_nonblank_note(make_event):
+    app = _build_app()
+    event = make_event(event_id=42, status="published")
+    event.submitted_by_organizer_id = 7
+
+    db = AsyncMock()
+    db.get = AsyncMock(return_value=event)
+
+    with (
+        patch("app.routers.admin.settings") as mock_settings,
+        patch("app.routers.admin.AsyncSessionLocal", return_value=_make_db_ctx(db)),
+    ):
+        mock_settings.ADMIN_PASSWORD = ""
+        mock_settings.APP_ENV = APP_ENV_DEVELOPMENT
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            resp = await client.post(
+                "/admin/submissions/42/approve",
+                json={"resolution_note": "   "},
+                auth=("admin", ""),
+            )
+
+    assert resp.status_code == http.HTTPStatus.UNPROCESSABLE_ENTITY
 
 
 @pytest.mark.asyncio
@@ -331,7 +420,9 @@ async def test_approve_submission_with_no_submitting_organizer_still_publishes(
             transport=ASGITransport(app=app), base_url="http://test"
         ) as client:
             resp = await client.post(
-                "/admin/submissions/42/approve", auth=("admin", "")
+                "/admin/submissions/42/approve",
+                json={"resolution_note": "Looks good."},
+                auth=("admin", ""),
             )
 
     assert resp.status_code == http.HTTPStatus.OK

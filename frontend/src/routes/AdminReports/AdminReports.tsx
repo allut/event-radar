@@ -116,7 +116,7 @@ export default function AdminReports() {
           items={items}
           getId={(item) => item.event_id}
           isResolved={(item) => item.event_id in resolvedById}
-          resolvedTag="Resolved"
+          resolvedTag={() => 'Resolved'}
           selectedId={currentId}
           onSelect={(id) => {
             setSelectedId(id);

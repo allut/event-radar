@@ -5,7 +5,7 @@ interface AdminQueueSplitViewProps<T> {
   items: T[];
   getId: (item: T) => number;
   isResolved: (item: T) => boolean;
-  resolvedTag: string;
+  resolvedTag: (item: T) => string;
   selectedId: number | null;
   onSelect: (id: number) => void;
   renderRow: (item: T) => React.ReactNode;
@@ -61,7 +61,7 @@ export default function AdminQueueSplitView<T>({
               onClick={() => select(id)}
             >
               {renderRow(item)}
-              {resolved && <span className={styles.resolvedTag}>{resolvedTag}</span>}
+              {resolved && <span className={styles.resolvedTag}>{resolvedTag(item)}</span>}
             </button>
           );
         })}

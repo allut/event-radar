@@ -320,6 +320,7 @@ export const QUERY_KEYS = {
   organizerEvents: 'organizerEvents',
   adminCounts: 'adminCounts',
   adminReports: 'adminReports',
+  adminSubmissions: 'adminSubmissions',
 } as const;
 
 // ─── UI state types ───────────────────────────────────────────────────────────
@@ -624,4 +625,7 @@ export const API = {
   adminReports: '/admin/reports',
   adminReportResolve: (id: number) => `/admin/reports/${id}/resolve`,
   adminReportTakedown: (id: number) => `/admin/reports/${id}/takedown`,
+  adminSubmissions: '/admin/submissions',
+  adminSubmissionApprove: (id: number) => `/admin/submissions/${id}/approve`,
+  adminSubmissionRetract: (id: number) => `/admin/submissions/${id}/retract`,
 } as const;
