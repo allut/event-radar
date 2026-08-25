@@ -1,7 +1,8 @@
 import { StatusCodes } from 'http-status-codes';
-import { ROUTES } from '../constants';
+import { API, ROUTES } from '../constants';
 import { clearSignedInHint, isLoggingOut } from '../lib/auth';
 import { clearOrganizerSignedInHint, isOrganizerLoggingOut } from '../lib/organizerAuth';
+import { clearAdminSignedInHint, isAdminLoggingOut } from '../lib/adminAuth';
 
 export class ApiError extends Error {
   constructor(public readonly status: number, message: string) {
@@ -17,10 +18,21 @@ interface RequestOptions extends RequestInit {
    * cookie the browser attaches automatically; this flag no longer selects a
    * token. */
   organizer?: boolean;
+  /** Same idea as `organizer`, but for the admin console session track (see
+   * lib/adminAuth.ts). */
+  admin?: boolean;
 }
 
+// POST /admin/auth/login is the one endpoint where a 401 means "wrong
+// credentials", not "your session expired" — every other call through this
+// client only ever gets a 401 from an expired/missing/revoked session. That
+// endpoint must skip the redirect-and-clear-hint interceptor below and let
+// its 401 fall through to the generic error path so the login form can show
+// the real ApiError.message instead of a misleading "Session expired".
+const NO_SESSION_REDIRECT_ON_401 = new Set<string>([API.adminAuthLogin]);
+
 async function request<T>(path: string, init: RequestOptions = {}): Promise<T> {
-  const { organizer, ...fetchInit } = init;
+  const { organizer, admin, ...fetchInit } = init;
   const hasBody = fetchInit.body !== undefined;
   // FormData (the image-upload path) must not be JSON.stringify'd or given
   // an explicit Content-Type — the browser sets the multipart boundary itself.
@@ -32,8 +44,11 @@ async function request<T>(path: string, init: RequestOptions = {}): Promise<T> {
 
   const res = await fetch(`/api${path}`, { ...fetchInit, headers, credentials: 'include' });
 
-  if (res.status === StatusCodes.UNAUTHORIZED) {
-    if (organizer) {
+  if (res.status === StatusCodes.UNAUTHORIZED && !NO_SESSION_REDIRECT_ON_401.has(path)) {
+    if (admin) {
+      clearAdminSignedInHint();
+      if (!isAdminLoggingOut()) window.location.replace(ROUTES.adminLogin);
+    } else if (organizer) {
       clearOrganizerSignedInHint();
       if (!isOrganizerLoggingOut()) window.location.replace(ROUTES.organizerLogin);
     } else {
@@ -57,6 +72,7 @@ async function request<T>(path: string, init: RequestOptions = {}): Promise<T> {
 
 interface CallOptions {
   organizer?: boolean;
+  admin?: boolean;
 }
 
 function jsonOrFormBody(body: unknown): BodyInit | undefined {
@@ -89,4 +105,12 @@ export const organizerApi = {
   post: <T>(path: string, body?: unknown) => api.post<T>(path, body, { organizer: true }),
   patch: <T>(path: string, body?: unknown) => api.patch<T>(path, body, { organizer: true }),
   delete: <T>(path: string) => api.delete<T>(path, { organizer: true }),
+};
+
+// Thin admin-scoped wrapper, mirroring organizerApi — every call carries
+// { admin: true } so call sites (admin console routes/hooks) never have to
+// remember the flag.
+export const adminApi = {
+  get: <T>(path: string) => api.get<T>(path, { admin: true }),
+  post: <T>(path: string, body?: unknown) => api.post<T>(path, body, { admin: true }),
 };

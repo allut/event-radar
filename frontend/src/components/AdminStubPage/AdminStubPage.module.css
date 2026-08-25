@@ -1,0 +1,31 @@
+.head {
+  margin-bottom: var(--space-6);
+}
+
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  letter-spacing: var(--eyebrow-tracking);
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.title {
+  font-family: var(--font-display);
+  font-size: var(--heading-xl);
+  font-weight: var(--fw-semibold);
+  color: var(--text);
+  margin-top: var(--space-1);
+}
+
+.panel {
+  composes: card from '../shared/Card.module.css';
+  padding: var(--space-5);
+}
+
+.stub {
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  color: var(--text-dim);
+  font-style: italic;
+}

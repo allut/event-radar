@@ -3,6 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import App from './App';
 import { setSignedInHint } from './lib/auth';
 import { setOrganizerSignedInHint } from './lib/organizerAuth';
+import { setAdminSignedInHint } from './lib/adminAuth';
 import { t } from './i18n';
 
 // Covers the two route guards in App.tsx that App.locale.test.tsx only
@@ -70,6 +71,39 @@ describe('App route guards', () => {
     setPath('/settings');
     render(<App />);
     await waitFor(() => expect(window.location.pathname).toBe('/login'));
+  });
+
+  // AdminApp is a React.lazy chunk (issue #154) — first-mount compilation of
+  // that chunk can outrun waitFor's default 1000ms timeout on a cold cache,
+  // so these three give it more room than the rest of this file needs.
+  const ADMIN_CHUNK_TIMEOUT = { timeout: 5000 };
+
+  it('AdminProtected redirects an unauthenticated visitor to /admin/login', async () => {
+    setPath('/admin');
+    render(<App />);
+
+    await waitFor(() => expect(window.location.pathname).toBe('/admin/login'), ADMIN_CHUNK_TIMEOUT);
+  });
+
+  it('AdminProtected renders the guarded route for an authenticated admin', async () => {
+    setAdminSignedInHint();
+    setPath('/admin');
+    render(<App />);
+
+    await waitFor(
+      () => expect(screen.getByRole('navigation', { name: 'Admin' })).toBeInTheDocument(),
+      ADMIN_CHUNK_TIMEOUT,
+    );
+    expect(window.location.pathname).toBe('/admin');
+  });
+
+  it('does not let a consumer or organizer session satisfy the admin guard', async () => {
+    setSignedInHint();
+    setOrganizerSignedInHint();
+    setPath('/admin/reports');
+    render(<App />);
+
+    await waitFor(() => expect(window.location.pathname).toBe('/admin/login'), ADMIN_CHUNK_TIMEOUT);
   });
 
   it('gates the catch-all NotFound route behind Protected', async () => {

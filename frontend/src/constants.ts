@@ -318,6 +318,7 @@ export const QUERY_KEYS = {
   settings: 'settings',
   showcase: 'showcase',
   organizerEvents: 'organizerEvents',
+  adminCounts: 'adminCounts',
 } as const;
 
 // ─── UI state types ───────────────────────────────────────────────────────────
@@ -548,7 +549,35 @@ export const ROUTES = {
   organizerSubmit: '/organizer/submit',
   organizerEventEdit: (id: number | string) => `/organizer/events/${id}/edit`,
   organizerEventEditPattern: '/organizer/events/:id/edit',
+  // Admin console (issue #154) — registered entirely outside App.tsx's
+  // ROUTE_DEFS/locale-prefix loop (see AdminApp), so these are never
+  // locale-prefixed and never appear in NAV_ITEMS.
+  adminLogin: '/admin/login',
+  adminDashboard: '/admin',
+  adminReports: '/admin/reports',
+  adminSubmissions: '/admin/submissions',
+  adminEventDetail: (id: number | string) => `/admin/events/${id}`,
+  adminEventDetailPattern: '/admin/events/:id',
+  adminPipeline: '/admin/pipeline',
+  adminDedup: '/admin/dedup',
 } as const;
+
+// The admin console's persistent nav — the 5 clickable screens of the
+// ticket's 7 (the other 2, /admin/login and /admin/events/:id, are reached
+// by URL/click-through, not nav links). Always lists all 5, even before
+// later tickets build the still-stubbed ones (issue #154). No i18n: the
+// console is an internal operator tool, not user-facing product surface.
+export const ADMIN_NAV_ITEMS = [
+  { route: ROUTES.adminDashboard, label: 'Dashboard' },
+  { route: ROUTES.adminReports, label: 'Reports' },
+  { route: ROUTES.adminSubmissions, label: 'Submissions' },
+  { route: ROUTES.adminPipeline, label: 'Pipeline' },
+  { route: ROUTES.adminDedup, label: 'Dedup groups' },
+] as const;
+
+// Parallel signed-in hint to SIGNED_IN_HINT_KEY/ORGANIZER_SIGNED_IN_HINT_KEY
+// (see lib/adminAuth.ts) — a third, independent auth track's localStorage flag.
+export const ADMIN_SIGNED_IN_HINT_KEY = 'admin_session_token';
 
 // The signed-in primary nav — same four {route, labelKey} pairs rendered by
 // both TopBar (desktop) and MobileMenu (mobile), kept in one place so they
@@ -587,4 +616,8 @@ export const API = {
   organizerEvent: (id: number | string) => `/organizer/events/${id}`,
   organizerEventImage: '/organizer/events/image',
   reports: '/reports',
+  adminAuthLogin: '/admin/auth/login',
+  adminAuthLogout: '/admin/auth/logout',
+  adminAuthMe: '/admin/auth/me',
+  adminCounts: '/admin/counts',
 } as const;

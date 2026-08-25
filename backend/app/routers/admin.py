@@ -6,12 +6,14 @@ import time
 from collections import OrderedDict
 from collections.abc import Awaitable, Callable, Sequence
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Query, Request, status
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
+from itsdangerous import BadSignature, SignatureExpired
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.auth.tokens import verify_admin_session_token
 from app.cleanup import cleanup_stale_data
 from app.config import settings
 from app.constants import (
@@ -22,6 +24,7 @@ from app.constants import (
     ADMIN_DEDUP_GROUPS_PAGE_SIZE,
     ADMIN_REVIEW_QUEUE_MAX_PAGE_SIZE,
     ADMIN_REVIEW_QUEUE_PAGE_SIZE,
+    ADMIN_SESSION_COOKIE_NAME,
     ADMIN_USERNAME_DEFAULT,
     APP_ENV_DEVELOPMENT,
     ERROR_ADMIN_DISABLED,
@@ -76,7 +79,10 @@ from app.routers.utils import (
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/admin")
-_security = HTTPBasic()
+# auto_error=False: a request carrying the admin session cookie instead of a
+# Basic header must not be auto-rejected before _require_admin gets a chance
+# to check the cookie — see _require_admin below.
+_security = HTTPBasic(auto_error=False)
 
 # (client_key -> (consecutive_failure_count, locked_until_monotonic)). In-memory,
 # single-process — see ADMIN_AUTH_MAX_FAILURES in constants.py for the trade-off.
@@ -100,10 +106,12 @@ def _evict_one_admin_auth_failure(now: float) -> None:
     _admin_auth_failures.popitem(last=False)
 
 
-def _require_admin(
-    request: Request, credentials: HTTPBasicCredentials = Depends(_security)
-) -> None:
-    key = client_key(request)
+def check_admin_lockout(key: str) -> float:
+    """Raise 429 if `key` is currently locked out; otherwise return
+    time.monotonic() for the caller to reuse (avoids a second clock read).
+    Shared by _require_admin (Basic auth) and routers/admin_auth.py's form
+    login — ticket #154 requires both auth surfaces to share one lockout
+    counter rather than each getting its own damper."""
     now = time.monotonic()
     _count, locked_until = _admin_auth_failures.get(key, (0, 0.0))
     if now < locked_until:
@@ -111,6 +119,94 @@ def _require_admin(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail=ERROR_ADMIN_LOCKOUT,
         )
+    return now
+
+
+def record_admin_auth_failure(key: str, now: float, username: str) -> None:
+    """Bump the consecutive-failure count for `key`, locking it out once
+    ADMIN_AUTH_MAX_FAILURES is reached. Shared with routers/admin_auth.py —
+    see check_admin_lockout."""
+    count, _locked = _admin_auth_failures.get(key, (0, 0.0))
+    failures = count + 1
+    locked_until = (
+        now + ADMIN_AUTH_LOCKOUT_SECONDS
+        if failures >= ADMIN_AUTH_MAX_FAILURES
+        else 0.0
+    )
+    _admin_auth_failures[key] = (failures, locked_until)
+    _admin_auth_failures.move_to_end(key)
+    while len(_admin_auth_failures) > ADMIN_AUTH_FAILURES_MAX_ENTRIES:
+        _evict_one_admin_auth_failure(now)
+    log.warning(
+        "admin auth failed: username=%r failures=%d",
+        username,
+        failures,
+        extra={"event": LOG_EVENT_AUTH_FAILED},
+    )
+
+
+def clear_admin_auth_failure(key: str) -> None:
+    """Reset `key`'s failure count on a successful login. Shared with
+    routers/admin_auth.py — see check_admin_lockout."""
+    _admin_auth_failures.pop(key, None)
+
+
+def admin_username_disabled() -> bool:
+    """True when ADMIN_USERNAME was never overridden from its well-known
+    default outside development — fail closed like the password check,
+    since a well-known username halves the credential pair an attacker
+    needs to brute-force. Shared with routers/admin_auth.py."""
+    return (
+        settings.ADMIN_USERNAME == ADMIN_USERNAME_DEFAULT
+        and settings.APP_ENV != APP_ENV_DEVELOPMENT
+    )
+
+
+def admin_credentials_ok(username: str, password: str) -> bool:
+    """Constant-time check of a username/password attempt against the
+    configured ADMIN_USERNAME/ADMIN_PASSWORD. Shared with
+    routers/admin_auth.py — caller is responsible for the
+    require_configured_secret/admin_username_disabled gates around this."""
+    username_ok = secrets.compare_digest(
+        username.encode(), settings.ADMIN_USERNAME.encode()
+    )
+    password_ok = secrets.compare_digest(
+        password.encode(), settings.ADMIN_PASSWORD.encode()
+    )
+    return username_ok and password_ok
+
+
+def _valid_admin_session(admin_session: str) -> bool:
+    try:
+        verify_admin_session_token(admin_session)
+        return True
+    except (SignatureExpired, BadSignature):
+        return False
+
+
+def _require_admin(
+    request: Request,
+    credentials: HTTPBasicCredentials | None = Depends(_security),
+    admin_session: str | None = Cookie(default=None, alias=ADMIN_SESSION_COOKIE_NAME),
+) -> None:
+    """Accept EITHER a valid admin console session cookie (issued by
+    POST /admin/auth/login) OR HTTP Basic (curl / existing integrations) —
+    see docs/backend-ops.md's Admin Endpoints section. An invalid/expired
+    cookie falls through to requiring Basic rather than rejecting outright,
+    so a stale browser cookie doesn't lock a curl caller out of the same
+    request path."""
+    if admin_session is not None and _valid_admin_session(admin_session):
+        return
+
+    if credentials is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=ERROR_ADMIN_INCORRECT_CREDENTIALS,
+            headers={"WWW-Authenticate": "Basic"},
+        )
+
+    key = client_key(request)
+    now = check_admin_lockout(key)
 
     password = settings.ADMIN_PASSWORD
     if not require_configured_secret(
@@ -121,47 +217,19 @@ def _require_admin(
         allow_insecure_dev=settings.ALLOW_INSECURE_DEV,
     ):
         return
-    if (
-        settings.ADMIN_USERNAME == ADMIN_USERNAME_DEFAULT
-        and settings.APP_ENV != APP_ENV_DEVELOPMENT
-    ):
-        # Fail closed like the password check: a well-known username halves the
-        # credential pair an attacker needs to brute-force.
+    if admin_username_disabled():
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=ERROR_ADMIN_DISABLED,
         )
-    username_ok = secrets.compare_digest(
-        credentials.username.encode(),
-        settings.ADMIN_USERNAME.encode(),
-    )
-    password_ok = secrets.compare_digest(
-        credentials.password.encode(),
-        password.encode(),
-    )
-    if not (username_ok and password_ok):
-        failures = _count + 1
-        locked_until = (
-            now + ADMIN_AUTH_LOCKOUT_SECONDS
-            if failures >= ADMIN_AUTH_MAX_FAILURES
-            else 0.0
-        )
-        _admin_auth_failures[key] = (failures, locked_until)
-        _admin_auth_failures.move_to_end(key)
-        while len(_admin_auth_failures) > ADMIN_AUTH_FAILURES_MAX_ENTRIES:
-            _evict_one_admin_auth_failure(now)
-        log.warning(
-            "admin auth failed: username=%r failures=%d",
-            credentials.username,
-            failures,
-            extra={"event": LOG_EVENT_AUTH_FAILED},
-        )
+    if not admin_credentials_ok(credentials.username, credentials.password):
+        record_admin_auth_failure(key, now, credentials.username)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=ERROR_ADMIN_INCORRECT_CREDENTIALS,
             headers={"WWW-Authenticate": "Basic"},
         )
-    _admin_auth_failures.pop(key, None)
+    clear_admin_auth_failure(key)
 
 
 @router.post("/ingest", dependencies=[Depends(_require_admin)])
@@ -762,6 +830,40 @@ async def admin_pipeline_run(
             return {"ok": False, "stages": stages}
 
     return {"ok": True, "stages": stages}
+
+
+@router.get("/counts", dependencies=[Depends(_require_admin)])
+@limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
+async def admin_counts(request: Request) -> dict:
+    """Open-reports + pending-submissions counts for the admin console landing
+    screen (issue #154). Mirrors the filters admin_list_reports/
+    admin_list_submissions use for their own totals, so the landing tiles
+    match what those (later-ticket) screens will show."""
+    async with AsyncSessionLocal() as db:
+        open_reports = (
+            await db.scalar(
+                select(func.count(func.distinct(EventReport.event_id)))
+                .select_from(EventReport)
+                .join(Event, Event.id == EventReport.event_id)
+                .where(
+                    EventReport.status == REPORT_STATUS_OPEN,
+                    Event.status != EVENT_STATUS_CANCELLED,
+                )
+            )
+        ) or 0
+        pending_submissions = (
+            await db.scalar(
+                select(func.count(Event.id)).where(
+                    Event.needs_review.is_(True),
+                    Event.status != EVENT_STATUS_CANCELLED,
+                )
+            )
+        ) or 0
+
+    return {
+        "open_reports": open_reports,
+        "pending_submissions": pending_submissions,
+    }
 
 
 @router.get("/stats", dependencies=[Depends(_require_admin)])

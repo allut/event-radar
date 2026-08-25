@@ -548,6 +548,10 @@ RATE_LIMIT_LOGOUT_ALL = "10/minute"
 # bump) — lower stakes than logout-all, so a more generous cap; shared by both
 # the consumer and organizer logout endpoints, mirroring RATE_LIMIT_LOGOUT_ALL.
 RATE_LIMIT_LOGOUT = "20/minute"
+# POST /admin/auth/login — a password+TOTP brute-force surface distinct from
+# RATE_LIMIT_ADMIN (which only gates already-authenticated /admin/* routes);
+# ADMIN_AUTH_MAX_FAILURES lockout is the consecutive-failure damper on top.
+RATE_LIMIT_ADMIN_LOGIN = "10/minute"
 # Authenticated /explore browsing — mirrors RATE_LIMIT_EVENTS_DETAIL; live filter
 # changes can fire a request per keystroke/chip-toggle, so this stays generous.
 RATE_LIMIT_BROWSE = "120/minute"
@@ -599,6 +603,25 @@ AUTH_ORGANIZER_SESSION_SALT = "organizer-session-v1"
 # organizers are not expected to need a different cadence than consumers).
 ORGANIZER_MAGIC_LINK_TTL_MINUTES = _MAGIC_LINK_TTL_MINUTES_SHARED
 ORGANIZER_SESSION_TTL_DAYS = _SESSION_TTL_DAYS_SHARED
+
+# Admin console auth (issue #154) — third auth track alongside the consumer and
+# organizer ones above. No magic link (password + TOTP instead) and no admins
+# table (a session just asserts "a valid login happened", nothing per-admin —
+# see routers/admin_auth.py), so this token carries no id/version claim, only a
+# distinct salt so it can never verify as a user/organizer token or vice versa.
+AUTH_ADMIN_SESSION_SALT = "admin-session-v1"
+ADMIN_SESSION_COOKIE_NAME = "admin_session"
+# Scoped under /api/admin like the organizer cookie is scoped under
+# /api/organizer — an admin route added outside /admin/* would silently 401.
+ADMIN_SESSION_COOKIE_PATH = "/api/admin"
+# 12h, shorter than the 2-day consumer/organizer TTL — a higher-value credential
+# with no revocation mechanism beyond expiry (see docs/adr/0001).
+ADMIN_SESSION_TTL_SECONDS = 12 * 60 * 60
+# One 30s step of drift tolerance either side of "now" (pyotp's valid_window is a
+# count of steps, not seconds; app/auth/totp.py) — accounts for clock skew between
+# the admin's authenticator app and this server without materially widening the
+# guess window.
+ADMIN_TOTP_VALID_WINDOW = 1
 # Per-organizer daily submission ceiling (routers/organizer_events.py), computed
 # from Tallinn calendar-day start — an IP rate limit alone can't cap a single
 # organizer account across multiple IPs.
@@ -1267,6 +1290,7 @@ LOG_EVENT_EMAIL_SEND_FAILED = "email_send_failed"  # Resend magic-link / digest 
 LOG_EVENT_CONTACT_HONEYPOT = "contact_honeypot_block"  # contact-form honeypot field tripped
 LOG_EVENT_HOST_REJECTED = "host_rejected"  # HostCheckMiddleware Host-header reject
 LOG_EVENT_REPORT_SUBMITTED = "report_submitted"  # POST /reports success
+LOG_EVENT_ADMIN_ACTION = "admin_action"  # /admin/auth/* login/logout (issue #154)
 # `status` field values for LOG_EVENT_JOB_RUN.
 LOG_STATUS_OK = "ok"
 LOG_STATUS_ERROR = "error"

@@ -14,6 +14,8 @@ from itsdangerous import URLSafeTimedSerializer
 
 from app.config import settings
 from app.constants import (
+    ADMIN_SESSION_TTL_SECONDS,
+    AUTH_ADMIN_SESSION_SALT,
     AUTH_MAGIC_SALT,
     AUTH_ORGANIZER_MAGIC_SALT,
     AUTH_ORGANIZER_SESSION_SALT,
@@ -122,6 +124,23 @@ def verify_organizer_session_token(token: str) -> tuple[int, int]:
         max_age=ORGANIZER_SESSION_TTL_DAYS * SECONDS_PER_DAY,
     )
     return int(payload["oid"]), int(payload.get("v", DEFAULT_SESSION_TOKEN_VERSION))
+
+
+def generate_admin_session_token() -> str:
+    """Admin console session (routers/admin_auth.py) — no admins table, no
+    per-admin identity, so unlike generate_session_token/
+    generate_organizer_session_token there is no id or "v" (revocation)
+    claim to embed: the payload just asserts a login happened. Revocation is
+    TTL expiry only (ADMIN_SESSION_TTL_SECONDS), per the ticket's scope."""
+    return _serializer().dumps({"admin": True}, salt=AUTH_ADMIN_SESSION_SALT)
+
+
+def verify_admin_session_token(token: str) -> None:
+    """Raises BadSignature / SignatureExpired on failure; returns nothing on
+    success (there is no id/version to hand back — see generate_admin_session_token)."""
+    _serializer().loads(
+        token, salt=AUTH_ADMIN_SESSION_SALT, max_age=ADMIN_SESSION_TTL_SECONDS
+    )
 
 
 def generate_unsubscribe_token(user_id: int) -> str:

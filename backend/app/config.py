@@ -123,6 +123,9 @@ class Settings(BaseSettings):
     ADMIN_PASSWORD: str = (
         ""  # Basic-auth password for /admin/* endpoints; empty = disabled (dev only)
     )
+    ADMIN_TOTP_SECRET: str = (
+        ""  # RFC 6238 base32 TOTP secret for POST /admin/auth/login; empty = disabled (dev only)
+    )
     INTERNAL_TOKEN: str = (
         ""  # X-Internal-Token header for /internal/tick; empty = disabled (dev only)
     )

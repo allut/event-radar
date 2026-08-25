@@ -1,0 +1,71 @@
+.head {
+  margin-bottom: var(--space-6);
+}
+
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  letter-spacing: var(--eyebrow-tracking);
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.title {
+  font-family: var(--font-display);
+  font-size: var(--heading-xl);
+  font-weight: var(--fw-semibold);
+  color: var(--text);
+  margin-top: var(--space-1);
+}
+
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--space-4);
+}
+
+.tile {
+  composes: card from '../../components/shared/Card.module.css';
+  padding: var(--space-5);
+  position: relative;
+  overflow: hidden;
+}
+
+.tile::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 2px;
+  background: var(--accent);
+}
+
+.tileWarn::before {
+  background: var(--danger);
+}
+
+.tileLabel {
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.tileNum {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 2.75rem;
+  font-weight: var(--fw-semibold);
+  color: var(--text);
+  line-height: 1.1;
+  margin: var(--space-2) 0 var(--space-1);
+}
+
+.tileWarn .tileNum {
+  color: var(--danger);
+}
+
+.tileSub {
+  font-size: var(--fs-sm);
+  color: var(--text-soft);
+}

@@ -54,6 +54,11 @@
 
   /* Typography */
   --font-display: 'Cormorant Garamond', Georgia, serif;
+  /* System stack only (no bundled webfont) — used by the admin console's
+     data/label treatment (issue #154). Never a webfont: font-src 'self' in
+     the SPA's CSP (docs/backend-ops.md) only serves the two @fontsource
+     faces already bundled in main.tsx. */
+  --font-mono: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
 
   --fs-2xs:  0.75rem;    /* badge labels */
   --fs-xs:   0.8125rem;  /* footer, locale pills, price chips */

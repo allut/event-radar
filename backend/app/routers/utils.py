@@ -30,7 +30,6 @@ from app.constants import (
     PREFERRED_TASTE_MIN_WEIGHT,
     REPORT_STATUS_OPEN,
     REPORT_STATUS_RESOLVED,
-    SECONDS_PER_DAY,
     SESSION_COOKIE_HTTPONLY,
     SESSION_COOKIE_SAMESITE,
     SESSION_COOKIE_SECURE,
@@ -71,15 +70,15 @@ class VerifyTokenBody(BaseModel):
 
 
 def set_session_cookie(
-    response: Response, *, name: str, token: str, path: str, ttl_days: int
+    response: Response, *, name: str, token: str, path: str, ttl_seconds: int
 ) -> None:
-    """Set a hardened session cookie — shared by the consumer and organizer
-    /verify endpoints. Secure is unconditional (never gated on APP_ENV): see
-    docs/adr/0001-session-tokens-in-httponly-cookies.md."""
+    """Set a hardened session cookie — shared by the consumer, organizer, and
+    admin /verify|/login endpoints. Secure is unconditional (never gated on
+    APP_ENV): see docs/adr/0001-session-tokens-in-httponly-cookies.md."""
     response.set_cookie(
         key=name,
         value=token,
-        max_age=ttl_days * SECONDS_PER_DAY,
+        max_age=ttl_seconds,
         path=path,
         secure=SESSION_COOKIE_SECURE,
         httponly=SESSION_COOKIE_HTTPONLY,
