@@ -1,5 +1,8 @@
 """Unit tests for app.routers.utils helpers."""
+import asyncio
+import json
 from datetime import datetime, timezone
+from unittest.mock import patch
 
 import pytest
 from fastapi import HTTPException
@@ -18,6 +21,7 @@ from app.routers.utils import (
     resolve_open_reports,
     send_report_resolution_emails,
     serialize_event,
+    stream_admin_job,
 )
 
 
@@ -330,3 +334,48 @@ class TestSerializeEventReportedField:
     def test_false_when_event_id_not_in_set(self, make_event):
         result = serialize_event(make_event(10), reported_event_ids={99})
         assert result["reported"] is False
+
+
+class TestStreamAdminJob:
+    """Regression coverage for issue #159: Starlette's StreamingResponse
+    cancels its streaming generator on a client disconnect (task-group race
+    against listen_for_disconnect on uvicorn's pinned ASGI spec_version
+    "2.3" — docs/research/2026-08-23-admin-console-timeout-ceilings.md
+    finding 5). stream_admin_job must not let that cancellation reach the
+    job coroutine itself: the job has to keep running to completion (and
+    still get logged) even after the consumer stops reading."""
+
+    @pytest.mark.asyncio
+    async def test_job_completes_and_logs_after_generator_is_cancelled(self):
+        job_done = asyncio.Event()
+
+        async def slow_job() -> dict:
+            await asyncio.sleep(0.05)
+            job_done.set()
+            return {"ok": True}
+
+        with patch("app.routers.utils.log_admin_action") as mock_log:
+            gen = stream_admin_job("Test", "test", "test_action", "target", slow_job())
+            first = asyncio.ensure_future(gen.__anext__())
+            await asyncio.sleep(0.01)  # let the runner task start; job is still sleeping
+            first.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await first
+            await gen.aclose()  # what Starlette does to the generator on disconnect
+
+            await asyncio.wait_for(job_done.wait(), timeout=1)
+            await asyncio.sleep(0.02)  # let the runner's log_admin_action call land
+
+        mock_log.assert_called_once_with("test_action", "target", {"ok": True})
+
+    @pytest.mark.asyncio
+    async def test_normal_completion_streams_one_ok_line(self):
+        async def job() -> dict:
+            return {"processed": 3}
+
+        with patch("app.routers.utils.log_admin_action") as mock_log:
+            lines = [line async for line in stream_admin_job("Test", "test", "test_action", "target", job())]
+
+        assert len(lines) == 1
+        assert json.loads(lines[0]) == {"stage": "test", "status": "ok", "result": {"processed": 3}, "error": None}
+        mock_log.assert_called_once_with("test_action", "target", {"processed": 3})

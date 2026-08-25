@@ -3,6 +3,7 @@ _require_admin fail-closed, /ingest, /ingest/{slug}, /dedup, /dedup/groups,
 /classify, /refetch, /stats."""
 
 import http
+import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -10,6 +11,12 @@ from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
 from app.constants import ADMIN_USERNAME_DEFAULT, APP_ENV_DEVELOPMENT
+
+
+def _ndjson_lines(resp) -> list[dict]:
+    """Parse a streamed NDJSON admin-trigger response body (issue #159) into
+    its envelope lines."""
+    return [json.loads(line) for line in resp.text.strip().split("\n") if line]
 
 
 def _build_app() -> FastAPI:
@@ -97,7 +104,11 @@ async def test_ingest_all_returns_results():
             resp = await client.post("/admin/ingest", auth=("admin", ""))
 
     assert resp.status_code == http.HTTPStatus.OK
-    assert resp.json()["results"] == [{"slug": "fienta", "raw_count": 5}]
+    assert resp.headers["cache-control"] == "no-store"
+    lines = _ndjson_lines(resp)
+    assert len(lines) == 1
+    assert lines[0]["status"] == "ok"
+    assert lines[0]["result"]["results"] == [{"slug": "fienta", "raw_count": 5}]
 
 
 @pytest.mark.asyncio
@@ -138,7 +149,10 @@ async def test_ingest_source_value_error_400():
         ) as client:
             resp = await client.post("/admin/ingest/fienta", auth=("admin", ""))
 
-    assert resp.status_code == http.HTTPStatus.BAD_REQUEST
+    assert resp.status_code == http.HTTPStatus.OK
+    lines = _ndjson_lines(resp)
+    assert lines[0]["status"] == "error"
+    assert lines[0]["error"] == "disabled"
 
 
 @pytest.mark.asyncio
@@ -162,7 +176,8 @@ async def test_ingest_source_success():
             resp = await client.post("/admin/ingest/fienta", auth=("admin", ""))
 
     assert resp.status_code == http.HTTPStatus.OK
-    assert resp.json()["new_count"] == 1
+    lines = _ndjson_lines(resp)
+    assert lines[0]["result"]["new_count"] == 1
 
 
 # ---------------------------------------------------------------------------
@@ -194,7 +209,11 @@ async def test_simple_job_triggers(path, target):
             resp = await client.post(path, auth=("admin", ""))
 
     assert resp.status_code == http.HTTPStatus.OK
-    assert resp.json() == {"done": 1}
+    assert resp.headers["cache-control"] == "no-store"
+    lines = _ndjson_lines(resp)
+    assert len(lines) == 1
+    assert lines[0]["status"] == "ok"
+    assert lines[0]["result"] == {"done": 1}
     mock_job.assert_awaited_once()
 
 

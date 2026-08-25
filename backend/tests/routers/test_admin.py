@@ -5,6 +5,7 @@ unset so APP_ENV=development lets any credentials through (mirrors the
 behaviour tested in test_webhooks.py for RESEND_WEBHOOK_SECRET).
 """
 import http
+import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -12,6 +13,12 @@ from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
 from app.constants import APP_ENV_DEVELOPMENT
+
+
+def _ndjson_lines(resp) -> list[dict]:
+    """Parse a streamed NDJSON admin-trigger response body (issue #159) into
+    its envelope lines."""
+    return [json.loads(line) for line in resp.text.strip().split("\n") if line]
 
 
 # ---------------------------------------------------------------------------
@@ -68,7 +75,10 @@ async def test_sync_organizers_calls_job_and_returns_result():
             resp = await client.post("/admin/sync-organizers", auth=("admin", ""))
 
     assert resp.status_code == http.HTTPStatus.OK
-    assert resp.json() == expected
+    lines = _ndjson_lines(resp)
+    assert len(lines) == 1
+    assert lines[0]["status"] == "ok"
+    assert lines[0]["result"] == expected
     mock_sync.assert_awaited_once()
 
 
@@ -94,7 +104,12 @@ async def test_sync_organizers_returns_500_on_job_error():
         ) as client:
             resp = await client.post("/admin/sync-organizers", auth=("admin", ""))
 
-    assert resp.status_code == http.HTTPStatus.INTERNAL_SERVER_ERROR
+    assert resp.status_code == http.HTTPStatus.OK
+    lines = _ndjson_lines(resp)
+    assert len(lines) == 1
+    assert lines[0]["status"] == "error"
+    assert lines[0]["result"] is None
+    assert "fienta down" not in lines[0]["error"]
 
 
 # ---------------------------------------------------------------------------
@@ -127,7 +142,9 @@ async def test_cleanup_defaults_to_dry_run_and_does_not_commit():
             resp = await client.post("/admin/cleanup", auth=("admin", ""))
 
     assert resp.status_code == http.HTTPStatus.OK
-    assert resp.json() == expected
+    lines = _ndjson_lines(resp)
+    assert lines[0]["status"] == "ok"
+    assert lines[0]["result"] == expected
     mock_cleanup.assert_awaited_once_with(db_ctx.__aenter__.return_value, dry_run=True)
     db_ctx.__aenter__.return_value.commit.assert_not_awaited()
 
@@ -181,7 +198,10 @@ async def test_cleanup_returns_500_on_job_error():
         ) as client:
             resp = await client.post("/admin/cleanup", auth=("admin", ""))
 
-    assert resp.status_code == http.HTTPStatus.INTERNAL_SERVER_ERROR
+    assert resp.status_code == http.HTTPStatus.OK
+    lines = _ndjson_lines(resp)
+    assert lines[0]["status"] == "error"
+    assert lines[0]["result"] is None
 
 
 # ---------------------------------------------------------------------------
@@ -213,7 +233,9 @@ async def test_build_feeds_calls_job_and_returns_result():
             resp = await client.post("/admin/build-feeds", auth=("admin", ""))
 
     assert resp.status_code == http.HTTPStatus.OK
-    assert resp.json() == expected
+    lines = _ndjson_lines(resp)
+    assert lines[0]["status"] == "ok"
+    assert lines[0]["result"] == expected
     mock_build.assert_awaited_once()
 
 
@@ -239,7 +261,10 @@ async def test_build_feeds_returns_500_on_job_error():
         ) as client:
             resp = await client.post("/admin/build-feeds", auth=("admin", ""))
 
-    assert resp.status_code == http.HTTPStatus.INTERNAL_SERVER_ERROR
+    assert resp.status_code == http.HTTPStatus.OK
+    lines = _ndjson_lines(resp)
+    assert lines[0]["status"] == "error"
+    assert lines[0]["result"] is None
 
 
 # ---------------------------------------------------------------------------
@@ -269,7 +294,9 @@ async def test_publish_calls_job_and_returns_result():
             resp = await client.post("/admin/publish", auth=("admin", ""))
 
     assert resp.status_code == http.HTTPStatus.OK
-    assert resp.json() == expected
+    lines = _ndjson_lines(resp)
+    assert lines[0]["status"] == "ok"
+    assert lines[0]["result"] == expected
     mock_publish.assert_awaited_once()
 
 
@@ -293,7 +320,10 @@ async def test_publish_returns_500_on_job_error():
         ) as client:
             resp = await client.post("/admin/publish", auth=("admin", ""))
 
-    assert resp.status_code == http.HTTPStatus.INTERNAL_SERVER_ERROR
+    assert resp.status_code == http.HTTPStatus.OK
+    lines = _ndjson_lines(resp)
+    assert lines[0]["status"] == "error"
+    assert lines[0]["result"] is None
 
 
 # ---------------------------------------------------------------------------
@@ -323,7 +353,9 @@ async def test_geocode_calls_job_and_returns_result():
             resp = await client.post("/admin/geocode", auth=("admin", ""))
 
     assert resp.status_code == http.HTTPStatus.OK
-    assert resp.json() == expected
+    lines = _ndjson_lines(resp)
+    assert lines[0]["status"] == "ok"
+    assert lines[0]["result"] == expected
     mock_geocode.assert_awaited_once()
 
 
@@ -347,7 +379,10 @@ async def test_geocode_returns_500_on_job_error():
         ) as client:
             resp = await client.post("/admin/geocode", auth=("admin", ""))
 
-    assert resp.status_code == http.HTTPStatus.INTERNAL_SERVER_ERROR
+    assert resp.status_code == http.HTTPStatus.OK
+    lines = _ndjson_lines(resp)
+    assert lines[0]["status"] == "error"
+    assert lines[0]["result"] is None
 
 
 # ---------------------------------------------------------------------------
@@ -435,7 +470,10 @@ async def test_send_digests_returns_500_on_job_error():
         ) as client:
             resp = await client.post("/admin/send-digests", auth=("admin", ""))
 
-    assert resp.status_code == http.HTTPStatus.INTERNAL_SERVER_ERROR
+    assert resp.status_code == http.HTTPStatus.OK
+    lines = _ndjson_lines(resp)
+    assert lines[0]["status"] == "error"
+    assert lines[0]["result"] is None
 
 
 # ---------------------------------------------------------------------------
@@ -505,9 +543,8 @@ async def test_pipeline_run_calls_all_seven_stages_in_order():
             resp = await client.post("/admin/pipeline/run", auth=("admin", ""))
 
     assert resp.status_code == http.HTTPStatus.OK
-    body = resp.json()
-    assert body["ok"] is True
-    assert list(body["stages"].keys()) == [
+    lines = _ndjson_lines(resp)
+    assert [line["stage"] for line in lines] == [
         "sync_organizers",
         "ingest",
         "dedup",
@@ -516,6 +553,7 @@ async def test_pipeline_run_calls_all_seven_stages_in_order():
         "build_feeds",
         "send_digests",
     ]
+    assert all(line["status"] == "ok" for line in lines)
     # All seven job mocks were awaited exactly once
     for m in mocks.values():
         m.assert_awaited_once()
@@ -615,9 +653,10 @@ async def test_pipeline_run_stops_on_ingest_failure():
             resp = await client.post("/admin/pipeline/run", auth=("admin", ""))
 
     assert resp.status_code == http.HTTPStatus.OK
-    body = resp.json()
-    assert body["ok"] is False
-    assert "error" in body["stages"]["ingest"]
+    lines = _ndjson_lines(resp)
+    assert [line["stage"] for line in lines] == ["sync_organizers", "ingest"]
+    assert lines[-1]["status"] == "error"
+    assert lines[-1]["stage"] == "ingest"
     # dedup must not have been called
     mock_dedup.assert_not_awaited()
 
@@ -653,7 +692,7 @@ async def test_pipeline_run_stops_on_sync_failure():
             resp = await client.post("/admin/pipeline/run", auth=("admin", ""))
 
     assert resp.status_code == http.HTTPStatus.OK
-    body = resp.json()
-    assert body["ok"] is False
-    assert "error" in body["stages"]["sync_organizers"]
+    lines = _ndjson_lines(resp)
+    assert [line["stage"] for line in lines] == ["sync_organizers"]
+    assert lines[0]["status"] == "error"
     mock_ingest.assert_not_awaited()

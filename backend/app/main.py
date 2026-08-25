@@ -113,8 +113,11 @@ def _scheduled(
     """Wrap a job for APScheduler: log the summary, swallow + log failures.
 
     Scheduled jobs must never raise (the scheduler would only log a bare
-    traceback); admin-triggered runs of the same jobs convert failures to 500s
-    via routers.utils.run_admin_job instead.
+    traceback); admin-triggered runs of the same jobs go through
+    routers.utils.run_admin_job (which converts failures to 500s) or, for the
+    /admin/pipeline job triggers (issue #159), stream_admin_job (which
+    streams a status="error" NDJSON line instead, since headers are already
+    sent by the time a streamed job can fail).
     """
 
     async def _job() -> None:

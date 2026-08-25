@@ -1,8 +1,10 @@
 """Shared serialization helpers for event routers."""
 
+import asyncio
+import json
 import logging
 import re
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -171,6 +173,63 @@ async def run_admin_job(name: str, coro: Awaitable[dict]) -> dict:
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=ERROR_ADMIN_JOB_FAILED.format(name=name),
         )
+
+
+def ndjson_line(stage: str, status_: str, result: Any, error: str | None) -> bytes:
+    """One line of the shared streamed-job envelope (issue #159) — every
+    /admin/* job trigger streams this shape, one line per stage."""
+    return (
+        json.dumps({"stage": stage, "status": status_, "result": result, "error": error})
+        + "\n"
+    ).encode()
+
+
+async def stream_admin_job(
+    name: str, stage: str, action: str, target: int | str, coro: Awaitable[dict]
+) -> AsyncIterator[bytes]:
+    """Streaming sibling of run_admin_job: runs *coro* and yields a single
+    NDJSON envelope line instead of returning a dict. A failure becomes a
+    status="error" line rather than an HTTP 500 — once the stream has
+    started, headers are already sent, so the generic-failure behavior
+    (server log gets the traceback, client gets a generic message, no
+    internals leak) has to travel inside the body instead of the status
+    code.
+
+    *coro* runs as an independent task, not a direct `await` in this
+    generator's own frame. A client disconnect makes Starlette cancel this
+    generator (StreamingResponse races `listen_for_disconnect` against the
+    body on uvicorn's pinned ASGI spec_version "2.3", cancelling whichever
+    task is streaming — see docs/research/2026-08-23-admin-console-timeout-
+    ceilings.md finding 5 / issue #159); a direct `await coro` would let
+    that cancellation propagate straight into the job and cut it off
+    mid-write. Awaiting `queue.get()` instead means the generator's own
+    cancellation never touches the task, so the job always runs to
+    completion regardless of whether anyone is still listening."""
+    queue: asyncio.Queue[bytes | None] = asyncio.Queue()
+
+    async def _runner() -> None:
+        try:
+            result = await coro
+            log_admin_action(action, target, result)
+            await queue.put(ndjson_line(stage, "ok", result, None))
+        except HTTPException as exc:
+            detail = str(exc.detail)
+            log_admin_action(action, target, {"error": detail})
+            await queue.put(ndjson_line(stage, "error", None, detail))
+        except Exception:
+            log.exception("admin %s failed", name)
+            detail = ERROR_ADMIN_JOB_FAILED.format(name=name)
+            log_admin_action(action, target, {"error": detail})
+            await queue.put(ndjson_line(stage, "error", None, detail))
+        finally:
+            await queue.put(None)
+
+    asyncio.ensure_future(_runner())
+    while True:
+        line = await queue.get()
+        if line is None:
+            return
+        yield line
 
 
 def log_admin_action(action: str, target: int | str, result: dict) -> None:

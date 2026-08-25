@@ -1,13 +1,15 @@
 """Admin endpoints — protected by HTTP Basic auth."""
 
+import asyncio
 import logging
 import secrets
 import time
 from collections import OrderedDict
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from datetime import datetime
 
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Query, Request, status
+from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from itsdangerous import BadSignature, SignatureExpired
 from pydantic import BaseModel
@@ -19,8 +21,20 @@ from app.cleanup import cleanup_stale_data
 from app.config import settings
 from app.constants import (
     ADMIN_ACTION_APPROVE_SUBMISSION,
+    ADMIN_ACTION_BUILD_FEEDS,
+    ADMIN_ACTION_CLEANUP,
+    ADMIN_ACTION_CLASSIFY,
+    ADMIN_ACTION_DEDUP,
+    ADMIN_ACTION_GEOCODE,
+    ADMIN_ACTION_INGEST,
+    ADMIN_ACTION_INGEST_SOURCE,
+    ADMIN_ACTION_PIPELINE_RUN,
+    ADMIN_ACTION_PUBLISH,
+    ADMIN_ACTION_REFETCH,
     ADMIN_ACTION_RESOLVE_REPORTS,
     ADMIN_ACTION_RETRACT_SUBMISSION,
+    ADMIN_ACTION_SEND_DIGESTS,
+    ADMIN_ACTION_SYNC_ORGANIZERS,
     ADMIN_ACTION_TAKEDOWN_REPORTED_EVENT,
     ADMIN_AUTH_FAILURES_MAX_ENTRIES,
     ADMIN_AUTH_LOCKOUT_SECONDS,
@@ -83,6 +97,7 @@ from app.routers.utils import (
     cancel_event_and_resolve_reports,
     canonical_event_filter,
     log_admin_action,
+    ndjson_line,
     require_configured_secret,
     resolve_open_reports,
     run_admin_job,
@@ -90,6 +105,7 @@ from app.routers.utils import (
     select_events_with_classification,
     send_report_resolution_emails,
     serialize_event,
+    stream_admin_job,
     validate_report_reason,
 )
 
@@ -248,20 +264,30 @@ def _require_admin(
     clear_admin_auth_failure(key)
 
 
+def _ndjson_response(gen: AsyncIterator[bytes]) -> StreamingResponse:
+    """Shared streamed-envelope response wrapper (issue #159) — every job
+    trigger endpoint streams NDJSON with caching disabled unconditionally."""
+    return StreamingResponse(
+        gen, media_type="application/x-ndjson", headers={"Cache-Control": "no-store"}
+    )
+
+
 @router.post("/ingest", dependencies=[Depends(_require_admin)])
 @limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
-async def admin_ingest_all(request: Request) -> dict:
+async def admin_ingest_all(request: Request) -> StreamingResponse:
     """Trigger ingestion for all enabled sources."""
 
     async def _run() -> dict:
         return {"results": await ingest_all_enabled()}
 
-    return await run_admin_job("Ingestion", _run())
+    return _ndjson_response(
+        stream_admin_job("Ingestion", "ingest", ADMIN_ACTION_INGEST, "all", _run())
+    )
 
 
 @router.post("/ingest/{slug}", dependencies=[Depends(_require_admin)])
 @limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
-async def admin_ingest_source(slug: str, request: Request) -> dict:
+async def admin_ingest_source(slug: str, request: Request) -> StreamingResponse:
     """Trigger ingestion for a single source by slug."""
     if slug not in ADAPTER_REGISTRY:
         raise HTTPException(
@@ -277,14 +303,22 @@ async def admin_ingest_source(slug: str, request: Request) -> dict:
                 status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
             ) from exc
 
-    return await run_admin_job("Ingestion", _run())
+    return _ndjson_response(
+        stream_admin_job(
+            "Ingestion", "ingest", ADMIN_ACTION_INGEST_SOURCE, slug, _run()
+        )
+    )
 
 
 @router.post("/dedup", dependencies=[Depends(_require_admin)])
 @limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
-async def admin_dedup_run(request: Request) -> dict:
+async def admin_dedup_run(request: Request) -> StreamingResponse:
     """Trigger a dedup pass, draining the backlog until it clears or the cap is hit."""
-    return await run_admin_job("Dedup", dedup_pass_drain_now())
+    return _ndjson_response(
+        stream_admin_job(
+            "Dedup", "dedup", ADMIN_ACTION_DEDUP, "dedup", dedup_pass_drain_now()
+        )
+    )
 
 
 def _dedup_event_summary(e: Event) -> dict:
@@ -908,43 +942,77 @@ async def admin_takedown_reported_event(
 
 @router.post("/classify", dependencies=[Depends(_require_admin)])
 @limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
-async def admin_classify(request: Request) -> dict:
+async def admin_classify(request: Request) -> StreamingResponse:
     """Trigger LLM classification, draining the backlog until it clears or the cap is hit."""
-    return await run_admin_job("Classification", classify_pending_drain_now())
+    return _ndjson_response(
+        stream_admin_job(
+            "Classification",
+            "classify",
+            ADMIN_ACTION_CLASSIFY,
+            "classify",
+            classify_pending_drain_now(),
+        )
+    )
 
 
 @router.post("/publish", dependencies=[Depends(_require_admin)])
 @limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
-async def admin_publish(request: Request) -> dict:
+async def admin_publish(request: Request) -> StreamingResponse:
     """Promote qualifying classified events to published (one bulk UPDATE)."""
-    return await run_admin_job("Publish", publish_pending_job())
+    return _ndjson_response(
+        stream_admin_job(
+            "Publish", "publish", ADMIN_ACTION_PUBLISH, "publish", publish_pending_job()
+        )
+    )
 
 
 @router.post("/geocode", dependencies=[Depends(_require_admin)])
 @limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
-async def admin_geocode(request: Request) -> dict:
+async def admin_geocode(request: Request) -> StreamingResponse:
     """Backfill lat/lng for events with a venue_address but no coordinates (one batch)."""
-    return await run_admin_job("Geocoding", geocode_pending_job())
+    return _ndjson_response(
+        stream_admin_job(
+            "Geocoding",
+            "geocode",
+            ADMIN_ACTION_GEOCODE,
+            "geocode",
+            geocode_pending_job(),
+        )
+    )
 
 
 @router.post("/refetch", dependencies=[Depends(_require_admin)])
 @limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
-async def admin_refetch(request: Request) -> dict:
+async def admin_refetch(request: Request) -> StreamingResponse:
     """Re-fetch detail pages for all future events and reconcile stored fields (one batch).
 
     Standalone, like /admin/geocode — not part of /admin/pipeline/run. Run it
     before a manual geocode if you want coords NULLed by an address change
     re-resolved in the same operation.
     """
-    return await run_admin_job("Refetch", refetch_event_details_job())
+    return _ndjson_response(
+        stream_admin_job(
+            "Refetch",
+            "refetch",
+            ADMIN_ACTION_REFETCH,
+            "refetch",
+            refetch_event_details_job(),
+        )
+    )
 
 
 @router.post("/sync-organizers", dependencies=[Depends(_require_admin)])
 @limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
-async def admin_sync_organizers(request: Request) -> dict:
+async def admin_sync_organizers(request: Request) -> StreamingResponse:
     """Trigger Fienta organizer sync (discover new organizers, flag stale ones)."""
-    return await run_admin_job(
-        "Organizer sync", run_in_session(sync_fienta_organizers, commit=True)
+    return _ndjson_response(
+        stream_admin_job(
+            "Organizer sync",
+            "sync_organizers",
+            ADMIN_ACTION_SYNC_ORGANIZERS,
+            "sync_organizers",
+            run_in_session(sync_fienta_organizers, commit=True),
+        )
     )
 
 
@@ -956,7 +1024,7 @@ async def admin_cleanup(
         True,
         description="When true (default), counts candidate rows but deletes nothing",
     ),
-) -> dict:
+) -> StreamingResponse:
     """Trigger data retention cleanup (prunes satellite tables; never events).
 
     Defaults to dry-run, matching every other destructive admin/maintenance
@@ -965,21 +1033,32 @@ async def admin_cleanup(
 
     See app.cleanup.cleanup_stale_data for the per-table retention windows.
     """
-    return await run_admin_job(
-        "Cleanup",
-        run_in_session(
-            lambda db: cleanup_stale_data(db, dry_run=dry_run), commit=not dry_run
-        ),
+    return _ndjson_response(
+        stream_admin_job(
+            "Cleanup",
+            "cleanup",
+            ADMIN_ACTION_CLEANUP,
+            "cleanup",
+            run_in_session(
+                lambda db: cleanup_stale_data(db, dry_run=dry_run), commit=not dry_run
+            ),
+        )
     )
 
 
 @router.post("/build-feeds", dependencies=[Depends(_require_admin)])
 @limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
-async def admin_build_feeds(request: Request) -> dict:
+async def admin_build_feeds(request: Request) -> StreamingResponse:
     """Trigger daily feed builder for all active users (writes to daily_feeds)."""
     # build_daily_feeds commits internally (score.py); no second commit needed.
-    return await run_admin_job(
-        "Feed build", run_in_session(build_daily_feeds, commit=False)
+    return _ndjson_response(
+        stream_admin_job(
+            "Feed build",
+            "build_feeds",
+            ADMIN_ACTION_BUILD_FEEDS,
+            "build_feeds",
+            run_in_session(build_daily_feeds, commit=False),
+        )
     )
 
 
@@ -988,25 +1067,26 @@ async def admin_build_feeds(request: Request) -> dict:
 async def admin_send_digests(
     request: Request,
     dry_run: bool = Query(True, description="When true (default), counts would-send but skips actual email delivery"),
-) -> dict:
+) -> StreamingResponse:
     """Trigger daily digest send. Defaults to dry-run — pass ?dry_run=false to actually send."""
-    return await run_admin_job(
-        "Digest send",
-        run_in_session(lambda db: send_daily_digests(db, dry_run=dry_run), commit=False),
+    return _ndjson_response(
+        stream_admin_job(
+            "Digest send",
+            "send_digests",
+            ADMIN_ACTION_SEND_DIGESTS,
+            "send_digests",
+            run_in_session(lambda db: send_daily_digests(db, dry_run=dry_run), commit=False),
+        )
     )
 
 
-@router.post("/pipeline/run", dependencies=[Depends(_require_admin)])
-@limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
-async def admin_pipeline_run(
-    request: Request,
-    dry_run: bool = Query(True, description="When true (default), digest stage counts would-send but skips actual email delivery"),
-) -> dict:
-    """Run all seven pipeline stages in dependency order.
-
-    Stops at the first failure — later stages depend on earlier output.
-    Returns {ok, stages} where stages is an ordered dict of per-stage results.
-    """
+async def _run_pipeline_stages(dry_run: bool, queue: asyncio.Queue[bytes | None]) -> None:
+    """Run all seven pipeline stages in dependency order, pushing one NDJSON
+    envelope line per completed stage onto *queue*. Stops at the first
+    failure — later stages depend on earlier output — so a failed run
+    pushes fewer than seven lines. Runs as its own task (see
+    _stream_pipeline_run) so a client disconnect can't cut a stage off
+    mid-run."""
     stage_runners: list[tuple[str, Callable[[], Awaitable[object]]]] = [
         (
             "sync_organizers",
@@ -1027,15 +1107,52 @@ async def admin_pipeline_run(
     ]
 
     stages: dict[str, object] = {}
+    ok = True
     for stage_name, runner in stage_runners:
         try:
-            stages[stage_name] = await runner()
+            result = await runner()
+            stages[stage_name] = result
+            await queue.put(ndjson_line(stage_name, "ok", result, None))
         except Exception:
             log.exception("pipeline: %s failed", stage_name)
-            stages[stage_name] = {"error": f"{stage_name} failed; see server logs"}
-            return {"ok": False, "stages": stages}
+            error = f"{stage_name} failed; see server logs"
+            stages[stage_name] = {"error": error}
+            ok = False
+            await queue.put(ndjson_line(stage_name, "error", None, error))
+            break
 
-    return {"ok": True, "stages": stages}
+    log_admin_action(ADMIN_ACTION_PIPELINE_RUN, "pipeline", {"ok": ok, "stages": stages})
+    await queue.put(None)
+
+
+async def _stream_pipeline_run(dry_run: bool) -> AsyncIterator[bytes]:
+    """Streams _run_pipeline_stages' output. Runs the stages as an
+    independent task rather than a direct `await` in this generator's own
+    frame — a client disconnect cancels this generator (Starlette's
+    StreamingResponse races `listen_for_disconnect` against the body on
+    uvicorn's pinned ASGI spec_version "2.3" — see docs/research/2026-08-23-
+    admin-console-timeout-ceilings.md finding 5 / issue #159), and a direct
+    `await` would let that cancellation reach into the stage loop and cut a
+    stage off mid-run. Awaiting `queue.get()` instead means the run always
+    finishes regardless of whether anyone is still listening."""
+    queue: asyncio.Queue[bytes | None] = asyncio.Queue()
+    asyncio.ensure_future(_run_pipeline_stages(dry_run, queue))
+    while True:
+        line = await queue.get()
+        if line is None:
+            return
+        yield line
+
+
+@router.post("/pipeline/run", dependencies=[Depends(_require_admin)])
+@limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
+async def admin_pipeline_run(
+    request: Request,
+    dry_run: bool = Query(True, description="When true (default), digest stage counts would-send but skips actual email delivery"),
+) -> StreamingResponse:
+    """Run all seven pipeline stages in dependency order, streamed as NDJSON
+    (one line per completed stage — issue #159)."""
+    return _ndjson_response(_stream_pipeline_run(dry_run))
 
 
 @router.get("/counts", dependencies=[Depends(_require_admin)])

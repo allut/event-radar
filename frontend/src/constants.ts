@@ -61,6 +61,9 @@ export const CARD_ANIMATION_DELAY_STEP_MS = 80;
 // ─── Layout ──────────────────────────────────────────────────────────────────
 // Matches the `max-width: 640px` breakpoint used across component CSS modules.
 export const MOBILE_BREAKPOINT_PX = 640;
+// /admin/pipeline (issue #159) is desktop-only — below this it shows a
+// "come back at a desk" gate instead of the trigger console.
+export const ADMIN_DESKTOP_BREAKPOINT_PX = 1024;
 
 // ─── Dropdown ────────────────────────────────────────────────────────────────
 // useDropdown's default initial-focus target: the popover's first button
@@ -637,4 +640,64 @@ export const API = {
   adminSubmissionApprove: (id: number) => `/admin/submissions/${id}/approve`,
   adminSubmissionRetract: (id: number) => `/admin/submissions/${id}/retract`,
   adminEventDetail: (id: number | string) => `/admin/events/${id}`,
+  adminIngestAll: '/admin/ingest',
+  adminIngestSource: (slug: string) => `/admin/ingest/${slug}`,
+  adminDedupRun: '/admin/dedup',
+  adminClassify: '/admin/classify',
+  adminPublish: '/admin/publish',
+  adminGeocode: '/admin/geocode',
+  adminRefetch: '/admin/refetch',
+  adminSyncOrganizers: '/admin/sync-organizers',
+  adminCleanup: (dryRun: boolean) => `/admin/cleanup?dry_run=${dryRun}`,
+  adminBuildFeeds: '/admin/build-feeds',
+  adminSendDigests: (dryRun: boolean) => `/admin/send-digests?dry_run=${dryRun}`,
+  adminPipelineRun: (dryRun: boolean) => `/admin/pipeline/run?dry_run=${dryRun}`,
 } as const;
+
+// /admin/pipeline (issue #159) — one row per job-trigger endpoint. The admin
+// console is English-only/internal, so labels/hints are plain strings, not
+// i18n keys (matches AdminReports/AdminSubmissions' own inline copy).
+export type AdminTriggerId =
+  | 'ingest_all'
+  | 'ingest_source'
+  | 'dedup'
+  | 'classify'
+  | 'publish'
+  | 'geocode'
+  | 'refetch'
+  | 'sync_organizers'
+  | 'cleanup'
+  | 'build_feeds'
+  | 'send_digests'
+  | 'pipeline_run';
+
+export interface AdminPipelineTrigger {
+  id: AdminTriggerId;
+  label: string;
+  hint: string;
+  dryRunCapable?: boolean;
+  needsSlug?: boolean;
+  /** pipeline_run only — the stage order the generic viewer streams through. */
+  stages?: string[];
+}
+
+export const ADMIN_PIPELINE_TRIGGERS: AdminPipelineTrigger[] = [
+  { id: 'ingest_all', label: 'Ingest all sources', hint: 'Pull raw events from every enabled source' },
+  { id: 'ingest_source', label: 'Ingest one source', hint: 'Pull raw events from a single source by slug', needsSlug: true },
+  { id: 'dedup', label: 'Dedup pass', hint: 'Drain the dedup backlog' },
+  { id: 'classify', label: 'Classify', hint: 'LLM classification of pending events' },
+  { id: 'publish', label: 'Publish', hint: 'Promote qualifying events to published' },
+  { id: 'geocode', label: 'Geocode', hint: 'Backfill lat/lng from venue addresses' },
+  { id: 'refetch', label: 'Refetch details', hint: 'Re-fetch source detail pages' },
+  { id: 'sync_organizers', label: 'Sync organizers', hint: 'Discover new organizers, flag stale ones' },
+  { id: 'cleanup', label: 'Cleanup', hint: 'Prune satellite tables past retention', dryRunCapable: true },
+  { id: 'build_feeds', label: 'Build feeds', hint: 'Build Daily 5 for every active user' },
+  { id: 'send_digests', label: 'Send digests', hint: 'Send the daily email digest', dryRunCapable: true },
+  {
+    id: 'pipeline_run',
+    label: 'Run full pipeline',
+    hint: 'All seven stages in order',
+    dryRunCapable: true,
+    stages: ['sync_organizers', 'ingest', 'dedup', 'classify', 'publish', 'build_feeds', 'send_digests'],
+  },
+];

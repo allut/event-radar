@@ -31,6 +31,27 @@ interface RequestOptions extends RequestInit {
 // the real ApiError.message instead of a misleading "Session expired".
 const NO_SESSION_REDIRECT_ON_401 = new Set<string>([API.adminAuthLogin]);
 
+// Shared by request() and adminStream() — a 401 always means "your session
+// expired" (except the login-form carve-out above), regardless of whether
+// the response is a single JSON body or an NDJSON stream. Clears the right
+// track's signed-in hint and redirects, then throws so the caller can stop.
+function handleSessionExpiry401(opts: CallOptions): never {
+  if (opts.admin) {
+    clearAdminSignedInHint();
+    if (!isAdminLoggingOut()) window.location.replace(ROUTES.adminLogin);
+  } else if (opts.organizer) {
+    clearOrganizerSignedInHint();
+    if (!isOrganizerLoggingOut()) window.location.replace(ROUTES.organizerLogin);
+  } else {
+    clearSignedInHint();
+    // A 401 during an explicit logout is an expected side effect of the
+    // cache-clear race described in lib/auth.ts, not a real session expiry —
+    // skip the hard redirect so it doesn't override the logout navigation.
+    if (!isLoggingOut()) window.location.replace(ROUTES.login);
+  }
+  throw new ApiError(StatusCodes.UNAUTHORIZED, 'Session expired');
+}
+
 async function request<T>(path: string, init: RequestOptions = {}): Promise<T> {
   const { organizer, admin, ...fetchInit } = init;
   const hasBody = fetchInit.body !== undefined;
@@ -45,20 +66,7 @@ async function request<T>(path: string, init: RequestOptions = {}): Promise<T> {
   const res = await fetch(`/api${path}`, { ...fetchInit, headers, credentials: 'include' });
 
   if (res.status === StatusCodes.UNAUTHORIZED && !NO_SESSION_REDIRECT_ON_401.has(path)) {
-    if (admin) {
-      clearAdminSignedInHint();
-      if (!isAdminLoggingOut()) window.location.replace(ROUTES.adminLogin);
-    } else if (organizer) {
-      clearOrganizerSignedInHint();
-      if (!isOrganizerLoggingOut()) window.location.replace(ROUTES.organizerLogin);
-    } else {
-      clearSignedInHint();
-      // A 401 during an explicit logout is an expected side effect of the
-      // cache-clear race described in lib/auth.ts, not a real session expiry —
-      // skip the hard redirect so it doesn't override the logout navigation.
-      if (!isLoggingOut()) window.location.replace(ROUTES.login);
-    }
-    throw new ApiError(StatusCodes.UNAUTHORIZED, 'Session expired');
+    handleSessionExpiry401({ organizer, admin });
   }
 
   if (!res.ok) {
@@ -114,3 +122,54 @@ export const adminApi = {
   get: <T>(path: string) => api.get<T>(path, { admin: true }),
   post: <T>(path: string, body?: unknown) => api.post<T>(path, body, { admin: true }),
 };
+
+export interface NdjsonLine {
+  stage: string;
+  status: 'ok' | 'error';
+  result: unknown;
+  error: string | null;
+}
+
+// Thrown when the connection drops mid-stream (network error while reading
+// the body) — distinct from a clean stream that simply reported a
+// status:"error" line, and from a request that never started (ApiError).
+// The /admin/pipeline job triggers (issue #159) stream NDJSON instead of
+// returning a single JSON body, so they go through this reader rather than
+// `request()`.
+export class StreamDisconnectedError extends Error {}
+
+export async function adminStream(
+  path: string,
+  onLine: (line: NdjsonLine) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  const res = await fetch(`/api${path}`, { method: 'POST', credentials: 'include', signal });
+
+  if (res.status === StatusCodes.UNAUTHORIZED) {
+    handleSessionExpiry401({ admin: true });
+  }
+  if (!res.ok || !res.body) {
+    throw new ApiError(res.status, `HTTP ${res.status}`);
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let newlineAt = buffer.indexOf('\n');
+      while (newlineAt >= 0) {
+        const raw = buffer.slice(0, newlineAt);
+        buffer = buffer.slice(newlineAt + 1);
+        if (raw.trim()) onLine(JSON.parse(raw) as NdjsonLine);
+        newlineAt = buffer.indexOf('\n');
+      }
+    }
+  } catch (err) {
+    if (signal?.aborted) return;
+    throw new StreamDisconnectedError(err instanceof Error ? err.message : 'Stream disconnected');
+  }
+}
