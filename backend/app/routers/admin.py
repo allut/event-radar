@@ -17,6 +17,8 @@ from app.auth.tokens import verify_admin_session_token
 from app.cleanup import cleanup_stale_data
 from app.config import settings
 from app.constants import (
+    ADMIN_ACTION_RESOLVE_REPORTS,
+    ADMIN_ACTION_TAKEDOWN_REPORTED_EVENT,
     ADMIN_AUTH_FAILURES_MAX_ENTRIES,
     ADMIN_AUTH_LOCKOUT_SECONDS,
     ADMIN_AUTH_MAX_FAILURES,
@@ -67,6 +69,7 @@ from app.rate_limit import client_key, limiter
 from app.routers.utils import (
     cancel_event_and_resolve_reports,
     canonical_event_filter,
+    log_admin_action,
     require_configured_secret,
     resolve_open_reports,
     run_admin_job,
@@ -668,7 +671,9 @@ async def admin_resolve_reports(
             await send_report_resolution_emails(db, event, resolved, note)
             return {"event_id": event.id, "resolved_count": len(resolved)}
 
-    return await run_admin_job("Resolve reports", _run())
+    result = await run_admin_job("Resolve reports", _run())
+    log_admin_action(ADMIN_ACTION_RESOLVE_REPORTS, event_id, result)
+    return result
 
 
 @router.post(
@@ -697,7 +702,9 @@ async def admin_takedown_reported_event(
                 "resolved_count": len(resolved),
             }
 
-    return await run_admin_job("Takedown reported event", _run())
+    result = await run_admin_job("Takedown reported event", _run())
+    log_admin_action(ADMIN_ACTION_TAKEDOWN_REPORTED_EVENT, event_id, result)
+    return result
 
 
 @router.post("/classify", dependencies=[Depends(_require_admin)])

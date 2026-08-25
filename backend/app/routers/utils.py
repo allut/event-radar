@@ -23,6 +23,7 @@ from app.constants import (
     ERROR_INVALID_REPORT_REASON,
     EVENT_STATUS_CANCELLED,
     EVENT_STATUS_PUBLISHED,
+    LOG_EVENT_ADMIN_ACTION,
     LOG_EVENT_EMAIL_SEND_FAILED,
     MASK_DB_URL_PASSWORD_RE,
     MAGIC_LINK_RESEND_COOLDOWN_SECONDS,
@@ -170,6 +171,22 @@ async def run_admin_job(name: str, coro: Awaitable[dict]) -> dict:
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=ERROR_ADMIN_JOB_FAILED.format(name=name),
         )
+
+
+def log_admin_action(action: str, target: int | str, result: dict) -> None:
+    """Passive "did I already do this" record on the shared Axiom pipe — no
+    DB table, one admin always the actor (see the admin-console spec's
+    Audit logging section). Call after a mutating /admin/* action succeeds."""
+    log.info(
+        "admin action: %s",
+        action,
+        extra={
+            "event": LOG_EVENT_ADMIN_ACTION,
+            "action": action,
+            "target": target,
+            "result": result,
+        },
+    )
 
 
 def require_configured_secret(

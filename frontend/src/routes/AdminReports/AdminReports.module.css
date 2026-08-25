@@ -1,0 +1,114 @@
+.head {
+  margin-bottom: var(--space-6);
+}
+
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  letter-spacing: var(--eyebrow-tracking);
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.title {
+  font-family: var(--font-display);
+  font-size: var(--heading-xl);
+  font-weight: var(--fw-semibold);
+  color: var(--text);
+  margin-top: var(--space-1);
+}
+
+.rowTitle {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rowMeta {
+  font-size: var(--fs-2xs);
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin-top: var(--space-0-45);
+}
+
+.illegalDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--danger);
+  display: inline-block;
+}
+
+.detailTitle {
+  font-family: var(--font-display);
+  font-size: var(--fs-lg);
+  font-weight: var(--fw-semibold);
+  color: var(--text);
+  margin-bottom: var(--space-1);
+}
+
+.detailMeta {
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+  margin-bottom: var(--space-3);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.chip {
+  font-size: var(--fs-2xs);
+  color: var(--text-muted);
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.1rem var(--space-2);
+}
+
+.illegalChip {
+  composes: chip;
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+.reportList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.reportItem {
+  composes: card from '../../components/shared/Card.module.css';
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--fs-sm);
+}
+
+.reportItemHead {
+  display: flex;
+  justify-content: space-between;
+  color: var(--text-dim);
+  font-size: var(--fs-2xs);
+  margin-bottom: var(--space-1);
+}
+
+.reportItemHead strong {
+  color: var(--text);
+  font-size: var(--fs-sm);
+}
+
+.resolvedPanel {
+  composes: card from '../../components/shared/Card.module.css';
+  margin-top: var(--space-5);
+  padding: var(--space-4);
+  color: var(--success);
+  font-weight: var(--fw-medium);
+}

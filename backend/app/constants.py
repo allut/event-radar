@@ -1291,6 +1291,9 @@ LOG_EVENT_CONTACT_HONEYPOT = "contact_honeypot_block"  # contact-form honeypot f
 LOG_EVENT_HOST_REJECTED = "host_rejected"  # HostCheckMiddleware Host-header reject
 LOG_EVENT_REPORT_SUBMITTED = "report_submitted"  # POST /reports success
 LOG_EVENT_ADMIN_ACTION = "admin_action"  # /admin/auth/* login/logout (issue #154)
+# `action` field values for LOG_EVENT_ADMIN_ACTION (issue #155).
+ADMIN_ACTION_RESOLVE_REPORTS = "resolve_reports"
+ADMIN_ACTION_TAKEDOWN_REPORTED_EVENT = "takedown_reported_event"
 # `status` field values for LOG_EVENT_JOB_RUN.
 LOG_STATUS_OK = "ok"
 LOG_STATUS_ERROR = "error"

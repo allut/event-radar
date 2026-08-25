@@ -10,6 +10,8 @@ from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
 from app.constants import (
+    ADMIN_ACTION_RESOLVE_REPORTS,
+    ADMIN_ACTION_TAKEDOWN_REPORTED_EVENT,
     APP_ENV_DEVELOPMENT,
     EVENT_CANCELLATION_REASON_REPORT_TAKEDOWN,
     EVENT_STATUS_CANCELLED,
@@ -188,7 +190,7 @@ async def test_list_reports_excludes_cancelled():
 
 @pytest.mark.asyncio
 async def test_resolve_reports_closes_open_reports_no_event_mutation(
-    make_event, make_report, make_user
+    make_event, make_report, make_user, caplog
 ):
     app = _build_app()
     event = make_event(event_id=42, status="published")
@@ -209,6 +211,7 @@ async def test_resolve_reports_closes_open_reports_no_event_mutation(
         patch(
             "app.routers.utils.send_report_outcome_email", new=AsyncMock()
         ) as mock_send,
+        caplog.at_level("INFO"),
     ):
         mock_settings.ADMIN_PASSWORD = ""
         mock_settings.APP_ENV = APP_ENV_DEVELOPMENT
@@ -227,6 +230,13 @@ async def test_resolve_reports_closes_open_reports_no_event_mutation(
     assert report.status == "resolved"
     assert report.resolution_note == "Looked into it, event is fine."
     assert report.resolved_at is not None
+
+    admin_action_records = [
+        r for r in caplog.records if getattr(r, "event", None) == "admin_action"
+    ]
+    assert len(admin_action_records) == 1
+    assert admin_action_records[0].action == ADMIN_ACTION_RESOLVE_REPORTS
+    assert admin_action_records[0].target == 42
     assert event.status == "published"  # resolve never mutates the event
     mock_send.assert_awaited_once_with(
         reporter.email, event, "Looked into it, event is fine.", reporter.locale
@@ -292,7 +302,7 @@ async def test_resolve_reports_event_not_found():
 
 @pytest.mark.asyncio
 async def test_takedown_cancels_event_and_resolves_reports(
-    make_event, make_report, make_user
+    make_event, make_report, make_user, caplog
 ):
     app = _build_app()
     event = make_event(event_id=42, status="published")
@@ -311,6 +321,7 @@ async def test_takedown_cancels_event_and_resolves_reports(
         patch("app.routers.admin.settings") as mock_settings,
         patch("app.routers.admin.AsyncSessionLocal", return_value=_make_db_ctx(db)),
         patch("app.routers.utils.send_report_outcome_email", new=AsyncMock()),
+        caplog.at_level("INFO"),
     ):
         mock_settings.ADMIN_PASSWORD = ""
         mock_settings.APP_ENV = APP_ENV_DEVELOPMENT
@@ -335,3 +346,10 @@ async def test_takedown_cancels_event_and_resolves_reports(
     assert event.cancellation_reason == EVENT_CANCELLATION_REASON_REPORT_TAKEDOWN
     assert report.status == "resolved"
     assert report.resolution_note == "Confirmed spam, taken down."
+
+    admin_action_records = [
+        r for r in caplog.records if getattr(r, "event", None) == "admin_action"
+    ]
+    assert len(admin_action_records) == 1
+    assert admin_action_records[0].action == ADMIN_ACTION_TAKEDOWN_REPORTED_EVENT
+    assert admin_action_records[0].target == 42

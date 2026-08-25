@@ -100,3 +100,48 @@
   padding: var(--space-7) var(--space-8);
   min-width: 0;
 }
+
+/* Below this, mobile-usable screens (Reports/Submissions/Dashboard) need
+ * real width to render their own layouts — the fixed 220px rail is a
+ * desktop-only affordance. Desktop-only screens (Pipeline/Dedup) render
+ * their own "come back at a desk" body regardless of shell width. */
+@media (max-width: 640px) {
+  .shell {
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .rail {
+    width: 100%;
+    flex-shrink: 1;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    padding: var(--space-3) 0;
+  }
+
+  .brandRow {
+    padding: 0 var(--space-4) var(--space-3);
+    margin-bottom: var(--space-2);
+  }
+
+  .nav {
+    flex-direction: row;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    gap: var(--space-1);
+  }
+
+  .navLink {
+    white-space: nowrap;
+  }
+
+  .foot {
+    margin-top: 0;
+    border-top: none;
+    padding: 0 var(--space-4);
+  }
+
+  .content {
+    padding: var(--space-5) var(--space-4);
+  }
+}
