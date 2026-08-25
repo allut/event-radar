@@ -512,6 +512,13 @@ export const EXPLORE_PARAM = {
   limit: 'limit',
   offset: 'offset',
 } as const;
+
+// Query-param name for the report-notification email's deep link into
+// AdminReports — carries the reported event's id so the matching row's
+// detail panel auto-opens on load.
+export const ADMIN_REPORTS_PARAM = {
+  report: 'report',
+} as const;
 // URL state uses a terse '1' flag; the /explore API query uses 'true'/'false'.
 export const EXPLORE_URL_FLAG_TRUE = '1';
 export const EXPLORE_API_FLAG_TRUE = 'true';

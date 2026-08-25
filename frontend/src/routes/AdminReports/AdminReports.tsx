@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { adminApi, ApiError } from '../../api/client';
-import { API, QUERY_KEYS, REPORT_REASONS, UI_STATE } from '../../constants';
+import { ADMIN_REPORTS_PARAM, API, QUERY_KEYS, REPORT_REASONS, UI_STATE } from '../../constants';
 import { t } from '../../i18n';
 import { relativeTimeFromNow } from '../../utils';
 import PageState from '../../components/PageState';
@@ -64,7 +65,10 @@ export default function AdminReports() {
     queryFn: () => adminApi.get<AdminReportsResponse>(API.adminReports),
   });
 
+  const [searchParams] = useSearchParams();
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [deepLinkApplied, setDeepLinkApplied] = useState(false);
+  const [deepLinkMatchedId, setDeepLinkMatchedId] = useState<number | null>(null);
   const [note, setNote] = useState('');
   const [resolvedById, setResolvedById] = useState<
     Record<number, { item: AdminReportedEvent; kind: ResolutionKind }>
@@ -76,6 +80,19 @@ export default function AdminReports() {
     for (const entry of Object.values(resolvedById)) byId.set(entry.item.event_id, entry.item);
     return Array.from(byId.values());
   }, [serverItems, resolvedById]);
+
+  // Adjust state during render (React's documented pattern for "derive from
+  // props/state once data arrives") rather than a useEffect, since a
+  // setState-in-effect would cause an extra render pass on every load.
+  if (!deepLinkApplied && items.length > 0) {
+    setDeepLinkApplied(true);
+    const rawLinkedId = searchParams.get(ADMIN_REPORTS_PARAM.report);
+    const linkedId = rawLinkedId === null ? NaN : Number(rawLinkedId);
+    if (!Number.isNaN(linkedId) && items.some((item) => item.event_id === linkedId)) {
+      setSelectedId(linkedId);
+      setDeepLinkMatchedId(linkedId);
+    }
+  }
 
   const currentId = selectedId ?? items[0]?.event_id ?? null;
 
@@ -123,6 +140,7 @@ export default function AdminReports() {
             setNote('');
           }}
           emptyLabel="No open reports."
+          initialDetailOpen={deepLinkMatchedId !== null}
           renderRow={(item) => (
             <>
               <div className={styles.rowTitle}>{item.title}</div>

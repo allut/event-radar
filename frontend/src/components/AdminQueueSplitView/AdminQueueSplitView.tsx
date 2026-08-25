@@ -11,6 +11,9 @@ interface AdminQueueSplitViewProps<T> {
   renderRow: (item: T) => React.ReactNode;
   renderDetail: (item: T) => React.ReactNode;
   emptyLabel: string;
+  /** Open the detail panel on mobile from first render (e.g. a caller that
+   * seeded `selectedId` from a deep link, where the row was never clicked). */
+  initialDetailOpen?: boolean;
 }
 
 /** Shared inbox layout for every admin moderation queue (reports today,
@@ -29,8 +32,9 @@ export default function AdminQueueSplitView<T>({
   renderRow,
   renderDetail,
   emptyLabel,
+  initialDetailOpen = false,
 }: AdminQueueSplitViewProps<T>) {
-  const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
+  const [mobileDetailOpen, setMobileDetailOpen] = useState(initialDetailOpen);
 
   if (items.length === 0) {
     return <p className={styles.empty}>{emptyLabel}</p>;

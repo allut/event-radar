@@ -76,14 +76,14 @@ async def test_success_posts_expected_content(monkeypatch, make_event):
     assert "Illegal allegation:</strong> True" in html_body
     # unmasked reporter email — no @-masking applied
     assert "r***@example.com" not in html_body
-    # ready-to-paste curl snippets, no embedded credentials
-    assert "curl -u user:pass" in html_body
-    assert "https://api.radar.ee/admin/reports/42/resolve" in html_body
-    assert "https://api.radar.ee/admin/reports/42/takedown" in html_body
+    # single console deep link, no curl snippets
+    assert "curl" not in html_body
+    assert "https://radar.ee/admin/reports?report=42" in html_body
 
     text_body = body["text"]
     assert "reporter@example.com" in text_body
-    assert "curl -u user:pass" in text_body
+    assert "curl" not in text_body
+    assert "https://radar.ee/admin/reports?report=42" in text_body
 
 
 @pytest.mark.asyncio

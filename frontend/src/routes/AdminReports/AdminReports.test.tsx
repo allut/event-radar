@@ -3,6 +3,7 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import AdminReports from './AdminReports';
 import { renderWithProviders } from '../../test/utils';
+import splitViewStyles from '../../components/AdminQueueSplitView/AdminQueueSplitView.module.css';
 
 vi.mock('../../api/client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../api/client')>()),
@@ -84,6 +85,35 @@ describe('AdminReports', () => {
     await userEvent.click(screen.getByRole('button', { name: /Öömaaeg/ }));
     expect(screen.getByRole('heading', { name: 'Öömaaeg' })).toBeInTheDocument();
     expect(screen.getByText('Price mismatch.')).toBeInTheDocument();
+  });
+
+  it('auto-opens the detail panel matching a ?report= deep link', async () => {
+    mockGet.mockResolvedValueOnce(sampleReports);
+    renderWithProviders(<AdminReports />, { route: '/admin/reports?report=2' });
+
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Öömaaeg' })).toBeInTheDocument());
+    expect(screen.getByText('Price mismatch.')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Öömaaeg' }).closest(`.${splitViewStyles.detail}`))
+      .toHaveClass(splitViewStyles.detailShownMobile);
+  });
+
+  it('falls back to the first item when the ?report= id has no matching open report', async () => {
+    mockGet.mockResolvedValueOnce(sampleReports);
+    renderWithProviders(<AdminReports />, { route: '/admin/reports?report=999' });
+
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'MEEDIUM' })).toBeInTheDocument());
+  });
+
+  it('does not mis-treat a missing ?report= param as event id 0', async () => {
+    mockGet.mockResolvedValueOnce({
+      total: 1,
+      events: [{ ...sampleReports.events[0], event_id: 0 }],
+    });
+    renderWithProviders(<AdminReports />, { route: '/admin/reports' });
+
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'MEEDIUM' })).toBeInTheDocument());
+    expect(screen.getByRole('heading', { name: 'MEEDIUM' }).closest(`.${splitViewStyles.detail}`))
+      .not.toHaveClass(splitViewStyles.detailShownMobile);
   });
 
   it('requires a note before resolve/takedown are enabled', async () => {

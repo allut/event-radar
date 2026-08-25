@@ -37,18 +37,7 @@ async def send_report_notification(
         return
 
     event_href = f"{settings.FRONTEND_URL}/events/{event.id}"
-    resolve_href = f"{settings.BACKEND_URL}/admin/reports/{event.id}/resolve"
-    takedown_href = f"{settings.BACKEND_URL}/admin/reports/{event.id}/takedown"
-    resolve_curl = (
-        f"curl -u user:pass -X POST '{resolve_href}' "
-        '-H "Content-Type: application/json" '
-        '-d \'{"resolution_note": "not actionable"}\''
-    )
-    takedown_curl = (
-        f"curl -u user:pass -X POST '{takedown_href}' "
-        '-H "Content-Type: application/json" '
-        '-d \'{"resolution_note": "taken down"}\''
-    )
+    console_href = f"{settings.FRONTEND_URL}/admin/reports?report={event.id}"
 
     safe_title = html.escape(event.title_orig)
     safe_reason = html.escape(reason)
@@ -73,9 +62,8 @@ async def send_report_notification(
         f"<p><strong>Illegal allegation:</strong> {is_illegal_allegation}</p>"
     )
     html_lines.append(f"<p><strong>Reporter:</strong> {safe_reporter_email}</p>")
-    html_lines.append(f"<p><strong>Resolve:</strong><br><code>{html.escape(resolve_curl)}</code></p>")
     html_lines.append(
-        f"<p><strong>Takedown:</strong><br><code>{html.escape(takedown_curl)}</code></p>"
+        f"<p><a href='{console_href}'>Review in the admin console</a></p>"
     )
     html_body = "".join(html_lines)
 
@@ -87,8 +75,7 @@ async def send_report_notification(
         f"Report count: {report_count}\n"
         f"Illegal allegation: {is_illegal_allegation}\n"
         f"Reporter: {reporter_email}\n\n"
-        f"Resolve:\n{resolve_curl}\n\n"
-        f"Takedown:\n{takedown_curl}\n"
+        f"Review in the admin console:\n{console_href}\n"
     )
 
     async with httpx.AsyncClient(timeout=RESEND_TIMEOUT_SECONDS) as client:
