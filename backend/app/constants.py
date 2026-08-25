@@ -424,6 +424,14 @@ REPORT_AUTO_RESOLVE_NOTE = "auto-resolved: event cancelled"
 ADMIN_REPORTS_QUEUE_PAGE_SIZE: int = 50
 ADMIN_REPORTS_QUEUE_MAX_PAGE_SIZE: int = 500
 
+# Event inspector (routers/admin.py GET /admin/events/{id}, issue #157) caps
+# how many raw_events rows it inlines — unlike the paginated queues above,
+# this is a fixed ceiling (not offset/limit query params) since it's one
+# sub-list within a single-event payload, not its own listing endpoint. Each
+# row carries a full verbatim JSONB payload, so this bounds response size
+# for an event with a long refetch/dedup-merge history.
+ADMIN_EVENT_INSPECTOR_RAW_EVENTS_LIMIT: int = 20
+
 # Deduplication
 DEDUP_LOOKBACK_DAYS = 30  # only re-cluster events that started within this window
 # Upper bound on load_dedup_candidate_events — without it, an event scheduled

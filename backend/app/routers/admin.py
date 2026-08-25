@@ -5,12 +5,13 @@ import secrets
 import time
 from collections import OrderedDict
 from collections.abc import Awaitable, Callable, Sequence
+from datetime import datetime
 
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Query, Request, status
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from itsdangerous import BadSignature, SignatureExpired
 from pydantic import BaseModel
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.tokens import verify_admin_session_token
@@ -26,6 +27,7 @@ from app.constants import (
     ADMIN_AUTH_MAX_FAILURES,
     ADMIN_DEDUP_GROUPS_MAX_PAGE_SIZE,
     ADMIN_DEDUP_GROUPS_PAGE_SIZE,
+    ADMIN_EVENT_INSPECTOR_RAW_EVENTS_LIMIT,
     ADMIN_REVIEW_QUEUE_MAX_PAGE_SIZE,
     ADMIN_REVIEW_QUEUE_PAGE_SIZE,
     ADMIN_SESSION_COOKIE_NAME,
@@ -50,6 +52,7 @@ from app.constants import (
     RATE_LIMIT_ADMIN,
     REPORT_AUTO_RESOLVE_NOTE,
     REPORT_STATUS_OPEN,
+    TALLINN_TZ,
 )
 from app.db import AsyncSessionLocal
 from app.email.digest import send_daily_digests
@@ -64,7 +67,15 @@ from app.ingestion.jobs import (
 )
 from app.ingestion.organizer_sync import sync_fienta_organizers
 from app.ingestion.registry import ADAPTER_REGISTRY
-from app.models.models import Event, EventReport, Organizer, Source
+from app.models.models import (
+    DailyFeed,
+    Event,
+    EventReport,
+    EventSource,
+    Organizer,
+    RawEvent,
+    Source,
+)
 from app.publish import publish_pending
 from app.ranking.score import build_daily_feeds
 from app.rate_limit import client_key, limiter
@@ -276,23 +287,28 @@ async def admin_dedup_run(request: Request) -> dict:
     return await run_admin_job("Dedup", dedup_pass_drain_now())
 
 
+def _dedup_event_summary(e: Event) -> dict:
+    """Minimal per-event dict shared by every dedup-group listing:
+    /admin/dedup/groups' _serialize_dedup_groups and the event inspector's
+    sibling list (issue #157) — one field set kept in sync in one place."""
+    return {
+        "id": e.id,
+        "title": e.title_orig,
+        "starts_at": e.starts_at.isoformat(),
+        "venue": e.venue_name,
+        "status": e.status,
+        "url": e.url,
+        "is_explicit": e.is_explicit,
+    }
+
+
 def _serialize_dedup_groups(rows: Sequence[Event]) -> dict[int, list[dict]]:
     """Group event rows by dedup_group_id into response dicts."""
     groups: dict[int, list[dict]] = {}
     for e in rows:
         if e.dedup_group_id is None:
             continue
-        groups.setdefault(e.dedup_group_id, []).append(
-            {
-                "id": e.id,
-                "title": e.title_orig,
-                "starts_at": e.starts_at.isoformat(),
-                "venue": e.venue_name,
-                "status": e.status,
-                "url": e.url,
-                "is_explicit": e.is_explicit,
-            }
-        )
+        groups.setdefault(e.dedup_group_id, []).append(_dedup_event_summary(e))
     return groups
 
 
@@ -661,6 +677,176 @@ async def _event_or_404(db: AsyncSession, event_id: int) -> Event:
             status_code=status.HTTP_404_NOT_FOUND, detail=ERROR_EVENT_NOT_FOUND
         )
     return event
+
+
+def _serialize_inspector_report(r: EventReport) -> dict:
+    return {
+        "id": r.id,
+        "user_id": r.user_id,
+        "reason": r.reason,
+        "is_illegal_allegation": r.is_illegal_allegation,
+        "detail": r.detail,
+        "status": r.status,
+        "resolution_note": r.resolution_note,
+        "created_at": r.created_at.isoformat(),
+        "resolved_at": r.resolved_at.isoformat() if r.resolved_at else None,
+    }
+
+
+def _serialize_raw_event(raw: RawEvent, source_slug: str) -> dict:
+    """payload is included verbatim — the frontend must render it as
+    escaped/pretty-printed text, never parsed as HTML (issue #157). Unlike
+    description/important_info (sanitized at ingest), this is the one
+    genuinely unsanitized field in the console."""
+    return {
+        "id": raw.id,
+        "source_slug": source_slug,
+        "external_id": raw.external_id,
+        "payload": raw.payload,
+        "fetched_at": raw.fetched_at.isoformat(),
+        "processed_at": raw.processed_at.isoformat() if raw.processed_at else None,
+    }
+
+
+def _serialize_event_detail(event: Event) -> dict:
+    cl = event.classification
+    return {
+        "id": event.id,
+        "slug": event.slug,
+        "title_orig": event.title_orig,
+        "description_orig": event.description_orig,
+        "important_info": event.important_info,
+        "price_hint": event.price_hint,
+        "starts_at": event.starts_at.isoformat(),
+        "ends_at": event.ends_at.isoformat() if event.ends_at else None,
+        "venue_name": event.venue_name,
+        "venue_address": event.venue_address,
+        "lat": event.lat,
+        "lng": event.lng,
+        "url": event.url,
+        "image_url": event.image_url,
+        "price_min": float(event.price_min) if event.price_min is not None else None,
+        "price_max": float(event.price_max) if event.price_max is not None else None,
+        "currency": event.currency,
+        "status": event.status,
+        "is_explicit": event.is_explicit,
+        "is_out_of_area": event.is_out_of_area,
+        "is_non_event": event.is_non_event,
+        "has_free_tier": event.has_free_tier,
+        "dedup_group_id": event.dedup_group_id,
+        "submitted_by_organizer_id": event.submitted_by_organizer_id,
+        "needs_review": event.needs_review,
+        "cancellation_reason": event.cancellation_reason,
+        "created_at": event.created_at.isoformat(),
+        "updated_at": event.updated_at.isoformat(),
+        "detail_refetched_at": (
+            event.detail_refetched_at.isoformat()
+            if event.detail_refetched_at
+            else None
+        ),
+        "geocode_attempted_at": (
+            event.geocode_attempted_at.isoformat()
+            if event.geocode_attempted_at
+            else None
+        ),
+        "classification": (
+            {
+                "categories": cl.categories,
+                "vibes": cl.vibes,
+                "quality_score": cl.quality_score,
+                "why_go_bullets": cl.why_go_bullets,
+                "language_detected": cl.language_detected,
+                "model_used": cl.model_used,
+                "classified_at": cl.classified_at.isoformat(),
+            }
+            if cl
+            else None
+        ),
+    }
+
+
+@router.get("/events/{event_id}", dependencies=[Depends(_require_admin)])
+@limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
+async def admin_get_event(event_id: int, request: Request) -> dict:
+    """Full-detail inspector payload for one event, any status (issue #157,
+    part of #153). Curated projection, not a raw ORM dump — mirrors
+    _serialize_dedup_groups' style. Dedup siblings and reports are fetched
+    inline (cheap, already-indexed lookups), not separate round-trips.
+
+    Feed-membership uses the `@>` (array-contains) operator, not `= ANY()` —
+    the only one of the two the built-in GIN array_ops opclass can accelerate
+    (see docs/research/2026-08-25-admin-console-feed-membership.md). Shipped
+    with no new index initially per that research's recommendation.
+    """
+    async with AsyncSessionLocal() as db:
+        event = await db.scalar(
+            select_events_with_classification().where(Event.id == event_id)
+        )
+        if event is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail=ERROR_EVENT_NOT_FOUND
+            )
+
+        siblings: Sequence[Event] = []
+        if event.dedup_group_id is not None:
+            # Deliberately includes cancelled siblings, unlike
+            # admin_list_dedup_groups (which excludes them from its listing
+            # view) — an admin drilling into one specific event wants to see
+            # a cancelled sibling too (e.g. to understand why it was
+            # cancelled), matching this endpoint's own "any status" event.
+            siblings = (
+                await db.scalars(
+                    select(Event).where(
+                        Event.dedup_group_id == event.dedup_group_id,
+                        Event.id != event.id,
+                    )
+                )
+            ).all()
+
+        reports = (
+            await db.scalars(
+                select(EventReport)
+                .where(EventReport.event_id == event.id)
+                .order_by(EventReport.created_at.desc())
+            )
+        ).all()
+
+        raw_rows = (
+            await db.execute(
+                select(RawEvent, Source.slug)
+                .join(Source, Source.id == RawEvent.source_id)
+                .join(
+                    EventSource,
+                    and_(
+                        EventSource.source_id == RawEvent.source_id,
+                        EventSource.external_id == RawEvent.external_id,
+                    ),
+                )
+                .where(EventSource.event_id == event.id)
+                .order_by(RawEvent.fetched_at.desc())
+                .limit(ADMIN_EVENT_INSPECTOR_RAW_EVENTS_LIMIT)
+            )
+        ).all()
+
+        today = datetime.now(TALLINN_TZ).date()
+        in_todays_feed = (
+            await db.scalar(
+                select(DailyFeed.id)
+                .where(
+                    DailyFeed.feed_date == today,
+                    DailyFeed.event_ids.contains([event.id]),
+                )
+                .limit(1)
+            )
+        ) is not None
+
+    return {
+        "event": _serialize_event_detail(event),
+        "dedup_siblings": [_dedup_event_summary(e) for e in siblings],
+        "reports": [_serialize_inspector_report(r) for r in reports],
+        "raw_events": [_serialize_raw_event(re, slug) for re, slug in raw_rows],
+        "in_todays_feed": in_todays_feed,
+    }
 
 
 @router.post(

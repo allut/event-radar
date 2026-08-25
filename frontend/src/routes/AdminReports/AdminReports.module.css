@@ -59,23 +59,14 @@
 }
 
 .chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
+  composes: chips from '../../components/shared/Chip.module.css';
   margin-bottom: var(--space-3);
 }
 
-.chip {
-  font-size: var(--fs-2xs);
-  color: var(--text-muted);
-  background: var(--bg-raised);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 0.1rem var(--space-2);
-}
+.chip { composes: chip from '../../components/shared/Chip.module.css'; }
 
 .illegalChip {
-  composes: chip;
+  composes: chip from '../../components/shared/Chip.module.css';
   color: var(--danger);
   border-color: var(--danger);
 }

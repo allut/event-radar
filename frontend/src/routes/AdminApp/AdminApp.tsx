@@ -41,7 +41,7 @@ function screenFor(pathname: string): ReactNode | null {
   if (pathname === ROUTES.adminPipeline) return <AdminPipeline />;
   if (pathname === ROUTES.adminDedup) return <AdminDedup />;
   if (pathname.startsWith(EVENT_DETAIL_PREFIX) && pathname.length > EVENT_DETAIL_PREFIX.length) {
-    return <AdminEventDetail />;
+    return <AdminEventDetail eventId={pathname.slice(EVENT_DETAIL_PREFIX.length)} />;
   }
   return null;
 }
