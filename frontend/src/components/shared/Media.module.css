@@ -1,0 +1,11 @@
+/* Blurred cover-fit backdrop image behind a card/hero's foreground image
+   (EventCard, EventDetail). */
+.mediaBackdrop {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: blur(var(--blur-backdrop));
+  transform: scale(var(--scale-hover));
+}

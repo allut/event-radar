@@ -3,32 +3,19 @@
 }
 
 .card {
-  composes: card cardAccentTop cardPage from '../../components/shared/Card.module.css';
-  composes: rise from '../../components/shared/Animations.module.css';
-  --rise-distance: var(--rise-distance-lg);
-  --rise-duration: var(--anim-rise-sm);
-  padding: var(--space-7);
+  composes: authCard from '../../components/shared/Card.module.css';
 }
 
 .header {
-  display: flex;
-  align-items: center;
-  gap: var(--space-0-6);
-  margin-bottom: var(--space-2);
+  composes: authHeader from '../../components/shared/Card.module.css';
 }
 
 .radar {
-  composes: breathe from '../../components/shared/Animations.module.css';
-  font-size: var(--fs-xl);
-  color: var(--accent);
+  composes: authRadar from '../../components/shared/Card.module.css';
 }
 
 .brand {
-  font-family: var(--font-display);
-  font-size: var(--heading-lg);
-  font-weight: var(--fw-semibold);
-  letter-spacing: var(--tracking-normal);
-  color: var(--text);
+  composes: authBrand from '../../components/shared/Card.module.css';
 }
 
 .tag {

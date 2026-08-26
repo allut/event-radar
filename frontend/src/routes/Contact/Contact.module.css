@@ -67,12 +67,7 @@
 }
 
 .success {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--space-0-6);
-  padding: var(--space-5) 0;
-  text-align: center;
+  composes: successBlock from '../../components/shared/Button.module.css';
 }
 
 .checkCircle {
@@ -93,16 +88,5 @@
 }
 
 .resend {
-  background: none;
-  border: none;
-  color: var(--text-muted);
-  font-size: var(--fs-sm);
-  margin-top: var(--space-2);
-  text-decoration: underline;
-  text-underline-offset: var(--underline-offset);
-  transition: color var(--transition);
-}
-
-.resend:hover {
-  color: var(--text);
+  composes: textButton from '../../components/shared/Button.module.css';
 }

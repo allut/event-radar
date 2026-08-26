@@ -1,21 +1,13 @@
 .head { margin-bottom: var(--space-6); }
 .eyebrow {
-  font-family: var(--font-mono);
-  font-size: var(--fs-2xs);
-  letter-spacing: var(--eyebrow-tracking);
-  text-transform: uppercase;
-  color: var(--text-dim);
+  composes: adminEyebrow from '../../components/shared/Page.module.css';
 }
 .title {
-  font-family: var(--font-display);
-  font-size: var(--heading-xl);
-  font-weight: var(--fw-semibold);
-  color: var(--text);
-  margin-top: var(--space-1);
+  composes: adminPageTitle from '../../components/shared/Page.module.css';
 }
 
 .rowTitle { font-size: var(--fs-sm); font-weight: var(--fw-medium); color: var(--text); }
-.rowMeta { font-size: var(--fs-2xs); color: var(--text-muted); margin-top: var(--space-0-45); }
+.rowMeta { composes: queueRowMeta from '../../components/shared/AdminQueue.module.css'; }
 
 .dryRunToggle {
   display: inline-flex;

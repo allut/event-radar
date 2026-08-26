@@ -29,3 +29,68 @@
   letter-spacing: var(--tracking-tighter);
   color: var(--text);
 }
+
+/* Body copy shared by LegalPage and StaticPage. */
+.proseBody {
+  font-size: var(--fs-base);
+  color: var(--text-soft);
+  line-height: var(--leading-body);
+}
+
+/* Admin console route-header chrome (AdminDashboard, AdminDedup,
+   AdminEventDetail, AdminPipeline, AdminReports, AdminSubmissions) — named
+   distinctly from .pageEyebrow/.pageTitle above since those have different
+   declarations and existing consumers (LegalPage, StaticPage, EventSubmit). */
+.adminEyebrow {
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  letter-spacing: var(--eyebrow-tracking);
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.adminPageTitle {
+  font-family: var(--font-display);
+  font-size: var(--heading-xl);
+  font-weight: var(--fw-semibold);
+  color: var(--text);
+  margin-top: var(--space-1);
+}
+
+/* Explore/SavedEvents grid-page shell — masthead + heading + card grid. */
+.gridMain {
+  flex: 1;
+  max-width: var(--page-max-grid);
+  width: 100%;
+  margin: 0 auto;
+  padding: var(--space-7) var(--space-5) var(--space-8);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.gridMasthead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.gridHeading {
+  font-family: var(--font-display);
+  font-size: var(--heading-2xl);
+  font-weight: var(--fw-semibold);
+  color: var(--text);
+  letter-spacing: var(--tracking-tighter);
+}
+
+.cardGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(var(--card-grid-min), 1fr));
+  gap: var(--space-4);
+}
+
+@media (max-width: 640px) {
+  .cardGrid {
+    grid-template-columns: 1fr;
+  }
+}

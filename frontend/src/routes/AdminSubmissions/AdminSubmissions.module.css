@@ -3,48 +3,27 @@
 }
 
 .eyebrow {
-  font-family: var(--font-mono);
-  font-size: var(--fs-2xs);
-  letter-spacing: var(--eyebrow-tracking);
-  text-transform: uppercase;
-  color: var(--text-dim);
+  composes: adminEyebrow from '../../components/shared/Page.module.css';
 }
 
 .title {
-  font-family: var(--font-display);
-  font-size: var(--heading-xl);
-  font-weight: var(--fw-semibold);
-  color: var(--text);
-  margin-top: var(--space-1);
+  composes: adminPageTitle from '../../components/shared/Page.module.css';
 }
 
 .rowTitle {
-  font-size: var(--fs-sm);
-  font-weight: var(--fw-medium);
-  color: var(--text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  composes: queueRowTitle from '../../components/shared/AdminQueue.module.css';
 }
 
 .rowMeta {
-  font-size: var(--fs-2xs);
-  color: var(--text-muted);
-  margin-top: var(--space-0-45);
+  composes: queueRowMeta from '../../components/shared/AdminQueue.module.css';
 }
 
 .detailTitle {
-  font-family: var(--font-display);
-  font-size: var(--fs-lg);
-  font-weight: var(--fw-semibold);
-  color: var(--text);
-  margin-bottom: var(--space-1);
+  composes: queueDetailTitle from '../../components/shared/AdminQueue.module.css';
 }
 
 .detailMeta {
-  font-size: var(--fs-sm);
-  color: var(--text-muted);
-  margin-bottom: var(--space-3);
+  composes: queueDetailMeta from '../../components/shared/AdminQueue.module.css';
 }
 
 .chips {
@@ -66,11 +45,7 @@
 }
 
 .resolvedPanel {
-  composes: card from '../../components/shared/Card.module.css';
-  margin-top: var(--space-5);
-  padding: var(--space-4);
-  color: var(--success);
-  font-weight: var(--fw-medium);
+  composes: queueResolvedPanel from '../../components/shared/AdminQueue.module.css';
 }
 
 .retractedPanel {

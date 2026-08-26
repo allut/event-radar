@@ -1,0 +1,54 @@
+/* Admin queue/detail row chrome shared across AdminDedup, AdminReports,
+   AdminSubmissions, AdminPipeline, AdminQueueSplitView, AdminEventDetail. */
+
+.queueRowTitle {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.queueRowMeta {
+  font-size: var(--fs-2xs);
+  color: var(--text-muted);
+  margin-top: var(--space-0-45);
+}
+
+.queueEmpty {
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  color: var(--text-dim);
+  font-style: italic;
+}
+
+.queueDetailTitle {
+  font-family: var(--font-display);
+  font-size: var(--fs-lg);
+  font-weight: var(--fw-semibold);
+  color: var(--text);
+  margin-bottom: var(--space-1);
+}
+
+.queueDetailMeta {
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+  margin-bottom: var(--space-3);
+}
+
+.queueResolvedPanel {
+  composes: card from './Card.module.css';
+  margin-top: var(--space-5);
+  padding: var(--space-4);
+  color: var(--success);
+  font-weight: var(--fw-medium);
+}
+
+.queueReportItemHead {
+  display: flex;
+  justify-content: space-between;
+  color: var(--text-dim);
+  font-size: var(--fs-2xs);
+  margin-bottom: var(--space-1);
+}

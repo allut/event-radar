@@ -12,7 +12,5 @@
 }
 
 .body {
-  font-size: var(--fs-base);
-  color: var(--text-soft);
-  line-height: var(--leading-body);
+  composes: proseBody from '../shared/Page.module.css';
 }
