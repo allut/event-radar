@@ -3,11 +3,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-
-def _scalars_result(items):
-    m = MagicMock()
-    m.all.return_value = items
-    return m
+from tests.routers.conftest import scalars_returning as _scalars_result
 
 
 class TestShowcase:

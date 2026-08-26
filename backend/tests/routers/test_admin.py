@@ -5,45 +5,13 @@ unset so APP_ENV=development lets any credentials through (mirrors the
 behaviour tested in test_webhooks.py for RESEND_WEBHOOK_SECRET).
 """
 import http
-import json
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
-from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
 from app.constants import APP_ENV_DEVELOPMENT
-
-
-def _ndjson_lines(resp) -> list[dict]:
-    """Parse a streamed NDJSON admin-trigger response body (issue #159) into
-    its envelope lines."""
-    return [json.loads(line) for line in resp.text.strip().split("\n") if line]
-
-
-# ---------------------------------------------------------------------------
-# Test-app factory
-# ---------------------------------------------------------------------------
-
-
-def _build_app() -> FastAPI:
-    from app.routers.admin import router
-
-    app = FastAPI()
-    app.include_router(router)
-    return app
-
-
-def _make_db_ctx(db: AsyncMock | None = None) -> MagicMock:
-    """Return a mock async-context-manager that yields *db* on __aenter__."""
-    if db is None:
-        db = AsyncMock()
-        db.commit = AsyncMock()
-        db.rollback = AsyncMock()
-    ctx = MagicMock()
-    ctx.__aenter__ = AsyncMock(return_value=db)
-    ctx.__aexit__ = AsyncMock(return_value=False)
-    return ctx
+from tests.routers.conftest import ndjson_lines
 
 
 # ---------------------------------------------------------------------------
@@ -52,9 +20,9 @@ def _make_db_ctx(db: AsyncMock | None = None) -> MagicMock:
 
 
 @pytest.mark.asyncio
-async def test_sync_organizers_calls_job_and_returns_result():
-    app = _build_app()
-    db_ctx = _make_db_ctx()
+async def test_sync_organizers_calls_job_and_returns_result(admin_app, make_db_ctx, mock_db):
+    app = admin_app
+    db_ctx = make_db_ctx(mock_db)
     expected = {"added": [], "stale": []}
 
     with (
@@ -75,7 +43,7 @@ async def test_sync_organizers_calls_job_and_returns_result():
             resp = await client.post("/admin/sync-organizers", auth=("admin", ""))
 
     assert resp.status_code == http.HTTPStatus.OK
-    lines = _ndjson_lines(resp)
+    lines = ndjson_lines(resp)
     assert len(lines) == 1
     assert lines[0]["status"] == "ok"
     assert lines[0]["result"] == expected
@@ -83,9 +51,9 @@ async def test_sync_organizers_calls_job_and_returns_result():
 
 
 @pytest.mark.asyncio
-async def test_sync_organizers_returns_500_on_job_error():
-    app = _build_app()
-    db_ctx = _make_db_ctx()
+async def test_sync_organizers_returns_500_on_job_error(admin_app, make_db_ctx, mock_db):
+    app = admin_app
+    db_ctx = make_db_ctx(mock_db)
 
     with (
         patch("app.routers.admin.settings") as mock_settings,
@@ -105,7 +73,7 @@ async def test_sync_organizers_returns_500_on_job_error():
             resp = await client.post("/admin/sync-organizers", auth=("admin", ""))
 
     assert resp.status_code == http.HTTPStatus.OK
-    lines = _ndjson_lines(resp)
+    lines = ndjson_lines(resp)
     assert len(lines) == 1
     assert lines[0]["status"] == "error"
     assert lines[0]["result"] is None
@@ -118,10 +86,10 @@ async def test_sync_organizers_returns_500_on_job_error():
 
 
 @pytest.mark.asyncio
-async def test_cleanup_defaults_to_dry_run_and_does_not_commit():
+async def test_cleanup_defaults_to_dry_run_and_does_not_commit(admin_app, make_db_ctx, mock_db):
     """Matches every other destructive admin/maintenance tool's dry-run-first convention."""
-    app = _build_app()
-    db_ctx = _make_db_ctx()
+    app = admin_app
+    db_ctx = make_db_ctx(mock_db)
     expected = {"auth_magic_links": 3, "llm_calls": 10}
 
     with (
@@ -142,7 +110,7 @@ async def test_cleanup_defaults_to_dry_run_and_does_not_commit():
             resp = await client.post("/admin/cleanup", auth=("admin", ""))
 
     assert resp.status_code == http.HTTPStatus.OK
-    lines = _ndjson_lines(resp)
+    lines = ndjson_lines(resp)
     assert lines[0]["status"] == "ok"
     assert lines[0]["result"] == expected
     mock_cleanup.assert_awaited_once_with(db_ctx.__aenter__.return_value, dry_run=True)
@@ -150,9 +118,9 @@ async def test_cleanup_defaults_to_dry_run_and_does_not_commit():
 
 
 @pytest.mark.asyncio
-async def test_cleanup_dry_run_false_actually_deletes_and_commits():
-    app = _build_app()
-    db_ctx = _make_db_ctx()
+async def test_cleanup_dry_run_false_actually_deletes_and_commits(admin_app, make_db_ctx, mock_db):
+    app = admin_app
+    db_ctx = make_db_ctx(mock_db)
 
     with (
         patch("app.routers.admin.settings") as mock_settings,
@@ -177,9 +145,9 @@ async def test_cleanup_dry_run_false_actually_deletes_and_commits():
 
 
 @pytest.mark.asyncio
-async def test_cleanup_returns_500_on_job_error():
-    app = _build_app()
-    db_ctx = _make_db_ctx()
+async def test_cleanup_returns_500_on_job_error(admin_app, make_db_ctx, mock_db):
+    app = admin_app
+    db_ctx = make_db_ctx(mock_db)
 
     with (
         patch("app.routers.admin.settings") as mock_settings,
@@ -199,7 +167,7 @@ async def test_cleanup_returns_500_on_job_error():
             resp = await client.post("/admin/cleanup", auth=("admin", ""))
 
     assert resp.status_code == http.HTTPStatus.OK
-    lines = _ndjson_lines(resp)
+    lines = ndjson_lines(resp)
     assert lines[0]["status"] == "error"
     assert lines[0]["result"] is None
 
@@ -210,9 +178,9 @@ async def test_cleanup_returns_500_on_job_error():
 
 
 @pytest.mark.asyncio
-async def test_build_feeds_calls_job_and_returns_result():
-    app = _build_app()
-    db_ctx = _make_db_ctx()
+async def test_build_feeds_calls_job_and_returns_result(admin_app, make_db_ctx, mock_db):
+    app = admin_app
+    db_ctx = make_db_ctx(mock_db)
     expected = {"built": 3, "empty": 0, "total_users": 3, "candidate_events": 12}
 
     with (
@@ -233,16 +201,16 @@ async def test_build_feeds_calls_job_and_returns_result():
             resp = await client.post("/admin/build-feeds", auth=("admin", ""))
 
     assert resp.status_code == http.HTTPStatus.OK
-    lines = _ndjson_lines(resp)
+    lines = ndjson_lines(resp)
     assert lines[0]["status"] == "ok"
     assert lines[0]["result"] == expected
     mock_build.assert_awaited_once()
 
 
 @pytest.mark.asyncio
-async def test_build_feeds_returns_500_on_job_error():
-    app = _build_app()
-    db_ctx = _make_db_ctx()
+async def test_build_feeds_returns_500_on_job_error(admin_app, make_db_ctx, mock_db):
+    app = admin_app
+    db_ctx = make_db_ctx(mock_db)
 
     with (
         patch("app.routers.admin.settings") as mock_settings,
@@ -262,7 +230,7 @@ async def test_build_feeds_returns_500_on_job_error():
             resp = await client.post("/admin/build-feeds", auth=("admin", ""))
 
     assert resp.status_code == http.HTTPStatus.OK
-    lines = _ndjson_lines(resp)
+    lines = ndjson_lines(resp)
     assert lines[0]["status"] == "error"
     assert lines[0]["result"] is None
 
@@ -273,8 +241,8 @@ async def test_build_feeds_returns_500_on_job_error():
 
 
 @pytest.mark.asyncio
-async def test_publish_calls_job_and_returns_result():
-    app = _build_app()
+async def test_publish_calls_job_and_returns_result(admin_app):
+    app = admin_app
     expected = {"published": 3}
 
     with (
@@ -294,15 +262,15 @@ async def test_publish_calls_job_and_returns_result():
             resp = await client.post("/admin/publish", auth=("admin", ""))
 
     assert resp.status_code == http.HTTPStatus.OK
-    lines = _ndjson_lines(resp)
+    lines = ndjson_lines(resp)
     assert lines[0]["status"] == "ok"
     assert lines[0]["result"] == expected
     mock_publish.assert_awaited_once()
 
 
 @pytest.mark.asyncio
-async def test_publish_returns_500_on_job_error():
-    app = _build_app()
+async def test_publish_returns_500_on_job_error(admin_app):
+    app = admin_app
 
     with (
         patch("app.routers.admin.settings") as mock_settings,
@@ -321,7 +289,7 @@ async def test_publish_returns_500_on_job_error():
             resp = await client.post("/admin/publish", auth=("admin", ""))
 
     assert resp.status_code == http.HTTPStatus.OK
-    lines = _ndjson_lines(resp)
+    lines = ndjson_lines(resp)
     assert lines[0]["status"] == "error"
     assert lines[0]["result"] is None
 
@@ -332,8 +300,8 @@ async def test_publish_returns_500_on_job_error():
 
 
 @pytest.mark.asyncio
-async def test_geocode_calls_job_and_returns_result():
-    app = _build_app()
+async def test_geocode_calls_job_and_returns_result(admin_app):
+    app = admin_app
     expected = {"geocoded": 4}
 
     with (
@@ -353,15 +321,15 @@ async def test_geocode_calls_job_and_returns_result():
             resp = await client.post("/admin/geocode", auth=("admin", ""))
 
     assert resp.status_code == http.HTTPStatus.OK
-    lines = _ndjson_lines(resp)
+    lines = ndjson_lines(resp)
     assert lines[0]["status"] == "ok"
     assert lines[0]["result"] == expected
     mock_geocode.assert_awaited_once()
 
 
 @pytest.mark.asyncio
-async def test_geocode_returns_500_on_job_error():
-    app = _build_app()
+async def test_geocode_returns_500_on_job_error(admin_app):
+    app = admin_app
 
     with (
         patch("app.routers.admin.settings") as mock_settings,
@@ -380,7 +348,7 @@ async def test_geocode_returns_500_on_job_error():
             resp = await client.post("/admin/geocode", auth=("admin", ""))
 
     assert resp.status_code == http.HTTPStatus.OK
-    lines = _ndjson_lines(resp)
+    lines = ndjson_lines(resp)
     assert lines[0]["status"] == "error"
     assert lines[0]["result"] is None
 
@@ -391,9 +359,9 @@ async def test_geocode_returns_500_on_job_error():
 
 
 @pytest.mark.asyncio
-async def test_send_digests_defaults_to_dry_run():
-    app = _build_app()
-    db_ctx = _make_db_ctx()
+async def test_send_digests_defaults_to_dry_run(admin_app, make_db_ctx, mock_db):
+    app = admin_app
+    db_ctx = make_db_ctx(mock_db)
     expected = {"sent": 2, "skipped": 0, "errored": 0, "total_opted_in": 2, "dry_run": True}
 
     with (
@@ -419,9 +387,9 @@ async def test_send_digests_defaults_to_dry_run():
 
 
 @pytest.mark.asyncio
-async def test_send_digests_passes_dry_run_false():
-    app = _build_app()
-    db_ctx = _make_db_ctx()
+async def test_send_digests_passes_dry_run_false(admin_app, make_db_ctx, mock_db):
+    app = admin_app
+    db_ctx = make_db_ctx(mock_db)
     expected = {"sent": 2, "skipped": 0, "errored": 0, "total_opted_in": 2, "dry_run": False}
 
     with (
@@ -449,9 +417,9 @@ async def test_send_digests_passes_dry_run_false():
 
 
 @pytest.mark.asyncio
-async def test_send_digests_returns_500_on_job_error():
-    app = _build_app()
-    db_ctx = _make_db_ctx()
+async def test_send_digests_returns_500_on_job_error(admin_app, make_db_ctx, mock_db):
+    app = admin_app
+    db_ctx = make_db_ctx(mock_db)
 
     with (
         patch("app.routers.admin.settings") as mock_settings,
@@ -471,7 +439,7 @@ async def test_send_digests_returns_500_on_job_error():
             resp = await client.post("/admin/send-digests", auth=("admin", ""))
 
     assert resp.status_code == http.HTTPStatus.OK
-    lines = _ndjson_lines(resp)
+    lines = ndjson_lines(resp)
     assert lines[0]["status"] == "error"
     assert lines[0]["result"] is None
 
@@ -519,9 +487,9 @@ def _all_job_mocks(
 
 
 @pytest.mark.asyncio
-async def test_pipeline_run_calls_all_seven_stages_in_order():
-    app = _build_app()
-    db_ctx = _make_db_ctx()
+async def test_pipeline_run_calls_all_seven_stages_in_order(admin_app, make_db_ctx, mock_db):
+    app = admin_app
+    db_ctx = make_db_ctx(mock_db)
     mocks = _all_job_mocks()
     with (
         patch("app.routers.admin.settings") as mock_settings,
@@ -543,7 +511,7 @@ async def test_pipeline_run_calls_all_seven_stages_in_order():
             resp = await client.post("/admin/pipeline/run", auth=("admin", ""))
 
     assert resp.status_code == http.HTTPStatus.OK
-    lines = _ndjson_lines(resp)
+    lines = ndjson_lines(resp)
     assert [line["stage"] for line in lines] == [
         "sync_organizers",
         "ingest",
@@ -560,9 +528,9 @@ async def test_pipeline_run_calls_all_seven_stages_in_order():
 
 
 @pytest.mark.asyncio
-async def test_pipeline_run_defaults_to_dry_run_for_digests():
-    app = _build_app()
-    db_ctx = _make_db_ctx()
+async def test_pipeline_run_defaults_to_dry_run_for_digests(admin_app, make_db_ctx, mock_db):
+    app = admin_app
+    db_ctx = make_db_ctx(mock_db)
     mocks = _all_job_mocks()
 
     with (
@@ -590,9 +558,9 @@ async def test_pipeline_run_defaults_to_dry_run_for_digests():
 
 
 @pytest.mark.asyncio
-async def test_pipeline_run_passes_dry_run_false_to_digests():
-    app = _build_app()
-    db_ctx = _make_db_ctx()
+async def test_pipeline_run_passes_dry_run_false_to_digests(admin_app, make_db_ctx, mock_db):
+    app = admin_app
+    db_ctx = make_db_ctx(mock_db)
     mocks = _all_job_mocks()
 
     with (
@@ -622,10 +590,10 @@ async def test_pipeline_run_passes_dry_run_false_to_digests():
 
 
 @pytest.mark.asyncio
-async def test_pipeline_run_stops_on_ingest_failure():
+async def test_pipeline_run_stops_on_ingest_failure(admin_app, make_db_ctx, mock_db):
     """A failure in stage 2 (ingest) must abort and not call later stages."""
-    app = _build_app()
-    db_ctx = _make_db_ctx()
+    app = admin_app
+    db_ctx = make_db_ctx(mock_db)
     mock_ingest = AsyncMock(side_effect=RuntimeError("source timeout"))
     mock_dedup = AsyncMock()
 
@@ -653,7 +621,7 @@ async def test_pipeline_run_stops_on_ingest_failure():
             resp = await client.post("/admin/pipeline/run", auth=("admin", ""))
 
     assert resp.status_code == http.HTTPStatus.OK
-    lines = _ndjson_lines(resp)
+    lines = ndjson_lines(resp)
     assert [line["stage"] for line in lines] == ["sync_organizers", "ingest"]
     assert lines[-1]["status"] == "error"
     assert lines[-1]["stage"] == "ingest"
@@ -662,10 +630,10 @@ async def test_pipeline_run_stops_on_ingest_failure():
 
 
 @pytest.mark.asyncio
-async def test_pipeline_run_stops_on_sync_failure():
+async def test_pipeline_run_stops_on_sync_failure(admin_app, make_db_ctx, mock_db):
     """A failure in stage 1 (sync_organizers) must abort immediately."""
-    app = _build_app()
-    db_ctx = _make_db_ctx()
+    app = admin_app
+    db_ctx = make_db_ctx(mock_db)
     mock_ingest = AsyncMock()
 
     with (
@@ -692,7 +660,7 @@ async def test_pipeline_run_stops_on_sync_failure():
             resp = await client.post("/admin/pipeline/run", auth=("admin", ""))
 
     assert resp.status_code == http.HTTPStatus.OK
-    lines = _ndjson_lines(resp)
+    lines = ndjson_lines(resp)
     assert [line["stage"] for line in lines] == ["sync_organizers"]
     assert lines[0]["status"] == "error"
     mock_ingest.assert_not_awaited()

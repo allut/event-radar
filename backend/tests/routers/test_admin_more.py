@@ -3,41 +3,13 @@ _require_admin fail-closed, /ingest, /ingest/{slug}, /dedup, /dedup/groups,
 /classify, /refetch, /stats."""
 
 import http
-import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
 from app.constants import ADMIN_USERNAME_DEFAULT, APP_ENV_DEVELOPMENT
-
-
-def _ndjson_lines(resp) -> list[dict]:
-    """Parse a streamed NDJSON admin-trigger response body (issue #159) into
-    its envelope lines."""
-    return [json.loads(line) for line in resp.text.strip().split("\n") if line]
-
-
-def _build_app() -> FastAPI:
-    from app.routers.admin import router
-
-    app = FastAPI()
-    app.include_router(router)
-    return app
-
-
-def _make_db_ctx(db: AsyncMock) -> MagicMock:
-    ctx = MagicMock()
-    ctx.__aenter__ = AsyncMock(return_value=db)
-    ctx.__aexit__ = AsyncMock(return_value=False)
-    return ctx
-
-
-def _scalars_returning(items):
-    r = MagicMock()
-    r.all.return_value = items
-    return r
+from tests.routers.conftest import ndjson_lines, scalars_returning
 
 
 # ---------------------------------------------------------------------------
@@ -46,8 +18,8 @@ def _scalars_returning(items):
 
 
 @pytest.mark.asyncio
-async def test_default_username_in_production_returns_503():
-    app = _build_app()
+async def test_default_username_in_production_returns_503(admin_app):
+    app = admin_app
     with patch("app.routers.admin.settings") as mock_settings:
         mock_settings.ADMIN_PASSWORD = "s3cret"
         mock_settings.ADMIN_USERNAME = ADMIN_USERNAME_DEFAULT
@@ -64,8 +36,8 @@ async def test_default_username_in_production_returns_503():
 
 
 @pytest.mark.asyncio
-async def test_wrong_credentials_returns_401():
-    app = _build_app()
+async def test_wrong_credentials_returns_401(admin_app):
+    app = admin_app
     with patch("app.routers.admin.settings") as mock_settings:
         mock_settings.ADMIN_PASSWORD = "s3cret"
         mock_settings.ADMIN_USERNAME = "realadmin"
@@ -85,8 +57,8 @@ async def test_wrong_credentials_returns_401():
 
 
 @pytest.mark.asyncio
-async def test_ingest_all_returns_results():
-    app = _build_app()
+async def test_ingest_all_returns_results(admin_app):
+    app = admin_app
     with (
         patch("app.routers.admin.settings") as mock_settings,
         patch(
@@ -105,15 +77,15 @@ async def test_ingest_all_returns_results():
 
     assert resp.status_code == http.HTTPStatus.OK
     assert resp.headers["cache-control"] == "no-store"
-    lines = _ndjson_lines(resp)
+    lines = ndjson_lines(resp)
     assert len(lines) == 1
     assert lines[0]["status"] == "ok"
     assert lines[0]["result"]["results"] == [{"slug": "fienta", "raw_count": 5}]
 
 
 @pytest.mark.asyncio
-async def test_ingest_source_unknown_slug_404():
-    app = _build_app()
+async def test_ingest_source_unknown_slug_404(admin_app):
+    app = admin_app
     with (
         patch("app.routers.admin.settings") as mock_settings,
         patch("app.routers.admin.ADAPTER_REGISTRY", {}),
@@ -130,8 +102,8 @@ async def test_ingest_source_unknown_slug_404():
 
 
 @pytest.mark.asyncio
-async def test_ingest_source_value_error_400():
-    app = _build_app()
+async def test_ingest_source_value_error_400(admin_app):
+    app = admin_app
     with (
         patch("app.routers.admin.settings") as mock_settings,
         patch("app.routers.admin.ADAPTER_REGISTRY", {"fienta": MagicMock()}),
@@ -150,14 +122,14 @@ async def test_ingest_source_value_error_400():
             resp = await client.post("/admin/ingest/fienta", auth=("admin", ""))
 
     assert resp.status_code == http.HTTPStatus.OK
-    lines = _ndjson_lines(resp)
+    lines = ndjson_lines(resp)
     assert lines[0]["status"] == "error"
     assert lines[0]["error"] == "disabled"
 
 
 @pytest.mark.asyncio
-async def test_ingest_source_success():
-    app = _build_app()
+async def test_ingest_source_success(admin_app):
+    app = admin_app
     with (
         patch("app.routers.admin.settings") as mock_settings,
         patch("app.routers.admin.ADAPTER_REGISTRY", {"fienta": MagicMock()}),
@@ -176,7 +148,7 @@ async def test_ingest_source_success():
             resp = await client.post("/admin/ingest/fienta", auth=("admin", ""))
 
     assert resp.status_code == http.HTTPStatus.OK
-    lines = _ndjson_lines(resp)
+    lines = ndjson_lines(resp)
     assert lines[0]["result"]["new_count"] == 1
 
 
@@ -194,8 +166,8 @@ async def test_ingest_source_success():
         ("/admin/refetch", "app.routers.admin.refetch_event_details_job"),
     ],
 )
-async def test_simple_job_triggers(path, target):
-    app = _build_app()
+async def test_simple_job_triggers(path, target, admin_app):
+    app = admin_app
     with (
         patch("app.routers.admin.settings") as mock_settings,
         patch(target, new_callable=AsyncMock, return_value={"done": 1}) as mock_job,
@@ -210,7 +182,7 @@ async def test_simple_job_triggers(path, target):
 
     assert resp.status_code == http.HTTPStatus.OK
     assert resp.headers["cache-control"] == "no-store"
-    lines = _ndjson_lines(resp)
+    lines = ndjson_lines(resp)
     assert len(lines) == 1
     assert lines[0]["status"] == "ok"
     assert lines[0]["result"] == {"done": 1}
@@ -223,15 +195,15 @@ async def test_simple_job_triggers(path, target):
 
 
 @pytest.mark.asyncio
-async def test_dedup_groups_empty_page():
-    app = _build_app()
-    db = AsyncMock()
+async def test_dedup_groups_empty_page(admin_app, make_db_ctx, mock_db):
+    app = admin_app
+    db = mock_db
     db.scalar = AsyncMock(return_value=0)
-    db.scalars = AsyncMock(return_value=_scalars_returning([]))
+    db.scalars = AsyncMock(return_value=scalars_returning([]))
 
     with (
         patch("app.routers.admin.settings") as mock_settings,
-        patch("app.routers.admin.AsyncSessionLocal", return_value=_make_db_ctx(db)),
+        patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
     ):
         mock_settings.ADMIN_PASSWORD = ""
         mock_settings.APP_ENV = APP_ENV_DEVELOPMENT
@@ -249,10 +221,10 @@ async def test_dedup_groups_empty_page():
 
 
 @pytest.mark.asyncio
-async def test_dedup_groups_populated_page():
+async def test_dedup_groups_populated_page(admin_app, make_db_ctx, mock_db):
     from datetime import datetime, timezone
 
-    app = _build_app()
+    app = admin_app
     ev = MagicMock()
     ev.id = 11
     ev.dedup_group_id = 5
@@ -263,16 +235,16 @@ async def test_dedup_groups_populated_page():
     ev.url = "https://x"
     ev.is_explicit = False
 
-    db = AsyncMock()
+    db = mock_db
     db.scalar = AsyncMock(return_value=1)  # total_groups
     # first scalars() -> page group ids; second -> event rows
     db.scalars = AsyncMock(
-        side_effect=[_scalars_returning([5]), _scalars_returning([ev])]
+        side_effect=[scalars_returning([5]), scalars_returning([ev])]
     )
 
     with (
         patch("app.routers.admin.settings") as mock_settings,
-        patch("app.routers.admin.AsyncSessionLocal", return_value=_make_db_ctx(db)),
+        patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
     ):
         mock_settings.ADMIN_PASSWORD = ""
         mock_settings.APP_ENV = APP_ENV_DEVELOPMENT
@@ -296,15 +268,15 @@ async def test_dedup_groups_populated_page():
 
 
 @pytest.mark.asyncio
-async def test_stats_returns_counts():
-    app = _build_app()
-    db = AsyncMock()
+async def test_stats_returns_counts(admin_app, make_db_ctx, mock_db):
+    app = admin_app
+    db = mock_db
     # total, canonical, sources_total, sources_enabled
     db.scalar = AsyncMock(side_effect=[100, 60, 8, 5])
 
     with (
         patch("app.routers.admin.settings") as mock_settings,
-        patch("app.routers.admin.AsyncSessionLocal", return_value=_make_db_ctx(db)),
+        patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
     ):
         mock_settings.ADMIN_PASSWORD = ""
         mock_settings.APP_ENV = APP_ENV_DEVELOPMENT

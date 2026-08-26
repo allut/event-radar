@@ -7,32 +7,13 @@ running, then unblocks the first so it completes normally.
 """
 import asyncio
 import http
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
-from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
 from app.constants import APP_ENV_DEVELOPMENT
 from app.routers.utils import _RUNNING_ADMIN_JOBS
-
-
-def _build_app() -> FastAPI:
-    from app.routers.admin import router
-
-    app = FastAPI()
-    app.include_router(router)
-    return app
-
-
-def _make_db_ctx() -> MagicMock:
-    db = AsyncMock()
-    db.commit = AsyncMock()
-    db.rollback = AsyncMock()
-    ctx = MagicMock()
-    ctx.__aenter__ = AsyncMock(return_value=db)
-    ctx.__aexit__ = AsyncMock(return_value=False)
-    return ctx
 
 
 def _blocked_job(event: asyncio.Event, result: dict):
@@ -53,8 +34,8 @@ def _clear_locks():
 
 
 @pytest.mark.asyncio
-async def test_second_concurrent_classify_call_gets_409():
-    app = _build_app()
+async def test_second_concurrent_classify_call_gets_409(admin_app):
+    app = admin_app
     block = asyncio.Event()
     job = _blocked_job(block, {"classified": 1})
 
@@ -82,8 +63,8 @@ async def test_second_concurrent_classify_call_gets_409():
 
 
 @pytest.mark.asyncio
-async def test_second_concurrent_full_ingest_call_gets_409():
-    app = _build_app()
+async def test_second_concurrent_full_ingest_call_gets_409(admin_app):
+    app = admin_app
     block = asyncio.Event()
     job = _blocked_job(block, [])
 
@@ -111,9 +92,9 @@ async def test_second_concurrent_full_ingest_call_gets_409():
 
 
 @pytest.mark.asyncio
-async def test_second_concurrent_cleanup_call_gets_409():
-    app = _build_app()
-    db_ctx = _make_db_ctx()
+async def test_second_concurrent_cleanup_call_gets_409(admin_app, make_db_ctx, mock_db):
+    app = admin_app
+    db_ctx = make_db_ctx(mock_db)
     block = asyncio.Event()
     job = _blocked_job(block, {})
 
@@ -142,9 +123,9 @@ async def test_second_concurrent_cleanup_call_gets_409():
 
 
 @pytest.mark.asyncio
-async def test_second_concurrent_send_digests_call_gets_409():
-    app = _build_app()
-    db_ctx = _make_db_ctx()
+async def test_second_concurrent_send_digests_call_gets_409(admin_app, make_db_ctx, mock_db):
+    app = admin_app
+    db_ctx = make_db_ctx(mock_db)
     block = asyncio.Event()
     job = _blocked_job(block, {"sent": 0, "skipped": 0, "errored": 0, "total_opted_in": 0, "dry_run": True})
 
@@ -173,9 +154,9 @@ async def test_second_concurrent_send_digests_call_gets_409():
 
 
 @pytest.mark.asyncio
-async def test_second_concurrent_pipeline_run_call_gets_409():
-    app = _build_app()
-    db_ctx = _make_db_ctx()
+async def test_second_concurrent_pipeline_run_call_gets_409(admin_app, make_db_ctx, mock_db):
+    app = admin_app
+    db_ctx = make_db_ctx(mock_db)
     block = asyncio.Event()
     # Only the first stage (sync_organizers) blocks — the other six stages
     # must be mocked too, or the run would fall through to real ingestion/
@@ -213,13 +194,13 @@ async def test_second_concurrent_pipeline_run_call_gets_409():
 
 
 @pytest.mark.asyncio
-async def test_standalone_classify_blocked_while_pipeline_run_is_mid_classify_stage():
+async def test_standalone_classify_blocked_while_pipeline_run_is_mid_classify_stage(admin_app, make_db_ctx, mock_db):
     """Regression: pipeline/run only held its own lock, not the locks for the
     ingest/classify/send_digests sub-stages it runs internally — a standalone
     trigger for one of those stages could run concurrently with the
     pipeline's own execution of that same stage."""
-    app = _build_app()
-    db_ctx = _make_db_ctx()
+    app = admin_app
+    db_ctx = make_db_ctx(mock_db)
     block = asyncio.Event()
     classify_job = _blocked_job(block, {"classified": 1})
 
@@ -254,10 +235,10 @@ async def test_standalone_classify_blocked_while_pipeline_run_is_mid_classify_st
 
 
 @pytest.mark.asyncio
-async def test_lock_released_after_completion_allows_a_later_call():
+async def test_lock_released_after_completion_allows_a_later_call(admin_app):
     """Not concurrent — proves the guard doesn't wedge the trigger shut
     after a run finishes."""
-    app = _build_app()
+    app = admin_app
 
     with (
         patch("app.routers.admin.settings") as mock_settings,

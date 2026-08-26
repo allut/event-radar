@@ -18,6 +18,7 @@ from app.auth.tokens import (
     verify_organizer_session_token,
     verify_session_token,
 )
+from tests.auth.conftest import mock_execute_returning
 from tests.conftest import assert_hardened_cookie
 
 
@@ -78,12 +79,6 @@ class TestOrganizerSessionToken:
         organizer_session = generate_organizer_session_token(1, 1)
         with pytest.raises(BadSignature):
             verify_session_token(organizer_session)
-
-
-def _mock_execute_returning(row):
-    execute_result = MagicMock()
-    execute_result.fetchone.return_value = row
-    return AsyncMock(return_value=execute_result)
 
 
 class TestRequestOrganizerMagicLink:
@@ -150,7 +145,7 @@ class TestVerifyOrganizerMagicLink:
         from app.routers.organizer_auth import VerifyTokenBody, verify_organizer_magic_link
 
         token, _, _ = generate_organizer_magic_token(3)
-        mock_db.execute = _mock_execute_returning((3,))
+        mock_db.execute = mock_execute_returning((3,))
 
         organizer = MagicMock()
         organizer.id = 3
@@ -183,7 +178,7 @@ class TestVerifyOrganizerMagicLink:
         from app.routers.organizer_auth import VerifyTokenBody, verify_organizer_magic_link
 
         token, _, _ = generate_organizer_magic_token(3)
-        mock_db.execute = _mock_execute_returning(None)
+        mock_db.execute = mock_execute_returning(None)
 
         with pytest.raises(HTTPException) as exc_info:
             await verify_organizer_magic_link(

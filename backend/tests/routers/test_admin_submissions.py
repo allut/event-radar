@@ -6,7 +6,6 @@ import http
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
 from app.constants import (
@@ -15,27 +14,7 @@ from app.constants import (
     APP_ENV_DEVELOPMENT,
     EVENT_STATUS_CANCELLED,
 )
-
-
-def _build_app() -> FastAPI:
-    from app.routers.admin import router
-
-    app = FastAPI()
-    app.include_router(router)
-    return app
-
-
-def _make_db_ctx(db: AsyncMock) -> MagicMock:
-    ctx = MagicMock()
-    ctx.__aenter__ = AsyncMock(return_value=db)
-    ctx.__aexit__ = AsyncMock(return_value=False)
-    return ctx
-
-
-def _scalars_returning(items):
-    r = MagicMock()
-    r.all.return_value = items
-    return r
+from tests.routers.conftest import scalars_returning
 
 
 # ---------------------------------------------------------------------------
@@ -44,15 +23,15 @@ def _scalars_returning(items):
 
 
 @pytest.mark.asyncio
-async def test_list_submissions_empty_page():
-    app = _build_app()
-    db = AsyncMock()
+async def test_list_submissions_empty_page(admin_app, make_db_ctx, mock_db):
+    app = admin_app
+    db = mock_db
     db.scalar = AsyncMock(return_value=0)
-    db.scalars = AsyncMock(return_value=_scalars_returning([]))
+    db.scalars = AsyncMock(return_value=scalars_returning([]))
 
     with (
         patch("app.routers.admin.settings") as mock_settings,
-        patch("app.routers.admin.AsyncSessionLocal", return_value=_make_db_ctx(db)),
+        patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
     ):
         mock_settings.ADMIN_PASSWORD = ""
         mock_settings.APP_ENV = APP_ENV_DEVELOPMENT
@@ -70,19 +49,19 @@ async def test_list_submissions_empty_page():
 
 
 @pytest.mark.asyncio
-async def test_list_submissions_populated_page(make_event):
-    app = _build_app()
+async def test_list_submissions_populated_page(admin_app, make_db_ctx, mock_db, make_event):
+    app = admin_app
     event = make_event(event_id=42, status="published")
     event.submitted_by_organizer_id = 7
     event.needs_review = True
 
-    db = AsyncMock()
+    db = mock_db
     db.scalar = AsyncMock(return_value=1)  # total
-    db.scalars = AsyncMock(return_value=_scalars_returning([event]))
+    db.scalars = AsyncMock(return_value=scalars_returning([event]))
 
     with (
         patch("app.routers.admin.settings") as mock_settings,
-        patch("app.routers.admin.AsyncSessionLocal", return_value=_make_db_ctx(db)),
+        patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
     ):
         mock_settings.ADMIN_PASSWORD = ""
         mock_settings.APP_ENV = APP_ENV_DEVELOPMENT
@@ -101,14 +80,14 @@ async def test_list_submissions_populated_page(make_event):
 
 
 @pytest.mark.asyncio
-async def test_list_submissions_excludes_cancelled():
+async def test_list_submissions_excludes_cancelled(admin_app, make_db_ctx, mock_db):
     """A cancelled submission must never surface in the queue, regardless of
     its needs_review flag — retract() already clears it, but this filter is
     defense-in-depth against that invariant drifting."""
-    app = _build_app()
-    db = AsyncMock()
+    app = admin_app
+    db = mock_db
     db.scalar = AsyncMock(return_value=0)
-    db.scalars = AsyncMock(return_value=_scalars_returning([]))
+    db.scalars = AsyncMock(return_value=scalars_returning([]))
 
     captured: dict = {}
 
@@ -120,7 +99,7 @@ async def test_list_submissions_excludes_cancelled():
 
     with (
         patch("app.routers.admin.settings") as mock_settings,
-        patch("app.routers.admin.AsyncSessionLocal", return_value=_make_db_ctx(db)),
+        patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
     ):
         mock_settings.ADMIN_PASSWORD = ""
         mock_settings.APP_ENV = APP_ENV_DEVELOPMENT
@@ -141,19 +120,18 @@ async def test_list_submissions_excludes_cancelled():
 
 
 @pytest.mark.asyncio
-async def test_retract_submission_cancels_event(make_event, caplog):
-    app = _build_app()
+async def test_retract_submission_cancels_event(admin_app, make_db_ctx, mock_db, make_event, caplog):
+    app = admin_app
     event = make_event(event_id=42, status="published")
     event.submitted_by_organizer_id = 7
 
-    db = AsyncMock()
+    db = mock_db
     db.get = AsyncMock(return_value=event)
-    db.execute = AsyncMock(return_value=MagicMock(scalars=lambda: _scalars_returning([])))
-    db.commit = AsyncMock()
+    db.execute = AsyncMock(return_value=MagicMock(scalars=lambda: scalars_returning([])))
 
     with (
         patch("app.routers.admin.settings") as mock_settings,
-        patch("app.routers.admin.AsyncSessionLocal", return_value=_make_db_ctx(db)),
+        patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
         caplog.at_level("INFO"),
     ):
         mock_settings.ADMIN_PASSWORD = ""
@@ -187,28 +165,27 @@ async def test_retract_submission_cancels_event(make_event, caplog):
 
 @pytest.mark.asyncio
 async def test_retract_submission_auto_resolves_open_reports(
-    make_event, make_report, make_user
+    admin_app, make_db_ctx, mock_db, make_event, make_report, make_user
 ):
     """Cancelling via retract must auto-resolve the event's open reports
     through the shared resolve_open_reports() helper (issue #125), so a
     reporter isn't left with a permanently "open" report on a dead event."""
-    app = _build_app()
+    app = admin_app
     event = make_event(event_id=42, status="published")
     event.submitted_by_organizer_id = 7
     report = make_report(report_id=1, event_id=42, status="open")
     reporter = make_user(user_id=report.user_id)
 
-    db = AsyncMock()
+    db = mock_db
     db.get = AsyncMock(return_value=event)
     db.execute = AsyncMock(
-        return_value=MagicMock(scalars=lambda: _scalars_returning([report]))
+        return_value=MagicMock(scalars=lambda: scalars_returning([report]))
     )
-    db.scalars = AsyncMock(return_value=_scalars_returning([reporter]))
-    db.commit = AsyncMock()
+    db.scalars = AsyncMock(return_value=scalars_returning([reporter]))
 
     with (
         patch("app.routers.admin.settings") as mock_settings,
-        patch("app.routers.admin.AsyncSessionLocal", return_value=_make_db_ctx(db)),
+        patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
         patch("app.routers.utils.send_report_outcome_email", new=AsyncMock()),
     ):
         mock_settings.ADMIN_PASSWORD = ""
@@ -229,19 +206,19 @@ async def test_retract_submission_auto_resolves_open_reports(
 
 
 @pytest.mark.asyncio
-async def test_retract_non_submission_returns_404():
+async def test_retract_non_submission_returns_404(admin_app, make_db_ctx, mock_db):
     """An event with no submitted_by_organizer_id (a normally-scraped event)
     is not a "submission" and must not be retractable via this route."""
-    app = _build_app()
+    app = admin_app
     event = MagicMock()
     event.submitted_by_organizer_id = None
 
-    db = AsyncMock()
+    db = mock_db
     db.get = AsyncMock(return_value=event)
 
     with (
         patch("app.routers.admin.settings") as mock_settings,
-        patch("app.routers.admin.AsyncSessionLocal", return_value=_make_db_ctx(db)),
+        patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
     ):
         mock_settings.ADMIN_PASSWORD = ""
         mock_settings.APP_ENV = APP_ENV_DEVELOPMENT
@@ -259,17 +236,17 @@ async def test_retract_non_submission_returns_404():
 
 
 @pytest.mark.asyncio
-async def test_retract_submission_requires_nonblank_note(make_event):
-    app = _build_app()
+async def test_retract_submission_requires_nonblank_note(admin_app, make_db_ctx, mock_db, make_event):
+    app = admin_app
     event = make_event(event_id=42, status="published")
     event.submitted_by_organizer_id = 7
 
-    db = AsyncMock()
+    db = mock_db
     db.get = AsyncMock(return_value=event)
 
     with (
         patch("app.routers.admin.settings") as mock_settings,
-        patch("app.routers.admin.AsyncSessionLocal", return_value=_make_db_ctx(db)),
+        patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
     ):
         mock_settings.ADMIN_PASSWORD = ""
         mock_settings.APP_ENV = APP_ENV_DEVELOPMENT
@@ -292,15 +269,15 @@ async def test_retract_submission_requires_nonblank_note(make_event):
 
 
 @pytest.mark.asyncio
-async def test_approve_submission_clears_needs_review(make_event, make_organizer, caplog):
-    app = _build_app()
+async def test_approve_submission_clears_needs_review(admin_app, make_db_ctx, mock_db, make_event, make_organizer, caplog):
+    app = admin_app
     event = make_event(event_id=42, status="published")
     event.submitted_by_organizer_id = 7
     event.needs_review = True
     organizer = make_organizer(organizer_id=7)
     organizer.verified = False
 
-    db = AsyncMock()
+    db = mock_db
 
     async def _get(model, pk):
         from app.models.models import Event, Organizer
@@ -312,11 +289,10 @@ async def test_approve_submission_clears_needs_review(make_event, make_organizer
         raise AssertionError(f"unexpected db.get({model!r}, {pk!r})")
 
     db.get = AsyncMock(side_effect=_get)
-    db.commit = AsyncMock()
 
     with (
         patch("app.routers.admin.settings") as mock_settings,
-        patch("app.routers.admin.AsyncSessionLocal", return_value=_make_db_ctx(db)),
+        patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
         patch(
             "app.routers.admin.publish_pending", new_callable=AsyncMock
         ) as mock_publish,
@@ -352,17 +328,17 @@ async def test_approve_submission_clears_needs_review(make_event, make_organizer
 
 
 @pytest.mark.asyncio
-async def test_approve_submission_requires_nonblank_note(make_event):
-    app = _build_app()
+async def test_approve_submission_requires_nonblank_note(admin_app, make_db_ctx, mock_db, make_event):
+    app = admin_app
     event = make_event(event_id=42, status="published")
     event.submitted_by_organizer_id = 7
 
-    db = AsyncMock()
+    db = mock_db
     db.get = AsyncMock(return_value=event)
 
     with (
         patch("app.routers.admin.settings") as mock_settings,
-        patch("app.routers.admin.AsyncSessionLocal", return_value=_make_db_ctx(db)),
+        patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
     ):
         mock_settings.ADMIN_PASSWORD = ""
         mock_settings.APP_ENV = APP_ENV_DEVELOPMENT
@@ -381,18 +357,18 @@ async def test_approve_submission_requires_nonblank_note(make_event):
 
 @pytest.mark.asyncio
 async def test_approve_submission_with_no_submitting_organizer_still_publishes(
-    make_event,
+    admin_app, make_db_ctx, mock_db, make_event,
 ):
     """Defense-in-depth: submitted_by_organizer_id is set (this event passed
     _submission_or_404's filter), but the referenced Organizer row is
     somehow already gone — the handler must not crash and must still run
     the publish gate."""
-    app = _build_app()
+    app = admin_app
     event = make_event(event_id=42, status="published")
     event.submitted_by_organizer_id = 7
     event.needs_review = True
 
-    db = AsyncMock()
+    db = mock_db
 
     async def _get(model, pk):
         from app.models.models import Event, Organizer
@@ -404,11 +380,10 @@ async def test_approve_submission_with_no_submitting_organizer_still_publishes(
         raise AssertionError(f"unexpected db.get({model!r}, {pk!r})")
 
     db.get = AsyncMock(side_effect=_get)
-    db.commit = AsyncMock()
 
     with (
         patch("app.routers.admin.settings") as mock_settings,
-        patch("app.routers.admin.AsyncSessionLocal", return_value=_make_db_ctx(db)),
+        patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
         patch(
             "app.routers.admin.publish_pending", new_callable=AsyncMock
         ) as mock_publish,

@@ -1,6 +1,73 @@
+import json
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
+from fastapi import FastAPI
 
 from app.rate_limit import limiter
+
+
+@pytest.fixture
+def admin_app() -> FastAPI:
+    """Minimal FastAPI app wiring only the admin router — shared by every
+    admin-router test module that needs a bare app to mount it on."""
+    from app.routers.admin import router
+
+    app = FastAPI()
+    app.include_router(router)
+    return app
+
+
+def ndjson_lines(resp) -> list:
+    """Parse a streamed NDJSON admin-trigger response body (issue #159) into
+    its envelope lines. Shared by every admin-router test module exercising
+    a streaming /admin/* trigger endpoint."""
+    return [json.loads(line) for line in resp.text.strip().split("\n") if line]
+
+
+def scalars_returning(items):
+    """A sync MagicMock whose `.all()` returns `items` — stands in for the
+    object `(await db.scalars(...))` resolves to. Shared by every admin-router
+    test module that mocks a `db.scalars()` call."""
+    r = MagicMock()
+    r.all.return_value = items
+    return r
+
+
+def execute_rows(rows):
+    """A sync MagicMock whose `.all()` returns `rows` — stands in for the
+    object `(await db.execute(...))` resolves to. Shared by every admin-router
+    test module that mocks a `db.execute()` call returning row tuples."""
+    r = MagicMock()
+    r.all.return_value = rows
+    return r
+
+
+@pytest.fixture
+def make_db_ctx():
+    """Factory for a mock async-context-manager that yields the given db on
+    __aenter__ — mirrors what `AsyncSessionLocal()` returns when used as
+    `async with AsyncSessionLocal() as db:`."""
+    def _factory(db: AsyncMock) -> MagicMock:
+        ctx = MagicMock()
+        ctx.__aenter__ = AsyncMock(return_value=db)
+        ctx.__aexit__ = AsyncMock(return_value=False)
+        return ctx
+    return _factory
+
+
+@pytest.fixture(autouse=True)
+def _reset_admin_auth_failures():
+    """The failure counter is a module-level dict (in-memory, single-process
+    by design — see ADMIN_AUTH_MAX_FAILURES in constants.py) shared across
+    tests in this process; isolate each test from the others. Shared by
+    every admin-auth-surface test module (Basic-auth lockout, admin console
+    session login)."""
+    from app.routers import admin as admin_module
+
+    admin_module._admin_auth_failures.clear()
+    yield
+    admin_module._admin_auth_failures.clear()
 
 
 @pytest.fixture(autouse=True)

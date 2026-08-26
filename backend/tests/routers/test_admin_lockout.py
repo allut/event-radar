@@ -5,35 +5,14 @@ import http
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
 from app.constants import ADMIN_AUTH_MAX_FAILURES
 
 
-def _build_app() -> FastAPI:
-    from app.routers.admin import router
-
-    app = FastAPI()
-    app.include_router(router)
-    return app
-
-
-@pytest.fixture(autouse=True)
-def _reset_admin_auth_failures():
-    """The failure counter is a module-level dict (in-memory, single-process
-    by design — see ADMIN_AUTH_MAX_FAILURES in constants.py) shared across
-    tests in this process; isolate each test from the others."""
-    from app.routers import admin as admin_module
-
-    admin_module._admin_auth_failures.clear()
-    yield
-    admin_module._admin_auth_failures.clear()
-
-
 @pytest.mark.asyncio
-async def test_lockout_after_max_consecutive_failures():
-    app = _build_app()
+async def test_lockout_after_max_consecutive_failures(admin_app):
+    app = admin_app
 
     with patch("app.routers.admin.settings") as mock_settings:
         mock_settings.ADMIN_PASSWORD = "s3cret"
@@ -61,14 +40,14 @@ async def test_lockout_after_max_consecutive_failures():
 
 
 @pytest.mark.asyncio
-async def test_admin_auth_failures_dict_is_bounded():
+async def test_admin_auth_failures_dict_is_bounded(admin_app):
     """P2-11: _admin_auth_failures is an in-memory dict keyed by client_key()
     with no prior eviction — sustained scanning traffic from many distinct
     clients would grow it forever. Bounded LRU (ADMIN_AUTH_FAILURES_MAX_ENTRIES)
     caps it, mirroring browse.py's _score_cache."""
     from app.routers import admin as admin_module
 
-    app = _build_app()
+    app = admin_app
 
     with patch("app.routers.admin.settings") as mock_settings, patch(
         "app.routers.admin.ADMIN_AUTH_FAILURES_MAX_ENTRIES", 3
@@ -91,7 +70,7 @@ async def test_admin_auth_failures_dict_is_bounded():
 
 
 @pytest.mark.asyncio
-async def test_eviction_does_not_lift_an_active_lockout():
+async def test_eviction_does_not_lift_an_active_lockout(admin_app):
     """A blind oldest-first eviction would let a high-cardinality distributed
     brute-force evict — and thereby prematurely lift — another client's
     still-active lockout. The victim's locked-until entry must survive being
@@ -99,7 +78,7 @@ async def test_eviction_does_not_lift_an_active_lockout():
     to evict instead."""
     from app.routers import admin as admin_module
 
-    app = _build_app()
+    app = admin_app
 
     with patch("app.routers.admin.settings") as mock_settings, patch(
         "app.routers.admin.ADMIN_AUTH_FAILURES_MAX_ENTRIES", 1
@@ -135,7 +114,7 @@ async def test_eviction_does_not_lift_an_active_lockout():
 
 
 @pytest.mark.asyncio
-async def test_rate_limit_bucket_shared_across_different_admin_routes():
+async def test_rate_limit_bucket_shared_across_different_admin_routes(admin_app):
     """L2: RATE_LIMIT_ADMIN must be ONE bucket per client across the whole
     /admin prefix (limiter.shared_limit(..., scope="admin")), not one bucket
     per route — otherwise cycling through routes lets an attacker exceed the
@@ -143,7 +122,7 @@ async def test_rate_limit_bucket_shared_across_different_admin_routes():
     from app.constants import RATE_LIMIT_ADMIN
 
     burst = int(RATE_LIMIT_ADMIN.split("/")[0])
-    app = _build_app()
+    app = admin_app
 
     with (
         patch("app.routers.admin.settings") as mock_settings,
@@ -177,8 +156,8 @@ async def test_rate_limit_bucket_shared_across_different_admin_routes():
 
 
 @pytest.mark.asyncio
-async def test_successful_auth_resets_failure_counter():
-    app = _build_app()
+async def test_successful_auth_resets_failure_counter(admin_app):
+    app = admin_app
 
     with patch("app.routers.admin.settings") as mock_settings:
         mock_settings.ADMIN_PASSWORD = "s3cret"

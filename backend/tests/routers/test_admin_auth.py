@@ -23,17 +23,6 @@ def _build_app() -> FastAPI:
     return app
 
 
-@pytest.fixture(autouse=True)
-def _reset_admin_auth_failures():
-    """Mirrors test_admin_lockout.py's fixture — the failure counter is a
-    module-level dict shared by both auth surfaces under test here."""
-    from app.routers import admin as admin_module
-
-    admin_module._admin_auth_failures.clear()
-    yield
-    admin_module._admin_auth_failures.clear()
-
-
 def _patch_settings(mock_settings, *, totp_secret: str | None):
     mock_settings.ADMIN_USERNAME = "realadmin"
     mock_settings.ADMIN_PASSWORD = "s3cret"

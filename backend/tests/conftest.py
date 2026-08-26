@@ -3,6 +3,7 @@ import os
 # Must be set before any app module import so pydantic-settings can validate Settings.
 os.environ.setdefault("SECRET_KEY", "test-secret-not-for-production")
 
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock
 
@@ -62,6 +63,39 @@ def make_user():
         u.created_at = MagicMock()
         u.created_at.isoformat.return_value = "2026-05-13T06:00:00+00:00"
         return u
+    return _factory
+
+
+def session_factory(db):
+    """A callable standing in for `AsyncSessionLocal` that yields `db` from an
+    async context manager, matching `async with AsyncSessionLocal() as db:`.
+    Shared by every test module that monkeypatches a module-level
+    `AsyncSessionLocal` binding rather than overriding the `get_db` dependency."""
+    @asynccontextmanager
+    async def _ctx():
+        yield db
+
+    return MagicMock(side_effect=lambda: _ctx())
+
+
+@pytest.fixture
+def patch_client(monkeypatch):
+    """Factory: patch `module`'s httpx.AsyncClient so `async with AsyncClient(...)
+    as client` yields a mock whose `.post` is an AsyncMock returning `resp`.
+    Returns that post mock. Shared by every outbound-HTTP email sender test
+    (auth magic link, contact, report notify/reporter) — each patches its own
+    module's httpx binding, so the module is a required argument."""
+    def _factory(module, resp):
+        post = AsyncMock(return_value=resp)
+
+        @asynccontextmanager
+        async def _ctx(*args, **kwargs):
+            client = MagicMock()
+            client.post = post
+            yield client
+
+        monkeypatch.setattr(module.httpx, "AsyncClient", MagicMock(side_effect=_ctx))
+        return post
     return _factory
 
 

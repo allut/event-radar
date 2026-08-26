@@ -6,7 +6,6 @@ import http
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
 from app.constants import (
@@ -16,33 +15,7 @@ from app.constants import (
     EVENT_CANCELLATION_REASON_REPORT_TAKEDOWN,
     EVENT_STATUS_CANCELLED,
 )
-
-
-def _build_app() -> FastAPI:
-    from app.routers.admin import router
-
-    app = FastAPI()
-    app.include_router(router)
-    return app
-
-
-def _make_db_ctx(db: AsyncMock) -> MagicMock:
-    ctx = MagicMock()
-    ctx.__aenter__ = AsyncMock(return_value=db)
-    ctx.__aexit__ = AsyncMock(return_value=False)
-    return ctx
-
-
-def _scalars_returning(items):
-    r = MagicMock()
-    r.all.return_value = items
-    return r
-
-
-def _execute_rows(rows):
-    r = MagicMock()
-    r.all.return_value = rows
-    return r
+from tests.routers.conftest import execute_rows, scalars_returning
 
 
 # ---------------------------------------------------------------------------
@@ -51,15 +24,15 @@ def _execute_rows(rows):
 
 
 @pytest.mark.asyncio
-async def test_list_reports_empty_page():
-    app = _build_app()
-    db = AsyncMock()
+async def test_list_reports_empty_page(admin_app, make_db_ctx, mock_db):
+    app = admin_app
+    db = mock_db
     db.scalar = AsyncMock(return_value=0)
-    db.execute = AsyncMock(return_value=_execute_rows([]))
+    db.execute = AsyncMock(return_value=execute_rows([]))
 
     with (
         patch("app.routers.admin.settings") as mock_settings,
-        patch("app.routers.admin.AsyncSessionLocal", return_value=_make_db_ctx(db)),
+        patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
     ):
         mock_settings.ADMIN_PASSWORD = ""
         mock_settings.APP_ENV = APP_ENV_DEVELOPMENT
@@ -77,10 +50,12 @@ async def test_list_reports_empty_page():
 
 
 @pytest.mark.asyncio
-async def test_list_reports_groups_one_row_per_event(make_event, make_report):
+async def test_list_reports_groups_one_row_per_event(
+    admin_app, make_db_ctx, mock_db, make_event, make_report
+):
     """A 2-times-reported event must render as one queue row aggregating
     both reports, not two rows."""
-    app = _build_app()
+    app = admin_app
     event = make_event(event_id=42, status="published")
     event.submitted_by_organizer_id = None
 
@@ -97,19 +72,19 @@ async def test_list_reports_groups_one_row_per_event(make_event, make_report):
         report_id=2, event_id=42, reason="wrong_location", is_illegal_allegation=False
     )
 
-    db = AsyncMock()
+    db = mock_db
     db.scalar = AsyncMock(return_value=1)  # total
-    db.execute = AsyncMock(return_value=_execute_rows([agg_row]))
+    db.execute = AsyncMock(return_value=execute_rows([agg_row]))
     db.scalars = AsyncMock(
         side_effect=[
-            _scalars_returning([event]),  # bulk Event load
-            _scalars_returning([report_a, report_b]),  # bulk EventReport load
+            scalars_returning([event]),  # bulk Event load
+            scalars_returning([report_a, report_b]),  # bulk EventReport load
         ]
     )
 
     with (
         patch("app.routers.admin.settings") as mock_settings,
-        patch("app.routers.admin.AsyncSessionLocal", return_value=_make_db_ctx(db)),
+        patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
     ):
         mock_settings.ADMIN_PASSWORD = ""
         mock_settings.APP_ENV = APP_ENV_DEVELOPMENT
@@ -132,13 +107,13 @@ async def test_list_reports_groups_one_row_per_event(make_event, make_report):
 
 
 @pytest.mark.asyncio
-async def test_list_reports_invalid_reason_rejected():
-    app = _build_app()
-    db = AsyncMock()
+async def test_list_reports_invalid_reason_rejected(admin_app, make_db_ctx, mock_db):
+    app = admin_app
+    db = mock_db
 
     with (
         patch("app.routers.admin.settings") as mock_settings,
-        patch("app.routers.admin.AsyncSessionLocal", return_value=_make_db_ctx(db)),
+        patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
     ):
         mock_settings.ADMIN_PASSWORD = ""
         mock_settings.APP_ENV = APP_ENV_DEVELOPMENT
@@ -154,21 +129,21 @@ async def test_list_reports_invalid_reason_rejected():
 
 
 @pytest.mark.asyncio
-async def test_list_reports_excludes_cancelled():
-    app = _build_app()
-    db = AsyncMock()
+async def test_list_reports_excludes_cancelled(admin_app, make_db_ctx, mock_db):
+    app = admin_app
+    db = mock_db
     captured: dict = {}
 
     async def _capture_execute(stmt):
         captured["agg_stmt"] = stmt
-        return _execute_rows([])
+        return execute_rows([])
 
     db.scalar = AsyncMock(return_value=0)
     db.execute = AsyncMock(side_effect=_capture_execute)
 
     with (
         patch("app.routers.admin.settings") as mock_settings,
-        patch("app.routers.admin.AsyncSessionLocal", return_value=_make_db_ctx(db)),
+        patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
     ):
         mock_settings.ADMIN_PASSWORD = ""
         mock_settings.APP_ENV = APP_ENV_DEVELOPMENT
@@ -190,24 +165,23 @@ async def test_list_reports_excludes_cancelled():
 
 @pytest.mark.asyncio
 async def test_resolve_reports_closes_open_reports_no_event_mutation(
-    make_event, make_report, make_user, caplog
+    admin_app, make_db_ctx, mock_db, make_event, make_report, make_user, caplog
 ):
-    app = _build_app()
+    app = admin_app
     event = make_event(event_id=42, status="published")
     report = make_report(report_id=1, event_id=42, status="open")
     reporter = make_user(user_id=report.user_id)
 
-    db = AsyncMock()
+    db = mock_db
     db.get = AsyncMock(return_value=event)
     db.execute = AsyncMock(
-        return_value=MagicMock(scalars=lambda: _scalars_returning([report]))
+        return_value=MagicMock(scalars=lambda: scalars_returning([report]))
     )
-    db.scalars = AsyncMock(return_value=_scalars_returning([reporter]))
-    db.commit = AsyncMock()
+    db.scalars = AsyncMock(return_value=scalars_returning([reporter]))
 
     with (
         patch("app.routers.admin.settings") as mock_settings,
-        patch("app.routers.admin.AsyncSessionLocal", return_value=_make_db_ctx(db)),
+        patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
         patch(
             "app.routers.utils.send_report_outcome_email", new=AsyncMock()
         ) as mock_send,
@@ -244,16 +218,16 @@ async def test_resolve_reports_closes_open_reports_no_event_mutation(
 
 
 @pytest.mark.asyncio
-async def test_resolve_reports_requires_nonblank_note(make_event):
-    app = _build_app()
+async def test_resolve_reports_requires_nonblank_note(admin_app, make_db_ctx, mock_db, make_event):
+    app = admin_app
     event = make_event(event_id=42, status="published")
 
-    db = AsyncMock()
+    db = mock_db
     db.get = AsyncMock(return_value=event)
 
     with (
         patch("app.routers.admin.settings") as mock_settings,
-        patch("app.routers.admin.AsyncSessionLocal", return_value=_make_db_ctx(db)),
+        patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
     ):
         mock_settings.ADMIN_PASSWORD = ""
         mock_settings.APP_ENV = APP_ENV_DEVELOPMENT
@@ -271,14 +245,14 @@ async def test_resolve_reports_requires_nonblank_note(make_event):
 
 
 @pytest.mark.asyncio
-async def test_resolve_reports_event_not_found():
-    app = _build_app()
-    db = AsyncMock()
+async def test_resolve_reports_event_not_found(admin_app, make_db_ctx, mock_db):
+    app = admin_app
+    db = mock_db
     db.get = AsyncMock(return_value=None)
 
     with (
         patch("app.routers.admin.settings") as mock_settings,
-        patch("app.routers.admin.AsyncSessionLocal", return_value=_make_db_ctx(db)),
+        patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
     ):
         mock_settings.ADMIN_PASSWORD = ""
         mock_settings.APP_ENV = APP_ENV_DEVELOPMENT
@@ -302,24 +276,23 @@ async def test_resolve_reports_event_not_found():
 
 @pytest.mark.asyncio
 async def test_takedown_cancels_event_and_resolves_reports(
-    make_event, make_report, make_user, caplog
+    admin_app, make_db_ctx, mock_db, make_event, make_report, make_user, caplog
 ):
-    app = _build_app()
+    app = admin_app
     event = make_event(event_id=42, status="published")
     report = make_report(report_id=1, event_id=42, status="open")
     reporter = make_user(user_id=report.user_id)
 
-    db = AsyncMock()
+    db = mock_db
     db.get = AsyncMock(return_value=event)
     db.execute = AsyncMock(
-        return_value=MagicMock(scalars=lambda: _scalars_returning([report]))
+        return_value=MagicMock(scalars=lambda: scalars_returning([report]))
     )
-    db.scalars = AsyncMock(return_value=_scalars_returning([reporter]))
-    db.commit = AsyncMock()
+    db.scalars = AsyncMock(return_value=scalars_returning([reporter]))
 
     with (
         patch("app.routers.admin.settings") as mock_settings,
-        patch("app.routers.admin.AsyncSessionLocal", return_value=_make_db_ctx(db)),
+        patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
         patch("app.routers.utils.send_report_outcome_email", new=AsyncMock()),
         caplog.at_level("INFO"),
     ):

@@ -5,12 +5,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from app.constants import VALID_CATEGORIES, VALID_VIBES
-
-
-def _scalars_result(items):
-    m = MagicMock()
-    m.all.return_value = items
-    return m
+from tests.routers.conftest import scalars_returning as _scalars_result
 
 
 def _persona_row(weight, affinity_vector):

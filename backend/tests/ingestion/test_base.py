@@ -8,7 +8,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
-from bs4 import BeautifulSoup
 from tenacity import RetryCallState
 
 from app.constants import (
@@ -45,6 +44,7 @@ from app.ingestion.pricing import (
     strip_fee_amounts,
 )
 from app.ingestion.sources.fienta import address_city, is_target_city
+from tests.ingestion.conftest import soup as _soup
 
 
 def _addrinfo(*ips: str) -> list:
@@ -470,10 +470,6 @@ class TestPriceContextDigest:
             # truncated one (e.g. never ends in a bare digit run cut short of
             # the next expected digit).
             assert eur_amounts_from_text(line)
-
-
-def _soup(html: str) -> BeautifulSoup:
-    return BeautifulSoup(html, "html.parser")
 
 
 def _ld_script(json_body: str) -> str:

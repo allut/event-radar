@@ -22,6 +22,7 @@ from app.auth.tokens import (
     verify_session_token,
     verify_unsubscribe_token,
 )
+from tests.auth.conftest import mock_execute_returning
 from tests.conftest import assert_hardened_cookie
 
 
@@ -194,14 +195,6 @@ class TestRequestMagicLink:
         assert "detail" in result  # still returns 200 with message
 
 
-def _mock_execute_returning(row):
-    """Return an AsyncMock whose result has .fetchone() returning `row`."""
-    execute_result = MagicMock()
-    execute_result.fetchone.return_value = row
-    execute_mock = AsyncMock(return_value=execute_result)
-    return execute_mock
-
-
 # Mirrors the column order of verify_magic_link's
 # `.returning(User.id, User.email, User.locale, User.session_token_version)` —
 # a real SQLAlchemy Row supports attribute access; a plain tuple does not.
@@ -276,7 +269,7 @@ class TestVerifyMagicLink:
         token, _, _ = generate_magic_token(3)
 
         # Atomic UPDATE finds no matching row (already used or expired)
-        mock_db.execute = _mock_execute_returning(None)
+        mock_db.execute = mock_execute_returning(None)
 
         with pytest.raises(HTTPException) as exc_info:
             await verify_magic_link(

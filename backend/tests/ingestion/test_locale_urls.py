@@ -6,12 +6,9 @@ import pytest
 from bs4 import BeautifulSoup
 
 from app.ingestion.locale_urls import fetch_locale_variants
+from tests.ingestion.conftest import soup as _soup
 
 _LOCALES = frozenset({"en", "et", "ru"})
-
-
-def _soup(html: str) -> BeautifulSoup:
-    return BeautifulSoup(html, "html.parser")
 
 
 def _base_soup(host: str = "example.test") -> BeautifulSoup:
