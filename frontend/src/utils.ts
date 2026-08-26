@@ -19,11 +19,18 @@ export function titleWithBrand(pageTitle: string, locale: string): string {
   return `${pageTitle} | ${t('brand', locale)}`;
 }
 
+/** Appends `key=value` to a path/query string — `?` when `path` has no query
+ * string yet, `&` otherwise. `withLocaleQuery` below is this same shape,
+ * fixed to the `locale` key. */
+export function withQueryParam(path: string, key: string, value: string): string {
+  const sep = path.includes('?') ? '&' : '?';
+  return `${path}${sep}${key}=${encodeURIComponent(value)}`;
+}
+
 /** Appends `locale=` to a path/query string every data-fetching route sends
  * to the API — `?` when `path` has no query string yet, `&` otherwise. */
 export function withLocaleQuery(path: string, locale: string): string {
-  const sep = path.includes('?') ? '&' : '?';
-  return `${path}${sep}locale=${encodeURIComponent(locale)}`;
+  return withQueryParam(path, 'locale', locale);
 }
 
 /** Reshapes a URL before it's forwarded to Vercel Analytics: strips the query string and
@@ -79,12 +86,14 @@ export function sanitizeHtml(html: string): string {
 // Formatters below are built once per locale and cached at module scope —
 // Intl constructors are comparatively expensive, and EventCard (rendered N-up
 // in a grid) calls these per card per render.
+const DTF_HOUR_MINUTE: Intl.DateTimeFormatOptions = { hour: '2-digit', minute: '2-digit', hour12: false };
+
 const HOUR_MINUTE_FORMATTERS = new Map<string, Intl.DateTimeFormat>();
 function hourMinuteFormatter(locale: string): Intl.DateTimeFormat {
   const localeCode = toLocaleCode(locale);
   let fmt = HOUR_MINUTE_FORMATTERS.get(localeCode);
   if (!fmt) {
-    fmt = new Intl.DateTimeFormat(localeCode, { hour: '2-digit', minute: '2-digit', hour12: false });
+    fmt = new Intl.DateTimeFormat(localeCode, DTF_HOUR_MINUTE);
     HOUR_MINUTE_FORMATTERS.set(localeCode, fmt);
   }
   return fmt;
@@ -206,6 +215,9 @@ const DTF_DAY_MONTH_YEAR_LONG: Intl.DateTimeFormatOptions = {
   day: 'numeric', month: 'long', year: 'numeric',
 };
 const DTF_MONTH_YEAR: Intl.DateTimeFormatOptions = { month: 'long', year: 'numeric' };
+const DTF_LONG_DATE: Intl.DateTimeFormatOptions = {
+  weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+};
 
 export function formatEventTime(iso: string, locale: string): string {
   const localeCode = toLocaleCode(locale);
@@ -413,12 +425,7 @@ export function formatPickerValue(value: string, locale: string): string {
 
 function formatLongDate(date: Date, locale: string): string {
   const localeCode = toLocaleCode(locale);
-  return date.toLocaleDateString(localeCode, {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  });
+  return dateTimeFormatter(localeCode, 'long-date', DTF_LONG_DATE).format(date);
 }
 
 export function formatTodayDate(locale: string): string {

@@ -14,15 +14,25 @@ export interface UseDropdownResult {
 
 /**
  * Shared open/close + outside-click + Escape + focus behavior for a
- * trigger-button + popover dropdown (FacetMenu, SelectMenu, DatePicker).
+ * trigger-button + popover dropdown (FacetMenu, SelectMenu, DatePicker,
+ * EventOverflowMenu).
  *
  * @param initialFocusSelector CSS selector for the element to focus when the
  *   popover opens. Defaults to the popover's first `<button>` (FacetMenu/
  *   SelectMenu behavior). DatePicker passes a selector for the selected-day
  *   cell instead, so opening the calendar doesn't land focus on the
  *   previous-month arrow.
+ * @param mobileTopVar Custom-property name (e.g. `--facet-pop-top`) the
+ *   popover reads for its mobile fixed-position `top`. When set, the hook
+ *   keeps it synced to the trigger's viewport-relative bottom edge on
+ *   scroll/resize while open and on mobile — CSS alone can't express that
+ *   once the popover leaves the trigger's positioned ancestor (FacetMenu,
+ *   EventOverflowMenu).
  */
-export function useDropdown(initialFocusSelector = DROPDOWN_DEFAULT_FOCUS_SELECTOR): UseDropdownResult {
+export function useDropdown(
+  initialFocusSelector = DROPDOWN_DEFAULT_FOCUS_SELECTOR,
+  mobileTopVar?: string,
+): UseDropdownResult {
   const [open, setOpen] = useState(false);
   const [flip, setFlip] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -53,6 +63,29 @@ export function useDropdown(initialFocusSelector = DROPDOWN_DEFAULT_FOCUS_SELECT
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [open, initialFocusSelector]);
+
+  // Fixed-position popover on mobile (see each consumer's .pop mobile
+  // override) needs its `top` computed from the trigger's viewport
+  // position — CSS alone can't express that once the panel leaves the
+  // trigger's positioned ancestor. Re-synced on scroll/resize so it doesn't
+  // drift from the trigger while open.
+  useEffect(() => {
+    if (!mobileTopVar || !open || !popRef.current || !triggerRef.current) return;
+    if (!window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT_PX}px)`).matches) return;
+
+    function syncTop() {
+      const bottom = triggerRef.current!.getBoundingClientRect().bottom;
+      popRef.current!.style.setProperty(mobileTopVar!, `calc(${bottom}px + var(--space-0-45))`);
+    }
+
+    syncTop();
+    window.addEventListener('scroll', syncTop, true);
+    window.addEventListener('resize', syncTop);
+    return () => {
+      window.removeEventListener('scroll', syncTop, true);
+      window.removeEventListener('resize', syncTop);
+    };
+  }, [open, mobileTopVar]);
 
   // Flip the popover to right-anchor when it would overflow the viewport's
   // right edge — desktop only, mobile has its own fixed-position layout

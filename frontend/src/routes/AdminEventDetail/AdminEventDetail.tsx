@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { adminApi, ApiError } from '../../api/client';
-import { API, QUERY_KEYS, ROUTES, UI_STATE } from '../../constants';
+import { API, QUERY_KEYS, ROUTES, UI_STATE, REPORT_STATUS, DEFAULT_LOCALE_CODE, ADMIN_EVENT_DETAIL_TABS } from '../../constants';
 import PageState from '../../components/PageState';
 import Toast from '../../components/Toast';
 import { useToast } from '../../hooks/useToast';
@@ -84,12 +84,13 @@ const ACTION_CONFIG: Record<ActionKind, { path: (id: number) => string; message:
   retracted: { path: API.adminSubmissionRetract, message: 'Submission retracted.' },
 };
 
-const TABS = ['Overview', 'Classification', 'Dedup & reports', 'Raw payload'] as const;
-type Tab = (typeof TABS)[number];
+type Tab = (typeof ADMIN_EVENT_DETAIL_TABS)[number];
+
+const DTF_ADMIN_TIMESTAMP: Intl.DateTimeFormatOptions = { dateStyle: 'medium', timeStyle: 'short' };
 
 function fmt(iso: string | null): string {
   if (!iso) return '—';
-  return new Date(iso).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' });
+  return new Date(iso).toLocaleString(DEFAULT_LOCALE_CODE, DTF_ADMIN_TIMESTAMP);
 }
 
 // Admin event inspector (issue #157, part of #153): deep-linkable detail
@@ -130,7 +131,7 @@ export default function AdminEventDetail({ eventId }: { eventId: string }) {
   if (isError || !data) return <PageState kind={UI_STATE.error} message="Couldn't load this event." inline />;
 
   const { event, dedup_siblings, reports, raw_events, in_todays_feed } = data;
-  const openReports = reports.filter((r) => r.status === 'open');
+  const openReports = reports.filter((r) => r.status === REPORT_STATUS.open);
   const cl = event.classification;
   const actionDisabled = actionMutation.isPending || !note.trim();
 
@@ -178,7 +179,7 @@ export default function AdminEventDetail({ eventId }: { eventId: string }) {
       )}
 
       <div className={styles.tabStrip} role="tablist">
-        {TABS.map((t) => (
+        {ADMIN_EVENT_DETAIL_TABS.map((t) => (
           <button
             key={t}
             type="button"
@@ -249,7 +250,7 @@ export default function AdminEventDetail({ eventId }: { eventId: string }) {
                 <div key={r.id} className={styles.reportItem}>
                   <div className={styles.reportItemHead}>
                     <strong>{r.reason}</strong>
-                    <span className={r.status === 'open' ? styles.openTag : styles.resolvedTag}>{r.status}</span>
+                    <span className={r.status === REPORT_STATUS.open ? styles.openTag : styles.resolvedTag}>{r.status}</span>
                   </div>
                   {r.detail && <p>{r.detail}</p>}
                   {r.resolution_note && <p className={styles.factLabel}>Resolved: {r.resolution_note}</p>}

@@ -1,5 +1,5 @@
 import { StatusCodes } from 'http-status-codes';
-import { API, ROUTES } from '../constants';
+import { API, API_BASE, ROUTES } from '../constants';
 import { clearSignedInHint, isLoggingOut } from '../lib/auth';
 import { clearOrganizerSignedInHint, isOrganizerLoggingOut } from '../lib/organizerAuth';
 import { clearAdminSignedInHint, isAdminLoggingOut } from '../lib/adminAuth';
@@ -63,7 +63,7 @@ async function request<T>(path: string, init: RequestOptions = {}): Promise<T> {
     ...(fetchInit.headers as Record<string, string> | undefined ?? {}),
   };
 
-  const res = await fetch(`/api${path}`, { ...fetchInit, headers, credentials: 'include' });
+  const res = await fetch(`${API_BASE}${path}`, { ...fetchInit, headers, credentials: 'include' });
 
   if (res.status === StatusCodes.UNAUTHORIZED && !NO_SESSION_REDIRECT_ON_401.has(path)) {
     handleSessionExpiry401({ organizer, admin });
@@ -143,7 +143,7 @@ export async function adminStream(
   onLine: (line: NdjsonLine) => void,
   signal?: AbortSignal,
 ): Promise<void> {
-  const res = await fetch(`/api${path}`, { method: 'POST', credentials: 'include', signal });
+  const res = await fetch(`${API_BASE}${path}`, { method: 'POST', credentials: 'include', signal });
 
   if (res.status === StatusCodes.UNAUTHORIZED) {
     handleSessionExpiry401({ admin: true });

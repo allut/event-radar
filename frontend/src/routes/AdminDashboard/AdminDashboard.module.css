@@ -20,7 +20,7 @@
 
 .tiles {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(var(--admin-tile-min), 1fr));
   gap: var(--space-4);
 }
 
@@ -35,7 +35,7 @@
   content: '';
   position: absolute;
   inset: 0 auto 0 0;
-  width: 2px;
+  width: var(--border-w-ring);
   background: var(--accent);
 }
 
@@ -54,10 +54,10 @@
 .tileNum {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
-  font-size: 2.75rem;
+  font-size: var(--numeral-lg);
   font-weight: var(--fw-semibold);
   color: var(--text);
-  line-height: 1.1;
+  line-height: var(--leading-display);
   margin: var(--space-2) 0 var(--space-1);
 }
 

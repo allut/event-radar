@@ -85,7 +85,7 @@
 .grid {
   composes: content from '../../components/shared/DesktopGate.module.css';
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(var(--admin-trigger-min), 1fr));
   gap: var(--space-3);
 }
 .card {

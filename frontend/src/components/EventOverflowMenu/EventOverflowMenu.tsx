@@ -1,8 +1,7 @@
-import { useEffect } from 'react';
 import { t } from '../../i18n';
 import { useDropdown } from '../../hooks/useDropdown';
 import { cx } from '../../utils';
-import { MOBILE_BREAKPOINT_PX } from '../../constants';
+import { DROPDOWN_DEFAULT_FOCUS_SELECTOR } from '../../constants';
 import menuStyles from '../shared/Menu.module.css';
 import styles from './EventOverflowMenu.module.css';
 
@@ -44,30 +43,12 @@ interface EventOverflowMenuProps {
 /** Kebab trigger + popover holding Share and Report event — the first Modal-
  * adjacent menu pattern shared by EventDetail and EventCard (issue #128). */
 export default function EventOverflowMenu({ locale, reported, onShare, onReport, triggerClassName }: EventOverflowMenuProps) {
-  const { open, setOpen, flip, rootRef, popRef, triggerRef, close } = useDropdown();
-
-  // Fixed-position popover on mobile (see .pop's mobile override) escapes the
-  // card's `overflow: hidden`, but then needs its `top` computed from the
-  // trigger's viewport position — CSS alone can't express that once the
-  // panel leaves the trigger's positioned ancestor. Re-synced on scroll/
-  // resize so it doesn't drift from the trigger while open.
-  useEffect(() => {
-    if (!open || !popRef.current || !triggerRef.current) return;
-    if (!window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT_PX}px)`).matches) return;
-
-    function syncTop() {
-      const bottom = triggerRef.current!.getBoundingClientRect().bottom;
-      popRef.current!.style.setProperty('--overflow-pop-top', `calc(${bottom}px + var(--space-0-45))`);
-    }
-
-    syncTop();
-    window.addEventListener('scroll', syncTop, true);
-    window.addEventListener('resize', syncTop);
-    return () => {
-      window.removeEventListener('scroll', syncTop, true);
-      window.removeEventListener('resize', syncTop);
-    };
-  }, [open, popRef, triggerRef]);
+  // The mobile fixed-position popover escapes the card's `overflow: hidden`
+  // (see .pop's mobile override).
+  const { open, setOpen, flip, rootRef, popRef, triggerRef, close } = useDropdown(
+    DROPDOWN_DEFAULT_FOCUS_SELECTOR,
+    '--overflow-pop-top',
+  );
 
   return (
     <div className={menuStyles.menu} ref={rootRef}>

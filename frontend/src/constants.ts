@@ -20,6 +20,7 @@ import {
 } from './_generated/sharedConstants.js';
 
 export { LOCALES, APP_VERSION, MAGIC_LINK_EXPIRY_MINUTES, PERSONA_MAX_SELECTABLE, DEFAULT_CURRENCY, SAFE_URL_SCHEMES, SANITIZE_ALLOWED_TAGS, SANITIZE_ALLOWED_ATTR, CATEGORIES, VIBES, BROWSE_PAGE_SIZE, ORGANIZER_IMAGE_ALLOWED_MIME };
+export const DEFAULT_LOCALE_CODE = _DEFAULT_LOCALE_CODE;
 export type { PersonaData };
 
 // Re-export PERSONAS under the original name so all import sites are unchanged.
@@ -54,6 +55,10 @@ export const AUTH_REDIRECT_DELAY_MS = 600;
 // AUTH_REDIRECT_DELAY_MS-delayed logout-all flow, without masking a genuine
 // session expiry indefinitely if the user never signs back in on this tab.
 export const LOGOUT_FLAG_TTL_MS = 10_000;
+
+// Defers pageview tracking to a macrotask so it reads the post-navigation
+// location instead of racing react-router's own update (App.tsx GoogleAnalytics).
+export const PAGEVIEW_TRACK_DELAY_MS = 0;
 
 // ─── Animation ───────────────────────────────────────────────────────────────
 export const CARD_ANIMATION_DELAY_STEP_MS = 80;
@@ -214,6 +219,14 @@ export const CHAIN_MARKER_PREFIX = 'prerender-chain:';
 export const ROUND_STATUS = {
   continuing: 'continuing',
   done: 'done',
+} as const;
+// Backend event/report status values compared against in the admin console —
+// mirrors ROUND_STATUS/UI_STATE's pattern so a typo is a compile error.
+export const EVENT_STATUS = {
+  published: 'published',
+} as const;
+export const REPORT_STATUS = {
+  open: 'open',
 } as const;
 // Worst-case ~100 minutes wall-clock at the 10-minute render budget per round,
 // sized with margin against the throughput research's 5–7-round cold-catch-up
@@ -570,11 +583,17 @@ export const ROUTES = {
   // ROUTE_DEFS/locale-prefix loop (see AdminApp), so these are never
   // locale-prefixed and never appear in NAV_ITEMS.
   adminLogin: '/admin/login',
+  adminBase: '/admin',
+  adminSplat: '/admin/*',
+  adminEventsSplat: '/admin/events/*',
   adminDashboard: '/admin',
   adminReports: '/admin/reports',
   adminSubmissions: '/admin/submissions',
   adminEventDetail: (id: number | string) => `/admin/events/${id}`,
   adminEventDetailPattern: '/admin/events/:id',
+  // Path-prefix form of adminEventDetail, for AdminApp's manual pathname
+  // dispatch (see that file's comment on why it can't use nested <Routes>).
+  adminEventDetailPrefix: '/admin/events/',
   adminPipeline: '/admin/pipeline',
   adminDedup: '/admin/dedup',
 } as const;
@@ -592,6 +611,9 @@ export const ADMIN_NAV_ITEMS = [
   { route: ROUTES.adminDedup, label: 'Dedup groups' },
 ] as const;
 
+// AdminEventDetail's tab strip — same no-i18n exemption as ADMIN_NAV_ITEMS.
+export const ADMIN_EVENT_DETAIL_TABS = ['Overview', 'Classification', 'Dedup & reports', 'Raw payload'] as const;
+
 // Parallel signed-in hint to SIGNED_IN_HINT_KEY/ORGANIZER_SIGNED_IN_HINT_KEY
 // (see lib/adminAuth.ts) — a third, independent auth track's localStorage flag.
 export const ADMIN_SIGNED_IN_HINT_KEY = 'admin_session_token';
@@ -605,6 +627,11 @@ export const NAV_ITEMS = [
   { route: ROUTES.saved, labelKey: 'nav_saved' },
   { route: ROUTES.settings, labelKey: 'nav_settings' },
 ] as const;
+
+// Prefix every backend request is proxied under (see vercel.json's rewrite
+// rule, which is keyed on this same string) — api/client.ts's fetch wrapper
+// and NDJSON stream path both prepend it.
+export const API_BASE = '/api';
 
 // ─── API endpoints ───────────────────────────────────────────────────────────
 // Every backend request path resolves through this map (or a builder function

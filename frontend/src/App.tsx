@@ -7,7 +7,7 @@ import { SpeedInsights } from '@vercel/speed-insights/react';
 import { useAuth } from './hooks/useAuth';
 import { useOrganizerAuth } from './hooks/useOrganizerAuth';
 import { useLocalePath } from './hooks/useLocalePath';
-import { QUERY_RETRY, QUERY_STALE_TIME, ROUTES, LOCALE_ET } from './constants';
+import { QUERY_RETRY, QUERY_STALE_TIME, ROUTES, LOCALE_ET, PAGEVIEW_TRACK_DELAY_MS } from './constants';
 import { maskAnalyticsUrl, localizedTo } from './utils';
 import { getStoredLocale } from './lib/auth';
 import { initGtag, trackPageview } from './lib/gtag';
@@ -93,7 +93,10 @@ function GoogleAnalytics() {
     initGtag(import.meta.env.VITE_GA_MEASUREMENT_ID);
   }, []);
   useEffect(() => {
-    const id = window.setTimeout(() => trackPageview(maskAnalyticsUrl(location.pathname)), 0);
+    const id = window.setTimeout(
+      () => trackPageview(maskAnalyticsUrl(location.pathname)),
+      PAGEVIEW_TRACK_DELAY_MS,
+    );
     return () => window.clearTimeout(id);
   }, [location.pathname]);
   return null;
@@ -119,7 +122,7 @@ function BareLocaleGate({ children }: { children: React.ReactNode }) {
 // own minimal chrome (AdminShell), not the public app's (issue #154).
 function ConditionalFooter() {
   const { pathname } = useLocation();
-  if (pathname.startsWith('/admin')) return null;
+  if (pathname.startsWith(ROUTES.adminBase)) return null;
   return <Footer />;
 }
 
@@ -183,9 +186,9 @@ export default function App() {
                   These two extra entries add enough static segments to win
                   outright; every other /admin/... path has no such
                   same-shape collision, so the plain splat still covers them. */}
-              <Route path="/admin/login" element={<Suspense fallback={null}><AdminApp /></Suspense>} />
-              <Route path="/admin/events/*" element={<Suspense fallback={null}><AdminApp /></Suspense>} />
-              <Route path="/admin/*" element={<Suspense fallback={null}><AdminApp /></Suspense>} />
+              <Route path={ROUTES.adminLogin} element={<Suspense fallback={null}><AdminApp /></Suspense>} />
+              <Route path={ROUTES.adminEventsSplat} element={<Suspense fallback={null}><AdminApp /></Suspense>} />
+              <Route path={ROUTES.adminSplat} element={<Suspense fallback={null}><AdminApp /></Suspense>} />
               <Route path="*" element={<Protected><NotFound /></Protected>} />
               <Route path="/:locale/*" element={<Protected><NotFound /></Protected>} />
             </Routes>

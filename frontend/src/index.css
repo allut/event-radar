@@ -103,6 +103,7 @@
   --space-0-375: 0.375rem;
   --space-0-42: 0.42rem;
   --space-0-45: 0.45rem;
+  --space-0-5: 0.5rem;
   --space-0-55: 0.55rem;
   --space-0-6: 0.6rem;
   --space-0-625: 0.625rem;
@@ -217,7 +218,7 @@
   --page-max-grid: 1080px;
   --page-max-wide: 1100px;
   --page-max-feed: 760px;         /* Feed */
-  --page-max-organizer: 840px;    /* OrganizerDashboard */
+  --page-max-organizer: 840px;    /* OrganizerDashboard, AdminEventDetail */
   --page-max-settings: 640px;     /* Settings */
   --page-max-showcase: 560px;     /* Landing showcase panel */
 
@@ -248,6 +249,14 @@
   --menu-pop-min-width: 330px;
   --overflow-pop-min-width: 200px;   /* EventOverflowMenu */
   --overflow-trigger-size: 32px;     /* EventOverflowMenu kebab button */
+
+  /* Admin console geometry */
+  --admin-rail-width: 220px;            /* AdminShell nav rail */
+  --admin-queue-list-width: 340px;      /* AdminQueueSplitView list column */
+  --admin-queue-list-max-height: 70vh;  /* AdminQueueSplitView list scroll cap */
+  --admin-tab-panel-min-height: 320px;  /* AdminEventDetail tab panel */
+  --admin-tile-min: 220px;              /* AdminDashboard stat tile grid */
+  --admin-trigger-min: 240px;           /* AdminPipeline trigger card grid */
 
   /* Heading scale */
   --heading-3xl: 3rem;

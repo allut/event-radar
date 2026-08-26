@@ -5,7 +5,7 @@
 }
 
 .rail {
-  width: 220px;
+  width: var(--admin-rail-width);
   flex-shrink: 0;
   background: var(--bg-raised);
   border-right: 1px solid var(--border);
@@ -50,7 +50,7 @@
 .nav {
   display: flex;
   flex-direction: column;
-  gap: var(--space-0-5, 0.15rem);
+  gap: var(--space-0-5);
   padding: 0 var(--space-2);
 }
 

@@ -37,8 +37,8 @@
 }
 
 .illegalDot {
-  width: 6px;
-  height: 6px;
+  width: var(--seg-blip-size);
+  height: var(--seg-blip-size);
   border-radius: 50%;
   background: var(--danger);
   display: inline-block;

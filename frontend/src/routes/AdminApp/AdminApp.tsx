@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { Navigate, useLocation } from 'react-router-dom';
-import { ROUTES } from '../../constants';
+import { ROUTES, ROBOTS_NOINDEX } from '../../constants';
 import { useAdminAuth } from '../../hooks/useAdminAuth';
 import AdminShell from '../../components/AdminShell';
 import AdminLogin from '../AdminLogin';
@@ -32,16 +32,17 @@ function AdminProtected({ children }: { children: ReactNode }) {
 // comment) that outrank those collisions outright, all pointing at this one
 // component — so the dispatch has to happen here, in plain code, rather
 // than through react-router's own nested route matching.
-const EVENT_DETAIL_PREFIX = '/admin/events/';
-
 function screenFor(pathname: string): ReactNode | null {
   if (pathname === ROUTES.adminDashboard) return <AdminDashboard />;
   if (pathname === ROUTES.adminReports) return <AdminReports />;
   if (pathname === ROUTES.adminSubmissions) return <AdminSubmissions />;
   if (pathname === ROUTES.adminPipeline) return <AdminPipeline />;
   if (pathname === ROUTES.adminDedup) return <AdminDedup />;
-  if (pathname.startsWith(EVENT_DETAIL_PREFIX) && pathname.length > EVENT_DETAIL_PREFIX.length) {
-    return <AdminEventDetail eventId={pathname.slice(EVENT_DETAIL_PREFIX.length)} />;
+  if (
+    pathname.startsWith(ROUTES.adminEventDetailPrefix) &&
+    pathname.length > ROUTES.adminEventDetailPrefix.length
+  ) {
+    return <AdminEventDetail eventId={pathname.slice(ROUTES.adminEventDetailPrefix.length)} />;
   }
   return null;
 }
@@ -52,13 +53,17 @@ function screenFor(pathname: string): ReactNode | null {
 // public-route visit downloads. Registered entirely outside App.tsx's
 // ROUTE_DEFS/locale-prefix loop: no i18n, no locale prefix, no in-app link —
 // entry is typed-URL/bookmark only (issue #154).
+function NoindexMeta() {
+  return <Helmet><meta name="robots" content={ROBOTS_NOINDEX} /></Helmet>;
+}
+
 export default function AdminApp() {
   const { pathname } = useLocation();
 
   if (pathname === ROUTES.adminLogin) {
     return (
       <>
-        <Helmet><meta name="robots" content="noindex" /></Helmet>
+        <NoindexMeta />
         <AdminLogin />
       </>
     );
@@ -67,7 +72,7 @@ export default function AdminApp() {
   const screen = screenFor(pathname);
   return (
     <>
-      <Helmet><meta name="robots" content="noindex" /></Helmet>
+      <NoindexMeta />
       <AdminProtected>
         {screen ? <AdminShell>{screen}</AdminShell> : <Navigate to={ROUTES.adminDashboard} replace />}
       </AdminProtected>

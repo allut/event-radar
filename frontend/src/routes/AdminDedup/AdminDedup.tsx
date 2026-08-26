@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { adminApi } from '../../api/client';
-import { API, QUERY_KEYS, UI_STATE, ADMIN_DEDUP_GROUPS_PAGE_SIZE } from '../../constants';
+import { API, QUERY_KEYS, UI_STATE, ADMIN_DEDUP_GROUPS_PAGE_SIZE, EVENT_STATUS } from '../../constants';
 import PageState from '../../components/PageState';
 import EmptyState from '../../components/EmptyState';
 import styles from './AdminDedup.module.css';
@@ -95,7 +95,7 @@ export default function AdminDedup() {
                       </div>
                     </div>
                     <div className={styles.badges}>
-                      <span className={event.status === 'published' ? `${styles.badge} ${styles.badgePublished}` : styles.badge}>
+                      <span className={event.status === EVENT_STATUS.published ? `${styles.badge} ${styles.badgePublished}` : styles.badge}>
                         {event.status}
                       </span>
                       {event.is_explicit && (
