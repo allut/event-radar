@@ -56,12 +56,12 @@ async def submit_report(
     detail = (body.detail or "").strip() or None
     if not detail and (body.reason == REPORT_REASON_OTHER or body.is_illegal_allegation):
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=ERROR_REPORT_DETAIL_REQUIRED,
         )
     if detail and len(detail) > REPORT_DETAIL_MAX_CHARS:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=ERROR_REPORT_DETAIL_TOO_LONG.format(max_chars=REPORT_DETAIL_MAX_CHARS),
         )
 

@@ -445,7 +445,7 @@ def _validated_resolution_note(body: _ResolutionBody) -> str:
     note = body.resolution_note.strip()
     if not note:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=ERROR_RESOLUTION_NOTE_REQUIRED,
         )
     return note

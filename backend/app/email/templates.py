@@ -108,3 +108,14 @@ EVENT_TICKETS_ROW = (
     '<a href="{href}" class="tickets-link" style="{s_tickets_link}">{label}</a>'
     "</td></tr>"
 )
+
+REPORT_NOTIFY_EVENT_LINE = (
+    "<p><strong>Event:</strong> {title} (<a href='{href}'>{href}</a>)</p>"
+)
+REPORT_NOTIFY_SOURCE_LINE = "<p><strong>Source:</strong> <a href='{url}'>{url}</a></p>"
+REPORT_NOTIFY_REASON_LINE = "<p><strong>Reason(s):</strong> {reason}</p>"
+REPORT_NOTIFY_DETAIL_LINE = "<p><strong>Detail:</strong> {detail}</p>"
+REPORT_NOTIFY_COUNT_LINE = "<p><strong>Report count:</strong> {count}</p>"
+REPORT_NOTIFY_ILLEGAL_LINE = "<p><strong>Illegal allegation:</strong> {is_illegal}</p>"
+REPORT_NOTIFY_REPORTER_LINE = "<p><strong>Reporter:</strong> {email}</p>"
+REPORT_NOTIFY_REVIEW_LINE = "<p><a href='{href}'>Review in the admin console</a></p>"

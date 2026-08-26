@@ -1,7 +1,8 @@
 """Admin notification email on first open report — mirrors contact.py's
-Resend-with-log-fallback pattern (internal-only mail, no styles/templates/
-assembly split, sent to CONTACT_TO_ADDRESS). Sent only when a report
-transitions an event from zero to one open report — see routers/reports.py.
+Resend-with-log-fallback pattern (internal-only mail, sent to
+CONTACT_TO_ADDRESS). Markup lives in templates.py (REPORT_NOTIFY_* constants);
+this module only assembles it. Sent only when a report transitions an event
+from zero to one open report — see routers/reports.py.
 """
 
 import html
@@ -15,6 +16,16 @@ from app.constants import (
     RESEND_ERROR_SNIPPET_LEN,
     RESEND_SEND_URL,
     RESEND_TIMEOUT_SECONDS,
+)
+from app.email.templates import (
+    REPORT_NOTIFY_COUNT_LINE,
+    REPORT_NOTIFY_DETAIL_LINE,
+    REPORT_NOTIFY_EVENT_LINE,
+    REPORT_NOTIFY_ILLEGAL_LINE,
+    REPORT_NOTIFY_REASON_LINE,
+    REPORT_NOTIFY_REPORTER_LINE,
+    REPORT_NOTIFY_REVIEW_LINE,
+    REPORT_NOTIFY_SOURCE_LINE,
 )
 from app.models.models import Event
 
@@ -48,23 +59,19 @@ async def send_report_notification(
     subject = f"New report — {' '.join(event.title_orig.split())}"
 
     html_lines = [
-        f"<p><strong>Event:</strong> {safe_title} (<a href='{event_href}'>{event_href}</a>)</p>",
+        REPORT_NOTIFY_EVENT_LINE.format(title=safe_title, href=event_href),
     ]
     if safe_source_url:
-        html_lines.append(
-            f"<p><strong>Source:</strong> <a href='{safe_source_url}'>{safe_source_url}</a></p>"
-        )
-    html_lines.append(f"<p><strong>Reason(s):</strong> {safe_reason}</p>")
+        html_lines.append(REPORT_NOTIFY_SOURCE_LINE.format(url=safe_source_url))
+    html_lines.append(REPORT_NOTIFY_REASON_LINE.format(reason=safe_reason))
     if safe_detail:
-        html_lines.append(f"<p><strong>Detail:</strong> {safe_detail}</p>")
-    html_lines.append(f"<p><strong>Report count:</strong> {report_count}</p>")
+        html_lines.append(REPORT_NOTIFY_DETAIL_LINE.format(detail=safe_detail))
+    html_lines.append(REPORT_NOTIFY_COUNT_LINE.format(count=report_count))
     html_lines.append(
-        f"<p><strong>Illegal allegation:</strong> {is_illegal_allegation}</p>"
+        REPORT_NOTIFY_ILLEGAL_LINE.format(is_illegal=is_illegal_allegation)
     )
-    html_lines.append(f"<p><strong>Reporter:</strong> {safe_reporter_email}</p>")
-    html_lines.append(
-        f"<p><a href='{console_href}'>Review in the admin console</a></p>"
-    )
+    html_lines.append(REPORT_NOTIFY_REPORTER_LINE.format(email=safe_reporter_email))
+    html_lines.append(REPORT_NOTIFY_REVIEW_LINE.format(href=console_href))
     html_body = "".join(html_lines)
 
     text_body = (

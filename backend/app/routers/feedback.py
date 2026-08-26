@@ -64,7 +64,7 @@ async def record_feedback(
     """Upsert a feedback signal for an event and invalidate cached scores."""
     if body.signal not in VALID_SIGNALS:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=ERROR_INVALID_SIGNAL.format(signals=sorted(VALID_SIGNALS)),
         )
 
@@ -176,7 +176,7 @@ async def list_feedback_events(
     """
     if signal not in PREFERENCE_SIGNALS:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=ERROR_INVALID_PREFERENCE_SIGNAL.format(
                 signals=sorted(PREFERENCE_SIGNALS)
             ),
