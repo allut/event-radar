@@ -7,9 +7,6 @@
 .gate {
   display: none;
 }
-.content {
-  display: block;
-}
 @media (max-width: 1024px) {
   .gate {
     composes: card from './Card.module.css';
