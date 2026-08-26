@@ -83,6 +83,7 @@
 }
 
 .grid {
+  composes: content from '../../components/shared/DesktopGate.module.css';
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   gap: var(--space-3);
@@ -108,19 +109,7 @@
   border-top: 1px solid var(--border);
 }
 
-/* Desktop-only screen (mirrors AdminShell.module.css's comment on Pipeline/
- * Dedup): below ADMIN_DESKTOP_BREAKPOINT_PX (constants.ts) the trigger grid
- * is replaced outright by a "come back at a desk" message rather than
- * reflowing into a cramped mobile layout — this console's density (12
- * triggers, live streamed output) doesn't have a usable narrow form. */
-.desktopGate { display: none; }
-@media (max-width: 1024px) {
-  .desktopGate {
-    composes: card from '../../components/shared/Card.module.css';
-    display: block;
-    padding: var(--space-5);
-    color: var(--text-muted);
-    font-size: var(--fs-sm);
-  }
-  .grid { display: none; }
-}
+/* Desktop-only screen — see components/shared/DesktopGate.module.css. This
+ * console's density (12 triggers, live streamed output) doesn't have a
+ * usable narrow form. */
+.desktopGate { composes: gate from '../../components/shared/DesktopGate.module.css'; }

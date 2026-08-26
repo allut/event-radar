@@ -324,6 +324,7 @@ export const QUERY_KEYS = {
   adminCounts: 'adminCounts',
   adminReports: 'adminReports',
   adminSubmissions: 'adminSubmissions',
+  adminDedupGroups: 'adminDedupGroups',
   adminEventDetail: 'adminEventDetail',
 } as const;
 
@@ -389,6 +390,9 @@ export const DATE_PRESETS: { value: DatePreset; labelKey: string }[] = [
 
 // ─── Saved Events ────────────────────────────────────────────────────────────
 export const SAVED_EVENTS_PAGE_SIZE = 24;
+
+// ─── Admin: dedup groups (mirrors backend's ADMIN_DEDUP_GROUPS_PAGE_SIZE) ───
+export const ADMIN_DEDUP_GROUPS_PAGE_SIZE = 50;
 
 // ─── Organizer submission ────────────────────────────────────────────────────
 // ORGANIZER_IMAGE_ALLOWED_MIME (re-exported above) is sourced from
@@ -637,6 +641,7 @@ export const API = {
   adminReportResolve: (id: number) => `/admin/reports/${id}/resolve`,
   adminReportTakedown: (id: number) => `/admin/reports/${id}/takedown`,
   adminSubmissions: '/admin/submissions',
+  adminDedupGroups: '/admin/dedup/groups',
   adminSubmissionApprove: (id: number) => `/admin/submissions/${id}/approve`,
   adminSubmissionRetract: (id: number) => `/admin/submissions/${id}/retract`,
   adminEventDetail: (id: number | string) => `/admin/events/${id}`,
@@ -677,7 +682,7 @@ export interface AdminPipelineTrigger {
   hint: string;
   dryRunCapable?: boolean;
   needsSlug?: boolean;
-  /** pipeline_run only — the stage order the generic viewer streams through. */
+  /** pipeline_run only — the stage order PipelineRunBreakdown renders through. */
   stages?: string[];
   /** Set only on cleanup/send_digests/pipeline_run (issue #160) — a real
    * (dry_run=false) run of these requires the typed-confirmation modal,
