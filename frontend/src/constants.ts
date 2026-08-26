@@ -679,6 +679,10 @@ export interface AdminPipelineTrigger {
   needsSlug?: boolean;
   /** pipeline_run only — the stage order the generic viewer streams through. */
   stages?: string[];
+  /** Set only on cleanup/send_digests/pipeline_run (issue #160) — a real
+   * (dry_run=false) run of these requires the typed-confirmation modal,
+   * naming this endpoint's specific consequence. */
+  dangerCopy?: string;
 }
 
 export const ADMIN_PIPELINE_TRIGGERS: AdminPipelineTrigger[] = [
@@ -690,14 +694,27 @@ export const ADMIN_PIPELINE_TRIGGERS: AdminPipelineTrigger[] = [
   { id: 'geocode', label: 'Geocode', hint: 'Backfill lat/lng from venue addresses' },
   { id: 'refetch', label: 'Refetch details', hint: 'Re-fetch source detail pages' },
   { id: 'sync_organizers', label: 'Sync organizers', hint: 'Discover new organizers, flag stale ones' },
-  { id: 'cleanup', label: 'Cleanup', hint: 'Prune satellite tables past retention', dryRunCapable: true },
+  {
+    id: 'cleanup',
+    label: 'Cleanup',
+    hint: 'Prune satellite tables past retention',
+    dryRunCapable: true,
+    dangerCopy: 'This deletes rows from satellite tables (raw events, feedback, expired sessions, and more). Events themselves are never deleted, but this cannot be undone.',
+  },
   { id: 'build_feeds', label: 'Build feeds', hint: 'Build Daily 5 for every active user' },
-  { id: 'send_digests', label: 'Send digests', hint: 'Send the daily email digest', dryRunCapable: true },
+  {
+    id: 'send_digests',
+    label: 'Send digests',
+    hint: 'Send the daily email digest',
+    dryRunCapable: true,
+    dangerCopy: 'This sends a real email to every opted-in user right now, not a test send.',
+  },
   {
     id: 'pipeline_run',
     label: 'Run full pipeline',
     hint: 'All seven stages in order',
     dryRunCapable: true,
     stages: ['sync_organizers', 'ingest', 'dedup', 'classify', 'publish', 'build_feeds', 'send_digests'],
+    dangerCopy: 'This runs the full pipeline end to end, including LLM classification (real spend) and a real digest send to every opted-in user.',
   },
 ];

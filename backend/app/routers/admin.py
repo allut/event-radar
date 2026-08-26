@@ -94,10 +94,12 @@ from app.publish import publish_pending
 from app.ranking.score import build_daily_feeds
 from app.rate_limit import client_key, limiter
 from app.routers.utils import (
+    acquire_admin_job_lock,
     cancel_event_and_resolve_reports,
     canonical_event_filter,
     log_admin_action,
     ndjson_line,
+    release_admin_job_lock,
     require_configured_secret,
     resolve_open_reports,
     run_admin_job,
@@ -276,12 +278,20 @@ def _ndjson_response(gen: AsyncIterator[bytes]) -> StreamingResponse:
 @limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
 async def admin_ingest_all(request: Request) -> StreamingResponse:
     """Trigger ingestion for all enabled sources."""
+    acquire_admin_job_lock(ADMIN_ACTION_INGEST)
 
     async def _run() -> dict:
         return {"results": await ingest_all_enabled()}
 
     return _ndjson_response(
-        stream_admin_job("Ingestion", "ingest", ADMIN_ACTION_INGEST, "all", _run())
+        stream_admin_job(
+            "Ingestion",
+            "ingest",
+            ADMIN_ACTION_INGEST,
+            "all",
+            _run(),
+            lock_key=ADMIN_ACTION_INGEST,
+        )
     )
 
 
@@ -944,6 +954,7 @@ async def admin_takedown_reported_event(
 @limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
 async def admin_classify(request: Request) -> StreamingResponse:
     """Trigger LLM classification, draining the backlog until it clears or the cap is hit."""
+    acquire_admin_job_lock(ADMIN_ACTION_CLASSIFY)
     return _ndjson_response(
         stream_admin_job(
             "Classification",
@@ -951,6 +962,7 @@ async def admin_classify(request: Request) -> StreamingResponse:
             ADMIN_ACTION_CLASSIFY,
             "classify",
             classify_pending_drain_now(),
+            lock_key=ADMIN_ACTION_CLASSIFY,
         )
     )
 
@@ -1033,6 +1045,7 @@ async def admin_cleanup(
 
     See app.cleanup.cleanup_stale_data for the per-table retention windows.
     """
+    acquire_admin_job_lock(ADMIN_ACTION_CLEANUP)
     return _ndjson_response(
         stream_admin_job(
             "Cleanup",
@@ -1042,6 +1055,7 @@ async def admin_cleanup(
             run_in_session(
                 lambda db: cleanup_stale_data(db, dry_run=dry_run), commit=not dry_run
             ),
+            lock_key=ADMIN_ACTION_CLEANUP,
         )
     )
 
@@ -1069,6 +1083,7 @@ async def admin_send_digests(
     dry_run: bool = Query(True, description="When true (default), counts would-send but skips actual email delivery"),
 ) -> StreamingResponse:
     """Trigger daily digest send. Defaults to dry-run — pass ?dry_run=false to actually send."""
+    acquire_admin_job_lock(ADMIN_ACTION_SEND_DIGESTS)
     return _ndjson_response(
         stream_admin_job(
             "Digest send",
@@ -1076,8 +1091,37 @@ async def admin_send_digests(
             ADMIN_ACTION_SEND_DIGESTS,
             "send_digests",
             run_in_session(lambda db: send_daily_digests(db, dry_run=dry_run), commit=False),
+            lock_key=ADMIN_ACTION_SEND_DIGESTS,
         )
     )
+
+
+# Sub-stages that are also standalone triggers with their own single-flight
+# guard (issue #160) — held for pipeline/run's whole duration too, or a
+# standalone ingest/classify/send-digests click mid-pipeline would run
+# concurrently with the pipeline's own execution of that same stage.
+_PIPELINE_RUN_OVERLAPPING_LOCK_KEYS = (
+    ADMIN_ACTION_INGEST,
+    ADMIN_ACTION_CLASSIFY,
+    ADMIN_ACTION_SEND_DIGESTS,
+)
+
+
+def _acquire_pipeline_run_locks() -> None:
+    acquired: list[str] = []
+    try:
+        for key in (ADMIN_ACTION_PIPELINE_RUN, *_PIPELINE_RUN_OVERLAPPING_LOCK_KEYS):
+            acquire_admin_job_lock(key)
+            acquired.append(key)
+    except HTTPException:
+        for key in acquired:
+            release_admin_job_lock(key)
+        raise
+
+
+def _release_pipeline_run_locks() -> None:
+    for key in (ADMIN_ACTION_PIPELINE_RUN, *_PIPELINE_RUN_OVERLAPPING_LOCK_KEYS):
+        release_admin_job_lock(key)
 
 
 async def _run_pipeline_stages(dry_run: bool, queue: asyncio.Queue[bytes | None]) -> None:
@@ -1108,21 +1152,24 @@ async def _run_pipeline_stages(dry_run: bool, queue: asyncio.Queue[bytes | None]
 
     stages: dict[str, object] = {}
     ok = True
-    for stage_name, runner in stage_runners:
-        try:
-            result = await runner()
-            stages[stage_name] = result
-            await queue.put(ndjson_line(stage_name, "ok", result, None))
-        except Exception:
-            log.exception("pipeline: %s failed", stage_name)
-            error = f"{stage_name} failed; see server logs"
-            stages[stage_name] = {"error": error}
-            ok = False
-            await queue.put(ndjson_line(stage_name, "error", None, error))
-            break
+    try:
+        for stage_name, runner in stage_runners:
+            try:
+                result = await runner()
+                stages[stage_name] = result
+                await queue.put(ndjson_line(stage_name, "ok", result, None))
+            except Exception:
+                log.exception("pipeline: %s failed", stage_name)
+                error = f"{stage_name} failed; see server logs"
+                stages[stage_name] = {"error": error}
+                ok = False
+                await queue.put(ndjson_line(stage_name, "error", None, error))
+                break
 
-    log_admin_action(ADMIN_ACTION_PIPELINE_RUN, "pipeline", {"ok": ok, "stages": stages})
-    await queue.put(None)
+        log_admin_action(ADMIN_ACTION_PIPELINE_RUN, "pipeline", {"ok": ok, "stages": stages})
+    finally:
+        _release_pipeline_run_locks()
+        await queue.put(None)
 
 
 async def _stream_pipeline_run(dry_run: bool) -> AsyncIterator[bytes]:
@@ -1152,6 +1199,7 @@ async def admin_pipeline_run(
 ) -> StreamingResponse:
     """Run all seven pipeline stages in dependency order, streamed as NDJSON
     (one line per completed stage — issue #159)."""
+    _acquire_pipeline_run_locks()
     return _ndjson_response(_stream_pipeline_run(dry_run))
 
 

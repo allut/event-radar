@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { adminStream, ApiError, StreamDisconnectedError, type NdjsonLine } from '../../api/client';
 import { ADMIN_PIPELINE_TRIGGERS, API, type AdminPipelineTrigger } from '../../constants';
+import ConfirmRunModal from './ConfirmRunModal';
 import styles from './AdminPipeline.module.css';
 
 type RunState = 'idle' | 'starting' | 'streaming' | 'done' | 'disconnected';
@@ -103,13 +104,35 @@ function TriggerCard({ trigger }: { trigger: AdminPipelineTrigger }) {
   const [dryRun, setDryRun] = useState(true);
   const [slug, setSlug] = useState('');
   const [opened, setOpened] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const { state, lines, run } = useTriggerRun();
 
   const path = triggerPath(trigger, dryRun, slug);
   const busy = state === 'starting' || state === 'streaming';
+  const guarded = Boolean(trigger.dangerCopy);
+  // `lines` still holds the last completed run's data until the next run()
+  // call resets it — carrying a completed dry run's numbers into the
+  // confirmation modal (issue #160) needs no extra state.
+  const dryRunLines = state === 'done' && lines.length > 0 ? lines : null;
+
+  function startRealRun() {
+    const realPath = triggerPath(trigger, false, slug);
+    if (!realPath) return;
+    setConfirmOpen(false);
+    setOpened(true);
+    // Flip the toggle off so a completed real run doesn't re-satisfy
+    // `guarded && dryRun && state === 'done'` and resurrect "Run for real"
+    // mislabeling this real run's own numbers as a dry run's.
+    setDryRun(false);
+    run(realPath);
+  }
 
   function handleRun() {
     if (!path) return;
+    if (guarded && !dryRun) {
+      setConfirmOpen(true);
+      return;
+    }
     setOpened(true);
     run(path);
   }
@@ -148,10 +171,28 @@ function TriggerCard({ trigger }: { trigger: AdminPipelineTrigger }) {
           Run
         </button>
       </div>
+      {guarded && dryRun && state === 'done' && (
+        <button
+          type="button"
+          className={styles.runForRealButton}
+          onClick={() => setConfirmOpen(true)}
+          aria-label={`Run ${trigger.label} for real`}
+        >
+          Run for real
+        </button>
+      )}
       {opened && lines.length > 0 && (
         <div className={styles.drawer}>
           {lines.map((l) => <ResultViewer key={l.stage} line={l} />)}
         </div>
+      )}
+      {confirmOpen && (
+        <ConfirmRunModal
+          trigger={trigger}
+          dryRunLines={dryRunLines}
+          onCancel={() => setConfirmOpen(false)}
+          onConfirm={startRealRun}
+        />
       )}
     </div>
   );

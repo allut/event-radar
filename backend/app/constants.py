@@ -1492,4 +1492,5 @@ ERROR_IMAGE_UPLOAD_FAILED = "Image upload failed; please try again."
 
 # routers/utils.py
 ERROR_ADMIN_JOB_FAILED = "{name} failed; see server logs"
+ERROR_ADMIN_JOB_ALREADY_RUNNING = "{name} is already running; try again once it finishes."
 ERROR_FEATURE_DISABLED = "{feature} disabled: {setting_name} not configured"

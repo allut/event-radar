@@ -75,7 +75,13 @@ describe('AdminPipeline', () => {
     await userEvent.click(toggle);
     expect(toggle.checked).toBe(false);
 
+    // cleanup is a guarded trigger (issue #160) — a real run requires typed
+    // confirmation before adminStream is ever called.
     await userEvent.click(within(card).getByRole('button', { name: 'Run Cleanup' }));
+    expect(mockAdminStream).not.toHaveBeenCalled();
+
+    await userEvent.click(screen.getByRole('button', { name: 'I understand, continue' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Run for real' }));
 
     await waitFor(() => {
       expect(mockAdminStream).toHaveBeenCalledWith(
@@ -94,5 +100,105 @@ describe('AdminPipeline', () => {
 
     await userEvent.type(within(card).getByPlaceholderText('source slug'), 'fienta');
     expect(runButton).not.toBeDisabled();
+  });
+
+  describe('confirmation modal for a real run (issue #160)', () => {
+    it.each([
+      ['cleanup', 'Run Cleanup', /deletes rows from satellite tables/],
+      ['send_digests', 'Run Send digests', /real email to every opted-in user/],
+      ['pipeline_run', 'Run Run full pipeline', /full pipeline end to end/],
+    ])('gates a real %s run behind danger copy naming its consequence', async (testId, runLabel, dangerCopy) => {
+      mockAdminStream.mockResolvedValue(undefined);
+      renderWithProviders(<AdminPipeline />);
+
+      const card = screen.getByTestId(`trigger-card-${testId}`);
+      await userEvent.click(within(card).getByRole('checkbox', { name: 'Dry run' }));
+      await userEvent.click(within(card).getByRole('button', { name: runLabel }));
+
+      expect(mockAdminStream).not.toHaveBeenCalled();
+      expect(screen.getByText(dangerCopy)).toBeInTheDocument();
+    });
+
+    it('cancelling the confirmation never starts a run', async () => {
+      mockAdminStream.mockResolvedValue(undefined);
+      renderWithProviders(<AdminPipeline />);
+
+      const card = screen.getByTestId('trigger-card-cleanup');
+      await userEvent.click(within(card).getByRole('checkbox', { name: 'Dry run' }));
+      await userEvent.click(within(card).getByRole('button', { name: 'Run Cleanup' }));
+
+      await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+      expect(screen.queryByText(/deletes rows from satellite tables/)).not.toBeInTheDocument();
+      expect(mockAdminStream).not.toHaveBeenCalled();
+    });
+
+    it('does not gate a dry run — only a real (dry_run=false) run needs confirmation', async () => {
+      mockAdminStream.mockResolvedValue(undefined);
+      renderWithProviders(<AdminPipeline />);
+
+      const card = screen.getByTestId('trigger-card-cleanup');
+      await userEvent.click(within(card).getByRole('button', { name: 'Run Cleanup' }));
+
+      expect(screen.queryByText(/deletes rows from satellite tables/)).not.toBeInTheDocument();
+      await waitFor(() => expect(mockAdminStream).toHaveBeenCalledWith(
+        expect.stringContaining('dry_run=true'),
+        expect.any(Function),
+        expect.anything(),
+      ));
+    });
+
+    it('"Run for real" after a completed dry run carries its numbers into the confirmation', async () => {
+      mockAdminStream.mockImplementation((_path, onLine) => {
+        onLine({ stage: 'cleanup', status: 'ok', result: { raw_events: 412, dry_run: true }, error: null });
+        return Promise.resolve();
+      });
+      renderWithProviders(<AdminPipeline />);
+
+      const card = screen.getByTestId('trigger-card-cleanup');
+      await userEvent.click(within(card).getByRole('button', { name: 'Run Cleanup' }));
+      expect(await within(card).findByText('done')).toBeInTheDocument();
+
+      await userEvent.click(within(card).getByRole('button', { name: 'Run Cleanup for real' }));
+      await userEvent.click(screen.getByRole('button', { name: 'I understand, continue' }));
+
+      expect(within(screen.getByRole('dialog')).getByText(/"raw_events": 412/)).toBeInTheDocument();
+
+      mockAdminStream.mockClear();
+      mockAdminStream.mockResolvedValue(undefined);
+      await userEvent.click(screen.getByRole('button', { name: 'Run for real' }));
+
+      await waitFor(() => expect(mockAdminStream).toHaveBeenCalledWith(
+        expect.stringContaining('dry_run=false'),
+        expect.any(Function),
+        expect.anything(),
+      ));
+    });
+
+    it('does not resurrect "Run for real" after a real run completes', async () => {
+      // Regression: startRealRun left the dry-run toggle on, so a completed
+      // real run re-satisfied the "show Run for real" condition and
+      // mislabeled its own numbers as a dry run's.
+      mockAdminStream.mockImplementation((_path, onLine) => {
+        onLine({ stage: 'cleanup', status: 'ok', result: { raw_events: 412, dry_run: true }, error: null });
+        return Promise.resolve();
+      });
+      renderWithProviders(<AdminPipeline />);
+
+      const card = screen.getByTestId('trigger-card-cleanup');
+      await userEvent.click(within(card).getByRole('button', { name: 'Run Cleanup' }));
+      expect(await within(card).findByText('done')).toBeInTheDocument();
+
+      await userEvent.click(within(card).getByRole('button', { name: 'Run Cleanup for real' }));
+      await userEvent.click(screen.getByRole('button', { name: 'I understand, continue' }));
+
+      mockAdminStream.mockImplementation((_path, onLine) => {
+        onLine({ stage: 'cleanup', status: 'ok', result: { raw_events: 412, dry_run: false }, error: null });
+        return Promise.resolve();
+      });
+      await userEvent.click(screen.getByRole('button', { name: 'Run for real' }));
+      await within(card).findByText('done');
+
+      expect(within(card).queryByRole('button', { name: 'Run Cleanup for real' })).not.toBeInTheDocument();
+    });
   });
 });

@@ -35,6 +35,16 @@
 }
 .runButton:disabled { opacity: var(--opacity-disabled); cursor: not-allowed; }
 
+.runForRealButton {
+  composes: btnOutline from '../../components/shared/Button.module.css';
+  align-self: flex-end;
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--fs-sm);
+  color: var(--danger);
+  border-color: var(--danger);
+  cursor: pointer;
+}
+
 .badgeStarting, .badgeStreaming, .badgeDone, .badgeDisconnected {
   font-family: var(--font-mono);
   font-size: var(--fs-2xs);

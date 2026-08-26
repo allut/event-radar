@@ -20,6 +20,7 @@ from app.constants import (
     APP_ENV_DEVELOPMENT,
     DEFAULT_USER_LOCALE,
     EMAIL_MASK_VISIBLE_CHARS,
+    ERROR_ADMIN_JOB_ALREADY_RUNNING,
     ERROR_ADMIN_JOB_FAILED,
     ERROR_FEATURE_DISABLED,
     ERROR_INVALID_REPORT_REASON,
@@ -157,6 +158,27 @@ async def recent_unused_link_exists(
     return already_sent is not None
 
 
+_RUNNING_ADMIN_JOBS: set[str] = set()
+
+
+def acquire_admin_job_lock(key: str) -> None:
+    """Single-flight guard for the expensive/destructive triggers (issue
+    #160): pipeline/run, cleanup, full ingest, send_digests, classify. Raises
+    409 if *key* is already running instead of letting a retry click start a
+    second concurrent run. In-memory only — fine given this app's
+    single-process topology (see CLAUDE.md's Architecture section)."""
+    if key in _RUNNING_ADMIN_JOBS:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=ERROR_ADMIN_JOB_ALREADY_RUNNING.format(name=key),
+        )
+    _RUNNING_ADMIN_JOBS.add(key)
+
+
+def release_admin_job_lock(key: str) -> None:
+    _RUNNING_ADMIN_JOBS.discard(key)
+
+
 async def run_admin_job(name: str, coro: Awaitable[dict]) -> dict:
     """Await an admin-triggered job, converting any failure into a generic 500.
 
@@ -185,7 +207,12 @@ def ndjson_line(stage: str, status_: str, result: Any, error: str | None) -> byt
 
 
 async def stream_admin_job(
-    name: str, stage: str, action: str, target: int | str, coro: Awaitable[dict]
+    name: str,
+    stage: str,
+    action: str,
+    target: int | str,
+    coro: Awaitable[dict],
+    lock_key: str | None = None,
 ) -> AsyncIterator[bytes]:
     """Streaming sibling of run_admin_job: runs *coro* and yields a single
     NDJSON envelope line instead of returning a dict. A failure becomes a
@@ -222,6 +249,8 @@ async def stream_admin_job(
             log_admin_action(action, target, {"error": detail})
             await queue.put(ndjson_line(stage, "error", None, detail))
         finally:
+            if lock_key is not None:
+                release_admin_job_lock(lock_key)
             await queue.put(None)
 
     asyncio.ensure_future(_runner())
