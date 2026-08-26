@@ -35,6 +35,24 @@ describe('AdminPipeline', () => {
     expect(await within(card).findByText('done')).toBeInTheDocument();
   });
 
+  it('renders pipeline_run results through the bespoke stage breakdown, not the generic viewer (issue #161)', async () => {
+    mockAdminStream.mockImplementation((_path, onLine) => {
+      onLine({ stage: 'sync_organizers', status: 'ok', result: { checked: 42 }, error: null });
+      return Promise.resolve();
+    });
+
+    renderWithProviders(<AdminPipeline />);
+    const card = screen.getByTestId('trigger-card-pipeline_run');
+    await userEvent.click(within(card).getByRole('button', { name: 'Run Run full pipeline' }));
+
+    // The breakdown shows every stage (a stage that never streamed too),
+    // which the generic per-line viewer never would.
+    expect(await within(card).findByText('Sync organizers')).toBeInTheDocument();
+    expect(within(card).getByText('Send digests')).toBeInTheDocument();
+    expect(within(card).getByText(/checked=42/)).toBeInTheDocument();
+    expect(within(card).queryByText(/"checked": 42/)).not.toBeInTheDocument();
+  });
+
   it('renders an error line without leaking internals, matching run_admin_job\'s generic failure', async () => {
     mockAdminStream.mockImplementation((_path, onLine) => {
       onLine({ stage: 'publish', status: 'error', result: null, error: 'Publish failed; see server logs' });

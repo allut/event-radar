@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { adminStream, ApiError, StreamDisconnectedError, type NdjsonLine } from '../../api/client';
 import { ADMIN_PIPELINE_TRIGGERS, API, type AdminPipelineTrigger } from '../../constants';
 import ConfirmRunModal from './ConfirmRunModal';
+import PipelineRunBreakdown from './PipelineRunBreakdown';
 import styles from './AdminPipeline.module.css';
 
 type RunState = 'idle' | 'starting' | 'streaming' | 'done' | 'disconnected';
@@ -71,9 +72,8 @@ function useTriggerRun() {
 }
 
 // The generic pretty-printed result viewer (issue #159) — every trigger
-// renders through this by default. pipeline/run's bespoke stage-by-stage
-// breakdown is a separate later ticket (#161); until then its lines render
-// through here too, one card per completed stage.
+// except pipeline_run renders through this. pipeline_run gets the bespoke
+// stage-by-stage breakdown (PipelineRunBreakdown, issue #161) instead.
 function ResultViewer({ line }: { line: NdjsonLine }) {
   if (line.status === 'error') {
     return (
@@ -181,7 +181,12 @@ function TriggerCard({ trigger }: { trigger: AdminPipelineTrigger }) {
           Run for real
         </button>
       )}
-      {opened && lines.length > 0 && (
+      {opened && lines.length > 0 && trigger.id === 'pipeline_run' && trigger.stages && (
+        <div className={styles.drawer}>
+          <PipelineRunBreakdown stages={trigger.stages} lines={lines} />
+        </div>
+      )}
+      {opened && lines.length > 0 && trigger.id !== 'pipeline_run' && (
         <div className={styles.drawer}>
           {lines.map((l) => <ResultViewer key={l.stage} line={l} />)}
         </div>
