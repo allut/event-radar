@@ -272,53 +272,9 @@ python scripts/generate_shared.py
 
 ### Manually triggering pipeline jobs (E2E testing)
 
-The scheduled jobs described in [Architecture](#architecture) (`sync_fienta_organizers`, `cleanup_stale_data`, `ingest_all_enabled`, `dedup_pass`, `classify_pending`, `publish_pending`, `build_daily_feeds`, `send_daily_digests`, `geocode_pending`, `refetch_event_details`) can each be run on demand via `/admin/*` endpoints — useful for exercising the full pipeline end to end without waiting for the schedule.
+The scheduled jobs described in [Architecture](#architecture) (`sync_fienta_organizers`, `cleanup_stale_data`, `ingest_all_enabled`, `dedup_pass`, `classify_pending`, `publish_pending`, `build_daily_feeds`, `send_daily_digests`, `geocode_pending`, `refetch_event_details`) can each be run on demand from the admin console — useful for exercising the full pipeline end to end without waiting for the schedule.
 
-All `/admin/*` endpoints require HTTP Basic auth (`ADMIN_USERNAME` / `ADMIN_PASSWORD`, see `.env.example`). With no `ADMIN_PASSWORD` set they return 503 unless **both** `APP_ENV=development` and `ALLOW_INSECURE_DEV=true` — set that pair locally and any credentials are accepted, as in the `admin:admin` examples below. Run them in this order to exercise a full pipeline cycle:
-
-```bash
-# 1. sync_fienta_organizers — discover/refresh Fienta organizer IDs
-curl -u admin:admin -X POST http://localhost:8000/admin/sync-organizers
-
-# 2. ingest_all_enabled — fetch raw events from every enabled source
-#    (POST /admin/ingest/{slug} runs a single source instead)
-curl -u admin:admin -X POST http://localhost:8000/admin/ingest
-
-# 3. dedup_pass — rule pre-filter + LLM tiebreaker over non-cancelled events
-curl -u admin:admin -X POST http://localhost:8000/admin/dedup
-
-# 4. classify_pending — LLM classification for one batch of draft events
-curl -u admin:admin -X POST http://localhost:8000/admin/classify
-
-# 5. publish_pending — promote qualifying classified events to published
-curl -u admin:admin -X POST http://localhost:8000/admin/publish
-
-# 6. build_daily_feeds — score events and write daily_feeds for all users
-curl -u admin:admin -X POST http://localhost:8000/admin/build-feeds
-
-# 7. send_daily_digests — dry-run by default (counts would-send, sends nothing)
-curl -u admin:admin -X POST http://localhost:8000/admin/send-digests
-# Pass dry_run=false to actually deliver emails:
-curl -u admin:admin -X POST "http://localhost:8000/admin/send-digests?dry_run=false"
-
-# geocode_pending — backfill lat/lng for events missing coordinates (runs standalone,
-# not part of pipeline/run; safe to invoke any time)
-curl -u admin:admin -X POST http://localhost:8000/admin/geocode
-
-# refetch_event_details — re-fetch each future event's source detail page and
-# reconcile venue/price/coordinates (runs standalone, not part of pipeline/run)
-curl -u admin:admin -X POST http://localhost:8000/admin/refetch
-
-# cleanup_stale_data — prune aged satellite/audit rows (auth tokens, raw payloads,
-# old feed snapshots, cached scores); never deletes events. Dry-run by default
-# (counts candidates, deletes nothing); runs standalone, not part of pipeline/run.
-curl -u admin:admin -X POST http://localhost:8000/admin/cleanup
-# Pass dry_run=false to actually delete:
-curl -u admin:admin -X POST "http://localhost:8000/admin/cleanup?dry_run=false"
-```
-
-> [!TIP]
-> `POST /admin/pipeline/run` runs all seven stages above in dependency order in a single call, stopping at the first failure — the fastest way to drive a full E2E cycle. It also accepts `?dry_run=false` for the final digest stage. `GET /admin/stats` and `GET /admin/dedup/groups` are useful for inspecting the results afterwards; `GET /admin/submissions` (plus `POST /admin/submissions/{event_id}/approve` and `.../retract`) is the post-hoc review queue for organizer-submitted events. The geocoding backfill (`geocode_pending`), the detail-refetch sync (`refetch_event_details`), and the data-retention cleanup (`cleanup_stale_data`) each run on their own schedule and are not part of `pipeline/run`; trigger them on demand via `POST /admin/geocode`, `POST /admin/refetch`, and `POST /admin/cleanup` respectively. Run `refetch` before `geocode` if you want coordinates cleared by an address change re-resolved in the same operation.
+Sign in at `/admin/login` (username/password + TOTP, see `docs/backend-ops.md`), then use `/admin/pipeline` to trigger any stage individually or run the full `POST /admin/pipeline/run` sequence in one click — it streams a live per-stage result breakdown and gates destructive/expensive triggers (digest send, cleanup delete) behind an explicit confirmation. `/admin/dedup` reviews dedup groups, `/admin/submissions` is the organizer-submission review queue, `/admin/reports` is the report queue, `/admin/events/:id` is the single-event inspector, and `/admin` is the dashboard landing page. See `docs/backend-ops.md` for the full endpoint/screen breakdown.
 
 ### Resetting event data
 
