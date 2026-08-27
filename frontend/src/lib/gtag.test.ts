@@ -48,7 +48,14 @@ describe('initGtag', () => {
   it('configures GA4 with automatic pageview tracking disabled', () => {
     initGtag('G-TEST123');
     const calls = window.dataLayer as unknown[];
-    expect(calls).toContainEqual(['config', 'G-TEST123', { send_page_view: false }]);
+    expect(calls).toContainEqual([
+      'config',
+      'G-TEST123',
+      {
+        send_page_view: false,
+        page_location: window.location.origin + window.location.pathname,
+      },
+    ]);
   });
 
   it('configures GA4 cookieless (no persistent client-id cookie)', () => {
@@ -69,10 +76,24 @@ describe('trackPageview', () => {
     expect(() => trackPageview('/events/1')).not.toThrow();
   });
 
-  it('forwards the masked path as a page_view event', () => {
+  it('forwards the masked path as a page_view event, with a matching masked page_location', () => {
     const gtag = vi.fn();
     window.gtag = gtag;
     trackPageview('/events/[id]');
-    expect(gtag).toHaveBeenCalledWith('event', 'page_view', { page_path: '/events/[id]' });
+    expect(gtag).toHaveBeenCalledWith('event', 'page_view', {
+      page_path: '/events/[id]',
+      page_location: window.location.origin + '/events/[id]',
+    });
+  });
+
+  it('sends page_location, not just page_path — GA4 ignores page_path for the reported URL', () => {
+    // Regression for M-2 in the OWASP audit: GA4 auto-populates page_location
+    // from the real document.location.href unless it's set explicitly, which
+    // silently defeated maskAnalyticsUrl() even though page_path was masked.
+    const gtag = vi.fn();
+    window.gtag = gtag;
+    trackPageview('/explore');
+    const [, , params] = gtag.mock.calls[0] as [string, string, Record<string, unknown>];
+    expect(params.page_location).toBe(window.location.origin + '/explore');
   });
 });

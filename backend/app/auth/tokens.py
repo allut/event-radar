@@ -10,7 +10,7 @@ so a compromised DB row cannot be turned back into a valid token.
 import hashlib
 from datetime import datetime, timedelta, timezone
 
-from itsdangerous import URLSafeTimedSerializer
+from itsdangerous import BadSignature, URLSafeTimedSerializer
 
 from app.config import settings
 from app.constants import (
@@ -130,17 +130,28 @@ def generate_admin_session_token() -> str:
     """Admin console session (routers/admin_auth.py) — no admins table, no
     per-admin identity, so unlike generate_session_token/
     generate_organizer_session_token there is no id or "v" (revocation)
-    claim to embed: the payload just asserts a login happened. Revocation is
-    TTL expiry only (ADMIN_SESSION_TTL_SECONDS), per the ticket's scope."""
-    return _serializer().dumps({"admin": True}, salt=AUTH_ADMIN_SESSION_SALT)
+    claim to embed. Revocation is TTL expiry (ADMIN_SESSION_TTL_SECONDS) plus
+    the "e" (epoch) claim below: bumping settings.ADMIN_SESSION_EPOCH (an env
+    var, changed on the next deploy) invalidates every outstanding admin
+    session immediately, which is the cheapest durable revocation that fits
+    this no-Redis/no-admins-table design — see M-1 in the OWASP audit."""
+    return _serializer().dumps(
+        {"admin": True, "e": settings.ADMIN_SESSION_EPOCH}, salt=AUTH_ADMIN_SESSION_SALT
+    )
 
 
 def verify_admin_session_token(token: str) -> None:
     """Raises BadSignature / SignatureExpired on failure; returns nothing on
-    success (there is no id/version to hand back — see generate_admin_session_token)."""
-    _serializer().loads(
+    success (there is no id/version to hand back — see generate_admin_session_token).
+    A token whose "e" claim doesn't match the currently configured
+    ADMIN_SESSION_EPOCH is treated as an invalid signature — this is what
+    lets rotating that env var revoke every previously issued admin session
+    without a per-session revocation table."""
+    payload = _serializer().loads(
         token, salt=AUTH_ADMIN_SESSION_SALT, max_age=ADMIN_SESSION_TTL_SECONDS
     )
+    if payload.get("e", "") != settings.ADMIN_SESSION_EPOCH:
+        raise BadSignature("admin session epoch mismatch")
 
 
 def generate_unsubscribe_token(user_id: int) -> str:

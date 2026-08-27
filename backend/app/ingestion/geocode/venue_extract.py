@@ -16,7 +16,7 @@ from app.constants import (
     VENUE_NAME_SUSPECT_MAX_LEN,
 )
 from app.ingestion.content_filters import alternation_pattern
-from app.llm.prompts import LLM_VENUE_EXTRACT_PROMPT_TEMPLATE
+from app.llm.prompts import LLM_VENUE_EXTRACT_PROMPT_TEMPLATE, escape_prompt_delimiters
 from app.llm.router import LLMError, content_hash, llm_available, llm_json
 from app.models.models import Event, LlmCall
 
@@ -118,7 +118,7 @@ async def extract_address_from_venue_name(db: AsyncSession) -> int:
     # Build prompts and hashes for bulk prefetch.
     prompts: dict[str, str] = {
         name: LLM_VENUE_EXTRACT_PROMPT_TEMPLATE.format(
-            venue=name[:VENUE_NAME_PROMPT_MAX_CHARS]
+            venue=escape_prompt_delimiters(name[:VENUE_NAME_PROMPT_MAX_CHARS])
         )
         for name in by_name
     }

@@ -126,6 +126,12 @@ class Settings(BaseSettings):
     ADMIN_TOTP_SECRET: str = (
         ""  # RFC 6238 base32 TOTP secret for POST /admin/auth/login; empty = disabled (dev only)
     )
+    ADMIN_SESSION_EPOCH: str = (
+        ""  # Bump (any new value) to invalidate every outstanding admin session on
+        # the next deploy — see generate_admin_session_token/verify_admin_session_token.
+        # The cheapest durable revocation this no-admins-table design supports; a
+        # credential rotation is already a redeploy, so this rides that redeploy.
+    )
     INTERNAL_TOKEN: str = (
         ""  # X-Internal-Token header for /internal/tick; empty = disabled (dev only)
     )

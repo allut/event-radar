@@ -1,6 +1,12 @@
 """Coverage for admin endpoints/branches not exercised by test_admin.py:
 _require_admin fail-closed, /ingest, /ingest/{slug}, /dedup, /dedup/groups,
-/classify, /refetch, /stats."""
+/classify, /refetch, /stats.
+
+_require_admin fail-closed tests below target a read-only (GET) route —
+mutating (POST) routes require the session-only get_current_admin (H-1 in
+the OWASP audit) and no longer accept Basic auth at all, so they can't
+exercise _require_admin's Basic-branch checks (admin_username_disabled,
+admin_credentials_ok)."""
 
 import http
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -28,8 +34,8 @@ async def test_default_username_in_production_returns_503(admin_app):
         async with AsyncClient(
             transport=ASGITransport(app=app), base_url="http://test"
         ) as client:
-            resp = await client.post(
-                "/admin/publish", auth=(ADMIN_USERNAME_DEFAULT, "s3cret")
+            resp = await client.get(
+                "/admin/stats", auth=(ADMIN_USERNAME_DEFAULT, "s3cret")
             )
 
     assert resp.status_code == http.HTTPStatus.SERVICE_UNAVAILABLE
@@ -46,7 +52,7 @@ async def test_wrong_credentials_returns_401(admin_app):
         async with AsyncClient(
             transport=ASGITransport(app=app), base_url="http://test"
         ) as client:
-            resp = await client.post("/admin/publish", auth=("realadmin", "wrong"))
+            resp = await client.get("/admin/stats", auth=("realadmin", "wrong"))
 
     assert resp.status_code == http.HTTPStatus.UNAUTHORIZED
 

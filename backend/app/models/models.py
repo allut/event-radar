@@ -697,3 +697,31 @@ class LlmCall(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
+
+
+# ---------------------------------------------------------------------------
+# Admin Audit Log
+# ---------------------------------------------------------------------------
+
+
+class AdminAction(Base):
+    """Append-only durable record of a destructive/moderation admin action
+    (takedown, retract, approve, resolve reports, pipeline run) — the report
+    feature carries legal obligations that generally assume this is
+    reconstructible after the fact (see docs/research/ on report-feature
+    legal duties). Written inside the same transaction as the mutation it
+    records where the endpoint has one open; survives an outage of the
+    LOG_SHIP_URL log drain, unlike the structured log line alone. There is no
+    admins table (see ADR 0001), so there is no actor column — "a login
+    happened" is the only fact the admin auth model asserts."""
+
+    __tablename__ = "admin_actions"
+    __table_args__ = (Index("ix_admin_actions_created_at", "created_at"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    action: Mapped[str] = mapped_column(String(40), nullable=False)
+    target: Mapped[str] = mapped_column(Text, nullable=False)
+    result: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )

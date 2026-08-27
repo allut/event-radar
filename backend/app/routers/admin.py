@@ -50,6 +50,8 @@ from app.constants import (
     ERROR_ADMIN_DISABLED,
     ERROR_ADMIN_INCORRECT_CREDENTIALS,
     ERROR_ADMIN_LOCKOUT,
+    ERROR_MISSING_SESSION_COOKIE,
+    ERROR_SESSION_INVALID,
     ERROR_SUBMISSION_NOT_FOUND,
     ERROR_UNKNOWN_SOURCE,
     ADMIN_REPORTS_QUEUE_MAX_PAGE_SIZE,
@@ -218,17 +220,59 @@ def _valid_admin_session(admin_session: str) -> bool:
         return False
 
 
+def get_current_admin(
+    admin_session: str | None = Cookie(default=None, alias=ADMIN_SESSION_COOKIE_NAME),
+) -> None:
+    """Session-only dependency — no HTTP Basic fallback. Every *mutating*
+    /admin/* route uses this instead of _require_admin (H-1 in the OWASP
+    audit): _require_admin's Basic branch checks only ADMIN_USERNAME/
+    ADMIN_PASSWORD and never touches TOTP, so it made the admin console's
+    second factor bypassable on every route that accepted it. Read-only
+    routes (GET) keep _require_admin so curl/scripts can still read them with
+    just the password. Defined here (not admin_auth.py, which imports
+    admin_credentials_ok etc. from this module) to avoid a circular import;
+    admin_auth.py imports this function from here instead.
+
+    A missing cookie still goes through the same require_configured_secret
+    dev fail-open every other secret-gated surface uses (ADMIN_PASSWORD
+    unset + APP_ENV=development + ALLOW_INSECURE_DEV=true) — this is
+    orthogonal to H-1: that bug was Basic credentials alone satisfying a
+    *configured* password without TOTP, not the pre-existing "admin auth is
+    off entirely" dev/test convenience this shares with _require_admin."""
+    if admin_session is None:
+        if not require_configured_secret(
+            settings.ADMIN_PASSWORD,
+            feature="Admin endpoints",
+            setting_name="ADMIN_PASSWORD",
+            app_env=settings.APP_ENV,
+            allow_insecure_dev=settings.ALLOW_INSECURE_DEV,
+        ):
+            return
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=ERROR_MISSING_SESSION_COOKIE,
+        )
+    try:
+        verify_admin_session_token(admin_session)
+    except (SignatureExpired, BadSignature):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=ERROR_SESSION_INVALID,
+        )
+
+
 def _require_admin(
     request: Request,
     credentials: HTTPBasicCredentials | None = Depends(_security),
     admin_session: str | None = Cookie(default=None, alias=ADMIN_SESSION_COOKIE_NAME),
 ) -> None:
-    """Accept EITHER a valid admin console session cookie (issued by
-    POST /admin/auth/login) OR HTTP Basic (curl / existing integrations) —
-    see docs/backend-ops.md's Admin Endpoints section. An invalid/expired
-    cookie falls through to requiring Basic rather than rejecting outright,
-    so a stale browser cookie doesn't lock a curl caller out of the same
-    request path."""
+    """Read-only surface: accept EITHER a valid admin console session cookie
+    (issued by POST /admin/auth/login) OR HTTP Basic (curl / existing
+    integrations) — see docs/backend-ops.md's Admin Endpoints section. An
+    invalid/expired cookie falls through to requiring Basic rather than
+    rejecting outright, so a stale browser cookie doesn't lock a curl caller
+    out of the same request path. Every mutating route uses get_current_admin
+    instead (session-only, no Basic) — see its docstring."""
     if admin_session is not None and _valid_admin_session(admin_session):
         return
 
@@ -274,7 +318,7 @@ def _ndjson_response(gen: AsyncIterator[bytes]) -> StreamingResponse:
     )
 
 
-@router.post("/ingest", dependencies=[Depends(_require_admin)])
+@router.post("/ingest", dependencies=[Depends(get_current_admin)])
 @limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
 async def admin_ingest_all(request: Request) -> StreamingResponse:
     """Trigger ingestion for all enabled sources."""
@@ -295,7 +339,7 @@ async def admin_ingest_all(request: Request) -> StreamingResponse:
     )
 
 
-@router.post("/ingest/{slug}", dependencies=[Depends(_require_admin)])
+@router.post("/ingest/{slug}", dependencies=[Depends(get_current_admin)])
 @limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
 async def admin_ingest_source(slug: str, request: Request) -> StreamingResponse:
     """Trigger ingestion for a single source by slug."""
@@ -320,7 +364,7 @@ async def admin_ingest_source(slug: str, request: Request) -> StreamingResponse:
     )
 
 
-@router.post("/dedup", dependencies=[Depends(_require_admin)])
+@router.post("/dedup", dependencies=[Depends(get_current_admin)])
 @limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
 async def admin_dedup_run(request: Request) -> StreamingResponse:
     """Trigger a dedup pass, draining the backlog until it clears or the cap is hit."""
@@ -519,7 +563,7 @@ async def _submission_or_404(db: AsyncSession, event_id: int) -> Event:
 
 
 @router.post(
-    "/submissions/{event_id}/retract", dependencies=[Depends(_require_admin)]
+    "/submissions/{event_id}/retract", dependencies=[Depends(get_current_admin)]
 )
 @limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
 async def admin_retract_submission(
@@ -541,19 +585,19 @@ async def admin_retract_submission(
                 EVENT_CANCELLATION_REASON_ADMIN_RETRACT,
                 REPORT_AUTO_RESOLVE_NOTE,
             )
+            result = {"id": event.id, "status": event.status, "note": note}
+            log_admin_action(db, ADMIN_ACTION_RETRACT_SUBMISSION, event_id, result)
             await db.commit()
             await send_report_resolution_emails(
                 db, event, resolved, REPORT_AUTO_RESOLVE_NOTE
             )
-            return {"id": event.id, "status": event.status, "note": note}
+            return result
 
-    result = await run_admin_job("Retract submission", _run())
-    log_admin_action(ADMIN_ACTION_RETRACT_SUBMISSION, event_id, result)
-    return result
+    return await run_admin_job("Retract submission", _run())
 
 
 @router.post(
-    "/submissions/{event_id}/approve", dependencies=[Depends(_require_admin)]
+    "/submissions/{event_id}/approve", dependencies=[Depends(get_current_admin)]
 )
 @limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
 async def admin_approve_submission(
@@ -579,12 +623,12 @@ async def admin_approve_submission(
             # whole backlog, not just this event — leave event_ids unscoped.
             # Diagnostic breakdown is unused by this endpoint's response.
             await publish_pending(db, diagnostics=False)
+            result = {"id": event.id, "needs_review": event.needs_review, "note": note}
+            log_admin_action(db, ADMIN_ACTION_APPROVE_SUBMISSION, event_id, result)
             await db.commit()
-            return {"id": event.id, "needs_review": event.needs_review, "note": note}
+            return result
 
-    result = await run_admin_job("Approve submission", _run())
-    log_admin_action(ADMIN_ACTION_APPROVE_SUBMISSION, event_id, result)
-    return result
+    return await run_admin_job("Approve submission", _run())
 
 
 @router.get("/reports", dependencies=[Depends(_require_admin)])
@@ -906,7 +950,7 @@ async def admin_get_event(event_id: int, request: Request) -> dict:
 
 
 @router.post(
-    "/reports/{event_id}/resolve", dependencies=[Depends(_require_admin)]
+    "/reports/{event_id}/resolve", dependencies=[Depends(get_current_admin)]
 )
 @limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
 async def admin_resolve_reports(
@@ -922,17 +966,17 @@ async def admin_resolve_reports(
         async with AsyncSessionLocal() as db:
             event = await _event_or_404(db, event_id)
             resolved = await resolve_open_reports(db, event, note)
+            result = {"event_id": event.id, "resolved_count": len(resolved)}
+            log_admin_action(db, ADMIN_ACTION_RESOLVE_REPORTS, event_id, result)
             await db.commit()
             await send_report_resolution_emails(db, event, resolved, note)
-            return {"event_id": event.id, "resolved_count": len(resolved)}
+            return result
 
-    result = await run_admin_job("Resolve reports", _run())
-    log_admin_action(ADMIN_ACTION_RESOLVE_REPORTS, event_id, result)
-    return result
+    return await run_admin_job("Resolve reports", _run())
 
 
 @router.post(
-    "/reports/{event_id}/takedown", dependencies=[Depends(_require_admin)]
+    "/reports/{event_id}/takedown", dependencies=[Depends(get_current_admin)]
 )
 @limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
 async def admin_takedown_reported_event(
@@ -949,20 +993,20 @@ async def admin_takedown_reported_event(
             resolved = await cancel_event_and_resolve_reports(
                 db, event, EVENT_CANCELLATION_REASON_REPORT_TAKEDOWN, note
             )
-            await db.commit()
-            await send_report_resolution_emails(db, event, resolved, note)
-            return {
+            result = {
                 "event_id": event.id,
                 "status": event.status,
                 "resolved_count": len(resolved),
             }
+            log_admin_action(db, ADMIN_ACTION_TAKEDOWN_REPORTED_EVENT, event_id, result)
+            await db.commit()
+            await send_report_resolution_emails(db, event, resolved, note)
+            return result
 
-    result = await run_admin_job("Takedown reported event", _run())
-    log_admin_action(ADMIN_ACTION_TAKEDOWN_REPORTED_EVENT, event_id, result)
-    return result
+    return await run_admin_job("Takedown reported event", _run())
 
 
-@router.post("/classify", dependencies=[Depends(_require_admin)])
+@router.post("/classify", dependencies=[Depends(get_current_admin)])
 @limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
 async def admin_classify(request: Request) -> StreamingResponse:
     """Trigger LLM classification, draining the backlog until it clears or the cap is hit."""
@@ -979,7 +1023,7 @@ async def admin_classify(request: Request) -> StreamingResponse:
     )
 
 
-@router.post("/publish", dependencies=[Depends(_require_admin)])
+@router.post("/publish", dependencies=[Depends(get_current_admin)])
 @limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
 async def admin_publish(request: Request) -> StreamingResponse:
     """Promote qualifying classified events to published (one bulk UPDATE)."""
@@ -990,7 +1034,7 @@ async def admin_publish(request: Request) -> StreamingResponse:
     )
 
 
-@router.post("/geocode", dependencies=[Depends(_require_admin)])
+@router.post("/geocode", dependencies=[Depends(get_current_admin)])
 @limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
 async def admin_geocode(request: Request) -> StreamingResponse:
     """Backfill lat/lng for events with a venue_address but no coordinates (one batch)."""
@@ -1005,7 +1049,7 @@ async def admin_geocode(request: Request) -> StreamingResponse:
     )
 
 
-@router.post("/refetch", dependencies=[Depends(_require_admin)])
+@router.post("/refetch", dependencies=[Depends(get_current_admin)])
 @limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
 async def admin_refetch(request: Request) -> StreamingResponse:
     """Re-fetch detail pages for all future events and reconcile stored fields (one batch).
@@ -1025,7 +1069,7 @@ async def admin_refetch(request: Request) -> StreamingResponse:
     )
 
 
-@router.post("/sync-organizers", dependencies=[Depends(_require_admin)])
+@router.post("/sync-organizers", dependencies=[Depends(get_current_admin)])
 @limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
 async def admin_sync_organizers(request: Request) -> StreamingResponse:
     """Trigger Fienta organizer sync (discover new organizers, flag stale ones)."""
@@ -1040,7 +1084,7 @@ async def admin_sync_organizers(request: Request) -> StreamingResponse:
     )
 
 
-@router.post("/cleanup", dependencies=[Depends(_require_admin)])
+@router.post("/cleanup", dependencies=[Depends(get_current_admin)])
 @limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
 async def admin_cleanup(
     request: Request,
@@ -1072,7 +1116,7 @@ async def admin_cleanup(
     )
 
 
-@router.post("/build-feeds", dependencies=[Depends(_require_admin)])
+@router.post("/build-feeds", dependencies=[Depends(get_current_admin)])
 @limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
 async def admin_build_feeds(request: Request) -> StreamingResponse:
     """Trigger daily feed builder for all active users (writes to daily_feeds)."""
@@ -1088,7 +1132,7 @@ async def admin_build_feeds(request: Request) -> StreamingResponse:
     )
 
 
-@router.post("/send-digests", dependencies=[Depends(_require_admin)])
+@router.post("/send-digests", dependencies=[Depends(get_current_admin)])
 @limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
 async def admin_send_digests(
     request: Request,
@@ -1178,7 +1222,15 @@ async def _run_pipeline_stages(dry_run: bool, queue: asyncio.Queue[bytes | None]
                 await queue.put(ndjson_line(stage_name, "error", None, error))
                 break
 
-        log_admin_action(ADMIN_ACTION_PIPELINE_RUN, "pipeline", {"ok": ok, "stages": stages})
+        # No single db session spans every stage above (each manages its own
+        # commit), so this row can't ride the same transaction as any one
+        # mutation — it gets its own short-lived session instead, still more
+        # durable than the log line alone.
+        async with AsyncSessionLocal() as audit_db:
+            log_admin_action(
+                audit_db, ADMIN_ACTION_PIPELINE_RUN, "pipeline", {"ok": ok, "stages": stages}
+            )
+            await audit_db.commit()
     finally:
         _release_pipeline_run_locks()
         await queue.put(None)
@@ -1203,7 +1255,7 @@ async def _stream_pipeline_run(dry_run: bool) -> AsyncIterator[bytes]:
         yield line
 
 
-@router.post("/pipeline/run", dependencies=[Depends(_require_admin)])
+@router.post("/pipeline/run", dependencies=[Depends(get_current_admin)])
 @limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
 async def admin_pipeline_run(
     request: Request,

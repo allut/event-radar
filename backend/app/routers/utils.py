@@ -43,6 +43,7 @@ from app.constants import (
 from app.db import AsyncSessionLocal
 from app.email.report_reporter import send_report_outcome_email
 from app.models.models import (
+    AdminAction,
     Event,
     EventClassification,
     EventReport,
@@ -237,16 +238,16 @@ async def stream_admin_job(
     async def _runner() -> None:
         try:
             result = await coro
-            log_admin_action(action, target, result)
+            log_admin_action(None, action, target, result)
             await queue.put(ndjson_line(stage, "ok", result, None))
         except HTTPException as exc:
             detail = str(exc.detail)
-            log_admin_action(action, target, {"error": detail})
+            log_admin_action(None, action, target, {"error": detail})
             await queue.put(ndjson_line(stage, "error", None, detail))
         except Exception:
             log.exception("admin %s failed", name)
             detail = ERROR_ADMIN_JOB_FAILED.format(name=name)
-            log_admin_action(action, target, {"error": detail})
+            log_admin_action(None, action, target, {"error": detail})
             await queue.put(ndjson_line(stage, "error", None, detail))
         finally:
             if lock_key is not None:
@@ -261,10 +262,19 @@ async def stream_admin_job(
         yield line
 
 
-def log_admin_action(action: str, target: int | str, result: dict) -> None:
-    """Passive "did I already do this" record on the shared Axiom pipe — no
-    DB table, one admin always the actor (see the admin-console spec's
-    Audit logging section). Call after a mutating /admin/* action succeeds."""
+def log_admin_action(
+    db: AsyncSession | None, action: str, target: int | str, result: dict
+) -> None:
+    """Structured log line on the shared Axiom pipe, plus — when *db* is
+    given — a durable AdminAction row added to it. The row rides the
+    caller's own open transaction (added, not committed here) so it lands
+    atomically with the mutation it records, and survives an outage of the
+    LOG_SHIP_URL log drain. Call from inside the same `_run()` closure as the
+    mutation, before that closure's own `await db.commit()`, for the
+    takedown/retract/approve/resolve/pipeline-run actions the report
+    feature's legal obligations bear on (see the admin-console spec's Audit
+    logging section) — pass None for every other admin job, which keeps the
+    pre-existing log-only behavior."""
     log.info(
         "admin action: %s",
         action,
@@ -275,6 +285,8 @@ def log_admin_action(action: str, target: int | str, result: dict) -> None:
             "result": result,
         },
     )
+    if db is not None:
+        db.add(AdminAction(action=action, target=str(target), result=result))
 
 
 def require_configured_secret(

@@ -42,7 +42,7 @@ from app.constants import (
     LLM_DEDUP_VENUE_MAX_LEN,
     LLM_TASK_DEDUP,
 )
-from app.llm.prompts import LLM_DEDUP_PROMPT_TEMPLATE
+from app.llm.prompts import LLM_DEDUP_PROMPT_TEMPLATE, escape_prompt_delimiters
 from app.dedup.rules import (
     union,
     apply_same_day_title_unions,
@@ -63,12 +63,16 @@ log = logging.getLogger(__name__)
 
 def _build_prompt(a: Event, b: Event) -> str:
     return LLM_DEDUP_PROMPT_TEMPLATE.format(
-        title_a=a.title_orig[:LLM_DEDUP_TITLE_MAX_LEN],
+        title_a=escape_prompt_delimiters(a.title_orig[:LLM_DEDUP_TITLE_MAX_LEN]),
         date_a=a.starts_at.strftime("%Y-%m-%d %H:%M"),
-        venue_a=(a.venue_name or LLM_CLASSIFY_VENUE_FALLBACK)[:LLM_DEDUP_VENUE_MAX_LEN],
-        title_b=b.title_orig[:LLM_DEDUP_TITLE_MAX_LEN],
+        venue_a=escape_prompt_delimiters(
+            (a.venue_name or LLM_CLASSIFY_VENUE_FALLBACK)[:LLM_DEDUP_VENUE_MAX_LEN]
+        ),
+        title_b=escape_prompt_delimiters(b.title_orig[:LLM_DEDUP_TITLE_MAX_LEN]),
         date_b=b.starts_at.strftime("%Y-%m-%d %H:%M"),
-        venue_b=(b.venue_name or LLM_CLASSIFY_VENUE_FALLBACK)[:LLM_DEDUP_VENUE_MAX_LEN],
+        venue_b=escape_prompt_delimiters(
+            (b.venue_name or LLM_CLASSIFY_VENUE_FALLBACK)[:LLM_DEDUP_VENUE_MAX_LEN]
+        ),
     )
 
 

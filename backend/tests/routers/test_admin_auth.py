@@ -204,11 +204,37 @@ async def test_admin_session_cookie_satisfies_require_admin():
 
 
 @pytest.mark.asyncio
+async def test_correct_basic_credentials_alone_do_not_satisfy_a_mutating_route():
+    """H-1 regression: the admin console's TOTP second factor must not be
+    bypassable on a mutating /admin/* route via HTTP Basic alone — Basic only
+    ever checks ADMIN_USERNAME/ADMIN_PASSWORD, never TOTP. Mutating routes
+    require get_current_admin (session-cookie only, no Basic fallback)."""
+    app = _build_app()
+
+    with patch("app.routers.admin.settings") as mock_settings:
+        mock_settings.ADMIN_PASSWORD = "s3cret"
+        mock_settings.ADMIN_USERNAME = "realadmin"
+        mock_settings.APP_ENV = "production"
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            resp = await client.post(
+                "/admin/publish", auth=("realadmin", "s3cret")
+            )
+
+    assert resp.status_code == http.HTTPStatus.UNAUTHORIZED
+
+
+@pytest.mark.asyncio
 async def test_failed_form_login_shares_lockout_counter_with_basic_auth():
     """L2 shared lockout: consecutive failures on the FORM login endpoint
     must count toward the SAME lockout as HTTP Basic — after
     ADMIN_AUTH_MAX_FAILURES failed form logins, a subsequent Basic attempt
-    with correct credentials must still be locked out (429), and vice versa."""
+    with correct credentials must still be locked out (429), and vice versa.
+    Checked against a read-only (GET) route — mutating (POST) routes require
+    the session-only get_current_admin (H-1 in the OWASP audit) and no
+    longer accept Basic auth at all."""
     secret = pyotp.random_base32()
     app = _build_app()
 
@@ -232,8 +258,8 @@ async def test_failed_form_login_shares_lockout_counter_with_basic_auth():
                 assert resp.status_code == http.HTTPStatus.UNAUTHORIZED
 
             # Correct Basic credentials, but this client_key is now locked out.
-            basic_resp = await client.post(
-                "/admin/publish", auth=("realadmin", "s3cret")
+            basic_resp = await client.get(
+                "/admin/stats", auth=("realadmin", "s3cret")
             )
 
     assert basic_resp.status_code == http.HTTPStatus.TOO_MANY_REQUESTS

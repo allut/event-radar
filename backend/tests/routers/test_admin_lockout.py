@@ -1,5 +1,9 @@
 """Tests for L2: consecutive-failure lockout on /admin/* Basic auth
-(routers/admin.py::_require_admin), on top of the shared_limit rate bucket."""
+(routers/admin.py::_require_admin), on top of the shared_limit rate bucket.
+
+Basic-auth-specific tests target a read-only (GET) route — mutating (POST)
+routes require the session-only get_current_admin (H-1 in the OWASP audit)
+and no longer accept Basic at all, so they can't exercise this lockout."""
 
 import http
 from unittest.mock import AsyncMock, patch
@@ -24,15 +28,15 @@ async def test_lockout_after_max_consecutive_failures(admin_app):
         ) as client:
             statuses = []
             for _ in range(ADMIN_AUTH_MAX_FAILURES):
-                resp = await client.post(
-                    "/admin/publish", auth=("realadmin", "wrong")
+                resp = await client.get(
+                    "/admin/stats", auth=("realadmin", "wrong")
                 )
                 statuses.append(resp.status_code)
 
             # One more failure past the threshold — must be locked out (429),
             # not just another 401.
-            locked_resp = await client.post(
-                "/admin/publish", auth=("realadmin", "wrong")
+            locked_resp = await client.get(
+                "/admin/stats", auth=("realadmin", "wrong")
             )
 
     assert statuses == [http.HTTPStatus.UNAUTHORIZED] * ADMIN_AUTH_MAX_FAILURES
@@ -60,8 +64,8 @@ async def test_admin_auth_failures_dict_is_bounded(admin_app):
             transport=ASGITransport(app=app), base_url="http://test"
         ) as client:
             for i in range(6):
-                await client.post(
-                    "/admin/publish",
+                await client.get(
+                    "/admin/stats",
                     auth=("realadmin", "wrong"),
                     headers={"X-Forwarded-For": f"10.0.0.{i}"},
                 )
@@ -93,8 +97,8 @@ async def test_eviction_does_not_lift_an_active_lockout(admin_app):
             # Victim: lock it out first, so it is both the oldest entry and
             # currently under an active lockout.
             for _ in range(ADMIN_AUTH_MAX_FAILURES):
-                await client.post(
-                    "/admin/publish",
+                await client.get(
+                    "/admin/stats",
                     auth=("realadmin", "wrong"),
                     headers={"X-Forwarded-For": "10.0.0.1"},
                 )
@@ -102,8 +106,8 @@ async def test_eviction_does_not_lift_an_active_lockout(admin_app):
 
             # Attacker: fail from a second, expired (never-locked) client —
             # pushes the dict over the max-entries cap of 2.
-            await client.post(
-                "/admin/publish",
+            await client.get(
+                "/admin/stats",
                 auth=("realadmin", "wrong"),
                 headers={"X-Forwarded-For": "10.0.0.2"},
             )
@@ -168,21 +172,16 @@ async def test_successful_auth_resets_failure_counter(admin_app):
             transport=ASGITransport(app=app), base_url="http://test"
         ) as client:
             for _ in range(ADMIN_AUTH_MAX_FAILURES - 1):
-                await client.post("/admin/publish", auth=("realadmin", "wrong"))
+                await client.get("/admin/stats", auth=("realadmin", "wrong"))
 
-            with patch(
-                "app.routers.admin.publish_pending_job",
-                new_callable=AsyncMock,
-                return_value={"published": 0},
-            ):
-                good_resp = await client.post(
-                    "/admin/publish", auth=("realadmin", "s3cret")
-                )
+            good_resp = await client.get(
+                "/admin/stats", auth=("realadmin", "s3cret")
+            )
 
             # Counter reset by the successful auth — next failure alone must
             # not trigger a lockout.
-            next_fail_resp = await client.post(
-                "/admin/publish", auth=("realadmin", "wrong")
+            next_fail_resp = await client.get(
+                "/admin/stats", auth=("realadmin", "wrong")
             )
 
     assert good_resp.status_code == http.HTTPStatus.OK

@@ -366,7 +366,7 @@ class TestStreamAdminJob:
             await asyncio.wait_for(job_done.wait(), timeout=1)
             await asyncio.sleep(0.02)  # let the runner's log_admin_action call land
 
-        mock_log.assert_called_once_with("test_action", "target", {"ok": True})
+        mock_log.assert_called_once_with(None, "test_action", "target", {"ok": True})
 
     @pytest.mark.asyncio
     async def test_normal_completion_streams_one_ok_line(self):
@@ -378,4 +378,4 @@ class TestStreamAdminJob:
 
         assert len(lines) == 1
         assert json.loads(lines[0]) == {"stage": "test", "status": "ok", "result": {"processed": 3}, "error": None}
-        mock_log.assert_called_once_with("test_action", "target", {"processed": 3})
+        mock_log.assert_called_once_with(None, "test_action", "target", {"processed": 3})

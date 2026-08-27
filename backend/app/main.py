@@ -11,7 +11,7 @@ from starlette.middleware.base import RequestResponseEndpoint
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
-from starlette.datastructures import Headers
+from starlette.datastructures import Headers, MutableHeaders
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
@@ -345,14 +345,36 @@ class HostCheckMiddleware:
 
         saw_400 = False
         rejected = False
+        # This middleware is registered outside (wraps around) the
+        # add_security_headers layer, so TrustedHostMiddleware's own 400
+        # response — built and sent directly, without ever calling
+        # self.app — never passes through that layer (L-1 in the OWASP
+        # audit). A pass-through response (self.app called, valid host)
+        # already carries the headers by the time it reaches here, since
+        # add_security_headers sits further in; MutableHeaders.__setitem__
+        # replaces rather than duplicates an existing value, so setting them
+        # unconditionally on every 400 is safe either way. The response.start
+        # message is held back until response.body arrives (TrustedHost's
+        # rejection is always exactly these two messages) so the body can
+        # still be inspected for the log line below before headers are sent.
+        pending_start: Message | None = None
 
         async def _send(message: Message) -> None:
-            nonlocal saw_400, rejected
+            nonlocal saw_400, rejected, pending_start
             if message["type"] == ASGI_MESSAGE_TYPE_RESPONSE_START:
                 saw_400 = message["status"] == status.HTTP_400_BAD_REQUEST
+                if saw_400:
+                    pending_start = message
+                    return
             elif message["type"] == ASGI_MESSAGE_TYPE_RESPONSE_BODY:
-                if saw_400 and TRUSTED_HOST_REJECT_BODY in message.get("body", b""):
-                    rejected = True
+                if saw_400 and pending_start is not None:
+                    if TRUSTED_HOST_REJECT_BODY in message.get("body", b""):
+                        rejected = True
+                    headers = MutableHeaders(raw=pending_start["headers"])
+                    for name, value in SECURITY_HEADERS.items():
+                        headers[name] = value
+                    await send(pending_start)
+                    pending_start = None
                 saw_400 = False
             await send(message)
 
@@ -394,9 +416,14 @@ class MaxBodySizeMiddleware:
         self.max_bytes = max_bytes
 
     async def _reject(self, scope: Scope, receive: Receive, send: Send) -> None:
+        # This middleware is registered outside (wraps around) the
+        # add_security_headers layer, so a response built here never passes
+        # through it — set the headers directly, or this 413 ships without
+        # CSP/nosniff/etc. (L-1 in the OWASP audit).
         response = JSONResponse(
             {"detail": f"Request body exceeds {self.max_bytes} bytes."},
             status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+            headers=SECURITY_HEADERS,
         )
         await response(scope, receive, send)
 
@@ -572,9 +599,24 @@ app.add_middleware(
 # CORS_ORIGINS now serves double duty — CORS (above) and CSRF trust (below).
 # Widening it for one purpose widens the other too; a value added here to let a
 # new frontend deployment through CORS also becomes a trusted CSRF origin.
+#
+# CORS_ORIGINS is sync: false in render.yaml, so an operator who forgets to set
+# it in the Render dashboard silently keeps its dev default
+# (settings.CORS_ORIGINS' literal default below) — SameSite=Strict means that
+# default can't actually carry the session cookie cross-origin, but a
+# permanently-trusted localhost CSRF origin in production is still the wrong
+# shape for a config mistake to take. Dropped outside development so a
+# forgotten CORS_ORIGINS degrades to "no CSRF-trusted origins" (fail closed)
+# rather than "trust two hardcoded localhost ports" (fail open).
+_DEV_CORS_ORIGINS_DEFAULT = frozenset(
+    {"http://localhost:5173", "http://localhost:4173"}
+)
+_csrf_trusted_origins = frozenset(settings.CORS_ORIGINS) | {settings.FRONTEND_URL}
+if settings.APP_ENV != APP_ENV_DEVELOPMENT:
+    _csrf_trusted_origins -= _DEV_CORS_ORIGINS_DEFAULT
 app.add_middleware(
     CsrfOriginCheckMiddleware,
-    trusted_origins=frozenset(settings.CORS_ORIGINS) | {settings.FRONTEND_URL},
+    trusted_origins=_csrf_trusted_origins,
 )
 
 

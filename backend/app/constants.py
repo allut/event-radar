@@ -1340,6 +1340,12 @@ SECURITY_HEADERS: dict[str, str] = {
     # Pure JSON API, nothing should ever be cached by an intermediary — most
     # importantly, POST /auth/verify sets the session cookie via Set-Cookie.
     "Cache-Control": "no-store",
+    # Denies browser-feature access outright rather than leaving it at
+    # browser defaults — this API never needs camera/mic/geolocation/payment,
+    # and interest-cohort opts out of FLoC-style tracking.
+    "Permissions-Policy": (
+        "camera=(), microphone=(), geolocation=(), payment=(), interest-cohort=()"
+    ),
 }
 # HSTS is only safe to send over HTTPS — Render terminates TLS in front of the app,
 # so this is gated to production (see app.main) to avoid breaking local http://localhost.
@@ -1441,6 +1447,7 @@ ERROR_EVENT_NOT_FOUND = "Event not found."
 ERROR_USER_NOT_FOUND = "User not found."
 ERROR_ORGANIZER_NOT_FOUND = "Organizer not found."
 ERROR_SUBMISSION_NOT_FOUND = "Submission not found."
+ERROR_EVENT_CANCELLED = "This event was taken down and can no longer be edited."
 
 # main.py (/internal/tick)
 ERROR_INTERNAL_TICK_INVALID_TOKEN = "Invalid token"

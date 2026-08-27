@@ -47,7 +47,7 @@ from app.constants import (
     VALID_LOCALES,
     VALID_VIBES,
 )
-from app.llm.prompts import LLM_CLASSIFY_PROMPT_TEMPLATE
+from app.llm.prompts import LLM_CLASSIFY_PROMPT_TEMPLATE, escape_prompt_delimiters
 from app.ingestion.pricing import (
     eur_amounts_from_text,
     eur_price_bounds_from_text,
@@ -89,10 +89,12 @@ def _build_classify_prompt(event: Event, price_context: str | None = None) -> st
     if price_context is None:
         price_context = _price_context(event)
     return LLM_CLASSIFY_PROMPT_TEMPLATE.format(
-        title=event.title_orig,
-        venue=event.venue_name or LLM_CLASSIFY_VENUE_FALLBACK,
-        description=desc or LLM_CLASSIFY_DESC_FALLBACK,
-        important_info=important_info or LLM_CLASSIFY_IMPORTANT_INFO_FALLBACK,
+        title=escape_prompt_delimiters(event.title_orig),
+        venue=escape_prompt_delimiters(event.venue_name or LLM_CLASSIFY_VENUE_FALLBACK),
+        description=escape_prompt_delimiters(desc or LLM_CLASSIFY_DESC_FALLBACK),
+        important_info=escape_prompt_delimiters(
+            important_info or LLM_CLASSIFY_IMPORTANT_INFO_FALLBACK
+        ),
         price_hint=price_hint or LLM_CLASSIFY_PRICE_HINT_FALLBACK,
         price_context=price_context or LLM_CLASSIFY_PRICE_CONTEXT_FALLBACK,
     )

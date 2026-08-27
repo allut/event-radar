@@ -29,6 +29,7 @@ from app.constants import (
     CLOUDINARY_UPLOAD_URL_TEMPLATE,
     ERROR_DAILY_IMAGE_UPLOAD_LIMIT,
     ERROR_DAILY_SUBMISSION_LIMIT,
+    ERROR_EVENT_CANCELLED,
     ERROR_EVENT_CREATE_FAILED,
     ERROR_EVENT_NOT_FOUND,
     ERROR_EVENT_URL_SCHEME,
@@ -40,6 +41,7 @@ from app.constants import (
     ERROR_SUBMISSION_SOURCE_NOT_CONFIGURED,
     ERROR_UNSUPPORTED_IMAGE_TYPE,
     EVENT_CANCELLATION_REASON_ORGANIZER_RETRACT,
+    EVENT_STATUS_CANCELLED,
     EVENT_STATUS_CLASSIFIED,
     EVENT_STATUS_PUBLISHED,
     HTTP_TIMEOUT_SECONDS,
@@ -425,6 +427,13 @@ async def update_own_event(
     unsafe one is pulled back to classified so the publish gate keeps it out
     of the public feed."""
     event = await _own_event_or_404(db, event_id, current_organizer.id)
+    if event.status == EVENT_STATUS_CANCELLED:
+        # A takedown (admin_takedown_reported_event) is the decisive action
+        # for content that had to come down — the organizer must not be able
+        # to change the stored content behind that decision after the fact.
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail=ERROR_EVENT_CANCELLED
+        )
 
     fields_set = body.model_fields_set
     if "title" in fields_set and body.title is not None:
@@ -587,13 +596,43 @@ async def list_own_events(
 
 
 def _cloudinary_signature(params: dict[str, str | int], api_secret: str) -> str:
-    """Cloudinary signed-upload signature: SHA-1 over the sorted
+    """Cloudinary signed-upload signature: SHA-256 over the sorted
     `key=value&...` param string with the API secret appended — per
     https://cloudinary.com/documentation/authentication_signatures. Only
     params actually sent to the upload API are signed; `file`, `cloud_name`,
-    and `api_key` are excluded per that spec."""
+    and `api_key` are excluded per that spec. `signature_algorithm` must be
+    one of the signed params (Cloudinary verifies over every param it
+    receives except the excluded set above), so the caller includes it in
+    `params` before calling this."""
     to_sign = "&".join(f"{k}={params[k]}" for k in sorted(params))
-    return hashlib.sha1((to_sign + api_secret).encode()).hexdigest()
+    return hashlib.sha256((to_sign + api_secret).encode()).hexdigest()
+
+
+# Leading-byte signatures for the three formats IMAGE_UPLOAD_ALLOWED_MIME
+# allows. WebP needs its own check below since RIFF is a generic container
+# format — the fourCC at offset 8 is what actually says "WEBP".
+_IMAGE_MAGIC_BYTES: dict[bytes, str] = {
+    b"\xff\xd8\xff": "image/jpeg",
+    b"\x89PNG\r\n\x1a\n": "image/png",
+}
+_IMAGE_EXTENSION_BY_MIME: dict[str, str] = {
+    "image/jpeg": "jpg",
+    "image/png": "png",
+    "image/webp": "webp",
+}
+
+
+def _sniff_image_mime(body: bytes) -> str | None:
+    """Detect the real image format from its leading bytes rather than
+    trusting file.content_type, which is a value the client writes into its
+    own multipart headers and this endpoint otherwise never verifies before
+    forwarding the bytes to Cloudinary."""
+    for magic, mime in _IMAGE_MAGIC_BYTES.items():
+        if body.startswith(magic):
+            return mime
+    if body[:4] == b"RIFF" and body[8:12] == b"WEBP":
+        return "image/webp"
+    return None
 
 
 @router.post("/image")
@@ -653,6 +692,17 @@ async def upload_event_image(
             detail=ERROR_IMAGE_TOO_LARGE.format(max_bytes=IMAGE_UPLOAD_MAX_BYTES),
         )
 
+    # Authoritative type check: file.content_type is client-asserted and
+    # otherwise never verified against the actual bytes before they leave
+    # this system for Cloudinary. The earlier content_type check above is
+    # only a fast-path rejection of an obviously wrong header.
+    sniffed_mime = _sniff_image_mime(body)
+    if sniffed_mime is None or sniffed_mime not in IMAGE_UPLOAD_ALLOWED_MIME:
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail=ERROR_UNSUPPORTED_IMAGE_TYPE.format(content_type=file.content_type),
+        )
+
     if not settings.CLOUDINARY_CLOUD_NAME:
         log.warning(
             "CLOUDINARY_CLOUD_NAME not set — image upload skipped (organizer_id=%d)",
@@ -665,11 +715,16 @@ async def upload_event_image(
 
     timestamp = int(time.time())
     signature = _cloudinary_signature(
-        {"timestamp": timestamp}, settings.CLOUDINARY_API_SECRET
+        {"timestamp": timestamp, "signature_algorithm": "sha256"},
+        settings.CLOUDINARY_API_SECRET,
     )
     upload_url = CLOUDINARY_UPLOAD_URL_TEMPLATE.format(
         cloud_name=settings.CLOUDINARY_CLOUD_NAME
     )
+    # Generated rather than file.filename — nothing downstream reads the
+    # upload filename, and it is attacker-controlled text otherwise crossing
+    # a service boundary unchanged.
+    generated_filename = f"{uuid4().hex}.{_IMAGE_EXTENSION_BY_MIME[sniffed_mime]}"
 
     async with httpx.AsyncClient(timeout=HTTP_TIMEOUT_SECONDS) as client:
         try:
@@ -680,8 +735,9 @@ async def upload_event_image(
                     "api_key": settings.CLOUDINARY_API_KEY,
                     "timestamp": timestamp,
                     "signature": signature,
+                    "signature_algorithm": "sha256",
                 },
-                files={"file": (file.filename, body, file.content_type)},
+                files={"file": (generated_filename, body, sniffed_mime)},
             )
         except httpx.HTTPError:
             log.exception(

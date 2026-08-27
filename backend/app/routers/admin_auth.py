@@ -13,11 +13,10 @@ one damper for both auth surfaces on this credential pair.
 
 import logging
 
-from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response, status
-from itsdangerous import BadSignature, SignatureExpired
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel
 
-from app.auth.tokens import generate_admin_session_token, verify_admin_session_token
+from app.auth.tokens import generate_admin_session_token
 from app.auth.totp import verify_totp_code
 from app.config import settings
 from app.constants import (
@@ -26,8 +25,6 @@ from app.constants import (
     ADMIN_SESSION_TTL_SECONDS,
     ERROR_ADMIN_DISABLED,
     ERROR_ADMIN_INCORRECT_CREDENTIALS,
-    ERROR_MISSING_SESSION_COOKIE,
-    ERROR_SESSION_INVALID,
     LOG_EVENT_ADMIN_ACTION,
     RATE_LIMIT_ADMIN_LOGIN,
     RATE_LIMIT_BROWSE,
@@ -39,6 +36,7 @@ from app.routers.admin import (
     admin_username_disabled,
     check_admin_lockout,
     clear_admin_auth_failure,
+    get_current_admin,
     record_admin_auth_failure,
 )
 from app.routers.utils import clear_session_cookie, require_configured_secret, set_session_cookie
@@ -51,28 +49,6 @@ class AdminLoginBody(BaseModel):
     username: str
     password: str
     totp_code: str
-
-
-async def get_current_admin(
-    admin_session: str | None = Cookie(default=None, alias=ADMIN_SESSION_COOKIE_NAME),
-) -> None:
-    """Session-only dependency for new admin-console endpoints — mirrors
-    organizer_auth.py::get_current_organizer, but returns nothing (no
-    per-admin identity exists to hand back — see generate_admin_session_token).
-    Endpoints that must also accept curl's HTTP Basic (the existing /admin/*
-    surface) use admin.py::_require_admin instead."""
-    if not admin_session:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=ERROR_MISSING_SESSION_COOKIE,
-        )
-    try:
-        verify_admin_session_token(admin_session)
-    except (SignatureExpired, BadSignature):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=ERROR_SESSION_INVALID,
-        )
 
 
 @router.post("/login", status_code=status.HTTP_200_OK)
