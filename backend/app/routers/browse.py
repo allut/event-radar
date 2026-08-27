@@ -161,24 +161,33 @@ async def _browse_sql_path(
     else:
         order_col = EventClassification.quality_score.desc().nulls_last()
 
-    total = (
-        await db.scalar(
-            select(func.count(Event.id))
-            .select_from(Event)
-            .join(Event.classification)
-            .where(*conds)
-        )
-    ) or 0
+    # `total` is a full-set aggregate over every matching row — expensive to
+    # re-run identically for page 2, 3, 4... of the same infinite scroll, so
+    # it's computed only for the first page; the frontend holds it across
+    # subsequent pages via React Query. `has_more` no longer needs `total` at
+    # all: fetch one extra row past `limit` and check whether it showed up.
+    total: int | None = None
+    if offset == 0:
+        total = (
+            await db.scalar(
+                select(func.count(Event.id))
+                .select_from(Event)
+                .join(Event.classification)
+                .where(*conds)
+            )
+        ) or 0
 
     page_stmt = (
         select_events_with_classification()
         .join(Event.classification)
         .where(*conds)
         .order_by(order_col)
-        .limit(limit)
+        .limit(limit + 1)
         .offset(offset)
     )
     events = list((await db.scalars(page_stmt)).all())
+    has_more = len(events) > limit
+    events = events[:limit]
     event_ids = [e.id for e in events]
     sigs = await load_user_signals(db, user_id, event_ids)
     reported = await load_user_reported_events(db, user_id, event_ids)
@@ -193,7 +202,7 @@ async def _browse_sql_path(
         "total": total,
         "limit": limit,
         "offset": offset,
-        "has_more": offset + len(events) < total,
+        "has_more": has_more,
     }
 
 

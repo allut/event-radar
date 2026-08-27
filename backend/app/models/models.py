@@ -81,7 +81,10 @@ class User(Base):
 
 class AuthMagicLink(Base):
     __tablename__ = "auth_magic_links"
-    __table_args__ = (Index("ix_auth_magic_links_user_id", "user_id"),)
+    __table_args__ = (
+        Index("ix_auth_magic_links_user_id", "user_id"),
+        Index("ix_auth_magic_links_expires_at", "expires_at"),
+    )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     user_id: Mapped[int] = mapped_column(
@@ -139,7 +142,10 @@ class Organizer(Base):
 
 class OrganizerMagicLink(Base):
     __tablename__ = "organizer_magic_links"
-    __table_args__ = (Index("ix_organizer_magic_links_organizer_id", "organizer_id"),)
+    __table_args__ = (
+        Index("ix_organizer_magic_links_organizer_id", "organizer_id"),
+        Index("ix_organizer_magic_links_expires_at", "expires_at"),
+    )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     organizer_id: Mapped[int] = mapped_column(
@@ -260,10 +266,10 @@ class RawEvent(Base):
     __tablename__ = "raw_events"
     __table_args__ = (
         Index("ix_raw_events_fetched_at", "fetched_at"),
-        # Created by migration 0002 but was missing here — a create_all-built
-        # schema (tests) lacked it until this declaration was added back,
-        # mirroring the identical ix_events_status fix on Event below.
-        Index("ix_raw_events_source_id", "source_id"),
+        # Composite serves ingest_skip_ids' (source_id, fetched_at >= cutoff)
+        # predicate directly instead of a bitmap-AND over two single-column
+        # indexes; also covers source_id-only lookups (leftmost prefix).
+        Index("ix_raw_events_source_fetched", "source_id", "fetched_at"),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
@@ -514,6 +520,12 @@ class EventReport(Base):
             "event_id",
             unique=True,
         ),
+        Index(
+            "ix_event_reports_open_event",
+            "event_id",
+            postgresql_where=text("status = 'open'"),
+        ),
+        Index("ix_event_reports_event_created", "event_id", "created_at"),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)

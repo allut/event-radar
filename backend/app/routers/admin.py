@@ -474,24 +474,29 @@ async def admin_list_submissions(
     """
     async with AsyncSessionLocal() as db:
         queue_filter = (Event.needs_review.is_(True), Event.status != EVENT_STATUS_CANCELLED)
-        total = (
-            await db.scalar(select(func.count(Event.id)).where(*queue_filter))
-        ) or 0
+        # total only on the first page — see browse.py's _browse_sql_path.
+        total: int | None = None
+        if offset == 0:
+            total = (
+                await db.scalar(select(func.count(Event.id)).where(*queue_filter))
+            ) or 0
 
         stmt = (
             select_events_with_classification()
             .where(*queue_filter)
             .order_by(Event.created_at.desc())
-            .limit(limit)
+            .limit(limit + 1)
             .offset(offset)
         )
-        events = (await db.scalars(stmt)).all()
+        events = list((await db.scalars(stmt)).all())
+        has_more = len(events) > limit
+        events = events[:limit]
 
     return {
         "total": total,
         "limit": limit,
         "offset": offset,
-        "has_more": offset + len(events) < total,
+        "has_more": has_more,
         "events": [
             {
                 **serialize_event(e),
@@ -640,19 +645,26 @@ async def admin_list_reports(
     )
 
     async with AsyncSessionLocal() as db:
-        total = (
-            await db.scalar(select(func.count()).select_from(agg.subquery()))
-        ) or 0
+        # total only on the first page — see browse.py's _browse_sql_path.
+        # This one aggregates a GROUP BY subquery, so it's the priciest of
+        # the four COUNT sites this rule touches.
+        total: int | None = None
+        if offset == 0:
+            total = (
+                await db.scalar(select(func.count()).select_from(agg.subquery()))
+            ) or 0
 
         page = (
             await db.execute(
                 agg.order_by(
                     has_illegal_col.desc(), report_count_col.desc(), oldest_col.asc()
                 )
-                .limit(limit)
+                .limit(limit + 1)
                 .offset(offset)
             )
         ).all()
+        has_more = len(page) > limit
+        page = page[:limit]
 
         event_ids = [row.event_id for row in page]
         events_by_id: dict[int, Event] = {}
@@ -709,7 +721,7 @@ async def admin_list_reports(
         "total": total,
         "limit": limit,
         "offset": offset,
-        "has_more": offset + len(rows) < total,
+        "has_more": has_more,
         "events": rows,
     }
 

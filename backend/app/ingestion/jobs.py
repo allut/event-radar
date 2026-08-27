@@ -5,6 +5,7 @@ import logging
 from collections.abc import Awaitable, Callable
 
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.constants import (
     AGGREGATE_LAST_VALUE_FIELDS,
@@ -110,12 +111,21 @@ async def _run_db_job(
     return summary
 
 
-async def dedup_pass() -> dict:
+async def dedup_pass(*, retry_seconds: int = LLM_BACKLOG_RETRY_SECONDS) -> dict:
     """Run two-stage deduplication (rule pre-filter + LLM tiebreaker).
 
     Degrades to the rule-only pass when no LLM provider is configured.
+
+    ``retry_seconds`` is forwarded to ``run_dedup_pass_llm``'s internal
+    backlog-drain sub-passes (see its docstring) — pass ``0`` for a
+    synchronous caller that wants a single unpaced burst, e.g.
+    ``dedup_pass_drain_now``.
     """
-    return await _run_db_job("dedup pass", run_dedup_pass_llm)
+
+    async def _run(db: AsyncSession) -> dict:
+        return await run_dedup_pass_llm(db, retry_seconds=retry_seconds)
+
+    return await _run_db_job("dedup pass", _run)
 
 
 async def classify_pending_job() -> dict:
@@ -243,9 +253,17 @@ async def dedup_pass_drain_now() -> dict:
 
     For manual/admin entry points where the caller is blocking on the HTTP
     response — the scheduler's 15-min retry interval would stall the request.
+    ``retry_seconds=0`` is passed both to this external wrapper (no sleep
+    between external re-scans, unchanged) and into ``dedup_pass`` itself (no
+    sleep between its now-internal backlog-drain sub-passes either) — this
+    entry point has always accepted a full unpaced burst.
     """
     return await _drain_backlog(
-        dedup_pass, _dedup_has_backlog, "dedup", retry_seconds=0, aggregate=True
+        lambda: dedup_pass(retry_seconds=0),
+        _dedup_has_backlog,
+        "dedup",
+        retry_seconds=0,
+        aggregate=True,
     )
 
 

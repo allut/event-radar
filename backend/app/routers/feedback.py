@@ -182,18 +182,22 @@ async def list_feedback_events(
             ),
         )
 
-    total = (
-        await db.scalar(
-            select(func.count(UserEventFeedback.id))
-            .select_from(UserEventFeedback)
-            .join(Event, Event.id == UserEventFeedback.event_id)
-            .where(
-                UserEventFeedback.user_id == current_user.id,
-                UserEventFeedback.signal == signal,
-                public_event_filter(),
+    # See browse.py's _browse_sql_path for the rationale: total only on the
+    # first page, has_more via a limit+1 sentinel row instead of total.
+    total: int | None = None
+    if offset == 0:
+        total = (
+            await db.scalar(
+                select(func.count(UserEventFeedback.id))
+                .select_from(UserEventFeedback)
+                .join(Event, Event.id == UserEventFeedback.event_id)
+                .where(
+                    UserEventFeedback.user_id == current_user.id,
+                    UserEventFeedback.signal == signal,
+                    public_event_filter(),
+                )
             )
-        )
-    ) or 0
+        ) or 0
 
     page_stmt = (
         select_events_with_classification()
@@ -207,10 +211,12 @@ async def list_feedback_events(
             public_event_filter(),
         )
         .order_by(UserEventFeedback.created_at.desc())
-        .limit(limit)
+        .limit(limit + 1)
         .offset(offset)
     )
     events = list((await db.scalars(page_stmt)).all())
+    has_more = len(events) > limit
+    events = events[:limit]
 
     feedback_by_event = {e.id: signal for e in events}
     reported = await load_user_reported_events(
@@ -231,5 +237,5 @@ async def list_feedback_events(
         "total": total,
         "limit": limit,
         "offset": offset,
-        "has_more": offset + len(events) < total,
+        "has_more": has_more,
     }

@@ -24,6 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased, load_only
 
 from app.constants import (
+    DEDUP_CANDIDATE_PAIR_MAX,
     DEDUP_CANDIDATE_PAIR_WARN_THRESHOLD,
     DEDUP_LOOKAHEAD_DAYS,
     DEDUP_LOOKBACK_DAYS,
@@ -429,15 +430,20 @@ async def candidate_pair_ids_in_window(
                 ),
             )
             .order_by(a.id, b.id)
+            .limit(DEDUP_CANDIDATE_PAIR_MAX)
         )
     ).all()
     pairs = [(row[0], row[1]) for row in pair_rows]
     if len(pairs) > DEDUP_CANDIDATE_PAIR_WARN_THRESHOLD:
         log.warning(
-            "candidate_pair_ids_in_window: %d candidate pairs (warn threshold %d) "
+            "candidate_pair_ids_in_window: %d candidate pairs (warn threshold %d)%s "
             "— same-window listing density is high, dedup pass will take longer",
             len(pairs),
             DEDUP_CANDIDATE_PAIR_WARN_THRESHOLD,
+            " (TRUNCATED at cap — remaining pairs deterministically picked up "
+            "next pass as head clusters collapse)"
+            if len(pairs) >= DEDUP_CANDIDATE_PAIR_MAX
+            else "",
         )
     return pairs
 

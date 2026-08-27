@@ -381,8 +381,12 @@ class TestRunDedupPassLlm:
 
         result = await tiebreaker.run_dedup_pass_llm(mock_db)
 
+        # H2: once (1,2) and (1,3) are confirmed and unioned, (2,3) is already
+        # in the same group — the third pair's LLM call is skipped as a
+        # redundant confirmation of what union-find already knows.
         assert result["candidate_pairs"] == 3
-        assert result["llm_confirmed"] == 3
+        assert result["llm_confirmed"] == 2
+        assert confirm.await_count == 2
         assert a.dedup_group_id == 1
         assert b.dedup_group_id == 1
         assert c.dedup_group_id == 1
@@ -418,8 +422,37 @@ class TestRunDedupPassLlm:
 
     @pytest.mark.asyncio
     async def test_fresh_call_cap_bounds_network_calls(self, mock_db, monkeypatch, make_event):
-        # cap=2 with 3 cache-miss fuzzy-matching pairs → only 2 reach the LLM,
-        # the 3rd is deferred, and the loop does NOT break (candidate_pairs==3).
+        # cap=2 with 3 cache-miss, never-confirmed pairs, retry_seconds=0 (the
+        # admin-triggered dedup_pass_drain_now path, which already accepts a
+        # full unpaced burst) → the internal drain loop (H4) resolves all 3
+        # pairs across two in-memory sub-passes, no external re-run needed.
+        monkeypatch.setattr(tiebreaker, "llm_available", lambda: True)
+        monkeypatch.setattr(tiebreaker, "LLM_DEDUP_MAX_FRESH_LLM_CALLS_PER_PASS", 2)
+        events = [_event(make_event, 1), _event(make_event, 2), _event(make_event, 3)]
+        _wire_db(mock_db, events)
+        _wire_execute(mock_db, [])
+        monkeypatch.setattr(
+            tiebreaker,
+            "candidate_pair_ids_in_window",
+            AsyncMock(return_value=[(1, 2), (1, 3), (2, 3)]),
+        )
+        confirm = AsyncMock(return_value=False)
+        monkeypatch.setattr(tiebreaker, "_llm_confirms_pair", confirm)
+
+        result = await tiebreaker.run_dedup_pass_llm(mock_db, retry_seconds=0)
+
+        assert result["candidate_pairs"] == 3
+        assert result["fresh_calls"] == 3
+        assert result["deferred_pairs"] == 0
+        assert confirm.await_count == 3
+
+    @pytest.mark.asyncio
+    async def test_fresh_call_cap_defers_when_paced(self, mock_db, monkeypatch, make_event):
+        # Same setup, but the default (paced, retry_seconds>0) scheduled path:
+        # exactly one sub-pass runs — the 3rd pair stays deferred for the next
+        # external _drain_backlog call (jobs.py) rather than being resolved
+        # in-process, since that would mean sleeping while still holding this
+        # call's DB session/http_client open.
         monkeypatch.setattr(tiebreaker, "llm_available", lambda: True)
         monkeypatch.setattr(tiebreaker, "LLM_DEDUP_MAX_FRESH_LLM_CALLS_PER_PASS", 2)
         events = [_event(make_event, 1), _event(make_event, 2), _event(make_event, 3)]
@@ -442,7 +475,9 @@ class TestRunDedupPassLlm:
 
     @pytest.mark.asyncio
     async def test_cached_pairs_do_not_consume_fresh_budget(self, mock_db, monkeypatch, make_event):
-        # cap=1, 2 cached + 1 fresh pair → all decided, fresh_calls==1.
+        # cap=1, 2 cached pairs transitively merge all 3 events → the 3rd
+        # (fresh) pair is now redundant (H2's same_group skip) and never
+        # reaches the LLM at all.
         monkeypatch.setattr(tiebreaker, "llm_available", lambda: True)
         monkeypatch.setattr(tiebreaker, "LLM_DEDUP_MAX_FRESH_LLM_CALLS_PER_PASS", 1)
         events = [_event(make_event, 1), _event(make_event, 2), _event(make_event, 3)]
@@ -465,10 +500,10 @@ class TestRunDedupPassLlm:
 
         result = await tiebreaker.run_dedup_pass_llm(mock_db)
 
-        assert result["fresh_calls"] == 1
+        assert result["fresh_calls"] == 0
         assert result["deferred_pairs"] == 0
-        assert result["llm_confirmed"] == 3
-        confirm.assert_awaited_once()
+        assert result["llm_confirmed"] == 2
+        confirm.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_cached_reject_is_respected(self, mock_db, monkeypatch, make_event):
@@ -526,7 +561,19 @@ class TestRunDedupPassLlm:
         assert low_b.dedup_group_id is None
 
     @pytest.mark.asyncio
-    async def test_backlog_drains_across_runs(self, mock_db, monkeypatch, make_event):
+    async def test_backlog_drains_within_single_call_when_unpaced(
+        self, mock_db, monkeypatch, make_event
+    ):
+        # H4: for an unpaced caller (retry_seconds=0 — the admin-triggered
+        # dedup_pass_drain_now, which already accepts a full unpaced burst in
+        # one blocking request), the fresh-call budget loop lives inside
+        # run_dedup_pass_llm itself, looping the cheap in-memory resolve step
+        # over the already-loaded survivors instead of requiring the caller
+        # (jobs.py's _drain_backlog) to re-run the whole expensive
+        # load+SQL-self-join+fuzzy-scan across multiple external calls.
+        # budget=1 with 2 independent pairs used to leave one pair deferred
+        # to a second external run_dedup_pass_llm call; now one call drains
+        # both via two internal sub-passes.
         monkeypatch.setattr(tiebreaker, "llm_available", lambda: True)
         monkeypatch.setattr(tiebreaker, "LLM_DEDUP_MAX_FRESH_LLM_CALLS_PER_PASS", 1)
         monkeypatch.setattr(tiebreaker, "_dedup_pair_hash", _hash_by_ids)
@@ -535,33 +582,46 @@ class TestRunDedupPassLlm:
             "candidate_pair_ids_in_window",
             AsyncMock(return_value=[(1, 2), (3, 4)]),
         )
-
-        # Run 1: cold cache, budget=1 → one fresh call, one pair deferred.
-        run1_events = [_event(make_event, 1), _event(make_event, 2), _event(make_event, 3), _event(make_event, 4)]
-        _wire_db(mock_db, run1_events)
+        events = [_event(make_event, 1), _event(make_event, 2), _event(make_event, 3), _event(make_event, 4)]
+        _wire_db(mock_db, events)
         _wire_execute(mock_db, [])
-        monkeypatch.setattr(tiebreaker, "_llm_confirms_pair", AsyncMock(return_value=True))
+        confirm = AsyncMock(return_value=True)
+        monkeypatch.setattr(tiebreaker, "_llm_confirms_pair", confirm)
 
-        result1 = await tiebreaker.run_dedup_pass_llm(mock_db)
-        assert result1["fresh_calls"] == 1
-        assert result1["deferred_pairs"] == 1
+        result = await tiebreaker.run_dedup_pass_llm(mock_db, retry_seconds=0)
 
-        # Run 2: prefetch now returns cached decisions for both pairs (the
-        # backlog has drained) → no fresh calls, no deferrals, all grouped.
-        run2_events = [_event(make_event, 1), _event(make_event, 2), _event(make_event, 3), _event(make_event, 4)]
-        _wire_db(mock_db, run2_events)
-        _wire_execute(
-            mock_db,
-            [
-                ("hash-1-2", {"same": True, "confidence": 0.9}),
-                ("hash-3-4", {"same": True, "confidence": 0.9}),
-            ],
+        assert result["fresh_calls"] == 2
+        assert result["deferred_pairs"] == 0
+        assert result["llm_confirmed"] == 2
+        assert confirm.await_count == 2
+
+    @pytest.mark.asyncio
+    async def test_backlog_stays_single_pass_when_paced(self, mock_db, monkeypatch, make_event):
+        # Same setup as above but the default (paced) retry_seconds — the
+        # scheduled dedup_pass_drained path. Only one sub-pass runs; the
+        # second pair stays deferred for jobs.py's _drain_backlog to pick up
+        # on its next externally-paced, freshly-sessioned call — no sleep
+        # happens inside this call's DB session/http_client scope.
+        monkeypatch.setattr(tiebreaker, "llm_available", lambda: True)
+        monkeypatch.setattr(tiebreaker, "LLM_DEDUP_MAX_FRESH_LLM_CALLS_PER_PASS", 1)
+        monkeypatch.setattr(tiebreaker, "_dedup_pair_hash", _hash_by_ids)
+        monkeypatch.setattr(
+            tiebreaker,
+            "candidate_pair_ids_in_window",
+            AsyncMock(return_value=[(1, 2), (3, 4)]),
         )
+        events = [_event(make_event, 1), _event(make_event, 2), _event(make_event, 3), _event(make_event, 4)]
+        _wire_db(mock_db, events)
+        _wire_execute(mock_db, [])
+        confirm = AsyncMock(return_value=True)
+        monkeypatch.setattr(tiebreaker, "_llm_confirms_pair", confirm)
 
-        result2 = await tiebreaker.run_dedup_pass_llm(mock_db)
-        assert result2["fresh_calls"] == 0
-        assert result2["deferred_pairs"] == 0
-        assert result2["llm_confirmed"] == 2
+        result = await tiebreaker.run_dedup_pass_llm(mock_db)
+
+        assert result["fresh_calls"] == 1
+        assert result["deferred_pairs"] == 1
+        assert result["llm_confirmed"] == 1
+        assert confirm.await_count == 1
 
     @pytest.mark.asyncio
     async def test_complete_clustering_at_warm_cache(self, mock_db, monkeypatch, make_event):

@@ -102,7 +102,11 @@ class TestBrowseSqlPath:
         from app.routers.browse import _browse_sql_path
 
         mock_db.scalar.return_value = 5
-        mock_db.scalars.return_value = _scalars_result([make_event(1), make_event(2)])
+        # has_more is now derived from a limit+1 sentinel row rather than
+        # `total` — the query fetches one extra row past `limit`.
+        mock_db.scalars.return_value = _scalars_result(
+            [make_event(1), make_event(2), make_event(3)]
+        )
 
         result = await _browse_sql_path(mock_db, [], "date", limit=2, offset=0, locale="en", user_id=1)
 

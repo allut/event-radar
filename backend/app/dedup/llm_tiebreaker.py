@@ -32,6 +32,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.constants import (
+    LLM_BACKLOG_MAX_DRAIN_PASSES,
+    LLM_BACKLOG_RETRY_SECONDS,
     LLM_CLASSIFY_VENUE_FALLBACK,
     LLM_DEDUP_CONFIDENCE_THRESHOLD,
     LLM_DEDUP_HASH_QUERY_CHUNK_SIZE,
@@ -103,6 +105,10 @@ async def _llm_confirms_pair(
 
     Note: event_id=a.id is stored in llm_calls for audit; the pair identity is
     recoverable from the content_hash (which encodes both titles + dates).
+
+    Only called on a ``cached_decisions`` miss, so the bulk prefetch has
+    already established there is no cached row — pass an empty
+    ``prefetched_cache`` to make ``llm_json`` skip its own per-call SELECT.
     """
     prompt = _build_prompt(a, b)
     response = await llm_json_or_none(
@@ -112,6 +118,7 @@ async def _llm_confirms_pair(
         event_id=a.id,
         context=f"llm dedup failed for pair ({a.id}, {b.id}) — treating as distinct",
         http_client=http_client,
+        prefetched_cache={},
     )
     if response is None:
         return False
@@ -205,25 +212,40 @@ async def _resolve_survivor_pairs(
     cached_decisions: dict[str, bool],
     parent: dict[int, int],
     http_client: httpx.AsyncClient,
+    *,
+    max_fresh_calls: int = LLM_DEDUP_MAX_FRESH_LLM_CALLS_PER_PASS,
 ) -> tuple[int, int, int]:
     """Stage 2: resolve each survivor via the cache, else a fresh LLM call
-    (bounded by LLM_DEDUP_MAX_FRESH_LLM_CALLS_PER_PASS). Unions confirmed
-    pairs into ``parent``. Returns (llm_confirmed, fresh_calls, deferred)."""
+    (bounded by ``max_fresh_calls``). Unions confirmed pairs into ``parent``
+    and records every freshly-decided verdict (confirmed or not) into
+    ``cached_decisions`` in place, so a caller looping this function across
+    sub-passes over the same survivor list never re-asks the LLM about a pair
+    it already resolved this run. Returns (llm_confirmed, fresh_calls, deferred).
+    """
     llm_confirmed = 0
     fresh_calls = 0
     deferred_pairs = 0
     for a, b, pair_hash in survivors:
+        if same_group(parent, a.id, b.id):
+            # A prior union in this same loop (or the same-day pass) already
+            # merged this pair — union-find only needs k-1 merges for a
+            # k-member cluster, so a k(k-1)/2-pair stage-1 scan would
+            # otherwise burn redundant LLM calls confirming what's already
+            # known.
+            continue
         cached = cached_decisions.get(pair_hash)
         if cached is not None:
             if cached:
                 union(parent, a.id, b.id)
                 llm_confirmed += 1
             continue
-        if fresh_calls >= LLM_DEDUP_MAX_FRESH_LLM_CALLS_PER_PASS:
+        if fresh_calls >= max_fresh_calls:
             deferred_pairs += 1
             continue
         fresh_calls += 1
-        if await _llm_confirms_pair(a, b, db, http_client):
+        confirmed = await _llm_confirms_pair(a, b, db, http_client)
+        cached_decisions[pair_hash] = confirmed
+        if confirmed:
             union(parent, a.id, b.id)
             llm_confirmed += 1
 
@@ -231,13 +253,15 @@ async def _resolve_survivor_pairs(
         log.info(
             "dedup-llm: fresh-call budget (%d) reached; %d pair(s) deferred to "
             "next pass (self-healing)",
-            LLM_DEDUP_MAX_FRESH_LLM_CALLS_PER_PASS,
+            max_fresh_calls,
             deferred_pairs,
         )
     return llm_confirmed, fresh_calls, deferred_pairs
 
 
-async def run_dedup_pass_llm(db: AsyncSession) -> dict:
+async def run_dedup_pass_llm(
+    db: AsyncSession, *, retry_seconds: int = LLM_BACKLOG_RETRY_SECONDS
+) -> dict:
     """Two-stage dedup: rule pre-filter + cache-aware LLM tiebreaker.
 
     Loads all non-cancelled events in the lookback window, finds candidate pairs
@@ -247,11 +271,25 @@ async def run_dedup_pass_llm(db: AsyncSession) -> dict:
     budget — clustering is always complete w.r.t. everything decided so far.
 
     Caps *fresh* (cache-miss) network calls at
-    ``LLM_DEDUP_MAX_FRESH_LLM_CALLS_PER_PASS`` per pass to bound DB session
-    lifetime (Cerebras fallback at 1 req/min could otherwise hold the
-    connection open indefinitely). Pairs that can't be decided within the
-    budget are deferred to the next pass — the backlog drains across
-    successive runs and, once the cache is warm, every run is fully correct.
+    ``LLM_DEDUP_MAX_FRESH_LLM_CALLS_PER_PASS`` per internal sub-pass to bound
+    each burst against the LLM provider (Cerebras fallback at 1 req/min could
+    otherwise hold the connection open indefinitely).
+
+    ``retry_seconds`` never sleeps *inside* this call — this function's whole
+    body runs inside one caller-opened DB session (``run_in_session`` in
+    jobs.py) plus one ``llm_http_client()``, and a sleep here would hold both
+    open for the duration, which is worse than the problem it would be trying
+    to solve. Instead ``retry_seconds`` only decides whether it's safe to loop
+    multiple sub-passes over the same already-loaded survivors (no reload) at
+    all: ``retry_seconds=0`` (the admin-triggered ``dedup_pass_drain_now``,
+    which already accepts a full unpaced burst in one blocking request) loops
+    up to ``LLM_BACKLOG_MAX_DRAIN_PASSES`` sub-passes back-to-back, since no
+    pacing is wanted anyway. Any non-zero ``retry_seconds`` (the scheduled
+    ``dedup_pass_drained`` default) runs exactly one sub-pass and returns
+    immediately with whatever remains deferred — pacing between attempts is
+    then jobs.py's external ``_drain_backlog`` sleeping *between* fresh,
+    closed-and-reopened sessions, exactly as it did before this function had
+    an internal loop at all.
 
     Falls back gracefully if no LLM providers are configured (returns
     rule-only result).
@@ -305,10 +343,29 @@ async def run_dedup_pass_llm(db: AsyncSession) -> dict:
         db, [pair_hash for _, _, pair_hash in survivors]
     )
 
+    # Loop the (cheap, in-memory) resolve step over the same already-loaded
+    # survivors/cache instead of re-running the expensive load + SQL self-join
+    # + Python fuzzy scan per sub-pass — but only when retry_seconds==0 (no
+    # pacing wanted, see docstring). Otherwise a single sub-pass, matching the
+    # pre-H4 behavior exactly: jobs.py's external _drain_backlog is what re-runs
+    # this whole function (fresh session, fresh reload) after its own sleep.
+    max_sub_passes = LLM_BACKLOG_MAX_DRAIN_PASSES if retry_seconds == 0 else 1
+    llm_confirmed = fresh_calls = 0
+    deferred_pairs = len(survivors)
     async with llm_http_client() as http_client:
-        llm_confirmed, fresh_calls, deferred_pairs = await _resolve_survivor_pairs(
-            db, survivors, cached_decisions, parent, http_client
-        )
+        for _ in range(max_sub_passes):
+            sub_confirmed, sub_fresh, deferred_pairs = await _resolve_survivor_pairs(
+                db,
+                survivors,
+                cached_decisions,
+                parent,
+                http_client,
+                max_fresh_calls=LLM_DEDUP_MAX_FRESH_LLM_CALLS_PER_PASS,
+            )
+            llm_confirmed += sub_confirmed
+            fresh_calls += sub_fresh
+            if deferred_pairs == 0:
+                break
 
     assignments = build_cluster_assignments(parent, ids, events_by_id)
 

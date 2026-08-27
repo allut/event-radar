@@ -459,6 +459,12 @@ DEDUP_UNFILTERED_FALLBACK_MAX_EVENTS = 500
 # (the pass still runs), just a visibility threshold: crossing it logs a
 # warning so a density spike shows up instead of silently growing pass time.
 DEDUP_CANDIDATE_PAIR_WARN_THRESHOLD = 20000
+# Hard cap for the same query — worst case (many events sharing one starts_at)
+# is quadratic in same-window listing density with no LIMIT, materializing
+# every pair into Python. Deterministic ORDER BY means a truncated tail is
+# picked up on the next pass as the head clusters collapse. Kept above the
+# warn threshold so a warning always fires before truncation would.
+DEDUP_CANDIDATE_PAIR_MAX = 50_000
 
 # Resend email delivery
 RESEND_SEND_URL = "https://api.resend.com/emails"
@@ -759,9 +765,11 @@ PAGINATION_MIN_OFFSET: int = 0
 # Ceiling on `offset` across every paginated list endpoint (browse.py, feedback.py,
 # admin.py, organizer_events.py) — `ge=` alone leaves offset unbounded, so an
 # offset like 5_000_000 makes Postgres walk and discard that many rows on every
-# request at the endpoint's full rate limit. High enough that no legitimate
-# pagination depth is ever affected.
-PAGINATION_MAX_OFFSET: int = 100_000
+# request at the endpoint's full rate limit. Every consumer is infinite scroll
+# from offset=0 at BROWSE_PAGE_SIZE-ish increments, so 5_000 already covers far
+# more depth than any legitimate session reaches while still bounding the
+# LIMIT/OFFSET seq-scan-and-discard cost an authenticated caller can force.
+PAGINATION_MAX_OFFSET: int = 5_000
 # Candidate cap for the Python-scored path (Path B: for_you=True OR sort=relevance —
 # so also date/price/quality sort *under* for_you=True, not just relevance). Sorted
 # soonest-first before capping, so the cap policy is a deliberate soonest-bias, not
