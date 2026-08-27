@@ -52,6 +52,18 @@ export function initGtag(measurementId: string | undefined): void {
   window.dataLayer = window.dataLayer ?? [];
   const gtag = (...args: unknown[]) => window.dataLayer!.push(args);
   window.gtag = gtag;
+  // Must be the first command: GA4's Consent Mode leaves the tag's consent
+  // state permanently "unset" (Tag Assistant: "Default consent state has not
+  // been set yet") until an explicit default is sent — without it, the GA4
+  // tag never fires at all, not even a cookieless ping. This app collects no
+  // PII and runs no ads/remarketing (Google Signals is off in the GA4
+  // property), so analytics is granted and every ad-related signal denied.
+  gtag('consent', 'default', {
+    ad_storage: 'denied',
+    ad_user_data: 'denied',
+    ad_personalization: 'denied',
+    analytics_storage: 'granted',
+  });
   gtag('js', new Date());
   gtag('set', 'client_storage', 'none');
   gtag('config', measurementId, {
