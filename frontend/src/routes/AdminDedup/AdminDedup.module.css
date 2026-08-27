@@ -1,0 +1,66 @@
+.head { margin-bottom: var(--space-6); }
+.eyebrow {
+  composes: adminEyebrow from '../../components/shared/Page.module.css';
+}
+.title {
+  composes: adminPageTitle from '../../components/shared/Page.module.css';
+}
+
+.subtitle { font-size: var(--fs-sm); color: var(--text-muted); margin-bottom: var(--space-4); }
+
+.group {
+  composes: card from '../../components/shared/Card.module.css';
+  margin-bottom: var(--space-4);
+  overflow: hidden;
+}
+.groupHead {
+  display: flex;
+  justify-content: space-between;
+  padding: var(--space-2) var(--space-4);
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+}
+.eventRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border);
+}
+.eventRow:last-child { border-bottom: none; }
+.evMain { min-width: 0; }
+.evTitle {
+  composes: queueRowTitle from '../../components/shared/AdminQueue.module.css';
+}
+.evMeta {
+  composes: queueRowMeta from '../../components/shared/AdminQueue.module.css';
+}
+
+.badges { display: flex; align-items: center; gap: var(--space-1); flex-shrink: 0; }
+.badge {
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  padding: var(--space-0-45) var(--space-2);
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.badgePublished { color: var(--success); border-color: var(--success-border); }
+.badgeExplicit { color: var(--danger); border-color: var(--danger-border); }
+
+.loadMoreBtn {
+  composes: btnOutline from '../../components/shared/Button.module.css';
+  display: block;
+  margin: var(--space-5) auto 0;
+  padding: var(--space-2) var(--space-5);
+  cursor: pointer;
+}
+.loadMoreBtn:disabled { opacity: var(--opacity-disabled); cursor: not-allowed; }
+
+/* Desktop-only screen — see components/shared/DesktopGate.module.css. */
+.desktopGate { composes: gate from '../../components/shared/DesktopGate.module.css'; }
+.real { composes: content from '../../components/shared/DesktopGate.module.css'; }

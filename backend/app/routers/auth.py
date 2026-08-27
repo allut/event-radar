@@ -33,6 +33,7 @@ from app.constants import (
     RATE_LIMIT_BROWSE,
     RATE_LIMIT_LOGOUT,
     RATE_LIMIT_LOGOUT_ALL,
+    SECONDS_PER_DAY,
     SESSION_COOKIE_NAME,
     SESSION_COOKIE_PATH,
     VALID_LOCALES,
@@ -259,7 +260,7 @@ async def verify_magic_link(
         name=SESSION_COOKIE_NAME,
         token=session_token,
         path=SESSION_COOKIE_PATH,
-        ttl_days=settings.SESSION_TTL_DAYS,
+        ttl_seconds=settings.SESSION_TTL_DAYS * SECONDS_PER_DAY,
     )
     return {
         "user": {

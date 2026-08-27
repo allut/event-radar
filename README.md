@@ -20,6 +20,8 @@ The whole platform is designed to run on **free-tier infrastructure** at a stead
 - **Saved Events** — a dedicated page listing the events a user has bookmarked, liked, or disliked, tabbed by signal and paginated.
 - **Public landing showcase** — the only unauthenticated *list* read path: a fixed-size grid of six top-quality published events happening this week (widening to a 30-day window on a thin week), shown on `/` when signed out. No personalization, no PII. (Single-event detail, `GET /events/{id}`, is also public via optional auth.)
 - **Organizer portal** — self-service event submission for venues/promoters: its own magic-link auth track (separate table, tokens, and signing salts from user auth), a submit/edit form with per-locale `et`/`en`/`ru` text and an organizer-chosen category, signed Cloudinary image upload, a per-account daily submission cap, and an admin review queue. A submission from a `verified` organizer auto-publishes through the normal publish gate; a brand-new organizer's first submission waits in the queue until an admin approves it (which flips the organizer to `verified`).
+- **Content reporting** — a signed-in user can flag an event's hosted content from the event card or detail page (`POST /reports`); the report lands in an admin queue with an email notification, and an admin can resolve it or take the event down.
+- **Admin console** — an operator-facing SPA at `/admin/*` (its own lazy-loaded chunk, un-i18n'd, reachable only by typed URL): dashboard, pipeline runner with a live per-stage breakdown, dedup-group review, organizer-submission queue, report queue, and a single-event inspector. Its own auth track — username/password + required TOTP, a 12h `Path=/api/admin` cookie — sharing the admin lockout counter with the HTTP Basic path.
 - **Magic-link auth** — passwordless sign-in with short-lived (15-minute), single-use links and 2-day sessions carried in an httpOnly / Secure / `SameSite=Strict` cookie, revocable per user via a token version. No third-party auth provider.
 - **Email digest opt-out** — one-click unsubscribe (RFC 8058 `List-Unsubscribe` header + a token-signed no-login page with an Undo/resubscribe button) toggles the daily digest without a sign-in.
 - **Static pages** — a globally mounted site footer links to localized Privacy and Terms pages plus a Contact form (email-only delivery, honeypot + rate limit, no login).
@@ -32,9 +34,9 @@ The whole platform is designed to run on **free-tier infrastructure** at a stead
 
 ```
 Vite + React SPA  ──HTTPS / JSON──▶  FastAPI (single process)
-                                       ├── Routers: /auth /admin /onboarding /events /explore
-                                       │            /feed /feedback /public /users/me /contact
-                                       │            /email /webhooks
+                                       ├── Routers: /auth /admin /admin/auth /onboarding /events
+                                       │            /explore /feed /feedback /public /reports
+                                       │            /users/me /contact /email /webhooks
                                        │            /organizer/auth /organizer/events
                                        └── APScheduler (embedded, kept warm by a cron-job.org ping)
                                            ├── Weekly Sun 03:00: sync_fienta_organizers
@@ -69,7 +71,7 @@ Geocoding runs as a separate backfill alongside this pipeline, filling in `lat`/
 | Frontend    | Vite, React 18, TypeScript, TanStack Query, React Router, CSS Modules, Vitest + Testing Library |
 | Database    | Neon Postgres (async via `asyncpg`) |
 | LLM         | Groq (primary), Cerebras, Mistral (fallback chain) |
-| Email       | Resend (magic links, daily digests, contact-form relay, inbound newsletter webhook) |
+| Email       | Resend (magic links, daily digests, contact-form relay, report notifications, inbound newsletter webhook) |
 | Images      | Cloudinary (signed server-side upload for organizer-submitted event images) |
 | SEO         | Playwright (build-time prerender snapshots), Vercel Serverless Functions (`frontend/api/`) for the prerender-cadence gate and live SEO audit |
 | Hosting     | Render (backend web service) · Vercel (frontend) · cron-job.org (backend keepalive + prerender-cadence + live SEO audit pings) |
@@ -190,13 +192,13 @@ event-radar/
 ├── .devcontainer/             # VS Code Dev Container (Python 3.12 + Node 20 + Postgres 16)
 ├── backend/                  # FastAPI application
 │   ├── app/
-│   │   ├── routers/          # /auth /admin /onboarding /events /explore /feed /feedback /public /users/me /contact /email /webhooks /organizer/auth /organizer/events
+│   │   ├── routers/          # /auth /admin /admin/auth /onboarding /events /explore /feed /feedback /public /reports /users/me /contact /email /webhooks /organizer/auth /organizer/events
 │   │   ├── ingestion/        # source adapters (Fienta, HTML listings, newsletter), geocoding backfill, detail-refetch sync, organizer sync
 │   │   ├── dedup/            # rule-based pre-filter + LLM tiebreaker
 │   │   ├── llm/              # provider router, classifier, taxonomy, extractor
 │   │   ├── ranking/          # scoring + Daily 5 builder
-│   │   ├── email/            # digest / magic-link / contact styles / templates / delivery
-│   │   ├── auth/             # magic-link tokens + email
+│   │   ├── email/            # digest / magic-link / contact / report-notification styles / templates / delivery
+│   │   ├── auth/             # magic-link tokens + email, admin TOTP (RFC 6238)
 │   │   ├── models/           # SQLAlchemy models
 │   │   ├── _generated/       # generated constants & i18n (do not edit by hand)
 │   │   ├── constants.py      # single source of truth for backend literals
@@ -210,17 +212,19 @@ event-radar/
 │   │   ├── seeds.py          # persona + source seeding on startup
 │   │   └── main.py           # app wiring, middleware, scheduler
 │   ├── alembic/             # migrations
-│   ├── scripts/             # one-off operational scripts (reset_events.py, _reclassify_events.py)
+│   ├── scripts/             # one-off operational scripts (reset_events.py, _reclassify_events.py, admin_totp_enroll.py)
 │   └── tests/               # pytest suite
 ├── frontend/                 # Vite + React SPA
-│   ├── api/                  # Vercel Serverless Functions: prerender-cadence.ts, seo-audit.ts (SEO pipeline, see Deployment)
-│   ├── scripts/prerender.ts  # build-time prerender snapshot pipeline (Playwright)
+│   ├── api/                  # Vercel Serverless Functions: prerender-cadence.ts, seo-audit.ts (SEO pipeline, see Deployment) + vercel.ts request/response type shim
+│   ├── scripts/              # build-time prerender snapshot pipeline (prerender.ts, Playwright) + generate-icons.ts
 │   ├── vercel.json           # Vercel rewrites (/api proxy + SPA fallback) + security headers
 │   └── src/
-│       ├── routes/          # Landing, Login, AuthVerify, Onboarding, Feed, Explore, SavedEvents, EventDetail, Settings, Unsubscribe, Privacy, Terms, Contact, NotFound + organizer portal (OrganizerLogin, OrganizerVerify, OrganizerDashboard, EventSubmit)
-│       ├── components/      # EventCard, PersonaCard, TopBar, OrganizerTopBar, form controls, shared CSS base classes ...
-│       ├── hooks/           # useAuth, useFeedback, useDropdown, useOrganizerAuth ...
-│       ├── lib/             # signed-in hint + locale storage, auth/locale subscriber stores (auth.ts, organizerAuth.ts) — the session itself is an httpOnly cookie
+│       ├── routes/          # Landing, Login, AuthVerify, Onboarding, Feed, Explore, SavedEvents, EventDetail, Settings, Unsubscribe, Privacy, Terms, Contact, NotFound
+│       │                    #   + organizer portal (OrganizerLogin, OrganizerVerify, OrganizerDashboard, EventSubmit)
+│       │                    #   + admin console, own lazy chunk (AdminApp, AdminLogin, AdminDashboard, AdminPipeline, AdminDedup, AdminSubmissions, AdminReports, AdminEventDetail)
+│       ├── components/      # EventCard, PersonaCard, TopBar, OrganizerTopBar, ReportModal, AdminShell, form controls, shared CSS base classes ...
+│       ├── hooks/           # useAuth, useFeedback, useDropdown, useOrganizerAuth, useAdminAuth, useSeoMeta ...
+│       ├── lib/             # auth/organizer/admin subscriber stores + signed-in hint & locale storage (the session itself is an httpOnly cookie), analytics (gtag.ts), SEO/prerender modules (prerenderChain, seoAudit, seoValidation, structuredData, urlLocale)
 │       ├── api/             # API client (user + organizer wrappers)
 │       ├── content/legal/   # localized Privacy/Terms documents
 │       ├── _generated/      # generated constants & i18n (do not edit by hand)
@@ -272,53 +276,9 @@ python scripts/generate_shared.py
 
 ### Manually triggering pipeline jobs (E2E testing)
 
-The scheduled jobs described in [Architecture](#architecture) (`sync_fienta_organizers`, `cleanup_stale_data`, `ingest_all_enabled`, `dedup_pass`, `classify_pending`, `publish_pending`, `build_daily_feeds`, `send_daily_digests`, `geocode_pending`, `refetch_event_details`) can each be run on demand via `/admin/*` endpoints — useful for exercising the full pipeline end to end without waiting for the schedule.
+The scheduled jobs described in [Architecture](#architecture) (`sync_fienta_organizers`, `cleanup_stale_data`, `ingest_all_enabled`, `dedup_pass`, `classify_pending`, `publish_pending`, `build_daily_feeds`, `send_daily_digests`, `geocode_pending`, `refetch_event_details`) can each be run on demand from the admin console — useful for exercising the full pipeline end to end without waiting for the schedule.
 
-All `/admin/*` endpoints require HTTP Basic auth (`ADMIN_USERNAME` / `ADMIN_PASSWORD`, see `.env.example`). With no `ADMIN_PASSWORD` set they return 503 unless **both** `APP_ENV=development` and `ALLOW_INSECURE_DEV=true` — set that pair locally and any credentials are accepted, as in the `admin:admin` examples below. Run them in this order to exercise a full pipeline cycle:
-
-```bash
-# 1. sync_fienta_organizers — discover/refresh Fienta organizer IDs
-curl -u admin:admin -X POST http://localhost:8000/admin/sync-organizers
-
-# 2. ingest_all_enabled — fetch raw events from every enabled source
-#    (POST /admin/ingest/{slug} runs a single source instead)
-curl -u admin:admin -X POST http://localhost:8000/admin/ingest
-
-# 3. dedup_pass — rule pre-filter + LLM tiebreaker over non-cancelled events
-curl -u admin:admin -X POST http://localhost:8000/admin/dedup
-
-# 4. classify_pending — LLM classification for one batch of draft events
-curl -u admin:admin -X POST http://localhost:8000/admin/classify
-
-# 5. publish_pending — promote qualifying classified events to published
-curl -u admin:admin -X POST http://localhost:8000/admin/publish
-
-# 6. build_daily_feeds — score events and write daily_feeds for all users
-curl -u admin:admin -X POST http://localhost:8000/admin/build-feeds
-
-# 7. send_daily_digests — dry-run by default (counts would-send, sends nothing)
-curl -u admin:admin -X POST http://localhost:8000/admin/send-digests
-# Pass dry_run=false to actually deliver emails:
-curl -u admin:admin -X POST "http://localhost:8000/admin/send-digests?dry_run=false"
-
-# geocode_pending — backfill lat/lng for events missing coordinates (runs standalone,
-# not part of pipeline/run; safe to invoke any time)
-curl -u admin:admin -X POST http://localhost:8000/admin/geocode
-
-# refetch_event_details — re-fetch each future event's source detail page and
-# reconcile venue/price/coordinates (runs standalone, not part of pipeline/run)
-curl -u admin:admin -X POST http://localhost:8000/admin/refetch
-
-# cleanup_stale_data — prune aged satellite/audit rows (auth tokens, raw payloads,
-# old feed snapshots, cached scores); never deletes events. Dry-run by default
-# (counts candidates, deletes nothing); runs standalone, not part of pipeline/run.
-curl -u admin:admin -X POST http://localhost:8000/admin/cleanup
-# Pass dry_run=false to actually delete:
-curl -u admin:admin -X POST "http://localhost:8000/admin/cleanup?dry_run=false"
-```
-
-> [!TIP]
-> `POST /admin/pipeline/run` runs all seven stages above in dependency order in a single call, stopping at the first failure — the fastest way to drive a full E2E cycle. It also accepts `?dry_run=false` for the final digest stage. `GET /admin/stats` and `GET /admin/dedup/groups` are useful for inspecting the results afterwards; `GET /admin/submissions` (plus `POST /admin/submissions/{event_id}/approve` and `.../retract`) is the post-hoc review queue for organizer-submitted events. The geocoding backfill (`geocode_pending`), the detail-refetch sync (`refetch_event_details`), and the data-retention cleanup (`cleanup_stale_data`) each run on their own schedule and are not part of `pipeline/run`; trigger them on demand via `POST /admin/geocode`, `POST /admin/refetch`, and `POST /admin/cleanup` respectively. Run `refetch` before `geocode` if you want coordinates cleared by an address change re-resolved in the same operation.
+Sign in at `/admin/login` (username/password + TOTP, see `docs/backend-ops.md`), then use `/admin/pipeline` to trigger any stage individually or run the full `POST /admin/pipeline/run` sequence in one click — it streams a live per-stage result breakdown and gates destructive/expensive triggers (digest send, cleanup delete) behind an explicit confirmation. `/admin/dedup` reviews dedup groups, `/admin/submissions` is the organizer-submission review queue, `/admin/reports` is the report queue, `/admin/events/:id` is the single-event inspector, and `/admin` is the dashboard landing page. See `docs/backend-ops.md` for the full endpoint/screen breakdown.
 
 ### Resetting event data
 
@@ -337,7 +297,7 @@ python scripts/reset_events.py --yes    # actually truncate
 
 Production runs entirely on free tiers, split across three services (cron-job.org covers both the backend keepalive and the SEO freshness jobs below):
 
-- **Backend — Render web service** (`render.yaml`): `rootDir: backend`, health check on `/health`. Migrations run on every boot — `startCommand` chains `alembic upgrade head && uvicorn ...`, since Render's `preDeployCommand` is paid-only. Set `DATABASE_URL` (asyncpg form: `postgresql+asyncpg://user:pass@host/db?ssl=require`), `ADMIN_PASSWORD`, `INTERNAL_TOKEN`, the LLM keys (`GROQ_API_KEY`, optionally `CEREBRAS_API_KEY` / `MISTRAL_API_KEY`), `RESEND_API_KEY`, `RESEND_FROM_ADDRESS`, `CONTACT_TO_ADDRESS`, `RESEND_WEBHOOK_SECRET`, `CORS_ORIGINS`, `FRONTEND_URL`, `BACKEND_URL` (the API's own absolute URL, e.g. `https://event-radar-api.onrender.com` — needed by the digest's server-side-fetched `List-Unsubscribe` header), and the Cloudinary trio `CLOUDINARY_CLOUD_NAME` / `CLOUDINARY_API_KEY` / `CLOUDINARY_API_SECRET` (organizer image upload; the endpoint returns 501 when unset). `SECRET_KEY` is auto-generated. Optionally set `LOG_SHIP_URL` (+ `LOG_SHIP_TOKEN`) to ship JSON logs to an external drain such as Axiom.
+- **Backend — Render web service** (`render.yaml`): `rootDir: backend`, health check on `/health`. Migrations run on every boot — `startCommand` chains `alembic upgrade head && uvicorn ...`, since Render's `preDeployCommand` is paid-only. Set `DATABASE_URL` (asyncpg form: `postgresql+asyncpg://user:pass@host/db?ssl=require`), `ADMIN_PASSWORD` and `ADMIN_TOTP_SECRET` (the admin console's second factor — enroll the secret locally with `backend/scripts/admin_totp_enroll.py`; `ADMIN_USERNAME` defaults to `admin`), `INTERNAL_TOKEN`, the LLM keys (`GROQ_API_KEY`, optionally `CEREBRAS_API_KEY` / `MISTRAL_API_KEY`), `RESEND_API_KEY`, `RESEND_FROM_ADDRESS`, `CONTACT_TO_ADDRESS`, `RESEND_WEBHOOK_SECRET`, `CORS_ORIGINS`, `FRONTEND_URL`, `BACKEND_URL` (the API's own absolute URL, e.g. `https://event-radar-api.onrender.com` — needed by the digest's server-side-fetched `List-Unsubscribe` header), and the Cloudinary trio `CLOUDINARY_CLOUD_NAME` / `CLOUDINARY_API_KEY` / `CLOUDINARY_API_SECRET` (organizer image upload; the endpoint returns 501 when unset). `SECRET_KEY` is auto-generated. Optionally set `LOG_SHIP_URL` (+ `LOG_SHIP_TOKEN`) to ship JSON logs to an external drain such as Axiom.
 - **Frontend — Vercel** (`frontend/vercel.json`): static Vite build (`npm run build`, output `dist`). The API client issues all requests against a relative `/api` prefix (`frontend/src/api/client.ts`), so a Vercel rewrite proxies `/api/:path*` to the Render URL **and strips the `/api` prefix** (backend routes have no `/api` prefix — this mirrors the dev Vite proxy), except `/api/seo-audit` and `/api/prerender-cadence`, which are excluded by a negative lookahead so they reach Vercel's own serverless functions (see "SEO prerendering" below) instead of being proxied to Render; a second rewrite provides the SPA fallback to `app-shell.html` (a copy of the pre-prerender `dist/index.html`, kept distinct so a prerendered snapshot never overwrites the generic CSR shell other routes fall back to) for React Router routes. Same-origin proxying also avoids CORS entirely. No build-time API env var is used.
 - **Keepalive — cron-job.org**: Render's free tier sleeps after 15 minutes idle, which would stop the embedded APScheduler. A [cron-job.org](https://cron-job.org) job pings `https://event-radar-api.onrender.com/internal/tick` every 10 minutes with the `X-Internal-Token` header set to the same value as Render's `INTERNAL_TOKEN`. (Render's own cron jobs are paid; GitHub Actions cron proved too imprecise for a keepalive cadence.)
 - **SEO prerendering — Vercel Serverless Functions + cron-job.org**: two more cron-job.org jobs, independent of the keepalive above, keep the frontend's prerendered snapshots and `sitemap.xml` fresh. One hits `frontend/api/prerender-cadence.ts` every 6h, which gates a Vercel Deploy Hook rebuild (skipping it when a multi-round prerender chain is already in flight); the other hits `frontend/api/seo-audit.ts` every 6h to check production directly and self-files/closes a GitHub issue if the cadence has gone silently stale. Both endpoints are excluded from `vercel.json`'s `/api/:path*` → Render rewrite by name and authenticate via their own shared-secret headers (`PRERENDER_CADENCE_TOKEN_HEADER` / `SEO_AUDIT_TOKEN_HEADER`), separate from the backend's `X-Internal-Token`. Full detail in `docs/backend-ops.md` and `docs/frontend.md`.
@@ -355,4 +315,5 @@ Production runs entirely on free tiers, split across three services (cron-job.or
 - **[docs/organizer-portal.md](docs/organizer-portal.md)** — the self-service organizer track end to end.
 - **[docs/observability.md](docs/observability.md)** — shipped log-record shape, the `event` taxonomy, and the APL queries behind each Axiom monitor.
 - **[docs/adr/](docs/adr/)** — architecture decision records.
+- **[docs/agents/](docs/agents/)** — agent-facing workflow docs: issue tracker, triage labels, domain docs.
 - **[shared/README.md](shared/README.md)** — the cross-stack shared/generated files and their workflow.

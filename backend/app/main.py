@@ -11,7 +11,7 @@ from starlette.middleware.base import RequestResponseEndpoint
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
-from starlette.datastructures import Headers
+from starlette.datastructures import Headers, MutableHeaders
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
@@ -81,6 +81,7 @@ from app.logging_config import configure_logging, shutdown_log_shipping
 from app.ranking.score import build_daily_feeds
 from app.rate_limit import client_key, limiter, rate_limit_exceeded_handler
 from app.routers.admin import router as admin_router
+from app.routers.admin_auth import router as admin_auth_router
 from app.routers.auth import router as auth_router
 from app.routers.browse import router as browse_router
 from app.routers.contact import router as contact_router
@@ -91,6 +92,7 @@ from app.routers.onboarding import router as onboarding_router
 from app.routers.organizer_auth import router as organizer_auth_router
 from app.routers.organizer_events import router as organizer_events_router
 from app.routers.public import router as public_router
+from app.routers.reports import router as reports_router
 from app.routers.settings import router as settings_router
 from app.routers.unsubscribe import router as unsubscribe_router
 from app.routers.utils import require_configured_secret, run_in_session
@@ -111,8 +113,11 @@ def _scheduled(
     """Wrap a job for APScheduler: log the summary, swallow + log failures.
 
     Scheduled jobs must never raise (the scheduler would only log a bare
-    traceback); admin-triggered runs of the same jobs convert failures to 500s
-    via routers.utils.run_admin_job instead.
+    traceback); admin-triggered runs of the same jobs go through
+    routers.utils.run_admin_job (which converts failures to 500s) or, for the
+    /admin/pipeline job triggers (issue #159), stream_admin_job (which
+    streams a status="error" NDJSON line instead, since headers are already
+    sent by the time a streamed job can fail).
     """
 
     async def _job() -> None:
@@ -340,14 +345,36 @@ class HostCheckMiddleware:
 
         saw_400 = False
         rejected = False
+        # This middleware is registered outside (wraps around) the
+        # add_security_headers layer, so TrustedHostMiddleware's own 400
+        # response — built and sent directly, without ever calling
+        # self.app — never passes through that layer (L-1 in the OWASP
+        # audit). A pass-through response (self.app called, valid host)
+        # already carries the headers by the time it reaches here, since
+        # add_security_headers sits further in; MutableHeaders.__setitem__
+        # replaces rather than duplicates an existing value, so setting them
+        # unconditionally on every 400 is safe either way. The response.start
+        # message is held back until response.body arrives (TrustedHost's
+        # rejection is always exactly these two messages) so the body can
+        # still be inspected for the log line below before headers are sent.
+        pending_start: Message | None = None
 
         async def _send(message: Message) -> None:
-            nonlocal saw_400, rejected
+            nonlocal saw_400, rejected, pending_start
             if message["type"] == ASGI_MESSAGE_TYPE_RESPONSE_START:
                 saw_400 = message["status"] == status.HTTP_400_BAD_REQUEST
+                if saw_400:
+                    pending_start = message
+                    return
             elif message["type"] == ASGI_MESSAGE_TYPE_RESPONSE_BODY:
-                if saw_400 and TRUSTED_HOST_REJECT_BODY in message.get("body", b""):
-                    rejected = True
+                if saw_400 and pending_start is not None:
+                    if TRUSTED_HOST_REJECT_BODY in message.get("body", b""):
+                        rejected = True
+                    headers = MutableHeaders(raw=pending_start["headers"])
+                    for name, value in SECURITY_HEADERS.items():
+                        headers[name] = value
+                    await send(pending_start)
+                    pending_start = None
                 saw_400 = False
             await send(message)
 
@@ -389,9 +416,14 @@ class MaxBodySizeMiddleware:
         self.max_bytes = max_bytes
 
     async def _reject(self, scope: Scope, receive: Receive, send: Send) -> None:
+        # This middleware is registered outside (wraps around) the
+        # add_security_headers layer, so a response built here never passes
+        # through it — set the headers directly, or this 413 ships without
+        # CSP/nosniff/etc. (L-1 in the OWASP audit).
         response = JSONResponse(
             {"detail": f"Request body exceeds {self.max_bytes} bytes."},
             status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+            headers=SECURITY_HEADERS,
         )
         await response(scope, receive, send)
 
@@ -567,9 +599,24 @@ app.add_middleware(
 # CORS_ORIGINS now serves double duty — CORS (above) and CSRF trust (below).
 # Widening it for one purpose widens the other too; a value added here to let a
 # new frontend deployment through CORS also becomes a trusted CSRF origin.
+#
+# CORS_ORIGINS is sync: false in render.yaml, so an operator who forgets to set
+# it in the Render dashboard silently keeps its dev default
+# (settings.CORS_ORIGINS' literal default below) — SameSite=Strict means that
+# default can't actually carry the session cookie cross-origin, but a
+# permanently-trusted localhost CSRF origin in production is still the wrong
+# shape for a config mistake to take. Dropped outside development so a
+# forgotten CORS_ORIGINS degrades to "no CSRF-trusted origins" (fail closed)
+# rather than "trust two hardcoded localhost ports" (fail open).
+_DEV_CORS_ORIGINS_DEFAULT = frozenset(
+    {"http://localhost:5173", "http://localhost:4173"}
+)
+_csrf_trusted_origins = frozenset(settings.CORS_ORIGINS) | {settings.FRONTEND_URL}
+if settings.APP_ENV != APP_ENV_DEVELOPMENT:
+    _csrf_trusted_origins -= _DEV_CORS_ORIGINS_DEFAULT
 app.add_middleware(
     CsrfOriginCheckMiddleware,
-    trusted_origins=frozenset(settings.CORS_ORIGINS) | {settings.FRONTEND_URL},
+    trusted_origins=_csrf_trusted_origins,
 )
 
 
@@ -650,6 +697,7 @@ if _allowed_hosts:
 app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
 
 app.include_router(admin_router)
+app.include_router(admin_auth_router)
 app.include_router(auth_router)
 app.include_router(browse_router)
 app.include_router(contact_router)
@@ -660,6 +708,7 @@ app.include_router(onboarding_router)
 app.include_router(organizer_auth_router)
 app.include_router(organizer_events_router)
 app.include_router(public_router)
+app.include_router(reports_router)
 app.include_router(settings_router)
 app.include_router(unsubscribe_router)
 app.include_router(webhooks_router)

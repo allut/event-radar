@@ -5,6 +5,7 @@ import { api, ApiError } from '../../api/client';
 import { getLocale } from '../../lib/auth';
 import { t } from '../../i18n';
 import { API, ROUTES, UI_STATE, type UnsubscribeState } from '../../constants';
+import { withQueryParam } from '../../utils';
 import { useLocalePath } from '../../hooks/useLocalePath';
 import { useStaticSeoMeta } from '../../hooks/useStaticSeoMeta';
 import AuthCard, { type AuthCardKind } from '../../components/AuthCard';
@@ -36,7 +37,7 @@ export default function Unsubscribe() {
 
     async function run(tok: string) {
       try {
-        await api.post(`${API.emailUnsubscribe}?token=${encodeURIComponent(tok)}`);
+        await api.post(withQueryParam(API.emailUnsubscribe, 'token', tok));
         setState(UI_STATE.success);
       } catch (err) {
         setState(UI_STATE.error);
@@ -54,7 +55,7 @@ export default function Unsubscribe() {
     if (!token || resubscribePending) return;
     setResubscribePending(true);
     try {
-      await api.post(`${API.emailResubscribe}?token=${encodeURIComponent(token)}`);
+      await api.post(withQueryParam(API.emailResubscribe, 'token', token));
       setState(UI_STATE.resubscribed);
     } catch {
       setErrorMsg(t('unsubscribe.error', locale));

@@ -375,6 +375,63 @@ EVENT_STATUS_CLASSIFIED = "classified"
 EVENT_STATUS_PUBLISHED = "published"
 EVENT_STATUS_CANCELLED = "cancelled"
 
+EVENT_CANCELLATION_REASON_ORGANIZER_RETRACT = "organizer_retract"
+EVENT_CANCELLATION_REASON_ADMIN_RETRACT = "admin_retract"
+EVENT_CANCELLATION_REASON_REPORT_TAKEDOWN = "report_takedown"
+VALID_EVENT_CANCELLATION_REASONS = frozenset(
+    {
+        EVENT_CANCELLATION_REASON_ORGANIZER_RETRACT,
+        EVENT_CANCELLATION_REASON_ADMIN_RETRACT,
+        EVENT_CANCELLATION_REASON_REPORT_TAKEDOWN,
+    }
+)
+
+# Report-an-inappropriate-event feature (event_reports table).
+REPORT_REASON_SPAM_OR_SCAM = "spam_or_scam"
+REPORT_REASON_SEXUAL_OR_EXPLICIT = "sexual_or_explicit"
+REPORT_REASON_NOT_AN_EVENT = "not_an_event"
+REPORT_REASON_HATEFUL_OR_VIOLENT = "hateful_or_violent"
+REPORT_REASON_MISLEADING_INFO = "misleading_info"
+REPORT_REASON_EVENT_ENDED_OR_CANCELLED = "event_ended_or_cancelled"
+REPORT_REASON_WRONG_LOCATION = "wrong_location"
+REPORT_REASON_OTHER = "other"
+VALID_REPORT_REASONS = frozenset(
+    {
+        REPORT_REASON_SPAM_OR_SCAM,
+        REPORT_REASON_SEXUAL_OR_EXPLICIT,
+        REPORT_REASON_NOT_AN_EVENT,
+        REPORT_REASON_HATEFUL_OR_VIOLENT,
+        REPORT_REASON_MISLEADING_INFO,
+        REPORT_REASON_EVENT_ENDED_OR_CANCELLED,
+        REPORT_REASON_WRONG_LOCATION,
+        REPORT_REASON_OTHER,
+    }
+)
+REPORT_STATUS_OPEN = "open"
+REPORT_STATUS_RESOLVED = "resolved"
+VALID_REPORT_STATUSES = frozenset({REPORT_STATUS_OPEN, REPORT_STATUS_RESOLVED})
+REPORT_DETAIL_MAX_CHARS = 500
+
+# System-generated resolution_note for the auto-resolve-on-cancellation cascade
+# (utils.py::resolve_open_reports) — every path that cancels an event (admin
+# retract, organizer retract, organizer self-delete, report takedown's own
+# explicit note) reuses this so the reporter-outcome email (issue #127) has a
+# consistent fallback message regardless of which door triggered it.
+REPORT_AUTO_RESOLVE_NOTE = "auto-resolved: event cancelled"
+
+# Admin report review-queue pagination (routers/admin.py GET /admin/reports) —
+# mirrors ADMIN_REVIEW_QUEUE_PAGE_SIZE's sizing rationale.
+ADMIN_REPORTS_QUEUE_PAGE_SIZE: int = 50
+ADMIN_REPORTS_QUEUE_MAX_PAGE_SIZE: int = 500
+
+# Event inspector (routers/admin.py GET /admin/events/{id}, issue #157) caps
+# how many raw_events rows it inlines — unlike the paginated queues above,
+# this is a fixed ceiling (not offset/limit query params) since it's one
+# sub-list within a single-event payload, not its own listing endpoint. Each
+# row carries a full verbatim JSONB payload, so this bounds response size
+# for an event with a long refetch/dedup-merge history.
+ADMIN_EVENT_INSPECTOR_RAW_EVENTS_LIMIT: int = 20
+
 # Deduplication
 DEDUP_LOOKBACK_DAYS = 30  # only re-cluster events that started within this window
 # Upper bound on load_dedup_candidate_events — without it, an event scheduled
@@ -402,6 +459,12 @@ DEDUP_UNFILTERED_FALLBACK_MAX_EVENTS = 500
 # (the pass still runs), just a visibility threshold: crossing it logs a
 # warning so a density spike shows up instead of silently growing pass time.
 DEDUP_CANDIDATE_PAIR_WARN_THRESHOLD = 20000
+# Hard cap for the same query — worst case (many events sharing one starts_at)
+# is quadratic in same-window listing density with no LIMIT, materializing
+# every pair into Python. Deterministic ORDER BY means a truncated tail is
+# picked up on the next pass as the head clusters collapse. Kept above the
+# warn threshold so a warning always fires before truncation would.
+DEDUP_CANDIDATE_PAIR_MAX = 50_000
 
 # Resend email delivery
 RESEND_SEND_URL = "https://api.resend.com/emails"
@@ -485,6 +548,9 @@ ADMIN_AUTH_FAILURES_MAX_ENTRIES = 4096
 # Authenticated feedback writes — generous cap; prevents cache-rebuild DoS
 # (every signal wipes all user_event_scores rows for that user).
 RATE_LIMIT_FEEDBACK = "60/minute"
+# POST /reports — content-moderation write, tighter than RATE_LIMIT_FEEDBACK
+# since it creates a row an admin must triage (see LOG_EVENT_REPORT_SUBMITTED).
+RATE_LIMIT_REPORT = "10/minute"
 # Authenticated state-changing writes (onboarding persona, settings GET/PATCH) —
 # damps self-inflicted DB write spam from a valid session token.
 RATE_LIMIT_AUTHENTICATED_WRITE = "30/minute"
@@ -496,6 +562,10 @@ RATE_LIMIT_LOGOUT_ALL = "10/minute"
 # bump) — lower stakes than logout-all, so a more generous cap; shared by both
 # the consumer and organizer logout endpoints, mirroring RATE_LIMIT_LOGOUT_ALL.
 RATE_LIMIT_LOGOUT = "20/minute"
+# POST /admin/auth/login — a password+TOTP brute-force surface distinct from
+# RATE_LIMIT_ADMIN (which only gates already-authenticated /admin/* routes);
+# ADMIN_AUTH_MAX_FAILURES lockout is the consecutive-failure damper on top.
+RATE_LIMIT_ADMIN_LOGIN = "10/minute"
 # Authenticated /explore browsing — mirrors RATE_LIMIT_EVENTS_DETAIL; live filter
 # changes can fire a request per keystroke/chip-toggle, so this stays generous.
 RATE_LIMIT_BROWSE = "120/minute"
@@ -547,6 +617,25 @@ AUTH_ORGANIZER_SESSION_SALT = "organizer-session-v1"
 # organizers are not expected to need a different cadence than consumers).
 ORGANIZER_MAGIC_LINK_TTL_MINUTES = _MAGIC_LINK_TTL_MINUTES_SHARED
 ORGANIZER_SESSION_TTL_DAYS = _SESSION_TTL_DAYS_SHARED
+
+# Admin console auth (issue #154) — third auth track alongside the consumer and
+# organizer ones above. No magic link (password + TOTP instead) and no admins
+# table (a session just asserts "a valid login happened", nothing per-admin —
+# see routers/admin_auth.py), so this token carries no id/version claim, only a
+# distinct salt so it can never verify as a user/organizer token or vice versa.
+AUTH_ADMIN_SESSION_SALT = "admin-session-v1"
+ADMIN_SESSION_COOKIE_NAME = "admin_session"
+# Scoped under /api/admin like the organizer cookie is scoped under
+# /api/organizer — an admin route added outside /admin/* would silently 401.
+ADMIN_SESSION_COOKIE_PATH = "/api/admin"
+# 12h, shorter than the 2-day consumer/organizer TTL — a higher-value credential
+# with no revocation mechanism beyond expiry (see docs/adr/0001).
+ADMIN_SESSION_TTL_SECONDS = 12 * 60 * 60
+# One 30s step of drift tolerance either side of "now" (pyotp's valid_window is a
+# count of steps, not seconds; app/auth/totp.py) — accounts for clock skew between
+# the admin's authenticator app and this server without materially widening the
+# guess window.
+ADMIN_TOTP_VALID_WINDOW = 1
 # Per-organizer daily submission ceiling (routers/organizer_events.py), computed
 # from Tallinn calendar-day start — an IP rate limit alone can't cap a single
 # organizer account across multiple IPs.
@@ -676,9 +765,11 @@ PAGINATION_MIN_OFFSET: int = 0
 # Ceiling on `offset` across every paginated list endpoint (browse.py, feedback.py,
 # admin.py, organizer_events.py) — `ge=` alone leaves offset unbounded, so an
 # offset like 5_000_000 makes Postgres walk and discard that many rows on every
-# request at the endpoint's full rate limit. High enough that no legitimate
-# pagination depth is ever affected.
-PAGINATION_MAX_OFFSET: int = 100_000
+# request at the endpoint's full rate limit. Every consumer is infinite scroll
+# from offset=0 at BROWSE_PAGE_SIZE-ish increments, so 5_000 already covers far
+# more depth than any legitimate session reaches while still bounding the
+# LIMIT/OFFSET seq-scan-and-discard cost an authenticated caller can force.
+PAGINATION_MAX_OFFSET: int = 5_000
 # Candidate cap for the Python-scored path (Path B: for_you=True OR sort=relevance —
 # so also date/price/quality sort *under* for_you=True, not just relevance). Sorted
 # soonest-first before capping, so the cap policy is a deliberate soonest-bias, not
@@ -1214,6 +1305,26 @@ LOG_EVENT_WEBHOOK_REJECTED = "webhook_rejected"  # inbound-mail signature / body
 LOG_EVENT_EMAIL_SEND_FAILED = "email_send_failed"  # Resend magic-link / digest failure
 LOG_EVENT_CONTACT_HONEYPOT = "contact_honeypot_block"  # contact-form honeypot field tripped
 LOG_EVENT_HOST_REJECTED = "host_rejected"  # HostCheckMiddleware Host-header reject
+LOG_EVENT_REPORT_SUBMITTED = "report_submitted"  # POST /reports success
+LOG_EVENT_ADMIN_ACTION = "admin_action"  # /admin/auth/* login/logout (issue #154)
+# `action` field values for LOG_EVENT_ADMIN_ACTION (issue #155).
+ADMIN_ACTION_RESOLVE_REPORTS = "resolve_reports"
+ADMIN_ACTION_TAKEDOWN_REPORTED_EVENT = "takedown_reported_event"
+ADMIN_ACTION_APPROVE_SUBMISSION = "approve_submission"
+ADMIN_ACTION_RETRACT_SUBMISSION = "retract_submission"
+# `action` field values for the /admin/pipeline job triggers (issue #159).
+ADMIN_ACTION_INGEST = "ingest"
+ADMIN_ACTION_INGEST_SOURCE = "ingest_source"
+ADMIN_ACTION_DEDUP = "dedup"
+ADMIN_ACTION_CLASSIFY = "classify"
+ADMIN_ACTION_PUBLISH = "publish"
+ADMIN_ACTION_GEOCODE = "geocode"
+ADMIN_ACTION_REFETCH = "refetch"
+ADMIN_ACTION_SYNC_ORGANIZERS = "sync_organizers"
+ADMIN_ACTION_CLEANUP = "cleanup"
+ADMIN_ACTION_BUILD_FEEDS = "build_feeds"
+ADMIN_ACTION_SEND_DIGESTS = "send_digests"
+ADMIN_ACTION_PIPELINE_RUN = "pipeline_run"
 # `status` field values for LOG_EVENT_JOB_RUN.
 LOG_STATUS_OK = "ok"
 LOG_STATUS_ERROR = "error"
@@ -1229,6 +1340,12 @@ SECURITY_HEADERS: dict[str, str] = {
     # Pure JSON API, nothing should ever be cached by an intermediary — most
     # importantly, POST /auth/verify sets the session cookie via Set-Cookie.
     "Cache-Control": "no-store",
+    # Denies browser-feature access outright rather than leaving it at
+    # browser defaults — this API never needs camera/mic/geolocation/payment,
+    # and interest-cohort opts out of FLoC-style tracking.
+    "Permissions-Policy": (
+        "camera=(), microphone=(), geolocation=(), payment=(), interest-cohort=()"
+    ),
 }
 # HSTS is only safe to send over HTTPS — Render terminates TLS in front of the app,
 # so this is gated to production (see app.main) to avoid breaking local http://localhost.
@@ -1330,6 +1447,7 @@ ERROR_EVENT_NOT_FOUND = "Event not found."
 ERROR_USER_NOT_FOUND = "User not found."
 ERROR_ORGANIZER_NOT_FOUND = "Organizer not found."
 ERROR_SUBMISSION_NOT_FOUND = "Submission not found."
+ERROR_EVENT_CANCELLED = "This event was taken down and can no longer be edited."
 
 # main.py (/internal/tick)
 ERROR_INTERNAL_TICK_INVALID_TOKEN = "Invalid token"
@@ -1346,6 +1464,14 @@ ERROR_UNKNOWN_SOURCE = "Unknown source: {slug!r}"
 ERROR_INVALID_SORT = "sort must be one of {sorts}"
 ERROR_INVALID_SIGNAL = "Invalid signal. Must be one of: {signals}"
 ERROR_INVALID_PREFERENCE_SIGNAL = "signal must be one of: {signals}"
+
+# routers/reports.py
+ERROR_INVALID_REPORT_REASON = "reason must be one of: {reasons}"
+ERROR_REPORT_DETAIL_REQUIRED = (
+    "detail is required when reason is 'other' or is_illegal_allegation is true."
+)
+ERROR_REPORT_DETAIL_TOO_LONG = "detail must be at most {max_chars} characters."
+ERROR_RESOLUTION_NOTE_REQUIRED = "resolution_note is required."
 
 # routers/settings.py
 ERROR_NO_UPDATE_FIELDS = "Provide at least one field to update."
@@ -1381,4 +1507,5 @@ ERROR_IMAGE_UPLOAD_FAILED = "Image upload failed; please try again."
 
 # routers/utils.py
 ERROR_ADMIN_JOB_FAILED = "{name} failed; see server logs"
+ERROR_ADMIN_JOB_ALREADY_RUNNING = "{name} is already running; try again once it finishes."
 ERROR_FEATURE_DISABLED = "{feature} disabled: {setting_name} not configured"

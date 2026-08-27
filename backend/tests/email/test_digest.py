@@ -297,9 +297,9 @@ class TestDigestI18nConstants:
 
 
 def _make_db_with_user_and_feed(
-    user_id: int = 1, event_ids: list[int] | None = None
+    db: AsyncMock, user_id: int = 1, event_ids: list[int] | None = None
 ) -> AsyncMock:
-    """Return a mock DB session set up for a single opted-in user with a feed."""
+    """Wire the given mock DB session for a single opted-in user with a feed."""
     if event_ids is None:
         event_ids = [10]
 
@@ -324,7 +324,6 @@ def _make_db_with_user_and_feed(
         r.all.return_value = rows
         return r
 
-    db = AsyncMock()
     # First call → users, second call → feeds, third call → events
     db.scalars = AsyncMock(
         side_effect=[_sync_result([user]), _sync_result([feed]), _sync_result([event])]
@@ -334,8 +333,8 @@ def _make_db_with_user_and_feed(
 
 class TestSendDailyDigestsDryRun:
     @pytest.mark.asyncio
-    async def test_dry_run_does_not_call_send_digest_email(self):
-        db = _make_db_with_user_and_feed()
+    async def test_dry_run_does_not_call_send_digest_email(self, mock_db):
+        db = _make_db_with_user_and_feed(mock_db)
         with (
             patch("app.email.digest.datetime") as mock_dt,
             patch("app.email.digest.send_digest_email", new_callable=AsyncMock) as mock_send,
@@ -348,8 +347,8 @@ class TestSendDailyDigestsDryRun:
         assert result["sent"] == 1
 
     @pytest.mark.asyncio
-    async def test_user_query_filters_on_email_verified(self):
-        db = _make_db_with_user_and_feed()
+    async def test_user_query_filters_on_email_verified(self, mock_db):
+        db = _make_db_with_user_and_feed(mock_db)
         with (
             patch("app.email.digest.datetime") as mock_dt,
             patch("app.email.digest.send_digest_email", new_callable=AsyncMock),
@@ -363,8 +362,8 @@ class TestSendDailyDigestsDryRun:
         assert "email_digest_opt_in" in compiled
 
     @pytest.mark.asyncio
-    async def test_event_query_excludes_explicit_events(self):
-        db = _make_db_with_user_and_feed()
+    async def test_event_query_excludes_explicit_events(self, mock_db):
+        db = _make_db_with_user_and_feed(mock_db)
         with (
             patch("app.email.digest.datetime") as mock_dt,
             patch("app.email.digest.send_digest_email", new_callable=AsyncMock),
@@ -379,8 +378,8 @@ class TestSendDailyDigestsDryRun:
         assert "false" in compiled.lower()
 
     @pytest.mark.asyncio
-    async def test_dry_run_false_calls_send_digest_email(self):
-        db = _make_db_with_user_and_feed()
+    async def test_dry_run_false_calls_send_digest_email(self, mock_db):
+        db = _make_db_with_user_and_feed(mock_db)
         with (
             patch("app.email.digest.datetime") as mock_dt,
             patch("app.email.digest.send_digest_email", new_callable=AsyncMock) as mock_send,
@@ -392,11 +391,11 @@ class TestSendDailyDigestsDryRun:
         assert result["dry_run"] is False
 
     @pytest.mark.asyncio
-    async def test_dry_run_key_present_in_early_return_no_users(self):
+    async def test_dry_run_key_present_in_early_return_no_users(self, mock_db):
         no_users = MagicMock()
         no_users.all.return_value = []
 
-        db = AsyncMock()
+        db = mock_db
         db.scalars = AsyncMock(return_value=no_users)
 
         with patch("app.email.digest.datetime") as mock_dt:
@@ -407,7 +406,7 @@ class TestSendDailyDigestsDryRun:
         assert result["dry_run"] is True
 
     @pytest.mark.asyncio
-    async def test_dry_run_key_present_in_early_return_no_feeds(self):
+    async def test_dry_run_key_present_in_early_return_no_feeds(self, mock_db):
         user = MagicMock()
         user.id = 1
         user.email_digest_opt_in = True
@@ -421,7 +420,7 @@ class TestSendDailyDigestsDryRun:
             r.all.return_value = rows
             return r
 
-        db = AsyncMock()
+        db = mock_db
         db.scalars = AsyncMock(
             side_effect=[_sync_result([user]), _sync_result([feed])]
         )

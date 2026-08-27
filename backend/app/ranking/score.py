@@ -384,15 +384,44 @@ def locality_bonus(lat: float | None, lng: float | None) -> float:
     return 0.0
 
 
+def _precompute_event_factors(
+    event_rows: list[Event], now: datetime
+) -> dict[int, tuple[float, float, float]]:
+    """Per-event (recency, quality, locality) — invariant across every user.
+
+    build_daily_feeds' inner loop calls score_event once per (user, candidate)
+    pair; these three factors depend only on the event and the run's fixed
+    ``now``, so without this they're recomputed identically U times per event
+    at U x E scale. Hoisted once here and threaded through as ``precomputed``.
+    """
+    factors: dict[int, tuple[float, float, float]] = {}
+    for event in event_rows:
+        cl = event.classification
+        quality = cl.quality_score if cl and cl.quality_score is not None else NEUTRAL_SCORE
+        factors[event.id] = (
+            recency_boost(event.starts_at, now),
+            quality,
+            locality_bonus(event.lat, event.lng),
+        )
+    return factors
+
+
 def score_event(
     user_persona_weights: list[tuple[float, dict]],
     ctx: FeedbackContext,
     event: Event,
     now: datetime,
+    precomputed: tuple[float, float, float] | None = None,
 ) -> float | None:
     """
     Compute personalized score for one event. Returns None if hard-excluded.
     Score is in [0, 1].
+
+    ``precomputed`` is the (recency, quality, locality) triple from
+    ``_precompute_event_factors`` — pass it from a caller iterating many users
+    over the same candidate pool to skip recomputing these per-event-only
+    values on every call. Callers scoring a single user's events ad hoc (e.g.
+    browse.py) omit it and get the values computed inline, as before.
     """
     cl: EventClassification | None = event.classification
     categories: list[str] = cl.categories if cl else []
@@ -404,9 +433,14 @@ def score_event(
         return None  # hard exclude
 
     affinity = persona_affinity(user_persona_weights, categories, vibes, time_slots)
-    recency = recency_boost(event.starts_at, now)
-    quality = cl.quality_score if cl and cl.quality_score is not None else NEUTRAL_SCORE
-    locality = locality_bonus(event.lat, event.lng)
+    if precomputed is not None:
+        recency, quality, locality = precomputed
+    else:
+        recency = recency_boost(event.starts_at, now)
+        quality = (
+            cl.quality_score if cl and cl.quality_score is not None else NEUTRAL_SCORE
+        )
+        locality = locality_bonus(event.lat, event.lng)
     fb_normalized = (fb + 1.0) / 2.0  # map [-1, 1] → [0, 1]
 
     return (
@@ -545,6 +579,7 @@ class _SharedFeedContext:
 
     event_rows: list[Event]
     candidate_series_key: dict[int, tuple[str, str]]
+    event_factors: dict[int, tuple[float, float, float]]
 
 
 @dataclass
@@ -568,6 +603,10 @@ class _FeedBuildContext:
     @property
     def candidate_series_key(self) -> dict[int, tuple[str, str]]:
         return self.shared.candidate_series_key
+
+    @property
+    def event_factors(self) -> dict[int, tuple[float, float, float]]:
+        return self.shared.event_factors
 
 
 async def _load_recent_series_by_user(
@@ -653,12 +692,13 @@ def _collapse_series_duplicates(
 
 async def _load_candidate_events(
     db: AsyncSession, now: datetime
-) -> tuple[list[Event], dict[int, tuple[str, str]]]:
+) -> tuple[list[Event], dict[int, tuple[str, str]], dict[int, tuple[float, float, float]]]:
     """Bulk-load published, non-excluded, upcoming-within-lookahead candidate
     events. Identical query for every page of users within one
     build_daily_feeds run — see _SharedFeedContext. Collapses same-series
     duplicates (see _collapse_series_duplicates) before returning, along with
-    each survivor's series key."""
+    each survivor's series key and its precomputed per-event score factors
+    (see _precompute_event_factors)."""
     cutoff = now + timedelta(days=DAILY_5_LOOKAHEAD_DAYS)
     event_rows = list(
         (
@@ -674,7 +714,8 @@ async def _load_candidate_events(
             )
         ).all()
     )
-    return _collapse_series_duplicates(event_rows)
+    collapsed, candidate_series_key = _collapse_series_duplicates(event_rows)
+    return collapsed, candidate_series_key, _precompute_event_factors(collapsed, now)
 
 
 async def _verified_user_ids(db: AsyncSession) -> list[int]:
@@ -709,10 +750,13 @@ async def _load_feed_build_context(
     events + series keys once instead of re-running the identical query per
     page; when None (the default), it's loaded here exactly as before."""
     if shared is None:
-        event_rows, candidate_series_key = await _load_candidate_events(db, now)
+        event_rows, candidate_series_key, event_factors = await _load_candidate_events(
+            db, now
+        )
         shared = _SharedFeedContext(
             event_rows=event_rows,
             candidate_series_key=candidate_series_key,
+            event_factors=event_factors,
         )
     event_rows = shared.event_rows
     candidate_event_ids = [e.id for e in event_rows]
@@ -760,13 +804,20 @@ async def _load_feed_build_context(
 
     # Cached scores: the feedback router DELETEs the (user, event) row on
     # signal change, so an existing row reflects the most recent signal.
+    # Chunked on event_id — user_ids is already bounded (≤500), but the 14-day
+    # candidate pool has no such ceiling, and SQLAlchemy expands each `IN` to
+    # one bind parameter per element. Past ~32k candidates this would hit
+    # Postgres's per-statement parameter limit, the same one
+    # SCORE_INSERT_CHUNK_SIZE exists to respect on the write side.
     score_cache: dict[tuple[int, int], float] = {}
-    if candidate_event_ids:
+    event_ids = list(candidate_event_ids)
+    for i in range(0, len(event_ids), SCORE_INSERT_CHUNK_SIZE):
+        chunk = event_ids[i : i + SCORE_INSERT_CHUNK_SIZE]
         ues_rows = (
             await db.scalars(
                 select(UserEventScore).where(
                     UserEventScore.user_id.in_(user_ids),
-                    UserEventScore.event_id.in_(candidate_event_ids),
+                    UserEventScore.event_id.in_(chunk),
                 )
             )
         ).all()
@@ -814,7 +865,13 @@ def _score_user_candidates(
             scores_reused += 1
             return cached
 
-        s = score_event(user_persona_weights, fb_ctx, event, now)
+        s = score_event(
+            user_persona_weights,
+            fb_ctx,
+            event,
+            now,
+            precomputed=build_ctx.event_factors.get(event.id),
+        )
         if s is None:
             return None
         new_score_rows.append(
@@ -939,10 +996,11 @@ async def build_daily_feeds(db: AsyncSession) -> dict:
             "scores_reused": 0,
         }
 
-    event_rows, candidate_series_key = await _load_candidate_events(db, now)
+    event_rows, candidate_series_key, event_factors = await _load_candidate_events(db, now)
     shared = _SharedFeedContext(
         event_rows=event_rows,
         candidate_series_key=candidate_series_key,
+        event_factors=event_factors,
     )
 
     built = empty = scores_reused = scores_written = total_users = 0

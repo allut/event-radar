@@ -20,6 +20,7 @@ import {
 } from './_generated/sharedConstants.js';
 
 export { LOCALES, APP_VERSION, MAGIC_LINK_EXPIRY_MINUTES, PERSONA_MAX_SELECTABLE, DEFAULT_CURRENCY, SAFE_URL_SCHEMES, SANITIZE_ALLOWED_TAGS, SANITIZE_ALLOWED_ATTR, CATEGORIES, VIBES, BROWSE_PAGE_SIZE, ORGANIZER_IMAGE_ALLOWED_MIME };
+export const DEFAULT_LOCALE_CODE = _DEFAULT_LOCALE_CODE;
 export type { PersonaData };
 
 // Re-export PERSONAS under the original name so all import sites are unchanged.
@@ -55,12 +56,19 @@ export const AUTH_REDIRECT_DELAY_MS = 600;
 // session expiry indefinitely if the user never signs back in on this tab.
 export const LOGOUT_FLAG_TTL_MS = 10_000;
 
+// Defers pageview tracking to a macrotask so it reads the post-navigation
+// location instead of racing react-router's own update (App.tsx GoogleAnalytics).
+export const PAGEVIEW_TRACK_DELAY_MS = 0;
+
 // ─── Animation ───────────────────────────────────────────────────────────────
 export const CARD_ANIMATION_DELAY_STEP_MS = 80;
 
 // ─── Layout ──────────────────────────────────────────────────────────────────
 // Matches the `max-width: 640px` breakpoint used across component CSS modules.
 export const MOBILE_BREAKPOINT_PX = 640;
+// /admin/pipeline (issue #159) is desktop-only — below this it shows a
+// "come back at a desk" gate instead of the trigger console.
+export const ADMIN_DESKTOP_BREAKPOINT_PX = 1024;
 
 // ─── Dropdown ────────────────────────────────────────────────────────────────
 // useDropdown's default initial-focus target: the popover's first button
@@ -212,6 +220,14 @@ export const ROUND_STATUS = {
   continuing: 'continuing',
   done: 'done',
 } as const;
+// Backend event/report status values compared against in the admin console —
+// mirrors ROUND_STATUS/UI_STATE's pattern so a typo is a compile error.
+export const EVENT_STATUS = {
+  published: 'published',
+} as const;
+export const REPORT_STATUS = {
+  open: 'open',
+} as const;
 // Worst-case ~100 minutes wall-clock at the 10-minute render budget per round,
 // sized with margin against the throughput research's 5–7-round cold-catch-up
 // estimate. Fixed, not dynamic — a pathological catalog can't chain forever.
@@ -251,6 +267,24 @@ export const ANALYTICS_ORGANIZER_EDIT_PATH_RE = new RegExp(`^${_LOCALE_PREFIX_RE
 // GA4 loader src — googletagmanager.com only, matching the CSP script-src
 // widened for it (frontend/vercel.json, see docs/security.md).
 export const GTAG_SCRIPT_SRC = 'https://www.googletagmanager.com/gtag/js';
+
+// ─── Reports (event_reports, issue #128) ────────────────────────────────────
+// Mirrors the backend's VALID_REPORT_REASONS order (app/constants.py) — labels/
+// descriptions come from the report_reason_<slug>(_description) i18n keys.
+export const REPORT_REASON_OTHER = 'other';
+export const REPORT_REASONS: { value: string; labelKey: string; descriptionKey: string }[] = [
+  { value: 'spam_or_scam', labelKey: 'report_reason_spam_or_scam', descriptionKey: 'report_reason_spam_or_scam_description' },
+  { value: 'sexual_or_explicit', labelKey: 'report_reason_sexual_or_explicit', descriptionKey: 'report_reason_sexual_or_explicit_description' },
+  { value: 'not_an_event', labelKey: 'report_reason_not_an_event', descriptionKey: 'report_reason_not_an_event_description' },
+  { value: 'hateful_or_violent', labelKey: 'report_reason_hateful_or_violent', descriptionKey: 'report_reason_hateful_or_violent_description' },
+  { value: 'misleading_info', labelKey: 'report_reason_misleading_info', descriptionKey: 'report_reason_misleading_info_description' },
+  { value: 'event_ended_or_cancelled', labelKey: 'report_reason_event_ended_or_cancelled', descriptionKey: 'report_reason_event_ended_or_cancelled_description' },
+  { value: 'wrong_location', labelKey: 'report_reason_wrong_location', descriptionKey: 'report_reason_wrong_location_description' },
+  { value: REPORT_REASON_OTHER, labelKey: 'report_reason_other', descriptionKey: 'report_reason_other_description' },
+];
+// Mirrors the backend's REPORT_DETAIL_MAX_CHARS (app/constants.py) — client-side
+// validation only, the server re-validates and is the real boundary.
+export const REPORT_DETAIL_MAX_CHARS = 500;
 
 // ─── Events / feedback ───────────────────────────────────────────────────────
 export type Signal = 'like' | 'dislike' | 'bookmark';
@@ -300,6 +334,11 @@ export const QUERY_KEYS = {
   settings: 'settings',
   showcase: 'showcase',
   organizerEvents: 'organizerEvents',
+  adminCounts: 'adminCounts',
+  adminReports: 'adminReports',
+  adminSubmissions: 'adminSubmissions',
+  adminDedupGroups: 'adminDedupGroups',
+  adminEventDetail: 'adminEventDetail',
 } as const;
 
 // ─── UI state types ───────────────────────────────────────────────────────────
@@ -364,6 +403,9 @@ export const DATE_PRESETS: { value: DatePreset; labelKey: string }[] = [
 
 // ─── Saved Events ────────────────────────────────────────────────────────────
 export const SAVED_EVENTS_PAGE_SIZE = 24;
+
+// ─── Admin: dedup groups (mirrors backend's ADMIN_DEDUP_GROUPS_PAGE_SIZE) ───
+export const ADMIN_DEDUP_GROUPS_PAGE_SIZE = 50;
 
 // ─── Organizer submission ────────────────────────────────────────────────────
 // ORGANIZER_IMAGE_ALLOWED_MIME (re-exported above) is sourced from
@@ -490,6 +532,13 @@ export const EXPLORE_PARAM = {
   limit: 'limit',
   offset: 'offset',
 } as const;
+
+// Query-param name for the report-notification email's deep link into
+// AdminReports — carries the reported event's id so the matching row's
+// detail panel auto-opens on load.
+export const ADMIN_REPORTS_PARAM = {
+  report: 'report',
+} as const;
 // URL state uses a terse '1' flag; the /explore API query uses 'true'/'false'.
 export const EXPLORE_URL_FLAG_TRUE = '1';
 export const EXPLORE_API_FLAG_TRUE = 'true';
@@ -530,7 +579,44 @@ export const ROUTES = {
   organizerSubmit: '/organizer/submit',
   organizerEventEdit: (id: number | string) => `/organizer/events/${id}/edit`,
   organizerEventEditPattern: '/organizer/events/:id/edit',
+  // Admin console (issue #154) — registered entirely outside App.tsx's
+  // ROUTE_DEFS/locale-prefix loop (see AdminApp), so these are never
+  // locale-prefixed and never appear in NAV_ITEMS.
+  adminLogin: '/admin/login',
+  adminBase: '/admin',
+  adminSplat: '/admin/*',
+  adminEventsSplat: '/admin/events/*',
+  adminDashboard: '/admin',
+  adminReports: '/admin/reports',
+  adminSubmissions: '/admin/submissions',
+  adminEventDetail: (id: number | string) => `/admin/events/${id}`,
+  adminEventDetailPattern: '/admin/events/:id',
+  // Path-prefix form of adminEventDetail, for AdminApp's manual pathname
+  // dispatch (see that file's comment on why it can't use nested <Routes>).
+  adminEventDetailPrefix: '/admin/events/',
+  adminPipeline: '/admin/pipeline',
+  adminDedup: '/admin/dedup',
 } as const;
+
+// The admin console's persistent nav — the 5 clickable screens of the
+// ticket's 7 (the other 2, /admin/login and /admin/events/:id, are reached
+// by URL/click-through, not nav links). Always lists all 5, even before
+// later tickets build the still-stubbed ones (issue #154). No i18n: the
+// console is an internal operator tool, not user-facing product surface.
+export const ADMIN_NAV_ITEMS = [
+  { route: ROUTES.adminDashboard, label: 'Dashboard' },
+  { route: ROUTES.adminReports, label: 'Reports' },
+  { route: ROUTES.adminSubmissions, label: 'Submissions' },
+  { route: ROUTES.adminPipeline, label: 'Pipeline' },
+  { route: ROUTES.adminDedup, label: 'Dedup groups' },
+] as const;
+
+// AdminEventDetail's tab strip — same no-i18n exemption as ADMIN_NAV_ITEMS.
+export const ADMIN_EVENT_DETAIL_TABS = ['Overview', 'Classification', 'Dedup & reports', 'Raw payload'] as const;
+
+// Parallel signed-in hint to SIGNED_IN_HINT_KEY/ORGANIZER_SIGNED_IN_HINT_KEY
+// (see lib/adminAuth.ts) — a third, independent auth track's localStorage flag.
+export const ADMIN_SIGNED_IN_HINT_KEY = 'admin_session_token';
 
 // The signed-in primary nav — same four {route, labelKey} pairs rendered by
 // both TopBar (desktop) and MobileMenu (mobile), kept in one place so they
@@ -541,6 +627,11 @@ export const NAV_ITEMS = [
   { route: ROUTES.saved, labelKey: 'nav_saved' },
   { route: ROUTES.settings, labelKey: 'nav_settings' },
 ] as const;
+
+// Prefix every backend request is proxied under (see vercel.json's rewrite
+// rule, which is keyed on this same string) — api/client.ts's fetch wrapper
+// and NDJSON stream path both prepend it.
+export const API_BASE = '/api';
 
 // ─── API endpoints ───────────────────────────────────────────────────────────
 // Every backend request path resolves through this map (or a builder function
@@ -568,4 +659,107 @@ export const API = {
   organizerEvents: '/organizer/events',
   organizerEvent: (id: number | string) => `/organizer/events/${id}`,
   organizerEventImage: '/organizer/events/image',
+  reports: '/reports',
+  adminAuthLogin: '/admin/auth/login',
+  adminAuthLogout: '/admin/auth/logout',
+  adminAuthMe: '/admin/auth/me',
+  adminCounts: '/admin/counts',
+  adminReports: '/admin/reports',
+  adminReportResolve: (id: number) => `/admin/reports/${id}/resolve`,
+  adminReportTakedown: (id: number) => `/admin/reports/${id}/takedown`,
+  adminSubmissions: '/admin/submissions',
+  adminDedupGroups: '/admin/dedup/groups',
+  adminSubmissionApprove: (id: number) => `/admin/submissions/${id}/approve`,
+  adminSubmissionRetract: (id: number) => `/admin/submissions/${id}/retract`,
+  adminEventDetail: (id: number | string) => `/admin/events/${id}`,
+  adminIngestAll: '/admin/ingest',
+  adminIngestSource: (slug: string) => `/admin/ingest/${slug}`,
+  adminDedupRun: '/admin/dedup',
+  adminClassify: '/admin/classify',
+  adminPublish: '/admin/publish',
+  adminGeocode: '/admin/geocode',
+  adminRefetch: '/admin/refetch',
+  adminSyncOrganizers: '/admin/sync-organizers',
+  adminCleanup: (dryRun: boolean) => `/admin/cleanup?dry_run=${dryRun}`,
+  adminBuildFeeds: '/admin/build-feeds',
+  adminSendDigests: (dryRun: boolean) => `/admin/send-digests?dry_run=${dryRun}`,
+  adminPipelineRun: (dryRun: boolean) => `/admin/pipeline/run?dry_run=${dryRun}`,
 } as const;
+
+// /admin/pipeline (issue #159) — one row per job-trigger endpoint. The admin
+// console is English-only/internal, so labels/hints are plain strings, not
+// i18n keys (matches AdminReports/AdminSubmissions' own inline copy).
+export type AdminTriggerId =
+  | 'ingest_all'
+  | 'ingest_source'
+  | 'dedup'
+  | 'classify'
+  | 'publish'
+  | 'geocode'
+  | 'refetch'
+  | 'sync_organizers'
+  | 'cleanup'
+  | 'build_feeds'
+  | 'send_digests'
+  | 'pipeline_run';
+
+export interface AdminPipelineTrigger {
+  id: AdminTriggerId;
+  label: string;
+  hint: string;
+  dryRunCapable?: boolean;
+  needsSlug?: boolean;
+  /** pipeline_run only — the stage order PipelineRunBreakdown renders through. */
+  stages?: string[];
+  /** Set only on cleanup/send_digests/pipeline_run (issue #160) — a real
+   * (dry_run=false) run of these requires the typed-confirmation modal,
+   * naming this endpoint's specific consequence. */
+  dangerCopy?: string;
+}
+
+export const ADMIN_PIPELINE_TRIGGERS: AdminPipelineTrigger[] = [
+  { id: 'ingest_all', label: 'Ingest all sources', hint: 'Pull raw events from every enabled source' },
+  { id: 'ingest_source', label: 'Ingest one source', hint: 'Pull raw events from a single source by slug', needsSlug: true },
+  { id: 'dedup', label: 'Dedup pass', hint: 'Drain the dedup backlog' },
+  { id: 'classify', label: 'Classify', hint: 'LLM classification of pending events' },
+  { id: 'publish', label: 'Publish', hint: 'Promote qualifying events to published' },
+  { id: 'geocode', label: 'Geocode', hint: 'Backfill lat/lng from venue addresses' },
+  { id: 'refetch', label: 'Refetch details', hint: 'Re-fetch source detail pages' },
+  { id: 'sync_organizers', label: 'Sync organizers', hint: 'Discover new organizers, flag stale ones' },
+  {
+    id: 'cleanup',
+    label: 'Cleanup',
+    hint: 'Prune satellite tables past retention',
+    dryRunCapable: true,
+    dangerCopy: 'This deletes rows from satellite tables (raw events, feedback, expired sessions, and more). Events themselves are never deleted, but this cannot be undone.',
+  },
+  { id: 'build_feeds', label: 'Build feeds', hint: 'Build Daily 5 for every active user' },
+  {
+    id: 'send_digests',
+    label: 'Send digests',
+    hint: 'Send the daily email digest',
+    dryRunCapable: true,
+    dangerCopy: 'This sends a real email to every opted-in user right now, not a test send.',
+  },
+  {
+    id: 'pipeline_run',
+    label: 'Run full pipeline',
+    hint: 'All seven stages in order',
+    dryRunCapable: true,
+    stages: ['sync_organizers', 'ingest', 'dedup', 'classify', 'publish', 'build_feeds', 'send_digests'],
+    dangerCopy: 'This runs the full pipeline end to end, including LLM classification (real spend) and a real digest send to every opted-in user.',
+  },
+];
+
+// pipeline_run's bespoke stage-by-stage breakdown (PipelineRunBreakdown,
+// issue #161) — display label per entry in ADMIN_PIPELINE_TRIGGERS'
+// pipeline_run.stages, keyed by the same stage names admin.py streams.
+export const ADMIN_PIPELINE_STAGE_LABELS: Record<string, string> = {
+  sync_organizers: 'Sync organizers',
+  ingest: 'Ingest',
+  dedup: 'Dedup',
+  classify: 'Classify',
+  publish: 'Publish',
+  build_feeds: 'Build feeds',
+  send_digests: 'Send digests',
+};

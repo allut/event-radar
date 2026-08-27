@@ -32,13 +32,7 @@
 }
 
 .heroBackdrop {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  filter: blur(var(--blur-backdrop));
-  transform: scale(var(--scale-hover));
+  composes: mediaBackdrop from '../../components/shared/Media.module.css';
 }
 
 .heroImage {
@@ -319,28 +313,12 @@
   border-bottom: 1px solid var(--border-subtle);
 }
 
-.shareBtn {
-  composes: btnOutline from '../../components/shared/Button.module.css';
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-0-45);
-  padding: var(--space-0-45) var(--space-0-875);
-  font-size: var(--fs-sm);
-  font-weight: var(--fw-semibold);
-  line-height: normal;
-  letter-spacing: var(--tracking-normal);
-  cursor: pointer;
+.overflowTrigger {
+  border: 1px solid var(--border);
 }
 
-.shareBtn svg {
-  width: var(--action-icon-size);
-  height: var(--action-icon-size);
-  flex-shrink: 0;
-}
-
-.shareBtn:focus-visible {
-  outline: none;
-  box-shadow: var(--shadow-focus-ring);
+.overflowTrigger:hover {
+  border-color: var(--accent-hover-border);
 }
 
 .ticketsBtn {
@@ -364,20 +342,7 @@
     justify-content: center;
   }
 
-  .shareBtn {
+  .overflowTrigger {
     margin-left: auto;
-    padding-block: var(--space-2);
-  }
-}
-
-@media (max-width: 400px) {
-  .shareLabel {
-    display: none;
-  }
-
-  .shareBtn {
-    gap: 0;
-    padding-left: var(--space-0-625);
-    padding-right: var(--space-0-625);
   }
 }

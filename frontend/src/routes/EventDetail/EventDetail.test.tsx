@@ -156,10 +156,17 @@ describe('EventDetail', () => {
     expect(mockNavigate).toHaveBeenCalledWith(-1);
   });
 
-  it('renders share button when authenticated', async () => {
+  async function openOverflowMenu() {
+    const trigger = await screen.findByRole('button', { name: 'More options' });
+    await userEvent.click(trigger);
+  }
+
+  it('renders share and report menu items when authenticated', async () => {
     mockGet.mockResolvedValueOnce(eventData);
     renderWithProviders(<EventDetail />, { route: '/en/events/1', pathPattern: '/:locale/events/:id' });
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Share' })).toBeInTheDocument());
+    await openOverflowMenu();
+    expect(screen.getByRole('menuitem', { name: 'Share' })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: 'Report event' })).toBeInTheDocument();
   });
 
   it('does not copy or toast when user cancels the native share sheet', async () => {
@@ -168,8 +175,8 @@ describe('EventDetail', () => {
     Object.assign(navigator, { clipboard: { writeText }, share });
     mockGet.mockResolvedValueOnce(eventData);
     renderWithProviders(<EventDetail />, { route: '/en/events/1', pathPattern: '/:locale/events/:id' });
-    await waitFor(() => screen.getByRole('button', { name: 'Share' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Share' }));
+    await openOverflowMenu();
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Share' }));
     await waitFor(() => expect(share).toHaveBeenCalled());
     expect(writeText).not.toHaveBeenCalled();
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
@@ -181,10 +188,25 @@ describe('EventDetail', () => {
     Object.assign(navigator, { clipboard: { writeText } });
     mockGet.mockResolvedValueOnce(eventData);
     renderWithProviders(<EventDetail />, { route: '/en/events/1', pathPattern: '/:locale/events/:id' });
-    await waitFor(() => screen.getByRole('button', { name: 'Share' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Share' }));
+    await openOverflowMenu();
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Share' }));
     expect(writeText).toHaveBeenCalledWith(window.location.href);
     await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Link copied'));
+  });
+
+  it('opens the report modal when Report event is clicked while authenticated', async () => {
+    mockGet.mockResolvedValueOnce(eventData);
+    renderWithProviders(<EventDetail />, { route: '/en/events/1', pathPattern: '/:locale/events/:id' });
+    await openOverflowMenu();
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Report event' }));
+    expect(screen.getByRole('dialog', { name: 'Report event' })).toBeInTheDocument();
+  });
+
+  it('shows a disabled Reported row when the event was already reported', async () => {
+    mockGet.mockResolvedValueOnce({ ...eventData, reported: true });
+    renderWithProviders(<EventDetail />, { route: '/en/events/1', pathPattern: '/:locale/events/:id' });
+    await openOverflowMenu();
+    expect(screen.getByRole('menuitem', { name: 'Reported' })).toBeDisabled();
   });
 
   it('renders feedback buttons when authenticated', async () => {
@@ -209,10 +231,20 @@ describe('EventDetail', () => {
       expect(screen.queryByRole('button', { name: 'Like' })).not.toBeInTheDocument();
     });
 
-    it('renders share button even when signed out', async () => {
+    it('renders share menu item even when signed out', async () => {
       mockGet.mockResolvedValueOnce(eventData);
       renderWithProviders(<EventDetail />, { route: '/en/events/1', pathPattern: '/:locale/events/:id' });
-      await waitFor(() => expect(screen.getByRole('button', { name: 'Share' })).toBeInTheDocument());
+      await openOverflowMenu();
+      expect(screen.getByRole('menuitem', { name: 'Share' })).toBeInTheDocument();
+    });
+
+    it('redirects to /login when Report event is clicked while signed out', async () => {
+      mockGet.mockResolvedValueOnce(eventData);
+      renderWithProviders(<EventDetail />, { route: '/en/events/1', pathPattern: '/:locale/events/:id' });
+      await openOverflowMenu();
+      await userEvent.click(screen.getByRole('menuitem', { name: 'Report event' }));
+      expect(mockNavigate).toHaveBeenCalledWith('/en/login', undefined);
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     });
 
     it('switching locale does not call api.patch', async () => {

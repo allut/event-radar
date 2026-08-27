@@ -1,7 +1,6 @@
 """Tests for app.auth.email.send_magic_link — no-key, success, and error paths."""
 
-from contextlib import asynccontextmanager
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 
 import httpx
 import pytest
@@ -9,25 +8,10 @@ import pytest
 from app.auth import email
 
 
-def _patch_client(monkeypatch, resp):
-    """Patch httpx.AsyncClient so the ``async with ... as client`` yields a mock
-    whose ``.post`` is an AsyncMock returning ``resp``. Returns that post mock."""
-    post = AsyncMock(return_value=resp)
-
-    @asynccontextmanager
-    async def _ctx(*args, **kwargs):
-        client = MagicMock()
-        client.post = post
-        yield client
-
-    monkeypatch.setattr(email.httpx, "AsyncClient", MagicMock(side_effect=_ctx))
-    return post
-
-
 @pytest.mark.asyncio
-async def test_no_api_key_logs_and_skips_send(monkeypatch, caplog):
+async def test_no_api_key_logs_and_skips_send(patch_client, monkeypatch, caplog):
     monkeypatch.setattr(email.settings, "RESEND_API_KEY", "")
-    post = _patch_client(monkeypatch, MagicMock(status_code=200))
+    post = patch_client(email, MagicMock(status_code=200))
 
     await email.send_magic_link("user@example.com", "tok123")
 
@@ -38,13 +22,13 @@ async def test_no_api_key_logs_and_skips_send(monkeypatch, caplog):
 
 
 @pytest.mark.asyncio
-async def test_success_posts_expected_payload(monkeypatch):
+async def test_success_posts_expected_payload(patch_client, monkeypatch):
     monkeypatch.setattr(email.settings, "RESEND_API_KEY", "re_key")
     monkeypatch.setattr(email.settings, "RESEND_FROM_ADDRESS", "noreply@radar.ee")
     monkeypatch.setattr(email.settings, "FRONTEND_URL", "https://app.radar.ee")
 
     resp = MagicMock(status_code=httpx.codes.OK, text="ok")
-    post = _patch_client(monkeypatch, resp)
+    post = patch_client(email, resp)
 
     await email.send_magic_link("user@example.com", "tok123", locale="en")
 
@@ -62,12 +46,12 @@ async def test_success_posts_expected_payload(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_non_2xx_logs_error(monkeypatch, caplog):
+async def test_non_2xx_logs_error(patch_client, monkeypatch, caplog):
     import logging
 
     monkeypatch.setattr(email.settings, "RESEND_API_KEY", "re_key")
     resp = MagicMock(status_code=422, text="bad payload")
-    _patch_client(monkeypatch, resp)
+    patch_client(email, resp)
 
     with caplog.at_level(logging.ERROR):
         await email.send_magic_link("user@example.com", "tok123")

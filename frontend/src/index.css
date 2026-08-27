@@ -54,6 +54,11 @@
 
   /* Typography */
   --font-display: 'Cormorant Garamond', Georgia, serif;
+  /* System stack only (no bundled webfont) — used by the admin console's
+     data/label treatment (issue #154). Never a webfont: font-src 'self' in
+     the SPA's CSP (docs/backend-ops.md) only serves the two @fontsource
+     faces already bundled in main.tsx. */
+  --font-mono: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
 
   --fs-2xs:  0.75rem;    /* badge labels */
   --fs-xs:   0.8125rem;  /* footer, locale pills, price chips */
@@ -98,6 +103,7 @@
   --space-0-375: 0.375rem;
   --space-0-42: 0.42rem;
   --space-0-45: 0.45rem;
+  --space-0-5: 0.5rem;
   --space-0-55: 0.55rem;
   --space-0-6: 0.6rem;
   --space-0-625: 0.625rem;
@@ -121,6 +127,7 @@
   --z-sticky: 10;
   --z-toast: 50;
   --z-card-overlay: 1;
+  --z-card-control: 2;
   --z-seg-label: 1;
   --z-modal: 100;
 
@@ -212,12 +219,13 @@
   --page-max-grid: 1080px;
   --page-max-wide: 1100px;
   --page-max-feed: 760px;         /* Feed */
-  --page-max-organizer: 840px;    /* OrganizerDashboard */
+  --page-max-organizer: 840px;    /* OrganizerDashboard, AdminEventDetail */
   --page-max-settings: 640px;     /* Settings */
   --page-max-showcase: 560px;     /* Landing showcase panel */
 
   /* Component max/min-widths */
   --card-max-narrow: 400px;       /* shared/Card.module.css .cardPage */
+  --modal-max-width: 480px;       /* Modal panel */
   --card-max-auth: 360px;         /* AuthCard */
   --card-max-auth-inner: 280px;   /* AuthCard inner content */
   --empty-state-max: 380px;
@@ -240,6 +248,16 @@
 
   /* Popover/menu geometry */
   --menu-pop-min-width: 330px;
+  --overflow-pop-min-width: 200px;   /* EventOverflowMenu */
+  --overflow-trigger-size: 32px;     /* EventOverflowMenu kebab button */
+
+  /* Admin console geometry */
+  --admin-rail-width: 220px;            /* AdminShell nav rail */
+  --admin-queue-list-width: 340px;      /* AdminQueueSplitView list column */
+  --admin-queue-list-max-height: 70vh;  /* AdminQueueSplitView list scroll cap */
+  --admin-tab-panel-min-height: 320px;  /* AdminEventDetail tab panel */
+  --admin-tile-min: 220px;              /* AdminDashboard stat tile grid */
+  --admin-trigger-min: 240px;           /* AdminPipeline trigger card grid */
 
   /* Heading scale */
   --heading-3xl: 3rem;

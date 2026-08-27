@@ -60,6 +60,17 @@ MAGIC_LINK_BODY = """\
 
 EMAIL_FOOTER_BRAND = "What's on Radar, Tallinn"
 
+REPORT_OUTCOME_HEADER = """\
+<p style="{s_eyebrow}">WHAT'S ON RADAR</p>
+<h1 style="{s_h1}">{heading}</h1>"""
+
+REPORT_OUTCOME_BODY = """\
+<p style="{s_body_text}">{intro}</p>
+<p style="{s_body_text}">{note}</p>
+<table role="presentation" align="center" cellpadding="0" cellspacing="0" border="0" style="{s_feed_btn_wrap}"><tr><td>
+<a href="{event_url}" class="cta-btn" style="{s_feed_btn}">{cta_label}</a>
+</td></tr></table>"""
+
 EVENT_BLOCK = (
     '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="{s_card_wrap}">'
     "<tr><td>"
@@ -97,3 +108,14 @@ EVENT_TICKETS_ROW = (
     '<a href="{href}" class="tickets-link" style="{s_tickets_link}">{label}</a>'
     "</td></tr>"
 )
+
+REPORT_NOTIFY_EVENT_LINE = (
+    "<p><strong>Event:</strong> {title} (<a href='{href}'>{href}</a>)</p>"
+)
+REPORT_NOTIFY_SOURCE_LINE = "<p><strong>Source:</strong> <a href='{url}'>{url}</a></p>"
+REPORT_NOTIFY_REASON_LINE = "<p><strong>Reason(s):</strong> {reason}</p>"
+REPORT_NOTIFY_DETAIL_LINE = "<p><strong>Detail:</strong> {detail}</p>"
+REPORT_NOTIFY_COUNT_LINE = "<p><strong>Report count:</strong> {count}</p>"
+REPORT_NOTIFY_ILLEGAL_LINE = "<p><strong>Illegal allegation:</strong> {is_illegal}</p>"
+REPORT_NOTIFY_REPORTER_LINE = "<p><strong>Reporter:</strong> {email}</p>"
+REPORT_NOTIFY_REVIEW_LINE = "<p><a href='{href}'>Review in the admin console</a></p>"

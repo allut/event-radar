@@ -1,0 +1,21 @@
+/* Desktop-only screen (AdminPipeline #159, AdminDedup #162, AdminShell): below
+ * ADMIN_DESKTOP_BREAKPOINT_PX (constants.ts) the real content is replaced
+ * outright by a "come back at a desk" message instead of reflowing into a
+ * cramped mobile layout — these consoles' density doesn't have a usable
+ * narrow form. Consumers `composes` .gate onto their own message element and
+ * .content onto their real-content wrapper. */
+.gate {
+  display: none;
+}
+@media (max-width: 1024px) {
+  .gate {
+    composes: card from './Card.module.css';
+    display: block;
+    padding: var(--space-5);
+    color: var(--text-muted);
+    font-size: var(--fs-sm);
+  }
+  .content {
+    display: none;
+  }
+}

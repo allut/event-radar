@@ -81,7 +81,10 @@ class User(Base):
 
 class AuthMagicLink(Base):
     __tablename__ = "auth_magic_links"
-    __table_args__ = (Index("ix_auth_magic_links_user_id", "user_id"),)
+    __table_args__ = (
+        Index("ix_auth_magic_links_user_id", "user_id"),
+        Index("ix_auth_magic_links_expires_at", "expires_at"),
+    )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     user_id: Mapped[int] = mapped_column(
@@ -139,7 +142,10 @@ class Organizer(Base):
 
 class OrganizerMagicLink(Base):
     __tablename__ = "organizer_magic_links"
-    __table_args__ = (Index("ix_organizer_magic_links_organizer_id", "organizer_id"),)
+    __table_args__ = (
+        Index("ix_organizer_magic_links_organizer_id", "organizer_id"),
+        Index("ix_organizer_magic_links_expires_at", "expires_at"),
+    )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     organizer_id: Mapped[int] = mapped_column(
@@ -260,10 +266,10 @@ class RawEvent(Base):
     __tablename__ = "raw_events"
     __table_args__ = (
         Index("ix_raw_events_fetched_at", "fetched_at"),
-        # Created by migration 0002 but was missing here — a create_all-built
-        # schema (tests) lacked it until this declaration was added back,
-        # mirroring the identical ix_events_status fix on Event below.
-        Index("ix_raw_events_source_id", "source_id"),
+        # Composite serves ingest_skip_ids' (source_id, fetched_at >= cutoff)
+        # predicate directly instead of a bitmap-AND over two single-column
+        # indexes; also covers source_id-only lookups (leftmost prefix).
+        Index("ix_raw_events_source_fetched", "source_id", "fetched_at"),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
@@ -422,6 +428,10 @@ class Event(Base):
     needs_review: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=false(), default=False
     )
+    # Why a cancelled event was cancelled — NULL for events cancelled before
+    # this column existed (no backfill of historical rows) and for events
+    # that were never cancelled. See VALID_EVENT_CANCELLATION_REASONS.
+    cancellation_reason: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
     sources: Mapped[list["EventSource"]] = relationship(back_populates="event")
     classification: Mapped["EventClassification | None"] = relationship(
@@ -429,6 +439,7 @@ class Event(Base):
     )
     feedback: Mapped[list["UserEventFeedback"]] = relationship(back_populates="event")
     scores: Mapped[list["UserEventScore"]] = relationship(back_populates="event")
+    reports: Mapped[list["EventReport"]] = relationship(back_populates="event")
 
 
 class EventSource(Base):
@@ -494,6 +505,54 @@ class EventClassification(Base):
     )
 
     event: Mapped["Event"] = relationship(back_populates="classification")
+
+
+class EventReport(Base):
+    """A user-filed report that an event is inappropriate — distinct from
+    UserEventFeedback (like/dislike/bookmark) and the organizer-submission
+    review queue (needs_review)."""
+
+    __tablename__ = "event_reports"
+    __table_args__ = (
+        Index(
+            "uq_event_reports_user_event",
+            "user_id",
+            "event_id",
+            unique=True,
+        ),
+        Index(
+            "ix_event_reports_open_event",
+            "event_id",
+            postgresql_where=text("status = 'open'"),
+        ),
+        Index("ix_event_reports_event_created", "event_id", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    event_id: Mapped[int] = mapped_column(
+        ForeignKey("events.id", ondelete="CASCADE"), nullable=False
+    )
+    reason: Mapped[str] = mapped_column(String(30), nullable=False)
+    is_illegal_allegation: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=false(), default=False
+    )
+    detail: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False, server_default=text("'open'"), default="open"
+    )
+    resolution_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    resolved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    user: Mapped["User"] = relationship()
+    event: Mapped["Event"] = relationship(back_populates="reports")
 
 
 # ---------------------------------------------------------------------------
@@ -635,6 +694,34 @@ class LlmCall(Base):
     prompt_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
     completion_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
     response_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
+# ---------------------------------------------------------------------------
+# Admin Audit Log
+# ---------------------------------------------------------------------------
+
+
+class AdminAction(Base):
+    """Append-only durable record of a destructive/moderation admin action
+    (takedown, retract, approve, resolve reports, pipeline run) — the report
+    feature carries legal obligations that generally assume this is
+    reconstructible after the fact (see docs/research/ on report-feature
+    legal duties). Written inside the same transaction as the mutation it
+    records where the endpoint has one open; survives an outage of the
+    LOG_SHIP_URL log drain, unlike the structured log line alone. There is no
+    admins table (see ADR 0001), so there is no actor column — "a login
+    happened" is the only fact the admin auth model asserts."""
+
+    __tablename__ = "admin_actions"
+    __table_args__ = (Index("ix_admin_actions_created_at", "created_at"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    action: Mapped[str] = mapped_column(String(40), nullable=False)
+    target: Mapped[str] = mapped_column(Text, nullable=False)
+    result: Mapped[dict] = mapped_column(JSONB, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

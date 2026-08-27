@@ -145,6 +145,7 @@ export function makeEvent(overrides: Partial<EventData> = {}): EventData {
     why_go: [],
     quality_score: 0.8,
     my_signal: null,
+    reported: false,
     ...overrides,
   };
 }

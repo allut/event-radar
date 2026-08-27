@@ -1,0 +1,118 @@
+"""Reporter-outcome email — fires once a reporter's report is resolved
+(manual admin resolve/takedown, or the auto-resolve-on-cancellation cascade).
+Branded/i18n pattern (EMAIL_DOCUMENT shell + styles.py/templates.py, t()/ti()),
+unlike contact.py's internal-only exemption — this goes to an external user.
+Sent by app.routers.utils.resolve_open_reports, the single shared helper
+every resolve/takedown/cascade path funnels through (see issue #125), so the
+send is centralized there rather than duplicated per caller.
+"""
+
+from __future__ import annotations
+
+import html as html_lib
+import logging
+
+import httpx
+
+from app.config import settings
+from app.constants import (
+    LOG_EVENT_EMAIL_SEND_FAILED,
+    RESEND_ERROR_SNIPPET_LEN,
+    RESEND_SEND_URL,
+    RESEND_TIMEOUT_SECONDS,
+)
+from app.email import styles
+from app.email.styles import EMAIL_CSS
+from app.email.templates import (
+    EMAIL_DOCUMENT,
+    EMAIL_FOOTER_BRAND,
+    REPORT_OUTCOME_BODY,
+    REPORT_OUTCOME_HEADER,
+)
+from app.i18n import t, ti
+from app.models.models import Event
+
+log = logging.getLogger(__name__)
+
+
+def build_report_outcome_html(event: Event, resolution_note: str, locale: str) -> str:
+    safe_event_url = html_lib.escape(
+        f"{settings.FRONTEND_URL}/events/{event.id}", quote=True
+    )
+    note = resolution_note.strip() or t("email.report_outcome.fallback_note", locale)
+
+    header_html = REPORT_OUTCOME_HEADER.format(
+        s_eyebrow=styles.S_EYEBROW,
+        s_h1=styles.S_H1,
+        heading=t("email.report_outcome.heading", locale),
+    )
+    content_html = REPORT_OUTCOME_BODY.format(
+        s_body_text=styles.S_BODY_TEXT,
+        intro=html_lib.escape(
+            ti("email.report_outcome.intro", locale, event_title=event.title_orig)
+        ),
+        note=html_lib.escape(note),
+        s_feed_btn_wrap=styles.S_FEED_BTN_WRAP,
+        event_url=safe_event_url,
+        s_feed_btn=styles.S_FEED_BTN,
+        cta_label=t("email.report_outcome.cta", locale),
+    )
+
+    return EMAIL_DOCUMENT.format(
+        css=EMAIL_CSS,
+        s_page=styles.S_PAGE,
+        s_container=styles.S_CONTAINER,
+        s_header_pad=styles.S_HEADER_PAD,
+        header_html=header_html,
+        s_content_pad=styles.S_CONTENT_PAD,
+        content_html=content_html,
+        s_footer=styles.S_FOOTER,
+        footer_html=EMAIL_FOOTER_BRAND,
+    )
+
+
+def build_report_outcome_text(event: Event, resolution_note: str, locale: str) -> str:
+    note = resolution_note.strip() or t("email.report_outcome.fallback_note", locale)
+    intro = ti("email.report_outcome.intro", locale, event_title=event.title_orig)
+    event_url = f"{settings.FRONTEND_URL}/events/{event.id}"
+    return f"{intro}\n\n{note}\n\n{event_url}"
+
+
+async def send_report_outcome_email(
+    to_email: str, event: Event, resolution_note: str, locale: str
+) -> None:
+    if not settings.RESEND_API_KEY:
+        log.warning(
+            "RESEND_API_KEY not set — report outcome email NOT sent (event_id=%s)",
+            event.id,
+        )
+        return
+
+    subject = t("email.report_outcome.subject", locale)
+    html_body = build_report_outcome_html(event, resolution_note, locale)
+    text_body = build_report_outcome_text(event, resolution_note, locale)
+
+    async with httpx.AsyncClient(timeout=RESEND_TIMEOUT_SECONDS) as client:
+        resp = await client.post(
+            RESEND_SEND_URL,
+            headers={"Authorization": f"Bearer {settings.RESEND_API_KEY}"},
+            json={
+                "from": settings.RESEND_FROM_ADDRESS,
+                "to": [to_email],
+                "reply_to": settings.CONTACT_TO_ADDRESS,
+                "subject": subject,
+                "html": html_body,
+                "text": text_body,
+            },
+        )
+
+    if resp.status_code not in (httpx.codes.OK, httpx.codes.CREATED):
+        log.error(
+            "Resend API error sending report outcome email (event_id=%s): %s %s",
+            event.id,
+            resp.status_code,
+            resp.text[:RESEND_ERROR_SNIPPET_LEN],
+            extra={"event": LOG_EVENT_EMAIL_SEND_FAILED},
+        )
+    else:
+        log.info("Report outcome email sent (event_id=%s)", event.id)

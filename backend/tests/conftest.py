@@ -3,6 +3,7 @@ import os
 # Must be set before any app module import so pydantic-settings can validate Settings.
 os.environ.setdefault("SECRET_KEY", "test-secret-not-for-production")
 
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock
 
@@ -31,6 +32,10 @@ def mock_db():
     # coroutine. Tests that care about hydrated my_signal override this return value.
     _execute_result = MagicMock()
     _execute_result.all.return_value = []
+    # Also covers resolve_open_reports()'s `(await db.execute(...)).scalars().all()`
+    # (an UPDATE...RETURNING) — defaults to no resolved rows; tests that care
+    # override this return value.
+    _execute_result.scalars.return_value = MagicMock(all=MagicMock(return_value=[]))
     db.execute.return_value = _execute_result
     db.add = MagicMock()
     db.flush = AsyncMock()
@@ -58,6 +63,39 @@ def make_user():
         u.created_at = MagicMock()
         u.created_at.isoformat.return_value = "2026-05-13T06:00:00+00:00"
         return u
+    return _factory
+
+
+def session_factory(db):
+    """A callable standing in for `AsyncSessionLocal` that yields `db` from an
+    async context manager, matching `async with AsyncSessionLocal() as db:`.
+    Shared by every test module that monkeypatches a module-level
+    `AsyncSessionLocal` binding rather than overriding the `get_db` dependency."""
+    @asynccontextmanager
+    async def _ctx():
+        yield db
+
+    return MagicMock(side_effect=lambda: _ctx())
+
+
+@pytest.fixture
+def patch_client(monkeypatch):
+    """Factory: patch `module`'s httpx.AsyncClient so `async with AsyncClient(...)
+    as client` yields a mock whose `.post` is an AsyncMock returning `resp`.
+    Returns that post mock. Shared by every outbound-HTTP email sender test
+    (auth magic link, contact, report notify/reporter) — each patches its own
+    module's httpx binding, so the module is a required argument."""
+    def _factory(module, resp):
+        post = AsyncMock(return_value=resp)
+
+        @asynccontextmanager
+        async def _ctx(*args, **kwargs):
+            client = MagicMock()
+            client.post = post
+            yield client
+
+        monkeypatch.setattr(module.httpx, "AsyncClient", MagicMock(side_effect=_ctx))
+        return post
     return _factory
 
 
@@ -124,6 +162,8 @@ def make_event():
         e.is_out_of_area = False
         e.has_free_tier = False
         e.dedup_group_id = None
+        e.created_at = MagicMock()
+        e.created_at.isoformat.return_value = "2026-05-13T06:00:00+00:00"
 
         if why_go is not None or why_go_localized is not None:
             cl = MagicMock()
@@ -144,6 +184,32 @@ def make_event():
             cl.language_detected = DEFAULT_USER_LOCALE
             e.classification = cl
         return e
+    return _factory
+
+
+@pytest.fixture
+def make_report():
+    def _factory(
+        report_id: int = 1,
+        user_id: int = 1,
+        event_id: int = 10,
+        reason: str = "spam_or_scam",
+        is_illegal_allegation: bool = False,
+        detail: str | None = None,
+        status: str = "open",
+    ) -> MagicMock:
+        r = MagicMock()
+        r.id = report_id
+        r.user_id = user_id
+        r.event_id = event_id
+        r.reason = reason
+        r.is_illegal_allegation = is_illegal_allegation
+        r.detail = detail
+        r.status = status
+        r.resolution_note = None
+        r.created_at = datetime(2026, 5, 13, 6, 0, 0, tzinfo=timezone.utc)
+        r.resolved_at = None
+        return r
     return _factory
 
 

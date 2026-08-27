@@ -1,6 +1,6 @@
 @keyframes spin     { to { transform: rotate(360deg); } }
 @keyframes breathe  { 0%, 100% { opacity: 1; } 50% { opacity: var(--opacity-breathe-min); } }
-@keyframes rise     { from { opacity: 0; transform: translateY(var(--rise-distance, 8px)); } to { opacity: 1; transform: translateY(0); } }
+@keyframes rise     { from { opacity: 0; transform: translateY(var(--rise-distance)); } to { opacity: 1; transform: translateY(0); } }
 @keyframes fadeIn      { from { opacity: 0; } to { opacity: 1; } }
 @keyframes fadeInScale { from { opacity: 0; transform: scale(var(--scale-press)); } to { opacity: 1; transform: scale(1); } }
 
@@ -13,7 +13,14 @@
 }
 
 .rise {
-  animation: rise var(--rise-duration, var(--anim-fast)) var(--easing) both;
+  /* backwards, not both: holding the animation's *end* transform after it
+   * finishes (fill-mode "both") leaves a non-"none" computed transform on
+   * the element forever, which makes it a new containing block for any
+   * `position: fixed` descendant (e.g. EventOverflowMenu's mobile popover) —
+   * breaking that descendant's viewport-relative positioning.
+   * The end state (opacity 1, translateY(0)) already matches each riser's
+   * unanimated resting style, so dropping "forwards" is visually a no-op. */
+  animation: rise var(--rise-duration, var(--anim-fast)) var(--easing) backwards;
 }
 
 .fadeIn {

@@ -1,0 +1,53 @@
+.head {
+  margin-bottom: var(--space-6);
+}
+
+.eyebrow {
+  composes: adminEyebrow from '../../components/shared/Page.module.css';
+}
+
+.title {
+  composes: adminPageTitle from '../../components/shared/Page.module.css';
+}
+
+.rowTitle {
+  composes: queueRowTitle from '../../components/shared/AdminQueue.module.css';
+}
+
+.rowMeta {
+  composes: queueRowMeta from '../../components/shared/AdminQueue.module.css';
+}
+
+.detailTitle {
+  composes: queueDetailTitle from '../../components/shared/AdminQueue.module.css';
+}
+
+.detailMeta {
+  composes: queueDetailMeta from '../../components/shared/AdminQueue.module.css';
+}
+
+.chips {
+  composes: chips from '../../components/shared/Chip.module.css';
+  margin-bottom: var(--space-3);
+}
+
+.chip { composes: chip from '../../components/shared/Chip.module.css'; }
+
+.preview {
+  composes: card from '../../components/shared/Card.module.css';
+  padding: var(--space-3);
+  font-size: var(--fs-sm);
+  color: var(--text-soft);
+}
+
+.previewLink {
+  color: var(--accent-light);
+}
+
+.resolvedPanel {
+  composes: queueResolvedPanel from '../../components/shared/AdminQueue.module.css';
+}
+
+.retractedPanel {
+  color: var(--danger);
+}

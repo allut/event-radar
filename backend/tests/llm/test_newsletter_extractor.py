@@ -51,7 +51,7 @@ class TestIsValidEvent:
 
 
 @pytest.fixture()
-def newsletter_db():
+def newsletter_db(mock_db):
     """Newsletter-specific DB mock: scalar returns a source, get returns an email_obj."""
     source = MagicMock()
     source.id = 99
@@ -59,13 +59,9 @@ def newsletter_db():
     email_obj = MagicMock()
     email_obj.processed_at = None
 
-    db = AsyncMock()
-    db.execute = AsyncMock()
-    db.flush = AsyncMock()
-    db.scalar = AsyncMock(return_value=source)
-    db.get = AsyncMock(return_value=email_obj)
-    db.add = MagicMock()
-    return db
+    mock_db.scalar = AsyncMock(return_value=source)
+    mock_db.get = AsyncMock(return_value=email_obj)
+    return mock_db
 
 
 _VALID_EVENTS_RESPONSE = {

@@ -1,0 +1,82 @@
+.trigger {
+  composes: iconAction from '../shared/Button.module.css';
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--overflow-trigger-size);
+  height: var(--overflow-trigger-size);
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  color: var(--text);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.trigger svg {
+  width: var(--action-icon-size);
+  height: var(--action-icon-size);
+}
+
+.trigger:focus-visible {
+  outline: none;
+}
+
+.pop {
+  composes: menuPop from '../shared/Menu.module.css';
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-0-2);
+  padding: var(--space-0-45);
+  min-width: var(--overflow-pop-min-width);
+}
+
+/* Trigger is pinned to its container's right edge (EventCard's top-right
+ * corner, EventDetail's actions row), so this menu right-anchors by default
+ * — the opposite default from other menuPop consumers. useDropdown is given
+ * defaultAnchor='right' so its flip heuristic checks left-edge overflow
+ * instead of right, and data-flip='true' here means "flip to left-anchored"
+ * (see the override below), not "flip to right-anchored" like other menus. */
+.pop.pop {
+  left: auto;
+  right: 0;
+}
+
+.pop.pop[data-flip='true'] {
+  left: 0;
+  right: auto;
+}
+
+@media (max-width: 640px) {
+  .pop.pop {
+    position: fixed;
+    left: var(--space-3);
+    right: var(--space-3);
+    top: var(--overflow-pop-top);
+    width: auto;
+    max-width: none;
+    min-width: 0;
+  }
+}
+
+.item {
+  composes: menuOption from '../shared/Menu.module.css';
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  text-align: left;
+  padding: var(--space-0-625) var(--space-0-875);
+  width: 100%;
+}
+
+.item svg {
+  width: var(--action-icon-size);
+  height: var(--action-icon-size);
+  flex-shrink: 0;
+}
+
+.item:disabled {
+  color: var(--text-muted);
+  opacity: var(--opacity-disabled);
+  cursor: not-allowed;
+  background: transparent;
+}

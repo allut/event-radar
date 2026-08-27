@@ -1,0 +1,76 @@
+.head {
+  margin-bottom: var(--space-6);
+}
+
+.eyebrow {
+  composes: adminEyebrow from '../../components/shared/Page.module.css';
+}
+
+.title {
+  composes: adminPageTitle from '../../components/shared/Page.module.css';
+}
+
+.rowTitle {
+  composes: queueRowTitle from '../../components/shared/AdminQueue.module.css';
+}
+
+.rowMeta {
+  composes: queueRowMeta from '../../components/shared/AdminQueue.module.css';
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.illegalDot {
+  width: var(--seg-blip-size);
+  height: var(--seg-blip-size);
+  border-radius: 50%;
+  background: var(--danger);
+  display: inline-block;
+}
+
+.detailTitle {
+  composes: queueDetailTitle from '../../components/shared/AdminQueue.module.css';
+}
+
+.detailMeta {
+  composes: queueDetailMeta from '../../components/shared/AdminQueue.module.css';
+}
+
+.chips {
+  composes: chips from '../../components/shared/Chip.module.css';
+  margin-bottom: var(--space-3);
+}
+
+.chip { composes: chip from '../../components/shared/Chip.module.css'; }
+
+.illegalChip {
+  composes: chip from '../../components/shared/Chip.module.css';
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+.reportList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.reportItem {
+  composes: card from '../../components/shared/Card.module.css';
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--fs-sm);
+}
+
+.reportItemHead {
+  composes: queueReportItemHead from '../../components/shared/AdminQueue.module.css';
+}
+
+.reportItemHead strong {
+  color: var(--text);
+  font-size: var(--fs-sm);
+}
+
+.resolvedPanel {
+  composes: queueResolvedPanel from '../../components/shared/AdminQueue.module.css';
+}

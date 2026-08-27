@@ -7,6 +7,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.constants import (
+    EVENT_STATUS_CANCELLED,
     EVENT_STATUS_CLASSIFIED,
     EVENT_STATUS_PUBLISHED,
     ORGANIZER_CURRENCY_MAX_LEN,
@@ -370,6 +371,33 @@ class TestSubmitEvent:
 
 class TestUpdateOwnEvent:
     @pytest.mark.asyncio
+    async def test_rejects_edit_of_cancelled_event(
+        self, mock_db, make_request, make_organizer
+    ):
+        """L-3 in the OWASP audit: an admin takedown is the decisive action
+        for content that had to come down — the organizer must not be able
+        to change the stored content behind that decision after the fact."""
+        from fastapi import HTTPException
+        from app.routers.organizer_events import PatchEventBody, update_own_event
+
+        organizer = make_organizer(organizer_id=5)
+        event = _fake_event(submitted_by_organizer_id=5, status=EVENT_STATUS_CANCELLED)
+        mock_db.scalar.return_value = event
+
+        body = PatchEventBody(venue_name="New Venue Hall")
+        with pytest.raises(HTTPException) as exc_info:
+            await update_own_event(
+                10,
+                body,
+                make_request(method="PATCH", path="/organizer/events/10"),
+                organizer,
+                mock_db,
+            )
+        assert exc_info.value.status_code == http.HTTPStatus.CONFLICT
+        # The event must not have been mutated on the way to the rejection.
+        assert event.venue_name != "New Venue Hall"
+
+    @pytest.mark.asyncio
     async def test_category_edit_applies_via_helper(
         self, mock_db, make_request, make_organizer
     ):
@@ -532,12 +560,44 @@ class TestUpdateOwnEvent:
 class TestUploadEventImage:
     """POST /organizer/events/image — signed Cloudinary upload (Phase 2 §2.1)."""
 
-    def _fake_upload(self, content_type="image/png", body=b"fake-bytes"):
+    # Real PNG magic bytes — upload_event_image sniffs the leading bytes
+    # rather than trusting content_type (M-3 in the OWASP audit), so a fake
+    # body would now be rejected as unsupported before reaching whatever the
+    # test is actually exercising.
+    _PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
+
+    def _fake_upload(self, content_type="image/png", body=None):
+        if body is None:
+            body = self._PNG_MAGIC + b"fake-bytes"
         f = MagicMock()
         f.content_type = content_type
         f.filename = "photo.png"
         f.read = AsyncMock(return_value=body)
         return f
+
+    @pytest.mark.asyncio
+    async def test_rejects_declared_type_not_matching_actual_bytes(
+        self, mock_db, make_request, make_organizer
+    ):
+        """M-3 in the OWASP audit: file.content_type is client-asserted and
+        was previously never checked against the actual bytes before they
+        left this system for Cloudinary."""
+        from fastapi import HTTPException
+        from app.routers.organizer_events import upload_event_image
+
+        mock_db.scalar.return_value = 0
+        organizer = make_organizer(organizer_id=5)
+        # Declares PNG but the bytes are neither PNG, JPEG, nor WebP.
+        file = self._fake_upload(content_type="image/png", body=b"not-a-real-image")
+
+        with pytest.raises(HTTPException) as exc_info:
+            await upload_event_image(
+                make_request(method="POST", path="/organizer/events/image"),
+                file,
+                organizer,
+                mock_db,
+            )
+        assert exc_info.value.status_code == http.HTTPStatus.UNSUPPORTED_MEDIA_TYPE
 
     @pytest.mark.asyncio
     async def test_rejects_unsupported_mime(
@@ -664,7 +724,13 @@ class TestUploadEventImage:
         _, kwargs = mock_post.call_args
         assert kwargs["data"]["api_key"] == "key123"
         assert "signature" in kwargs["data"]
-        assert kwargs["files"]["file"][0] == "photo.png"
+        assert kwargs["data"]["signature_algorithm"] == "sha256"
+        # Generated, not file.filename — M-3 in the OWASP audit: the upload
+        # filename is attacker-controlled text otherwise crossing a service
+        # boundary unchanged, and nothing downstream reads it.
+        uploaded_filename = kwargs["files"]["file"][0]
+        assert uploaded_filename != "photo.png"
+        assert uploaded_filename.endswith(".png")
         # L5: a successful upload is recorded so the daily cap can count it.
         added = mock_db.add.call_args[0][0]
         assert isinstance(added, OrganizerImageUpload)
@@ -793,6 +859,40 @@ class TestDeleteOwnEvent:
 
         assert event.status == EVENT_STATUS_CANCELLED
         assert result["status"] == EVENT_STATUS_CANCELLED
+
+    @pytest.mark.asyncio
+    async def test_deletes_auto_resolves_open_reports(
+        self, mock_db, make_request, make_organizer, make_report, make_user
+    ):
+        """Self-delete must auto-resolve the event's open reports through
+        the shared resolve_open_reports() helper (issue #125), firing one
+        reporter-outcome email per resolved report (issue #127)."""
+        from app.routers.organizer_events import delete_own_event
+
+        organizer = make_organizer(organizer_id=5)
+        event = _fake_event(submitted_by_organizer_id=5)
+        report = make_report(report_id=1, event_id=10, status="open")
+        reporter = make_user(user_id=report.user_id)
+        mock_db.scalar.return_value = event
+        mock_db.execute.return_value.scalars.return_value.all.return_value = [report]
+        mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=[reporter]))
+        mock_db.commit = AsyncMock()
+
+        with patch(
+            "app.routers.utils.send_report_outcome_email", new=AsyncMock()
+        ) as mock_send:
+            await delete_own_event(
+                10,
+                make_request(method="DELETE", path="/organizer/events/10"),
+                organizer,
+                mock_db,
+            )
+
+        assert report.status == "resolved"
+        assert report.resolution_note == "auto-resolved: event cancelled"
+        mock_send.assert_awaited_once_with(
+            reporter.email, event, "auto-resolved: event cancelled", reporter.locale
+        )
 
     @pytest.mark.asyncio
     async def test_cross_organizer_delete_raises_404(

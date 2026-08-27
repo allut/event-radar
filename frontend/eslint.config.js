@@ -6,13 +6,7 @@ import reactRefresh from 'eslint-plugin-react-refresh'
 import tseslint from 'typescript-eslint'
 
 export default tseslint.config(
-  { ignores: ['dist', 'src/_generated'] },
-  {
-    files: ['**/*.test.{ts,tsx}', 'src/test/**'],
-    rules: {
-      'react-refresh/only-export-components': 'off',
-    },
-  },
+  { ignores: ['dist', 'coverage', 'src/_generated'] },
   {
     extends: [
       js.configs.recommended,
@@ -42,6 +36,12 @@ export default tseslint.config(
       'react/no-array-index-key': 'error',
       quotes: ['error', 'single', { avoidEscape: true, allowTemplateLiterals: true }],
       'jsx-quotes': ['error', 'prefer-double'],
+    },
+  },
+  {
+    files: ['**/*.test.{ts,tsx}', 'src/test/**'],
+    rules: {
+      'react-refresh/only-export-components': 'off',
     },
   },
 )

@@ -38,3 +38,18 @@ _Avoid_: logout (when the distinction below matters)
 **Sign out everywhere**:
 Invalidates every session for an identity across all devices, immediately.
 _Avoid_: global logout, force logout, revoke all
+
+## Content Moderation
+
+**Report**:
+A signed-in user's flag that a specific event's hosted content is
+inappropriate, submitted for admin resolution. Distinct from feedback
+(preference signals like/dislike/bookmark) and from the organizer post-hoc
+review queue (which judges a submitter's trustworthiness, not content).
+_Avoid_: flag, complaint, feedback
+
+**Resolve** (a report):
+The admin action that closes out an open report, optionally with a
+resolution note. Distinct from "review," which is reserved for the
+organizer submission queue.
+_Avoid_: review, approve, dismiss

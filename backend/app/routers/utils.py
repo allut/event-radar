@@ -1,15 +1,17 @@
 """Shared serialization helpers for event routers."""
 
+import asyncio
+import json
 import logging
 import re
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from fastapi import HTTPException, Response, status
 from itsdangerous import BadSignature, SignatureExpired
 from pydantic import BaseModel, EmailStr
-from sqlalchemy import ColumnElement, Select, and_, delete, or_, select
+from sqlalchemy import ColumnElement, Select, and_, delete, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import InstrumentedAttribute, selectinload
 
@@ -18,23 +20,33 @@ from app.constants import (
     APP_ENV_DEVELOPMENT,
     DEFAULT_USER_LOCALE,
     EMAIL_MASK_VISIBLE_CHARS,
+    ERROR_ADMIN_JOB_ALREADY_RUNNING,
     ERROR_ADMIN_JOB_FAILED,
     ERROR_FEATURE_DISABLED,
+    ERROR_INVALID_REPORT_REASON,
+    EVENT_STATUS_CANCELLED,
     EVENT_STATUS_PUBLISHED,
+    LOG_EVENT_ADMIN_ACTION,
+    LOG_EVENT_EMAIL_SEND_FAILED,
     MASK_DB_URL_PASSWORD_RE,
     MAGIC_LINK_RESEND_COOLDOWN_SECONDS,
     PREFERENCE_SIGNALS,
     PREFERRED_TASTE_MIN_WEIGHT,
-    SECONDS_PER_DAY,
+    REPORT_STATUS_OPEN,
+    REPORT_STATUS_RESOLVED,
     SESSION_COOKIE_HTTPONLY,
     SESSION_COOKIE_SAMESITE,
     SESSION_COOKIE_SECURE,
     VALID_LOCALES,
+    VALID_REPORT_REASONS,
 )
 from app.db import AsyncSessionLocal
+from app.email.report_reporter import send_report_outcome_email
 from app.models.models import (
+    AdminAction,
     Event,
     EventClassification,
+    EventReport,
     Persona,
     User,
     UserEventFeedback,
@@ -63,15 +75,15 @@ class VerifyTokenBody(BaseModel):
 
 
 def set_session_cookie(
-    response: Response, *, name: str, token: str, path: str, ttl_days: int
+    response: Response, *, name: str, token: str, path: str, ttl_seconds: int
 ) -> None:
-    """Set a hardened session cookie — shared by the consumer and organizer
-    /verify endpoints. Secure is unconditional (never gated on APP_ENV): see
-    docs/adr/0001-session-tokens-in-httponly-cookies.md."""
+    """Set a hardened session cookie — shared by the consumer, organizer, and
+    admin /verify|/login endpoints. Secure is unconditional (never gated on
+    APP_ENV): see docs/adr/0001-session-tokens-in-httponly-cookies.md."""
     response.set_cookie(
         key=name,
         value=token,
-        max_age=ttl_days * SECONDS_PER_DAY,
+        max_age=ttl_seconds,
         path=path,
         secure=SESSION_COOKIE_SECURE,
         httponly=SESSION_COOKIE_HTTPONLY,
@@ -147,6 +159,27 @@ async def recent_unused_link_exists(
     return already_sent is not None
 
 
+_RUNNING_ADMIN_JOBS: set[str] = set()
+
+
+def acquire_admin_job_lock(key: str) -> None:
+    """Single-flight guard for the expensive/destructive triggers (issue
+    #160): pipeline/run, cleanup, full ingest, send_digests, classify. Raises
+    409 if *key* is already running instead of letting a retry click start a
+    second concurrent run. In-memory only — fine given this app's
+    single-process topology (see CLAUDE.md's Architecture section)."""
+    if key in _RUNNING_ADMIN_JOBS:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=ERROR_ADMIN_JOB_ALREADY_RUNNING.format(name=key),
+        )
+    _RUNNING_ADMIN_JOBS.add(key)
+
+
+def release_admin_job_lock(key: str) -> None:
+    _RUNNING_ADMIN_JOBS.discard(key)
+
+
 async def run_admin_job(name: str, coro: Awaitable[dict]) -> dict:
     """Await an admin-triggered job, converting any failure into a generic 500.
 
@@ -163,6 +196,97 @@ async def run_admin_job(name: str, coro: Awaitable[dict]) -> dict:
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=ERROR_ADMIN_JOB_FAILED.format(name=name),
         )
+
+
+def ndjson_line(stage: str, status_: str, result: Any, error: str | None) -> bytes:
+    """One line of the shared streamed-job envelope (issue #159) — every
+    /admin/* job trigger streams this shape, one line per stage."""
+    return (
+        json.dumps({"stage": stage, "status": status_, "result": result, "error": error})
+        + "\n"
+    ).encode()
+
+
+async def stream_admin_job(
+    name: str,
+    stage: str,
+    action: str,
+    target: int | str,
+    coro: Awaitable[dict],
+    lock_key: str | None = None,
+) -> AsyncIterator[bytes]:
+    """Streaming sibling of run_admin_job: runs *coro* and yields a single
+    NDJSON envelope line instead of returning a dict. A failure becomes a
+    status="error" line rather than an HTTP 500 — once the stream has
+    started, headers are already sent, so the generic-failure behavior
+    (server log gets the traceback, client gets a generic message, no
+    internals leak) has to travel inside the body instead of the status
+    code.
+
+    *coro* runs as an independent task, not a direct `await` in this
+    generator's own frame. A client disconnect makes Starlette cancel this
+    generator (StreamingResponse races `listen_for_disconnect` against the
+    body on uvicorn's pinned ASGI spec_version "2.3", cancelling whichever
+    task is streaming — see docs/research/2026-08-23-admin-console-timeout-
+    ceilings.md finding 5 / issue #159); a direct `await coro` would let
+    that cancellation propagate straight into the job and cut it off
+    mid-write. Awaiting `queue.get()` instead means the generator's own
+    cancellation never touches the task, so the job always runs to
+    completion regardless of whether anyone is still listening."""
+    queue: asyncio.Queue[bytes | None] = asyncio.Queue()
+
+    async def _runner() -> None:
+        try:
+            result = await coro
+            log_admin_action(None, action, target, result)
+            await queue.put(ndjson_line(stage, "ok", result, None))
+        except HTTPException as exc:
+            detail = str(exc.detail)
+            log_admin_action(None, action, target, {"error": detail})
+            await queue.put(ndjson_line(stage, "error", None, detail))
+        except Exception:
+            log.exception("admin %s failed", name)
+            detail = ERROR_ADMIN_JOB_FAILED.format(name=name)
+            log_admin_action(None, action, target, {"error": detail})
+            await queue.put(ndjson_line(stage, "error", None, detail))
+        finally:
+            if lock_key is not None:
+                release_admin_job_lock(lock_key)
+            await queue.put(None)
+
+    asyncio.ensure_future(_runner())
+    while True:
+        line = await queue.get()
+        if line is None:
+            return
+        yield line
+
+
+def log_admin_action(
+    db: AsyncSession | None, action: str, target: int | str, result: dict
+) -> None:
+    """Structured log line on the shared Axiom pipe, plus — when *db* is
+    given — a durable AdminAction row added to it. The row rides the
+    caller's own open transaction (added, not committed here) so it lands
+    atomically with the mutation it records, and survives an outage of the
+    LOG_SHIP_URL log drain. Call from inside the same `_run()` closure as the
+    mutation, before that closure's own `await db.commit()`, for the
+    takedown/retract/approve/resolve/pipeline-run actions the report
+    feature's legal obligations bear on (see the admin-console spec's Audit
+    logging section) — pass None for every other admin job, which keeps the
+    pre-existing log-only behavior."""
+    log.info(
+        "admin action: %s",
+        action,
+        extra={
+            "event": LOG_EVENT_ADMIN_ACTION,
+            "action": action,
+            "target": target,
+            "result": result,
+        },
+    )
+    if db is not None:
+        db.add(AdminAction(action=action, target=str(target), result=result))
 
 
 def require_configured_secret(
@@ -441,6 +565,7 @@ def serialize_event(
     event: Event,
     locale: str = DEFAULT_USER_LOCALE,
     feedback_by_event: dict[int, str] | None = None,
+    reported_event_ids: set[int] | None = None,
 ) -> dict:
     cl = event.classification
     why_go = resolve_why_go(cl, locale)
@@ -468,6 +593,7 @@ def serialize_event(
         "quality_score": cl.quality_score if cl else None,
         "language": cl.language_detected if cl else None,
         "my_signal": feedback_by_event.get(event.id) if feedback_by_event else None,
+        "reported": event.id in reported_event_ids if reported_event_ids else False,
     }
 
 
@@ -498,3 +624,127 @@ async def load_user_signals(
         )
     ).all()
     return {row.event_id: row.signal for row in rows}
+
+
+async def load_user_reported_events(
+    db: AsyncSession, user_id: int, event_ids: list[int]
+) -> set[int]:
+    """Event IDs among ``event_ids`` the given user currently has an *open*
+    report on — feeds ``serialize_event``'s ``reported`` field.
+
+    Restricted to ``REPORT_STATUS_OPEN`` (not any status): a resolved report
+    must not render as "Reported" in the frontend menu, since a resolved
+    report is deliberately re-reportable (see event_reports upsert/reopen
+    semantics in routers/reports.py).
+    """
+    if not event_ids:
+        return set()
+    rows = (
+        await db.execute(
+            select(EventReport.event_id).where(
+                EventReport.user_id == user_id,
+                EventReport.event_id.in_(event_ids),
+                EventReport.status == REPORT_STATUS_OPEN,
+            )
+        )
+    ).all()
+    return {row.event_id for row in rows}
+
+
+async def resolve_open_reports(
+    db: AsyncSession, event: Event, resolution_note: str
+) -> list[EventReport]:
+    """Close every REPORT_STATUS_OPEN row on ``event`` with
+    ``resolution_note``, stamping ``resolved_at``. Shared by
+    POST /admin/reports/{event_id}/resolve, .../takedown, and every path that
+    cancels an event (admin retract, organizer retract, organizer
+    self-delete) — see issue #125. Caller commits, then calls
+    ``send_report_resolution_emails`` (issue #127) — deliberately NOT done
+    here, since sending before the caller's commit could notify a reporter
+    of a "resolved" status that a subsequent commit failure then rolls back.
+
+    A single UPDATE...RETURNING (not a SELECT followed by in-Python mutation)
+    so a report reopened concurrently (e.g. a fresh POST /reports upsert
+    landing between this call and the caller's commit) can't be missed —
+    the WHERE clause is evaluated atomically at execution time.
+    """
+    resolved_at = datetime.now(timezone.utc)
+    stmt = (
+        update(EventReport)
+        .where(
+            EventReport.event_id == event.id,
+            EventReport.status == REPORT_STATUS_OPEN,
+        )
+        .values(
+            status=REPORT_STATUS_RESOLVED,
+            resolution_note=resolution_note,
+            resolved_at=resolved_at,
+        )
+        .returning(EventReport)
+    )
+    result = await db.execute(stmt)
+    reports = list(result.scalars().all())
+    # Belt-and-suspenders: reflect the update on the in-memory objects too,
+    # in case the driver's RETURNING rows aren't merged into already
+    # identity-mapped instances still referenced elsewhere in this request.
+    for report in reports:
+        report.status = REPORT_STATUS_RESOLVED
+        report.resolution_note = resolution_note
+        report.resolved_at = resolved_at
+    return reports
+
+
+async def send_report_resolution_emails(
+    db: AsyncSession, event: Event, reports: list[EventReport], resolution_note: str
+) -> None:
+    """Send one reporter-outcome email per row in ``reports`` (the list
+    ``resolve_open_reports``/``cancel_event_and_resolve_reports`` returned).
+    Call this AFTER the caller's ``db.commit()`` — see issue #127 and
+    ``resolve_open_reports``'s docstring for why the ordering matters. A
+    per-report send failure is swallowed and logged; the ``resolved`` status
+    transition (already committed) is the durable record."""
+    if not reports:
+        return
+    user_ids = {report.user_id for report in reports}
+    users = (await db.scalars(select(User).where(User.id.in_(user_ids)))).all()
+    users_by_id = {u.id: u for u in users}
+    for report in reports:
+        reporter = users_by_id.get(report.user_id)
+        if reporter is None:
+            continue
+        try:
+            await send_report_outcome_email(
+                reporter.email, event, resolution_note, reporter.locale
+            )
+        except Exception:
+            log.error(
+                "Failed to send report outcome email (report_id=%s, event_id=%s)",
+                report.id,
+                event.id,
+                exc_info=True,
+                extra={"event": LOG_EVENT_EMAIL_SEND_FAILED},
+            )
+
+
+async def cancel_event_and_resolve_reports(
+    db: AsyncSession, event: Event, cancellation_reason: str, resolution_note: str
+) -> list[EventReport]:
+    """Cancel ``event`` and resolve its open reports in one call — every
+    cancellation path (admin retract, organizer retract, organizer
+    self-delete, report takedown) must keep this pairing atomic so a
+    cancelled event never leaves an open report behind. See issue #125.
+    Caller commits.
+    """
+    event.status = EVENT_STATUS_CANCELLED
+    event.cancellation_reason = cancellation_reason
+    return await resolve_open_reports(db, event, resolution_note)
+
+
+def validate_report_reason(reason: str) -> None:
+    """Shared by POST /reports and GET /admin/reports's ``reason`` filter —
+    a single source of truth for the taxonomy check and its error message."""
+    if reason not in VALID_REPORT_REASONS:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=ERROR_INVALID_REPORT_REASON.format(reasons=sorted(VALID_REPORT_REASONS)),
+        )

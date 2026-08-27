@@ -1,7 +1,6 @@
 """Tests for app.ingestion.jobs: ingest_source, ingest_all_enabled, _run_db_job,
 the thin scheduler-job wrappers, and the pure backlog/aggregate helpers."""
 
-from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -9,17 +8,7 @@ import pytest
 from app.constants import LLM_CLASSIFY_BATCH_SIZE
 from app.ingestion import jobs
 from app.routers import utils
-
-
-def _session_factory(db):
-    """Return a callable standing in for AsyncSessionLocal that yields ``db``
-    from an async context manager, matching ``async with AsyncSessionLocal()``."""
-
-    @asynccontextmanager
-    async def _ctx():
-        yield db
-
-    return MagicMock(side_effect=lambda: _ctx())
+from tests.conftest import session_factory as _session_factory
 
 
 def _make_source(slug="fienta", enabled=True, kind="api"):

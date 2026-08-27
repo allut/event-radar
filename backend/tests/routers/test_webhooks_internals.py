@@ -1,8 +1,7 @@
 """Unit tests for webhooks helper branches not exercised via the HTTP endpoint:
 timestamp parse failure, Svix secret validation, and _run_extraction."""
 
-from contextlib import asynccontextmanager
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -12,6 +11,7 @@ from app.routers.webhooks import (
     _timestamp_within_tolerance,
     _verify_svix_signature,
 )
+from tests.conftest import session_factory as _session_factory
 
 
 def test_timestamp_within_tolerance_non_numeric_is_false():
@@ -30,14 +30,6 @@ def test_verify_svix_signature_rejects_undecodable_key():
         _verify_svix_signature("whsec_!!!not-base64!!!", "id", "123", b"body", "v1,x")
         is False
     )
-
-
-def _session_factory(db):
-    @asynccontextmanager
-    async def _ctx():
-        yield db
-
-    return MagicMock(side_effect=lambda: _ctx())
 
 
 @pytest.mark.asyncio

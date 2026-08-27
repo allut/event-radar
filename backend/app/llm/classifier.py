@@ -47,7 +47,7 @@ from app.constants import (
     VALID_LOCALES,
     VALID_VIBES,
 )
-from app.llm.prompts import LLM_CLASSIFY_PROMPT_TEMPLATE
+from app.llm.prompts import LLM_CLASSIFY_PROMPT_TEMPLATE, escape_prompt_delimiters
 from app.ingestion.pricing import (
     eur_amounts_from_text,
     eur_price_bounds_from_text,
@@ -89,10 +89,12 @@ def _build_classify_prompt(event: Event, price_context: str | None = None) -> st
     if price_context is None:
         price_context = _price_context(event)
     return LLM_CLASSIFY_PROMPT_TEMPLATE.format(
-        title=event.title_orig,
-        venue=event.venue_name or LLM_CLASSIFY_VENUE_FALLBACK,
-        description=desc or LLM_CLASSIFY_DESC_FALLBACK,
-        important_info=important_info or LLM_CLASSIFY_IMPORTANT_INFO_FALLBACK,
+        title=escape_prompt_delimiters(event.title_orig),
+        venue=escape_prompt_delimiters(event.venue_name or LLM_CLASSIFY_VENUE_FALLBACK),
+        description=escape_prompt_delimiters(desc or LLM_CLASSIFY_DESC_FALLBACK),
+        important_info=escape_prompt_delimiters(
+            important_info or LLM_CLASSIFY_IMPORTANT_INFO_FALLBACK
+        ),
         price_hint=price_hint or LLM_CLASSIFY_PRICE_HINT_FALLBACK,
         price_context=price_context or LLM_CLASSIFY_PRICE_CONTEXT_FALLBACK,
     )
@@ -205,7 +207,8 @@ def _validate_llm_prices(
         price_context = _price_context(event)
     text = f"{event.price_hint or ''}\n{price_context}"
     amounts = eur_amounts_from_text(strip_fee_amounts(text))
-    is_free_signaled = any(kw in text.lower() for kw in FREE_TIER_KEYWORDS) or 0.0 in amounts
+    lowered = text.lower()
+    is_free_signaled = any(kw in lowered for kw in FREE_TIER_KEYWORDS) or 0.0 in amounts
 
     def _is_backed(value: float | None) -> bool:
         if value is None:
@@ -325,6 +328,7 @@ async def classify_event(
     existing_classification: EventClassification | None = None,
     prefetched: bool = False,
     prompt: str | None = None,
+    price_context: str | None = None,
     prefetched_cache: dict[str, tuple[dict[str, Any], str]] | None = None,
     http_client: httpx.AsyncClient | None = None,
 ) -> bool:
@@ -340,7 +344,10 @@ async def classify_event(
 
     ``prompt``, when supplied by a batch caller that already built it for
     cache-key hashing (see ``classify_pending``), is reused instead of being
-    rebuilt. ``prefetched_cache`` and ``http_client``, when supplied, are
+    rebuilt. ``price_context``, when supplied by that same caller, is reused
+    instead of being recomputed — it backs a full BeautifulSoup parse over the
+    untruncated description, the most expensive pure-CPU step in this path.
+    ``prefetched_cache`` and ``http_client``, when supplied, are
     forwarded to ``llm_json`` so a batch run consults one bulk-loaded cache map
     and one shared HTTP client instead of a per-event ``SELECT`` and connection
     pool — mirrors the dedup tiebreaker's cache-aware batch loop.
@@ -355,7 +362,8 @@ async def classify_event(
         event.status = EVENT_STATUS_CLASSIFIED
         return True
 
-    price_context = _price_context(event)
+    if price_context is None:
+        price_context = _price_context(event)
     if prompt is None:
         prompt = _build_classify_prompt(event, price_context=price_context)
     response = await llm_json_or_none(
@@ -540,8 +548,19 @@ async def classify_pending(
     # Built once here (not inside classify_event) so the same prompt string
     # backs both the cache prefetch below and the per-event LLM call —
     # skipped for already-flagged events, which never reach the LLM.
+    # price_context is built alongside it and passed straight through to
+    # classify_event, which would otherwise recompute it — price_context_digest
+    # runs a full BeautifulSoup parse over the untruncated description, the
+    # most expensive pure-CPU step in this path.
+    price_context_by_event_id = {
+        event.id: _price_context(event)
+        for event in events
+        if not (event.is_explicit or event.is_non_event)
+    }
     prompts_by_event_id = {
-        event.id: _build_classify_prompt(event)
+        event.id: _build_classify_prompt(
+            event, price_context=price_context_by_event_id[event.id]
+        )
         for event in events
         if not (event.is_explicit or event.is_non_event)
     }
@@ -555,6 +574,7 @@ async def classify_pending(
                 existing_classification=existing_map.get(event.id),
                 prefetched=True,
                 prompt=prompts_by_event_id.get(event.id),
+                price_context=price_context_by_event_id.get(event.id),
                 prefetched_cache=prefetched_cache,
                 http_client=http_client,
             )

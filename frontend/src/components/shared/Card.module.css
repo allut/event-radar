@@ -7,3 +7,35 @@
 .cardAccentTop   { border-top: var(--border-w-accent) solid var(--accent); }
 .cardDangerTop   { border-top: var(--border-w-accent) solid var(--danger); }
 .cardPage        { max-width: var(--card-max-narrow); width: 100%; }
+
+/* Login page/card/radar/brand shell shared by Login, OrganizerLogin,
+   AdminLogin — each consumer's own .header/.radar/.brand class composes one
+   of these instead of repeating the declarations. */
+.authCard {
+  composes: card cardAccentTop cardPage;
+  composes: rise from './Animations.module.css';
+  --rise-distance: var(--rise-distance-lg);
+  --rise-duration: var(--anim-rise-sm);
+  padding: var(--space-7);
+}
+
+.authHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--space-0-6);
+  margin-bottom: var(--space-2);
+}
+
+.authRadar {
+  composes: breathe from './Animations.module.css';
+  font-size: var(--fs-xl);
+  color: var(--accent);
+}
+
+.authBrand {
+  font-family: var(--font-display);
+  font-size: var(--heading-lg);
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--tracking-normal);
+  color: var(--text);
+}

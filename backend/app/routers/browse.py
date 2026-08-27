@@ -52,6 +52,7 @@ from app.routers.auth import get_current_user
 from app.routers.utils import (
     canonical_event_filter,
     event_not_ended_filter,
+    load_user_reported_events,
     load_user_signals,
     persona_weight_tuple,
     public_event_filter,
@@ -160,34 +161,48 @@ async def _browse_sql_path(
     else:
         order_col = EventClassification.quality_score.desc().nulls_last()
 
-    total = (
-        await db.scalar(
-            select(func.count(Event.id))
-            .select_from(Event)
-            .join(Event.classification)
-            .where(*conds)
-        )
-    ) or 0
+    # `total` is a full-set aggregate over every matching row — expensive to
+    # re-run identically for page 2, 3, 4... of the same infinite scroll, so
+    # it's computed only for the first page; the frontend holds it across
+    # subsequent pages via React Query. `has_more` no longer needs `total` at
+    # all: fetch one extra row past `limit` and check whether it showed up.
+    total: int | None = None
+    if offset == 0:
+        total = (
+            await db.scalar(
+                select(func.count(Event.id))
+                .select_from(Event)
+                .join(Event.classification)
+                .where(*conds)
+            )
+        ) or 0
 
     page_stmt = (
         select_events_with_classification()
         .join(Event.classification)
         .where(*conds)
         .order_by(order_col)
-        .limit(limit)
+        .limit(limit + 1)
         .offset(offset)
     )
     events = list((await db.scalars(page_stmt)).all())
-    sigs = await load_user_signals(db, user_id, [e.id for e in events])
+    has_more = len(events) > limit
+    events = events[:limit]
+    event_ids = [e.id for e in events]
+    sigs = await load_user_signals(db, user_id, event_ids)
+    reported = await load_user_reported_events(db, user_id, event_ids)
 
     return {
         "events": [
-            serialize_event(e, locale=locale, feedback_by_event=sigs) for e in events
+            serialize_event(
+                e, locale=locale, feedback_by_event=sigs, reported_event_ids=reported
+            )
+            for e in events
         ],
         "total": total,
         "limit": limit,
         "offset": offset,
-        "has_more": offset + len(events) < total,
+        "has_more": has_more,
     }
 
 
@@ -394,10 +409,13 @@ async def _browse_scored_path(
 
     ordered_events = [events_by_id[eid] for eid in page_ids if eid in events_by_id]
     sigs = await load_user_signals(db, current_user.id, page_ids)
+    reported = await load_user_reported_events(db, current_user.id, page_ids)
 
     return {
         "events": [
-            serialize_event(e, locale=locale, feedback_by_event=sigs)
+            serialize_event(
+                e, locale=locale, feedback_by_event=sigs, reported_event_ids=reported
+            )
             for e in ordered_events
         ],
         "total": total,

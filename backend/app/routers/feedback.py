@@ -38,6 +38,7 @@ from app.rate_limit import limiter
 from app.routers.auth import get_current_user
 from app.routers.utils import (
     invalidate_user_scores,
+    load_user_reported_events,
     public_event_filter,
     resolve_locale_param,
     select_events_with_classification,
@@ -63,7 +64,7 @@ async def record_feedback(
     """Upsert a feedback signal for an event and invalidate cached scores."""
     if body.signal not in VALID_SIGNALS:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=ERROR_INVALID_SIGNAL.format(signals=sorted(VALID_SIGNALS)),
         )
 
@@ -175,24 +176,28 @@ async def list_feedback_events(
     """
     if signal not in PREFERENCE_SIGNALS:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=ERROR_INVALID_PREFERENCE_SIGNAL.format(
                 signals=sorted(PREFERENCE_SIGNALS)
             ),
         )
 
-    total = (
-        await db.scalar(
-            select(func.count(UserEventFeedback.id))
-            .select_from(UserEventFeedback)
-            .join(Event, Event.id == UserEventFeedback.event_id)
-            .where(
-                UserEventFeedback.user_id == current_user.id,
-                UserEventFeedback.signal == signal,
-                public_event_filter(),
+    # See browse.py's _browse_sql_path for the rationale: total only on the
+    # first page, has_more via a limit+1 sentinel row instead of total.
+    total: int | None = None
+    if offset == 0:
+        total = (
+            await db.scalar(
+                select(func.count(UserEventFeedback.id))
+                .select_from(UserEventFeedback)
+                .join(Event, Event.id == UserEventFeedback.event_id)
+                .where(
+                    UserEventFeedback.user_id == current_user.id,
+                    UserEventFeedback.signal == signal,
+                    public_event_filter(),
+                )
             )
-        )
-    ) or 0
+        ) or 0
 
     page_stmt = (
         select_events_with_classification()
@@ -206,21 +211,31 @@ async def list_feedback_events(
             public_event_filter(),
         )
         .order_by(UserEventFeedback.created_at.desc())
-        .limit(limit)
+        .limit(limit + 1)
         .offset(offset)
     )
     events = list((await db.scalars(page_stmt)).all())
+    has_more = len(events) > limit
+    events = events[:limit]
 
     feedback_by_event = {e.id: signal for e in events}
+    reported = await load_user_reported_events(
+        db, current_user.id, [e.id for e in events]
+    )
     effective_locale = resolve_locale_param(locale, current_user.locale)
 
     return {
         "events": [
-            serialize_event(e, locale=effective_locale, feedback_by_event=feedback_by_event)
+            serialize_event(
+                e,
+                locale=effective_locale,
+                feedback_by_event=feedback_by_event,
+                reported_event_ids=reported,
+            )
             for e in events
         ],
         "total": total,
         "limit": limit,
         "offset": offset,
-        "has_more": offset + len(events) < total,
+        "has_more": has_more,
     }

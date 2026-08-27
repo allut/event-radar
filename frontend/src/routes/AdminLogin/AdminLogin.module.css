@@ -1,0 +1,74 @@
+.page {
+  composes: pageCentered from '../../components/shared/Page.module.css';
+}
+
+.card {
+  composes: authCard from '../../components/shared/Card.module.css';
+}
+
+.header {
+  composes: authHeader from '../../components/shared/Card.module.css';
+}
+
+.radar {
+  composes: authRadar from '../../components/shared/Card.module.css';
+}
+
+.brand {
+  composes: authBrand from '../../components/shared/Card.module.css';
+}
+
+.tag {
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  letter-spacing: var(--eyebrow-tracking);
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-bottom: var(--space-6);
+  padding-bottom: var(--space-1-75);
+  border-bottom: 1px solid var(--border);
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.label {
+  composes: fieldLabel from '../../components/shared/Field.module.css';
+  font-family: var(--font-mono);
+}
+
+.input {
+  composes: fieldInput from '../../components/shared/Field.module.css';
+  font-family: var(--font-mono);
+  width: 100%;
+}
+
+.error {
+  composes: alert from '../../components/shared/Alert.module.css';
+  font-size: var(--fs-sm);
+  padding: var(--space-2) var(--space-3);
+}
+
+.submit {
+  composes: btnSubmit from '../../components/shared/Button.module.css';
+  padding: var(--space-0-8125) var(--space-5);
+  margin-top: var(--space-1);
+}
+
+.foot {
+  margin-top: var(--space-4);
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  letter-spacing: var(--tracking-wider);
+  color: var(--text-dim);
+}

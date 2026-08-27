@@ -5,7 +5,7 @@ import { useOrganizerLogout } from '../../hooks/useOrganizerLogout';
 import { useLocalLocale } from '../../hooks/useLocalLocale';
 import { useLocalePath } from '../../hooks/useLocalePath';
 import { t } from '../../i18n';
-import { formatEventTime } from '../../utils';
+import { formatEventTime, withQueryParam } from '../../utils';
 import OrganizerTopBar from '../../components/OrganizerTopBar';
 import PageState from '../../components/PageState';
 import EmptyState from '../../components/EmptyState';
@@ -42,7 +42,9 @@ export default function OrganizerDashboard() {
   const { data, isLoading, isError } = useQuery({
     queryKey: [QUERY_KEYS.organizerEvents, locale],
     queryFn: () =>
-      organizerApi.get<OrganizerEventsResponse>(`${API.organizerEvents}?limit=${ORGANIZER_EVENTS_PAGE_SIZE}`),
+      organizerApi.get<OrganizerEventsResponse>(
+        withQueryParam(API.organizerEvents, 'limit', String(ORGANIZER_EVENTS_PAGE_SIZE)),
+      ),
   });
 
   const deleteMutation = useMutation({

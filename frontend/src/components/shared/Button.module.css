@@ -3,7 +3,7 @@
   -webkit-appearance: none;
   background: var(--accent);
   color: var(--on-accent);
-  border: none;
+  border: 1px solid transparent;
   border-radius: var(--radius);
   font-weight: var(--fw-semibold);
   letter-spacing: var(--tracking-snug);
@@ -34,4 +34,44 @@
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+/* Success-state layout + resend link shared by MagicLinkForm and Contact. */
+.successBlock {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-0-6);
+  padding: var(--space-5) 0;
+  text-align: center;
+}
+
+.textButton {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  margin-top: var(--space-2);
+  text-decoration: underline;
+  text-underline-offset: var(--underline-offset);
+  transition: color var(--transition);
+}
+
+.textButton:hover {
+  color: var(--text);
+}
+
+.iconAction {
+  background: none;
+  transition: background var(--transition), border-color var(--transition), transform var(--transition);
+}
+
+.iconAction:hover:not(:disabled) {
+  background: var(--bg-raised);
+  border-color: var(--border);
+  transform: scale(var(--scale-hover));
+}
+
+.iconAction:focus-visible {
+  box-shadow: var(--shadow-focus-ring);
 }

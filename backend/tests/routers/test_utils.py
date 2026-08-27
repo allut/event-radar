@@ -1,5 +1,8 @@
 """Unit tests for app.routers.utils helpers."""
+import asyncio
+import json
 from datetime import datetime, timezone
+from unittest.mock import patch
 
 import pytest
 from fastapi import HTTPException
@@ -10,10 +13,15 @@ from app.routers.utils import (
     event_ended_filter,
     event_not_ended_filter,
     event_series_key,
+    load_user_reported_events,
     mask_email,
     normalized_title,
     require_configured_secret,
     resolve_locale_param,
+    resolve_open_reports,
+    send_report_resolution_emails,
+    serialize_event,
+    stream_admin_job,
 )
 
 
@@ -194,3 +202,180 @@ class TestMaskEmail:
         masked = mask_email("verylongusername@example.com")
         assert "verylongusername" not in masked
         assert masked.endswith("@example.com")
+
+
+class TestLoadUserReportedEvents:
+    @pytest.mark.asyncio
+    async def test_empty_event_ids_short_circuits(self, mock_db):
+        result = await load_user_reported_events(mock_db, user_id=1, event_ids=[])
+        assert result == set()
+        mock_db.execute.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_returns_open_report_event_ids(self, mock_db):
+        from unittest.mock import MagicMock
+
+        row = MagicMock()
+        row.event_id = 10
+        exec_result = MagicMock()
+        exec_result.all.return_value = [row]
+        mock_db.execute.return_value = exec_result
+
+        result = await load_user_reported_events(mock_db, user_id=1, event_ids=[10, 20])
+        assert result == {10}
+
+
+class TestResolveOpenReports:
+    """resolve_open_reports() only mutates EventReport rows — it must not
+    itself send any email (issue #127's send_report_resolution_emails is a
+    separate, explicitly post-commit step; see its own tests below)."""
+
+    @pytest.mark.asyncio
+    async def test_does_not_send_email(self, mock_db, make_event, make_report):
+        from unittest.mock import AsyncMock, patch
+
+        event = make_event(42)
+        report = make_report(report_id=1, user_id=1, event_id=42, status="open")
+        mock_db.execute.return_value.scalars.return_value.all.return_value = [report]
+
+        with patch(
+            "app.routers.utils.send_report_outcome_email", new=AsyncMock()
+        ) as mock_send:
+            resolved = await resolve_open_reports(mock_db, event, "Reviewed.")
+
+        assert len(resolved) == 1
+        mock_send.assert_not_awaited()
+
+
+class TestSendReportResolutionEmails:
+    """send_report_resolution_emails() fires one reporter-outcome email per
+    resolved report (issue #127) — fan-out to multiple reporters, and a
+    per-report swallow-and-log on send failure so one bad address can't
+    block the rest. Callers invoke this AFTER their own db.commit()."""
+
+    @pytest.mark.asyncio
+    async def test_fans_out_one_email_per_reporter(
+        self, mock_db, make_event, make_report, make_user
+    ):
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        event = make_event(42)
+        report_a = make_report(report_id=1, user_id=1, event_id=42, status="open")
+        report_b = make_report(report_id=2, user_id=2, event_id=42, status="open")
+        report_a.status = report_b.status = "resolved"
+        user_a = make_user(user_id=1)
+        user_b = make_user(user_id=2)
+        user_b.email = "other@example.com"
+
+        mock_db.scalars.return_value = MagicMock(
+            all=MagicMock(return_value=[user_a, user_b])
+        )
+
+        with patch(
+            "app.routers.utils.send_report_outcome_email", new=AsyncMock()
+        ) as mock_send:
+            await send_report_resolution_emails(
+                mock_db, event, [report_a, report_b], "Reviewed."
+            )
+
+        assert mock_send.await_count == 2
+        sent_to = {call.args[0] for call in mock_send.await_args_list}
+        assert sent_to == {user_a.email, "other@example.com"}
+
+    @pytest.mark.asyncio
+    async def test_no_reports_short_circuits(self, mock_db, make_event):
+        from unittest.mock import AsyncMock, patch
+
+        with patch(
+            "app.routers.utils.send_report_outcome_email", new=AsyncMock()
+        ) as mock_send:
+            await send_report_resolution_emails(mock_db, make_event(42), [], "note")
+
+        mock_send.assert_not_awaited()
+        mock_db.scalars.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_send_failure_is_swallowed_and_logged(
+        self, mock_db, make_event, make_report, make_user, caplog
+    ):
+        import logging
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        event = make_event(42)
+        report = make_report(report_id=1, user_id=1, event_id=42, status="resolved")
+        user = make_user(user_id=1)
+
+        mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=[user]))
+
+        with (
+            patch(
+                "app.routers.utils.send_report_outcome_email",
+                new=AsyncMock(side_effect=RuntimeError("boom")),
+            ),
+            caplog.at_level(logging.ERROR),
+        ):
+            await send_report_resolution_emails(mock_db, event, [report], "Reviewed.")
+
+        assert any(
+            "Failed to send report outcome email" in r.getMessage()
+            for r in caplog.records
+        )
+
+
+class TestSerializeEventReportedField:
+    def test_defaults_to_false(self, make_event):
+        result = serialize_event(make_event(10))
+        assert result["reported"] is False
+
+    def test_true_when_event_id_in_set(self, make_event):
+        result = serialize_event(make_event(10), reported_event_ids={10})
+        assert result["reported"] is True
+
+    def test_false_when_event_id_not_in_set(self, make_event):
+        result = serialize_event(make_event(10), reported_event_ids={99})
+        assert result["reported"] is False
+
+
+class TestStreamAdminJob:
+    """Regression coverage for issue #159: Starlette's StreamingResponse
+    cancels its streaming generator on a client disconnect (task-group race
+    against listen_for_disconnect on uvicorn's pinned ASGI spec_version
+    "2.3" — docs/research/2026-08-23-admin-console-timeout-ceilings.md
+    finding 5). stream_admin_job must not let that cancellation reach the
+    job coroutine itself: the job has to keep running to completion (and
+    still get logged) even after the consumer stops reading."""
+
+    @pytest.mark.asyncio
+    async def test_job_completes_and_logs_after_generator_is_cancelled(self):
+        job_done = asyncio.Event()
+
+        async def slow_job() -> dict:
+            await asyncio.sleep(0.05)
+            job_done.set()
+            return {"ok": True}
+
+        with patch("app.routers.utils.log_admin_action") as mock_log:
+            gen = stream_admin_job("Test", "test", "test_action", "target", slow_job())
+            first = asyncio.ensure_future(gen.__anext__())
+            await asyncio.sleep(0.01)  # let the runner task start; job is still sleeping
+            first.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await first
+            await gen.aclose()  # what Starlette does to the generator on disconnect
+
+            await asyncio.wait_for(job_done.wait(), timeout=1)
+            await asyncio.sleep(0.02)  # let the runner's log_admin_action call land
+
+        mock_log.assert_called_once_with(None, "test_action", "target", {"ok": True})
+
+    @pytest.mark.asyncio
+    async def test_normal_completion_streams_one_ok_line(self):
+        async def job() -> dict:
+            return {"processed": 3}
+
+        with patch("app.routers.utils.log_admin_action") as mock_log:
+            lines = [line async for line in stream_admin_job("Test", "test", "test_action", "target", job())]
+
+        assert len(lines) == 1
+        assert json.loads(lines[0]) == {"stage": "test", "status": "ok", "result": {"processed": 3}, "error": None}
+        mock_log.assert_called_once_with(None, "test_action", "target", {"processed": 3})

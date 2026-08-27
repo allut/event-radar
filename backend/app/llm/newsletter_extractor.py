@@ -15,7 +15,7 @@ from app.constants import (
     SOURCE_KIND_INBOUND_EMAIL,
     SOURCE_SLUG_NEWSLETTER,
 )
-from app.llm.prompts import NEWSLETTER_EXTRACT_PROMPT_TEMPLATE
+from app.llm.prompts import NEWSLETTER_EXTRACT_PROMPT_TEMPLATE, escape_prompt_delimiters
 from app.llm.router import llm_json_or_none
 from app.models.models import RawEvent, RawInboundEmail, Source
 
@@ -56,8 +56,8 @@ async def extract_events_from_email(
     Returns the number of events extracted.
     """
     prompt = NEWSLETTER_EXTRACT_PROMPT_TEMPLATE.format(
-        subject=subject[:NEWSLETTER_SUBJECT_MAX_LEN],
-        body=text_body[:NEWSLETTER_BODY_MAX_LEN],
+        subject=escape_prompt_delimiters(subject[:NEWSLETTER_SUBJECT_MAX_LEN]),
+        body=escape_prompt_delimiters(text_body[:NEWSLETTER_BODY_MAX_LEN]),
     )
 
     response = await llm_json_or_none(

@@ -13,6 +13,7 @@ from app.db import get_db
 from app.models.models import Event, User
 from app.rate_limit import limiter
 from app.routers.utils import (
+    load_user_reported_events,
     load_user_signals,
     parse_session_cookie_user,
     public_event_filter,
@@ -50,6 +51,7 @@ async def get_event(
     parsed = parse_session_cookie_user(session)
     locale = DEFAULT_USER_LOCALE
     sigs: dict[int, str] = {}
+    reported: set[int] = set()
     if parsed is not None:
         user_id, token_version = parsed
         user = await db.get(User, user_id)
@@ -59,7 +61,13 @@ async def get_event(
         if user is not None and token_version == user.session_token_version:
             locale = user.locale
             sigs = await load_user_signals(db, user_id, [event.id])
+            reported = await load_user_reported_events(db, user_id, [event.id])
 
     effective_locale = resolve_locale_param(locale_query, locale)
 
-    return serialize_event(event, locale=effective_locale, feedback_by_event=sigs)
+    return serialize_event(
+        event,
+        locale=effective_locale,
+        feedback_by_event=sigs,
+        reported_event_ids=reported,
+    )

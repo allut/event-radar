@@ -1,39 +1,22 @@
 """Tests for L2: consecutive-failure lockout on /admin/* Basic auth
-(routers/admin.py::_require_admin), on top of the shared_limit rate bucket."""
+(routers/admin.py::_require_admin), on top of the shared_limit rate bucket.
+
+Basic-auth-specific tests target a read-only (GET) route — mutating (POST)
+routes require the session-only get_current_admin (H-1 in the OWASP audit)
+and no longer accept Basic at all, so they can't exercise this lockout."""
 
 import http
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
 from app.constants import ADMIN_AUTH_MAX_FAILURES
 
 
-def _build_app() -> FastAPI:
-    from app.routers.admin import router
-
-    app = FastAPI()
-    app.include_router(router)
-    return app
-
-
-@pytest.fixture(autouse=True)
-def _reset_admin_auth_failures():
-    """The failure counter is a module-level dict (in-memory, single-process
-    by design — see ADMIN_AUTH_MAX_FAILURES in constants.py) shared across
-    tests in this process; isolate each test from the others."""
-    from app.routers import admin as admin_module
-
-    admin_module._admin_auth_failures.clear()
-    yield
-    admin_module._admin_auth_failures.clear()
-
-
 @pytest.mark.asyncio
-async def test_lockout_after_max_consecutive_failures():
-    app = _build_app()
+async def test_lockout_after_max_consecutive_failures(admin_app):
+    app = admin_app
 
     with patch("app.routers.admin.settings") as mock_settings:
         mock_settings.ADMIN_PASSWORD = "s3cret"
@@ -45,15 +28,15 @@ async def test_lockout_after_max_consecutive_failures():
         ) as client:
             statuses = []
             for _ in range(ADMIN_AUTH_MAX_FAILURES):
-                resp = await client.post(
-                    "/admin/publish", auth=("realadmin", "wrong")
+                resp = await client.get(
+                    "/admin/stats", auth=("realadmin", "wrong")
                 )
                 statuses.append(resp.status_code)
 
             # One more failure past the threshold — must be locked out (429),
             # not just another 401.
-            locked_resp = await client.post(
-                "/admin/publish", auth=("realadmin", "wrong")
+            locked_resp = await client.get(
+                "/admin/stats", auth=("realadmin", "wrong")
             )
 
     assert statuses == [http.HTTPStatus.UNAUTHORIZED] * ADMIN_AUTH_MAX_FAILURES
@@ -61,14 +44,14 @@ async def test_lockout_after_max_consecutive_failures():
 
 
 @pytest.mark.asyncio
-async def test_admin_auth_failures_dict_is_bounded():
+async def test_admin_auth_failures_dict_is_bounded(admin_app):
     """P2-11: _admin_auth_failures is an in-memory dict keyed by client_key()
     with no prior eviction — sustained scanning traffic from many distinct
     clients would grow it forever. Bounded LRU (ADMIN_AUTH_FAILURES_MAX_ENTRIES)
     caps it, mirroring browse.py's _score_cache."""
     from app.routers import admin as admin_module
 
-    app = _build_app()
+    app = admin_app
 
     with patch("app.routers.admin.settings") as mock_settings, patch(
         "app.routers.admin.ADMIN_AUTH_FAILURES_MAX_ENTRIES", 3
@@ -81,8 +64,8 @@ async def test_admin_auth_failures_dict_is_bounded():
             transport=ASGITransport(app=app), base_url="http://test"
         ) as client:
             for i in range(6):
-                await client.post(
-                    "/admin/publish",
+                await client.get(
+                    "/admin/stats",
                     auth=("realadmin", "wrong"),
                     headers={"X-Forwarded-For": f"10.0.0.{i}"},
                 )
@@ -91,7 +74,7 @@ async def test_admin_auth_failures_dict_is_bounded():
 
 
 @pytest.mark.asyncio
-async def test_eviction_does_not_lift_an_active_lockout():
+async def test_eviction_does_not_lift_an_active_lockout(admin_app):
     """A blind oldest-first eviction would let a high-cardinality distributed
     brute-force evict — and thereby prematurely lift — another client's
     still-active lockout. The victim's locked-until entry must survive being
@@ -99,7 +82,7 @@ async def test_eviction_does_not_lift_an_active_lockout():
     to evict instead."""
     from app.routers import admin as admin_module
 
-    app = _build_app()
+    app = admin_app
 
     with patch("app.routers.admin.settings") as mock_settings, patch(
         "app.routers.admin.ADMIN_AUTH_FAILURES_MAX_ENTRIES", 1
@@ -114,8 +97,8 @@ async def test_eviction_does_not_lift_an_active_lockout():
             # Victim: lock it out first, so it is both the oldest entry and
             # currently under an active lockout.
             for _ in range(ADMIN_AUTH_MAX_FAILURES):
-                await client.post(
-                    "/admin/publish",
+                await client.get(
+                    "/admin/stats",
                     auth=("realadmin", "wrong"),
                     headers={"X-Forwarded-For": "10.0.0.1"},
                 )
@@ -123,8 +106,8 @@ async def test_eviction_does_not_lift_an_active_lockout():
 
             # Attacker: fail from a second, expired (never-locked) client —
             # pushes the dict over the max-entries cap of 2.
-            await client.post(
-                "/admin/publish",
+            await client.get(
+                "/admin/stats",
                 auth=("realadmin", "wrong"),
                 headers={"X-Forwarded-For": "10.0.0.2"},
             )
@@ -135,7 +118,7 @@ async def test_eviction_does_not_lift_an_active_lockout():
 
 
 @pytest.mark.asyncio
-async def test_rate_limit_bucket_shared_across_different_admin_routes():
+async def test_rate_limit_bucket_shared_across_different_admin_routes(admin_app):
     """L2: RATE_LIMIT_ADMIN must be ONE bucket per client across the whole
     /admin prefix (limiter.shared_limit(..., scope="admin")), not one bucket
     per route — otherwise cycling through routes lets an attacker exceed the
@@ -143,7 +126,7 @@ async def test_rate_limit_bucket_shared_across_different_admin_routes():
     from app.constants import RATE_LIMIT_ADMIN
 
     burst = int(RATE_LIMIT_ADMIN.split("/")[0])
-    app = _build_app()
+    app = admin_app
 
     with (
         patch("app.routers.admin.settings") as mock_settings,
@@ -177,10 +160,16 @@ async def test_rate_limit_bucket_shared_across_different_admin_routes():
 
 
 @pytest.mark.asyncio
-async def test_successful_auth_resets_failure_counter():
-    app = _build_app()
+async def test_successful_auth_resets_failure_counter(admin_app, make_db_ctx, mock_db):
+    app = admin_app
+    db = mock_db
+    # total, canonical, sources_total, sources_enabled
+    db.scalar = AsyncMock(side_effect=[100, 60, 8, 5])
 
-    with patch("app.routers.admin.settings") as mock_settings:
+    with (
+        patch("app.routers.admin.settings") as mock_settings,
+        patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
+    ):
         mock_settings.ADMIN_PASSWORD = "s3cret"
         mock_settings.ADMIN_USERNAME = "realadmin"
         mock_settings.APP_ENV = "production"
@@ -189,21 +178,16 @@ async def test_successful_auth_resets_failure_counter():
             transport=ASGITransport(app=app), base_url="http://test"
         ) as client:
             for _ in range(ADMIN_AUTH_MAX_FAILURES - 1):
-                await client.post("/admin/publish", auth=("realadmin", "wrong"))
+                await client.get("/admin/stats", auth=("realadmin", "wrong"))
 
-            with patch(
-                "app.routers.admin.publish_pending_job",
-                new_callable=AsyncMock,
-                return_value={"published": 0},
-            ):
-                good_resp = await client.post(
-                    "/admin/publish", auth=("realadmin", "s3cret")
-                )
+            good_resp = await client.get(
+                "/admin/stats", auth=("realadmin", "s3cret")
+            )
 
             # Counter reset by the successful auth — next failure alone must
             # not trigger a lockout.
-            next_fail_resp = await client.post(
-                "/admin/publish", auth=("realadmin", "wrong")
+            next_fail_resp = await client.get(
+                "/admin/stats", auth=("realadmin", "wrong")
             )
 
     assert good_resp.status_code == http.HTTPStatus.OK

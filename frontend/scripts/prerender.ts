@@ -172,6 +172,12 @@ export interface PrerenderTarget {
  * under budget, else waits until the oldest slot in the window expires. */
 class RateGate {
   private readonly timestamps: number[] = [];
+  // Head index instead of Array.shift() — shift() is O(window) per call
+  // (re-indexes every remaining element), so this makes eviction O(1)
+  // amortized. Compacted back to the front once evicted entries dominate the
+  // array so it doesn't grow unbounded over a long prerender run.
+  private head = 0;
+
   constructor(
     private readonly maxPerWindow: number,
     private readonly windowMs: number,
@@ -180,14 +186,21 @@ class RateGate {
   async acquire(): Promise<void> {
     for (;;) {
       const now = Date.now();
-      while (this.timestamps.length > 0 && now - this.timestamps[0] >= this.windowMs) {
-        this.timestamps.shift();
+      while (
+        this.head < this.timestamps.length &&
+        now - this.timestamps[this.head] >= this.windowMs
+      ) {
+        this.head++;
       }
-      if (this.timestamps.length < this.maxPerWindow) {
+      if (this.head > 0 && this.head * 2 >= this.timestamps.length) {
+        this.timestamps.splice(0, this.head);
+        this.head = 0;
+      }
+      if (this.timestamps.length - this.head < this.maxPerWindow) {
         this.timestamps.push(now);
         return;
       }
-      const waitMs = this.windowMs - (now - this.timestamps[0]) + 10;
+      const waitMs = this.windowMs - (now - this.timestamps[this.head]) + 10;
       await new Promise((resolve) => setTimeout(resolve, waitMs));
     }
   }

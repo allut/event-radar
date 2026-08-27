@@ -40,6 +40,7 @@ from app.constants import (
     RATE_LIMIT_AUTH_VERIFY,
     RATE_LIMIT_LOGOUT,
     RATE_LIMIT_LOGOUT_ALL,
+    SECONDS_PER_DAY,
     VALID_LOCALES,
 )
 from app.db import get_db
@@ -233,7 +234,7 @@ async def verify_organizer_magic_link(
         name=ORGANIZER_SESSION_COOKIE_NAME,
         token=session_token,
         path=ORGANIZER_SESSION_COOKIE_PATH,
-        ttl_days=ORGANIZER_SESSION_TTL_DAYS,
+        ttl_seconds=ORGANIZER_SESSION_TTL_DAYS * SECONDS_PER_DAY,
     )
     return {
         "organizer": {

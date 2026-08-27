@@ -4,6 +4,21 @@ import userEvent from '@testing-library/user-event';
 import EventCard from './EventCard';
 import { renderWithProviders, makeEvent } from '../../test/utils';
 
+const mockNavigate = vi.fn();
+vi.mock('react-router-dom', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('react-router-dom')>();
+  return { ...actual, useNavigate: () => mockNavigate };
+});
+
+vi.mock('../../lib/auth', () => ({
+  getLocale: vi.fn(() => 'en'),
+  getStoredLocale: vi.fn(() => null),
+  setLocale: vi.fn(),
+  clearLocale: vi.fn(),
+  isAuthenticated: vi.fn(() => true),
+  subscribeAuth: vi.fn(() => () => undefined),
+}));
+
 vi.mock('../../hooks/useFeedback', () => ({
   useFeedback: vi.fn(() => ({
     activeSignal: null,
@@ -19,6 +34,9 @@ vi.mock('../../utils', async (importOriginal) => {
     trackExternalClick: vi.fn(),
   };
 });
+
+import { isAuthenticated } from '../../lib/auth';
+const mockIsAuthenticated = vi.mocked(isAuthenticated);
 
 describe('EventCard', () => {
   it('renders title as link to event detail', () => {
@@ -119,5 +137,50 @@ describe('EventCard', () => {
     const clickable = container.querySelector('[class*="clickable"]');
     const ticketsLink = screen.getByRole('link', { name: /tickets/i });
     expect(clickable?.contains(ticketsLink)).toBe(false);
+  });
+
+  describe('overflow menu', () => {
+    it('shows Share and Report event on an interactive card', async () => {
+      const event = makeEvent();
+      renderWithProviders(<EventCard event={event} index={0} locale="en" />);
+      await userEvent.click(screen.getByRole('button', { name: 'More options' }));
+      expect(screen.getByRole('menuitem', { name: 'Share' })).toBeInTheDocument();
+      expect(screen.getByRole('menuitem', { name: 'Report event' })).toBeInTheDocument();
+    });
+
+    it('renders no kebab on a read-only card', () => {
+      const event = makeEvent();
+      renderWithProviders(<EventCard event={event} index={0} locale="en" readOnly />);
+      expect(screen.queryByRole('button', { name: 'More options' })).not.toBeInTheDocument();
+    });
+
+    it('shows a disabled Reported row when the event was already reported', async () => {
+      const event = makeEvent({ reported: true });
+      renderWithProviders(<EventCard event={event} index={0} locale="en" />);
+      await userEvent.click(screen.getByRole('button', { name: 'More options' }));
+      expect(screen.getByRole('menuitem', { name: 'Reported' })).toBeDisabled();
+    });
+
+    it('opens the report modal when Report event is clicked while authenticated', async () => {
+      const event = makeEvent({ id: 5 });
+      renderWithProviders(<EventCard event={event} index={0} locale="en" />);
+      await userEvent.click(screen.getByRole('button', { name: 'More options' }));
+      await userEvent.click(screen.getByRole('menuitem', { name: 'Report event' }));
+      expect(screen.getByRole('dialog', { name: 'Report event' })).toBeInTheDocument();
+    });
+
+    it('redirects to /login instead of opening the modal when signed out', async () => {
+      mockIsAuthenticated.mockReturnValue(false);
+      try {
+        const event = makeEvent({ id: 5 });
+        renderWithProviders(<EventCard event={event} index={0} locale="en" />);
+        await userEvent.click(screen.getByRole('button', { name: 'More options' }));
+        await userEvent.click(screen.getByRole('menuitem', { name: 'Report event' }));
+        expect(mockNavigate).toHaveBeenCalledWith('/login', undefined);
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      } finally {
+        mockIsAuthenticated.mockReturnValue(true);
+      }
+    });
   });
 });

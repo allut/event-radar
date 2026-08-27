@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { HelmetProvider } from 'react-helmet-async';
@@ -7,7 +7,7 @@ import { SpeedInsights } from '@vercel/speed-insights/react';
 import { useAuth } from './hooks/useAuth';
 import { useOrganizerAuth } from './hooks/useOrganizerAuth';
 import { useLocalePath } from './hooks/useLocalePath';
-import { QUERY_RETRY, QUERY_STALE_TIME, ROUTES, LOCALE_ET } from './constants';
+import { QUERY_RETRY, QUERY_STALE_TIME, ROUTES, LOCALE_ET, PAGEVIEW_TRACK_DELAY_MS } from './constants';
 import { maskAnalyticsUrl, localizedTo } from './utils';
 import { getStoredLocale } from './lib/auth';
 import { initGtag, trackPageview } from './lib/gtag';
@@ -31,6 +31,12 @@ import OrganizerDashboard from './routes/OrganizerDashboard';
 import EventSubmit from './routes/EventSubmit';
 import NotFound from './routes/NotFound';
 import Footer from './components/Footer';
+
+// The admin console's own React.lazy boundary (issue #154) — its whole route
+// tree (AdminApp) lives in a separate chunk, never downloaded by a signed-out
+// public-route visit. Registered below, entirely outside ROUTE_DEFS/the
+// locale-prefix loop.
+const AdminApp = lazy(() => import('./routes/AdminApp'));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -87,7 +93,10 @@ function GoogleAnalytics() {
     initGtag(import.meta.env.VITE_GA_MEASUREMENT_ID);
   }, []);
   useEffect(() => {
-    const id = window.setTimeout(() => trackPageview(maskAnalyticsUrl(location.pathname)), 0);
+    const id = window.setTimeout(
+      () => trackPageview(maskAnalyticsUrl(location.pathname)),
+      PAGEVIEW_TRACK_DELAY_MS,
+    );
     return () => window.clearTimeout(id);
   }, [location.pathname]);
   return null;
@@ -107,6 +116,14 @@ function BareLocaleGate({ children }: { children: React.ReactNode }) {
     return <Navigate to={localizedTo(location.pathname + location.search + location.hash, preferred)} replace />;
   }
   return <>{children}</>;
+}
+
+// The public Footer is suppressed on /admin/* — the admin console has its
+// own minimal chrome (AdminShell), not the public app's (issue #154).
+function ConditionalFooter() {
+  const { pathname } = useLocation();
+  if (pathname.startsWith(ROUTES.adminBase)) return null;
+  return <Footer />;
 }
 
 function localePrefixedPattern(path: string): string {
@@ -159,10 +176,23 @@ export default function App() {
               {ROUTE_DEFS.map(({ path, element }) => (
                 <Route key={`loc:${path}`} path={localePrefixedPattern(path)} element={element} />
               ))}
+              {/* Three registrations, all pointing at the same lazy AdminApp
+                  chunk — see AdminApp.tsx's screenFor comment for why a
+                  single "/admin/*" splat isn't enough: react-router scores a
+                  matched static segment above a splat, so "/:locale/login"
+                  and "/:locale/events/:id" (both registered above from
+                  ROUTE_DEFS) would otherwise outrank a bare "/admin/*" for
+                  the literal paths "/admin/login" and "/admin/events/:id".
+                  These two extra entries add enough static segments to win
+                  outright; every other /admin/... path has no such
+                  same-shape collision, so the plain splat still covers them. */}
+              <Route path={ROUTES.adminLogin} element={<Suspense fallback={null}><AdminApp /></Suspense>} />
+              <Route path={ROUTES.adminEventsSplat} element={<Suspense fallback={null}><AdminApp /></Suspense>} />
+              <Route path={ROUTES.adminSplat} element={<Suspense fallback={null}><AdminApp /></Suspense>} />
               <Route path="*" element={<Protected><NotFound /></Protected>} />
               <Route path="/:locale/*" element={<Protected><NotFound /></Protected>} />
             </Routes>
-            <Footer />
+            <ConditionalFooter />
             <Analytics beforeSend={(e) => ({ ...e, url: maskAnalyticsUrl(e.url) })} />
             <SpeedInsights beforeSend={(e) => ({ ...e, url: maskAnalyticsUrl(e.url) })} />
             <GoogleAnalytics />
