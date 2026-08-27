@@ -159,10 +159,13 @@ async def test_login_and_logout_and_me_roundtrip():
 @pytest.mark.asyncio
 async def test_me_without_session_cookie_is_401():
     app = _build_app()
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as client:
-        resp = await client.get("/admin/auth/me")
+    with patch("app.routers.admin.settings") as mock_settings:
+        _patch_settings(mock_settings, totp_secret=None)
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            resp = await client.get("/admin/auth/me")
     assert resp.status_code == http.HTTPStatus.UNAUTHORIZED
 
 

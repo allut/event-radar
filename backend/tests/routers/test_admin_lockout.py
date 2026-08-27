@@ -160,10 +160,16 @@ async def test_rate_limit_bucket_shared_across_different_admin_routes(admin_app)
 
 
 @pytest.mark.asyncio
-async def test_successful_auth_resets_failure_counter(admin_app):
+async def test_successful_auth_resets_failure_counter(admin_app, make_db_ctx, mock_db):
     app = admin_app
+    db = mock_db
+    # total, canonical, sources_total, sources_enabled
+    db.scalar = AsyncMock(side_effect=[100, 60, 8, 5])
 
-    with patch("app.routers.admin.settings") as mock_settings:
+    with (
+        patch("app.routers.admin.settings") as mock_settings,
+        patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
+    ):
         mock_settings.ADMIN_PASSWORD = "s3cret"
         mock_settings.ADMIN_USERNAME = "realadmin"
         mock_settings.APP_ENV = "production"
