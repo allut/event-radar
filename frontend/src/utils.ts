@@ -488,6 +488,13 @@ export function shouldFlipPopover(triggerLeft: number, popWidth: number, viewpor
   return triggerLeft + popWidth > viewportWidth - marginPx;
 }
 
+/** Mirror of shouldFlipPopover for a popover that's right-anchored to the
+ * trigger by default (extends leftward) — flips to left-anchored when that
+ * would overflow the viewport's left edge. */
+export function shouldFlipPopoverLeft(triggerRight: number, popWidth: number, marginPx: number): boolean {
+  return triggerRight - popWidth < marginPx;
+}
+
 // ─── Explore ─────────────────────────────────────────────────────────────────
 
 export interface ExploreFilters {

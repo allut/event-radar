@@ -30,6 +30,22 @@
   min-width: var(--overflow-pop-min-width);
 }
 
+/* Trigger is pinned to its container's right edge (EventCard's top-right
+ * corner, EventDetail's actions row), so this menu right-anchors by default
+ * — the opposite default from other menuPop consumers. useDropdown is given
+ * defaultAnchor='right' so its flip heuristic checks left-edge overflow
+ * instead of right, and data-flip='true' here means "flip to left-anchored"
+ * (see the override below), not "flip to right-anchored" like other menus. */
+.pop.pop {
+  left: auto;
+  right: 0;
+}
+
+.pop.pop[data-flip='true'] {
+  left: 0;
+  right: auto;
+}
+
 @media (max-width: 640px) {
   .pop.pop {
     position: fixed;

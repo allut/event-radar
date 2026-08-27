@@ -48,6 +48,7 @@ export default function EventOverflowMenu({ locale, reported, onShare, onReport,
   const { open, setOpen, flip, rootRef, popRef, triggerRef, close } = useDropdown(
     DROPDOWN_DEFAULT_FOCUS_SELECTOR,
     '--overflow-pop-top',
+    'right',
   );
 
   return (

@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type Dispatch, type RefObject, type SetStateAction } from 'react';
 import { DROPDOWN_DEFAULT_FOCUS_SELECTOR, MOBILE_BREAKPOINT_PX } from '../constants';
-import { shouldFlipPopover } from '../utils';
+import { shouldFlipPopover, shouldFlipPopoverLeft } from '../utils';
 
 export interface UseDropdownResult {
   open: boolean;
@@ -28,10 +28,17 @@ export interface UseDropdownResult {
  *   scroll/resize while open and on mobile — CSS alone can't express that
  *   once the popover leaves the trigger's positioned ancestor (FacetMenu,
  *   EventOverflowMenu).
+ * @param defaultAnchor Which edge the popover is anchored to before any
+ *   flip is applied. `'left'` (default) covers triggers that sit near the
+ *   viewport's left/center, flipping to right-anchored if that would
+ *   overflow the right edge. `'right'` covers triggers pinned to their
+ *   container's right edge (EventOverflowMenu), flipping to left-anchored
+ *   if right-anchoring would overflow the left edge.
  */
 export function useDropdown(
   initialFocusSelector = DROPDOWN_DEFAULT_FOCUS_SELECTOR,
   mobileTopVar?: string,
+  defaultAnchor: 'left' | 'right' = 'left',
 ): UseDropdownResult {
   const [open, setOpen] = useState(false);
   const [flip, setFlip] = useState(false);
@@ -100,12 +107,11 @@ export function useDropdown(
       const spaceRem = parseFloat(getComputedStyle(popRef.current).getPropertyValue('--space-5'));
       const rootFontPx = parseFloat(getComputedStyle(document.documentElement).fontSize);
       const marginPx = spaceRem * rootFontPx;
-      return shouldFlipPopover(
-        triggerRef.current.getBoundingClientRect().left,
-        popRef.current.getBoundingClientRect().width,
-        window.innerWidth,
-        marginPx,
-      );
+      const triggerRect = triggerRef.current.getBoundingClientRect();
+      const popWidth = popRef.current.getBoundingClientRect().width;
+      return defaultAnchor === 'right'
+        ? shouldFlipPopoverLeft(triggerRect.right, popWidth, marginPx)
+        : shouldFlipPopover(triggerRect.left, popWidth, window.innerWidth, marginPx);
     }
 
     setFlip(measure());
@@ -116,7 +122,7 @@ export function useDropdown(
     }
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
-  }, [open]);
+  }, [open, defaultAnchor]);
 
   return { open, setOpen, flip, rootRef, popRef, triggerRef, close };
 }
