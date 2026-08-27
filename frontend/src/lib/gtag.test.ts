@@ -64,6 +64,28 @@ describe('initGtag', () => {
     expect(calls).toContainEqual(['set', 'client_storage', 'none']);
   });
 
+  it('sends an explicit default consent state before config, granting analytics but denying ad signals', () => {
+    // Regression: without this, GA4's Consent Mode leaves consent "unset"
+    // forever and the tag never sends a hit (Tag Assistant: "Default consent
+    // state has not been set yet"), even though config/event calls succeed.
+    initGtag('G-TEST123');
+    const calls = window.dataLayer as unknown[][];
+    expect(calls).toContainEqual([
+      'consent',
+      'default',
+      {
+        ad_storage: 'denied',
+        ad_user_data: 'denied',
+        ad_personalization: 'denied',
+        analytics_storage: 'granted',
+      },
+    ]);
+    const consentIndex = calls.findIndex((call) => call[0] === 'consent');
+    const configIndex = calls.findIndex((call) => call[0] === 'config');
+    expect(consentIndex).toBeGreaterThanOrEqual(0);
+    expect(consentIndex).toBeLessThan(configIndex);
+  });
+
   it('is idempotent — a second call does not append a second script', () => {
     initGtag('G-TEST123');
     initGtag('G-TEST123');
