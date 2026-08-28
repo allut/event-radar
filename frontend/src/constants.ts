@@ -47,6 +47,11 @@ export const LOCALE_KEY = 'locale';
 // two independent auth tracks (own account table, own token salts on the
 // backend) that must never be confused for one another. See lib/organizerAuth.ts.
 export const ORGANIZER_SIGNED_IN_HINT_KEY = 'organizer_session_token';
+// Client-only dismissal flag for the profile nudge banner (#175) — no backend
+// field for this, so a stale/cleared browser just re-shows it once.
+export const ORGANIZER_PROFILE_NUDGE_DISMISSED_KEY = 'organizer_profile_nudge_dismissed';
+// Mirrors backend ORGANIZER_NAME_MAX_LEN (app/constants.py).
+export const ORGANIZER_NAME_MAX_LEN = 255;
 
 // ─── Auth / magic link ───────────────────────────────────────────────────────
 export const AUTH_REDIRECT_DELAY_MS = 600;
@@ -334,6 +339,7 @@ export const QUERY_KEYS = {
   settings: 'settings',
   showcase: 'showcase',
   organizerEvents: 'organizerEvents',
+  organizerProfile: 'organizerProfile',
   adminCounts: 'adminCounts',
   adminReports: 'adminReports',
   adminSubmissions: 'adminSubmissions',
@@ -578,6 +584,7 @@ export const ROUTES = {
   organizerVerify: '/organizer/verify',
   organizerDashboard: '/organizer/dashboard',
   organizerSubmit: '/organizer/submit',
+  organizerProfile: '/organizer/profile',
   organizerEventEdit: (id: number | string) => `/organizer/events/${id}/edit`,
   organizerEventEditPattern: '/organizer/events/:id/edit',
   // Admin console (issue #154) — registered entirely outside App.tsx's
@@ -660,6 +667,7 @@ export const API = {
   organizerEvents: '/organizer/events',
   organizerEvent: (id: number | string) => `/organizer/events/${id}`,
   organizerEventImage: '/organizer/events/image',
+  organizerProfile: '/organizer/profile',
   reports: '/reports',
   adminAuthLogin: '/admin/auth/login',
   adminAuthLogout: '/admin/auth/logout',

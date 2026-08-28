@@ -105,12 +105,16 @@ def make_organizer():
         organizer_id: int = 1,
         locale: str = DEFAULT_USER_LOCALE,
         session_token_version: int = 1,
+        verified: bool = False,
+        name: str | None = None,
     ) -> MagicMock:
         o = MagicMock()
         o.id = organizer_id
         o.email = "organizer@example.com"
         o.locale = locale
         o.session_token_version = session_token_version
+        o.verified = verified
+        o.name = name
         o.created_at = MagicMock()
         o.created_at.isoformat.return_value = "2026-05-13T06:00:00+00:00"
         return o

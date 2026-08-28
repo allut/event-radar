@@ -27,6 +27,18 @@ const sampleEvents = {
   offset: 0,
 };
 
+// OrganizerDashboard renders OrganizerProfileNudge, which fires its own
+// organizerApi.get('/organizer/profile') call — route by path instead of
+// queueing positional mockResolvedValueOnce values, since the two calls can
+// resolve in either order. Defaults to a name set, so the nudge banner
+// (covered by OrganizerProfileNudge.test.tsx) doesn't interfere with these
+// event-list assertions unless a test overrides it.
+function mockOrganizerGet(eventsResponse: unknown, profileResponse: unknown = { name: 'Test Organizer' }) {
+  mockGet.mockImplementation((path: string) =>
+    path.includes('/organizer/profile') ? Promise.resolve(profileResponse) : Promise.resolve(eventsResponse),
+  );
+}
+
 beforeEach(() => {
   mockGet.mockReset();
   mockDelete.mockReset();
@@ -34,7 +46,7 @@ beforeEach(() => {
 
 describe('OrganizerDashboard', () => {
   it('lists the organizer\'s own events with status and review badges', async () => {
-    mockGet.mockResolvedValueOnce(sampleEvents);
+    mockOrganizerGet(sampleEvents);
     renderWithProviders(<OrganizerDashboard />);
     await waitFor(() => expect(screen.getByText('Jazz Night')).toBeInTheDocument());
     expect(screen.getByText('Art Show')).toBeInTheDocument();
@@ -42,13 +54,13 @@ describe('OrganizerDashboard', () => {
   });
 
   it('shows an empty state when there are no events', async () => {
-    mockGet.mockResolvedValueOnce({ events: [], limit: 24, offset: 0 });
+    mockOrganizerGet({ events: [], limit: 24, offset: 0 });
     renderWithProviders(<OrganizerDashboard />);
     await waitFor(() => expect(screen.getByText(/no events yet/i)).toBeInTheDocument());
   });
 
   it('deletes an event after confirmation', async () => {
-    mockGet.mockResolvedValue(sampleEvents);
+    mockOrganizerGet(sampleEvents);
     mockDelete.mockResolvedValueOnce({ id: 1, status: 'cancelled' });
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
 
@@ -63,7 +75,7 @@ describe('OrganizerDashboard', () => {
   });
 
   it('does not delete when the confirmation is declined', async () => {
-    mockGet.mockResolvedValue(sampleEvents);
+    mockOrganizerGet(sampleEvents);
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
 
     renderWithProviders(<OrganizerDashboard />);

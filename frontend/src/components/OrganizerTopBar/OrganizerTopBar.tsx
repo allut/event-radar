@@ -40,6 +40,12 @@ export default function OrganizerTopBar({ locale, onLocaleChange, onLogout }: Or
         >
           {t('organizer_new_event', locale)}
         </NavLink>
+        <NavLink
+          to={localePath(ROUTES.organizerProfile)}
+          className={({ isActive }) => cx(styles.navLink, isActive && styles.navLinkActive)}
+        >
+          {t('organizer_profile_nav', locale)}
+        </NavLink>
       </nav>
 
       <div className={styles.actions}>

@@ -134,6 +134,9 @@ class Organizer(Base):
     verified: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default="false"
     )
+    # Optional display name (#175) — no logo/contact-info fields, out of scope
+    # per docs/organizer-portal.md's Organizer Profile section.
+    name: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     magic_links: Mapped[list["OrganizerMagicLink"]] = relationship(
         back_populates="organizer"

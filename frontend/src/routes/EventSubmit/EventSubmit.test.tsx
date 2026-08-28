@@ -23,6 +23,13 @@ beforeEach(() => {
   mockGet.mockReset();
   mockPost.mockReset();
   mockPatch.mockReset();
+  // OrganizerProfileNudge (rendered on every EventSubmit view) fires its own
+  // organizerApi.get('/organizer/profile') independent of edit-mode's
+  // /organizer/events fetch — default it to a name set so the nudge banner
+  // doesn't appear in tests that don't care about it.
+  mockGet.mockImplementation((path: string) =>
+    path.includes('/organizer/profile') ? Promise.resolve({ name: 'Test Organizer' }) : Promise.resolve(undefined),
+  );
 });
 
 describe('EventSubmit (create)', () => {
@@ -128,7 +135,7 @@ describe('EventSubmit (create)', () => {
 
 describe('EventSubmit (edit)', () => {
   it('prefills from the organizer\'s event list and submits a PATCH', async () => {
-    mockGet.mockResolvedValueOnce({
+    const eventsResponse = {
       events: [
         {
           id: 9,
@@ -148,7 +155,12 @@ describe('EventSubmit (edit)', () => {
       ],
       limit: 24,
       offset: 0,
-    });
+    };
+    mockGet.mockImplementation((path: string) =>
+      path.includes('/organizer/profile')
+        ? Promise.resolve({ name: 'Test Organizer' })
+        : Promise.resolve(eventsResponse),
+    );
     mockPatch.mockResolvedValueOnce({ id: 9, slug: 'existing-event', status: 'published' });
 
     renderWithProviders(<EventSubmit />, {

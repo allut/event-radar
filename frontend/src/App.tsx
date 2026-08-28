@@ -28,6 +28,7 @@ import Contact from './routes/Contact';
 import OrganizerLogin from './routes/OrganizerLogin';
 import OrganizerVerify from './routes/OrganizerVerify';
 import OrganizerDashboard from './routes/OrganizerDashboard';
+import OrganizerProfile from './routes/OrganizerProfile';
 import EventSubmit from './routes/EventSubmit';
 import NotFound from './routes/NotFound';
 import Footer from './components/Footer';
@@ -155,6 +156,7 @@ const ROUTE_DEFS: RouteDef[] = [
   { path: ROUTES.organizerLogin, element: <OrganizerLogin /> },
   { path: ROUTES.organizerVerify, element: <OrganizerVerify /> },
   { path: ROUTES.organizerDashboard, element: <OrganizerProtected><OrganizerDashboard /></OrganizerProtected> },
+  { path: ROUTES.organizerProfile, element: <OrganizerProtected><OrganizerProfile /></OrganizerProtected> },
   { path: ROUTES.organizerSubmit, element: <OrganizerProtected><EventSubmit /></OrganizerProtected> },
   { path: ROUTES.organizerEventEditPattern, element: <OrganizerProtected><EventSubmit /></OrganizerProtected> },
 ];

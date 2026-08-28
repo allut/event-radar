@@ -4,6 +4,7 @@ import { useOrganizerLogout } from '../../hooks/useOrganizerLogout';
 import { useOrganizerEventForm } from '../../hooks/useOrganizerEventForm';
 import { useLocalLocale } from '../../hooks/useLocalLocale';
 import OrganizerTopBar from '../../components/OrganizerTopBar';
+import OrganizerProfileNudge from '../../components/OrganizerProfileNudge';
 import SegmentedControl from '../../components/SegmentedControl';
 import DatePicker from '../../components/DatePicker';
 import SelectField from '../../components/SelectField';
@@ -112,6 +113,7 @@ export default function EventSubmit() {
       <OrganizerTopBar locale={locale} onLocaleChange={handleLocaleChange} onLogout={handleLogout} />
 
       <main className={styles.main}>
+        <OrganizerProfileNudge locale={locale} />
         <h1 className={styles.title}>
           {form.isEditMode ? t('organizer_edit_title', locale) : t('organizer_submit_title', locale)}
         </h1>
