@@ -40,6 +40,7 @@ from app.constants import (
     ERROR_IMAGE_URL_SCHEME,
     ERROR_SUBMISSION_SOURCE_NOT_CONFIGURED,
     ERROR_UNSUPPORTED_IMAGE_TYPE,
+    ERROR_VENUE_NOT_FOUND,
     EVENT_CANCELLATION_REASON_ORGANIZER_RETRACT,
     EVENT_STATUS_CANCELLED,
     EVENT_STATUS_CLASSIFIED,
@@ -81,6 +82,7 @@ from app.models.models import (
     Organizer,
     OrganizerImageUpload,
     Source,
+    Venue,
 )
 from app.publish import publish_pending
 from app.rate_limit import limiter
@@ -120,6 +122,7 @@ class SubmitEventBody(BaseModel):
     ends_at: datetime | None = None
     venue_name: str | None = Field(None, max_length=ORGANIZER_VENUE_NAME_MAX_LEN)
     venue_address: str | None = Field(None, max_length=ORGANIZER_VENUE_ADDRESS_MAX_LEN)
+    venue_id: int | None = None
     url: str | None = None
     image_url: str | None = None
     price_min: float | None = Field(None, ge=0)
@@ -174,6 +177,7 @@ class PatchEventBody(BaseModel):
     ends_at: datetime | None = None
     venue_name: str | None = Field(None, max_length=ORGANIZER_VENUE_NAME_MAX_LEN)
     venue_address: str | None = Field(None, max_length=ORGANIZER_VENUE_ADDRESS_MAX_LEN)
+    venue_id: int | None = None
     url: str | None = None
     image_url: str | None = None
     price_min: float | None = Field(None, ge=0)
@@ -290,6 +294,25 @@ async def _own_event_or_404(
     return event
 
 
+async def _own_venue_or_404(db: AsyncSession, venue_id: int, organizer_id: int) -> Venue:
+    """Same 404-not-403 ownership check as organizer_venues.py's own helper
+    (#176) — mirrors _own_event_or_404's convention. Not imported from there
+    since a leading-underscore name is module-private (CLAUDE.md
+    Encapsulation rule)."""
+    venue = await db.scalar(
+        select(Venue).where(
+            Venue.id == venue_id,
+            Venue.organizer_id == organizer_id,
+            Venue.deleted_at.is_(None),
+        )
+    )
+    if venue is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=ERROR_VENUE_NOT_FOUND
+        )
+    return venue
+
+
 @router.post("", status_code=status.HTTP_201_CREATED)
 @limiter.limit(RATE_LIMIT_SUBMIT)
 async def submit_event(
@@ -327,6 +350,10 @@ async def submit_event(
     source = await _get_user_submission_source(db)
     _check_image_host(body.image_url)
 
+    venue: Venue | None = None
+    if body.venue_id is not None:
+        venue = await _own_venue_or_404(db, body.venue_id, current_organizer.id)
+
     has_price = body.price_min is not None or body.price_max is not None
     normalized = NormalizedEvent(
         external_id=f"{ORGANIZER_SUBMISSION_EXTERNAL_ID_PREFIX}{current_organizer.id}:{uuid4()}",
@@ -335,8 +362,11 @@ async def submit_event(
         description=sanitize_html(body.description),
         important_info=sanitize_html(body.important_info),
         ends_at=body.ends_at,
-        venue_name=body.venue_name,
-        venue_address=body.venue_address,
+        # A saved venue_id is the sole venue source going forward — the
+        # free-typed venue_name/venue_address are dropped at write time even
+        # if the organizer also sent them (#176).
+        venue_name=body.venue_name if body.venue_id is None else None,
+        venue_address=body.venue_address if body.venue_id is None else None,
         lat=None,
         lng=None,
         # insert_normalized_event applies safe_external_url (scheme-only) for
@@ -382,6 +412,7 @@ async def submit_event(
         )
 
     event.submitted_by_organizer_id = current_organizer.id
+    event.venue_id = body.venue_id
     event.needs_review = True
     # Capture into plain values before publish_pending(): its bulk UPDATE
     # (WHERE Event.id IN (subquery)) can't use the ORM's "evaluate"
@@ -394,7 +425,25 @@ async def submit_event(
     event_id = event.id
     event_slug = event.slug
 
-    if not await classify_event(event, db):
+    if venue is not None:
+        # event.venue_name/venue_address were written NULL (FK is the sole
+        # venue source, #176) — insert_normalized_event's Layer-1 keyword
+        # prefilter therefore never scanned the venue's real text. Recheck it
+        # here so a saved venue's name can't carry unmoderated explicit/
+        # non-event content past the flags insert_normalized_event set.
+        if not event.is_explicit and is_explicit_text(venue.name):
+            event.is_explicit = True
+        if not event.is_non_event and is_non_event_text(None, venue.name):
+            event.is_non_event = True
+        # Feed the LLM classifier the real venue text in-memory only — the
+        # persisted column stays NULL per the write-time rule above.
+        event.venue_name = venue.name
+    try:
+        classify_ok = await classify_event(event, db)
+    finally:
+        if venue is not None:
+            event.venue_name = None
+    if not classify_ok:
         # LLM outage (every provider failed) — event stays draft, distinct
         # from the normal "not yet reviewed" case; classify_pending's 6h
         # backlog drain will retry it, but this is worth surfacing in ops.
@@ -442,9 +491,24 @@ async def update_own_event(
         event.starts_at = body.starts_at
     if "ends_at" in fields_set:
         event.ends_at = body.ends_at
-    if "venue_name" in fields_set:
+    linked_venue: Venue | None = None
+    if "venue_id" in fields_set and body.venue_id is not None:
+        linked_venue = await _own_venue_or_404(db, body.venue_id, current_organizer.id)
+        event.venue_id = body.venue_id
+        event.venue_name = None
+        event.venue_address = None
+    elif "venue_id" in fields_set and body.venue_id is None:
+        # Explicit unlink back to the free-typed path — venue_name/address
+        # below (if present in the same patch) then repopulate it.
+        event.venue_id = None
+    # Gate on the post-update FK state, not just whether this request touched
+    # venue_id — otherwise a later PATCH sending only venue_name on an
+    # already-linked event (venue_id untouched this request, still set from a
+    # prior one) would silently leave both venue_id and venue_name set,
+    # violating the "FK is the sole venue source" rule (#176).
+    if "venue_name" in fields_set and event.venue_id is None:
         event.venue_name = body.venue_name
-    if "venue_address" in fields_set:
+    if "venue_address" in fields_set and event.venue_id is None:
         event.venue_address = body.venue_address
     if "url" in fields_set:
         # Same scheme-only guard insert_normalized_event applies at submit
@@ -518,13 +582,22 @@ async def update_own_event(
 
     event.needs_review = True
 
+    # event.venue_name is NULL whenever the event is linked to a saved venue
+    # (#176) — scan the venue's real name/address instead so a linked venue
+    # can't carry unmoderated explicit/non-event text past these checks.
+    # linked_venue only covers a venue_id set in *this* request; an event
+    # already linked from an earlier one still needs its venue looked up.
+    if event.venue_id is not None and linked_venue is None:
+        linked_venue = await db.get(Venue, event.venue_id)
+    moderated_venue_name = linked_venue.name if linked_venue else event.venue_name
+
     if not event.is_explicit and is_explicit_text(
-        event.title_orig, event.description_orig, event.venue_name, event.important_info
+        event.title_orig, event.description_orig, moderated_venue_name, event.important_info
     ):
         event.is_explicit = True
         if event.status == EVENT_STATUS_PUBLISHED:
             event.status = EVENT_STATUS_CLASSIFIED
-    if not event.is_non_event and is_non_event_text(event.title_orig, event.venue_name):
+    if not event.is_non_event and is_non_event_text(event.title_orig, moderated_venue_name):
         event.is_non_event = True
         if event.status == EVENT_STATUS_PUBLISHED:
             event.status = EVENT_STATUS_CLASSIFIED

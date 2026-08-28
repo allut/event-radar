@@ -396,6 +396,7 @@ class Event(Base):
         ),
         # ORDER BY events.price_min ASC NULLS LAST (browse.py's price sort, Path A).
         Index("ix_events_price_min", "price_min"),
+        Index("ix_events_venue_id", "venue_id"),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
@@ -410,6 +411,13 @@ class Event(Base):
     )
     venue_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     venue_address: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # A saved organizer Venue this event was submitted against (#176). When
+    # set, venue_name/venue_address are left NULL at write time — the FK
+    # becomes the sole venue source for the event going forward (read-path
+    # join/resolution is #177, not this ticket).
+    venue_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("venues.id", ondelete="SET NULL"), nullable=True
+    )
     lat: Mapped[float | None] = mapped_column(Float, nullable=True)
     lng: Mapped[float | None] = mapped_column(Float, nullable=True)
     url: Mapped[str | None] = mapped_column(Text, nullable=True)
