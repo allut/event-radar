@@ -9,6 +9,7 @@ import SegmentedControl from '../../components/SegmentedControl';
 import DatePicker from '../../components/DatePicker';
 import SelectField from '../../components/SelectField';
 import FileField from '../../components/FileField';
+import VenuePicker from '../../components/VenuePicker';
 import { t, ti } from '../../i18n';
 import {
   CATEGORIES, CONTENT_LANG_ORDER, DEFAULT_CURRENCY, LOCALE_EN, LOCALE_ET, LOCALE_RU, LOCALES,
@@ -199,30 +200,14 @@ export default function EventSubmit() {
             </div>
           </div>
 
-          <div className={styles.fieldRow}>
-            <div className={styles.fieldCol}>
-              <label className={styles.label} htmlFor="venue_name">{t('organizer_field_venue_name', locale)}</label>
-              <input
-                id="venue_name"
-                type="text"
-                className={styles.input}
-                value={form.venueName}
-                onChange={(e) => form.setVenueName(e.target.value)}
-                disabled={form.isSubmitting}
-              />
-            </div>
-            <div className={styles.fieldCol}>
-              <label className={styles.label} htmlFor="venue_address">{t('organizer_field_venue_address', locale)}</label>
-              <input
-                id="venue_address"
-                type="text"
-                className={styles.input}
-                value={form.venueAddress}
-                onChange={(e) => form.setVenueAddress(e.target.value)}
-                disabled={form.isSubmitting}
-              />
-            </div>
-          </div>
+          <VenuePicker
+            id="venue"
+            value={form.venue}
+            onChange={form.setVenue}
+            locale={locale}
+            contentLang={contentLang}
+            disabled={form.isSubmitting}
+          />
 
           <label className={styles.label} htmlFor="category">{t('organizer_field_category', locale)}</label>
           <SelectField

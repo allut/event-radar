@@ -52,6 +52,9 @@ export const ORGANIZER_SIGNED_IN_HINT_KEY = 'organizer_session_token';
 export const ORGANIZER_PROFILE_NUDGE_DISMISSED_KEY = 'organizer_profile_nudge_dismissed';
 // Mirrors backend ORGANIZER_NAME_MAX_LEN (app/constants.py).
 export const ORGANIZER_NAME_MAX_LEN = 255;
+// Mirrors backend ORGANIZER_VENUE_NAME_MAX_LEN/ORGANIZER_VENUE_ADDRESS_MAX_LEN (app/constants.py).
+export const ORGANIZER_VENUE_NAME_MAX_LEN = 255;
+export const ORGANIZER_VENUE_ADDRESS_MAX_LEN = 500;
 
 // ─── Auth / magic link ───────────────────────────────────────────────────────
 export const AUTH_REDIRECT_DELAY_MS = 600;
@@ -340,6 +343,7 @@ export const QUERY_KEYS = {
   showcase: 'showcase',
   organizerEvents: 'organizerEvents',
   organizerProfile: 'organizerProfile',
+  organizerVenues: 'organizerVenues',
   adminCounts: 'adminCounts',
   adminReports: 'adminReports',
   adminSubmissions: 'adminSubmissions',
@@ -668,6 +672,8 @@ export const API = {
   organizerEvent: (id: number | string) => `/organizer/events/${id}`,
   organizerEventImage: '/organizer/events/image',
   organizerProfile: '/organizer/profile',
+  organizerVenues: '/organizer/venues',
+  organizerVenue: (id: number | string) => `/organizer/venues/${id}`,
   reports: '/reports',
   adminAuthLogin: '/admin/auth/login',
   adminAuthLogout: '/admin/auth/logout',

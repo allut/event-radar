@@ -5,6 +5,7 @@ import { API, QUERY_KEYS, ORGANIZER_EVENTS_PAGE_SIZE, DEFAULT_CURRENCY, ORGANIZE
 import { t } from '../i18n';
 import { toIsoOrUndefined, toLocalInput } from '../utils';
 import { useLocaleNavigate } from './useLocaleNavigate';
+import type { SavedVenue, VenuePickerValue } from '../components/VenuePicker';
 
 interface OrganizerEventFull {
   id: number;
@@ -15,6 +16,7 @@ interface OrganizerEventFull {
   ends_at: string | null;
   venue_name: string | null;
   venue_address: string | null;
+  venue_id: number | null;
   url: string | null;
   image_url: string | null;
   price_min: number | null;
@@ -49,8 +51,7 @@ interface FormFields {
   importantInfoRu: string;
   startsAt: string;
   endsAt: string;
-  venueName: string;
-  venueAddress: string;
+  venue: VenuePickerValue;
   url: string;
   imageUrl: string;
   priceMin: string;
@@ -58,12 +59,17 @@ interface FormFields {
   category: string;
 }
 
+const EMPTY_VENUE: VenuePickerValue = {
+  mode: 'oneoff', save: false,
+  name: '', nameEn: '', nameRu: '', address: '', addressEn: '', addressRu: '',
+};
+
 const EMPTY_FIELDS: FormFields = {
   title: '', titleEn: '', titleRu: '',
   description: '', descriptionEn: '', descriptionRu: '',
   importantInfo: '', importantInfoEn: '', importantInfoRu: '',
   startsAt: '', endsAt: '',
-  venueName: '', venueAddress: '',
+  venue: EMPTY_VENUE,
   url: '', imageUrl: '',
   priceMin: '', priceMax: '',
   category: '',
@@ -92,8 +98,16 @@ function fieldsFromExisting(existing: OrganizerEventFull): FormFields {
     importantInfoRu: infoLoc[LOCALE_RU] ?? '',
     startsAt: toLocalInput(existing.starts_at),
     endsAt: toLocalInput(existing.ends_at),
-    venueName: existing.venue_name ?? '',
-    venueAddress: existing.venue_address ?? '',
+    // Event has no localized venue_name_en/ru columns of its own (only the
+    // Venue model does) — a legacy one-off's EN/RU venue text has nowhere
+    // to have come from, so prefill leaves them blank.
+    venue: typeof existing.venue_id === 'number'
+      ? { mode: 'saved', venueId: existing.venue_id }
+      : {
+          mode: 'oneoff', save: false,
+          name: existing.venue_name ?? '', nameEn: '', nameRu: '',
+          address: existing.venue_address ?? '', addressEn: '', addressRu: '',
+        },
     url: existing.url ?? '',
     imageUrl: existing.image_url ?? '',
     priceMin: existing.price_min !== null ? String(existing.price_min) : '',
@@ -126,10 +140,8 @@ export interface UseOrganizerEventFormResult {
   setStartsAt: (v: string) => void;
   endsAt: string;
   setEndsAt: (v: string) => void;
-  venueName: string;
-  setVenueName: (v: string) => void;
-  venueAddress: string;
-  setVenueAddress: (v: string) => void;
+  venue: VenuePickerValue;
+  setVenue: (v: VenuePickerValue) => void;
   url: string;
   setUrl: (v: string) => void;
   imageUrl: string;
@@ -213,9 +225,55 @@ export function useOrganizerEventForm(locale: string, eventId?: number): UseOrga
     onSuccess: (data) => setField('imageUrl', data.url),
   });
 
-  function buildBody(): Record<string, unknown> {
+  const createVenueMutation = useMutation({
+    mutationFn: (v: VenuePickerValue & { mode: 'oneoff' }) =>
+      organizerApi.post<SavedVenue>(API.organizerVenues, {
+        name: v.name.trim(),
+        name_en: v.nameEn.trim() || undefined,
+        name_ru: v.nameRu.trim() || undefined,
+        address: v.address.trim() || undefined,
+        address_en: v.addressEn.trim() || undefined,
+        address_ru: v.addressRu.trim() || undefined,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.organizerVenues] });
+    },
+  });
+
+  /** Resolves the picker's in-progress state into the venue_id/venue_name
+   * fields the submission API accepts — a saved pick sends venue_id as-is;
+   * a one-off with "save this venue" checked creates the Venue row first
+   * (#178: creation happens atomically with event submission, not before)
+   * and sends the new venue_id; an unsaved one-off sends the legacy
+   * free-typed venue_name/venue_address (base locale only — Event has no
+   * localized venue columns), unchanged from today. */
+  async function resolveVenue(): Promise<Record<string, unknown>> {
+    const v = fields.venue;
+    if (v.mode === 'saved') return { venue_id: v.venueId };
+    if (v.save && v.name.trim()) {
+      const created = await createVenueMutation.mutateAsync(v);
+      // Retrying a failed submit (e.g. the event POST/PATCH that follows
+      // fails) must not re-create a second Venue row — switch the form to
+      // the now-saved venue so a second submit attempt reuses its id.
+      setField('venue', { mode: 'saved', venueId: created.id });
+      return { venue_id: created.id };
+    }
+    const body: Record<string, unknown> = {};
+    if (v.name.trim()) body.venue_name = v.name.trim();
+    if (v.address.trim()) body.venue_address = v.address.trim();
+    // In edit mode, an event previously linked to a saved venue (venue_id
+    // set server-side) must be explicitly unlinked when the organizer
+    // switches to a one-off — the PATCH handler only clears venue_id when
+    // the key is present in the request at all (organizer_events.py's
+    // fields_set check), so omitting it here would silently leave the old
+    // link in place even though the picker now shows a blank one-off.
+    if (isEditMode) body.venue_id = null;
+    return body;
+  }
+
+  function buildBody(venueFields: Record<string, unknown>): Record<string, unknown> {
     const f = fields;
-    const body: Record<string, unknown> = { title: f.title.trim() };
+    const body: Record<string, unknown> = { title: f.title.trim(), ...venueFields };
     if (f.titleEn.trim()) body.title_en = f.titleEn.trim();
     if (f.titleRu.trim()) body.title_ru = f.titleRu.trim();
     if (f.description.trim()) body.description = f.description.trim();
@@ -228,8 +286,6 @@ export function useOrganizerEventForm(locale: string, eventId?: number): UseOrga
     if (startsIso) body.starts_at = startsIso;
     const endsIso = toIsoOrUndefined(f.endsAt);
     if (endsIso) body.ends_at = endsIso;
-    if (f.venueName.trim()) body.venue_name = f.venueName.trim();
-    if (f.venueAddress.trim()) body.venue_address = f.venueAddress.trim();
     if (f.url.trim()) body.url = f.url.trim();
     // In edit mode, always send image_url (even '') so a Remove-image save can
     // clear the stored value — the PATCH handler gates the update on the key's
@@ -248,10 +304,13 @@ export function useOrganizerEventForm(locale: string, eventId?: number): UseOrga
   }
 
   const submitMutation = useMutation({
-    mutationFn: () =>
-      isEditMode
-        ? organizerApi.patch<SubmitResult>(API.organizerEvent(eventId as number), buildBody())
-        : organizerApi.post<SubmitResult>(API.organizerEvents, buildBody()),
+    mutationFn: async () => {
+      const venueFields = await resolveVenue();
+      const body = buildBody(venueFields);
+      return isEditMode
+        ? organizerApi.patch<SubmitResult>(API.organizerEvent(eventId as number), body)
+        : organizerApi.post<SubmitResult>(API.organizerEvents, body);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.organizerEvents] });
       navigate(ROUTES.organizerDashboard, { replace: true });
@@ -281,8 +340,7 @@ export function useOrganizerEventForm(locale: string, eventId?: number): UseOrga
     importantInfoRu: fields.importantInfoRu, setImportantInfoRu: (v: string) => setField('importantInfoRu', v),
     startsAt: fields.startsAt, setStartsAt: (v: string) => setField('startsAt', v),
     endsAt: fields.endsAt, setEndsAt: (v: string) => setField('endsAt', v),
-    venueName: fields.venueName, setVenueName: (v: string) => setField('venueName', v),
-    venueAddress: fields.venueAddress, setVenueAddress: (v: string) => setField('venueAddress', v),
+    venue: fields.venue, setVenue: (v: VenuePickerValue) => setField('venue', v),
     url: fields.url, setUrl: (v: string) => setField('url', v),
     imageUrl: fields.imageUrl,
     clearImage: () => { setField('imageUrl', ''); imageMutation.reset(); },

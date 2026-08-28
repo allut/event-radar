@@ -27,9 +27,11 @@ beforeEach(() => {
   // organizerApi.get('/organizer/profile') independent of edit-mode's
   // /organizer/events fetch — default it to a name set so the nudge banner
   // doesn't appear in tests that don't care about it.
-  mockGet.mockImplementation((path: string) =>
-    path.includes('/organizer/profile') ? Promise.resolve({ name: 'Test Organizer' }) : Promise.resolve(undefined),
-  );
+  mockGet.mockImplementation((path: string) => {
+    if (path.includes('/organizer/profile')) return Promise.resolve({ name: 'Test Organizer' });
+    if (path.includes('/organizer/venues')) return Promise.resolve([]);
+    return Promise.resolve(undefined);
+  });
 });
 
 describe('EventSubmit (create)', () => {
@@ -146,6 +148,7 @@ describe('EventSubmit (edit)', () => {
           ends_at: null,
           venue_name: null,
           venue_address: null,
+          venue_id: null,
           url: null,
           image_url: null,
           price_min: null,
@@ -156,11 +159,11 @@ describe('EventSubmit (edit)', () => {
       limit: 24,
       offset: 0,
     };
-    mockGet.mockImplementation((path: string) =>
-      path.includes('/organizer/profile')
-        ? Promise.resolve({ name: 'Test Organizer' })
-        : Promise.resolve(eventsResponse),
-    );
+    mockGet.mockImplementation((path: string) => {
+      if (path.includes('/organizer/profile')) return Promise.resolve({ name: 'Test Organizer' });
+      if (path.includes('/organizer/venues')) return Promise.resolve([]);
+      return Promise.resolve(eventsResponse);
+    });
     mockPatch.mockResolvedValueOnce({ id: 9, slug: 'existing-event', status: 'published' });
 
     renderWithProviders(<EventSubmit />, {

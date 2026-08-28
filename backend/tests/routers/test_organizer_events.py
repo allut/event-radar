@@ -1080,6 +1080,23 @@ class TestListOwnEvents:
         assert result["events"][0]["description_localized"] == {"et": "Kirjeldus"}
         assert result["events"][0]["important_info_localized"] is None
 
+    @pytest.mark.asyncio
+    async def test_includes_venue_id(self, mock_db, make_request, make_organizer):
+        """#178: the submission form's edit-mode prefill needs venue_id to
+        preselect a saved venue in the picker — serialize_event() omits it
+        (public-read-path-oriented), so list_own_events must layer it on."""
+        from app.routers.organizer_events import list_own_events
+
+        organizer = make_organizer(organizer_id=5)
+        event = _fake_event(submitted_by_organizer_id=5, venue_id=7)
+        mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=[event]))
+
+        result = await list_own_events(
+            make_request(path="/organizer/events"), 20, 0, organizer, mock_db
+        )
+
+        assert result["events"][0]["venue_id"] == 7
+
 
 class TestDeleteOwnEvent:
     @pytest.mark.asyncio

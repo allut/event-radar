@@ -657,6 +657,7 @@ async def list_own_events(
                 **serialize_event(e, locale=current_organizer.locale),
                 "status": e.status,
                 "needs_review": e.needs_review,
+                "venue_id": e.venue_id,
                 "title_localized": e.title_localized,
                 "description_localized": e.description_localized,
                 "important_info_localized": e.important_info_localized,
