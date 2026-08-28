@@ -109,7 +109,7 @@ export default function VenuePicker({ id, value, onChange, locale, contentLang, 
   );
 
   // Deferred to a microtask (mirrors useOrganizerEventForm.ts's prefill
-  // effect / OrganizerProfile.tsx's hydration) — this is a one-time draft
+  // effect / OrganizerSettings.tsx's hydration) — this is a one-time draft
   // hydration when the edit form opens, not a value derivable from render,
   // so react-hooks/set-state-in-effect's synchronous-setState flag doesn't
   // apply once deferred.

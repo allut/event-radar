@@ -588,7 +588,7 @@ export const ROUTES = {
   organizerVerify: '/organizer/verify',
   organizerDashboard: '/organizer/dashboard',
   organizerSubmit: '/organizer/submit',
-  organizerProfile: '/organizer/profile',
+  organizerSettings: '/organizer/settings',
   organizerEventEdit: (id: number | string) => `/organizer/events/${id}/edit`,
   organizerEventEditPattern: '/organizer/events/:id/edit',
   // Admin console (issue #154) — registered entirely outside App.tsx's
@@ -657,6 +657,7 @@ export const API = {
   authLogoutAll: '/auth/logout-all',
   authRequestLink: '/auth/request-link',
   organizerAuthLogout: '/organizer/auth/logout',
+  organizerAuthLogoutAll: '/organizer/auth/logout-all',
   organizerAuthVerify: '/organizer/auth/verify',
   organizerAuthRequestLink: '/organizer/auth/request-link',
   onboardingPersona: '/onboarding/persona',

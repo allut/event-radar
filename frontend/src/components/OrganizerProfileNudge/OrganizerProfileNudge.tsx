@@ -23,7 +23,7 @@ function isDismissed(): boolean {
   }
 }
 
-// Nudges a first-time organizer (no display name set) toward /organizer/profile.
+// Nudges a first-time organizer (no display name set) toward /organizer/settings.
 // Shown on the dashboard and submit form; never blocks submission. Dismissal
 // is client-only (localStorage) — no backend field for it (#175).
 export default function OrganizerProfileNudge({ locale }: OrganizerProfileNudgeProps) {
@@ -51,7 +51,7 @@ export default function OrganizerProfileNudge({ locale }: OrganizerProfileNudgeP
     <div className={styles.nudge} role="status">
       <span className={styles.message}>{t('organizer_nudge_message', locale)}</span>
       <div className={styles.actions}>
-        <Link to={localePath(ROUTES.organizerProfile)} className={styles.cta}>
+        <Link to={localePath(ROUTES.organizerSettings)} className={styles.cta}>
           {t('organizer_nudge_cta', locale)}
         </Link>
         <button

@@ -220,7 +220,7 @@
   --page-max-wide: 1100px;
   --page-max-feed: 760px;         /* Feed */
   --page-max-organizer: 840px;    /* OrganizerDashboard, AdminEventDetail */
-  --page-max-settings: 640px;     /* Settings */
+  --page-max-settings: 640px;     /* Settings, OrganizerSettings */
   --page-max-showcase: 560px;     /* Landing showcase panel */
 
   /* Component max/min-widths */
