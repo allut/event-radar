@@ -645,6 +645,10 @@ ORGANIZER_DAILY_SUBMISSION_CAP = 20
 # free-tier upload quota, since an upload can happen without ever completing
 # a submission (organizer_image_uploads, app/models/models.py).
 ORGANIZER_DAILY_IMAGE_UPLOAD_CAP = 20
+# Same count-then-act soft ceiling, but for POST /organizer/venues — venues
+# are created independently of a submission, so neither existing cap bounds
+# them (routers/organizer_venues.py).
+ORGANIZER_DAILY_VENUE_CREATION_CAP = 20
 
 # Field length caps for SubmitEventBody/PatchEventBody (routers/organizer_events.py).
 # venue_name and currency mirror the Event column widths (models/models.py) so an
@@ -1496,6 +1500,10 @@ ERROR_IMAGE_HOST_NOT_ALLOWED = (
     "(res.cloudinary.com)."
 )
 ERROR_DAILY_SUBMISSION_LIMIT = "Daily submission limit reached. Try again tomorrow."
+ERROR_DAILY_VENUE_CREATION_LIMIT = (
+    "Daily venue creation limit reached. Try again tomorrow."
+)
+ERROR_VENUE_NOT_FOUND = "Venue not found."
 ERROR_EVENT_CREATE_FAILED = "Could not create event; please try again."
 ERROR_EVENT_URL_SCHEME = "Event URL is not allowed (unsupported scheme)."
 ERROR_IMAGE_URL_SCHEME = "Image URL is not allowed (unsupported scheme)."
