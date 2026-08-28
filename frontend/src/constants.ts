@@ -391,7 +391,7 @@ export const SORT_OPTIONS: { value: SortOption; labelKey: string }[] = [
   { value: 'quality', labelKey: 'sort_quality' },
 ];
 
-export type DatePreset = 'any' | 'today' | 'weekend' | '7d' | '30d';
+export type DatePreset = 'any' | 'today' | 'weekend' | '7d' | '30d' | 'custom';
 
 export const DATE_PRESETS: { value: DatePreset; labelKey: string }[] = [
   { value: 'any', labelKey: 'date_any' },
@@ -399,6 +399,7 @@ export const DATE_PRESETS: { value: DatePreset; labelKey: string }[] = [
   { value: 'weekend', labelKey: 'date_weekend' },
   { value: '7d', labelKey: 'date_7d' },
   { value: '30d', labelKey: 'date_30d' },
+  { value: 'custom', labelKey: 'date_custom' },
 ];
 
 // ─── Saved Events ────────────────────────────────────────────────────────────

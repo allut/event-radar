@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { cx, safeUrl, sanitizeHtml, formatPrice, categoryGradient, formatHourMinute, formatEventShortDate, makeActiveClassMap, trackExternalClick, datePresetRange, parseExploreFilters, exploreFiltersToSearchParams, buildExploreApiQuery, activeFacetCount, isFullSet, shouldFlipPopover, maskAnalyticsUrl, DEFAULT_EXPLORE_FILTERS, type ExploreFilters, monthGridDays, weekdayHeaders, splitDateTimeValue, joinDateTimeValue, parseTypedDate, formatPickerValue, formatMonthYearLabel, toDisplayDateTime, fromDisplayDateTime, buildMapsUrl, isValidLocale, stripLocalePrefix, localizedPath, localeFromPath, localizedTo, truncateForMeta } from './utils';
+import { cx, safeUrl, sanitizeHtml, formatPrice, categoryGradient, formatHourMinute, formatEventShortDate, makeActiveClassMap, trackExternalClick, datePresetRange, parseExploreFilters, exploreFiltersToSearchParams, buildExploreApiQuery, activeFacetCount, isFullSet, shouldFlipPopover, maskAnalyticsUrl, DEFAULT_EXPLORE_FILTERS, type ExploreFilters, monthGridDays, weekdayHeaders, splitDateTimeValue, joinDateTimeValue, parseTypedDate, formatPickerValue, formatMonthYearLabel, toDisplayDateTime, fromDisplayDateTime, buildMapsUrl, isValidLocale, stripLocalePrefix, localizedPath, localeFromPath, localizedTo, truncateForMeta, parseISODateLocal, formatDateRangeShort } from './utils';
 import { FALLBACK_GRADIENT, CATEGORIES, GOOGLE_MAPS_SEARCH_URL } from './constants';
 
 vi.mock('./api/client', () => ({
@@ -412,6 +412,10 @@ describe('datePresetRange', () => {
     expect(datePresetRange('any')).toEqual({ from: null, to: null });
   });
 
+  it('returns null bounds for "custom" (resolved from customFrom/customTo instead)', () => {
+    expect(datePresetRange('custom')).toEqual({ from: null, to: null });
+  });
+
   it('"today" returns the same date for from and to', () => {
     mockToday('2026-07-15T10:00:00');
     expect(datePresetRange('today')).toEqual({ from: '2026-07-15', to: '2026-07-15' });
@@ -455,12 +459,49 @@ describe('explore filters <-> URL params', () => {
       category: ['music', 'nightlife'],
       vibe: ['trendy'],
       datePreset: '7d',
+      customFrom: null,
+      customTo: null,
       free: true,
       forYou: true,
       sort: 'date',
     };
     const params = exploreFiltersToSearchParams(filters);
     expect(parseExploreFilters(params)).toEqual(filters);
+  });
+
+  it('round-trips a custom date range through the URL', () => {
+    const filters: ExploreFilters = {
+      ...DEFAULT_EXPLORE_FILTERS,
+      datePreset: 'custom',
+      customFrom: '2026-09-01',
+      customTo: '2026-09-15',
+    };
+    const params = exploreFiltersToSearchParams(filters);
+    expect(params.get('date')).toBe('custom');
+    expect(params.get('date_from')).toBe('2026-09-01');
+    expect(params.get('date_to')).toBe('2026-09-15');
+    expect(parseExploreFilters(params)).toEqual(filters);
+  });
+
+  it('omits date_from/date_to when datePreset is custom but no range is set yet', () => {
+    const filters: ExploreFilters = { ...DEFAULT_EXPLORE_FILTERS, datePreset: 'custom' };
+    const params = exploreFiltersToSearchParams(filters);
+    expect(params.has('date_from')).toBe(false);
+    expect(params.has('date_to')).toBe(false);
+  });
+
+  it('drops a malformed date_from/date_to (hand-edited deep link) instead of passing it through', () => {
+    const malformed = new URLSearchParams('date=custom&date_from=garbage&date_to=2026-13-40');
+    const parsed = parseExploreFilters(malformed);
+    expect(parsed.customFrom).toBeNull();
+    expect(parsed.customTo).toBeNull();
+  });
+
+  it('accepts a well-formed date_from/date_to', () => {
+    const params = new URLSearchParams('date=custom&date_from=2026-09-01&date_to=2026-09-15');
+    const parsed = parseExploreFilters(params);
+    expect(parsed.customFrom).toBe('2026-09-01');
+    expect(parsed.customTo).toBe('2026-09-15');
   });
 
   it('an absent category/vibe param means "all"; an empty one means "none"', () => {
@@ -531,6 +572,33 @@ describe('buildExploreApiQuery', () => {
     const params = new URLSearchParams(buildExploreApiQuery(filters, 0));
     expect(params.has('category')).toBe(false);
     expect(params.has('vibe')).toBe(false);
+  });
+
+  it('uses customFrom/customTo directly for a custom range, not datePresetRange', () => {
+    const filters: ExploreFilters = {
+      ...DEFAULT_EXPLORE_FILTERS,
+      datePreset: 'custom',
+      customFrom: '2026-09-01',
+      customTo: '2026-09-15',
+    };
+    const params = new URLSearchParams(buildExploreApiQuery(filters, 0));
+    expect(params.get('date_from')).toBe('2026-09-01');
+    expect(params.get('date_to')).toBe('2026-09-15');
+  });
+});
+
+describe('parseISODateLocal / formatDateRangeShort', () => {
+  it('parses a YYYY-MM-DD string as a local-midnight Date', () => {
+    const d = parseISODateLocal('2026-09-15');
+    expect(d.getFullYear()).toBe(2026);
+    expect(d.getMonth()).toBe(8);
+    expect(d.getDate()).toBe(15);
+  });
+
+  it('formats a short range label', () => {
+    const result = formatDateRangeShort('2026-09-01', '2026-09-15', 'en');
+    expect(result).toContain('–');
+    expect(result).toMatch(/^1 Sep\w* – 15 Sep\w*$/);
   });
 });
 

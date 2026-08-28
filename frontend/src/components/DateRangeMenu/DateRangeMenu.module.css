@@ -1,0 +1,131 @@
+.menu {
+  composes: menu from '../shared/Menu.module.css';
+}
+
+.triggerInline {
+  composes: triggerInline from '../SelectMenu/SelectMenu.module.css';
+}
+
+.label {
+  composes: label from '../SelectMenu/SelectMenu.module.css';
+}
+
+.value {
+  composes: value from '../SelectMenu/SelectMenu.module.css';
+}
+
+.chev {
+  composes: chev from '../SelectMenu/SelectMenu.module.css';
+}
+
+.pop {
+  composes: menuPop from '../shared/Menu.module.css';
+}
+
+/* List mode: same equal-width option-list sizing as SelectMenu's popover. */
+.pop.pop {
+  min-width: 100%;
+  width: max-content;
+}
+
+/* Calendar mode: fixed grid width, matching DatePicker's popover. */
+.popCalendar.popCalendar {
+  width: var(--picker-pop-width);
+  min-width: var(--picker-pop-width);
+}
+
+.optionList {
+  composes: optionList from '../SelectMenu/SelectMenu.module.css';
+}
+
+.option {
+  composes: option from '../SelectMenu/SelectMenu.module.css';
+}
+
+.optionActive {
+  composes: optionActive from '../SelectMenu/SelectMenu.module.css';
+}
+
+.back {
+  display: flex;
+  align-items: center;
+  gap: var(--space-0-45);
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--tracking-wide);
+  padding: 0 0 var(--space-3);
+  transition: color var(--transition);
+}
+
+.back:hover {
+  color: var(--accent-light);
+}
+
+.back svg {
+  width: var(--cal-nav-icon-size);
+  height: var(--cal-nav-icon-size);
+}
+
+.calHead {
+  composes: calHead from '../DatePicker/DatePicker.module.css';
+}
+
+.calNavBtn {
+  composes: calNavBtn from '../DatePicker/DatePicker.module.css';
+}
+
+.calMonthLabel {
+  composes: calMonthLabel from '../DatePicker/DatePicker.module.css';
+}
+
+.rangeHint {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--fs-2xs);
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--tracking-wider);
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-bottom: var(--space-2);
+}
+
+.hintPart {
+  color: var(--text-dim);
+}
+
+.hintPartActive {
+  color: var(--accent-light);
+}
+
+.calWeekdays {
+  composes: calWeekdays from '../DatePicker/DatePicker.module.css';
+}
+
+.calGrid {
+  composes: calGrid from '../DatePicker/DatePicker.module.css';
+}
+
+.calDay {
+  composes: calDay from '../DatePicker/DatePicker.module.css';
+}
+
+.spill {
+  composes: spill from '../DatePicker/DatePicker.module.css';
+}
+
+.today {
+  composes: today from '../DatePicker/DatePicker.module.css';
+}
+
+.rangeEndpoint {
+  composes: selected from '../DatePicker/DatePicker.module.css';
+}
+
+.inRange {
+  background: var(--accent-soft);
+  color: var(--text-soft);
+  border-radius: 0;
+}
