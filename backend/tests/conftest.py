@@ -129,6 +129,8 @@ def make_event():
         starts_at: datetime | None = None,
         venue_name: str | None = "Test Venue",
         venue_address: str | None = "Test Street 1",
+        venue_id: int | None = None,
+        venue: MagicMock | None = None,
         lat: float | None = TALLINN_CENTER_LAT,
         lng: float | None = TALLINN_CENTER_LNG,
         price_min: float | None = None,
@@ -152,6 +154,8 @@ def make_event():
         e.ends_at = None
         e.venue_name = venue_name
         e.venue_address = venue_address
+        e.venue_id = venue_id
+        e.venue = venue
         e.lat = lat
         e.lng = lng
         e.url = "https://example.com"
@@ -188,6 +192,33 @@ def make_event():
             cl.language_detected = DEFAULT_USER_LOCALE
             e.classification = cl
         return e
+    return _factory
+
+
+@pytest.fixture
+def make_venue():
+    def _factory(
+        venue_id: int = 1,
+        name: str = "Saved Venue",
+        name_en: str | None = None,
+        name_ru: str | None = None,
+        address: str | None = "Saved Street 1",
+        address_en: str | None = None,
+        address_ru: str | None = None,
+        lat: float | None = TALLINN_CENTER_LAT,
+        lng: float | None = TALLINN_CENTER_LNG,
+    ) -> MagicMock:
+        v = MagicMock()
+        v.id = venue_id
+        v.name = name
+        v.name_en = name_en
+        v.name_ru = name_ru
+        v.address = address
+        v.address_en = address_en
+        v.address_ru = address_ru
+        v.lat = lat
+        v.lng = lng
+        return v
     return _factory
 
 

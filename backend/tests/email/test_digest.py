@@ -157,6 +157,14 @@ class TestBuildDigestHtml:
         html = build_digest_html(events, date(2026, 5, 20), "en", "https://eventradar.ee")
         assert "Kultuurikatel" in html
 
+    def test_venue_prefers_joined_venue_when_linked(self, make_event, make_venue):
+        """#177: the digest must prefer the joined Venue over Event's own
+        (write-time-NULL) venue_name once venue_id is set."""
+        venue = make_venue(name="Telliskivi Creative City", name_en="Telliskivi Loomelinnak")
+        events = [make_event(venue_id=1, venue=venue, venue_name=None)]
+        html = build_digest_html(events, date(2026, 5, 20), "en", "https://eventradar.ee")
+        assert "Telliskivi Loomelinnak" in html
+
     def test_no_events_et_locale(self):
         html = build_digest_html([], date(2026, 5, 20), "et", "https://eventradar.ee")
         assert "Täna pole üritusi" in html

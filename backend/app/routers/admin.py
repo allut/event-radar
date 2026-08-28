@@ -15,6 +15,7 @@ from itsdangerous import BadSignature, SignatureExpired
 from pydantic import BaseModel
 from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.auth.tokens import verify_admin_session_token
 from app.cleanup import cleanup_stale_data
@@ -47,6 +48,7 @@ from app.constants import (
     ADMIN_SESSION_COOKIE_NAME,
     ADMIN_USERNAME_DEFAULT,
     APP_ENV_DEVELOPMENT,
+    DEFAULT_USER_LOCALE,
     ERROR_ADMIN_DISABLED,
     ERROR_ADMIN_INCORRECT_CREDENTIALS,
     ERROR_ADMIN_LOCKOUT,
@@ -104,6 +106,9 @@ from app.routers.utils import (
     release_admin_job_lock,
     require_configured_secret,
     resolve_open_reports,
+    resolve_venue_address,
+    resolve_venue_coords,
+    resolve_venue_name,
     run_admin_job,
     run_in_session,
     select_events_with_classification,
@@ -383,7 +388,7 @@ def _dedup_event_summary(e: Event) -> dict:
         "id": e.id,
         "title": e.title_orig,
         "starts_at": e.starts_at.isoformat(),
-        "venue": e.venue_name,
+        "venue": resolve_venue_name(e, DEFAULT_USER_LOCALE),
         "status": e.status,
         "url": e.url,
         "is_explicit": e.is_explicit,
@@ -457,6 +462,7 @@ async def admin_dedup_groups(
         rows = (
             await db.scalars(
                 select(Event)
+                .options(selectinload(Event.venue))
                 .where(
                     Event.dedup_group_id.in_(page_group_ids),
                     Event.status != EVENT_STATUS_CANCELLED,
@@ -715,7 +721,11 @@ async def admin_list_reports(
         reports_by_event: dict[int, list[EventReport]] = {}
         if event_ids:
             events = (
-                await db.scalars(select(Event).where(Event.id.in_(event_ids)))
+                await db.scalars(
+                    select(Event)
+                    .options(selectinload(Event.venue))
+                    .where(Event.id.in_(event_ids))
+                )
             ).all()
             events_by_id = {e.id: e for e in events}
 
@@ -743,7 +753,7 @@ async def admin_list_reports(
                 "event_id": event.id,
                 "title": event.title_orig,
                 "status": event.status,
-                "venue": event.venue_name,
+                "venue": resolve_venue_name(event, DEFAULT_USER_LOCALE),
                 "submitted_by_organizer_id": event.submitted_by_organizer_id,
                 "report_count": row.report_count,
                 "reasons": sorted({r.reason for r in event_reports}),
@@ -810,6 +820,7 @@ def _serialize_raw_event(raw: RawEvent, source_slug: str) -> dict:
 
 def _serialize_event_detail(event: Event) -> dict:
     cl = event.classification
+    lat, lng = resolve_venue_coords(event)
     return {
         "id": event.id,
         "slug": event.slug,
@@ -819,10 +830,10 @@ def _serialize_event_detail(event: Event) -> dict:
         "price_hint": event.price_hint,
         "starts_at": event.starts_at.isoformat(),
         "ends_at": event.ends_at.isoformat() if event.ends_at else None,
-        "venue_name": event.venue_name,
-        "venue_address": event.venue_address,
-        "lat": event.lat,
-        "lng": event.lng,
+        "venue_name": resolve_venue_name(event, DEFAULT_USER_LOCALE),
+        "venue_address": resolve_venue_address(event, DEFAULT_USER_LOCALE),
+        "lat": lat,
+        "lng": lng,
         "url": event.url,
         "image_url": event.image_url,
         "price_min": float(event.price_min) if event.price_min is not None else None,
@@ -896,7 +907,9 @@ async def admin_get_event(event_id: int, request: Request) -> dict:
             # cancelled), matching this endpoint's own "any status" event.
             siblings = (
                 await db.scalars(
-                    select(Event).where(
+                    select(Event)
+                    .options(selectinload(Event.venue))
+                    .where(
                         Event.dedup_group_id == event.dedup_group_id,
                         Event.id != event.id,
                     )

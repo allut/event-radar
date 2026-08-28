@@ -19,6 +19,9 @@ from app.routers.utils import (
     require_configured_secret,
     resolve_locale_param,
     resolve_open_reports,
+    resolve_venue_address,
+    resolve_venue_coords,
+    resolve_venue_name,
     send_report_resolution_emails,
     serialize_event,
     stream_admin_job,
@@ -320,6 +323,77 @@ class TestSendReportResolutionEmails:
             "Failed to send report outcome email" in r.getMessage()
             for r in caplog.records
         )
+
+
+class TestResolveVenue:
+    """#177: joined Venue fields win over Event.venue_name/venue_address/
+    lat/lng when venue_id is set; legacy free-typed columns are used
+    otherwise (Event.venue_name/venue_address are left NULL at write time
+    once venue_id is set — #176)."""
+
+    def test_name_prefers_joined_venue_when_linked(self, make_event, make_venue):
+        venue = make_venue(name="Telliskivi Creative City", name_en="Telliskivi Loomelinnak")
+        event = make_event(venue_id=1, venue=venue, venue_name=None)
+        assert resolve_venue_name(event, "et") == "Telliskivi Creative City"
+        assert resolve_venue_name(event, "en") == "Telliskivi Loomelinnak"
+        assert resolve_venue_name(event, "ru") == "Telliskivi Creative City"  # falls back to base
+
+    def test_name_falls_back_to_event_column_when_unlinked(self, make_event):
+        event = make_event(venue_id=None, venue=None, venue_name="Free-typed Venue")
+        assert resolve_venue_name(event, "en") == "Free-typed Venue"
+
+    def test_address_prefers_joined_venue_when_linked(self, make_event, make_venue):
+        venue = make_venue(address="Telliskivi 60a", address_ru="Теллискиви 60a")
+        event = make_event(venue_id=1, venue=venue, venue_address=None)
+        assert resolve_venue_address(event, "ru") == "Теллискиви 60a"
+        assert resolve_venue_address(event, "en") == "Telliskivi 60a"  # falls back to base
+
+    def test_address_falls_back_to_event_column_when_unlinked(self, make_event):
+        event = make_event(venue_id=None, venue=None, venue_address="Free-typed Street 1")
+        assert resolve_venue_address(event, "en") == "Free-typed Street 1"
+
+    def test_coords_prefer_venue_geocode_when_linked_and_present(self, make_event, make_venue):
+        venue = make_venue(lat=59.44, lng=24.74)
+        event = make_event(venue_id=1, venue=venue, lat=None, lng=None)
+        assert resolve_venue_coords(event) == (59.44, 24.74)
+
+    def test_coords_fall_back_to_event_when_venue_ungeocoded(self, make_event, make_venue):
+        venue = make_venue(lat=None, lng=None)
+        event = make_event(venue_id=1, venue=venue, lat=58.0, lng=25.0)
+        assert resolve_venue_coords(event) == (58.0, 25.0)
+
+    def test_coords_fall_back_to_event_when_unlinked(self, make_event):
+        event = make_event(venue_id=None, venue=None, lat=58.0, lng=25.0)
+        assert resolve_venue_coords(event) == (58.0, 25.0)
+
+
+class TestSerializeEventVenueResolution:
+    def test_serializes_joined_venue_fields_when_linked(self, make_event, make_venue):
+        venue = make_venue(
+            name="Telliskivi Creative City",
+            address="Telliskivi 60a",
+            lat=59.44,
+            lng=24.74,
+        )
+        event = make_event(
+            venue_id=1, venue=venue, venue_name=None, venue_address=None, lat=None, lng=None
+        )
+        result = serialize_event(event)
+        assert result["venue_name"] == "Telliskivi Creative City"
+        assert result["venue_address"] == "Telliskivi 60a"
+        assert result["lat"] == 59.44
+        assert result["lng"] == 24.74
+
+    def test_serializes_legacy_columns_when_unlinked(self, make_event):
+        event = make_event(
+            venue_id=None,
+            venue=None,
+            venue_name="Free-typed Venue",
+            venue_address="Free-typed Street 1",
+        )
+        result = serialize_event(event)
+        assert result["venue_name"] == "Free-typed Venue"
+        assert result["venue_address"] == "Free-typed Street 1"
 
 
 class TestSerializeEventReportedField:

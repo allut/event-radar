@@ -26,6 +26,8 @@ from app.constants import (
     ERROR_INVALID_REPORT_REASON,
     EVENT_STATUS_CANCELLED,
     EVENT_STATUS_PUBLISHED,
+    LOCALE_EN,
+    LOCALE_RU,
     LOG_EVENT_ADMIN_ACTION,
     LOG_EVENT_EMAIL_SEND_FAILED,
     MASK_DB_URL_PASSWORD_RE,
@@ -52,6 +54,7 @@ from app.models.models import (
     UserEventFeedback,
     UserEventScore,
     UserPersona,
+    Venue,
 )
 
 log = logging.getLogger(__name__)
@@ -508,8 +511,11 @@ def parse_session_cookie_user(session: str | None) -> tuple[int, int] | None:
 
 
 def select_events_with_classification() -> Select[tuple[Event]]:
-    """Base SELECT for Event with classification eager-loaded. Callers add their own .where()."""
-    return select(Event).options(selectinload(Event.classification))
+    """Base SELECT for Event with classification + linked Venue eager-loaded
+    (#177 — venue read-path resolution must not N+1). Callers add their own .where()."""
+    return select(Event).options(
+        selectinload(Event.classification), selectinload(Event.venue)
+    )
 
 
 def resolve_locale_param(locale: str | None, fallback: str) -> str:
@@ -547,6 +553,58 @@ def resolve_important_info(event: Event, locale: str) -> str | None:
     return event.important_info
 
 
+def _linked_venue(event: Event) -> Venue | None:
+    """Return the joined Venue when the event is venue-linked, else None."""
+    return event.venue if event.venue_id is not None else None
+
+
+def _pick_locale(locale: str, base: str | None, en: str | None, ru: str | None) -> str | None:
+    """Per-locale value with fallback to the base (Estonian) value."""
+    if locale == LOCALE_EN:
+        return en or base
+    if locale == LOCALE_RU:
+        return ru or base
+    return base
+
+
+def resolve_venue_name(event: Event, locale: str = DEFAULT_USER_LOCALE) -> str | None:
+    """Prefer the linked Venue's per-locale name over Event.venue_name.
+
+    venue_name/venue_address are left NULL at write time whenever venue_id
+    is set (#176) — the join is the sole venue source going forward. Falls
+    back to the legacy free-typed column when venue_id is None."""
+    venue = _linked_venue(event)
+    if venue is not None:
+        return _pick_locale(locale, venue.name, venue.name_en, venue.name_ru)
+    return event.venue_name
+
+
+def resolve_venue_address(event: Event, locale: str = DEFAULT_USER_LOCALE) -> str | None:
+    """Prefer the linked Venue's per-locale address over Event.venue_address.
+    See resolve_venue_name for the venue_id/write-time-NULL rationale."""
+    venue = _linked_venue(event)
+    if venue is not None:
+        return _pick_locale(locale, venue.address, venue.address_en, venue.address_ru)
+    return event.venue_address
+
+
+def resolve_venue_coords(event: Event) -> tuple[float | None, float | None]:
+    """Prefer the linked Venue's own geocode over Event.lat/lng.
+
+    A venue-linked event's own lat/lng never gets backfilled by the
+    geocoding job (its partial index keys off venue_address IS NOT NULL,
+    which is NULL for a linked event) — the Venue's own geocode cooldown
+    (docs/data-model.md) is the only source of coordinates once linked.
+    Requires both lat AND lng to be present before preferring the venue's
+    pair — a half-geocoded venue (one of the two still NULL) falls back to
+    the event's own (possibly also-NULL, but never mismatched) pair rather
+    than surfacing a broken half-populated coordinate."""
+    venue = _linked_venue(event)
+    if venue is not None and venue.lat is not None and venue.lng is not None:
+        return venue.lat, venue.lng
+    return event.lat, event.lng
+
+
 def resolve_why_go(cl: EventClassification | None, locale: str) -> list[str]:
     """Return localized why_go bullets for a classification, with locale → en → raw fallback."""
     if cl is None:
@@ -569,6 +627,7 @@ def serialize_event(
 ) -> dict:
     cl = event.classification
     why_go = resolve_why_go(cl, locale)
+    lat, lng = resolve_venue_coords(event)
     return {
         "id": event.id,
         "slug": event.slug,
@@ -577,10 +636,10 @@ def serialize_event(
         "important_info": resolve_important_info(event, locale),
         "starts_at": event.starts_at.isoformat(),
         "ends_at": event.ends_at.isoformat() if event.ends_at else None,
-        "venue_name": event.venue_name,
-        "venue_address": event.venue_address,
-        "lat": event.lat,
-        "lng": event.lng,
+        "venue_name": resolve_venue_name(event, locale),
+        "venue_address": resolve_venue_address(event, locale),
+        "lat": lat,
+        "lng": lng,
         "url": event.url,
         "image_url": event.image_url,
         "price_min": float(event.price_min) if event.price_min is not None else None,

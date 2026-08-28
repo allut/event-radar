@@ -48,6 +48,7 @@ from app.routers.utils import (
     mask_email,
     public_event_filter,
     resolve_title,
+    resolve_venue_name,
     resolve_why_go,
     select_events_with_classification,
 )
@@ -96,7 +97,7 @@ def _build_event_block(event: Event, locale: str, frontend_url: str) -> str:
     time_str = html_lib.escape(_format_event_time(event.starts_at, locale))
     event_href = f"{frontend_url}/events/{event.id}"
 
-    venue_str = html_lib.escape(event.venue_name or "")
+    venue_str = html_lib.escape(resolve_venue_name(event, locale) or "")
     venue_html = (
         EVENT_VENUE.format(s_venue=styles.S_VENUE, venue=venue_str)
         if venue_str

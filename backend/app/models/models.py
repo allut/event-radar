@@ -490,6 +490,7 @@ class Event(Base):
     feedback: Mapped[list["UserEventFeedback"]] = relationship(back_populates="event")
     scores: Mapped[list["UserEventScore"]] = relationship(back_populates="event")
     reports: Mapped[list["EventReport"]] = relationship(back_populates="event")
+    venue: Mapped["Venue | None"] = relationship()
 
 
 class EventSource(Base):
