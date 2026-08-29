@@ -84,7 +84,7 @@ describe('useOrganizerEventForm — venue picker submit resolution (#178)', () =
       result.current.setStartsAt('2026-08-01T18:00');
       result.current.setVenue({
         mode: 'oneoff', save: true,
-        name: 'Pop-up Garden', nameEn: '', nameRu: '', address: 'Some St 1', addressEn: '', addressRu: '',
+        name: 'Pop-up Garden', nameEn: '', nameRu: '', address: 'Some St 1',
       });
     });
     act(() => {
@@ -107,7 +107,7 @@ describe('useOrganizerEventForm — venue picker submit resolution (#178)', () =
       result.current.setStartsAt('2026-08-01T18:00');
       result.current.setVenue({
         mode: 'oneoff', save: false,
-        name: 'Pop-up Garden', nameEn: '', nameRu: '', address: 'Some St 1', addressEn: '', addressRu: '',
+        name: 'Pop-up Garden', nameEn: '', nameRu: '', address: 'Some St 1',
       });
     });
     act(() => {
@@ -141,7 +141,7 @@ describe('useOrganizerEventForm — venue picker submit resolution (#178)', () =
     act(() => {
       result.current.setVenue({
         mode: 'oneoff', save: false,
-        name: '', nameEn: '', nameRu: '', address: '', addressEn: '', addressRu: '',
+        name: '', nameEn: '', nameRu: '', address: '',
       });
     });
     act(() => {

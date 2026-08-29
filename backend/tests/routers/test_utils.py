@@ -343,14 +343,13 @@ class TestResolveVenue:
         assert resolve_venue_name(event, "en") == "Free-typed Venue"
 
     def test_address_prefers_joined_venue_when_linked(self, make_event, make_venue):
-        venue = make_venue(address="Telliskivi 60a", address_ru="Теллискиви 60a")
+        venue = make_venue(address="Telliskivi 60a")
         event = make_event(venue_id=1, venue=venue, venue_address=None)
-        assert resolve_venue_address(event, "ru") == "Теллискиви 60a"
-        assert resolve_venue_address(event, "en") == "Telliskivi 60a"  # falls back to base
+        assert resolve_venue_address(event) == "Telliskivi 60a"
 
     def test_address_falls_back_to_event_column_when_unlinked(self, make_event):
         event = make_event(venue_id=None, venue=None, venue_address="Free-typed Street 1")
-        assert resolve_venue_address(event, "en") == "Free-typed Street 1"
+        assert resolve_venue_address(event) == "Free-typed Street 1"
 
     def test_coords_prefer_venue_geocode_when_linked_and_present(self, make_event, make_venue):
         venue = make_venue(lat=59.44, lng=24.74)

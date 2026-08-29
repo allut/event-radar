@@ -203,8 +203,6 @@ def make_venue():
         name_en: str | None = None,
         name_ru: str | None = None,
         address: str | None = "Saved Street 1",
-        address_en: str | None = None,
-        address_ru: str | None = None,
         lat: float | None = TALLINN_CENTER_LAT,
         lng: float | None = TALLINN_CENTER_LNG,
     ) -> MagicMock:
@@ -214,8 +212,6 @@ def make_venue():
         v.name_en = name_en
         v.name_ru = name_ru
         v.address = address
-        v.address_en = address_en
-        v.address_ru = address_ru
         v.lat = lat
         v.lng = lng
         return v

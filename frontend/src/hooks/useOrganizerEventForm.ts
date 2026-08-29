@@ -61,7 +61,7 @@ interface FormFields {
 
 const EMPTY_VENUE: VenuePickerValue = {
   mode: 'oneoff', save: false,
-  name: '', nameEn: '', nameRu: '', address: '', addressEn: '', addressRu: '',
+  name: '', nameEn: '', nameRu: '', address: '',
 };
 
 const EMPTY_FIELDS: FormFields = {
@@ -106,7 +106,7 @@ function fieldsFromExisting(existing: OrganizerEventFull): FormFields {
       : {
           mode: 'oneoff', save: false,
           name: existing.venue_name ?? '', nameEn: '', nameRu: '',
-          address: existing.venue_address ?? '', addressEn: '', addressRu: '',
+          address: existing.venue_address ?? '',
         },
     url: existing.url ?? '',
     imageUrl: existing.image_url ?? '',
@@ -232,8 +232,6 @@ export function useOrganizerEventForm(locale: string, eventId?: number): UseOrga
         name_en: v.nameEn.trim() || undefined,
         name_ru: v.nameRu.trim() || undefined,
         address: v.address.trim() || undefined,
-        address_en: v.addressEn.trim() || undefined,
-        address_ru: v.addressRu.trim() || undefined,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.organizerVenues] });

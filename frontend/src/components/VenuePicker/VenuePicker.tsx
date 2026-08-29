@@ -16,20 +16,17 @@ export interface SavedVenue {
   name_en: string | null;
   name_ru: string | null;
   address: string | null;
-  address_en: string | null;
-  address_ru: string | null;
 }
 
-/** Per-locale name/address text — mirrors the Venue model's name/name_en/
- * name_ru columns (#174), same three-locale shape as an event's title/
- * description/important_info. */
+/** Per-locale name text — mirrors the Venue model's name/name_en/name_ru
+ * columns (#174), same three-locale shape as an event's title/description/
+ * important_info. address is a single non-localized field — street names
+ * don't translate across locales. */
 export interface VenueOneOffFields {
   name: string;
   nameEn: string;
   nameRu: string;
   address: string;
-  addressEn: string;
-  addressRu: string;
 }
 
 export type VenuePickerValue =
@@ -62,10 +59,13 @@ function fieldLabel(key: string, locale: string, contentLang: ContentLang): stri
 
 type VenueTextField = 'name' | 'address';
 
+// address has no per-locale column (street names don't translate) — only
+// name routes through the content-language tab.
 function keyFor(field: VenueTextField, lang: ContentLang): keyof VenueOneOffFields {
-  if (lang === LOCALE_EN) return field === 'name' ? 'nameEn' : 'addressEn';
-  if (lang === LOCALE_RU) return field === 'name' ? 'nameRu' : 'addressRu';
-  return field;
+  if (field === 'address') return 'address';
+  if (lang === LOCALE_EN) return 'nameEn';
+  if (lang === LOCALE_RU) return 'nameRu';
+  return 'name';
 }
 
 function fieldFor(fields: VenueOneOffFields, field: VenueTextField, lang: ContentLang): string {
@@ -94,7 +94,7 @@ export default function VenuePicker({ id, value, onChange, locale, contentLang, 
   const [open, setOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [draft, setDraft] = useState<VenueOneOffFields>({
-    name: '', nameEn: '', nameRu: '', address: '', addressEn: '', addressRu: '',
+    name: '', nameEn: '', nameRu: '', address: '',
   });
 
   const { data: venues = [] } = useQuery({
@@ -121,8 +121,6 @@ export default function VenuePicker({ id, value, onChange, locale, contentLang, 
           nameEn: selected.name_en ?? '',
           nameRu: selected.name_ru ?? '',
           address: selected.address ?? '',
-          addressEn: selected.address_en ?? '',
-          addressRu: selected.address_ru ?? '',
         });
       });
     }
@@ -151,8 +149,6 @@ export default function VenuePicker({ id, value, onChange, locale, contentLang, 
         name_en: draft.nameEn.trim() || null,
         name_ru: draft.nameRu.trim() || null,
         address: draft.address.trim() || null,
-        address_en: draft.addressEn.trim() || null,
-        address_ru: draft.addressRu.trim() || null,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.organizerVenues] });
@@ -175,7 +171,7 @@ export default function VenuePicker({ id, value, onChange, locale, contentLang, 
   function selectOneOff() {
     onChange({
       mode: 'oneoff', save: false,
-      name: query.trim(), nameEn: '', nameRu: '', address: '', addressEn: '', addressRu: '',
+      name: query.trim(), nameEn: '', nameRu: '', address: '',
     });
     setQuery('');
     setOpen(false);
@@ -251,7 +247,7 @@ export default function VenuePicker({ id, value, onChange, locale, contentLang, 
             className={styles.miniInput}
             value={fieldFor(draft, 'address', contentLang)}
             onChange={(e) => setDraft((d) => withFieldFor(d, 'address', contentLang, e.target.value))}
-            placeholder={fieldLabel('organizer_field_venue_address', locale, contentLang)}
+            placeholder={t('organizer_field_venue_address', locale)}
             disabled={disabled}
             maxLength={ORGANIZER_VENUE_ADDRESS_MAX_LEN}
           />
@@ -293,7 +289,7 @@ export default function VenuePicker({ id, value, onChange, locale, contentLang, 
             className={styles.miniInput}
             value={fieldFor(value, 'address', contentLang)}
             onChange={(e) => onChange(withFieldFor(value, 'address', contentLang, e.target.value))}
-            placeholder={fieldLabel('organizer_field_venue_address', locale, contentLang)}
+            placeholder={t('organizer_field_venue_address', locale)}
             disabled={disabled}
             maxLength={ORGANIZER_VENUE_ADDRESS_MAX_LEN}
           />

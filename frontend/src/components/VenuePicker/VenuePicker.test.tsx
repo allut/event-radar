@@ -16,8 +16,8 @@ const mockGet = vi.mocked(organizerApi.get);
 const mockPatch = vi.mocked(organizerApi.patch);
 
 const VENUES = [
-  { id: 1, name: 'Kultuurikatel', name_en: null, name_ru: null, address: 'Põhja pst 27a, Tallinn', address_en: null, address_ru: null },
-  { id: 2, name: 'Telliskivi', name_en: null, name_ru: null, address: 'Telliskivi 60a, Tallinn', address_en: null, address_ru: null },
+  { id: 1, name: 'Kultuurikatel', name_en: null, name_ru: null, address: 'Põhja pst 27a, Tallinn' },
+  { id: 2, name: 'Telliskivi', name_en: null, name_ru: null, address: 'Telliskivi 60a, Tallinn' },
 ];
 
 /** Controlled-component wrapper — mirrors how EventSubmit wires
@@ -35,7 +35,7 @@ function Harness({ initial, contentLang = LOCALE_ET }: { initial: VenuePickerVal
 
 const EMPTY: VenuePickerValue = {
   mode: 'oneoff', save: false,
-  name: '', nameEn: '', nameRu: '', address: '', addressEn: '', addressRu: '',
+  name: '', nameEn: '', nameRu: '', address: '',
 };
 
 beforeEach(() => {
@@ -69,8 +69,6 @@ describe('VenuePicker', () => {
         name_en: null,
         name_ru: null,
         address: 'Põhja pst 27a, Tallinn',
-        address_en: null,
-        address_ru: null,
       }),
     );
   });
@@ -101,7 +99,7 @@ describe('VenuePicker', () => {
     await userEvent.click(await screen.findByText(/use "Pop-up Garden" as a one-off venue/i));
 
     expect(screen.getByTestId('value')).toHaveTextContent(
-      JSON.stringify({ mode: 'oneoff', save: false, name: 'Pop-up Garden', nameEn: '', nameRu: '', address: '', addressEn: '', addressRu: '' }),
+      JSON.stringify({ mode: 'oneoff', save: false, name: 'Pop-up Garden', nameEn: '', nameRu: '', address: '' }),
     );
     expect(screen.queryByRole('checkbox')).not.toBeChecked();
   });
@@ -114,7 +112,7 @@ describe('VenuePicker', () => {
     await userEvent.click(screen.getByRole('checkbox'));
 
     expect(screen.getByTestId('value')).toHaveTextContent(
-      JSON.stringify({ mode: 'oneoff', save: true, name: 'Pop-up Garden', nameEn: '', nameRu: '', address: '', addressEn: '', addressRu: '' }),
+      JSON.stringify({ mode: 'oneoff', save: true, name: 'Pop-up Garden', nameEn: '', nameRu: '', address: '' }),
     );
   });
 });

@@ -36,8 +36,6 @@ class VenueBody(BaseModel):
     name_en: str | None = Field(None, max_length=ORGANIZER_VENUE_NAME_MAX_LEN)
     name_ru: str | None = Field(None, max_length=ORGANIZER_VENUE_NAME_MAX_LEN)
     address: str | None = Field(None, max_length=ORGANIZER_VENUE_ADDRESS_MAX_LEN)
-    address_en: str | None = Field(None, max_length=ORGANIZER_VENUE_ADDRESS_MAX_LEN)
-    address_ru: str | None = Field(None, max_length=ORGANIZER_VENUE_ADDRESS_MAX_LEN)
     price_min: float | None = Field(None, ge=0)
     price_max: float | None = Field(None, ge=0)
     currency: str | None = Field(None, max_length=ORGANIZER_CURRENCY_MAX_LEN)
@@ -58,8 +56,6 @@ class VenuePatchBody(BaseModel):
     name_en: str | None = Field(None, max_length=ORGANIZER_VENUE_NAME_MAX_LEN)
     name_ru: str | None = Field(None, max_length=ORGANIZER_VENUE_NAME_MAX_LEN)
     address: str | None = Field(None, max_length=ORGANIZER_VENUE_ADDRESS_MAX_LEN)
-    address_en: str | None = Field(None, max_length=ORGANIZER_VENUE_ADDRESS_MAX_LEN)
-    address_ru: str | None = Field(None, max_length=ORGANIZER_VENUE_ADDRESS_MAX_LEN)
     price_min: float | None = Field(None, ge=0)
     price_max: float | None = Field(None, ge=0)
     currency: str | None = Field(None, max_length=ORGANIZER_CURRENCY_MAX_LEN)
@@ -85,8 +81,6 @@ def _serialize(venue: Venue) -> dict:
         "name_en": venue.name_en,
         "name_ru": venue.name_ru,
         "address": venue.address,
-        "address_en": venue.address_en,
-        "address_ru": venue.address_ru,
         "lat": venue.lat,
         "lng": venue.lng,
         "price_min": venue.price_min,
@@ -170,8 +164,6 @@ async def create_venue(
         name_en=body.name_en,
         name_ru=body.name_ru,
         address=body.address,
-        address_en=body.address_en,
-        address_ru=body.address_ru,
         price_min=body.price_min,
         price_max=body.price_max,
         currency=normalize_currency(body.currency, has_price),
@@ -200,16 +192,10 @@ async def update_own_venue(
         venue.name_en = body.name_en
     if "name_ru" in fields_set:
         venue.name_ru = body.name_ru
-    address_fields = fields_set & {"address", "address_en", "address_ru"}
+    address_fields = fields_set & {"address"}
     address_changed = False
     if "address" in address_fields and body.address != venue.address:
         venue.address = body.address
-        address_changed = True
-    if "address_en" in address_fields and body.address_en != venue.address_en:
-        venue.address_en = body.address_en
-        address_changed = True
-    if "address_ru" in address_fields and body.address_ru != venue.address_ru:
-        venue.address_ru = body.address_ru
         address_changed = True
     if address_changed:
         # Address actually changed — the previously geocoded lat/lng no

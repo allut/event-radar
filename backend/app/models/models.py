@@ -192,13 +192,15 @@ class OrganizerImageUpload(Base):
 
 class Venue(Base):
     """A reusable venue an organizer builds up across event submissions
-    (docs/organizer-portal.md, #173). Per-locale text columns mirror the
-    Persona pattern rather than Event's JSONB localized-field pattern, since
-    a venue has no ingestion path that fills locales piecemeal. price_min/
-    price_max/currency are copy-in defaults for a submission form, not
-    authoritative pricing — the Event row created from a venue owns its own
-    price fields. geocode_attempted_at is a separate cooldown clock from
-    Event's own column of the same name."""
+    (docs/organizer-portal.md, #173). name/name_en/name_ru mirror the
+    Persona per-locale-column pattern rather than Event's JSONB
+    localized-field pattern, since a venue has no ingestion path that fills
+    locales piecemeal. address is a single non-localized column — street
+    names don't translate across locales. price_min/price_max/currency are
+    copy-in defaults for a submission form, not authoritative pricing — the
+    Event row created from a venue owns its own price fields.
+    geocode_attempted_at is a separate cooldown clock from Event's own
+    column of the same name."""
 
     __tablename__ = "venues"
     __table_args__ = (Index("ix_venues_organizer_id", "organizer_id"),)
@@ -211,8 +213,6 @@ class Venue(Base):
     name_en: Mapped[str | None] = mapped_column(String(255), nullable=True)
     name_ru: Mapped[str | None] = mapped_column(String(255), nullable=True)
     address: Mapped[str | None] = mapped_column(String(500), nullable=True)
-    address_en: Mapped[str | None] = mapped_column(String(500), nullable=True)
-    address_ru: Mapped[str | None] = mapped_column(String(500), nullable=True)
     lat: Mapped[float | None] = mapped_column(Float, nullable=True)
     lng: Mapped[float | None] = mapped_column(Float, nullable=True)
     price_min: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)

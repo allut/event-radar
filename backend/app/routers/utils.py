@@ -579,12 +579,13 @@ def resolve_venue_name(event: Event, locale: str = DEFAULT_USER_LOCALE) -> str |
     return event.venue_name
 
 
-def resolve_venue_address(event: Event, locale: str = DEFAULT_USER_LOCALE) -> str | None:
-    """Prefer the linked Venue's per-locale address over Event.venue_address.
-    See resolve_venue_name for the venue_id/write-time-NULL rationale."""
+def resolve_venue_address(event: Event) -> str | None:
+    """Prefer the linked Venue's address over Event.venue_address. Address
+    is not localized (street names don't translate) — see resolve_venue_name
+    for the venue_id/write-time-NULL rationale."""
     venue = _linked_venue(event)
     if venue is not None:
-        return _pick_locale(locale, venue.address, venue.address_en, venue.address_ru)
+        return venue.address
     return event.venue_address
 
 
@@ -637,7 +638,7 @@ def serialize_event(
         "starts_at": event.starts_at.isoformat(),
         "ends_at": event.ends_at.isoformat() if event.ends_at else None,
         "venue_name": resolve_venue_name(event, locale),
-        "venue_address": resolve_venue_address(event, locale),
+        "venue_address": resolve_venue_address(event),
         "lat": lat,
         "lng": lng,
         "url": event.url,

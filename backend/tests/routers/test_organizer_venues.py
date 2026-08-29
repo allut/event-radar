@@ -16,8 +16,6 @@ def _fake_venue(**overrides):
     v.name_en = None
     v.name_ru = None
     v.address = "Test Street 1"
-    v.address_en = None
-    v.address_ru = None
     v.lat = 59.437
     v.lng = 24.7536
     v.price_min = None
@@ -55,8 +53,6 @@ class TestListOwnVenues:
                 "name_en": venue.name_en,
                 "name_ru": venue.name_ru,
                 "address": venue.address,
-                "address_en": venue.address_en,
-                "address_ru": venue.address_ru,
                 "lat": venue.lat,
                 "lng": venue.lng,
                 "price_min": venue.price_min,
@@ -108,8 +104,6 @@ class TestCreateVenue:
                 "name_en",
                 "name_ru",
                 "address",
-                "address_en",
-                "address_ru",
                 "lat",
                 "lng",
                 "price_min",

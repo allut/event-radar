@@ -831,7 +831,7 @@ def _serialize_event_detail(event: Event) -> dict:
         "starts_at": event.starts_at.isoformat(),
         "ends_at": event.ends_at.isoformat() if event.ends_at else None,
         "venue_name": resolve_venue_name(event, DEFAULT_USER_LOCALE),
-        "venue_address": resolve_venue_address(event, DEFAULT_USER_LOCALE),
+        "venue_address": resolve_venue_address(event),
         "lat": lat,
         "lng": lng,
         "url": event.url,
