@@ -18,12 +18,11 @@ Deep-dive docs live in `docs/` and are **not** auto-loaded — read the relevant
 | `docs/frontend.md` | `frontend/src/routes/`, `frontend/src/components/`, `frontend/src/hooks/`, `frontend/src/lib/`, `frontend/src/content/`, `frontend/scripts/`, `frontend/api/`, `shared/i18n/`, `backend/app/email/` |
 | `docs/conventions.md` | the *why* behind a Code Quality Rule below (full rationale + examples) |
 | `docs/data-model.md` | writing a migration, a query touching a new column, or a serializer |
-| `docs/organizer-portal.md` | `app/routers/organizer_auth.py`, `app/routers/organizer_events.py`, `frontend/src/routes/EventSubmit/` |
+| `docs/organizer-portal.md` | `app/routers/organizer_auth.py`, `app/routers/organizer_events.py`, `app/routers/organizer_profile.py`, `app/routers/organizer_venues.py`, `frontend/src/routes/EventSubmit/`, `frontend/src/routes/OrganizerSettings/`, `frontend/src/components/VenuePicker/` |
 | `docs/observability.md` | the Axiom monitoring spec (linked from `docs/backend-ops.md`'s Logging section) |
 | `CONTEXT.md` | before naming a new domain concept — repo-root domain glossary |
 | `docs/adr/` | architectural decisions (currently one: `0001-session-tokens-in-httponly-cookies.md`) |
 | `docs/agents/` | agent-facing workflow docs (issue tracker, triage labels, domain docs) — see Agent skills below |
-| `docs/research/` | dated deep-dive write-ups behind a past decision (admin-console timeout ceilings, report-feature legal obligations, admin-console feed membership) — historical record, not live spec; never the authority when it disagrees with the docs above |
 
 ## Commands
 
@@ -79,7 +78,7 @@ Vite + React SPA (frontend, port 5173 in dev)
   │           (`/` renders the public Landing when signed out, the Feed when signed in)
   │           Each is registered twice — bare path (Estonian) and `/:locale` prefix (/en/…, /ru/…)
   │           Organizer portal: /organizer/login  /organizer/verify  /organizer/dashboard
-  │                             /organizer/submit  /organizer/events/:id/edit
+  │                             /organizer/settings  /organizer/submit  /organizer/events/:id/edit
   │           Admin console (own React.lazy chunk, no i18n, outside the locale loop):
   │                             /admin/login  /admin  /admin/reports  /admin/submissions
   │                             /admin/pipeline  /admin/dedup  /admin/events/:id
@@ -89,6 +88,7 @@ Vite + React SPA (frontend, port 5173 in dev)
 FastAPI Backend (single process on Render free tier, port 8000 in dev)
   ├── Routers: /auth  /admin  /admin/auth  /onboarding  /events  /explore  /feed  /feedback  /public
   │            /reports  /users/me  /contact  /email  /webhooks  /organizer/auth  /organizer/events
+  │            /organizer/profile  /organizer/venues
   └── APScheduler (embedded, kept alive by a cron-job.org ping of /internal/tick every 10 min)
       ├── Weekly Sun 03:00: sync_fienta_organizers   ├── Weekly Sun 03:30: cleanup_stale_data
       ├── Hourly: ingest_all_sources (job id; callable is ingest_all_enabled) ├── 6-hourly: dedup_pass + classify_pending + publish_pending + geocode_pending
@@ -112,7 +112,7 @@ Full detail (field-level authority tables, sub-pass ordering, tiering) in `docs/
 4. **Ranking** — `score = 0.45·persona_affinity + 0.20·recency_boost + 0.20·feedback_signal + 0.10·quality_score + 0.05·locality_bonus` (feedback_signal is `fb_normalized`, the raw [-1,1] feedback score mapped to [0,1] before weighting)
 5. **Daily 5 builder** — 06:00 Europe/Tallinn; MMR-lite diversity capped at `DAILY_5_MAX_PER_CATEGORY` (2); series cooldown + backfill tiers guarantee `n=5`.
 6. **Publish gate** — `app/publish.py::publish_pending()` promotes `classified` → `published` on quality/explicit/non-event/area/ended/title/bbox/organizer-trust checks; runs every 6h.
-7. **Geocoding backfill** — Nominatim + venue-name extraction + sibling-copy sub-passes; runs every 6h.
+7. **Geocoding backfill** — bbox self-heal + organizer-`Venue` pass (with coord sync onto venue-linked events) + venue-name extraction + sibling-copy + Nominatim sub-passes, in that order; runs every 6h.
 8. **Detail-refetch sync** — daily 04:30, reconciles venue/price/coords/localized text from source detail pages before the 06:00 feed build.
 
 Four read paths (Daily 5 feed, Explore, Saved Events, public Landing showcase) and the Fienta organizer lifecycle (detect/skip/revive/retire/discover) are documented in `docs/pipeline.md`. LLM usage constraints (`LLM_MAX_TOKENS = 400` per call, `LLM_REASONING_MAX_TOKENS = 600` hard-cap ceiling used by the Cerebras entry, dedup content-hash cache, Groq→Cerebras→Mistral fallback, backlog drain) and the three-layer NSFW/non-event content filters are also there.
@@ -121,7 +121,7 @@ Four read paths (Daily 5 feed, Explore, Saved Events, public Landing showcase) a
 
 - **Auth** — three independent tracks, never interchangeable (separate salts/tables; see `CONTEXT.md`). Consumer + organizer: magic-link email (`itsdangerous` tokens, no third-party auth), httpOnly/Secure/`SameSite=Strict` session cookies (2-day TTL), `session_token_version` revocation, `email_verified` gate on the digest/feed builder. Admin console: password + required TOTP (`app/auth/totp.py`, RFC 6238) against `ADMIN_USERNAME`/`ADMIN_PASSWORD`/`ADMIN_TOTP_SECRET`, its own 12h cookie (`Path=/api/admin`, no revocation beyond TTL expiry); secret enrollment is the one-time local `backend/scripts/admin_totp_enroll.py`, not an endpoint. Full flow, residual-risk trade-offs, and the digest unsubscribe token in `docs/security.md`.
 - **Security hardening** — rate limiting (every endpoint gets a `RATE_LIMIT_*`), security headers, CSP, body-size ceiling, `require_configured_secret` dev-fail-open double gate, admin auth lockout, external-URL sanitization (`safe_external_url()` vs `safe_fetchable_url()`, keyed on fetched-vs-rendered), stored-HTML sanitization (`sanitize_html()`/`html_to_text()`), redirect SSRF guard, webhook signature verification, CSRF (`CsrfOriginCheckMiddleware`, `app/main.py`, rejects mutating requests whose `Origin` isn't in `CORS_ORIGINS ∪ {FRONTEND_URL}` — second layer behind `SameSite=Strict`). Full detail in `docs/security.md` — read it before adding any new endpoint or external-facing URL field.
-- **Organizer portal** — self-service submission with its own auth track (separate salts/tables from user auth), auto-publish gated on organizer trust (`verified` flag), admin post-hoc review queue. Full detail in `docs/organizer-portal.md`.
+- **Organizer portal** — self-service submission with its own auth track (separate salts/tables from user auth), auto-publish gated on organizer trust (`verified` flag), admin post-hoc review queue, an organizer settings page (display name), and saved venues — a per-organizer reusable `Venue` directory (`app/routers/organizer_venues.py`, `VenuePicker` in the submit/edit form). A venue-linked event leaves `venue_name`/`venue_address` NULL and resolves them at read time via `resolve_venue_name()`/`resolve_venue_address()`/`resolve_venue_coords()` (`app/routers/utils.py`) — never read those columns directly in a serializer. Full detail in `docs/organizer-portal.md` + `docs/data-model.md`.
 - **Content reporting** — a signed-in user flags an event's hosted content via `POST /reports` (`app/routers/reports.py`, `ReportModal` on the frontend); admins resolve or take down from `/admin/reports`. "Report" ≠ feedback and ≠ the organizer review queue — see `CONTEXT.md`'s Content Moderation glossary before naming anything here.
 - **Admin endpoints** — `/admin/*`, HTTP Basic auth (or the admin console's `/admin/auth` session cookie — both share one consecutive-failure lockout counter), shared rate-limit bucket, `run_admin_job()` helper. Operate the pipeline via the admin console (`/admin/login`, `/admin` dashboard, `/admin/pipeline`, `/admin/dedup`, `/admin/submissions`, `/admin/reports`, `/admin/events/:id`), not curl. Full detail in `docs/backend-ops.md`.
 
@@ -135,7 +135,7 @@ Frontend imports generated strings via `frontend/src/i18n.ts`; backend via `back
 
 ## Frontend Structure
 
-Each component/route lives in its own folder: `Name.tsx` + `Name.module.css` + a one-line `index.ts` barrel. Routes in `frontend/src/routes/`, shared components in `frontend/src/components/`, CSS design tokens are **mandatory** (never hardcode colors/spacing/radii — see Code Quality Rules below), shared CSS chrome composes from `frontend/src/components/shared/`. Hooks/utils/constants each have one canonical home (`frontend/src/hooks/`, `frontend/src/utils.ts`, `frontend/src/constants.ts`) — check there before writing a new one. Non-component homes: `frontend/src/api/client.ts` (the single fetch wrapper), `frontend/src/lib/` (auth/locale/analytics/SEO-prerender modules), `frontend/src/content/legal/` (per-locale legal-doc data behind `LegalPage`), `frontend/scripts/` (build-time prerender + icon generation), `frontend/api/` (Vercel serverless functions — the live SEO audit). Tests are co-located as `Name.test.tsx`/`Name.test.ts`. Full folder-by-folder breakdown in `docs/frontend.md`.
+Each component/route lives in its own folder: `Name.tsx` + `Name.module.css` + a one-line `index.ts` barrel. Routes in `frontend/src/routes/`, shared components in `frontend/src/components/`, CSS design tokens are **mandatory** (never hardcode colors/spacing/radii — see Code Quality Rules below), shared CSS chrome composes from `frontend/src/components/shared/`. Hooks/utils/constants each have one canonical home (`frontend/src/hooks/`, `frontend/src/utils.ts`, `frontend/src/constants.ts`) — check there before writing a new one. Non-component homes: `frontend/src/api/client.ts` (the single fetch wrapper), `frontend/src/lib/` (auth/locale/analytics/SEO-prerender modules), `frontend/src/content/legal/` (per-locale legal-doc data behind `LegalPage`), `frontend/scripts/` (build-time prerender + icon generation), `frontend/api/` (Vercel serverless functions — the live SEO audit and the prerender-cadence endpoint; both are carved out of `vercel.json`'s API-proxy rewrite). Tests are co-located as `Name.test.tsx`/`Name.test.ts`. Full folder-by-folder breakdown in `docs/frontend.md`.
 
 Two routing facts that bite: every `ROUTE_DEFS` entry is registered at both its bare path and a `/:locale` prefix (`/` and `/events/:id` are the SEO routes that never redirect); the admin console lives entirely outside that loop in its own `React.lazy` chunk (`routes/AdminApp/`), un-i18n'd and reachable only by typed URL.
 
@@ -164,7 +164,7 @@ Full rationale for each rule (why it works this way, trade-offs accepted) is in 
 - **Python lint** — `python -m ruff check backend` must pass clean, config in `backend/ruff.toml` (no `backend/pyproject.toml` — don't create one) (`select = ["E","F","W","Q"]`, `line-length = 88`, `E501` ignored, `extend-exclude = ["app/_generated"]`).
 - **Type checking** — `python -m mypy app` from `backend/` must pass clean. Give structurally-incompatible reused loop variables their own names.
 - **Type annotations** — modern PEP 604/585 syntax (`X | None`, `list[T]`), annotate all public return types.
-- **Shared test fixtures** — backend: `backend/tests/conftest.py` (`mock_db`, `make_user`, `make_event`). Frontend: `frontend/src/test/utils.tsx` (`renderWithProviders`, `makeEvent`); mock the `api` module, not `fetch`.
+- **Shared test fixtures** — backend: `backend/tests/conftest.py` (`mock_db`, `make_user`, `make_organizer`, `make_event`, `make_venue`, `make_report`, `make_request`, `patch_client`, `assert_hardened_cookie`). Frontend: `frontend/src/test/utils.tsx` (`renderWithProviders`, `makeQueryWrapper`, `makeRouterQueryWrapper`, `makeEvent`); mock the `api` module, not `fetch`.
 - **Numeric truthiness** — never gate a numeric field on truthiness (`0` is falsy — breaks free events). Use explicit `is not None` / `isinstance` checks.
 
 ## Conventions
