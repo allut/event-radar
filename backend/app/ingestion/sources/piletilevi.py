@@ -8,17 +8,18 @@ from typing import Any
 import httpx
 from bs4 import BeautifulSoup, NavigableString, Tag
 
-from app.constants import LOCALIZED_TEXT_MAX_DESC_CHARS, TALLINN_TZ
+from app.constants import TALLINN_TZ
 from app.ingestion.http_client import http_get, http_post
 from app.ingestion.jsonld import extract_jsonld_event_location, extract_jsonld_event_text
 from app.ingestion.pricing import normalize_currency, to_float
-from app.ingestion.sanitize import html_to_text, sanitize_html
+from app.ingestion.sanitize import sanitize_html
 from app.ingestion.selectors import (
     PILETILEVI_ALL_PATH,
     PILETILEVI_CARD_SELECTOR,
     PILETILEVI_CODE_RE,
     PILETILEVI_DATE_FORMAT,
     PILETILEVI_DATE_SELECTOR,
+    PILETILEVI_DATE_SEPARATOR,
     PILETILEVI_DETAIL_DESC_SELECTOR,
     PILETILEVI_HEIGHT_PATH_RE,
     PILETILEVI_HOST,
@@ -33,7 +34,7 @@ from app.ingestion.selectors import (
     PILETILEVI_TITLE_SELECTOR,
     PILETILEVI_VENUE_SELECTOR,
 )
-from app.ingestion.html_utils import attr_str
+from app.ingestion.html_utils import attr_str, localized_description
 from app.ingestion.sources.html_base import HtmlListingAdapter, OnceAsync
 
 log = logging.getLogger(__name__)
@@ -92,10 +93,10 @@ def full_res_piletilevi_image(url: str | None) -> str | None:
 
 def _parse_piletilevi_date(date_str: str) -> datetime | None:
     """Parse "We 19.08.2026 • 19:00" → timezone-aware datetime."""
-    if not date_str or "•" not in date_str:
+    if not date_str or PILETILEVI_DATE_SEPARATOR not in date_str:
         return None
     try:
-        date_part_raw, time_part = date_str.split("•", 1)
+        date_part_raw, time_part = date_str.split(PILETILEVI_DATE_SEPARATOR, 1)
         # Strip weekday abbreviation: "We 19.08.2026" → "19.08.2026"
         date_part = date_part_raw.strip().split(" ", 1)[-1].strip()
         time_part = time_part.strip()
@@ -157,15 +158,7 @@ def piletilevi_localized_text(soup: BeautifulSoup) -> tuple[str | None, str | No
     collapsed, gluing sentences together (e.g. "...maagia.Lisainfo: ...").
     """
     title, _ = extract_jsonld_event_text(soup)
-    desc_tag = soup.select_one(PILETILEVI_DETAIL_DESC_SELECTOR)
-    desc: str | None = None
-    if desc_tag:
-        html = sanitize_html(desc_tag.decode_contents())
-        if html:
-            desc = html if len(html) <= LOCALIZED_TEXT_MAX_DESC_CHARS else (
-                (html_to_text(html) or "")[:LOCALIZED_TEXT_MAX_DESC_CHARS] or None
-            )
-    return title, desc
+    return title, localized_description(soup, PILETILEVI_DETAIL_DESC_SELECTOR)
 
 
 class PiletileviAdapter(HtmlListingAdapter):

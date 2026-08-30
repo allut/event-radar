@@ -11,6 +11,8 @@ from app.config import settings
 from app.constants import (
     APP_ENV_DEVELOPMENT,
     AUTH_VERIFY_PATH,
+    AUTHORIZATION_HEADER,
+    BEARER_PREFIX,
     DEFAULT_USER_LOCALE,
     LOG_EVENT_EMAIL_SEND_FAILED,
     RESEND_ERROR_SNIPPET_LEN,
@@ -61,7 +63,7 @@ async def send_magic_link(
     async with httpx.AsyncClient(timeout=RESEND_TIMEOUT_SECONDS) as client:
         resp = await client.post(
             RESEND_SEND_URL,
-            headers={"Authorization": f"Bearer {settings.RESEND_API_KEY}"},
+            headers={AUTHORIZATION_HEADER: f"{BEARER_PREFIX}{settings.RESEND_API_KEY}"},
             json={
                 "from": settings.RESEND_FROM_ADDRESS,
                 "to": [to_email],

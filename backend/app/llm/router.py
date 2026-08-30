@@ -22,6 +22,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.constants import (
+    AUTHORIZATION_HEADER,
+    BEARER_PREFIX,
     LLM_MAX_TOKENS,
     LLM_PROVIDERS,
     LLM_REQUEST_TIMEOUT_SECONDS,
@@ -163,14 +165,14 @@ async def llm_json(
             if http_client is not None:
                 resp = await http_client.post(
                     f"{provider['base_url']}/chat/completions",
-                    headers={"Authorization": f"Bearer {api_key}"},
+                    headers={AUTHORIZATION_HEADER: f"{BEARER_PREFIX}{api_key}"},
                     json=payload,
                 )
             else:
                 async with httpx.AsyncClient(timeout=LLM_REQUEST_TIMEOUT_SECONDS) as client:
                     resp = await client.post(
                         f"{provider['base_url']}/chat/completions",
-                        headers={"Authorization": f"Bearer {api_key}"},
+                        headers={AUTHORIZATION_HEADER: f"{BEARER_PREFIX}{api_key}"},
                         json=payload,
                     )
 

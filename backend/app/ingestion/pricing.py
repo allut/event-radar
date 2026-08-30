@@ -12,9 +12,12 @@ from bs4 import BeautifulSoup
 from app.constants import (
     CURRENCY_AMOUNT_RE,
     DEFAULT_CURRENCY,
+    HTML_PARSER,
     PRICE_CONTEXT_MAX_CHARS,
     PRICE_FEE_CLAUSE_RE,
     PRICE_FEE_KEYWORDS,
+    PRICE_FROM_STRING_FREE_SUFFIX,
+    PRICE_FROM_STRING_FREE_TOKEN,
     PRICE_FROM_STRING_RE,
 )
 
@@ -56,7 +59,10 @@ def parse_price_from_string(
     if not value:
         return (None, None, None, False)
     text = value.strip()
-    has_free = text.lower() == "free" or text.lower().endswith(", free")
+    has_free = (
+        text.lower() == PRICE_FROM_STRING_FREE_TOKEN
+        or text.lower().endswith(PRICE_FROM_STRING_FREE_SUFFIX)
+    )
     m = _PRICE_FROM_STRING_RE.search(text)
     if not m:
         return (0.0, 0.0, None, False) if has_free else (None, None, None, False)
@@ -132,7 +138,7 @@ def price_context_digest(*texts: str | None) -> str:
             continue
         # Newline-separated (not html_to_text's space-joined) so each block/line
         # can be scanned and kept/dropped independently.
-        raw_plain = BeautifulSoup(text, "html.parser").get_text(separator="\n", strip=True)
+        raw_plain = BeautifulSoup(text, HTML_PARSER).get_text(separator="\n", strip=True)
         plain = strip_fee_amounts(raw_plain) or ""
         for line in plain.splitlines():
             line = line.strip()

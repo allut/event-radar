@@ -492,6 +492,9 @@ DIGEST_MAX_WHY_GO_BULLETS = 3
 # Concurrency cap when fanning out digest sends — bounded by Resend free-tier
 # rate (10 req/s). Eight in-flight sends leaves headroom for occasional retries.
 DIGEST_SEND_CONCURRENCY: int = 8
+# send_daily_digests per-user outcome sentinels.
+DIGEST_RESULT_SENT = "sent"
+DIGEST_RESULT_SKIPPED = "skipped"
 
 # Admin endpoint pagination
 ADMIN_DEDUP_GROUPS_PAGE_SIZE: int = 50
@@ -522,6 +525,11 @@ SVIX_ID_HEADER = "svix-id"
 SVIX_TIMESTAMP_HEADER = "svix-timestamp"
 SVIX_SIGNATURE_HEADER = "svix-signature"
 SVIX_SECRET_PREFIX = "whsec_"
+# Bearer-token auth headers used by outbound email/LLM API clients.
+AUTHORIZATION_HEADER = "Authorization"
+BEARER_PREFIX = "Bearer "
+# BeautifulSoup's built-in parser name — used everywhere we parse scraped/stored HTML.
+HTML_PARSER = "html.parser"
 # Reject a signature whose svix-timestamp is further than this from "now" (either
 # direction), blocking replay of an old, legitimately-signed request. Matches
 # Svix's own recommended default tolerance.
@@ -1231,6 +1239,9 @@ PRICE_FEE_CLAUSE_RE = (
 # Parses a Fienta listing price_from_string: "From 9.50 EUR" / "12 EUR" — a number
 # (int or decimal, "." or "," separator) followed by any 3-letter currency code.
 PRICE_FROM_STRING_RE = r"(?:from\s+)?(\d+(?:[.,]\d+)?)\s*([A-Za-z]{3})"
+# Fienta price_from_string free-tier tokens (see parse_price_from_string's grammar).
+PRICE_FROM_STRING_FREE_TOKEN = "free"
+PRICE_FROM_STRING_FREE_SUFFIX = ", free"
 
 # Free-tier keywords across et/en/ru — a "0" reported by the LLM is only trusted
 # when one of these literally appears in the text; otherwise it's treated as an
@@ -1275,11 +1286,12 @@ LOG_SHIP_QUEUE_MAXSIZE = 10_000  # bounded; drop-newest if shipping stalls
 # Loggers configured by frameworks/libraries before configure_logging() runs —
 # stripped of their own handlers and re-pointed at the root logger so every
 # line (app, uvicorn, SQL echo) shares the same timestamped format.
+SQLALCHEMY_ENGINE_LOGGER_NAME = "sqlalchemy.engine"
 LOG_FRAMEWORK_LOGGER_NAMES: tuple[str, ...] = (
     "uvicorn",
     "uvicorn.error",
     "uvicorn.access",
-    "sqlalchemy.engine",
+    SQLALCHEMY_ENGINE_LOGGER_NAME,
 )
 # HTTP client loggers pinned to WARNING: their per-request INFO/DEBUG lines are
 # noise, and — critically — shipping one would make the ship POST itself emit a

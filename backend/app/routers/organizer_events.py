@@ -40,7 +40,6 @@ from app.constants import (
     ERROR_IMAGE_URL_SCHEME,
     ERROR_SUBMISSION_SOURCE_NOT_CONFIGURED,
     ERROR_UNSUPPORTED_IMAGE_TYPE,
-    ERROR_VENUE_NOT_FOUND,
     EVENT_CANCELLATION_REASON_ORGANIZER_RETRACT,
     EVENT_STATUS_CANCELLED,
     EVENT_STATUS_CLASSIFIED,
@@ -89,6 +88,7 @@ from app.rate_limit import limiter
 from app.routers.organizer_auth import get_current_organizer
 from app.routers.utils import (
     cancel_event_and_resolve_reports,
+    own_venue_or_404,
     select_events_with_classification,
     send_report_resolution_emails,
     serialize_event,
@@ -294,25 +294,6 @@ async def _own_event_or_404(
     return event
 
 
-async def _own_venue_or_404(db: AsyncSession, venue_id: int, organizer_id: int) -> Venue:
-    """Same 404-not-403 ownership check as organizer_venues.py's own helper
-    (#176) — mirrors _own_event_or_404's convention. Not imported from there
-    since a leading-underscore name is module-private (CLAUDE.md
-    Encapsulation rule)."""
-    venue = await db.scalar(
-        select(Venue).where(
-            Venue.id == venue_id,
-            Venue.organizer_id == organizer_id,
-            Venue.deleted_at.is_(None),
-        )
-    )
-    if venue is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail=ERROR_VENUE_NOT_FOUND
-        )
-    return venue
-
-
 @router.post("", status_code=status.HTTP_201_CREATED)
 @limiter.limit(RATE_LIMIT_SUBMIT)
 async def submit_event(
@@ -352,7 +333,7 @@ async def submit_event(
 
     venue: Venue | None = None
     if body.venue_id is not None:
-        venue = await _own_venue_or_404(db, body.venue_id, current_organizer.id)
+        venue = await own_venue_or_404(db, body.venue_id, current_organizer.id)
 
     has_price = body.price_min is not None or body.price_max is not None
     normalized = NormalizedEvent(
@@ -493,7 +474,7 @@ async def update_own_event(
         event.ends_at = body.ends_at
     linked_venue: Venue | None = None
     if "venue_id" in fields_set and body.venue_id is not None:
-        linked_venue = await _own_venue_or_404(db, body.venue_id, current_organizer.id)
+        linked_venue = await own_venue_or_404(db, body.venue_id, current_organizer.id)
         event.venue_id = body.venue_id
         event.venue_name = None
         event.venue_address = None

@@ -15,7 +15,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth.tokens import generate_unsubscribe_token
 from app.config import settings
 from app.constants import (
+    AUTHORIZATION_HEADER,
+    BEARER_PREFIX,
     DIGEST_MAX_WHY_GO_BULLETS,
+    DIGEST_RESULT_SENT,
+    DIGEST_RESULT_SKIPPED,
     DIGEST_SEND_CONCURRENCY,
     LOCALE_ET,
     LOCALE_RU,
@@ -251,7 +255,9 @@ async def send_digest_email(
             await http_post(
                 client,
                 RESEND_SEND_URL,
-                headers={"Authorization": f"Bearer {settings.RESEND_API_KEY}"},
+                headers={
+                    AUTHORIZATION_HEADER: f"{BEARER_PREFIX}{settings.RESEND_API_KEY}"
+                },
                 json_body={
                     "from": settings.RESEND_FROM_ADDRESS,
                     "to": [to_email],
@@ -336,13 +342,18 @@ async def send_daily_digests(
     ).all()
 
     if not users:
-        return {"sent": 0, "skipped": 0, "total_opted_in": 0, "dry_run": dry_run}
+        return {
+            DIGEST_RESULT_SENT: 0,
+            DIGEST_RESULT_SKIPPED: 0,
+            "total_opted_in": 0,
+            "dry_run": dry_run,
+        }
 
     feed_by_user, event_map = await _load_digest_data(db, today, [u.id for u in users])
     if event_map is None:
         return {
-            "sent": 0,
-            "skipped": len(users),
+            DIGEST_RESULT_SENT: 0,
+            DIGEST_RESULT_SKIPPED: len(users),
             "total_opted_in": len(users),
             "dry_run": dry_run,
         }
@@ -354,25 +365,25 @@ async def send_daily_digests(
         """Returns 'sent' | 'skipped'."""
         user = user_map.get(uid)
         if not user:
-            return "skipped"
+            return DIGEST_RESULT_SKIPPED
         ordered_events = [event_map[eid] for eid in eids if eid in event_map]
         if not ordered_events:
-            return "skipped"
+            return DIGEST_RESULT_SKIPPED
         if dry_run:
-            return "sent"
+            return DIGEST_RESULT_SENT
         async with semaphore:
             try:
                 await send_digest_email(
                     user.email, user.locale, ordered_events, today, user.id
                 )
-                return "sent"
+                return DIGEST_RESULT_SENT
             except Exception:
                 log.exception(
                     "Failed to send digest to user %d",
                     uid,
                     extra={"event": LOG_EVENT_EMAIL_SEND_FAILED},
                 )
-                return "skipped"
+                return DIGEST_RESULT_SKIPPED
 
     # return_exceptions=True is defence-in-depth: _send_one already catches
     # every send error and returns "skipped", but a programming error inside
@@ -381,7 +392,7 @@ async def send_daily_digests(
         *(_send_one(uid, eids) for uid, eids in feed_by_user.items()),
         return_exceptions=True,
     )
-    sent = sum(1 for r in results if r == "sent")
+    sent = sum(1 for r in results if r == DIGEST_RESULT_SENT)
     errored = sum(1 for r in results if isinstance(r, Exception))
     skipped = len(results) - sent - errored
     for r in results:
@@ -393,8 +404,8 @@ async def send_daily_digests(
             )
 
     return {
-        "sent": sent,
-        "skipped": skipped,
+        DIGEST_RESULT_SENT: sent,
+        DIGEST_RESULT_SKIPPED: skipped,
         "errored": errored,
         "total_opted_in": len(users),
         "dry_run": dry_run,

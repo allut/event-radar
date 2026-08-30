@@ -22,6 +22,7 @@ from app.constants import (
     DETAIL_FETCH_CONCURRENCY,
     HTML_LISTING_LOCALE_FETCH_DELAY_SECONDS,
     HTML_LISTING_MAX_DETAIL_FETCHES,
+    HTML_PARSER,
     HTTP_METHOD_GET,
     HTTP_METHOD_POST,
     HTTP_TIMEOUT_SECONDS,
@@ -85,16 +86,6 @@ def full_res_wp_image(url: str | None) -> str | None:
     if not url or not any(h in url for h in WP_THUMBNAIL_HOSTS):
         return url
     return _WP_THUMB_SUFFIX_RE.sub(r"\1", url)
-
-
-def og_title(soup: BeautifulSoup) -> str | None:
-    """Return og:title content, or None if absent."""
-    tag = soup.find("meta", property="og:title")
-    if tag and isinstance(tag, Tag):
-        content = tag.get("content")
-        if isinstance(content, str):
-            return content.strip() or None
-    return None
 
 
 def first_image_url(img_tag: Tag) -> str | None:
@@ -238,7 +229,7 @@ class HtmlListingAdapter(SourceAdapter):
                     page += 1
                     continue
 
-                soup = BeautifulSoup(resp.text, "html.parser")
+                soup = BeautifulSoup(resp.text, HTML_PARSER)
                 # Count new external ids regardless of passes_filter, so a page
                 # consisting entirely of filtered-out events (e.g. non-Tallinn
                 # Piletilevi listings) doesn't prematurely stop pagination.
@@ -328,7 +319,7 @@ class HtmlListingAdapter(SourceAdapter):
                     exc,
                 )
                 return
-            detail_soup = BeautifulSoup(detail_resp.text, "html.parser")
+            detail_soup = BeautifulSoup(detail_resp.text, HTML_PARSER)
             await self.parse_detail(client, detail_soup, card)
 
             def _extract(

@@ -24,6 +24,7 @@ from app.constants import (
     ERROR_ADMIN_JOB_FAILED,
     ERROR_FEATURE_DISABLED,
     ERROR_INVALID_REPORT_REASON,
+    ERROR_VENUE_NOT_FOUND,
     EVENT_STATUS_CANCELLED,
     EVENT_STATUS_PUBLISHED,
     LOCALE_EN,
@@ -39,6 +40,7 @@ from app.constants import (
     SESSION_COOKIE_HTTPONLY,
     SESSION_COOKIE_SAMESITE,
     SESSION_COOKIE_SECURE,
+    TALLINN_TZ,
     VALID_LOCALES,
     VALID_REPORT_REASONS,
 )
@@ -728,7 +730,7 @@ async def resolve_open_reports(
     landing between this call and the caller's commit) can't be missed —
     the WHERE clause is evaluated atomically at execution time.
     """
-    resolved_at = datetime.now(timezone.utc)
+    resolved_at = datetime.now(TALLINN_TZ)
     stmt = (
         update(EventReport)
         .where(
@@ -808,3 +810,21 @@ def validate_report_reason(reason: str) -> None:
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=ERROR_INVALID_REPORT_REASON.format(reasons=sorted(VALID_REPORT_REASONS)),
         )
+
+
+async def own_venue_or_404(db: AsyncSession, venue_id: int, organizer_id: int) -> Venue:
+    """Shared by organizer_events.py and organizer_venues.py — 404-not-403
+    ownership check for a saved Venue, mirroring organizer_events.py's own
+    ``_own_event_or_404`` convention."""
+    venue = await db.scalar(
+        select(Venue).where(
+            Venue.id == venue_id,
+            Venue.organizer_id == organizer_id,
+            Venue.deleted_at.is_(None),
+        )
+    )
+    if venue is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=ERROR_VENUE_NOT_FOUND
+        )
+    return venue

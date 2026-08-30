@@ -14,7 +14,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.constants import (
     ERROR_DAILY_VENUE_CREATION_LIMIT,
-    ERROR_VENUE_NOT_FOUND,
     ORGANIZER_CURRENCY_MAX_LEN,
     ORGANIZER_DAILY_VENUE_CREATION_CAP,
     ORGANIZER_VENUE_ADDRESS_MAX_LEN,
@@ -27,6 +26,7 @@ from app.ingestion.pricing import normalize_currency
 from app.models.models import Organizer, Venue
 from app.rate_limit import limiter
 from app.routers.organizer_auth import get_current_organizer
+from app.routers.utils import own_venue_or_404
 
 router = APIRouter(prefix="/organizer/venues", tags=["organizer-venues"])
 
@@ -88,21 +88,6 @@ def _serialize(venue: Venue) -> dict:
         "currency": venue.currency,
         "created_at": venue.created_at,
     }
-
-
-async def _own_venue_or_404(db: AsyncSession, venue_id: int, organizer_id: int) -> Venue:
-    venue = await db.scalar(
-        select(Venue).where(
-            Venue.id == venue_id,
-            Venue.organizer_id == organizer_id,
-            Venue.deleted_at.is_(None),
-        )
-    )
-    if venue is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail=ERROR_VENUE_NOT_FOUND
-        )
-    return venue
 
 
 @router.get("")
@@ -183,7 +168,7 @@ async def update_own_venue(
     current_organizer: Organizer = Depends(get_current_organizer),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    venue = await _own_venue_or_404(db, venue_id, current_organizer.id)
+    venue = await own_venue_or_404(db, venue_id, current_organizer.id)
 
     fields_set = body.model_fields_set
     if "name" in fields_set and body.name is not None:
@@ -228,6 +213,6 @@ async def delete_own_venue(
     current_organizer: Organizer = Depends(get_current_organizer),
     db: AsyncSession = Depends(get_db),
 ) -> None:
-    venue = await _own_venue_or_404(db, venue_id, current_organizer.id)
+    venue = await own_venue_or_404(db, venue_id, current_organizer.id)
     venue.deleted_at = datetime.now(TALLINN_TZ)
     await db.commit()

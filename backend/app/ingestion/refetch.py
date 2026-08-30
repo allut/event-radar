@@ -33,6 +33,7 @@ from app.constants import (
     EVENT_STATUS_CLASSIFIED,
     EVENT_STATUS_PUBLISHED,
     GEOCODE_COORD_QUANT_DECIMALS,
+    HTML_PARSER,
     HTTP_TIMEOUT_SECONDS,
     LOCALIZED_TEXT_FIENTA_LOCALES,
     REFETCH_COMMIT_INTERVAL_SECONDS,
@@ -324,7 +325,7 @@ async def _process_one(
         return False
 
     summary["fetched"] += 1
-    soup = BeautifulSoup(response.text, "html.parser")
+    soup = BeautifulSoup(response.text, HTML_PARSER)
     jsonld_items = parse_jsonld_event_items(soup)
     location = location_from_jsonld_items(jsonld_items)
     price_min, price_max, currency, has_free_tier = offers_from_jsonld_items(jsonld_items)
