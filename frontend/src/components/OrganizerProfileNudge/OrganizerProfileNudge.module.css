@@ -46,7 +46,7 @@
   border: none;
   color: var(--text-muted);
   font-size: var(--fs-lg);
-  line-height: 1;
+  line-height: var(--leading-none);
   cursor: pointer;
   padding: var(--space-0-3);
   border-radius: var(--radius);

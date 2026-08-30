@@ -293,6 +293,7 @@ export const REPORT_REASONS: { value: string; labelKey: string; descriptionKey: 
 // Mirrors the backend's REPORT_DETAIL_MAX_CHARS (app/constants.py) — client-side
 // validation only, the server re-validates and is the real boundary.
 export const REPORT_DETAIL_MAX_CHARS = 500;
+export const REPORT_DETAIL_TEXTAREA_ROWS = 4;
 
 // ─── Events / feedback ───────────────────────────────────────────────────────
 export type Signal = 'like' | 'dislike' | 'bookmark';
@@ -387,6 +388,10 @@ export const VERIFY_STATE_TO_KIND: Record<VerifyState, AuthCardKind> = {
 
 // Contact form (routes/Contact/Contact.tsx)
 export const CONTACT_TEXTAREA_ROWS = 6;
+
+// Admin console (routes/AdminLogin, components/AdminQueueActionPanel)
+export const TOTP_CODE_LENGTH = 6;
+export const ADMIN_NOTE_TEXTAREA_ROWS = 3;
 
 // ─── Explore ─────────────────────────────────────────────────────────────────
 // BROWSE_PAGE_SIZE itself is cross-stack (shared/app-config.json), imported above.
@@ -665,6 +670,7 @@ export const API = {
   feed: '/feed',
   feedback: '/feedback',
   feedbackEvent: (id: number) => `/feedback/${id}`,
+  feedbackEvents: '/feedback/events',
   publicShowcase: '/public/showcase',
   emailUnsubscribe: '/email/unsubscribe',
   emailResubscribe: '/email/resubscribe',

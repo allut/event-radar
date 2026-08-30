@@ -41,7 +41,7 @@
   composes: iconAction from '../shared/Button.module.css';
   color: var(--text-muted);
   font-size: var(--fs-md);
-  line-height: 1;
+  line-height: var(--leading-none);
   padding: var(--space-0-45);
   border: 1px solid transparent;
   border-radius: var(--radius);

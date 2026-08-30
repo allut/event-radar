@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { api, ApiError } from '../../api/client';
 import { t, ti } from '../../i18n';
-import { API, REPORT_DETAIL_MAX_CHARS, REPORT_REASON_OTHER, REPORT_REASONS } from '../../constants';
+import { API, REPORT_DETAIL_MAX_CHARS, REPORT_DETAIL_TEXTAREA_ROWS, REPORT_REASON_OTHER, REPORT_REASONS } from '../../constants';
 import Modal from '../Modal';
 import styles from './ReportModal.module.css';
 
@@ -115,7 +115,7 @@ export default function ReportModal({ open, onClose, eventId, locale, onSubmitte
               onChange={(e) => setDetail(e.target.value)}
               placeholder={t('report_detail_placeholder', locale)}
               maxLength={REPORT_DETAIL_MAX_CHARS}
-              rows={4}
+              rows={REPORT_DETAIL_TEXTAREA_ROWS}
             />
           </label>
 
