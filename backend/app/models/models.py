@@ -385,9 +385,9 @@ class Event(Base):
             "needs_review",
             postgresql_where=text("needs_review"),
         ),
-        # event_not_ended_filter()'s OR (ends_at >= now) / (ends_at IS NULL AND
-        # starts_at >= now) can't use a plain B-tree — this expression index
-        # backs it (and _date_range_filter's identical coalesce(ends_at,
+        # event_not_ended_filter()/event_ended_filter()'s coalesce(ends_at,
+        # starts_at) comparison can't use a plain B-tree — this expression
+        # index backs it (and _date_range_filter's identical coalesce(ends_at,
         # starts_at) >= date_from_start in browse.py), on the largest table in
         # the schema, which grows forever since events rows are never deleted.
         Index(

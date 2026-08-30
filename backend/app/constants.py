@@ -843,6 +843,12 @@ PREFERRED_TASTE_MIN_WEIGHT: float = 0.5
 # 'classified' and never reach a feed. Tunable later from real data.
 PUBLISH_MIN_QUALITY_SCORE: float = 0.4
 
+# Publish gate's reject-breakdown diagnostic only looks back this many days
+# (by starts_at) — it answers "why did recent work get rejected", not an
+# all-time audit total, so it doesn't pay the cost of scanning every
+# permanently-failing event ever classified.
+PUBLISH_DIAGNOSTICS_WINDOW_DAYS: int = 30
+
 # Tallinn centre bounding box (~5 km radius) used for locality bonus
 TALLINN_CENTER_LAT: float = 59.437
 TALLINN_CENTER_LNG: float = 24.745

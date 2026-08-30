@@ -11,7 +11,7 @@ from typing import Any
 from fastapi import HTTPException, Response, status
 from itsdangerous import BadSignature, SignatureExpired
 from pydantic import BaseModel, EmailStr
-from sqlalchemy import ColumnElement, Select, and_, delete, or_, select, update
+from sqlalchemy import ColumnElement, Select, and_, delete, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import InstrumentedAttribute, selectinload
 
@@ -430,30 +430,29 @@ def event_not_ended_filter(now: datetime, entity: Any = Event) -> ColumnElement[
     ``starts_at`` with a future ``ends_at`` (multi-day runs, ongoing
     exhibitions) stays live — only a genuinely-over event fails this.
 
+    Written as ``coalesce(ends_at, starts_at) >= now`` — exactly equivalent
+    to the OR form, but sargable against ``ix_events_live_until ON events
+    (coalesce(ends_at, starts_at))`` (migration ``0023``). The OR form
+    Postgres cannot match to that expression index, forcing a seq scan on
+    ``events`` (a table rows are never removed from — see ``cleanup.py``) at
+    every call site.
+
     ``entity`` accepts ``Event`` (default) or an ``aliased(Event)`` so
     self-join clauses reuse this definition instead of re-deriving it.
     """
-    return or_(
-        entity.ends_at >= now,
-        and_(entity.ends_at.is_(None), entity.starts_at >= now),
-    )
+    return func.coalesce(entity.ends_at, entity.starts_at) >= now
 
 
 def event_ended_filter(now: datetime, entity: Any = Event) -> ColumnElement[bool]:
-    """Event has ended — the NULL-safe complement of ``event_not_ended_filter``.
+    """Event has ended — the complement of ``event_not_ended_filter``.
 
-    ``~event_not_ended_filter(now)`` is NOT equivalent: when ``ends_at IS
-    NULL`` and ``starts_at < now``, ``event_not_ended_filter`` evaluates to
-    SQL NULL (three-valued logic on ``ends_at >= now``), and ``NOT NULL`` is
-    also NULL — which a WHERE clause treats as non-matching. That silently
-    excludes exactly the ended, no-``ends_at`` events callers usually mean to
-    catch (e.g. bulk-cancelling stale drafts), so build the negation
-    explicitly instead of negating the nullable expression.
+    Also written via ``coalesce`` (see ``event_not_ended_filter``) so it hits
+    the same index. Unlike the old OR form, ``coalesce(...) < now`` carries
+    no three-valued-logic trap: ``coalesce`` never evaluates to NULL here
+    (``starts_at`` is NOT NULL), so this is safe to use directly — no need to
+    build the negation of ``event_not_ended_filter`` by hand.
     """
-    return or_(
-        entity.ends_at < now,
-        and_(entity.ends_at.is_(None), entity.starts_at < now),
-    )
+    return func.coalesce(entity.ends_at, entity.starts_at) < now
 
 
 def mask_email(email: str) -> str:

@@ -152,7 +152,15 @@ def check_admin_lockout(key: str) -> float:
     time.monotonic() for the caller to reuse (avoids a second clock read).
     Shared by _require_admin (Basic auth) and routers/admin_auth.py's form
     login — ticket #154 requires both auth surfaces to share one lockout
-    counter rather than each getting its own damper."""
+    counter rather than each getting its own damper.
+
+    Opportunistically drops `key`'s entry once its lockout has expired
+    (locked_until > 0.0 and now >= locked_until) — otherwise nothing ever
+    removes an expired entry, so once the LRU (ADMIN_AUTH_FAILURES_MAX_ENTRIES)
+    saturates it stays saturated and every subsequent failure pays the
+    eviction scan. A never-locked entry (locked_until == 0.0, still under
+    ADMIN_AUTH_MAX_FAILURES) is left alone — dropping it would reset the
+    consecutive-failure count this dict exists to track."""
     now = time.monotonic()
     _count, locked_until = _admin_auth_failures.get(key, (0, 0.0))
     if now < locked_until:
@@ -160,6 +168,8 @@ def check_admin_lockout(key: str) -> float:
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail=ERROR_ADMIN_LOCKOUT,
         )
+    if locked_until > 0.0:
+        _admin_auth_failures.pop(key, None)
     return now
 
 

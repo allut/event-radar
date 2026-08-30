@@ -139,38 +139,35 @@ class TestEventNotEndedFilter:
     """Compiled-SQL checks — the predicate has no Python-side evaluation path,
     so correctness is verified against the literal-bound SQL it produces."""
 
-    def test_compiles_to_ends_at_or_starts_at_fallback(self):
+    def test_compiles_to_sargable_coalesce_form(self):
         now = datetime(2026, 6, 25, tzinfo=timezone.utc)
         compiled = str(
             event_not_ended_filter(now).compile(
                 compile_kwargs={"literal_binds": True}
             )
         )
-        # Live if ends_at hasn't passed yet...
-        assert "events.ends_at >=" in compiled
-        # ...or, when ends_at is unset, live if starts_at hasn't passed yet.
-        assert "events.ends_at IS NULL" in compiled
-        assert "events.starts_at >=" in compiled
+        # Live if ends_at hasn't passed yet, falling back to starts_at when
+        # ends_at is unset — written via coalesce() so it's sargable against
+        # ix_events_live_until ON events (coalesce(ends_at, starts_at)),
+        # unlike the equivalent OR form.
+        assert "coalesce(events.ends_at, events.starts_at) >=" in compiled
         assert "2026-06-25" in compiled
 
 
 class TestEventEndedFilter:
-    """event_ended_filter must NOT be ``not_(event_not_ended_filter(...))`` —
-    negating that expression hits SQL three-valued logic: for an ended event
-    with ``ends_at IS NULL``, ``event_not_ended_filter`` evaluates to NULL
-    (via ``ends_at >= now``), and ``NOT NULL`` is also NULL, which a WHERE
-    clause treats as non-matching. event_ended_filter must build the
-    complement directly using ``<`` comparisons so it has no such gap."""
+    """event_ended_filter is the complement of event_not_ended_filter, also
+    written via coalesce() so it hits the same expression index. Unlike the
+    old OR form, coalesce(ends_at, starts_at) is never NULL (starts_at is
+    NOT NULL), so a plain ``<`` comparison has no three-valued-logic gap —
+    no need to build the negation by hand."""
 
-    def test_compiles_without_negating_a_nullable_comparison(self):
+    def test_compiles_to_sargable_coalesce_form(self):
         now = datetime(2026, 6, 25, tzinfo=timezone.utc)
         compiled = str(
             event_ended_filter(now).compile(compile_kwargs={"literal_binds": True})
         )
         assert "NOT" not in compiled.upper()
-        assert "events.ends_at <" in compiled
-        assert "events.ends_at IS NULL" in compiled
-        assert "events.starts_at <" in compiled
+        assert "coalesce(events.ends_at, events.starts_at) <" in compiled
         assert "2026-06-25" in compiled
 
 

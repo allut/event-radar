@@ -156,10 +156,10 @@ export default function VenuePicker({ id, value, onChange, locale, contentLang, 
     },
   });
 
-  const matches = useMemo(
-    () => venues.filter((v) => v.name.toLowerCase().includes(query.trim().toLowerCase())),
-    [venues, query],
-  );
+  const matches = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+    return venues.filter((v) => v.name.toLowerCase().includes(normalizedQuery));
+  }, [venues, query]);
 
   function selectSaved(venue: SavedVenue) {
     onChange({ mode: 'saved', venueId: venue.id });

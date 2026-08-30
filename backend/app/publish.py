@@ -1,6 +1,6 @@
 """Publish gate — promotes qualifying classified events to published."""
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import cast
 
 from sqlalchemy import and_, case, func, or_, select, update
@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.constants import (
     EVENT_STATUS_CLASSIFIED,
     EVENT_STATUS_PUBLISHED,
+    PUBLISH_DIAGNOSTICS_WINDOW_DAYS,
     PUBLISH_MIN_QUALITY_SCORE,
     TALLINN_REGION_BBOX,
     TALLINN_TZ,
@@ -62,7 +63,9 @@ async def publish_pending(
     After the UPDATE, a diagnostic SELECT over the events still left in
     'classified' (the rejects) breaks down per-reason counts. Reasons are
     non-exclusive — one event can fail several gates — so they need not sum
-    to the total reject count.
+    to the total reject count. Bounded to the last PUBLISH_DIAGNOSTICS_WINDOW_DAYS
+    (by starts_at) — an operator signal about recent rejects, not an all-time
+    audit total; see PUBLISH_DIAGNOSTICS_WINDOW_DAYS in constants.py.
     """
     now = datetime.now(TALLINN_TZ)
     lat_min, lat_max, lng_min, lng_max = TALLINN_REGION_BBOX
@@ -156,7 +159,11 @@ async def publish_pending(
         )
         .select_from(Event)
         .outerjoin(EventClassification, EventClassification.event_id == Event.id)
-        .where(Event.status == EVENT_STATUS_CLASSIFIED)
+        .where(
+            Event.status == EVENT_STATUS_CLASSIFIED,
+            Event.starts_at
+            >= now - timedelta(days=PUBLISH_DIAGNOSTICS_WINDOW_DAYS),
+        )
     )
     reject_row = (await db.execute(reject_stmt)).one()
     summary.update(
