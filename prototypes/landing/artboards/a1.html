@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="en" class="ab">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>A1 · dark-editorial</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Manrope:wght@200..800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#13161e; --ink-deep:#0f1119; --paper:#e4dfd6;
+  --gold:#c8922a; --gold-dim:rgba(200,146,42,.32);
+  --soft:#9fb0c8; --muted:#7a8ba3; --rule:#2a3244; --rule-fine:#1e2534;
+  --display:'Cormorant Garamond',Georgia,serif;
+  --body:'Manrope',system-ui,sans-serif;
+  --gut:clamp(20px,2.6vw,38px);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--ink);color:var(--paper);font-family:var(--body);font-weight:350;
+  -webkit-font-smoothing:antialiased;font-size:15px;line-height:1.6}
+.wrap{max-width:1180px;margin:0 auto;padding:0 var(--gut) 0}
+a{color:inherit}
+
+/* ---------- masthead ---------- */
+.masthead{padding-top:26px}
+.dateline{display:flex;justify-content:space-between;align-items:baseline;gap:16px;
+  font-size:10.5px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:var(--muted)}
+.dateline b{color:var(--gold);font-weight:700}
+.wordmark{font-family:var(--display);font-weight:300;font-size:clamp(38px,6.4vw,74px);
+  line-height:.96;letter-spacing:-.022em;margin:12px 0 10px;color:var(--paper)}
+.wordmark em{font-style:italic;color:var(--gold)}
+.rule{height:1px;background:var(--rule);transform-origin:left;animation:draw .9s var(--e) both}
+.rule.double{height:4px;background:
+  linear-gradient(var(--rule),var(--rule)) top/100% 1px no-repeat,
+  linear-gradient(var(--rule),var(--rule)) bottom/100% 1px no-repeat;}
+.rule.gold{background:var(--gold-dim)}
+:root{--e:cubic-bezier(.22,.61,.36,1)}
+@keyframes draw{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+
+/* ---------- lead ---------- */
+.lead{display:grid;grid-template-columns:minmax(0,7.2fr) 1px minmax(0,3.4fr);gap:0 clamp(22px,3vw,44px);
+  padding:30px 0 0}
+.vrule{background:var(--rule-fine)}
+.eyebrow{font-size:10.5px;font-weight:800;letter-spacing:.2em;text-transform:uppercase;color:var(--gold);
+  display:flex;align-items:center;gap:10px}
+.eyebrow:after{content:"";flex:1;height:1px;background:var(--gold-dim)}
+h1{font-family:var(--display);font-weight:300;font-size:clamp(44px,6.9vw,86px);line-height:.98;
+  letter-spacing:-.025em;margin:18px 0 0}
+h1 .l{display:block;overflow:hidden;padding-bottom:.14em;margin-bottom:-.14em}
+h1 .l>span{display:block;animation:rise 1s var(--e) both}
+h1 .l:nth-child(1)>span{animation-delay:.05s}
+h1 .l:nth-child(2)>span{animation-delay:.16s}
+h1 .l:nth-child(3)>span{animation-delay:.27s}
+h1 i{font-style:italic;color:var(--gold)}
+@keyframes rise{from{transform:translateY(105%)}to{transform:translateY(0)}}
+
+.standfirst{margin:22px 0 0;font-size:17px;line-height:1.62;color:var(--paper);max-width:56ch;column-count:2;
+  column-gap:34px;column-rule:1px solid var(--rule-fine)}
+.standfirst p{margin:0 0 .8em}
+.standfirst p:first-child:first-letter{font-family:var(--display);float:left;font-size:74px;line-height:.72;
+  padding:8px 10px 0 0;color:var(--gold);font-weight:400}
+.byline{margin-top:16px;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+
+/* ---------- capture ---------- */
+.capture{margin-top:26px;border-top:1px solid var(--rule);padding-top:18px}
+.capture h2{margin:0;font-family:var(--display);font-weight:400;font-size:26px;letter-spacing:-.01em}
+.form{display:flex;gap:0;margin-top:12px;max-width:520px;border-bottom:1px solid var(--gold-dim)}
+.form input{flex:1;min-width:0;background:transparent;border:0;color:var(--paper);font:inherit;font-size:16px;
+  padding:10px 2px}
+.form input::placeholder{color:var(--muted)}
+.form input:focus{outline:none;box-shadow:0 2px 0 var(--gold)}
+.form button{background:transparent;border:0;color:var(--gold);font:inherit;font-weight:800;font-size:12.5px;
+  letter-spacing:.14em;text-transform:uppercase;padding:10px 0 10px 18px;cursor:pointer;white-space:nowrap}
+.form button:hover{color:var(--paper)}
+.micro{margin:9px 0 0;font-size:12px;color:var(--muted)}
+
+/* ---------- rail ---------- */
+.rail{padding-top:2px}
+.railhead{display:flex;justify-content:space-between;align-items:baseline;
+  font-size:10.5px;font-weight:800;letter-spacing:.18em;text-transform:uppercase;color:var(--soft)}
+.railhead b{font-family:var(--display);font-size:26px;font-weight:400;letter-spacing:0;color:var(--gold)}
+.list{list-style:none;margin:12px 0 0;padding:0}
+.list li{display:grid;grid-template-columns:46px 1fr auto;gap:0 12px;padding:11px 0;
+  border-top:1px solid var(--rule-fine);animation:fade .7s var(--e) both}
+.list li:nth-child(1){animation-delay:.30s}.list li:nth-child(2){animation-delay:.38s}
+.list li:nth-child(3){animation-delay:.46s}.list li:nth-child(4){animation-delay:.54s}
+.list li:nth-child(5){animation-delay:.62s}
+@keyframes fade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.t{font-variant-numeric:tabular-nums;font-weight:700;font-size:12.5px;color:var(--gold);padding-top:2px}
+.ti{font-weight:600;font-size:14px;line-height:1.3;letter-spacing:-.005em}
+.vn{display:block;font-weight:350;font-size:12px;color:var(--muted);margin-top:3px}
+.pr{font-variant-numeric:tabular-nums;font-size:12.5px;color:var(--soft);padding-top:2px}
+.desk{margin-top:24px;border-top:1px solid var(--rule);padding-top:14px}
+.desk dt{font-size:10.5px;font-weight:800;letter-spacing:.18em;text-transform:uppercase;color:var(--soft)}
+.desk dd{margin:10px 0 0;font-size:13px;color:var(--soft);line-height:1.75}
+.desk dd span{color:var(--muted);font-variant-numeric:tabular-nums}
+
+/* ---------- plate ---------- */
+.plate{margin:34px 0 0;height:clamp(200px,26vw,300px);position:relative;overflow:hidden;border-top:1px solid var(--rule);
+  border-bottom:1px solid var(--rule)}
+.plate i{position:absolute;inset:0;
+  background:
+    radial-gradient(120% 90% at 18% 110%,rgba(200,146,42,.55),transparent 58%),
+    radial-gradient(70% 60% at 74% 18%,rgba(159,176,200,.35),transparent 60%),
+    linear-gradient(168deg,#1b2231,#0d1017 62%,#171d29);
+  filter:saturate(.85)}
+.plate i:after{content:"";position:absolute;inset:0;opacity:.5;mix-blend-mode:overlay;
+  background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E")}
+.cap{position:absolute;left:0;bottom:0;padding:10px 14px;background:rgba(19,22,30,.86);
+  font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--soft)}
+.cap b{color:var(--gold);font-weight:700}
+.ab.noimg .plate{display:none}
+
+/* ---------- process ---------- */
+.sec{padding:52px 0 0}
+.sechead{display:flex;align-items:baseline;justify-content:space-between;gap:20px;padding-bottom:14px}
+.sechead h2{margin:0;font-family:var(--display);font-weight:400;font-size:clamp(28px,3.4vw,42px);
+  letter-spacing:-.015em}
+.sechead p{margin:0;font-size:12px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase}
+.steps{display:grid;grid-template-columns:1.25fr 1fr .85fr;gap:0}
+.step{padding:20px 30px 26px 0;border-top:1px solid var(--rule);border-right:1px solid var(--rule-fine)}
+.step:last-child{border-right:0;padding-right:0}
+.step:nth-child(2),.step:nth-child(3){padding-left:30px}
+.num{font-family:var(--display);font-size:52px;line-height:1;font-weight:300;color:var(--gold);
+  font-variant-numeric:lining-nums}
+.step h3{margin:6px 0 8px;font-size:17px;font-weight:700;letter-spacing:-.01em}
+.step p{margin:0;font-size:14px;color:var(--soft);line-height:1.65}
+
+/* ---------- figures ---------- */
+.figs{display:grid;grid-template-columns:repeat(5,1fr);margin-top:14px;border-top:1px solid var(--rule)}
+.fig{padding:18px 16px 18px 0;border-right:1px solid var(--rule-fine)}
+.fig:last-child{border-right:0}
+.fig:not(:first-child){padding-left:16px}
+.fig b{display:block;font-family:var(--display);font-weight:400;font-size:clamp(30px,3.6vw,46px);line-height:1;
+  color:var(--paper);font-variant-numeric:lining-nums}
+.fig span{display:block;margin-top:8px;font-size:11.5px;color:var(--muted);line-height:1.45}
+
+/* ---------- classified ---------- */
+.classified{margin-top:52px;border:1px solid var(--gold-dim);padding:26px 28px;
+  display:grid;grid-template-columns:1fr auto;gap:24px;align-items:end}
+.classified .eyebrow{color:var(--gold)}
+.classified .eyebrow:after{display:none}
+.classified h3{margin:12px 0 6px;font-family:var(--display);font-weight:400;font-size:32px;letter-spacing:-.015em}
+.classified p{margin:0;font-size:14px;color:var(--soft);max-width:52ch}
+.btn{display:inline-block;border:1px solid var(--gold);color:var(--gold);text-decoration:none;
+  padding:11px 22px;font-size:12px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;white-space:nowrap;
+  transition:background .2s,color .2s}
+.btn:hover{background:var(--gold);color:var(--ink)}
+
+/* ---------- colophon ---------- */
+.colophon{margin-top:46px;border-top:1px solid var(--rule);padding:16px 0 46px;
+  display:flex;flex-wrap:wrap;gap:6px 22px;font-size:11px;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--muted)}
+.colophon b{color:var(--soft);font-weight:700}
+
+@media(max-width:860px){
+  .lead{grid-template-columns:1fr}.vrule{display:none}
+  .rail{margin-top:34px;border-top:1px solid var(--rule);padding-top:18px}
+  .standfirst{column-count:1}
+  .steps{grid-template-columns:1fr}
+  .step{border-right:0;padding:18px 0 22px!important}
+  .figs{grid-template-columns:repeat(2,1fr)}
+  .fig{border-bottom:1px solid var(--rule-fine)}
+  .classified{grid-template-columns:1fr}
+}
+@media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important}}
+.ab.rm *,.ab.rm *:before,.ab.rm *:after{animation:none!important;transition:none!important}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="masthead">
+    <div class="dateline">
+      <span>Nº 31 · Sunday 31 August 2026</span>
+      <span><b>1 008</b> events on the radar</span>
+      <span>Tallinn · 59°26′N 24°45′E</span>
+    </div>
+    <h1 class="wordmark">What&rsquo;s on <em>Radar</em></h1>
+    <div class="rule double"></div>
+  </header>
+
+  <div class="lead">
+    <div>
+      <p class="eyebrow">The weekend scan</p>
+      <h1>
+        <span class="l"><span>Five events worth</span></span>
+        <span class="l"><span>leaving the <i>house</i></span></span>
+        <span class="l"><span>for.</span></span>
+      </h1>
+
+      <div class="standfirst">
+        <p>Every hour, this page reads Fienta, Piletilevi, KUMU and the Estonia Concert Hall, plus what organisers file themselves. It removes the duplicates, sorts 1 008 upcoming events into fourteen categories, and at six each morning picks the five that match how you actually go out.</p>
+        <p>Not a listings dump. Not an algorithmic firehose. Five, chosen against your taste, in your inbox by seven — in English, Eesti or Русский.</p>
+      </div>
+      <p class="byline">Compiled hourly · 205 venues · booked into 2027</p>
+
+      <section class="capture">
+        <h2>Get the Daily 5</h2>
+        <form class="form" onsubmit="return false">
+          <input type="email" placeholder="you@example.com" aria-label="Email address">
+          <button type="submit">Send me a link →</button>
+        </form>
+        <p class="micro">No password, ever. One email at 06:00. Unsubscribe from any of them in one click.</p>
+      </section>
+    </div>
+
+    <div class="vrule"></div>
+
+    <aside class="rail">
+      <div class="railhead"><span>Tonight in Tallinn</span><b>8</b></div>
+      <ul class="list">
+        <li><span class="t">18:00</span><span><span class="ti">Elu on unenägu</span><span class="vn">Tallinna Linnateater, Suur saal</span></span><span class="pr">€32</span></li>
+        <li><span class="t">19:00</span><span><span class="ti">Avamine</span><span class="vn">Linnateater, Kammersaal</span></span><span class="pr">—</span></li>
+        <li><span class="t">19:00</span><span><span class="ti">Ma ei märganudki, millal sa läksid</span><span class="vn">Sakala 3 teatrimaja</span></span><span class="pr">€25</span></li>
+        <li><span class="t">20:00</span><span><span class="ti">Robin Täpp “DRIVE-IN”</span><span class="vn">Kanuti Gildi SAAL</span></span><span class="pr">€9.50</span></li>
+        <li><span class="t">21:00</span><span><span class="ti">Ükskõik Open Mic</span><span class="vn">Ükskõik Baar</span></span><span class="pr">€10</span></li>
+      </ul>
+      <dl class="desk">
+        <dt>The desk</dt>
+        <dd>
+          Piletilevi <span>752</span><br>
+          Fienta <span>663</span><br>
+          KUMU <span>31</span><br>
+          Estonia Concert Hall <span>11</span><br>
+          Organisers, direct <span>·</span>
+        </dd>
+      </dl>
+    </aside>
+  </div>
+
+  <figure class="plate">
+    <i></i>
+    <figcaption class="cap">Tonight, 20:00 · <b>Robin Täpp “DRIVE-IN”</b> · Kanuti Gildi SAAL · €9.50</figcaption>
+  </figure>
+
+  <section class="sec">
+    <div class="sechead">
+      <h2>How the five are chosen</h2>
+      <p>Three steps · runs daily</p>
+    </div>
+    <div class="steps">
+      <article class="step">
+        <div class="num">01</div>
+        <h3>Pick your vibe</h3>
+        <p>Tell us the kind of entertainment you like — clubs, galleries, workshops, family days. Fourteen categories, ten vibes.</p>
+      </article>
+      <article class="step">
+        <div class="num">02</div>
+        <h3>We scan the city</h3>
+        <p>Every venue, ticket site and gallery in Tallinn, read hourly, de-duplicated and ranked for you.</p>
+      </article>
+      <article class="step">
+        <div class="num">03</div>
+        <h3>Open your inbox</h3>
+        <p>Five events matched to your taste, waiting each morning. Never more than two from one category.</p>
+      </article>
+    </div>
+  </section>
+
+  <section class="sec" style="padding-top:44px">
+    <div class="sechead">
+      <h2>By the numbers</h2>
+      <p>Recounted at every build</p>
+    </div>
+    <div class="figs">
+      <div class="fig"><b>1 008</b><span>upcoming events, published right now</span></div>
+      <div class="fig"><b>205</b><span>venues across Tallinn</span></div>
+      <div class="fig"><b>14</b><span>categories, from theatre to nightlife</span></div>
+      <div class="fig"><b>2027</b><span>the furthest night already on the books</span></div>
+      <div class="fig"><b>€1</b><span>the cheapest ticket in the catalogue</span></div>
+    </div>
+  </section>
+
+  <section class="classified">
+    <div>
+      <p class="eyebrow">Classified · for organisers</p>
+      <h3>Put your event on the radar.</h3>
+      <p>List it yourself. It reaches the feed within seconds, and it stays yours to edit — no fee, no commission, no middleman.</p>
+    </div>
+    <a class="btn" href="#">List your event →</a>
+  </section>
+
+  <footer class="colophon">
+    <span><b>No password</b></span><span><b>No tracking</b></span><span><b>No fee</b></span>
+    <span>English · Eesti · Русский</span>
+    <span>Digest 07:00 Europe/Tallinn</span>
+    <span>What&rsquo;s on Radar, Tallinn</span>
+  </footer>
+</div>
+</body>
+</html>

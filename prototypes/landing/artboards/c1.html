@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="et" class="ab">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>C1 · cinematic-on-brand</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400&family=Manrope:wght@200..800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#13161e;--ink-deep:#0b0d13;--paper:#e4dfd6;--gold:#c8922a;--gold-lt:#e8a838;
+  --soft:#9fb0c8;--muted:#7a8ba3;--dim:#3d4d65;--rule:#242c3d;
+  --display:'Cormorant Garamond',Georgia,serif;
+  --body:'Manrope',system-ui,sans-serif;
+  --e:cubic-bezier(.22,.61,.36,1);
+  --grain:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--ink);color:var(--paper);font-family:var(--body);font-size:15px;line-height:1.62;
+  font-weight:400;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1240px;margin:0 auto;padding:0 clamp(18px,3vw,44px)}
+.lab{font-size:10.5px;font-weight:800;letter-spacing:.2em;text-transform:uppercase}
+
+/* --- hero poster --- */
+.hero{position:relative;min-height:min(92vh,760px);display:flex;flex-direction:column;justify-content:space-between;
+  overflow:hidden;border-bottom:1px solid rgba(200,146,42,.35)}
+.poster{position:absolute;inset:0}
+.poster .img{position:absolute;inset:-4%;background-size:cover;animation:drift 26s var(--e) infinite alternate}
+@keyframes drift{from{transform:scale(1.0) translateY(0)}to{transform:scale(1.09) translateY(-1.6%)}}
+.h-img{background:
+  radial-gradient(60% 55% at 68% 26%,rgba(232,168,56,.55),transparent 62%),
+  radial-gradient(70% 60% at 22% 88%,rgba(90,120,175,.42),transparent 66%),
+  linear-gradient(175deg,#1c2434,#0a0c12 58%,#191320)}
+.poster .img:after{content:"";position:absolute;inset:0;background:var(--grain);opacity:.34;mix-blend-mode:overlay}
+.scrim{position:absolute;inset:0;background:
+  linear-gradient(0deg,rgba(11,13,19,.94) 6%,rgba(11,13,19,.55) 42%,rgba(11,13,19,.72));}
+.frame{position:absolute;inset:clamp(14px,2vw,26px);border:1px solid rgba(200,146,42,.28);pointer-events:none}
+.ab.noimg .poster .img{background:linear-gradient(175deg,#1a2030,#0d1017)}
+.ab.noimg .frame{border-color:var(--rule)}
+
+.hero-top{position:relative;padding:clamp(26px,3.4vw,44px) 0 0}
+.hero-top .wrap{display:flex;justify-content:space-between;align-items:baseline;gap:16px;flex-wrap:wrap}
+.mark{font-family:var(--display);font-size:clamp(20px,2.2vw,27px);font-weight:400;letter-spacing:-.015em}
+.mark em{font-style:italic;color:var(--gold)}
+.hero-top .lab{color:var(--soft)}
+.hero-top .lab b{color:var(--gold)}
+
+.hero-bot{position:relative;padding-bottom:clamp(26px,3.4vw,46px)}
+.hero-bot .lab{color:var(--gold)}
+h1{font-family:var(--display);font-weight:300;font-size:clamp(46px,8.4vw,116px);line-height:.94;
+  letter-spacing:-.03em;margin:14px 0 0;max-width:16ch;text-wrap:balance}
+h1 i{font-style:italic;color:var(--gold)}
+h1 .l{display:block;overflow:hidden;padding-bottom:.14em;margin-bottom:-.14em}
+h1 .l>span{display:block;animation:rise 1.15s var(--e) both}
+h1 .l:nth-child(2)>span{animation-delay:.12s}h1 .l:nth-child(3)>span{animation-delay:.24s}
+@keyframes rise{from{transform:translateY(104%)}to{transform:translateY(0)}}
+.hero-bot p.sub{margin:20px 0 0;max-width:52ch;color:#cbd3de;font-size:16px}
+.cutline{margin-top:26px;height:1px;background:linear-gradient(90deg,var(--gold),rgba(200,146,42,0) 72%);
+  transform-origin:left;animation:draw 1.4s var(--e) .5s both}
+@keyframes draw{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+.capbar{margin-top:22px;display:flex;gap:22px;align-items:flex-end;flex-wrap:wrap}
+.form{display:flex;flex:1;min-width:280px;max-width:520px;border-bottom:1px solid rgba(200,146,42,.5)}
+.form input{flex:1;min-width:0;background:transparent;border:0;color:var(--paper);font:inherit;font-size:17px;padding:10px 0}
+.form input::placeholder{color:var(--muted)}
+.form input:focus{outline:none;box-shadow:0 2px 0 var(--gold)}
+.form button{background:transparent;border:0;color:var(--gold);font:inherit;font-weight:800;font-size:11.5px;
+  letter-spacing:.16em;text-transform:uppercase;padding:0 0 0 18px;cursor:pointer;white-space:nowrap}
+.form button:hover{color:var(--paper)}
+.capbar .fine{margin:0;font-size:12px;color:var(--muted);max-width:36ch}
+
+/* --- ticker --- */
+.ticker{border-bottom:1px solid var(--rule);background:var(--ink-deep);overflow:hidden}
+.tk{display:flex;align-items:center}
+.tk-h{flex:0 0 auto;padding:11px clamp(18px,3vw,44px) 11px;border-right:1px solid var(--rule);color:var(--gold);
+  white-space:nowrap}
+.tk-view{overflow:hidden;flex:1}
+.tk-track{display:flex;gap:0;white-space:nowrap;animation:slide 42s linear infinite}
+@keyframes slide{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+.tk-track span{padding:11px 22px;font-size:12.5px;color:var(--soft);border-right:1px solid var(--rule)}
+.tk-track b{color:var(--gold);font-weight:700;font-variant-numeric:tabular-nums;margin-right:8px}
+
+/* --- stacked posters --- */
+.plate{position:relative;min-height:min(78vh,620px);display:flex;align-items:flex-end;overflow:hidden;
+  border-bottom:1px solid var(--rule)}
+.p1 .img{background:
+  linear-gradient(108deg,rgba(255,228,186,.16) 0 13%,transparent 36%),
+  radial-gradient(110% 85% at 26% 8%,rgba(232,168,56,.42),transparent 60%),
+  linear-gradient(195deg,#33261a,#0c0e13 72%)}
+.p2 .img{background:
+  linear-gradient(66deg,rgba(198,220,255,.14) 0 15%,transparent 38%),
+  radial-gradient(115% 88% at 80% 96%,rgba(120,150,205,.40),transparent 62%),
+  linear-gradient(160deg,#1a2334,#0a0c12 74%)}
+.p3 .img{background:
+  linear-gradient(190deg,rgba(255,214,150,.18) 0 11%,transparent 32%),
+  radial-gradient(120% 80% at 50% 4%,rgba(200,146,42,.38),transparent 58%),
+  linear-gradient(200deg,#271d26,#0b0d13 72%)}
+.plate .scrim{background:linear-gradient(0deg,rgba(11,13,19,.95) 12%,rgba(11,13,19,.35) 60%,rgba(11,13,19,.6))}
+.plate.right{justify-content:flex-end}
+.plate .wrap{position:relative;width:100%;padding-top:clamp(50px,7vw,110px);padding-bottom:clamp(28px,3.6vw,52px)}
+.plate .inner{max-width:600px}
+.plate.right .inner{margin-left:auto}
+.plate .lab{color:var(--gold)}
+.plate h2{font-family:var(--display);font-weight:300;font-size:clamp(32px,5vw,64px);line-height:1.0;
+  letter-spacing:-.025em;margin:12px 0 0}
+.plate h2 i{font-style:italic;color:var(--gold)}
+.plate p{margin:16px 0 0;color:#cbd3de;font-size:15px;max-width:46ch}
+.hair{margin-top:22px;height:1px;background:rgba(200,146,42,.55);width:64%}
+.meta{display:flex;gap:0;margin-top:14px;flex-wrap:wrap}
+.meta span{font-size:11px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;color:var(--soft);
+  padding:0 14px;border-left:1px solid var(--rule)}
+.meta span:first-child{padding-left:0;border-left:0}
+
+/* --- flat section (reads without imagery) --- */
+.flat{padding:clamp(42px,5.6vw,80px) 0}
+.flat-h{display:grid;grid-template-columns:minmax(0,1fr) minmax(260px,.7fr);gap:0 clamp(24px,4vw,64px);
+  align-items:end;padding-bottom:26px;border-bottom:1px solid var(--rule)}
+.flat-h h2{font-family:var(--display);font-weight:300;font-size:clamp(30px,4.4vw,56px);line-height:1.02;
+  letter-spacing:-.025em;margin:10px 0 0;max-width:16ch}
+.flat-h p{margin:0;color:var(--soft);font-size:14.5px}
+.steps{display:grid;grid-template-columns:1.25fr 1fr .85fr}
+.st{padding:24px 30px 26px 0;border-right:1px solid var(--rule)}
+.st+.st{padding-left:30px}.st:last-child{border-right:0;padding-right:0}
+.st b{font-family:var(--display);font-size:44px;font-weight:300;color:var(--gold);line-height:1;display:block}
+.st h3{margin:8px 0 8px;font-size:18px;font-weight:700;letter-spacing:-.01em}
+.st p{margin:0;color:var(--soft);font-size:14px}
+.figs{display:grid;grid-template-columns:repeat(5,1fr);border-top:1px solid var(--rule)}
+.f{padding:22px 16px 22px 0;border-right:1px solid var(--rule)}
+.f+.f{padding-left:16px}.f:last-child{border-right:0}
+.f b{display:block;font-family:var(--display);font-weight:300;font-size:clamp(30px,3.8vw,48px);line-height:1;
+  font-variant-numeric:tabular-nums}
+.f span{display:block;margin-top:8px;font-size:11.5px;color:var(--muted);line-height:1.5}
+
+/* organiser */
+.org{border-top:1px solid var(--rule);padding:34px 0;display:grid;grid-template-columns:1fr auto;gap:24px;
+  align-items:center}
+.org .lab{color:var(--gold)}
+.org h3{font-family:var(--display);font-weight:300;font-size:clamp(28px,3.8vw,46px);margin:10px 0 8px;letter-spacing:-.025em}
+.org p{margin:0;color:var(--soft);font-size:14.5px;max-width:54ch}
+.org a{border:1px solid var(--gold);color:var(--gold);text-decoration:none;padding:14px 24px;font-size:11.5px;
+  font-weight:800;letter-spacing:.16em;text-transform:uppercase;white-space:nowrap;transition:.2s}
+.org a:hover{background:var(--gold);color:var(--ink)}
+footer{border-top:1px solid var(--rule);padding:16px 0 42px;display:flex;flex-wrap:wrap;gap:6px 22px}
+footer span{font-size:10.5px;font-weight:700;letter-spacing:.15em;text-transform:uppercase;color:var(--dim)}
+
+@media(max-width:880px){
+  .plate .inner{max-width:none}
+  .plate.right .inner{margin-left:0}
+  .steps{grid-template-columns:1fr}
+  .st{border-right:0;padding:18px 0 22px!important;border-top:1px solid var(--rule)}
+  .figs{grid-template-columns:repeat(2,1fr)}
+  .f{border-right:0;padding-left:0!important}
+  .org{grid-template-columns:1fr}
+  .flat-h{grid-template-columns:1fr;gap:16px}
+}
+@media(prefers-reduced-motion:reduce){
+  *,*:before,*:after{animation:none!important;transition:none!important}
+  .tk-track{flex-wrap:wrap;white-space:normal}
+}
+.ab.rm *,.ab.rm *:before,.ab.rm *:after{animation:none!important;transition:none!important}
+.ab.rm .tk-track{flex-wrap:wrap;white-space:normal}
+</style>
+</head>
+<body>
+
+<section class="hero">
+  <div class="poster"><div class="img h-img"></div><div class="scrim"></div></div>
+  <div class="frame"></div>
+
+  <div class="hero-top">
+    <div class="wrap">
+      <span class="mark">What&rsquo;s on <em>Radar</em></span>
+      <span class="lab"><b>1 008</b> sündmust radaril &nbsp;·&nbsp; 205 toimumispaika &nbsp;·&nbsp; täna õhtul <b>8</b></span>
+    </div>
+  </div>
+
+  <div class="hero-bot">
+    <div class="wrap">
+      <p class="lab">Pühapäev, 31. august · Tallinn</p>
+      <h1>
+        <span class="l"><span>Viis sündmust, mille</span></span>
+        <span class="l"><span>pärast tasub kodust</span></span>
+        <span class="l"><span><i>välja</i> minna.</span></span>
+      </h1>
+      <p class="sub">Skannime iga tund kogu linna — piletimüüjad, teatrid, galeriid — ja saadame hommikul kell seitse viis sündmust, mis sobivad just sinule.</p>
+      <div class="cutline"></div>
+      <div class="capbar">
+        <form class="form" onsubmit="return false">
+          <input type="email" placeholder="sina@example.ee" aria-label="E-posti aadress">
+          <button>Saada mulle link →</button>
+        </form>
+        <p class="fine">Parooli pole vaja. Link kehtib 15 minutit, kiri tuleb kell 07:00.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="ticker">
+  <div class="tk">
+    <span class="tk-h lab">Täna õhtul</span>
+    <div class="tk-view">
+      <div class="tk-track">
+        <span><b>18:00</b>Elu on unenägu · Tallinna Linnateater</span>
+        <span><b>19:00</b>Ma ei märganudki, millal sa läksid · Sakala 3</span>
+        <span><b>19:30</b>Ekskursioonid hämarikus · Tallinna Loomaaed</span>
+        <span><b>20:00</b>Robin Täpp „DRIVE-IN“ · Kanuti Gildi SAAL</span>
+        <span><b>21:00</b>Ükskõik Open Mic · Ükskõik Baar</span>
+        <span><b>22:00</b>Sauna Social + Bar · Heldeke!</span>
+        <span><b>18:00</b>Elu on unenägu · Tallinna Linnateater</span>
+        <span><b>19:00</b>Ma ei märganudki, millal sa läksid · Sakala 3</span>
+        <span><b>19:30</b>Ekskursioonid hämarikus · Tallinna Loomaaed</span>
+        <span><b>20:00</b>Robin Täpp „DRIVE-IN“ · Kanuti Gildi SAAL</span>
+        <span><b>21:00</b>Ükskõik Open Mic · Ükskõik Baar</span>
+        <span><b>22:00</b>Sauna Social + Bar · Heldeke!</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<section class="plate p1">
+  <div class="poster"><div class="img"></div><div class="scrim"></div></div>
+  <div class="wrap"><div class="inner">
+    <p class="lab">Neljapäev · 19:00 · Muusika</p>
+    <h2>Hooaja avakontsert.<br><i>Poska ja Elgar.</i></h2>
+    <p>Estonia kontserdisaal, 32 €. Üks 350 muusikasündmusest, mis on praegu kavas — ja üks neist, mis kuulub sinu hommikusse viisikusse, kui klassika on sinu maitse.</p>
+    <div class="hair"></div>
+    <div class="meta"><span>Estonia kontserdisaal</span><span>32 €</span><span>Muusika</span></div>
+  </div></div>
+</section>
+
+<section class="plate p2 right">
+  <div class="poster"><div class="img"></div><div class="scrim"></div></div>
+  <div class="wrap"><div class="inner">
+    <p class="lab">Iga päev · 10:00 · Näitus</p>
+    <h2>Telliskivi peab üksi<br><i>170</i> sündmust aastas.</h2>
+    <p>Ja see on ainult üks aadress 205-st. Kokku toimub Tallinnas umbes seitsekümmend asja nädalas — keegi ei loe seda kõike läbi. Radar loeb, iga tund, ja viskab duplikaadid välja enne, kui sa neid näedki.</p>
+    <div class="hair"></div>
+    <div class="meta"><span>Telliskivi 60a/9</span><span>10 €</span><span>Näitused</span></div>
+  </div></div>
+</section>
+
+<section class="plate p3">
+  <div class="poster"><div class="img"></div><div class="scrim"></div></div>
+  <div class="wrap"><div class="inner">
+    <p class="lab">Igal hommikul · 06:00</p>
+    <h2>Viis valikut.<br>Mitte kunagi kolm <i>ühest</i> žanrist.</h2>
+    <p>Kell kuus valib Radar sinu maitse järgi viis sündmust, piirab iga kategooria kahega ja jätab vahele selle, mida sa oled juba näinud. Kell seitse on kiri postkastis.</p>
+    <div class="hair"></div>
+    <div class="meta"><span>06:00 valik</span><span>07:00 kiri</span><span>Ilma paroolita</span></div>
+  </div></div>
+</section>
+
+<div class="wrap">
+  <section class="flat">
+    <div class="flat-h">
+      <div>
+        <p class="lab" style="color:var(--gold)">Kuidas see töötab</p>
+        <h2>Loodud selle järgi, kuidas sina tegelikult välja lähed.</h2>
+      </div>
+      <p>Vali persoon sisselogimisel — edasi õpib voog ise, sinu salvestuste ja vahelejätmiste põhjal.</p>
+    </div>
+    <div class="steps">
+      <article class="st"><b>01</b><h3>Vali oma meeleolu</h3><p>Klubid, galeriid, töötoad, perepäevad — neliteist kategooriat, kümme meeleolu.</p></article>
+      <article class="st"><b>02</b><h3>Meie skannime linna</h3><p>Fienta, Piletilevi, KUMU, Estonia kontserdisaal ja korraldajad ise — iga tund.</p></article>
+      <article class="st"><b>03</b><h3>Ava oma postkast</h3><p>Viis sündmust ootamas igal hommikul kell seitse.</p></article>
+    </div>
+    <div class="figs">
+      <div class="f"><b>1 008</b><span>tulevast sündmust</span></div>
+      <div class="f"><b>205</b><span>toimumispaika</span></div>
+      <div class="f"><b>14</b><span>kategooriat</span></div>
+      <div class="f"><b>2027</b><span>kaugeim õhtu kavas</span></div>
+      <div class="f"><b>1 €</b><span>odavaim pilet</span></div>
+    </div>
+  </section>
+
+  <section class="org">
+    <div>
+      <p class="lab">Korraldajatele</p>
+      <h3>Pane oma üritus radarile.</h3>
+      <p>Lisa oma üritus ise. See jõuab voogu sekunditega ja jääb sulle igal ajal muudetavaks.</p>
+    </div>
+    <a href="#">Lisa oma üritus →</a>
+  </section>
+
+  <footer>
+    <span>Ilma paroolita</span><span>Ilma jälgimiseta</span><span>Ilma tasuta</span>
+    <span>English · Eesti · Русский</span><span>Tallinn, 2026</span>
+  </footer>
+</div>
+</body>
+</html>

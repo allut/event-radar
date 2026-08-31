@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="en" class="ab">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>B1 · full-instrument</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300&family=JetBrains+Mono:wght@300;400;500;700&family=Manrope:wght@200..800&display=swap" rel="stylesheet">
+<style>
+@property --n{syntax:'<integer>';initial-value:0;inherits:true}
+:root{
+  --ink:#0f1119;--panel:#13161e;--panel-2:#171b26;--paper:#e4dfd6;
+  --gold:#c8922a;--gold-lt:#e8a838;--glow:rgba(200,146,42,.14);
+  --soft:#9fb0c8;--muted:#7a8ba3;--dim:#3d4d65;--rule:#222a3a;--hair:#1a2130;
+  --display:'Cormorant Garamond',Georgia,serif;
+  --body:'Manrope',system-ui,sans-serif;
+  --mono:'JetBrains Mono',ui-monospace,Menlo,monospace;
+  --e:cubic-bezier(.22,.61,.36,1);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--ink);color:var(--paper);font-family:var(--body);font-size:14px;line-height:1.55;
+  -webkit-font-smoothing:antialiased;
+  background-image:linear-gradient(var(--hair) 1px,transparent 1px),linear-gradient(90deg,var(--hair) 1px,transparent 1px);
+  background-size:44px 44px;background-position:-1px -1px}
+.wrap{max-width:1200px;margin:0 auto;padding:0 clamp(16px,2.2vw,30px)}
+.m{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase}
+
+/* source strip */
+.srcbar{border-bottom:1px solid var(--rule);background:rgba(15,17,25,.86);position:relative;overflow:hidden}
+.srcbar:before{content:"";position:absolute;top:0;bottom:0;width:180px;
+  background:linear-gradient(90deg,transparent,var(--glow),transparent);animation:sweepx 7s linear infinite}
+@keyframes sweepx{from{left:-200px}to{left:100%}}
+.srcbar .wrap{display:flex;align-items:center;gap:0;flex-wrap:wrap;padding-top:9px;padding-bottom:9px;position:relative}
+.src{display:flex;align-items:center;gap:7px;padding:0 14px;border-right:1px solid var(--rule);color:var(--muted)}
+.src:first-child{padding-left:0}.src:last-child{border-right:0}
+.src b{color:var(--soft);font-weight:500}
+.dot{width:5px;height:5px;background:var(--gold);border-radius:50%;box-shadow:0 0 0 3px var(--glow);
+  animation:pulse 2.6s var(--e) infinite}
+.dot.late{animation-delay:.9s}.dot.late2{animation-delay:1.7s}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.28}}
+.srcbar .clock{margin-left:auto;color:var(--dim)}
+
+/* hero */
+.hero{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(300px,.95fr);gap:0 clamp(24px,3.4vw,52px);
+  padding:30px 0 34px;align-items:start}
+.coord{display:flex;gap:16px;color:var(--gold);flex-wrap:wrap}
+.coord span{color:var(--muted)}
+h1{font-family:var(--display);font-weight:300;font-size:clamp(40px,5.8vw,76px);line-height:.99;letter-spacing:-.025em;
+  margin:16px 0 0;max-width:14ch}
+h1 i{font-style:italic;color:var(--gold)}
+h1 .l{display:block;overflow:hidden;padding-bottom:.14em;margin-bottom:-.14em}
+h1 .l>span{display:block;animation:rise .95s var(--e) both}
+h1 .l:nth-child(2)>span{animation-delay:.1s}h1 .l:nth-child(3)>span{animation-delay:.2s}
+@keyframes rise{from{transform:translateY(103%)}to{transform:translateY(0)}}
+.sub{margin:18px 0 0;color:var(--soft);max-width:50ch;font-size:15px}
+
+/* command capture */
+.cmd{margin-top:24px;border:1px solid var(--rule);background:var(--panel);max-width:560px}
+.cmd-h{display:flex;justify-content:space-between;padding:7px 12px;border-bottom:1px solid var(--rule);
+  color:var(--muted)}
+.cmd-h b{color:var(--gold);font-weight:500}
+.cmd form{display:flex;align-items:center;gap:8px;padding:12px}
+.caret{font-family:var(--mono);color:var(--gold);font-size:14px;animation:blink 1.15s steps(1) infinite}
+@keyframes blink{50%{opacity:0}}
+.cmd input{flex:1;min-width:0;background:transparent;border:0;color:var(--paper);font-family:var(--mono);
+  font-size:14.5px;padding:4px 0}
+.cmd input::placeholder{color:var(--dim)}
+.cmd input:focus{outline:none}
+.cmd button{background:var(--gold);color:var(--ink);border:0;font-family:var(--mono);font-weight:700;font-size:10.5px;
+  letter-spacing:.12em;text-transform:uppercase;padding:9px 14px;cursor:pointer}
+.cmd button:hover{background:var(--gold-lt)}
+.cmd-f{padding:0 12px 11px;color:var(--dim);font-family:var(--mono);font-size:10.5px;line-height:1.6}
+
+/* counters */
+.gauges{display:flex;margin-top:26px;border-top:1px solid var(--rule);border-bottom:1px solid var(--rule)}
+.g{flex:1;padding:14px 14px 14px 0;border-right:1px solid var(--hair);position:relative}
+.g+.g{padding-left:14px}.g:last-child{border-right:0}
+.g:before{content:"";position:absolute;top:0;left:0;width:10px;height:3px;background:var(--gold)}
+.g b{display:block;font-family:var(--display);font-weight:400;font-size:clamp(28px,3.4vw,42px);line-height:1;
+  font-variant-numeric:tabular-nums;color:var(--paper)}
+.count{--n:1008;animation:c1 2.2s var(--e) .3s both}
+.count:after{content:counter(n);counter-reset:n var(--n)}
+@keyframes c1{from{--n:0}to{--n:1008}}
+.count2{--n:82;animation:c2 1.6s var(--e) .5s both}
+.count2:after{content:counter(n);counter-reset:n var(--n)}
+@keyframes c2{from{--n:0}to{--n:82}}
+.count3{--n:205;animation:c3 1.9s var(--e) .7s both}
+.count3:after{content:counter(n);counter-reset:n var(--n)}
+@keyframes c3{from{--n:0}to{--n:205}}
+.g span{display:block;margin-top:7px;font-family:var(--mono);font-size:10px;letter-spacing:.11em;
+  text-transform:uppercase;color:var(--muted);line-height:1.5}
+
+/* radar */
+.scope{position:relative;aspect-ratio:1;border:1px solid var(--rule);background:
+  radial-gradient(circle at 50% 50%,rgba(200,146,42,.07),transparent 62%),var(--panel);overflow:hidden}
+.ring{position:absolute;inset:0;margin:auto;border:1px solid rgba(159,176,200,.13);border-radius:50%}
+.r1{width:26%;height:26%}.r2{width:52%;height:52%}.r3{width:78%;height:78%}.r4{width:99%;height:99%}
+.cross,.cross2{position:absolute;background:rgba(159,176,200,.11)}
+.cross{left:0;right:0;top:50%;height:1px}.cross2{top:0;bottom:0;left:50%;width:1px}
+.sweep{position:absolute;inset:0;border-radius:50%;
+  background:conic-gradient(from 0deg,rgba(200,146,42,.34),rgba(200,146,42,.06) 26deg,transparent 62deg);
+  animation:spin 6s linear infinite;transform-origin:50% 50%}
+@keyframes spin{to{transform:rotate(360deg)}}
+.blip{position:absolute;width:7px;height:7px;background:var(--gold);border-radius:50%;
+  box-shadow:0 0 0 4px var(--glow);animation:blip 6s linear infinite}
+.blip:nth-of-type(1){left:36%;top:31%;animation-delay:.6s}
+.blip:nth-of-type(2){left:61%;top:44%;animation-delay:1.7s}
+.blip:nth-of-type(3){left:47%;top:63%;animation-delay:3.1s}
+.blip:nth-of-type(4){left:71%;top:69%;animation-delay:4.2s}
+.blip:nth-of-type(5){left:26%;top:57%;animation-delay:5.0s}
+.blip:nth-of-type(6){left:55%;top:22%;animation-delay:2.4s}
+@keyframes blip{0%{opacity:1;transform:scale(1.5)}22%{opacity:.85;transform:scale(1)}100%{opacity:.25;transform:scale(1)}}
+.tag{position:absolute;font-family:var(--mono);font-size:9.5px;letter-spacing:.06em;color:var(--soft);
+  white-space:nowrap;padding-left:9px;border-left:1px solid rgba(200,146,42,.4)}
+.tag b{display:block;color:var(--gold);font-weight:500}
+.t1{left:41%;top:20%}.t2{left:20%;top:48%}.t3{left:31%;top:74%}
+.scope-lab{position:absolute;bottom:8px;left:10px;right:10px;display:flex;justify-content:space-between;
+  font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim)}
+.scope-cap{margin-top:9px;font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--dim);display:flex;justify-content:space-between}
+
+/* ledger */
+.sec-h{display:flex;align-items:baseline;gap:14px;padding:26px 0 10px;border-bottom:1px solid var(--rule)}
+.sec-h h2{font-family:var(--display);font-weight:400;font-size:clamp(24px,3vw,34px);margin:0;letter-spacing:-.02em}
+.sec-h i{flex:1;height:1px;background:var(--hair)}
+.sec-h .m{color:var(--muted)}
+table{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:12px}
+thead th{text-align:left;font-weight:500;font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--dim);padding:9px 10px 9px 0;border-bottom:1px solid var(--rule)}
+tbody td{padding:10px 10px 10px 0;border-bottom:1px solid var(--hair);vertical-align:baseline}
+tbody tr:hover td{background:rgba(200,146,42,.045)}
+.c-t{color:var(--gold);white-space:nowrap;font-weight:500}
+.c-n{font-family:var(--body);font-size:14px;font-weight:600;letter-spacing:-.005em;width:44%}
+.c-v{display:block;color:var(--muted);font-size:11px;margin-top:3px}
+.c-c{color:var(--soft);font-size:10px;letter-spacing:.1em}
+.c-p{color:var(--soft);text-align:right;white-space:nowrap}
+.bars{display:flex;gap:2px;align-items:flex-end;height:12px}
+.bars i{width:3px;background:var(--dim)}
+.bars i.on{background:var(--gold)}
+.bars i:nth-child(1){height:4px}.bars i:nth-child(2){height:6px}.bars i:nth-child(3){height:9px}
+.bars i:nth-child(4){height:12px}
+
+/* clock ruler */
+.ruler{margin-top:30px;border:1px solid var(--rule);background:var(--panel);padding:18px 0 0}
+.ruler h3{font-family:var(--display);font-weight:400;font-size:24px;margin:0 0 2px;letter-spacing:-.015em;
+  padding:0 18px}
+.ruler .m{color:var(--muted);padding:0 18px}
+.track{position:relative;margin:22px 18px 0;height:1px;background:var(--rule)}
+.stops{display:flex;justify-content:space-between;margin:0 18px;padding-bottom:18px}
+.stop{position:relative;padding-top:12px;flex:1;text-align:left}
+.stop:last-child{text-align:right;flex:0 0 auto}
+.stop:before{content:"";position:absolute;top:-1px;left:0;width:1px;height:9px;background:var(--gold)}
+.stop:last-child:before{left:auto;right:0}
+.stop b{display:block;font-family:var(--mono);font-size:13px;color:var(--gold);font-weight:500}
+.stop span{display:block;font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--muted);margin-top:4px}
+
+/* transmit */
+.tx{margin-top:30px;border:1px solid rgba(200,146,42,.35);display:grid;grid-template-columns:1fr auto;
+  gap:20px;align-items:center;padding:22px;background:linear-gradient(180deg,rgba(200,146,42,.05),transparent)}
+.tx .m{color:var(--gold)}
+.tx h3{font-family:var(--display);font-weight:400;font-size:clamp(24px,3vw,34px);margin:8px 0 6px;letter-spacing:-.02em}
+.tx p{margin:0;color:var(--soft);font-size:13.5px;max-width:56ch}
+.tx a{border:1px solid var(--gold);color:var(--gold);text-decoration:none;font-family:var(--mono);font-size:10.5px;
+  letter-spacing:.14em;text-transform:uppercase;padding:12px 20px;white-space:nowrap;transition:.2s}
+.tx a:hover{background:var(--gold);color:var(--ink)}
+
+footer{margin-top:26px;border-top:1px solid var(--rule);display:flex;flex-wrap:wrap;gap:0;
+  padding:0 0 30px}
+footer span{font-family:var(--mono);font-size:10px;letter-spacing:.11em;text-transform:uppercase;color:var(--dim);
+  padding:12px 14px;border-right:1px solid var(--hair)}
+footer span:first-child{padding-left:0}
+footer span:last-child{border-right:0;margin-left:auto;padding-right:0}
+
+@media(max-width:900px){
+  .hero{grid-template-columns:1fr}
+  .scope{margin-top:28px}
+  .gauges{flex-wrap:wrap}.g{flex:1 0 45%;border-right:0;padding-left:0!important}
+  .c-v{display:block}
+  table thead{display:none}
+  tbody tr{display:grid;grid-template-columns:auto 1fr auto;gap:0 10px;padding:6px 0;border-bottom:1px solid var(--hair)}
+  tbody td{border:0;padding:3px 0}
+  .c-n{grid-column:2}.c-c{grid-column:2}
+  .tx{grid-template-columns:1fr}
+}
+@media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important}}
+.ab.rm *,.ab.rm *:before,.ab.rm *:after{animation:none!important;transition:none!important}
+</style>
+</head>
+<body>
+
+<div class="srcbar">
+  <div class="wrap">
+    <span class="src m"><i class="dot"></i>Piletilevi <b>752</b></span>
+    <span class="src m"><i class="dot late"></i>Fienta <b>663</b></span>
+    <span class="src m"><i class="dot late2"></i>KUMU <b>31</b></span>
+    <span class="src m"><i class="dot late"></i>Estonia Concert Hall <b>11</b></span>
+    <span class="src m"><i class="dot"></i>Organisers, direct</span>
+    <span class="clock m">Last sweep 17:04 · next in 56 min</span>
+  </div>
+</div>
+
+<div class="wrap">
+  <section class="hero">
+    <div>
+      <p class="coord m"><span>Station</span> Tallinn <span>·</span> 59.4370° N <span>/</span> 24.7536° E <span>·</span> Range 12 km</p>
+      <h1>
+        <span class="l"><span>Every event in</span></span>
+        <span class="l"><span>Tallinn, on one</span></span>
+        <span class="l"><span><i>screen</i>.</span></span>
+      </h1>
+      <p class="sub">We sweep five sources every hour, merge the duplicates, and plot what is left. At 06:00 the five strongest returns for your taste are pulled off the scope and sent to you.</p>
+
+      <div class="cmd">
+        <div class="cmd-h m"><span>Subscribe · channel: email</span><b>ready</b></div>
+        <form onsubmit="return false">
+          <span class="caret">▸</span>
+          <input type="email" placeholder="you@example.com" aria-label="Email address">
+          <button>Open channel</button>
+        </form>
+        <p class="cmd-f">No password. Sign-in link valid 15 min · digest 07:00 Europe/Tallinn · one click to close the channel.</p>
+      </div>
+
+    </div>
+
+    <div>
+      <div class="scope">
+        <div class="ring r1"></div><div class="ring r2"></div><div class="ring r3"></div><div class="ring r4"></div>
+        <div class="cross"></div><div class="cross2"></div>
+        <div class="sweep"></div>
+        <i class="blip"></i><i class="blip"></i><i class="blip"></i><i class="blip"></i><i class="blip"></i><i class="blip"></i>
+        <span class="tag t1"><b>Kanuti Gildi SAAL</b>Robin Täpp “DRIVE-IN” · 20:00</span>
+        <span class="tag t2"><b>Telliskivi 60a/9</b>170 events a year</span>
+        <span class="tag t3"><b>Estonia kontserdisaal</b>Poska ja Elgar · Thu</span>
+        <div class="scope-lab"><span>Sweep 6 s</span><span>8 returns tonight</span></div>
+      </div>
+      <p class="scope-cap"><span>Fig. 1 — live returns, Tallinn grid</span><span>Refresh: hourly</span></p>
+    </div>
+  </section>
+
+  <div class="gauges">
+        <div class="g"><b class="count"></b><span>upcoming<br>returns</span></div>
+        <div class="g"><b class="count2"></b><span>within<br>7 days</span></div>
+        <div class="g"><b class="count3"></b><span>venues<br>in range</span></div>
+        <div class="g"><b>14</b><span>categories<br>tracked</span></div>
+      </div>
+
+  <section>
+    <div class="sec-h"><h2>Tonight&rsquo;s returns</h2><i></i><span class="m">Sun 31 Aug · 8 signals</span></div>
+    <table>
+      <thead><tr><th>Time</th><th>Return</th><th>Category</th><th>Signal</th><th style="text-align:right">Entry</th></tr></thead>
+      <tbody>
+        <tr><td class="c-t">18:00</td><td class="c-n">Elu on unenägu<span class="c-v">Tallinna Linnateater, Suur saal</span></td><td class="c-c">THEATRE</td><td><span class="bars"><i class="on"></i><i class="on"></i><i class="on"></i><i></i></span></td><td class="c-p">€32</td></tr>
+        <tr><td class="c-t">19:00</td><td class="c-n">Ma ei märganudki, millal sa läksid<span class="c-v">Sakala 3 teatrimaja</span></td><td class="c-c">THEATRE</td><td><span class="bars"><i class="on"></i><i class="on"></i><i></i><i></i></span></td><td class="c-p">€25</td></tr>
+        <tr><td class="c-t">19:00</td><td class="c-n">Neuropa: Where Sound Becomes Vision<span class="c-v">Ratas&amp;Kohv Hipodroomi</span></td><td class="c-c">MUSIC</td><td><span class="bars"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i></span></td><td class="c-p">€5</td></tr>
+        <tr><td class="c-t">19:30</td><td class="c-n">Ekskursioonid hämarikus<span class="c-v">Tallinna Loomaaed</span></td><td class="c-c">FAMILY</td><td><span class="bars"><i class="on"></i><i class="on"></i><i class="on"></i><i></i></span></td><td class="c-p">€25.80</td></tr>
+        <tr><td class="c-t">20:00</td><td class="c-n">Robin Täpp “DRIVE-IN”<span class="c-v">Kanuti Gildi SAAL</span></td><td class="c-c">ALTERNATIVE</td><td><span class="bars"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i></span></td><td class="c-p">€9.50</td></tr>
+        <tr><td class="c-t">20:00</td><td class="c-n">Old Town English Open Mic<span class="c-v">Kultuuriklubi Winkel</span></td><td class="c-c">COMEDY</td><td><span class="bars"><i class="on"></i><i class="on"></i><i></i><i></i></span></td><td class="c-p">€10</td></tr>
+        <tr><td class="c-t">22:00</td><td class="c-n">Sauna Social + Bar — Tallinn Fringe 2026<span class="c-v">Heldeke!</span></td><td class="c-c">NIGHTLIFE</td><td><span class="bars"><i class="on"></i><i class="on"></i><i class="on"></i><i></i></span></td><td class="c-p">€3</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="ruler">
+    <h3>The station never closes.</h3>
+    <p class="m">One full cycle, every day, Europe/Tallinn</p>
+    <div class="track"></div>
+    <div class="stops">
+      <div class="stop"><b>Hourly</b><span>Sources re-read</span></div>
+      <div class="stop"><b>04:30</b><span>Details re-checked</span></div>
+      <div class="stop"><b>06:00</b><span>Your five chosen</span></div>
+      <div class="stop"><b>07:00</b><span>Digest sent</span></div>
+    </div>
+  </section>
+
+  <section class="tx">
+    <div>
+      <p class="m">Organisers · transmit</p>
+      <h3>Put your event on the radar.</h3>
+      <p>List it yourself. It appears on the scope within seconds and stays yours to edit — no fee, no commission.</p>
+    </div>
+    <a href="#">List your event →</a>
+  </section>
+
+  <footer>
+    <span>No password</span><span>No tracking</span><span>No fee</span>
+    <span>English · Eesti · Русский</span>
+    <span>Booked into 2027</span>
+    <span>Station time 17:41</span>
+  </footer>
+</div>
+</body>
+</html>

@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="ru" class="ab">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>D2 · warm-light-board</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@200..700&family=Manrope:wght@200..800&display=swap" rel="stylesheet">
+<style>
+:root{
+  /* palette push: warm light board, black rules, one signal blue. No navy, no gold. */
+  --ground:#e9e2d3;--ground-2:#ded6c5;--slat:#f2ece0;--ink:#16130e;--ink-2:#4a443a;
+  --blue:#12459f;--blue-lt:#2d67c9;--rule:#16130e;--hair:#bdb4a0;--mute:#77705f;
+  --display:'Oswald',Impact,sans-serif;
+  --body:'Manrope',system-ui,sans-serif;
+  --e:cubic-bezier(.3,.7,.3,1);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--body);font-size:14px;line-height:1.55;
+  font-weight:500;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1280px;margin:0 auto;padding:0 clamp(14px,2vw,26px)}
+.lab{font-family:var(--display);font-weight:500;font-size:11.5px;letter-spacing:.2em;text-transform:uppercase}
+.osw{font-family:var(--display);font-variant-numeric:tabular-nums}
+
+/* top */
+.top{background:var(--ink);color:var(--ground)}
+.top .wrap{display:flex;align-items:center;gap:0;flex-wrap:wrap;padding:9px 0}
+.top .mark{font-family:var(--display);font-weight:600;font-size:21px;letter-spacing:.02em;text-transform:uppercase;
+  padding-right:18px}
+.top .mark em{font-style:normal;color:#8fb4ee}
+.top span{padding:0 13px;border-left:1px solid rgba(233,226,211,.22);color:#c9c1b0}
+.top span b{color:#fff;font-weight:700}
+.top .clk{margin-left:auto;border-left:0;font-family:var(--display);font-size:16px;font-weight:500;letter-spacing:.1em;
+  color:#8fb4ee}
+
+/* destination */
+.dest{padding:clamp(22px,3vw,40px) 0 clamp(16px,2vw,26px);border-bottom:3px solid var(--rule)}
+.flapline{display:flex;gap:clamp(3px,.5vw,6px);flex-wrap:wrap}
+.flap{display:inline-block;background:var(--ink);color:var(--slat);font-family:var(--display);font-weight:600;
+  font-size:clamp(36px,8.4vw,104px);line-height:1;letter-spacing:.01em;padding:.08em .1em .12em;position:relative;
+  min-width:.56em;text-align:center;transform-origin:50% 0;animation:flip .42s var(--e) both}
+.flap:after{content:"";position:absolute;left:0;right:0;top:50%;height:2px;background:var(--ground);opacity:.85}
+.flapline .flap:nth-child(1){animation-delay:.04s}.flapline .flap:nth-child(2){animation-delay:.10s}
+.flapline .flap:nth-child(3){animation-delay:.16s}.flapline .flap:nth-child(4){animation-delay:.22s}
+.flapline .flap:nth-child(5){animation-delay:.28s}.flapline .flap:nth-child(6){animation-delay:.34s}
+.flapline .flap:nth-child(7){animation-delay:.40s}
+@keyframes flip{
+  0%{transform:rotateX(-92deg);background:var(--ground-2);color:var(--ground-2)}
+  55%{transform:rotateX(11deg);background:#2a251c}
+  100%{transform:rotateX(0);background:var(--ink);color:var(--slat)}
+}
+.dest .sub{display:flex;flex-wrap:wrap;margin-top:14px}
+.dest .sub span{padding:0 15px;border-left:1px solid var(--hair);font-family:var(--display);font-size:12px;
+  font-weight:500;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-2)}
+.dest .sub span:first-child{padding-left:0;border-left:0;color:var(--blue)}
+.dest h1{font-family:var(--display);font-weight:400;font-size:clamp(24px,3.6vw,44px);line-height:1.12;
+  letter-spacing:.005em;margin:18px 0 0;max-width:26ch;text-transform:none}
+.dest h1 b{font-weight:600;color:var(--blue)}
+
+/* board */
+.board{border-bottom:3px solid var(--rule)}
+.hd,.row{display:grid;grid-template-columns:96px minmax(0,1fr) minmax(0,.6fr) 128px 92px 122px;gap:2px;
+  background:var(--rule)}
+.hd>*,.row>*{background:var(--ground);padding:10px 12px;min-width:0;display:flex;align-items:center}
+.hd>*{background:var(--ink);color:#c9c1b0;font-family:var(--display);font-size:11px;font-weight:400;
+  letter-spacing:.16em;text-transform:uppercase;padding-top:8px;padding-bottom:8px}
+.row>*{background:var(--slat);transform-origin:50% 0;animation:fliprow .38s var(--e) both}
+.row:nth-child(2)>*{animation-delay:.28s}.row:nth-child(3)>*{animation-delay:.34s}
+.row:nth-child(4)>*{animation-delay:.40s}.row:nth-child(5)>*{animation-delay:.46s}
+.row:nth-child(6)>*{animation-delay:.52s}.row:nth-child(7)>*{animation-delay:.58s}
+.row:nth-child(8)>*{animation-delay:.64s}
+.row:hover>*{background:#fff}
+.c-time{font-family:var(--display);font-variant-numeric:tabular-nums;font-size:clamp(21px,2.4vw,30px);
+  font-weight:500;letter-spacing:.01em;color:var(--ink)}
+.c-ev{font-size:15px;font-weight:700;letter-spacing:-.005em;line-height:1.25}
+.c-vn{font-size:12.5px;font-weight:500;color:var(--mute);line-height:1.3}
+.c-cat{font-family:var(--display);font-size:11.5px;font-weight:400;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--ink-2)}
+.c-pr{font-family:var(--display);font-variant-numeric:tabular-nums;font-size:19px;font-weight:500;justify-content:flex-end}
+.c-st{font-family:var(--display);font-size:11.5px;font-weight:400;letter-spacing:.13em;text-transform:uppercase;color:var(--mute)}
+.c-st.on{color:var(--blue);font-weight:500}
+.c-st.now{background:var(--blue)!important;color:#fff;font-weight:500}
+
+@keyframes fliprow{
+  0%{transform:rotateX(-90deg);opacity:0}
+  55%{transform:rotateX(10deg);opacity:1}
+  100%{transform:rotateX(0);opacity:1}
+}
+
+/* capture row */
+.caprow{display:grid;grid-template-columns:96px minmax(0,1fr) 122px;gap:2px;background:var(--rule);margin-top:2px}
+.caprow>*{background:var(--ink);padding:14px 12px}
+.caprow .t{font-family:var(--display);font-variant-numeric:tabular-nums;font-size:clamp(21px,2.4vw,30px);
+  font-weight:500;color:#8fb4ee}
+.caprow .f{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.caprow .f b{font-family:var(--display);font-size:11.5px;font-weight:400;letter-spacing:.16em;text-transform:uppercase;
+  color:#c9c1b0;white-space:nowrap}
+.caprow input{flex:1;min-width:200px;background:transparent;border:0;border-bottom:1px solid rgba(233,226,211,.35);
+  color:var(--slat);font:inherit;font-size:16px;font-weight:600;padding:7px 0}
+.caprow input::placeholder{color:#7d7565}
+.caprow input:focus{outline:none;border-color:#8fb4ee}
+.caprow button{background:var(--blue);color:#fff;border:0;font-family:var(--display);font-weight:500;font-size:12px;
+  letter-spacing:.16em;text-transform:uppercase;padding:13px 0;width:100%;cursor:pointer}
+.caprow button:hover{background:var(--blue-lt)}
+.capnote{padding:10px 0 0;font-size:12px;color:var(--mute);max-width:78ch}
+
+/* how */
+.how{display:grid;grid-template-columns:1.3fr 1fr .92fr;gap:2px;background:var(--rule);margin-top:26px}
+.how>div{background:var(--ground);padding:20px 20px 24px}
+.how .lab{color:var(--blue)}
+.how h3{font-family:var(--display);font-weight:500;margin:10px 0 8px;font-size:21px;letter-spacing:.01em;
+  line-height:1.15}
+.how p{margin:0;font-size:13.5px;font-weight:500;color:var(--ink-2);line-height:1.6}
+
+/* figures */
+.figs{display:grid;grid-template-columns:repeat(5,1fr);gap:2px;background:var(--rule);margin-top:2px}
+.figs>div{background:var(--ink);padding:20px;color:var(--ground)}
+.figs b{display:block;font-family:var(--display);font-variant-numeric:tabular-nums;font-size:clamp(30px,4.6vw,56px);
+  font-weight:500;line-height:1;letter-spacing:.005em}
+.figs div:nth-child(1) b,.figs div:nth-child(5) b{color:#8fb4ee}
+.figs span{display:block;margin-top:9px;font-family:var(--display);font-size:11.5px;font-weight:300;
+  letter-spacing:.14em;text-transform:uppercase;color:#b6ad9c;line-height:1.5}
+
+/* announcement */
+.ann{margin-top:26px;background:var(--blue);color:#fff;display:grid;grid-template-columns:1fr auto;gap:20px;
+  align-items:center;padding:22px 20px}
+.ann .lab{color:rgba(255,255,255,.68)}
+.ann h3{font-family:var(--display);font-weight:500;margin:8px 0 5px;font-size:clamp(22px,3vw,34px);
+  letter-spacing:.008em;line-height:1.1}
+.ann p{margin:0;font-size:13.5px;font-weight:500;color:rgba(255,255,255,.86);max-width:58ch}
+.ann a{background:#fff;color:var(--blue);text-decoration:none;padding:14px 22px;font-family:var(--display);
+  font-size:12px;font-weight:500;letter-spacing:.16em;text-transform:uppercase;white-space:nowrap}
+.ann a:hover{background:var(--ink);color:#fff}
+footer{display:flex;flex-wrap:wrap;gap:2px;background:var(--rule);margin-top:2px;margin-bottom:34px}
+footer span{background:var(--ground);flex:1;padding:13px 14px;font-family:var(--display);font-size:11.5px;
+  font-weight:400;letter-spacing:.15em;text-transform:uppercase;color:var(--mute);white-space:nowrap}
+
+@media(max-width:980px){
+  .hd{display:none}
+  .row{grid-template-columns:84px 1fr 96px;grid-template-areas:"t e p" "t v s"}
+  .row .c-time{grid-area:t}.row .c-ev{grid-area:e}.row .c-vn{grid-area:v}
+  .row .c-pr{grid-area:p}.row .c-st{grid-area:s;justify-content:flex-end}
+  .row .c-cat{display:none}
+  .row{margin-bottom:10px}
+  .row .c-time{border-left:3px solid var(--blue)}
+  .caprow{grid-template-columns:1fr}
+  .how{grid-template-columns:1fr}
+  .figs{grid-template-columns:repeat(2,1fr)}
+  .ann{grid-template-columns:1fr}
+  footer span{flex:1 0 45%}
+}
+@media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important}}
+.ab.rm *,.ab.rm *:before,.ab.rm *:after{animation:none!important;transition:none!important}
+</style>
+</head>
+<body>
+
+<div class="top">
+  <div class="wrap">
+    <span class="mark">What&rsquo;s on <em>Radar</em></span>
+    <span class="lab"><b>1 008</b> впереди</span>
+    <span class="lab"><b>82</b> на неделе</span>
+    <span class="lab"><b>205</b> площадок</span>
+    <span class="lab">Обход каждый час</span>
+    <span class="clk">17:41</span>
+  </div>
+</div>
+
+<div class="wrap">
+  <section class="dest">
+    <div class="flapline">
+      <span class="flap">Т</span><span class="flap">А</span><span class="flap">Л</span><span class="flap">Л</span><span class="flap">И</span><span class="flap">Н</span><span class="flap">Н</span>
+    </div>
+    <div class="sub">
+      <span>Сегодня · 8 отправлений</span><span>Вс 31 августа 2026</span><span>Табло собирается в 06:00</span>
+      <span>English · Eesti · Русский</span>
+    </div>
+    <h1>Всё, что уходит сегодня вечером — и <b>пять</b>, которые утром будут вашими.</h1>
+  </section>
+
+  <section class="board">
+    <div class="hd">
+      <div>Время</div><div>Событие</div><div>Площадка</div><div>Категория</div>
+      <div style="justify-content:flex-end">Цена</div><div>Статус</div>
+    </div>
+    <div class="row">
+      <div class="c-time">18:00</div><div class="c-ev">Elu on unenägu</div>
+      <div class="c-vn">Таллинский городской театр, Большой зал</div><div class="c-cat">Театр</div>
+      <div class="c-pr">32 €</div><div class="c-st now">Вход открыт</div>
+    </div>
+    <div class="row">
+      <div class="c-time">19:00</div><div class="c-ev">Александр Попов «Колыбельная в госпитале»</div>
+      <div class="c-vn">Fort Bar live music</div><div class="c-cat">Комедия</div>
+      <div class="c-pr">5 €</div><div class="c-st on">Через 1 ч 19</div>
+    </div>
+    <div class="row">
+      <div class="c-time">19:00</div><div class="c-ev">Neuropa: Where Sound Becomes Vision</div>
+      <div class="c-vn">Ratas&amp;Kohv Hipodroomi</div><div class="c-cat">Музыка</div>
+      <div class="c-pr">5 €</div><div class="c-st on">Через 1 ч 19</div>
+    </div>
+    <div class="row">
+      <div class="c-time">19:30</div><div class="c-ev">Экскурсии в сумерках — Северные ворота</div>
+      <div class="c-vn">Таллинский зоопарк</div><div class="c-cat">Семья</div>
+      <div class="c-pr">25,80 €</div><div class="c-st">По сеансам</div>
+    </div>
+    <div class="row">
+      <div class="c-time">20:00</div><div class="c-ev">Психиатрическая клиника с Оксаной Яаксон</div>
+      <div class="c-vn">Kultuuriklubi Winkel</div><div class="c-cat">Комедия</div>
+      <div class="c-pr">10 €</div><div class="c-st">Еженедельно</div>
+    </div>
+    <div class="row">
+      <div class="c-time">20:00</div><div class="c-ev">Robin Täpp «DRIVE-IN»</div>
+      <div class="c-vn">Kanuti Gildi SAAL</div><div class="c-cat">Альтернатива</div>
+      <div class="c-pr">9,50 €</div><div class="c-st">До среды</div>
+    </div>
+    <div class="row">
+      <div class="c-time">22:00</div><div class="c-ev">Sauna Social + Bar — Tallinn Fringe 2026</div>
+      <div class="c-vn">Heldeke!</div><div class="c-cat">Ночная жизнь</div>
+      <div class="c-pr">3 €</div><div class="c-st">Поздно</div>
+    </div>
+  </section>
+
+  <div class="caprow">
+    <div class="t">06:00</div>
+    <div class="f">
+      <b>Ваши пять · отправление ежедневно</b>
+      <input type="email" placeholder="вы@example.com" aria-label="Электронная почта">
+    </div>
+    <div style="padding:0"><button type="button">Отправить</button></div>
+  </div>
+  <p class="capnote">Без пароля — пришлём ссылку для входа, она действует 15 минут. Письмо уходит в 07:00 по таллинскому времени. Отписка в один клик.</p>
+
+  <section class="how">
+    <div>
+      <p class="lab">Правило 01</p>
+      <h3>На табло — весь город</h3>
+      <p>Fienta, Piletilevi, KUMU, концертный зал «Эстония» и сами организаторы — обход каждый час, дубликаты объединяются до публикации.</p>
+    </div>
+    <div>
+      <p class="lab">Правило 02</p>
+      <h3>Не более двух из одной категории</h3>
+      <p>Пять спектаклей подряд — это не вечер. Каждая категория ограничена двумя, а показанное раньше уходит на паузу.</p>
+    </div>
+    <div>
+      <p class="lab">Правило 03</p>
+      <h3>Пересборка в шесть</h3>
+      <p>Ранжируем под вкус, который вы задали при входе. Отправляем в семь.</p>
+    </div>
+  </section>
+
+  <section class="figs">
+    <div><b>1 008</b><span>событий впереди</span></div>
+    <div><b>205</b><span>площадок</span></div>
+    <div><b>14</b><span>категорий</span></div>
+    <div><b>2027</b><span>расписано до</span></div>
+    <div><b>1 €</b><span>самый дешёвый билет</span></div>
+  </section>
+
+  <section class="ann">
+    <div>
+      <p class="lab">Объявление · организаторам</p>
+      <h3>Выведите своё событие на радар.</h3>
+      <p>Добавьте своё событие сами. Оно появится в ленте за секунды и останется доступным для редактирования.</p>
+    </div>
+    <a href="#">Добавить событие →</a>
+  </section>
+
+  <footer>
+    <span>Без пароля</span><span>Без слежки</span><span>Без платы</span>
+    <span>English · Eesti · Русский</span><span>Таллин 59.4370 N</span>
+  </footer>
+</div>
+</body>
+</html>

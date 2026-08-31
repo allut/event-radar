@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="en" class="ab">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>C2 · cinematic-new-type</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..900;1,400..700&family=Manrope:wght@200..800&display=swap" rel="stylesheet">
+<style>
+:root{
+  /* palette push: oxblood/plum ground, bone, cold silver-blue as the thin cut (no gold, no navy) */
+  --ground:#171014;--deep:#0d080b;--panel:#1f1519;--bone:#f2ece2;
+  --silver:#a9bdcf;--silver-dim:rgba(169,189,207,.34);--silver-faint:rgba(169,189,207,.12);
+  --mute:#9c8a92;--faint:#6b5a62;--rule:#2c1f26;
+  --display:'Playfair Display',Georgia,serif;
+  --body:'Manrope',system-ui,sans-serif;
+  --e:cubic-bezier(.22,.61,.36,1);
+  --grain:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='170' height='170'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.75' numOctaves='3'/%3E%3C/filter%3E%3Crect width='170' height='170' filter='url(%23n)'/%3E%3C/svg%3E");
+  --rail:118px;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--ground);color:var(--bone);font-family:var(--body);font-size:15px;line-height:1.62;
+  font-weight:400;-webkit-font-smoothing:antialiased}
+.lab{font-size:10px;font-weight:800;letter-spacing:.24em;text-transform:uppercase}
+.shell{display:grid;grid-template-columns:var(--rail) minmax(0,1fr)}
+
+/* --- filmstrip rail (signature) --- */
+.strip{border-right:1px solid var(--rule);position:relative}
+.strip-in{position:sticky;top:0;height:100vh;display:flex;flex-direction:column;justify-content:space-between;
+  padding:20px 0 20px 20px}
+.strip .mark{font-family:var(--display);font-weight:500;font-size:15px;letter-spacing:-.01em;line-height:1.2;
+  writing-mode:vertical-rl;transform:rotate(180deg);color:var(--bone)}
+.strip .mark em{font-style:italic;color:var(--silver)}
+.frames{flex:1;display:flex;flex-direction:column;justify-content:center;gap:0;margin:22px 0}
+.fr{position:relative;padding:10px 0;border-top:1px solid var(--rule);font-size:11.5px;letter-spacing:.08em;
+  color:var(--mute);font-variant-numeric:tabular-nums;animation:fadein .8s var(--e) both}
+.fr:nth-child(1){animation-delay:.2s}.fr:nth-child(2){animation-delay:.28s}.fr:nth-child(3){animation-delay:.36s}
+.fr:nth-child(4){animation-delay:.44s}.fr:nth-child(5){animation-delay:.52s}.fr:nth-child(6){animation-delay:.6s}
+.fr:last-child{border-bottom:1px solid var(--rule)}
+.fr.now{color:var(--bone);font-weight:700}
+.fr.now:before{content:"";position:absolute;left:-20px;top:-1px;width:12px;height:1px;background:var(--silver)}
+@keyframes fadein{from{opacity:0;transform:translateX(-6px)}to{opacity:1;transform:none}}
+.strip .foot{font-size:10px;letter-spacing:.16em;color:var(--mute);text-transform:uppercase;color:var(--faint);
+  writing-mode:vertical-rl;transform:rotate(180deg)}
+
+.col{min-width:0}
+.pad{padding:0 clamp(20px,4vw,72px)}
+
+/* --- hero --- */
+.hero{position:relative;min-height:min(94vh,820px);display:flex;flex-direction:column;justify-content:flex-end;
+  overflow:hidden}
+.pic{position:absolute;inset:0}
+.pic .img{position:absolute;inset:-5%;animation:drift 30s var(--e) infinite alternate}
+@keyframes drift{from{transform:scale(1.02)}to{transform:scale(1.11) translateY(-2%)}}
+.h-img{background:
+  radial-gradient(58% 52% at 62% 24%,rgba(255,214,196,.5),transparent 62%),
+  radial-gradient(72% 62% at 20% 92%,rgba(120,60,86,.75),transparent 68%),
+  linear-gradient(172deg,#3a1f2c,#10080d 62%,#1d1018)}
+.pic .img:after{content:"";position:absolute;inset:0;background:var(--grain);opacity:.32;mix-blend-mode:overlay}
+.pic .scrim{position:absolute;inset:0;
+  background:linear-gradient(0deg,rgba(13,8,11,.96) 8%,rgba(13,8,11,.42) 52%,rgba(13,8,11,.6))}
+.ab.noimg .pic .img{background:linear-gradient(172deg,#241620,#100a0e)}
+.hero .pad{position:relative;padding-bottom:clamp(30px,4vw,62px);padding-top:60px}
+.eyebrow{color:var(--silver)}
+h1{font-family:var(--display);font-weight:400;font-size:clamp(48px,9.2vw,132px);line-height:.95;
+  letter-spacing:-.035em;margin:18px 0 0;max-width:11ch}
+h1 i{font-style:italic;font-weight:500}
+h1 b{font-weight:800}
+h1 .l{display:block;overflow:hidden;padding-bottom:.14em;margin-bottom:-.14em}
+h1 .l>span{display:block;animation:rise 1.2s var(--e) both}
+h1 .l:nth-child(2)>span{animation-delay:.13s}h1 .l:nth-child(3)>span{animation-delay:.26s}
+@keyframes rise{from{transform:translateY(104%)}to{transform:translateY(0)}}
+.cut{margin-top:30px;height:1px;background:linear-gradient(90deg,var(--silver),rgba(169,189,207,0) 78%);
+  transform-origin:left;animation:draw 1.5s var(--e) .55s both}
+@keyframes draw{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+.hero p.sub{margin:22px 0 0;max-width:50ch;color:#d6c9d0;font-size:16.5px}
+.capbar{margin-top:26px;display:flex;gap:24px;align-items:flex-end;flex-wrap:wrap}
+.form{display:flex;flex:1;min-width:280px;max-width:520px;border-bottom:1px solid var(--silver-dim)}
+.form input{flex:1;min-width:0;background:transparent;border:0;color:var(--bone);font:inherit;font-size:17px;padding:11px 0}
+.form input::placeholder{color:var(--faint)}
+.form input:focus{outline:none;box-shadow:0 2px 0 var(--silver)}
+.form button{background:transparent;border:0;color:var(--silver);font:inherit;font-weight:800;font-size:11px;
+  letter-spacing:.18em;text-transform:uppercase;padding:0 0 0 18px;cursor:pointer;white-space:nowrap}
+.form button:hover{color:var(--bone)}
+.capbar .fine{margin:0;font-size:12px;color:var(--mute);max-width:34ch}
+
+/* --- statement --- */
+.stmt{padding-top:clamp(48px,6vw,96px);padding-bottom:clamp(40px,5vw,76px);border-bottom:1px solid var(--rule)}
+.stmt h2{font-family:var(--display);font-weight:400;font-size:clamp(30px,4.6vw,60px);line-height:1.04;
+  letter-spacing:-.03em;margin:14px 0 0;max-width:19ch}
+.stmt h2 i{font-style:italic;color:var(--silver)}
+.stmt .two{display:grid;grid-template-columns:minmax(0,1fr) minmax(240px,.62fr);gap:0 clamp(24px,4vw,68px);
+  margin-top:26px}
+.stmt p{margin:0 0 1em;color:#cdbfc6;font-size:15.5px;max-width:52ch}
+.side{border-left:1px solid var(--rule);padding-left:clamp(20px,2.6vw,36px)}
+.side dl{margin:0}
+.side div{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:11px 0;
+  border-bottom:1px solid var(--rule)}
+.side dt{font-size:10.5px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--mute)}
+.side dd{margin:0;font-family:var(--display);font-size:24px;font-weight:500;font-variant-numeric:tabular-nums}
+
+/* --- plates --- */
+.plate{position:relative;min-height:min(80vh,660px);display:flex;align-items:flex-end;overflow:hidden;
+  border-bottom:1px solid var(--rule)}
+.q1 .img{background:radial-gradient(60% 55% at 72% 26%,rgba(169,189,207,.42),transparent 62%),
+  linear-gradient(190deg,#1d2430,#0c0a0f 66%)}
+.q2 .img{background:radial-gradient(66% 58% at 26% 78%,rgba(196,104,120,.5),transparent 64%),
+  linear-gradient(158deg,#2a1620,#0e080c 70%)}
+.plate .scrim{background:linear-gradient(0deg,rgba(13,8,11,.96) 12%,rgba(13,8,11,.3) 58%,rgba(13,8,11,.55))}
+.plate .pad{position:relative;width:100%;padding-top:clamp(60px,8vw,130px);padding-bottom:clamp(28px,3.6vw,56px)}
+.plate .inner{max-width:640px}
+.plate.right .inner{margin-left:auto}
+.plate h3{font-family:var(--display);font-weight:400;font-size:clamp(32px,5.4vw,72px);line-height:.98;
+  letter-spacing:-.032em;margin:12px 0 0}
+.plate h3 i{font-style:italic;color:var(--silver)}
+.plate p{margin:18px 0 0;color:#d0c3ca;font-size:15px;max-width:46ch}
+.creds{display:flex;flex-wrap:wrap;margin-top:22px;border-top:1px solid var(--silver-faint);padding-top:12px}
+.creds span{font-size:10.5px;font-weight:700;letter-spacing:.15em;text-transform:uppercase;color:var(--mute);
+  padding:0 15px;border-left:1px solid var(--rule)}
+.creds span:first-child{padding-left:0;border-left:0}
+.creds b{color:var(--silver);font-weight:700}
+
+/* --- capture band --- */
+.band{background:var(--deep);border-bottom:1px solid var(--rule);padding-top:clamp(40px,5vw,72px);
+  padding-bottom:clamp(40px,5vw,72px)}
+.band h2{font-family:var(--display);font-weight:400;font-size:clamp(32px,5.2vw,68px);line-height:.98;
+  letter-spacing:-.032em;margin:12px 0 0;max-width:13ch}
+.band h2 b{font-weight:800}
+.band .row{display:grid;grid-template-columns:minmax(0,1fr) minmax(280px,.8fr);gap:0 clamp(24px,4vw,64px);
+  align-items:end}
+.band .fine{color:var(--mute);font-size:12.5px;margin:12px 0 0}
+.steps{display:grid;grid-template-columns:1.2fr 1fr .9fr;margin-top:clamp(30px,4vw,54px);
+  border-top:1px solid var(--rule)}
+.st{padding:22px 28px 0 0;border-right:1px solid var(--rule)}
+.st+.st{padding-left:28px}.st:last-child{border-right:0;padding-right:0}
+.st b{font-family:var(--display);font-size:15px;font-weight:700;letter-spacing:.18em;color:var(--silver);
+  text-transform:uppercase;display:block}
+.st h4{margin:10px 0 8px;font-size:18px;font-weight:700;letter-spacing:-.01em}
+.st p{margin:0;color:var(--mute);font-size:14px}
+
+/* organiser + footer */
+.org{padding-top:clamp(34px,4.4vw,62px);padding-bottom:clamp(34px,4.4vw,62px);
+  display:grid;grid-template-columns:1fr auto;gap:26px;align-items:center;border-bottom:1px solid var(--rule)}
+.org h3{font-family:var(--display);font-weight:400;font-size:clamp(28px,4vw,52px);margin:12px 0 8px;letter-spacing:-.03em}
+.org p{margin:0;color:var(--mute);font-size:14.5px;max-width:52ch}
+.org a{border:1px solid var(--silver-dim);color:var(--silver);text-decoration:none;padding:14px 26px;font-size:11px;
+  font-weight:800;letter-spacing:.18em;text-transform:uppercase;white-space:nowrap;transition:.2s}
+.org a:hover{background:var(--silver);color:var(--deep);border-color:var(--silver)}
+footer{padding:18px 0 46px;display:flex;flex-wrap:wrap;gap:6px 24px}
+footer span{font-size:10px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:var(--faint)}
+
+@media(max-width:900px){
+  :root{--rail:0px}
+  .shell{grid-template-columns:1fr}
+  .strip{display:none}
+  .stmt .two{grid-template-columns:1fr}
+  .side{border-left:0;padding-left:0;margin-top:22px;border-top:1px solid var(--rule)}
+  .plate .inner,.plate.right .inner{max-width:none;margin-left:0}
+  .band .row{grid-template-columns:1fr;gap:22px}
+  .steps{grid-template-columns:1fr}
+  .st{border-right:0;padding:18px 0 0!important;border-top:1px solid var(--rule)}
+  .org{grid-template-columns:1fr}
+}
+@media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important}}
+.ab.rm *,.ab.rm *:before,.ab.rm *:after{animation:none!important;transition:none!important}
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <aside class="strip">
+    <div class="strip-in">
+      <div class="mark">What&rsquo;s on <em>Radar</em></div>
+      <div class="frames">
+        <div class="fr">17:30</div>
+        <div class="fr now">18:00</div>
+        <div class="fr">19:00</div>
+        <div class="fr">19:30</div>
+        <div class="fr">20:00</div>
+        <div class="fr">22:00</div>
+      </div>
+      <div class="foot">Tallinn · tonight</div>
+    </div>
+  </aside>
+
+  <div class="col">
+
+    <section class="hero">
+      <div class="pic"><div class="img h-img"></div><div class="scrim"></div></div>
+      <div class="pad">
+        <p class="lab eyebrow">Sunday 31 August · eight events tonight</p>
+        <h1>
+          <span class="l"><span>The city is</span></span>
+          <span class="l"><span><i>already</i></span></span>
+          <span class="l"><span><b>lit.</b></span></span>
+        </h1>
+        <div class="cut"></div>
+        <p class="sub">One thousand and eight events are on in Tallinn between now and 2027. We read every source hourly and send you the five that are actually yours, at six every morning.</p>
+        <div class="capbar">
+          <form class="form" onsubmit="return false">
+            <input type="email" placeholder="you@example.com" aria-label="Email address">
+            <button>Send me a link →</button>
+          </form>
+          <p class="fine">No password. The link lasts 15 minutes; the digest lands at 07:00.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="stmt pad">
+      <p class="lab eyebrow">The problem, stated plainly</p>
+      <h2>Seventy things happen here every week. You will hear about <i>four</i> of them.</h2>
+      <div class="two">
+        <div>
+          <p>Not because the city is quiet — because the listings are scattered across five ticket sites, a dozen venue calendars and whatever an algorithm decided to show you that afternoon. The same show appears three times under three names, and the small room with forty seats never appears at all.</p>
+          <p>What&rsquo;s on Radar reads all of it every hour, merges the duplicates, sorts the rest into fourteen categories, and at six in the morning picks five for you — never more than two of the same kind, never the one you skipped last week.</p>
+        </div>
+        <div class="side">
+          <dl>
+            <div><dt>On now &amp; ahead</dt><dd>1 008</dd></div>
+            <div><dt>Next seven days</dt><dd>82</dd></div>
+            <div><dt>Venues</dt><dd>205</dd></div>
+            <div><dt>Categories</dt><dd>14</dd></div>
+            <div><dt>Booked into</dt><dd>2027</dd></div>
+          </dl>
+        </div>
+      </div>
+    </section>
+
+    <section class="plate q1">
+      <div class="pic"><div class="img"></div><div class="scrim"></div></div>
+      <div class="pad"><div class="inner">
+        <p class="lab eyebrow">Thursday · 19:00 · Music</p>
+        <h3>Hooaja avakontsert.<br><i>Poska and Elgar.</i></h3>
+        <p>Estonia Concert Hall, €32. One of 350 music events currently on the books — and the sort of thing that reaches your inbox on a Thursday if orchestral is your register.</p>
+        <div class="creds"><span>Estonia kontserdisaal</span><span><b>€32</b></span><span>Music</span></div>
+      </div></div>
+    </section>
+
+    <section class="plate q2 right">
+      <div class="pic"><div class="img"></div><div class="scrim"></div></div>
+      <div class="pad"><div class="inner">
+        <p class="lab eyebrow">Tonight · 22:00 · Nightlife</p>
+        <h3>Sauna Social + Bar.<br><i>Three euros.</i></h3>
+        <p>Tallinn Fringe, at Heldeke!. The cheapest ticket in the catalogue is one euro; the point is not that everything is cheap, it is that the small rooms are in here at all.</p>
+        <div class="creds"><span>Heldeke!</span><span><b>€3</b></span><span>Nightlife · Underground</span></div>
+      </div></div>
+    </section>
+
+    <section class="band pad">
+      <div class="row">
+        <div>
+          <p class="lab eyebrow">Five, at six, by email</p>
+          <h2>Stop <b>scrolling</b> for the city.</h2>
+        </div>
+        <div>
+          <form class="form" onsubmit="return false">
+            <input type="email" placeholder="you@example.com" aria-label="Email address">
+            <button>Send me a link →</button>
+          </form>
+          <p class="fine">No password, no tracking, no fee. English, Eesti or Русский — you choose at sign-up.</p>
+        </div>
+      </div>
+      <div class="steps">
+        <article class="st"><b>First</b><h4>Pick your vibe</h4><p>Clubs, galleries, workshops, family days — fourteen categories, ten vibes.</p></article>
+        <article class="st"><b>Then</b><h4>We scan the city</h4><p>Fienta, Piletilevi, KUMU, the Estonia Concert Hall, and organisers filing direct.</p></article>
+        <article class="st"><b>Daily</b><h4>Open your inbox</h4><p>Five events matched to your taste, waiting at seven every morning.</p></article>
+      </div>
+    </section>
+
+    <section class="org pad">
+      <div>
+        <p class="lab eyebrow">Organisers</p>
+        <h3>Put your event on the radar.</h3>
+        <p>List it yourself. It reaches the feed within seconds and stays yours to edit — no fee, no commission.</p>
+      </div>
+      <a href="#">List your event →</a>
+    </section>
+
+    <footer class="pad">
+      <span>No password</span><span>No tracking</span><span>No fee</span>
+      <span>English · Eesti · Русский</span><span>Tallinn, 2026</span>
+    </footer>
+  </div>
+</div>
+</body>
+</html>
