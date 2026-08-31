@@ -75,6 +75,17 @@ APP_ENV_DEVELOPMENT = "development"
 # username removes half of the credential pair an attacker needs to brute-force.
 ADMIN_USERNAME_DEFAULT = "admin"
 
+# Minimum SECRET_KEY length Settings will accept (OWASP audit F7) — 32 bytes
+# is what `python -c "import secrets; print(secrets.token_hex(32))"` (the
+# documented generation command) produces as a hex string. render.yaml's
+# generateValue:true already clears this bar; the floor exists so a hand-set
+# dev/self-hosted key can't start the app with something trivially guessable.
+SECRET_KEY_MIN_LEN = 32
+# The literal placeholder shipped in .env.example — rejected outright so a
+# copy-paste-without-editing mistake fails at startup instead of signing
+# every token with a value visible in the public repo.
+SECRET_KEY_PLACEHOLDER_PREFIX = "change-me-"
+
 # Hostnames treated as "local" by the dev/prod-DB startup sanity check
 # (app/main.py's lifespan) — a DATABASE_URL host outside this set while
 # APP_ENV=development suggests a misconfigured env var pointed at a real
@@ -110,6 +121,12 @@ ASGI_MESSAGE_TYPE_RESPONSE_BODY = "http.response.body"
 SECONDS_PER_MINUTE = 60
 SECONDS_PER_HOUR = 3600
 SECONDS_PER_DAY = 86400
+
+# ingestion/http_client.py::host_guard_hook pins redirects to this port (in
+# addition to hostname + scheme) — every ingestion source is fetched over
+# https, so a redirect to a non-standard port on an otherwise-allowlisted
+# host is rejected rather than silently followed (OWASP audit F14).
+HTTPS_DEFAULT_PORT = 443
 
 # Recycle pooled DB connections older than this many seconds. Set below Neon's
 # free-tier idle/auto-suspend window (~5 min) so we never hand out a connection
@@ -411,6 +428,12 @@ REPORT_STATUS_OPEN = "open"
 REPORT_STATUS_RESOLVED = "resolved"
 VALID_REPORT_STATUSES = frozenset({REPORT_STATUS_OPEN, REPORT_STATUS_RESOLVED})
 REPORT_DETAIL_MAX_CHARS = 500
+
+# Admin-authenticated but persisted to a Text column and emailed verbatim to
+# every reporter (see app/email/report_reporter.py) — bounded so validation
+# rejects an oversized note before it's stored/mailed rather than only being
+# limited by the 10 MiB request-body ceiling (OWASP audit F16).
+ADMIN_RESOLUTION_NOTE_MAX_CHARS = 2000
 
 # System-generated resolution_note for the auto-resolve-on-cancellation cascade
 # (utils.py::resolve_open_reports) — every path that cancels an event (admin
@@ -842,6 +865,19 @@ PREFERRED_TASTE_MIN_WEIGHT: float = 0.5
 # Publish gate — classified events with quality_score below this stay
 # 'classified' and never reach a feed. Tunable later from real data.
 PUBLISH_MIN_QUALITY_SCORE: float = 0.4
+
+# Ceiling applied to the LLM's quality_score for organizer-submitted events
+# only (Event.submitted_by_organizer_id is not None), before it's persisted.
+# Unlike is_explicit/is_non_event, quality_score has no deterministic keyword
+# floor. PUBLISH_MIN_QUALITY_SCORE (0.4) is a low bar most real events already
+# clear, so this ceiling isn't primarily a publish-gate defense — the actual
+# steerable prize is ranking prominence: quality_score feeds the persona
+# ranking formula (10% weight) and orders the public showcase/Explore
+# `quality_score DESC`, so an organizer who controls the event text could
+# otherwise push the model toward quality:1.0 to get outsized visibility
+# regardless of the event's real quality. Capping below 1.0 bounds that
+# upside while leaving normal submissions unaffected (OWASP audit F13).
+ORGANIZER_SUBMISSION_QUALITY_SCORE_CEILING: float = 0.7
 
 # Publish gate's reject-breakdown diagnostic only looks back this many days
 # (by starts_at) — it answers "why did recent work get rejected", not an
@@ -1332,6 +1368,16 @@ LOG_EVENT_CONTACT_HONEYPOT = "contact_honeypot_block"  # contact-form honeypot f
 LOG_EVENT_HOST_REJECTED = "host_rejected"  # HostCheckMiddleware Host-header reject
 LOG_EVENT_REPORT_SUBMITTED = "report_submitted"  # POST /reports success
 LOG_EVENT_ADMIN_ACTION = "admin_action"  # /admin/auth/* login/logout (issue #154)
+# Global (not per-IP) daily unverified-account-creation budget crossed — see
+# routers/utils.py::record_unverified_account_creation (OWASP audit F10).
+LOG_EVENT_UNVERIFIED_ACCOUNT_BUDGET_EXCEEDED = "unverified_account_budget_exceeded"
+
+# Daily cap (process-wide, not per-IP) on new unverified User/Organizer rows
+# created via the magic-link request endpoints before an operator alert fires
+# — an early signal ahead of Resend's own sender-reputation/quota controls
+# (OWASP audit F10). Well above realistic organic signup volume for this
+# single-city MVP; tune from real data once there's a baseline.
+UNVERIFIED_ACCOUNT_DAILY_BUDGET = 200
 # `action` field values for LOG_EVENT_ADMIN_ACTION (issue #155).
 ADMIN_ACTION_RESOLVE_REPORTS = "resolve_reports"
 ADMIN_ACTION_TAKEDOWN_REPORTED_EVENT = "takedown_reported_event"

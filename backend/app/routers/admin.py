@@ -12,7 +12,7 @@ from fastapi import APIRouter, Cookie, Depends, HTTPException, Query, Request, s
 from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from itsdangerous import BadSignature, SignatureExpired
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -22,6 +22,7 @@ from app.cleanup import cleanup_stale_data
 from app.config import settings
 from app.constants import (
     ADMIN_ACTION_APPROVE_SUBMISSION,
+    ADMIN_RESOLUTION_NOTE_MAX_CHARS,
     ADMIN_ACTION_BUILD_FEEDS,
     ADMIN_ACTION_CLEANUP,
     ADMIN_ACTION_CLASSIFY,
@@ -242,9 +243,13 @@ def get_current_admin(
     /admin/* route uses this instead of _require_admin (H-1 in the OWASP
     audit): _require_admin's Basic branch checks only ADMIN_USERNAME/
     ADMIN_PASSWORD and never touches TOTP, so it made the admin console's
-    second factor bypassable on every route that accepted it. Read-only
-    routes (GET) keep _require_admin so curl/scripts can still read them with
-    just the password. Defined here (not admin_auth.py, which imports
+    second factor bypassable on every route that accepted it. Only the two
+    non-PII read-only routes (/admin/counts, /admin/stats) keep
+    _require_admin so curl/scripts can still read them with just the
+    password (OWASP audit F3) — every other GET, including /admin/reports,
+    /admin/events/{id}, and /admin/submissions, discloses reporter/organizer
+    PII and requires this TOTP-backed session instead. Defined here (not
+    admin_auth.py, which imports
     admin_credentials_ok etc. from this module) to avoid a circular import;
     admin_auth.py imports this function from here instead.
 
@@ -498,7 +503,7 @@ async def admin_dedup_groups(
 
 
 class _ResolutionBody(BaseModel):
-    resolution_note: str
+    resolution_note: str = Field(max_length=ADMIN_RESOLUTION_NOTE_MAX_CHARS)
 
 
 def _validated_resolution_note(body: _ResolutionBody) -> str:
@@ -511,7 +516,7 @@ def _validated_resolution_note(body: _ResolutionBody) -> str:
     return note
 
 
-@router.get("/submissions", dependencies=[Depends(_require_admin)])
+@router.get("/submissions", dependencies=[Depends(get_current_admin)])
 @limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
 async def admin_list_submissions(
     request: Request,
@@ -647,7 +652,7 @@ async def admin_approve_submission(
     return await run_admin_job("Approve submission", _run())
 
 
-@router.get("/reports", dependencies=[Depends(_require_admin)])
+@router.get("/reports", dependencies=[Depends(get_current_admin)])
 @limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
 async def admin_list_reports(
     request: Request,
@@ -886,7 +891,7 @@ def _serialize_event_detail(event: Event) -> dict:
     }
 
 
-@router.get("/events/{event_id}", dependencies=[Depends(_require_admin)])
+@router.get("/events/{event_id}", dependencies=[Depends(get_current_admin)])
 @limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
 async def admin_get_event(event_id: int, request: Request) -> dict:
     """Full-detail inspector payload for one event, any status (issue #157,

@@ -28,16 +28,29 @@ import { isValidAuditToken } from '../src/lib/seoAuditAuth.js';
 import type { VercelRequest, VercelResponse } from './vercel';
 
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
-  const expectedToken = process.env.SEO_AUDIT_TOKEN;
-  const githubToken = process.env.GH_ISSUE_TOKEN;
-  if (!expectedToken || !githubToken) {
-    res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ error: 'seo-audit: SEO_AUDIT_TOKEN/GH_ISSUE_TOKEN not configured' });
+  if (req.method !== 'POST') {
+    res.status(StatusCodes.METHOD_NOT_ALLOWED).end();
     return;
   }
 
+  // Auth first, opaque 403 either way (OWASP audit F5): checking config
+  // presence before the token let an unauthenticated caller distinguish
+  // "misconfigured" (500 naming the missing env vars) from "configured but
+  // wrong token" (403), fingerprinting deploy state pre-auth.
+  const expectedToken = process.env.SEO_AUDIT_TOKEN;
+  const githubToken = process.env.GH_ISSUE_TOKEN;
   const received = req.headers[SEO_AUDIT_TOKEN_HEADER];
-  if (typeof received !== 'string' || !isValidAuditToken(received, expectedToken)) {
-    res.status(StatusCodes.FORBIDDEN).json({ error: 'invalid token' });
+  const authorized =
+    typeof received === 'string' && !!expectedToken && isValidAuditToken(received, expectedToken);
+  if (!authorized) {
+    res.status(StatusCodes.FORBIDDEN).json({ error: 'forbidden' });
+    return;
+  }
+
+  if (!githubToken) {
+    // Caller has already proven possession of the shared secret, so it's
+    // safe to disclose the remaining misconfiguration now.
+    res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ error: 'seo-audit: GH_ISSUE_TOKEN not configured' });
     return;
   }
 

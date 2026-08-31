@@ -581,6 +581,17 @@ class TestExtractJsonldEventOffers:
         )
         assert extract_jsonld_event_offers(_soup(html))[2] == "EUR"
 
+    def test_malformed_currency_dropped_not_raised(self):
+        """OWASP audit F0: Event.currency is String(3) — a malformed listing's
+        "EUROS" must be dropped at the extraction site, not passed through
+        unbounded (which would abort the whole ingest run at the DB write)."""
+        html = _ld_script(
+            '{"@type":"Event","offers":{"@type":"Offer","price":"10","priceCurrency":"EUROS"}}'
+        )
+        price_min, price_max, currency, has_free = extract_jsonld_event_offers(_soup(html))
+        assert (price_min, price_max, has_free) == (10.0, 10.0, False)
+        assert currency is None
+
 
 class TestCoordsInEstonia:
     def test_tallinn_coords_in_estonia(self):
@@ -960,6 +971,26 @@ class TestInsertNormalizedEvent:
 
         self._nested_cm(mock_db)
         mock_db.flush.side_effect = IntegrityError("stmt", {}, Exception("dup key"))
+        source = MagicMock(id=1, slug="test-source")
+        normalized = NormalizedEvent(
+            external_id="ext-1",
+            title="Test Event",
+            starts_at=datetime(2026, 6, 1, 18, 0, tzinfo=TALLINN_TZ),
+        )
+
+        result = await insert_normalized_event(mock_db, source, normalized)
+
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_returns_none_on_data_error(self, mock_db):
+        """OWASP audit F0: a bad scraped value that slips past validation
+        (e.g. an oversized currency code) must not abort the whole
+        ingest/refetch batch — this row is skipped, not the run."""
+        from sqlalchemy.exc import DataError
+
+        self._nested_cm(mock_db)
+        mock_db.flush.side_effect = DataError("stmt", {}, Exception("value too long"))
         source = MagicMock(id=1, slug="test-source")
         normalized = NormalizedEvent(
             external_id="ext-1",

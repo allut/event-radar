@@ -32,6 +32,10 @@ Every shipped line is one JSON object (`JsonLogFormatter`):
 | `webhook_rejected` | inbound-mail bad signature / bad body | `app/routers/webhooks.py` |
 | `report_submitted` | `POST /reports` succeeded | `app/routers/reports.py` |
 | `email_send_failed` | Resend magic-link or digest send failed | `app/auth/email.py`, `app/email/digest.py` |
+| `admin_action` | console-initiated admin action — audit trail; carries `action`, one of 17 `ADMIN_ACTION_*` values (`app/constants.py`) | `app/routers/admin_auth.py`, `app/routers/utils.py` |
+| `contact_honeypot_block` | contact-form honeypot field tripped (bot signal) | `app/routers/contact.py` |
+| `host_rejected` | `HostCheckMiddleware` rejected a request's Host header — signals cache-poisoning/host-spoofing probes | `app/main.py` |
+| `unverified_account_budget_exceeded` | global daily new-unverified-account budget crossed (mail-bomb early warning, OWASP audit F10) | `app/routers/utils.py::record_unverified_account_creation` |
 
 ## Setup
 
@@ -62,10 +66,12 @@ thresholds after observing a few days of baseline volume.
 | 7 | Log-stream silence | Threshold (below) | `['event-radar'] \| summarize count()` over 30 min | count < 1 |
 | 8 | Job-duration anomaly *(optional)* | AnomalyDetection | `['event-radar'] \| where event == "job_run" \| summarize avg(duration_ms) by job, bin_auto(_time)` | auto-baselined drift |
 | 9 | Report abuse spike | Threshold | `['event-radar'] \| where event == "report_submitted" \| summarize count()` over 10 min | placeholder — tune after baseline volume observed |
+| 10 | Admin action audit ⭐ | Match | `['event-radar'] \| where event == "admin_action"` | any match — the audit trail (17 `ADMIN_ACTION_*` values) exists but had no monitor watching it (OWASP audit F11); this makes every console-initiated admin action visible, not alert-worthy on its own |
+| 11 | Host-header probing | Threshold | `['event-radar'] \| where event == "host_rejected" \| summarize count()` over 15 min | count > 5 — signals cache-poisoning/host-spoofing probes (OWASP audit F11) |
 
 **Priority if the free tier caps monitor count:** #2 (job failed), #3/#3b (dead
 scheduler), #7 (silence) are the must-haves — they catch the real operational
-failure modes. #1, #4, #5, #6, #9 are next. #8 is a nice-to-have.
+failure modes. #1, #4, #5, #6, #9, #10, #11 are next. #8 is a nice-to-have.
 
 ### Why #3/#3b/#7 matter most
 

@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import DataError, IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.constants import (
@@ -214,6 +214,22 @@ async def insert_normalized_event(
     except IntegrityError:
         log.warning(
             "slug collision source=%s external_id=%s slug=%s — skipped",
+            source.slug,
+            normalized.external_id,
+            slug,
+        )
+        return None
+    except DataError:
+        # Narrower than DatabaseError on purpose (adversarial review caught
+        # this): DatabaseError is also the parent of OperationalError
+        # (deadlock/timeout/connection loss) — catching that broadly would
+        # silently log a real infra failure as an ordinary per-row skip
+        # instead of letting it propagate. DataError is what
+        # StringDataRightTruncation (a bad scraped value slipping past
+        # validation) actually raises, so this stays scoped to the bad-data
+        # case the fix targets; the savepoint above rolls back just this insert.
+        log.warning(
+            "row rejected by db source=%s external_id=%s slug=%s — skipped",
             source.slug,
             normalized.external_id,
             slug,

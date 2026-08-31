@@ -1,9 +1,9 @@
 """Publish gate — promotes qualifying classified events to published."""
 
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import cast
 
-from sqlalchemy import and_, case, func, or_, select, update
+from sqlalchemy import and_, case, func, literal, or_, select, text, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -162,7 +162,8 @@ async def publish_pending(
         .where(
             Event.status == EVENT_STATUS_CLASSIFIED,
             Event.starts_at
-            >= now - timedelta(days=PUBLISH_DIAGNOSTICS_WINDOW_DAYS),
+            >= literal(now)
+            - text(f"INTERVAL '{PUBLISH_DIAGNOSTICS_WINDOW_DAYS} days'"),
         )
     )
     reject_row = (await db.execute(reject_stmt)).one()

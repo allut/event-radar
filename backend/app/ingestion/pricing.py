@@ -11,6 +11,7 @@ from bs4 import BeautifulSoup
 
 from app.constants import (
     CURRENCY_AMOUNT_RE,
+    CURRENCY_CODE_MAX_LEN,
     DEFAULT_CURRENCY,
     HTML_PARSER,
     PRICE_CONTEXT_MAX_CHARS,
@@ -22,9 +23,21 @@ from app.constants import (
 )
 
 def normalize_currency(raw: Any, has_price: bool) -> str | None:
-    """Coerce a raw currency value; fall back to DEFAULT_CURRENCY only when a price exists."""
+    """Coerce a raw currency value; fall back to DEFAULT_CURRENCY only when a price exists.
+
+    Bad data (e.g. a scraped listing's or the LLM's malformed "EUROS") longer
+    than CURRENCY_CODE_MAX_LEN is dropped outright, unconditionally on
+    has_price — never truncated and never defaulted to EUR: a 4+-char value
+    isn't a real currency code, so treating it as "no currency stated" (rather
+    than guessing it means EUR) is the safer read, and letting it through
+    unbounded would only move the StringDataRightTruncation failure to the DB
+    write instead of preventing it.
+    """
     if raw:
-        return str(raw)
+        code = str(raw)
+        if len(code) > CURRENCY_CODE_MAX_LEN:
+            return None  # bad data — dropped, never defaulted, regardless of has_price
+        return code
     return DEFAULT_CURRENCY if has_price else None
 
 

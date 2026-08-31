@@ -31,6 +31,7 @@ from app.constants import (
     LOCALE_RU,
     LOG_EVENT_ADMIN_ACTION,
     LOG_EVENT_EMAIL_SEND_FAILED,
+    LOG_EVENT_UNVERIFIED_ACCOUNT_BUDGET_EXCEEDED,
     MASK_DB_URL_PASSWORD_RE,
     MAGIC_LINK_RESEND_COOLDOWN_SECONDS,
     PREFERENCE_SIGNALS,
@@ -41,6 +42,7 @@ from app.constants import (
     SESSION_COOKIE_SAMESITE,
     SESSION_COOKIE_SECURE,
     TALLINN_TZ,
+    UNVERIFIED_ACCOUNT_DAILY_BUDGET,
     VALID_LOCALES,
     VALID_REPORT_REASONS,
 )
@@ -827,3 +829,45 @@ async def own_venue_or_404(db: AsyncSession, venue_id: int, organizer_id: int) -
             status_code=status.HTTP_404_NOT_FOUND, detail=ERROR_VENUE_NOT_FOUND
         )
     return venue
+
+
+# {"YYYY-MM-DD": count} — in-memory, single-process, like the admin lockout
+# dict (routers/admin.py) — resets on deploy/restart, which just means one
+# lost day of budget tracking, not a security regression.
+_unverified_account_creation_counts: dict[str, int] = {}
+_unverified_account_budget_alerted: set[str] = set()
+
+
+def record_unverified_account_creation() -> None:
+    """Bump the global (not per-IP) daily count of new unverified User/
+    Organizer rows created via the magic-link request endpoints
+    (auth.py::_get_or_create_user, organizer_auth.py::_get_or_create_organizer).
+
+    The per-email cooldown (RATE_LIMIT_AUTH_REQUEST_LINK) only throttles
+    repeats to the *same* address; a burst of distinct first-contact
+    addresses can still mail-bomb via this service's Resend domain. Rather
+    than hard-blocking new signups (which would turn away real users during
+    a legitimate burst), this logs one distinct, greppable warning the first
+    time UNVERIFIED_ACCOUNT_DAILY_BUDGET is crossed for the day — an early
+    signal an operator can alert on ahead of Resend's own sender-reputation/
+    quota controls tripping (OWASP audit F10).
+    """
+    today = datetime.now(timezone.utc).date().isoformat()
+    count = _unverified_account_creation_counts.get(today, 0) + 1
+    _unverified_account_creation_counts[today] = count
+    if (
+        count >= UNVERIFIED_ACCOUNT_DAILY_BUDGET
+        and today not in _unverified_account_budget_alerted
+    ):
+        _unverified_account_budget_alerted.add(today)
+        log.warning(
+            "auth: unverified-account creation budget exceeded (%d today)",
+            count,
+            extra={"event": LOG_EVENT_UNVERIFIED_ACCOUNT_BUDGET_EXCEEDED},
+        )
+    # Bound growth: only today's entry is ever needed going forward — a
+    # process left running for weeks would otherwise accumulate one stale
+    # key per day forever.
+    for stale_day in [d for d in _unverified_account_creation_counts if d != today]:
+        del _unverified_account_creation_counts[stale_day]
+        _unverified_account_budget_alerted.discard(stale_day)

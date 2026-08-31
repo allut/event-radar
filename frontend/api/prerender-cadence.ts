@@ -62,18 +62,27 @@ async function fetchTipCommitMessage(): Promise<string | null> {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
-  const expectedToken = process.env.PRERENDER_CADENCE_TOKEN;
-  const deployHookUrl = process.env.PRERENDER_CADENCE_DEPLOY_HOOK_URL;
-  if (!expectedToken || !deployHookUrl) {
-    res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
-      error: 'prerender-cadence: PRERENDER_CADENCE_TOKEN/PRERENDER_CADENCE_DEPLOY_HOOK_URL not configured',
-    });
+  if (req.method !== 'POST') {
+    res.status(StatusCodes.METHOD_NOT_ALLOWED).end();
     return;
   }
 
+  // Auth first, opaque 403 either way (OWASP audit F5) — see seo-audit.ts's
+  // handler for why config presence must not be checked pre-auth.
+  const expectedToken = process.env.PRERENDER_CADENCE_TOKEN;
+  const deployHookUrl = process.env.PRERENDER_CADENCE_DEPLOY_HOOK_URL;
   const received = req.headers[PRERENDER_CADENCE_TOKEN_HEADER];
-  if (typeof received !== 'string' || !isValidAuditToken(received, expectedToken)) {
-    res.status(StatusCodes.FORBIDDEN).json({ error: 'invalid token' });
+  const authorized =
+    typeof received === 'string' && !!expectedToken && isValidAuditToken(received, expectedToken);
+  if (!authorized) {
+    res.status(StatusCodes.FORBIDDEN).json({ error: 'forbidden' });
+    return;
+  }
+
+  if (!deployHookUrl) {
+    res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      error: 'prerender-cadence: PRERENDER_CADENCE_DEPLOY_HOOK_URL not configured',
+    });
     return;
   }
 
