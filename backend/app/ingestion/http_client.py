@@ -31,6 +31,7 @@ from tenacity import (
 from app.constants import (
     ALLOWED_SOURCE_HOSTS,
     DNS_RESOLVE_CACHE_TTL_SECONDS,
+    HTTPS_DEFAULT_PORT,
     HTTP_RETRY_AFTER_MAX_SECONDS,
     HTTP_RETRYABLE_STATUS_CODES,
     HTTP_RETRY_JITTER_MAX,
@@ -164,11 +165,31 @@ def host_guard_hook(
     hosts: frozenset[str] = frozenset(h for h in raw_hosts if h is not None)
 
     async def hook(request: httpx.Request) -> None:
-        if urlsplit(str(request.url)).hostname not in hosts:
+        parts = urlsplit(str(request.url))
+        # Pin scheme and port too, not just hostname (OWASP audit F14) — a
+        # hostname-only check lets a redirect to the same allowlisted host on
+        # a non-standard port, or an https->http downgrade, pass unnoticed.
+        # Every allowed source is fetched over https on the default port, so
+        # anything else is a permanent guard failure, same as a host mismatch.
+        if (
+            parts.hostname not in hosts
+            or parts.scheme != "https"
+            or parts.port not in (None, HTTPS_DEFAULT_PORT)
+        ):
             # ValueError, not httpx.RequestError: a host mismatch is a
             # permanent guard failure, not a transient one, and
             # httpx.RequestError is retried by _http_retry's predicate.
             raise ValueError(f"request host mismatch (SSRF guard): {request.url}")
+        # Re-check DNS rebinding on every hop this hook fires for, not just
+        # the initial fetch — safe_fetchable_url only resolves once at ingest
+        # time, so refetch.py's daily re-fetch of stored URLs previously never
+        # re-ran this check (OWASP audit F15). Cached per-hostname (see
+        # resolves_to_private_ip), so this is a cache hit on every request
+        # after the first for a given source host within the TTL.
+        if await asyncio.to_thread(resolves_to_private_ip, parts.hostname):
+            raise ValueError(
+                f"request host resolves to a private/reserved address (SSRF guard): {request.url}"
+            )
 
     return hook
 

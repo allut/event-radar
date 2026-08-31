@@ -14,6 +14,7 @@ from app.constants import (
     FIENTA_CITY_FILTER,
     FIENTA_MAX_PAGES,
     FIENTA_MIN_REQUEST_INTERVAL_SECONDS,
+    HTML_PARSER,
     HTTP_TIMEOUT_SECONDS,
     LOCALIZED_TEXT_FIENTA_LOCALES,
 )
@@ -396,7 +397,7 @@ class FientaAdapter(SourceAdapter):
             await limiter.acquire()
             try:
                 response = await http_get(client, url)
-                soup = BeautifulSoup(response.text, "html.parser")
+                soup = BeautifulSoup(response.text, HTML_PARSER)
                 item["_detail"] = _parse_detail_fields(soup)
 
                 # The canonical URL 302s to a locale-prefixed path (e.g. /et/slug).

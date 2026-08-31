@@ -1,4 +1,4 @@
-import { BRAND_GLYPH, UI_STATE } from '../../constants';
+import { BRAND_GLYPH, TOTP_CODE_LENGTH, UI_STATE } from '../../constants';
 import { useAdminLogin } from '../../hooks/useAdminLogin';
 import styles from './AdminLogin.module.css';
 
@@ -57,8 +57,8 @@ export default function AdminLogin() {
               className={styles.input}
               value={totpCode}
               onChange={(e) => setTotpCode(e.target.value)}
-              placeholder="000000"
-              maxLength={6}
+              placeholder={'0'.repeat(TOTP_CODE_LENGTH)}
+              maxLength={TOTP_CODE_LENGTH}
               autoComplete="one-time-code"
               disabled={loading}
               required

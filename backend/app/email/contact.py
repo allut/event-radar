@@ -12,6 +12,8 @@ import httpx
 
 from app.config import settings
 from app.constants import (
+    AUTHORIZATION_HEADER,
+    BEARER_PREFIX,
     LOG_EVENT_EMAIL_SEND_FAILED,
     RESEND_ERROR_SNIPPET_LEN,
     RESEND_SEND_URL,
@@ -49,7 +51,7 @@ async def send_contact_message(name: str, email: str, message: str) -> None:
     async with httpx.AsyncClient(timeout=RESEND_TIMEOUT_SECONDS) as client:
         resp = await client.post(
             RESEND_SEND_URL,
-            headers={"Authorization": f"Bearer {settings.RESEND_API_KEY}"},
+            headers={AUTHORIZATION_HEADER: f"{BEARER_PREFIX}{settings.RESEND_API_KEY}"},
             json={
                 "from": settings.RESEND_FROM_ADDRESS,
                 "to": [settings.CONTACT_TO_ADDRESS],

@@ -15,8 +15,13 @@
   cursor: pointer;
 }
 
-.activeChip {
+/* Doubled selector + explicit :hover pair — `.chip` composes `btnOutline`
+   cross-file, and Rollup emits Button.module.css's block after this one, so
+   both `.btnOutline` and `.btnOutline:hover` would otherwise win the tie.
+   See shared/Menu.module.css's .activePill comment. */
+.activeChip.activeChip,
+.activeChip.activeChip:hover {
   background: var(--accent-subtle);
-  border-color: var(--accent-border);
+  border: 1px solid var(--accent-border);
   color: var(--accent-light);
 }

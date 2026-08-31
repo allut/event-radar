@@ -14,13 +14,11 @@ from bs4 import BeautifulSoup
 from app.constants import (
     DEFAULT_CURRENCY,
     HTTP_METHOD_POST,
-    LOCALIZED_TEXT_MAX_DESC_CHARS,
-    LOCALIZED_TEXT_MAX_TITLE_CHARS,
     TALLINN_TZ,
 )
 from app.ingestion.http_client import http_post
 from app.ingestion.pricing import to_float
-from app.ingestion.sanitize import html_to_text, sanitize_html
+from app.ingestion.sanitize import sanitize_html
 from app.ingestion.selectors import (
     ECH_SITE_NAME_ET,
     ECH_SITE_TITLE_SUFFIX,
@@ -47,14 +45,13 @@ from app.ingestion.selectors import (
     ESTONIA_CONCERT_HALL_VENUES,
     ESTONIA_CONCERT_HALL_VENUE_SELECTOR,
 )
-from app.ingestion.html_utils import attr_str
+from app.ingestion.html_utils import attr_str, og_title_localized_text
 from app.ingestion.sources.html_base import (
     HtmlListingAdapter,
     ListingRequest,
     OnceAsync,
     full_res_wp_image,
     next_occurrence_year,
-    og_title,
 )
 
 log = logging.getLogger(__name__)
@@ -70,28 +67,12 @@ def estonia_concert_hall_localized_text(soup: BeautifulSoup) -> tuple[str | None
     Uses og:title (suffix-stripped) — ECH pages carry no JSON-LD Event block.
     Falls back to <h1> text when og:title is absent.
     """
-    raw_title = og_title(soup)
-    if raw_title:
-        if raw_title == ECH_SITE_NAME_ET or raw_title.startswith(ECH_SITE_NAME_ET + " -"):
-            # Site-level page (homepage) — og:title is the venue/site name, not an event
-            title = None
-        else:
-            title = raw_title.removesuffix(ECH_SITE_TITLE_SUFFIX).strip() or None
-    else:
-        h1 = soup.find("h1")
-        title = h1.get_text(strip=True) if h1 else None
-    title = title[:LOCALIZED_TEXT_MAX_TITLE_CHARS] if title else None
-
-    desc_tag = soup.select_one(ESTONIA_CONCERT_HALL_DESCRIPTION_SELECTOR)
-    desc: str | None = None
-    if desc_tag:
-        html = sanitize_html(desc_tag.decode_contents())
-        if html:
-            desc = html if len(html) <= LOCALIZED_TEXT_MAX_DESC_CHARS else (
-                (html_to_text(html) or "")[:LOCALIZED_TEXT_MAX_DESC_CHARS] or None
-            )
-
-    return title, desc
+    return og_title_localized_text(
+        soup,
+        site_name=ECH_SITE_NAME_ET,
+        title_suffix=ECH_SITE_TITLE_SUFFIX,
+        desc_selector=ESTONIA_CONCERT_HALL_DESCRIPTION_SELECTOR,
+    )
 
 
 def _jwt_claim(token: str, claim: str) -> str | None:

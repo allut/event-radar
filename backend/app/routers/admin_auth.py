@@ -17,7 +17,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel
 
 from app.auth.tokens import generate_admin_session_token
-from app.auth.totp import verify_totp_code
+from app.auth.totp import check_totp_code, record_totp_step
 from app.config import settings
 from app.constants import (
     ADMIN_SESSION_COOKIE_NAME,
@@ -84,13 +84,18 @@ async def admin_login(body: AdminLoginBody, request: Request, response: Response
             allow_insecure_dev=settings.ALLOW_INSECURE_DEV,
         )
         credentials_ok = admin_credentials_ok(body.username, body.password)
-        totp_ok = verify_totp_code(totp_secret, body.totp_code) if totp_configured else True
+        totp_step = check_totp_code(totp_secret, body.totp_code) if totp_configured else None
+        totp_ok = totp_step is not None if totp_configured else True
         if not (credentials_ok and totp_ok):
             record_admin_auth_failure(key, now, body.username)
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail=ERROR_ADMIN_INCORRECT_CREDENTIALS,
             )
+        # Only burn the code once the overall login has actually succeeded —
+        # a wrong-password attempt must not consume a still-valid TOTP code.
+        if totp_step is not None:
+            record_totp_step(totp_step)
     # else: password unset, dev fail-open (require_configured_secret already
     # logged a warning) — mirrors _require_admin's own early return.
 
@@ -109,15 +114,13 @@ async def admin_login(body: AdminLoginBody, request: Request, response: Response
 
 @router.post("/logout", status_code=status.HTTP_200_OK)
 @limiter.limit(RATE_LIMIT_LOGOUT)
-async def admin_logout(
-    request: Request,
-    response: Response,
-    _admin: None = Depends(get_current_admin),
-) -> dict:
+async def admin_logout(request: Request, response: Response) -> dict:
     """Sign out this device only — the admin session carries no
     session_token_version, so there is no "logout everywhere" variant (a
     12h TTL with no revocation beyond expiry is the accepted ceiling; see
-    docs/adr/0001)."""
+    docs/adr/0001). Idempotent (OWASP audit F18): no auth dependency, so an
+    already-expired session still gets a 200 with its stale cookie cleared,
+    not a 401."""
     clear_session_cookie(
         response, name=ADMIN_SESSION_COOKIE_NAME, path=ADMIN_SESSION_COOKIE_PATH
     )

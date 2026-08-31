@@ -633,9 +633,7 @@ class TestBuildDailyFeedsExplicitFilter:
 
         stmt = mock_db.scalars.call_args_list[1].args[0]
         compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
-        assert "events.ends_at >=" in compiled
-        assert "events.ends_at IS NULL" in compiled
-        assert "events.starts_at >=" in compiled
+        assert "coalesce(events.ends_at, events.starts_at) >=" in compiled
 
     async def test_verified_user_ids_query_filters_on_email_verified(self, mock_db):
         # Filters on email_verified (a user with zero UserPersona rows can

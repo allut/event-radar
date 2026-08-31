@@ -1,0 +1,123 @@
+.page {
+  composes: page from '../../components/shared/Page.module.css';
+}
+
+/* ── Main ── */
+.main {
+  flex: 1;
+  max-width: var(--page-max-settings);
+  margin: 0 auto;
+  padding: var(--space-2-5) var(--space-6) var(--space-8);
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2-5);
+}
+
+/* ── Section ── */
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding-bottom: var(--space-2-5);
+  border-bottom: var(--rule);
+}
+
+.section:last-of-type {
+  border-bottom: none;
+}
+
+.sectionTitle {
+  font-family: var(--font-display);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-bold);
+  color: var(--text-soft);
+  letter-spacing: var(--eyebrow-tracking);
+  text-transform: uppercase;
+}
+
+.email {
+  font-size: var(--fs-base);
+  color: var(--text);
+}
+
+/* ── Display name form ── */
+.form {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-4);
+  width: 100%;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: 100%;
+}
+
+.srOnly {
+  composes: srOnly from '../../components/shared/Visually.module.css';
+}
+
+.input {
+  composes: fieldInput from '../../components/shared/Field.module.css';
+  width: 100%;
+}
+
+.saveBtn {
+  composes: btnPrimary from '../../components/shared/Button.module.css';
+  align-self: flex-start;
+  padding: var(--space-0-625) var(--space-5);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-bold);
+}
+
+.saveBtn:disabled {
+  opacity: var(--opacity-disabled);
+  cursor: not-allowed;
+}
+
+/* ── Security ── */
+.toggleRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.toggleLabel {
+  font-size: var(--fs-base);
+  color: var(--text);
+}
+
+.toggleDesc {
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+  margin-top: var(--space-0-2);
+}
+
+.repickBtn {
+  composes: btnOutline from '../../components/shared/Button.module.css';
+  align-self: flex-start;
+  padding: var(--space-0-45) var(--space-4);
+  font-size: var(--fs-sm);
+  letter-spacing: var(--tracking-normal);
+  cursor: pointer;
+}
+
+.repickBtn:hover {
+  color: var(--accent-light);
+}
+
+/* ── Save feedback ── */
+.saveSuccess {
+  color: var(--success);
+  font-size: var(--fs-sm);
+}
+
+.saveError {
+  color: var(--danger);
+  font-size: var(--fs-sm);
+}

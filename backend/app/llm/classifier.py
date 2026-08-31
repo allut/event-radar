@@ -41,6 +41,7 @@ from app.constants import (
     LLM_CLASSIFY_WHY_GO_MAX_BULLETS,
     LLM_MAX_PROMPT_CHARS,
     LLM_TASK_CLASSIFY,
+    ORGANIZER_SUBMISSION_QUALITY_SCORE_CEILING,
     PRICE_HINT_MAX_CHARS,
     TALLINN_TZ,
     VALID_CATEGORIES,
@@ -316,10 +317,14 @@ def _reconcile_event_price_fields(event: Event, parsed: dict[str, Any]) -> None:
 
 
 def _apply_content_flags(event: Event, parsed: dict[str, Any]) -> None:
-    """OR-merge the LLM's content flags; is_out_of_area is set directly."""
+    """OR-merge all three of the LLM's content flags — a re-classification
+    pass (e.g. on an organizer edit) must never *clear* a flag a prior pass
+    set, even one with no deterministic keyword floor of its own
+    (is_out_of_area, unlike is_explicit/is_non_event, has no prefilter that
+    independently re-derives it — see OWASP audit F13)."""
     event.is_explicit = event.is_explicit or parsed["explicit"]
     event.is_non_event = event.is_non_event or parsed["non_event"]
-    event.is_out_of_area = not parsed["in_target_city"]
+    event.is_out_of_area = event.is_out_of_area or not parsed["in_target_city"]
 
 
 async def classify_event(
@@ -385,6 +390,13 @@ async def classify_event(
         log.warning("classify parse failed for event_id=%d: %s", event.id, exc)
         return False
     _validate_llm_prices(parsed, event, price_context=price_context)
+    if (
+        event.submitted_by_organizer_id is not None
+        and parsed["quality_score"] is not None
+    ):
+        parsed["quality_score"] = min(
+            parsed["quality_score"], ORGANIZER_SUBMISSION_QUALITY_SCORE_CEILING
+        )
 
     if prefetched:
         existing = existing_classification

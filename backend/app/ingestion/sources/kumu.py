@@ -8,12 +8,10 @@ import httpx
 from bs4 import BeautifulSoup, Tag
 
 from app.constants import (
-    LOCALIZED_TEXT_MAX_DESC_CHARS,
-    LOCALIZED_TEXT_MAX_TITLE_CHARS,
     PRICE_HINT_MAX_CHARS,
     TALLINN_TZ,
 )
-from app.ingestion.sanitize import html_to_text, sanitize_html
+from app.ingestion.sanitize import sanitize_html
 from app.ingestion.selectors import (
     KUMU_CARD_SELECTOR,
     KUMU_DATE_FORMAT,
@@ -35,12 +33,11 @@ from app.ingestion.selectors import (
     KUMU_VENUE_LNG,
     KUMU_VENUE_NAME,
 )
-from app.ingestion.html_utils import attr_str
+from app.ingestion.html_utils import attr_str, og_title_localized_text
 from app.ingestion.sources.html_base import (
     HtmlListingAdapter,
     first_image_url,
     full_res_wp_image,
-    og_title,
 )
 
 log = logging.getLogger(__name__)
@@ -80,28 +77,12 @@ def kumu_localized_text(soup: BeautifulSoup) -> tuple[str | None, str | None]:
     Yoast WebPage graph with no Event block, so extract_jsonld_event_text returns
     (None, None). Falls back to <h1> text when og:title is absent.
     """
-    raw_title = og_title(soup)
-    if raw_title:
-        if raw_title == KUMU_SITE_NAME_ET or raw_title.startswith(KUMU_SITE_NAME_ET + " -"):
-            # Site-level page (homepage) — og:title is the venue/site name, not an event
-            title = None
-        else:
-            title = raw_title.removesuffix(KUMU_SITE_TITLE_SUFFIX).strip() or None
-    else:
-        h1 = soup.find("h1")
-        title = h1.get_text(strip=True) if h1 else None
-    title = title[:LOCALIZED_TEXT_MAX_TITLE_CHARS] if title else None
-
-    desc_tag = soup.select_one(KUMU_DESCRIPTION_SELECTOR)
-    desc: str | None = None
-    if desc_tag:
-        html = sanitize_html(desc_tag.decode_contents())
-        if html:
-            desc = html if len(html) <= LOCALIZED_TEXT_MAX_DESC_CHARS else (
-                (html_to_text(html) or "")[:LOCALIZED_TEXT_MAX_DESC_CHARS] or None
-            )
-
-    return title, desc
+    return og_title_localized_text(
+        soup,
+        site_name=KUMU_SITE_NAME_ET,
+        title_suffix=KUMU_SITE_TITLE_SUFFIX,
+        desc_selector=KUMU_DESCRIPTION_SELECTOR,
+    )
 
 
 class KumuAdapter(HtmlListingAdapter):

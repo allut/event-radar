@@ -52,6 +52,7 @@ from app.routers.utils import (
     clear_session_cookie,
     mask_email,
     recent_unused_link_exists,
+    record_unverified_account_creation,
     set_session_cookie,
 )
 
@@ -110,6 +111,7 @@ async def _get_or_create_organizer(
             "organizer auth: new unverified organizer row created email=%s",
             mask_email(email),
         )
+        record_unverified_account_creation()
     return organizer
 
 
@@ -247,13 +249,11 @@ async def verify_organizer_magic_link(
 
 @router.post("/logout", status_code=status.HTTP_200_OK)
 @limiter.limit(RATE_LIMIT_LOGOUT)
-async def organizer_logout(
-    request: Request,
-    response: Response,
-    current_organizer: Organizer = Depends(get_current_organizer),
-) -> dict:
+async def organizer_logout(request: Request, response: Response) -> dict:
     """Sign out this device only. Mirrors auth.py::logout — expires the
-    cookie without touching session_token_version."""
+    cookie without touching session_token_version. Idempotent (OWASP audit
+    F18): no auth dependency, so an already-expired/revoked session still
+    gets a 200 with its stale cookie cleared, not a 401."""
     clear_session_cookie(
         response, name=ORGANIZER_SESSION_COOKIE_NAME, path=ORGANIZER_SESSION_COOKIE_PATH
     )

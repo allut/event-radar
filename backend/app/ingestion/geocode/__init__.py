@@ -40,7 +40,8 @@ from app.ingestion.geocode.venue_extract import (
     extract_address_from_venue_name,
     is_suspect_venue_name,
 )
-from app.models.models import Event
+from app.ingestion.geocode.venue_pass import geocode_pending_venues
+from app.models.models import Event, Venue
 
 __all__ = [
     "canonical_venue_name",
@@ -48,6 +49,7 @@ __all__ = [
     "extract_address_from_venue_name",
     "geocode_address",
     "geocode_pending",
+    "geocode_pending_venues",
     "is_suspect_venue_name",
     "normalize_address_for_geocoding",
 ]
@@ -84,6 +86,42 @@ async def _self_heal_out_of_bbox_coords(db: AsyncSession) -> int:
     if healed:
         log.info("self-healed %d event(s) with out-of-bbox coords", healed)
     return healed
+
+
+async def _sync_venue_linked_coords(db: AsyncSession) -> int:
+    """Copy a linked Venue's resolved coords onto its Events (#179).
+
+    Covers two cases with one bulk UPDATE...FROM (fixed query count, no N+1):
+    an event submitted before its venue's geocode resolved (event.lat IS NULL),
+    and a later venue address correction (organizer_venues.py clears the
+    venue's own lat/lng/geocode_attempted_at on edit, then geocode_pending_venues
+    re-resolves them to a new coord) propagating forward onto already-published
+    events at that venue. The one deliberate, scoped exception to this feature's
+    otherwise forward-only/no-backfill behavior — it only touches events already
+    linked via venue_id, never retroactively links unlinked ones. Rows already
+    matching the venue's coords are excluded from the WHERE clause so the
+    rowcount reflects only rows actually changed.
+    """
+    stmt = (
+        update(Event)
+        .where(
+            Event.venue_id == Venue.id,
+            Venue.lat.is_not(None),
+            Venue.lng.is_not(None),
+            or_(
+                Event.lat.is_(None),
+                Event.lng.is_(None),
+                Event.lat != Venue.lat,
+                Event.lng != Venue.lng,
+            ),
+        )
+        .values(lat=Venue.lat, lng=Venue.lng)
+    )
+    result = await db.execute(stmt)
+    synced = cast(CursorResult, result).rowcount
+    if synced:
+        log.info("synced venue-linked coords onto %d event(s)", synced)
+    return synced
 
 
 async def _build_geocode_cache(
@@ -192,6 +230,12 @@ async def geocode_pending(db: AsyncSession) -> dict:
     first so a bad donor coord can't propagate to copy_venue_from_siblings or the
     Nominatim cache below within the same run.
 
+    Next, resolves any organizer-saved Venue with a pending address
+    (geocode_pending_venues, #179) and syncs each linked Venue's resolved coords
+    onto its Events (_sync_venue_linked_coords) — a venue-linked event has
+    venue_name/venue_address left NULL at write time (#176), so it never enters
+    the venue_address-driven passes below; this is its only coordinate path.
+
     First copies venue data between same-name siblings (copy_venue_from_siblings),
     so copied coords count toward the run; any copied row still missing coords
     falls through to the Nominatim pass below. The sibling copy makes no Nominatim
@@ -205,6 +249,8 @@ async def geocode_pending(db: AsyncSession) -> dict:
     """
     now = datetime.now(TALLINN_TZ)
     healed = await _self_heal_out_of_bbox_coords(db)
+    venues_geocoded, venues_failed = await geocode_pending_venues(db, now)
+    synced = await _sync_venue_linked_coords(db)
     extracted = await extract_address_from_venue_name(db)
     copied = await copy_venue_from_siblings(db, now)
 
@@ -232,6 +278,9 @@ async def geocode_pending(db: AsyncSession) -> dict:
             "copied": copied,
             "extracted": extracted,
             "healed": healed,
+            "venues_geocoded": venues_geocoded,
+            "venues_failed": venues_failed,
+            "synced": synced,
         }
 
     cache = await _build_geocode_cache(db, now)
@@ -244,4 +293,7 @@ async def geocode_pending(db: AsyncSession) -> dict:
         "copied": copied,
         "extracted": extracted,
         "healed": healed,
+        "venues_geocoded": venues_geocoded,
+        "venues_failed": venues_failed,
+        "synced": synced,
     }

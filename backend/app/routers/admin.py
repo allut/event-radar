@@ -12,15 +12,17 @@ from fastapi import APIRouter, Cookie, Depends, HTTPException, Query, Request, s
 from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from itsdangerous import BadSignature, SignatureExpired
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.auth.tokens import verify_admin_session_token
 from app.cleanup import cleanup_stale_data
 from app.config import settings
 from app.constants import (
     ADMIN_ACTION_APPROVE_SUBMISSION,
+    ADMIN_RESOLUTION_NOTE_MAX_CHARS,
     ADMIN_ACTION_BUILD_FEEDS,
     ADMIN_ACTION_CLEANUP,
     ADMIN_ACTION_CLASSIFY,
@@ -47,6 +49,7 @@ from app.constants import (
     ADMIN_SESSION_COOKIE_NAME,
     ADMIN_USERNAME_DEFAULT,
     APP_ENV_DEVELOPMENT,
+    DEFAULT_USER_LOCALE,
     ERROR_ADMIN_DISABLED,
     ERROR_ADMIN_INCORRECT_CREDENTIALS,
     ERROR_ADMIN_LOCKOUT,
@@ -104,6 +107,9 @@ from app.routers.utils import (
     release_admin_job_lock,
     require_configured_secret,
     resolve_open_reports,
+    resolve_venue_address,
+    resolve_venue_coords,
+    resolve_venue_name,
     run_admin_job,
     run_in_session,
     select_events_with_classification,
@@ -147,7 +153,15 @@ def check_admin_lockout(key: str) -> float:
     time.monotonic() for the caller to reuse (avoids a second clock read).
     Shared by _require_admin (Basic auth) and routers/admin_auth.py's form
     login — ticket #154 requires both auth surfaces to share one lockout
-    counter rather than each getting its own damper."""
+    counter rather than each getting its own damper.
+
+    Opportunistically drops `key`'s entry once its lockout has expired
+    (locked_until > 0.0 and now >= locked_until) — otherwise nothing ever
+    removes an expired entry, so once the LRU (ADMIN_AUTH_FAILURES_MAX_ENTRIES)
+    saturates it stays saturated and every subsequent failure pays the
+    eviction scan. A never-locked entry (locked_until == 0.0, still under
+    ADMIN_AUTH_MAX_FAILURES) is left alone — dropping it would reset the
+    consecutive-failure count this dict exists to track."""
     now = time.monotonic()
     _count, locked_until = _admin_auth_failures.get(key, (0, 0.0))
     if now < locked_until:
@@ -155,6 +169,8 @@ def check_admin_lockout(key: str) -> float:
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail=ERROR_ADMIN_LOCKOUT,
         )
+    if locked_until > 0.0:
+        _admin_auth_failures.pop(key, None)
     return now
 
 
@@ -227,9 +243,13 @@ def get_current_admin(
     /admin/* route uses this instead of _require_admin (H-1 in the OWASP
     audit): _require_admin's Basic branch checks only ADMIN_USERNAME/
     ADMIN_PASSWORD and never touches TOTP, so it made the admin console's
-    second factor bypassable on every route that accepted it. Read-only
-    routes (GET) keep _require_admin so curl/scripts can still read them with
-    just the password. Defined here (not admin_auth.py, which imports
+    second factor bypassable on every route that accepted it. Only the two
+    non-PII read-only routes (/admin/counts, /admin/stats) keep
+    _require_admin so curl/scripts can still read them with just the
+    password (OWASP audit F3) — every other GET, including /admin/reports,
+    /admin/events/{id}, and /admin/submissions, discloses reporter/organizer
+    PII and requires this TOTP-backed session instead. Defined here (not
+    admin_auth.py, which imports
     admin_credentials_ok etc. from this module) to avoid a circular import;
     admin_auth.py imports this function from here instead.
 
@@ -383,7 +403,7 @@ def _dedup_event_summary(e: Event) -> dict:
         "id": e.id,
         "title": e.title_orig,
         "starts_at": e.starts_at.isoformat(),
-        "venue": e.venue_name,
+        "venue": resolve_venue_name(e, DEFAULT_USER_LOCALE),
         "status": e.status,
         "url": e.url,
         "is_explicit": e.is_explicit,
@@ -457,6 +477,7 @@ async def admin_dedup_groups(
         rows = (
             await db.scalars(
                 select(Event)
+                .options(selectinload(Event.venue))
                 .where(
                     Event.dedup_group_id.in_(page_group_ids),
                     Event.status != EVENT_STATUS_CANCELLED,
@@ -482,7 +503,7 @@ async def admin_dedup_groups(
 
 
 class _ResolutionBody(BaseModel):
-    resolution_note: str
+    resolution_note: str = Field(max_length=ADMIN_RESOLUTION_NOTE_MAX_CHARS)
 
 
 def _validated_resolution_note(body: _ResolutionBody) -> str:
@@ -495,7 +516,7 @@ def _validated_resolution_note(body: _ResolutionBody) -> str:
     return note
 
 
-@router.get("/submissions", dependencies=[Depends(_require_admin)])
+@router.get("/submissions", dependencies=[Depends(get_current_admin)])
 @limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
 async def admin_list_submissions(
     request: Request,
@@ -631,7 +652,7 @@ async def admin_approve_submission(
     return await run_admin_job("Approve submission", _run())
 
 
-@router.get("/reports", dependencies=[Depends(_require_admin)])
+@router.get("/reports", dependencies=[Depends(get_current_admin)])
 @limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
 async def admin_list_reports(
     request: Request,
@@ -715,7 +736,11 @@ async def admin_list_reports(
         reports_by_event: dict[int, list[EventReport]] = {}
         if event_ids:
             events = (
-                await db.scalars(select(Event).where(Event.id.in_(event_ids)))
+                await db.scalars(
+                    select(Event)
+                    .options(selectinload(Event.venue))
+                    .where(Event.id.in_(event_ids))
+                )
             ).all()
             events_by_id = {e.id: e for e in events}
 
@@ -743,7 +768,7 @@ async def admin_list_reports(
                 "event_id": event.id,
                 "title": event.title_orig,
                 "status": event.status,
-                "venue": event.venue_name,
+                "venue": resolve_venue_name(event, DEFAULT_USER_LOCALE),
                 "submitted_by_organizer_id": event.submitted_by_organizer_id,
                 "report_count": row.report_count,
                 "reasons": sorted({r.reason for r in event_reports}),
@@ -810,6 +835,7 @@ def _serialize_raw_event(raw: RawEvent, source_slug: str) -> dict:
 
 def _serialize_event_detail(event: Event) -> dict:
     cl = event.classification
+    lat, lng = resolve_venue_coords(event)
     return {
         "id": event.id,
         "slug": event.slug,
@@ -819,10 +845,10 @@ def _serialize_event_detail(event: Event) -> dict:
         "price_hint": event.price_hint,
         "starts_at": event.starts_at.isoformat(),
         "ends_at": event.ends_at.isoformat() if event.ends_at else None,
-        "venue_name": event.venue_name,
-        "venue_address": event.venue_address,
-        "lat": event.lat,
-        "lng": event.lng,
+        "venue_name": resolve_venue_name(event, DEFAULT_USER_LOCALE),
+        "venue_address": resolve_venue_address(event),
+        "lat": lat,
+        "lng": lng,
         "url": event.url,
         "image_url": event.image_url,
         "price_min": float(event.price_min) if event.price_min is not None else None,
@@ -865,7 +891,7 @@ def _serialize_event_detail(event: Event) -> dict:
     }
 
 
-@router.get("/events/{event_id}", dependencies=[Depends(_require_admin)])
+@router.get("/events/{event_id}", dependencies=[Depends(get_current_admin)])
 @limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
 async def admin_get_event(event_id: int, request: Request) -> dict:
     """Full-detail inspector payload for one event, any status (issue #157,
@@ -896,7 +922,9 @@ async def admin_get_event(event_id: int, request: Request) -> dict:
             # cancelled), matching this endpoint's own "any status" event.
             siblings = (
                 await db.scalars(
-                    select(Event).where(
+                    select(Event)
+                    .options(selectinload(Event.venue))
+                    .where(
                         Event.dedup_group_id == event.dedup_group_id,
                         Event.id != event.id,
                     )

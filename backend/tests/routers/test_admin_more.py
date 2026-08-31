@@ -237,6 +237,8 @@ async def test_dedup_groups_populated_page(admin_app, make_db_ctx, mock_db):
     ev.title_orig = "Jazz"
     ev.starts_at = datetime(2026, 7, 21, 20, 0, tzinfo=timezone.utc)
     ev.venue_name = "Club"
+    ev.venue_id = None
+    ev.venue = None
     ev.status = "published"
     ev.url = "https://x"
     ev.is_explicit = False
@@ -266,6 +268,54 @@ async def test_dedup_groups_populated_page(admin_app, make_db_ctx, mock_db):
     assert body["event_count"] == 1
     assert body["groups"][0]["dedup_group_id"] == 5
     assert body["groups"][0]["events"][0]["id"] == 11
+    assert body["groups"][0]["events"][0]["venue"] == "Club"
+
+
+@pytest.mark.asyncio
+async def test_dedup_groups_prefers_joined_venue_when_linked(
+    admin_app, make_db_ctx, mock_db, make_venue
+):
+    """#177: the dedup-groups listing must prefer the joined Venue over
+    Event's own (write-time-NULL) venue_name once venue_id is set."""
+    from datetime import datetime, timezone
+
+    app = admin_app
+    venue = make_venue(name="Telliskivi Creative City", name_en="Telliskivi Loomelinnak")
+    ev = MagicMock()
+    ev.id = 11
+    ev.dedup_group_id = 5
+    ev.title_orig = "Jazz"
+    ev.starts_at = datetime(2026, 7, 21, 20, 0, tzinfo=timezone.utc)
+    ev.venue_name = None
+    ev.venue_id = 1
+    ev.venue = venue
+    ev.status = "published"
+    ev.url = "https://x"
+    ev.is_explicit = False
+
+    db = mock_db
+    db.scalar = AsyncMock(return_value=1)
+    db.scalars = AsyncMock(
+        side_effect=[scalars_returning([5]), scalars_returning([ev])]
+    )
+
+    with (
+        patch("app.routers.admin.settings") as mock_settings,
+        patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
+    ):
+        mock_settings.ADMIN_PASSWORD = ""
+        mock_settings.APP_ENV = APP_ENV_DEVELOPMENT
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            resp = await client.get("/admin/dedup/groups", auth=("admin", ""))
+
+    assert resp.status_code == http.HTTPStatus.OK
+    body = resp.json()
+    # admin console has no locale/i18n loop — the resolver's DEFAULT_USER_LOCALE
+    # ("en") applies, so name_en wins over the base name.
+    assert body["groups"][0]["events"][0]["venue"] == "Telliskivi Loomelinnak"
 
 
 # ---------------------------------------------------------------------------

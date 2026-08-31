@@ -134,6 +134,9 @@ class Organizer(Base):
     verified: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default="false"
     )
+    # Optional display name (#175) — no logo/contact-info fields, out of scope
+    # per docs/organizer-portal.md's Organizer Profile section.
+    name: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     magic_links: Mapped[list["OrganizerMagicLink"]] = relationship(
         back_populates="organizer"
@@ -181,6 +184,45 @@ class OrganizerImageUpload(Base):
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     organizer_id: Mapped[int] = mapped_column(
         ForeignKey("organizers.id", ondelete="CASCADE"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
+class Venue(Base):
+    """A reusable venue an organizer builds up across event submissions
+    (docs/organizer-portal.md, #173). name/name_en/name_ru mirror the
+    Persona per-locale-column pattern rather than Event's JSONB
+    localized-field pattern, since a venue has no ingestion path that fills
+    locales piecemeal. address is a single non-localized column — street
+    names don't translate across locales. price_min/price_max/currency are
+    copy-in defaults for a submission form, not authoritative pricing — the
+    Event row created from a venue owns its own price fields.
+    geocode_attempted_at is a separate cooldown clock from Event's own
+    column of the same name."""
+
+    __tablename__ = "venues"
+    __table_args__ = (Index("ix_venues_organizer_id", "organizer_id"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    organizer_id: Mapped[int] = mapped_column(
+        ForeignKey("organizers.id", ondelete="CASCADE"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    name_en: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    name_ru: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    address: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    lat: Mapped[float | None] = mapped_column(Float, nullable=True)
+    lng: Mapped[float | None] = mapped_column(Float, nullable=True)
+    price_min: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)
+    price_max: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)
+    currency: Mapped[str | None] = mapped_column(String(3), nullable=True)
+    geocode_attempted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
@@ -343,9 +385,9 @@ class Event(Base):
             "needs_review",
             postgresql_where=text("needs_review"),
         ),
-        # event_not_ended_filter()'s OR (ends_at >= now) / (ends_at IS NULL AND
-        # starts_at >= now) can't use a plain B-tree — this expression index
-        # backs it (and _date_range_filter's identical coalesce(ends_at,
+        # event_not_ended_filter()/event_ended_filter()'s coalesce(ends_at,
+        # starts_at) comparison can't use a plain B-tree — this expression
+        # index backs it (and _date_range_filter's identical coalesce(ends_at,
         # starts_at) >= date_from_start in browse.py), on the largest table in
         # the schema, which grows forever since events rows are never deleted.
         Index(
@@ -354,6 +396,7 @@ class Event(Base):
         ),
         # ORDER BY events.price_min ASC NULLS LAST (browse.py's price sort, Path A).
         Index("ix_events_price_min", "price_min"),
+        Index("ix_events_venue_id", "venue_id"),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
@@ -368,6 +411,13 @@ class Event(Base):
     )
     venue_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     venue_address: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # A saved organizer Venue this event was submitted against (#176). When
+    # set, venue_name/venue_address are left NULL at write time — the FK
+    # becomes the sole venue source for the event going forward (read-path
+    # join/resolution is #177, not this ticket).
+    venue_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("venues.id", ondelete="SET NULL"), nullable=True
+    )
     lat: Mapped[float | None] = mapped_column(Float, nullable=True)
     lng: Mapped[float | None] = mapped_column(Float, nullable=True)
     url: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -440,6 +490,7 @@ class Event(Base):
     feedback: Mapped[list["UserEventFeedback"]] = relationship(back_populates="event")
     scores: Mapped[list["UserEventScore"]] = relationship(back_populates="event")
     reports: Mapped[list["EventReport"]] = relationship(back_populates="event")
+    venue: Mapped["Venue | None"] = relationship()
 
 
 class EventSource(Base):

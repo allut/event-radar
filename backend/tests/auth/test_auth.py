@@ -351,18 +351,30 @@ class TestLogout:
         from fastapi import Response
         from app.routers.auth import logout
 
-        user = MagicMock()
-        user.id = 7
-        user.session_token_version = 1
+        response = Response()
+        result = await logout(
+            request=make_request(method="POST", path="/auth/logout"),
+            response=response,
+        )
+
+        assert_hardened_cookie(
+            response.headers["set-cookie"], name="session", path="/api", cleared=True
+        )
+        assert "detail" in result
+
+    @pytest.mark.asyncio
+    async def test_idempotent_with_no_session_at_all(self, mock_db, make_request):
+        """OWASP audit F18: logout must not depend on a valid session — an
+        already-expired/revoked cookie still gets a 200 and gets cleared."""
+        from fastapi import Response
+        from app.routers.auth import logout
 
         response = Response()
         result = await logout(
             request=make_request(method="POST", path="/auth/logout"),
             response=response,
-            current_user=user,
         )
 
-        assert user.session_token_version == 1  # untouched
         assert_hardened_cookie(
             response.headers["set-cookie"], name="session", path="/api", cleared=True
         )

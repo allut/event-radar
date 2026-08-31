@@ -81,6 +81,65 @@ async def test_curated_field_set_no_siblings_no_reports_no_raw(
 
 
 @pytest.mark.asyncio
+async def test_venue_prefers_joined_venue_when_linked(
+    admin_app, make_db_ctx, mock_db, make_event, make_venue
+):
+    """#177: the inspector must prefer the joined Venue over Event's own
+    (write-time-NULL) venue_name/venue_address/lat/lng once venue_id is set."""
+    venue = make_venue(name="Telliskivi Creative City", address="Telliskivi 60a", lat=59.44, lng=24.74)
+    event = make_event(
+        event_id=42,
+        venue_id=1,
+        venue=venue,
+        venue_name=None,
+        venue_address=None,
+        lat=None,
+        lng=None,
+    )
+    _fill_event_detail_fields(event)
+
+    db = mock_db
+    db.scalar = AsyncMock(side_effect=[event, None])
+    db.scalars = AsyncMock(side_effect=[scalars_returning([])])
+    db.execute = AsyncMock(return_value=execute_rows([]))
+
+    resp = await _get(db, admin_app, make_db_ctx)
+
+    assert resp.status_code == http.HTTPStatus.OK
+    body = resp.json()["event"]
+    assert body["venue_name"] == "Telliskivi Creative City"
+    assert body["venue_address"] == "Telliskivi 60a"
+    assert body["lat"] == 59.44
+    assert body["lng"] == 24.74
+
+
+@pytest.mark.asyncio
+async def test_venue_falls_back_to_legacy_columns_when_unlinked(
+    admin_app, make_db_ctx, mock_db, make_event
+):
+    event = make_event(
+        event_id=42,
+        venue_id=None,
+        venue=None,
+        venue_name="Free-typed Venue",
+        venue_address="Free-typed Street 1",
+    )
+    _fill_event_detail_fields(event)
+
+    db = mock_db
+    db.scalar = AsyncMock(side_effect=[event, None])
+    db.scalars = AsyncMock(side_effect=[scalars_returning([])])
+    db.execute = AsyncMock(return_value=execute_rows([]))
+
+    resp = await _get(db, admin_app, make_db_ctx)
+
+    assert resp.status_code == http.HTTPStatus.OK
+    body = resp.json()["event"]
+    assert body["venue_name"] == "Free-typed Venue"
+    assert body["venue_address"] == "Free-typed Street 1"
+
+
+@pytest.mark.asyncio
 async def test_dedup_siblings_and_reports_included(
     admin_app, make_db_ctx, mock_db, make_event, make_report
 ):

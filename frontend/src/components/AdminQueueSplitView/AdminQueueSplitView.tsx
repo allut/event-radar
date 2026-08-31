@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { cx } from '../../utils';
 import styles from './AdminQueueSplitView.module.css';
 
 interface AdminQueueSplitViewProps<T> {
@@ -57,11 +58,7 @@ export default function AdminQueueSplitView<T>({
             <button
               key={id}
               type="button"
-              className={[
-                styles.row,
-                id === getId(current) ? styles.rowActive : '',
-                resolved ? styles.rowResolved : '',
-              ].filter(Boolean).join(' ')}
+              className={cx(styles.row, id === getId(current) && styles.rowActive, resolved && styles.rowResolved)}
               onClick={() => select(id)}
             >
               {renderRow(item)}

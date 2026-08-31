@@ -13,7 +13,7 @@ from urllib.parse import urljoin, urlsplit
 import httpx
 from bs4 import BeautifulSoup
 
-from app.constants import LOCALIZED_TEXT_HREFLANG_NORMALIZE
+from app.constants import HTML_PARSER, LOCALIZED_TEXT_HREFLANG_NORMALIZE
 from app.ingestion.html_utils import attr_str
 
 log = logging.getLogger(__name__)
@@ -95,7 +95,7 @@ async def fetch_locale_variants(
                     )
                     continue
                 title, desc, info = extract(
-                    BeautifulSoup(resp.text, "html.parser"), locale
+                    BeautifulSoup(resp.text, HTML_PARSER), locale
                 )
             except (httpx.HTTPStatusError, httpx.RequestError) as exc:
                 log.debug(

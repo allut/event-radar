@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { adminApi, ApiError } from '../../api/client';
 import { API, QUERY_KEYS, UI_STATE } from '../../constants';
-import { relativeTimeFromNow } from '../../utils';
+import { relativeTimeFromNow, safeUrl } from '../../utils';
 import PageState from '../../components/PageState';
 import Toast from '../../components/Toast';
 import { useToast } from '../../hooks/useToast';
@@ -124,6 +124,7 @@ export default function AdminSubmissions() {
           )}
           renderDetail={(item) => {
             const resolution = resolvedById[item.id];
+            const previewUrl = safeUrl(item.url);
             return (
               <div>
                 <h2 className={styles.detailTitle}>{item.title}</h2>
@@ -137,11 +138,11 @@ export default function AdminSubmissions() {
                 )}
                 <div className={styles.preview}>
                   {item.description ?? 'No description.'}
-                  {item.url && (
+                  {previewUrl && (
                     <>
                       <br />
-                      <a href={item.url} target="_blank" rel="noreferrer" className={styles.previewLink}>
-                        {item.url} →
+                      <a href={previewUrl} target="_blank" rel="noopener noreferrer" className={styles.previewLink}>
+                        {previewUrl} →
                       </a>
                     </>
                   )}

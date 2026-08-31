@@ -47,6 +47,7 @@ from app.routers.utils import (
     clear_session_cookie,
     mask_email,
     recent_unused_link_exists,
+    record_unverified_account_creation,
     serialize_user,
     set_session_cookie,
 )
@@ -125,6 +126,7 @@ async def _get_or_create_user(
         db.add(user)
         await db.flush()  # populate user.id
         log.info("auth: new unverified user row created email=%s", mask_email(email))
+        record_unverified_account_creation()
     return user
 
 
@@ -273,15 +275,15 @@ async def verify_magic_link(
 
 @router.post("/logout", status_code=status.HTTP_200_OK)
 @limiter.limit(RATE_LIMIT_LOGOUT)
-async def logout(
-    request: Request,
-    response: Response,
-    current_user: User = Depends(get_current_user),
-) -> dict:
+async def logout(request: Request, response: Response) -> dict:
     """Sign out this device only: expires the session cookie without
     touching session_token_version, leaving every other device's session
     intact. The server-side counterpart "sign out" previously lacked — until
-    now it was pure client-side localStorage.removeItem."""
+    now it was pure client-side localStorage.removeItem.
+
+    Idempotent (OWASP audit F18): no auth dependency, so a session that's
+    already expired/revoked still gets a 200 and its stale cookie cleared,
+    instead of a 401 that leaves the dead cookie sitting in the browser."""
     clear_session_cookie(response, name=SESSION_COOKIE_NAME, path=SESSION_COOKIE_PATH)
     return {"detail": "Signed out."}
 

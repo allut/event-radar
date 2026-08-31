@@ -25,6 +25,7 @@ from app.constants import (
     LOG_SHIP_QUEUE_MAXSIZE,
     LOG_SHIP_SUPPRESS_ACCESS_PATHS,
     LOG_SHIP_TIMEOUT_SECONDS,
+    SQLALCHEMY_ENGINE_LOGGER_NAME,
 )
 
 _queue_listener: logging.handlers.QueueListener | None = None
@@ -203,7 +204,7 @@ def configure_logging() -> None:
         logger = logging.getLogger(name)
         logger.handlers.clear()
         logger.propagate = True
-        if name == "sqlalchemy.engine":
+        if name == SQLALCHEMY_ENGINE_LOGGER_NAME:
             logger.setLevel(logging.INFO if is_dev else logging.WARNING)
         else:
             logger.setLevel(logging.NOTSET)

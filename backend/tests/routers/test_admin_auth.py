@@ -10,7 +10,20 @@ import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
+import app.auth.totp as totp_module
 from app.constants import ADMIN_AUTH_MAX_FAILURES
+
+
+@pytest.fixture(autouse=True)
+def _reset_totp_replay_state():
+    """_last_accepted_step (app/auth/totp.py) is process-global — isolate
+    each test, since every test here mints its own TOTP secret but the
+    replay guard tracks accepted steps across all secrets (single-admin
+    design). Without this, a later test's "current" step can collide with
+    an earlier test's accepted step within the same wall-clock second."""
+    totp_module._last_accepted_step = None
+    yield
+    totp_module._last_accepted_step = None
 
 
 def _build_app() -> FastAPI:
@@ -154,6 +167,19 @@ async def test_login_and_logout_and_me_roundtrip():
 
             me_after_logout = await client.get("/admin/auth/me")
     assert me_after_logout.status_code == http.HTTPStatus.UNAUTHORIZED
+
+
+@pytest.mark.asyncio
+async def test_logout_is_idempotent_with_no_session_cookie():
+    """OWASP audit F18: logout must not require a valid session — hitting it
+    with no cookie at all still gets a 200, not a 401, and clears the cookie."""
+    app = _build_app()
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.post("/admin/auth/logout")
+    assert resp.status_code == http.HTTPStatus.OK
+    assert "Max-Age=0" in resp.headers["set-cookie"]
 
 
 @pytest.mark.asyncio

@@ -8,7 +8,7 @@ The whole platform is designed to run on **free-tier infrastructure** at a stead
 
 ## Features
 
-- **Multi-source ingestion** — Fienta API, HTML listing scrapers (Piletilevi, KUMU, Estonia Concert Hall) sharing a common adapter, organizer self-submission, and inbound newsletter parsing via email webhook (fully wired but dormant — no sender domain is allowlisted yet). A Nominatim geocoding backfill fills in venue coordinates that sources don't provide, a daily detail-refetch sync reconciles venue/price/coordinates against each event's source page, and per-locale page fetches capture localized `et`/`en`/`ru` titles and descriptions at ingest.
+- **Multi-source ingestion** — Fienta API, HTML listing scrapers (Piletilevi, KUMU, Estonia Concert Hall) sharing a common adapter, organizer self-submission, and inbound newsletter parsing via email webhook (fully wired but dormant — no sender domain is allowlisted yet). A multi-pass geocoding backfill (out-of-bbox self-heal, organizer venue directory sync, venue-name address extraction, sibling copy, Nominatim lookup) fills in venue coordinates that sources don't provide, a daily detail-refetch sync reconciles venue/price/coordinates against each event's source page, and per-locale page fetches capture localized `et`/`en`/`ru` titles and descriptions at ingest.
 - **Two-stage deduplication** — a cheap SQL + fuzzy pre-filter narrows candidate pairs, then an LLM tiebreaker resolves only the survivors. Decisions are cached by content hash to avoid repeat LLM calls.
 - **LLM classification** — assigns a fixed 14-category / 10-vibe taxonomy, a quality score, an explicit-content flag, a non-event flag, a parsed price range, and a localized 3-bullet "why go?" rationale, with a Groq → Cerebras → Mistral provider fallback chain.
 - **3-layer NSFW filter** — a keyword prefilter at ingest time, an LLM-assigned explicit-content flag, and a publish gate that excludes flagged events from the published feed.
@@ -19,7 +19,7 @@ The whole platform is designed to run on **free-tier infrastructure** at a stead
 - **Explore discovery grid** — a searchable, filterable (keyword, category/vibe, date, free-only, for-you), and sortable (relevance/date/price/quality) view over all upcoming published events, with an optional personalized ranking path.
 - **Saved Events** — a dedicated page listing the events a user has bookmarked, liked, or disliked, tabbed by signal and paginated.
 - **Public landing showcase** — the only unauthenticated *list* read path: a fixed-size grid of six top-quality published events happening this week (widening to a 30-day window on a thin week), shown on `/` when signed out. No personalization, no PII. (Single-event detail, `GET /events/{id}`, is also public via optional auth.)
-- **Organizer portal** — self-service event submission for venues/promoters: its own magic-link auth track (separate table, tokens, and signing salts from user auth), a submit/edit form with per-locale `et`/`en`/`ru` text and an organizer-chosen category, signed Cloudinary image upload, a per-account daily submission cap, and an admin review queue. A submission from a `verified` organizer auto-publishes through the normal publish gate; a brand-new organizer's first submission waits in the queue until an admin approves it (which flips the organizer to `verified`).
+- **Organizer portal** — self-service event submission for venues/promoters: its own magic-link auth track (separate table, tokens, and signing salts from user auth), a submit/edit form with per-locale `et`/`en`/`ru` text and an organizer-chosen category, signed Cloudinary image upload, a reusable per-organizer saved-venue directory picked from the form, an organizer settings page (display name, log out everywhere), per-account daily submission/image-upload/venue-creation caps, and an admin review queue. A submission from a `verified` organizer auto-publishes through the normal publish gate; a brand-new organizer's first submission waits in the queue until an admin approves it (which flips the organizer to `verified`).
 - **Content reporting** — a signed-in user can flag an event's hosted content from the event card or detail page (`POST /reports`); the report lands in an admin queue with an email notification, and an admin can resolve it or take the event down.
 - **Admin console** — an operator-facing SPA at `/admin/*` (its own lazy-loaded chunk, un-i18n'd, reachable only by typed URL): dashboard, pipeline runner with a live per-stage breakdown, dedup-group review, organizer-submission queue, report queue, and a single-event inspector. Its own auth track — username/password + required TOTP, a 12h `Path=/api/admin` cookie — sharing the admin lockout counter with the HTTP Basic path.
 - **Magic-link auth** — passwordless sign-in with short-lived (15-minute), single-use links and 2-day sessions carried in an httpOnly / Secure / `SameSite=Strict` cookie, revocable per user via a token version. No third-party auth provider.
@@ -38,6 +38,7 @@ Vite + React SPA  ──HTTPS / JSON──▶  FastAPI (single process)
                                        │            /explore /feed /feedback /public /reports
                                        │            /users/me /contact /email /webhooks
                                        │            /organizer/auth /organizer/events
+                                       │            /organizer/profile /organizer/venues
                                        └── APScheduler (embedded, kept warm by a cron-job.org ping)
                                            ├── Weekly Sun 03:00: sync_fienta_organizers
                                            ├── Weekly Sun 03:30: cleanup_stale_data
@@ -61,7 +62,7 @@ The processing pipeline:
 fetch → raw_events → normalize → dedup → events(draft) → classify → events(classified) → publish gate → events(published) → rank → daily_feeds → digest
 ```
 
-Geocoding runs as a separate backfill alongside this pipeline, filling in `lat`/`lng` for events that have a venue address but no coordinates.
+Geocoding runs as a separate backfill alongside this pipeline, filling in `lat`/`lng` for events that lack coordinates. It is a chain of sub-passes in a fixed order: self-heal coordinates that fall outside the Tallinn bbox, geocode organizer-owned `Venue` rows and sync their coordinates onto venue-linked events, extract an address out of a venue *name*, copy from an already-geocoded sibling event at the same venue, and finally a rate-limited Nominatim lookup.
 
 ## Tech stack
 
@@ -192,7 +193,7 @@ event-radar/
 ├── .devcontainer/             # VS Code Dev Container (Python 3.12 + Node 20 + Postgres 16)
 ├── backend/                  # FastAPI application
 │   ├── app/
-│   │   ├── routers/          # /auth /admin /admin/auth /onboarding /events /explore /feed /feedback /public /reports /users/me /contact /email /webhooks /organizer/auth /organizer/events
+│   │   ├── routers/          # /auth /admin /admin/auth /onboarding /events /explore /feed /feedback /public /reports /users/me /contact /email /webhooks /organizer/auth /organizer/events /organizer/profile /organizer/venues
 │   │   ├── ingestion/        # source adapters (Fienta, HTML listings, newsletter), geocoding backfill, detail-refetch sync, organizer sync
 │   │   ├── dedup/            # rule-based pre-filter + LLM tiebreaker
 │   │   ├── llm/              # provider router, classifier, taxonomy, extractor
@@ -220,9 +221,9 @@ event-radar/
 │   ├── vercel.json           # Vercel rewrites (/api proxy + SPA fallback) + security headers
 │   └── src/
 │       ├── routes/          # Landing, Login, AuthVerify, Onboarding, Feed, Explore, SavedEvents, EventDetail, Settings, Unsubscribe, Privacy, Terms, Contact, NotFound
-│       │                    #   + organizer portal (OrganizerLogin, OrganizerVerify, OrganizerDashboard, EventSubmit)
+│       │                    #   + organizer portal (OrganizerLogin, OrganizerVerify, OrganizerDashboard, OrganizerSettings, EventSubmit — also serves /organizer/events/:id/edit)
 │       │                    #   + admin console, own lazy chunk (AdminApp, AdminLogin, AdminDashboard, AdminPipeline, AdminDedup, AdminSubmissions, AdminReports, AdminEventDetail)
-│       ├── components/      # EventCard, PersonaCard, TopBar, OrganizerTopBar, ReportModal, AdminShell, form controls, shared CSS base classes ...
+│       ├── components/      # EventCard, PersonaCard, TopBar, OrganizerTopBar, OrganizerProfileNudge, VenuePicker, ReportModal, AdminShell, form controls, shared CSS base classes ...
 │       ├── hooks/           # useAuth, useFeedback, useDropdown, useOrganizerAuth, useAdminAuth, useSeoMeta ...
 │       ├── lib/             # auth/organizer/admin subscriber stores + signed-in hint & locale storage (the session itself is an httpOnly cookie), analytics (gtag.ts), SEO/prerender modules (prerenderChain, seoAudit, seoValidation, structuredData, urlLocale)
 │       ├── api/             # API client (user + organizer wrappers)

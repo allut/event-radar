@@ -59,18 +59,30 @@ function parseWildcardAgentRules(robotsTxt: string): RobotsRule[] {
 }
 
 /** Google's robots.txt matching semantics (`*` wildcard, `$` end-anchor,
+ * longest-matching-pattern wins, `Allow` wins exact-length ties) against an
+ * already-parsed rule set — split out of isPathAllowedByRobots so callers
+ * checking multiple paths against the same robots.txt body (evaluateLiveAudit)
+ * parse once instead of re-parsing (and recompiling every rule's RegExp) per
+ * path. */
+function isPathAllowedByRules(rules: RobotsRule[], path: string): boolean {
+  const matching = rules.filter((rule) => rule.regex.test(path));
+  if (matching.length === 0) return true;
+  matching.sort((a, b) => b.patternLength - a.patternLength || (a.allow === b.allow ? 0 : a.allow ? -1 : 1));
+  return matching[0].allow;
+}
+
+/** Google's robots.txt matching semantics (`*` wildcard, `$` end-anchor,
  * longest-matching-pattern wins, `Allow` wins exact-length ties) — used by
  * the live audit to catch a robots.txt regression that blocks the sitemap,
  * the OG fallback image, or the SPA's built assets (the bug this audit
  * check exists for: robots.txt's `Disallow: /` silently caught
  * /sitemap.xml, and Google Search Console reported "Couldn't fetch" with
- * nothing else in the pipeline any wiser). */
+ * nothing else in the pipeline any wiser). Thin single-path wrapper around
+ * isPathAllowedByRules — re-parses robots.txt each call, so prefer parsing
+ * once via parseWildcardAgentRules + isPathAllowedByRules when checking
+ * several paths against the same body. */
 export function isPathAllowedByRobots(robotsTxt: string, path: string): boolean {
-  const rules = parseWildcardAgentRules(robotsTxt);
-  const matching = rules.filter((rule) => rule.regex.test(path));
-  if (matching.length === 0) return true;
-  matching.sort((a, b) => b.patternLength - a.patternLength || (a.allow === b.allow ? 0 : a.allow ? -1 : 1));
-  return matching[0].allow;
+  return isPathAllowedByRules(parseWildcardAgentRules(robotsTxt), path);
 }
 
 export interface LiveAuditResult {
@@ -120,17 +132,19 @@ export function evaluateLiveAudit(params: {
   const now = params.now ?? new Date();
   const issues: string[] = [];
 
-  if (!isPathAllowedByRobots(params.robotsTxt, SITEMAP_PATH)) {
+  const robotsRules = parseWildcardAgentRules(params.robotsTxt);
+
+  if (!isPathAllowedByRules(robotsRules, SITEMAP_PATH)) {
     issues.push(`robots.txt blocks ${SITEMAP_PATH} — Google Search Console will report "Couldn't fetch"`);
   }
-  if (!isPathAllowedByRobots(params.robotsTxt, OG_FALLBACK_IMAGE_PATH)) {
+  if (!isPathAllowedByRules(robotsRules, OG_FALLBACK_IMAGE_PATH)) {
     issues.push(`robots.txt blocks ${OG_FALLBACK_IMAGE_PATH} — the og:image fallback can't be crawled`);
   }
-  if (!isPathAllowedByRobots(params.robotsTxt, `${CRAWLABLE_ASSETS_PATH}index.js`)) {
+  if (!isPathAllowedByRules(robotsRules, `${CRAWLABLE_ASSETS_PATH}index.js`)) {
     issues.push(`robots.txt blocks ${CRAWLABLE_ASSETS_PATH} — Googlebot can't fetch the SPA's built assets`);
   }
   for (const iconPath of CRAWLABLE_ICON_PATHS) {
-    if (!isPathAllowedByRobots(params.robotsTxt, iconPath)) {
+    if (!isPathAllowedByRules(robotsRules, iconPath)) {
       issues.push(`robots.txt blocks ${iconPath} — Google can't crawl the site icon`);
     }
   }

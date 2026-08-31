@@ -8,7 +8,13 @@ from app._generated.shared_constants import (
     MAGIC_LINK_TTL_MINUTES as _MAGIC_LINK_TTL_DEFAULT,
     SESSION_TTL_DAYS as _SESSION_TTL_DEFAULT,
 )
-from app.constants import ADMIN_USERNAME_DEFAULT, APP_ENV_DEVELOPMENT, LOG_LEVEL_DEFAULT
+from app.constants import (
+    ADMIN_USERNAME_DEFAULT,
+    APP_ENV_DEVELOPMENT,
+    LOG_LEVEL_DEFAULT,
+    SECRET_KEY_MIN_LEN,
+    SECRET_KEY_PLACEHOLDER_PREFIX,
+)
 
 
 class Settings(BaseSettings):
@@ -192,6 +198,21 @@ class Settings(BaseSettings):
         if normalized not in logging.getLevelNamesMapping():
             raise ValueError(f"Invalid LOG_LEVEL: {v!r}")
         return normalized
+
+    @field_validator("SECRET_KEY")
+    @classmethod
+    def _validate_secret_key(cls, v: str) -> str:
+        if v.startswith(SECRET_KEY_PLACEHOLDER_PREFIX):
+            raise ValueError(
+                "SECRET_KEY is still the .env.example placeholder — generate a real "
+                'value with `python -c "import secrets; print(secrets.token_hex(32))"`'
+            )
+        if len(v) < SECRET_KEY_MIN_LEN:
+            raise ValueError(
+                f"SECRET_KEY must be at least {SECRET_KEY_MIN_LEN} characters "
+                f"(got {len(v)})"
+            )
+        return v
 
 
 settings = Settings()  # type: ignore[call-arg]

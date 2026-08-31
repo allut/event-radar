@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { adminApi } from '../../api/client';
 import { API, QUERY_KEYS } from '../../constants';
+import { padIndex } from '../../utils';
 import styles from './AdminDashboard.module.css';
 
 interface AdminCounts {
@@ -9,7 +10,7 @@ interface AdminCounts {
 }
 
 function padCount(n: number | undefined): string {
-  return n === undefined ? '––' : String(n).padStart(2, '0');
+  return n === undefined ? '––' : padIndex(n);
 }
 
 // Admin console landing screen (issue #154) — the two counts GET

@@ -10,7 +10,7 @@ row rather than creating a duplicate, and reopens it if it was resolved.
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -40,7 +40,11 @@ class ReportBody(BaseModel):
     event_id: int
     reason: str
     is_illegal_allegation: bool = False
-    detail: str | None = None
+    # max_length rejects an oversized value during validation, before it's
+    # fully materialized — the len() check below still runs (it also checks
+    # the *stripped* length, which max_length can't express) but a multi-MB
+    # payload no longer has to be parsed in full first (OWASP audit F16).
+    detail: str | None = Field(default=None, max_length=REPORT_DETAIL_MAX_CHARS)
 
 
 @router.post("", status_code=status.HTTP_200_OK)

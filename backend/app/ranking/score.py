@@ -14,7 +14,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from collections.abc import Sequence
 from datetime import date, datetime, timedelta
-from functools import lru_cache
+from functools import cached_property, lru_cache
 
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -124,7 +124,7 @@ class FeedbackContext:
     # results instead of a silent all-zero indirect signal.
     _liked_aggregates_built_for: datetime | None = field(default=None, repr=False)
 
-    @property
+    @cached_property
     def disliked_categories(self) -> frozenset[str]:
         """Union of categories across every disliked feedback row.
 
@@ -133,6 +133,11 @@ class FeedbackContext:
         soft-filter (browse.py) to hide events in a category the user has
         actively disliked, independent of the per-event/per-group hard
         excludes (`disliked_event_ids` / `disliked_groups`).
+
+        `@cached_property` (not `@property`): `self.rows` is fixed at
+        construction (from_orm_rows), so this is safe to compute once and
+        reuse — an in-loop call inside scoring is a one-character regression
+        away from O(E*L) otherwise.
         """
         cats: set[str] = set()
         for row in self.rows:

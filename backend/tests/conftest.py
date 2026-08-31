@@ -1,7 +1,7 @@
 import os
 
 # Must be set before any app module import so pydantic-settings can validate Settings.
-os.environ.setdefault("SECRET_KEY", "test-secret-not-for-production")
+os.environ.setdefault("SECRET_KEY", "test-secret-not-for-production-32chars")
 
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -105,12 +105,16 @@ def make_organizer():
         organizer_id: int = 1,
         locale: str = DEFAULT_USER_LOCALE,
         session_token_version: int = 1,
+        verified: bool = False,
+        name: str | None = None,
     ) -> MagicMock:
         o = MagicMock()
         o.id = organizer_id
         o.email = "organizer@example.com"
         o.locale = locale
         o.session_token_version = session_token_version
+        o.verified = verified
+        o.name = name
         o.created_at = MagicMock()
         o.created_at.isoformat.return_value = "2026-05-13T06:00:00+00:00"
         return o
@@ -125,6 +129,8 @@ def make_event():
         starts_at: datetime | None = None,
         venue_name: str | None = "Test Venue",
         venue_address: str | None = "Test Street 1",
+        venue_id: int | None = None,
+        venue: MagicMock | None = None,
         lat: float | None = TALLINN_CENTER_LAT,
         lng: float | None = TALLINN_CENTER_LNG,
         price_min: float | None = None,
@@ -148,6 +154,8 @@ def make_event():
         e.ends_at = None
         e.venue_name = venue_name
         e.venue_address = venue_address
+        e.venue_id = venue_id
+        e.venue = venue
         e.lat = lat
         e.lng = lng
         e.url = "https://example.com"
@@ -184,6 +192,29 @@ def make_event():
             cl.language_detected = DEFAULT_USER_LOCALE
             e.classification = cl
         return e
+    return _factory
+
+
+@pytest.fixture
+def make_venue():
+    def _factory(
+        venue_id: int = 1,
+        name: str = "Saved Venue",
+        name_en: str | None = None,
+        name_ru: str | None = None,
+        address: str | None = "Saved Street 1",
+        lat: float | None = TALLINN_CENTER_LAT,
+        lng: float | None = TALLINN_CENTER_LNG,
+    ) -> MagicMock:
+        v = MagicMock()
+        v.id = venue_id
+        v.name = name
+        v.name_en = name_en
+        v.name_ru = name_ru
+        v.address = address
+        v.lat = lat
+        v.lng = lng
+        return v
     return _factory
 
 

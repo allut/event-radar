@@ -107,6 +107,50 @@ async def test_list_reports_groups_one_row_per_event(
 
 
 @pytest.mark.asyncio
+async def test_list_reports_venue_prefers_joined_venue_when_linked(
+    admin_app, make_db_ctx, mock_db, make_event, make_venue, make_report
+):
+    """#177: the reports queue must prefer the joined Venue over Event's own
+    (write-time-NULL) venue_name once venue_id is set."""
+    app = admin_app
+    venue = make_venue(name="Telliskivi Creative City", name_en="Telliskivi Loomelinnak")
+    event = make_event(event_id=42, status="published", venue_id=1, venue=venue, venue_name=None)
+    event.submitted_by_organizer_id = None
+
+    agg_row = MagicMock(
+        event_id=42,
+        has_illegal_allegation=False,
+        report_count=1,
+        oldest_open_report_at="2026-05-13T06:00:00+00:00",
+    )
+    report_a = make_report(report_id=1, event_id=42, reason="spam_or_scam")
+
+    db = mock_db
+    db.scalar = AsyncMock(return_value=1)
+    db.execute = AsyncMock(return_value=execute_rows([agg_row]))
+    db.scalars = AsyncMock(
+        side_effect=[scalars_returning([event]), scalars_returning([report_a])]
+    )
+
+    with (
+        patch("app.routers.admin.settings") as mock_settings,
+        patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
+    ):
+        mock_settings.ADMIN_PASSWORD = ""
+        mock_settings.APP_ENV = APP_ENV_DEVELOPMENT
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            resp = await client.get("/admin/reports", auth=("admin", ""))
+
+    assert resp.status_code == http.HTTPStatus.OK
+    row = resp.json()["events"][0]
+    # admin console has no locale/i18n loop — DEFAULT_USER_LOCALE ("en") applies.
+    assert row["venue"] == "Telliskivi Loomelinnak"
+
+
+@pytest.mark.asyncio
 async def test_list_reports_invalid_reason_rejected(admin_app, make_db_ctx, mock_db):
     app = admin_app
     db = mock_db

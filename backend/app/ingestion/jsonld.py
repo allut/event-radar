@@ -10,6 +10,7 @@ from typing import Any
 from bs4 import BeautifulSoup
 
 from app.constants import (
+    CURRENCY_CODE_MAX_LEN,
     LOCALIZED_TEXT_MAX_DESC_CHARS,
     LOCALIZED_TEXT_MAX_TITLE_CHARS,
 )
@@ -149,7 +150,12 @@ def offers_from_jsonld_items(
                 if currency is None:
                     cur_raw = offer.get("priceCurrency")
                     if cur_raw:
-                        currency = str(cur_raw).upper()
+                        cur_upper = str(cur_raw).upper()
+                        # Bad data (e.g. "EUROS") is dropped, not truncated — a
+                        # 4+-char value isn't a real code, and Event.currency
+                        # is String(3) so an unbounded value aborts the write.
+                        if len(cur_upper) <= CURRENCY_CODE_MAX_LEN:
+                            currency = cur_upper
             else:
                 has_free_offer = True
         if paid_prices:

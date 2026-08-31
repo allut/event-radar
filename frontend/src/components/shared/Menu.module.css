@@ -60,7 +60,13 @@
    Cross-file consumers repeat these three declarations locally instead
    (see SelectMenu.optionActive, MobileMenu.linkActive/.localeOptionActive,
    Bar.module.css .navLinkActive) so each stays correct via its own
-   same-file source order, same as this file's own .triggerButtonActive. */
+   same-file source order, same as this file's own .triggerButtonActive.
+   A doubled selector alone isn't enough when the cross-file base also
+   declares its own `:hover` (e.g. this file's .menuOption:hover, or
+   Button.module.css's .btnOutline:hover) — that hover rule can still tie
+   or outrank the doubled active selector on specificity, so pair every
+   doubled active rule with an explicit `<selector>.<selector>:hover`
+   variant at the next specificity tier up. */
 .activePill {
   background: var(--accent-subtle);
   border: 1px solid var(--accent-border);

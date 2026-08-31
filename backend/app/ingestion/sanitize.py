@@ -18,6 +18,7 @@ from app.constants import (
     HTML_CF_EMAIL_MARKERS,
     HTML_EDGE_BR_RE,
     HTML_MULTI_BR_TEMPLATE_RE,
+    HTML_PARSER,
     HTML_SANITIZE_ALLOWED_ATTRS,
     HTML_SANITIZE_ALLOWED_TAGS,
     HTML_SANITIZE_MAX_CONSECUTIVE_BR,
@@ -25,6 +26,7 @@ from app.constants import (
     HTML_WHITESPACE_RUN_RE,
     SAFE_URL_SCHEMES,
 )
+from app.ingestion.selectors import CFEMAIL_HREF_MARKER
 
 _MULTI_BR_RE = re.compile(HTML_MULTI_BR_TEMPLATE_RE % (HTML_SANITIZE_MAX_CONSECUTIVE_BR + 1))
 _EDGE_BR_RE = re.compile(HTML_EDGE_BR_RE)
@@ -62,7 +64,7 @@ def deobfuscate_cf_emails(html: str) -> str:
     """
     if not any(marker in html for marker in HTML_CF_EMAIL_MARKERS):
         return html
-    soup = BeautifulSoup(html, "html.parser")
+    soup = BeautifulSoup(html, HTML_PARSER)
     changed = False
     for span in soup.find_all(attrs={"data-cfemail": True}):
         decoded = decode_cfemail(str(span["data-cfemail"]))
@@ -71,7 +73,7 @@ def deobfuscate_cf_emails(html: str) -> str:
             changed = True
     for anchor in soup.find_all("a", href=True):
         href = str(anchor["href"])
-        if "/cdn-cgi/l/email-protection#" not in href:
+        if CFEMAIL_HREF_MARKER not in href:
             continue
         decoded = decode_cfemail(href.rsplit("#", 1)[-1])
         if decoded is not None:
@@ -91,7 +93,7 @@ def _block_tags_to_breaks(html: str) -> str:
     lowered = html.lower()
     if not any(f"<{tag}" in lowered for tag in HTML_BLOCK_TAGS_TO_BREAK):
         return html
-    soup = BeautifulSoup(html, "html.parser")
+    soup = BeautifulSoup(html, HTML_PARSER)
     for tag in soup.find_all(list(HTML_BLOCK_TAGS_TO_BREAK)):
         tag.insert_after(soup.new_tag("br"))
         tag.unwrap()
@@ -136,7 +138,7 @@ def _collapse_text_whitespace(html: str) -> str:
     not formatting noise, and Python's \\s would otherwise silently collapse it.
     """
     inline_tags = HTML_SANITIZE_ALLOWED_TAGS - HTML_BLOCK_BOUNDARY_TAGS
-    soup = BeautifulSoup(html, "html.parser")
+    soup = BeautifulSoup(html, HTML_PARSER)
     for node in soup.find_all(string=True):
         collapsed = _WHITESPACE_RUN_RE.sub(" ", node)
         # A single space touching a block boundary (line start/end, or the
@@ -233,4 +235,4 @@ def html_to_text(text: str | None) -> str | None:
     """
     if not text:
         return text
-    return BeautifulSoup(text, "html.parser").get_text(separator=" ", strip=True) or None
+    return BeautifulSoup(text, HTML_PARSER).get_text(separator=" ", strip=True) or None

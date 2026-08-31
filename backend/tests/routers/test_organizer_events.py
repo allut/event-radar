@@ -29,6 +29,7 @@ def _fake_event(**overrides):
     e.description_orig = "A test event"
     e.important_info = None
     e.venue_name = "Test Venue"
+    e.venue_id = None
     e.title_localized = None
     e.description_localized = None
     e.important_info_localized = None
@@ -368,6 +369,143 @@ class TestSubmitEvent:
             )
         assert result["id"] == fake_event.id
 
+    @pytest.mark.asyncio
+    async def test_venue_id_linked_submission_nulls_free_typed_fields(
+        self, mock_db, make_request, make_organizer
+    ):
+        """#176: venue_id set -> venue_name/venue_address left NULL at write
+        time even if the organizer also sent free-typed values, and the FK
+        is persisted onto the event."""
+        from app.routers.organizer_events import SubmitEventBody, submit_event
+
+        organizer = make_organizer(organizer_id=5)
+        fake_event = _fake_event()
+        source = MagicMock(id=1, slug="user_submission")
+        owned_venue = MagicMock(id=7, organizer_id=5, deleted_at=None)
+        # MagicMock's `name` kwarg sets the mock's own repr, not a `.name`
+        # attribute — set it explicitly so the content-moderation recheck
+        # (is_explicit_text/is_non_event_text) scans a real string.
+        owned_venue.name = "Real Venue Hall"
+        # scalar order: daily-cap count, source lookup, venue ownership check,
+        # final-status re-fetch.
+        mock_db.scalar.side_effect = [0, source, owned_venue, EVENT_STATUS_PUBLISHED]
+        mock_db.commit = AsyncMock()
+
+        with (
+            patch(
+                "app.routers.organizer_events.insert_normalized_event",
+                new_callable=AsyncMock,
+                return_value=fake_event,
+            ) as mock_insert,
+            patch(
+                "app.routers.organizer_events.classify_event",
+                new_callable=AsyncMock,
+                return_value=True,
+            ),
+            patch(
+                "app.routers.organizer_events.publish_pending", new_callable=AsyncMock
+            ),
+        ):
+            body = SubmitEventBody(
+                title="Kontsert",
+                starts_at="2026-06-01T18:00:00+03:00",
+                venue_id=7,
+                venue_name="Ignored Free-Typed Name",
+                venue_address="Ignored Free-Typed Address",
+            )
+            result = await submit_event(
+                body,
+                make_request(method="POST", path="/organizer/events"),
+                organizer,
+                mock_db,
+            )
+
+        normalized_arg = mock_insert.await_args.args[2]
+        assert normalized_arg.venue_name is None
+        assert normalized_arg.venue_address is None
+        assert fake_event.venue_id == 7
+        assert result["id"] == fake_event.id
+
+    @pytest.mark.asyncio
+    async def test_venue_id_ownership_violation_rejected(
+        self, mock_db, make_request, make_organizer
+    ):
+        """#176: a venue_id owned by another organizer (or nonexistent) 404s
+        before any event is created."""
+        from fastapi import HTTPException
+        from app.routers.organizer_events import SubmitEventBody, submit_event
+
+        organizer = make_organizer(organizer_id=5)
+        source = MagicMock(id=1, slug="user_submission")
+        # daily-cap count, source lookup, venue ownership check (not found).
+        mock_db.scalar.side_effect = [0, source, None]
+
+        with patch(
+            "app.routers.organizer_events.insert_normalized_event",
+            new_callable=AsyncMock,
+        ) as mock_insert:
+            body = SubmitEventBody(
+                title="Kontsert",
+                starts_at="2026-06-01T18:00:00+03:00",
+                venue_id=999,
+            )
+            with pytest.raises(HTTPException) as exc_info:
+                await submit_event(
+                    body,
+                    make_request(method="POST", path="/organizer/events"),
+                    organizer,
+                    mock_db,
+                )
+        assert exc_info.value.status_code == http.HTTPStatus.NOT_FOUND
+        mock_insert.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_free_typed_submission_unaffected_by_venue_id_support(
+        self, mock_db, make_request, make_organizer
+    ):
+        """#176: the no-venue_id path is unchanged — free-typed venue_name/
+        venue_address still flow straight through."""
+        from app.routers.organizer_events import SubmitEventBody, submit_event
+
+        organizer = make_organizer(organizer_id=5)
+        fake_event = _fake_event()
+        source = MagicMock(id=1, slug="user_submission")
+        mock_db.scalar.side_effect = [0, source, EVENT_STATUS_PUBLISHED]
+        mock_db.commit = AsyncMock()
+
+        with (
+            patch(
+                "app.routers.organizer_events.insert_normalized_event",
+                new_callable=AsyncMock,
+                return_value=fake_event,
+            ) as mock_insert,
+            patch(
+                "app.routers.organizer_events.classify_event",
+                new_callable=AsyncMock,
+                return_value=True,
+            ),
+            patch(
+                "app.routers.organizer_events.publish_pending", new_callable=AsyncMock
+            ),
+        ):
+            body = SubmitEventBody(
+                title="Kontsert",
+                starts_at="2026-06-01T18:00:00+03:00",
+                venue_name="Freely Typed Hall",
+                venue_address="Freely Typed St 1",
+            )
+            await submit_event(
+                body,
+                make_request(method="POST", path="/organizer/events"),
+                organizer,
+                mock_db,
+            )
+
+        normalized_arg = mock_insert.await_args.args[2]
+        assert normalized_arg.venue_name == "Freely Typed Hall"
+        assert normalized_arg.venue_address == "Freely Typed St 1"
+        assert fake_event.venue_id is None
+
 
 class TestUpdateOwnEvent:
     @pytest.mark.asyncio
@@ -554,6 +692,110 @@ class TestUpdateOwnEvent:
                 mock_db,
             )
         assert event.url == "https://mytheatre.ee/tickets/42"
+        assert result["status"] == EVENT_STATUS_PUBLISHED
+
+    @pytest.mark.asyncio
+    async def test_venue_id_edit_links_venue_and_nulls_free_typed_fields(
+        self, mock_db, make_request, make_organizer
+    ):
+        """#176: patching in a venue_id validates ownership, links the FK,
+        and clears any stale free-typed venue_name/venue_address."""
+        from app.routers.organizer_events import PatchEventBody, update_own_event
+
+        organizer = make_organizer(organizer_id=5)
+        event = _fake_event(
+            submitted_by_organizer_id=5,
+            status=EVENT_STATUS_PUBLISHED,
+            venue_name="Old Free-Typed Hall",
+            venue_address="Old Address",
+            venue_id=None,
+        )
+        owned_venue = MagicMock(id=7, organizer_id=5, deleted_at=None)
+        # MagicMock's `name` kwarg sets the mock's own repr, not a `.name`
+        # attribute — set it explicitly so the content-moderation recheck
+        # (is_explicit_text/is_non_event_text) scans a real string.
+        owned_venue.name = "Real Venue Hall"
+        mock_db.scalar.side_effect = [event, owned_venue]
+        mock_db.commit = AsyncMock()
+
+        body = PatchEventBody(venue_id=7)
+        result = await update_own_event(
+            10,
+            body,
+            make_request(method="PATCH", path="/organizer/events/10"),
+            organizer,
+            mock_db,
+        )
+
+        assert event.venue_id == 7
+        assert event.venue_name is None
+        assert event.venue_address is None
+        assert result["status"] == EVENT_STATUS_PUBLISHED
+
+    @pytest.mark.asyncio
+    async def test_venue_id_edit_ownership_violation_raises_404(
+        self, mock_db, make_request, make_organizer
+    ):
+        from fastapi import HTTPException
+        from app.routers.organizer_events import PatchEventBody, update_own_event
+
+        organizer = make_organizer(organizer_id=5)
+        event = _fake_event(
+            submitted_by_organizer_id=5, status=EVENT_STATUS_PUBLISHED, venue_id=None
+        )
+        mock_db.scalar.side_effect = [event, None]
+
+        body = PatchEventBody(venue_id=999)
+        with pytest.raises(HTTPException) as exc_info:
+            await update_own_event(
+                10,
+                body,
+                make_request(method="PATCH", path="/organizer/events/10"),
+                organizer,
+                mock_db,
+            )
+        assert exc_info.value.status_code == http.HTTPStatus.NOT_FOUND
+        assert event.venue_id is None
+
+    @pytest.mark.asyncio
+    async def test_venue_name_edit_ignored_when_already_linked(
+        self, mock_db, make_request, make_organizer
+    ):
+        """A PATCH that sends only venue_name (not venue_id) on an event
+        already linked to a venue must not resurrect venue_name — the FK
+        stays the sole venue source until explicitly unlinked."""
+        from app.models.models import Venue
+        from app.routers.organizer_events import PatchEventBody, update_own_event
+
+        organizer = make_organizer(organizer_id=5)
+        event = _fake_event(
+            submitted_by_organizer_id=5,
+            status=EVENT_STATUS_PUBLISHED,
+            venue_id=7,
+            venue_name=None,
+            venue_address=None,
+        )
+        linked_venue = MagicMock(id=7)
+        linked_venue.name = "Real Venue Hall"
+        # scalar order: _own_event_or_404 lookup, then the moderation
+        # recheck's db.get(Venue, ...) fallback — not exercised via scalar,
+        # so only one scalar call here; db.get is mocked separately below.
+        mock_db.scalar.side_effect = [event]
+        mock_db.get = AsyncMock(return_value=linked_venue)
+        mock_db.commit = AsyncMock()
+
+        body = PatchEventBody(venue_name="Sneaky Rename Attempt")
+        result = await update_own_event(
+            10,
+            body,
+            make_request(method="PATCH", path="/organizer/events/10"),
+            organizer,
+            mock_db,
+        )
+
+        assert event.venue_id == 7
+        assert event.venue_name is None
+        mock_db.get.assert_awaited_once_with(Venue, 7)
         assert result["status"] == EVENT_STATUS_PUBLISHED
 
 
@@ -837,6 +1079,23 @@ class TestListOwnEvents:
         assert result["events"][0]["title_localized"] == {"et": "Pealkiri", "en": "Title"}
         assert result["events"][0]["description_localized"] == {"et": "Kirjeldus"}
         assert result["events"][0]["important_info_localized"] is None
+
+    @pytest.mark.asyncio
+    async def test_includes_venue_id(self, mock_db, make_request, make_organizer):
+        """#178: the submission form's edit-mode prefill needs venue_id to
+        preselect a saved venue in the picker — serialize_event() omits it
+        (public-read-path-oriented), so list_own_events must layer it on."""
+        from app.routers.organizer_events import list_own_events
+
+        organizer = make_organizer(organizer_id=5)
+        event = _fake_event(submitted_by_organizer_id=5, venue_id=7)
+        mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=[event]))
+
+        result = await list_own_events(
+            make_request(path="/organizer/events"), 20, 0, organizer, mock_db
+        )
+
+        assert result["events"][0]["venue_id"] == 7
 
 
 class TestDeleteOwnEvent:

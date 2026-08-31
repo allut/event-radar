@@ -47,7 +47,8 @@
 /* See MobileMenu.module.css's .linkActive for why this repeats the trio
    with a doubled selector instead of composing .activePill or relying on
    source order (Rollup's per-file CSS block order isn't import-order). */
-.optionActive.optionActive {
+.optionActive.optionActive,
+.optionActive.optionActive:hover {
   background: var(--accent-subtle);
   border: 1px solid var(--accent-border);
   color: var(--accent-light);

@@ -8,6 +8,7 @@ import pytest
 from app.constants import (
     EVENT_STATUS_CLASSIFIED,
     EVENT_STATUS_PUBLISHED,
+    PUBLISH_DIAGNOSTICS_WINDOW_DAYS,
     PUBLISH_MIN_QUALITY_SCORE,
     TALLINN_REGION_BBOX,
 )
@@ -54,6 +55,22 @@ async def test_publish_pending_zero_rowcount_when_nothing_qualifies(mock_db):
     result = await publish_pending(mock_db)
 
     assert result["published"] == 0
+
+
+@pytest.mark.asyncio
+async def test_reject_breakdown_statement_bounds_to_recent_window(mock_db):
+    """F3: the diagnostic reject-breakdown SELECT must stay bounded to the
+    last PUBLISH_DIAGNOSTICS_WINDOW_DAYS (by starts_at), not scan every
+    all-time classified reject."""
+    _configure_execute(mock_db, rowcount=0)
+
+    await publish_pending(mock_db)
+
+    reject_stmt = mock_db.execute.call_args_list[1][0][0]
+    compiled = str(reject_stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert f"events.status = '{EVENT_STATUS_CLASSIFIED}'" in compiled
+    assert "events.starts_at >=" in compiled
+    assert str(PUBLISH_DIAGNOSTICS_WINDOW_DAYS) in compiled or "interval" in compiled.lower()
 
 
 @pytest.mark.asyncio
@@ -108,9 +125,9 @@ async def test_publish_pending_statement_encodes_gate_criteria(mock_db):
     assert "is_non_event" in compiled
     # is_out_of_area=false gate (LLM location signal).
     assert "is_out_of_area" in compiled
-    # event_not_ended_filter: ends_at >= now, falling back to starts_at >= now.
-    assert "ends_at >=" in compiled
-    assert "starts_at >=" in compiled
+    # event_not_ended_filter: coalesce(ends_at, starts_at) >= now (sargable
+    # against ix_events_live_until).
+    assert "coalesce(events.ends_at, events.starts_at) >=" in compiled
     # title_orig presence check.
     assert "title_orig" in compiled
     # quality_score gate joined via event_classifications subquery.

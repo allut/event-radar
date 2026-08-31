@@ -12,6 +12,7 @@ from typing import NamedTuple
 PILETILEVI_HOST = "piletilevi.ee"
 PILETILEVI_TALLINN_FILTER = "Tallinn"
 PILETILEVI_DATE_FORMAT = "%d.%m.%Y %H:%M"
+PILETILEVI_DATE_SEPARATOR = "•"
 PILETILEVI_ALL_PATH = "/en/tickets/all"
 PILETILEVI_MAX_PAGES = 70  # safety bound — real stop is an empty page or the detail cap
 
@@ -183,3 +184,8 @@ JSONLD_ADDRESS_FIELDS: tuple[str, ...] = (
     "addressLocality",
     "addressRegion",
 )
+
+# --- Cloudflare email-obfuscation marker (app/ingestion/sanitize.py) ---
+# Cloudflare's "Email Address Protection" rewrites a mailto anchor's href to
+# this prefix + an encoded data-cfemail-style payload; decode_cfemail() reverses it.
+CFEMAIL_HREF_MARKER = "/cdn-cgi/l/email-protection#"

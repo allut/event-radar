@@ -12,7 +12,7 @@ import PageState from '../../components/PageState';
 import TopBar from '../../components/TopBar';
 import SeoTags from '../../components/SeoTags';
 import SegmentedControl from '../../components/SegmentedControl';
-import { SAVED_TABS, SIGNAL_CONFIG, SAVED_EVENTS_PAGE_SIZE, QUERY_KEYS, UI_STATE, type Signal } from '../../constants';
+import { API, SAVED_TABS, SIGNAL_CONFIG, SAVED_EVENTS_PAGE_SIZE, QUERY_KEYS, UI_STATE, type Signal } from '../../constants';
 import styles from './SavedEvents.module.css';
 
 interface SavedEventsResponse {
@@ -40,7 +40,7 @@ export default function SavedEvents() {
     queryKey: [QUERY_KEYS.saved, locale, signal],
     queryFn: ({ pageParam }) =>
       api.get<SavedEventsResponse>(
-        withLocaleQuery(`/feedback/events?signal=${signal}&limit=${SAVED_EVENTS_PAGE_SIZE}&offset=${pageParam}`, locale),
+        withLocaleQuery(`${API.feedbackEvents}?signal=${signal}&limit=${SAVED_EVENTS_PAGE_SIZE}&offset=${pageParam}`, locale),
       ),
     initialPageParam: 0,
     getNextPageParam: (lastPage) =>

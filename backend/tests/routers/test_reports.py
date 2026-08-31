@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi import HTTPException
+from pydantic import ValidationError
 
 from app.constants import REPORT_DETAIL_MAX_CHARS
 
@@ -135,23 +136,19 @@ class TestSubmitReport:
         assert result == {"ok": True}
 
     @pytest.mark.asyncio
-    async def test_detail_too_long_rejected(
-        self, mock_db, make_user, make_event, make_request
-    ):
-        from app.routers.reports import ReportBody, submit_report
+    async def test_detail_too_long_rejected(self):
+        """OWASP audit F16: ReportBody.detail now carries Field(max_length=...),
+        so an oversized value is rejected during Pydantic validation — before
+        it's fully materialized/parsed into the handler — rather than only by
+        submit_report's own len() check after construction."""
+        from app.routers.reports import ReportBody
 
-        with pytest.raises(HTTPException) as exc_info:
-            await submit_report(
-                body=ReportBody(
-                    event_id=10,
-                    reason="other",
-                    detail="x" * (REPORT_DETAIL_MAX_CHARS + 1),
-                ),
-                request=make_request(method="POST", path="/reports"),
-                current_user=make_user(),
-                db=mock_db,
+        with pytest.raises(ValidationError):
+            ReportBody(
+                event_id=10,
+                reason="other",
+                detail="x" * (REPORT_DETAIL_MAX_CHARS + 1),
             )
-        assert exc_info.value.status_code == http.HTTPStatus.UNPROCESSABLE_ENTITY
 
     @pytest.mark.asyncio
     async def test_whitespace_only_detail_normalized_to_none(

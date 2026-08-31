@@ -1,3 +1,4 @@
+import { ADMIN_NOTE_TEXTAREA_ROWS } from '../../constants';
 import styles from './AdminQueueActionPanel.module.css';
 
 interface AdminQueueAction {
@@ -36,7 +37,7 @@ export default function AdminQueueActionPanel({
           className={styles.noteTextarea}
           value={noteValue}
           onChange={(e) => onNoteChange(e.target.value)}
-          rows={3}
+          rows={ADMIN_NOTE_TEXTAREA_ROWS}
           disabled={noteDisabled}
         />
       </label>

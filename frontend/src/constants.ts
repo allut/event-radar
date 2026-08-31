@@ -47,6 +47,14 @@ export const LOCALE_KEY = 'locale';
 // two independent auth tracks (own account table, own token salts on the
 // backend) that must never be confused for one another. See lib/organizerAuth.ts.
 export const ORGANIZER_SIGNED_IN_HINT_KEY = 'organizer_session_token';
+// Client-only dismissal flag for the profile nudge banner (#175) — no backend
+// field for this, so a stale/cleared browser just re-shows it once.
+export const ORGANIZER_PROFILE_NUDGE_DISMISSED_KEY = 'organizer_profile_nudge_dismissed';
+// Mirrors backend ORGANIZER_NAME_MAX_LEN (app/constants.py).
+export const ORGANIZER_NAME_MAX_LEN = 255;
+// Mirrors backend ORGANIZER_VENUE_NAME_MAX_LEN/ORGANIZER_VENUE_ADDRESS_MAX_LEN (app/constants.py).
+export const ORGANIZER_VENUE_NAME_MAX_LEN = 255;
+export const ORGANIZER_VENUE_ADDRESS_MAX_LEN = 500;
 
 // ─── Auth / magic link ───────────────────────────────────────────────────────
 export const AUTH_REDIRECT_DELAY_MS = 600;
@@ -285,6 +293,7 @@ export const REPORT_REASONS: { value: string; labelKey: string; descriptionKey: 
 // Mirrors the backend's REPORT_DETAIL_MAX_CHARS (app/constants.py) — client-side
 // validation only, the server re-validates and is the real boundary.
 export const REPORT_DETAIL_MAX_CHARS = 500;
+export const REPORT_DETAIL_TEXTAREA_ROWS = 4;
 
 // ─── Events / feedback ───────────────────────────────────────────────────────
 export type Signal = 'like' | 'dislike' | 'bookmark';
@@ -334,6 +343,8 @@ export const QUERY_KEYS = {
   settings: 'settings',
   showcase: 'showcase',
   organizerEvents: 'organizerEvents',
+  organizerProfile: 'organizerProfile',
+  organizerVenues: 'organizerVenues',
   adminCounts: 'adminCounts',
   adminReports: 'adminReports',
   adminSubmissions: 'adminSubmissions',
@@ -378,6 +389,10 @@ export const VERIFY_STATE_TO_KIND: Record<VerifyState, AuthCardKind> = {
 // Contact form (routes/Contact/Contact.tsx)
 export const CONTACT_TEXTAREA_ROWS = 6;
 
+// Admin console (routes/AdminLogin, components/AdminQueueActionPanel)
+export const TOTP_CODE_LENGTH = 6;
+export const ADMIN_NOTE_TEXTAREA_ROWS = 3;
+
 // ─── Explore ─────────────────────────────────────────────────────────────────
 // BROWSE_PAGE_SIZE itself is cross-stack (shared/app-config.json), imported above.
 export const EXPLORE_SEARCH_DEBOUNCE_MS = 400;
@@ -391,7 +406,7 @@ export const SORT_OPTIONS: { value: SortOption; labelKey: string }[] = [
   { value: 'quality', labelKey: 'sort_quality' },
 ];
 
-export type DatePreset = 'any' | 'today' | 'weekend' | '7d' | '30d';
+export type DatePreset = 'any' | 'today' | 'weekend' | '7d' | '30d' | 'custom';
 
 export const DATE_PRESETS: { value: DatePreset; labelKey: string }[] = [
   { value: 'any', labelKey: 'date_any' },
@@ -399,6 +414,7 @@ export const DATE_PRESETS: { value: DatePreset; labelKey: string }[] = [
   { value: 'weekend', labelKey: 'date_weekend' },
   { value: '7d', labelKey: 'date_7d' },
   { value: '30d', labelKey: 'date_30d' },
+  { value: 'custom', labelKey: 'date_custom' },
 ];
 
 // ─── Saved Events ────────────────────────────────────────────────────────────
@@ -577,6 +593,7 @@ export const ROUTES = {
   organizerVerify: '/organizer/verify',
   organizerDashboard: '/organizer/dashboard',
   organizerSubmit: '/organizer/submit',
+  organizerSettings: '/organizer/settings',
   organizerEventEdit: (id: number | string) => `/organizer/events/${id}/edit`,
   organizerEventEditPattern: '/organizer/events/:id/edit',
   // Admin console (issue #154) — registered entirely outside App.tsx's
@@ -645,6 +662,7 @@ export const API = {
   authLogoutAll: '/auth/logout-all',
   authRequestLink: '/auth/request-link',
   organizerAuthLogout: '/organizer/auth/logout',
+  organizerAuthLogoutAll: '/organizer/auth/logout-all',
   organizerAuthVerify: '/organizer/auth/verify',
   organizerAuthRequestLink: '/organizer/auth/request-link',
   onboardingPersona: '/onboarding/persona',
@@ -652,6 +670,7 @@ export const API = {
   feed: '/feed',
   feedback: '/feedback',
   feedbackEvent: (id: number) => `/feedback/${id}`,
+  feedbackEvents: '/feedback/events',
   publicShowcase: '/public/showcase',
   emailUnsubscribe: '/email/unsubscribe',
   emailResubscribe: '/email/resubscribe',
@@ -659,6 +678,9 @@ export const API = {
   organizerEvents: '/organizer/events',
   organizerEvent: (id: number | string) => `/organizer/events/${id}`,
   organizerEventImage: '/organizer/events/image',
+  organizerProfile: '/organizer/profile',
+  organizerVenues: '/organizer/venues',
+  organizerVenue: (id: number | string) => `/organizer/venues/${id}`,
   reports: '/reports',
   adminAuthLogin: '/admin/auth/login',
   adminAuthLogout: '/admin/auth/logout',

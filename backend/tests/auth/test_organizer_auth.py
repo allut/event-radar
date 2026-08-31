@@ -259,16 +259,33 @@ class TestOrganizerLogout:
         from fastapi import Response
         from app.routers.organizer_auth import organizer_logout
 
-        organizer = make_organizer(organizer_id=7)
+        response = Response()
+        result = await organizer_logout(
+            request=make_request(method="POST", path="/organizer/auth/logout"),
+            response=response,
+        )
+
+        assert_hardened_cookie(
+            response.headers["set-cookie"],
+            name="organizer_session",
+            path="/api/organizer",
+            cleared=True,
+        )
+        assert "detail" in result
+
+    @pytest.mark.asyncio
+    async def test_idempotent_with_no_session_at_all(self, mock_db, make_request):
+        """OWASP audit F18: logout must not depend on a valid session — an
+        already-expired/revoked cookie still gets a 200 and gets cleared."""
+        from fastapi import Response
+        from app.routers.organizer_auth import organizer_logout
 
         response = Response()
         result = await organizer_logout(
             request=make_request(method="POST", path="/organizer/auth/logout"),
             response=response,
-            current_organizer=organizer,
         )
 
-        assert organizer.session_token_version == 1  # untouched
         assert_hardened_cookie(
             response.headers["set-cookie"],
             name="organizer_session",

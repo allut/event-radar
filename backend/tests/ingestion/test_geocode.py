@@ -10,12 +10,14 @@ import pytest
 from app.constants import TALLINN_TZ
 from app.ingestion.geocode import (
     _self_heal_out_of_bbox_coords,
+    _sync_venue_linked_coords,
     is_suspect_venue_name,
     canonical_venue_name,
     copy_venue_from_siblings,
     extract_address_from_venue_name,
     geocode_address,
     geocode_pending,
+    geocode_pending_venues,
     normalize_address_for_geocoding,
 )
 
@@ -189,6 +191,9 @@ class TestGeocodePending:
             "copied": 0,
             "extracted": 0,
             "healed": 0,
+            "venues_geocoded": 0,
+            "venues_failed": 0,
+            "synced": 0,
         }
 
     @pytest.mark.asyncio
@@ -217,6 +222,14 @@ class TestGeocodePending:
                 new=AsyncMock(return_value=0),
             ),
             patch(
+                "app.ingestion.geocode.geocode_pending_venues",
+                new=AsyncMock(return_value=(0, 0)),
+            ),
+            patch(
+                "app.ingestion.geocode._sync_venue_linked_coords",
+                new=AsyncMock(return_value=0),
+            ),
+            patch(
                 "app.ingestion.geocode.geocode_address",
                 new=AsyncMock(return_value=(59.5, 24.5)),
             ) as mock_geo,
@@ -231,6 +244,9 @@ class TestGeocodePending:
             "copied": 0,
             "extracted": 0,
             "healed": 0,
+            "venues_geocoded": 0,
+            "venues_failed": 0,
+            "synced": 0,
         }
         assert (event1.lat, event1.lng) == (59.5, 24.5)
         assert (event2.lat, event2.lng) == (59.43, 24.75)
@@ -265,6 +281,14 @@ class TestGeocodePending:
                 new=AsyncMock(return_value=0),
             ),
             patch(
+                "app.ingestion.geocode.geocode_pending_venues",
+                new=AsyncMock(return_value=(0, 0)),
+            ),
+            patch(
+                "app.ingestion.geocode._sync_venue_linked_coords",
+                new=AsyncMock(return_value=0),
+            ),
+            patch(
                 "app.ingestion.geocode.geocode_address",
                 new=AsyncMock(return_value=(59.44, 24.72)),
             ) as mock_geo,
@@ -279,6 +303,9 @@ class TestGeocodePending:
             "copied": 0,
             "extracted": 0,
             "healed": 0,
+            "venues_geocoded": 0,
+            "venues_failed": 0,
+            "synced": 0,
         }
         mock_geo.assert_called_once()  # normalized key collision → 1 call for 3 events
 
@@ -319,6 +346,14 @@ class TestGeocodePending:
                 new=AsyncMock(return_value=0),
             ),
             patch(
+                "app.ingestion.geocode.geocode_pending_venues",
+                new=AsyncMock(return_value=(0, 0)),
+            ),
+            patch(
+                "app.ingestion.geocode._sync_venue_linked_coords",
+                new=AsyncMock(return_value=0),
+            ),
+            patch(
                 "app.ingestion.geocode.geocode_address", new=AsyncMock()
             ) as mock_geo,
             patch("app.ingestion.geocode.asyncio.sleep", new=AsyncMock()),
@@ -332,6 +367,9 @@ class TestGeocodePending:
             "copied": 0,
             "extracted": 0,
             "healed": 0,
+            "venues_geocoded": 0,
+            "venues_failed": 0,
+            "synced": 0,
         }
         assert (pending_event.lat, pending_event.lng) == (59.4381936, 24.7286398)
         mock_geo.assert_not_called()
@@ -354,6 +392,14 @@ class TestGeocodePending:
                 new=AsyncMock(return_value=0),
             ),
             patch(
+                "app.ingestion.geocode.geocode_pending_venues",
+                new=AsyncMock(return_value=(0, 0)),
+            ),
+            patch(
+                "app.ingestion.geocode._sync_venue_linked_coords",
+                new=AsyncMock(return_value=0),
+            ),
+            patch(
                 "app.ingestion.geocode.geocode_address", new=AsyncMock(return_value=None)
             ),
             patch("app.ingestion.geocode.asyncio.sleep", new=AsyncMock()),
@@ -367,6 +413,9 @@ class TestGeocodePending:
             "copied": 0,
             "extracted": 0,
             "healed": 0,
+            "venues_geocoded": 0,
+            "venues_failed": 0,
+            "synced": 0,
         }
         assert event1.lat is None
         assert event1.lng is None
@@ -1017,6 +1066,14 @@ class TestExtractAddressFromVenueName:
                 new=AsyncMock(return_value=0),
             ),
             patch(
+                "app.ingestion.geocode.geocode_pending_venues",
+                new=AsyncMock(return_value=(0, 0)),
+            ),
+            patch(
+                "app.ingestion.geocode._sync_venue_linked_coords",
+                new=AsyncMock(return_value=0),
+            ),
+            patch(
                 "app.ingestion.geocode.geocode_address",
                 new=AsyncMock(side_effect=httpx.RequestError("boom")),
             ),
@@ -1067,6 +1124,14 @@ class TestExtractAddressFromVenueName:
                 new=AsyncMock(return_value=0),
             ),
             patch(
+                "app.ingestion.geocode.geocode_pending_venues",
+                new=AsyncMock(return_value=(0, 0)),
+            ),
+            patch(
+                "app.ingestion.geocode._sync_venue_linked_coords",
+                new=AsyncMock(return_value=0),
+            ),
+            patch(
                 "app.ingestion.geocode.geocode_address", new=AsyncMock(return_value=None)
             ) as mock_geo,
             patch("app.ingestion.geocode.asyncio.sleep", new=AsyncMock()),
@@ -1100,3 +1165,116 @@ class TestSelfHealOutOfBboxCoords:
         compiled = str(mock_db.execute.call_args.args[0])
         assert "is_out_of_area" in compiled
         assert "lat" in compiled and "lng" in compiled
+
+
+class TestGeocodePendingVenues:
+    @pytest.mark.asyncio
+    async def test_no_pending_venues_returns_zero_without_nominatim_call(
+        self, mock_db
+    ):
+        mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=[]))
+        with patch(
+            "app.ingestion.geocode.venue_pass.geocode_address", new=AsyncMock()
+        ) as mock_geo:
+            geocoded, failed = await geocode_pending_venues(mock_db, _NOW)
+        assert (geocoded, failed) == (0, 0)
+        mock_geo.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_resolves_pending_venue_address(self, mock_db, make_venue):
+        venue = make_venue(venue_id=1)
+        venue.address = "Telliskivi 60a, Tallinn"
+        venue.lat = None
+        venue.lng = None
+        venue.geocode_attempted_at = None
+
+        mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=[venue]))
+
+        with (
+            patch(
+                "app.ingestion.geocode.venue_pass.geocode_address",
+                new=AsyncMock(return_value=(59.44, 24.75)),
+            ) as mock_geo,
+            patch("app.ingestion.geocode.venue_pass.asyncio.sleep", new=AsyncMock()),
+        ):
+            geocoded, failed = await geocode_pending_venues(mock_db, _NOW)
+
+        assert (geocoded, failed) == (1, 0)
+        assert (venue.lat, venue.lng) == (59.44, 24.75)
+        assert venue.geocode_attempted_at == _NOW
+        mock_geo.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_definitive_no_match_stamps_cooldown(self, mock_db, make_venue):
+        venue = make_venue(venue_id=1)
+        venue.address = "Nowhere At All"
+        venue.lat = None
+        venue.lng = None
+        venue.geocode_attempted_at = None
+
+        mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=[venue]))
+
+        with (
+            patch(
+                "app.ingestion.geocode.venue_pass.geocode_address",
+                new=AsyncMock(return_value=None),
+            ),
+            patch("app.ingestion.geocode.venue_pass.asyncio.sleep", new=AsyncMock()),
+        ):
+            geocoded, failed = await geocode_pending_venues(mock_db, _NOW)
+
+        assert (geocoded, failed) == (0, 1)
+        assert venue.lat is None
+        assert venue.geocode_attempted_at == _NOW
+
+    @pytest.mark.asyncio
+    async def test_transient_failure_not_stamped_for_retry(self, mock_db, make_venue):
+        venue = make_venue(venue_id=1)
+        venue.address = "Unreachable Place"
+        venue.lat = None
+        venue.lng = None
+        venue.geocode_attempted_at = None
+
+        mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=[venue]))
+
+        with (
+            patch(
+                "app.ingestion.geocode.venue_pass.geocode_address",
+                new=AsyncMock(side_effect=httpx.RequestError("boom")),
+            ),
+            patch("app.ingestion.geocode.venue_pass.asyncio.sleep", new=AsyncMock()),
+        ):
+            geocoded, failed = await geocode_pending_venues(mock_db, _NOW)
+
+        assert (geocoded, failed) == (0, 1)
+        assert venue.geocode_attempted_at is None
+
+    @pytest.mark.asyncio
+    async def test_pending_query_excludes_soft_deleted_and_cooldown(self, mock_db):
+        """Asserts on the compiled SQL since mock_db.scalars doesn't execute a
+        real query — must filter on deleted_at and geocode_attempted_at."""
+        mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=[]))
+        await geocode_pending_venues(mock_db, _NOW)
+        compiled = str(mock_db.scalars.call_args.args[0])
+        assert "deleted_at" in compiled
+        assert "geocode_attempted_at" in compiled
+
+
+class TestSyncVenueLinkedCoords:
+    @pytest.mark.asyncio
+    async def test_bulk_update_statement_joins_venue_and_event(self, mock_db):
+        """Fills a venue-linked event's null coords or a stale coord in a single
+        bulk UPDATE...FROM — no N+1 (one execute() call regardless of row count)."""
+        mock_db.execute.return_value = MagicMock(rowcount=2)
+        synced = await _sync_venue_linked_coords(mock_db)
+        assert synced == 2
+        mock_db.execute.assert_called_once()
+        compiled = str(mock_db.execute.call_args.args[0])
+        assert "venues" in compiled
+        assert "venue_id" in compiled
+
+    @pytest.mark.asyncio
+    async def test_no_rows_synced_returns_zero(self, mock_db):
+        mock_db.execute.return_value = MagicMock(rowcount=0)
+        synced = await _sync_venue_linked_coords(mock_db)
+        assert synced == 0

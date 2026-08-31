@@ -15,12 +15,12 @@ import SeoTags from '../../components/SeoTags';
 import FacetMenu from '../../components/FacetMenu';
 import SegmentedControl from '../../components/SegmentedControl';
 import SelectMenu from '../../components/SelectMenu';
+import DateRangeMenu from '../../components/DateRangeMenu';
 import {
   API,
   BRAND_GLYPH,
   CATEGORIES,
   VIBES,
-  DATE_PRESETS,
   EXPLORE_AUDIENCE_ALL,
   EXPLORE_AUDIENCE_FOR_YOU,
   EXPLORE_SEARCH_DEBOUNCE_MS,
@@ -144,6 +144,10 @@ export default function Explore() {
     commitFilters({ ...filters, datePreset: preset });
   }
 
+  function setCustomRange(from: string, to: string) {
+    commitFilters({ ...filters, datePreset: 'custom', customFrom: from, customTo: to });
+  }
+
   function toggleFree() {
     commitFilters({ ...filters, free: !filters.free });
   }
@@ -181,10 +185,6 @@ export default function Explore() {
   );
   const vibeOptions = useMemo(
     () => VIBES.map((slug) => ({ value: slug, label: t(`vibe_${slug}`, locale) })),
-    [locale],
-  );
-  const dateOptions = useMemo(
-    () => DATE_PRESETS.map((p) => ({ value: p.value, label: t(p.labelKey, locale) })),
     [locale],
   );
   const forYouOptions = useMemo(
@@ -254,12 +254,14 @@ export default function Explore() {
               ariaLabel={t('sort_by', locale)}
             />
             <span className={styles.divider} aria-hidden />
-            <SelectMenu
-              variant="inline"
+            <DateRangeMenu
               label={t('date_prefix', locale)}
               value={filters.datePreset}
-              options={dateOptions}
-              onChange={(v) => setDatePreset(v as DatePreset)}
+              customFrom={filters.customFrom}
+              customTo={filters.customTo}
+              onSelectPreset={setDatePreset}
+              onChangeCustomRange={setCustomRange}
+              locale={locale}
               ariaLabel={t('filter_dates', locale)}
             />
           </div>

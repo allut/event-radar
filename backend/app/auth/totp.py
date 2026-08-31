@@ -4,38 +4,58 @@ Secret enrollment is a separate one-time local script (scripts/admin_totp_enroll
 this module only verifies a submitted 6-digit code against the configured secret.
 """
 
+import time
+
 import pyotp
 
 from app.constants import ADMIN_TOTP_VALID_WINDOW
 
 # Single-admin credential (no admins table — see auth/tokens.py's
-# generate_admin_session_token), so one process-wide "last accepted code"
+# generate_admin_session_token), so one process-wide "last accepted step"
 # is enough to close the replay window: without it, a code observed once
 # (shoulder-surf, a leaked log line, a slow MITM) stays valid for the rest
 # of its ±ADMIN_TOTP_VALID_WINDOW-step window and could mint a second,
-# independent session. In-memory only, like the admin auth lockout dict
+# independent session. Tracking the timestep counter (not the code string)
+# closes the window exactly, including for a still-valid *older* code once a
+# *newer* one has been accepted — a code string check alone doesn't catch
+# that case. In-memory only, like the admin auth lockout dict
 # (routers/admin.py) — resets on deploy/restart, which just means one lost
-# accepted-code memory, not a security regression.
-_last_accepted_code: str | None = None
+# accepted-step memory, not a security regression.
+_last_accepted_step: int | None = None
 
 
-def verify_totp_code(secret: str, code: str) -> bool:
-    """True if `code` is a valid, not-yet-used current (±ADMIN_TOTP_VALID_WINDOW
-    step) TOTP for `secret`. Rejects an exact code reuse even within its still-
-    valid window (see _last_accepted_code above).
+def check_totp_code(secret: str, code: str) -> int | None:
+    """Return the matched timestep if `code` is a valid, not-yet-accepted
+    current (±ADMIN_TOTP_VALID_WINDOW step) TOTP for `secret`, else None.
+
+    Pure check — does not record anything. The caller must invoke
+    record_totp_step() with the returned step only after deciding the overall
+    login succeeded (see routers/admin_auth.py); recording as a side effect of
+    verification would burn a valid code even on a failed-password attempt.
 
     Never raises — a malformed secret or code is just an invalid login attempt,
     not a server error.
     """
-    global _last_accepted_code
     if not secret or not code:
-        return False
-    if code == _last_accepted_code:
-        return False
+        return None
     try:
-        valid = pyotp.TOTP(secret).verify(code, valid_window=ADMIN_TOTP_VALID_WINDOW)
+        totp = pyotp.TOTP(secret)
+        current_step = int(time.time() / totp.interval)
+        for offset in range(-ADMIN_TOTP_VALID_WINDOW, ADMIN_TOTP_VALID_WINDOW + 1):
+            step = current_step + offset
+            if _last_accepted_step is not None and step <= _last_accepted_step:
+                continue  # already-accepted or older step — reject even if the code matches
+            if totp.generate_otp(step) == code:
+                return step
     except Exception:
-        return False
-    if valid:
-        _last_accepted_code = code
-    return valid
+        return None
+    return None
+
+
+def record_totp_step(step: int) -> None:
+    """Record `step` (from check_totp_code) as accepted, closing replay for
+    it and every earlier step. Call only after the caller has confirmed the
+    overall login succeeded (credentials_ok and totp_ok)."""
+    global _last_accepted_step
+    if _last_accepted_step is None or step > _last_accepted_step:
+        _last_accepted_step = step

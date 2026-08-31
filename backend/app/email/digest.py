@@ -15,8 +15,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth.tokens import generate_unsubscribe_token
 from app.config import settings
 from app.constants import (
+    AUTHORIZATION_HEADER,
+    BEARER_PREFIX,
     DIGEST_MAX_WHY_GO_BULLETS,
+    DIGEST_RESULT_SENT,
+    DIGEST_RESULT_SKIPPED,
     DIGEST_SEND_CONCURRENCY,
+    FEED_BUILD_USER_BATCH_SIZE,
     LOCALE_ET,
     LOCALE_RU,
     LOG_EVENT_EMAIL_SEND_FAILED,
@@ -48,6 +53,7 @@ from app.routers.utils import (
     mask_email,
     public_event_filter,
     resolve_title,
+    resolve_venue_name,
     resolve_why_go,
     select_events_with_classification,
 )
@@ -96,7 +102,7 @@ def _build_event_block(event: Event, locale: str, frontend_url: str) -> str:
     time_str = html_lib.escape(_format_event_time(event.starts_at, locale))
     event_href = f"{frontend_url}/events/{event.id}"
 
-    venue_str = html_lib.escape(event.venue_name or "")
+    venue_str = html_lib.escape(resolve_venue_name(event, locale) or "")
     venue_html = (
         EVENT_VENUE.format(s_venue=styles.S_VENUE, venue=venue_str)
         if venue_str
@@ -250,7 +256,9 @@ async def send_digest_email(
             await http_post(
                 client,
                 RESEND_SEND_URL,
-                headers={"Authorization": f"Bearer {settings.RESEND_API_KEY}"},
+                headers={
+                    AUTHORIZATION_HEADER: f"{BEARER_PREFIX}{settings.RESEND_API_KEY}"
+                },
                 json_body={
                     "from": settings.RESEND_FROM_ADDRESS,
                     "to": [to_email],
@@ -321,6 +329,13 @@ async def send_daily_digests(
     """
     Send today's Daily 5 digest to all opted-in users.
     Runs at 07:00 Europe/Tallinn (one hour after build_daily_feeds).
+
+    Pages the opted-in population at FEED_BUILD_USER_BATCH_SIZE, mirroring
+    build_daily_feeds — memory is bounded by a batch size (feeds + their
+    referenced events + in-flight send coroutines) instead of by the total
+    opted-in count. DIGEST_SEND_CONCURRENCY bounds in-flight HTTP across the
+    whole run via one shared semaphore, not per page.
+
     Returns summary dict for logging.
     """
     today = datetime.now(TALLINN_TZ).date()
@@ -335,65 +350,71 @@ async def send_daily_digests(
     ).all()
 
     if not users:
-        return {"sent": 0, "skipped": 0, "total_opted_in": 0, "dry_run": dry_run}
-
-    feed_by_user, event_map = await _load_digest_data(db, today, [u.id for u in users])
-    if event_map is None:
         return {
-            "sent": 0,
-            "skipped": len(users),
-            "total_opted_in": len(users),
+            DIGEST_RESULT_SENT: 0,
+            DIGEST_RESULT_SKIPPED: 0,
+            "errored": 0,
+            "total_opted_in": 0,
             "dry_run": dry_run,
         }
 
-    user_map: dict[int, User] = {u.id: u for u in users}
     semaphore = asyncio.Semaphore(DIGEST_SEND_CONCURRENCY)
+    sent = errored = 0
+    user_map: dict[int, User] = {u.id: u for u in users}
 
-    async def _send_one(uid: int, eids: list[int]) -> str:
+    async def _send_one(user: User, eids: list[int], event_map: dict[int, Event]) -> str:
         """Returns 'sent' | 'skipped'."""
-        user = user_map.get(uid)
-        if not user:
-            return "skipped"
         ordered_events = [event_map[eid] for eid in eids if eid in event_map]
         if not ordered_events:
-            return "skipped"
+            return DIGEST_RESULT_SKIPPED
         if dry_run:
-            return "sent"
+            return DIGEST_RESULT_SENT
         async with semaphore:
             try:
                 await send_digest_email(
                     user.email, user.locale, ordered_events, today, user.id
                 )
-                return "sent"
+                return DIGEST_RESULT_SENT
             except Exception:
                 log.exception(
                     "Failed to send digest to user %d",
-                    uid,
+                    user.id,
                     extra={"event": LOG_EVENT_EMAIL_SEND_FAILED},
                 )
-                return "skipped"
+                return DIGEST_RESULT_SKIPPED
 
-    # return_exceptions=True is defence-in-depth: _send_one already catches
-    # every send error and returns "skipped", but a programming error inside
-    # the wrapper itself would otherwise abort the whole batch.
-    results = await asyncio.gather(
-        *(_send_one(uid, eids) for uid, eids in feed_by_user.items()),
-        return_exceptions=True,
-    )
-    sent = sum(1 for r in results if r == "sent")
-    errored = sum(1 for r in results if isinstance(r, Exception))
-    skipped = len(results) - sent - errored
-    for r in results:
-        if isinstance(r, Exception):
-            log.error(
-                "digest fanout coroutine raised",
-                exc_info=r,
-                extra={"event": LOG_EVENT_EMAIL_SEND_FAILED},
-            )
+    for i in range(0, len(users), FEED_BUILD_USER_BATCH_SIZE):
+        page_ids = [u.id for u in users[i : i + FEED_BUILD_USER_BATCH_SIZE]]
+
+        feed_by_user, event_map = await _load_digest_data(db, today, page_ids)
+        if event_map is None:
+            continue
+
+        # return_exceptions=True is defence-in-depth: _send_one already catches
+        # every send error and returns "skipped", but a programming error inside
+        # the wrapper itself would otherwise abort the whole page's batch.
+        results = await asyncio.gather(
+            *(
+                _send_one(user_map[uid], eids, event_map)
+                for uid, eids in feed_by_user.items()
+            ),
+            return_exceptions=True,
+        )
+        sent += sum(1 for r in results if r == DIGEST_RESULT_SENT)
+        errored += sum(1 for r in results if isinstance(r, Exception))
+        for r in results:
+            if isinstance(r, Exception):
+                log.error(
+                    "digest fanout coroutine raised",
+                    exc_info=r,
+                    extra={"event": LOG_EVENT_EMAIL_SEND_FAILED},
+                )
+
+    skipped = len(users) - sent - errored
 
     return {
-        "sent": sent,
-        "skipped": skipped,
+        DIGEST_RESULT_SENT: sent,
+        DIGEST_RESULT_SKIPPED: skipped,
         "errored": errored,
         "total_opted_in": len(users),
         "dry_run": dry_run,

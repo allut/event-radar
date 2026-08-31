@@ -11,7 +11,7 @@ from typing import Any
 from fastapi import HTTPException, Response, status
 from itsdangerous import BadSignature, SignatureExpired
 from pydantic import BaseModel, EmailStr
-from sqlalchemy import ColumnElement, Select, and_, delete, or_, select, update
+from sqlalchemy import ColumnElement, Select, and_, delete, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import InstrumentedAttribute, selectinload
 
@@ -24,10 +24,14 @@ from app.constants import (
     ERROR_ADMIN_JOB_FAILED,
     ERROR_FEATURE_DISABLED,
     ERROR_INVALID_REPORT_REASON,
+    ERROR_VENUE_NOT_FOUND,
     EVENT_STATUS_CANCELLED,
     EVENT_STATUS_PUBLISHED,
+    LOCALE_EN,
+    LOCALE_RU,
     LOG_EVENT_ADMIN_ACTION,
     LOG_EVENT_EMAIL_SEND_FAILED,
+    LOG_EVENT_UNVERIFIED_ACCOUNT_BUDGET_EXCEEDED,
     MASK_DB_URL_PASSWORD_RE,
     MAGIC_LINK_RESEND_COOLDOWN_SECONDS,
     PREFERENCE_SIGNALS,
@@ -37,6 +41,8 @@ from app.constants import (
     SESSION_COOKIE_HTTPONLY,
     SESSION_COOKIE_SAMESITE,
     SESSION_COOKIE_SECURE,
+    TALLINN_TZ,
+    UNVERIFIED_ACCOUNT_DAILY_BUDGET,
     VALID_LOCALES,
     VALID_REPORT_REASONS,
 )
@@ -52,6 +58,7 @@ from app.models.models import (
     UserEventFeedback,
     UserEventScore,
     UserPersona,
+    Venue,
 )
 
 log = logging.getLogger(__name__)
@@ -425,30 +432,29 @@ def event_not_ended_filter(now: datetime, entity: Any = Event) -> ColumnElement[
     ``starts_at`` with a future ``ends_at`` (multi-day runs, ongoing
     exhibitions) stays live — only a genuinely-over event fails this.
 
+    Written as ``coalesce(ends_at, starts_at) >= now`` — exactly equivalent
+    to the OR form, but sargable against ``ix_events_live_until ON events
+    (coalesce(ends_at, starts_at))`` (migration ``0023``). The OR form
+    Postgres cannot match to that expression index, forcing a seq scan on
+    ``events`` (a table rows are never removed from — see ``cleanup.py``) at
+    every call site.
+
     ``entity`` accepts ``Event`` (default) or an ``aliased(Event)`` so
     self-join clauses reuse this definition instead of re-deriving it.
     """
-    return or_(
-        entity.ends_at >= now,
-        and_(entity.ends_at.is_(None), entity.starts_at >= now),
-    )
+    return func.coalesce(entity.ends_at, entity.starts_at) >= now
 
 
 def event_ended_filter(now: datetime, entity: Any = Event) -> ColumnElement[bool]:
-    """Event has ended — the NULL-safe complement of ``event_not_ended_filter``.
+    """Event has ended — the complement of ``event_not_ended_filter``.
 
-    ``~event_not_ended_filter(now)`` is NOT equivalent: when ``ends_at IS
-    NULL`` and ``starts_at < now``, ``event_not_ended_filter`` evaluates to
-    SQL NULL (three-valued logic on ``ends_at >= now``), and ``NOT NULL`` is
-    also NULL — which a WHERE clause treats as non-matching. That silently
-    excludes exactly the ended, no-``ends_at`` events callers usually mean to
-    catch (e.g. bulk-cancelling stale drafts), so build the negation
-    explicitly instead of negating the nullable expression.
+    Also written via ``coalesce`` (see ``event_not_ended_filter``) so it hits
+    the same index. Unlike the old OR form, ``coalesce(...) < now`` carries
+    no three-valued-logic trap: ``coalesce`` never evaluates to NULL here
+    (``starts_at`` is NOT NULL), so this is safe to use directly — no need to
+    build the negation of ``event_not_ended_filter`` by hand.
     """
-    return or_(
-        entity.ends_at < now,
-        and_(entity.ends_at.is_(None), entity.starts_at < now),
-    )
+    return func.coalesce(entity.ends_at, entity.starts_at) < now
 
 
 def mask_email(email: str) -> str:
@@ -508,8 +514,11 @@ def parse_session_cookie_user(session: str | None) -> tuple[int, int] | None:
 
 
 def select_events_with_classification() -> Select[tuple[Event]]:
-    """Base SELECT for Event with classification eager-loaded. Callers add their own .where()."""
-    return select(Event).options(selectinload(Event.classification))
+    """Base SELECT for Event with classification + linked Venue eager-loaded
+    (#177 — venue read-path resolution must not N+1). Callers add their own .where()."""
+    return select(Event).options(
+        selectinload(Event.classification), selectinload(Event.venue)
+    )
 
 
 def resolve_locale_param(locale: str | None, fallback: str) -> str:
@@ -547,6 +556,59 @@ def resolve_important_info(event: Event, locale: str) -> str | None:
     return event.important_info
 
 
+def _linked_venue(event: Event) -> Venue | None:
+    """Return the joined Venue when the event is venue-linked, else None."""
+    return event.venue if event.venue_id is not None else None
+
+
+def _pick_locale(locale: str, base: str | None, en: str | None, ru: str | None) -> str | None:
+    """Per-locale value with fallback to the base (Estonian) value."""
+    if locale == LOCALE_EN:
+        return en or base
+    if locale == LOCALE_RU:
+        return ru or base
+    return base
+
+
+def resolve_venue_name(event: Event, locale: str = DEFAULT_USER_LOCALE) -> str | None:
+    """Prefer the linked Venue's per-locale name over Event.venue_name.
+
+    venue_name/venue_address are left NULL at write time whenever venue_id
+    is set (#176) — the join is the sole venue source going forward. Falls
+    back to the legacy free-typed column when venue_id is None."""
+    venue = _linked_venue(event)
+    if venue is not None:
+        return _pick_locale(locale, venue.name, venue.name_en, venue.name_ru)
+    return event.venue_name
+
+
+def resolve_venue_address(event: Event) -> str | None:
+    """Prefer the linked Venue's address over Event.venue_address. Address
+    is not localized (street names don't translate) — see resolve_venue_name
+    for the venue_id/write-time-NULL rationale."""
+    venue = _linked_venue(event)
+    if venue is not None:
+        return venue.address
+    return event.venue_address
+
+
+def resolve_venue_coords(event: Event) -> tuple[float | None, float | None]:
+    """Prefer the linked Venue's own geocode over Event.lat/lng.
+
+    A venue-linked event's own lat/lng never gets backfilled by the
+    geocoding job (its partial index keys off venue_address IS NOT NULL,
+    which is NULL for a linked event) — the Venue's own geocode cooldown
+    (docs/data-model.md) is the only source of coordinates once linked.
+    Requires both lat AND lng to be present before preferring the venue's
+    pair — a half-geocoded venue (one of the two still NULL) falls back to
+    the event's own (possibly also-NULL, but never mismatched) pair rather
+    than surfacing a broken half-populated coordinate."""
+    venue = _linked_venue(event)
+    if venue is not None and venue.lat is not None and venue.lng is not None:
+        return venue.lat, venue.lng
+    return event.lat, event.lng
+
+
 def resolve_why_go(cl: EventClassification | None, locale: str) -> list[str]:
     """Return localized why_go bullets for a classification, with locale → en → raw fallback."""
     if cl is None:
@@ -569,6 +631,7 @@ def serialize_event(
 ) -> dict:
     cl = event.classification
     why_go = resolve_why_go(cl, locale)
+    lat, lng = resolve_venue_coords(event)
     return {
         "id": event.id,
         "slug": event.slug,
@@ -577,10 +640,10 @@ def serialize_event(
         "important_info": resolve_important_info(event, locale),
         "starts_at": event.starts_at.isoformat(),
         "ends_at": event.ends_at.isoformat() if event.ends_at else None,
-        "venue_name": event.venue_name,
-        "venue_address": event.venue_address,
-        "lat": event.lat,
-        "lng": event.lng,
+        "venue_name": resolve_venue_name(event, locale),
+        "venue_address": resolve_venue_address(event),
+        "lat": lat,
+        "lng": lng,
         "url": event.url,
         "image_url": event.image_url,
         "price_min": float(event.price_min) if event.price_min is not None else None,
@@ -668,7 +731,7 @@ async def resolve_open_reports(
     landing between this call and the caller's commit) can't be missed —
     the WHERE clause is evaluated atomically at execution time.
     """
-    resolved_at = datetime.now(timezone.utc)
+    resolved_at = datetime.now(TALLINN_TZ)
     stmt = (
         update(EventReport)
         .where(
@@ -748,3 +811,63 @@ def validate_report_reason(reason: str) -> None:
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=ERROR_INVALID_REPORT_REASON.format(reasons=sorted(VALID_REPORT_REASONS)),
         )
+
+
+async def own_venue_or_404(db: AsyncSession, venue_id: int, organizer_id: int) -> Venue:
+    """Shared by organizer_events.py and organizer_venues.py — 404-not-403
+    ownership check for a saved Venue, mirroring organizer_events.py's own
+    ``_own_event_or_404`` convention."""
+    venue = await db.scalar(
+        select(Venue).where(
+            Venue.id == venue_id,
+            Venue.organizer_id == organizer_id,
+            Venue.deleted_at.is_(None),
+        )
+    )
+    if venue is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=ERROR_VENUE_NOT_FOUND
+        )
+    return venue
+
+
+# {"YYYY-MM-DD": count} — in-memory, single-process, like the admin lockout
+# dict (routers/admin.py) — resets on deploy/restart, which just means one
+# lost day of budget tracking, not a security regression.
+_unverified_account_creation_counts: dict[str, int] = {}
+_unverified_account_budget_alerted: set[str] = set()
+
+
+def record_unverified_account_creation() -> None:
+    """Bump the global (not per-IP) daily count of new unverified User/
+    Organizer rows created via the magic-link request endpoints
+    (auth.py::_get_or_create_user, organizer_auth.py::_get_or_create_organizer).
+
+    The per-email cooldown (RATE_LIMIT_AUTH_REQUEST_LINK) only throttles
+    repeats to the *same* address; a burst of distinct first-contact
+    addresses can still mail-bomb via this service's Resend domain. Rather
+    than hard-blocking new signups (which would turn away real users during
+    a legitimate burst), this logs one distinct, greppable warning the first
+    time UNVERIFIED_ACCOUNT_DAILY_BUDGET is crossed for the day — an early
+    signal an operator can alert on ahead of Resend's own sender-reputation/
+    quota controls tripping (OWASP audit F10).
+    """
+    today = datetime.now(timezone.utc).date().isoformat()
+    count = _unverified_account_creation_counts.get(today, 0) + 1
+    _unverified_account_creation_counts[today] = count
+    if (
+        count >= UNVERIFIED_ACCOUNT_DAILY_BUDGET
+        and today not in _unverified_account_budget_alerted
+    ):
+        _unverified_account_budget_alerted.add(today)
+        log.warning(
+            "auth: unverified-account creation budget exceeded (%d today)",
+            count,
+            extra={"event": LOG_EVENT_UNVERIFIED_ACCOUNT_BUDGET_EXCEEDED},
+        )
+    # Bound growth: only today's entry is ever needed going forward — a
+    # process left running for weeks would otherwise accumulate one stale
+    # key per day forever.
+    for stale_day in [d for d in _unverified_account_creation_counts if d != today]:
+        del _unverified_account_creation_counts[stale_day]
+        _unverified_account_budget_alerted.discard(stale_day)

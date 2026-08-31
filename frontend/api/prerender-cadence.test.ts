@@ -4,8 +4,8 @@ import { PRERENDER_CADENCE_TOKEN_HEADER } from '../src/constants';
 import { buildRoundMarker, serializeRoundMarker } from '../src/lib/prerenderChain';
 import type { VercelRequest, VercelResponse } from './vercel';
 
-function makeReq(headers: Record<string, string>): VercelRequest {
-  return { headers, query: {}, body: undefined } as unknown as VercelRequest;
+function makeReq(headers: Record<string, string>, method = 'POST'): VercelRequest {
+  return { headers, query: {}, body: undefined, method } as unknown as VercelRequest;
 }
 
 function makeRes(): VercelResponse & { statusCode: number; body: unknown } {
@@ -18,6 +18,9 @@ function makeRes(): VercelResponse & { statusCode: number; body: unknown } {
     },
     json(body: unknown) {
       res.body = body;
+      return res;
+    },
+    end() {
       return res;
     },
   };
@@ -135,6 +138,19 @@ describe('prerender-cadence handler', () => {
   it('rejects requests with an invalid token', async () => {
     const res = makeRes();
     await handler(makeReq({ [PRERENDER_CADENCE_TOKEN_HEADER]: 'wrong' }), res);
+    expect(res.statusCode).toBe(403);
+  });
+
+  it('rejects non-POST requests before checking the token', async () => {
+    const res = makeRes();
+    await handler(makeReq({ [PRERENDER_CADENCE_TOKEN_HEADER]: 'shared-secret' }, 'GET'), res);
+    expect(res.statusCode).toBe(405);
+  });
+
+  it('returns an opaque 403 (not 500) when the shared secret itself is unconfigured', async () => {
+    delete process.env.PRERENDER_CADENCE_TOKEN;
+    const res = makeRes();
+    await handler(makeReq({ [PRERENDER_CADENCE_TOKEN_HEADER]: 'anything' }), res);
     expect(res.statusCode).toBe(403);
   });
 });
