@@ -252,29 +252,6 @@
 
 .trustDot { color: var(--accent); }
 
-/* ── Final CTA ───────────────────────────────────────────────────────── */
-.finalCta {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--space-5);
-  max-width: var(--page-max-showcase);
-  margin: 0 auto;
-  padding: var(--space-9) var(--space-6);
-  text-align: center;
-}
-
-.finalTitle {
-  font-family: var(--font-display);
-  font-size: var(--heading-2xl);
-  font-weight: var(--fw-semibold);
-  line-height: var(--leading-display);
-  letter-spacing: var(--tracking-tighter);
-  color: var(--text);
-}
-
-.finalCta .emailForm { justify-content: center; width: 100%; }
-
 /* ── For organizers ──────────────────────────────────────────────────── */
 .organizer {
   max-width: var(--page-max-medium);
@@ -358,7 +335,6 @@
 
 @media (max-width: 640px) {
   .h1 { font-size: var(--heading-xl); }
-  .finalTitle { font-size: var(--heading-xl); }
   .emailForm {
     flex-direction: column;
     gap: var(--space-3);

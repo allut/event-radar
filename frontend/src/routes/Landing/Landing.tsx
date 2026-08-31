@@ -167,11 +167,6 @@ export default function Landing() {
           <span className={styles.trustDot} aria-hidden>·</span>
           <span className={styles.trustItem}>{t('landing_trust_free', locale)}</span>
         </section>
-
-        <section className={styles.finalCta}>
-          <h2 className={styles.finalTitle}>{t('landing_final_title', locale)}</h2>
-          <EmailCapture locale={locale} />
-        </section>
       </main>
     </div>
   );
