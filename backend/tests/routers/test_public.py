@@ -1,4 +1,5 @@
-"""Tests for GET /public/showcase (app/routers/public.py)."""
+"""Tests for GET /public/showcase, GET /public/counts (app/routers/public.py)."""
+from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
 import pytest
@@ -6,12 +7,28 @@ import pytest
 from tests.routers.conftest import scalars_returning as _scalars_result
 
 
+def _agg_row(
+    upcoming_count=1008,
+    venue_count=205,
+    furthest_date=datetime(2027, 1, 15, tzinfo=timezone.utc),
+    cheapest_price=1.0,
+):
+    row = MagicMock()
+    row.upcoming_count = upcoming_count
+    row.venue_count = venue_count
+    row.furthest_date = furthest_date
+    row.cheapest_price = cheapest_price
+    return row
+
+
 class TestShowcase:
     @pytest.mark.asyncio
     async def test_returns_serialized_events(self, mock_db, make_event, make_request):
         from app.routers.public import showcase
 
-        mock_db.scalars.return_value = _scalars_result([make_event(1), make_event(2)])
+        mock_db.scalars.return_value = _scalars_result(
+            [make_event(1, title="Event One"), make_event(2, title="Event Two")]
+        )
 
         result = await showcase(request=make_request(), locale="en", db=mock_db)
 
@@ -59,7 +76,9 @@ class TestShowcase:
         narrow-then-fallback shape."""
         from app.routers.public import showcase
 
-        mock_db.scalars.return_value = _scalars_result([make_event(1), make_event(2)])
+        mock_db.scalars.return_value = _scalars_result(
+            [make_event(1, title="Event One"), make_event(2, title="Event Two")]
+        )
 
         result = await showcase(request=make_request(), locale="en", db=mock_db)
 
@@ -74,13 +93,46 @@ class TestShowcase:
         from app.routers.public import showcase
 
         mock_db.scalars.return_value = _scalars_result(
-            [make_event(i) for i in range(1, SHOWCASE_EVENT_COUNT + 1)]
+            [
+                make_event(i, title=f"Event {i}")
+                for i in range(1, SHOWCASE_EVENT_COUNT + 1)
+            ]
         )
 
         result = await showcase(request=make_request(), locale="en", db=mock_db)
 
         assert len(result["events"]) == SHOWCASE_EVENT_COUNT
         assert mock_db.scalars.await_count == 1
+
+    @pytest.mark.asyncio
+    async def test_recurring_series_collapses_to_one_instance(
+        self, mock_db, make_event, make_request
+    ):
+        """A multi-date listing (e.g. a workshop running Tue/Thu/Sat) ingests as
+        several rows sharing an event_series_key but distinct dedup_group_ids —
+        recurring series are intentionally not dedup-grouped across days — so
+        without the showcase's own collapse, each date-instance could
+        independently qualify for the grid and the same title would appear
+        more than once (see collapse_series_duplicates)."""
+        from app.routers.public import showcase
+
+        earlier = make_event(
+            1,
+            title="I Didn't Leave Ukraine",
+            venue_name="Kanuti Gildi SAAL",
+            starts_at=datetime(2026, 9, 5, 19, 0, 0, tzinfo=timezone.utc),
+        )
+        later = make_event(
+            2,
+            title="I Didn't Leave Ukraine",
+            venue_name="Kanuti Gildi SAAL",
+            starts_at=datetime(2026, 9, 10, 19, 0, 0, tzinfo=timezone.utc),
+        )
+        mock_db.scalars.return_value = _scalars_result([earlier, later])
+
+        result = await showcase(request=make_request(), locale="en", db=mock_db)
+
+        assert [e["id"] for e in result["events"]] == [1]
 
     def test_query_prefers_narrow_window_but_bounds_wide(self):
         from datetime import datetime, timezone
@@ -151,3 +203,90 @@ class TestPrerenderEvents:
         assert "is_non_event" in sql
         assert "dedup_group_id" in sql
         assert "ends_at" in sql or "starts_at" in sql
+
+
+class TestCounts:
+    @pytest.mark.asyncio
+    async def test_returns_payload_shape(self, mock_db, make_event, make_request):
+        import app.routers.public as public_module
+        from app.routers.public import counts
+
+        public_module._counts_cache.clear()
+        mock_db.execute.return_value.one.return_value = _agg_row()
+        mock_db.scalars.return_value = _scalars_result([make_event(1, title="Tonight Show")])
+
+        result = await counts(request=make_request(), locale="en", db=mock_db)
+
+        assert result["upcoming_count"] == 1008
+        assert result["venue_count"] == 205
+        assert result["furthest_date"] == "2027-01-15"
+        assert result["cheapest_price"] == 1.0
+        assert result["tonight_is_fallback"] is False
+        assert result["tonight_events"] == [
+            {"title": "Tonight Show", "starts_at": "2026-05-15T18:00:00+00:00", "venue_name": "Test Venue"}
+        ]
+
+    @pytest.mark.asyncio
+    async def test_empty_tonight_falls_back_to_wider_window(self, mock_db, make_event, make_request):
+        import app.routers.public as public_module
+        from app.routers.public import counts
+
+        public_module._counts_cache.clear()
+        mock_db.execute.return_value.one.return_value = _agg_row()
+        # First db.scalars() call (tonight) returns empty, second (fallback) returns events.
+        mock_db.scalars.side_effect = [
+            _scalars_result([]),
+            _scalars_result([make_event(2, title="Later This Week")]),
+        ]
+
+        result = await counts(request=make_request(), locale="en", db=mock_db)
+
+        assert result["tonight_is_fallback"] is True
+        assert [e["title"] for e in result["tonight_events"]] == ["Later This Week"]
+        assert mock_db.scalars.await_count == 2
+
+    @pytest.mark.asyncio
+    async def test_no_price_min_positive_returns_none(self, mock_db, make_request):
+        import app.routers.public as public_module
+        from app.routers.public import counts
+
+        public_module._counts_cache.clear()
+        mock_db.execute.return_value.one.return_value = _agg_row(cheapest_price=None, furthest_date=None)
+        mock_db.scalars.return_value = _scalars_result([])
+
+        result = await counts(request=make_request(), locale="en", db=mock_db)
+
+        assert result["cheapest_price"] is None
+        assert result["furthest_date"] is None
+
+    @pytest.mark.asyncio
+    async def test_second_call_within_ttl_hits_cache_not_db(self, mock_db, make_event, make_request):
+        import app.routers.public as public_module
+        from app.routers.public import counts
+
+        public_module._counts_cache.clear()
+        mock_db.execute.return_value.one.return_value = _agg_row()
+        mock_db.scalars.return_value = _scalars_result([make_event(1)])
+
+        first = await counts(request=make_request(), locale="en", db=mock_db)
+        assert mock_db.execute.await_count == 1
+
+        second = await counts(request=make_request(), locale="en", db=mock_db)
+
+        assert second == first
+        # No further DB hit — served from the in-process TTL cache.
+        assert mock_db.execute.await_count == 1
+
+    @pytest.mark.asyncio
+    async def test_cache_is_keyed_per_locale(self, mock_db, make_event, make_request):
+        import app.routers.public as public_module
+        from app.routers.public import counts
+
+        public_module._counts_cache.clear()
+        mock_db.execute.return_value.one.return_value = _agg_row()
+        mock_db.scalars.return_value = _scalars_result([make_event(1)])
+
+        await counts(request=make_request(), locale="en", db=mock_db)
+        await counts(request=make_request(), locale="ru", db=mock_db)
+
+        assert mock_db.execute.await_count == 2

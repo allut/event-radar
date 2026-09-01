@@ -72,6 +72,7 @@ from app.models.models import (
 )
 from app.routers.utils import (
     canonical_event_filter,
+    collapse_series_duplicates,
     event_not_ended_filter,
     event_series_key,
     persona_weight_tuple,
@@ -659,49 +660,13 @@ async def _load_recent_series_by_user(
     return recent_series_by_user
 
 
-def _collapse_series_duplicates(
-    event_rows: list[Event],
-) -> tuple[list[Event], dict[int, tuple[str, str]]]:
-    """One representative per event_series_key — nearest (earliest) starts_at
-    wins; ties broken by event id, so the surviving instance is deterministic
-    across builds even when the underlying query has no ORDER BY.
-
-    A multi-date listing (e.g. a workshop running Tue/Thu/Sat) ingests as
-    several Event rows sharing a series key but distinct dedup_group_ids
-    (recurring series are intentionally not dedup-grouped at ingestion), so
-    without this more than one date-instance of the same series could score
-    well and both land in a single user's Daily 5 on the same day. Runs once
-    per build, upstream of scoring/cooldown/MMR, so every downstream
-    mechanism (series cooldown, backfill tiers) operates on an
-    already-deduped pool with no further changes needed.
-
-    Returns the collapsed events plus their series keys (each key computed
-    exactly once here) so callers building `candidate_series_key` don't
-    recompute `event_series_key()` a second time over the same rows.
-    """
-    earliest_by_key: dict[tuple[str, str], Event] = {}
-    for event in event_rows:
-        key = event_series_key(event.title_orig, event.venue_name)
-        current = earliest_by_key.get(key)
-        if current is None or (event.starts_at, event.id) < (
-            current.starts_at,
-            current.id,
-        ):
-            earliest_by_key[key] = event
-    collapsed = list(earliest_by_key.values())
-    series_key_by_event_id = {
-        event.id: key for key, event in earliest_by_key.items()
-    }
-    return collapsed, series_key_by_event_id
-
-
 async def _load_candidate_events(
     db: AsyncSession, now: datetime
 ) -> tuple[list[Event], dict[int, tuple[str, str]], dict[int, tuple[float, float, float]]]:
     """Bulk-load published, non-excluded, upcoming-within-lookahead candidate
     events. Identical query for every page of users within one
     build_daily_feeds run — see _SharedFeedContext. Collapses same-series
-    duplicates (see _collapse_series_duplicates) before returning, along with
+    duplicates (see collapse_series_duplicates) before returning, along with
     each survivor's series key and its precomputed per-event score factors
     (see _precompute_event_factors)."""
     cutoff = now + timedelta(days=DAILY_5_LOOKAHEAD_DAYS)
@@ -719,7 +684,7 @@ async def _load_candidate_events(
             )
         ).all()
     )
-    collapsed, candidate_series_key = _collapse_series_duplicates(event_rows)
+    collapsed, candidate_series_key = collapse_series_duplicates(event_rows)
     return collapsed, candidate_series_key, _precompute_event_factors(collapsed, now)
 
 

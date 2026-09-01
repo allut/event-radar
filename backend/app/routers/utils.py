@@ -379,6 +379,42 @@ def event_series_key(title_orig: str, venue_name: str | None) -> tuple[str, str]
     return (normalized_title(title_orig), normalized_title(venue_name or ""))
 
 
+def collapse_series_duplicates(
+    event_rows: list[Event],
+) -> tuple[list[Event], dict[int, tuple[str, str]]]:
+    """One representative per event_series_key — nearest (earliest) starts_at
+    wins; ties broken by event id, so the surviving instance is deterministic
+    across builds even when the underlying query has no ORDER BY.
+
+    A multi-date listing (e.g. a workshop running Tue/Thu/Sat) ingests as
+    several Event rows sharing a series key but distinct dedup_group_ids
+    (recurring series are intentionally not dedup-grouped at ingestion), so
+    without this more than one date-instance of the same series could score
+    well and both land in a single user's Daily 5 on the same day, or both
+    appear in the public showcase grid. Shared by the Daily 5 candidate loader
+    (``_load_candidate_events``) and the public showcase (``showcase``), each
+    running this once per build/request, upstream of any downstream ordering.
+
+    Returns the collapsed events plus their series keys (each key computed
+    exactly once here) so callers building `candidate_series_key` don't
+    recompute `event_series_key()` a second time over the same rows.
+    """
+    earliest_by_key: dict[tuple[str, str], Event] = {}
+    for event in event_rows:
+        key = event_series_key(event.title_orig, event.venue_name)
+        current = earliest_by_key.get(key)
+        if current is None or (event.starts_at, event.id) < (
+            current.starts_at,
+            current.id,
+        ):
+            earliest_by_key[key] = event
+    collapsed = list(earliest_by_key.values())
+    series_key_by_event_id = {
+        event.id: key for key, event in earliest_by_key.items()
+    }
+    return collapsed, series_key_by_event_id
+
+
 def persona_weight_tuple(
     user_persona: UserPersona, persona: Persona | None = None
 ) -> tuple[float, dict]:

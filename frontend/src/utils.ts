@@ -83,6 +83,13 @@ export function sanitizeHtml(html: string): string {
   });
 }
 
+/** Strips all HTML tags from a sanitized-but-still-HTML description field,
+ * for plain-text teaser contexts (card snippets, meta descriptions) that
+ * must not render markup. */
+export function stripHtmlToText(html: string): string {
+  return DOMPurify.sanitize(html, { ALLOWED_TAGS: [], ALLOWED_ATTR: [] });
+}
+
 // Formatters below are built once per locale and cached at module scope —
 // Intl constructors are comparatively expensive, and EventCard (rendered N-up
 // in a grid) calls these per card per render.
@@ -218,6 +225,7 @@ const DTF_MONTH_YEAR: Intl.DateTimeFormatOptions = { month: 'long', year: 'numer
 const DTF_LONG_DATE: Intl.DateTimeFormatOptions = {
   weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
 };
+const DTF_DAY_MONTH_LONG: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'long' };
 
 export function formatEventTime(iso: string, locale: string): string {
   const localeCode = toLocaleCode(locale);
@@ -430,6 +438,21 @@ function formatLongDate(date: Date, locale: string): string {
 
 export function formatTodayDate(locale: string): string {
   return formatLongDate(new Date(), locale);
+}
+
+/** Landing-hero dateline: weekday-long + day/month-long, no year — the
+ * Landing hero shows the city name as its own suffix instead. */
+export function formatHeroDateline(locale: string): string {
+  const localeCode = toLocaleCode(locale);
+  const date = new Date();
+  const weekday = dateTimeFormatter(localeCode, 'weekday-long', DTF_WEEKDAY_LONG).format(date);
+  const dayMonth = dateTimeFormatter(localeCode, 'day-month-long', DTF_DAY_MONTH_LONG).format(date);
+  return `${weekday}, ${dayMonth}`;
+}
+
+/** Locale-grouped integer, e.g. 1008 → "1,008" (en) / "1 008" (et). */
+export function formatCount(n: number, locale: string): string {
+  return new Intl.NumberFormat(toLocaleCode(locale)).format(n);
 }
 
 /** Formats a `YYYY-MM-DD` date-only string (e.g. `daily_feeds.feed_date`) using

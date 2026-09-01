@@ -11,9 +11,9 @@ export const PERSONA_MAX_SELECTABLE = 3;
 export const DEFAULT_CURRENCY = 'EUR';
 
 export const LOCALES = [
-  { code: 'en', label: 'EN' },
-  { code: 'et', label: 'ET' },
-  { code: 'ru', label: 'RU' },
+  { code: 'en', label: 'EN', nativeName: 'English' },
+  { code: 'et', label: 'ET', nativeName: 'Eesti' },
+  { code: 'ru', label: 'RU', nativeName: 'Русский' },
 ] as const;
 
 export const LOCALE_CODE_MAP: Record<string, string> = { 'et': 'et-EE', 'ru': 'ru-RU' };

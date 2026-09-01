@@ -2,69 +2,223 @@
   composes: page from '../../components/shared/Page.module.css';
 }
 
-/* ── Hero ────────────────────────────────────────────────────────────── */
-.hero {
-  display: grid;
-  grid-template-columns: 1.1fr 0.9fr;
-  align-items: center;
-  gap: var(--space-8);
+.wrap {
   max-width: var(--page-max-wide);
   width: 100%;
   margin: 0 auto;
-  padding: var(--space-9) var(--space-6) var(--space-8);
+  padding: 0 var(--space-6);
 }
 
-.heroText {
-  composes: rise from '../../components/shared/Animations.module.css';
+/* Shared small-caps label treatment (c1.html's single `.lab` rule) — composed
+   by every eyebrow/dateline/label instance below instead of each re-deriving
+   its own weight/tracking. */
+.eyebrow {
+  font-size: var(--fs-3xs);
+  font-weight: var(--fw-black);
+  letter-spacing: var(--tracking-loose);
+  text-transform: uppercase;
+}
+
+/* ── Hero ────────────────────────────────────────────────────────────── */
+.hero {
+  position: relative;
+  min-height: min(92vh, 760px);
   display: flex;
   flex-direction: column;
+  justify-content: flex-end;
+  overflow: hidden;
+  border-bottom: var(--rule);
+}
+
+.poster {
+  position: absolute;
+  inset: 0;
+}
+
+.posterImg {
+  position: absolute;
+  inset: -4%;
+  background:
+    radial-gradient(60% 55% at 68% 26%, var(--accent-hover-bg), transparent 62%),
+    radial-gradient(70% 60% at 22% 88%, rgba(90, 120, 175, 0.42), transparent 66%),
+    linear-gradient(175deg, var(--bg-card-hover), var(--bg) 58%, var(--bg-raised));
+  background-size: cover;
+}
+
+.posterImg::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--grain);
+  opacity: 0.34;
+  mix-blend-mode: overlay;
+}
+
+.scrim {
+  position: absolute;
+  inset: 0;
+  background: var(--scrim-vertical);
+}
+
+.frame {
+  position: absolute;
+  inset: clamp(14px, 2vw, 26px);
+  border: 1px solid var(--poster-frame);
+  pointer-events: none;
+}
+
+.heroGrid {
+  position: relative;
+  max-width: var(--page-max-wide);
+  width: 100%;
+  margin: 0 auto;
+  padding: 0 var(--space-6);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: min(92vh, 760px);
+}
+
+.heroMain {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  flex: 1;
+  gap: var(--space-6); /* floor so heroTop/heroBot never sit flush on short/tall content */
+}
+
+.heroTop {
+  padding-top: clamp(26px, 3.4vw, 44px);
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
   gap: var(--space-4);
-  --rise-duration: var(--anim-rise-md);
+  flex-wrap: wrap;
+}
+
+.mark {
+  font-family: var(--font-display);
+  font-size: clamp(20px, 2.2vw, 27px);
+  font-weight: var(--fw-regular);
+  color: var(--text);
+  letter-spacing: var(--tracking-tighter);
+}
+
+.markAccent {
+  font-style: italic;
+  color: var(--accent);
+}
+
+.heroCounter {
+  composes: eyebrow;
+  color: var(--text-soft);
+}
+
+.heroCounter b {
+  color: var(--accent);
+}
+
+.heroBot {
+  padding-bottom: clamp(26px, 3.4vw, 46px);
+}
+
+.dateline {
+  composes: eyebrow;
+  color: var(--accent);
 }
 
 .h1 {
   font-family: var(--font-display);
-  font-size: var(--heading-3xl);
-  font-weight: var(--fw-semibold);
-  line-height: var(--leading-display);
+  font-weight: var(--fw-light);
+  font-size: var(--font-size-display-hero);
+  line-height: var(--leading-none);
   letter-spacing: var(--tracking-tighter);
-  color: var(--text);
+  margin-top: var(--space-0-875);
+  max-width: 22ch;
+  text-wrap: balance;
 }
 
 .sub {
-  font-size: var(--fs-base);
-  color: var(--text-soft);
-  line-height: var(--leading-body);
+  margin-top: var(--space-5);
   max-width: var(--measure-prose);
+  color: var(--text-soft);
+  font-size: var(--fs-base);
+  line-height: var(--leading-body);
 }
 
-.heroArt {
-  composes: rise from '../../components/shared/Animations.module.css';
-  --rise-duration: var(--anim-rise-lg);
+.cutline {
+  margin-top: var(--space-6);
+  height: 1px;
+  background: linear-gradient(90deg, var(--accent), rgba(200, 146, 42, 0) 72%);
+}
+
+.capbar {
+  margin-top: var(--space-5);
+  display: flex;
+  gap: var(--space-5);
+  align-items: center; /* was flex-end — center .fine against the input/button row */
+  flex-wrap: wrap;
+}
+
+.fine {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+  max-width: 36ch;
 }
 
 /* ── Email capture ───────────────────────────────────────────────────── */
+/* Hero-specific override: a deliberately minimal treatment (transparent
+   underline field, uppercase gold text button) — not the sitewide
+   Field/Button chrome, which stays untouched for every other form. */
 .emailForm {
   display: flex;
-  gap: var(--space-2);
   flex-wrap: wrap;
-  margin-top: var(--space-2);
+  flex: 1;
+  min-width: 280px;
+  max-width: 520px;
+  border-bottom: 1px solid var(--accent-muted);
 }
 
 .input {
-  composes: fieldInput from '../../components/shared/Field.module.css';
-  flex: 1 1 var(--flex-basis-md);
+  background: transparent;
+  border: 0;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-lg);
+  padding: var(--space-2) 0;
+  flex: 1;
   min-width: 0;
 }
 
+.input::placeholder {
+  color: var(--text-muted);
+}
+
+.input:focus {
+  outline: none;
+  box-shadow: 0 2px 0 var(--accent);
+}
+
 .submit {
-  composes: btnPrimary from '../../components/shared/Button.module.css';
-  padding: var(--space-3) var(--space-5);
-  font-size: var(--fs-base);
+  background: transparent;
+  border: 0;
+  color: var(--accent);
+  font: inherit;
+  font-weight: var(--fw-bold);
+  font-size: var(--fs-xs);
+  letter-spacing: var(--tracking-wider);
+  text-transform: uppercase;
+  padding: 0 0 0 var(--space-4);
+  cursor: pointer;
   white-space: nowrap;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+}
+
+.submit:hover {
+  color: var(--text);
 }
 
 .spinner {
@@ -78,24 +232,12 @@
   padding: var(--space-2) var(--space-3);
 }
 
-.secondaryCta {
-  font-size: var(--fs-sm);
-  color: var(--text-muted);
-  letter-spacing: var(--tracking-normal);
-  transition: color var(--transition);
-  align-self: flex-start;
-}
-
-.secondaryCta:hover { color: var(--accent-light); }
-
 .success {
   composes: rise from '../../components/shared/Animations.module.css';
   display: flex;
   flex-direction: column;
-  align-items: center;
-  text-align: center;
+  align-items: flex-start;
   gap: var(--space-2);
-  padding: var(--space-4) 0;
 }
 
 .checkCircle {
@@ -107,44 +249,210 @@
 .successMsg strong { color: var(--accent); }
 .successHint { font-size: var(--fs-sm); color: var(--text-muted); }
 
-/* ── Section shells ──────────────────────────────────────────────────── */
-.sectionTitle {
-  font-family: var(--font-display);
-  font-size: var(--heading-xl);
-  font-weight: var(--fw-semibold);
-  line-height: var(--leading-display);
-  letter-spacing: var(--tracking-tighter);
-  color: var(--text);
-  text-align: center;
+/* ── Ticker ──────────────────────────────────────────────────────────── */
+.ticker {
+  border-bottom: var(--rule);
+  background: var(--bg-raised);
+  overflow: hidden;
 }
 
-.sectionSub {
-  font-size: var(--fs-md);
-  color: var(--text-muted);
-  text-align: center;
-  margin-top: var(--space-2);
+.tk {
+  display: flex;
+  align-items: center;
 }
 
-/* ── How it works ────────────────────────────────────────────────────── */
-.steps {
-  max-width: var(--page-max-medium);
-  margin: 0 auto;
-  padding: var(--space-8) var(--space-6);
+.tkLabel {
+  flex: 0 0 auto;
+  padding: var(--space-3) var(--space-6);
+  border-right: var(--rule);
+  color: var(--accent);
+  font-size: var(--fs-2xs);
+  font-weight: var(--fw-bold);
+  letter-spacing: var(--eyebrow-tracking);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.tkView {
+  overflow: hidden;
+  flex: 1;
+}
+
+.tkTrack {
+  display: flex;
+  white-space: nowrap;
+}
+
+.tkItem {
+  padding: var(--space-3) var(--space-5);
+  font-size: var(--fs-sm);
+  color: var(--text-soft);
+  border-right: var(--rule);
+}
+
+.tkItem b {
+  color: var(--accent);
+  font-weight: var(--fw-bold);
+  font-variant-numeric: tabular-nums;
+  margin-right: var(--space-2);
+}
+
+/* ── Stacked plates ──────────────────────────────────────────────────── */
+.plates {
   border-top: var(--rule);
 }
 
-.stepList {
+.plate {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(var(--plate-text-min), 1fr);
+  border-bottom: var(--rule);
+}
+
+.plateFlip {
+  grid-template-columns: minmax(var(--plate-text-min), 1fr) minmax(0, 1.35fr);
+}
+
+.plateMedia {
+  position: relative;
+  overflow: hidden;
+  min-height: var(--plate-media-min-height);
+  border-right: var(--rule);
+  background: var(--bg-card);
+}
+
+.plateFlip .plateMedia {
+  order: 2;
+  border-right: 0;
+  border-left: var(--rule);
+}
+
+/* cover on a fixed panel is the whole fix: every source ratio fills the box
+   identically, so there is no letterbox left for a backdrop/mask to disguise. */
+.plateImg,
+.platePlaceholder {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+  object-position: center;
+}
+
+.plateImg {
+  filter: var(--plate-image-filter); /* B3's saturate/contrast pull, so photos sit in the navy ground */
+}
+
+.plateText {
+  padding: var(--space-6);
+}
+
+.plateEyebrow {
+  composes: eyebrow;
+  color: var(--accent);
+}
+
+.plateH2 {
+  font-family: var(--font-display);
+  font-weight: var(--fw-light);
+  font-size: var(--font-size-display-card);
+  line-height: var(--leading-none);
+  letter-spacing: var(--tracking-tighter);
+  margin-top: var(--space-3);
+  color: var(--text);
+  text-wrap: balance;
+}
+
+.plateBody {
+  margin-top: var(--space-4);
+  max-width: 46ch;
+  color: var(--text-soft);
+  font-size: var(--fs-md);
+  line-height: var(--leading-body);
+}
+
+.hair {
+  margin-top: var(--space-5);
+  height: 1px;
+  width: var(--hair-width);
+  background: var(--accent-muted);
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  margin-top: var(--space-3);
+}
+
+.meta span {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-bold);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  color: var(--text-soft);
+  padding: 0 var(--space-3);
+  border-left: var(--rule);
+}
+
+.meta span:first-child {
+  padding-left: 0;
+  border-left: 0;
+}
+
+/* ── Flat proof section ─────────────────────────────────────────────── */
+.flat {
+  padding: clamp(42px, 5.6vw, 80px) 0;
+}
+
+.flatHeader {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 0.7fr);
+  gap: 0 clamp(24px, 4vw, 64px);
+  align-items: end;
+  padding-bottom: var(--space-6);
+  border-bottom: var(--rule);
+}
+
+.flatEyebrow {
+  composes: eyebrow;
+  color: var(--accent);
+}
+
+.flatTitle {
+  font-family: var(--font-display);
+  font-weight: var(--fw-light);
+  font-size: var(--font-size-display-section);
+  line-height: 1.02;
+  letter-spacing: var(--tracking-tighter);
+  margin-top: var(--space-2);
+  max-width: 28ch; /* was 16ch — same over-narrow wrap issue as round-2's h1 fix */
+  color: var(--text);
+  text-wrap: balance;
+}
+
+.flatSub {
+  color: var(--text-soft);
+  font-size: var(--fs-md);
+}
+
+.steps {
   list-style: none;
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: var(--space-6);
-  margin-top: var(--space-7);
+  grid-template-columns: 1.25fr 1fr 0.85fr;
 }
 
 .step {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
+  padding: var(--space-6) var(--space-6) var(--space-6) 0;
+  border-right: var(--rule);
+}
+
+.step:last-child {
+  border-right: 0;
+  padding-right: 0;
+}
+
+.step + .step {
+  padding-left: var(--space-6);
 }
 
 .stepNum {
@@ -153,110 +461,65 @@
   font-weight: var(--fw-light);
   line-height: var(--leading-none);
   color: var(--accent);
-  letter-spacing: var(--tracking-tighter);
+  display: block;
 }
 
 .stepTitle {
+  margin-top: var(--space-2);
   font-size: var(--heading-xs);
   font-weight: var(--fw-semibold);
   color: var(--text);
 }
 
 .stepBody {
-  font-size: var(--fs-md);
+  margin-top: var(--space-2);
   color: var(--text-soft);
-  line-height: var(--leading-body);
+  font-size: var(--fs-md);
 }
 
-/* ── Showcase grid ───────────────────────────────────────────────────── */
-.showcase {
-  max-width: var(--page-max-wide);
-  margin: 0 auto;
-  padding: var(--space-8) var(--space-6);
-  border-top: var(--rule);
-  width: 100%;
-}
-
-.grid {
+.figs {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(var(--card-grid-min), 1fr));
-  gap: var(--space-5);
-  margin-top: var(--space-7);
-}
-
-.showcaseCta {
-  composes: btnOutline from '../../components/shared/Button.module.css';
-  display: inline-flex;
-  margin: var(--space-6) auto 0;
-  padding: var(--space-3) var(--space-6);
-}
-
-/* ── Personas ────────────────────────────────────────────────────────── */
-.personas {
-  max-width: var(--page-max-medium);
-  margin: 0 auto;
-  padding: var(--space-8) var(--space-6);
+  /* --fig-count (set inline) is the number of Fig children actually
+     rendered — furthest_date/cheapest_price are nullable, so this avoids
+     reserving empty grid tracks when fewer than 5 stats are available. */
+  grid-template-columns: repeat(var(--fig-count, 5), 1fr);
+  margin-top: var(--space-6);
+  padding-top: var(--space-6);
   border-top: var(--rule);
-  width: 100%;
 }
 
-.personaRow {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: var(--space-4);
-  margin-top: var(--space-7);
-}
-
-.personaChip {
-  composes: card from '../../components/shared/Card.module.css';
+.fig {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  text-align: center;
-  gap: var(--space-1);
-  padding: var(--space-5) var(--space-3);
-  /* fit 5 per row on desktop; a trailing partial row centers via justify-content */
-  flex: 0 1 calc((100% - 4 * var(--space-4)) / 5);
+  padding: 0 var(--space-4);
+  border-left: var(--rule);
 }
 
-.personaEmoji { font-size: var(--heading-md); }
-.personaName {
-  font-size: var(--fs-sm);
-  font-weight: var(--fw-semibold);
-  color: var(--text);
+.fig:first-child {
+  padding-left: 0;
+  border-left: 0;
 }
-.personaVibe {
+
+.figValue {
+  font-family: var(--font-display);
+  font-weight: var(--fw-light);
+  font-size: var(--font-size-display-plate);
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  line-height: var(--leading-none);
+}
+
+.figLabel {
+  margin-top: var(--space-2);
   font-size: var(--fs-2xs);
   color: var(--text-muted);
-  line-height: var(--leading-snug);
 }
-
-/* ── Trust row ───────────────────────────────────────────────────────── */
-.trust {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-3);
-  padding: var(--space-6);
-  border-top: var(--rule);
-}
-
-.trustItem {
-  font-size: var(--fs-sm);
-  letter-spacing: var(--tracking-wide);
-  text-transform: uppercase;
-  color: var(--text-soft);
-}
-
-.trustDot { color: var(--accent); }
 
 /* ── For organizers ──────────────────────────────────────────────────── */
 .organizer {
   max-width: var(--page-max-medium);
   margin: 0 auto;
-  padding: var(--space-8) var(--space-6);
+  padding: var(--space-8) 0;
   border-top: var(--rule);
   width: 100%;
   display: grid;
@@ -272,13 +535,11 @@
 }
 
 .organizerEyebrow {
+  composes: eyebrow;
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  font-size: var(--fs-2xs);
-  text-transform: uppercase;
-  letter-spacing: var(--eyebrow-tracking);
-  color: var(--text-muted);
+  color: var(--accent);
 }
 
 .organizerMark {
@@ -288,9 +549,11 @@
 }
 
 .organizerTitle {
-  composes: sectionTitle;
-  font-size: var(--heading-lg);
-  text-align: left;
+  font-family: var(--font-display);
+  font-weight: var(--fw-light);
+  font-size: var(--font-size-display-section);
+  letter-spacing: var(--tracking-tighter);
+  color: var(--text);
 }
 
 .organizerBody {
@@ -299,12 +562,25 @@
   max-width: var(--measure-prose);
 }
 
+/* Hero/CTA-band-specific treatment (like the email submit button above) —
+   not the sitewide secondary button, so this doesn't compose btnOutline. */
 .organizerCta {
-  composes: btnOutline from '../../components/shared/Button.module.css';
   display: inline-flex;
-  padding: var(--space-3) var(--space-6);
+  padding: var(--space-4) var(--space-6);
   align-self: center;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  font-weight: var(--fw-bold);
+  font-size: var(--fs-xs);
+  letter-spacing: var(--tracking-wider);
+  text-transform: uppercase;
   white-space: nowrap;
+  transition: background var(--transition), color var(--transition);
+}
+
+.organizerCta:hover {
+  background: var(--accent);
+  color: var(--on-accent);
 }
 
 /* !important: CSS Modules bundling can place the composed .breathe class
@@ -315,34 +591,57 @@
   .organizerMark { animation: none !important; }
 }
 
+/* ── Footer ──────────────────────────────────────────────────────────── */
+.footer {
+  border-top: var(--rule);
+  padding: var(--space-5) 0 var(--space-8);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-6);
+}
+
+/* --text-muted (not --text-dim, which is decorative-only and fails AA — see
+   index.css's --text-dim comment) — this is real footer copy, not a ghost
+   numeral or hairline. */
+.trustItem,
+.footerLocales,
+.footerYear {
+  composes: eyebrow;
+  font-weight: var(--fw-bold); /* prototype footer is lighter than .lab (c1.html:143-144) */
+  color: var(--text-muted);
+}
+
 /* ── Responsive ──────────────────────────────────────────────────────── */
 @media (max-width: 900px) {
-  .hero {
-    grid-template-columns: 1fr;
-    gap: var(--space-6);
-    padding-top: var(--space-7);
-    text-align: center;
+  .flatHeader { grid-template-columns: 1fr; gap: var(--space-4); }
+  .steps { grid-template-columns: 1fr; }
+  .step { border-right: 0; border-top: var(--rule); padding: var(--space-5) 0 !important; }
+  .figs { grid-template-columns: repeat(2, 1fr); }
+  .fig { border-left: 0; padding-left: 0 !important; }
+  .plate,
+  .plateFlip { grid-template-columns: 1fr; }
+  .plateFlip .plateMedia { order: 0; border-left: 0; }
+  .plateMedia {
+    border-right: 0;
+    border-bottom: var(--rule);
+    min-height: var(--plate-media-min-height-compact);
   }
-  .heroText { align-items: center; }
-  .sub { text-align: center; }
-  .emailForm { justify-content: center; }
-  .heroArt { order: -1; }
-  .stepList { grid-template-columns: 1fr; gap: var(--space-5); }
-  .personaChip { flex-basis: calc((100% - 2 * var(--space-4)) / 3); }
+  .plateText { padding: var(--space-5) 0; }
   .organizer { grid-template-columns: 1fr; row-gap: var(--space-5); }
   .organizerCta { justify-self: start; }
 }
 
 @media (max-width: 640px) {
-  .h1 { font-size: var(--heading-xl); }
-  .emailForm {
-    flex-direction: column;
-    gap: var(--space-3);
-    width: 100%;
+  .hero,
+  .heroGrid {
+    min-height: calc(100dvh - var(--topbar-height-mobile));
   }
-  /* .input's `flex: 1 1 220px` would apply 220px as a *height* basis once the
-     form stacks — reset it so the input keeps its natural height. */
-  .input { flex: none; width: 100%; }
-  .submit { width: 100%; }
-  .personaChip { flex-basis: calc((100% - 1 * var(--space-4)) / 2); }
+  .heroMain { justify-content: center; }
+  .h1 { font-size: var(--heading-xl); }
+  .capbar { flex-direction: column; align-items: stretch; }
+  .emailForm { width: 100%; }
+  .submit { padding-left: 0; }
+  .ticker { display: none; }
+  .plates { margin-top: var(--space-7); }
+  .footer { justify-content: center; text-align: center; }
 }

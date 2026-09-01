@@ -194,7 +194,8 @@ def _ts_locales(cfg: dict) -> str:
     for loc in cfg["locales"]:
         code = _ts_str(loc["code"])
         label = _ts_str(loc["label"])
-        lines.append(f"  {{ code: {code}, label: {label} }},")
+        native_name = _ts_str(loc["nativeName"])
+        lines.append(f"  {{ code: {code}, label: {label}, nativeName: {native_name} }},")
     lines.append("] as const;")
     return "\n".join(lines)
 

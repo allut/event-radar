@@ -342,6 +342,7 @@ export const QUERY_KEYS = {
   event: 'event',
   settings: 'settings',
   showcase: 'showcase',
+  counts: 'counts',
   organizerEvents: 'organizerEvents',
   organizerProfile: 'organizerProfile',
   organizerVenues: 'organizerVenues',
@@ -507,17 +508,6 @@ export const STEP_KEYS = [
 export const BRAND_GLYPH = '◉';
 // Organizer dashboard's empty-state icon.
 export const ORGANIZER_EMPTY_ICON = '📅';
-// Six taxonomy categories placed as radar blips on the Landing hero, positioned
-// (top/left %) around the sweep. Labels come from the shared category_* i18n keys.
-export const RADAR_BLIPS: { slug: string; top: number; left: number; delay: number }[] = [
-  { slug: 'music', top: 20, left: 30, delay: 0 },
-  { slug: 'theater', top: 32, left: 72, delay: 0.4 },
-  { slug: 'exhibitions', top: 58, left: 80, delay: 0.8 },
-  { slug: 'nightlife', top: 76, left: 52, delay: 1.2 },
-  { slug: 'workshops', top: 66, left: 32, delay: 1.6 },
-  { slug: 'family', top: 40, left: 18, delay: 2.0 },
-];
-
 // ─── Explore ─────────────────────────────────────────────────────────────────
 export const EXPLORE_AUDIENCE_ALL = 'all';
 export const EXPLORE_AUDIENCE_FOR_YOU = 'foryou';
@@ -672,6 +662,7 @@ export const API = {
   feedbackEvent: (id: number) => `/feedback/${id}`,
   feedbackEvents: '/feedback/events',
   publicShowcase: '/public/showcase',
+  publicCounts: '/public/counts',
   emailUnsubscribe: '/email/unsubscribe',
   emailResubscribe: '/email/resubscribe',
   event: (id: number | string) => `/events/${id}`,

@@ -1,23 +1,72 @@
+import { Fragment, type CSSProperties } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../../api/client';
-import { API, BRAND_GLYPH, MAGIC_LINK_EXPIRY_MINUTES, OG_FALLBACK_IMAGE_PATH, PERSONAS, PRODUCTION_ORIGIN, QUERY_KEYS, ROUTES, STEP_KEYS, UI_STATE } from '../../constants';
-import { t, ti, personaName, personaVibe } from '../../i18n';
-import { padIndex, withLocaleQuery } from '../../utils';
+import { API, CATEGORIES, LOCALES, MAGIC_LINK_EXPIRY_MINUTES, OG_FALLBACK_IMAGE_PATH, PRODUCTION_ORIGIN, QUERY_KEYS, ROUTES, STEP_KEYS, UI_STATE } from '../../constants';
+import { t, ti } from '../../i18n';
+import { categoryGradient, cx, formatCount, formatEventTime, formatHeroDateline, formatHourMinute, formatPrice, padIndex, safeUrl, stripHtmlToText, truncateForMeta, withLocaleQuery } from '../../utils';
 import { useLocaleMutation } from '../../hooks/useLocaleMutation';
 import { useLocalePath } from '../../hooks/useLocalePath';
 import { useMagicLinkRequest } from '../../hooks/useMagicLinkRequest';
 import { useOrganizerAuth } from '../../hooks/useOrganizerAuth';
+import { usePrefersReducedMotion } from '../../hooks/usePrefersReducedMotion';
 import { useSeoMeta } from '../../hooks/useSeoMeta';
 import { buildWebsiteJsonLd } from '../../lib/structuredData';
 import TopBar from '../../components/TopBar';
-import EventCard, { type EventData } from '../../components/EventCard';
 import SeoTags from '../../components/SeoTags';
-import RadarHero from './RadarHero';
+import { type EventData } from '../../components/EventCard';
+import animStyles from '../../components/shared/Animations.module.css';
 import styles from './Landing.module.css';
 
 interface ShowcaseResponse {
   events: EventData[];
+}
+
+interface TonightEvent {
+  title: string;
+  starts_at: string;
+  venue_name: string | null;
+}
+
+interface CountsResponse {
+  upcoming_count: number;
+  venue_count: number;
+  furthest_date: string | null;
+  cheapest_price: number | null;
+  tonight_is_fallback: boolean;
+  tonight_events: TonightEvent[];
+}
+
+const PLATE_BODY_MAX_LENGTH = 140;
+
+/** Renders an i18n template containing a single `{count}` placeholder with
+ * just the count bolded, e.g. "1,008+ events on the radar right now". */
+function CountSegment({ template, count }: { template: string; count: string }) {
+  const [before, after] = template.split('{count}');
+  return <>{before}<b>{count}</b>{after ?? ''}</>;
+}
+
+/** Renders an i18n string with an `_accented_` word wrapped in markup, e.g.
+ * "…tasub kodust _välja_ minna." → "…tasub kodust <em>välja</em> minna."
+ * No-op when the string carries no underscore markers. */
+function AccentedText({ text }: { text: string }) {
+  const parts = text.split(/_(.+?)_/);
+  const seen = new Map<string, number>();
+  return (
+    <>
+      {parts.map((part, i) => {
+        const base = `${i % 2 === 1 ? 'a' : 't'}:${part}`;
+        const occurrence = seen.get(base) ?? 0;
+        seen.set(base, occurrence + 1);
+        const key = occurrence === 0 ? base : `${base}#${occurrence}`;
+        return i % 2 === 1 ? (
+          <em key={key} className={styles.markAccent}>{part}</em>
+        ) : (
+          <Fragment key={key}>{part}</Fragment>
+        );
+      })}
+    </>
+  );
 }
 
 function EmailCapture({ locale }: { locale: string }) {
@@ -38,25 +87,109 @@ function EmailCapture({ locale }: { locale: string }) {
   }
 
   return (
-    <form onSubmit={submit} className={styles.emailForm} noValidate>
-      <input
-        type="email"
-        className={styles.input}
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
-        placeholder={t('email_placeholder', locale)}
-        autoComplete="email"
-        disabled={state === UI_STATE.loading}
-        aria-label={t('email_label', locale)}
-        required
-      />
-      <button type="submit" className={styles.submit} disabled={state === UI_STATE.loading || !email.trim()}>
-        {state === UI_STATE.loading
-          ? <span className={styles.spinner} aria-label={t('sending', locale)} />
-          : t('landing_cta_primary', locale)}
-      </button>
-      {state === UI_STATE.error && <p className={styles.error} role="alert">{errorMsg}</p>}
-    </form>
+    <>
+      <form onSubmit={submit} className={styles.emailForm} noValidate>
+        <input
+          type="email"
+          className={styles.input}
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder={t('email_placeholder', locale)}
+          autoComplete="email"
+          disabled={state === UI_STATE.loading}
+          aria-label={t('email_label', locale)}
+          required
+        />
+        <button type="submit" className={styles.submit} disabled={state === UI_STATE.loading || !email.trim()}>
+          {state === UI_STATE.loading
+            ? <span className={styles.spinner} aria-label={t('sending', locale)} />
+            : t('landing_cta_primary', locale)}
+        </button>
+        {state === UI_STATE.error && <p className={styles.error} role="alert">{errorMsg}</p>}
+      </form>
+      <p className={styles.fine}>{t('no_password', locale)}</p>
+    </>
+  );
+}
+
+function TickerRow({ event, locale }: { event: TonightEvent; locale: string }) {
+  return (
+    <span className={styles.tkItem}>
+      <b>{formatHourMinute(event.starts_at, locale)}</b>
+      {event.venue_name ? `${event.title} · ${event.venue_name}` : event.title}
+    </span>
+  );
+}
+
+function Ticker({ locale, events, isFallback }: { locale: string; events: TonightEvent[]; isFallback: boolean }) {
+  const reducedMotion = usePrefersReducedMotion();
+  if (events.length === 0) return null;
+
+  const title = t(isFallback ? 'landing_ticker_title_fallback' : 'landing_ticker_title_tonight', locale);
+  // Duplicated content is the standard seamless-marquee technique — skipped
+  // under reduced motion so a frozen mid-loop marquee never shows two
+  // overlapping copies (wayfinder #186). Each copy tagged 0/1 rather than
+  // keyed by array index, since the same event appears once per copy.
+  const track = reducedMotion
+    ? events.map((event) => ({ event, copy: 0 }))
+    : [...events.map((event) => ({ event, copy: 0 })), ...events.map((event) => ({ event, copy: 1 }))];
+
+  return (
+    <div className={styles.ticker} data-testid="ticker">
+      <div className={styles.tk}>
+        <span className={styles.tkLabel}>{title}</span>
+        <div className={styles.tkView}>
+          <div className={cx(styles.tkTrack, !reducedMotion && animStyles.tickerSlide)}>
+            {track.map(({ event, copy }) => (
+              <TickerRow key={`${copy}-${event.starts_at}-${event.title}`} event={event} locale={locale} />
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Plate({ event, index, locale }: { event: EventData; index: number; locale: string }) {
+  const isFlipped = index % 2 === 1;
+  const category = event.categories[0];
+  const categoryLabel = category ? t(`category_${category}`, locale) : null;
+  const eyebrow = [formatEventTime(event.starts_at, locale), categoryLabel].filter(Boolean).join(' · ');
+  const price = formatPrice(event.price_min, event.price_max, event.currency, locale, event.has_free_tier);
+  const imageUrl = safeUrl(event.image_url);
+
+  return (
+    <article className={cx(styles.plate, isFlipped && styles.plateFlip)}>
+      <div className={styles.plateMedia}>
+        {imageUrl ? (
+          <img src={imageUrl} alt={event.title} loading="lazy" className={styles.plateImg} />
+        ) : (
+          <div className={styles.platePlaceholder} style={{ background: categoryGradient(event.categories) }} />
+        )}
+      </div>
+      <div className={styles.plateText}>
+        <p className={styles.plateEyebrow}>{eyebrow}</p>
+        <h2 className={styles.plateH2}>{event.title}</h2>
+        {event.description && (
+          <p className={styles.plateBody}>{truncateForMeta(stripHtmlToText(event.description), PLATE_BODY_MAX_LENGTH)}</p>
+        )}
+        <div className={cx(styles.hair, animStyles.hairlineDraw)} />
+        <div className={styles.meta}>
+          {event.venue_name && <span>{event.venue_name}</span>}
+          {price && <span>{price}</span>}
+          {categoryLabel && <span>{categoryLabel}</span>}
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function Fig({ value, labelKey, locale }: { value: string; labelKey: string; locale: string }) {
+  return (
+    <div className={styles.fig}>
+      <b className={styles.figValue}>{value}</b>
+      <span className={styles.figLabel}>{t(labelKey, locale)}</span>
+    </div>
   );
 }
 
@@ -74,13 +207,25 @@ export default function Landing() {
   });
   const jsonLd = buildWebsiteJsonLd(locale);
 
-  const { data, isError } = useQuery({
+  const { data: showcaseData } = useQuery({
     queryKey: [QUERY_KEYS.showcase, locale],
     queryFn: () => api.get<ShowcaseResponse>(withLocaleQuery(API.publicShowcase, locale)),
     retry: false,
   });
+  const plateEvents = (showcaseData?.events ?? []).slice(0, 3);
 
-  const showcaseEvents = data?.events ?? [];
+  const { data: counts } = useQuery({
+    queryKey: [QUERY_KEYS.counts, locale],
+    queryFn: () => api.get<CountsResponse>(withLocaleQuery(API.publicCounts, locale)),
+    retry: false,
+  });
+  const tonightEvents = counts?.tonight_events ?? [];
+  const furthestYear = counts?.furthest_date ? new Date(counts.furthest_date).getFullYear() : null;
+
+  const brand = t('brand', locale);
+  const brandSplitIdx = brand.lastIndexOf(' ');
+  const brandPrefix = brandSplitIdx === -1 ? brand : brand.slice(0, brandSplitIdx);
+  const brandLast = brandSplitIdx === -1 ? '' : brand.slice(brandSplitIdx + 1);
 
   return (
     <div className={styles.page}>
@@ -89,84 +234,115 @@ export default function Landing() {
 
       <main>
         <section className={styles.hero}>
-          <div className={styles.heroText}>
-            <h1 className={styles.h1}>{t('landing_hero_h1', locale)}</h1>
-            <p className={styles.sub}>{t('landing_hero_sub', locale)}</p>
-            <EmailCapture locale={locale} />
-            <a href="#showcase" className={styles.secondaryCta}>{t('landing_cta_explore', locale)}</a>
+          <div className={styles.poster}>
+            <div className={cx(styles.posterImg, animStyles.posterDrift)} />
           </div>
-          <div className={styles.heroArt}>
-            <RadarHero locale={locale} />
-          </div>
-        </section>
+          <div className={styles.scrim} />
+          <div className={styles.frame} />
 
-        <section className={styles.steps} aria-label={t('landing_how_title', locale)}>
-          <h2 className={styles.sectionTitle}>{t('landing_how_title', locale)}</h2>
-          <ol className={styles.stepList}>
-            {STEP_KEYS.map((step, i) => (
-              <li key={step.title} className={styles.step}>
-                <span className={styles.stepNum} aria-hidden>{padIndex(i + 1)}</span>
-                <h3 className={styles.stepTitle}>{t(step.title, locale)}</h3>
-                <p className={styles.stepBody}>{t(step.body, locale)}</p>
-              </li>
-            ))}
-          </ol>
-        </section>
+          <div className={styles.heroGrid}>
+            <div className={styles.heroMain}>
+              <div className={styles.heroTop}>
+                <span className={styles.mark}>
+                  {brandPrefix} <em className={styles.markAccent}>{brandLast}</em>
+                </span>
+                {counts && (
+                  <span className={styles.heroCounter}>
+                    <CountSegment template={t('landing_hero_counter', locale)} count={formatCount(counts.upcoming_count, locale)} />
+                    {' · '}
+                    {ti('landing_hero_venues', locale, { count: formatCount(counts.venue_count, locale) })}
+                    {' · '}
+                    <CountSegment template={t('landing_hero_tonight', locale)} count={String(tonightEvents.length)} />
+                  </span>
+                )}
+              </div>
 
-        {(showcaseEvents.length > 0 || isError) && (
-          <section id="showcase" className={styles.showcase}>
-            <h2 className={styles.sectionTitle}>{t('landing_showcase_title', locale)}</h2>
-            <p className={styles.sectionSub}>{t('landing_showcase_sub', locale)}</p>
-            {isError ? (
-              <p className={styles.error} role="alert">{t('landing_showcase_error', locale)}</p>
-            ) : (
-              <>
-                <div className={styles.grid}>
-                  {showcaseEvents.map((event, i) => (
-                    <EventCard key={event.id} event={event} index={i} locale={locale} readOnly />
-                  ))}
+              <div className={styles.heroBot}>
+                <p className={styles.dateline}>{formatHeroDateline(locale)} · {t('landing_hero_city', locale)}</p>
+                <h1 className={styles.h1}>
+                  <span className={animStyles.heroRise}>
+                    <span><AccentedText text={t('landing_hero_h1', locale)} /></span>
+                  </span>
+                </h1>
+                <p className={styles.sub}>{t('landing_hero_sub', locale)}</p>
+                <div className={cx(styles.cutline, animStyles.hairlineDraw)} />
+                <div className={styles.capbar}>
+                  <EmailCapture locale={locale} />
                 </div>
-                <Link to={localePath(ROUTES.login)} className={styles.showcaseCta}>{t('landing_showcase_cta', locale)}</Link>
-              </>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <Ticker locale={locale} events={tonightEvents} isFallback={counts?.tonight_is_fallback ?? false} />
+
+        <div className={styles.wrap}>
+          <div className={styles.plates}>
+            {plateEvents.map((event, i) => (
+              <Plate key={event.id} event={event} index={i} locale={locale} />
+            ))}
+          </div>
+        </div>
+
+        <div className={styles.wrap}>
+          <section className={styles.flat}>
+            <div className={styles.flatHeader}>
+              <div>
+                <p className={styles.flatEyebrow}>{t('landing_how_title', locale)}</p>
+                <h2 className={styles.flatTitle}>{t('landing_personas_title', locale)}</h2>
+              </div>
+              <p className={styles.flatSub}>{t('landing_personas_sub', locale)}</p>
+            </div>
+
+            <ol className={styles.steps}>
+              {STEP_KEYS.map((step, i) => (
+                <li key={step.title} className={styles.step}>
+                  <span className={styles.stepNum} aria-hidden>{padIndex(i + 1)}</span>
+                  <h3 className={styles.stepTitle}>{t(step.title, locale)}</h3>
+                  <p className={styles.stepBody}>{t(step.body, locale)}</p>
+                </li>
+              ))}
+            </ol>
+
+            {counts && (
+              <div
+                className={styles.figs}
+                style={{ '--fig-count': String(3 + Number(furthestYear !== null) + Number(counts.cheapest_price !== null)) } as CSSProperties}
+              >
+                <Fig value={`${formatCount(counts.upcoming_count, locale)}+`} labelKey="landing_stat_upcoming" locale={locale} />
+                <Fig value={`${formatCount(counts.venue_count, locale)}+`} labelKey="landing_stat_venues" locale={locale} />
+                <Fig value={String(CATEGORIES.length)} labelKey="landing_stat_categories" locale={locale} />
+                {furthestYear !== null && (
+                  <Fig value={String(furthestYear)} labelKey="landing_stat_horizon" locale={locale} />
+                )}
+                {counts.cheapest_price !== null && (
+                  <Fig value={`€${counts.cheapest_price}`} labelKey="landing_stat_price" locale={locale} />
+                )}
+              </div>
             )}
           </section>
-        )}
 
-        <section className={styles.personas}>
-          <h2 className={styles.sectionTitle}>{t('landing_personas_title', locale)}</h2>
-          <p className={styles.sectionSub}>{t('landing_personas_sub', locale)}</p>
-          <div className={styles.personaRow}>
-            {PERSONAS.map((persona) => (
-              <div key={persona.slug} className={styles.personaChip}>
-                <span className={styles.personaEmoji} aria-hidden>{persona.emoji}</span>
-                <span className={styles.personaName}>{personaName(persona.slug, locale)}</span>
-                <span className={styles.personaVibe}>{personaVibe(persona.slug, locale)}</span>
-              </div>
-            ))}
-          </div>
-        </section>
+          <section className={styles.organizer} aria-labelledby="organizer-cta">
+            <div className={styles.organizerText}>
+              <p className={styles.organizerEyebrow}>
+                {t('landing_organizer_eyebrow', locale)}
+              </p>
+              <h3 id="organizer-cta" className={styles.organizerTitle}>{t('landing_organizer_title', locale)}</h3>
+              <p className={styles.organizerBody}>{t('landing_organizer_body', locale)}</p>
+            </div>
+            <Link to={localePath(isOrganizer ? ROUTES.organizerDashboard : ROUTES.organizerLogin)} className={styles.organizerCta}>
+              {t('landing_organizer_cta', locale)}
+            </Link>
+          </section>
 
-        <section className={styles.organizer} aria-labelledby="organizer-cta">
-          <div className={styles.organizerText}>
-            <p className={styles.organizerEyebrow}>
-              <span className={styles.organizerMark} aria-hidden>{BRAND_GLYPH}</span>
-              {t('landing_organizer_eyebrow', locale)}
-            </p>
-            <h2 id="organizer-cta" className={styles.organizerTitle}>{t('landing_organizer_title', locale)}</h2>
-            <p className={styles.organizerBody}>{t('landing_organizer_body', locale)}</p>
-          </div>
-          <Link to={localePath(isOrganizer ? ROUTES.organizerDashboard : ROUTES.organizerLogin)} className={styles.organizerCta}>
-            {t('landing_organizer_cta', locale)}
-          </Link>
-        </section>
-
-        <section className={styles.trust}>
-          <span className={styles.trustItem}>{t('landing_trust_nopassword', locale)}</span>
-          <span className={styles.trustDot} aria-hidden>·</span>
-          <span className={styles.trustItem}>{t('landing_trust_notracking', locale)}</span>
-          <span className={styles.trustDot} aria-hidden>·</span>
-          <span className={styles.trustItem}>{t('landing_trust_free', locale)}</span>
-        </section>
+          <footer className={styles.footer}>
+            <span className={styles.trustItem}>{t('landing_trust_nopassword', locale)}</span>
+            <span className={styles.trustItem}>{t('landing_trust_notracking', locale)}</span>
+            <span className={styles.trustItem}>{t('landing_trust_free', locale)}</span>
+            <span className={styles.footerLocales}>{LOCALES.map((l) => l.nativeName).join(' · ')}</span>
+            <span className={styles.footerYear}>{t('brand', locale)}, {new Date().getFullYear()}</span>
+          </footer>
+        </div>
       </main>
     </div>
   );

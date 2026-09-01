@@ -614,6 +614,16 @@ SHOWCASE_EVENT_COUNT = 6
 # endpoint retries once at the wider window rather than rendering a stub grid.
 SHOWCASE_WINDOW_DAYS = 7
 SHOWCASE_FALLBACK_WINDOW_DAYS = 30
+# GET /public/counts (wayfinder #188/#189) — hand-rolled process-local TTL cache,
+# no new dependency (single-process/no-Redis architecture). Sized for real
+# visitor traffic: Landing client-fetches this live via React Query on every
+# real visit, not just at prerender-build time.
+PUBLIC_COUNTS_CACHE_TTL_SECONDS = 900
+# Same "this week, fall back if thin" pattern as the showcase grid — a real
+# empty-tonight is a valid, non-error state, so the ticker widens rather than
+# rendering nothing.
+PUBLIC_COUNTS_TONIGHT_CAP = 20
+PUBLIC_COUNTS_FALLBACK_WINDOW_DAYS = 7
 
 # Auth tokens
 AUTH_MAGIC_SALT = "magic-link-v1"

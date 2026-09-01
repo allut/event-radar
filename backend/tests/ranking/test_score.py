@@ -913,7 +913,7 @@ class TestBuildDailyFeedsSeriesCooldown:
 
 class TestCollapseSeriesDuplicates:
     def test_keeps_earliest_starts_at_per_series(self):
-        from app.ranking.score import _collapse_series_duplicates
+        from app.routers.utils import collapse_series_duplicates
 
         later = _feed_event(1, "Workshop", "Studio")
         later.starts_at = _now() + timedelta(days=5)
@@ -922,7 +922,7 @@ class TestCollapseSeriesDuplicates:
         middle = _feed_event(3, "Workshop", "Studio")
         middle.starts_at = _now() + timedelta(days=3)
 
-        collapsed, series_key_by_event_id = _collapse_series_duplicates(
+        collapsed, series_key_by_event_id = collapse_series_duplicates(
             [later, earlier, middle]
         )
 
@@ -933,7 +933,7 @@ class TestCollapseSeriesDuplicates:
         # Two instances sharing an exact starts_at (e.g. duplicate showtimes)
         # must resolve to the same survivor every call, independent of input
         # order or DB row order (the underlying query has no ORDER BY).
-        from app.ranking.score import _collapse_series_duplicates
+        from app.routers.utils import collapse_series_duplicates
 
         same_time = _now() + timedelta(days=2)
         ev5 = _feed_event(5, "Workshop", "Studio")
@@ -941,19 +941,19 @@ class TestCollapseSeriesDuplicates:
         ev2 = _feed_event(2, "Workshop", "Studio")
         ev2.starts_at = same_time
 
-        collapsed_a, _ = _collapse_series_duplicates([ev5, ev2])
-        collapsed_b, _ = _collapse_series_duplicates([ev2, ev5])
+        collapsed_a, _ = collapse_series_duplicates([ev5, ev2])
+        collapsed_b, _ = collapse_series_duplicates([ev2, ev5])
 
         assert [e.id for e in collapsed_a] == [2]
         assert [e.id for e in collapsed_b] == [2]
 
     def test_distinct_series_all_kept(self):
-        from app.ranking.score import _collapse_series_duplicates
+        from app.routers.utils import collapse_series_duplicates
 
         ev1 = _feed_event(1, "Concert", "Hall")
         ev2 = _feed_event(2, "Play", "Theater")
 
-        collapsed, series_key_by_event_id = _collapse_series_duplicates([ev1, ev2])
+        collapsed, series_key_by_event_id = collapse_series_duplicates([ev1, ev2])
 
         assert {e.id for e in collapsed} == {1, 2}
         assert set(series_key_by_event_id) == {1, 2}
