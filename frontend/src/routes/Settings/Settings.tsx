@@ -7,7 +7,7 @@ import { useLocaleNavigate } from '../../hooks/useLocaleNavigate';
 import { useLogout } from '../../hooks/useLogout';
 import { useToast } from '../../hooks/useToast';
 import { useStaticSeoMeta } from '../../hooks/useStaticSeoMeta';
-import { API, AUTH_REDIRECT_DELAY_MS, BRAND_GLYPH, PERSONAS_BY_SLUG, QUERY_KEYS, RANK_LABEL_KEYS, ROUTES, UI_STATE, TOAST_IDLE, type ToastState } from '../../constants';
+import { API, AUTH_REDIRECT_DELAY_MS, QUERY_KEYS, RANK_LABEL_KEYS, ROUTES, UI_STATE, TOAST_IDLE, type ToastState } from '../../constants';
 import { cx } from '../../utils';
 import { t, personaName } from '../../i18n';
 import LocaleSelector from '../../components/LocaleSelector';
@@ -94,10 +94,6 @@ export default function Settings() {
     logoutAllMutation.mutate();
   }
 
-  function personaEmoji(slug: string): string {
-    return PERSONAS_BY_SLUG.get(slug)?.emoji ?? BRAND_GLYPH;
-  }
-
   if (isLoading) {
     return (
       <>
@@ -137,6 +133,7 @@ export default function Settings() {
               onChange={handleLocaleChange}
               ariaLabel={t('section_language', locale)}
               disabled={localePending}
+              sharp
             />
           </div>
         </section>
@@ -147,7 +144,6 @@ export default function Settings() {
             {data?.personas.length ? (
               data.personas.map((p, i) => (
                 <div className={styles.personaRow} key={p.slug}>
-                  <span className={styles.personaEmoji}>{personaEmoji(p.slug)}</span>
                   <div>
                     <span className={styles.personaName}>
                       {personaName(p.slug, locale)}

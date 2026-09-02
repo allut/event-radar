@@ -56,11 +56,6 @@
   padding: var(--space-3) var(--space-4);
 }
 
-.personaEmoji {
-  font-size: var(--heading-md);
-  line-height: var(--leading-none);
-}
-
 .personaName {
   font-size: var(--fs-base);
   color: var(--text);
@@ -97,6 +92,7 @@
 
 .repickBtn {
   composes: btnOutline from '../../components/shared/Button.module.css';
+  composes: buttonSharp from '../../components/shared/Button.module.css';
   align-self: flex-start;
   padding: var(--space-0-45) var(--space-4);
   font-size: var(--fs-sm);
