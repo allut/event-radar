@@ -57,7 +57,7 @@ export default function Feed() {
   return (
     <div className={styles.page}>
       <SeoTags meta={seoMeta} />
-      <TopBar locale={locale} onLocaleChange={handleLocaleChange} onLogout={handleLogout} localeDisabled={localePending} />
+      <TopBar locale={locale} onLocaleChange={handleLocaleChange} onLogout={handleLogout} localeDisabled={localePending} localeSharp />
 
       <main className={styles.main}>
         <header className={styles.masthead}>
@@ -92,6 +92,7 @@ export default function Feed() {
 
         {events.length === 0 ? (
           <EmptyState
+            eyebrow={t('daily_five', locale)}
             title={t('feed_empty_title', locale)}
             message={t('feed_empty_msg', locale)}
             hint={t('feed_empty_hint', locale)}
