@@ -1,5 +1,6 @@
 .page {
   composes: pageCentered from '../../components/shared/Page.module.css';
+  font-family: var(--font-system);
 }
 
 .card {
@@ -14,8 +15,13 @@
   composes: authRadar from '../../components/shared/Card.module.css';
 }
 
+/* !important: CSS Modules bundling can place the composed .authBrand rules
+   (from Card.module.css) later in the output than this file's own rules, at
+   equal specificity — this override must win the cascade regardless of that
+   chunk order (confirmed empirically: without !important, Cormorant wins). */
 .brand {
   composes: authBrand from '../../components/shared/Card.module.css';
+  font-family: var(--font-system) !important;
 }
 
 .tag {
@@ -48,6 +54,7 @@
 
 .input {
   composes: fieldInput from '../../components/shared/Field.module.css';
+  composes: fieldSharp from '../../components/shared/Field.module.css';
   font-family: var(--font-mono);
   width: 100%;
 }
@@ -60,6 +67,7 @@
 
 .submit {
   composes: btnSubmit from '../../components/shared/Button.module.css';
+  composes: buttonSharp from '../../components/shared/Button.module.css';
   padding: var(--space-0-8125) var(--space-5);
   margin-top: var(--space-1);
 }

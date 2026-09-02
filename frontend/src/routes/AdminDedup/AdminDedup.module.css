@@ -54,6 +54,7 @@
 
 .loadMoreBtn {
   composes: btnOutline from '../../components/shared/Button.module.css';
+  composes: buttonSharp from '../../components/shared/Button.module.css';
   display: block;
   margin: var(--space-5) auto 0;
   padding: var(--space-2) var(--space-5);

@@ -2,6 +2,7 @@
   display: flex;
   min-height: 100vh;
   width: 100%;
+  font-family: var(--font-system);
 }
 
 .rail {
@@ -29,7 +30,7 @@
 }
 
 .name {
-  font-family: var(--font-display);
+  font-family: var(--font-system);
   font-weight: var(--fw-semibold);
   font-size: var(--fs-lg);
   color: var(--text);
@@ -55,8 +56,8 @@
 }
 
 .navLink {
+  composes: buttonSharp from '../shared/Button.module.css';
   padding: var(--space-2) var(--space-3);
-  border-radius: var(--radius);
   color: var(--text-soft);
   text-decoration: none;
   font-size: var(--fs-sm);

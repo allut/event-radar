@@ -64,6 +64,10 @@
      the SPA's CSP (docs/backend-ops.md) only serves the two @fontsource
      faces already bundled in main.tsx. */
   --font-mono: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  /* Admin console's own type stack (issue #211) — deliberately not an alias
+     of --font-body: drops Manrope for the OS-native sans, distinguishing the
+     admin sub-language from the consumer/organizer surfaces. */
+  --font-system: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
 
   --fs-2xs:  0.75rem;    /* badge labels */
   --fs-3xs:  0.656rem;   /* ~10.5px — Landing c1 prototype .lab label */
