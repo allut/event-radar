@@ -240,6 +240,7 @@ export default function Explore() {
               value={filters.forYou ? EXPLORE_AUDIENCE_FOR_YOU : EXPLORE_AUDIENCE_ALL}
               onChange={(v) => setForYou(v === EXPLORE_AUDIENCE_FOR_YOU)}
               ariaLabel={`${t('all_events', locale)} / ${t('for_you', locale)}`}
+              sharp
             />
           </div>
 

@@ -92,7 +92,6 @@
 
 .authBtn {
   composes: btnOutline from './Button.module.css';
-  composes: buttonSharp from './Button.module.css';
   padding: var(--space-0-45) var(--space-0-875);
   font-size: var(--fs-sm);
   line-height: normal;

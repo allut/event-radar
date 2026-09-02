@@ -28,7 +28,6 @@
 }
 
 .searchInput {
-  composes: fieldSharp from '../../components/shared/Field.module.css';
   width: 100%;
   padding: var(--space-0-875) var(--space-1-1) var(--space-0-875) var(--space-2-75);
   border: 1px solid var(--border);
@@ -86,7 +85,6 @@
 
 .freeBtn {
   composes: triggerInline from '../../components/shared/Menu.module.css';
-  composes: menuSharp from '../../components/shared/Menu.module.css';
   font-weight: var(--fw-semibold);
 }
 
@@ -100,7 +98,6 @@
 
 .loadMoreBtn {
   composes: btnOutline from '../../components/shared/Button.module.css';
-  composes: buttonSharp from '../../components/shared/Button.module.css';
   align-self: center;
   padding: var(--space-0-6) var(--space-4);
   font-size: var(--fs-sm);
@@ -113,7 +110,6 @@
 
 .clearFiltersBtn {
   composes: btnOutline from '../../components/shared/Button.module.css';
-  composes: buttonSharp from '../../components/shared/Button.module.css';
   align-self: center;
   padding: var(--space-0-45) var(--space-4);
   font-size: var(--fs-sm);

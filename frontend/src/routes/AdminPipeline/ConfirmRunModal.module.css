@@ -33,14 +33,12 @@
 
 .cancelBtn {
   composes: btnOutline from '../../components/shared/Button.module.css';
-  composes: buttonSharp from '../../components/shared/Button.module.css';
   padding: var(--space-2) var(--space-4);
   cursor: pointer;
 }
 
 .continueBtn {
   composes: btnOutline from '../../components/shared/Button.module.css';
-  composes: buttonSharp from '../../components/shared/Button.module.css';
   padding: var(--space-2) var(--space-4);
   cursor: pointer;
   color: var(--danger);
@@ -49,7 +47,6 @@
 
 .confirmBtn {
   composes: btnOutline from '../../components/shared/Button.module.css';
-  composes: buttonSharp from '../../components/shared/Button.module.css';
   padding: var(--space-2) var(--space-4);
   cursor: pointer;
   color: var(--danger);

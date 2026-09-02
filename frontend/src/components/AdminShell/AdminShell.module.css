@@ -56,7 +56,6 @@
 }
 
 .navLink {
-  composes: buttonSharp from '../shared/Button.module.css';
   padding: var(--space-2) var(--space-3);
   color: var(--text-soft);
   text-decoration: none;

@@ -26,7 +26,6 @@
 
 .cta {
   composes: btnOutline from '../shared/Button.module.css';
-  composes: buttonSharp from '../shared/Button.module.css';
   padding: var(--space-0-45) var(--space-0-875);
   font-size: var(--fs-sm);
   font-weight: var(--fw-semibold);
@@ -43,7 +42,6 @@
 }
 
 .dismissBtn {
-  composes: buttonSharp from '../shared/Button.module.css';
   background: none;
   border: none;
   color: var(--text-muted);

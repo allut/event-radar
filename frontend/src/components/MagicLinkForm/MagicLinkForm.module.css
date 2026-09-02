@@ -10,7 +10,6 @@
 
 .input {
   composes: fieldInput from '../shared/Field.module.css';
-  composes: fieldSharp from '../shared/Field.module.css';
   width: 100%;
 }
 
@@ -22,7 +21,6 @@
 
 .submit {
   composes: btnSubmit from '../shared/Button.module.css';
-  composes: buttonSharp from '../shared/Button.module.css';
   padding: var(--space-0-8125) var(--space-5);
   margin-top: var(--space-1);
 }

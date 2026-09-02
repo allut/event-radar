@@ -4,7 +4,7 @@
   background: var(--accent);
   color: var(--on-accent);
   border: 1px solid transparent;
-  border-radius: var(--radius);
+  border-radius: 0;
   font-weight: var(--fw-semibold);
   letter-spacing: var(--tracking-snug);
   line-height: normal;
@@ -19,7 +19,7 @@
   -webkit-appearance: none;
   background: none;
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: 0;
   color: var(--text-muted);
   line-height: normal;
   transition: border-color var(--transition), color var(--transition);
@@ -74,11 +74,4 @@
 
 .iconAction:focus-visible {
   box-shadow: var(--shadow-focus-ring);
-}
-
-/* Universal on-brand marker for C1-migrated surfaces (wayfinder #195/#196) —
- * survived all three prototype review rounds. Compose alongside any button
- * class above; --radius itself (cards, images, chips) is untouched. */
-.buttonSharp {
-  border-radius: 0;
 }

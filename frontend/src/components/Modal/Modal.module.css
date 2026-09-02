@@ -44,7 +44,7 @@
   line-height: var(--leading-none);
   padding: var(--space-0-45);
   border: 1px solid transparent;
-  border-radius: var(--radius);
+  border-radius: 0;
   cursor: pointer;
   flex-shrink: 0;
 }

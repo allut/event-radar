@@ -72,6 +72,7 @@ export default function SavedEvents() {
           value={signal}
           onChange={(v) => setSignal(v as Signal)}
           ariaLabel={t('nav_saved', locale)}
+          sharp
         />
 
         {isLoading ? (

@@ -21,7 +21,6 @@
 
 .runButton {
   composes: btnPrimary from '../../components/shared/Button.module.css';
-  composes: buttonSharp from '../../components/shared/Button.module.css';
   padding: var(--space-2) var(--space-4);
   font-size: var(--fs-sm);
   cursor: pointer;
@@ -30,7 +29,6 @@
 
 .runForRealButton {
   composes: btnOutline from '../../components/shared/Button.module.css';
-  composes: buttonSharp from '../../components/shared/Button.module.css';
   align-self: flex-end;
   padding: var(--space-2) var(--space-4);
   font-size: var(--fs-sm);
@@ -71,7 +69,6 @@
 
 .slugInput {
   composes: fieldInput from '../../components/shared/Field.module.css';
-  composes: fieldSharp from '../../components/shared/Field.module.css';
   font-size: var(--fs-2xs);
   padding: var(--space-1) var(--space-2);
   margin-top: var(--space-1);

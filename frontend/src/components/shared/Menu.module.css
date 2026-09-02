@@ -13,7 +13,7 @@
   max-width: calc(100vw - 2 * var(--space-5));
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: 0;
   box-shadow: var(--shadow-lead);
   padding: var(--space-3);
 }
@@ -34,7 +34,7 @@
   display: inline-flex;
   align-items: center;
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: 0;
   padding: var(--space-0-45) var(--space-0-875);
   color: var(--text);
   background: var(--bg-overlay-soft);
@@ -84,7 +84,7 @@
   padding: var(--space-0-45) var(--space-0-875);
   background: transparent;
   border: 1px solid transparent;
-  border-radius: var(--radius);
+  border-radius: 0;
   color: var(--text);
   font-size: var(--fs-sm);
   transition: color var(--transition);
@@ -96,7 +96,7 @@
 
 .menuOption {
   text-align: center;
-  border-radius: var(--radius);
+  border-radius: 0;
   border: 1px solid transparent;
   background: transparent;
   color: var(--text-muted);
@@ -120,12 +120,6 @@
   .chev {
     display: none;
   }
-}
-
-/* Universal on-brand marker for C1-migrated surfaces (wayfinder #195/#196) —
- * compose alongside triggerButton/triggerInline/menuPop/menuOption. */
-.menuSharp {
-  border-radius: 0;
 }
 
 @media (max-width: 640px) {

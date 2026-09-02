@@ -6,7 +6,6 @@
 
 .backBtn {
   composes: btnOutline from '../../components/shared/Button.module.css';
-  composes: buttonSharp from '../../components/shared/Button.module.css';
   font-size: var(--fs-sm);
   padding: var(--space-0-375) var(--space-0-875);
   cursor: pointer;
@@ -324,7 +323,6 @@
 
 .ticketsBtn {
   composes: btnPrimary from '../../components/shared/Button.module.css';
-  composes: buttonSharp from '../../components/shared/Button.module.css';
   margin-left: auto;
   display: inline-flex;
   align-items: center;
