@@ -57,7 +57,7 @@ export default function Feed() {
   return (
     <div className={styles.page}>
       <SeoTags meta={seoMeta} />
-      <TopBar locale={locale} onLocaleChange={handleLocaleChange} onLogout={handleLogout} localeDisabled={localePending} localeSharp />
+      <TopBar locale={locale} onLocaleChange={handleLocaleChange} onLogout={handleLogout} localeDisabled={localePending} />
 
       <main className={styles.main}>
         <header className={styles.masthead}>

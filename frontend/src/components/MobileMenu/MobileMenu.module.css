@@ -4,6 +4,7 @@
 
 .trigger {
   composes: triggerBase from '../shared/Menu.module.css';
+  composes: menuSharp from '../shared/Menu.module.css';
   justify-content: center;
   font-size: var(--fs-lg);
   transition: border-color var(--transition);
@@ -11,6 +12,7 @@
 
 .pop {
   composes: menuPop from '../shared/Menu.module.css';
+  composes: menuSharp from '../shared/Menu.module.css';
 }
 
 .pop.pop {
@@ -40,7 +42,7 @@
 
 .link {
   padding: var(--space-0-45) var(--space-0-875);
-  border-radius: var(--radius);
+  border-radius: 0;
   font-size: var(--fs-sm);
   font-weight: var(--fw-semibold);
   color: var(--text-muted);
@@ -75,6 +77,7 @@
 
 .localeOption {
   composes: menuOption from '../shared/Menu.module.css';
+  composes: menuSharp from '../shared/Menu.module.css';
   padding: var(--space-0-3) var(--space-0-625);
 }
 
@@ -89,6 +92,7 @@
 
 .signOut {
   composes: btnOutline from '../shared/Button.module.css';
+  composes: buttonSharp from '../shared/Button.module.css';
   padding: var(--space-0-45) var(--space-0-875);
   font-size: var(--fs-sm);
   font-weight: var(--fw-semibold);

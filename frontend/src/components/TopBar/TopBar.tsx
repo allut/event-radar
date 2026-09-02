@@ -15,11 +15,9 @@ interface TopBarProps {
   onBack?: () => void;
   authed?: boolean;
   showNav?: boolean;
-  /** C1-migrated surfaces (wayfinder #202): squares the locale switcher's trigger/popover. */
-  localeSharp?: boolean;
 }
 
-export default function TopBar({ locale, onLocaleChange, onLogout, localeDisabled, onBack, authed = true, showNav = true, localeSharp }: TopBarProps) {
+export default function TopBar({ locale, onLocaleChange, onLogout, localeDisabled, onBack, authed = true, showNav = true }: TopBarProps) {
   const localePath = useLocalePath();
   return (
     <header className={styles.topBar}>
@@ -64,7 +62,7 @@ export default function TopBar({ locale, onLocaleChange, onLogout, localeDisable
             onChange={onLocaleChange}
             ariaLabel={t('section_language', locale)}
             disabled={localeDisabled}
-            sharp={localeSharp}
+            sharp
           />
         </div>
         <div className={styles.mobileMenuWrap}>

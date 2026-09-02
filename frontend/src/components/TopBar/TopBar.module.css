@@ -8,6 +8,7 @@
 
 .backBtn {
   composes: btnOutline from '../shared/Button.module.css';
+  composes: buttonSharp from '../shared/Button.module.css';
   display: inline-flex;
   align-items: center;
   gap: var(--space-0-3);

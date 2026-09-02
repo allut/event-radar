@@ -59,7 +59,7 @@
 
 .navLink {
   padding: var(--space-0-35) var(--space-0-875);
-  border-radius: var(--radius);
+  border-radius: 0;
   font-size: var(--fs-sm);
   font-weight: var(--fw-semibold);
   letter-spacing: var(--tracking-normal);
@@ -92,6 +92,7 @@
 
 .authBtn {
   composes: btnOutline from './Button.module.css';
+  composes: buttonSharp from './Button.module.css';
   padding: var(--space-0-45) var(--space-0-875);
   font-size: var(--fs-sm);
   line-height: normal;
