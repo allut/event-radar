@@ -119,6 +119,13 @@
   composes: srOnly from '../shared/Visually.module.css';
 }
 
+/* Doubled selector — beats .field (composed fieldWrap)/.pickButton/
+ * .removeButton's own border-radius on specificity regardless of source
+ * order (same trick as SelectMenu.module.css's .sharp.sharp). */
+.sharp.sharp {
+  border-radius: 0;
+}
+
 @media (max-width: 640px) {
   .pickButton {
     padding: var(--space-2) var(--space-3);

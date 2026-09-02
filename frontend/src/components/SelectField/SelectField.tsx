@@ -12,6 +12,9 @@ interface SelectFieldProps {
   placeholder: string;
   ariaLabel: string;
   disabled?: boolean;
+  /** C1-migrated surfaces (wayfinder #209): squares the trigger, popover
+   * and option list. Additive, defaults off. */
+  sharp?: boolean;
 }
 
 const ChevronIcon = () => (
@@ -24,13 +27,14 @@ interface ListboxProps {
   onSelect: (v: string) => void;
   ariaLabel: string;
   popRef: RefObject<HTMLDivElement>;
+  sharp: boolean;
 }
 
 /** The open panel's option list — a separate component so its roving-tabindex
  * state is fresh on every open (mirrors DatePicker's PopoverBody). Implements
  * the ARIA listbox keyboard pattern (Arrow/Home/End move focus, Enter/Space
  * activate) since the panel carries role="listbox"/"option". */
-function Listbox({ flatOptions, value, onSelect, ariaLabel, popRef }: ListboxProps) {
+function Listbox({ flatOptions, value, onSelect, ariaLabel, popRef, sharp }: ListboxProps) {
   const selectedIndex = Math.max(0, flatOptions.findIndex((o) => o.value === value));
   const [focusedIndex, setFocusedIndex] = useState(selectedIndex);
   const listRef = useRef<HTMLDivElement>(null);
@@ -64,7 +68,7 @@ function Listbox({ flatOptions, value, onSelect, ariaLabel, popRef }: ListboxPro
   }
 
   return (
-    <div className={styles.pop} ref={popRef} role="listbox" aria-label={ariaLabel} onKeyDown={handleKeyDown}>
+    <div className={cx(styles.pop, sharp && styles.sharp)} ref={popRef} role="listbox" aria-label={ariaLabel} onKeyDown={handleKeyDown}>
       <div ref={listRef}>
         {flatOptions.map((option, index) => {
           const isSelected = option.value === value;
@@ -76,7 +80,7 @@ function Listbox({ flatOptions, value, onSelect, ariaLabel, popRef }: ListboxPro
               tabIndex={index === focusedIndex ? 0 : -1}
               aria-selected={isSelected}
               data-selected={isSelected || undefined}
-              className={cx(styles.option, isSelected && styles.optionSelected, option.value === '' && styles.placeholderOption)}
+              className={cx(styles.option, isSelected && styles.optionSelected, option.value === '' && styles.placeholderOption, sharp && styles.sharp)}
               onFocus={() => setFocusedIndex(index)}
               onClick={() => onSelect(option.value)}
             >
@@ -93,7 +97,7 @@ function Listbox({ flatOptions, value, onSelect, ariaLabel, popRef }: ListboxPro
 /** Form-field-shaped single-select popover — themed replacement for a native
  * `<select>`. Used by EventSubmit's Category field; a field-width dark panel
  * distinct from SelectMenu's centered Explore-filter list. */
-export default function SelectField({ id, value, options, onChange, placeholder, ariaLabel, disabled = false }: SelectFieldProps) {
+export default function SelectField({ id, value, options, onChange, placeholder, ariaLabel, disabled = false, sharp = false }: SelectFieldProps) {
   const { open, setOpen, rootRef, popRef, triggerRef, close } = useDropdown('[data-selected="true"]');
   const current = options.find((o) => o.value === value);
   const flatOptions: ChipOption[] = [{ value: '', label: placeholder }, ...options];
@@ -109,7 +113,7 @@ export default function SelectField({ id, value, options, onChange, placeholder,
         ref={triggerRef}
         id={id}
         type="button"
-        className={cx(styles.trigger, open && styles.triggerOpen)}
+        className={cx(styles.trigger, open && styles.triggerOpen, sharp && styles.sharp)}
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-label={ariaLabel}
@@ -124,7 +128,7 @@ export default function SelectField({ id, value, options, onChange, placeholder,
         </span>
       </button>
       {open && !disabled && (
-        <Listbox flatOptions={flatOptions} value={value} onSelect={handleSelect} ariaLabel={ariaLabel} popRef={popRef} />
+        <Listbox flatOptions={flatOptions} value={value} onSelect={handleSelect} ariaLabel={ariaLabel} popRef={popRef} sharp={sharp} />
       )}
     </div>
   );

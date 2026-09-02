@@ -105,3 +105,10 @@
 @media (prefers-reduced-motion: reduce) {
   .indicator { transition: none; }
 }
+
+/* Doubled selector — beats .segDial/.indicator/.segDial .segBtn's own
+ * border-radius on specificity regardless of cross-rule source order (same
+ * trick as SelectMenu.module.css's .sharp.sharp). */
+.sharp.sharp {
+  border-radius: 0;
+}

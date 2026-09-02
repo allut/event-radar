@@ -321,3 +321,12 @@
     right: 0;
   }
 }
+
+/* Doubled selector — beats .field (composed fieldWrap)/.calendarButton/.pop
+ * (composed menuPop)/.calNavBtn/.calDay/.timeInput's own border-radius on
+ * specificity regardless of source order (same trick as
+ * SelectMenu.module.css's .sharp.sharp). Decorative radii (.today's dot,
+ * .selected's own background) are untouched — not a control's corners. */
+.sharp.sharp {
+  border-radius: 0;
+}

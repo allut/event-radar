@@ -160,3 +160,11 @@
   font-size: var(--fs-xs);
   color: var(--text-muted);
 }
+
+/* Doubled selector — beats .input/.pop (composed menuPop)/.option/
+ * .oneOffOption/.miniInput/.saveBtn/.miniForm's own border-radius on
+ * specificity regardless of source order (same trick as
+ * SelectMenu.module.css's .sharp.sharp). */
+.sharp.sharp {
+  border-radius: 0;
+}

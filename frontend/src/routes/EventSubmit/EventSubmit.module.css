@@ -24,7 +24,7 @@
   padding: var(--space-4);
   background: var(--bg-raised);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: 0;
 }
 
 .contentHead {
@@ -70,12 +70,14 @@
 
 .input {
   composes: fieldInput from '../../components/shared/Field.module.css';
+  composes: fieldSharp from '../../components/shared/Field.module.css';
   width: 100%;
   font-family: inherit;
 }
 
 .textarea {
   composes: fieldInput from '../../components/shared/Field.module.css';
+  composes: fieldSharp from '../../components/shared/Field.module.css';
   width: 100%;
   font-family: inherit;
   resize: vertical;
@@ -90,6 +92,7 @@
 
 .submit {
   composes: btnSubmit from '../../components/shared/Button.module.css';
+  composes: buttonSharp from '../../components/shared/Button.module.css';
   padding: var(--space-0-8125) var(--space-5);
   margin-top: var(--space-1);
 }

@@ -54,6 +54,7 @@ export default function OrganizerTopBar({ locale, onLocaleChange, onLogout }: Or
           locale={locale}
           onChange={onLocaleChange}
           ariaLabel={t('section_language', locale)}
+          sharp
         />
       </div>
     </header>

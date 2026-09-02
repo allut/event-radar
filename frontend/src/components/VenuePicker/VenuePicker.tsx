@@ -44,6 +44,10 @@ interface VenuePickerProps {
    * instead of a second, separate set of language tabs. */
   contentLang: ContentLang;
   disabled?: boolean;
+  /** C1-migrated surfaces (wayfinder #209): squares the search input, the
+   * saved/one-off menu chrome, and the inline edit/one-off mini-form's
+   * input and save button. Additive, defaults off. */
+  sharp?: boolean;
 }
 
 function langLabel(lang: ContentLang): string {
@@ -87,7 +91,7 @@ function withFieldFor<T extends VenueOneOffFields>(fields: T, field: VenueTextFi
  * control's own UI action, not something the submission form needs to
  * orchestrate. The final pick/one-off/save-checkbox state is lifted to the
  * caller via value/onChange since event submission has to read it. */
-export default function VenuePicker({ id, value, onChange, locale, contentLang, disabled = false }: VenuePickerProps) {
+export default function VenuePicker({ id, value, onChange, locale, contentLang, disabled = false, sharp = false }: VenuePickerProps) {
   const queryClient = useQueryClient();
   const rootRef = useRef<HTMLDivElement>(null);
   const [query, setQuery] = useState('');
@@ -186,7 +190,7 @@ export default function VenuePicker({ id, value, onChange, locale, contentLang, 
         <input
           id={id}
           type="text"
-          className={styles.input}
+          className={cx(styles.input, sharp && styles.sharp)}
           value={query}
           placeholder={value.mode === 'saved' && selected ? selected.name : t('organizer_venue_search_placeholder', locale)}
           onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
@@ -199,21 +203,21 @@ export default function VenuePicker({ id, value, onChange, locale, contentLang, 
           autoComplete="off"
         />
         {open && !disabled && (
-          <div className={styles.pop} id={listId} role="listbox" aria-label={t('organizer_field_venue', locale)}>
+          <div className={cx(styles.pop, sharp && styles.sharp)} id={listId} role="listbox" aria-label={t('organizer_field_venue', locale)}>
             {matches.map((v) => (
               <button
                 key={v.id}
                 type="button"
                 role="option"
                 aria-selected={value.mode === 'saved' && value.venueId === v.id}
-                className={styles.option}
+                className={cx(styles.option, sharp && styles.sharp)}
                 onClick={() => selectSaved(v)}
               >
                 <span className={styles.optionName}>{v.name}</span>
                 {v.address && <span className={styles.optionAddress}>{v.address}</span>}
               </button>
             ))}
-            <button type="button" className={styles.oneOffOption} onClick={selectOneOff}>
+            <button type="button" className={cx(styles.oneOffOption, sharp && styles.sharp)} onClick={selectOneOff}>
               {query.trim()
                 ? ti('organizer_venue_oneoff_option', locale, { query: query.trim() })
                 : t('organizer_venue_oneoff_option_empty', locale)}
@@ -232,10 +236,10 @@ export default function VenuePicker({ id, value, onChange, locale, contentLang, 
       )}
 
       {value.mode === 'saved' && selected && editOpen && (
-        <div className={styles.miniForm}>
+        <div className={cx(styles.miniForm, sharp && styles.sharp)}>
           <input
             type="text"
-            className={styles.miniInput}
+            className={cx(styles.miniInput, sharp && styles.sharp)}
             value={fieldFor(draft, 'name', contentLang)}
             onChange={(e) => setDraft((d) => withFieldFor(d, 'name', contentLang, e.target.value))}
             placeholder={fieldLabel('organizer_field_venue_name', locale, contentLang)}
@@ -244,7 +248,7 @@ export default function VenuePicker({ id, value, onChange, locale, contentLang, 
           />
           <input
             type="text"
-            className={styles.miniInput}
+            className={cx(styles.miniInput, sharp && styles.sharp)}
             value={fieldFor(draft, 'address', contentLang)}
             onChange={(e) => setDraft((d) => withFieldFor(d, 'address', contentLang, e.target.value))}
             placeholder={t('organizer_field_venue_address', locale)}
@@ -254,7 +258,7 @@ export default function VenuePicker({ id, value, onChange, locale, contentLang, 
           <div className={styles.miniFormActions}>
             <button
               type="button"
-              className={styles.saveBtn}
+              className={cx(styles.saveBtn, sharp && styles.sharp)}
               disabled={disabled || updateMutation.isPending || !draft.name.trim()}
               onClick={() => updateMutation.mutate()}
             >
@@ -274,10 +278,10 @@ export default function VenuePicker({ id, value, onChange, locale, contentLang, 
       )}
 
       {value.mode === 'oneoff' && (
-        <div className={cx(styles.miniForm, styles.oneOffForm)}>
+        <div className={cx(styles.miniForm, styles.oneOffForm, sharp && styles.sharp)}>
           <input
             type="text"
-            className={styles.miniInput}
+            className={cx(styles.miniInput, sharp && styles.sharp)}
             value={fieldFor(value, 'name', contentLang)}
             onChange={(e) => onChange(withFieldFor(value, 'name', contentLang, e.target.value))}
             placeholder={fieldLabel('organizer_field_venue_name', locale, contentLang)}
@@ -286,7 +290,7 @@ export default function VenuePicker({ id, value, onChange, locale, contentLang, 
           />
           <input
             type="text"
-            className={styles.miniInput}
+            className={cx(styles.miniInput, sharp && styles.sharp)}
             value={fieldFor(value, 'address', contentLang)}
             onChange={(e) => onChange(withFieldFor(value, 'address', contentLang, e.target.value))}
             placeholder={t('organizer_field_venue_address', locale)}
