@@ -34,3 +34,11 @@
 .chev {
   composes: chev from '../shared/Menu.module.css';
 }
+
+/* Doubled selector: .menuBtn/.menuBtnInline/.pop each compose a cross-file
+ * shared/Menu.module.css base whose own border-radius could otherwise tie
+ * (and win) on specificity depending on bundle order — see that file's
+ * .activePill comment. */
+.sharp.sharp {
+  border-radius: 0;
+}

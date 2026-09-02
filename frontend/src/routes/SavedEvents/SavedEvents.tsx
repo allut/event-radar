@@ -80,7 +80,6 @@ export default function SavedEvents() {
           <PageState kind={UI_STATE.error} message={t('saved_error', locale)} inline />
         ) : events.length === 0 ? (
           <EmptyState
-            icon={SIGNAL_CONFIG[signal].icon}
             title={t('saved_empty_title', locale)}
             message={t('saved_empty_msg', locale)}
           />

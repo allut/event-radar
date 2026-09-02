@@ -18,7 +18,6 @@ import SelectMenu from '../../components/SelectMenu';
 import DateRangeMenu from '../../components/DateRangeMenu';
 import {
   API,
-  BRAND_GLYPH,
   CATEGORIES,
   VIBES,
   EXPLORE_AUDIENCE_ALL,
@@ -252,6 +251,7 @@ export default function Explore() {
               options={sortOptions}
               onChange={(v) => setSort(v as SortOption)}
               ariaLabel={t('sort_by', locale)}
+              sharp
             />
             <span className={styles.divider} aria-hidden />
             <DateRangeMenu
@@ -263,6 +263,7 @@ export default function Explore() {
               onChangeCustomRange={setCustomRange}
               locale={locale}
               ariaLabel={t('filter_dates', locale)}
+              sharp
             />
           </div>
         </div>
@@ -276,6 +277,7 @@ export default function Explore() {
               selected={filters.category}
               onToggle={(v) => toggleFacet('category', v)}
               ariaLabel={t('filter_categories', locale)}
+              sharp
             />
             <span className={styles.divider} aria-hidden />
             <FacetMenu
@@ -285,6 +287,7 @@ export default function Explore() {
               selected={filters.vibe}
               onToggle={(v) => toggleFacet('vibe', v)}
               ariaLabel={t('filter_vibes', locale)}
+              sharp
             />
             <span className={styles.divider} aria-hidden />
             <button
@@ -304,7 +307,7 @@ export default function Explore() {
           <PageState kind={UI_STATE.error} message={t('explore_error', locale)} inline />
         ) : events.length === 0 ? (
           <EmptyState
-            icon={BRAND_GLYPH}
+            eyebrow={t('nav_explore', locale)}
             title={t('explore_empty_title', locale)}
             message={t('explore_empty_msg', locale)}
           />
@@ -317,6 +320,7 @@ export default function Explore() {
                 index={i}
                 locale={locale}
                 variant="standard"
+                sharp
               />
             ))}
           </div>

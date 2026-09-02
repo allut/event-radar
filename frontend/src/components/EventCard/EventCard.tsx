@@ -45,13 +45,17 @@ interface EventCardProps {
   locale: string;
   onFeedbackSent?: () => void;
   variant?: 'standard' | 'featured';
+  // Zero-radius corner treatment (Explore's grid) — applied on top of the
+  // shared `.card` base without touching its rounded default for other
+  // standard-card consumers (Feed/SavedEvents/OrganizerDashboard).
+  sharp?: boolean;
   // Presentational mode for anonymous surfaces (e.g. the public landing showcase):
   // hides the feedback row and skips click tracking, since both POST to auth-only
   // /feedback and would bounce a logged-out visitor to /login.
   readOnly?: boolean;
 }
 
-function EventCard({ event, index, locale, onFeedbackSent, variant = 'standard', readOnly = false }: EventCardProps) {
+function EventCard({ event, index, locale, onFeedbackSent, variant = 'standard', sharp = false, readOnly = false }: EventCardProps) {
   const { activeSignal, pending, sendFeedback } = useFeedback(event.id, {
     initialSignal: event.my_signal,
     onChange: onFeedbackSent,
@@ -74,7 +78,7 @@ function EventCard({ event, index, locale, onFeedbackSent, variant = 'standard',
 
   return (
     <article
-      className={cx(styles.card, isFeatured && styles.featured)}
+      className={cx(styles.card, isFeatured && styles.featured, sharp && styles.cardSharp)}
       style={{ animationDelay: `${index * CARD_ANIMATION_DELAY_STEP_MS}ms` }}
     >
       <div className={styles.clickable}>

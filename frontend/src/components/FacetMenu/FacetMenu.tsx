@@ -14,6 +14,9 @@ interface FacetMenuProps {
   /** 'button' is a bordered pill (default); 'inline' blends into a cluster
    * (e.g. next to another FacetMenu), matching SelectMenu's inline variant. */
   variant?: 'button' | 'inline';
+  /** C1-migrated surfaces (wayfinder #200): squares the trigger, popover and
+   * option pills. Additive, defaults off so unmigrated consumers are unaffected. */
+  sharp?: boolean;
 }
 
 /** Trigger button + popover for one Explore facet (Category/Vibe/When).
@@ -25,6 +28,7 @@ export default function FacetMenu({
   onToggle,
   ariaLabel,
   variant = 'button',
+  sharp = false,
 }: FacetMenuProps) {
   const { open, setOpen, flip, rootRef, popRef, triggerRef } = useDropdown(
     DROPDOWN_DEFAULT_FOCUS_SELECTOR,
@@ -37,11 +41,12 @@ export default function FacetMenu({
       <button
         ref={triggerRef}
         type="button"
-        className={
+        className={cx(
           variant === 'inline'
             ? cx(styles.menuBtnInline, hasSelection && styles.hasInline)
-            : cx(styles.menuBtn, hasSelection && styles.has)
-        }
+            : cx(styles.menuBtn, hasSelection && styles.has),
+          sharp && styles.sharp,
+        )}
         aria-expanded={open}
         aria-haspopup="true"
         onClick={() => setOpen((v) => !v)}
@@ -50,8 +55,8 @@ export default function FacetMenu({
         <span className={styles.chev} aria-hidden>▾</span>
       </button>
       {open && (
-        <div className={styles.pop} ref={popRef} data-flip={flip || undefined}>
-          <Chip options={options} selected={selected} onToggle={onToggle} ariaLabel={ariaLabel} />
+        <div className={cx(styles.pop, sharp && styles.sharp)} ref={popRef} data-flip={flip || undefined}>
+          <Chip options={options} selected={selected} onToggle={onToggle} ariaLabel={ariaLabel} sharp={sharp} />
         </div>
       )}
     </div>

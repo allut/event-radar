@@ -303,3 +303,10 @@
   background: var(--bg-overlay-soft);
   backdrop-filter: blur(var(--blur-chip));
 }
+
+/* Doubled selector: beats the composed shared `.card`'s
+   `border-radius: var(--radius)` regardless of cross-file stylesheet
+   injection order, same pattern as .cardOverflowTrigger above. */
+.cardSharp.cardSharp {
+  border-radius: 0;
+}

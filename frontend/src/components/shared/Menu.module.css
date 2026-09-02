@@ -122,6 +122,12 @@
   }
 }
 
+/* Universal on-brand marker for C1-migrated surfaces (wayfinder #195/#196) —
+ * compose alongside triggerButton/triggerInline/menuPop/menuOption. */
+.menuSharp {
+  border-radius: 0;
+}
+
 @media (max-width: 640px) {
   .triggerInline {
     width: 100%;

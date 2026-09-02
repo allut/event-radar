@@ -25,3 +25,9 @@
   border: 1px solid var(--accent-border);
   color: var(--accent-light);
 }
+
+/* Doubled selector — .chip's own border-radius-pill (same file, later in
+ * source) would otherwise tie and win over a plain single-class .sharp. */
+.sharp.sharp {
+  border-radius: 0;
+}

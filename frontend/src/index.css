@@ -233,6 +233,9 @@
      so the hero's two-column breakpoint (wayfinder #185) is the literal
      1680px value in Landing.module.css's @media rule, matching this token. */
   --bp-wide: 1680px;
+  /* Same documentation-only constraint as --bp-wide above — the 640px mobile
+     breakpoint stays a literal in every @media rule (wayfinder #196/#200). */
+  --bp-narrow: 640px;
 
   /* Component max/min-widths */
   --card-max-narrow: 400px;       /* shared/Card.module.css .cardPage */

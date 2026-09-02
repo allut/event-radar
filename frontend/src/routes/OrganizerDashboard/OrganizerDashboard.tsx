@@ -13,7 +13,7 @@ import EmptyState from '../../components/EmptyState';
 import Toast from '../../components/Toast';
 import { useToast } from '../../hooks/useToast';
 import { useStaticSeoMeta } from '../../hooks/useStaticSeoMeta';
-import { API, ORGANIZER_EMPTY_ICON, QUERY_KEYS, ORGANIZER_EVENTS_PAGE_SIZE, ROUTES, UI_STATE } from '../../constants';
+import { API, QUERY_KEYS, ORGANIZER_EVENTS_PAGE_SIZE, ROUTES, UI_STATE } from '../../constants';
 import SeoTags from '../../components/SeoTags';
 import styles from './OrganizerDashboard.module.css';
 
@@ -84,7 +84,6 @@ export default function OrganizerDashboard() {
           <PageState kind={UI_STATE.error} message={t('generic_error', locale)} inline />
         ) : events.length === 0 ? (
           <EmptyState
-            icon={ORGANIZER_EMPTY_ICON}
             title={t('organizer_empty_title', locale)}
             message={t('organizer_empty_msg', locale)}
           />

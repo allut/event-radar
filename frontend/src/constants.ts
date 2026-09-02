@@ -506,8 +506,6 @@ export const STEP_KEYS = [
 // Self-contained radar-mark glyph used across TopBar/OrganizerTopBar/Footer/
 // Landing/auth cards — no external asset, matches the app's same-origin CSP.
 export const BRAND_GLYPH = '◉';
-// Organizer dashboard's empty-state icon.
-export const ORGANIZER_EMPTY_ICON = '📅';
 // ─── Explore ─────────────────────────────────────────────────────────────────
 export const EXPLORE_AUDIENCE_ALL = 'all';
 export const EXPLORE_AUDIENCE_FOR_YOU = 'foryou';

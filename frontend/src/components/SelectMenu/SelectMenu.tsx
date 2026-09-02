@@ -16,6 +16,9 @@ interface SelectMenuProps {
   /** 'button' variant only — highlights the trigger when a non-default value is selected. */
   active?: boolean;
   disabled?: boolean;
+  /** C1-migrated surfaces (wayfinder #200): squares the trigger, popover and
+   * option list. Additive, defaults off so unmigrated consumers are unaffected. */
+  sharp?: boolean;
 }
 
 /** Single-select trigger + popover of a vertical, equal-width option list.
@@ -29,6 +32,7 @@ export default function SelectMenu({
   variant = 'inline',
   active = false,
   disabled = false,
+  sharp = false,
 }: SelectMenuProps) {
   const { open, setOpen, flip, rootRef, popRef, triggerRef, close } = useDropdown();
   const current = options.find((o) => o.value === value);
@@ -43,11 +47,12 @@ export default function SelectMenu({
       <button
         ref={triggerRef}
         type="button"
-        className={
+        className={cx(
           variant === 'button'
             ? cx(menuStyles.triggerButton, active && menuStyles.triggerButtonActive)
-            : styles.triggerInline
-        }
+            : styles.triggerInline,
+          sharp && styles.sharp,
+        )}
         aria-expanded={open}
         aria-haspopup="true"
         disabled={disabled}
@@ -58,7 +63,7 @@ export default function SelectMenu({
         <span className={styles.chev} aria-hidden>▾</span>
       </button>
       {open && !disabled && (
-        <div className={styles.pop} ref={popRef} data-flip={flip || undefined}>
+        <div className={cx(styles.pop, sharp && styles.sharp)} ref={popRef} data-flip={flip || undefined}>
           <div className={styles.optionList} role="group" aria-label={ariaLabel}>
             {options.map((option) => {
               const isActive = option.value === value;
@@ -66,7 +71,7 @@ export default function SelectMenu({
                 <button
                   key={option.value}
                   type="button"
-                  className={cx(styles.option, isActive && styles.optionActive)}
+                  className={cx(styles.option, isActive && styles.optionActive, sharp && styles.sharp)}
                   onClick={() => handleSelect(option.value)}
                   aria-pressed={isActive}
                 >
