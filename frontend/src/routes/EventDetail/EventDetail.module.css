@@ -6,6 +6,7 @@
 
 .backBtn {
   composes: btnOutline from '../../components/shared/Button.module.css';
+  composes: buttonSharp from '../../components/shared/Button.module.css';
   font-size: var(--fs-sm);
   padding: var(--space-0-375) var(--space-0-875);
   cursor: pointer;
@@ -276,7 +277,7 @@
   letter-spacing: var(--tracking-wider);
   text-transform: uppercase;
   padding: var(--space-0-1875) var(--space-0-625);
-  border-radius: var(--radius-pill);
+  border-radius: 0;
   background: var(--accent-subtle);
   color: var(--accent);
   border: 1px solid var(--accent-border);
@@ -323,6 +324,7 @@
 
 .ticketsBtn {
   composes: btnPrimary from '../../components/shared/Button.module.css';
+  composes: buttonSharp from '../../components/shared/Button.module.css';
   margin-left: auto;
   display: inline-flex;
   align-items: center;
