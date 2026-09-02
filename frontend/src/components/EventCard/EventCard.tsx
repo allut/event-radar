@@ -72,6 +72,31 @@ function EventCard({ event, index, locale, onFeedbackSent, variant = 'standard',
     showToast(result === 'copied' ? UI_STATE.success : UI_STATE.error, t(result === 'copied' ? 'link_copied' : 'share_failed', locale));
   }
 
+  const actionsRow = (!readOnly || ticketUrl) && (
+    <div className={styles.actions}>
+      {!readOnly && (
+        <FeedbackButtonRow
+          activeSignal={activeSignal}
+          pending={pending}
+          onPress={sendFeedback}
+          locale={locale}
+          variant={isFeatured ? 'detail' : 'card'}
+        />
+      )}
+      {ticketUrl && (
+        <a
+          href={ticketUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={styles.ticketsLink}
+          onClick={readOnly ? undefined : () => trackExternalClick(event.id)}
+        >
+          {t('tickets', locale)}
+        </a>
+      )}
+    </div>
+  );
+
   return (
     <article
       className={cx(styles.card, isFeatured && styles.featured)}
@@ -139,30 +164,7 @@ function EventCard({ event, index, locale, onFeedbackSent, variant = 'standard',
         </div>
       </div>
 
-      {(!readOnly || ticketUrl) && (
-        <div className={styles.actions}>
-          {!readOnly && (
-            <FeedbackButtonRow
-              activeSignal={activeSignal}
-              pending={pending}
-              onPress={sendFeedback}
-              locale={locale}
-              variant={isFeatured ? 'detail' : 'card'}
-            />
-          )}
-          {ticketUrl && (
-            <a
-              href={ticketUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={styles.ticketsLink}
-              onClick={readOnly ? undefined : () => trackExternalClick(event.id)}
-            >
-              {t('tickets', locale)}
-            </a>
-          )}
-        </div>
-      )}
+      {actionsRow}
 
       {!readOnly && toast.status !== UI_STATE.idle && <Toast status={toast.status} message={toast.message} />}
       {!readOnly && reportOpen && (

@@ -12,15 +12,13 @@ What's in here: the locked applied spec for wayfinder #197, under the C1-migrati
 
 ### 1. EventCard's shape
 
-`EventCard` gains a third variant, `editorial`, alongside the existing `standard`/`featured` — not a separate component. It reuses the feedback row, report modal and overflow menu already wired into the component; only the visual shell changes.
+**Superseded.** This spec originally called for a third `EventCard` variant, `editorial` — a split-row plate (fixed-height image panel filled with `object-fit: cover`, text column beside it, `.hair` rule between eyebrow/meta and title), ratio-proof by construction per the map's own #185 lesson. It was built twice against this spec (#200 for Explore, #204 for SavedEvents) and reverted both times on product review after seeing it live — "looks bad" against the standard card grid, no structural fix attempted. Neither surface has an `editorial` consumer left; the variant and its shared plate CSS (`cardEditorial` family in `shared/Card.module.css`, `riseEditorial`/`fadeInEditorial` in `shared/Animations.module.css`) don't exist in the codebase. `EventCard` stays two variants, `standard`/`featured`, everywhere.
 
-`editorial` composes the shared-layer plan's `cardEditorial`/`cardEditorialFlip` family (`Card.module.css`) — a fixed-height image panel (`--plate-media-min-height`) filled with `object-fit: cover`, text column beside it, `.hair` rule between eyebrow/meta and title. Ratio-proof by construction: no focal-point data, no letterboxing to disguise, per the map's own #185 lesson.
-
-`editorial` is consumed by **Explore** (#200, single scrolling column, image-left/text-right) and **SavedEvents** (below). `standard`/`featured` are unchanged and stay in use on Feed until Feed's own migration issue.
+The five shared `--plate-*`/`--font-size-display-card` custom properties stay defined regardless — `Landing.module.css`'s own `.plate` showcase rows still consume them independently of this now-dead `EventCard` variant.
 
 ### 2. Where display type (Cormorant) is allowed
 
-- **Masthead + card/list titles.** Cormorant stays on page headings (Feed's date heading, Explore's masthead, EventDetail's `h1`, Settings' page title) **and** on every card/event title — `EventCard`'s current title treatment (Cormorant at `--heading-sm`, `editorial` variant at `--font-size-display-card`) carries forward unchanged in kind.
+- **Masthead + card/list titles.** Cormorant stays on page headings (Feed's date heading, Explore's masthead, EventDetail's `h1`, Settings' page title) **and** on every card/event title — `EventCard`'s current title treatment (Cormorant at `--heading-sm`) carries forward unchanged in kind.
 - **Static/legal gets it further** — section headings (`LegalPage`'s `.h2`) move to Cormorant too, see §Static/legal below.
 - Everywhere else — body copy, labels, buttons, meta rows, form chrome — stays Manrope. No new surface introduces Cormorant into a control or a data value.
 
@@ -54,9 +52,9 @@ Reskinned in place — full-width hero kept, **not** restructured into a plate s
 | Surface | Card shape | Type | Notes |
 |---|---|---|---|
 | Feed | `standard`/`featured` (unchanged), reskinned | Cormorant heading + card titles (current) | Lead+list structure kept — 5 curated cards is a different problem from an unbounded browse list; converging shape with Explore was considered and rejected (flattens the curated-vs-browse distinction #193's charting drew). Sharp corners on any control (locale switcher, promo CTA). |
-| Explore | `editorial` (built under #200) | — | Spec lives in #200's scope, not repeated here. |
+| Explore | `standard` grid, reskinned | — | Built `editorial` under #200, reverted post-close to the card grid with only the sharp-corner treatment kept (`EventCard`'s `sharp` prop, later itself reverted — see §1). |
 | EventDetail | n/a (no card, single event) | current | See §5 above — reskin only. |
-| SavedEvents | `editorial` | Cormorant card titles (current) | Converges on Explore's plate structure — same problem shape (unbounded, browsable, no lead card), one shape to build instead of a third bespoke one. `loadMoreBtn` gets `buttonSharp`. |
+| SavedEvents | `standard` grid, reskinned | Cormorant card titles (current) | Built `editorial` under #204 to converge on Explore's plate structure, reverted post-build on product review — see §1. `loadMoreBtn` keeps `buttonSharp`; `EmptyState` keeps its eyebrow. |
 | Settings | n/a (form/list, no cards) | Cormorant page title + `.sectionTitle` eyebrows (current, unchanged) | Light touch: sharp corners on every control, structure unchanged. Persona-summary display (`Settings.tsx:98`, `.personaEmoji`) drops the emoji glyph — falls back to persona name text only, consistent with the PersonaCard decision below. |
 
 ### Auth cluster (Login, AuthVerify, Onboarding, Unsubscribe — `AuthCard`/`MagicLinkForm`)
@@ -103,6 +101,6 @@ Full editorial, per the map's own framing of long-form text as "the cheapest pos
 ## Open items carried to other tickets
 
 - **#198** (organizer portal spec) inherits the auth-cluster section above verbatim for `/organizer/login`/`/organizer/verify`, and locks `fieldSharp`/`buttonSharp` for the submit/edit form per its own remaining questions (chrome convergence, dashboard density).
-- **#199** (admin sub-language spec) adopts only the sharp-corner primitives from this spec (§3) — no Cormorant, no `editorial` card variant, no hairline-section treatment.
-- **The terminal cleanup ticket** (carried on #193's map) is where Feed and EventDetail actually pick up `buttonSharp`/`fieldSharp`/`.riseEditorial` if their eventual migration issues choose to adopt what's specced here — this document specs their target state; building it is explicitly out of scope for this ticket per the map's Notes.
-- **Real event photography for imagery-bearing cards** (`editorial` variant's image panel) — still carried as fog from #181/#193; placeholder gradients or existing `image_url` data serve until that's resolved.
+- **#199** (admin sub-language spec) adopts only the sharp-corner primitives from this spec (§3) — no Cormorant, no plate card variant (moot now anyway — see §1), no hairline-section treatment.
+- **The terminal cleanup ticket** (carried on #193's map) is where Feed and EventDetail actually pick up `buttonSharp`/`fieldSharp` if their eventual migration issues choose to adopt what's specced here — this document specs their target state; building it is explicitly out of scope for this ticket per the map's Notes. `.riseEditorial` is moot: it was deleted along with the `editorial` variant (§1) and never had a Feed/EventDetail consumer.
+- **Real event photography for imagery-bearing cards** — moot for now: it was carried as fog from #181/#193 against the `editorial` variant's image panel, which no longer exists (§1). Revisit if a plate-style card is proposed again.

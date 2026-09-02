@@ -80,6 +80,7 @@ export default function SavedEvents() {
           <PageState kind={UI_STATE.error} message={t('saved_error', locale)} inline />
         ) : events.length === 0 ? (
           <EmptyState
+            eyebrow={t('nav_saved', locale)}
             title={t('saved_empty_title', locale)}
             message={t('saved_empty_msg', locale)}
           />
