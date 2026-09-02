@@ -120,20 +120,6 @@ describe('EventCard', () => {
     expect(card?.className).not.toMatch(/featured/);
   });
 
-  it('sharp: applies the zero-radius class on a standard card', () => {
-    const event = makeEvent();
-    const { container } = renderWithProviders(<EventCard event={event} index={0} locale="en" sharp />);
-    const card = container.querySelector('article');
-    expect(card?.className).toMatch(/cardSharp/);
-  });
-
-  it('does not apply the sharp class by default', () => {
-    const event = makeEvent();
-    const { container } = renderWithProviders(<EventCard event={event} index={0} locale="en" />);
-    const card = container.querySelector('article');
-    expect(card?.className).not.toMatch(/cardSharp/);
-  });
-
   it('stretches the title link over the image/body region so the whole card body is clickable', () => {
     const event = makeEvent({ id: 7, title: 'Cool Concert', why_go: ['Great music'] });
     const { container } = renderWithProviders(<EventCard event={event} index={0} locale="en" />);

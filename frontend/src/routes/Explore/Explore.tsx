@@ -320,7 +320,6 @@ export default function Explore() {
                 index={i}
                 locale={locale}
                 variant="standard"
-                sharp
               />
             ))}
           </div>
