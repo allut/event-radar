@@ -162,7 +162,10 @@ function Plate({ event, index, locale }: { event: EventData; index: number; loca
     <article className={cx(styles.plate, isFlipped && styles.plateFlip)}>
       <div className={styles.plateMedia}>
         {imageUrl ? (
-          <img src={imageUrl} alt={event.title} loading="lazy" className={styles.plateImg} />
+          <>
+            <img src={imageUrl} alt="" aria-hidden className={styles.plateBackdrop} loading="lazy" />
+            <img src={imageUrl} alt={event.title} loading="lazy" className={styles.plateImg} />
+          </>
         ) : (
           <div className={styles.platePlaceholder} style={{ background: categoryGradient(event.categories) }} />
         )}

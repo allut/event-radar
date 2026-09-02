@@ -326,8 +326,10 @@
   border-left: var(--rule);
 }
 
-/* cover on a fixed panel is the whole fix: every source ratio fills the box
-   identically, so there is no letterbox left for a backdrop/mask to disguise. */
+.plateBackdrop {
+  composes: mediaBackdrop from '../../components/shared/Media.module.css';
+}
+
 .plateImg,
 .platePlaceholder {
   position: absolute;
@@ -335,11 +337,15 @@
   width: 100%;
   height: 100%;
   display: block;
+}
+
+.platePlaceholder {
   object-fit: cover;
   object-position: center;
 }
 
 .plateImg {
+  object-fit: contain;
   filter: var(--plate-image-filter); /* B3's saturate/contrast pull, so photos sit in the navy ground */
 }
 
