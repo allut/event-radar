@@ -119,10 +119,11 @@
   composes: srOnly from '../shared/Visually.module.css';
 }
 
-/* Doubled selector — beats .field (composed fieldWrap)/.pickButton/
- * .removeButton's own border-radius on specificity regardless of source
- * order (same trick as SelectMenu.module.css's .sharp.sharp). */
-.sharp.sharp {
+/* .field (composed fieldWrap) already squares unconditionally at its
+ * shared-base source (#212) — only these locally radiused controls still
+ * need squaring here. */
+.pickButton,
+.removeButton {
   border-radius: 0;
 }
 

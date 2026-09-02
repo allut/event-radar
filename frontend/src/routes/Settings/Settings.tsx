@@ -133,7 +133,6 @@ export default function Settings() {
               onChange={handleLocaleChange}
               ariaLabel={t('section_language', locale)}
               disabled={localePending}
-              sharp
             />
           </div>
         </section>

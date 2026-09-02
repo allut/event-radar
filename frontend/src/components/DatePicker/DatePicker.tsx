@@ -24,10 +24,6 @@ interface DatePickerProps {
   /** Earlier days (in the same wire format) are greyed out and unselectable — Ends passes Starts. */
   min?: string;
   ariaLabel: string;
-  /** C1-migrated surfaces (wayfinder #209): squares the field row, calendar
-   * trigger, popover chrome, nav buttons, day grid and time inputs. Additive,
-   * defaults off. */
-  sharp?: boolean;
 }
 
 /** Reads the hour/minute text fields back as bounded numbers — empty or
@@ -74,10 +70,9 @@ interface PopoverBodyProps {
   disabled: boolean;
   popRef: RefObject<HTMLDivElement>;
   flip: boolean;
-  sharp: boolean;
 }
 
-function PopoverBody({ id, value, onChange, min, locale, required, disabled, popRef, flip, sharp }: PopoverBodyProps) {
+function PopoverBody({ id, value, onChange, min, locale, required, disabled, popRef, flip }: PopoverBodyProps) {
   const today = startOfDay(new Date());
   const parsed = splitDateTimeValue(value);
   const minParsed = min ? splitDateTimeValue(min) : null;
@@ -232,13 +227,13 @@ function PopoverBody({ id, value, onChange, min, locale, required, disabled, pop
   const monthLabelId = `${id}-picker-month-label`;
 
   return (
-    <div className={cx(styles.pop, sharp && styles.sharp)} ref={popRef} data-flip={flip || undefined} role="dialog" aria-labelledby={monthLabelId}>
+    <div className={styles.pop} ref={popRef} data-flip={flip || undefined} role="dialog" aria-labelledby={monthLabelId}>
       <div className={styles.calHead}>
-        <button type="button" className={cx(styles.calNavBtn, sharp && styles.sharp)} aria-label={t('picker_prev_month', locale)} onClick={() => goToMonth(-1)}>
+        <button type="button" className={styles.calNavBtn} aria-label={t('picker_prev_month', locale)} onClick={() => goToMonth(-1)}>
           <PrevIcon />
         </button>
         <span className={styles.calMonthLabel} id={monthLabelId}>{monthYearLabel}</span>
-        <button type="button" className={cx(styles.calNavBtn, sharp && styles.sharp)} aria-label={t('picker_next_month', locale)} onClick={() => goToMonth(1)}>
+        <button type="button" className={styles.calNavBtn} aria-label={t('picker_next_month', locale)} onClick={() => goToMonth(1)}>
           <NextIcon />
         </button>
       </div>
@@ -264,7 +259,7 @@ function PopoverBody({ id, value, onChange, min, locale, required, disabled, pop
               data-date={c.dataDate}
               data-selected-day={isFocused || undefined}
               disabled={isDisabled}
-              className={cx(styles.calDay, c.spill && styles.spill, isToday && styles.today, isSelected && styles.selected, sharp && styles.sharp)}
+              className={cx(styles.calDay, c.spill && styles.spill, isToday && styles.today, isSelected && styles.selected)}
               onClick={() => commitDay(c.date)}
             >
               {c.day}
@@ -280,7 +275,7 @@ function PopoverBody({ id, value, onChange, min, locale, required, disabled, pop
               type="text"
               inputMode="numeric"
               maxLength={TIME_FIELD_MAX_LENGTH}
-              className={cx(styles.timeInput, sharp && styles.sharp)}
+              className={styles.timeInput}
               value={hourText}
               aria-label={t('picker_hour_label', locale)}
               disabled={disabled}
@@ -301,7 +296,7 @@ function PopoverBody({ id, value, onChange, min, locale, required, disabled, pop
               type="text"
               inputMode="numeric"
               maxLength={TIME_FIELD_MAX_LENGTH}
-              className={cx(styles.timeInput, sharp && styles.sharp)}
+              className={styles.timeInput}
               value={minuteText}
               aria-label={t('picker_minute_label', locale)}
               disabled={disabled}
@@ -339,7 +334,7 @@ function PopoverBody({ id, value, onChange, min, locale, required, disabled, pop
  * and Ends. The committed `value`/`onChange` contract is the same 'YYYY-MM-DDTHH:mm'
  * wire format as the native datetime-local input this replaces; the field displays
  * (and accepts typed input as) a space in place of the 'T' — see toDisplayDateTime. */
-export default function DatePicker({ id, value, onChange, locale, disabled = false, required = false, min, ariaLabel, sharp = false }: DatePickerProps) {
+export default function DatePicker({ id, value, onChange, locale, disabled = false, required = false, min, ariaLabel }: DatePickerProps) {
   const { open, setOpen, flip, rootRef, popRef, triggerRef } = useDropdown('[data-selected-day="true"]');
   // Holds the *displayed* text (space-separated — see toDisplayDateTime), not
   // the canonical 'T'-joined wire value.
@@ -375,7 +370,7 @@ export default function DatePicker({ id, value, onChange, locale, disabled = fal
 
   return (
     <div className={styles.datePicker} ref={rootRef}>
-      <div className={cx(styles.field, disabled && styles.fieldDisabled, sharp && styles.sharp)}>
+      <div className={cx(styles.field, disabled && styles.fieldDisabled)}>
         <input
           id={id}
           type="text"
@@ -391,7 +386,7 @@ export default function DatePicker({ id, value, onChange, locale, disabled = fal
         <button
           ref={triggerRef}
           type="button"
-          className={cx(styles.calendarButton, sharp && styles.sharp)}
+          className={styles.calendarButton}
           aria-label={t('picker_open_calendar', locale)}
           aria-expanded={open}
           aria-haspopup="dialog"
@@ -413,7 +408,6 @@ export default function DatePicker({ id, value, onChange, locale, disabled = fal
           disabled={disabled}
           popRef={popRef}
           flip={flip}
-          sharp={sharp}
         />
       )}
     </div>

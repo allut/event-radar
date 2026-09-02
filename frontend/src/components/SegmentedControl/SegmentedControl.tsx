@@ -17,30 +17,27 @@ interface SegmentedControlProps {
   ariaLabel: string;
   /** 'plain' (default) is today's bare-hairline look. 'dial' is the gold sliding-pill treatment. */
   variant?: 'plain' | 'dial';
-  /** C1-migrated surfaces (wayfinder #209): squares the dial's outer pill,
-   * sliding indicator and active-segment background. Additive, defaults off. */
-  sharp?: boolean;
 }
 
 /** Two(+)-segment mode switch — used for Explore's All events / For you control. */
-export default function SegmentedControl({ options, value, onChange, ariaLabel, variant = 'plain', sharp = false }: SegmentedControlProps) {
+export default function SegmentedControl({ options, value, onChange, ariaLabel, variant = 'plain' }: SegmentedControlProps) {
   const isDial = variant === 'dial';
   const activeIndex = options.findIndex((o) => o.value === value);
   return (
     <div
-      className={cx(styles.seg, isDial && styles.segDial, sharp && styles.sharp)}
+      className={cx(styles.seg, isDial && styles.segDial)}
       role="group"
       aria-label={ariaLabel}
       style={isDial ? ({ '--seg-count': options.length, '--seg-index': activeIndex } as React.CSSProperties) : undefined}
     >
-      {isDial && activeIndex >= 0 && <span className={cx(styles.indicator, sharp && styles.sharp)} aria-hidden />}
+      {isDial && activeIndex >= 0 && <span className={styles.indicator} aria-hidden />}
       {options.map((opt) => {
         const isActive = opt.value === value;
         return (
           <button
             key={opt.value}
             type="button"
-            className={cx(styles.segBtn, opt.marker && styles.hasMarker, isActive && styles.active, sharp && styles.sharp)}
+            className={cx(styles.segBtn, opt.marker && styles.hasMarker, isActive && styles.active)}
             aria-pressed={isActive}
             onClick={() => onChange(opt.value)}
           >

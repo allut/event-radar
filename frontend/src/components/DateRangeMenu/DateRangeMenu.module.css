@@ -129,11 +129,3 @@
   color: var(--text-soft);
   border-radius: 0;
 }
-
-/* Doubled selector — .triggerInline/.pop/.option each set their own
- * border-radius (locally or via cross-file compose) that could otherwise
- * tie on specificity; see Menu.module.css's .activePill comment. Calendar
- * cells (.calDay etc.) are out of this ticket's scope — untouched. */
-.sharp.sharp {
-  border-radius: 0;
-}

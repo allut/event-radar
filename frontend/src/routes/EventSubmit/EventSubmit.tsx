@@ -129,7 +129,6 @@ export default function EventSubmit() {
                 value={contentLang}
                 onChange={(v) => setContentLang(v as ContentLang)}
                 ariaLabel={t('organizer_language_tabs_label', locale)}
-                sharp
               />
             </div>
             <p className={styles.contentHint}>
@@ -185,7 +184,6 @@ export default function EventSubmit() {
                 disabled={form.isSubmitting}
                 required
                 ariaLabel={t('organizer_field_starts_at', locale)}
-                sharp
               />
             </div>
             <div className={styles.fieldCol}>
@@ -198,7 +196,6 @@ export default function EventSubmit() {
                 disabled={form.isSubmitting}
                 min={form.startsAt}
                 ariaLabel={t('organizer_field_ends_at', locale)}
-                sharp
               />
             </div>
           </div>
@@ -210,7 +207,6 @@ export default function EventSubmit() {
             locale={locale}
             contentLang={contentLang}
             disabled={form.isSubmitting}
-            sharp
           />
 
           <label className={styles.label} htmlFor="category">{t('organizer_field_category', locale)}</label>
@@ -222,7 +218,6 @@ export default function EventSubmit() {
             placeholder={t('organizer_category_none', locale)}
             ariaLabel={t('organizer_field_category', locale)}
             disabled={form.isSubmitting}
-            sharp
           />
 
           <div className={styles.fieldRow}>
@@ -282,7 +277,6 @@ export default function EventSubmit() {
             emptyLabel={t('organizer_image_none', locale)}
             uploadingLabel={t('organizer_image_uploading', locale)}
             removeLabel={t('organizer_image_remove', locale)}
-            sharp
           />
           {form.imageError && <p className={styles.error} role="alert">{form.imageError}</p>}
 

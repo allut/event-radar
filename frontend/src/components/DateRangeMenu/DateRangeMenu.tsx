@@ -17,9 +17,6 @@ interface DateRangeMenuProps {
   onChangeCustomRange: (from: string, to: string) => void;
   locale: string;
   ariaLabel: string;
-  /** C1-migrated surfaces (wayfinder #200): squares the trigger, popover and
-   * option list. Additive, defaults off so unmigrated consumers are unaffected. */
-  sharp?: boolean;
 }
 
 const PrevIcon = () => (
@@ -144,7 +141,7 @@ function CalendarBody({ customFrom, customTo, locale, onBack, onCommit }: Calend
  * selecting-and-closing. Explore-date-specific, not a general-purpose list
  * picker — see SelectMenu for that. */
 export default function DateRangeMenu({
-  label, value, customFrom, customTo, onSelectPreset, onChangeCustomRange, locale, ariaLabel, sharp = false,
+  label, value, customFrom, customTo, onSelectPreset, onChangeCustomRange, locale, ariaLabel,
 }: DateRangeMenuProps) {
   const { open, setOpen, flip, rootRef, popRef, triggerRef, close } = useDropdown();
   const [mode, setMode] = useState<'list' | 'calendar'>('list');
@@ -179,7 +176,7 @@ export default function DateRangeMenu({
       <button
         ref={triggerRef}
         type="button"
-        className={cx(styles.triggerInline, sharp && styles.sharp)}
+        className={styles.triggerInline}
         aria-expanded={open}
         aria-haspopup="true"
         onClick={handleOpen}
@@ -189,7 +186,7 @@ export default function DateRangeMenu({
         <span className={styles.chev} aria-hidden>▾</span>
       </button>
       {open && (
-        <div className={cx(styles.pop, mode === 'calendar' && styles.popCalendar, sharp && styles.sharp)} ref={popRef} data-flip={flip || undefined}>
+        <div className={cx(styles.pop, mode === 'calendar' && styles.popCalendar)} ref={popRef} data-flip={flip || undefined}>
           {mode === 'list' ? (
             <div className={styles.optionList} role="group" aria-label={ariaLabel}>
               {DATE_PRESETS.map((option) => {
@@ -198,7 +195,7 @@ export default function DateRangeMenu({
                   <button
                     key={option.value}
                     type="button"
-                    className={cx(styles.option, isActive && styles.optionActive, sharp && styles.sharp)}
+                    className={cx(styles.option, isActive && styles.optionActive)}
                     onClick={() => handleSelect(option.value)}
                     aria-pressed={isActive}
                   >

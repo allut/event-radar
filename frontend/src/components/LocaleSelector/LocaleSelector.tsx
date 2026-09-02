@@ -6,11 +6,9 @@ interface LocaleSelectorProps {
   onChange: (code: string) => void;
   ariaLabel: string;
   disabled?: boolean;
-  /** C1-migrated surfaces (wayfinder #202): squares the trigger/popover. */
-  sharp?: boolean;
 }
 
-export default function LocaleSelector({ locale, onChange, ariaLabel, disabled, sharp }: LocaleSelectorProps) {
+export default function LocaleSelector({ locale, onChange, ariaLabel, disabled }: LocaleSelectorProps) {
   return (
     <SelectMenu
       label=""
@@ -20,7 +18,6 @@ export default function LocaleSelector({ locale, onChange, ariaLabel, disabled, 
       ariaLabel={ariaLabel}
       variant="button"
       disabled={disabled}
-      sharp={sharp}
     />
   );
 }

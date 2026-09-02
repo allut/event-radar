@@ -106,9 +106,11 @@
   .indicator { transition: none; }
 }
 
-/* Doubled selector — beats .segDial/.indicator/.segDial .segBtn's own
- * border-radius on specificity regardless of cross-rule source order (same
- * trick as SelectMenu.module.css's .sharp.sharp). */
-.sharp.sharp {
+/* .segDial/.indicator/.segDial .segBtn are all defined earlier in this same
+ * file, so a later same-selector rule squares them deterministically via
+ * source order — no cross-file compose tie to guard against here. */
+.segDial,
+.indicator,
+.segDial .segBtn {
   border-radius: 0;
 }

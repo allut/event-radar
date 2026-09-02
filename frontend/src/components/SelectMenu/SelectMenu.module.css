@@ -15,8 +15,6 @@
 .triggerInline {
   composes: triggerInline from '../shared/Menu.module.css';
   border-radius: 0;
-  border-top-right-radius: var(--radius);
-  border-bottom-right-radius: var(--radius);
 }
 
 .label {
@@ -58,11 +56,4 @@
   .label:empty {
     display: none;
   }
-}
-
-/* Doubled selector — .triggerInline/.pop/.option each set their own
- * border-radius (locally or via cross-file compose) that could otherwise
- * tie on specificity; see Menu.module.css's .activePill comment. */
-.sharp.sharp {
-  border-radius: 0;
 }

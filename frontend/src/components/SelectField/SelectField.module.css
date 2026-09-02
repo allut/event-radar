@@ -134,9 +134,10 @@
   background: var(--accent-light);
 }
 
-/* Doubled selector — beats .trigger/.pop (composed menuPop)/.option's own
- * border-radius on specificity regardless of source order (same trick as
- * SelectMenu.module.css's .sharp.sharp). */
-.sharp.sharp {
+/* .pop (composed menuPop) already squares unconditionally at its
+ * shared-base source (#212) — only these locally radiused controls still
+ * need squaring here. */
+.trigger,
+.option {
   border-radius: 0;
 }

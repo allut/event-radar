@@ -15,9 +15,6 @@ interface FileFieldProps {
   emptyLabel: string;
   uploadingLabel: string;
   removeLabel: string;
-  /** C1-migrated surfaces (wayfinder #209): squares the field chrome and its
-   * choose/replace/remove controls. Additive, defaults off. */
-  sharp?: boolean;
 }
 
 const RemoveIcon = () => (
@@ -30,7 +27,7 @@ const RemoveIcon = () => (
  * and a remove action, plus the image preview folded in below. */
 export default function FileField({
   id, accept, onSelect, onClear, previewUrl, uploading = false, disabled = false,
-  chooseLabel, replaceLabel, emptyLabel, uploadingLabel, removeLabel, sharp = false,
+  chooseLabel, replaceLabel, emptyLabel, uploadingLabel, removeLabel,
 }: FileFieldProps) {
   const [fileName, setFileName] = useState('');
   const safePreview = safeUrl(previewUrl);
@@ -54,8 +51,8 @@ export default function FileField({
 
   return (
     <div>
-      <div className={cx(styles.field, sharp && styles.sharp)} data-disabled={disabled || undefined}>
-        <label className={cx(styles.pickButton, disabled && styles.pickButtonDisabled, sharp && styles.sharp)} htmlFor={id}>
+      <div className={styles.field} data-disabled={disabled || undefined}>
+        <label className={cx(styles.pickButton, disabled && styles.pickButtonDisabled)} htmlFor={id}>
           {hasFile ? replaceLabel : chooseLabel}
         </label>
         <input
@@ -79,7 +76,7 @@ export default function FileField({
         {hasFile && !uploading && (
           <button
             type="button"
-            className={cx(styles.removeButton, sharp && styles.sharp)}
+            className={styles.removeButton}
             aria-label={removeLabel}
             onClick={handleClear}
             disabled={disabled}

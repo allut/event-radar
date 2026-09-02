@@ -240,7 +240,6 @@ export default function Explore() {
               value={filters.forYou ? EXPLORE_AUDIENCE_FOR_YOU : EXPLORE_AUDIENCE_ALL}
               onChange={(v) => setForYou(v === EXPLORE_AUDIENCE_FOR_YOU)}
               ariaLabel={`${t('all_events', locale)} / ${t('for_you', locale)}`}
-              sharp
             />
           </div>
 
@@ -252,7 +251,6 @@ export default function Explore() {
               options={sortOptions}
               onChange={(v) => setSort(v as SortOption)}
               ariaLabel={t('sort_by', locale)}
-              sharp
             />
             <span className={styles.divider} aria-hidden />
             <DateRangeMenu
@@ -264,7 +262,6 @@ export default function Explore() {
               onChangeCustomRange={setCustomRange}
               locale={locale}
               ariaLabel={t('filter_dates', locale)}
-              sharp
             />
           </div>
         </div>
@@ -278,7 +275,6 @@ export default function Explore() {
               selected={filters.category}
               onToggle={(v) => toggleFacet('category', v)}
               ariaLabel={t('filter_categories', locale)}
-              sharp
             />
             <span className={styles.divider} aria-hidden />
             <FacetMenu
@@ -288,7 +284,6 @@ export default function Explore() {
               selected={filters.vibe}
               onToggle={(v) => toggleFacet('vibe', v)}
               ariaLabel={t('filter_vibes', locale)}
-              sharp
             />
             <span className={styles.divider} aria-hidden />
             <button

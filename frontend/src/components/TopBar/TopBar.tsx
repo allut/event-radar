@@ -62,7 +62,6 @@ export default function TopBar({ locale, onLocaleChange, onLogout, localeDisable
             onChange={onLocaleChange}
             ariaLabel={t('section_language', locale)}
             disabled={localeDisabled}
-            sharp
           />
         </div>
         <div className={styles.mobileMenuWrap}>
