@@ -170,7 +170,13 @@
 /* ── Email capture ───────────────────────────────────────────────────── */
 /* Hero-specific override: a deliberately minimal treatment (transparent
    underline field, uppercase gold text button) — not the sitewide
-   Field/Button chrome, which stays untouched for every other form. */
+   Field/Button chrome, which stays untouched for every other form.
+   #213 tried the sitewide fieldInput/btnSubmit composition here (bg-raised
+   input box + solid filled button); reverted after landing in the app —
+   the boxed/filled chrome reads heavier against the hero's poster imagery
+   than this minimal underline treatment, a real visual regression the
+   sitewide default doesn't justify for this one full-bleed surface. Not
+   retrying without a specific design direction for how it should look. */
 .emailForm {
   display: flex;
   flex-wrap: wrap;
@@ -298,6 +304,13 @@
 }
 
 /* ── Stacked plates ──────────────────────────────────────────────────── */
+/* #213 retrofit: stays local, not `composes: card` from Card.module.css.
+   The shipped showcase is a flush, full-bleed split-row strip separated by
+   a hairline — Card's base class adds a border + border-radius + gap on
+   every side, which would box each row and visibly regress the shipped
+   design. Data-shaping (categoryGradient/formatPrice/safeUrl/formatEventTime)
+   and the media/animation classes below already come from the same shared
+   utilities/modules EventCard itself composes from. */
 .plates {
   border-top: var(--rule);
 }
