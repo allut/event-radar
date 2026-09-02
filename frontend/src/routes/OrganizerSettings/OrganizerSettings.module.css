@@ -63,11 +63,13 @@
 
 .input {
   composes: fieldInput from '../../components/shared/Field.module.css';
+  composes: fieldSharp from '../../components/shared/Field.module.css';
   width: 100%;
 }
 
 .saveBtn {
   composes: btnPrimary from '../../components/shared/Button.module.css';
+  composes: buttonSharp from '../../components/shared/Button.module.css';
   align-self: flex-start;
   padding: var(--space-0-625) var(--space-5);
   font-size: var(--fs-sm);
@@ -100,6 +102,7 @@
 
 .repickBtn {
   composes: btnOutline from '../../components/shared/Button.module.css';
+  composes: buttonSharp from '../../components/shared/Button.module.css';
   align-self: flex-start;
   padding: var(--space-0-45) var(--space-4);
   font-size: var(--fs-sm);

@@ -29,6 +29,7 @@
 
 .newBtn {
   composes: btnPrimary from '../../components/shared/Button.module.css';
+  composes: buttonSharp from '../../components/shared/Button.module.css';
   padding: var(--space-0-625) var(--space-5);
   font-size: var(--fs-sm);
   font-weight: var(--fw-bold);
@@ -84,10 +85,12 @@
   font-weight: var(--fw-semibold);
   text-transform: uppercase;
   letter-spacing: var(--tracking-wide);
-  padding: var(--space-0-3) var(--space-0-6);
-  border-radius: var(--radius);
+  padding: var(--space-0-375) var(--space-0-6);
+  border-radius: 0;
   border: 1px solid var(--border);
   color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
 }
 
 .status_published {
@@ -115,10 +118,12 @@
 .reviewBadge {
   font-size: var(--fs-xs);
   font-weight: var(--fw-semibold);
-  padding: var(--space-0-3) var(--space-0-6);
-  border-radius: var(--radius);
+  padding: var(--space-0-375) var(--space-0-6);
+  border-radius: 0;
   border: 1px solid var(--border);
   color: var(--text-soft);
+  display: inline-flex;
+  align-items: center;
 }
 
 .rowActions {
@@ -129,6 +134,7 @@
 
 .editBtn {
   composes: btnOutline from '../../components/shared/Button.module.css';
+  composes: buttonSharp from '../../components/shared/Button.module.css';
   padding: var(--space-0-45) var(--space-0-875);
   font-size: var(--fs-sm);
   text-decoration: none;
@@ -138,6 +144,7 @@
 
 .deleteBtn {
   composes: btnOutline from '../../components/shared/Button.module.css';
+  composes: buttonSharp from '../../components/shared/Button.module.css';
   padding: var(--space-0-45) var(--space-0-875);
   font-size: var(--fs-sm);
   color: var(--danger);
