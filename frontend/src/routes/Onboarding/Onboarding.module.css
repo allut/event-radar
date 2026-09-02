@@ -72,6 +72,7 @@
 
 .submit {
   composes: btnSubmit from '../../components/shared/Button.module.css';
+  composes: buttonSharp from '../../components/shared/Button.module.css';
   padding: var(--space-0-8125) var(--space-6);
   min-width: var(--onboarding-submit-min);
 }

@@ -12,7 +12,7 @@ const persona: PersonaData = {
 };
 
 describe('PersonaCard', () => {
-  it('renders persona name and emoji', () => {
+  it('renders persona name and vibe, not the emoji', () => {
     render(
       <PersonaCard
         persona={persona}
@@ -23,7 +23,8 @@ describe('PersonaCard', () => {
       />,
     );
     expect(screen.getByText('Culture Buff')).toBeInTheDocument();
-    expect(screen.getByText('🎭')).toBeInTheDocument();
+    expect(screen.getByText('Museums and theatre')).toBeInTheDocument();
+    expect(screen.queryByText('🎭')).not.toBeInTheDocument();
   });
 
   it('selected: main button has aria-pressed=true and shows rank badge', () => {

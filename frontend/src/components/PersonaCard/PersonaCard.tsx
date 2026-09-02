@@ -30,8 +30,8 @@ export default function PersonaCard({
         disabled={disabled}
         title={isSelected ? t('persona_btn_deselect', locale) : t('persona_btn_select', locale)}
       >
-        <span className={styles.emoji} aria-hidden>{persona.emoji}</span>
         <span className={styles.name}>{persona.name}</span>
+        <span className={styles.hair} aria-hidden />
         <span className={styles.vibe}>{persona.vibe}</span>
       </button>
 
