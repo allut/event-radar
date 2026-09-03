@@ -20,12 +20,23 @@
 }
 
 /* ── Hero ────────────────────────────────────────────────────────────── */
-.hero {
-  position: relative;
-  min-height: min(92vh, 760px);
+/* Wraps .hero + Ticker so the two together fill the viewport below the
+   topbar, revealing the events section on scroll. Mobile has no override
+   here — .hero's own mobile min-height rule + .ticker's mobile display:none
+   (see the max-width:640px block below) make .heroGroup size to .hero's
+   content height there, same as before this group wrapper existed. */
+.heroGroup {
   display: flex;
   flex-direction: column;
-  justify-content: flex-end;
+  min-height: calc(100dvh - var(--topbar-height));
+}
+
+.hero {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
   border-bottom: var(--rule);
 }
@@ -75,14 +86,14 @@
   padding: 0 var(--space-6);
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  min-height: min(92vh, 760px);
+  flex: 1;
+  min-height: 0;
 }
 
 .heroMain {
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
+  justify-content: center;
   flex: 1;
   gap: var(--space-6); /* floor so heroTop/heroBot never sit flush on short/tall content */
 }
@@ -661,7 +672,6 @@
   .heroGrid {
     min-height: calc(100dvh - var(--topbar-height-mobile));
   }
-  .heroMain { justify-content: center; }
   .h1 { font-size: var(--heading-xl); }
   .capbar { flex-direction: column; align-items: stretch; }
   .emailForm { width: 100%; }

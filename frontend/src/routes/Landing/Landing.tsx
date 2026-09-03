@@ -236,55 +236,49 @@ export default function Landing() {
       <TopBar locale={locale} onLocaleChange={handleLocaleChange} authed={false} localeDisabled={localePending} />
 
       <main>
-        <section className={styles.hero}>
-          <div className={styles.poster}>
-            <div className={cx(styles.posterImg, animStyles.posterDrift)} />
-          </div>
-          <div className={styles.scrim} />
-          <div className={styles.frame} />
+        <div className={styles.heroGroup}>
+          <section className={styles.hero}>
+            <div className={styles.poster}>
+              <div className={cx(styles.posterImg, animStyles.posterDrift)} />
+            </div>
+            <div className={styles.scrim} />
+            <div className={styles.frame} />
 
-          <div className={styles.heroGrid}>
-            <div className={styles.heroMain}>
-              <div className={styles.heroTop}>
-                <span className={styles.mark}>
-                  {brandPrefix} <em className={styles.markAccent}>{brandLast}</em>
-                </span>
-                {counts && (
-                  <span className={styles.heroCounter}>
-                    <CountSegment template={t('landing_hero_counter', locale)} count={formatCount(counts.upcoming_count, locale)} />
-                    {' · '}
-                    {ti('landing_hero_venues', locale, { count: formatCount(counts.venue_count, locale) })}
-                    {' · '}
-                    <CountSegment template={t('landing_hero_tonight', locale)} count={String(tonightEvents.length)} />
+            <div className={styles.heroGrid}>
+              <div className={styles.heroMain}>
+                <div className={styles.heroTop}>
+                  <span className={styles.mark}>
+                    {brandPrefix} <em className={styles.markAccent}>{brandLast}</em>
                   </span>
-                )}
-              </div>
+                  {counts && (
+                    <span className={styles.heroCounter}>
+                      <CountSegment template={t('landing_hero_counter', locale)} count={formatCount(counts.upcoming_count, locale)} />
+                      {' · '}
+                      {ti('landing_hero_venues', locale, { count: formatCount(counts.venue_count, locale) })}
+                      {' · '}
+                      <CountSegment template={t('landing_hero_tonight', locale)} count={String(tonightEvents.length)} />
+                    </span>
+                  )}
+                </div>
 
-              <div className={styles.heroBot}>
-                <p className={styles.dateline}>{formatHeroDateline(locale)} · {t('landing_hero_city', locale)}</p>
-                <h1 className={styles.h1}>
-                  <span className={animStyles.heroRise}>
-                    <span><AccentedText text={t('landing_hero_h1', locale)} /></span>
-                  </span>
-                </h1>
-                <p className={styles.sub}>{t('landing_hero_sub', locale)}</p>
-                <div className={cx(styles.cutline, animStyles.hairlineDraw)} />
-                <div className={styles.capbar}>
-                  <EmailCapture locale={locale} />
+                <div className={styles.heroBot}>
+                  <p className={styles.dateline}>{formatHeroDateline(locale)} · {t('landing_hero_city', locale)}</p>
+                  <h1 className={styles.h1}>
+                    <span className={animStyles.heroRise}>
+                      <span><AccentedText text={t('landing_hero_h1', locale)} /></span>
+                    </span>
+                  </h1>
+                  <p className={styles.sub}>{t('landing_hero_sub', locale)}</p>
+                  <div className={cx(styles.cutline, animStyles.hairlineDraw)} />
+                  <div className={styles.capbar}>
+                    <EmailCapture locale={locale} />
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        </section>
+          </section>
 
-        <Ticker locale={locale} events={tonightEvents} isFallback={counts?.tonight_is_fallback ?? false} />
-
-        <div className={styles.wrap}>
-          <div className={styles.plates}>
-            {plateEvents.map((event, i) => (
-              <Plate key={event.id} event={event} index={i} locale={locale} />
-            ))}
-          </div>
+          <Ticker locale={locale} events={tonightEvents} isFallback={counts?.tonight_is_fallback ?? false} />
         </div>
 
         <div className={styles.wrap}>
@@ -324,6 +318,14 @@ export default function Landing() {
               </div>
             )}
           </section>
+        </div>
+
+        <div className={styles.wrap}>
+          <div className={styles.plates}>
+            {plateEvents.map((event, i) => (
+              <Plate key={event.id} event={event} index={i} locale={locale} />
+            ))}
+          </div>
 
           <section className={styles.organizer} aria-labelledby="organizer-cta">
             <div className={styles.organizerText}>

@@ -374,6 +374,9 @@
   --topbar-height-mobile: 68px; /* TopBar's rendered height at <=640px (nav hidden,
     logo + locale/auth actions row) -- no existing height token on .bar (intrinsic,
     padding-driven); tune-by-eye like --space-7 above, confirm in live QA. */
+  --topbar-height: 72px; /* TopBar's rendered height above 640px (nav row present) --
+    same intrinsic/padding-driven situation as --topbar-height-mobile; tune-by-eye,
+    confirm in live QA. */
 }
 
 html {
