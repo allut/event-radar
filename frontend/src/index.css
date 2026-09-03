@@ -362,7 +362,7 @@
      --text/--text-soft are verified against --bg, a lighter ground than this. */
   --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
   --scrim-vertical: linear-gradient(0deg, rgba(15, 17, 25, 0.94) 6%, rgba(15, 17, 25, 0.55) 42%, rgba(15, 17, 25, 0.72));
-  --font-size-display-hero: clamp(46px, 8.4vw, 116px);
+  --font-size-display-hero: clamp(40px, 7.2vw, 96px);
   --font-size-display-plate: clamp(32px, 5vw, 64px); /* .figValue, the stat numerals */
   --font-size-display-section: clamp(30px, 4.4vw, 56px);
   --font-size-display-card: clamp(26px, 3.2vw, 38px); /* B3 split-panel showcase card title */

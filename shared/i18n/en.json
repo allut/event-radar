@@ -161,6 +161,8 @@
     "seo_landing_description": "Discover five hand-picked events in Tallinn every day — concerts, exhibitions, workshops, and nightlife matched to your taste. Free daily email, no tracking.",
     "landing_cta_primary": "Get Daily 5 →",
     "landing_cta_explore": "See what's on →",
+    "landing_capbar_email_label": "Get picks by email",
+    "landing_capbar_browse_label": "Or browse everything",
     "landing_how_title": "How it works",
     "landing_step1_title": "Pick your vibe",
     "landing_step1_body": "Tell us the kind of entertainment you like — clubs, galleries, workshops, family days.",

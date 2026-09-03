@@ -230,6 +230,8 @@ export default function Landing() {
   const brandPrefix = brandSplitIdx === -1 ? brand : brand.slice(0, brandSplitIdx);
   const brandLast = brandSplitIdx === -1 ? '' : brand.slice(brandSplitIdx + 1);
 
+  const exploreHref = localePath(ROUTES.explore);
+
   return (
     <div className={styles.page}>
       <SeoTags meta={seoMeta} jsonLd={jsonLd} />
@@ -270,8 +272,17 @@ export default function Landing() {
                   </h1>
                   <p className={styles.sub}>{t('landing_hero_sub', locale)}</p>
                   <div className={cx(styles.cutline, animStyles.hairlineDraw)} />
+
                   <div className={styles.capbar}>
-                    <EmailCapture locale={locale} />
+                    <div className={styles.capbarCol}>
+                      <span className={styles.capbarLabel}>{t('landing_capbar_email_label', locale)}</span>
+                      <EmailCapture locale={locale} />
+                    </div>
+                    <div className={styles.capbarDivider} />
+                    <div className={styles.capbarCol}>
+                      <span className={styles.capbarLabel}>{t('landing_capbar_browse_label', locale)}</span>
+                      <Link to={exploreHref} className={styles.capbarBrowse}>{t('landing_cta_explore', locale)}</Link>
+                    </div>
                   </div>
                 </div>
               </div>
