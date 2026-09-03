@@ -146,7 +146,8 @@ describe('Landing', () => {
   it('renders the hero counter and brand mark', async () => {
     renderWithProviders(<Landing />, { route: '/en', pathPattern: '/:locale' });
     await waitFor(() => expect(screen.getAllByText('1,008').length).toBeGreaterThan(0));
-    expect(screen.getByText(/205 venues/i)).toBeInTheDocument();
+    const venueCount = screen.getByText('205', { selector: 'b' });
+    expect(venueCount.parentElement?.textContent).toMatch(/205 venues/i);
     expect(screen.getAllByText('2', { selector: 'b' }).length).toBeGreaterThan(0);
     expect(screen.getByText('Radar')).toBeInTheDocument();
   });
