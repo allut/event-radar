@@ -10,7 +10,6 @@ import { useStaticSeoMeta } from '../../hooks/useStaticSeoMeta';
 import { API, AUTH_REDIRECT_DELAY_MS, QUERY_KEYS, RANK_LABEL_KEYS, ROUTES, UI_STATE, TOAST_IDLE, type ToastState } from '../../constants';
 import { cx } from '../../utils';
 import { t, personaName } from '../../i18n';
-import LocaleSelector from '../../components/LocaleSelector';
 import PageState from '../../components/PageState';
 import Toast from '../../components/Toast';
 import Toggle from '../../components/Toggle';
@@ -123,18 +122,6 @@ export default function Settings() {
         <section className={styles.section}>
           <h2 className={styles.sectionTitle}>{t('section_account', locale)}</h2>
           <p className={styles.email}>{data?.email}</p>
-        </section>
-
-        <section className={styles.section}>
-          <h2 className={styles.sectionTitle}>{t('section_language', locale)}</h2>
-          <div className={styles.localeControl}>
-            <LocaleSelector
-              locale={locale}
-              onChange={handleLocaleChange}
-              ariaLabel={t('section_language', locale)}
-              disabled={localePending}
-            />
-          </div>
         </section>
 
         <section className={styles.section}>
