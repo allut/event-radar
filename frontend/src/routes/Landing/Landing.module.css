@@ -321,6 +321,12 @@
   border-bottom: var(--rule);
 }
 
+@media (min-width: 641px) {
+  .plate:not(:last-child) {
+    margin-bottom: var(--space-4);
+  }
+}
+
 .plateFlip {
   grid-template-columns: minmax(var(--plate-text-min), 1fr) minmax(0, 1.35fr);
 }
@@ -661,6 +667,6 @@
   .emailForm { width: 100%; }
   .submit { padding-left: 0; }
   .ticker { display: none; }
-  .plates { margin-top: var(--space-7); }
+  .plates { margin-top: var(--space-5); }
   .footer { justify-content: center; text-align: center; }
 }
