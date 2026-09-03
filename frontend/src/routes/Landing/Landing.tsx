@@ -254,7 +254,7 @@ export default function Landing() {
                     <span className={styles.heroCounter}>
                       <CountSegment template={t('landing_hero_counter', locale)} count={formatCount(counts.upcoming_count, locale)} />
                       {' · '}
-                      {ti('landing_hero_venues', locale, { count: formatCount(counts.venue_count, locale) })}
+                      <CountSegment template={t('landing_hero_venues', locale)} count={formatCount(counts.venue_count, locale)} />
                       {' · '}
                       <CountSegment template={t('landing_hero_tonight', locale)} count={String(tonightEvents.length)} />
                     </span>
