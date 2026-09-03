@@ -11,6 +11,8 @@ vi.mock('../../lib/auth', () => ({
   setLocale: vi.fn(),
   clearSignedInHint: vi.fn(),
   beginLogout: vi.fn(),
+  isAuthenticated: vi.fn(() => true),
+  subscribeAuth: vi.fn(() => () => undefined),
 }));
 
 vi.mock('../../api/client', () => ({
@@ -22,11 +24,32 @@ vi.mock('../../api/client', () => ({
 }));
 
 vi.mock('../../components/EventCard', () => ({
-  default: ({ event }: { event: { title: string } }) => <div data-testid="event-card">{event.title}</div>,
+  default: ({ event, index, onFeedbackBlocked, onCardClick }: {
+    event: { id: number; title: string };
+    index: number;
+    onFeedbackBlocked?: (signal: string) => void;
+    onCardClick?: (index: number) => void;
+  }) => (
+    <div data-testid="event-card">
+      {event.title}
+      {onFeedbackBlocked && (
+        <button onClick={() => onFeedbackBlocked('bookmark')}>block-bookmark-{event.id}</button>
+      )}
+      {onCardClick && <button onClick={() => onCardClick(index)}>card-click-{event.id}</button>}
+    </div>
+  ),
+}));
+
+vi.mock('../../lib/gtag', () => ({
+  trackEvent: vi.fn(),
 }));
 
 import { api } from '../../api/client';
+import { trackEvent } from '../../lib/gtag';
+import { isAuthenticated } from '../../lib/auth';
 const mockGet = vi.mocked(api.get);
+const mockTrackEvent = vi.mocked(trackEvent);
+const mockIsAuthenticated = vi.mocked(isAuthenticated);
 
 interface ExploreResponse {
   events: EventData[];
@@ -53,6 +76,8 @@ const currentUser = { preferred_categories: ['music'], preferred_vibes: ['trendy
 
 beforeEach(() => {
   mockGet.mockReset();
+  mockTrackEvent.mockClear();
+  mockIsAuthenticated.mockReturnValue(true);
 });
 
 afterEach(() => {
@@ -282,6 +307,101 @@ describe('Explore', () => {
       expect(exploreCall).toContain('q=jazz');
       expect(exploreCall).toMatch(/category=/);
       expect(exploreCall).not.toMatch(/category=[^&]*\bmusic\b/);
+    });
+  });
+
+  describe('anonymous visitor (issue #235)', () => {
+    beforeEach(() => {
+      mockIsAuthenticated.mockReturnValue(false);
+    });
+
+    it('never calls /users/me when signed out', async () => {
+      mockGet.mockImplementation(() => Promise.resolve(exploreResponse([makeEvent({ id: 1 }), makeEvent({ id: 2 })])));
+      renderWithProviders(<Explore />, { route: '/explore' });
+      // Anonymous grid drops the last event to make room for the upsell
+      // card without an orphaned card wrapping to a new row.
+      await waitFor(() => expect(screen.getAllByTestId('event-card').length).toBe(1));
+
+      const calls = mockGet.mock.calls.map((c) => c[0] as string);
+      expect(calls.some((c) => c.startsWith('/users/me'))).toBe(false);
+    });
+
+    it('fires explore_view with signed_in: false on landing', async () => {
+      mockGet.mockImplementation(() => Promise.resolve(exploreResponse([])));
+      renderWithProviders(<Explore />, { route: '/explore' });
+      await waitFor(() => expect(mockTrackEvent).toHaveBeenCalledWith('explore_view', { signed_in: false, locale: 'en' }));
+    });
+
+    it('renders the persistent upsell card and opens the sign-in modal from its CTA', async () => {
+      mockGet.mockImplementation(() => Promise.resolve(exploreResponse([makeEvent({ id: 1 })])));
+      renderWithProviders(<Explore />, { route: '/explore' });
+      await waitFor(() => expect(screen.getByText('Like what you see?')).toBeInTheDocument());
+
+      await userEvent.click(screen.getByRole('button', { name: 'Sign in to personalize →' }));
+
+      expect(screen.getByRole('dialog', { name: 'Sign in' })).toBeInTheDocument();
+      expect(screen.getByText('Sign in for your picks')).toBeInTheDocument();
+      expect(mockTrackEvent).toHaveBeenCalledWith('explore_upsell_click', { action: 'for_you' });
+      expect(mockTrackEvent).toHaveBeenCalledWith('signin_modal_open', { trigger: 'for_you' });
+    });
+
+    it('intercepts a blocked feedback press into the save/thumbs sign-in modal without a second trigger reopening it', async () => {
+      mockGet.mockImplementation(() =>
+        Promise.resolve(exploreResponse([
+          makeEvent({ id: 1, title: 'First' }),
+          makeEvent({ id: 2, title: 'Second' }),
+          makeEvent({ id: 3, title: 'Third' }),
+        ])),
+      );
+      renderWithProviders(<Explore />, { route: '/explore' });
+      // Anonymous grid drops the last event to make room for the upsell
+      // card without an orphaned card wrapping to a new row.
+      await waitFor(() => expect(screen.getAllByTestId('event-card').length).toBe(2));
+
+      await userEvent.click(screen.getByText('block-bookmark-1'));
+      expect(screen.getByText('Sign in to save this')).toBeInTheDocument();
+      expect(mockTrackEvent).toHaveBeenCalledWith('explore_upsell_click', { action: 'save' });
+      expect(mockTrackEvent).toHaveBeenCalledWith('signin_modal_open', { trigger: 'save' });
+
+      mockTrackEvent.mockClear();
+      // A second trigger click while the modal is open is a no-op — no
+      // second signin_modal_open, and the modal keeps its original copy.
+      await userEvent.click(screen.getByText('block-bookmark-2'));
+      expect(mockTrackEvent).not.toHaveBeenCalledWith('signin_modal_open', expect.anything());
+      expect(screen.getByText('Sign in to save this')).toBeInTheDocument();
+    });
+
+    it('fires explore_card_click with signed_in and position when a card is opened', async () => {
+      mockGet.mockImplementation(() => Promise.resolve(exploreResponse([makeEvent({ id: 1 }), makeEvent({ id: 2 })])));
+      renderWithProviders(<Explore />, { route: '/explore' });
+      // Anonymous grid drops the last event to make room for the upsell
+      // card without an orphaned card wrapping to a new row.
+      await waitFor(() => expect(screen.getAllByTestId('event-card').length).toBe(1));
+
+      await userEvent.click(screen.getByText('card-click-1'));
+
+      expect(mockTrackEvent).toHaveBeenCalledWith('explore_card_click', { signed_in: false, position: 0 });
+    });
+
+    it('turning on For-you intercepts into the sign-in modal instead of applying the filter', async () => {
+      mockGet.mockImplementation(() => Promise.resolve(exploreResponse([])));
+      renderWithProviders(<Explore />, { route: '/explore' });
+      await waitFor(() => expect(screen.getByRole('button', { name: 'For you' })).toBeInTheDocument());
+
+      await userEvent.click(screen.getByRole('button', { name: 'For you' }));
+
+      expect(screen.getByRole('dialog', { name: 'Sign in' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'For you' })).toHaveAttribute('aria-pressed', 'false');
+    });
+
+    it('drops the last event to keep the total card count unchanged when the upsell card is added', async () => {
+      const anonEvents = Array.from({ length: 6 }, (_, i) => makeEvent({ id: i + 1, title: `Event ${i + 1}` }));
+      mockGet.mockImplementation(() => Promise.resolve(exploreResponse(anonEvents)));
+      renderWithProviders(<Explore />, { route: '/explore' });
+
+      await waitFor(() => expect(screen.getAllByTestId('event-card').length).toBe(5));
+      expect(screen.queryByText('Event 6')).not.toBeInTheDocument();
+      expect(screen.getByText('Like what you see?')).toBeInTheDocument();
     });
   });
 });

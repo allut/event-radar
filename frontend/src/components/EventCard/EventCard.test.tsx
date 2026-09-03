@@ -183,4 +183,42 @@ describe('EventCard', () => {
       }
     });
   });
+
+  describe('onFeedbackBlocked / onCardClick (issue #235)', () => {
+    it('routes a bookmark press through onFeedbackBlocked instead of useFeedback when set', async () => {
+      const { useFeedback } = await import('../../hooks/useFeedback');
+      const sendFeedback = vi.fn();
+      vi.mocked(useFeedback).mockReturnValueOnce({ activeSignal: null, pending: false, sendFeedback });
+      const onFeedbackBlocked = vi.fn();
+      const event = makeEvent();
+      renderWithProviders(<EventCard event={event} index={0} locale="en" onFeedbackBlocked={onFeedbackBlocked} />);
+
+      await userEvent.click(screen.getByRole('button', { name: 'Bookmark' }));
+
+      expect(onFeedbackBlocked).toHaveBeenCalledWith('bookmark');
+      expect(sendFeedback).not.toHaveBeenCalled();
+    });
+
+    it('calls sendFeedback directly when onFeedbackBlocked is not set', async () => {
+      const { useFeedback } = await import('../../hooks/useFeedback');
+      const sendFeedback = vi.fn();
+      vi.mocked(useFeedback).mockReturnValueOnce({ activeSignal: null, pending: false, sendFeedback });
+      const event = makeEvent();
+      renderWithProviders(<EventCard event={event} index={0} locale="en" />);
+
+      await userEvent.click(screen.getByRole('button', { name: 'Like' }));
+
+      expect(sendFeedback).toHaveBeenCalledWith('like');
+    });
+
+    it('fires onCardClick with the card index when the title link is clicked', async () => {
+      const onCardClick = vi.fn();
+      const event = makeEvent({ title: 'Cool Concert' });
+      renderWithProviders(<EventCard event={event} index={2} locale="en" onCardClick={onCardClick} />);
+
+      await userEvent.click(screen.getByRole('link', { name: 'Cool Concert' }));
+
+      expect(onCardClick).toHaveBeenCalledWith(2);
+    });
+  });
 });

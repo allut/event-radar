@@ -54,13 +54,34 @@ interface EventCardProps {
   // (Feed) have no sibling to align against, so they can opt out and avoid
   // the dead space a 1-line title leaves above the bullets.
   alignTitle?: boolean;
+  // Anonymous /explore (issue #235): when set, a save/thumbs press is
+  // intercepted client-side before any API call — useFeedback's sendFeedback
+  // is never invoked — and this is called with the pressed signal instead,
+  // so the caller can open the sign-in modal and fire its own analytics.
+  onFeedbackBlocked?: (signal: Signal) => void;
+  // Fired with this card's list `index` when the title link is clicked, so
+  // the caller (Explore) can track explore_card_click with the position.
+  // Navigation itself is unaffected — this is additive, not an
+  // interception. Takes `index` as an argument (rather than the caller
+  // closing over it per card) so Explore can pass one referentially-stable
+  // callback for every card instead of a fresh closure per card per render,
+  // which would defeat this component's memo below.
+  onCardClick?: (index: number) => void;
 }
 
-function EventCard({ event, index, locale, onFeedbackSent, variant = 'standard', readOnly = false, alignTitle = true }: EventCardProps) {
+function EventCard({ event, index, locale, onFeedbackSent, variant = 'standard', readOnly = false, alignTitle = true, onFeedbackBlocked, onCardClick }: EventCardProps) {
   const { activeSignal, pending, sendFeedback } = useFeedback(event.id, {
     initialSignal: event.my_signal,
     onChange: onFeedbackSent,
   });
+
+  function handleFeedbackPress(signal: Signal) {
+    if (onFeedbackBlocked) {
+      onFeedbackBlocked(signal);
+      return;
+    }
+    sendFeedback(signal);
+  }
   const localePath = useLocalePath();
   const { toast, showToast } = useToast();
   const { reportOpen, reported, openReportModal, closeReportModal, handleReportSubmitted } = useEventReport(event.reported);
@@ -83,7 +104,7 @@ function EventCard({ event, index, locale, onFeedbackSent, variant = 'standard',
         <FeedbackButtonRow
           activeSignal={activeSignal}
           pending={pending}
-          onPress={sendFeedback}
+          onPress={handleFeedbackPress}
           locale={locale}
           variant={isFeatured ? 'detail' : 'card'}
         />
@@ -152,7 +173,11 @@ function EventCard({ event, index, locale, onFeedbackSent, variant = 'standard',
           </div>
 
           <h2 className={cx(styles.title, isFeatured && styles.featuredTitle)}>
-            <Link to={localePath(ROUTES.eventDetail(event.id))} className={cx(styles.titleLink, styles.stretched)}>
+            <Link
+              to={localePath(ROUTES.eventDetail(event.id))}
+              className={cx(styles.titleLink, styles.stretched)}
+              onClick={onCardClick ? () => onCardClick(index) : undefined}
+            >
               <span className={cx(styles.titleClamp, isFeatured && styles.featuredTitleClamp, !isFeatured && !alignTitle && styles.titleClampFlush)}>
                 {event.title}
               </span>

@@ -32,7 +32,7 @@
 
 .title {
   font-family: var(--font-display);
-  font-size: var(--fs-lg);
+  font-size: var(--fs-xl);
   font-weight: var(--fw-semibold);
   color: var(--text);
 }

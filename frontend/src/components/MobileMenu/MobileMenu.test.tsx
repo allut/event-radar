@@ -93,7 +93,7 @@ describe('MobileMenu', () => {
     expect(screen.getByRole('link', { name: 'Daily 5' })).toHaveAttribute('href', '/ru');
   });
 
-  it('shows a Sign in link and no nav/sign-out when signed out', () => {
+  it('shows a Sign in link, no sign-out, and only Explore in nav when signed out', () => {
     renderWithProviders(
       <MobileMenu locale="en" onLocaleChange={vi.fn()} authed={false} />,
     );
@@ -103,7 +103,9 @@ describe('MobileMenu', () => {
     const signIn = screen.getByRole('link', { name: 'Sign in' });
     expect(signIn).toHaveAttribute('href', '/login');
     expect(screen.queryByText('Sign out')).not.toBeInTheDocument();
-    expect(screen.queryByRole('navigation')).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Explore' })).toBeInTheDocument();
+    expect(screen.queryByText('Daily 5')).not.toBeInTheDocument();
+    expect(screen.queryByText('Saved')).not.toBeInTheDocument();
     expect(screen.getByText('ET')).toBeInTheDocument();
   });
 });

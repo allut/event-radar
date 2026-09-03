@@ -2,7 +2,7 @@ import { Fragment, type CSSProperties } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../../api/client';
-import { API, CATEGORIES, LOCALES, MAGIC_LINK_EXPIRY_MINUTES, OG_FALLBACK_IMAGE_PATH, PRODUCTION_ORIGIN, QUERY_KEYS, ROUTES, STEP_KEYS, UI_STATE } from '../../constants';
+import { ANALYTICS_EVENTS, API, CATEGORIES, LOCALES, MAGIC_LINK_EXPIRY_MINUTES, OG_FALLBACK_IMAGE_PATH, PRODUCTION_ORIGIN, QUERY_KEYS, ROUTES, STEP_KEYS, UI_STATE } from '../../constants';
 import { t, ti } from '../../i18n';
 import { categoryGradient, cx, formatCount, formatEventTime, formatHeroDateline, formatHourMinute, formatPrice, padIndex, safeUrl, stripHtmlToText, truncateForMeta, withLocaleQuery } from '../../utils';
 import { useLocaleMutation } from '../../hooks/useLocaleMutation';
@@ -11,6 +11,7 @@ import { useMagicLinkRequest } from '../../hooks/useMagicLinkRequest';
 import { useOrganizerAuth } from '../../hooks/useOrganizerAuth';
 import { usePrefersReducedMotion } from '../../hooks/usePrefersReducedMotion';
 import { useSeoMeta } from '../../hooks/useSeoMeta';
+import { trackEvent } from '../../lib/gtag';
 import { buildWebsiteJsonLd } from '../../lib/structuredData';
 import TopBar from '../../components/TopBar';
 import SeoTags from '../../components/SeoTags';
@@ -72,6 +73,11 @@ function AccentedText({ text }: { text: string }) {
 function EmailCapture({ locale }: { locale: string }) {
   const { email, setEmail, state, errorMsg, submit } = useMagicLinkRequest(locale);
 
+  function handleSubmit(e: React.FormEvent) {
+    trackEvent(ANALYTICS_EVENTS.landingEmailSubmit, { locale });
+    return submit(e);
+  }
+
   if (state === UI_STATE.success) {
     return (
       <div className={styles.success} role="status">
@@ -88,7 +94,7 @@ function EmailCapture({ locale }: { locale: string }) {
 
   return (
     <>
-      <form onSubmit={submit} className={styles.emailForm} noValidate>
+      <form onSubmit={handleSubmit} className={styles.emailForm} noValidate>
         <input
           type="email"
           className={styles.input}
@@ -281,7 +287,13 @@ export default function Landing() {
                     <div className={styles.capbarDivider} />
                     <div className={styles.capbarCol}>
                       <span className={styles.capbarLabel}>{t('landing_capbar_browse_label', locale)}</span>
-                      <Link to={exploreHref} className={styles.capbarBrowse}>{t('landing_cta_explore', locale)}</Link>
+                      <Link
+                        to={exploreHref}
+                        className={styles.capbarBrowse}
+                        onClick={() => trackEvent(ANALYTICS_EVENTS.landingBrowseCtaClick, { locale })}
+                      >
+                        {t('landing_cta_explore', locale)}
+                      </Link>
                     </div>
                   </div>
                 </div>
@@ -337,6 +349,16 @@ export default function Landing() {
               <Plate key={event.id} event={event} index={i} locale={locale} />
             ))}
           </div>
+
+          {counts && (
+            <Link
+              to={exploreHref}
+              className={styles.showcaseCta}
+              onClick={() => trackEvent(ANALYTICS_EVENTS.landingBrowseCtaClick, { locale })}
+            >
+              {ti('landing_showcase_cta', locale, { count: formatCount(counts.upcoming_count, locale) })}
+            </Link>
+          )}
 
           <section className={styles.organizer} aria-labelledby="organizer-cta">
             <div className={styles.organizerText}>

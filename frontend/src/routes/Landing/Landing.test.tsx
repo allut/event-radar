@@ -19,6 +19,10 @@ vi.mock('../../components/LocaleSelector', () => ({
   default: () => <div data-testid="locale-selector" />,
 }));
 
+vi.mock('../../lib/gtag', () => ({
+  trackEvent: vi.fn(),
+}));
+
 let matchMediaReducedMotion = false;
 beforeEach(() => {
   matchMediaReducedMotion = false;
@@ -31,8 +35,10 @@ beforeEach(() => {
 });
 
 import { api } from '../../api/client';
+import { trackEvent } from '../../lib/gtag';
 const mockGet = vi.mocked(api.get);
 const mockPost = vi.mocked(api.post);
+const mockTrackEvent = vi.mocked(trackEvent);
 
 const counts = {
   upcoming_count: 1008,
@@ -166,5 +172,39 @@ describe('Landing', () => {
     renderWithProviders(<Landing />, { route: '/en', pathPattern: '/:locale' });
     expect(screen.getByRole('heading', { name: /Put your event on the radar/i })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /List your event/i })).toHaveAttribute('href', '/en/organizer/login');
+  });
+
+  it('shows Explore in the nav for a signed-out visitor (TopBar\'s shared signed-out chrome, issue #235)', () => {
+    renderWithProviders(<Landing />, { route: '/en', pathPattern: '/:locale' });
+    expect(screen.getByRole('link', { name: 'Explore' })).toHaveAttribute('href', '/en/explore');
+  });
+
+  describe('showcase pill + analytics (issue #235)', () => {
+    it('renders the "Explore all N events" pill beneath the showcase with the live count', async () => {
+      renderWithProviders(<Landing />, { route: '/en', pathPattern: '/:locale' });
+      const pill = await screen.findByRole('link', { name: /Explore all 1,008 events/i });
+      expect(pill).toHaveAttribute('href', '/en/explore');
+    });
+
+    it('tracks landing_browse_cta_click when the pill is clicked', async () => {
+      renderWithProviders(<Landing />, { route: '/en', pathPattern: '/:locale' });
+      const pill = await screen.findByRole('link', { name: /Explore all 1,008 events/i });
+      await userEvent.click(pill);
+      expect(mockTrackEvent).toHaveBeenCalledWith('landing_browse_cta_click', { locale: 'en' });
+    });
+
+    it('tracks landing_browse_cta_click when the hero browse CTA is clicked', async () => {
+      renderWithProviders(<Landing />, { route: '/en', pathPattern: '/:locale' });
+      await userEvent.click(screen.getByRole('link', { name: /See what's on/i }));
+      expect(mockTrackEvent).toHaveBeenCalledWith('landing_browse_cta_click', { locale: 'en' });
+    });
+
+    it('tracks landing_email_submit when the hero email-capture form is submitted', async () => {
+      mockPost.mockResolvedValueOnce(undefined);
+      renderWithProviders(<Landing />, { route: '/en', pathPattern: '/:locale' });
+      await userEvent.type(screen.getByPlaceholderText(/you@example.com/i), 'me@example.com');
+      await userEvent.click(screen.getByRole('button', { name: /Get Daily 5/i }));
+      expect(mockTrackEvent).toHaveBeenCalledWith('landing_email_submit', { locale: 'en' });
+    });
   });
 });

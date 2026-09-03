@@ -19,6 +19,10 @@ interface TopBarProps {
 
 export default function TopBar({ locale, onLocaleChange, onLogout, localeDisabled, onBack, authed = true, showNav = true }: TopBarProps) {
   const localePath = useLocalePath();
+  // Signed-out chrome (issue #235): Explore stays visible in nav — it's a
+  // public route now — but Daily 5/Saved/Settings are dead ends for an
+  // anonymous visitor (Saved has nothing in it, the others require auth).
+  const visibleNavItems = authed ? NAV_ITEMS : NAV_ITEMS.filter((item) => item.route === ROUTES.explore);
   return (
     <header className={styles.topBar}>
       <div className={styles.left}>
@@ -28,9 +32,9 @@ export default function TopBar({ locale, onLocaleChange, onLogout, localeDisable
         </Link>
       </div>
 
-      {authed && showNav && (
+      {showNav && visibleNavItems.length > 0 && (
         <nav className={styles.nav} aria-label={t('nav_daily5', locale)}>
-          {NAV_ITEMS.map(({ route, labelKey }) => (
+          {visibleNavItems.map(({ route, labelKey }) => (
             <NavLink
               key={route}
               to={localePath(route)}

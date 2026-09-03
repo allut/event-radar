@@ -276,6 +276,21 @@ export const ANALYTICS_ORGANIZER_EDIT_PATH_RE = new RegExp(`^${_LOCALE_PREFIX_RE
 // widened for it (frontend/vercel.json, see docs/security.md).
 export const GTAG_SCRIPT_SRC = 'https://www.googletagmanager.com/gtag/js';
 
+// GA4 custom event names for the public-Explore + sign-in-upsell flow (issue
+// #235). Event/param names are centralized here rather than inlined at call
+// sites, per this file's Code Quality Rule.
+export const ANALYTICS_EVENTS = {
+  landingBrowseCtaClick: 'landing_browse_cta_click',
+  landingEmailSubmit: 'landing_email_submit',
+  exploreView: 'explore_view',
+  exploreFilterChange: 'explore_filter_change',
+  exploreCardClick: 'explore_card_click',
+  exploreUpsellClick: 'explore_upsell_click',
+  signinModalOpen: 'signin_modal_open',
+  signinModalDismiss: 'signin_modal_dismiss',
+  signinModalSubmit: 'signin_modal_submit',
+} as const;
+
 // ─── Reports (event_reports, issue #128) ────────────────────────────────────
 // Mirrors the backend's VALID_REPORT_REASONS order (app/constants.py) — labels/
 // descriptions come from the report_reason_<slug>(_description) i18n keys.
@@ -509,6 +524,38 @@ export const BRAND_GLYPH = '◉';
 // ─── Explore ─────────────────────────────────────────────────────────────────
 export const EXPLORE_AUDIENCE_ALL = 'all';
 export const EXPLORE_AUDIENCE_FOR_YOU = 'foryou';
+
+// Anonymous-visitor sign-in upsell (issue #235). `SignInTrigger` names which
+// control opened the modal — the modal's title stays static ("Sign in"), but
+// the heading/body copy above MagicLinkForm and the `trigger`/`action`
+// analytics params both key off this. Save and thumbs up/down share one copy
+// variant; the persistent upsell card's CTA reuses the for_you variant too
+// (same "personalize" framing), so only two variants exist for three triggers.
+export type SignInTrigger = 'save' | 'thumbs' | 'for_you';
+export const SIGN_IN_TRIGGER_COPY: Record<SignInTrigger, { headingKey: string; bodyKey: string }> = {
+  save: { headingKey: 'sign_in_modal_save_heading', bodyKey: 'sign_in_modal_save_body' },
+  thumbs: { headingKey: 'sign_in_modal_save_heading', bodyKey: 'sign_in_modal_save_body' },
+  for_you: { headingKey: 'sign_in_modal_foryou_heading', bodyKey: 'sign_in_modal_foryou_body' },
+};
+// Index in the (0-based) results array after which the persistent upsell
+// card is inserted for anonymous visitors — tuned by eye against the
+// responsive auto-fill grid (Page.module.css's .cardGrid), which has no
+// fixed column count to compute an exact row boundary from.
+export const EXPLORE_UPSELL_CARD_POSITION = 5;
+
+// explore_filter_change's `filter_type` param (issue #235) is a fixed
+// vocabulary — the facet name, or which other control changed — centralized
+// here rather than inlined as string literals at each Explore.tsx call site.
+export const EXPLORE_FILTER_TYPES = {
+  category: 'category',
+  vibe: 'vibe',
+  date: 'date',
+  free: 'free',
+  sort: 'sort',
+  forYou: 'for_you',
+  q: 'q',
+} as const;
+export type ExploreFilterType = (typeof EXPLORE_FILTER_TYPES)[keyof typeof EXPLORE_FILTER_TYPES];
 export const SORT_DEFAULT: SortOption = 'relevance';
 export const DATE_PRESET_DEFAULT: DatePreset = 'any';
 export const DATE_PRESET_TODAY: DatePreset = 'today';

@@ -145,7 +145,7 @@ const ROUTE_DEFS: RouteDef[] = [
   { path: ROUTES.authVerify, element: <AuthVerify /> },
   { path: ROUTES.onboarding, element: <Protected><Onboarding /></Protected> },
   { path: ROUTES.home, element: <Home />, noRedirect: true },
-  { path: ROUTES.explore, element: <Protected><Explore /></Protected> },
+  { path: ROUTES.explore, element: <Explore /> },
   { path: ROUTES.saved, element: <Protected><SavedEvents /></Protected> },
   { path: ROUTES.eventDetailPattern, element: <EventDetail />, noRedirect: true },
   { path: ROUTES.settings, element: <Protected><Settings /></Protected> },

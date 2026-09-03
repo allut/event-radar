@@ -371,6 +371,22 @@
   border-top: var(--rule);
 }
 
+.showcaseCta {
+  display: flex;
+  justify-content: center;
+  padding: var(--space-5) 0;
+  border-bottom: var(--rule);
+  color: var(--accent);
+  font-weight: var(--fw-semibold);
+  font-size: var(--fs-sm);
+  letter-spacing: var(--tracking-snug);
+  transition: color var(--transition);
+}
+
+.showcaseCta:hover {
+  color: var(--text);
+}
+
 .plate {
   display: grid;
   grid-template-columns: minmax(0, 1.35fr) minmax(var(--plate-text-min), 1fr);

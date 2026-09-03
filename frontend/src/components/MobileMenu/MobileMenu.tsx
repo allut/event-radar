@@ -19,6 +19,9 @@ interface MobileMenuProps {
 export default function MobileMenu({ locale, onLocaleChange, onLogout, localeDisabled, showNav = true, authed = true }: MobileMenuProps) {
   const { open, setOpen, flip, rootRef, popRef, triggerRef, close } = useDropdown();
   const localePath = useLocalePath();
+  // Mirrors TopBar's signed-out nav filtering — Explore stays visible, the
+  // rest are dead ends for an anonymous visitor.
+  const visibleNavItems = authed ? NAV_ITEMS : NAV_ITEMS.filter((item) => item.route === ROUTES.explore);
 
   return (
     <div className={cx(menuStyles.menu, styles.mobileMenu)} ref={rootRef}>
@@ -35,10 +38,10 @@ export default function MobileMenu({ locale, onLocaleChange, onLogout, localeDis
       </button>
       {open && (
         <div className={styles.pop} ref={popRef} data-flip={flip || undefined}>
-          {authed && showNav && (
+          {showNav && visibleNavItems.length > 0 && (
             <>
               <nav className={styles.section} aria-label={t('nav_daily5', locale)}>
-                {NAV_ITEMS.map(({ route, labelKey }) => (
+                {visibleNavItems.map(({ route, labelKey }) => (
                   <NavLink
                     key={route}
                     to={localePath(route)}

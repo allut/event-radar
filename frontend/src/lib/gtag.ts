@@ -92,3 +92,12 @@ export function trackPageview(path: string): void {
     page_location: window.location.origin + path,
   });
 }
+
+/** Sends one custom GA4 event with the given params. Params must stay enums,
+ * booleans, or small integers — no free text, no user id/email, no
+ * persistent identifier (matches the "cookieless and aggregated" claim in
+ * content/legal/privacy.*.ts). No-op until initGtag() has run, same as
+ * trackPageview(). */
+export function trackEvent(name: string, params?: Record<string, string | number | boolean>): void {
+  window.gtag?.('event', name, params);
+}
