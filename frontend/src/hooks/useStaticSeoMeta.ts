@@ -13,7 +13,7 @@ import { useSeoMeta, type SeoMetaResult } from './useSeoMeta';
  * render its body), not re-derived from useRouteLocale() here: several
  * routes (Login, AuthVerify, Onboarding, Unsubscribe, the organizer login/
  * verify pages, NotFound) resolve their locale via getLocale(), which
- * defaults to LOCALES[0] ('en') when nothing is stored — diverging from
+ * defaults to LOCALE_EN ('en') when nothing is stored — diverging from
  * useRouteLocale()'s bare-path default of Estonian. Deriving the SEO
  * <title>/<html lang> independently would silently mismatch the page's own
  * rendered language for a first-time visitor. */

@@ -2,16 +2,16 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useLocale } from './useLocale';
 import { setLocale } from '../lib/auth';
-import { LOCALES } from '../constants';
+import { LOCALE_EN } from '../constants';
 
 beforeEach(() => {
   localStorage.clear();
 });
 
 describe('useLocale', () => {
-  it('defaults to LOCALES[0] when no preference is stored', () => {
+  it('defaults to LOCALE_EN when no preference is stored', () => {
     const { result } = renderHook(() => useLocale());
-    expect(result.current).toBe(LOCALES[0].code);
+    expect(result.current).toBe(LOCALE_EN);
   });
 
   it('reflects a stored preference and updates live on setLocale', () => {

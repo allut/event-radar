@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { setSignedInHint, clearSignedInHint, isAuthenticated, getLocale, getStoredLocale, setLocale, clearLocale, subscribeLocale, beginLogout, isLoggingOut } from './auth';
-import { LOCALES } from '../constants';
+import { LOCALE_EN } from '../constants';
 
 describe('signed-in hint storage', () => {
   it('setSignedInHint sets the hint, isAuthenticated reflects it', () => {
@@ -49,13 +49,13 @@ describe('getLocale', () => {
     expect(getLocale()).toBe('et');
   });
 
-  it('returns first locale when stored value invalid', () => {
+  it('returns LOCALE_EN when stored value invalid', () => {
     localStorage.setItem('locale', 'zz');
-    expect(getLocale()).toBe(LOCALES[0].code);
+    expect(getLocale()).toBe(LOCALE_EN);
   });
 
-  it('returns first locale when nothing stored', () => {
-    expect(getLocale()).toBe(LOCALES[0].code);
+  it('returns LOCALE_EN when nothing stored', () => {
+    expect(getLocale()).toBe(LOCALE_EN);
   });
 });
 
