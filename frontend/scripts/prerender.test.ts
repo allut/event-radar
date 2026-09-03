@@ -1,8 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { buildRobotsTxt, isPreviewBuild, logZeroProgressAbort, main, selectValidationTargets } from './prerender';
+import {
+  buildRobotsTxt,
+  fetchLiveExploreCount,
+  isPreviewBuild,
+  logZeroProgressAbort,
+  main,
+  selectValidationTargets,
+} from './prerender';
 import type { PrerenderTarget } from './prerender';
 import type { RoundMarker } from '../src/lib/prerenderChain';
-import { CRAWLABLE_ICON_PATHS, SITEMAP_PATH } from '../src/constants';
+import { BROWSE_PAGE_SIZE, CRAWLABLE_ICON_PATHS, SITEMAP_PATH } from '../src/constants';
 
 function makeTarget(bare: string): PrerenderTarget {
   return { bare, locale: 'en' };
@@ -185,7 +192,23 @@ describe('buildRobotsTxt', () => {
   });
 
   it('keeps every public route allowed', () => {
-    for (const path of ['/', '/en', '/ru', '/events/1', '/en/events/1', '/ru/events/1']) {
+    for (const path of [
+      '/',
+      '/en',
+      '/ru',
+      '/events/1',
+      '/en/events/1',
+      '/ru/events/1',
+      '/explore',
+      '/en/explore',
+      '/ru/explore',
+    ]) {
+      expect(isAllowed(robotsTxt, path)).toBe(true);
+    }
+  });
+
+  it('keeps a filtered /explore query string crawlable — not $-anchored (issue #236)', () => {
+    for (const path of ['/explore?category=music', '/en/explore?vibe=chill&free=true']) {
       expect(isAllowed(robotsTxt, path)).toBe(true);
     }
   });
@@ -199,6 +222,44 @@ describe('buildRobotsTxt', () => {
     expect(sitemapDirective).toBeDefined();
     const sitemapUrl = new URL(sitemapDirective!.replace('Sitemap:', '').trim());
     expect(isAllowed(robotsTxt, sitemapUrl.pathname)).toBe(true);
+  });
+});
+
+describe('fetchLiveExploreCount (issue #236)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  function mockExploreTotal(total: number): void {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({ total }),
+    } as Response);
+  }
+
+  it('subtracts one, matching the anonymous view\'s upsell-card truncation — a 3-event catalog resolves to 2', async () => {
+    mockExploreTotal(3);
+    await expect(fetchLiveExploreCount('en')).resolves.toBe(2);
+  });
+
+  it('floors at 0 rather than going negative for an empty catalog', async () => {
+    mockExploreTotal(0);
+    await expect(fetchLiveExploreCount('en')).resolves.toBe(0);
+  });
+
+  it('caps at BROWSE_PAGE_SIZE before subtracting, mirroring events.length only ever reflecting the first page', async () => {
+    mockExploreTotal(BROWSE_PAGE_SIZE + 50);
+    await expect(fetchLiveExploreCount('en')).resolves.toBe(BROWSE_PAGE_SIZE - 1);
+  });
+
+  it('returns undefined on a non-ok response rather than throwing', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({ ok: false } as Response);
+    await expect(fetchLiveExploreCount('en')).resolves.toBeUndefined();
+  });
+
+  it('returns undefined on a network failure rather than throwing', async () => {
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('network'));
+    await expect(fetchLiveExploreCount('en')).resolves.toBeUndefined();
   });
 });
 

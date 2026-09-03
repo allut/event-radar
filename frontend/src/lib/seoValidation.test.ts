@@ -5,8 +5,9 @@ import {
   compareEventStaleness,
   assertEventJsonLd,
   assertWebsiteJsonLd,
+  assertListJsonLd,
 } from './seoValidation';
-import { buildEventJsonLd, buildWebsiteJsonLd } from './structuredData';
+import { buildEventJsonLd, buildExploreItemListJsonLd, buildWebsiteJsonLd } from './structuredData';
 import { buildSeoMeta } from '../hooks/useSeoMeta';
 import { makeEvent } from '../test/utils';
 import { PRODUCTION_ORIGIN } from '../constants';
@@ -118,6 +119,45 @@ describe('assertEventJsonLd', () => {
     const broken = { '@type': 'Event', name: '', startDate: 'not-a-date' };
     const issues = assertEventJsonLd(broken);
     expect(issues.length).toBeGreaterThan(0);
+  });
+
+  it('accepts an AggregateOffer with a valid price range (issue #236)', () => {
+    const event = makeEvent({ price_min: 10, price_max: 15, currency: 'EUR' });
+    expect(assertEventJsonLd(buildEventJsonLd(event))).toEqual([]);
+  });
+
+  it('accepts price_min: 0 (a free event) — numeric-truthiness rule', () => {
+    const event = makeEvent({ price_min: 0, price_max: 5, currency: 'EUR' });
+    const jsonLd = buildEventJsonLd(event);
+    expect(jsonLd.offers).toMatchObject({ '@type': 'AggregateOffer', lowPrice: 0, highPrice: 5 });
+    expect(assertEventJsonLd(jsonLd)).toEqual([]);
+  });
+
+  it('flags offers.lowPrice > offers.highPrice', () => {
+    const issues = assertEventJsonLd({
+      '@type': 'Event',
+      name: 'x',
+      startDate: '2026-01-01T00:00:00Z',
+      image: 'https://example.com/img.jpg',
+      offers: { '@type': 'AggregateOffer', lowPrice: 20, highPrice: 10, priceCurrency: 'EUR' },
+    });
+    expect(issues).toContain('offers.lowPrice must be <= offers.highPrice');
+  });
+
+  it('flags a missing priceCurrency only when lowPrice is present', () => {
+    const issues = assertEventJsonLd({
+      '@type': 'Event',
+      name: 'x',
+      startDate: '2026-01-01T00:00:00Z',
+      image: 'https://example.com/img.jpg',
+      offers: { '@type': 'AggregateOffer', lowPrice: 10, highPrice: 10 },
+    });
+    expect(issues).toContain('offers.priceCurrency is required when lowPrice is present');
+  });
+
+  it('never newly fails an event that omits price', () => {
+    const event = makeEvent({ price_min: null, url: 'https://example.com/tickets', currency: 'EUR' });
+    expect(assertEventJsonLd(buildEventJsonLd(event))).toEqual([]);
   });
 });
 
@@ -250,5 +290,102 @@ describe('compareEventStaleness', () => {
     const live = { ...event, price_min: null, price_max: null };
     const issues = compareEventStaleness(parsed, live);
     expect(issues).toContain('price is stale: snapshot has a price, live API now has none');
+  });
+});
+
+describe('assertListJsonLd', () => {
+  function threeEvents() {
+    return [makeEvent({ id: 1, title: 'A' }), makeEvent({ id: 2, title: 'B' }), makeEvent({ id: 3, title: 'C' })];
+  }
+
+  it('accepts buildExploreItemListJsonLd output for 3+ events', () => {
+    const jsonLd = buildExploreItemListJsonLd(threeEvents(), 'et');
+    expect(assertListJsonLd(jsonLd, { originPrefix: PRODUCTION_ORIGIN })).toEqual([]);
+  });
+
+  it('flags @type mismatch', () => {
+    const issues = assertListJsonLd({ '@type': 'Thing', itemListElement: [] }, { originPrefix: PRODUCTION_ORIGIN });
+    expect(issues).toContain('@type must be "ItemList"');
+  });
+
+  it('requires itemListElement to be an array', () => {
+    const issues = assertListJsonLd({ '@type': 'ItemList' }, { originPrefix: PRODUCTION_ORIGIN });
+    expect(issues).toContain('itemListElement must be an array');
+  });
+
+  it('flags fewer than 3 items when no liveItemCount is supplied (defaults to the hard check)', () => {
+    const jsonLd = buildExploreItemListJsonLd([makeEvent({ id: 1 })], 'et');
+    const issues = assertListJsonLd(jsonLd, { originPrefix: PRODUCTION_ORIGIN });
+    expect(issues.some((i) => i.includes('expected at least 3'))).toBe(true);
+  });
+
+  it('skips the >=3 check when liveItemCount proves the catalog is genuinely thin', () => {
+    const jsonLd = buildExploreItemListJsonLd([makeEvent({ id: 1 })], 'et');
+    const issues = assertListJsonLd(jsonLd, { originPrefix: PRODUCTION_ORIGIN, liveItemCount: 1 });
+    expect(issues.some((i) => i.includes('expected at least 3'))).toBe(false);
+  });
+
+  it('does not skip the >=3 check when liveItemCount shows a builder regression', () => {
+    const jsonLd = buildExploreItemListJsonLd([makeEvent({ id: 1 })], 'et');
+    const issues = assertListJsonLd(jsonLd, { originPrefix: PRODUCTION_ORIGIN, liveItemCount: 10 });
+    expect(issues.some((i) => i.includes('expected at least 3'))).toBe(true);
+  });
+
+  it('accepts a genuinely empty list', () => {
+    const jsonLd = buildExploreItemListJsonLd([], 'et');
+    const issues = assertListJsonLd(jsonLd, { originPrefix: PRODUCTION_ORIGIN, liveItemCount: 0 });
+    expect(issues).toEqual([]);
+  });
+
+  it('flags non-sequential/duplicate positions', () => {
+    const jsonLd = buildExploreItemListJsonLd(threeEvents(), 'et') as unknown as { itemListElement: { position: number }[] };
+    jsonLd.itemListElement[2].position = 2;
+    const issues = assertListJsonLd(jsonLd, { originPrefix: PRODUCTION_ORIGIN });
+    expect(issues.some((i) => i.includes('positions must be exactly'))).toBe(true);
+  });
+
+  it('flags a duplicate item.url across the list', () => {
+    const jsonLd = buildExploreItemListJsonLd(threeEvents(), 'et') as unknown as {
+      itemListElement: { item: { url: string } }[];
+    };
+    jsonLd.itemListElement[1].item.url = jsonLd.itemListElement[0].item.url;
+    const issues = assertListJsonLd(jsonLd, { originPrefix: PRODUCTION_ORIGIN });
+    expect(issues.some((i) => i.includes('is not unique across the list'))).toBe(true);
+  });
+
+  it('flags an item.url with no fragment allowed', () => {
+    const jsonLd = buildExploreItemListJsonLd(threeEvents(), 'et') as unknown as {
+      itemListElement: { item: { url: string } }[];
+    };
+    jsonLd.itemListElement[0].item.url += '#section';
+    const issues = assertListJsonLd(jsonLd, { originPrefix: PRODUCTION_ORIGIN });
+    expect(issues.some((i) => i.includes('must not contain a fragment'))).toBe(true);
+  });
+
+  it('flags an item.url that does not point at originPrefix', () => {
+    const jsonLd = buildExploreItemListJsonLd(threeEvents(), 'et') as unknown as {
+      itemListElement: { item: { url: string } }[];
+    };
+    jsonLd.itemListElement[0].item.url = 'https://evil.example.com/events/1';
+    const issues = assertListJsonLd(jsonLd, { originPrefix: PRODUCTION_ORIGIN });
+    expect(issues.some((i) => i.includes('does not point at'))).toBe(true);
+  });
+
+  it('requires item.image even for an event whose own assertEventJsonLd would accept offers-only', () => {
+    const jsonLd = buildExploreItemListJsonLd(threeEvents(), 'et') as unknown as {
+      itemListElement: { item: { image?: string } }[];
+    };
+    delete jsonLd.itemListElement[0].item.image;
+    const issues = assertListJsonLd(jsonLd, { originPrefix: PRODUCTION_ORIGIN });
+    expect(issues.some((i) => i === 'item[0]: image is required')).toBe(true);
+  });
+
+  it('prefixes a nested item failure with its index', () => {
+    const jsonLd = buildExploreItemListJsonLd(threeEvents(), 'et') as unknown as {
+      itemListElement: { item: { name?: string } }[];
+    };
+    delete jsonLd.itemListElement[1].item.name;
+    const issues = assertListJsonLd(jsonLd, { originPrefix: PRODUCTION_ORIGIN });
+    expect(issues).toContain('item[1]: name is required');
   });
 });

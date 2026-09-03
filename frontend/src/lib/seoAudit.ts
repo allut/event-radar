@@ -10,6 +10,7 @@ import {
   SEO_AUDIT_STALE_THRESHOLD_HOURS,
   SITEMAP_PATH,
 } from '../constants.js';
+import type { LocaleCode } from '../constants.js';
 import { parseSnapshotHtml, validateSnapshotStructure } from './seoValidation.js';
 
 /** One `Allow:`/`Disallow:` rule parsed out of a `User-agent: *` group,
@@ -127,6 +128,10 @@ export function evaluateLiveAudit(params: {
   landingHtml: string;
   robotsTxt: string;
   eventHtml?: string;
+  /** One entry per locale variant of /explore's canonical URL (issue #236) —
+   * best-effort, same as eventHtml: a locale that failed to fetch is simply
+   * absent rather than failing the whole audit. */
+  exploreHtmlByLocale?: Partial<Record<LocaleCode, string>>;
   now?: Date;
 }): LiveAuditResult {
   const now = params.now ?? new Date();
@@ -182,6 +187,19 @@ export function evaluateLiveAudit(params: {
       originPrefix: PRODUCTION_ORIGIN,
     });
     issues.push(...eventIssues.map((issue) => `event structural: ${issue}`));
+  }
+
+  // No liveItemCount re-query here (issue #236) — unlike the in-build gate,
+  // this is a best-effort production spot-check with no backend fan-out of
+  // its own; assertListJsonLd's >=3 check simply no-ops without it.
+  for (const [locale, html] of Object.entries(params.exploreHtmlByLocale ?? {})) {
+    const parsedExplore = parseSnapshotHtml(html);
+    const exploreIssues = validateSnapshotStructure(parsedExplore, {
+      kind: 'list',
+      locale,
+      originPrefix: PRODUCTION_ORIGIN,
+    });
+    issues.push(...exploreIssues.map((issue) => `explore (${locale}) structural: ${issue}`));
   }
 
   return { ok: issues.length === 0, issues, buildTimestamp };

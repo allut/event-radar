@@ -129,6 +129,103 @@ export function assertEventJsonLd(jsonLd: unknown): string[] {
   const hasOffers = asRecord(obj.offers) !== null;
   if (!hasImage && !hasOffers) issues.push('at least one of image/offers is required');
 
+  // Narrow structural check on offers.lowPrice/highPrice/priceCurrency
+  // (AggregateOffer, issue #236) — fires only when lowPrice is present, so
+  // an event that omits price (price_min === null) never newly fails here.
+  const offers = asRecord(obj.offers);
+  if (offers && offers.lowPrice !== undefined) {
+    if (typeof offers.lowPrice !== 'number') issues.push('offers.lowPrice must be a number');
+    if (typeof offers.highPrice !== 'number') issues.push('offers.highPrice must be a number');
+    if (
+      typeof offers.lowPrice === 'number' &&
+      typeof offers.highPrice === 'number' &&
+      offers.lowPrice > offers.highPrice
+    ) {
+      issues.push('offers.lowPrice must be <= offers.highPrice');
+    }
+    if (!isNonEmptyString(offers.priceCurrency)) issues.push('offers.priceCurrency is required when lowPrice is present');
+  }
+
+  return issues;
+}
+
+/** Runtime assertion for the /explore page's `ItemList` node (issue #236) —
+ * checked against the same structural discipline as `assertEventJsonLd`,
+ * plus list-specific shape (position sequencing, per-item url uniqueness).
+ * `liveItemCount`, when passed, is the actual published-event count behind
+ * the page's own query at validation time (mirrors `compareEventStaleness`'s
+ * live re-fetch, though this is a count-only check, not a full staleness
+ * diff — /explore is exempt from that, see prerender.ts) — it's what lets a
+ * genuinely thin calendar (fewer than 3 events exist) skip the >=3 check
+ * without hardcoding a minimum that would also swallow a real builder
+ * regression (an `itemListElement` that's short despite there being enough
+ * live events to fill it). When omitted (e.g. the live audit, which doesn't
+ * re-query /explore), the >=3 check is skipped entirely — best-effort,
+ * matching this module's other live-audit-only omissions. */
+export function assertListJsonLd(jsonLd: unknown, options: { originPrefix: string; liveItemCount?: number }): string[] {
+  const issues: string[] = [];
+  const obj = asRecord(jsonLd);
+  if (!obj) return ['jsonLd is missing or not an object'];
+
+  if (obj['@type'] !== 'ItemList') issues.push('@type must be "ItemList"');
+
+  const rawItems = obj.itemListElement;
+  if (!Array.isArray(rawItems)) {
+    return [...issues, 'itemListElement must be an array'];
+  }
+
+  if (rawItems.length < 3 && (options.liveItemCount === undefined || options.liveItemCount >= 3)) {
+    issues.push(
+      `itemListElement has only ${rawItems.length} entr${rawItems.length === 1 ? 'y' : 'ies'}, expected at least 3`,
+    );
+  }
+
+  const seenUrls = new Set<string>();
+  const positions: number[] = [];
+  rawItems.forEach((raw, i) => {
+    const entry = asRecord(raw);
+    if (!entry) {
+      issues.push(`item[${i}]: entry is not an object`);
+      return;
+    }
+    if (entry['@type'] !== 'ListItem') issues.push(`item[${i}]: @type must be "ListItem"`);
+    if (typeof entry.position === 'number' && Number.isInteger(entry.position)) {
+      positions.push(entry.position);
+    } else {
+      issues.push(`item[${i}]: position must be an integer`);
+    }
+
+    const item = asRecord(entry.item);
+    if (!item) {
+      issues.push(`item[${i}]: item is missing or not an object`);
+      return;
+    }
+    issues.push(...assertEventJsonLd(item).map((issue) => `item[${i}]: ${issue}`));
+
+    const url = isNonEmptyString(item.url) ? item.url : null;
+    if (!url) {
+      issues.push(`item[${i}]: url is required`);
+    } else {
+      if (!url.startsWith(options.originPrefix)) {
+        issues.push(`item[${i}]: url "${url}" does not point at ${options.originPrefix}`);
+      }
+      if (url.includes('#')) issues.push(`item[${i}]: url must not contain a fragment`);
+      if (seenUrls.has(url)) issues.push(`item[${i}]: url "${url}" is not unique across the list`);
+      seenUrls.add(url);
+    }
+
+    if (!isNonEmptyString(item.image)) issues.push(`item[${i}]: image is required`);
+  });
+
+  const expectedPositions = Array.from({ length: rawItems.length }, (_, i) => i + 1);
+  const sortedPositions = [...positions].sort((a, b) => a - b);
+  if (
+    positions.length !== rawItems.length ||
+    !expectedPositions.every((p, i) => sortedPositions[i] === p)
+  ) {
+    issues.push(`positions must be exactly 1..${rawItems.length} with no gaps or repeats`);
+  }
+
   return issues;
 }
 
@@ -148,10 +245,12 @@ export function assertWebsiteJsonLd(jsonLd: unknown): string[] {
 }
 
 export interface StructuralValidationOptions {
-  kind: 'event' | 'website';
+  kind: 'event' | 'website' | 'list';
   locale: string;
   /** PRODUCTION_ORIGIN — canonical/hreflang hrefs must be absolute URLs on it. */
   originPrefix: string;
+  /** `kind: 'list'` only — see assertListJsonLd's doc comment. */
+  liveItemCount?: number;
 }
 
 /** Structural-correctness half of the gate (issue #53): valid JSON-LD per the
@@ -160,7 +259,7 @@ export interface StructuralValidationOptions {
  * supposed to emit for an indexable route. */
 export function validateSnapshotStructure(
   parsed: ParsedSnapshot,
-  { kind, locale, originPrefix }: StructuralValidationOptions,
+  { kind, locale, originPrefix, liveItemCount }: StructuralValidationOptions,
 ): string[] {
   const issues: string[] = [];
   const shellDefaultTitle = t('brand', locale);
@@ -195,7 +294,11 @@ export function validateSnapshotStructure(
     issues.push(`expected exactly one JSON-LD script, found ${parsed.jsonLd.length}`);
   } else {
     const jsonLdIssues =
-      kind === 'event' ? assertEventJsonLd(parsed.jsonLd[0]) : assertWebsiteJsonLd(parsed.jsonLd[0]);
+      kind === 'event'
+        ? assertEventJsonLd(parsed.jsonLd[0])
+        : kind === 'list'
+          ? assertListJsonLd(parsed.jsonLd[0], { originPrefix, liveItemCount })
+          : assertWebsiteJsonLd(parsed.jsonLd[0]);
     issues.push(...jsonLdIssues.map((issue) => `jsonLd: ${issue}`));
   }
 

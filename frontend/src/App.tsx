@@ -104,7 +104,7 @@ function GoogleAnalytics() {
 }
 
 // Bare-path locale redirect, applied only to "standard" routes (everything
-// except Home/EventDetail — see NO_REDIRECT below). If the visitor has an
+// except Home/Explore/EventDetail — see NO_REDIRECT below). If the visitor has an
 // explicit, stored non-Estonian locale preference, a bare URL (no `:locale`
 // segment matched) redirects client-side to that preference's prefixed
 // equivalent. No Accept-Language sniffing: a first-time visitor with no
@@ -134,9 +134,10 @@ function localePrefixedPattern(path: string): string {
 interface RouteDef {
   path: string;
   element: React.ReactNode;
-  // Home and EventDetail are the two public SEO routes: their bare path
-  // always renders Estonian and never redirects (crawler/prerender
-  // stability), regardless of any stored locale preference.
+  // Home, Explore and EventDetail are the three public SEO routes (issue
+  // #236 added Explore): their bare path always renders Estonian and never
+  // redirects (crawler/prerender stability), regardless of any stored
+  // locale preference.
   noRedirect?: boolean;
 }
 
@@ -145,7 +146,7 @@ const ROUTE_DEFS: RouteDef[] = [
   { path: ROUTES.authVerify, element: <AuthVerify /> },
   { path: ROUTES.onboarding, element: <Protected><Onboarding /></Protected> },
   { path: ROUTES.home, element: <Home />, noRedirect: true },
-  { path: ROUTES.explore, element: <Explore /> },
+  { path: ROUTES.explore, element: <Explore />, noRedirect: true },
   { path: ROUTES.saved, element: <Protected><SavedEvents /></Protected> },
   { path: ROUTES.eventDetailPattern, element: <EventDetail />, noRedirect: true },
   { path: ROUTES.settings, element: <Protected><Settings /></Protected> },

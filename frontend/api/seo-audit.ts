@@ -21,7 +21,9 @@ import { StatusCodes } from 'http-status-codes';
 // the Vite SPA build or tsx-run scripts elsewhere in this repo), so Node's
 // ESM resolver requires explicit .js extensions on every relative import —
 // including transitively, in every local module this file pulls in.
-import { FAVICON_ICO_PATH, PRODUCTION_ORIGIN, SEO_AUDIT_TOKEN_HEADER, SITEMAP_PATH } from '../src/constants.js';
+import { FAVICON_ICO_PATH, LOCALES, PRODUCTION_ORIGIN, ROUTES, SEO_AUDIT_TOKEN_HEADER, SITEMAP_PATH } from '../src/constants.js';
+import type { LocaleCode } from '../src/constants.js';
+import { localizedPath } from '../src/lib/urlLocale.js';
 import { evaluateLiveAudit, parseSitemapEventUrls } from '../src/lib/seoAudit.js';
 import { reportAuditFailure, reportAuditRecovery } from '../src/lib/seoAuditIssue.js';
 import { isValidAuditToken } from '../src/lib/seoAuditAuth.js';
@@ -97,7 +99,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     }
   }
 
-  const result = evaluateLiveAudit({ sitemapXml, landingHtml, robotsTxt, eventHtml });
+  // Explore's canonical URL, all 3 locales (issue #236) — best-effort, same
+  // as eventHtml above: a single locale's fetch failing doesn't fail the
+  // whole audit run.
+  const exploreHtmlByLocale: Partial<Record<LocaleCode, string>> = {};
+  await Promise.all(
+    LOCALES.map(async ({ code }) => {
+      try {
+        const res = await fetch(`${PRODUCTION_ORIGIN}${localizedPath(ROUTES.explore, code)}`);
+        if (res.ok) exploreHtmlByLocale[code] = await res.text();
+      } catch {
+        // Best-effort only — see comment above.
+      }
+    }),
+  );
+
+  const result = evaluateLiveAudit({ sitemapXml, landingHtml, robotsTxt, eventHtml, exploreHtmlByLocale });
 
   // Catches the app-shell-fallthrough failure mode robots.txt/HTML assertions
   // can't see: Vercel's SPA catch-all rewrite serves /favicon.ico as a 200

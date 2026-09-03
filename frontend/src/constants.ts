@@ -190,6 +190,19 @@ export const PRICE_DATA_ATTR = {
   currency: 'data-currency',
   hasFreeTier: 'data-has-free-tier',
 } as const;
+// Prerender readiness markers for /explore (issue #236) — same family as
+// PRICE_DATA_ATTR above. `indexable` (useSeoMeta) only flips true on a
+// successful query, which is what the canonical-link wait selector every
+// other prerender target uses relies on — but /explore has a real error
+// path (a query that fails outright), where Playwright must still stop
+// waiting rather than time out. These two markers decouple "the page is
+// done loading, snapshot it" (PRERENDER_READY) from "is it indexable"
+// (still driven by useSeoMeta/indexable alone) and let the render script
+// tell an error state apart from a genuine (possibly zero-row) success.
+export const PRERENDER_READY_ATTR = 'data-prerender-ready';
+export const PRERENDER_READY_SELECTOR = `[${PRERENDER_READY_ATTR}="true"]`;
+export const PRERENDER_ERROR_ATTR = 'data-prerender-error';
+export const PRERENDER_ERROR_SELECTOR = `[${PRERENDER_ERROR_ATTR}="true"]`;
 // sitemap.xml's dist-relative filename (prerender.ts writes it, api/seo-audit.ts
 // fetches it) and its absolute-origin-relative path (referenced from
 // robots.txt's Sitemap directive and the live audit's production fetch).

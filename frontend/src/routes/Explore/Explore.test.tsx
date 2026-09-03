@@ -93,7 +93,7 @@ describe('Explore', () => {
       );
     });
 
-    renderWithProviders(<Explore />, { route: '/explore' });
+    renderWithProviders(<Explore />, { route: '/en/explore', pathPattern: '/:locale/explore' });
 
     await waitFor(() => expect(screen.getAllByTestId('event-card').length).toBe(2));
     expect(screen.getByText('Jazz Night')).toBeInTheDocument();
@@ -105,7 +105,7 @@ describe('Explore', () => {
       return Promise.resolve(exploreResponse([makeEvent({ id: 1 })]));
     });
 
-    renderWithProviders(<Explore />, { route: '/explore' });
+    renderWithProviders(<Explore />, { route: '/en/explore', pathPattern: '/:locale/explore' });
     await waitFor(() => expect(screen.getAllByTestId('event-card').length).toBe(1));
 
     expect(screen.getByRole('button', { name: 'All events' })).toHaveAttribute('aria-pressed', 'true');
@@ -126,7 +126,7 @@ describe('Explore', () => {
       return Promise.resolve(exploreResponse([makeEvent({ id: 1 })]));
     });
 
-    renderWithProviders(<Explore />, { route: '/explore' });
+    renderWithProviders(<Explore />, { route: '/en/explore', pathPattern: '/:locale/explore' });
     await waitFor(() => expect(screen.getAllByTestId('event-card').length).toBe(1));
 
     await userEvent.click(screen.getByRole('button', { name: /Categories/ }));
@@ -147,7 +147,7 @@ describe('Explore', () => {
       return Promise.resolve(exploreResponse([makeEvent({ id: 1 })]));
     });
 
-    renderWithProviders(<Explore />, { route: '/explore?category=' });
+    renderWithProviders(<Explore />, { route: '/en/explore?category=', pathPattern: '/:locale/explore' });
     await waitFor(() => expect(screen.getByText(/no events/i)).toBeInTheDocument());
 
     const calls = mockGet.mock.calls.map((c) => c[0] as string);
@@ -166,7 +166,7 @@ describe('Explore', () => {
       );
     });
 
-    renderWithProviders(<Explore />, { route: '/explore' });
+    renderWithProviders(<Explore />, { route: '/en/explore', pathPattern: '/:locale/explore' });
     await waitFor(() => expect(screen.getAllByTestId('event-card').length).toBe(1));
 
     await userEvent.click(screen.getByRole('button', { name: /load more/i }));
@@ -181,7 +181,7 @@ describe('Explore', () => {
       return Promise.resolve(exploreResponse([makeEvent({ id: 1 })]));
     });
 
-    renderWithProviders(<Explore />, { route: '/explore' });
+    renderWithProviders(<Explore />, { route: '/en/explore', pathPattern: '/:locale/explore' });
     await waitFor(() => expect(screen.getByRole('button', { name: 'All events' })).toHaveAttribute('aria-pressed', 'true'));
 
     await userEvent.click(screen.getByRole('button', { name: 'For you' }));
@@ -205,7 +205,7 @@ describe('Explore', () => {
       return Promise.resolve(exploreResponse([]));
     });
 
-    renderWithProviders(<Explore />, { route: '/explore' });
+    renderWithProviders(<Explore />, { route: '/en/explore', pathPattern: '/:locale/explore' });
     await userEvent.click(screen.getByRole('button', { name: 'For you' }));
     await waitFor(() => expect(screen.getByRole('button', { name: 'For you' })).toHaveAttribute('aria-pressed', 'true'));
 
@@ -231,7 +231,7 @@ describe('Explore', () => {
       return Promise.resolve(exploreResponse([]));
     });
 
-    renderWithProviders(<Explore />, { route: '/explore' });
+    renderWithProviders(<Explore />, { route: '/en/explore', pathPattern: '/:locale/explore' });
     await userEvent.click(screen.getByRole('button', { name: 'For you' }));
     await waitFor(() => expect(screen.getByRole('button', { name: /Categories · 2/ })).toBeInTheDocument());
 
@@ -247,7 +247,7 @@ describe('Explore', () => {
       return Promise.resolve(exploreResponse([]));
     });
 
-    renderWithProviders(<Explore />, { route: '/explore' });
+    renderWithProviders(<Explore />, { route: '/en/explore', pathPattern: '/:locale/explore' });
     await userEvent.click(screen.getByRole('button', { name: 'For you' }));
     await waitFor(() => expect(screen.getByRole('button', { name: /Categories · 1/ })).toBeInTheDocument());
 
@@ -264,9 +264,39 @@ describe('Explore', () => {
       return Promise.reject(new Error('network'));
     });
 
-    renderWithProviders(<Explore />, { route: '/explore' });
+    renderWithProviders(<Explore />, { route: '/en/explore', pathPattern: '/:locale/explore' });
 
     await waitFor(() => expect(screen.getByText(/Failed to load events/i)).toBeInTheDocument());
+  });
+
+  describe('prerender readiness marker (issue #236)', () => {
+    it('is absent while the query is loading', () => {
+      mockGet.mockImplementation(() => new Promise(() => {})); // never resolves
+      renderWithProviders(<Explore />, { route: '/en/explore', pathPattern: '/:locale/explore' });
+      expect(document.querySelector('[data-prerender-ready="true"]')).toBeNull();
+    });
+
+    it('is present, with no error marker, once the query succeeds', async () => {
+      mockGet.mockImplementation((path: string) => {
+        if (path.startsWith('/users/me')) return Promise.resolve(currentUser);
+        return Promise.resolve(exploreResponse([makeEvent({ id: 1 })]));
+      });
+      renderWithProviders(<Explore />, { route: '/en/explore', pathPattern: '/:locale/explore' });
+
+      await waitFor(() => expect(document.querySelector('[data-prerender-ready="true"]')).not.toBeNull());
+      expect(document.querySelector('[data-prerender-error="true"]')).toBeNull();
+    });
+
+    it('is present alongside the error marker once the query errors, so the build can fail loudly instead of timing out', async () => {
+      mockGet.mockImplementation((path: string) => {
+        if (path.startsWith('/users/me')) return Promise.resolve(currentUser);
+        return Promise.reject(new Error('network'));
+      });
+      renderWithProviders(<Explore />, { route: '/en/explore', pathPattern: '/:locale/explore' });
+
+      await waitFor(() => expect(document.querySelector('[data-prerender-ready="true"]')).not.toBeNull());
+      expect(document.querySelector('[data-prerender-error="true"]')).not.toBeNull();
+    });
   });
 
   it('a chip click during a pending search debounce does not clobber it', async () => {
@@ -282,7 +312,7 @@ describe('Explore', () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime.bind(vi) });
 
-    renderWithProviders(<Explore />, { route: '/explore' });
+    renderWithProviders(<Explore />, { route: '/en/explore', pathPattern: '/:locale/explore' });
     await waitFor(() => expect(screen.getByRole('button', { name: /Categories/ })).toBeInTheDocument());
 
     await user.type(screen.getByPlaceholderText(/search events/i), 'jazz');
@@ -317,7 +347,7 @@ describe('Explore', () => {
 
     it('never calls /users/me when signed out', async () => {
       mockGet.mockImplementation(() => Promise.resolve(exploreResponse([makeEvent({ id: 1 }), makeEvent({ id: 2 })])));
-      renderWithProviders(<Explore />, { route: '/explore' });
+      renderWithProviders(<Explore />, { route: '/en/explore', pathPattern: '/:locale/explore' });
       // Anonymous grid drops the last event to make room for the upsell
       // card without an orphaned card wrapping to a new row.
       await waitFor(() => expect(screen.getAllByTestId('event-card').length).toBe(1));
@@ -328,13 +358,13 @@ describe('Explore', () => {
 
     it('fires explore_view with signed_in: false on landing', async () => {
       mockGet.mockImplementation(() => Promise.resolve(exploreResponse([])));
-      renderWithProviders(<Explore />, { route: '/explore' });
+      renderWithProviders(<Explore />, { route: '/en/explore', pathPattern: '/:locale/explore' });
       await waitFor(() => expect(mockTrackEvent).toHaveBeenCalledWith('explore_view', { signed_in: false, locale: 'en' }));
     });
 
     it('renders the persistent upsell card and opens the sign-in modal from its CTA', async () => {
       mockGet.mockImplementation(() => Promise.resolve(exploreResponse([makeEvent({ id: 1 })])));
-      renderWithProviders(<Explore />, { route: '/explore' });
+      renderWithProviders(<Explore />, { route: '/en/explore', pathPattern: '/:locale/explore' });
       await waitFor(() => expect(screen.getByText('Like what you see?')).toBeInTheDocument());
 
       await userEvent.click(screen.getByRole('button', { name: 'Sign in to personalize →' }));
@@ -353,7 +383,7 @@ describe('Explore', () => {
           makeEvent({ id: 3, title: 'Third' }),
         ])),
       );
-      renderWithProviders(<Explore />, { route: '/explore' });
+      renderWithProviders(<Explore />, { route: '/en/explore', pathPattern: '/:locale/explore' });
       // Anonymous grid drops the last event to make room for the upsell
       // card without an orphaned card wrapping to a new row.
       await waitFor(() => expect(screen.getAllByTestId('event-card').length).toBe(2));
@@ -373,7 +403,7 @@ describe('Explore', () => {
 
     it('fires explore_card_click with signed_in and position when a card is opened', async () => {
       mockGet.mockImplementation(() => Promise.resolve(exploreResponse([makeEvent({ id: 1 }), makeEvent({ id: 2 })])));
-      renderWithProviders(<Explore />, { route: '/explore' });
+      renderWithProviders(<Explore />, { route: '/en/explore', pathPattern: '/:locale/explore' });
       // Anonymous grid drops the last event to make room for the upsell
       // card without an orphaned card wrapping to a new row.
       await waitFor(() => expect(screen.getAllByTestId('event-card').length).toBe(1));
@@ -385,7 +415,7 @@ describe('Explore', () => {
 
     it('turning on For-you intercepts into the sign-in modal instead of applying the filter', async () => {
       mockGet.mockImplementation(() => Promise.resolve(exploreResponse([])));
-      renderWithProviders(<Explore />, { route: '/explore' });
+      renderWithProviders(<Explore />, { route: '/en/explore', pathPattern: '/:locale/explore' });
       await waitFor(() => expect(screen.getByRole('button', { name: 'For you' })).toBeInTheDocument());
 
       await userEvent.click(screen.getByRole('button', { name: 'For you' }));
@@ -397,7 +427,7 @@ describe('Explore', () => {
     it('drops the last event to keep the total card count unchanged when the upsell card is added', async () => {
       const anonEvents = Array.from({ length: 6 }, (_, i) => makeEvent({ id: i + 1, title: `Event ${i + 1}` }));
       mockGet.mockImplementation(() => Promise.resolve(exploreResponse(anonEvents)));
-      renderWithProviders(<Explore />, { route: '/explore' });
+      renderWithProviders(<Explore />, { route: '/en/explore', pathPattern: '/:locale/explore' });
 
       await waitFor(() => expect(screen.getAllByTestId('event-card').length).toBe(5));
       expect(screen.queryByText('Event 6')).not.toBeInTheDocument();

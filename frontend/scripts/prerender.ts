@@ -34,14 +34,18 @@ import { chromium, type Browser, type Page } from 'playwright';
 import { preview, type PreviewServer } from 'vite';
 import type { EventData } from '../src/components/EventCard';
 import {
+  BROWSE_PAGE_SIZE,
   CANONICAL_LINK_SELECTOR,
   CRAWLABLE_ASSETS_PATH,
   CRAWLABLE_ICON_PATHS,
+  EXPLORE_PARAM,
   JSONLD_SCRIPT_SELECTOR,
   LOCALE_URL_PREFIX_CODES,
   LOCALES,
   OG_FALLBACK_IMAGE_PATH,
   PRERENDER_CHAIN_GITHUB_REPO,
+  PRERENDER_ERROR_SELECTOR,
+  PRERENDER_READY_SELECTOR,
   PRODUCTION_ORIGIN,
   ROUND_STATUS,
   ROUTES,
@@ -49,6 +53,7 @@ import {
   SEO_XDEFAULT_CODE,
   SITEMAP_FILENAME,
   SITEMAP_PATH,
+  SORT_DEFAULT,
 } from '../src/constants';
 import { localizedPath } from '../src/lib/urlLocale';
 import { githubRequest } from '../src/lib/githubRequest';
@@ -236,6 +241,13 @@ function buildTargets(candidates: PrerenderCandidate[]): PrerenderTarget[] {
   const targets: PrerenderTarget[] = [];
   for (const locale of localeCodes) {
     targets.push({ bare: ROUTES.home, locale });
+    // Appended right after home, never at index 0 — the live audit
+    // (seoAudit.ts's parseSitemapLastmod) reads sitemap freshness off the
+    // *first* <lastmod> in the document, which depends on home staying
+    // first (issue #236). No eventId/updatedAt, same shape as home — see
+    // classifyTarget's doc comment for why that alone makes it always
+    // render fresh, no copy-forward.
+    targets.push({ bare: ROUTES.explore, locale });
     for (const candidate of candidates) {
       targets.push({
         bare: ROUTES.eventDetail(candidate.id),
@@ -360,8 +372,13 @@ function buildSitemapXml(targets: PrerenderTarget[], buildTimestamp: string): st
  * three lines were added. */
 export function buildRobotsTxt(): string {
   const lines = ['User-agent: *', 'Disallow: /', 'Allow: /$', 'Allow: /events/'];
+  // Not $-anchored (unlike the home-route `Allow: /$` above) — a filtered
+  // Explore URL (`/explore?category=…`) must stay crawlable per the map's
+  // canonical-alone crawl-control decision (issue #236): no Disallow on
+  // query strings, no param-conditional noindex.
+  lines.push(`Allow: ${ROUTES.explore}`);
   for (const code of LOCALE_URL_PREFIX_CODES) {
-    lines.push(`Allow: /${code}$`, `Allow: /${code}/events/`);
+    lines.push(`Allow: /${code}$`, `Allow: /${code}/events/`, `Allow: /${code}${ROUTES.explore}`);
   }
   lines.push(`Allow: ${SITEMAP_PATH}`, `Allow: ${OG_FALLBACK_IMAGE_PATH}`, `Allow: ${CRAWLABLE_ASSETS_PATH}`);
   for (const iconPath of CRAWLABLE_ICON_PATHS) lines.push(`Allow: ${iconPath}`);
@@ -435,23 +452,37 @@ async function snapshotTarget(
   previewOrigin: string,
   target: PrerenderTarget,
 ): Promise<void> {
-  if (target.bare !== ROUTES.home) {
+  // Re-keyed on eventId, not `bare !== ROUTES.home` (issue #236) — /explore
+  // never calls GET /events/{id}, so it must not consume this budget either.
+  if (target.eventId !== undefined) {
     await eventDetailRateGate.acquire();
   }
   const url = `${previewOrigin}${localizedPath(target.bare, target.locale)}`;
   await page.goto(url, { waitUntil: 'networkidle', timeout: NAV_TIMEOUT_MS });
-  // Landing and /events/:id are the only routes useSeoMeta marks `indexable`
-  // (see useSeoMeta.ts) — for /events/:id that only flips true once the
-  // event has actually loaded (EventDetail.tsx), so waiting for the
-  // canonical link this hook emits is a reliable "real content is in the
-  // DOM, not the loading/CSR-shell state" signal for both target types.
-  // `state: 'attached'`, not the default 'visible' — a <link> element never
-  // has a CSS box, so the default visibility check would time out even once
-  // Helmet has inserted it.
-  await page.waitForSelector(CANONICAL_LINK_SELECTOR, {
+  const isExplore = target.bare === ROUTES.explore;
+  // Landing and /events/:id are `indexable` (useSeoMeta) only once real
+  // content has loaded, so waiting for the canonical link this hook emits is
+  // a reliable "real content is in the DOM" signal for both. /explore is
+  // different (issue #236): readiness must be decoupled from indexability —
+  // a query that resolves to an error is real, settled content that must
+  // still get snapshotted (so the error marker check below can fail the
+  // build loudly) rather than left to time out here, but useSeoMeta's
+  // `indexable` is never true on error. So /explore waits on its own
+  // PRERENDER_READY_SELECTOR (Explore.tsx sets it on isSuccess/isError, never
+  // isLoading) instead of the canonical-link selector.
+  // `state: 'attached'`, not the default 'visible' — neither marker has a
+  // CSS box, so the default visibility check would time out even once
+  // rendered.
+  await page.waitForSelector(isExplore ? PRERENDER_READY_SELECTOR : CANONICAL_LINK_SELECTOR, {
     state: 'attached',
     timeout: CONTENT_READY_TIMEOUT_MS,
   });
+  if (isExplore && (await page.$(PRERENDER_ERROR_SELECTOR)) !== null) {
+    // The query itself errored — fail loudly rather than silently shipping a
+    // noindex page (issue #236): routed through the same failures[]/throw
+    // path every other render failure takes, below.
+    throw new Error(`prerender: /explore query errored for ${localizedPath(target.bare, target.locale)}`);
+  }
   let html = await page.content();
   if (target.eventId !== undefined && target.updatedAt !== undefined) {
     html = embedChangeMarker(html, target.updatedAt);
@@ -511,15 +542,53 @@ async function runPool<T>(items: T[], concurrency: number, worker: (item: T) => 
  * Hobby-plan 45-minute build cap (see PRERENDER_CONCURRENCY above). Returns
  * one message per violation, prefixed with the target's path — never
  * throws for a validation failure itself. */
+/** Live count backing the /explore validator's >=3-items check (issue #236)
+ * — same unfiltered, first-page query Explore.tsx's default request builds
+ * (DEFAULT_EXPLORE_FILTERS + offset 0), but limit=1: only the response's
+ * `total` is read, not the events themselves. Prerendering is always
+ * anonymous (Playwright never signs in), and Explore.tsx's `gridItems`
+ * always drops exactly one fetched event to make room for the persistent
+ * upsell card (`visibleEvents = events.slice(0, events.length - 1)`) — so
+ * the snapshot's `itemListElement` (built from that same `visibleEvents`,
+ * per buildExploreItemListJsonLd's caller) is always one shorter than the
+ * raw catalog count. Adjusting for that here (not in assertListJsonLd,
+ * which stays a generic, business-rule-free structural check) is what lets
+ * a catalog of exactly 3 events correctly render a 2-item list without
+ * tripping the >=3 check — comparing against the unadjusted `total` would
+ * make every such catalog fail the build on a UI layout decision, not an
+ * actual builder regression. `min(total, BROWSE_PAGE_SIZE)` mirrors
+ * `events.length` itself only ever reflecting the first fetched page.
+ * `undefined` on any fetch problem (best-effort — see assertListJsonLd's
+ * doc comment on what omitting this does to the check). */
+export async function fetchLiveExploreCount(locale: string): Promise<number | undefined> {
+  const params = new URLSearchParams();
+  params.set(EXPLORE_PARAM.forYou, 'false');
+  params.set(EXPLORE_PARAM.sort, SORT_DEFAULT);
+  params.set(EXPLORE_PARAM.limit, '1');
+  params.set(EXPLORE_PARAM.offset, '0');
+  params.set('locale', locale);
+  try {
+    const res = await fetch(`${API_ORIGIN}/explore?${params.toString()}`);
+    if (!res.ok) return undefined;
+    const body = (await res.json()) as { total: number };
+    return Math.max(Math.min(body.total, BROWSE_PAGE_SIZE) - 1, 0);
+  } catch {
+    return undefined;
+  }
+}
+
 async function validateTarget(target: PrerenderTarget): Promise<string[]> {
   const html = await readFile(outputFilePath(target.bare, target.locale), 'utf-8');
   const parsed = parseSnapshotHtml(html);
-  const isHome = target.bare === ROUTES.home;
+  const kind = target.bare === ROUTES.home ? 'website' : target.bare === ROUTES.explore ? 'list' : 'event';
+
+  const liveItemCount = kind === 'list' ? await fetchLiveExploreCount(target.locale) : undefined;
 
   const issues = validateSnapshotStructure(parsed, {
-    kind: isHome ? 'website' : 'event',
+    kind,
     locale: target.locale,
     originPrefix: PRODUCTION_ORIGIN,
+    liveItemCount,
   }).map((issue) => `structural: ${issue}`);
 
   if (target.eventId !== undefined) {

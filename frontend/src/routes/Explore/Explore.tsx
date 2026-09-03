@@ -7,7 +7,8 @@ import { withLocaleQuery } from '../../utils';
 import { useAuth } from '../../hooks/useAuth';
 import { useLocaleMutation } from '../../hooks/useLocaleMutation';
 import { useLogout } from '../../hooks/useLogout';
-import { useStaticSeoMeta } from '../../hooks/useStaticSeoMeta';
+import { useSeoMeta } from '../../hooks/useSeoMeta';
+import { buildExploreItemListJsonLd } from '../../lib/structuredData';
 import { trackEvent } from '../../lib/gtag';
 import EventCard, { type EventData } from '../../components/EventCard';
 import EmptyState from '../../components/EmptyState';
@@ -30,7 +31,10 @@ import {
   EXPLORE_FILTER_TYPES,
   EXPLORE_SEARCH_DEBOUNCE_MS,
   EXPLORE_UPSELL_CARD_POSITION,
+  PRERENDER_ERROR_ATTR,
+  PRERENDER_READY_ATTR,
   QUERY_KEYS,
+  ROUTES,
   SORT_DEFAULT,
   SORT_OPTIONS,
   UI_STATE,
@@ -47,6 +51,7 @@ import {
   DEFAULT_EXPLORE_FILTERS,
   exploreFiltersToSearchParams,
   parseExploreFilters,
+  titleWithBrand,
   type ExploreFilters,
 } from '../../utils';
 import styles from './Explore.module.css';
@@ -69,8 +74,12 @@ export default function Explore() {
   const handleLogout = useLogout();
   const [searchParams, setSearchParams] = useSearchParams();
   const filters = useMemo(() => parseExploreFilters(searchParams), [searchParams]);
-  const { locale, handleLocaleChange, isPending: localePending } = useLocaleMutation();
-  const seoMeta = useStaticSeoMeta('seo_title_explore', locale);
+  // publicRoute: true — /explore joins Home/EventDetail's noRedirect SEO
+  // route class (App.tsx, issue #236): its bare path always renders
+  // Estonian, so the initial locale must resolve purely from the URL
+  // segment, not a stored preference (see useLocaleMutation's own doc
+  // comment on this gap).
+  const { locale, handleLocaleChange, isPending: localePending } = useLocaleMutation({ publicRoute: true });
 
   // Single route-level sign-in modal (issue #235) — a second trigger click
   // while it's already open is a no-op (requestSignIn below).
@@ -160,6 +169,7 @@ export default function Explore() {
     data,
     isLoading,
     isError,
+    isSuccess,
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
@@ -255,14 +265,17 @@ export default function Explore() {
   // a signed-in grid — rather than added on top, which otherwise left one
   // orphaned card wrapping onto its own row at common viewport widths.
   type GridItem = { kind: 'event'; event: EventData; index: number } | { kind: 'upsell' };
+  const visibleEvents = useMemo(
+    () => (authed ? events : events.slice(0, Math.max(events.length - 1, 0))),
+    [events, authed],
+  );
   const gridItems = useMemo<GridItem[]>(() => {
-    const visibleEvents = authed ? events : events.slice(0, Math.max(events.length - 1, 0));
     const items: GridItem[] = visibleEvents.map((event, index) => ({ kind: 'event', event, index }));
     if (!authed) {
       items.splice(Math.min(EXPLORE_UPSELL_CARD_POSITION, items.length), 0, { kind: 'upsell' });
     }
     return items;
-  }, [events, authed]);
+  }, [visibleEvents, authed]);
   const activeCount = activeFacetCount(filters);
   const hasActiveFilters =
     activeCount > 0 || filters.q.length > 0 || filters.forYou || filters.sort !== SORT_DEFAULT;
@@ -287,9 +300,36 @@ export default function Explore() {
     [locale],
   );
 
+  // indexable/readiness are deliberately decoupled (issue #236): indexable
+  // is derived from isSuccess alone (never true on error, per useSeoMeta's
+  // own indexable contract), while the prerender readiness marker below
+  // fires on isSuccess OR isError — an errored query is real, settled
+  // content Playwright must stop waiting on, not something to time out over.
+  const seoMeta = useSeoMeta({
+    title: titleWithBrand(t('seo_title_explore', locale), locale),
+    locale,
+    path: ROUTES.explore,
+    indexable: isSuccess,
+  });
+  const jsonLd = useMemo(
+    () => (isSuccess ? buildExploreItemListJsonLd(visibleEvents, locale) : undefined),
+    [isSuccess, visibleEvents, locale],
+  );
+
   return (
     <div className={styles.page}>
-      <SeoTags meta={seoMeta} />
+      <SeoTags meta={seoMeta} jsonLd={jsonLd} />
+      {/* Prerender readiness marker (issue #236) — same family as
+          EventDetail.tsx's PRICE_DATA_ATTR. Set once this route's query
+          settles (isSuccess or isError, never isLoading); a distinct error
+          marker lets scripts/prerender.ts's snapshotTarget fail the build
+          loudly instead of silently shipping a noindex page. Always
+          mounted, unlike the states below it, which vary by query status. */}
+      <div
+        hidden
+        {...(isSuccess || isError ? { [PRERENDER_READY_ATTR]: 'true' } : {})}
+        {...(isError ? { [PRERENDER_ERROR_ATTR]: 'true' } : {})}
+      />
       <TopBar locale={locale} onLocaleChange={handleLocaleChange} onLogout={handleLogout} authed={authed} localeDisabled={localePending} />
 
       <main className={styles.main}>
