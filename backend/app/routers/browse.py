@@ -6,6 +6,7 @@ whenever For-you narrowing or relevance ranking is requested, since persona
 affinity and the feedback-based soft-filter aren't expressible as SQL ORDER BY.
 """
 
+import asyncio
 import time
 from collections import OrderedDict
 from collections.abc import Callable
@@ -18,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import load_only, selectinload
 
 from app.constants import (
+    BROWSE_ANON_CACHE_SENTINEL,
     BROWSE_FORYOU_MIN_AFFINITY,
     BROWSE_MAX_PAGE_SIZE,
     BROWSE_NEG_INF,
@@ -31,6 +33,7 @@ from app.constants import (
     BROWSE_SORT_QUALITY,
     BROWSE_SORT_RELEVANCE,
     BROWSE_SQL_SORTS,
+    DEFAULT_USER_LOCALE,
     ERROR_INVALID_SORT,
     FEEDBACK_HISTORY_LOOKBACK_DAYS,
     PAGINATION_MAX_OFFSET,
@@ -46,9 +49,14 @@ from app.constants import (
 )
 from app.db import get_db
 from app.models.models import Event, EventClassification, User, UserEventFeedback, UserPersona
-from app.ranking.score import FeedbackContext, persona_affinity, score_event
+from app.ranking.score import (
+    FeedbackContext,
+    anonymous_score_event,
+    persona_affinity,
+    score_event,
+)
 from app.rate_limit import limiter
-from app.routers.auth import get_current_user
+from app.routers.auth import get_optional_user
 from app.routers.utils import (
     canonical_event_filter,
     event_not_ended_filter,
@@ -142,6 +150,19 @@ def _facet_conditions(
     return conds
 
 
+async def _load_signals_and_reported(
+    db: AsyncSession, user_id: int | None, event_ids: list[int]
+) -> tuple[dict[int, str], set[int]]:
+    """Per-user signal/report hydration for a page of events — empty for an
+    anonymous caller (#234, ``user_id is None``), which has no signals or
+    reports to hydrate."""
+    if user_id is None:
+        return {}, set()
+    sigs = await load_user_signals(db, user_id, event_ids)
+    reported = await load_user_reported_events(db, user_id, event_ids)
+    return sigs, reported
+
+
 async def _browse_sql_path(
     db: AsyncSession,
     conds: list[ColumnElement[bool]],
@@ -149,10 +170,12 @@ async def _browse_sql_path(
     limit: int,
     offset: int,
     locale: str,
-    user_id: int,
+    user_id: int | None,
 ) -> dict:
     """Path A — pure SQL. Only reachable for for_you=False with sort in
-    {date, price, quality}; relevance sort always needs Python scoring."""
+    {date, price, quality}; relevance sort always needs Python scoring.
+    ``user_id`` is None for an anonymous caller (#234) — no per-user signals
+    or reported-event state to hydrate."""
     order_col: ColumnElement
     if sort == BROWSE_SORT_DATE:
         order_col = Event.starts_at.asc()
@@ -189,8 +212,7 @@ async def _browse_sql_path(
     has_more = len(events) > limit
     events = events[:limit]
     event_ids = [e.id for e in events]
-    sigs = await load_user_signals(db, user_id, event_ids)
-    reported = await load_user_reported_events(db, user_id, event_ids)
+    sigs, reported = await _load_signals_and_reported(db, user_id, event_ids)
 
     return {
         "events": [
@@ -291,11 +313,36 @@ def _score_cache_get(key: tuple) -> list[int] | None:
     return ids
 
 
+def _evict_lru(od: OrderedDict, max_entries: int) -> None:
+    while len(od) > max_entries:
+        od.popitem(last=False)
+
+
 def _score_cache_set(key: tuple, ids: list[int]) -> None:
     _score_cache[key] = (time.monotonic(), ids)
     _score_cache.move_to_end(key)
-    while len(_score_cache) > BROWSE_SCORE_CACHE_MAX_ENTRIES:
-        _score_cache.popitem(last=False)
+    _evict_lru(_score_cache, BROWSE_SCORE_CACHE_MAX_ENTRIES)
+
+
+# Per-cache-key locks, coalescing concurrent misses on the same key (#234) —
+# anonymous traffic collapses onto BROWSE_ANON_CACHE_SENTINEL, so without this
+# a burst of concurrent anonymous requests for the same filter/sort combo
+# would all miss the cache and recompute the same candidate scoring pass in
+# parallel. Bounded and evicted in lockstep with _score_cache (same TTL/size
+# regime; a lock outliving its cache entry is harmless, just wasted memory
+# until it's evicted here too).
+_score_cache_locks: OrderedDict[tuple, asyncio.Lock] = OrderedDict()
+
+
+def _score_cache_lock(key: tuple) -> asyncio.Lock:
+    lock = _score_cache_locks.get(key)
+    if lock is None:
+        lock = asyncio.Lock()
+        _score_cache_locks[key] = lock
+    else:
+        _score_cache_locks.move_to_end(key)
+    _evict_lru(_score_cache_locks, BROWSE_SCORE_CACHE_MAX_ENTRIES)
+    return lock
 
 
 async def _score_and_rank_candidates(
@@ -303,7 +350,7 @@ async def _score_and_rank_candidates(
     conds: list[ColumnElement[bool]],
     for_you: bool,
     sort: str,
-    current_user: User,
+    current_user: User | None,
     now: datetime,
 ) -> list[int]:
     candidate_stmt = (
@@ -327,17 +374,29 @@ async def _score_and_rank_candidates(
     )
     candidates = list((await db.scalars(candidate_stmt)).all())
 
-    user_persona_weights = await _load_user_persona_weights(db, current_user.id)
-    fb_ctx = await _load_feedback_context(db, current_user.id, now)
-
-    disliked_categories = fb_ctx.disliked_categories
+    # Anonymous caller (#234): no persona/feedback rows to load, and the
+    # locked anonymous formula drops feedback_signal entirely rather than
+    # treating it as neutral — see anonymous_score_event's docstring.
+    fb_ctx: FeedbackContext | None
+    if current_user is not None:
+        user_persona_weights = await _load_user_persona_weights(db, current_user.id)
+        loaded_fb_ctx = await _load_feedback_context(db, current_user.id, now)
+        fb_ctx = loaded_fb_ctx
+        disliked_categories = loaded_fb_ctx.disliked_categories
+    else:
+        user_persona_weights = []
+        fb_ctx = None
+        disliked_categories = frozenset()
 
     survivors: list[tuple[float | None, Event]] = []
     for event in candidates:
         cl = event.classification
         categories = cl.categories if cl else []
         vibes = cl.vibes if cl else []
-        s = score_event(user_persona_weights, fb_ctx, event, now)
+        if fb_ctx is not None:
+            s = score_event(user_persona_weights, fb_ctx, event, now)
+        else:
+            s = anonymous_score_event(event, now)
 
         if for_you:
             # Hard excludes (dislike / disliked dedup group) and the soft
@@ -373,25 +432,39 @@ async def _browse_scored_path(
     sort: str,
     limit: int,
     offset: int,
-    current_user: User,
+    current_user: User | None,
     now: datetime,
     locale: str,
     cache_key: tuple | None = None,
 ) -> dict:
     """Path B — Python scoring. Used whenever for_you=True or sort=relevance.
+    ``current_user`` is None for an anonymous caller (#234).
 
     The scored-and-sorted id list is cached (see BROWSE_SCORE_CACHE_TTL_SECONDS)
     so paging through /explore's infinite scroll re-scores the candidate pool
     once instead of once per page. ``cache_key=None`` (the default) skips the
-    cache entirely — always re-scores.
+    cache entirely — always re-scores. When a cache miss occurs, a per-key
+    asyncio.Lock coalesces concurrent misses on the same key so only one
+    caller recomputes; the rest await the lock and then read the now-populated
+    cache — load-bearing for anonymous traffic, which shares one cache key
+    (BROWSE_ANON_CACHE_SENTINEL) across all callers.
     """
     ranked_ids = _score_cache_get(cache_key) if cache_key is not None else None
     if ranked_ids is None:
-        ranked_ids = await _score_and_rank_candidates(
-            db, conds, for_you, sort, current_user, now
-        )
         if cache_key is not None:
-            _score_cache_set(cache_key, ranked_ids)
+            async with _score_cache_lock(cache_key):
+                # Re-check: another caller may have populated the cache while
+                # this one was waiting on the lock.
+                ranked_ids = _score_cache_get(cache_key)
+                if ranked_ids is None:
+                    ranked_ids = await _score_and_rank_candidates(
+                        db, conds, for_you, sort, current_user, now
+                    )
+                    _score_cache_set(cache_key, ranked_ids)
+        else:
+            ranked_ids = await _score_and_rank_candidates(
+                db, conds, for_you, sort, current_user, now
+            )
 
     # `total` is capped at BROWSE_RELEVANCE_MAX_CANDIDATES when the candidate
     # pool hit the cap — an accepted Path-B approximation.
@@ -408,8 +481,8 @@ async def _browse_scored_path(
         events_by_id = {e.id: e for e in full_rows}
 
     ordered_events = [events_by_id[eid] for eid in page_ids if eid in events_by_id]
-    sigs = await load_user_signals(db, current_user.id, page_ids)
-    reported = await load_user_reported_events(db, current_user.id, page_ids)
+    user_id = current_user.id if current_user is not None else None
+    sigs, reported = await _load_signals_and_reported(db, user_id, page_ids)
 
     return {
         "events": [
@@ -442,10 +515,15 @@ async def explore_events(
         PAGINATION_MIN_OFFSET, ge=PAGINATION_MIN_OFFSET, le=PAGINATION_MAX_OFFSET
     ),
     locale: str | None = Query(None),
-    current_user: User = Depends(get_current_user),
+    current_user: User | None = Depends(get_optional_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    """Browse/search all upcoming published events, personalized when for_you=True."""
+    """Browse/search all upcoming published events, personalized when for_you=True.
+
+    Anonymous callers (no/invalid session, current_user is None) get the same
+    result set as signed-in callers, scored via the persona-free formula in
+    anonymous_score_event() (#234) instead of a 401.
+    """
     if sort not in VALID_BROWSE_SORTS:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -456,15 +534,17 @@ async def explore_events(
     vibes = _parse_slug_list(vibe, VALID_VIBES)
     now = datetime.now(TALLINN_TZ)
     conds = _facet_conditions(categories, vibes, free, q, date_from, date_to, now)
-    effective_locale = resolve_locale_param(locale, current_user.locale)
+    user_locale = current_user.locale if current_user is not None else DEFAULT_USER_LOCALE
+    effective_locale = resolve_locale_param(locale, user_locale)
 
     if not for_you and sort in BROWSE_SQL_SORTS:
+        user_id = current_user.id if current_user is not None else None
         return await _browse_sql_path(
-            db, conds, sort, limit, offset, effective_locale, current_user.id
+            db, conds, sort, limit, offset, effective_locale, user_id
         )
 
     cache_key = (
-        current_user.id,
+        current_user.id if current_user is not None else BROWSE_ANON_CACHE_SENTINEL,
         for_you,
         sort,
         tuple(sorted(categories)),

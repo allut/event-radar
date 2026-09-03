@@ -36,6 +36,9 @@ from app.constants import (
     SCORE_HARD_EXCLUDE,
     SCORE_INSERT_CHUNK_SIZE,
     SCORE_WEIGHT_AFFINITY,
+    SCORE_WEIGHT_ANON_LOCALITY,
+    SCORE_WEIGHT_ANON_QUALITY,
+    SCORE_WEIGHT_ANON_RECENCY,
     SCORE_WEIGHT_FEEDBACK,
     SCORE_WEIGHT_LOCALITY,
     SCORE_WEIGHT_QUALITY,
@@ -455,6 +458,29 @@ def score_event(
         + SCORE_WEIGHT_FEEDBACK * fb_normalized
         + SCORE_WEIGHT_QUALITY * quality
         + SCORE_WEIGHT_LOCALITY * locality
+    )
+
+
+def anonymous_score_event(event: Event, now: datetime) -> float:
+    """Persona-free score for anonymous /explore callers (#234).
+
+    score = SCORE_WEIGHT_AFFINITY * NEUTRAL_SCORE + SCORE_WEIGHT_ANON_RECENCY * recency
+          + SCORE_WEIGHT_ANON_QUALITY * quality + SCORE_WEIGHT_ANON_LOCALITY * locality
+
+    feedback_signal is dropped entirely (see the SCORE_WEIGHT_ANON_* constants'
+    docstring) — never hard-excludes, unlike score_event(). persona_affinity is
+    the constant NEUTRAL_SCORE, matching what persona_affinity([], ...) already
+    returns for a request with no persona.
+    """
+    cl: EventClassification | None = event.classification
+    quality = cl.quality_score if cl and cl.quality_score is not None else NEUTRAL_SCORE
+    recency = recency_boost(event.starts_at, now)
+    locality = locality_bonus(event.lat, event.lng)
+    return (
+        SCORE_WEIGHT_AFFINITY * NEUTRAL_SCORE
+        + SCORE_WEIGHT_ANON_RECENCY * recency
+        + SCORE_WEIGHT_ANON_QUALITY * quality
+        + SCORE_WEIGHT_ANON_LOCALITY * locality
     )
 
 

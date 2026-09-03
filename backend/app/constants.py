@@ -782,6 +782,15 @@ SCORE_WEIGHT_RECENCY: float = 0.20
 SCORE_WEIGHT_FEEDBACK: float = 0.20
 SCORE_WEIGHT_QUALITY: float = 0.10
 SCORE_WEIGHT_LOCALITY: float = 0.05
+# Anonymous /explore scoring (#234): feedback_signal (0.20) is dropped — no
+# event-level aggregate feedback signal exists anywhere in the codebase.
+# persona_affinity keeps SCORE_WEIGHT_AFFINITY unchanged (it already returns
+# NEUTRAL_SCORE with no persona). The freed 0.20 is redistributed by uniformly
+# scaling the three remaining differentiating terms by 1/0.80 — a pure
+# rescale that preserves their relative influence.
+SCORE_WEIGHT_ANON_RECENCY: float = 0.25
+SCORE_WEIGHT_ANON_QUALITY: float = 0.125
+SCORE_WEIGHT_ANON_LOCALITY: float = 0.0625
 # _time_slots_for_event() memoization cap (ranking/score.py) — bounds an lru_cache keyed
 # on distinct starts_at values so repeated calls across users scoring the same event
 # don't redo the astimezone conversion. Comfortably above the number of distinct
@@ -837,6 +846,11 @@ BROWSE_RELEVANCE_MAX_CANDIDATES: int = 300
 # cache needed.
 BROWSE_SCORE_CACHE_TTL_SECONDS: float = 30.0
 BROWSE_SCORE_CACHE_MAX_ENTRIES: int = 512
+# Fixed sentinel in place of a real user id for the anonymous-caller cache key
+# (#234) — anonymous /explore traffic shares one cache entry per filter/sort
+# combination rather than one per caller. Never collides with a real User.id
+# (Postgres serial PKs start at 1).
+BROWSE_ANON_CACHE_SENTINEL: int = 0
 # How far back browse.py::_load_feedback_context looks for a user's like/dislike
 # history when scoring /explore (Path B). user_event_feedback is preserved
 # indefinitely by policy (see CLAUDE.md Data Retention), so an unbounded load

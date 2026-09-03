@@ -1,4 +1,5 @@
 """Tests for GET /explore (app/routers/browse.py)."""
+import asyncio
 from datetime import date, datetime, timezone
 from unittest.mock import MagicMock
 
@@ -518,3 +519,172 @@ class TestExploreEventsRouting:
         # Base conds only (public/not-ended/canonical) — no category overlap
         # clause was added since "bogus-category" isn't in VALID_CATEGORIES.
         assert len(seen_conds["conds"]) == 3
+
+
+class TestAnonymousExplore:
+    """#234 — GET /explore for current_user=None (anonymous, no session)."""
+
+    @pytest.mark.asyncio
+    async def test_score_and_rank_uses_anonymous_formula_no_persona_or_feedback_query(
+        self, mock_db, make_event
+    ):
+        from app.routers.browse import _score_and_rank_candidates
+
+        events = [make_event(1), make_event(2)]
+        # Only one scalars call expected (candidates) — no persona/feedback
+        # loads for an anonymous caller.
+        mock_db.scalars.side_effect = [_scalars_result(events)]
+        now = datetime(2026, 5, 10, tzinfo=timezone.utc)
+
+        ids = await _score_and_rank_candidates(
+            mock_db, [], for_you=False, sort="relevance", current_user=None, now=now
+        )
+
+        assert set(ids) == {1, 2}
+        assert mock_db.scalars.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_score_and_rank_never_hard_excludes(self, mock_db, make_event):
+        from app.routers.browse import _score_and_rank_candidates
+
+        event = make_event(1)
+        event.dedup_group_id = 5
+        mock_db.scalars.side_effect = [_scalars_result([event])]
+        now = datetime(2026, 5, 10, tzinfo=timezone.utc)
+
+        # for_you=True still keeps the event — no feedback context exists to
+        # hard-exclude it, and persona_affinity([], ...) == NEUTRAL_SCORE
+        # passes BROWSE_FORYOU_MIN_AFFINITY.
+        ids = await _score_and_rank_candidates(
+            mock_db, [], for_you=True, sort="relevance", current_user=None, now=now
+        )
+        assert ids == [1]
+
+    @pytest.mark.asyncio
+    async def test_browse_scored_path_anonymous_returns_no_signals(
+        self, mock_db, make_event
+    ):
+        from app.routers.browse import _browse_scored_path
+
+        events = [make_event(1)]
+        mock_db.scalars.side_effect = [
+            _scalars_result(events),  # candidates
+            _scalars_result(events),  # full-row refetch (no persona/feedback calls)
+        ]
+        now = datetime(2026, 5, 10, tzinfo=timezone.utc)
+
+        result = await _browse_scored_path(
+            mock_db, [], for_you=False, sort="relevance", limit=24, offset=0,
+            current_user=None, now=now, locale="en",
+        )
+        assert [e["id"] for e in result["events"]] == [1]
+        assert mock_db.scalars.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_browse_sql_path_anonymous_user_id_none_returns_no_signals(
+        self, mock_db, make_event
+    ):
+        from app.routers.browse import _browse_sql_path
+
+        mock_db.scalar.return_value = 1
+        mock_db.scalars.return_value = _scalars_result([make_event(1)])
+
+        result = await _browse_sql_path(
+            mock_db, [], "date", limit=24, offset=0, locale="en", user_id=None
+        )
+        assert [e["id"] for e in result["events"]] == [1]
+
+    @pytest.mark.asyncio
+    async def test_explore_events_anonymous_sql_path_passes_user_id_none(
+        self, mock_db, make_request, monkeypatch
+    ):
+        from app.routers import browse
+
+        called = {}
+
+        async def fake_sql_path(db, conds, sort, limit, offset, locale, user_id):
+            called["user_id"] = user_id
+            return {"events": [], "total": 0, "limit": limit, "offset": offset, "has_more": False}
+
+        monkeypatch.setattr(browse, "_browse_sql_path", fake_sql_path)
+
+        await browse.explore_events(
+            request=make_request(method="GET", path="/explore"),
+            q=None,
+            sort="date",
+            for_you=False,
+            current_user=None,
+            db=mock_db,
+        )
+        assert called["user_id"] is None
+
+    @pytest.mark.asyncio
+    async def test_explore_events_anonymous_uses_sentinel_cache_key(
+        self, mock_db, make_request, monkeypatch
+    ):
+        from app.routers import browse
+
+        seen = {}
+
+        async def fake_scored_path(db, conds, for_you, sort, limit, offset, current_user, now, locale, cache_key=None):
+            seen["cache_key"] = cache_key
+            seen["current_user"] = current_user
+            return {"events": [], "total": 0, "limit": limit, "offset": offset, "has_more": False}
+
+        monkeypatch.setattr(browse, "_browse_scored_path", fake_scored_path)
+
+        await browse.explore_events(
+            request=make_request(method="GET", path="/explore"),
+            q=None,
+            sort="relevance",
+            current_user=None,
+            db=mock_db,
+        )
+        assert seen["current_user"] is None
+        assert seen["cache_key"][0] == browse.BROWSE_ANON_CACHE_SENTINEL
+
+    @pytest.mark.asyncio
+    async def test_concurrent_misses_on_same_key_coalesce_to_one_recompute(
+        self, mock_db, make_event
+    ):
+        """Locked requirement (#234): concurrent misses on the same cache key
+        must not each recompute — the first miss computes, the rest await the
+        same lock then read the now-populated cache."""
+        from app.routers.browse import _score_cache, _score_cache_locks, _browse_scored_path
+
+        _score_cache.clear()
+        _score_cache_locks.clear()
+
+        events = [make_event(1)]
+        call_count = {"n": 0}
+
+        async def slow_scan(*args, **kwargs):
+            call_count["n"] += 1
+            await asyncio.sleep(0.01)
+            return [1]
+
+        with pytest.MonkeyPatch.context() as mp:
+            from app.routers import browse
+
+            mp.setattr(browse, "_score_and_rank_candidates", slow_scan)
+            mock_db.scalars.return_value = _scalars_result(events)
+
+            now = datetime(2026, 5, 10, tzinfo=timezone.utc)
+            cache_key = (browse.BROWSE_ANON_CACHE_SENTINEL, False, "relevance", (), (), False, None, None, None)
+
+            results = await asyncio.gather(
+                *[
+                    _browse_scored_path(
+                        mock_db, [], for_you=False, sort="relevance", limit=24, offset=0,
+                        current_user=None, now=now, locale="en", cache_key=cache_key,
+                    )
+                    for _ in range(5)
+                ]
+            )
+
+        assert call_count["n"] == 1
+        for result in results:
+            assert [e["id"] for e in result["events"]] == [1]
+
+        _score_cache.clear()
+        _score_cache_locks.clear()

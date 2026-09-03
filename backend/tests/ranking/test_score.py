@@ -12,6 +12,7 @@ from app.ranking.score import (
     _mmr_pick,
     _select_with_backfill,
     _time_slots_for_event,
+    anonymous_score_event,
     feedback_signal,
     locality_bonus,
     persona_affinity,
@@ -443,6 +444,51 @@ class TestScoreEvent:
         assert score_match is not None
         assert score_miss is not None
         assert score_match > score_miss
+
+
+class TestAnonymousScoreEvent:
+    """Locked formula for anonymous /explore callers (#234): 0.45*NEUTRAL_SCORE
+    + 0.25*recency + 0.125*quality + 0.0625*locality — feedback_signal dropped
+    entirely, never treated as neutral."""
+
+    def test_never_hard_excludes(self):
+        # Even an event whose dedup_group would hard-exclude an authenticated
+        # dislike has no meaning here — no feedback context exists at all.
+        e = _event(dedup_group=5)
+        result = anonymous_score_event(e, _now())
+        assert result is not None
+        assert 0.0 <= result <= 1.0
+
+    def test_matches_locked_formula(self):
+        now = _now()
+        e = _event(starts_at=now, quality=0.8, lat=59.437, lng=24.745)
+        result = anonymous_score_event(e, now)
+        # recency_boost(starts_at == now) == 1.0; locality inside Tallinn bbox == 1.0
+        expected = 0.45 * 0.5 + 0.25 * 1.0 + 0.125 * 0.8 + 0.0625 * 1.0
+        assert result == expected
+
+    def test_no_classification_uses_neutral_quality(self):
+        now = _now()
+        e = _event(starts_at=now)
+        e.classification = None
+        result = anonymous_score_event(e, now)
+        expected = 0.45 * 0.5 + 0.25 * 1.0 + 0.125 * 0.5 + 0.0625 * 1.0
+        assert result == expected
+
+    def test_ignores_feedback_entirely(self):
+        # score_event([], ctx-with-like, e, now) folds a like into the score via
+        # fb_normalized; anonymous_score_event has no feedback parameter at all,
+        # so an identical event scores the same regardless of any such history.
+        now = _now()
+        e1 = _event(event_id=1, starts_at=now)
+        e2 = _event(event_id=2, starts_at=now)
+        assert anonymous_score_event(e1, now) == anonymous_score_event(e2, now)
+
+    def test_higher_recency_scores_higher(self):
+        now = _now()
+        e_soon = _event(starts_at=now)
+        e_later = _event(starts_at=now + timedelta(days=10))
+        assert anonymous_score_event(e_soon, now) > anonymous_score_event(e_later, now)
 
 
 # ---------------------------------------------------------------------------

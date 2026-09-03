@@ -343,6 +343,60 @@ class TestGetCurrentUser:
         assert exc_info.value.status_code == http.HTTPStatus.UNAUTHORIZED
 
 
+class TestGetOptionalUser:
+    """get_optional_user (#234) — never raises; returns None instead of 401."""
+
+    @pytest.mark.asyncio
+    async def test_valid_session_cookie_returns_user(self, mock_db):
+        from app.routers.auth import get_optional_user
+
+        user = MagicMock()
+        user.id = 7
+        user.session_token_version = 1
+        mock_db.get.return_value = user
+
+        session_token = generate_session_token(7, 1)
+        result = await get_optional_user(session=session_token, db=mock_db)
+        assert result is not None
+        assert result.id == 7
+
+    @pytest.mark.asyncio
+    async def test_missing_cookie_returns_none(self, mock_db):
+        from app.routers.auth import get_optional_user
+
+        result = await get_optional_user(session=None, db=mock_db)
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_invalid_token_returns_none(self, mock_db):
+        from app.routers.auth import get_optional_user
+
+        result = await get_optional_user(session="garbage", db=mock_db)
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_revoked_session_returns_none(self, mock_db):
+        from app.routers.auth import get_optional_user
+
+        user = MagicMock()
+        user.id = 7
+        user.session_token_version = 2
+        mock_db.get.return_value = user
+
+        session_token = generate_session_token(7, 1)
+        result = await get_optional_user(session=session_token, db=mock_db)
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_unknown_user_returns_none(self, mock_db):
+        from app.routers.auth import get_optional_user
+
+        mock_db.get.return_value = None
+        session_token = generate_session_token(7, 1)
+        result = await get_optional_user(session=session_token, db=mock_db)
+        assert result is None
+
+
 class TestLogout:
     @pytest.mark.asyncio
     async def test_expires_session_cookie_without_bumping_version(
