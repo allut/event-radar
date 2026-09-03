@@ -39,7 +39,7 @@ S_FEED_BTN_WRAP = "padding:0 0 8px 0;"
 S_FEED_BTN = (
     "display:inline-block;font-family:Helvetica,Arial,sans-serif;"
     "font-size:14px;font-weight:600;color:#0f1119;background-color:#c8922a;"
-    "padding:12px 28px;border-radius:6px;letter-spacing:0.01em;"
+    "padding:12px 28px;border-radius:0;letter-spacing:0.01em;"
 )
 S_CONTENT_PAD = "padding:8px 24px 24px 24px;"
 
@@ -56,7 +56,7 @@ S_MUTED_NOTE = (
 # Event card
 S_CARD_WRAP = "padding-bottom:20px;"
 S_CARD = (
-    "background-color:#1c2230;border:1px solid #252c3d;border-radius:6px;"
+    "background-color:#1c2230;border:1px solid #252c3d;border-radius:0;"
     "overflow:hidden;"
 )
 S_IMG = "display:block;width:100%;max-width:600px;height:auto;border:0;"
