@@ -105,7 +105,7 @@ export default function Feed() {
             {events.slice(1).map((event, i) => (
               <li key={event.id} className={styles.standardItem}>
                 <span className={styles.indexNumeral} aria-hidden>{padIndex(i + 2)}</span>
-                <EventCard event={event} index={i + 1} locale={locale} />
+                <EventCard event={event} index={i + 1} locale={locale} alignTitle={false} />
               </li>
             ))}
           </ol>

@@ -204,6 +204,10 @@
   min-height: auto;
 }
 
+.titleClampFlush {
+  min-height: auto;
+}
+
 .stretched::after {
   content: '';
   position: absolute;

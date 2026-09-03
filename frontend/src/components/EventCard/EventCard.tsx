@@ -49,9 +49,14 @@ interface EventCardProps {
   // hides the feedback row and skips click tracking, since both POST to auth-only
   // /feedback and would bounce a logged-out visitor to /login.
   readOnly?: boolean;
+  // Grid layouts (Explore, Saved) need the title to reserve 2 lines of height
+  // so sibling cards' bullets stay aligned across a row. Single-column lists
+  // (Feed) have no sibling to align against, so they can opt out and avoid
+  // the dead space a 1-line title leaves above the bullets.
+  alignTitle?: boolean;
 }
 
-function EventCard({ event, index, locale, onFeedbackSent, variant = 'standard', readOnly = false }: EventCardProps) {
+function EventCard({ event, index, locale, onFeedbackSent, variant = 'standard', readOnly = false, alignTitle = true }: EventCardProps) {
   const { activeSignal, pending, sendFeedback } = useFeedback(event.id, {
     initialSignal: event.my_signal,
     onChange: onFeedbackSent,
@@ -148,7 +153,7 @@ function EventCard({ event, index, locale, onFeedbackSent, variant = 'standard',
 
           <h2 className={cx(styles.title, isFeatured && styles.featuredTitle)}>
             <Link to={localePath(ROUTES.eventDetail(event.id))} className={cx(styles.titleLink, styles.stretched)}>
-              <span className={cx(styles.titleClamp, isFeatured && styles.featuredTitleClamp)}>
+              <span className={cx(styles.titleClamp, isFeatured && styles.featuredTitleClamp, !isFeatured && !alignTitle && styles.titleClampFlush)}>
                 {event.title}
               </span>
             </Link>
