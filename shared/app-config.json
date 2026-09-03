@@ -9,8 +9,8 @@
   "default_currency": "EUR",
   "default_city": "Tallinn",
   "locales": [
-    { "code": "en", "label": "EN", "nativeName": "English" },
     { "code": "et", "label": "ET", "nativeName": "Eesti" },
+    { "code": "en", "label": "EN", "nativeName": "English" },
     { "code": "ru", "label": "RU", "nativeName": "Русский" }
   ],
   "locale_code_map": { "et": "et-EE", "ru": "ru-RU" },
