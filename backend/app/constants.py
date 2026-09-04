@@ -43,6 +43,7 @@ __all__ = [
     "VALID_CATEGORIES",
     "VALID_LOCALES",
     "VALID_SIGNALS",
+    "VALID_THEME_PREFERENCES",
     "VALID_VIBES",
 ]
 
@@ -740,6 +741,11 @@ ORGANIZER_SUBMISSION_EXTERNAL_ID_PREFIX = "org:"
 LOCALE_ET = "et"
 LOCALE_EN = "en"
 LOCALE_RU = "ru"
+
+# Server-side theme_preference column values (users/organizers) — mirrors
+# VALID_LOCALES. The tri-state UI value "system" is never sent to or stored
+# on this column; only "light"/"dark"/NULL are valid here.
+VALID_THEME_PREFERENCES = {"light", "dark"}
 
 # Admin review-queue pagination (routers/admin.py GET /admin/submissions) — mirrors
 # ADMIN_DEDUP_GROUPS_PAGE_SIZE's sizing rationale (small default page, generous cap).
