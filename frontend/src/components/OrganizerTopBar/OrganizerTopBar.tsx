@@ -4,6 +4,7 @@ import { cx } from '../../utils';
 import { BRAND_GLYPH, ROUTES } from '../../constants';
 import { useLocalePath } from '../../hooks/useLocalePath';
 import LocaleSelector from '../LocaleSelector';
+import ThemeSelector from '../ThemeSelector';
 import styles from './OrganizerTopBar.module.css';
 
 interface OrganizerTopBarProps {
@@ -55,6 +56,7 @@ export default function OrganizerTopBar({ locale, onLocaleChange, onLogout }: Or
           onChange={onLocaleChange}
           ariaLabel={t('section_language', locale)}
         />
+        <ThemeSelector locale={locale} ariaLabel={t('section_theme', locale)} />
       </div>
     </header>
   );

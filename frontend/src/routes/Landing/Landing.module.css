@@ -50,7 +50,7 @@
   position: absolute;
   inset: -4%;
   background:
-    radial-gradient(60% 55% at 68% 26%, var(--accent-hover-bg), transparent 62%),
+    radial-gradient(60% 55% at 68% 26%, var(--poster-glow-warm), transparent 62%),
     radial-gradient(70% 60% at 22% 88%, var(--poster-glow-cool), transparent 66%),
     linear-gradient(175deg, var(--bg-card-hover), var(--bg) 58%, var(--bg-raised));
   background-size: cover;

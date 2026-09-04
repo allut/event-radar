@@ -53,6 +53,13 @@
      --poster-glow-cool to --poster-glow-cool-light in the light :root block. */
   --poster-glow-cool: rgba(90, 120, 175, 0.42);
   --poster-glow-cool-light: rgba(140, 160, 205, 0.2);
+  /* Landing .posterImg gold-toned corner glow — dark value is an alias of
+     --accent-hover-bg (unchanged behavior); light value needs a stronger
+     alpha than that shared hover-highlight token, since the same 0.25 reads
+     as a barely-there wash against the near-white light --bg instead of the
+     warm bloom it produces against near-black. */
+  --poster-glow-warm: var(--accent-hover-bg);
+  --poster-glow-warm-light: rgba(200, 146, 42, 0.4);
 
   --bg-placeholder: rgba(255, 255, 255, 0.06);
 
@@ -412,6 +419,14 @@
      gradient tokens instead of disappearing (near-white-on-near-white). */
   --bg-placeholder: rgba(15, 17, 25, 0.06);
 
+  /* Sticky topbar / inline-overlay backdrops (Bar.module.css, Menu.module.css's
+     trigger + hover, Explore's search input/facet triggers, SegmentedControl,
+     DatePicker, EventCard's price chip, ...) — literal inversion of the dark
+     values' base rgb (19, 22, 30) onto the light --bg rgb (253, 252, 250),
+     same alpha, so these don't stay stuck dark under the light theme. */
+  --bg-overlay: rgba(253, 252, 250, 0.85);
+  --bg-overlay-soft: rgba(253, 252, 250, 0.82);
+
   /* --accent/--accent-light/--on-accent and all accent-alpha/success-alpha/
      danger-alpha tokens (already translucent overlays) carry over unchanged
      from :root, as does --overlay-scrim. */
@@ -447,6 +462,7 @@
      (15, 17, 25) onto the light --bg rgb (253, 252, 250), same alpha stops. */
   --scrim-vertical: linear-gradient(0deg, rgba(253, 252, 250, 0.94) 6%, rgba(253, 252, 250, 0.55) 42%, rgba(253, 252, 250, 0.72));
   --poster-glow-cool: var(--poster-glow-cool-light);
+  --poster-glow-warm: var(--poster-glow-warm-light);
 }
 
 html {

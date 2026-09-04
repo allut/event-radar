@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, screen } from '@testing-library/react';
 import { renderWithProviders } from '../../test/utils';
+import { getThemePreference } from '../../lib/theme';
 import MobileMenu from './MobileMenu';
 
 describe('MobileMenu', () => {
@@ -91,6 +92,18 @@ describe('MobileMenu', () => {
     expect(exploreLink).toHaveAttribute('href', '/ru/explore');
     expect(exploreLink.className).toMatch(/linkActive/);
     expect(screen.getByRole('link', { name: 'Daily 5' })).toHaveAttribute('href', '/ru');
+  });
+
+  it('fires setThemePreference and closes on a theme option click', () => {
+    renderWithProviders(
+      <MobileMenu locale="en" onLocaleChange={vi.fn()} onLogout={vi.fn()} />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
+    fireEvent.click(screen.getByText('Dark'));
+
+    expect(getThemePreference()).toBe('dark');
+    expect(screen.queryByText('Dark')).not.toBeInTheDocument();
   });
 
   it('shows a Sign in link, no sign-out, and only Explore in nav when signed out', () => {

@@ -68,20 +68,22 @@
   color: var(--accent-light);
 }
 
-.localeRow {
+/* Shared by the language and theme rows — both are a flush row of equal-width
+   pill buttons with the same active-state treatment. */
+.optionRow {
   display: flex;
   gap: var(--space-1);
 }
 
-.localeOption {
+.option {
   composes: menuOption from '../shared/Menu.module.css';
   padding: var(--space-0-3) var(--space-0-625);
 }
 
 /* See .linkActive above for why this repeats the trio with a doubled
    selector instead of composing .activePill or relying on source order. */
-.localeOptionActive.localeOptionActive,
-.localeOptionActive.localeOptionActive:hover {
+.optionActive.optionActive,
+.optionActive.optionActive:hover {
   background: var(--accent-subtle);
   border: 1px solid var(--accent-border);
   color: var(--accent-light);

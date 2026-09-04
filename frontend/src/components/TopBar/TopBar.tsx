@@ -4,6 +4,7 @@ import { cx } from '../../utils';
 import { BRAND_GLYPH, NAV_ITEMS, ROUTES } from '../../constants';
 import { useLocalePath } from '../../hooks/useLocalePath';
 import LocaleSelector from '../LocaleSelector';
+import ThemeSelector from '../ThemeSelector';
 import MobileMenu from '../MobileMenu';
 import styles from './TopBar.module.css';
 
@@ -67,6 +68,9 @@ export default function TopBar({ locale, onLocaleChange, onLogout, localeDisable
             ariaLabel={t('section_language', locale)}
             disabled={localeDisabled}
           />
+        </div>
+        <div className={styles.themeWrap}>
+          <ThemeSelector locale={locale} ariaLabel={t('section_theme', locale)} />
         </div>
         <div className={styles.mobileMenuWrap}>
           <MobileMenu

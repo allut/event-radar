@@ -697,6 +697,15 @@ export const NAV_ITEMS = [
   { route: ROUTES.settings, labelKey: 'nav_settings' },
 ] as const;
 
+// The three theme options rendered by both ThemeSelector (desktop) and
+// MobileMenu (mobile), kept in one place so they can't drift out of sync —
+// mirrors NAV_ITEMS' {value, labelKey} pattern above.
+export const THEME_OPTIONS = [
+  { value: 'system', labelKey: 'theme_system' },
+  { value: 'light', labelKey: 'theme_light' },
+  { value: 'dark', labelKey: 'theme_dark' },
+] as const;
+
 // Prefix every backend request is proxied under (see vercel.json's rewrite
 // rule, which is keyed on this same string) — api/client.ts's fetch wrapper
 // and NDJSON stream path both prepend it.

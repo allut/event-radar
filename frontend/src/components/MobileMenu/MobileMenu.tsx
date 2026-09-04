@@ -1,9 +1,11 @@
 import { Link, NavLink } from 'react-router-dom';
 import { t } from '../../i18n';
 import { cx } from '../../utils';
-import { LOCALES, NAV_ITEMS, ROUTES } from '../../constants';
+import { LOCALES, NAV_ITEMS, ROUTES, THEME_OPTIONS } from '../../constants';
 import { useDropdown } from '../../hooks/useDropdown';
 import { useLocalePath } from '../../hooks/useLocalePath';
+import { useThemePreference } from '../../hooks/useThemePreference';
+import { setThemePreference } from '../../lib/theme';
 import menuStyles from '../shared/Menu.module.css';
 import styles from './MobileMenu.module.css';
 
@@ -19,6 +21,7 @@ interface MobileMenuProps {
 export default function MobileMenu({ locale, onLocaleChange, onLogout, localeDisabled, showNav = true, authed = true }: MobileMenuProps) {
   const { open, setOpen, flip, rootRef, popRef, triggerRef, close } = useDropdown();
   const localePath = useLocalePath();
+  const themePreference = useThemePreference();
   // Mirrors TopBar's signed-out nav filtering — Explore stays visible, the
   // rest are dead ends for an anonymous visitor.
   const visibleNavItems = authed ? NAV_ITEMS : NAV_ITEMS.filter((item) => item.route === ROUTES.explore);
@@ -60,14 +63,14 @@ export default function MobileMenu({ locale, onLocaleChange, onLogout, localeDis
 
           <div className={styles.section}>
             <span className={styles.sectionLabel}>{t('section_language', locale)}</span>
-            <div className={styles.localeRow} role="group" aria-label={t('section_language', locale)}>
+            <div className={styles.optionRow} role="group" aria-label={t('section_language', locale)}>
               {LOCALES.map(({ code, label }) => {
                 const isActive = code === locale;
                 return (
                   <button
                     key={code}
                     type="button"
-                    className={cx(styles.localeOption, isActive && styles.localeOptionActive)}
+                    className={cx(styles.option, isActive && styles.optionActive)}
                     aria-pressed={isActive}
                     disabled={localeDisabled}
                     onClick={() => {
@@ -76,6 +79,31 @@ export default function MobileMenu({ locale, onLocaleChange, onLogout, localeDis
                     }}
                   >
                     {label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className={styles.divider} />
+
+          <div className={styles.section}>
+            <span className={styles.sectionLabel}>{t('section_theme', locale)}</span>
+            <div className={styles.optionRow} role="group" aria-label={t('section_theme', locale)}>
+              {THEME_OPTIONS.map(({ value, labelKey }) => {
+                const isActive = value === themePreference;
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    className={cx(styles.option, isActive && styles.optionActive)}
+                    aria-pressed={isActive}
+                    onClick={() => {
+                      setThemePreference(value);
+                      close();
+                    }}
+                  >
+                    {t(labelKey, locale)}
                   </button>
                 );
               })}
