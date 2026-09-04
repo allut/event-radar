@@ -115,14 +115,19 @@ export function parseSitemapEventUrls(sitemapXml: string): string[] {
   return locs.filter((loc) => eventUrlRe.test(loc));
 }
 
-/** The live audit (issue #54): checks production (not a local build) for (1)
- * a dead prerender cadence — sitemap.xml's build timestamp older than
- * SEO_AUDIT_STALE_THRESHOLD_HOURS — and (2) structural regressions on the
- * live Landing snapshot and (if the catalog has any published events yet) one
- * live event snapshot, reusing seoValidation.ts's in-build-gate checks
- * (issue #53) unchanged rather than reimplementing them. Pure/network-free
- * so it can be unit-tested directly; api/seo-audit.ts does the fetching
- * (including picking which event URL to fetch, via parseSitemapEventUrls). */
+/** The live audit (issue #54): checks production (not a local build) for
+ * (1) robots.txt crawlability regressions — sitemap.xml, the OG fallback
+ * image, the built `/assets/`, and each `CRAWLABLE_ICON_PATHS` entry all
+ * blocked-by-`Disallow` checks (the issue #54 motivating bug: a stray
+ * `Disallow: /` silently caught /sitemap.xml); (2) a dead prerender cadence
+ * — sitemap.xml's build timestamp older than SEO_AUDIT_STALE_THRESHOLD_HOURS
+ * — and (3) structural regressions on the live Landing snapshot, (if the
+ * catalog has any published events yet) one live event snapshot, and (issue
+ * #236) `/explore` per locale, reusing seoValidation.ts's in-build-gate
+ * checks (issue #53) unchanged rather than reimplementing them. Pure/
+ * network-free so it can be unit-tested directly; api/seo-audit.ts does the
+ * fetching (including picking which event URL to fetch, via
+ * parseSitemapEventUrls) and its own separate favicon content-type check. */
 export function evaluateLiveAudit(params: {
   sitemapXml: string;
   landingHtml: string;
