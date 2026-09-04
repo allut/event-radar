@@ -47,6 +47,10 @@ export const LOCALE_KEY = 'locale';
 // two independent auth tracks (own account table, own token salts on the
 // backend) that must never be confused for one another. See lib/organizerAuth.ts.
 export const ORGANIZER_SIGNED_IN_HINT_KEY = 'organizer_session_token';
+// Tri-state theme override, shared across consumer/organizer/admin (one SPA
+// bundle, one light palette) — see lib/theme.ts's resolveTheme(). Holds
+// "system" | "light" | "dark"; "system"/unset falls through to matchMedia.
+export const THEME_PREFERENCE_KEY = 'theme_preference';
 // Client-only dismissal flag for the profile nudge banner (#175) — no backend
 // field for this, so a stale/cleared browser just re-shows it once.
 export const ORGANIZER_PROFILE_NUDGE_DISMISSED_KEY = 'organizer_profile_nudge_dismissed';

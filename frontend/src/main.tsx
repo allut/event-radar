@@ -17,6 +17,10 @@ import '@fontsource/cormorant-garamond/500.css';
 import '@fontsource/cormorant-garamond/600.css';
 import App from './App';
 import './index.css';
+// Side-effect import: registers the matchMedia/storage listeners that keep
+// the theme live (OS flips, cross-tab writes) after the inline pre-paint
+// script in index.html has already set the initial value.
+import './lib/theme';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
