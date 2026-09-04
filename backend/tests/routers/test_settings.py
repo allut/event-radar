@@ -88,6 +88,50 @@ class TestPatchSettings:
         assert result["locale"] == "ru"
 
     @pytest.mark.asyncio
+    async def test_update_theme_preference(self, mock_db, make_user, make_request):
+        from app.routers.settings import patch_settings, PatchSettingsBody
+
+        _attach_empty_personas(mock_db)
+        user = make_user(theme_preference=None)
+
+        result = await patch_settings(
+            body=PatchSettingsBody(theme_preference="dark"),
+            request=make_request(method="PATCH", path="/users/me"),
+            current_user=user,
+            db=mock_db,
+        )
+
+        assert user.theme_preference == "dark"
+        mock_db.commit.assert_called_once()
+        assert result["theme_preference"] == "dark"
+
+    @pytest.mark.asyncio
+    async def test_omitted_theme_preference_leaves_existing_untouched(
+        self, mock_db, make_user, make_request
+    ):
+        from app.routers.settings import patch_settings, PatchSettingsBody
+
+        _attach_empty_personas(mock_db)
+        user = make_user(locale="en", theme_preference="light")
+
+        await patch_settings(
+            body=PatchSettingsBody(locale="ru"),
+            request=make_request(method="PATCH", path="/users/me"),
+            current_user=user,
+            db=mock_db,
+        )
+
+        assert user.theme_preference == "light"
+
+    @pytest.mark.asyncio
+    async def test_invalid_theme_preference_rejected(self):
+        from pydantic import ValidationError
+        from app.routers.settings import PatchSettingsBody
+
+        with pytest.raises(ValidationError):
+            PatchSettingsBody(theme_preference="blue")
+
+    @pytest.mark.asyncio
     async def test_update_email_opt_in(self, mock_db, make_user, make_request):
         from app.routers.settings import patch_settings, PatchSettingsBody
 

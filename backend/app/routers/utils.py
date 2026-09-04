@@ -532,6 +532,7 @@ def serialize_user(user: User, **extras) -> dict:
         "id": user.id,
         "email": user.email,
         "locale": user.locale,
+        "theme_preference": user.theme_preference,
         "home_city": user.home_city,
         "created_at": user.created_at.isoformat(),
         **extras,
