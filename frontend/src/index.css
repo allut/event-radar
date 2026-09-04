@@ -15,7 +15,7 @@
   --text: #e4dfd6;
   --text-muted: #7a8ba3;
   --text-soft: #9fb0c8;   /* readable secondary content, ~8.2:1 on --bg */
-  --text-dim: #3d4d65;    /* decorative only — ghost numerals, hairlines (~2.1:1, fails AA) */
+  --text-dim: #5c6e88;    /* decorative only — ghost numerals, hairlines (large-text AA, ~3.5:1 on --bg) */
   --border: #252c3d;
   --border-subtle: #1c2333;
   --success: #4cad7f;
@@ -42,10 +42,17 @@
   --accent-soft: rgba(200, 146, 42, 0.06);
   --accent-muted: rgba(200, 146, 42, 0.35);
   --accent-minimal: rgba(200, 146, 42, 0.03);
+  --accent-transparent: rgba(200, 146, 42, 0);
   --accent-hover-bg: rgba(200, 146, 42, 0.25);
   /* Landing (wayfinder #189, direction C1) — thin gold frame inset on the hero
      poster only, not repeated elsewhere. */
   --poster-frame: rgba(200, 146, 42, 0.28);
+  /* Landing .posterImg cool-toned corner glow (wayfinder #248) — dark value
+     equals the literal it replaces; light value is retuned lighter/lower-alpha,
+     not a mirror, so it doesn't read as a stain on white. Light theme resolves
+     --poster-glow-cool to --poster-glow-cool-light in the light :root block. */
+  --poster-glow-cool: rgba(90, 120, 175, 0.42);
+  --poster-glow-cool-light: rgba(140, 160, 205, 0.2);
 
   --bg-placeholder: rgba(255, 255, 255, 0.06);
 
@@ -377,6 +384,69 @@
   --topbar-height: 72px; /* TopBar's rendered height above 640px (nav row present) --
     same intrinsic/padding-driven situation as --topbar-height-mobile; tune-by-eye,
     confirm in live QA. */
+}
+
+/* Light theme (wayfinder #247/#248) — literal inversion of the dark :root
+   above, activated via document.documentElement.dataset.theme = "light" by
+   frontend/src/lib/theme.ts (a later ticket). No attribute present keeps the
+   dark block above as the default, so existing users see no change. Only
+   tokens that actually need a light-mode value are redefined here; everything
+   else (spacing, type scale, geometry, unlisted overlay/alpha tokens) is
+   theme-neutral and inherited from :root. */
+:root[data-theme="light"] {
+  --bg: #fdfcfa;
+  --bg-raised: #f5f6f9;
+  --bg-card: #eef0f4;
+  --bg-card-hover: #e2e6ee;
+  --text: #211f1a;
+  --text-muted: #4d5c74;
+  --text-soft: #5c6c82;   /* readable secondary content */
+  --text-dim: #7e8ba0;    /* decorative only — ghost numerals, hairlines (large-text AA, ~3.4:1 on --bg) */
+  --border: #d7dbe4;
+  --border-subtle: #e6e9f0;
+  --success: #1f7a4f;     /* darkened from the dark-theme hex for AA as text on white */
+  --danger: #b23a3a;      /* darkened from the dark-theme hex for AA as text on white */
+  /* EventCard ghost-numeral text on the category-gradient placeholder --
+     literal inversion of the dark rgba(255,255,255,0.06) onto --on-accent's
+     dark rgb (15, 17, 25), same alpha, so it stays visible on the new light
+     gradient tokens instead of disappearing (near-white-on-near-white). */
+  --bg-placeholder: rgba(15, 17, 25, 0.06);
+
+  /* --accent/--accent-light/--on-accent and all accent-alpha/success-alpha/
+     danger-alpha tokens (already translucent overlays) carry over unchanged
+     from :root, as does --overlay-scrim. */
+
+  /* Card shadows — black-based shadows tuned for a near-black page read too
+     heavy on white; the gold selection/focus glow needs the opposite move
+     since it nearly disappears against white. */
+  --shadow-card:        0 4px 20px rgba(23, 26, 35, 0.1);
+  --shadow-card-hover:  0 8px 24px rgba(23, 26, 35, 0.14);
+  --shadow-accent:      0 8px 32px rgba(200, 146, 42, 0.14);
+  --shadow-lead:        0 2px 8px rgba(23, 26, 35, 0.08);
+
+  /* Category card-fallback gradients — literal inversion per category: hue +
+     stop-2 saturation family preserved, lightness relationship flipped
+     (near-black shell -> near-white shell, deeper-tint stop -> pale but
+     visible tint). Exact hex pairs approved on issue #246. */
+  --gradient-nightlife:    linear-gradient(135deg, #f7f4f8 0%, #d7c1e6 100%);
+  --gradient-music:        linear-gradient(135deg, #f4f5f8 0%, #c1c4e6 100%);
+  --gradient-theater:      linear-gradient(135deg, #f8f6f4 0%, #e6cec1 100%);
+  --gradient-exhibitions:  linear-gradient(135deg, #f6f4f8 0%, #d4c1e6 100%);
+  --gradient-workshops:    linear-gradient(135deg, #f4f8f7 0%, #c1e6e6 100%);
+  --gradient-food_drink:   linear-gradient(135deg, #f5f8f4 0%, #cde6c1 100%);
+  --gradient-sports:       linear-gradient(135deg, #f4f8f5 0%, #c1d4e6 100%);
+  --gradient-networking:   linear-gradient(135deg, #f4f5f8 0%, #c1d7e6 100%);
+  --gradient-literature:   linear-gradient(135deg, #f7f8f4 0%, #e3e6c1 100%);
+  --gradient-family:       linear-gradient(135deg, #f8f4f6 0%, #e6c1d8 100%);
+  --gradient-cinema:       linear-gradient(135deg, #f4f8f6 0%, #c1e6d4 100%);
+  --gradient-alternative:  linear-gradient(135deg, #f8f7f4 0%, #e6dcc1 100%);
+  --gradient-romantic:     linear-gradient(135deg, #f8f4f6 0%, #e6c1d6 100%);
+  --gradient-fallback:     linear-gradient(135deg, #f8f8f9 0%, #e2e4e9 100%);
+
+  /* Landing hero poster — literal inversion of the dark gradient's base rgb
+     (15, 17, 25) onto the light --bg rgb (253, 252, 250), same alpha stops. */
+  --scrim-vertical: linear-gradient(0deg, rgba(253, 252, 250, 0.94) 6%, rgba(253, 252, 250, 0.55) 42%, rgba(253, 252, 250, 0.72));
+  --poster-glow-cool: var(--poster-glow-cool-light);
 }
 
 html {

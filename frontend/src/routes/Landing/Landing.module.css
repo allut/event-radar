@@ -51,7 +51,7 @@
   inset: -4%;
   background:
     radial-gradient(60% 55% at 68% 26%, var(--accent-hover-bg), transparent 62%),
-    radial-gradient(70% 60% at 22% 88%, rgba(90, 120, 175, 0.42), transparent 66%),
+    radial-gradient(70% 60% at 22% 88%, var(--poster-glow-cool), transparent 66%),
     linear-gradient(175deg, var(--bg-card-hover), var(--bg) 58%, var(--bg-raised));
   background-size: cover;
 }
@@ -160,7 +160,7 @@
 .cutline {
   margin-top: var(--space-6);
   height: 1px;
-  background: linear-gradient(90deg, var(--accent), rgba(200, 146, 42, 0) 72%);
+  background: linear-gradient(90deg, var(--accent), var(--accent-transparent) 72%);
 }
 
 /* Split rail: email capture and the Explore browse CTA sit side by side as
