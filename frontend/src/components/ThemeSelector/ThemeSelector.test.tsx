@@ -1,12 +1,26 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import ThemeSelector from './ThemeSelector';
 import { getThemePreference } from '../../lib/theme';
 
+vi.mock('../../lib/auth', () => ({
+  isAuthenticated: vi.fn(() => false),
+}));
+vi.mock('../../api/client', () => ({
+  api: { patch: vi.fn(() => Promise.resolve()) },
+}));
+
+import { isAuthenticated } from '../../lib/auth';
+import { api } from '../../api/client';
+const mockIsAuthenticated = vi.mocked(isAuthenticated);
+const mockPatch = vi.mocked(api.patch);
+
 describe('ThemeSelector', () => {
   afterEach(() => {
     localStorage.clear();
+    vi.clearAllMocks();
+    mockIsAuthenticated.mockReturnValue(false);
   });
 
   it('shows System on the trigger by default', () => {
@@ -41,5 +55,35 @@ describe('ThemeSelector', () => {
     expect(getThemePreference()).toBe('light');
     expect(document.documentElement.dataset.theme).toBe('light');
     expect(screen.getByRole('button', { name: 'Light' })).toBeInTheDocument();
+  });
+
+  it('when signed out, selecting an option never PATCHes the account', async () => {
+    render(<ThemeSelector locale="en" ariaLabel="Theme" />);
+    await userEvent.click(screen.getByRole('button', { name: 'System' }));
+    const group = screen.getByRole('group', { name: 'Theme' });
+    await userEvent.click(within(group).getByRole('button', { name: 'Dark' }));
+
+    expect(mockPatch).not.toHaveBeenCalled();
+  });
+
+  it('when signed in, selecting Light/Dark PATCHes theme_preference to the account', async () => {
+    mockIsAuthenticated.mockReturnValue(true);
+    render(<ThemeSelector locale="en" ariaLabel="Theme" />);
+    await userEvent.click(screen.getByRole('button', { name: 'System' }));
+    const group = screen.getByRole('group', { name: 'Theme' });
+    await userEvent.click(within(group).getByRole('button', { name: 'Dark' }));
+
+    expect(mockPatch).toHaveBeenCalledWith('/users/me', { theme_preference: 'dark' });
+  });
+
+  it('when signed in, selecting System does not PATCH — the server never stores "system"', async () => {
+    mockIsAuthenticated.mockReturnValue(true);
+    localStorage.setItem('theme_preference', 'dark');
+    render(<ThemeSelector locale="en" ariaLabel="Theme" />);
+    await userEvent.click(screen.getByRole('button', { name: 'Dark' }));
+    const group = screen.getByRole('group', { name: 'Theme' });
+    await userEvent.click(within(group).getByRole('button', { name: 'System' }));
+
+    expect(mockPatch).not.toHaveBeenCalled();
   });
 });
