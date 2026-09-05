@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { NavLink } from 'react-router-dom';
 import { ADMIN_NAV_ITEMS, BRAND_GLYPH } from '../../constants';
 import { useAdminLogout } from '../../hooks/useAdminLogout';
+import AdminThemeToggle from '../AdminThemeToggle';
 import styles from './AdminShell.module.css';
 
 interface AdminShellProps {
@@ -36,6 +37,7 @@ export default function AdminShell({ children }: AdminShellProps) {
           ))}
         </nav>
         <div className={styles.foot}>
+          <AdminThemeToggle />
           <button type="button" className={styles.signOut} onClick={logout}>Sign out →</button>
         </div>
       </aside>

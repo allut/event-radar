@@ -23,6 +23,11 @@
   right: 0;
 }
 
+.menuPop[data-open-upward='true'] {
+  top: auto;
+  bottom: calc(100% + var(--space-0-45));
+}
+
 @media (max-width: 640px) {
   .menuPop {
     left: auto;

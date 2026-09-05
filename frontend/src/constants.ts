@@ -683,6 +683,15 @@ export const ADMIN_NAV_ITEMS = [
 // AdminEventDetail's tab strip — same no-i18n exemption as ADMIN_NAV_ITEMS.
 export const ADMIN_EVENT_DETAIL_TABS = ['Overview', 'Classification', 'Dedup & reports', 'Raw payload'] as const;
 
+// AdminShell's foot-area theme toggle (issue #255) — same {value, label}
+// shape as THEME_OPTIONS below, but plain-English labels: same no-i18n
+// exemption as ADMIN_NAV_ITEMS, since the admin console has no locale.
+export const ADMIN_THEME_OPTIONS = [
+  { value: 'system', label: 'System' },
+  { value: 'light', label: 'Light' },
+  { value: 'dark', label: 'Dark' },
+] as const;
+
 // Parallel signed-in hint to SIGNED_IN_HINT_KEY/ORGANIZER_SIGNED_IN_HINT_KEY
 // (see lib/adminAuth.ts) — a third, independent auth track's localStorage flag.
 export const ADMIN_SIGNED_IN_HINT_KEY = 'admin_session_token';
