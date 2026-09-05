@@ -3,7 +3,8 @@ import { THEME_OPTIONS, API } from '../../constants';
 import { useThemePreference } from '../../hooks/useThemePreference';
 import { setThemePreference, type ThemePreference } from '../../lib/theme';
 import { isAuthenticated } from '../../lib/auth';
-import { api } from '../../api/client';
+import { isAuthenticatedOrganizer } from '../../lib/organizerAuth';
+import { api, organizerApi } from '../../api/client';
 import SelectMenu from '../SelectMenu';
 
 interface ThemeSelectorProps {
@@ -16,10 +17,12 @@ interface ThemeSelectorProps {
 // parent; the component owns it via useThemePreference()/lib/theme.ts
 // directly, since theme has no URL dependency to stay in sync with.
 //
-// Once signed in as a consumer, a change also persists to the account (#253)
-// via the same PATCH /users/me used for locale changes — isAuthenticated()
-// only reflects the consumer session, so an organizer-only session (no
-// account sync built yet, out of scope here) never fires this PATCH.
+// Once signed in, a change also persists to the account — consumer via
+// PATCH /users/me (#253), organizer via PATCH /organizer/profile (#254) —
+// same PATCH each track already uses for locale changes. The two tracks
+// never share state (see CONTEXT.md), so exactly one branch fires per
+// change; isAuthenticated() (consumer) takes precedence in the unlikely
+// case both hints are set in the same browser.
 // The account column only ever holds "light"/"dark"/NULL (see #247's
 // storage-shape decision) — "System" has no value of its own to send, so
 // picking it sends an explicit `null` to clear back to "no preference"
@@ -29,8 +32,13 @@ export default function ThemeSelector({ locale, ariaLabel }: ThemeSelectorProps)
 
   function handleChange(next: ThemePreference) {
     setThemePreference(next);
+    const value = next === 'system' ? null : next;
     if (isAuthenticated()) {
-      void api.patch(API.me, { theme_preference: next === 'system' ? null : next }).catch(() => {
+      void api.patch(API.me, { theme_preference: value }).catch(() => {
+        // Non-fatal — the device already applied the choice locally regardless.
+      });
+    } else if (isAuthenticatedOrganizer()) {
+      void organizerApi.patch(API.organizerProfile, { theme_preference: value }).catch(() => {
         // Non-fatal — the device already applied the choice locally regardless.
       });
     }

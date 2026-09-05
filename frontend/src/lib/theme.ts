@@ -59,6 +59,27 @@ export function setThemePreference(pref: ThemePreference): void {
   emitThemeChange();
 }
 
+// Shared post-verify sync policy for both auth tracks (#253 consumer,
+// #254 organizer): an existing account preference wins and is mirrored
+// locally; otherwise an explicit local override (set before sign-in) seeds
+// the account via patchAccountTheme. Each call site supplies its own
+// track-specific PATCH so the tracks' state stays independent (CONTEXT.md).
+export function syncAccountTheme(
+  accountTheme: ResolvedTheme | null,
+  patchAccountTheme: (theme: ResolvedTheme) => Promise<unknown>,
+): void {
+  if (accountTheme === 'light' || accountTheme === 'dark') {
+    setThemePreference(accountTheme);
+    return;
+  }
+  const local = getThemePreference();
+  if (local === 'light' || local === 'dark') {
+    void patchAccountTheme(local).catch(() => {
+      // Non-fatal — account sync isn't required for sign-in to succeed.
+    });
+  }
+}
+
 if (typeof window !== 'undefined') {
   // Re-applies in other open tabs when theme_preference changes in one tab —
   // the storage event only fires in tabs other than the one that made the

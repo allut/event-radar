@@ -7,20 +7,28 @@ import { getThemePreference } from '../../lib/theme';
 vi.mock('../../lib/auth', () => ({
   isAuthenticated: vi.fn(() => false),
 }));
+vi.mock('../../lib/organizerAuth', () => ({
+  isAuthenticatedOrganizer: vi.fn(() => false),
+}));
 vi.mock('../../api/client', () => ({
   api: { patch: vi.fn(() => Promise.resolve()) },
+  organizerApi: { patch: vi.fn(() => Promise.resolve()) },
 }));
 
 import { isAuthenticated } from '../../lib/auth';
-import { api } from '../../api/client';
+import { isAuthenticatedOrganizer } from '../../lib/organizerAuth';
+import { api, organizerApi } from '../../api/client';
 const mockIsAuthenticated = vi.mocked(isAuthenticated);
+const mockIsAuthenticatedOrganizer = vi.mocked(isAuthenticatedOrganizer);
 const mockPatch = vi.mocked(api.patch);
+const mockOrganizerPatch = vi.mocked(organizerApi.patch);
 
 describe('ThemeSelector', () => {
   afterEach(() => {
     localStorage.clear();
     vi.clearAllMocks();
     mockIsAuthenticated.mockReturnValue(false);
+    mockIsAuthenticatedOrganizer.mockReturnValue(false);
   });
 
   it('shows System on the trigger by default', () => {
@@ -85,5 +93,39 @@ describe('ThemeSelector', () => {
     await userEvent.click(within(group).getByRole('button', { name: 'System' }));
 
     expect(mockPatch).toHaveBeenCalledWith('/users/me', { theme_preference: null });
+  });
+
+  it('when signed in as an organizer, selecting Light/Dark PATCHes theme_preference to the organizer account', async () => {
+    mockIsAuthenticatedOrganizer.mockReturnValue(true);
+    render(<ThemeSelector locale="en" ariaLabel="Theme" />);
+    await userEvent.click(screen.getByRole('button', { name: 'System' }));
+    const group = screen.getByRole('group', { name: 'Theme' });
+    await userEvent.click(within(group).getByRole('button', { name: 'Dark' }));
+
+    expect(mockOrganizerPatch).toHaveBeenCalledWith('/organizer/profile', { theme_preference: 'dark' });
+    expect(mockPatch).not.toHaveBeenCalled();
+  });
+
+  it('when signed in as an organizer, selecting System PATCHes theme_preference: null to clear the organizer account', async () => {
+    mockIsAuthenticatedOrganizer.mockReturnValue(true);
+    localStorage.setItem('theme_preference', 'dark');
+    render(<ThemeSelector locale="en" ariaLabel="Theme" />);
+    await userEvent.click(screen.getByRole('button', { name: 'Dark' }));
+    const group = screen.getByRole('group', { name: 'Theme' });
+    await userEvent.click(within(group).getByRole('button', { name: 'System' }));
+
+    expect(mockOrganizerPatch).toHaveBeenCalledWith('/organizer/profile', { theme_preference: null });
+  });
+
+  it('when signed in as both consumer and organizer, the consumer PATCH takes precedence', async () => {
+    mockIsAuthenticated.mockReturnValue(true);
+    mockIsAuthenticatedOrganizer.mockReturnValue(true);
+    render(<ThemeSelector locale="en" ariaLabel="Theme" />);
+    await userEvent.click(screen.getByRole('button', { name: 'System' }));
+    const group = screen.getByRole('group', { name: 'Theme' });
+    await userEvent.click(within(group).getByRole('button', { name: 'Dark' }));
+
+    expect(mockPatch).toHaveBeenCalledWith('/users/me', { theme_preference: 'dark' });
+    expect(mockOrganizerPatch).not.toHaveBeenCalled();
   });
 });

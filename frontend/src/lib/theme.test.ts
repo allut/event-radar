@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { resolveTheme, getThemePreference, setThemePreference, applyTheme } from './theme';
+import { describe, it, expect, vi } from 'vitest';
+import { resolveTheme, getThemePreference, setThemePreference, applyTheme, syncAccountTheme } from './theme';
 
 describe('resolveTheme', () => {
   it('account preference "light" wins regardless of localStorage/system', () => {
@@ -73,5 +73,38 @@ describe('setThemePreference / applyTheme', () => {
     applyTheme();
     // Default mocked matchMedia().matches is false → resolves "light".
     expect(document.documentElement.dataset.theme).toBe('light');
+  });
+});
+
+describe('syncAccountTheme', () => {
+  it('mirrors an existing non-null account preference locally and does not patch', () => {
+    const patch = vi.fn(() => Promise.resolve());
+    setThemePreference('dark');
+    syncAccountTheme('light', patch);
+    expect(getThemePreference()).toBe('light');
+    expect(patch).not.toHaveBeenCalled();
+  });
+
+  it('seeds the account from an explicit local override when the account has none', () => {
+    const patch = vi.fn(() => Promise.resolve());
+    setThemePreference('dark');
+    syncAccountTheme(null, patch);
+    expect(patch).toHaveBeenCalledWith('dark');
+    // The local value is the source being seeded, not overwritten.
+    expect(getThemePreference()).toBe('dark');
+  });
+
+  it('does nothing when the account has none and local has no explicit override', () => {
+    const patch = vi.fn(() => Promise.resolve());
+    setThemePreference('system');
+    syncAccountTheme(null, patch);
+    expect(patch).not.toHaveBeenCalled();
+  });
+
+  it('a rejected patch is swallowed non-fatally', async () => {
+    const patch = vi.fn(() => Promise.reject(new Error('network')));
+    setThemePreference('light');
+    expect(() => syncAccountTheme(null, patch)).not.toThrow();
+    await Promise.resolve();
   });
 });

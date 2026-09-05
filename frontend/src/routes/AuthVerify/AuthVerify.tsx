@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api, ApiError } from '../../api/client';
 import { setSignedInHint, getLocale } from '../../lib/auth';
-import { getThemePreference, setThemePreference } from '../../lib/theme';
+import { syncAccountTheme } from '../../lib/theme';
 import { API, AUTH_REDIRECT_DELAY_MS, ROUTES, UI_STATE, VERIFY_STATE_TO_KIND, type VerifyState } from '../../constants';
 import { t } from '../../i18n';
 import { useLocaleNavigate } from '../../hooks/useLocaleNavigate';
@@ -48,23 +48,9 @@ export default function AuthVerify() {
         try {
           const me = await api.get<MeResponse>(API.authMe);
           if (me.has_personas) dest = ROUTES.home;
-          if (me.theme_preference === 'light' || me.theme_preference === 'dark') {
-            // Account preference already exists — it wins and isn't
-            // overwritten. Mirror it into localStorage so the local-only
-            // pre-paint resolution (no account fetch on every page load)
-            // keeps reflecting it on subsequent visits from this device.
-            setThemePreference(me.theme_preference);
-          } else {
-            // No account preference yet — seed it from an explicit local
-            // override, if one was set before sign-in. "system"/unset has
-            // nothing worth seeding.
-            const local = getThemePreference();
-            if (local === 'light' || local === 'dark') {
-              void api.patch(API.me, { theme_preference: local }).catch(() => {
-                // Non-fatal — account sync isn't required for sign-in to succeed.
-              });
-            }
-          }
+          syncAccountTheme(me.theme_preference, (theme) =>
+            api.patch(API.me, { theme_preference: theme })
+          );
         } catch {
           // /auth/me failure is non-fatal — fall back to /onboarding
         }
