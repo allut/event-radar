@@ -123,10 +123,17 @@
 .heroCounter {
   composes: eyebrow;
   color: var(--text-soft);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
 }
 
 .heroCounter b {
   color: var(--accent);
+}
+
+.heroCounterItem:not(:last-child)::after {
+  content: ' · ';
 }
 
 .heroBot {
@@ -739,6 +746,8 @@
   .emailForm { width: 100%; }
   .submit { padding-left: 0; }
   .ticker { display: none; }
+  .heroCounter { flex-direction: column; gap: 2px; }
+  .heroCounterItem:not(:last-child)::after { content: ''; }
   .plates { margin-top: var(--space-5); }
   .footer { justify-content: center; text-align: center; }
 }

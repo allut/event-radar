@@ -260,11 +260,15 @@ export default function Landing() {
                   </span>
                   {counts && (
                     <span className={styles.heroCounter}>
-                      <CountSegment template={t('landing_hero_counter', locale)} count={formatCount(counts.upcoming_count, locale)} />
-                      {' · '}
-                      <CountSegment template={t('landing_hero_venues', locale)} count={formatCount(counts.venue_count, locale)} />
-                      {' · '}
-                      <CountSegment template={t('landing_hero_tonight', locale)} count={String(tonightEvents.length)} />
+                      <span className={styles.heroCounterItem}>
+                        <CountSegment template={t('landing_hero_counter', locale)} count={formatCount(counts.upcoming_count, locale)} />
+                      </span>
+                      <span className={styles.heroCounterItem}>
+                        <CountSegment template={t('landing_hero_venues', locale)} count={formatCount(counts.venue_count, locale)} />
+                      </span>
+                      <span className={styles.heroCounterItem}>
+                        <CountSegment template={t('landing_hero_tonight', locale)} count={String(tonightEvents.length)} />
+                      </span>
                     </span>
                   )}
                 </div>
