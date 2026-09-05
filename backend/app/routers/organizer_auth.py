@@ -152,7 +152,11 @@ async def request_organizer_magic_link(
 
     try:
         await send_magic_link(
-            email, signed_token, email_locale, verify_path=ORGANIZER_AUTH_VERIFY_PATH
+            email,
+            signed_token,
+            email_locale,
+            verify_path=ORGANIZER_AUTH_VERIFY_PATH,
+            theme_preference=organizer.theme_preference,
         )
     except Exception:
         log.exception("Failed to send organizer magic link to %s", mask_email(email))

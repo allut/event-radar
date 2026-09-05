@@ -747,6 +747,11 @@ LOCALE_RU = "ru"
 # on this column; only "light"/"dark"/NULL are valid here.
 VALID_THEME_PREFERENCES = {"light", "dark"}
 
+# The one theme_preference value that keeps an email's dark styling unchanged —
+# every other value (including None/"system") selects the light style set.
+# See app/email/styles.py::get_email_styles.
+THEME_PREFERENCE_DARK = "dark"
+
 # Admin review-queue pagination (routers/admin.py GET /admin/submissions) — mirrors
 # ADMIN_DEDUP_GROUPS_PAGE_SIZE's sizing rationale (small default page, generous cap).
 ADMIN_REVIEW_QUEUE_PAGE_SIZE: int = 50

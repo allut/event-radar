@@ -257,7 +257,11 @@ async def test_resolve_reports_closes_open_reports_no_event_mutation(
     assert admin_action_records[0].target == 42
     assert event.status == "published"  # resolve never mutates the event
     mock_send.assert_awaited_once_with(
-        reporter.email, event, "Looked into it, event is fine.", reporter.locale
+        reporter.email,
+        event,
+        "Looked into it, event is fine.",
+        reporter.locale,
+        reporter.theme_preference,
     )
 
 

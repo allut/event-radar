@@ -186,7 +186,9 @@ async def request_magic_link(
     await db.commit()
 
     try:
-        await send_magic_link(email, signed_token, email_locale)
+        await send_magic_link(
+            email, signed_token, email_locale, theme_preference=user.theme_preference
+        )
     except Exception:
         log.exception("Failed to send magic link to %s", mask_email(email))
         # Do not surface email errors to caller — link is in DB, user can retry.

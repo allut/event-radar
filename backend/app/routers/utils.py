@@ -814,7 +814,11 @@ async def send_report_resolution_emails(
             continue
         try:
             await send_report_outcome_email(
-                reporter.email, event, resolution_note, reporter.locale
+                reporter.email,
+                event,
+                resolution_note,
+                reporter.locale,
+                reporter.theme_preference,
             )
         except Exception:
             log.error(

@@ -1150,7 +1150,11 @@ class TestDeleteOwnEvent:
         assert report.status == "resolved"
         assert report.resolution_note == "auto-resolved: event cancelled"
         mock_send.assert_awaited_once_with(
-            reporter.email, event, "auto-resolved: event cancelled", reporter.locale
+            reporter.email,
+            event,
+            "auto-resolved: event cancelled",
+            reporter.locale,
+            reporter.theme_preference,
         )
 
     @pytest.mark.asyncio

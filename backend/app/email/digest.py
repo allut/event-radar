@@ -30,8 +30,7 @@ from app.constants import (
     RESEND_TIMEOUT_SECONDS,
     TALLINN_TZ,
 )
-from app.email import styles
-from app.email.styles import EMAIL_CSS
+from app.email.styles import EmailStyles, get_email_styles
 from app.email.templates import (
     DIGEST_EMPTY_STATE,
     DIGEST_FOOTER,
@@ -95,7 +94,9 @@ def _format_price_pill(event: Event, locale: str) -> str:
     return price_str
 
 
-def _build_event_block(event: Event, locale: str, frontend_url: str) -> str:
+def _build_event_block(
+    event: Event, locale: str, frontend_url: str, s: EmailStyles
+) -> str:
     """Render one event card (time/venue/price, image or band, title, bullets)."""
     cl = event.classification
     bullets = resolve_why_go(cl, locale)[:DIGEST_MAX_WHY_GO_BULLETS]
@@ -104,14 +105,12 @@ def _build_event_block(event: Event, locale: str, frontend_url: str) -> str:
 
     venue_str = html_lib.escape(resolve_venue_name(event, locale) or "")
     venue_html = (
-        EVENT_VENUE.format(s_venue=styles.S_VENUE, venue=venue_str)
-        if venue_str
-        else ""
+        EVENT_VENUE.format(s_venue=s.s_venue, venue=venue_str) if venue_str else ""
     )
 
     price_str = _format_price_pill(event, locale)
     price_html = (
-        EVENT_PRICE_PILL.format(s_price_pill=styles.S_PRICE_PILL, price=price_str)
+        EVENT_PRICE_PILL.format(s_price_pill=s.s_price_pill, price=price_str)
         if price_str
         else ""
     )
@@ -121,34 +120,34 @@ def _build_event_block(event: Event, locale: str, frontend_url: str) -> str:
             event_href=event_href,
             image_url=html_lib.escape(event.image_url, quote=True),
             title=html_lib.escape(resolve_title(event, locale)),
-            s_img=styles.S_IMG,
+            s_img=s.s_img,
         )
     else:
         category = (cl.categories[0] if cl and cl.categories else "event").replace("_", " ")
         image_html = EVENT_IMAGE_BAND.format(
             event_href=event_href,
-            s_band=styles.S_BAND,
-            s_band_diamond=styles.S_BAND_DIAMOND,
-            s_band_category=styles.S_BAND_CATEGORY,
+            s_band=s.s_band,
+            s_band_diamond=s.s_band_diamond,
+            s_band_category=s.s_band_category,
             category=html_lib.escape(category.upper()),
         )
 
     safe_title = html_lib.escape(resolve_title(event, locale))
     title_link = EVENT_TITLE_LINK.format(
-        href=event_href, title=safe_title, s_title_link=styles.S_TITLE_LINK
+        href=event_href, title=safe_title, s_title_link=s.s_title_link
     )
     bullets_html = "".join(
         EVENT_BULLET.format(
             text=html_lib.escape(b),
-            s_bullet_row=styles.S_BULLET_ROW,
-            s_diamond=styles.S_DIAMOND,
+            s_bullet_row=s.s_bullet_row,
+            s_diamond=s.s_diamond,
         )
         for b in bullets
     )
     tickets_row_html = (
         EVENT_TICKETS_ROW.format(
-            s_footer_row=styles.S_FOOTER_ROW,
-            s_tickets_link=styles.S_TICKETS_LINK,
+            s_footer_row=s.s_footer_row,
+            s_tickets_link=s.s_tickets_link,
             href=html_lib.escape(event.url, quote=True),
             label=t("digest.tickets", locale),
         )
@@ -157,12 +156,12 @@ def _build_event_block(event: Event, locale: str, frontend_url: str) -> str:
     )
 
     return EVENT_BLOCK.format(
-        s_card_wrap=styles.S_CARD_WRAP,
-        s_card=styles.S_CARD,
+        s_card_wrap=s.s_card_wrap,
+        s_card=s.s_card,
         image_html=image_html,
-        s_body=styles.S_BODY,
-        s_meta=styles.S_META,
-        s_time=styles.S_TIME,
+        s_body=s.s_body,
+        s_meta=s.s_meta,
+        s_time=s.s_time,
         time_str=time_str,
         venue_html=venue_html,
         price_html=price_html,
@@ -178,13 +177,15 @@ def build_digest_html(
     locale: str,
     frontend_url: str,
     unsubscribe_url: str | None = None,
+    theme_preference: str | None = None,
 ) -> str:
+    s = get_email_styles(theme_preference)
     date_str = _format_feed_date(feed_date, locale)
     subject_label = t("digest.subject_label", locale)
     if unsubscribe_url is None:
         unsubscribe_url = f"{frontend_url}/settings"
 
-    event_blocks = [_build_event_block(e, locale, frontend_url) for e in events]
+    event_blocks = [_build_event_block(e, locale, frontend_url, s) for e in events]
     events_html = (
         "\n".join(event_blocks)
         if event_blocks
@@ -193,31 +194,31 @@ def build_digest_html(
     settings_label = t("digest.unsubscribe", locale)
 
     header_html = DIGEST_HEADER.format(
-        s_eyebrow=styles.S_EYEBROW,
-        s_h1=styles.S_H1,
+        s_eyebrow=s.s_eyebrow,
+        s_h1=s.s_h1,
         subject_label=subject_label,
         date_str=date_str,
-        s_date=styles.S_DATE,
-        s_feed_btn_wrap=styles.S_FEED_BTN_WRAP,
-        s_feed_btn=styles.S_FEED_BTN,
+        s_date=s.s_date,
+        s_feed_btn_wrap=s.s_feed_btn_wrap,
+        s_feed_btn=s.s_feed_btn,
         feed_url=frontend_url,
         open_feed_label=t("digest.open_feed", locale),
     )
     footer_html = DIGEST_FOOTER.format(
         unsubscribe_url=unsubscribe_url,
-        s_footer_link=styles.S_FOOTER_LINK,
+        s_footer_link=s.s_footer_link,
         settings_label=settings_label,
     )
 
     return EMAIL_DOCUMENT.format(
-        css=EMAIL_CSS,
-        s_page=styles.S_PAGE,
-        s_container=styles.S_CONTAINER,
-        s_header_pad=styles.S_HEADER_PAD,
+        css=s.css,
+        s_page=s.s_page,
+        s_container=s.s_container,
+        s_header_pad=s.s_header_pad,
         header_html=header_html,
-        s_content_pad=styles.S_CONTENT_PAD,
+        s_content_pad=s.s_content_pad,
         content_html=events_html,
-        s_footer=styles.S_FOOTER,
+        s_footer=s.s_footer,
         footer_html=footer_html,
     )
 
@@ -233,6 +234,7 @@ async def send_digest_email(
     events: Sequence[Event],
     feed_date: date,
     user_id: int,
+    theme_preference: str | None = None,
 ) -> None:
     if not settings.RESEND_API_KEY:
         log.warning(
@@ -245,7 +247,12 @@ async def send_digest_email(
     header_url = f"{settings.BACKEND_URL}/email/unsubscribe?token={unsubscribe_token}"
 
     html = build_digest_html(
-        events, feed_date, locale, settings.FRONTEND_URL, unsubscribe_url
+        events,
+        feed_date,
+        locale,
+        settings.FRONTEND_URL,
+        unsubscribe_url,
+        theme_preference,
     )
     subject = ti(
         "digest.subject_template", locale, date=_format_feed_date(feed_date, locale)
@@ -372,7 +379,12 @@ async def send_daily_digests(
         async with semaphore:
             try:
                 await send_digest_email(
-                    user.email, user.locale, ordered_events, today, user.id
+                    user.email,
+                    user.locale,
+                    ordered_events,
+                    today,
+                    user.id,
+                    user.theme_preference,
                 )
                 return DIGEST_RESULT_SENT
             except Exception:
