@@ -764,8 +764,7 @@ class AdminAction(Base):
     """Append-only durable record of a destructive/moderation admin action
     (takedown, retract, approve, resolve reports, pipeline run) — the report
     feature carries legal obligations that generally assume this is
-    reconstructible after the fact (see docs/research/ on report-feature
-    legal duties). Written inside the same transaction as the mutation it
+    reconstructible after the fact. Written inside the same transaction as the mutation it
     records where the endpoint has one open; survives an outage of the
     LOG_SHIP_URL log drain, unlike the structured log line alone. There is no
     admins table (see ADR 0001), so there is no actor column — "a login

@@ -234,8 +234,7 @@ async def stream_admin_job(
     generator's own frame. A client disconnect makes Starlette cancel this
     generator (StreamingResponse races `listen_for_disconnect` against the
     body on uvicorn's pinned ASGI spec_version "2.3", cancelling whichever
-    task is streaming — see docs/research/2026-08-23-admin-console-timeout-
-    ceilings.md finding 5 / issue #159); a direct `await coro` would let
+    task is streaming — issue #159); a direct `await coro` would let
     that cancellation propagate straight into the job and cut it off
     mid-write. Awaiting `queue.get()` instead means the generator's own
     cancellation never touches the task, so the job always runs to

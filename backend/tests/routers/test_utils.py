@@ -410,8 +410,7 @@ class TestStreamAdminJob:
     """Regression coverage for issue #159: Starlette's StreamingResponse
     cancels its streaming generator on a client disconnect (task-group race
     against listen_for_disconnect on uvicorn's pinned ASGI spec_version
-    "2.3" — docs/research/2026-08-23-admin-console-timeout-ceilings.md
-    finding 5). stream_admin_job must not let that cancellation reach the
+    "2.3"). stream_admin_job must not let that cancellation reach the
     job coroutine itself: the job has to keep running to completion (and
     still get logged) even after the consumer stops reading."""
 

@@ -901,8 +901,7 @@ async def admin_get_event(event_id: int, request: Request) -> dict:
 
     Feed-membership uses the `@>` (array-contains) operator, not `= ANY()` —
     the only one of the two the built-in GIN array_ops opclass can accelerate
-    (see docs/research/2026-08-25-admin-console-feed-membership.md). Shipped
-    with no new index initially per that research's recommendation.
+    Shipped with no new index initially, per the research behind #153.
     """
     async with AsyncSessionLocal() as db:
         event = await db.scalar(
@@ -1269,8 +1268,7 @@ async def _stream_pipeline_run(dry_run: bool) -> AsyncIterator[bytes]:
     independent task rather than a direct `await` in this generator's own
     frame — a client disconnect cancels this generator (Starlette's
     StreamingResponse races `listen_for_disconnect` against the body on
-    uvicorn's pinned ASGI spec_version "2.3" — see docs/research/2026-08-23-
-    admin-console-timeout-ceilings.md finding 5 / issue #159), and a direct
+    uvicorn's pinned ASGI spec_version "2.3" — issue #159), and a direct
     `await` would let that cancellation reach into the stage loop and cut a
     stage off mid-run. Awaiting `queue.get()` instead means the run always
     finishes regardless of whether anyone is still listening."""

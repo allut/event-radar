@@ -16,6 +16,7 @@ Deep-dive docs live in `docs/` and are **not** auto-loaded — read the relevant
 | `docs/security.md` | `app/main.py`, `app/rate_limit.py`, `app/routers/auth.py`, `app/routers/organizer_auth.py`, `app/routers/admin_auth.py`, `app/auth/`, `app/routers/utils.py`, `app/ingestion/http_client.py`, or any new endpoint |
 | `docs/backend-ops.md` | `render.yaml`, `frontend/vercel.json`, `app/routers/admin.py`, `app/routers/admin_auth.py`, `app/routers/reports.py`, `app/cleanup.py`, `app/logging_config.py`, `backend/scripts/` |
 | `docs/frontend.md` | `frontend/src/routes/`, `frontend/src/components/`, `frontend/src/hooks/`, `frontend/src/lib/`, `frontend/src/content/`, `frontend/scripts/`, `frontend/api/`, `shared/i18n/`, `backend/app/email/` |
+| `docs/design-system.md` | any `.module.css`, `frontend/src/index.css`, `frontend/src/components/shared/`, `frontend/src/lib/theme.ts`, `backend/app/email/styles.py`, or any change that is visual rather than behavioral |
 | `docs/conventions.md` | the *why* behind a Code Quality Rule below (full rationale + examples) |
 | `docs/data-model.md` | writing a migration, a query touching a new column, or a serializer |
 | `docs/organizer-portal.md` | `app/routers/organizer_auth.py`, `app/routers/organizer_events.py`, `app/routers/organizer_profile.py`, `app/routers/organizer_venues.py`, `frontend/src/routes/EventSubmit/`, `frontend/src/routes/OrganizerSettings/`, `frontend/src/components/VenuePicker/` |
@@ -139,6 +140,19 @@ Each component/route lives in its own folder: `Name.tsx` + `Name.module.css` + a
 
 Two routing facts that bite: every `ROUTE_DEFS` entry is registered at both its bare path and a `/:locale` prefix (`/` and `/events/:id` are the SEO routes that never redirect); the admin console lives entirely outside that loop in its own `React.lazy` chunk (`routes/AdminApp/`), un-i18n'd and reachable only by typed URL.
 
+## Design System
+
+One visual language — **C1**: editorial-cinematic type (Cormorant Garamond display) over the existing navy/gold brand, hairline rules instead of boxes, sharp interactive corners, no decorative iconography, imagery that amplifies but is never load-bearing. Full detail — token groups, per-surface registers, theming machinery, motion vocabulary, settled decisions — in `docs/design-system.md`. **Read it before any visual change.** The imperatives:
+
+- **Four registers, one token system.** Landing (hero display + poster imagery), consumer app and organizer portal (Cormorant on headings/eyebrows/card titles, Manrope everywhere else), and the admin console's **sub-language**: `--font-system` (OS-native sans) + `--font-mono` for data, never `--font-display` or `--font-body`, no imagery/scrims/display scale. Admin inherits colors, spacing, hairlines and geometry only.
+- **Sharp corners are universal and already in the base classes.** `border-radius: 0` on every button/input/menu (`Button`/`Field`/`Menu`/`Bar` shared modules); `--radius` is untouched on cards, images, and chips. There is no `buttonSharp`/`fieldSharp`/`menuSharp` variant to compose — don't reintroduce one.
+- **Dark is the origin palette; `:root[data-theme="light"]` is a literal inversion** redefining only the tokens that need a light value. Never define a color solely inside the light block. Theme resolution (`account → localStorage → OS`) lives in `frontend/src/lib/theme.ts`, duplicated minimally by an inline pre-paint script in `frontend/index.html` — the two must never disagree. Emails default to **light** (`app/email/styles.py::get_email_styles`).
+- **A new webfont must clear two gates**: `@fontsource` self-hosted (CSP is `font-src 'self'` — no CDN link) and a `cyrillic` subset (`ru` is first-class; a missing cut silently falls back to `system-ui`).
+- **Size display type against Estonian/Russian strings, never English** — ET/RU run ~1.6× longer. Display sizes are `clamp()` tokens (`--font-size-display-*`), not per-component inline clamps.
+- **Breakpoint tokens are documentation only** — `--bp-narrow: 640px` / `--bp-wide: 1680px` name the values; `@media` rules still carry the literal (custom properties can't drive media conditions). Keep them in sync.
+- **Motion must collapse under `prefers-reduced-motion` and survive the prerender gate.** `.rise` uses fill-mode `backwards`, not `both` — `both` leaves a computed transform that breaks `position: fixed` descendants.
+- **`EventCard` has two variants** (`standard`/`featured`), **`EmptyState` has no icon prop**, and no pictographic emoji ships in consumer/organizer UI. All three were settled after a build-and-revert; see the doc's "Settled" table before proposing otherwise.
+
 ## Code Quality Rules
 
 Full rationale for each rule (why it works this way, trade-offs accepted) is in `docs/conventions.md`. These are the imperatives:
@@ -147,8 +161,8 @@ Full rationale for each rule (why it works this way, trade-offs accepted) is in 
 - **Backend utilities** — all shared helpers in `backend/app/routers/utils.py`. Check there before writing a new one. Exception: `get_current_user` (`app/routers/auth.py`) and `get_current_organizer` (`app/routers/organizer_auth.py`) are FastAPI `Depends` auth entry-points, not reusable helpers — each is defined once and consumed via `Depends()` by other routers, so the anti-duplication rationale doesn't apply. Second exception: the admin-lockout helpers (`check_admin_lockout`, `record_admin_auth_failure`, `clear_admin_auth_failure`, `admin_username_disabled`, `admin_credentials_ok`) stay in `app/routers/admin.py` and are imported by `admin_auth.py` — they're inseparable from that module's `_admin_auth_failures` LRU state. Full rationale in `docs/conventions.md`.
 - **Frontend constants** — all magic values in `frontend/src/constants.ts` (cross-stack via `shared/`). Never inline a literal near component logic.
 - **Frontend utilities** — all shared helpers in `frontend/src/utils.ts`. Check there before writing a new one.
-- **CSS design tokens** — colors, radii, shadows, z-indices, transitions, spacing, typography, component-geometry vars are all tokenized in `:root` (`frontend/src/index.css`). Never hardcode — define the token first, then `var(--token-name)`.
-- **CSS shared base classes** — card/button/menu chrome lives in `frontend/src/components/shared/`. Use CSS Modules `composes` — never copy-paste.
+- **CSS design tokens** — colors, radii, shadows, z-indices, transitions, spacing, typography, component-geometry vars are all tokenized in `:root` (`frontend/src/index.css`). Never hardcode — define the token first, then `var(--token-name)`. Token groups and the light-theme rules are in `docs/design-system.md`.
+- **CSS shared base classes** — card/button/menu chrome lives in `frontend/src/components/shared/` (16 modules, mapped in `docs/design-system.md`). Use CSS Modules `composes` — never copy-paste, and never restyle a base class in place for one consumer; add a modifier variant instead.
 - **Retry logic** — all HTTP calls use `http_get()`/`http_post()` from `app/ingestion/http_client.py` (tenacity backoff, 429 `Retry-After` honored). Six documented bypass sites (inline-request-latency or fallback-chain reasons) — see `docs/conventions.md`; do not add a seventh without one.
 - **DB connection pooling** — `app/db.py` uses `pool_pre_ping=True` + `pool_recycle` below Neon's idle-suspend window.
 - **HTML listing adapters** — subclass `HtmlListingAdapter` (`app/ingestion/sources/html_base.py`); don't duplicate the fetch/parse loop or hreflang logic.

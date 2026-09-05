@@ -167,9 +167,9 @@ def _tonight_stmt(now: datetime) -> Select[tuple[Event]]:
 
 
 def _tonight_fallback_stmt(now: datetime) -> Select[tuple[Event]]:
-    """A real empty-tonight is a valid, non-error state (docs/research/landing-true-facts.md
-    fact #17) — this widens to the next PUBLIC_COUNTS_FALLBACK_WINDOW_DAYS days
-    rather than rendering an empty ticker."""
+    """A real empty-tonight is a valid, non-error state (docs/design-system.md,
+    Landing copy rules) — this widens to the next PUBLIC_COUNTS_FALLBACK_WINDOW_DAYS
+    days rather than rendering an empty ticker."""
     return (
         select_events_with_classification()
         .where(

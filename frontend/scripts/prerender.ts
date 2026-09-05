@@ -91,8 +91,8 @@ const NAV_TIMEOUT_MS = process.env.VERCEL ? 90_000 : 30_000;
 const CONTENT_READY_TIMEOUT_MS = process.env.VERCEL ? 45_000 : 15_000;
 // Targets run through a bounded pool of pages rather than one at a time —
 // with a growing published-event catalog (three locale variants each), a
-// fully sequential run risks Vercel's Hobby-plan 45-minute build cap (see
-// docs/research/prerendering-approach.md). Bounded, not unbounded, mirroring
+// fully sequential run risks Vercel's Hobby-plan 45-minute build cap.
+// Bounded, not unbounded, mirroring
 // this repo's external-API fan-out convention (CLAUDE.md). Used by the
 // filesystem/`fetch()`-only validation pass below, which has no Chromium
 // involvement and so isn't subject to RENDER_POOL_CONCURRENCY's constraint.
