@@ -161,6 +161,30 @@ class TestUpdateOwnProfile:
 
         assert organizer.theme_preference == "light"
 
+    @pytest.mark.asyncio
+    async def test_explicit_null_theme_preference_clears_it(
+        self, mock_db, make_request, make_organizer
+    ):
+        """#257 — an explicit `theme_preference: null` clears the account
+        back to "no preference", distinct from omitting the field."""
+        from app.routers.organizer_profile import (
+            OrganizerProfilePatchBody,
+            update_own_profile,
+        )
+
+        organizer = make_organizer(organizer_id=5, theme_preference="dark")
+
+        result = await update_own_profile(
+            OrganizerProfilePatchBody(theme_preference=None),
+            make_request(method="PATCH", path="/organizer/profile"),
+            organizer,
+            mock_db,
+        )
+
+        assert organizer.theme_preference is None
+        assert result["theme_preference"] is None
+        mock_db.commit.assert_awaited_once()
+
     def test_theme_preference_invalid_rejected(self):
         from pydantic import ValidationError
 

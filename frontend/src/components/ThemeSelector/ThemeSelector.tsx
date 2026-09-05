@@ -20,15 +20,17 @@ interface ThemeSelectorProps {
 // via the same PATCH /users/me used for locale changes — isAuthenticated()
 // only reflects the consumer session, so an organizer-only session (no
 // account sync built yet, out of scope here) never fires this PATCH.
-// "System" is never sent — the account column only ever holds "light"/"dark"
-// (see #247's storage-shape decision).
+// The account column only ever holds "light"/"dark"/NULL (see #247's
+// storage-shape decision) — "System" has no value of its own to send, so
+// picking it sends an explicit `null` to clear back to "no preference"
+// (#257), letting a prior Light/Dark account choice be durably undone.
 export default function ThemeSelector({ locale, ariaLabel }: ThemeSelectorProps) {
   const preference = useThemePreference();
 
   function handleChange(next: ThemePreference) {
     setThemePreference(next);
-    if (isAuthenticated() && next !== 'system') {
-      void api.patch(API.me, { theme_preference: next }).catch(() => {
+    if (isAuthenticated()) {
+      void api.patch(API.me, { theme_preference: next === 'system' ? null : next }).catch(() => {
         // Non-fatal — the device already applied the choice locally regardless.
       });
     }

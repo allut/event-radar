@@ -104,11 +104,18 @@ async def patch_settings(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    """Update locale, email digest preference, and/or theme preference."""
+    """Update locale, email digest preference, and/or theme preference.
+
+    An explicitly-sent `theme_preference: null` clears the account column
+    back to "no preference" (the client's way of durably reverting to
+    System, #257) — distinct from omitting the field, which leaves the
+    existing value untouched. Distinguished via `model_fields_set` since
+    both cases parse to `None` on the model.
+    """
     if (
         body.locale is None
         and body.email_digest_opt_in is None
-        and body.theme_preference is None
+        and "theme_preference" not in body.model_fields_set
     ):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -119,7 +126,7 @@ async def patch_settings(
         current_user.locale = body.locale
     if body.email_digest_opt_in is not None:
         current_user.email_digest_opt_in = body.email_digest_opt_in
-    if body.theme_preference is not None:
+    if "theme_preference" in body.model_fields_set:
         current_user.theme_preference = body.theme_preference
 
     await db.commit()

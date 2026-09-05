@@ -76,7 +76,7 @@ describe('ThemeSelector', () => {
     expect(mockPatch).toHaveBeenCalledWith('/users/me', { theme_preference: 'dark' });
   });
 
-  it('when signed in, selecting System does not PATCH — the server never stores "system"', async () => {
+  it('when signed in, selecting System PATCHes theme_preference: null to clear the account (#257)', async () => {
     mockIsAuthenticated.mockReturnValue(true);
     localStorage.setItem('theme_preference', 'dark');
     render(<ThemeSelector locale="en" ariaLabel="Theme" />);
@@ -84,6 +84,6 @@ describe('ThemeSelector', () => {
     const group = screen.getByRole('group', { name: 'Theme' });
     await userEvent.click(within(group).getByRole('button', { name: 'System' }));
 
-    expect(mockPatch).not.toHaveBeenCalled();
+    expect(mockPatch).toHaveBeenCalledWith('/users/me', { theme_preference: null });
   });
 });

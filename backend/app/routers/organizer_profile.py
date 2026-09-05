@@ -67,7 +67,11 @@ async def update_own_profile(
     if "name" in body.model_fields_set:
         stripped = body.name.strip() if body.name else None
         current_organizer.name = stripped or None
-    if body.theme_preference is not None:
+    # An explicitly-sent `theme_preference: null` clears the column back to
+    # "no preference" (durable revert-to-System, #257); omitting the field
+    # leaves the existing value untouched — distinguished via
+    # `model_fields_set` since both parse to `None` on the model.
+    if "theme_preference" in body.model_fields_set:
         current_organizer.theme_preference = body.theme_preference
     await db.commit()
     await db.refresh(current_organizer)

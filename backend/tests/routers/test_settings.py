@@ -124,6 +124,28 @@ class TestPatchSettings:
         assert user.theme_preference == "light"
 
     @pytest.mark.asyncio
+    async def test_explicit_null_theme_preference_clears_it(
+        self, mock_db, make_user, make_request
+    ):
+        """#257 — an explicit `theme_preference: null` clears the account
+        back to "no preference", distinct from omitting the field."""
+        from app.routers.settings import patch_settings, PatchSettingsBody
+
+        _attach_empty_personas(mock_db)
+        user = make_user(theme_preference="dark")
+
+        result = await patch_settings(
+            body=PatchSettingsBody(theme_preference=None),
+            request=make_request(method="PATCH", path="/users/me"),
+            current_user=user,
+            db=mock_db,
+        )
+
+        assert user.theme_preference is None
+        mock_db.commit.assert_called_once()
+        assert result["theme_preference"] is None
+
+    @pytest.mark.asyncio
     async def test_invalid_theme_preference_rejected(self):
         from pydantic import ValidationError
         from app.routers.settings import PatchSettingsBody
