@@ -70,12 +70,17 @@ export default function RichTextEditor({
   });
 
   useEffect(() => {
-    if (!editor) return;
+    if (!editor || editor.isDestroyed) return;
     editor.setEditable(!disabled, false);
   }, [editor, disabled]);
 
   useEffect(() => {
-    if (!editor) return;
+    // isDestroyed guards a real race, not just a test artifact: the editor
+    // can be torn down (e.g. a submit-triggered navigation unmounting this
+    // field) between this effect being scheduled and it actually running —
+    // calling getHTML()/setContent() on a destroyed editor throws (its
+    // ProseMirror schema is nulled out by destroy()).
+    if (!editor || editor.isDestroyed) return;
     if (value !== editor.getHTML()) {
       editor.commands.setContent(value, { emitUpdate: false });
     }

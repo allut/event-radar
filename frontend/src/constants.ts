@@ -463,7 +463,6 @@ export const ADMIN_DEDUP_GROUPS_PAGE_SIZE = 50;
 // boundary — this only lets the picker reject an obviously-wrong file before
 // spending a network round trip on it.
 export const ORGANIZER_IMAGE_ACCEPT = ORGANIZER_IMAGE_ALLOWED_MIME.join(',');
-export const ORGANIZER_TEXTAREA_ROWS = 6;
 export const ORGANIZER_EVENTS_PAGE_SIZE = 24;
 
 // Organizer submission content-language tabs (EventSubmit.tsx). ET is always

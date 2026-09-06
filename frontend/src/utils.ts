@@ -90,6 +90,13 @@ export function stripHtmlToText(html: string): string {
   return DOMPurify.sanitize(html, { ALLOWED_TAGS: [], ALLOWED_ATTR: [] });
 }
 
+/** True if a RichTextEditor field has real text — Tiptap's "empty" state
+ * serializes as `<p></p>`, not `''`, so a plain `.trim()` on the raw HTML
+ * would treat that as non-empty. */
+export function hasHtmlContent(html: string): boolean {
+  return stripHtmlToText(html).trim().length > 0;
+}
+
 // Formatters below are built once per locale and cached at module scope —
 // Intl constructors are comparatively expensive, and EventCard (rendered N-up
 // in a grid) calls these per card per render.

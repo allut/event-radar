@@ -14,7 +14,7 @@
   display: flex;
   align-items: center;
   gap: var(--space-1);
-  padding: var(--space-1-5) var(--space-2);
+  padding: var(--space-1) var(--space-2);
   border-bottom: var(--rule);
   flex-wrap: wrap;
 }
@@ -73,7 +73,7 @@
 .btnText {
   composes: btn;
   width: auto;
-  padding: 0 var(--space-1-5);
+  padding: 0 var(--space-2);
   font-size: var(--fs-xs);
   font-weight: var(--fw-semibold);
 }
@@ -81,8 +81,8 @@
 .linkRow {
   display: flex;
   align-items: center;
-  gap: var(--space-1-5);
-  padding: var(--space-1-5) var(--space-2);
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
   border-bottom: var(--rule);
   background: var(--bg-overlay-soft);
 }
@@ -90,14 +90,19 @@
 .linkInput {
   composes: fieldInput from '../shared/Field.module.css';
   flex: 1;
-  padding: var(--space-0-875) var(--space-1-5);
+  padding: var(--space-0-45) var(--space-2);
   font-size: var(--fs-sm);
 }
 
 .linkInsert {
-  composes: btnPrimary from '../shared/Button.module.css';
-  padding: var(--space-0-875) var(--space-2);
-  font-size: var(--fs-sm);
+  composes: textButton from '../shared/Button.module.css';
+  margin-top: 0;
+  color: var(--accent);
+  font-weight: var(--fw-semibold);
+}
+
+.linkInsert:hover {
+  color: var(--accent-light);
 }
 
 .linkCancel {
@@ -126,7 +131,7 @@
 .content :global(h3),
 .content :global(h4) {
   font-weight: var(--fw-semibold);
-  margin: var(--space-3) 0 var(--space-1-5);
+  margin: var(--space-3) 0 var(--space-2);
 }
 
 .content :global(ul),

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { lazy, Suspense, useMemo, useState } from 'react';
 import { useLocation, useParams } from 'react-router-dom';
 import { useOrganizerLogout } from '../../hooks/useOrganizerLogout';
 import { useOrganizerEventForm } from '../../hooks/useOrganizerEventForm';
@@ -13,14 +13,20 @@ import VenuePicker from '../../components/VenuePicker';
 import { t, ti } from '../../i18n';
 import {
   CATEGORIES, CONTENT_LANG_ORDER, DEFAULT_CURRENCY, LOCALE_EN, LOCALE_ET, LOCALE_RU, LOCALES,
-  ORGANIZER_BASE_CONTENT_LANG, ORGANIZER_IMAGE_ACCEPT, ORGANIZER_TEXTAREA_ROWS,
+  ORGANIZER_BASE_CONTENT_LANG, ORGANIZER_IMAGE_ACCEPT,
   PRICE_INPUT_MIN, PRICE_INPUT_STEP,
   type ContentLang, type ContentMarkerState,
 } from '../../constants';
-import { currencySymbol, titleWithBrand } from '../../utils';
+import { currencySymbol, hasHtmlContent, titleWithBrand } from '../../utils';
+
 import { useSeoMeta } from '../../hooks/useSeoMeta';
 import SeoTags from '../../components/SeoTags';
 import styles from './EventSubmit.module.css';
+
+// Tiptap is a heavy dependency reachable only from the organizer portal — kept
+// out of the main consumer-app bundle (Landing/Feed) via its own chunk, same
+// rationale as AdminApp.tsx's lazy boundary.
+const RichTextEditor = lazy(() => import('../../components/RichTextEditor'));
 
 interface ContentSlot {
   title: string;
@@ -29,7 +35,28 @@ interface ContentSlot {
   setDescription: (v: string) => void;
   importantInfo: string;
   setImportantInfo: (v: string) => void;
+  hasTitle: boolean;
+  hasDescription: boolean;
+  hasImportantInfo: boolean;
   hasContent: boolean;
+}
+
+// hasHtmlContent runs DOMPurify.sanitize — computed once per slot per render
+// here (memoized alongside the slot itself) rather than re-run per field
+// inside markerState on every keystroke anywhere in the form.
+function makeSlot(
+  title: string, setTitle: (v: string) => void,
+  description: string, setDescription: (v: string) => void,
+  importantInfo: string, setImportantInfo: (v: string) => void,
+): ContentSlot {
+  const hasTitle = Boolean(title.trim());
+  const hasDescription = hasHtmlContent(description);
+  const hasImportantInfo = hasHtmlContent(importantInfo);
+  return {
+    title, setTitle, description, setDescription, importantInfo, setImportantInfo,
+    hasTitle, hasDescription, hasImportantInfo,
+    hasContent: hasTitle || hasDescription || hasImportantInfo,
+  };
 }
 
 export default function EventSubmit() {
@@ -50,24 +77,21 @@ export default function EventSubmit() {
   // Re-trims all 9 text fields (multi-KB organizer prose) only when one of
   // them actually changes, not on every unrelated keystroke (price, venue, etc).
   const slots: Record<ContentLang, ContentSlot> = useMemo(() => ({
-    [LOCALE_ET]: {
-      title: form.title, setTitle: form.setTitle,
-      description: form.description, setDescription: form.setDescription,
-      importantInfo: form.importantInfo, setImportantInfo: form.setImportantInfo,
-      hasContent: Boolean(form.title.trim() || form.description.trim() || form.importantInfo.trim()),
-    },
-    [LOCALE_EN]: {
-      title: form.titleEn, setTitle: form.setTitleEn,
-      description: form.descriptionEn, setDescription: form.setDescriptionEn,
-      importantInfo: form.importantInfoEn, setImportantInfo: form.setImportantInfoEn,
-      hasContent: Boolean(form.titleEn.trim() || form.descriptionEn.trim() || form.importantInfoEn.trim()),
-    },
-    [LOCALE_RU]: {
-      title: form.titleRu, setTitle: form.setTitleRu,
-      description: form.descriptionRu, setDescription: form.setDescriptionRu,
-      importantInfo: form.importantInfoRu, setImportantInfo: form.setImportantInfoRu,
-      hasContent: Boolean(form.titleRu.trim() || form.descriptionRu.trim() || form.importantInfoRu.trim()),
-    },
+    [LOCALE_ET]: makeSlot(
+      form.title, form.setTitle,
+      form.description, form.setDescription,
+      form.importantInfo, form.setImportantInfo,
+    ),
+    [LOCALE_EN]: makeSlot(
+      form.titleEn, form.setTitleEn,
+      form.descriptionEn, form.setDescriptionEn,
+      form.importantInfoEn, form.setImportantInfoEn,
+    ),
+    [LOCALE_RU]: makeSlot(
+      form.titleRu, form.setTitleRu,
+      form.descriptionRu, form.setDescriptionRu,
+      form.importantInfoRu, form.setImportantInfoRu,
+    ),
   }), [
     form.title, form.setTitle, form.description, form.setDescription, form.importantInfo, form.setImportantInfo,
     form.titleEn, form.setTitleEn, form.descriptionEn, form.setDescriptionEn, form.importantInfoEn, form.setImportantInfoEn,
@@ -83,9 +107,9 @@ export default function EventSubmit() {
     if (code === ORGANIZER_BASE_CONTENT_LANG) return 'matched';
     const base = slots[ORGANIZER_BASE_CONTENT_LANG];
     const missesBaseField =
-      (base.title.trim() && !slot.title.trim()) ||
-      (base.description.trim() && !slot.description.trim()) ||
-      (base.importantInfo.trim() && !slot.importantInfo.trim());
+      (base.hasTitle && !slot.hasTitle) ||
+      (base.hasDescription && !slot.hasDescription) ||
+      (base.hasImportantInfo && !slot.hasImportantInfo);
     return missesBaseField ? 'partial' : 'matched';
   };
   const langTabOptions = CONTENT_LANG_ORDER.map((code) => {
@@ -148,29 +172,31 @@ export default function EventSubmit() {
               required={contentLang === ORGANIZER_BASE_CONTENT_LANG}
             />
 
-            <label className={styles.label} htmlFor="content_description">
+            <label className={styles.label} id="content_description_label">
               {langField('organizer_field_description')}
             </label>
-            <textarea
-              id="content_description"
-              className={styles.textarea}
-              value={activeSlot.description}
-              onChange={(e) => activeSlot.setDescription(e.target.value)}
-              rows={ORGANIZER_TEXTAREA_ROWS}
-              disabled={form.isSubmitting}
-            />
+            <Suspense fallback={<div className={styles.editorFallback} />}>
+              <RichTextEditor
+                id="content_description"
+                aria-labelledby="content_description_label"
+                value={activeSlot.description}
+                onChange={activeSlot.setDescription}
+                disabled={form.isSubmitting}
+              />
+            </Suspense>
 
-            <label className={styles.label} htmlFor="content_important_info">
+            <label className={styles.label} id="content_important_info_label">
               {langField('organizer_field_important_info')}
             </label>
-            <textarea
-              id="content_important_info"
-              className={styles.textarea}
-              value={activeSlot.importantInfo}
-              onChange={(e) => activeSlot.setImportantInfo(e.target.value)}
-              rows={ORGANIZER_TEXTAREA_ROWS}
-              disabled={form.isSubmitting}
-            />
+            <Suspense fallback={<div className={styles.editorFallback} />}>
+              <RichTextEditor
+                id="content_important_info"
+                aria-labelledby="content_important_info_label"
+                value={activeSlot.importantInfo}
+                onChange={activeSlot.setImportantInfo}
+                disabled={form.isSubmitting}
+              />
+            </Suspense>
           </div>
 
           <div className={styles.fieldRow}>

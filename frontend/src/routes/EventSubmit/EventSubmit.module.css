@@ -74,12 +74,9 @@
   font-family: inherit;
 }
 
-.textarea {
-  composes: fieldInput from '../../components/shared/Field.module.css';
-  width: 100%;
-  font-family: inherit;
-  resize: vertical;
+.editorFallback {
   min-height: var(--textarea-height-sm);
+  border: 1px solid var(--border);
 }
 
 .error {
