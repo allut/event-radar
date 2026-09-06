@@ -261,6 +261,11 @@
   margin-bottom: var(--space-2);
 }
 
+.description u {
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
 /* ─── Category / vibe tags ────────────────────────────────────────────────── */
 
 .tags {
