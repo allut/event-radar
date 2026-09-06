@@ -243,10 +243,10 @@ def get_current_admin(
     /admin/* route uses this instead of _require_admin (H-1 in the OWASP
     audit): _require_admin's Basic branch checks only ADMIN_USERNAME/
     ADMIN_PASSWORD and never touches TOTP, so it made the admin console's
-    second factor bypassable on every route that accepted it. Only the two
-    non-PII read-only routes (/admin/counts, /admin/stats) keep
-    _require_admin so curl/scripts can still read them with just the
-    password (OWASP audit F3) — every other GET, including /admin/reports,
+    second factor bypassable on every route that accepted it. Only the three
+    non-PII read-only routes (/admin/counts, /admin/stats,
+    /admin/dedup/groups) keep _require_admin so curl/scripts can still read
+    them with just the password (OWASP audit F3) — every other GET, including /admin/reports,
     /admin/events/{id}, and /admin/submissions, discloses reporter/organizer
     PII and requires this TOTP-backed session instead. Defined here (not
     admin_auth.py, which imports
