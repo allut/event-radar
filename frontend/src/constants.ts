@@ -705,6 +705,15 @@ export const NAV_ITEMS = [
   { route: ROUTES.settings, labelKey: 'nav_settings' },
 ] as const;
 
+// Same {route, labelKey} shape as NAV_ITEMS, rendered by both OrganizerTopBar
+// (desktop) and its MobileMenu (mobile) — kept in one place so they can't
+// drift out of sync.
+export const ORGANIZER_NAV_ITEMS = [
+  { route: ROUTES.organizerDashboard, labelKey: 'organizer_dashboard_title' },
+  { route: ROUTES.organizerSubmit, labelKey: 'organizer_new_event' },
+  { route: ROUTES.organizerSettings, labelKey: 'organizer_settings_nav' },
+] as const;
+
 // The three theme options rendered by both ThemeSelector (desktop) and
 // MobileMenu (mobile), kept in one place so they can't drift out of sync —
 // mirrors NAV_ITEMS' {value, labelKey} pattern above.

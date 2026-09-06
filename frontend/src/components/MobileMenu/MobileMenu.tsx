@@ -16,15 +16,21 @@ interface MobileMenuProps {
   localeDisabled?: boolean;
   showNav?: boolean;
   authed?: boolean;
+  // Overrides the default consumer NAV_ITEMS — e.g. OrganizerTopBar passes
+  // ORGANIZER_NAV_ITEMS. Callers that pass this are always authed (no
+  // signed-out variant to filter), so the explore-only filtering below is
+  // skipped entirely.
+  navItems?: readonly { route: string; labelKey: string }[];
+  navAriaLabelKey?: string;
 }
 
-export default function MobileMenu({ locale, onLocaleChange, onLogout, localeDisabled, showNav = true, authed = true }: MobileMenuProps) {
+export default function MobileMenu({ locale, onLocaleChange, onLogout, localeDisabled, showNav = true, authed = true, navItems, navAriaLabelKey = 'nav_daily5' }: MobileMenuProps) {
   const { open, setOpen, flip, rootRef, popRef, triggerRef, close } = useDropdown();
   const localePath = useLocalePath();
   const themePreference = useThemePreference();
   // Mirrors TopBar's signed-out nav filtering — Explore stays visible, the
   // rest are dead ends for an anonymous visitor.
-  const visibleNavItems = authed ? NAV_ITEMS : NAV_ITEMS.filter((item) => item.route === ROUTES.explore);
+  const visibleNavItems = navItems ?? (authed ? NAV_ITEMS : NAV_ITEMS.filter((item) => item.route === ROUTES.explore));
 
   return (
     <div className={cx(menuStyles.menu, styles.mobileMenu)} ref={rootRef}>
@@ -43,7 +49,7 @@ export default function MobileMenu({ locale, onLocaleChange, onLogout, localeDis
         <div className={styles.pop} ref={popRef} data-flip={flip || undefined}>
           {showNav && visibleNavItems.length > 0 && (
             <>
-              <nav className={styles.section} aria-label={t('nav_daily5', locale)}>
+              <nav className={styles.section} aria-label={t(navAriaLabelKey, locale)}>
                 {visibleNavItems.map(({ route, labelKey }) => (
                   <NavLink
                     key={route}
