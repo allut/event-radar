@@ -217,6 +217,16 @@ HTML_BLOCK_BOUNDARY_TAGS: frozenset[str] = frozenset(
     {"br", "p", "h3", "h4", "li", "ul", "ol", "blockquote"}
 )
 
+# Organizer-submission boundary allowlist (routers/organizer_events.py) — narrower
+# than the shared ingestion allowlist above, and backend-only (not generated into
+# shared/): it tracks the Tiptap toolbar's exact extension list (bold/italic/
+# underline/bulletList/orderedList/link/heading 3-4/blockquote, no color/span), so
+# the frontend never needs this set independently.
+ORGANIZER_HTML_SANITIZE_ALLOWED_TAGS: frozenset[str] = frozenset(
+    {"p", "br", "strong", "em", "u", "ul", "ol", "li", "a", "h3", "h4", "blockquote"}
+)
+ORGANIZER_HTML_SANITIZE_ALLOWED_ATTRS: dict[str, set[str]] = {"a": {"href"}}
+
 # Word-boundary keyword prefilter for sexually-explicit listings (en/et/ru), checked
 # at ingest time against title+description+venue. Kept tight and phrase-based to
 # avoid false positives ("sex" -> "Sussex", "strip" -> "comic strip"). Not exhaustive
@@ -698,8 +708,8 @@ ORGANIZER_DAILY_VENUE_CREATION_CAP = 20
 # Text-column fields (title/description/important_info) have no DB-enforced width,
 # so these are abuse-prevention ceilings, not truncation-avoidance.
 ORGANIZER_TITLE_MAX_LEN = 300
-ORGANIZER_DESCRIPTION_MAX_LEN = 10000
-ORGANIZER_IMPORTANT_INFO_MAX_LEN = 5000
+ORGANIZER_DESCRIPTION_MAX_LEN = 30000
+ORGANIZER_IMPORTANT_INFO_MAX_LEN = 15000
 ORGANIZER_VENUE_NAME_MAX_LEN = 255
 ORGANIZER_VENUE_ADDRESS_MAX_LEN = 500
 ORGANIZER_CURRENCY_MAX_LEN = 3

@@ -187,7 +187,11 @@ def _strip_empty_blocks(soup: BeautifulSoup) -> None:
             tag.decompose()
 
 
-def sanitize_html(text: str | None) -> str | None:
+def sanitize_html(
+    text: str | None,
+    tags: frozenset[str] | None = None,
+    attrs: dict[str, set[str]] | None = None,
+) -> str | None:
     """Sanitize HTML with a strict allowlist; plain text passes through unchanged.
 
     Safe for storing in description/important_info fields. Cloudflare
@@ -197,16 +201,32 @@ def sanitize_html(text: str | None) -> str | None:
     any disallowed tags so they render as visible text rather than markup. Block
     wrappers in HTML_BLOCK_TAGS_TO_BREAK are converted to <br> first (see
     _block_tags_to_breaks) so line boundaries are not lost when nh3 strips them.
+
+    `tags`/`attrs` default to the shared ingestion allowlist
+    (HTML_SANITIZE_ALLOWED_TAGS/ATTRS) — every ingestion call site is
+    unaffected. The organizer-submission boundary passes its own narrower
+    allowlist (ORGANIZER_HTML_SANITIZE_ALLOWED_TAGS/ATTRS) instead.
     """
     if text is None:
         return None
     text = deobfuscate_cf_emails(text)
+    resolved_attrs = attrs if attrs is not None else HTML_SANITIZE_ALLOWED_ATTRS
     cleaned = nh3.clean(
         _block_tags_to_breaks(text),
-        tags=set(HTML_SANITIZE_ALLOWED_TAGS),
-        attributes=HTML_SANITIZE_ALLOWED_ATTRS,
+        tags=set(tags) if tags is not None else set(HTML_SANITIZE_ALLOWED_TAGS),
+        attributes=resolved_attrs,
         url_schemes=set(SAFE_URL_SCHEMES),
         link_rel="noopener noreferrer",
+        # nh3/ammonia always keeps a handful of "generic" attributes (e.g.
+        # title, lang) regardless of the attributes map above — this filter
+        # enforces resolved_attrs as the true ceiling so a narrower boundary
+        # allowlist (e.g. the organizer one, which omits title) is honored.
+        # "rel" is exempted: it isn't organizer-controlled input, it's the
+        # link_rel="noopener noreferrer" value nh3 itself injects below —
+        # filtering it out here would silently defeat that protection.
+        attribute_filter=lambda tag, attr, value: (
+            value if attr == "rel" or attr in resolved_attrs.get(tag, set()) else None
+        ),
     )
     if not cleaned:
         return None

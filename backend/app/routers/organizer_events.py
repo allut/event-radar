@@ -54,6 +54,8 @@ from app.constants import (
     ORGANIZER_DAILY_IMAGE_UPLOAD_CAP,
     ORGANIZER_DAILY_SUBMISSION_CAP,
     ORGANIZER_DESCRIPTION_MAX_LEN,
+    ORGANIZER_HTML_SANITIZE_ALLOWED_ATTRS,
+    ORGANIZER_HTML_SANITIZE_ALLOWED_TAGS,
     ORGANIZER_IMPORTANT_INFO_MAX_LEN,
     ORGANIZER_SUBMISSION_EXTERNAL_ID_PREFIX,
     ORGANIZER_TITLE_MAX_LEN,
@@ -233,6 +235,16 @@ def _localized(
     return out or None
 
 
+def _organizer_sanitize(text: str | None) -> str | None:
+    """sanitize_html at the organizer-submission boundary (#267) — the
+    narrower Tiptap-tracking allowlist, not the shared ingestion one."""
+    return sanitize_html(
+        text,
+        tags=ORGANIZER_HTML_SANITIZE_ALLOWED_TAGS,
+        attrs=ORGANIZER_HTML_SANITIZE_ALLOWED_ATTRS,
+    )
+
+
 async def _get_user_submission_source(db: AsyncSession) -> Source:
     source = await db.scalar(
         select(Source).where(Source.slug == SOURCE_SLUG_USER_SUBMISSION)
@@ -336,12 +348,14 @@ async def submit_event(
         venue = await own_venue_or_404(db, body.venue_id, current_organizer.id)
 
     has_price = body.price_min is not None or body.price_max is not None
+    description = _organizer_sanitize(body.description)
+    important_info = _organizer_sanitize(body.important_info)
     normalized = NormalizedEvent(
         external_id=f"{ORGANIZER_SUBMISSION_EXTERNAL_ID_PREFIX}{current_organizer.id}:{uuid4()}",
         title=body.title,
         starts_at=body.starts_at,
-        description=sanitize_html(body.description),
-        important_info=sanitize_html(body.important_info),
+        description=description,
+        important_info=important_info,
         ends_at=body.ends_at,
         # A saved venue_id is the sole venue source going forward — the
         # free-typed venue_name/venue_address are dropped at write time even
@@ -361,14 +375,14 @@ async def submit_event(
         currency=normalize_currency(body.currency, has_price),
         title_localized=_localized(body.title, body.title_en, body.title_ru),
         description_localized=_localized(
-            sanitize_html(body.description),
-            sanitize_html(body.description_en),
-            sanitize_html(body.description_ru),
+            description,
+            _organizer_sanitize(body.description_en),
+            _organizer_sanitize(body.description_ru),
         ),
         important_info_localized=_localized(
-            sanitize_html(body.important_info),
-            sanitize_html(body.important_info_en),
-            sanitize_html(body.important_info_ru),
+            important_info,
+            _organizer_sanitize(body.important_info_en),
+            _organizer_sanitize(body.important_info_ru),
         ),
     )
 
@@ -527,9 +541,9 @@ async def update_own_event(
     if "category" in fields_set and body.category is not None:
         await _apply_organizer_category(db, event.id, body.category)
     if "description" in fields_set:
-        event.description_orig = sanitize_html(body.description)
+        event.description_orig = _organizer_sanitize(body.description)
     if "important_info" in fields_set:
-        event.important_info = sanitize_html(body.important_info)
+        event.important_info = _organizer_sanitize(body.important_info)
 
     if fields_set & {"title", "title_en", "title_ru"}:
         existing = event.title_localized or {}
@@ -542,10 +556,10 @@ async def update_own_event(
         existing = event.description_localized or {}
         event.description_localized = _localized(
             event.description_orig,
-            sanitize_html(body.description_en)
+            _organizer_sanitize(body.description_en)
             if "description_en" in fields_set
             else existing.get(LOCALE_EN),
-            sanitize_html(body.description_ru)
+            _organizer_sanitize(body.description_ru)
             if "description_ru" in fields_set
             else existing.get(LOCALE_RU),
         )
@@ -553,10 +567,10 @@ async def update_own_event(
         existing = event.important_info_localized or {}
         event.important_info_localized = _localized(
             event.important_info,
-            sanitize_html(body.important_info_en)
+            _organizer_sanitize(body.important_info_en)
             if "important_info_en" in fields_set
             else existing.get(LOCALE_EN),
-            sanitize_html(body.important_info_ru)
+            _organizer_sanitize(body.important_info_ru)
             if "important_info_ru" in fields_set
             else existing.get(LOCALE_RU),
         )
