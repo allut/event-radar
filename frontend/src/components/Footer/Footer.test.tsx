@@ -76,4 +76,27 @@ describe('Footer', () => {
     expect(screen.getByRole('link', { name: 'Contact' })).toHaveAttribute('href', '/ru/contact');
     expect(screen.getByRole('link', { name: 'For organizers' })).toHaveAttribute('href', '/ru/organizer/login');
   });
+
+  it('links Contact to the public form on a consumer-portal page even when signed in as an organizer', () => {
+    localStorage.setItem(ORGANIZER_SIGNED_IN_HINT_KEY, '1');
+    renderWithProviders(<Footer />, { route: '/explore' });
+    expect(screen.getByRole('link', { name: 'Contact' })).toHaveAttribute('href', '/contact');
+  });
+
+  it('links Contact to the public form on an organizer-portal page while signed out', () => {
+    renderWithProviders(<Footer />, { route: '/organizer/login' });
+    expect(screen.getByRole('link', { name: 'Contact' })).toHaveAttribute('href', '/contact');
+  });
+
+  it('links Contact to the authenticated organizer form on an organizer-portal page while signed in', () => {
+    localStorage.setItem(ORGANIZER_SIGNED_IN_HINT_KEY, '1');
+    renderWithProviders(<Footer />, { route: '/organizer/dashboard' });
+    expect(screen.getByRole('link', { name: 'Contact' })).toHaveAttribute('href', '/organizer/contact');
+  });
+
+  it('keeps the locale prefix on the organizer contact link', () => {
+    localStorage.setItem(ORGANIZER_SIGNED_IN_HINT_KEY, '1');
+    renderWithProviders(<Footer />, { route: '/ru/organizer/settings' });
+    expect(screen.getByRole('link', { name: 'Contact' })).toHaveAttribute('href', '/ru/organizer/contact');
+  });
 });

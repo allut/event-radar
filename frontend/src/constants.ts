@@ -645,6 +645,7 @@ export const ROUTES = {
   organizerDashboard: '/organizer/dashboard',
   organizerSubmit: '/organizer/submit',
   organizerSettings: '/organizer/settings',
+  organizerContact: '/organizer/contact',
   organizerEventEdit: (id: number | string) => `/organizer/events/${id}/edit`,
   organizerEventEditPattern: '/organizer/events/:id/edit',
   // Admin console (issue #154) — registered entirely outside App.tsx's
@@ -695,15 +696,22 @@ export const ADMIN_THEME_OPTIONS = [
 // (see lib/adminAuth.ts) — a third, independent auth track's localStorage flag.
 export const ADMIN_SIGNED_IN_HINT_KEY = 'admin_session_token';
 
-// The signed-in primary nav — same four {route, labelKey} pairs rendered by
-// both TopBar (desktop) and MobileMenu (mobile), kept in one place so they
-// can't drift out of sync.
+// The signed-in primary nav — same {route, labelKey} pairs rendered by both
+// TopBar (desktop) and MobileMenu (mobile), kept in one place so they can't
+// drift out of sync.
 export const NAV_ITEMS = [
   { route: ROUTES.home, labelKey: 'nav_daily5' },
   { route: ROUTES.explore, labelKey: 'nav_explore' },
   { route: ROUTES.saved, labelKey: 'nav_saved' },
   { route: ROUTES.settings, labelKey: 'nav_settings' },
+  { route: ROUTES.contact, labelKey: 'nav_contact' },
 ] as const;
+
+// Routes from NAV_ITEMS that stay visible to a signed-out visitor — Explore
+// and Contact are public; Daily 5/Saved/Settings are dead ends for an
+// anonymous visitor (Saved has nothing in it, the others require auth).
+// Shared by TopBar and MobileMenu so their signed-out filtering can't diverge.
+export const SIGNED_OUT_NAV_ROUTES: readonly string[] = [ROUTES.explore, ROUTES.contact];
 
 // Same {route, labelKey} shape as NAV_ITEMS, rendered by both OrganizerTopBar
 // (desktop) and its MobileMenu (mobile) — kept in one place so they can't
@@ -712,6 +720,7 @@ export const ORGANIZER_NAV_ITEMS = [
   { route: ROUTES.organizerDashboard, labelKey: 'organizer_dashboard_title' },
   { route: ROUTES.organizerSubmit, labelKey: 'organizer_new_event' },
   { route: ROUTES.organizerSettings, labelKey: 'organizer_settings_nav' },
+  { route: ROUTES.organizerContact, labelKey: 'organizer_contact_nav' },
 ] as const;
 
 // The three theme options rendered by both ThemeSelector (desktop) and
@@ -758,6 +767,7 @@ export const API = {
   organizerEvent: (id: number | string) => `/organizer/events/${id}`,
   organizerEventImage: '/organizer/events/image',
   organizerProfile: '/organizer/profile',
+  organizerContact: '/organizer/contact',
   organizerVenues: '/organizer/venues',
   organizerVenue: (id: number | string) => `/organizer/venues/${id}`,
   reports: '/reports',

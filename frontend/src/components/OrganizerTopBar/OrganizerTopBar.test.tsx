@@ -16,7 +16,7 @@ describe('OrganizerTopBar', () => {
     );
   });
 
-  it('renders a mobile menu trigger whose popover carries the three organizer nav links', () => {
+  it('renders a mobile menu trigger whose popover carries the organizer nav links', () => {
     renderWithProviders(
       <OrganizerTopBar locale="en" onLocaleChange={vi.fn()} onLogout={vi.fn()} />,
     );
@@ -32,5 +32,6 @@ describe('OrganizerTopBar', () => {
     expect(hrefsFor('Your events')).toContain('/organizer/dashboard');
     expect(hrefsFor('New event')).toContain('/organizer/submit');
     expect(hrefsFor('Settings')).toContain('/organizer/settings');
+    expect(hrefsFor('Contact')).toContain('/organizer/contact');
   });
 });

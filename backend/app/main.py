@@ -90,6 +90,7 @@ from app.routers.feed import router as feed_router
 from app.routers.feedback import router as feedback_router
 from app.routers.onboarding import router as onboarding_router
 from app.routers.organizer_auth import router as organizer_auth_router
+from app.routers.organizer_contact import router as organizer_contact_router
 from app.routers.organizer_events import router as organizer_events_router
 from app.routers.organizer_profile import router as organizer_profile_router
 from app.routers.organizer_venues import router as organizer_venues_router
@@ -708,6 +709,7 @@ app.include_router(feed_router)
 app.include_router(feedback_router)
 app.include_router(onboarding_router)
 app.include_router(organizer_auth_router)
+app.include_router(organizer_contact_router)
 app.include_router(organizer_events_router)
 app.include_router(organizer_profile_router)
 app.include_router(organizer_venues_router)

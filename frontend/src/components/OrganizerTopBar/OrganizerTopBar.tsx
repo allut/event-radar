@@ -16,9 +16,9 @@ interface OrganizerTopBarProps {
 
 // Organizer-scoped sibling of components/TopBar — deliberately not reused
 // directly, since that component's nav/auth links are hardcoded to the
-// consumer track (/login, /explore, /saved, ...). Kept minimal: three nav
-// links instead of TopBar's four. Shares TopBar's MobileMenu component
-// (parameterized via navItems/navAriaLabelKey) for the mobile hamburger.
+// consumer track (/login, /explore, /saved, ...). Shares TopBar's MobileMenu
+// component (parameterized via navItems/navAriaLabelKey) for the mobile
+// hamburger.
 export default function OrganizerTopBar({ locale, onLocaleChange, onLogout }: OrganizerTopBarProps) {
   const localePath = useLocalePath();
   return (
@@ -48,6 +48,12 @@ export default function OrganizerTopBar({ locale, onLocaleChange, onLogout }: Or
           className={({ isActive }) => cx(styles.navLink, isActive && styles.navLinkActive)}
         >
           {t('organizer_settings_nav', locale)}
+        </NavLink>
+        <NavLink
+          to={localePath(ROUTES.organizerContact)}
+          className={({ isActive }) => cx(styles.navLink, isActive && styles.navLinkActive)}
+        >
+          {t('organizer_contact_nav', locale)}
         </NavLink>
       </nav>
 

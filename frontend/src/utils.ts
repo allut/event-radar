@@ -33,6 +33,14 @@ export function withLocaleQuery(path: string, locale: string): string {
   return withQueryParam(path, 'locale', locale);
 }
 
+/** True for any organizer-portal route, with or without a `/:locale` prefix
+ * (e.g. `/organizer/dashboard`, `/ru/organizer/settings`) — used to pick the
+ * right chrome/links (e.g. Footer's Contact link) by current portal rather
+ * than by auth state alone. */
+export function isOrganizerPortalPath(pathname: string): boolean {
+  return /\/organizer(\/|$)/.test(pathname);
+}
+
 /** Reshapes a URL before it's forwarded to Vercel Analytics: strips the query string and
  * hash (query params can carry sensitive values — the /auth/verify magic-link token, an
  * /explore free-text search — that must never reach a third-party analytics vendor) and

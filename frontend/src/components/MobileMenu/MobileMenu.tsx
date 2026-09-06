@@ -1,7 +1,7 @@
 import { Link, NavLink } from 'react-router-dom';
 import { t } from '../../i18n';
 import { cx } from '../../utils';
-import { LOCALES, NAV_ITEMS, ROUTES, THEME_OPTIONS } from '../../constants';
+import { LOCALES, NAV_ITEMS, ROUTES, SIGNED_OUT_NAV_ROUTES, THEME_OPTIONS } from '../../constants';
 import { useDropdown } from '../../hooks/useDropdown';
 import { useLocalePath } from '../../hooks/useLocalePath';
 import { useThemePreference } from '../../hooks/useThemePreference';
@@ -28,9 +28,9 @@ export default function MobileMenu({ locale, onLocaleChange, onLogout, localeDis
   const { open, setOpen, flip, rootRef, popRef, triggerRef, close } = useDropdown();
   const localePath = useLocalePath();
   const themePreference = useThemePreference();
-  // Mirrors TopBar's signed-out nav filtering — Explore stays visible, the
-  // rest are dead ends for an anonymous visitor.
-  const visibleNavItems = navItems ?? (authed ? NAV_ITEMS : NAV_ITEMS.filter((item) => item.route === ROUTES.explore));
+  // Mirrors TopBar's signed-out nav filtering via the shared
+  // SIGNED_OUT_NAV_ROUTES allowlist.
+  const visibleNavItems = navItems ?? (authed ? NAV_ITEMS : NAV_ITEMS.filter((item) => SIGNED_OUT_NAV_ROUTES.includes(item.route)));
 
   return (
     <div className={cx(menuStyles.menu, styles.mobileMenu)} ref={rootRef}>

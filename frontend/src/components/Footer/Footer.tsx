@@ -1,7 +1,7 @@
 import { type ReactNode } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { t, ti } from '../../i18n';
-import { safeUrl } from '../../utils';
+import { isOrganizerPortalPath, safeUrl } from '../../utils';
 import { BRAND_GLYPH, ROUTES, SOCIAL_LINKS, type SocialIcon } from '../../constants';
 import { useLocale } from '../../hooks/useLocale';
 import { useLocalePath } from '../../hooks/useLocalePath';
@@ -34,6 +34,14 @@ export default function Footer() {
   const locale = useLocale();
   const localePath = useLocalePath();
   const isOrganizer = useOrganizerAuth();
+  const { pathname } = useLocation();
+  // On an organizer-portal page, an already-signed-in organizer gets the
+  // authenticated organizer contact form instead of the public one — a
+  // signed-out visitor there (e.g. /organizer/login) still gets the public
+  // form, since /organizer/contact would just bounce them to login.
+  const inOrganizerPortal = isOrganizerPortalPath(pathname) && isOrganizer;
+  const contactRoute = inOrganizerPortal ? ROUTES.organizerContact : ROUTES.contact;
+  const contactLabelKey = inOrganizerPortal ? 'organizer_contact_nav' : 'footer_contact';
   return (
     <footer className={styles.footer}>
       <div className={styles.inner}>
@@ -48,7 +56,7 @@ export default function Footer() {
         <nav className={styles.links} aria-label={t('footer_nav', locale)}>
           <Link to={localePath(ROUTES.privacy)} className={styles.link}>{t('footer_privacy', locale)}</Link>
           <Link to={localePath(ROUTES.terms)} className={styles.link}>{t('footer_terms', locale)}</Link>
-          <Link to={localePath(ROUTES.contact)} className={styles.link}>{t('footer_contact', locale)}</Link>
+          <Link to={localePath(contactRoute)} className={styles.link}>{t(contactLabelKey, locale)}</Link>
           <Link to={localePath(isOrganizer ? ROUTES.organizerDashboard : ROUTES.organizerLogin)} className={styles.link}>
             {t(isOrganizer ? 'footer_organizer_dashboard' : 'footer_organizers', locale)}
           </Link>

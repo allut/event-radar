@@ -1,7 +1,7 @@
 import { Link, NavLink } from 'react-router-dom';
 import { t } from '../../i18n';
 import { cx } from '../../utils';
-import { BRAND_GLYPH, NAV_ITEMS, ROUTES } from '../../constants';
+import { BRAND_GLYPH, NAV_ITEMS, ROUTES, SIGNED_OUT_NAV_ROUTES } from '../../constants';
 import { useLocalePath } from '../../hooks/useLocalePath';
 import LocaleSelector from '../LocaleSelector';
 import ThemeSelector from '../ThemeSelector';
@@ -20,10 +20,10 @@ interface TopBarProps {
 
 export default function TopBar({ locale, onLocaleChange, onLogout, localeDisabled, onBack, authed = true, showNav = true }: TopBarProps) {
   const localePath = useLocalePath();
-  // Signed-out chrome (issue #235): Explore stays visible in nav — it's a
-  // public route now — but Daily 5/Saved/Settings are dead ends for an
-  // anonymous visitor (Saved has nothing in it, the others require auth).
-  const visibleNavItems = authed ? NAV_ITEMS : NAV_ITEMS.filter((item) => item.route === ROUTES.explore);
+  // Signed-out chrome (issue #235): only the public routes in
+  // SIGNED_OUT_NAV_ROUTES stay visible — the rest are dead ends for an
+  // anonymous visitor.
+  const visibleNavItems = authed ? NAV_ITEMS : NAV_ITEMS.filter((item) => SIGNED_OUT_NAV_ROUTES.includes(item.route));
   return (
     <header className={styles.topBar}>
       <div className={styles.left}>

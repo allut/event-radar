@@ -549,6 +549,10 @@ RATE_LIMIT_CONTACT = "3/minute"
 # inline classify+publish pass, so keep it tight per-IP; the DB-backed
 # ORGANIZER_DAILY_SUBMISSION_CAP is the per-organizer ceiling.
 RATE_LIMIT_SUBMIT = "10/minute"
+# Authenticated organizer contact form (routers/organizer_contact.py) —
+# modeled on RATE_LIMIT_CONTACT: session-gated, but each hit still sends an
+# email, so keep the same tight per-IP cap.
+RATE_LIMIT_ORGANIZER_CONTACT = "3/minute"
 
 # Resend inbound-mail webhook signature verification (Svix scheme; see
 # https://resend.com/docs/dashboard/webhooks/verify-webhooks-requests and
