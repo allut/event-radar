@@ -395,9 +395,14 @@
 }
 
 .plate {
+  position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1.35fr) minmax(var(--plate-text-min), 1fr);
   border-bottom: var(--rule);
+}
+
+.plate:hover .plateImg {
+  transform: scale(var(--scale-subtle));
 }
 
 @media (min-width: 641px) {
@@ -445,6 +450,7 @@
 .plateImg {
   object-fit: contain;
   filter: var(--plate-image-filter); /* B3's saturate/contrast pull, so photos sit in the navy ground */
+  transition: transform var(--transition);
 }
 
 .plateText {
@@ -465,6 +471,23 @@
   margin-top: var(--space-3);
   color: var(--text);
   text-wrap: balance;
+}
+
+.plateTitleLink {
+  color: inherit;
+  transition: color var(--transition);
+}
+
+.plateTitleLink:hover {
+  color: var(--accent-light);
+}
+
+.plateStretched::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: var(--z-card-overlay);
+  cursor: pointer;
 }
 
 .plateBody {

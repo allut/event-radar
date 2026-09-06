@@ -157,6 +157,7 @@ function Ticker({ locale, events, isFallback }: { locale: string; events: Tonigh
 }
 
 function Plate({ event, index, locale }: { event: EventData; index: number; locale: string }) {
+  const localePath = useLocalePath();
   const isFlipped = index % 2 === 1;
   const category = event.categories[0];
   const categoryLabel = category ? t(`category_${category}`, locale) : null;
@@ -178,7 +179,11 @@ function Plate({ event, index, locale }: { event: EventData; index: number; loca
       </div>
       <div className={styles.plateText}>
         <p className={styles.plateEyebrow}>{eyebrow}</p>
-        <h2 className={styles.plateH2}>{event.title}</h2>
+        <h2 className={styles.plateH2}>
+          <Link to={localePath(ROUTES.eventDetail(event.id))} className={cx(styles.plateTitleLink, styles.plateStretched)}>
+            {event.title}
+          </Link>
+        </h2>
         {event.description && (
           <p className={styles.plateBody}>{truncateForMeta(stripHtmlToText(event.description), PLATE_BODY_MAX_LENGTH)}</p>
         )}

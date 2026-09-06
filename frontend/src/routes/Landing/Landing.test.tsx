@@ -88,6 +88,18 @@ describe('Landing', () => {
     expect(screen.getByText('Showcase Two')).toBeInTheDocument();
   });
 
+  it('links a plate title to the event detail page', async () => {
+    mockGetByUrl({
+      [API.publicShowcase]: {
+        events: [makeEvent({ id: 42, title: 'Showcase One' })],
+      },
+      [API.publicCounts]: counts,
+    });
+    renderWithProviders(<Landing />, { route: '/en', pathPattern: '/:locale' });
+    const link = await screen.findByRole('link', { name: 'Showcase One' });
+    expect(link).toHaveAttribute('href', '/en/events/42');
+  });
+
   it('renders one image for a showcase event with an image_url', async () => {
     mockGetByUrl({
       [API.publicShowcase]: {
