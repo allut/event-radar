@@ -11,6 +11,7 @@ from app._generated.shared_constants import (
 from app.constants import (
     ADMIN_USERNAME_DEFAULT,
     APP_ENV_DEVELOPMENT,
+    DEV_CORS_ORIGINS_DEFAULT,
     LOG_LEVEL_DEFAULT,
     SECRET_KEY_MIN_LEN,
     SECRET_KEY_PLACEHOLDER_PREFIX,
@@ -182,7 +183,7 @@ class Settings(BaseSettings):
     # Dual role: this set also seeds CsrfOriginCheckMiddleware's trusted-origin
     # allowlist (app/main.py, CORS_ORIGINS ∪ {FRONTEND_URL}) — widening it for CORS
     # also widens which Origins are trusted for the CSRF check.
-    CORS_ORIGINS: list[str] = ["http://localhost:5173", "http://localhost:4173"]
+    CORS_ORIGINS: list[str] = list(DEV_CORS_ORIGINS_DEFAULT)
 
     # Logging
     LOG_LEVEL: str = LOG_LEVEL_DEFAULT

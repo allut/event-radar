@@ -365,8 +365,10 @@ async def _score_and_rank_candidates(
                 Event.lat,
                 Event.lng,
                 Event.dedup_group_id,
+                Event.venue_id,
             ),
             selectinload(Event.classification),
+            selectinload(Event.venue),
         )
         .where(*conds)
         .order_by(Event.starts_at.asc())

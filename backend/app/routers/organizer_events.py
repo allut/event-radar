@@ -45,6 +45,8 @@ from app.constants import (
     EVENT_STATUS_CLASSIFIED,
     EVENT_STATUS_PUBLISHED,
     HTTP_TIMEOUT_SECONDS,
+    IMAGE_EXTENSION_BY_MIME,
+    IMAGE_MAGIC_BYTES,
     IMAGE_UPLOAD_ALLOWED_MIME,
     IMAGE_UPLOAD_MAX_BYTES,
     LOCALE_EN,
@@ -677,26 +679,12 @@ def _cloudinary_signature(params: dict[str, str | int], api_secret: str) -> str:
     return hashlib.sha256((to_sign + api_secret).encode()).hexdigest()
 
 
-# Leading-byte signatures for the three formats IMAGE_UPLOAD_ALLOWED_MIME
-# allows. WebP needs its own check below since RIFF is a generic container
-# format — the fourCC at offset 8 is what actually says "WEBP".
-_IMAGE_MAGIC_BYTES: dict[bytes, str] = {
-    b"\xff\xd8\xff": "image/jpeg",
-    b"\x89PNG\r\n\x1a\n": "image/png",
-}
-_IMAGE_EXTENSION_BY_MIME: dict[str, str] = {
-    "image/jpeg": "jpg",
-    "image/png": "png",
-    "image/webp": "webp",
-}
-
-
 def _sniff_image_mime(body: bytes) -> str | None:
     """Detect the real image format from its leading bytes rather than
     trusting file.content_type, which is a value the client writes into its
     own multipart headers and this endpoint otherwise never verifies before
     forwarding the bytes to Cloudinary."""
-    for magic, mime in _IMAGE_MAGIC_BYTES.items():
+    for magic, mime in IMAGE_MAGIC_BYTES.items():
         if body.startswith(magic):
             return mime
     if body[:4] == b"RIFF" and body[8:12] == b"WEBP":
@@ -793,7 +781,7 @@ async def upload_event_image(
     # Generated rather than file.filename — nothing downstream reads the
     # upload filename, and it is attacker-controlled text otherwise crossing
     # a service boundary unchanged.
-    generated_filename = f"{uuid4().hex}.{_IMAGE_EXTENSION_BY_MIME[sniffed_mime]}"
+    generated_filename = f"{uuid4().hex}.{IMAGE_EXTENSION_BY_MIME[sniffed_mime]}"
 
     async with httpx.AsyncClient(timeout=HTTP_TIMEOUT_SECONDS) as client:
         try:

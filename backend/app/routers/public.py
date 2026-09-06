@@ -27,7 +27,7 @@ from app.constants import (
     TALLINN_TZ,
 )
 from app.db import get_db
-from app.models.models import Event, EventClassification
+from app.models.models import Event, EventClassification, Venue
 from app.rate_limit import limiter
 from app.routers.utils import (
     canonical_event_filter,
@@ -184,16 +184,29 @@ def _tonight_fallback_stmt(now: datetime) -> Select[tuple[Event]]:
     )
 
 
-def _aggregates_stmt(now: datetime):
+def _aggregates_stmt(
+    now: datetime,
+) -> Select[tuple[int, int, datetime, float | None]]:
     """Single-row aggregate query: upcoming count, distinct venue count, furthest
     booked date, cheapest paid ticket. One query, no per-row loop — bulk
-    aggregates, not a scan hydrated into Python."""
+    aggregates, not a scan hydrated into Python.
+
+    Distinct-venue count is coalesced over the linked Venue's name so a
+    venue-linked event (whose own venue_name is left NULL, #176) isn't
+    silently dropped from the count — see resolve_venue_name()."""
     live = and_(public_event_filter(), Event.starts_at >= now)
-    return select(
-        func.count(Event.id).filter(live).label("upcoming_count"),
-        func.count(func.distinct(Event.venue_name)).filter(live).label("venue_count"),
-        func.max(Event.starts_at).filter(live).label("furthest_date"),
-        func.min(Event.price_min).filter(live, Event.price_min > 0).label("cheapest_price"),
+    venue_name = func.coalesce(Venue.name, Event.venue_name)
+    return (
+        select(
+            func.count(Event.id).filter(live).label("upcoming_count"),
+            func.count(func.distinct(venue_name)).filter(live).label("venue_count"),
+            func.max(Event.starts_at).filter(live).label("furthest_date"),
+            func.min(Event.price_min)
+            .filter(live, Event.price_min > 0)
+            .label("cheapest_price"),
+        )
+        .select_from(Event)
+        .outerjoin(Event.venue)
     )
 
 

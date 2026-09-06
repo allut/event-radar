@@ -205,6 +205,23 @@ class TestPrerenderEvents:
         assert "ends_at" in sql or "starts_at" in sql
 
 
+class TestAggregatesStmtVenueCount:
+    """#176: a venue-linked event leaves Event.venue_name NULL, so the
+    distinct-venue count must coalesce over the linked Venue's name or a
+    Postgres COUNT(DISTINCT ...) silently drops every organizer saved venue
+    (NULLs are excluded from DISTINCT)."""
+
+    def test_counts_over_coalesced_venue_name(self):
+        from app.routers.public import _aggregates_stmt
+
+        now = datetime(2026, 7, 19, 12, 0, 0, tzinfo=timezone.utc)
+        sql = str(_aggregates_stmt(now).compile(compile_kwargs={"literal_binds": True}))
+
+        assert "coalesce" in sql.lower()
+        assert "venues" in sql.lower()
+        assert "JOIN venues" in sql or "LEFT OUTER JOIN venues" in sql
+
+
 class TestCounts:
     @pytest.mark.asyncio
     async def test_returns_payload_shape(self, mock_db, make_event, make_request):

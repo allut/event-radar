@@ -14,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import sqlalchemy as sa
 from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncConnection
 
 from app.routers.utils import mask_db_url
 
@@ -41,7 +42,7 @@ _RESET_SOURCES_SQL = text(
 )
 
 
-async def _counts(conn) -> dict[str, int]:  # type: ignore[no-untyped-def]
+async def _counts(conn: AsyncConnection) -> dict[str, int]:
     result: dict[str, int] = {}
     for table in WIPE_TABLES:
         stmt = sa.select(sa.func.count()).select_from(sa.table(table))

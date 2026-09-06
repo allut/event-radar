@@ -729,6 +729,19 @@ IMAGE_UPLOAD_MAX_BYTES = 8 * 1024 * 1024  # 8 MiB
 CLOUDINARY_UPLOAD_URL_TEMPLATE = (
     "https://api.cloudinary.com/v1_1/{cloud_name}/image/upload"
 )
+# Leading-byte signatures for the three formats IMAGE_UPLOAD_ALLOWED_MIME
+# allows. WebP needs its own check (organizer_events.py::_sniff_image_mime)
+# since RIFF is a generic container format — the fourCC at offset 8 is what
+# actually says "WEBP".
+IMAGE_MAGIC_BYTES: dict[bytes, str] = {
+    b"\xff\xd8\xff": "image/jpeg",
+    b"\x89PNG\r\n\x1a\n": "image/png",
+}
+IMAGE_EXTENSION_BY_MIME: dict[str, str] = {
+    "image/jpeg": "jpg",
+    "image/png": "png",
+    "image/webp": "webp",
+}
 # Hosts an organizer-submission event.image_url is allowed to point at — the
 # signed Cloudinary upload endpoint (POST /organizer/events/image) always
 # returns a res.cloudinary.com secure_url. Without this, an organizer could
@@ -1355,6 +1368,14 @@ CURRENCY_AMOUNT_RE = (
 # via a credentialed cross-origin request.
 CORS_ALLOWED_METHODS: list[str] = ["GET", "POST", "PATCH", "DELETE"]
 CORS_ALLOWED_HEADERS: list[str] = ["Authorization", "Content-Type"]
+
+# Single source for the dev-only origins in both config.CORS_ORIGINS' literal
+# default and main.py's non-development CSRF-trust subtraction — the two must
+# never drift, or a value dropped from one but not the other either breaks
+# local dev or leaves a hardcoded localhost origin CSRF-trusted in production.
+DEV_CORS_ORIGINS_DEFAULT: frozenset[str] = frozenset(
+    {"http://localhost:5173", "http://localhost:4173"}
+)
 
 # CSRF — methods CsrfOriginCheckMiddleware (app/main.py) enforces the Origin
 # check against. Deliberately includes PUT even though the API never routes

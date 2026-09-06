@@ -400,7 +400,7 @@ def collapse_series_duplicates(
     """
     earliest_by_key: dict[tuple[str, str], Event] = {}
     for event in event_rows:
-        key = event_series_key(event.title_orig, event.venue_name)
+        key = event_series_key(event.title_orig, resolve_venue_name(event))
         current = earliest_by_key.get(key)
         if current is None or (event.starts_at, event.id) < (
             current.starts_at,

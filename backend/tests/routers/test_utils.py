@@ -9,6 +9,7 @@ from fastapi import HTTPException
 
 from app.constants import APP_ENV_DEVELOPMENT
 from app.routers.utils import (
+    collapse_series_duplicates,
     compute_preferred_taxonomy,
     event_ended_filter,
     event_not_ended_filter,
@@ -361,6 +362,26 @@ class TestResolveVenue:
     def test_coords_fall_back_to_event_when_unlinked(self, make_event):
         event = make_event(venue_id=None, venue=None, lat=58.0, lng=25.0)
         assert resolve_venue_coords(event) == (58.0, 25.0)
+
+
+class TestCollapseSeriesDuplicatesVenueLinked:
+    """#176/#177: venue-linked events leave Event.venue_name NULL, so the
+    series key must resolve through the linked Venue — reading the raw
+    column collapses two genuinely different venue-linked events sharing a
+    title into one series."""
+
+    def test_same_title_different_linked_venues_stay_distinct(self, make_event, make_venue):
+        venue_a = make_venue(venue_id=1, name="Telliskivi Creative City")
+        venue_b = make_venue(venue_id=2, name="Fotografiska")
+        event_a = make_event(
+            event_id=1, title="Jazz Night", venue_id=1, venue=venue_a, venue_name=None
+        )
+        event_b = make_event(
+            event_id=2, title="Jazz Night", venue_id=2, venue=venue_b, venue_name=None
+        )
+        collapsed, series_key_by_event_id = collapse_series_duplicates([event_a, event_b])
+        assert len(collapsed) == 2
+        assert series_key_by_event_id[1] != series_key_by_event_id[2]
 
 
 class TestSerializeEventVenueResolution:

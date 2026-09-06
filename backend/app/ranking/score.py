@@ -79,6 +79,8 @@ from app.routers.utils import (
     event_not_ended_filter,
     event_series_key,
     persona_weight_tuple,
+    resolve_venue_coords,
+    resolve_venue_name,
     select_events_with_classification,
 )
 
@@ -407,10 +409,11 @@ def _precompute_event_factors(
     for event in event_rows:
         cl = event.classification
         quality = cl.quality_score if cl and cl.quality_score is not None else NEUTRAL_SCORE
+        lat, lng = resolve_venue_coords(event)
         factors[event.id] = (
             recency_boost(event.starts_at, now),
             quality,
-            locality_bonus(event.lat, event.lng),
+            locality_bonus(lat, lng),
         )
     return factors
 
@@ -449,7 +452,8 @@ def score_event(
         quality = (
             cl.quality_score if cl and cl.quality_score is not None else NEUTRAL_SCORE
         )
-        locality = locality_bonus(event.lat, event.lng)
+        lat, lng = resolve_venue_coords(event)
+        locality = locality_bonus(lat, lng)
     fb_normalized = (fb + 1.0) / 2.0  # map [-1, 1] → [0, 1]
 
     return (
@@ -475,7 +479,8 @@ def anonymous_score_event(event: Event, now: datetime) -> float:
     cl: EventClassification | None = event.classification
     quality = cl.quality_score if cl and cl.quality_score is not None else NEUTRAL_SCORE
     recency = recency_boost(event.starts_at, now)
-    locality = locality_bonus(event.lat, event.lng)
+    lat, lng = resolve_venue_coords(event)
+    locality = locality_bonus(lat, lng)
     return (
         SCORE_WEIGHT_AFFINITY * NEUTRAL_SCORE
         + SCORE_WEIGHT_ANON_RECENCY * recency
@@ -675,12 +680,15 @@ async def _load_recent_series_by_user(
                 select(Event)
                 .where(Event.id.in_(list(shown_event_users.keys())))
                 .options(
-                    load_only(Event.id, Event.title_orig, Event.venue_name)
+                    load_only(
+                        Event.id, Event.title_orig, Event.venue_name, Event.venue_id
+                    ),
+                    selectinload(Event.venue),
                 )
             )
         ).all()
         for shown_ev in shown_event_rows:
-            key = event_series_key(shown_ev.title_orig, shown_ev.venue_name)
+            key = event_series_key(shown_ev.title_orig, resolve_venue_name(shown_ev))
             for uid in shown_event_users[shown_ev.id]:
                 recent_series_by_user.setdefault(uid, set()).add(key)
     return recent_series_by_user

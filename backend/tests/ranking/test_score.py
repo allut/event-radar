@@ -34,12 +34,16 @@ def _event(
     lat: float = 59.437,
     lng: float = 24.745,
     dedup_group: int | None = None,
+    venue_id: int | None = None,
+    venue: MagicMock | None = None,
 ) -> Event:
     e = MagicMock()
     e.id = event_id
     e.starts_at = starts_at or (_now() + timedelta(days=2))
     e.lat = lat
     e.lng = lng
+    e.venue_id = venue_id
+    e.venue = venue
     e.dedup_group_id = dedup_group
     cl = MagicMock()
     cl.categories = categories or ["music"]
@@ -406,8 +410,36 @@ class TestLocalityBonus:
 
 
 # ---------------------------------------------------------------------------
-# score_event
+# score_event / venue-linked locality resolution
 # ---------------------------------------------------------------------------
+
+
+class TestScoreEventVenueLinkedLocality:
+    """A venue-linked event's own lat/lng is never backfilled (#176) — the
+    read path must resolve coordinates through the linked Venue instead of
+    reading Event.lat/lng directly."""
+
+    def _venue_linked_event(self, lat: float | None, lng: float | None) -> Event:
+        venue = MagicMock()
+        venue.lat = lat
+        venue.lng = lng
+        return _event(lat=None, lng=None, venue_id=7, venue=venue)
+
+    def test_venue_linked_event_scores_nonzero_locality(self):
+        e = self._venue_linked_event(59.437, 24.745)  # Tallinn centre
+        v = {"categories": {"music": 1.0}, "vibes": {"underground": 1.0}}
+        result = score_event([(1.0, v)], _ctx(), e, _now())
+        assert result is not None
+        # Own lat/lng are None; without venue resolution locality would be
+        # NEUTRAL_SCORE (0.5) rather than the Tallinn-centre 1.0 the linked
+        # Venue actually reports.
+        no_venue_result = score_event([(1.0, v)], _ctx(), _event(lat=None, lng=None), _now())
+        assert result > no_venue_result
+
+    def test_half_geocoded_venue_falls_back_to_neutral(self):
+        e = self._venue_linked_event(59.437, None)
+        result = score_event([], _ctx(), e, _now())
+        assert result is not None
 
 
 class TestScoreEvent:
