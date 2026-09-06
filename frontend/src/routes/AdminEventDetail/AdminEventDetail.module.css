@@ -82,7 +82,41 @@
 .factList dd { color: var(--text); margin: 0; }
 
 .prose { font-size: var(--fs-base); color: var(--text-soft); max-width: var(--measure-prose); }
-.importantInfo { margin-top: var(--space-2); font-size: var(--fs-sm); color: var(--accent-light); }
+
+.proseHtml {
+  font-size: var(--fs-base);
+  color: var(--text-soft);
+  max-width: var(--measure-prose);
+  line-height: var(--leading-relaxed);
+  white-space: pre-wrap;
+}
+.proseHtml p + p { margin-top: var(--space-2); }
+.proseHtml ul, .proseHtml ol { padding-left: var(--space-4); margin-top: var(--space-1); margin-bottom: var(--space-1); }
+.proseHtml li { margin-bottom: var(--space-0-375); }
+.proseHtml a { color: var(--accent-light); }
+.proseHtml strong { color: var(--text); font-weight: var(--fw-semibold); }
+.proseHtml h3, .proseHtml h4 {
+  font-family: var(--font-system);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  color: var(--text);
+  margin-top: var(--space-3);
+  margin-bottom: var(--space-0-375);
+}
+.proseHtml blockquote {
+  border-left: var(--border-w-alert) solid var(--border);
+  padding-left: var(--space-2);
+  margin: var(--space-2) 0;
+}
+
+.importantInfo {
+  composes: proseHtml;
+  margin-top: var(--space-2);
+  font-size: var(--fs-sm);
+  color: var(--accent-light);
+}
+.importantInfo strong { color: inherit; }
+.importantInfo a { color: inherit; text-decoration: underline; }
 
 .chips {
   composes: chips from '../../components/shared/Chip.module.css';

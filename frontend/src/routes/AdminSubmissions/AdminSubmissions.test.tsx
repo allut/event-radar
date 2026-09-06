@@ -57,6 +57,23 @@ describe('AdminSubmissions', () => {
     expect(screen.getByText('Live jazz trio in the museum courtyard.')).toBeInTheDocument();
   });
 
+  it('renders the description snippet as plain text, never as HTML markup (out of scope for #271)', async () => {
+    mockGet.mockResolvedValueOnce({
+      total: 1,
+      events: [
+        {
+          ...sampleSubmissions.events[0],
+          description: 'Doors at 8pm. <strong>Bring ID</strong> — 18+ only.',
+        },
+      ],
+    });
+    renderWithProviders(<AdminSubmissions />);
+
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Tallinn Jazz Night' })).toBeInTheDocument());
+    expect(screen.getByText(/Doors at 8pm\. <strong>Bring ID<\/strong> — 18\+ only\./)).toBeInTheDocument();
+    expect(document.querySelector('strong')).not.toBeInTheDocument();
+  });
+
   it('shows an empty state when there are no pending submissions', async () => {
     mockGet.mockResolvedValueOnce({ total: 0, events: [] });
     renderWithProviders(<AdminSubmissions />);

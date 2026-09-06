@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { adminApi, ApiError } from '../../api/client';
 import { API, QUERY_KEYS, ROUTES, UI_STATE, REPORT_STATUS, DEFAULT_LOCALE_CODE, ADMIN_EVENT_DETAIL_TABS } from '../../constants';
+import { sanitizeHtml } from '../../utils';
 import PageState from '../../components/PageState';
 import Toast from '../../components/Toast';
 import { useToast } from '../../hooks/useToast';
@@ -108,6 +109,15 @@ export default function AdminEventDetail({ eventId }: { eventId: string }) {
     queryFn: () => adminApi.get<InspectorResponse>(API.adminEventDetail(eventId)),
   });
 
+  const sanitizedDescription = useMemo(
+    () => (data?.event.description_orig ? sanitizeHtml(data.event.description_orig) : null),
+    [data],
+  );
+  const sanitizedImportantInfo = useMemo(
+    () => (data?.event.important_info ? sanitizeHtml(data.event.important_info) : null),
+    [data],
+  );
+
   const actionMutation = useMutation({
     mutationFn: ({ kind, note }: { kind: ActionKind; note: string }) =>
       adminApi.post(ACTION_CONFIG[kind].path(Number(eventId)), { resolution_note: note }),
@@ -206,8 +216,17 @@ export default function AdminEventDetail({ eventId }: { eventId: string }) {
               <dt>Updated</dt><dd>{fmt(event.updated_at)}</dd>
               <dt>Detail refetched</dt><dd>{fmt(event.detail_refetched_at)}</dd>
             </dl>
-            <p className={styles.prose}>{event.description_orig ?? 'No description.'}</p>
-            {event.important_info && <p className={styles.importantInfo}>{event.important_info}</p>}
+            {sanitizedDescription ? (
+              <div className={styles.proseHtml} dangerouslySetInnerHTML={{ __html: sanitizedDescription }} />
+            ) : (
+              <p className={styles.prose}>No description.</p>
+            )}
+            {sanitizedImportantInfo && (
+              <div
+                className={styles.importantInfo}
+                dangerouslySetInnerHTML={{ __html: sanitizedImportantInfo }}
+              />
+            )}
           </>
         )}
 

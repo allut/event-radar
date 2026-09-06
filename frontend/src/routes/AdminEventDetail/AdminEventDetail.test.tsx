@@ -62,6 +62,39 @@ describe('AdminEventDetail', () => {
     expect(screen.getByText('A late-night jazz set.')).toBeInTheDocument();
   });
 
+  it('renders organizer-authored HTML in description/important_info as real markup, sanitized', async () => {
+    mockGet.mockResolvedValueOnce(
+      sampleResponse({
+        event: {
+          ...sampleResponse().event,
+          description_orig: '<p>Doors at <strong>8pm</strong>.</p><h3>Program</h3><ul><li>Set one</li></ul><script>alert(1)</script>',
+          important_info: '<p>18+ only. <a href="https://example.com">Details</a></p>',
+        },
+      }),
+    );
+    renderWithProviders(<AdminEventDetail eventId="42" />, { route: '/admin/events/42' });
+
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Jazz Cellar Night' })).toBeInTheDocument());
+
+    expect(screen.getByRole('heading', { name: 'Program', level: 3 })).toBeInTheDocument();
+    expect(screen.getByRole('listitem')).toHaveTextContent('Set one');
+    expect(screen.getByText('8pm').tagName).toBe('STRONG');
+    expect(document.querySelector('script')).not.toBeInTheDocument();
+
+    const link = screen.getByRole('link', { name: 'Details' });
+    expect(link).toHaveAttribute('href', 'https://example.com');
+    expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+  });
+
+  it('shows a plain-text fallback when there is no description', async () => {
+    mockGet.mockResolvedValueOnce(
+      sampleResponse({ event: { ...sampleResponse().event, description_orig: null } }),
+    );
+    renderWithProviders(<AdminEventDetail eventId="42" />, { route: '/admin/events/42' });
+
+    await waitFor(() => expect(screen.getByText('No description.')).toBeInTheDocument());
+  });
+
   it('shows the feed-membership badge only when in_todays_feed is true', async () => {
     mockGet.mockResolvedValueOnce(sampleResponse({ in_todays_feed: true }));
     renderWithProviders(<AdminEventDetail eventId="42" />, { route: '/admin/events/42' });
