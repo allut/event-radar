@@ -162,6 +162,9 @@ async def publish_pending(
         .where(
             Event.status == EVENT_STATUS_CLASSIFIED,
             Event.starts_at
+            # f-string is safe here only because PUBLISH_DIAGNOSTICS_WINDOW_DAYS is a
+            # fixed int constant, never request-derived — do not parameterize this with
+            # request input without switching to a bound parameter.
             >= literal(now)
             - text(f"INTERVAL '{PUBLISH_DIAGNOSTICS_WINDOW_DAYS} days'"),
         )

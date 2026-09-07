@@ -4,6 +4,7 @@ Secret enrollment is a separate one-time local script (scripts/admin_totp_enroll
 this module only verifies a submitted 6-digit code against the configured secret.
 """
 
+import hmac
 import time
 
 import pyotp
@@ -45,7 +46,7 @@ def check_totp_code(secret: str, code: str) -> int | None:
             step = current_step + offset
             if _last_accepted_step is not None and step <= _last_accepted_step:
                 continue  # already-accepted or older step — reject even if the code matches
-            if totp.generate_otp(step) == code:
+            if hmac.compare_digest(totp.generate_otp(step), code):
                 return step
     except Exception:
         return None
