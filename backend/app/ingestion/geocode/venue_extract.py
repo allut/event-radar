@@ -1,12 +1,15 @@
 """LLM pass mining street addresses glued into venue_name into venue_address."""
 
+import asyncio
 import logging
 
+import httpx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.constants import (
     GEOCODE_MAX_PER_RUN,
+    LLM_BATCH_FANOUT_CONCURRENCY,
     LLM_DEDUP_HASH_QUERY_CHUNK_SIZE,
     LLM_TASK_VENUE_EXTRACT,
     VENUE_EXTRACT_MAX_FRESH_LLM_CALLS_PER_RUN,
@@ -17,7 +20,13 @@ from app.constants import (
 )
 from app.ingestion.content_filters import alternation_pattern
 from app.llm.prompts import LLM_VENUE_EXTRACT_PROMPT_TEMPLATE, escape_prompt_delimiters
-from app.llm.router import LLMError, content_hash, llm_available, llm_json
+from app.llm.router import (
+    LLMError,
+    content_hash,
+    llm_available,
+    llm_http_client,
+    llm_json,
+)
 from app.models.models import Event, LlmCall
 
 log = logging.getLogger(__name__)
@@ -127,32 +136,70 @@ async def extract_address_from_venue_name(db: AsyncSession) -> int:
     cached_decisions = await _prefetch_venue_extract_cache(
         db, list(hashes.values())
     )
-    fresh_calls = 0
     mutated = 0
     mutated_names = 0
 
-    for name, events in by_name.items():
-        prompt_hash = hashes[name]
-        result: dict | None = cached_decisions.get(prompt_hash)
-
-        if result is None:
-            if fresh_calls >= VENUE_EXTRACT_MAX_FRESH_LLM_CALLS_PER_RUN:
+    # Filter pass: names needing a fresh call, capped at the run budget in
+    # by_name (== candidates) order, so the fan-out below preserves the same
+    # deferral priority the old sequential loop had.
+    to_call: list[str] = []
+    for name in by_name:
+        if cached_decisions.get(hashes[name]) is None:
+            if len(to_call) >= VENUE_EXTRACT_MAX_FRESH_LLM_CALLS_PER_RUN:
                 log.debug("venue-extract: fresh-call budget reached, deferring %r", name)
                 continue
+            to_call.append(name)
+
+    semaphore = asyncio.Semaphore(LLM_BATCH_FANOUT_CONCURRENCY)
+
+    async def _extract_one(name: str, http_client: httpx.AsyncClient) -> dict | None:
+        async with semaphore:
             try:
-                result, _ = await llm_json(LLM_TASK_VENUE_EXTRACT, prompts[name], db)
-                fresh_calls += 1
+                # to_call is built from a cached_decisions miss above, so the
+                # bulk prefetch already established there is no cached row —
+                # pass an empty prefetched_cache so llm_json skips its own
+                # per-call SELECT, which would otherwise run concurrently
+                # against the shared AsyncSession across in-flight coroutines.
+                result, _ = await llm_json(
+                    LLM_TASK_VENUE_EXTRACT,
+                    prompts[name],
+                    db,
+                    http_client=http_client,
+                    prefetched_cache={},
+                )
+                return result
             except LLMError as exc:
                 log.warning("venue-extract: LLM failed for %r: %s", name, exc)
-                continue
+                return None
+
+    async with llm_http_client() as http_client:
+        fresh_results = await asyncio.gather(
+            *(_extract_one(name, http_client) for name in to_call),
+            return_exceptions=True,
+        )
+    fresh_by_name: dict[str, dict] = {}
+    for name, result in zip(to_call, fresh_results):
+        if isinstance(result, BaseException):
+            log.error("venue-extract: %r raised during LLM extract: %s", name, result)
+            continue
+        if result is not None:
+            fresh_by_name[name] = result
+
+    for name, events in by_name.items():
+        prompt_hash = hashes[name]
+        decision: dict | None = cached_decisions.get(prompt_hash)
+        if decision is None:
+            decision = fresh_by_name.get(name)
+        if decision is None:
+            continue
 
         # Validate and apply.
-        if not isinstance(result, dict):
+        if not isinstance(decision, dict):
             log.warning("venue-extract: malformed response for %r — skipping", name)
             continue
 
-        raw_address = result.get("venue_address")
-        raw_name = result.get("venue_name")
+        raw_address = decision.get("venue_address")
+        raw_name = decision.get("venue_name")
 
         new_address: str | None = (raw_address.strip() or None) if isinstance(raw_address, str) else None
         new_name: str | None = (

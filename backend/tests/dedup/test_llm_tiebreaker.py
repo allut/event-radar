@@ -392,6 +392,45 @@ class TestRunDedupPassLlm:
         assert c.dedup_group_id == 1
 
     @pytest.mark.asyncio
+    async def test_one_pair_raising_does_not_abort_other_disjoint_pairs(
+        self, mock_db, monkeypatch, make_event
+    ):
+        """Fresh-call fan-out via asyncio.gather(..., return_exceptions=True):
+        two vertex-disjoint pairs land in the same concurrent wave, so one
+        pair's coroutine raising an unexpected exception must not prevent the
+        other, unrelated pair in the same wave from resolving normally."""
+        monkeypatch.setattr(tiebreaker, "llm_available", lambda: True)
+        a = _event(make_event, 1, title="Jazz Night One", venue_name="Venue A")
+        b = _event(make_event, 2, title="Jazz Night Two", venue_name="Venue A")
+        c = _event(make_event, 3, title="Rock Night One", venue_name="Venue B")
+        d = _event(make_event, 4, title="Rock Night Two", venue_name="Venue B")
+        _wire_db(mock_db, [a, b, c, d])
+        _wire_execute(mock_db, [])
+        monkeypatch.setattr(
+            tiebreaker,
+            "candidate_pair_ids_in_window",
+            AsyncMock(return_value=[(1, 2), (3, 4)]),
+        )
+
+        async def _confirm_side_effect(x, y, *_args, **_kwargs):
+            if {x.id, y.id} == {1, 2}:
+                raise RuntimeError("simulated concurrent-fanout failure")
+            return True
+
+        confirm = AsyncMock(side_effect=_confirm_side_effect)
+        monkeypatch.setattr(tiebreaker, "_llm_confirms_pair", confirm)
+
+        result = await tiebreaker.run_dedup_pass_llm(mock_db)
+
+        assert result["candidate_pairs"] == 2
+        assert confirm.await_count == 2
+        assert result["llm_confirmed"] == 1
+        assert a.dedup_group_id is None
+        assert b.dedup_group_id is None
+        assert c.dedup_group_id == 3
+        assert d.dedup_group_id == 3
+
+    @pytest.mark.asyncio
     async def test_distinct_products_same_slot_reach_llm_but_stay_unmerged(
         self, mock_db, monkeypatch, make_event
     ):

@@ -1026,6 +1026,7 @@ LLM_DEDUP_CONFIDENCE_THRESHOLD: float = (
 )
 LLM_CLASSIFY_BATCH_SIZE = 30  # max events processed per classify_pending run
 LLM_REQUEST_TIMEOUT_SECONDS: float = 30.0
+LLM_BATCH_FANOUT_CONCURRENCY = 5  # bounded in-flight LLM calls for classify/dedup/venue-extract batches
 
 LLM_DEDUP_TITLE_MAX_LEN = 200
 LLM_DEDUP_VENUE_MAX_LEN = 100

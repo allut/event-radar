@@ -8,6 +8,7 @@ Fixed taxonomy (14 categories, 10 vibes) prevents ontology drift.
 Any LLM-returned value not in the taxonomy is silently dropped.
 """
 
+import asyncio
 import logging
 from datetime import datetime
 from typing import Any, cast
@@ -26,6 +27,7 @@ from app.constants import (
     EVENT_STATUS_DRAFT,
     FREE_TIER_KEYWORDS,
     IMPORTANT_INFO_MAX_CHARS,
+    LLM_BATCH_FANOUT_CONCURRENCY,
     LLM_CLASSIFY_BATCH_SIZE,
     LLM_CLASSIFY_DESC_FALLBACK,
     LLM_CLASSIFY_EXPLICIT_DEFAULT,
@@ -578,9 +580,11 @@ async def classify_pending(
     }
     prefetched_cache = await _prefetch_classify_cache(db, prompts_by_event_id)
 
-    async with llm_http_client() as http_client:
-        for event in events:
-            ok = await classify_event(
+    semaphore = asyncio.Semaphore(LLM_BATCH_FANOUT_CONCURRENCY)
+
+    async def _classify_one(event: Event) -> bool:
+        async with semaphore:
+            return await classify_event(
                 event,
                 db,
                 existing_classification=existing_map.get(event.id),
@@ -590,10 +594,23 @@ async def classify_pending(
                 prefetched_cache=prefetched_cache,
                 http_client=http_client,
             )
-            if ok:
-                succeeded += 1
-            else:
-                failed += 1
+
+    async with llm_http_client() as http_client:
+        results = await asyncio.gather(
+            *(_classify_one(event) for event in events), return_exceptions=True
+        )
+    for event, result in zip(events, results):
+        if isinstance(result, BaseException):
+            log.error(
+                "classify_pending: event_id=%d raised during classify: %s",
+                event.id,
+                result,
+            )
+            failed += 1
+        elif result:
+            succeeded += 1
+        else:
+            failed += 1
 
     log.info(
         "classify_pending: attempted=%d succeeded=%d failed=%d cancelled=%d",
