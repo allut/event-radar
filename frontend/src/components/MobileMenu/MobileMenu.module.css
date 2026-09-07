@@ -35,7 +35,7 @@
 }
 
 .divider {
-  border-top: 1px solid var(--border);
+  border-top: var(--border-w-hair) solid var(--border);
 }
 
 .link {
@@ -64,7 +64,7 @@
    collapses it back to a single class in that case.) */
 .linkActive.linkActive {
   background: var(--accent-subtle);
-  border: 1px solid var(--accent-border);
+  border: var(--border-w-hair) solid var(--accent-border);
   color: var(--accent-light);
 }
 
@@ -85,7 +85,7 @@
 .optionActive.optionActive,
 .optionActive.optionActive:hover {
   background: var(--accent-subtle);
-  border: 1px solid var(--accent-border);
+  border: var(--border-w-hair) solid var(--accent-border);
   color: var(--accent-light);
 }
 

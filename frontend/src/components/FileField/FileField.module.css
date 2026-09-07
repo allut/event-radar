@@ -29,7 +29,7 @@
   letter-spacing: var(--tracking-snug);
   text-align: center;
   border: none;
-  border-right: 1px solid var(--border);
+  border-right: var(--border-w-hair) solid var(--border);
   border-radius: var(--radius) 0 0 var(--radius);
   color: var(--text);
   cursor: pointer;
@@ -79,7 +79,7 @@
   flex: 0 0 auto;
   width: var(--field-affordance-size);
   border: none;
-  border-left: 1px solid var(--border);
+  border-left: var(--border-w-hair) solid var(--border);
   background: transparent;
   color: var(--text-muted);
   border-radius: 0 var(--radius) var(--radius) 0;
@@ -112,7 +112,7 @@
   max-width: var(--file-preview-max-width);
   margin-top: var(--space-2);
   border-radius: var(--radius);
-  border: 1px solid var(--border);
+  border: var(--border-w-hair) solid var(--border);
 }
 
 .srOnly {

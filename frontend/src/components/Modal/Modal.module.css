@@ -43,7 +43,7 @@
   font-size: var(--fs-md);
   line-height: var(--leading-none);
   padding: var(--space-0-45);
-  border: 1px solid transparent;
+  border: var(--border-w-hair) solid transparent;
   border-radius: 0;
   cursor: pointer;
   flex-shrink: 0;

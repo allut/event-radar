@@ -27,9 +27,7 @@
 
 .h2 {
   font-family: var(--font-display);
-  /* Sized down from --font-size-display-section intent (clamp(30px, 4.4vw,
-     56px)) to fit a legal document's in-page heading hierarchy. */
-  font-size: clamp(1.15rem, 1.8vw, 1.5rem);
+  font-size: var(--font-size-display-legal);
   font-weight: var(--fw-semibold);
   line-height: var(--leading-display);
   color: var(--text);

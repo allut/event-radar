@@ -73,8 +73,8 @@
 
 .frame {
   position: absolute;
-  inset: clamp(14px, 2vw, 26px);
-  border: 1px solid var(--poster-frame);
+  inset: var(--landing-poster-inset);
+  border: var(--border-w-hair) solid var(--poster-frame);
   pointer-events: none;
 }
 
@@ -99,7 +99,7 @@
 }
 
 .heroTop {
-  padding-top: clamp(26px, 3.4vw, 44px);
+  padding-top: var(--landing-hero-pad-top);
   display: flex;
   justify-content: space-between;
   align-items: baseline;
@@ -109,7 +109,7 @@
 
 .mark {
   font-family: var(--font-display);
-  font-size: clamp(20px, 2.2vw, 27px);
+  font-size: var(--font-size-display-mark);
   font-weight: var(--fw-regular);
   color: var(--text);
   letter-spacing: var(--tracking-tighter);
@@ -137,7 +137,7 @@
 }
 
 .heroBot {
-  padding-bottom: clamp(26px, 3.4vw, 46px);
+  padding-bottom: var(--landing-hero-pad-bottom);
 }
 
 .dateline {
@@ -196,7 +196,7 @@
 }
 
 .capbarDivider {
-  width: 1px;
+  width: var(--border-w-hair);
   background: var(--border);
   flex-shrink: 0;
 }
@@ -205,7 +205,7 @@
   appearance: none;
   background: transparent;
   color: var(--accent);
-  border: 1px solid var(--accent);
+  border: var(--border-w-hair) solid var(--accent);
   padding: var(--space-3) var(--space-5);
   font-size: var(--fs-base);
   font-weight: var(--fw-semibold);
@@ -246,7 +246,7 @@
   flex: 1;
   min-width: 280px;
   max-width: 520px;
-  border-bottom: 1px solid var(--accent-muted);
+  border-bottom: var(--border-w-hair) solid var(--accent-muted);
 }
 
 .input {
@@ -528,13 +528,13 @@
 
 /* ── Flat proof section ─────────────────────────────────────────────── */
 .flat {
-  padding: clamp(42px, 5.6vw, 80px) 0;
+  padding: var(--landing-flat-pad) 0;
 }
 
 .flatHeader {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(260px, 0.7fr);
-  gap: 0 clamp(24px, 4vw, 64px);
+  gap: 0 var(--landing-flat-header-gap);
   align-items: end;
   padding-bottom: var(--space-6);
   border-bottom: var(--rule);
@@ -549,7 +549,7 @@
   font-family: var(--font-display);
   font-weight: var(--fw-light);
   font-size: var(--font-size-display-section);
-  line-height: 1.02;
+  line-height: var(--leading-display-tight);
   letter-spacing: var(--tracking-tighter);
   margin-top: var(--space-2);
   max-width: 28ch; /* was 16ch — same over-narrow wrap issue as round-2's h1 fix */
@@ -695,7 +695,7 @@
   display: inline-flex;
   padding: var(--space-4) var(--space-6);
   align-self: center;
-  border: 1px solid var(--accent);
+  border: var(--border-w-hair) solid var(--accent);
   color: var(--accent);
   font-weight: var(--fw-bold);
   font-size: var(--fs-xs);
@@ -769,7 +769,7 @@
   .emailForm { width: 100%; }
   .submit { padding-left: 0; }
   .ticker { display: none; }
-  .heroCounter { flex-direction: column; gap: 2px; }
+  .heroCounter { flex-direction: column; gap: var(--space-0-125); }
   .heroCounterItem:not(:last-child)::after { content: ''; }
   .plates { margin-top: var(--space-5); }
   .footer { justify-content: center; text-align: center; }

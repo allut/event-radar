@@ -1,6 +1,6 @@
 import DOMPurify from 'dompurify';
 import { api } from './api/client';
-import { API, CATEGORY_GRADIENTS, FALLBACK_GRADIENT, EUR_SYMBOL, DEFAULT_CURRENCY, GOOGLE_MAPS_SEARCH_URL, type Signal, toLocaleCode, SAFE_URL_SCHEMES, SANITIZE_ALLOWED_TAGS, SANITIZE_ALLOWED_ATTR, SIGNAL_TO_CLASS, BROWSE_PAGE_SIZE, CATEGORIES, VIBES, type DatePreset, type SortOption, ANALYTICS_EVENT_PATH_RE, ANALYTICS_ORGANIZER_EDIT_PATH_RE, CALENDAR_WEEK_START, CALENDAR_WEEKS_SHOWN, CALENDAR_DAYS_PER_WEEK, CALENDAR_REFERENCE_MONDAY, MAX_HOUR, MAX_MINUTE, DATE_PRESET_DAYS, DATE_PRESET_DAYS_FALLBACK, DATE_PRESET_DEFAULT, DATE_PRESET_TODAY, DATE_PRESET_WEEKEND, EXPLORE_PARAM, EXPLORE_URL_FLAG_TRUE, EXPLORE_API_FLAG_TRUE, SORT_DEFAULT, TIME_FIELD_MAX_LENGTH, LOCALES, type LocaleCode } from './constants';
+import { API, CATEGORY_GRADIENTS, FALLBACK_GRADIENT, EUR_SYMBOL, DEFAULT_CURRENCY, GOOGLE_MAPS_SEARCH_URL, type Signal, toLocaleCode, SAFE_URL_SCHEMES, SANITIZE_ALLOWED_TAGS, SANITIZE_ALLOWED_ATTR, SIGNAL_TO_CLASS, BROWSE_PAGE_SIZE, CATEGORIES, VIBES, type DatePreset, type SortOption, ANALYTICS_EVENT_PATH_RE, ANALYTICS_ORGANIZER_EDIT_PATH_RE, CALENDAR_WEEK_START, CALENDAR_WEEKS_SHOWN, CALENDAR_DAYS_PER_WEEK, CALENDAR_REFERENCE_MONDAY, MAX_HOUR, MAX_MINUTE, DATE_PRESET_DAYS, DATE_PRESET_DAYS_FALLBACK, DATE_PRESET_DEFAULT, DATE_PRESET_TODAY, DATE_PRESET_WEEKEND, EXPLORE_PARAM, EXPLORE_URL_FLAG_TRUE, EXPLORE_API_FLAG_TRUE, SORT_DEFAULT, TIME_FIELD_MAX_LENGTH, LOCALES, type LocaleCode, DEFAULT_LOCALE_CODE } from './constants';
 import { t, ti } from './i18n';
 import { stripLocalePrefix, localizedPath, localeFromPath, localizedTo } from './lib/urlLocale';
 
@@ -241,6 +241,14 @@ const DTF_LONG_DATE: Intl.DateTimeFormatOptions = {
   weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
 };
 const DTF_DAY_MONTH_LONG: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'long' };
+const DTF_ADMIN_TIMESTAMP: Intl.DateTimeFormatOptions = { dateStyle: 'medium', timeStyle: 'short' };
+
+/** Admin console timestamp — the console is un-i18n'd, so this always renders
+ * in DEFAULT_LOCALE_CODE rather than taking a locale param. */
+export function formatAdminTimestamp(iso: string | null): string {
+  if (!iso) return '—';
+  return dateTimeFormatter(DEFAULT_LOCALE_CODE, 'admin-timestamp', DTF_ADMIN_TIMESTAMP).format(new Date(iso));
+}
 
 export function formatEventTime(iso: string, locale: string): string {
   const localeCode = toLocaleCode(locale);

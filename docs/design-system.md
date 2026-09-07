@@ -42,7 +42,7 @@ Rules that bite:
 
 - **Naming is semantic, not locational**, unless the token is deliberately scoped. `--hair-width` names a treatment; `--font-size-display-hero` names its one consumer on purpose.
 - **Hero-only tokens stay hero-only.** `--poster-frame`, `--grain`, `--scrim-vertical`, `--poster-glow-*`, `--font-size-display-hero` have exactly one consumer (`Landing.module.css`) and are documented as scoped rather than renamed. If a future surface genuinely needs one, that's a decision made against a real consumer — not a speculative generalization now.
-- **Breakpoint tokens are documentation only.** CSS custom properties cannot drive `@media` conditions, so `--bp-narrow: 640px` and `--bp-wide: 1680px` exist to name the values; the `@media` rules themselves still carry the literal. Keep the literal and the token in sync; don't try `@media (max-width: var(--bp-narrow))`.
+- **Breakpoint tokens are documentation only.** CSS custom properties cannot drive `@media` conditions, so `--bp-narrow: 640px` exists to name the value; the `@media` rules themselves still carry the literal. Keep the literal and the token in sync; don't try `@media (max-width: var(--bp-narrow))`. (A `--bp-wide: 1680px` companion token existed for the Landing wide-screen hero side panel — removed along with the token once that treatment was cut from scope; see §12.)
 - **Off-scale spacing is allowed but must be named.** Steps like `--space-0-42` exist because two or more call sites needed them; add a named step rather than inlining a rem literal or forcing a layout onto the wrong scale step.
 - **Category gradients mirror the taxonomy.** The `--gradient-<category>` keys mirror `VALID_CATEGORIES` in `shared/app-config.json`; anything without an entry falls through `categoryGradient()` (`utils.ts`) to `--gradient-fallback`. Add a category to the taxonomy → add both theme's gradient pair.
 
@@ -107,6 +107,8 @@ Add a new shared pattern here rather than growing a second copy. New variants fo
 
 **A note on Landing:** `Landing.module.css` is the least shared-dependent stylesheet (it composes `Page`, `Alert`, `Spinner`, `StatusCircle`, `Animations`, `Media` and re-rolls the hero/ticker/plate/proof/footer chrome locally). That is deliberate — its hero treatment has no second consumer. Don't "fix" it by hoisting hero CSS into `shared/`.
 
+**One exception to "never copy-paste":** `composes:` resolves to a class-name string at build time, so it cannot be scoped inside a `@media` block — a shared rule that must apply only above/below a breakpoint has to be restated locally rather than composed. `Feed.module.css`'s media-scoped `.srOnly` override is the one live instance (`Visually.module.css`'s own `.srOnly` is unconditional); keep any such restatement in sync with the shared rule it mirrors.
+
 ## 8. Motion
 
 App-wide vocabulary in `Animations.module.css`: `.spin`, `.breathe`, `.rise`, `.fadeIn`, `.fadeInScale`, tuned per call site via `--spin-duration`/`--breathe-duration`/`--rise-duration`/`--rise-distance` custom properties. `.rise` uses `animation-fill-mode: backwards`, **not `both`** — holding the end transform leaves a non-`none` computed transform forever, which makes the element a containing block for any `position: fixed` descendant and breaks popover positioning (`EventOverflowMenu`'s mobile popover). Don't "improve" it to `forwards`/`both`.
@@ -130,7 +132,7 @@ Landing/C1 vocabulary, in the same file but Landing-exclusive: `heroRise` (maske
 
 ## 10. Layout and breakpoints
 
-- Two breakpoints: **640px** (mobile, the only one that recurs — 15+ stylesheets) and **1680px** (Landing's wide-hero treatment). Both are named by tokens (`--bp-narrow`, `--bp-wide`) but written as literals in `@media` rules; see §3.
+- One named breakpoint: **640px** (mobile, the only one that recurs — 15+ stylesheets), tokenized as `--bp-narrow` but written as a literal in `@media` rules; see §3. A handful of one-off unnamed breakpoints exist where 640px didn't fit the layout: **560px** (`Onboarding`), **641px** (`Landing`, the `min-width` complement to its own 640px `max-width` rule), **900px** (`Landing`), and **1024px** (`DesktopGate`, the admin desktop gate).
 - Page widths are tokenized per surface (`--page-max-narrow`/`-legal`/`-medium`/`-grid`/`-wide`/`-feed`/`-organizer`/`-settings`/`-showcase`). Pick an existing one before adding another.
 - The browse grid is `Page.module.css`'s `.cardGrid` — `repeat(auto-fill, minmax(var(--card-grid-min), 1fr))`, collapsing to one column at 640px. Explore and SavedEvents both compose it; Feed deliberately does *not* (a lead `featured` card plus a list — five curated picks is a different problem from an unbounded browse list, and converging the two would flatten the curated-vs-browse distinction).
 - Admin geometry has its own tokens (`--admin-rail-width`, `--admin-queue-list-width`, `--admin-tile-min`, `--admin-trigger-min`, …) and its own desktop gate (`DesktopGate.module.css`).

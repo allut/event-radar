@@ -8,7 +8,7 @@ import type {
   WithContext,
 } from 'schema-dts';
 import type { EventData } from '../components/EventCard';
-import { OG_FALLBACK_IMAGE_PATH, PRODUCTION_ORIGIN, ROUTES } from '../constants';
+import { OG_FALLBACK_IMAGE_PATH, PRODUCTION_ORIGIN, ROUTES, SCHEMA_ORG_CONTEXT } from '../constants';
 import { t } from '../i18n';
 import { localizedPath, safeUrl } from '../utils';
 
@@ -55,7 +55,7 @@ export function buildEventJsonLd(event: EventData): WithContext<SchemaEvent> {
         : undefined;
 
   return {
-    '@context': 'https://schema.org',
+    '@context': SCHEMA_ORG_CONTEXT,
     '@type': 'Event',
     name: event.title,
     startDate: event.starts_at,
@@ -81,7 +81,7 @@ export function buildEventJsonLd(event: EventData): WithContext<SchemaEvent> {
  * omitted — see docs/frontend.md's prerender section. */
 export function buildExploreItemListJsonLd(events: EventData[], locale: string): WithContext<ItemList> {
   return {
-    '@context': 'https://schema.org',
+    '@context': SCHEMA_ORG_CONTEXT,
     '@type': 'ItemList',
     itemListElement: events.map((event, index) => ({
       '@type': 'ListItem',
@@ -99,7 +99,7 @@ export function buildExploreItemListJsonLd(events: EventData[], locale: string):
  * of scope). */
 export function buildWebsiteJsonLd(locale: string): WithContext<SchemaWebSite> {
   return {
-    '@context': 'https://schema.org',
+    '@context': SCHEMA_ORG_CONTEXT,
     '@type': 'WebSite',
     name: t('brand', locale),
     url: `${PRODUCTION_ORIGIN}${localizedPath('/', locale)}`,

@@ -2,8 +2,8 @@ import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { adminApi, ApiError } from '../../api/client';
-import { API, QUERY_KEYS, ROUTES, UI_STATE, REPORT_STATUS, DEFAULT_LOCALE_CODE, ADMIN_EVENT_DETAIL_TABS } from '../../constants';
-import { sanitizeHtml } from '../../utils';
+import { API, QUERY_KEYS, ROUTES, UI_STATE, REPORT_STATUS, ADMIN_EVENT_DETAIL_TABS } from '../../constants';
+import { sanitizeHtml, formatAdminTimestamp } from '../../utils';
 import PageState from '../../components/PageState';
 import Toast from '../../components/Toast';
 import { useToast } from '../../hooks/useToast';
@@ -86,13 +86,6 @@ const ACTION_CONFIG: Record<ActionKind, { path: (id: number) => string; message:
 };
 
 type Tab = (typeof ADMIN_EVENT_DETAIL_TABS)[number];
-
-const DTF_ADMIN_TIMESTAMP: Intl.DateTimeFormatOptions = { dateStyle: 'medium', timeStyle: 'short' };
-
-function fmt(iso: string | null): string {
-  if (!iso) return '—';
-  return new Date(iso).toLocaleString(DEFAULT_LOCALE_CODE, DTF_ADMIN_TIMESTAMP);
-}
 
 // Admin event inspector (issue #157, part of #153): deep-linkable detail
 // panel for one event regardless of status. Tabbed layout — chosen over a
@@ -212,9 +205,9 @@ export default function AdminEventDetail({ eventId }: { eventId: string }) {
               <dt>Dedup group</dt><dd>{event.dedup_group_id ?? '—'}</dd>
               <dt>Organizer submission</dt><dd>{event.submitted_by_organizer_id ?? 'No'}</dd>
               <dt>Cancellation reason</dt><dd>{event.cancellation_reason ?? '—'}</dd>
-              <dt>Created</dt><dd>{fmt(event.created_at)}</dd>
-              <dt>Updated</dt><dd>{fmt(event.updated_at)}</dd>
-              <dt>Detail refetched</dt><dd>{fmt(event.detail_refetched_at)}</dd>
+              <dt>Created</dt><dd>{formatAdminTimestamp(event.created_at)}</dd>
+              <dt>Updated</dt><dd>{formatAdminTimestamp(event.updated_at)}</dd>
+              <dt>Detail refetched</dt><dd>{formatAdminTimestamp(event.detail_refetched_at)}</dd>
             </dl>
             {sanitizedDescription ? (
               <div className={styles.proseHtml} dangerouslySetInnerHTML={{ __html: sanitizedDescription }} />
@@ -238,7 +231,7 @@ export default function AdminEventDetail({ eventId }: { eventId: string }) {
                 {cl.vibes.map((v) => <span key={v} className={styles.chipVibe}>{v}</span>)}
               </div>
               <p className={styles.factLine}>
-                Quality score: {cl.quality_score ?? '—'} · Model: {cl.model_used ?? '—'} · Lang: {cl.language_detected ?? '—'} · Classified {fmt(cl.classified_at)}
+                Quality score: {cl.quality_score ?? '—'} · Model: {cl.model_used ?? '—'} · Lang: {cl.language_detected ?? '—'} · Classified {formatAdminTimestamp(cl.classified_at)}
               </p>
               {cl.why_go_bullets && cl.why_go_bullets.length > 0 && (
                 <ul className={styles.whyGo}>
@@ -285,7 +278,7 @@ export default function AdminEventDetail({ eventId }: { eventId: string }) {
           ) : (
             raw_events.map((re) => (
               <div key={re.id} className={styles.rawBlock}>
-                <p className={styles.rawMeta}>{re.source_slug} · {re.external_id ?? 'no external id'} · fetched {fmt(re.fetched_at)}</p>
+                <p className={styles.rawMeta}>{re.source_slug} · {re.external_id ?? 'no external id'} · fetched {formatAdminTimestamp(re.fetched_at)}</p>
                 {/* Escaped/pretty-printed text only — never parsed as HTML.
                     The one field in the console not sanitized at ingest. */}
                 <pre className={styles.rawPayload}>{JSON.stringify(re.payload, null, 2)}</pre>

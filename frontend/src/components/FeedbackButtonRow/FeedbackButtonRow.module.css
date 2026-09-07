@@ -5,7 +5,7 @@
 
 .action {
   composes: iconAction from '../shared/Button.module.css';
-  border: 1px solid transparent;
+  border: var(--border-w-hair) solid transparent;
   border-radius: 0;
   font-size: var(--fs-base);
   cursor: pointer;

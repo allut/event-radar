@@ -13,7 +13,7 @@ function getContent(container: HTMLElement): HTMLElement {
 describe('RichTextEditor', () => {
   it('renders icon-only mark/list buttons and H3/H4 text glyphs, grouped with dividers', async () => {
     const onChange = vi.fn();
-    render(<RichTextEditor value="<p>Hello</p>" onChange={onChange} />);
+    render(<RichTextEditor value="<p>Hello</p>" onChange={onChange} locale="en" />);
 
     await waitFor(() => expect(screen.getByRole('toolbar', { name: 'Formatting' })).toBeInTheDocument());
 
@@ -32,7 +32,7 @@ describe('RichTextEditor', () => {
 
   it('does not render any button for disallowed formatting', () => {
     const onChange = vi.fn();
-    render(<RichTextEditor value="<p>Hello</p>" onChange={onChange} />);
+    render(<RichTextEditor value="<p>Hello</p>" onChange={onChange} locale="en" />);
 
     for (const forbidden of ['Strikethrough', 'Code', 'Code block', 'Horizontal rule', 'H1', 'H2', 'H5', 'H6']) {
       expect(screen.queryByRole('button', { name: forbidden })).not.toBeInTheDocument();
@@ -41,7 +41,7 @@ describe('RichTextEditor', () => {
 
   it('reflects heading active state on the toolbar when the cursor is in a heading', async () => {
     const onChange = vi.fn();
-    const { container } = render(<RichTextEditor value="<p>Hello</p>" onChange={onChange} />);
+    const { container } = render(<RichTextEditor value="<p>Hello</p>" onChange={onChange} locale="en" />);
     await waitFor(() => getContent(container));
 
     const h3Button = screen.getByRole('button', { name: 'H3' });
@@ -56,7 +56,7 @@ describe('RichTextEditor', () => {
 
   it('reflects bullet-list active state on the toolbar', async () => {
     const onChange = vi.fn();
-    const { container } = render(<RichTextEditor value="<p>Hello</p>" onChange={onChange} />);
+    const { container } = render(<RichTextEditor value="<p>Hello</p>" onChange={onChange} locale="en" />);
     await waitFor(() => getContent(container));
 
     const bulletButton = screen.getByRole('button', { name: 'Bullet list' });
@@ -71,7 +71,7 @@ describe('RichTextEditor', () => {
   it('opens the inline link row, closes it on cancel with no change, and applies the link to a selection', async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
-    const { container } = render(<RichTextEditor value="<p>Hello</p>" onChange={onChange} />);
+    const { container } = render(<RichTextEditor value="<p>Hello</p>" onChange={onChange} locale="en" />);
     const content = await waitFor(() => getContent(container));
 
     expect(screen.queryByPlaceholderText('https://…')).not.toBeInTheDocument();
@@ -98,7 +98,7 @@ describe('RichTextEditor', () => {
 
   it('strips disallowed tags/attributes from pasted content to the allowed mark set', async () => {
     const onChange = vi.fn();
-    const { container } = render(<RichTextEditor value="<p></p>" onChange={onChange} />);
+    const { container } = render(<RichTextEditor value="<p></p>" onChange={onChange} locale="en" />);
     const content = await waitFor(() => getContent(container));
 
     const pasteHtml =
@@ -129,7 +129,7 @@ describe('RichTextEditor', () => {
 
   it('disables all toolbar buttons and the field when disabled', () => {
     const onChange = vi.fn();
-    render(<RichTextEditor value="<p>Hello</p>" onChange={onChange} disabled />);
+    render(<RichTextEditor value="<p>Hello</p>" onChange={onChange} disabled locale="en" />);
 
     for (const label of ['Bold', 'Italic', 'Underline', 'Bullet list', 'Numbered list', 'Blockquote', 'Insert link', 'H3', 'H4']) {
       expect(screen.getByRole('button', { name: label })).toBeDisabled();

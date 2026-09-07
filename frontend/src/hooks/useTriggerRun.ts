@@ -8,7 +8,7 @@ export type RunState = 'idle' | 'starting' | 'streaming' | 'done' | 'disconnecte
 // regardless of why — Render free-tier spin-up or ordinary first-stage
 // latency look the same to the client) from an in-flight run, a clean
 // finish, and a mid-stream disconnect (issue #159).
-export function useTriggerRun() {
+export function useTriggerRun(): { state: RunState; lines: NdjsonLine[]; run: (path: string) => void } {
   const [state, setState] = useState<RunState>('idle');
   const [lines, setLines] = useState<NdjsonLine[]>([]);
   const abortRef = useRef<AbortController | null>(null);

@@ -1,15 +1,14 @@
 import { useSyncExternalStore } from 'react';
-
-const QUERY = '(prefers-reduced-motion: reduce)';
+import { REDUCED_MOTION_QUERY } from '../constants';
 
 function subscribe(callback: () => void): () => void {
-  const mql = window.matchMedia(QUERY);
+  const mql = window.matchMedia(REDUCED_MOTION_QUERY);
   mql.addEventListener('change', callback);
   return () => mql.removeEventListener('change', callback);
 }
 
 function getSnapshot(): boolean {
-  return window.matchMedia(QUERY).matches;
+  return window.matchMedia(REDUCED_MOTION_QUERY).matches;
 }
 
 function getServerSnapshot(): boolean {

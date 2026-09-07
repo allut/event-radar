@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react';
 import { EditorContent, useEditor, useEditorState } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
+import { t } from '../../i18n';
 import { BoldIcon, ItalicIcon, UnderlineIcon, BulletListIcon, NumberedListIcon, LinkIcon, QuoteIcon } from './icons';
 import styles from './RichTextEditor.module.css';
 
 const MARKS = [
-  { key: 'bold', Icon: BoldIcon, label: 'Bold' },
-  { key: 'italic', Icon: ItalicIcon, label: 'Italic' },
-  { key: 'underline', Icon: UnderlineIcon, label: 'Underline' },
+  { key: 'bold', Icon: BoldIcon, labelKey: 'organizer_rte_bold' },
+  { key: 'italic', Icon: ItalicIcon, labelKey: 'organizer_rte_italic' },
+  { key: 'underline', Icon: UnderlineIcon, labelKey: 'organizer_rte_underline' },
 ] as const;
 
 const HEADINGS = [
@@ -16,9 +17,9 @@ const HEADINGS = [
 ];
 
 const LISTS = [
-  { key: 'bulletList', Icon: BulletListIcon, label: 'Bullet list' },
-  { key: 'orderedList', Icon: NumberedListIcon, label: 'Numbered list' },
-  { key: 'blockquote', Icon: QuoteIcon, label: 'Blockquote' },
+  { key: 'bulletList', Icon: BulletListIcon, labelKey: 'organizer_rte_bullet_list' },
+  { key: 'orderedList', Icon: NumberedListIcon, labelKey: 'organizer_rte_numbered_list' },
+  { key: 'blockquote', Icon: QuoteIcon, labelKey: 'organizer_rte_blockquote' },
 ] as const;
 
 export interface RichTextEditorProps {
@@ -30,6 +31,7 @@ export interface RichTextEditorProps {
   onChange: (html: string) => void;
   disabled?: boolean;
   'aria-labelledby'?: string;
+  locale: string;
 }
 
 /** Standalone rich-text field for organizer Description/Important-info
@@ -43,6 +45,7 @@ export default function RichTextEditor({
   onChange,
   disabled,
   'aria-labelledby': ariaLabelledBy,
+  locale,
 }: RichTextEditorProps) {
   const [linkOpen, setLinkOpen] = useState(false);
   const [linkUrl, setLinkUrl] = useState('');
@@ -149,15 +152,15 @@ export default function RichTextEditor({
 
   return (
     <div className={styles.wrap} data-disabled={disabled || undefined}>
-      <div className={styles.toolbar} role="toolbar" aria-label="Formatting">
+      <div className={styles.toolbar} role="toolbar" aria-label={t('organizer_rte_toolbar_label', locale)}>
         <div className={styles.group}>
-          {MARKS.map(({ key, Icon, label }) => (
+          {MARKS.map(({ key, Icon, labelKey }) => (
             <button
               key={key}
               type="button"
               className={styles.btn}
               data-active={state[key] || undefined}
-              aria-label={label}
+              aria-label={t(labelKey, locale)}
               aria-pressed={state[key]}
               onClick={() => runMark(key)}
               disabled={disabled}
@@ -185,13 +188,13 @@ export default function RichTextEditor({
         </div>
         <span className={styles.divider} aria-hidden />
         <div className={styles.group}>
-          {LISTS.map(({ key, Icon, label }) => (
+          {LISTS.map(({ key, Icon, labelKey }) => (
             <button
               key={key}
               type="button"
               className={styles.btn}
               data-active={state[key] || undefined}
-              aria-label={label}
+              aria-label={t(labelKey, locale)}
               aria-pressed={state[key]}
               onClick={() => runList(key)}
               disabled={disabled}
@@ -205,7 +208,7 @@ export default function RichTextEditor({
           type="button"
           className={styles.btn}
           data-active={(linkOpen || state.link) || undefined}
-          aria-label="Insert link"
+          aria-label={t('organizer_rte_insert_link', locale)}
           aria-pressed={linkOpen || state.link}
           onClick={openLink}
           disabled={disabled}
@@ -218,16 +221,16 @@ export default function RichTextEditor({
           <input
             type="url"
             className={styles.linkInput}
-            placeholder="https://…"
+            placeholder={t('organizer_rte_link_placeholder', locale)}
             value={linkUrl}
             onChange={(e) => setLinkUrl(e.target.value)}
             autoFocus
           />
           <button type="button" className={styles.linkInsert} onClick={insertLink}>
-            Insert
+            {t('organizer_rte_link_insert', locale)}
           </button>
           <button type="button" className={styles.linkCancel} onClick={cancelLink}>
-            Cancel
+            {t('organizer_rte_link_cancel', locale)}
           </button>
         </div>
       )}

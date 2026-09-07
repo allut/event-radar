@@ -82,6 +82,6 @@
 
 .badgeSoft {
   background: var(--accent-faint);
-  border: 1px solid var(--accent-muted);
+  border: var(--border-w-hair) solid var(--accent-muted);
   color: var(--accent);
 }

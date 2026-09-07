@@ -26,6 +26,7 @@ import { StatusCodes } from 'http-status-codes';
 import {
   PRERENDER_CADENCE_GIT_BRANCH,
   PRERENDER_CADENCE_TOKEN_HEADER,
+  PRERENDER_CADENCE_USER_AGENT,
   PRERENDER_CHAIN_GITHUB_REPO,
 } from '../src/constants.js';
 import { githubRequest } from '../src/lib/githubRequest.js';
@@ -51,7 +52,7 @@ async function fetchTipCommitMessage(): Promise<string | null> {
       PRERENDER_CHAIN_GITHUB_REPO,
       `/commits/${PRERENDER_CADENCE_GIT_BRANCH}`,
       token,
-      'event-radar-prerender-cadence',
+      PRERENDER_CADENCE_USER_AGENT,
     );
     if (!res.ok) return null;
     const body = (await res.json()) as { commit?: { message?: string } };

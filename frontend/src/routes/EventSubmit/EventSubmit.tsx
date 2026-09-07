@@ -182,6 +182,7 @@ export default function EventSubmit() {
                 value={activeSlot.description}
                 onChange={activeSlot.setDescription}
                 disabled={form.isSubmitting}
+                locale={locale}
               />
             </Suspense>
 
@@ -195,6 +196,7 @@ export default function EventSubmit() {
                 value={activeSlot.importantInfo}
                 onChange={activeSlot.setImportantInfo}
                 disabled={form.isSubmitting}
+                locale={locale}
               />
             </Suspense>
           </div>

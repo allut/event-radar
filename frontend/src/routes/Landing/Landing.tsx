@@ -2,7 +2,7 @@ import { Fragment, type CSSProperties } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../../api/client';
-import { ANALYTICS_EVENTS, API, CATEGORIES, LOCALES, MAGIC_LINK_EXPIRY_MINUTES, OG_FALLBACK_IMAGE_PATH, PRODUCTION_ORIGIN, QUERY_KEYS, ROUTES, STEP_KEYS, UI_STATE } from '../../constants';
+import { ANALYTICS_EVENTS, API, CATEGORIES, LANDING_PLATE_BODY_MAX_LENGTH, LOCALES, MAGIC_LINK_EXPIRY_MINUTES, OG_FALLBACK_IMAGE_PATH, PRODUCTION_ORIGIN, QUERY_KEYS, ROUTES, STEP_KEYS, UI_STATE } from '../../constants';
 import { t, ti } from '../../i18n';
 import { categoryGradient, cx, formatCount, formatEventTime, formatHeroDateline, formatHourMinute, formatPrice, padIndex, safeUrl, stripHtmlToText, truncateForMeta, withLocaleQuery } from '../../utils';
 import { useLocaleMutation } from '../../hooks/useLocaleMutation';
@@ -37,8 +37,6 @@ interface CountsResponse {
   tonight_is_fallback: boolean;
   tonight_events: TonightEvent[];
 }
-
-const PLATE_BODY_MAX_LENGTH = 140;
 
 /** Renders an i18n template containing a single `{count}` placeholder with
  * just the count bolded, e.g. "1,008+ events on the radar right now". */
@@ -185,7 +183,7 @@ function Plate({ event, index, locale }: { event: EventData; index: number; loca
           </Link>
         </h2>
         {event.description && (
-          <p className={styles.plateBody}>{truncateForMeta(stripHtmlToText(event.description), PLATE_BODY_MAX_LENGTH)}</p>
+          <p className={styles.plateBody}>{truncateForMeta(stripHtmlToText(event.description), LANDING_PLATE_BODY_MAX_LENGTH)}</p>
         )}
         <div className={cx(styles.hair, animStyles.hairlineDraw)} />
         <div className={styles.meta}>

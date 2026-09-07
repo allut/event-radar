@@ -48,7 +48,7 @@
 .optionActive.optionActive,
 .optionActive.optionActive:hover {
   background: var(--accent-subtle);
-  border: 1px solid var(--accent-border);
+  border: var(--border-w-hair) solid var(--accent-border);
   color: var(--accent-light);
 }
 

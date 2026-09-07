@@ -158,6 +158,8 @@ export const ICON_LINK_SELECTOR = `link[rel="${ICON_REL}"]`;
 // og:description/meta description target length — Google truncates around
 // ~155–160 chars; truncateForMeta (utils.ts) cuts at a word boundary under this.
 export const SEO_DESCRIPTION_MAX_LENGTH = 157;
+// Landing showcase plate body truncation (truncateForMeta cuts at a word boundary under this).
+export const LANDING_PLATE_BODY_MAX_LENGTH = 140;
 // Hreflang code for "no specific locale matches" — useSeoMeta (producer)
 // and scripts/prerender.ts's buildSitemapXml (producer) both special-case
 // this code to resolve to the bare Estonian URL rather than a localizedPath
@@ -874,3 +876,13 @@ export const ADMIN_PIPELINE_STAGE_LABELS: Record<string, string> = {
   build_feeds: 'Build feeds',
   send_digests: 'Send digests',
 };
+
+// usePrefersReducedMotion's matchMedia query.
+export const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)';
+
+// JSON-LD @context (structuredData.ts).
+export const SCHEMA_ORG_CONTEXT = 'https://schema.org';
+
+// GitHub API User-Agent for api/prerender-cadence.ts's githubRequest() call
+// (GitHub rejects requests with no User-Agent).
+export const PRERENDER_CADENCE_USER_AGENT = 'event-radar-prerender-cadence';

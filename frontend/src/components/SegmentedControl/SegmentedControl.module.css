@@ -30,7 +30,7 @@
 }
 
 .segBtn + .segBtn {
-  border-left: 1px solid var(--border);
+  border-left: var(--border-w-hair) solid var(--border);
 }
 
 .marker {
@@ -40,7 +40,7 @@
   width: var(--seg-blip-size);
   height: var(--seg-blip-size);
   border-radius: var(--radius-full);
-  border: 1px solid currentColor;
+  border: var(--border-w-hair) solid currentColor;
   transform: translateY(-50%);
 }
 
@@ -64,7 +64,7 @@
   position: relative;
   padding: var(--space-1);
   background: var(--bg-overlay-soft);
-  border: 1px solid var(--border);
+  border: var(--border-w-hair) solid var(--border);
   border-radius: var(--radius-pill);
 }
 
@@ -76,7 +76,7 @@
   width: calc((100% - 2 * var(--space-1)) / var(--seg-count));
   border-radius: var(--radius-pill);
   background: linear-gradient(180deg, var(--accent-faint), var(--accent-subtle));
-  border: 1px solid var(--accent-border);
+  border: var(--border-w-hair) solid var(--accent-border);
   transform: translateX(calc(var(--seg-index) * 100%));
   transition: transform var(--transition);
   pointer-events: none;

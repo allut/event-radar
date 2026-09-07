@@ -12,7 +12,7 @@
   min-width: var(--menu-pop-min-width);
   max-width: calc(100vw - 2 * var(--space-5));
   background: var(--bg-card);
-  border: 1px solid var(--border);
+  border: var(--border-w-hair) solid var(--border);
   border-radius: 0;
   box-shadow: var(--shadow-lead);
   padding: var(--space-3);
@@ -38,7 +38,7 @@
 .triggerBase {
   display: inline-flex;
   align-items: center;
-  border: 1px solid var(--border);
+  border: var(--border-w-hair) solid var(--border);
   border-radius: 0;
   padding: var(--space-0-45) var(--space-0-875);
   color: var(--text);
@@ -74,7 +74,7 @@
    variant at the next specificity tier up. */
 .activePill {
   background: var(--accent-subtle);
-  border: 1px solid var(--accent-border);
+  border: var(--border-w-hair) solid var(--accent-border);
   color: var(--accent-light);
 }
 
@@ -88,7 +88,7 @@
   gap: var(--space-0-45);
   padding: var(--space-0-45) var(--space-0-875);
   background: transparent;
-  border: 1px solid transparent;
+  border: var(--border-w-hair) solid transparent;
   border-radius: 0;
   color: var(--text);
   font-size: var(--fs-sm);
@@ -102,7 +102,7 @@
 .menuOption {
   text-align: center;
   border-radius: 0;
-  border: 1px solid transparent;
+  border: var(--border-w-hair) solid transparent;
   background: transparent;
   color: var(--text-muted);
   font-size: var(--fs-sm);

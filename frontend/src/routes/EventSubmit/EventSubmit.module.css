@@ -23,7 +23,7 @@
   gap: var(--space-2);
   padding: var(--space-4);
   background: var(--bg-raised);
-  border: 1px solid var(--border);
+  border: var(--border-w-hair) solid var(--border);
   border-radius: 0;
 }
 
@@ -76,7 +76,7 @@
 
 .editorFallback {
   min-height: var(--textarea-height-sm);
-  border: 1px solid var(--border);
+  border: var(--border-w-hair) solid var(--border);
 }
 
 .error {
