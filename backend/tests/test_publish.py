@@ -1,5 +1,7 @@
 """Unit tests for the publish gate (app/publish.py)."""
 
+import re
+from datetime import datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -11,6 +13,7 @@ from app.constants import (
     PUBLISH_DIAGNOSTICS_WINDOW_DAYS,
     PUBLISH_MIN_QUALITY_SCORE,
     TALLINN_REGION_BBOX,
+    TALLINN_TZ,
 )
 from app.publish import publish_pending
 
@@ -70,7 +73,15 @@ async def test_reject_breakdown_statement_bounds_to_recent_window(mock_db):
     compiled = str(reject_stmt.compile(compile_kwargs={"literal_binds": True}))
     assert f"events.status = '{EVENT_STATUS_CLASSIFIED}'" in compiled
     assert "events.starts_at >=" in compiled
-    assert str(PUBLISH_DIAGNOSTICS_WINDOW_DAYS) in compiled or "interval" in compiled.lower()
+
+    # The cutoff is computed in Python (now - PUBLISH_DIAGNOSTICS_WINDOW_DAYS),
+    # not baked into the SQL as a literal day-count — assert the bound itself
+    # is correct rather than looking for a magic number/keyword in the SQL text.
+    match = re.search(r"events\.starts_at >= '([^']+)'", compiled)
+    assert match is not None
+    cutoff = datetime.fromisoformat(match.group(1))
+    expected = datetime.now(TALLINN_TZ) - timedelta(days=PUBLISH_DIAGNOSTICS_WINDOW_DAYS)
+    assert abs((cutoff - expected).total_seconds()) < 5
 
 
 @pytest.mark.asyncio
