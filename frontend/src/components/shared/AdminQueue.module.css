@@ -24,7 +24,7 @@
 }
 
 .queueDetailTitle {
-  font-family: var(--font-display);
+  font-family: var(--font-system);
   font-size: var(--fs-lg);
   font-weight: var(--fw-semibold);
   color: var(--text);

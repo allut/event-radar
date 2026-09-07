@@ -4,8 +4,7 @@ from __future__ import annotations
 
 import html as html_lib
 
-from app.email import styles
-from app.email.styles import EMAIL_CSS
+from app.email.styles import get_email_styles
 from app.email.templates import (
     EMAIL_DOCUMENT,
     EMAIL_FOOTER_BRAND,
@@ -15,34 +14,40 @@ from app.email.templates import (
 from app.i18n import t, ti
 
 
-def build_magic_link_html(verify_url: str, ttl_minutes: int, locale: str) -> str:
+def build_magic_link_html(
+    verify_url: str,
+    ttl_minutes: int,
+    locale: str,
+    theme_preference: str | None = None,
+) -> str:
+    s = get_email_styles(theme_preference)
     safe_verify_url = html_lib.escape(verify_url, quote=True)
 
     header_html = MAGIC_LINK_HEADER.format(
-        s_eyebrow=styles.S_EYEBROW,
-        s_h1=styles.S_H1,
+        s_eyebrow=s.s_eyebrow,
+        s_h1=s.s_h1,
         heading=t("email.magic_link.heading", locale),
     )
     content_html = MAGIC_LINK_BODY.format(
-        s_body_text=styles.S_BODY_TEXT,
+        s_body_text=s.s_body_text,
         intro=ti("email.magic_link.intro", locale, ttl_minutes=ttl_minutes),
-        s_feed_btn_wrap=styles.S_FEED_BTN_WRAP,
+        s_feed_btn_wrap=s.s_feed_btn_wrap,
         verify_url=safe_verify_url,
-        s_feed_btn=styles.S_FEED_BTN,
+        s_feed_btn=s.s_feed_btn,
         cta_label=t("email.magic_link.cta", locale),
-        s_muted_note=styles.S_MUTED_NOTE,
+        s_muted_note=s.s_muted_note,
         ignore_note=t("email.magic_link.ignore_note", locale),
     )
 
     return EMAIL_DOCUMENT.format(
-        css=EMAIL_CSS,
-        s_page=styles.S_PAGE,
-        s_container=styles.S_CONTAINER,
-        s_header_pad=styles.S_HEADER_PAD,
+        css=s.css,
+        s_page=s.s_page,
+        s_container=s.s_container,
+        s_header_pad=s.s_header_pad,
         header_html=header_html,
-        s_content_pad=styles.S_CONTENT_PAD,
+        s_content_pad=s.s_content_pad,
         content_html=content_html,
-        s_footer=styles.S_FOOTER,
+        s_footer=s.s_footer,
         footer_html=EMAIL_FOOTER_BRAND,
     )
 

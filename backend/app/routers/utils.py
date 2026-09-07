@@ -234,8 +234,7 @@ async def stream_admin_job(
     generator's own frame. A client disconnect makes Starlette cancel this
     generator (StreamingResponse races `listen_for_disconnect` against the
     body on uvicorn's pinned ASGI spec_version "2.3", cancelling whichever
-    task is streaming — see docs/research/2026-08-23-admin-console-timeout-
-    ceilings.md finding 5 / issue #159); a direct `await coro` would let
+    task is streaming — issue #159); a direct `await coro` would let
     that cancellation propagate straight into the job and cut it off
     mid-write. Awaiting `queue.get()` instead means the generator's own
     cancellation never touches the task, so the job always runs to
@@ -379,6 +378,42 @@ def event_series_key(title_orig: str, venue_name: str | None) -> tuple[str, str]
     return (normalized_title(title_orig), normalized_title(venue_name or ""))
 
 
+def collapse_series_duplicates(
+    event_rows: list[Event],
+) -> tuple[list[Event], dict[int, tuple[str, str]]]:
+    """One representative per event_series_key — nearest (earliest) starts_at
+    wins; ties broken by event id, so the surviving instance is deterministic
+    across builds even when the underlying query has no ORDER BY.
+
+    A multi-date listing (e.g. a workshop running Tue/Thu/Sat) ingests as
+    several Event rows sharing a series key but distinct dedup_group_ids
+    (recurring series are intentionally not dedup-grouped at ingestion), so
+    without this more than one date-instance of the same series could score
+    well and both land in a single user's Daily 5 on the same day, or both
+    appear in the public showcase grid. Shared by the Daily 5 candidate loader
+    (``_load_candidate_events``) and the public showcase (``showcase``), each
+    running this once per build/request, upstream of any downstream ordering.
+
+    Returns the collapsed events plus their series keys (each key computed
+    exactly once here) so callers building `candidate_series_key` don't
+    recompute `event_series_key()` a second time over the same rows.
+    """
+    earliest_by_key: dict[tuple[str, str], Event] = {}
+    for event in event_rows:
+        key = event_series_key(event.title_orig, resolve_venue_name(event))
+        current = earliest_by_key.get(key)
+        if current is None or (event.starts_at, event.id) < (
+            current.starts_at,
+            current.id,
+        ):
+            earliest_by_key[key] = event
+    collapsed = list(earliest_by_key.values())
+    series_key_by_event_id = {
+        event.id: key for key, event in earliest_by_key.items()
+    }
+    return collapsed, series_key_by_event_id
+
+
 def persona_weight_tuple(
     user_persona: UserPersona, persona: Persona | None = None
 ) -> tuple[float, dict]:
@@ -496,6 +531,7 @@ def serialize_user(user: User, **extras) -> dict:
         "id": user.id,
         "email": user.email,
         "locale": user.locale,
+        "theme_preference": user.theme_preference,
         "home_city": user.home_city,
         "created_at": user.created_at.isoformat(),
         **extras,
@@ -777,7 +813,11 @@ async def send_report_resolution_emails(
             continue
         try:
             await send_report_outcome_email(
-                reporter.email, event, resolution_note, reporter.locale
+                reporter.email,
+                event,
+                resolution_note,
+                reporter.locale,
+                reporter.theme_preference,
             )
         except Exception:
             log.error(

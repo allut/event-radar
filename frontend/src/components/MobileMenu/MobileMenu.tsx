@@ -1,9 +1,11 @@
 import { Link, NavLink } from 'react-router-dom';
 import { t } from '../../i18n';
 import { cx } from '../../utils';
-import { LOCALES, NAV_ITEMS, ROUTES } from '../../constants';
+import { LOCALES, NAV_ITEMS, ROUTES, SIGNED_OUT_NAV_ROUTES, THEME_OPTIONS } from '../../constants';
 import { useDropdown } from '../../hooks/useDropdown';
 import { useLocalePath } from '../../hooks/useLocalePath';
+import { useThemePreference } from '../../hooks/useThemePreference';
+import { setThemePreference } from '../../lib/theme';
 import menuStyles from '../shared/Menu.module.css';
 import styles from './MobileMenu.module.css';
 
@@ -14,11 +16,21 @@ interface MobileMenuProps {
   localeDisabled?: boolean;
   showNav?: boolean;
   authed?: boolean;
+  // Overrides the default consumer NAV_ITEMS — e.g. OrganizerTopBar passes
+  // ORGANIZER_NAV_ITEMS. Callers that pass this are always authed (no
+  // signed-out variant to filter), so the explore-only filtering below is
+  // skipped entirely.
+  navItems?: readonly { route: string; labelKey: string }[];
+  navAriaLabelKey?: string;
 }
 
-export default function MobileMenu({ locale, onLocaleChange, onLogout, localeDisabled, showNav = true, authed = true }: MobileMenuProps) {
+export default function MobileMenu({ locale, onLocaleChange, onLogout, localeDisabled, showNav = true, authed = true, navItems, navAriaLabelKey = 'nav_daily5' }: MobileMenuProps) {
   const { open, setOpen, flip, rootRef, popRef, triggerRef, close } = useDropdown();
   const localePath = useLocalePath();
+  const themePreference = useThemePreference();
+  // Mirrors TopBar's signed-out nav filtering via the shared
+  // SIGNED_OUT_NAV_ROUTES allowlist.
+  const visibleNavItems = navItems ?? (authed ? NAV_ITEMS : NAV_ITEMS.filter((item) => SIGNED_OUT_NAV_ROUTES.includes(item.route)));
 
   return (
     <div className={cx(menuStyles.menu, styles.mobileMenu)} ref={rootRef}>
@@ -35,10 +47,10 @@ export default function MobileMenu({ locale, onLocaleChange, onLogout, localeDis
       </button>
       {open && (
         <div className={styles.pop} ref={popRef} data-flip={flip || undefined}>
-          {authed && showNav && (
+          {showNav && visibleNavItems.length > 0 && (
             <>
-              <nav className={styles.section} aria-label={t('nav_daily5', locale)}>
-                {NAV_ITEMS.map(({ route, labelKey }) => (
+              <nav className={styles.section} aria-label={t(navAriaLabelKey, locale)}>
+                {visibleNavItems.map(({ route, labelKey }) => (
                   <NavLink
                     key={route}
                     to={localePath(route)}
@@ -57,14 +69,14 @@ export default function MobileMenu({ locale, onLocaleChange, onLogout, localeDis
 
           <div className={styles.section}>
             <span className={styles.sectionLabel}>{t('section_language', locale)}</span>
-            <div className={styles.localeRow} role="group" aria-label={t('section_language', locale)}>
+            <div className={styles.optionRow} role="group" aria-label={t('section_language', locale)}>
               {LOCALES.map(({ code, label }) => {
                 const isActive = code === locale;
                 return (
                   <button
                     key={code}
                     type="button"
-                    className={cx(styles.localeOption, isActive && styles.localeOptionActive)}
+                    className={cx(styles.option, isActive && styles.optionActive)}
                     aria-pressed={isActive}
                     disabled={localeDisabled}
                     onClick={() => {
@@ -73,6 +85,31 @@ export default function MobileMenu({ locale, onLocaleChange, onLogout, localeDis
                     }}
                   >
                     {label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className={styles.divider} />
+
+          <div className={styles.section}>
+            <span className={styles.sectionLabel}>{t('section_theme', locale)}</span>
+            <div className={styles.optionRow} role="group" aria-label={t('section_theme', locale)}>
+              {THEME_OPTIONS.map(({ value, labelKey }) => {
+                const isActive = value === themePreference;
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    className={cx(styles.option, isActive && styles.optionActive)}
+                    aria-pressed={isActive}
+                    onClick={() => {
+                      setThemePreference(value);
+                      close();
+                    }}
+                  >
+                    {t(labelKey, locale)}
                   </button>
                 );
               })}

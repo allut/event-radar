@@ -43,6 +43,7 @@ __all__ = [
     "VALID_CATEGORIES",
     "VALID_LOCALES",
     "VALID_SIGNALS",
+    "VALID_THEME_PREFERENCES",
     "VALID_VIBES",
 ]
 
@@ -215,6 +216,16 @@ HTML_SANITIZE_MAX_CONSECUTIVE_BR = 2
 HTML_BLOCK_BOUNDARY_TAGS: frozenset[str] = frozenset(
     {"br", "p", "h3", "h4", "li", "ul", "ol", "blockquote"}
 )
+
+# Organizer-submission boundary allowlist (routers/organizer_events.py) — narrower
+# than the shared ingestion allowlist above, and backend-only (not generated into
+# shared/): it tracks the Tiptap toolbar's exact extension list (bold/italic/
+# underline/bulletList/orderedList/link/heading 3-4/blockquote, no color/span), so
+# the frontend never needs this set independently.
+ORGANIZER_HTML_SANITIZE_ALLOWED_TAGS: frozenset[str] = frozenset(
+    {"p", "br", "strong", "em", "u", "ul", "ol", "li", "a", "h3", "h4", "blockquote"}
+)
+ORGANIZER_HTML_SANITIZE_ALLOWED_ATTRS: dict[str, set[str]] = {"a": {"href"}}
 
 # Word-boundary keyword prefilter for sexually-explicit listings (en/et/ru), checked
 # at ingest time against title+description+venue. Kept tight and phrase-based to
@@ -538,6 +549,10 @@ RATE_LIMIT_CONTACT = "3/minute"
 # inline classify+publish pass, so keep it tight per-IP; the DB-backed
 # ORGANIZER_DAILY_SUBMISSION_CAP is the per-organizer ceiling.
 RATE_LIMIT_SUBMIT = "10/minute"
+# Authenticated organizer contact form (routers/organizer_contact.py) —
+# modeled on RATE_LIMIT_CONTACT: session-gated, but each hit still sends an
+# email, so keep the same tight per-IP cap.
+RATE_LIMIT_ORGANIZER_CONTACT = "3/minute"
 
 # Resend inbound-mail webhook signature verification (Svix scheme; see
 # https://resend.com/docs/dashboard/webhooks/verify-webhooks-requests and
@@ -614,6 +629,16 @@ SHOWCASE_EVENT_COUNT = 6
 # endpoint retries once at the wider window rather than rendering a stub grid.
 SHOWCASE_WINDOW_DAYS = 7
 SHOWCASE_FALLBACK_WINDOW_DAYS = 30
+# GET /public/counts (wayfinder #188/#189) — hand-rolled process-local TTL cache,
+# no new dependency (single-process/no-Redis architecture). Sized for real
+# visitor traffic: Landing client-fetches this live via React Query on every
+# real visit, not just at prerender-build time.
+PUBLIC_COUNTS_CACHE_TTL_SECONDS = 900
+# Same "this week, fall back if thin" pattern as the showcase grid — a real
+# empty-tonight is a valid, non-error state, so the ticker widens rather than
+# rendering nothing.
+PUBLIC_COUNTS_TONIGHT_CAP = 20
+PUBLIC_COUNTS_FALLBACK_WINDOW_DAYS = 7
 
 # Auth tokens
 AUTH_MAGIC_SALT = "magic-link-v1"
@@ -687,8 +712,8 @@ ORGANIZER_DAILY_VENUE_CREATION_CAP = 20
 # Text-column fields (title/description/important_info) have no DB-enforced width,
 # so these are abuse-prevention ceilings, not truncation-avoidance.
 ORGANIZER_TITLE_MAX_LEN = 300
-ORGANIZER_DESCRIPTION_MAX_LEN = 10000
-ORGANIZER_IMPORTANT_INFO_MAX_LEN = 5000
+ORGANIZER_DESCRIPTION_MAX_LEN = 30000
+ORGANIZER_IMPORTANT_INFO_MAX_LEN = 15000
 ORGANIZER_VENUE_NAME_MAX_LEN = 255
 ORGANIZER_VENUE_ADDRESS_MAX_LEN = 500
 ORGANIZER_CURRENCY_MAX_LEN = 3
@@ -704,6 +729,19 @@ IMAGE_UPLOAD_MAX_BYTES = 8 * 1024 * 1024  # 8 MiB
 CLOUDINARY_UPLOAD_URL_TEMPLATE = (
     "https://api.cloudinary.com/v1_1/{cloud_name}/image/upload"
 )
+# Leading-byte signatures for the three formats IMAGE_UPLOAD_ALLOWED_MIME
+# allows. WebP needs its own check (organizer_events.py::_sniff_image_mime)
+# since RIFF is a generic container format — the fourCC at offset 8 is what
+# actually says "WEBP".
+IMAGE_MAGIC_BYTES: dict[bytes, str] = {
+    b"\xff\xd8\xff": "image/jpeg",
+    b"\x89PNG\r\n\x1a\n": "image/png",
+}
+IMAGE_EXTENSION_BY_MIME: dict[str, str] = {
+    "image/jpeg": "jpg",
+    "image/png": "png",
+    "image/webp": "webp",
+}
 # Hosts an organizer-submission event.image_url is allowed to point at — the
 # signed Cloudinary upload endpoint (POST /organizer/events/image) always
 # returns a res.cloudinary.com secure_url. Without this, an organizer could
@@ -730,6 +768,16 @@ ORGANIZER_SUBMISSION_EXTERNAL_ID_PREFIX = "org:"
 LOCALE_ET = "et"
 LOCALE_EN = "en"
 LOCALE_RU = "ru"
+
+# Server-side theme_preference column values (users/organizers) — mirrors
+# VALID_LOCALES. The tri-state UI value "system" is never sent to or stored
+# on this column; only "light"/"dark"/NULL are valid here.
+VALID_THEME_PREFERENCES = {"light", "dark"}
+
+# The one theme_preference value that keeps an email's dark styling unchanged —
+# every other value (including None/"system") selects the light style set.
+# See app/email/styles.py::get_email_styles.
+THEME_PREFERENCE_DARK = "dark"
 
 # Admin review-queue pagination (routers/admin.py GET /admin/submissions) — mirrors
 # ADMIN_DEDUP_GROUPS_PAGE_SIZE's sizing rationale (small default page, generous cap).
@@ -772,6 +820,15 @@ SCORE_WEIGHT_RECENCY: float = 0.20
 SCORE_WEIGHT_FEEDBACK: float = 0.20
 SCORE_WEIGHT_QUALITY: float = 0.10
 SCORE_WEIGHT_LOCALITY: float = 0.05
+# Anonymous /explore scoring (#234): feedback_signal (0.20) is dropped — no
+# event-level aggregate feedback signal exists anywhere in the codebase.
+# persona_affinity keeps SCORE_WEIGHT_AFFINITY unchanged (it already returns
+# NEUTRAL_SCORE with no persona). The freed 0.20 is redistributed by uniformly
+# scaling the three remaining differentiating terms by 1/0.80 — a pure
+# rescale that preserves their relative influence.
+SCORE_WEIGHT_ANON_RECENCY: float = 0.25
+SCORE_WEIGHT_ANON_QUALITY: float = 0.125
+SCORE_WEIGHT_ANON_LOCALITY: float = 0.0625
 # _time_slots_for_event() memoization cap (ranking/score.py) — bounds an lru_cache keyed
 # on distinct starts_at values so repeated calls across users scoring the same event
 # don't redo the astimezone conversion. Comfortably above the number of distinct
@@ -827,6 +884,11 @@ BROWSE_RELEVANCE_MAX_CANDIDATES: int = 300
 # cache needed.
 BROWSE_SCORE_CACHE_TTL_SECONDS: float = 30.0
 BROWSE_SCORE_CACHE_MAX_ENTRIES: int = 512
+# Fixed sentinel in place of a real user id for the anonymous-caller cache key
+# (#234) — anonymous /explore traffic shares one cache entry per filter/sort
+# combination rather than one per caller. Never collides with a real User.id
+# (Postgres serial PKs start at 1).
+BROWSE_ANON_CACHE_SENTINEL: int = 0
 # How far back browse.py::_load_feedback_context looks for a user's like/dislike
 # history when scoring /explore (Path B). user_event_feedback is preserved
 # indefinitely by policy (see CLAUDE.md Data Retention), so an unbounded load
@@ -964,6 +1026,7 @@ LLM_DEDUP_CONFIDENCE_THRESHOLD: float = (
 )
 LLM_CLASSIFY_BATCH_SIZE = 30  # max events processed per classify_pending run
 LLM_REQUEST_TIMEOUT_SECONDS: float = 30.0
+LLM_BATCH_FANOUT_CONCURRENCY = 5  # bounded in-flight LLM calls for classify/dedup/venue-extract batches
 
 LLM_DEDUP_TITLE_MAX_LEN = 200
 LLM_DEDUP_VENUE_MAX_LEN = 100
@@ -1306,6 +1369,14 @@ CURRENCY_AMOUNT_RE = (
 # via a credentialed cross-origin request.
 CORS_ALLOWED_METHODS: list[str] = ["GET", "POST", "PATCH", "DELETE"]
 CORS_ALLOWED_HEADERS: list[str] = ["Authorization", "Content-Type"]
+
+# Single source for the dev-only origins in both config.CORS_ORIGINS' literal
+# default and main.py's non-development CSRF-trust subtraction — the two must
+# never drift, or a value dropped from one but not the other either breaks
+# local dev or leaves a hardcoded localhost origin CSRF-trusted in production.
+DEV_CORS_ORIGINS_DEFAULT: frozenset[str] = frozenset(
+    {"http://localhost:5173", "http://localhost:4173"}
+)
 
 # CSRF — methods CsrfOriginCheckMiddleware (app/main.py) enforces the Origin
 # check against. Deliberately includes PUT even though the API never routes

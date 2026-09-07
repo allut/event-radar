@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, screen } from '@testing-library/react';
 import { renderWithProviders } from '../../test/utils';
+import { getThemePreference } from '../../lib/theme';
 import MobileMenu from './MobileMenu';
 
 describe('MobileMenu', () => {
@@ -93,7 +94,41 @@ describe('MobileMenu', () => {
     expect(screen.getByRole('link', { name: 'Daily 5' })).toHaveAttribute('href', '/ru');
   });
 
-  it('shows a Sign in link and no nav/sign-out when signed out', () => {
+  it('fires setThemePreference and closes on a theme option click', () => {
+    renderWithProviders(
+      <MobileMenu locale="en" onLocaleChange={vi.fn()} onLogout={vi.fn()} />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
+    fireEvent.click(screen.getByText('Dark'));
+
+    expect(getThemePreference()).toBe('dark');
+    expect(screen.queryByText('Dark')).not.toBeInTheDocument();
+  });
+
+  it('renders a caller-supplied navItems override with its own aria-label instead of the default NAV_ITEMS', () => {
+    renderWithProviders(
+      <MobileMenu
+        locale="en"
+        onLocaleChange={vi.fn()}
+        onLogout={vi.fn()}
+        navItems={[{ route: '/organizer/dashboard', labelKey: 'organizer_dashboard_title' }]}
+        navAriaLabelKey="organizer_dashboard_title"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
+
+    expect(screen.getByRole('navigation', { name: 'Your events' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Your events' })).toHaveAttribute(
+      'href',
+      '/organizer/dashboard',
+    );
+    expect(screen.queryByText('Daily 5')).not.toBeInTheDocument();
+    expect(screen.queryByText('Explore')).not.toBeInTheDocument();
+  });
+
+  it('shows a Sign in link, no sign-out, and only Explore/Contact in nav when signed out', () => {
     renderWithProviders(
       <MobileMenu locale="en" onLocaleChange={vi.fn()} authed={false} />,
     );
@@ -103,7 +138,10 @@ describe('MobileMenu', () => {
     const signIn = screen.getByRole('link', { name: 'Sign in' });
     expect(signIn).toHaveAttribute('href', '/login');
     expect(screen.queryByText('Sign out')).not.toBeInTheDocument();
-    expect(screen.queryByRole('navigation')).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Explore' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Contact' })).toHaveAttribute('href', '/contact');
+    expect(screen.queryByText('Daily 5')).not.toBeInTheDocument();
+    expect(screen.queryByText('Saved')).not.toBeInTheDocument();
     expect(screen.getByText('ET')).toBeInTheDocument();
   });
 });

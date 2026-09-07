@@ -8,7 +8,7 @@
 .chip {
   composes: btnOutline from '../shared/Button.module.css';
   padding: var(--space-0-35) var(--space-0-875);
-  border-radius: var(--radius-pill);
+  border-radius: 0;
   font-size: var(--fs-xs);
   font-weight: var(--fw-semibold);
   letter-spacing: var(--tracking-wider);
@@ -22,6 +22,6 @@
 .activeChip.activeChip,
 .activeChip.activeChip:hover {
   background: var(--accent-subtle);
-  border: 1px solid var(--accent-border);
+  border: var(--border-w-hair) solid var(--accent-border);
   color: var(--accent-light);
 }

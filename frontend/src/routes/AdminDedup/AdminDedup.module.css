@@ -20,7 +20,7 @@
   font-family: var(--font-mono);
   font-size: var(--fs-2xs);
   color: var(--text-muted);
-  border-bottom: 1px solid var(--border);
+  border-bottom: var(--border-w-hair) solid var(--border);
 }
 .eventRow {
   display: flex;
@@ -28,7 +28,7 @@
   align-items: center;
   gap: var(--space-3);
   padding: var(--space-3) var(--space-4);
-  border-bottom: 1px solid var(--border);
+  border-bottom: var(--border-w-hair) solid var(--border);
 }
 .eventRow:last-child { border-bottom: none; }
 .evMain { min-width: 0; }
@@ -45,7 +45,7 @@
   font-size: var(--fs-2xs);
   padding: var(--space-0-45) var(--space-2);
   border-radius: var(--radius-pill);
-  border: 1px solid var(--border);
+  border: var(--border-w-hair) solid var(--border);
   color: var(--text-muted);
   white-space: nowrap;
 }

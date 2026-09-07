@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { parseSitemapLastmod, parseSitemapEventUrls, evaluateLiveAudit, isPathAllowedByRobots } from './seoAudit';
-import { buildEventJsonLd, buildWebsiteJsonLd } from './structuredData';
+import { buildEventJsonLd, buildExploreItemListJsonLd, buildWebsiteJsonLd } from './structuredData';
 import { buildSeoMeta } from '../hooks/useSeoMeta';
 import { makeEvent } from '../test/utils';
 import {
@@ -64,6 +64,11 @@ function renderEventHtml(eventId = 1): string {
     indexable: true,
   });
   return renderSnapshotHtml(meta, buildEventJsonLd(event));
+}
+
+function renderExploreHtml(locale: string, events = [makeEvent({ id: 1 }), makeEvent({ id: 2 }), makeEvent({ id: 3 })]): string {
+  const meta = buildSeoMeta({ title: 'Explore | What\'s on Radar', locale, path: '/explore', indexable: true });
+  return renderSnapshotHtml(meta, buildExploreItemListJsonLd(events, locale));
 }
 
 function sitemapWithLastmod(lastmod: string, extraLocs: string[] = []): string {
@@ -234,6 +239,44 @@ describe('evaluateLiveAudit', () => {
       now,
     });
     expect(result.issues.some((i) => i.includes('robots.txt blocks'))).toBe(false);
+  });
+
+  it('passes with structurally valid explore snapshots for all fetched locales (issue #236)', () => {
+    const buildTimestamp = now.toISOString();
+    const result = evaluateLiveAudit({
+      sitemapXml: sitemapWithLastmod(buildTimestamp),
+      robotsTxt: VALID_ROBOTS_TXT,
+      landingHtml: renderLandingHtml(),
+      exploreHtmlByLocale: { et: renderExploreHtml('et'), en: renderExploreHtml('en') },
+      now,
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it('surfaces structural regressions on a live explore snapshot, prefixed by locale', () => {
+    const buildTimestamp = now.toISOString();
+    const brokenExploreHtml = renderExploreHtml('en').replace(/<link rel="canonical"[^>]*>/, '');
+    const result = evaluateLiveAudit({
+      sitemapXml: sitemapWithLastmod(buildTimestamp),
+      robotsTxt: VALID_ROBOTS_TXT,
+      landingHtml: renderLandingHtml(),
+      exploreHtmlByLocale: { en: brokenExploreHtml },
+      now,
+    });
+    expect(result.ok).toBe(false);
+    expect(result.issues.some((i) => i.includes('explore (en) structural') && i.includes('canonical'))).toBe(true);
+  });
+
+  it('skips the explore check entirely when no explore page was fetched', () => {
+    const buildTimestamp = now.toISOString();
+    const result = evaluateLiveAudit({
+      sitemapXml: sitemapWithLastmod(buildTimestamp),
+      robotsTxt: VALID_ROBOTS_TXT,
+      landingHtml: renderLandingHtml(),
+      now,
+    });
+    expect(result.ok).toBe(true);
+    expect(result.issues.some((i) => i.includes('explore'))).toBe(false);
   });
 });
 

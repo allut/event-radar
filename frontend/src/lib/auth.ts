@@ -1,4 +1,4 @@
-import { SIGNED_IN_HINT_KEY, LOCALES, LOCALE_KEY, LOGOUT_FLAG_TTL_MS } from '../constants';
+import { SIGNED_IN_HINT_KEY, LOCALES, LOCALE_EN, LOCALE_KEY, LOGOUT_FLAG_TTL_MS } from '../constants';
 
 // Auth-change subscriber store, so components can react to setSignedInHint()/
 // clearSignedInHint() instead of only reading localStorage once at render
@@ -63,10 +63,10 @@ export function isLoggingOut(): boolean { return loggingOut; }
 
 export function getLocale(): string {
   const stored = localStorage.getItem(LOCALE_KEY);
-  return LOCALES.some((l) => l.code === stored) ? stored! : LOCALES[0].code;
+  return LOCALES.some((l) => l.code === stored) ? stored! : LOCALE_EN;
 }
 // Raw stored locale preference, or null if never explicitly set — unlike
-// getLocale(), this doesn't fall back to LOCALES[0] ('en'). The locale-routing
+// getLocale(), this doesn't fall back to LOCALE_EN. The locale-routing
 // wrapper (App.tsx) needs to tell "no preference yet" apart from "explicitly
 // en", since only an explicit non-Estonian preference should redirect a bare
 // URL — a first-time visitor with no preference must land on Estonian.

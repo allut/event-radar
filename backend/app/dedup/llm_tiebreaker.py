@@ -24,6 +24,7 @@ next pass. Once the cache is warm for the whole candidate set, ``deferred_pairs`
 reaches 0 and every run is fully correct.
 """
 
+import asyncio
 import logging
 from datetime import datetime
 
@@ -34,6 +35,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.constants import (
     LLM_BACKLOG_MAX_DRAIN_PASSES,
     LLM_BACKLOG_RETRY_SECONDS,
+    LLM_BATCH_FANOUT_CONCURRENCY,
     LLM_CLASSIFY_VENUE_FALLBACK,
     LLM_DEDUP_CONFIDENCE_THRESHOLD,
     LLM_DEDUP_HASH_QUERY_CHUNK_SIZE,
@@ -225,17 +227,26 @@ async def _resolve_survivor_pairs(
     ``cached_decisions`` in place, so a caller looping this function across
     sub-passes over the same survivor list never re-asks the LLM about a pair
     it already resolved this run. Returns (llm_confirmed, fresh_calls, deferred).
+
+    Fresh calls fan out concurrently (bounded by ``LLM_BATCH_FANOUT_CONCURRENCY``)
+    in vertex-disjoint waves: within one wave no two pairs share an event id, so
+    a wave's calls can't make each other redundant mid-flight — union-find's
+    early-exit (skip a pair already merged by an earlier decision) still fires
+    exactly as it would sequentially, just re-checked once per wave instead of
+    once per pair. Pairs that share an event id with one already in the current
+    wave wait for the next wave, by which point the earlier wave's unions are
+    applied and same_group may now skip them for free.
     """
     llm_confirmed = 0
     fresh_calls = 0
     deferred_pairs = 0
+
+    # Filter pass: apply cached decisions immediately (cheap, sequential), and
+    # collect only cache-miss pairs — up to max_fresh_calls, in survivor order,
+    # matching the pre-concurrency budget semantics — for the wave fan-out below.
+    pending: list[tuple[Event, Event, str]] = []
     for a, b, pair_hash in survivors:
         if same_group(parent, a.id, b.id):
-            # A prior union in this same loop (or the same-day pass) already
-            # merged this pair — union-find only needs k-1 merges for a
-            # k-member cluster, so a k(k-1)/2-pair stage-1 scan would
-            # otherwise burn redundant LLM calls confirming what's already
-            # known.
             continue
         cached = cached_decisions.get(pair_hash)
         if cached is not None:
@@ -243,15 +254,58 @@ async def _resolve_survivor_pairs(
                 union(parent, a.id, b.id)
                 llm_confirmed += 1
             continue
-        if fresh_calls >= max_fresh_calls:
-            deferred_pairs += 1
-            continue
-        fresh_calls += 1
-        confirmed = await _llm_confirms_pair(a, b, db, http_client)
-        cached_decisions[pair_hash] = confirmed
-        if confirmed:
-            union(parent, a.id, b.id)
-            llm_confirmed += 1
+        pending.append((a, b, pair_hash))
+
+    to_call = pending[:max_fresh_calls]
+    deferred_pairs = len(pending) - len(to_call)
+
+    semaphore = asyncio.Semaphore(LLM_BATCH_FANOUT_CONCURRENCY)
+
+    async def _confirm_one(a: Event, b: Event) -> bool:
+        async with semaphore:
+            return await _llm_confirms_pair(a, b, db, http_client)
+
+    remaining = to_call
+    while remaining:
+        wave: list[tuple[Event, Event, str]] = []
+        wave_ids: set[int] = set()
+        still_remaining: list[tuple[Event, Event, str]] = []
+        for a, b, pair_hash in remaining:
+            if same_group(parent, a.id, b.id):
+                # Resolved for free by an earlier wave's union — no call needed.
+                continue
+            if a.id in wave_ids or b.id in wave_ids:
+                still_remaining.append((a, b, pair_hash))
+                continue
+            wave.append((a, b, pair_hash))
+            wave_ids.add(a.id)
+            wave_ids.add(b.id)
+
+        if not wave:
+            break
+
+        results = await asyncio.gather(
+            *(_confirm_one(a, b) for a, b, _ in wave), return_exceptions=True
+        )
+        fresh_calls += len(wave)
+
+        for (a, b, pair_hash), result in zip(wave, results):
+            if isinstance(result, BaseException):
+                log.error(
+                    "dedup-llm: pair (%d, %d) raised during LLM confirm: %s",
+                    a.id,
+                    b.id,
+                    result,
+                )
+                confirmed = False
+            else:
+                confirmed = result
+            cached_decisions[pair_hash] = confirmed
+            if confirmed:
+                union(parent, a.id, b.id)
+                llm_confirmed += 1
+
+        remaining = still_remaining
 
     if deferred_pairs > 0:
         log.info(

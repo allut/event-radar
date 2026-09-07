@@ -7,9 +7,11 @@
 }
 
 .fieldInput {
+  appearance: none;
+  -webkit-appearance: none;
   background: var(--bg-raised);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border: var(--border-w-hair) solid var(--border);
+  border-radius: 0;
   padding: var(--space-3) var(--space-4);
   color: var(--text);
   font-size: var(--fs-base);
@@ -37,7 +39,7 @@
   display: flex;
   align-items: stretch;
   background: var(--bg-raised);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border: var(--border-w-hair) solid var(--border);
+  border-radius: 0;
   transition: border-color var(--transition), box-shadow var(--transition);
 }

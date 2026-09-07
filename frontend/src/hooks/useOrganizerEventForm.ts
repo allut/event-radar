@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { organizerApi, ApiError } from '../api/client';
 import { API, QUERY_KEYS, ORGANIZER_EVENTS_PAGE_SIZE, DEFAULT_CURRENCY, ORGANIZER_IMAGE_ALLOWED_MIME, ROUTES, LOCALE_EN, LOCALE_ET, LOCALE_RU } from '../constants';
 import { t } from '../i18n';
-import { toIsoOrUndefined, toLocalInput } from '../utils';
+import { hasHtmlContent, toIsoOrUndefined, toLocalInput } from '../utils';
 import { useLocaleNavigate } from './useLocaleNavigate';
 import type { SavedVenue, VenuePickerValue } from '../components/VenuePicker';
 
@@ -274,12 +274,12 @@ export function useOrganizerEventForm(locale: string, eventId?: number): UseOrga
     const body: Record<string, unknown> = { title: f.title.trim(), ...venueFields };
     if (f.titleEn.trim()) body.title_en = f.titleEn.trim();
     if (f.titleRu.trim()) body.title_ru = f.titleRu.trim();
-    if (f.description.trim()) body.description = f.description.trim();
-    if (f.descriptionEn.trim()) body.description_en = f.descriptionEn.trim();
-    if (f.descriptionRu.trim()) body.description_ru = f.descriptionRu.trim();
-    if (f.importantInfo.trim()) body.important_info = f.importantInfo.trim();
-    if (f.importantInfoEn.trim()) body.important_info_en = f.importantInfoEn.trim();
-    if (f.importantInfoRu.trim()) body.important_info_ru = f.importantInfoRu.trim();
+    if (hasHtmlContent(f.description)) body.description = f.description.trim();
+    if (hasHtmlContent(f.descriptionEn)) body.description_en = f.descriptionEn.trim();
+    if (hasHtmlContent(f.descriptionRu)) body.description_ru = f.descriptionRu.trim();
+    if (hasHtmlContent(f.importantInfo)) body.important_info = f.importantInfo.trim();
+    if (hasHtmlContent(f.importantInfoEn)) body.important_info_en = f.importantInfoEn.trim();
+    if (hasHtmlContent(f.importantInfoRu)) body.important_info_ru = f.importantInfoRu.trim();
     const startsIso = toIsoOrUndefined(f.startsAt);
     if (startsIso) body.starts_at = startsIso;
     const endsIso = toIsoOrUndefined(f.endsAt);

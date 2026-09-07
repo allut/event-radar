@@ -5,8 +5,8 @@
   justify-content: center;
   width: var(--overflow-trigger-size);
   height: var(--overflow-trigger-size);
-  border: 1px solid transparent;
-  border-radius: var(--radius);
+  border: var(--border-w-hair) solid transparent;
+  border-radius: 0;
   color: var(--text);
   cursor: pointer;
   flex-shrink: 0;

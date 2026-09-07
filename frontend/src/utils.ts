@@ -1,6 +1,6 @@
 import DOMPurify from 'dompurify';
 import { api } from './api/client';
-import { API, CATEGORY_GRADIENTS, FALLBACK_GRADIENT, EUR_SYMBOL, DEFAULT_CURRENCY, GOOGLE_MAPS_SEARCH_URL, type Signal, toLocaleCode, SAFE_URL_SCHEMES, SANITIZE_ALLOWED_TAGS, SANITIZE_ALLOWED_ATTR, SIGNAL_TO_CLASS, BROWSE_PAGE_SIZE, CATEGORIES, VIBES, type DatePreset, type SortOption, ANALYTICS_EVENT_PATH_RE, ANALYTICS_ORGANIZER_EDIT_PATH_RE, CALENDAR_WEEK_START, CALENDAR_WEEKS_SHOWN, CALENDAR_DAYS_PER_WEEK, CALENDAR_REFERENCE_MONDAY, MAX_HOUR, MAX_MINUTE, DATE_PRESET_DAYS, DATE_PRESET_DAYS_FALLBACK, DATE_PRESET_DEFAULT, DATE_PRESET_TODAY, DATE_PRESET_WEEKEND, EXPLORE_PARAM, EXPLORE_URL_FLAG_TRUE, EXPLORE_API_FLAG_TRUE, SORT_DEFAULT, TIME_FIELD_MAX_LENGTH, LOCALES, type LocaleCode } from './constants';
+import { API, CATEGORY_GRADIENTS, FALLBACK_GRADIENT, EUR_SYMBOL, DEFAULT_CURRENCY, GOOGLE_MAPS_SEARCH_URL, type Signal, toLocaleCode, SAFE_URL_SCHEMES, SANITIZE_ALLOWED_TAGS, SANITIZE_ALLOWED_ATTR, SIGNAL_TO_CLASS, BROWSE_PAGE_SIZE, CATEGORIES, VIBES, type DatePreset, type SortOption, ANALYTICS_EVENT_PATH_RE, ANALYTICS_ORGANIZER_EDIT_PATH_RE, CALENDAR_WEEK_START, CALENDAR_WEEKS_SHOWN, CALENDAR_DAYS_PER_WEEK, CALENDAR_REFERENCE_MONDAY, MAX_HOUR, MAX_MINUTE, DATE_PRESET_DAYS, DATE_PRESET_DAYS_FALLBACK, DATE_PRESET_DEFAULT, DATE_PRESET_TODAY, DATE_PRESET_WEEKEND, EXPLORE_PARAM, EXPLORE_URL_FLAG_TRUE, EXPLORE_API_FLAG_TRUE, SORT_DEFAULT, TIME_FIELD_MAX_LENGTH, LOCALES, type LocaleCode, DEFAULT_LOCALE_CODE } from './constants';
 import { t, ti } from './i18n';
 import { stripLocalePrefix, localizedPath, localeFromPath, localizedTo } from './lib/urlLocale';
 
@@ -31,6 +31,14 @@ export function withQueryParam(path: string, key: string, value: string): string
  * to the API — `?` when `path` has no query string yet, `&` otherwise. */
 export function withLocaleQuery(path: string, locale: string): string {
   return withQueryParam(path, 'locale', locale);
+}
+
+/** True for any organizer-portal route, with or without a `/:locale` prefix
+ * (e.g. `/organizer/dashboard`, `/ru/organizer/settings`) — used to pick the
+ * right chrome/links (e.g. Footer's Contact link) by current portal rather
+ * than by auth state alone. */
+export function isOrganizerPortalPath(pathname: string): boolean {
+  return /\/organizer(\/|$)/.test(pathname);
 }
 
 /** Reshapes a URL before it's forwarded to Vercel Analytics: strips the query string and
@@ -81,6 +89,20 @@ export function sanitizeHtml(html: string): string {
     ALLOWED_TAGS: SANITIZE_ALLOWED_TAGS,
     ALLOWED_ATTR: SANITIZE_ALLOWED_ATTR,
   });
+}
+
+/** Strips all HTML tags from a sanitized-but-still-HTML description field,
+ * for plain-text teaser contexts (card snippets, meta descriptions) that
+ * must not render markup. */
+export function stripHtmlToText(html: string): string {
+  return DOMPurify.sanitize(html, { ALLOWED_TAGS: [], ALLOWED_ATTR: [] });
+}
+
+/** True if a RichTextEditor field has real text — Tiptap's "empty" state
+ * serializes as `<p></p>`, not `''`, so a plain `.trim()` on the raw HTML
+ * would treat that as non-empty. */
+export function hasHtmlContent(html: string): boolean {
+  return stripHtmlToText(html).trim().length > 0;
 }
 
 // Formatters below are built once per locale and cached at module scope —
@@ -218,6 +240,15 @@ const DTF_MONTH_YEAR: Intl.DateTimeFormatOptions = { month: 'long', year: 'numer
 const DTF_LONG_DATE: Intl.DateTimeFormatOptions = {
   weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
 };
+const DTF_DAY_MONTH_LONG: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'long' };
+const DTF_ADMIN_TIMESTAMP: Intl.DateTimeFormatOptions = { dateStyle: 'medium', timeStyle: 'short' };
+
+/** Admin console timestamp — the console is un-i18n'd, so this always renders
+ * in DEFAULT_LOCALE_CODE rather than taking a locale param. */
+export function formatAdminTimestamp(iso: string | null): string {
+  if (!iso) return '—';
+  return dateTimeFormatter(DEFAULT_LOCALE_CODE, 'admin-timestamp', DTF_ADMIN_TIMESTAMP).format(new Date(iso));
+}
 
 export function formatEventTime(iso: string, locale: string): string {
   const localeCode = toLocaleCode(locale);
@@ -430,6 +461,21 @@ function formatLongDate(date: Date, locale: string): string {
 
 export function formatTodayDate(locale: string): string {
   return formatLongDate(new Date(), locale);
+}
+
+/** Landing-hero dateline: weekday-long + day/month-long, no year — the
+ * Landing hero shows the city name as its own suffix instead. */
+export function formatHeroDateline(locale: string): string {
+  const localeCode = toLocaleCode(locale);
+  const date = new Date();
+  const weekday = dateTimeFormatter(localeCode, 'weekday-long', DTF_WEEKDAY_LONG).format(date);
+  const dayMonth = dateTimeFormatter(localeCode, 'day-month-long', DTF_DAY_MONTH_LONG).format(date);
+  return `${weekday}, ${dayMonth}`;
+}
+
+/** Locale-grouped integer, e.g. 1008 → "1,008" (en) / "1 008" (et). */
+export function formatCount(n: number, locale: string): string {
+  return new Intl.NumberFormat(toLocaleCode(locale)).format(n);
 }
 
 /** Formats a `YYYY-MM-DD` date-only string (e.g. `daily_feeds.feed_date`) using

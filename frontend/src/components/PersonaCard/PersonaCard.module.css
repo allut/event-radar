@@ -3,6 +3,7 @@
   position: relative;
   display: flex;
   flex-direction: column;
+  border-radius: 0;
   transition: border-color var(--transition), transform var(--transition), box-shadow var(--transition);
   overflow: hidden;
 }
@@ -39,21 +40,9 @@
   opacity: var(--opacity-disabled);
 }
 
-.emoji {
-  font-size: var(--heading-2xl);
-  display: block;
-  margin-bottom: var(--space-1);
-  transition: transform var(--transition);
-}
-
-.card:hover .emoji,
-.card.selected .emoji {
-  transform: scale(var(--scale-hover));
-}
-
 .name {
   font-family: var(--font-display);
-  font-size: var(--heading-xs);
+  font-size: var(--heading-sm);
   font-weight: var(--fw-semibold);
   color: var(--text);
   letter-spacing: var(--tracking-snug);
@@ -62,6 +51,13 @@
 
 .card.selected .name {
   color: var(--accent-light);
+}
+
+.hair {
+  margin: var(--space-2) auto var(--space-1);
+  height: 1px;
+  width: var(--hair-width);
+  background: var(--accent-muted);
 }
 
 .vibe {
@@ -86,6 +82,6 @@
 
 .badgeSoft {
   background: var(--accent-faint);
-  border: 1px solid var(--accent-muted);
+  border: var(--border-w-hair) solid var(--accent-muted);
   color: var(--accent);
 }

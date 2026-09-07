@@ -45,7 +45,7 @@
   justify-content: center;
   width: var(--field-affordance-size);
   border: none;
-  border-left: 1px solid var(--border);
+  border-left: var(--border-w-hair) solid var(--border);
   background: transparent;
   color: var(--text-muted);
   border-radius: 0 var(--radius) var(--radius) 0;
@@ -97,7 +97,7 @@
   justify-content: center;
   width: var(--cal-nav-size);
   height: var(--cal-nav-size);
-  border: 1px solid var(--border);
+  border: var(--border-w-hair) solid var(--border);
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-muted);
@@ -162,7 +162,7 @@
   color: var(--text-soft);
   border-radius: var(--radius-sm);
   background: transparent;
-  border: 1px solid transparent;
+  border: var(--border-w-hair) solid transparent;
   transition: all var(--transition);
 }
 
@@ -245,7 +245,7 @@
   width: var(--time-field-width);
   height: var(--time-field-height);
   background: var(--bg-overlay-soft);
-  border: 1px solid var(--border);
+  border: var(--border-w-hair) solid var(--border);
   border-radius: var(--radius-sm);
   color: var(--accent-light);
   font-family: inherit;
@@ -320,4 +320,16 @@
     left: auto;
     right: 0;
   }
+}
+
+/* .field (composed fieldWrap) and .pop (composed menuPop) already square
+ * unconditionally at their shared-base source (#212) — only these locally
+ * radiused controls still need squaring here. Decorative radii (.today's
+ * dot, .selected's own background) are untouched — not a control's
+ * corners. */
+.calendarButton,
+.calNavBtn,
+.calDay,
+.timeInput {
+  border-radius: 0;
 }

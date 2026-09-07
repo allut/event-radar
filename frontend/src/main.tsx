@@ -2,20 +2,25 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 // Self-hosted fonts (bundled into the Vite build, served same-origin) — replaces the
 // external Google Fonts <link> so the CSP can drop third-party font/style hosts and
-// no font request leaks to a third party. Weights/styles mirror the former Google
-// request exactly (DM Sans 300/400/500/600; Cormorant Garamond 400/400-italic/500/600).
-// DM Sans ships latin + latin-ext only (no Cyrillic, same as Google) — Russian body
-// text falls back to system-ui via the CSS stack, unchanged from before.
-import '@fontsource/dm-sans/300.css';
-import '@fontsource/dm-sans/400.css';
-import '@fontsource/dm-sans/500.css';
-import '@fontsource/dm-sans/600.css';
+// no font request leaks to a third party.
+// Manrope Variable (wayfinder #190) replaces DM Sans SPA-wide: DM Sans had no
+// Cyrillic cut (ru fell back to system-ui), Manrope's variable-axis build covers
+// latin+latin-ext+cyrillic in one file, at less payload than DM Sans's four
+// static weights, and its 200-800 axis fixes --fw-bold:700 call sites that
+// previously had no 700 weight file in the build.
+import '@fontsource-variable/manrope';
+import '@fontsource/cormorant-garamond/300.css';
+import '@fontsource/cormorant-garamond/300-italic.css';
 import '@fontsource/cormorant-garamond/400.css';
 import '@fontsource/cormorant-garamond/400-italic.css';
 import '@fontsource/cormorant-garamond/500.css';
 import '@fontsource/cormorant-garamond/600.css';
 import App from './App';
 import './index.css';
+// Side-effect import: registers the matchMedia/storage listeners that keep
+// the theme live (OS flips, cross-tab writes) after the inline pre-paint
+// script in index.html has already set the initial value.
+import './lib/theme';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

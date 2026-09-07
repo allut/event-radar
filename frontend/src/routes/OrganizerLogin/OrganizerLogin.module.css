@@ -23,7 +23,7 @@
   font-size: var(--fs-md);
   margin-bottom: var(--space-6);
   padding-bottom: var(--space-1-75);
-  border-bottom: 1px solid var(--border);
+  border-bottom: var(--border-w-hair) solid var(--border);
 }
 
 .note {

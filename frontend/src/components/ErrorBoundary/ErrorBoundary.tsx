@@ -2,7 +2,7 @@ import { Component, type ReactNode } from 'react';
 import { getLocale } from '../../lib/auth';
 import { t } from '../../i18n';
 import styles from './ErrorBoundary.module.css';
-import { LOCALES } from '../../constants';
+import { LOCALE_EN } from '../../constants';
 
 interface Props { children: ReactNode }
 interface State { hasError: boolean }
@@ -20,7 +20,7 @@ export default class ErrorBoundary extends Component<Props, State> {
 
   render() {
     if (!this.state.hasError) return this.props.children;
-    let locale: string = LOCALES[0].code;
+    let locale: string = LOCALE_EN;
     try { locale = getLocale(); } catch { /* localStorage unavailable */ }
     return (
       <div className={styles.page}>

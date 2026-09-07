@@ -30,6 +30,12 @@ The authentication track for people who submit events. Structurally mirrors
 the consumer track and is never interchangeable with it.
 _Avoid_: portal auth, submitter auth
 
+**Admin track**:
+The authentication track for the operator console. Password + required TOTP
+rather than a magic link, with its own cookie name, path, and lifetime. Never
+interchangeable with the consumer or organizer tracks.
+_Avoid_: staff auth, ops login, superuser
+
 **Sign out**:
 Ends the session on the current device only. Other devices keep their
 sessions.

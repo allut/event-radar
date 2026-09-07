@@ -82,4 +82,19 @@ describe('SelectMenu', () => {
     expect(trigger).toBeInTheDocument();
     expect(trigger.className).toMatch(/triggerButtonActive/);
   });
+
+  it('opens the popover upward when openUpward is set', async () => {
+    render(
+      <SelectMenu
+        label="Theme"
+        value="relevance"
+        options={options}
+        onChange={vi.fn()}
+        ariaLabel="Theme"
+        openUpward
+      />,
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Theme Relevance' }));
+    expect(screen.getByRole('group', { name: 'Theme' }).parentElement).toHaveAttribute('data-open-upward', 'true');
+  });
 });

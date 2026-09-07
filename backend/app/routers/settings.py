@@ -11,6 +11,7 @@ from app.constants import (
     ERROR_NO_UPDATE_FIELDS,
     RATE_LIMIT_AUTHENTICATED_WRITE,
     VALID_LOCALES,
+    VALID_THEME_PREFERENCES,
 )
 from app.db import get_db
 from app.models.models import Persona, User, UserPersona
@@ -29,12 +30,22 @@ router = APIRouter(prefix="/users/me", tags=["settings"])
 class PatchSettingsBody(BaseModel):
     locale: str | None = None
     email_digest_opt_in: bool | None = None
+    theme_preference: str | None = None
 
     @field_validator("locale")
     @classmethod
     def locale_must_be_valid(cls, v: str | None) -> str | None:
         if v is not None and v not in VALID_LOCALES:
             raise ValueError(f"locale must be one of {sorted(VALID_LOCALES)}")
+        return v
+
+    @field_validator("theme_preference")
+    @classmethod
+    def theme_preference_must_be_valid(cls, v: str | None) -> str | None:
+        if v is not None and v not in VALID_THEME_PREFERENCES:
+            raise ValueError(
+                f"theme_preference must be one of {sorted(VALID_THEME_PREFERENCES)}"
+            )
         return v
 
 
@@ -93,8 +104,19 @@ async def patch_settings(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    """Update locale and/or email digest preference."""
-    if body.locale is None and body.email_digest_opt_in is None:
+    """Update locale, email digest preference, and/or theme preference.
+
+    An explicitly-sent `theme_preference: null` clears the account column
+    back to "no preference" (the client's way of durably reverting to
+    System, #257) — distinct from omitting the field, which leaves the
+    existing value untouched. Distinguished via `model_fields_set` since
+    both cases parse to `None` on the model.
+    """
+    if (
+        body.locale is None
+        and body.email_digest_opt_in is None
+        and "theme_preference" not in body.model_fields_set
+    ):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=ERROR_NO_UPDATE_FIELDS,
@@ -104,6 +126,8 @@ async def patch_settings(
         current_user.locale = body.locale
     if body.email_digest_opt_in is not None:
         current_user.email_digest_opt_in = body.email_digest_opt_in
+    if "theme_preference" in body.model_fields_set:
+        current_user.theme_preference = body.theme_preference
 
     await db.commit()
     await db.refresh(current_user)

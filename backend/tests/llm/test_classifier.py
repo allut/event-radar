@@ -722,6 +722,38 @@ class TestClassifyPendingIncludesExplicitRepresentatives:
         assert event.is_explicit is True
 
 
+class TestClassifyPendingConcurrentFanoutIsolation:
+    @pytest.mark.asyncio
+    async def test_one_event_raising_does_not_abort_the_batch(self, mock_db, make_event):
+        """classify_pending fans classify_event out concurrently via
+        asyncio.gather(..., return_exceptions=True) — one event's coroutine
+        raising an unexpected (non-LLMError) exception must not prevent its
+        siblings in the same batch from succeeding, and must count as failed
+        rather than crash the whole run."""
+        ok_event = make_event(event_id=1)
+        raising_event = make_event(event_id=2)
+
+        events_result = MagicMock()
+        events_result.all.return_value = [ok_event, raising_event]
+        existing_result = MagicMock()
+        existing_result.all.return_value = []
+        mock_db.scalars.side_effect = [events_result, existing_result]
+
+        async def _side_effect(task, prompt, db, *, event_id, **kwargs):
+            if event_id == raising_event.id:
+                raise RuntimeError("simulated concurrent-fanout failure")
+            return (_BASE_RAW, "groq/llama-3.3-70b-versatile")
+
+        with patch(
+            "app.llm.classifier.llm_json_or_none", AsyncMock(side_effect=_side_effect)
+        ):
+            summary = await classify_pending(mock_db)
+
+        assert summary["succeeded"] == 1
+        assert summary["failed"] == 1
+        assert summary["attempted"] == 2
+
+
 class TestNoLiveDedupSiblingClause:
     """Compiled-SQL check: verified live (VALUES-CTE query against the real DB)
     that a dedup-canonical representative with a still-live sibling correctly

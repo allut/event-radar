@@ -15,13 +15,13 @@
 .toastSuccess {
   composes: toast;
   background: var(--success-faint);
-  border: 1px solid var(--success-border);
+  border: var(--border-w-hair) solid var(--success-border);
   color: var(--success);
 }
 
 .toastError {
   composes: toast;
   background: var(--danger-faint);
-  border: 1px solid var(--danger-border);
+  border: var(--border-w-hair) solid var(--danger-border);
   color: var(--danger);
 }

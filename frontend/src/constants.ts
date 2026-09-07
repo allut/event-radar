@@ -47,6 +47,10 @@ export const LOCALE_KEY = 'locale';
 // two independent auth tracks (own account table, own token salts on the
 // backend) that must never be confused for one another. See lib/organizerAuth.ts.
 export const ORGANIZER_SIGNED_IN_HINT_KEY = 'organizer_session_token';
+// Tri-state theme override, shared across consumer/organizer/admin (one SPA
+// bundle, one light palette) — see lib/theme.ts's resolveTheme(). Holds
+// "system" | "light" | "dark"; "system"/unset falls through to matchMedia.
+export const THEME_PREFERENCE_KEY = 'theme_preference';
 // Client-only dismissal flag for the profile nudge banner (#175) — no backend
 // field for this, so a stale/cleared browser just re-shows it once.
 export const ORGANIZER_PROFILE_NUDGE_DISMISSED_KEY = 'organizer_profile_nudge_dismissed';
@@ -154,6 +158,8 @@ export const ICON_LINK_SELECTOR = `link[rel="${ICON_REL}"]`;
 // og:description/meta description target length — Google truncates around
 // ~155–160 chars; truncateForMeta (utils.ts) cuts at a word boundary under this.
 export const SEO_DESCRIPTION_MAX_LENGTH = 157;
+// Landing showcase plate body truncation (truncateForMeta cuts at a word boundary under this).
+export const LANDING_PLATE_BODY_MAX_LENGTH = 140;
 // Hreflang code for "no specific locale matches" — useSeoMeta (producer)
 // and scripts/prerender.ts's buildSitemapXml (producer) both special-case
 // this code to resolve to the bare Estonian URL rather than a localizedPath
@@ -190,6 +196,19 @@ export const PRICE_DATA_ATTR = {
   currency: 'data-currency',
   hasFreeTier: 'data-has-free-tier',
 } as const;
+// Prerender readiness markers for /explore (issue #236) — same family as
+// PRICE_DATA_ATTR above. `indexable` (useSeoMeta) only flips true on a
+// successful query, which is what the canonical-link wait selector every
+// other prerender target uses relies on — but /explore has a real error
+// path (a query that fails outright), where Playwright must still stop
+// waiting rather than time out. These two markers decouple "the page is
+// done loading, snapshot it" (PRERENDER_READY) from "is it indexable"
+// (still driven by useSeoMeta/indexable alone) and let the render script
+// tell an error state apart from a genuine (possibly zero-row) success.
+export const PRERENDER_READY_ATTR = 'data-prerender-ready';
+export const PRERENDER_READY_SELECTOR = `[${PRERENDER_READY_ATTR}="true"]`;
+export const PRERENDER_ERROR_ATTR = 'data-prerender-error';
+export const PRERENDER_ERROR_SELECTOR = `[${PRERENDER_ERROR_ATTR}="true"]`;
 // sitemap.xml's dist-relative filename (prerender.ts writes it, api/seo-audit.ts
 // fetches it) and its absolute-origin-relative path (referenced from
 // robots.txt's Sitemap directive and the live audit's production fetch).
@@ -276,6 +295,21 @@ export const ANALYTICS_ORGANIZER_EDIT_PATH_RE = new RegExp(`^${_LOCALE_PREFIX_RE
 // widened for it (frontend/vercel.json, see docs/security.md).
 export const GTAG_SCRIPT_SRC = 'https://www.googletagmanager.com/gtag/js';
 
+// GA4 custom event names for the public-Explore + sign-in-upsell flow (issue
+// #235). Event/param names are centralized here rather than inlined at call
+// sites, per this file's Code Quality Rule.
+export const ANALYTICS_EVENTS = {
+  landingBrowseCtaClick: 'landing_browse_cta_click',
+  landingEmailSubmit: 'landing_email_submit',
+  exploreView: 'explore_view',
+  exploreFilterChange: 'explore_filter_change',
+  exploreCardClick: 'explore_card_click',
+  exploreUpsellClick: 'explore_upsell_click',
+  signinModalOpen: 'signin_modal_open',
+  signinModalDismiss: 'signin_modal_dismiss',
+  signinModalSubmit: 'signin_modal_submit',
+} as const;
+
 // ─── Reports (event_reports, issue #128) ────────────────────────────────────
 // Mirrors the backend's VALID_REPORT_REASONS order (app/constants.py) — labels/
 // descriptions come from the report_reason_<slug>(_description) i18n keys.
@@ -342,6 +376,7 @@ export const QUERY_KEYS = {
   event: 'event',
   settings: 'settings',
   showcase: 'showcase',
+  counts: 'counts',
   organizerEvents: 'organizerEvents',
   organizerProfile: 'organizerProfile',
   organizerVenues: 'organizerVenues',
@@ -430,7 +465,6 @@ export const ADMIN_DEDUP_GROUPS_PAGE_SIZE = 50;
 // boundary — this only lets the picker reject an obviously-wrong file before
 // spending a network round trip on it.
 export const ORGANIZER_IMAGE_ACCEPT = ORGANIZER_IMAGE_ALLOWED_MIME.join(',');
-export const ORGANIZER_TEXTAREA_ROWS = 6;
 export const ORGANIZER_EVENTS_PAGE_SIZE = 24;
 
 // Organizer submission content-language tabs (EventSubmit.tsx). ET is always
@@ -505,22 +539,41 @@ export const STEP_KEYS = [
 // Self-contained radar-mark glyph used across TopBar/OrganizerTopBar/Footer/
 // Landing/auth cards — no external asset, matches the app's same-origin CSP.
 export const BRAND_GLYPH = '◉';
-// Organizer dashboard's empty-state icon.
-export const ORGANIZER_EMPTY_ICON = '📅';
-// Six taxonomy categories placed as radar blips on the Landing hero, positioned
-// (top/left %) around the sweep. Labels come from the shared category_* i18n keys.
-export const RADAR_BLIPS: { slug: string; top: number; left: number; delay: number }[] = [
-  { slug: 'music', top: 20, left: 30, delay: 0 },
-  { slug: 'theater', top: 32, left: 72, delay: 0.4 },
-  { slug: 'exhibitions', top: 58, left: 80, delay: 0.8 },
-  { slug: 'nightlife', top: 76, left: 52, delay: 1.2 },
-  { slug: 'workshops', top: 66, left: 32, delay: 1.6 },
-  { slug: 'family', top: 40, left: 18, delay: 2.0 },
-];
-
 // ─── Explore ─────────────────────────────────────────────────────────────────
 export const EXPLORE_AUDIENCE_ALL = 'all';
 export const EXPLORE_AUDIENCE_FOR_YOU = 'foryou';
+
+// Anonymous-visitor sign-in upsell (issue #235). `SignInTrigger` names which
+// control opened the modal — the modal's title stays static ("Sign in"), but
+// the heading/body copy above MagicLinkForm and the `trigger`/`action`
+// analytics params both key off this. Save and thumbs up/down share one copy
+// variant; the persistent upsell card's CTA reuses the for_you variant too
+// (same "personalize" framing), so only two variants exist for three triggers.
+export type SignInTrigger = 'save' | 'thumbs' | 'for_you';
+export const SIGN_IN_TRIGGER_COPY: Record<SignInTrigger, { headingKey: string; bodyKey: string }> = {
+  save: { headingKey: 'sign_in_modal_save_heading', bodyKey: 'sign_in_modal_save_body' },
+  thumbs: { headingKey: 'sign_in_modal_save_heading', bodyKey: 'sign_in_modal_save_body' },
+  for_you: { headingKey: 'sign_in_modal_foryou_heading', bodyKey: 'sign_in_modal_foryou_body' },
+};
+// Index in the (0-based) results array after which the persistent upsell
+// card is inserted for anonymous visitors — tuned by eye against the
+// responsive auto-fill grid (Page.module.css's .cardGrid), which has no
+// fixed column count to compute an exact row boundary from.
+export const EXPLORE_UPSELL_CARD_POSITION = 5;
+
+// explore_filter_change's `filter_type` param (issue #235) is a fixed
+// vocabulary — the facet name, or which other control changed — centralized
+// here rather than inlined as string literals at each Explore.tsx call site.
+export const EXPLORE_FILTER_TYPES = {
+  category: 'category',
+  vibe: 'vibe',
+  date: 'date',
+  free: 'free',
+  sort: 'sort',
+  forYou: 'for_you',
+  q: 'q',
+} as const;
+export type ExploreFilterType = (typeof EXPLORE_FILTER_TYPES)[keyof typeof EXPLORE_FILTER_TYPES];
 export const SORT_DEFAULT: SortOption = 'relevance';
 export const DATE_PRESET_DEFAULT: DatePreset = 'any';
 export const DATE_PRESET_TODAY: DatePreset = 'today';
@@ -594,6 +647,7 @@ export const ROUTES = {
   organizerDashboard: '/organizer/dashboard',
   organizerSubmit: '/organizer/submit',
   organizerSettings: '/organizer/settings',
+  organizerContact: '/organizer/contact',
   organizerEventEdit: (id: number | string) => `/organizer/events/${id}/edit`,
   organizerEventEditPattern: '/organizer/events/:id/edit',
   // Admin console (issue #154) — registered entirely outside App.tsx's
@@ -631,18 +685,53 @@ export const ADMIN_NAV_ITEMS = [
 // AdminEventDetail's tab strip — same no-i18n exemption as ADMIN_NAV_ITEMS.
 export const ADMIN_EVENT_DETAIL_TABS = ['Overview', 'Classification', 'Dedup & reports', 'Raw payload'] as const;
 
+// AdminShell's foot-area theme toggle (issue #255) — same {value, label}
+// shape as THEME_OPTIONS below, but plain-English labels: same no-i18n
+// exemption as ADMIN_NAV_ITEMS, since the admin console has no locale.
+export const ADMIN_THEME_OPTIONS = [
+  { value: 'system', label: 'System' },
+  { value: 'light', label: 'Light' },
+  { value: 'dark', label: 'Dark' },
+] as const;
+
 // Parallel signed-in hint to SIGNED_IN_HINT_KEY/ORGANIZER_SIGNED_IN_HINT_KEY
 // (see lib/adminAuth.ts) — a third, independent auth track's localStorage flag.
 export const ADMIN_SIGNED_IN_HINT_KEY = 'admin_session_token';
 
-// The signed-in primary nav — same four {route, labelKey} pairs rendered by
-// both TopBar (desktop) and MobileMenu (mobile), kept in one place so they
-// can't drift out of sync.
+// The signed-in primary nav — same {route, labelKey} pairs rendered by both
+// TopBar (desktop) and MobileMenu (mobile), kept in one place so they can't
+// drift out of sync.
 export const NAV_ITEMS = [
   { route: ROUTES.home, labelKey: 'nav_daily5' },
   { route: ROUTES.explore, labelKey: 'nav_explore' },
   { route: ROUTES.saved, labelKey: 'nav_saved' },
   { route: ROUTES.settings, labelKey: 'nav_settings' },
+  { route: ROUTES.contact, labelKey: 'nav_contact' },
+] as const;
+
+// Routes from NAV_ITEMS that stay visible to a signed-out visitor — Explore
+// and Contact are public; Daily 5/Saved/Settings are dead ends for an
+// anonymous visitor (Saved has nothing in it, the others require auth).
+// Shared by TopBar and MobileMenu so their signed-out filtering can't diverge.
+export const SIGNED_OUT_NAV_ROUTES: readonly string[] = [ROUTES.explore, ROUTES.contact];
+
+// Same {route, labelKey} shape as NAV_ITEMS, rendered by both OrganizerTopBar
+// (desktop) and its MobileMenu (mobile) — kept in one place so they can't
+// drift out of sync.
+export const ORGANIZER_NAV_ITEMS = [
+  { route: ROUTES.organizerDashboard, labelKey: 'organizer_dashboard_title' },
+  { route: ROUTES.organizerSubmit, labelKey: 'organizer_new_event' },
+  { route: ROUTES.organizerSettings, labelKey: 'organizer_settings_nav' },
+  { route: ROUTES.organizerContact, labelKey: 'organizer_contact_nav' },
+] as const;
+
+// The three theme options rendered by both ThemeSelector (desktop) and
+// MobileMenu (mobile), kept in one place so they can't drift out of sync —
+// mirrors NAV_ITEMS' {value, labelKey} pattern above.
+export const THEME_OPTIONS = [
+  { value: 'system', labelKey: 'theme_system' },
+  { value: 'light', labelKey: 'theme_light' },
+  { value: 'dark', labelKey: 'theme_dark' },
 ] as const;
 
 // Prefix every backend request is proxied under (see vercel.json's rewrite
@@ -672,6 +761,7 @@ export const API = {
   feedbackEvent: (id: number) => `/feedback/${id}`,
   feedbackEvents: '/feedback/events',
   publicShowcase: '/public/showcase',
+  publicCounts: '/public/counts',
   emailUnsubscribe: '/email/unsubscribe',
   emailResubscribe: '/email/resubscribe',
   event: (id: number | string) => `/events/${id}`,
@@ -679,6 +769,7 @@ export const API = {
   organizerEvent: (id: number | string) => `/organizer/events/${id}`,
   organizerEventImage: '/organizer/events/image',
   organizerProfile: '/organizer/profile',
+  organizerContact: '/organizer/contact',
   organizerVenues: '/organizer/venues',
   organizerVenue: (id: number | string) => `/organizer/venues/${id}`,
   reports: '/reports',
@@ -785,3 +876,13 @@ export const ADMIN_PIPELINE_STAGE_LABELS: Record<string, string> = {
   build_feeds: 'Build feeds',
   send_digests: 'Send digests',
 };
+
+// usePrefersReducedMotion's matchMedia query.
+export const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)';
+
+// JSON-LD @context (structuredData.ts).
+export const SCHEMA_ORG_CONTEXT = 'https://schema.org';
+
+// GitHub API User-Agent for api/prerender-cadence.ts's githubRequest() call
+// (GitHub rejects requests with no User-Agent).
+export const PRERENDER_CADENCE_USER_AGENT = 'event-radar-prerender-cadence';

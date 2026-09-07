@@ -23,8 +23,7 @@ from app.constants import (
     RESEND_SEND_URL,
     RESEND_TIMEOUT_SECONDS,
 )
-from app.email import styles
-from app.email.styles import EMAIL_CSS
+from app.email.styles import get_email_styles
 from app.email.templates import (
     EMAIL_DOCUMENT,
     EMAIL_FOOTER_BRAND,
@@ -37,38 +36,44 @@ from app.models.models import Event
 log = logging.getLogger(__name__)
 
 
-def build_report_outcome_html(event: Event, resolution_note: str, locale: str) -> str:
+def build_report_outcome_html(
+    event: Event,
+    resolution_note: str,
+    locale: str,
+    theme_preference: str | None = None,
+) -> str:
+    s = get_email_styles(theme_preference)
     safe_event_url = html_lib.escape(
         f"{settings.FRONTEND_URL}/events/{event.id}", quote=True
     )
     note = resolution_note.strip() or t("email.report_outcome.fallback_note", locale)
 
     header_html = REPORT_OUTCOME_HEADER.format(
-        s_eyebrow=styles.S_EYEBROW,
-        s_h1=styles.S_H1,
+        s_eyebrow=s.s_eyebrow,
+        s_h1=s.s_h1,
         heading=t("email.report_outcome.heading", locale),
     )
     content_html = REPORT_OUTCOME_BODY.format(
-        s_body_text=styles.S_BODY_TEXT,
+        s_body_text=s.s_body_text,
         intro=html_lib.escape(
             ti("email.report_outcome.intro", locale, event_title=event.title_orig)
         ),
         note=html_lib.escape(note),
-        s_feed_btn_wrap=styles.S_FEED_BTN_WRAP,
+        s_feed_btn_wrap=s.s_feed_btn_wrap,
         event_url=safe_event_url,
-        s_feed_btn=styles.S_FEED_BTN,
+        s_feed_btn=s.s_feed_btn,
         cta_label=t("email.report_outcome.cta", locale),
     )
 
     return EMAIL_DOCUMENT.format(
-        css=EMAIL_CSS,
-        s_page=styles.S_PAGE,
-        s_container=styles.S_CONTAINER,
-        s_header_pad=styles.S_HEADER_PAD,
+        css=s.css,
+        s_page=s.s_page,
+        s_container=s.s_container,
+        s_header_pad=s.s_header_pad,
         header_html=header_html,
-        s_content_pad=styles.S_CONTENT_PAD,
+        s_content_pad=s.s_content_pad,
         content_html=content_html,
-        s_footer=styles.S_FOOTER,
+        s_footer=s.s_footer,
         footer_html=EMAIL_FOOTER_BRAND,
     )
 
@@ -81,7 +86,11 @@ def build_report_outcome_text(event: Event, resolution_note: str, locale: str) -
 
 
 async def send_report_outcome_email(
-    to_email: str, event: Event, resolution_note: str, locale: str
+    to_email: str,
+    event: Event,
+    resolution_note: str,
+    locale: str,
+    theme_preference: str | None = None,
 ) -> None:
     if not settings.RESEND_API_KEY:
         log.warning(
@@ -91,7 +100,9 @@ async def send_report_outcome_email(
         return
 
     subject = t("email.report_outcome.subject", locale)
-    html_body = build_report_outcome_html(event, resolution_note, locale)
+    html_body = build_report_outcome_html(
+        event, resolution_note, locale, theme_preference
+    )
     text_body = build_report_outcome_text(event, resolution_note, locale)
 
     async with httpx.AsyncClient(timeout=RESEND_TIMEOUT_SECONDS) as client:

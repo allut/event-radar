@@ -30,6 +30,7 @@ from app.constants import (
     CORS_ALLOWED_HEADERS,
     CORS_ALLOWED_METHODS,
     CSRF_UNSAFE_METHODS,
+    DEV_CORS_ORIGINS_DEFAULT,
     DEV_DB_LOCAL_HOSTS,
     DIGEST_SEND_HOUR,
     ERROR_INTERNAL_TICK_INVALID_TOKEN,
@@ -90,6 +91,7 @@ from app.routers.feed import router as feed_router
 from app.routers.feedback import router as feedback_router
 from app.routers.onboarding import router as onboarding_router
 from app.routers.organizer_auth import router as organizer_auth_router
+from app.routers.organizer_contact import router as organizer_contact_router
 from app.routers.organizer_events import router as organizer_events_router
 from app.routers.organizer_profile import router as organizer_profile_router
 from app.routers.organizer_venues import router as organizer_venues_router
@@ -610,12 +612,9 @@ app.add_middleware(
 # shape for a config mistake to take. Dropped outside development so a
 # forgotten CORS_ORIGINS degrades to "no CSRF-trusted origins" (fail closed)
 # rather than "trust two hardcoded localhost ports" (fail open).
-_DEV_CORS_ORIGINS_DEFAULT = frozenset(
-    {"http://localhost:5173", "http://localhost:4173"}
-)
 _csrf_trusted_origins = frozenset(settings.CORS_ORIGINS) | {settings.FRONTEND_URL}
 if settings.APP_ENV != APP_ENV_DEVELOPMENT:
-    _csrf_trusted_origins -= _DEV_CORS_ORIGINS_DEFAULT
+    _csrf_trusted_origins -= DEV_CORS_ORIGINS_DEFAULT
 app.add_middleware(
     CsrfOriginCheckMiddleware,
     trusted_origins=_csrf_trusted_origins,
@@ -708,6 +707,7 @@ app.include_router(feed_router)
 app.include_router(feedback_router)
 app.include_router(onboarding_router)
 app.include_router(organizer_auth_router)
+app.include_router(organizer_contact_router)
 app.include_router(organizer_events_router)
 app.include_router(organizer_profile_router)
 app.include_router(organizer_venues_router)

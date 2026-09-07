@@ -57,16 +57,23 @@ describe('DatePicker', () => {
   });
 
   it('clamps a same-day time earlier than min up to the min time, instead of committing before it', async () => {
+    // Pin "today" before min's month, so the empty-value popover opens on
+    // min's month (its fallback view) rather than the real system clock's
+    // current month, which drifts past the hardcoded min date over time.
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date(2026, 6, 1));
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime.bind(vi) });
     const { container } = renderWithProviders(<Harness initial="" min="2026-08-15T20:00" />);
-    await userEvent.click(screen.getByRole('button', { name: /open calendar/i }));
+    await user.click(screen.getByRole('button', { name: /open calendar/i }));
 
     const sameDayAsMin = new Date(2026, 7, 15);
     const cell = container.querySelector(`[data-date="${sameDayAsMin.toDateString()}"]`) as HTMLElement;
     expect(cell).not.toBeDisabled();
-    await userEvent.click(cell);
+    await user.click(cell);
 
     // Default time (00:00) is before min's 20:00 — must clamp up, never commit 00:00.
     expect(screen.getByLabelText('Starts')).toHaveValue('2026-08-15 20:00');
+    vi.useRealTimers();
   });
 
   it('allows free typing of an hour before validating against a same-day min, clamping only on blur', async () => {

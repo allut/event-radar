@@ -978,6 +978,39 @@ class TestExtractAddressFromVenueName:
         assert event.venue_address == "Kopli 116"
 
     @pytest.mark.asyncio
+    async def test_one_name_raising_does_not_abort_other_names(self, mock_db):
+        """Fresh calls fan out concurrently via
+        asyncio.gather(..., return_exceptions=True) — one venue name's
+        coroutine raising an unexpected exception must not prevent another
+        name in the same batch from being extracted."""
+        ok_event = self._make_event(1, "Kopli 116")
+        raising_event = self._make_event(2, "Tartu mnt 47")
+        mock_db.scalars.return_value = MagicMock(
+            all=MagicMock(return_value=[ok_event, raising_event])
+        )
+        mock_db.execute.return_value = MagicMock(all=MagicMock(return_value=[]))
+
+        llm_response = {"venue_name": None, "venue_address": "Some Street 1"}
+
+        async def _llm_side_effect(task, prompt, db, **kwargs):
+            if "Tartu mnt 47" in prompt:
+                raise RuntimeError("simulated concurrent-fanout failure")
+            return (llm_response, "groq/llama")
+
+        with (
+            patch("app.ingestion.geocode.venue_extract.llm_available", return_value=True),
+            patch(
+                "app.ingestion.geocode.venue_extract.llm_json",
+                new=AsyncMock(side_effect=_llm_side_effect),
+            ),
+        ):
+            result = await extract_address_from_venue_name(mock_db)
+
+        assert result == 1
+        assert ok_event.venue_address == "Some Street 1"
+        assert raising_event.venue_address is None
+
+    @pytest.mark.asyncio
     async def test_fresh_call_budget_defers_excess(self, mock_db):
         from app.constants import VENUE_EXTRACT_MAX_FRESH_LLM_CALLS_PER_RUN
 

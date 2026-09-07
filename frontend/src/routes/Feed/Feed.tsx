@@ -12,7 +12,7 @@ import PageState from '../../components/PageState';
 import TopBar from '../../components/TopBar';
 import SeoTags from '../../components/SeoTags';
 import { formatHourMinute, formatIsoDate, formatTodayDate, padIndex, titleWithBrand, withLocaleQuery } from '../../utils';
-import { API, BRAND_GLYPH, QUERY_KEYS, ROUTES, UI_STATE } from '../../constants';
+import { API, QUERY_KEYS, ROUTES, UI_STATE } from '../../constants';
 import styles from './Feed.module.css';
 
 interface FeedResponse {
@@ -92,7 +92,7 @@ export default function Feed() {
 
         {events.length === 0 ? (
           <EmptyState
-            icon={BRAND_GLYPH}
+            eyebrow={t('daily_five', locale)}
             title={t('feed_empty_title', locale)}
             message={t('feed_empty_msg', locale)}
             hint={t('feed_empty_hint', locale)}
@@ -105,7 +105,7 @@ export default function Feed() {
             {events.slice(1).map((event, i) => (
               <li key={event.id} className={styles.standardItem}>
                 <span className={styles.indexNumeral} aria-hidden>{padIndex(i + 2)}</span>
-                <EventCard event={event} index={i + 1} locale={locale} />
+                <EventCard event={event} index={i + 1} locale={locale} alignTitle={false} />
               </li>
             ))}
           </ol>

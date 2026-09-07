@@ -37,3 +37,28 @@
 .authBtn {
   composes: authBtn from '../shared/Bar.module.css';
 }
+
+.localeWrap {
+  display: contents;
+}
+
+.themeWrap {
+  display: contents;
+}
+
+.mobileMenuWrap {
+  display: none;
+  justify-content: flex-end;
+}
+
+@media (max-width: 640px) {
+  .actions > .authBtn,
+  .actions > .localeWrap,
+  .actions > .themeWrap {
+    display: none;
+  }
+
+  .mobileMenuWrap {
+    display: flex;
+  }
+}

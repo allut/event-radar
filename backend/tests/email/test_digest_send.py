@@ -58,6 +58,22 @@ async def test_success_calls_http_post(monkeypatch, make_event):
 
 
 @pytest.mark.asyncio
+async def test_theme_preference_passed_through_to_html(monkeypatch, make_event):
+    monkeypatch.setattr(digest.settings, "RESEND_API_KEY", "re_key")
+    monkeypatch.setattr(digest.settings, "FRONTEND_URL", "https://app.radar.ee")
+    _patch_client(monkeypatch)
+    post = AsyncMock()
+    monkeypatch.setattr(digest, "http_post", post)
+
+    await send_digest_email(
+        "u@example.com", "en", [make_event()], date(2026, 7, 21), 7, "dark"
+    )
+
+    html = post.call_args.kwargs["json_body"]["html"]
+    assert "#13161e" in html
+
+
+@pytest.mark.asyncio
 async def test_http_error_raises_runtime_error(monkeypatch, make_event):
     monkeypatch.setattr(digest.settings, "RESEND_API_KEY", "re_key")
     _patch_client(monkeypatch)

@@ -1,6 +1,6 @@
 .card {
   background: var(--bg-card);
-  border: 1px solid var(--border);
+  border: var(--border-w-hair) solid var(--border);
   border-radius: var(--radius);
 }
 
@@ -39,3 +39,4 @@
   letter-spacing: var(--tracking-normal);
   color: var(--text);
 }
+

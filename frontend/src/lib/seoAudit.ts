@@ -10,6 +10,7 @@ import {
   SEO_AUDIT_STALE_THRESHOLD_HOURS,
   SITEMAP_PATH,
 } from '../constants.js';
+import type { LocaleCode } from '../constants.js';
 import { parseSnapshotHtml, validateSnapshotStructure } from './seoValidation.js';
 
 /** One `Allow:`/`Disallow:` rule parsed out of a `User-agent: *` group,
@@ -114,19 +115,28 @@ export function parseSitemapEventUrls(sitemapXml: string): string[] {
   return locs.filter((loc) => eventUrlRe.test(loc));
 }
 
-/** The live audit (issue #54): checks production (not a local build) for (1)
- * a dead prerender cadence — sitemap.xml's build timestamp older than
- * SEO_AUDIT_STALE_THRESHOLD_HOURS — and (2) structural regressions on the
- * live Landing snapshot and (if the catalog has any published events yet) one
- * live event snapshot, reusing seoValidation.ts's in-build-gate checks
- * (issue #53) unchanged rather than reimplementing them. Pure/network-free
- * so it can be unit-tested directly; api/seo-audit.ts does the fetching
- * (including picking which event URL to fetch, via parseSitemapEventUrls). */
+/** The live audit (issue #54): checks production (not a local build) for
+ * (1) robots.txt crawlability regressions — sitemap.xml, the OG fallback
+ * image, the built `/assets/`, and each `CRAWLABLE_ICON_PATHS` entry all
+ * blocked-by-`Disallow` checks (the issue #54 motivating bug: a stray
+ * `Disallow: /` silently caught /sitemap.xml); (2) a dead prerender cadence
+ * — sitemap.xml's build timestamp older than SEO_AUDIT_STALE_THRESHOLD_HOURS
+ * — and (3) structural regressions on the live Landing snapshot, (if the
+ * catalog has any published events yet) one live event snapshot, and (issue
+ * #236) `/explore` per locale, reusing seoValidation.ts's in-build-gate
+ * checks (issue #53) unchanged rather than reimplementing them. Pure/
+ * network-free so it can be unit-tested directly; api/seo-audit.ts does the
+ * fetching (including picking which event URL to fetch, via
+ * parseSitemapEventUrls) and its own separate favicon content-type check. */
 export function evaluateLiveAudit(params: {
   sitemapXml: string;
   landingHtml: string;
   robotsTxt: string;
   eventHtml?: string;
+  /** One entry per locale variant of /explore's canonical URL (issue #236) —
+   * best-effort, same as eventHtml: a locale that failed to fetch is simply
+   * absent rather than failing the whole audit. */
+  exploreHtmlByLocale?: Partial<Record<LocaleCode, string>>;
   now?: Date;
 }): LiveAuditResult {
   const now = params.now ?? new Date();
@@ -182,6 +192,19 @@ export function evaluateLiveAudit(params: {
       originPrefix: PRODUCTION_ORIGIN,
     });
     issues.push(...eventIssues.map((issue) => `event structural: ${issue}`));
+  }
+
+  // No liveItemCount re-query here (issue #236) — unlike the in-build gate,
+  // this is a best-effort production spot-check with no backend fan-out of
+  // its own; assertListJsonLd's >=3 check simply no-ops without it.
+  for (const [locale, html] of Object.entries(params.exploreHtmlByLocale ?? {})) {
+    const parsedExplore = parseSnapshotHtml(html);
+    const exploreIssues = validateSnapshotStructure(parsedExplore, {
+      kind: 'list',
+      locale,
+      originPrefix: PRODUCTION_ORIGIN,
+    });
+    issues.push(...exploreIssues.map((issue) => `explore (${locale}) structural: ${issue}`));
   }
 
   return { ok: issues.length === 0, issues, buildTimestamp };

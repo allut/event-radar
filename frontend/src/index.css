@@ -15,7 +15,7 @@
   --text: #e4dfd6;
   --text-muted: #7a8ba3;
   --text-soft: #9fb0c8;   /* readable secondary content, ~8.2:1 on --bg */
-  --text-dim: #3d4d65;    /* decorative only — ghost numerals, hairlines (~2.1:1, fails AA) */
+  --text-dim: #5c6e88;    /* decorative only — ghost numerals, hairlines (large-text AA, ~3.5:1 on --bg) */
   --border: #252c3d;
   --border-subtle: #1c2333;
   --success: #4cad7f;
@@ -23,6 +23,7 @@
   --radius: 6px;
   --easing: cubic-bezier(0.4, 0, 0.2, 1);
   --easing-breathe: ease-in-out; /* secondary curve for the looping breathe pulse */
+  --easing-landing: cubic-bezier(0.22, 0.61, 0.36, 1); /* Landing's one motion curve (wayfinder #186) */
   --transition: 200ms var(--easing);
   --transition-transform: 400ms var(--easing); /* slower image zoom-on-hover */
 
@@ -41,7 +42,24 @@
   --accent-soft: rgba(200, 146, 42, 0.06);
   --accent-muted: rgba(200, 146, 42, 0.35);
   --accent-minimal: rgba(200, 146, 42, 0.03);
+  --accent-transparent: rgba(200, 146, 42, 0);
   --accent-hover-bg: rgba(200, 146, 42, 0.25);
+  /* Landing (wayfinder #189, direction C1) — thin gold frame inset on the hero
+     poster only, not repeated elsewhere. */
+  --poster-frame: rgba(200, 146, 42, 0.28);
+  /* Landing .posterImg cool-toned corner glow (wayfinder #248) — dark value
+     equals the literal it replaces; light value is retuned lighter/lower-alpha,
+     not a mirror, so it doesn't read as a stain on white. Light theme resolves
+     --poster-glow-cool to --poster-glow-cool-light in the light :root block. */
+  --poster-glow-cool: rgba(90, 120, 175, 0.42);
+  --poster-glow-cool-light: rgba(140, 160, 205, 0.2);
+  /* Landing .posterImg gold-toned corner glow — dark value is an alias of
+     --accent-hover-bg (unchanged behavior); light value needs a stronger
+     alpha than that shared hover-highlight token, since the same 0.25 reads
+     as a barely-there wash against the near-white light --bg instead of the
+     warm bloom it produces against near-black. */
+  --poster-glow-warm: var(--accent-hover-bg);
+  --poster-glow-warm-light: rgba(200, 146, 42, 0.4);
 
   --bg-placeholder: rgba(255, 255, 255, 0.06);
 
@@ -54,13 +72,19 @@
 
   /* Typography */
   --font-display: 'Cormorant Garamond', Georgia, serif;
+  --font-body: 'Manrope Variable', system-ui, sans-serif;
   /* System stack only (no bundled webfont) — used by the admin console's
      data/label treatment (issue #154). Never a webfont: font-src 'self' in
      the SPA's CSP (docs/backend-ops.md) only serves the two @fontsource
      faces already bundled in main.tsx. */
   --font-mono: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  /* Admin console's own type stack (issue #211) — deliberately not an alias
+     of --font-body: drops Manrope for the OS-native sans, distinguishing the
+     admin sub-language from the consumer/organizer surfaces. */
+  --font-system: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
 
   --fs-2xs:  0.75rem;    /* badge labels */
+  --fs-3xs:  0.656rem;   /* ~10.5px — Landing c1 prototype .lab label */
   --fs-xs:   0.8125rem;  /* footer, locale pills, price chips */
   --fs-sm:   0.875rem;   /* labels, venue, secondary text */
   --fs-md:   0.9375rem;  /* body-small, taglines, bullets */
@@ -80,6 +104,7 @@
   --tracking-wide:     0.04em;  /* form labels, price badges */
   --tracking-wider:    0.06em;  /* uppercase pill labels */
   --eyebrow-tracking:  0.12em;  /* uppercase section eyebrows */
+  --tracking-loose:    0.2em;   /* Landing c1 prototype .lab label */
 
   /* Spacing scale */
   --space-1: 0.25rem;
@@ -116,6 +141,13 @@
   --space-1-75: 1.75rem;
   --space-2-5: 2.5rem;
   --space-2-75: 2.75rem;
+  /* Landing-scoped fluid spacing — named per the §3 rule that off-scale
+     clamp() spacing must be named, not inlined. */
+  --landing-poster-inset: clamp(14px, 2vw, 26px);   /* .frame inset off .posterImg */
+  --landing-hero-pad-top: clamp(26px, 3.4vw, 44px);  /* .heroTop */
+  --landing-hero-pad-bottom: clamp(26px, 3.4vw, 46px); /* .heroBot */
+  --landing-flat-pad: clamp(42px, 5.6vw, 80px);      /* .flat section vertical padding */
+  --landing-flat-header-gap: clamp(24px, 4vw, 64px); /* .flatHeader column gap */
 
   /* Shape */
   --radius-pill: 100px;
@@ -138,6 +170,7 @@
   --opacity-breathe-min: 0.4;    /* breathe keyframe trough */
 
   /* Border widths */
+  --border-w-hair: 1px;    /* control borders, focus-ring placeholders, hairline dividers */
   --border-w-ring: 2px;    /* spinner rings, status circles, drop zones */
   --border-w-alert: 2px;   /* left-rule on inline alert/error banners */
   --border-w-accent: 3px;  /* top-rule accent/danger card stripe */
@@ -222,6 +255,10 @@
   --page-max-organizer: 840px;    /* OrganizerDashboard, AdminEventDetail */
   --page-max-settings: 640px;     /* Settings, OrganizerSettings */
   --page-max-showcase: 560px;     /* Landing showcase panel */
+  /* Documentation only — CSS custom properties can't drive @media conditions,
+     so the 640px mobile breakpoint stays a literal in every @media rule
+     (wayfinder #196/#200). */
+  --bp-narrow: 640px;
 
   /* Component max/min-widths */
   --card-max-narrow: 400px;       /* shared/Card.module.css .cardPage */
@@ -274,6 +311,7 @@
 
   /* Leading (line-height) */
   --leading-display: 1.15;
+  --leading-display-tight: 1.02; /* Landing .flatTitle */
   --leading-body: 1.6;
   --leading-tight: 1.2;
   --leading-snug: 1.4;
@@ -282,9 +320,11 @@
 
   /* Font weight */
   --fw-light: 300;
+  --fw-regular: 400;
   --fw-medium: 500;
   --fw-semibold: 600;
   --fw-bold: 700;
+  --fw-black: 800; /* Landing c1 prototype .lab label */
 
   /* Animation durations */
   --anim-fast: 0.3s;
@@ -335,10 +375,106 @@
   --gradient-alternative:  linear-gradient(135deg, #100f0a 0%, #201a0a 100%);
   --gradient-romantic:     linear-gradient(135deg, #1a0a12 0%, #3a1128 100%);
   --gradient-fallback:     linear-gradient(135deg, #1a1f2e 0%, #13161e 100%);
+
+  /* Landing (wayfinder #189, direction C1) — poster depth & legibility.
+     --scrim-vertical uses --on-accent's rgb (15, 17, 25) as the dark base
+     rather than a new primitive; contrast is already covered since
+     --text/--text-soft are verified against --bg, a lighter ground than this. */
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+  --scrim-vertical: linear-gradient(0deg, rgba(15, 17, 25, 0.94) 6%, rgba(15, 17, 25, 0.55) 42%, rgba(15, 17, 25, 0.72));
+  --font-size-display-hero: clamp(40px, 7.2vw, 96px);
+  --font-size-display-plate: clamp(32px, 5vw, 64px); /* .figValue, the stat numerals */
+  --font-size-display-section: clamp(30px, 4.4vw, 56px);
+  --font-size-display-card: clamp(26px, 3.2vw, 38px); /* B3 split-panel showcase card title */
+  --font-size-display-mark: clamp(20px, 2.2vw, 27px); /* Landing .mark, brand wordmark */
+  --font-size-display-legal: clamp(1.15rem, 1.8vw, 1.5rem); /* LegalPage .h2, sized down from --font-size-display-section */
+  --hair-width: 64%; /* plate hairline width, c1.html's .hair */
+  --plate-media-min-height: 300px;          /* B3 .plate min-height */
+  --plate-media-min-height-compact: 210px;  /* B3 mobile */
+  --plate-text-min: 260px;                  /* B3 text-column grid minimum */
+  --plate-image-filter: saturate(0.85) contrast(1.04);
+  --topbar-height-mobile: 68px; /* TopBar's rendered height at <=640px (nav hidden,
+    logo + locale/auth actions row) -- no existing height token on .bar (intrinsic,
+    padding-driven); tune-by-eye like --space-7 above, confirm in live QA. */
+  --topbar-height: 72px; /* TopBar's rendered height above 640px (nav row present) --
+    same intrinsic/padding-driven situation as --topbar-height-mobile; tune-by-eye,
+    confirm in live QA. */
+}
+
+/* Light theme (wayfinder #247/#248) — literal inversion of the dark :root
+   above, activated via document.documentElement.dataset.theme = "light" by
+   frontend/src/lib/theme.ts (a later ticket). No attribute present keeps the
+   dark block above as the default, so existing users see no change. Only
+   tokens that actually need a light-mode value are redefined here; everything
+   else (spacing, type scale, geometry, unlisted overlay/alpha tokens) is
+   theme-neutral and inherited from :root. */
+:root[data-theme="light"] {
+  --bg: #fdfcfa;
+  --bg-raised: #f5f6f9;
+  --bg-card: #eef0f4;
+  --bg-card-hover: #e2e6ee;
+  --text: #211f1a;
+  --text-muted: #4d5c74;
+  --text-soft: #5c6c82;   /* readable secondary content */
+  --text-dim: #7e8ba0;    /* decorative only — ghost numerals, hairlines (large-text AA, ~3.4:1 on --bg) */
+  --border: #d7dbe4;
+  --border-subtle: #e6e9f0;
+  --success: #1f7a4f;     /* darkened from the dark-theme hex for AA as text on white */
+  --danger: #b23a3a;      /* darkened from the dark-theme hex for AA as text on white */
+  /* EventCard ghost-numeral text on the category-gradient placeholder --
+     literal inversion of the dark rgba(255,255,255,0.06) onto --on-accent's
+     dark rgb (15, 17, 25), same alpha, so it stays visible on the new light
+     gradient tokens instead of disappearing (near-white-on-near-white). */
+  --bg-placeholder: rgba(15, 17, 25, 0.06);
+
+  /* Sticky topbar / inline-overlay backdrops (Bar.module.css, Menu.module.css's
+     trigger + hover, Explore's search input/facet triggers, SegmentedControl,
+     DatePicker, EventCard's price chip, ...) — literal inversion of the dark
+     values' base rgb (19, 22, 30) onto the light --bg rgb (253, 252, 250),
+     same alpha, so these don't stay stuck dark under the light theme. */
+  --bg-overlay: rgba(253, 252, 250, 0.85);
+  --bg-overlay-soft: rgba(253, 252, 250, 0.82);
+
+  /* --accent/--accent-light/--on-accent and all accent-alpha/success-alpha/
+     danger-alpha tokens (already translucent overlays) carry over unchanged
+     from :root, as does --overlay-scrim. */
+
+  /* Card shadows — black-based shadows tuned for a near-black page read too
+     heavy on white; the gold selection/focus glow needs the opposite move
+     since it nearly disappears against white. */
+  --shadow-card:        0 4px 20px rgba(23, 26, 35, 0.1);
+  --shadow-card-hover:  0 8px 24px rgba(23, 26, 35, 0.14);
+  --shadow-accent:      0 8px 32px rgba(200, 146, 42, 0.14);
+  --shadow-lead:        0 2px 8px rgba(23, 26, 35, 0.08);
+
+  /* Category card-fallback gradients — literal inversion per category: hue +
+     stop-2 saturation family preserved, lightness relationship flipped
+     (near-black shell -> near-white shell, deeper-tint stop -> pale but
+     visible tint). Exact hex pairs approved on issue #246. */
+  --gradient-nightlife:    linear-gradient(135deg, #f7f4f8 0%, #d7c1e6 100%);
+  --gradient-music:        linear-gradient(135deg, #f4f5f8 0%, #c1c4e6 100%);
+  --gradient-theater:      linear-gradient(135deg, #f8f6f4 0%, #e6cec1 100%);
+  --gradient-exhibitions:  linear-gradient(135deg, #f6f4f8 0%, #d4c1e6 100%);
+  --gradient-workshops:    linear-gradient(135deg, #f4f8f7 0%, #c1e6e6 100%);
+  --gradient-food_drink:   linear-gradient(135deg, #f5f8f4 0%, #cde6c1 100%);
+  --gradient-sports:       linear-gradient(135deg, #f4f8f5 0%, #c1d4e6 100%);
+  --gradient-networking:   linear-gradient(135deg, #f4f5f8 0%, #c1d7e6 100%);
+  --gradient-literature:   linear-gradient(135deg, #f7f8f4 0%, #e3e6c1 100%);
+  --gradient-family:       linear-gradient(135deg, #f8f4f6 0%, #e6c1d8 100%);
+  --gradient-cinema:       linear-gradient(135deg, #f4f8f6 0%, #c1e6d4 100%);
+  --gradient-alternative:  linear-gradient(135deg, #f8f7f4 0%, #e6dcc1 100%);
+  --gradient-romantic:     linear-gradient(135deg, #f8f4f6 0%, #e6c1d6 100%);
+  --gradient-fallback:     linear-gradient(135deg, #f8f8f9 0%, #e2e4e9 100%);
+
+  /* Landing hero poster — literal inversion of the dark gradient's base rgb
+     (15, 17, 25) onto the light --bg rgb (253, 252, 250), same alpha stops. */
+  --scrim-vertical: linear-gradient(0deg, rgba(253, 252, 250, 0.94) 6%, rgba(253, 252, 250, 0.55) 42%, rgba(253, 252, 250, 0.72));
+  --poster-glow-cool: var(--poster-glow-cool-light);
+  --poster-glow-warm: var(--poster-glow-warm-light);
 }
 
 html {
-  font-family: 'DM Sans', system-ui, sans-serif;
+  font-family: var(--font-body);
   background-color: var(--bg);
   color: var(--text);
   font-size: 16px;

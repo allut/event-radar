@@ -92,7 +92,7 @@ describe('EventSubmit (create)', () => {
     const langTabs = screen.getByRole('group', { name: /content language/i });
 
     await userEvent.type(screen.getByLabelText(/^title \(et\)$/i), 'Jazz Night');
-    await userEvent.type(screen.getByLabelText(/^description \(et\)$/i), 'ET description');
+    await userEvent.type(await screen.findByLabelText(/^description \(et\)$/i), 'ET description');
     await userEvent.click(within(langTabs).getByRole('button', { name: /^EN,/ }));
     await userEvent.type(screen.getByLabelText(/^title \(en\)$/i), 'Jazz Night');
 
@@ -119,8 +119,8 @@ describe('EventSubmit (create)', () => {
 
     const langTabs = screen.getByRole('group', { name: /content language/i });
     await userEvent.click(within(langTabs).getByRole('button', { name: /^EN,/ }));
-    await userEvent.type(screen.getByLabelText(/^description \(en\)$/i), 'An English description');
-    await userEvent.type(screen.getByLabelText(/important info .*\(en\)$/i), 'English ticket info');
+    await userEvent.type(await screen.findByLabelText(/^description \(en\)$/i), 'An English description');
+    await userEvent.type(await screen.findByLabelText(/important info .*\(en\)$/i), 'English ticket info');
 
     await waitFor(() => expect(screen.getByRole('button', { name: /submit event/i })).not.toBeDisabled());
     await userEvent.click(screen.getByRole('button', { name: /submit event/i }));
@@ -129,9 +129,64 @@ describe('EventSubmit (create)', () => {
     const [, body] = mockPost.mock.calls[0];
     expect(body).toMatchObject({
       title: 'Jazz Night',
-      description_en: 'An English description',
-      important_info_en: 'English ticket info',
+      description_en: '<p>An English description</p>',
+      important_info_en: '<p>English ticket info</p>',
     });
+  });
+
+  it('mounts a RichTextEditor toolbar for Description and Important-info instead of a textarea, on every locale tab', async () => {
+    renderWithProviders(<EventSubmit />, { route: '/organizer/submit', pathPattern: '/organizer/submit' });
+    const langTabs = screen.getByRole('group', { name: /content language/i });
+
+    for (const tabName of [/^ET,/, /^EN,/, /^RU,/]) {
+      await userEvent.click(within(langTabs).getByRole('button', { name: tabName }));
+      expect(await screen.findByLabelText(/^description /i)).toHaveAttribute('contenteditable', 'true');
+      expect(screen.getByLabelText(/important info /i)).toHaveAttribute('contenteditable', 'true');
+      expect(screen.getAllByRole('toolbar', { name: 'Formatting' })).toHaveLength(2);
+    }
+    expect(document.querySelector('textarea')).not.toBeInTheDocument();
+  });
+
+  it('formats Description via the toolbar and submits the resulting HTML', async () => {
+    mockPost.mockResolvedValueOnce({ id: 8, slug: 'new-event-4', status: 'published' });
+    renderWithProviders(<EventSubmit />, { route: '/organizer/submit', pathPattern: '/organizer/submit' });
+
+    await userEvent.type(screen.getByLabelText(/^title \(et\)$/i), 'Jazz Night');
+    await userEvent.type(screen.getByLabelText(/starts/i), '2026-08-01 18:00');
+
+    const description = await screen.findByLabelText(/^description \(et\)$/i);
+    await userEvent.click(description);
+    await userEvent.keyboard('Loud music');
+    await userEvent.keyboard('{Control>}a{/Control}');
+    await userEvent.click(screen.getAllByRole('button', { name: 'Bold' })[0]);
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /submit event/i })).not.toBeDisabled());
+    await userEvent.click(screen.getByRole('button', { name: /submit event/i }));
+
+    await waitFor(() => expect(mockPost).toHaveBeenCalledTimes(1));
+    const [, body] = mockPost.mock.calls[0] as [string, Record<string, unknown>];
+    expect(body.description).toMatch(/<strong>.*Loud music.*<\/strong>/);
+  });
+
+  it('keeps each locale tab\'s Description content independent when switching tabs', async () => {
+    renderWithProviders(<EventSubmit />, { route: '/organizer/submit', pathPattern: '/organizer/submit' });
+    const langTabs = screen.getByRole('group', { name: /content language/i });
+
+    const etDescription = await screen.findByLabelText(/^description \(et\)$/i);
+    await userEvent.click(etDescription);
+    await userEvent.keyboard('ET only text');
+
+    await userEvent.click(within(langTabs).getByRole('button', { name: /^EN,/ }));
+    const enDescription = await screen.findByLabelText(/^description \(en\)$/i);
+    expect(enDescription).toHaveTextContent('');
+    await userEvent.click(enDescription);
+    await userEvent.keyboard('EN only text');
+
+    await userEvent.click(within(langTabs).getByRole('button', { name: /^ET,/ }));
+    expect(await screen.findByLabelText(/^description \(et\)$/i)).toHaveTextContent('ET only text');
+
+    await userEvent.click(within(langTabs).getByRole('button', { name: /^EN,/ }));
+    expect(await screen.findByLabelText(/^description \(en\)$/i)).toHaveTextContent('EN only text');
   });
 });
 
@@ -176,5 +231,50 @@ describe('EventSubmit (edit)', () => {
 
     await userEvent.click(screen.getByRole('button', { name: /save changes/i }));
     await waitFor(() => expect(mockPatch).toHaveBeenCalledWith('/organizer/events/9', expect.objectContaining({ title: 'Existing Event' })));
+  });
+
+  it('round-trips a formatted description into the editor and back out on save', async () => {
+    const eventsResponse = {
+      events: [
+        {
+          id: 10,
+          title: 'Existing Event',
+          description: '<p><strong>Bold</strong> description</p>',
+          important_info: null,
+          starts_at: '2026-08-01T18:00:00Z',
+          ends_at: null,
+          venue_name: null,
+          venue_address: null,
+          venue_id: null,
+          url: null,
+          image_url: null,
+          price_min: null,
+          price_max: null,
+          categories: [],
+        },
+      ],
+      limit: 24,
+      offset: 0,
+    };
+    mockGet.mockImplementation((path: string) => {
+      if (path.includes('/organizer/profile')) return Promise.resolve({ name: 'Test Organizer' });
+      if (path.includes('/organizer/venues')) return Promise.resolve([]);
+      return Promise.resolve(eventsResponse);
+    });
+    mockPatch.mockResolvedValueOnce({ id: 10, slug: 'existing-event', status: 'published' });
+
+    renderWithProviders(<EventSubmit />, {
+      route: '/organizer/events/10/edit',
+      pathPattern: '/organizer/events/:id/edit',
+    });
+
+    const description = await screen.findByLabelText(/^description \(et\)$/i);
+    await waitFor(() => expect(description.querySelector('strong')).toHaveTextContent('Bold'));
+
+    await userEvent.click(screen.getByRole('button', { name: /save changes/i }));
+    await waitFor(() => expect(mockPatch).toHaveBeenCalledWith(
+      '/organizer/events/10',
+      expect.objectContaining({ description: '<p><strong>Bold</strong> description</p>' }),
+    ));
   });
 });

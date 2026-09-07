@@ -15,8 +15,6 @@
 .triggerInline {
   composes: triggerInline from '../shared/Menu.module.css';
   border-radius: 0;
-  border-top-right-radius: var(--radius);
-  border-bottom-right-radius: var(--radius);
 }
 
 .label {
@@ -50,7 +48,7 @@
 .optionActive.optionActive,
 .optionActive.optionActive:hover {
   background: var(--accent-subtle);
-  border: 1px solid var(--accent-border);
+  border: var(--border-w-hair) solid var(--accent-border);
   color: var(--accent-light);
 }
 

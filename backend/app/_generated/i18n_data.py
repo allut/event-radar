@@ -4,28 +4,6 @@ from __future__ import annotations
 
 
 TRANSLATIONS: dict[str, dict[str, str]] = {
-    "en": {
-        "email.magic_link.subject": "Your What's on Radar sign-in link",
-        "email.magic_link.heading": "Sign in",
-        "email.magic_link.intro": "Click below to sign in. This link expires in {ttl_minutes} minutes.",
-        "email.magic_link.cta": "Sign in to What's on Radar",
-        "email.magic_link.ignore_note": "If you didn't request this, ignore this email.",
-        "email.report_outcome.subject": "Update on your report",
-        "email.report_outcome.heading": "Report reviewed",
-        "email.report_outcome.intro": "Your report about \"{event_title}\" has been reviewed:",
-        "email.report_outcome.fallback_note": "We've reviewed your report and made a decision.",
-        "email.report_outcome.cta": "View event",
-        "digest.subject_template": "Your Daily 5 — {date}",
-        "digest.subject_label": "Your Daily 5",
-        "digest.price_free": "Free",
-        "digest.price_free_with_paid": "Free · paid tickets up to €{amount}",
-        "digest.price_from": "From €{amount}",
-        "digest.price_free_options": "free options available",
-        "digest.unsubscribe": "Unsubscribe",
-        "digest.no_events": "No events today.",
-        "digest.open_feed": "Open your feed →",
-        "digest.tickets": "Get tickets →",
-    },
     "et": {
         "email.magic_link.subject": "Sinu What's on Radar sisselogimislink",
         "email.magic_link.heading": "Logi sisse",
@@ -47,6 +25,28 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "digest.no_events": "Täna pole üritusi.",
         "digest.open_feed": "Ava oma voog →",
         "digest.tickets": "Hangi piletid →",
+    },
+    "en": {
+        "email.magic_link.subject": "Your What's on Radar sign-in link",
+        "email.magic_link.heading": "Sign in",
+        "email.magic_link.intro": "Click below to sign in. This link expires in {ttl_minutes} minutes.",
+        "email.magic_link.cta": "Sign in to What's on Radar",
+        "email.magic_link.ignore_note": "If you didn't request this, ignore this email.",
+        "email.report_outcome.subject": "Update on your report",
+        "email.report_outcome.heading": "Report reviewed",
+        "email.report_outcome.intro": "Your report about \"{event_title}\" has been reviewed:",
+        "email.report_outcome.fallback_note": "We've reviewed your report and made a decision.",
+        "email.report_outcome.cta": "View event",
+        "digest.subject_template": "Your Daily 5 — {date}",
+        "digest.subject_label": "Your Daily 5",
+        "digest.price_free": "Free",
+        "digest.price_free_with_paid": "Free · paid tickets up to €{amount}",
+        "digest.price_from": "From €{amount}",
+        "digest.price_free_options": "free options available",
+        "digest.unsubscribe": "Unsubscribe",
+        "digest.no_events": "No events today.",
+        "digest.open_feed": "Open your feed →",
+        "digest.tickets": "Get tickets →",
     },
     "ru": {
         "email.magic_link.subject": "Ваша ссылка для входа в What's on Radar",
@@ -73,14 +73,14 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
 }
 
 MONTH_NAMES: dict[str, list[str]] = {
-    "en": ["", "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"],
     "et": ["", "jaanuar", "veebruar", "märts", "aprill", "mai", "juuni", "juuli", "august", "september", "oktoober", "november", "detsember"],
+    "en": ["", "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"],
     "ru": ["", "января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа", "сентября", "октября", "ноября", "декабря"],
 }
 
 DAY_NAMES: dict[str, list[str]] = {
-    "en": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"],
     "et": ["esmaspäev", "teisipäev", "kolmapäev", "neljapäev", "reede", "laupäev", "pühapäev"],
+    "en": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"],
     "ru": ["понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье"],
 }
 
@@ -89,13 +89,13 @@ PERSONAS: list[dict] = [
         "slug": "underground_clubber",
         "emoji": "🎛️",
         "names": {
-            "en": "Underground Clubber",
             "et": "Klubikülastaja",
+            "en": "Underground Clubber",
             "ru": "Клабер",
         },
         "vibes": {
-            "en": "Late-night raves, techno, basement bars",
             "et": "Hilisöised reivid, techno, keldribaarid",
+            "en": "Late-night raves, techno, basement bars",
             "ru": "Ночные рейвы, техно, подвальные бары",
         },
     },
@@ -103,13 +103,13 @@ PERSONAS: list[dict] = [
         "slug": "networking_pro",
         "emoji": "💼",
         "names": {
-            "en": "Networking Pro",
             "et": "Võrgustikuproff",
+            "en": "Networking Pro",
             "ru": "Нетворкинг про",
         },
         "vibes": {
-            "en": "Startup events, pitch nights, professional meetups",
             "et": "Idufirmade üritused, pitching, professionaalsed kohtumised",
+            "en": "Startup events, pitch nights, professional meetups",
             "ru": "Стартап-события, питчинги, профессиональные встречи",
         },
     },
@@ -117,13 +117,13 @@ PERSONAS: list[dict] = [
         "slug": "weekend_hobbyist",
         "emoji": "🎨",
         "names": {
-            "en": "Weekend Hobbyist",
             "et": "Nädalavahetuse harrastaja",
+            "en": "Weekend Hobbyist",
             "ru": "Хоббист выходного дня",
         },
         "vibes": {
-            "en": "Workshops, outdoor activities, craft markets",
             "et": "Töötoad, välistegevused, käsitööturgud",
+            "en": "Workshops, outdoor activities, craft markets",
             "ru": "Мастер-классы, активный отдых, ярмарки",
         },
     },
@@ -131,13 +131,13 @@ PERSONAS: list[dict] = [
         "slug": "culture_buff",
         "emoji": "🎭",
         "names": {
-            "en": "Culture Buff",
             "et": "Kultuurihuviline",
+            "en": "Culture Buff",
             "ru": "Ценитель культуры",
         },
         "vibes": {
-            "en": "Museums, theatre, classical concerts, art openings",
             "et": "Muuseumid, teater, klassikalised kontserdid, kunstiavamised",
+            "en": "Museums, theatre, classical concerts, art openings",
             "ru": "Музеи, театр, классические концерты, арт-открытия",
         },
     },
@@ -145,13 +145,13 @@ PERSONAS: list[dict] = [
         "slug": "family_explorer",
         "emoji": "👨‍👩‍👧",
         "names": {
-            "en": "Family Explorer",
             "et": "Perepuhkuse harrastaja",
+            "en": "Family Explorer",
             "ru": "Семейный исследователь",
         },
         "vibes": {
-            "en": "Kid-friendly, nature walks, weekend excursions",
             "et": "Peresõbralik, loodusretked, nädalavahetuse väljasõidud",
+            "en": "Kid-friendly, nature walks, weekend excursions",
             "ru": "Семейный отдых, прогулки на природе, вылазки на выходных",
         },
     },
@@ -159,13 +159,13 @@ PERSONAS: list[dict] = [
         "slug": "concert_goer",
         "emoji": "🎤",
         "names": {
-            "en": "Concert-goer",
             "et": "Kontserdikülastaja",
+            "en": "Concert-goer",
             "ru": "Меломан",
         },
         "vibes": {
-            "en": "Live gigs — pop, rock, jazz, classical; day or evening",
             "et": "Live-kontserdid — pop, rock, jazz, klassika; päeval või õhtul",
+            "en": "Live gigs — pop, rock, jazz, classical; day or evening",
             "ru": "Живые концерты — поп, рок, джаз, классика; днём или вечером",
         },
     },
@@ -173,13 +173,13 @@ PERSONAS: list[dict] = [
         "slug": "cinephile",
         "emoji": "🎬",
         "names": {
-            "en": "Cinephile",
             "et": "Filmihuviline",
+            "en": "Cinephile",
             "ru": "Киноман",
         },
         "vibes": {
-            "en": "Film screenings, festivals, arthouse & premieres",
             "et": "Filmiseansid, festivalid, arthouse ja esilinastused",
+            "en": "Film screenings, festivals, arthouse & premieres",
             "ru": "Кинопоказы, фестивали, артхаус и премьеры",
         },
     },
@@ -187,13 +187,13 @@ PERSONAS: list[dict] = [
         "slug": "comedy_fan",
         "emoji": "🎙️",
         "names": {
-            "en": "Comedy Fan",
             "et": "Komöödiafänn",
+            "en": "Comedy Fan",
             "ru": "Любитель комедии",
         },
         "vibes": {
-            "en": "Stand-up, improv, sketch & comedy nights",
             "et": "Stand-up, improteater, sketšid ja komöödiaõhtud",
+            "en": "Stand-up, improv, sketch & comedy nights",
             "ru": "Стендап, импровизация, скетчи и комедийные вечера",
         },
     },
@@ -201,13 +201,13 @@ PERSONAS: list[dict] = [
         "slug": "romance_seeker",
         "emoji": "🌹",
         "names": {
-            "en": "Romance Seeker",
             "et": "Romantika otsija",
+            "en": "Romance Seeker",
             "ru": "Искатель романтики",
         },
         "vibes": {
-            "en": "Romantic dinners, wine tastings, intimate concerts, cosy cinema",
             "et": "Romantilised õhtusöögid, veinidegustatsioonid, intiimsed kontserdid, hubane kino",
+            "en": "Romantic dinners, wine tastings, intimate concerts, cosy cinema",
             "ru": "Романтические ужины, дегустации вин, камерные концерты, уютное кино",
         },
     },

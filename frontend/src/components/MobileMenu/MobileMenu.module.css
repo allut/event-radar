@@ -35,12 +35,12 @@
 }
 
 .divider {
-  border-top: 1px solid var(--border);
+  border-top: var(--border-w-hair) solid var(--border);
 }
 
 .link {
   padding: var(--space-0-45) var(--space-0-875);
-  border-radius: var(--radius);
+  border-radius: 0;
   font-size: var(--fs-sm);
   font-weight: var(--fw-semibold);
   color: var(--text-muted);
@@ -64,26 +64,28 @@
    collapses it back to a single class in that case.) */
 .linkActive.linkActive {
   background: var(--accent-subtle);
-  border: 1px solid var(--accent-border);
+  border: var(--border-w-hair) solid var(--accent-border);
   color: var(--accent-light);
 }
 
-.localeRow {
+/* Shared by the language and theme rows — both are a flush row of equal-width
+   pill buttons with the same active-state treatment. */
+.optionRow {
   display: flex;
   gap: var(--space-1);
 }
 
-.localeOption {
+.option {
   composes: menuOption from '../shared/Menu.module.css';
   padding: var(--space-0-3) var(--space-0-625);
 }
 
 /* See .linkActive above for why this repeats the trio with a doubled
    selector instead of composing .activePill or relying on source order. */
-.localeOptionActive.localeOptionActive,
-.localeOptionActive.localeOptionActive:hover {
+.optionActive.optionActive,
+.optionActive.optionActive:hover {
   background: var(--accent-subtle);
-  border: 1px solid var(--accent-border);
+  border: var(--border-w-hair) solid var(--accent-border);
   color: var(--accent-light);
 }
 

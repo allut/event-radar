@@ -30,3 +30,46 @@
 .fadeInScale {
   animation: fadeInScale var(--anim-fast) var(--easing);
 }
+
+/* ── Landing motion vocabulary (wayfinder #186, direction C1) ──────────────
+   Distinct names/semantics from rise/breathe/fadeIn above — sitewide-scoped
+   here per #187 even though only Landing uses them today, so a future
+   direction reusing the poster/ticker treatment doesn't need re-prefixing. */
+
+@keyframes heroRise     { from { transform: translateY(104%); } to { transform: translateY(0); } }
+@keyframes hairlineDraw { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes posterDrift  { from { transform: scale(1) translateY(0); } to { transform: scale(1.09) translateY(-1.6%); } }
+@keyframes tickerSlide  { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+
+.heroRise {
+  display: block;
+  overflow: hidden;
+  padding-bottom: 0.14em;
+  margin-bottom: -0.14em;
+}
+.heroRise > span {
+  display: block;
+  animation: heroRise 1.15s var(--easing-landing) var(--hero-rise-delay, 0s) both;
+}
+
+.hairlineDraw {
+  transform-origin: left;
+  animation: hairlineDraw 1.4s var(--easing-landing) 0.5s both;
+}
+
+.posterDrift {
+  animation: posterDrift 26s var(--easing-landing) infinite alternate;
+}
+
+.tickerSlide {
+  animation: tickerSlide 42s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .heroRise > span,
+  .hairlineDraw,
+  .posterDrift,
+  .tickerSlide {
+    animation: none !important;
+  }
+}

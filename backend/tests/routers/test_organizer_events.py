@@ -12,6 +12,8 @@ from app.constants import (
     EVENT_STATUS_PUBLISHED,
     ORGANIZER_CURRENCY_MAX_LEN,
     ORGANIZER_DAILY_SUBMISSION_CAP,
+    ORGANIZER_DESCRIPTION_MAX_LEN,
+    ORGANIZER_IMPORTANT_INFO_MAX_LEN,
     ORGANIZER_VENUE_NAME_MAX_LEN,
 )
 
@@ -279,6 +281,76 @@ class TestSubmitEvent:
         mock_apply_category.assert_awaited_once_with(
             mock_db, fake_event.id, picked_category
         )
+
+    @pytest.mark.asyncio
+    async def test_tiptap_html_narrowed_to_organizer_allowlist(
+        self, mock_db, make_request, make_organizer
+    ):
+        """#267: description/important_info (all three locales) go through
+        sanitize_html with the narrower organizer-boundary allowlist, not the
+        shared ingestion one — a Tiptap-shaped payload with a <span>, inline
+        style, and a disallowed tag must come out stripped to just the
+        Tiptap toolbar's own tags."""
+        from app.routers.organizer_events import SubmitEventBody, submit_event
+
+        organizer = make_organizer(organizer_id=5)
+        fake_event = _fake_event()
+        source = MagicMock(id=1, slug="user_submission")
+        mock_db.scalar.side_effect = [0, source, EVENT_STATUS_PUBLISHED]
+        mock_db.commit = AsyncMock()
+
+        rich_html = (
+            '<p>Great <strong>show</strong> <span style="color:red">tonight</span></p>'
+            '<h2>Not allowed</h2><i>italic</i>'
+        )
+
+        with (
+            patch(
+                "app.routers.organizer_events.insert_normalized_event",
+                new_callable=AsyncMock,
+                return_value=fake_event,
+            ) as mock_insert,
+            patch(
+                "app.routers.organizer_events.classify_event",
+                new_callable=AsyncMock,
+                return_value=True,
+            ),
+            patch(
+                "app.routers.organizer_events.publish_pending", new_callable=AsyncMock
+            ),
+        ):
+            body = SubmitEventBody(
+                title="Kontsert",
+                starts_at="2026-06-01T18:00:00+03:00",
+                description=rich_html,
+                description_en=rich_html,
+                description_ru=rich_html,
+                important_info=rich_html,
+                important_info_en=rich_html,
+                important_info_ru=rich_html,
+            )
+            await submit_event(
+                body,
+                make_request(method="POST", path="/organizer/events"),
+                organizer,
+                mock_db,
+            )
+
+        normalized = mock_insert.await_args[0][2]
+        for stored in (
+            normalized.description,
+            normalized.important_info,
+            *normalized.description_localized.values(),
+            *normalized.important_info_localized.values(),
+        ):
+            assert stored is not None
+            assert "<span" not in stored
+            assert "style=" not in stored
+            assert "<h2>" not in stored
+            assert "Not allowed" in stored  # disallowed tag stripped, text kept
+            assert "<i>" not in stored
+            assert "<strong>show</strong>" in stored
+            assert "tonight" in stored
 
     @pytest.mark.asyncio
     async def test_rejects_url_with_bad_scheme(
@@ -588,6 +660,49 @@ class TestUpdateOwnEvent:
         assert event.needs_review is True
         assert event.status == EVENT_STATUS_PUBLISHED  # clean edit never demotes
         assert result["status"] == EVENT_STATUS_PUBLISHED
+
+    @pytest.mark.asyncio
+    async def test_patch_tiptap_html_narrowed_to_organizer_allowlist(
+        self, mock_db, make_request, make_organizer
+    ):
+        """#267: PATCH sanitizes description/important_info (all locales)
+        through the organizer-boundary allowlist, same as create."""
+        from app.routers.organizer_events import PatchEventBody, update_own_event
+
+        organizer = make_organizer(organizer_id=5)
+        event = _fake_event(submitted_by_organizer_id=5, status=EVENT_STATUS_PUBLISHED)
+        mock_db.scalar.return_value = event
+        mock_db.commit = AsyncMock()
+
+        rich_html = '<p>Great <span style="color:red">show</span></p><i>italic</i>'
+
+        body = PatchEventBody(
+            description=rich_html,
+            description_en=rich_html,
+            description_ru=rich_html,
+            important_info=rich_html,
+            important_info_en=rich_html,
+            important_info_ru=rich_html,
+        )
+        await update_own_event(
+            10,
+            body,
+            make_request(method="PATCH", path="/organizer/events/10"),
+            organizer,
+            mock_db,
+        )
+
+        for stored in (
+            event.description_orig,
+            event.important_info,
+            *event.description_localized.values(),
+            *event.important_info_localized.values(),
+        ):
+            assert stored is not None
+            assert "<span" not in stored
+            assert "style=" not in stored
+            assert "<i>" not in stored
+            assert "Great" in stored and "show" in stored and "italic" in stored
 
     @pytest.mark.asyncio
     async def test_newly_flagged_explicit_demotes_published_event(
@@ -1150,7 +1265,11 @@ class TestDeleteOwnEvent:
         assert report.status == "resolved"
         assert report.resolution_note == "auto-resolved: event cancelled"
         mock_send.assert_awaited_once_with(
-            reporter.email, event, "auto-resolved: event cancelled", reporter.locale
+            reporter.email,
+            event,
+            "auto-resolved: event cancelled",
+            reporter.locale,
+            reporter.theme_preference,
         )
 
     @pytest.mark.asyncio
@@ -1243,6 +1362,46 @@ class TestSubmitEventBodyValidation:
         )
         assert body.ends_at is not None
 
+    def test_description_at_raised_max_len_accepted(self):
+        """#267: raised 30000-char ceiling (was 10000)."""
+        from app.routers.organizer_events import SubmitEventBody
+
+        body = SubmitEventBody(
+            **self._base_kwargs(description="x" * ORGANIZER_DESCRIPTION_MAX_LEN)
+        )
+        assert len(body.description) == ORGANIZER_DESCRIPTION_MAX_LEN
+
+    def test_description_over_raised_max_len_rejected(self):
+        from app.routers.organizer_events import SubmitEventBody
+
+        with pytest.raises(ValidationError):
+            SubmitEventBody(
+                **self._base_kwargs(
+                    description="x" * (ORGANIZER_DESCRIPTION_MAX_LEN + 1)
+                )
+            )
+
+    def test_important_info_at_raised_max_len_accepted(self):
+        """#267: raised 15000-char ceiling (was 5000)."""
+        from app.routers.organizer_events import SubmitEventBody
+
+        body = SubmitEventBody(
+            **self._base_kwargs(
+                important_info="x" * ORGANIZER_IMPORTANT_INFO_MAX_LEN
+            )
+        )
+        assert len(body.important_info) == ORGANIZER_IMPORTANT_INFO_MAX_LEN
+
+    def test_important_info_over_raised_max_len_rejected(self):
+        from app.routers.organizer_events import SubmitEventBody
+
+        with pytest.raises(ValidationError):
+            SubmitEventBody(
+                **self._base_kwargs(
+                    important_info="x" * (ORGANIZER_IMPORTANT_INFO_MAX_LEN + 1)
+                )
+            )
+
 
 class TestPatchEventBodyValidation:
     def test_price_min_greater_than_price_max_rejected(self):
@@ -1274,3 +1433,29 @@ class TestPatchEventBodyValidation:
 
         with pytest.raises(ValidationError):
             PatchEventBody(venue_name="x" * (ORGANIZER_VENUE_NAME_MAX_LEN + 1))
+
+    def test_description_at_raised_max_len_accepted(self):
+        from app.routers.organizer_events import PatchEventBody
+
+        body = PatchEventBody(description="x" * ORGANIZER_DESCRIPTION_MAX_LEN)
+        assert len(body.description) == ORGANIZER_DESCRIPTION_MAX_LEN
+
+    def test_description_over_raised_max_len_rejected(self):
+        from app.routers.organizer_events import PatchEventBody
+
+        with pytest.raises(ValidationError):
+            PatchEventBody(description="x" * (ORGANIZER_DESCRIPTION_MAX_LEN + 1))
+
+    def test_important_info_at_raised_max_len_accepted(self):
+        from app.routers.organizer_events import PatchEventBody
+
+        body = PatchEventBody(important_info="x" * ORGANIZER_IMPORTANT_INFO_MAX_LEN)
+        assert len(body.important_info) == ORGANIZER_IMPORTANT_INFO_MAX_LEN
+
+    def test_important_info_over_raised_max_len_rejected(self):
+        from app.routers.organizer_events import PatchEventBody
+
+        with pytest.raises(ValidationError):
+            PatchEventBody(
+                important_info="x" * (ORGANIZER_IMPORTANT_INFO_MAX_LEN + 1)
+            )

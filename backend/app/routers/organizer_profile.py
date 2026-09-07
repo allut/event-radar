@@ -6,10 +6,14 @@ organizer set a name yet?); PATCH updates it, scoped to get_current_organizer.
 """
 
 from fastapi import APIRouter, Depends, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.constants import ORGANIZER_NAME_MAX_LEN, RATE_LIMIT_SUBMIT
+from app.constants import (
+    ORGANIZER_NAME_MAX_LEN,
+    RATE_LIMIT_SUBMIT,
+    VALID_THEME_PREFERENCES,
+)
 from app.db import get_db
 from app.models.models import Organizer
 from app.rate_limit import limiter
@@ -20,6 +24,16 @@ router = APIRouter(prefix="/organizer/profile", tags=["organizer-profile"])
 
 class OrganizerProfilePatchBody(BaseModel):
     name: str | None = Field(None, max_length=ORGANIZER_NAME_MAX_LEN)
+    theme_preference: str | None = None
+
+    @field_validator("theme_preference")
+    @classmethod
+    def theme_preference_must_be_valid(cls, v: str | None) -> str | None:
+        if v is not None and v not in VALID_THEME_PREFERENCES:
+            raise ValueError(
+                f"theme_preference must be one of {sorted(VALID_THEME_PREFERENCES)}"
+            )
+        return v
 
 
 def _serialize(organizer: Organizer) -> dict:
@@ -27,6 +41,7 @@ def _serialize(organizer: Organizer) -> dict:
         "id": organizer.id,
         "email": organizer.email,
         "locale": organizer.locale,
+        "theme_preference": organizer.theme_preference,
         "verified": organizer.verified,
         "name": organizer.name,
     }
@@ -52,6 +67,12 @@ async def update_own_profile(
     if "name" in body.model_fields_set:
         stripped = body.name.strip() if body.name else None
         current_organizer.name = stripped or None
+    # An explicitly-sent `theme_preference: null` clears the column back to
+    # "no preference" (durable revert-to-System, #257); omitting the field
+    # leaves the existing value untouched — distinguished via
+    # `model_fields_set` since both parse to `None` on the model.
+    if "theme_preference" in body.model_fields_set:
+        current_organizer.theme_preference = body.theme_preference
     await db.commit()
     await db.refresh(current_organizer)
     return _serialize(current_organizer)

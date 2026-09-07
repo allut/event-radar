@@ -1,12 +1,15 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { api } from '../../api/client';
 import { t } from '../../i18n';
 import { withLocaleQuery } from '../../utils';
+import { useAuth } from '../../hooks/useAuth';
 import { useLocaleMutation } from '../../hooks/useLocaleMutation';
 import { useLogout } from '../../hooks/useLogout';
-import { useStaticSeoMeta } from '../../hooks/useStaticSeoMeta';
+import { useSeoMeta } from '../../hooks/useSeoMeta';
+import { buildExploreItemListJsonLd } from '../../lib/structuredData';
+import { trackEvent } from '../../lib/gtag';
 import EventCard, { type EventData } from '../../components/EventCard';
 import EmptyState from '../../components/EmptyState';
 import PageState from '../../components/PageState';
@@ -16,19 +19,29 @@ import FacetMenu from '../../components/FacetMenu';
 import SegmentedControl from '../../components/SegmentedControl';
 import SelectMenu from '../../components/SelectMenu';
 import DateRangeMenu from '../../components/DateRangeMenu';
+import SignInModal from '../../components/SignInModal';
+import UpsellCard from './UpsellCard';
 import {
   API,
-  BRAND_GLYPH,
+  ANALYTICS_EVENTS,
   CATEGORIES,
   VIBES,
   EXPLORE_AUDIENCE_ALL,
   EXPLORE_AUDIENCE_FOR_YOU,
+  EXPLORE_FILTER_TYPES,
   EXPLORE_SEARCH_DEBOUNCE_MS,
+  EXPLORE_UPSELL_CARD_POSITION,
+  PRERENDER_ERROR_ATTR,
+  PRERENDER_READY_ATTR,
   QUERY_KEYS,
+  ROUTES,
   SORT_DEFAULT,
   SORT_OPTIONS,
   UI_STATE,
   type DatePreset,
+  type ExploreFilterType,
+  type Signal,
+  type SignInTrigger,
   type SortOption,
 } from '../../constants';
 import {
@@ -38,6 +51,7 @@ import {
   DEFAULT_EXPLORE_FILTERS,
   exploreFiltersToSearchParams,
   parseExploreFilters,
+  titleWithBrand,
   type ExploreFilters,
 } from '../../utils';
 import styles from './Explore.module.css';
@@ -56,11 +70,55 @@ interface CurrentUser {
 }
 
 export default function Explore() {
+  const authed = useAuth();
   const handleLogout = useLogout();
   const [searchParams, setSearchParams] = useSearchParams();
   const filters = useMemo(() => parseExploreFilters(searchParams), [searchParams]);
-  const { locale, handleLocaleChange, isPending: localePending } = useLocaleMutation();
-  const seoMeta = useStaticSeoMeta('seo_title_explore', locale);
+  // publicRoute: true — /explore joins Home/EventDetail's noRedirect SEO
+  // route class (App.tsx, issue #236): its bare path always renders
+  // Estonian, so the initial locale must resolve purely from the URL
+  // segment, not a stored preference (see useLocaleMutation's own doc
+  // comment on this gap).
+  const { locale, handleLocaleChange, isPending: localePending } = useLocaleMutation({ publicRoute: true });
+
+  // Single route-level sign-in modal (issue #235) — a second trigger click
+  // while it's already open is a no-op (requestSignIn below).
+  const [signInTrigger, setSignInTrigger] = useState<SignInTrigger | null>(null);
+
+  useEffect(() => {
+    trackEvent(ANALYTICS_EVENTS.exploreView, { signed_in: authed, locale });
+    // Fired once on route landing, not on every auth/locale change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Stable identities (only changing when signInTrigger itself changes, not
+  // on every Explore re-render) — passed down to EventCard as
+  // onFeedbackBlocked/onCardClick, so a new reference on every keystroke in
+  // the search box doesn't defeat EventCard's memo (issue #235 review).
+  const requestSignIn = useCallback((trigger: SignInTrigger) => {
+    // A second trigger click while the modal is already open is a no-op —
+    // signin_modal_open only fires for the click that actually opens it.
+    setSignInTrigger((current) => {
+      if (current !== null) return current;
+      trackEvent(ANALYTICS_EVENTS.signinModalOpen, { trigger });
+      return trigger;
+    });
+  }, []);
+
+  const handleFeedbackBlocked = useCallback((signal: Signal) => {
+    const action = signal === 'bookmark' ? 'save' : signal === 'like' ? 'thumbs_up' : 'thumbs_down';
+    trackEvent(ANALYTICS_EVENTS.exploreUpsellClick, { action });
+    requestSignIn(signal === 'bookmark' ? 'save' : 'thumbs');
+  }, [requestSignIn]);
+
+  const handleUpsellCtaClick = useCallback(() => {
+    trackEvent(ANALYTICS_EVENTS.exploreUpsellClick, { action: 'for_you' });
+    requestSignIn('for_you');
+  }, [requestSignIn]);
+
+  const handleCardClick = useCallback((index: number) => {
+    trackEvent(ANALYTICS_EVENTS.exploreCardClick, { signed_in: authed, position: index });
+  }, [authed]);
 
   const [searchInput, setSearchInput] = useState(filters.q);
 
@@ -85,15 +143,20 @@ export default function Explore() {
   useEffect(() => {
     if (searchInput === filters.q) return;
     const handle = setTimeout(() => {
+      trackFilterChange(EXPLORE_FILTER_TYPES.q);
       commitFilters({ ...filters, q: searchInput });
     }, EXPLORE_SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(handle);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchInput, filters]);
 
+  // Gated on authed — an anonymous visitor must never call this. The `api`
+  // client hard-redirects to /login on any 401, which would break the
+  // anonymous /explore flow if this fired signed out.
   const { data: currentUser } = useQuery({
     queryKey: [QUERY_KEYS.settings],
     queryFn: () => api.get<CurrentUser>(API.me),
+    enabled: authed,
   });
 
   // Each page is a fresh /explore request — the backend's Path B (For-you /
@@ -106,6 +169,7 @@ export default function Explore() {
     data,
     isLoading,
     isError,
+    isSuccess,
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
@@ -124,6 +188,13 @@ export default function Explore() {
     enabled: filters.category.length > 0 && filters.vibe.length > 0,
   });
 
+  // filter_type is a fixed vocabulary (EXPLORE_FILTER_TYPES) — see
+  // ANALYTICS_EVENTS.exploreFilterChange in constants.ts's Code Quality Rule
+  // on not inlining literal event/param values at call sites.
+  function trackFilterChange(filterType: ExploreFilterType) {
+    trackEvent(ANALYTICS_EVENTS.exploreFilterChange, { filter_type: filterType, signed_in: authed });
+  }
+
   function toggleFacet(kind: 'category' | 'vibe', value: string) {
     const current = filters[kind];
     const isRemoving = current.includes(value);
@@ -137,26 +208,38 @@ export default function Explore() {
       const preferred = kind === 'category' ? currentUser?.preferred_categories : currentUser?.preferred_vibes;
       if (preferred && !preferred.includes(value)) forYou = false;
     }
+    trackFilterChange(EXPLORE_FILTER_TYPES[kind]);
     commitFilters({ ...filters, [kind]: next, forYou });
   }
 
   function setDatePreset(preset: DatePreset) {
+    trackFilterChange(EXPLORE_FILTER_TYPES.date);
     commitFilters({ ...filters, datePreset: preset });
   }
 
   function setCustomRange(from: string, to: string) {
+    trackFilterChange(EXPLORE_FILTER_TYPES.date);
     commitFilters({ ...filters, datePreset: 'custom', customFrom: from, customTo: to });
   }
 
   function toggleFree() {
+    trackFilterChange(EXPLORE_FILTER_TYPES.free);
     commitFilters({ ...filters, free: !filters.free });
   }
 
   function setSort(sort: SortOption) {
+    trackFilterChange(EXPLORE_FILTER_TYPES.sort);
     commitFilters({ ...filters, sort });
   }
 
   function setForYou(next: boolean) {
+    // Anonymous visitor: turning For-you on intercepts into the sign-in
+    // modal instead of applying the filter — never reaches the backend.
+    if (next && !authed) {
+      handleUpsellCtaClick();
+      return;
+    }
+    trackFilterChange(EXPLORE_FILTER_TYPES.forYou);
     if (next) {
       // Fall back to "all" when the persona hasn't loaded yet (or has no
       // preference set) — avoids an accidental empty-selection/no-results
@@ -175,6 +258,24 @@ export default function Explore() {
   }
 
   const events = useMemo(() => data?.pages.flatMap((page) => page.events) ?? [], [data]);
+  // Grid render list: for anonymous visitors, the persistent upsell card is
+  // spliced in as an EventCard sibling after EXPLORE_UPSELL_CARD_POSITION
+  // cards (or at the end, for a shorter result set). The last event is
+  // dropped to make room for it — keeping the total card count the same as
+  // a signed-in grid — rather than added on top, which otherwise left one
+  // orphaned card wrapping onto its own row at common viewport widths.
+  type GridItem = { kind: 'event'; event: EventData; index: number } | { kind: 'upsell' };
+  const visibleEvents = useMemo(
+    () => (authed ? events : events.slice(0, Math.max(events.length - 1, 0))),
+    [events, authed],
+  );
+  const gridItems = useMemo<GridItem[]>(() => {
+    const items: GridItem[] = visibleEvents.map((event, index) => ({ kind: 'event', event, index }));
+    if (!authed) {
+      items.splice(Math.min(EXPLORE_UPSELL_CARD_POSITION, items.length), 0, { kind: 'upsell' });
+    }
+    return items;
+  }, [visibleEvents, authed]);
   const activeCount = activeFacetCount(filters);
   const hasActiveFilters =
     activeCount > 0 || filters.q.length > 0 || filters.forYou || filters.sort !== SORT_DEFAULT;
@@ -199,10 +300,37 @@ export default function Explore() {
     [locale],
   );
 
+  // indexable/readiness are deliberately decoupled (issue #236): indexable
+  // is derived from isSuccess alone (never true on error, per useSeoMeta's
+  // own indexable contract), while the prerender readiness marker below
+  // fires on isSuccess OR isError — an errored query is real, settled
+  // content Playwright must stop waiting on, not something to time out over.
+  const seoMeta = useSeoMeta({
+    title: titleWithBrand(t('seo_title_explore', locale), locale),
+    locale,
+    path: ROUTES.explore,
+    indexable: isSuccess,
+  });
+  const jsonLd = useMemo(
+    () => (isSuccess ? buildExploreItemListJsonLd(visibleEvents, locale) : undefined),
+    [isSuccess, visibleEvents, locale],
+  );
+
   return (
     <div className={styles.page}>
-      <SeoTags meta={seoMeta} />
-      <TopBar locale={locale} onLocaleChange={handleLocaleChange} onLogout={handleLogout} localeDisabled={localePending} />
+      <SeoTags meta={seoMeta} jsonLd={jsonLd} />
+      {/* Prerender readiness marker (issue #236) — same family as
+          EventDetail.tsx's PRICE_DATA_ATTR. Set once this route's query
+          settles (isSuccess or isError, never isLoading); a distinct error
+          marker lets scripts/prerender.ts's snapshotTarget fail the build
+          loudly instead of silently shipping a noindex page. Always
+          mounted, unlike the states below it, which vary by query status. */}
+      <div
+        hidden
+        {...(isSuccess || isError ? { [PRERENDER_READY_ATTR]: 'true' } : {})}
+        {...(isError ? { [PRERENDER_ERROR_ATTR]: 'true' } : {})}
+      />
+      <TopBar locale={locale} onLocaleChange={handleLocaleChange} onLogout={handleLogout} authed={authed} localeDisabled={localePending} />
 
       <main className={styles.main}>
         <header className={styles.masthead}>
@@ -304,21 +432,27 @@ export default function Explore() {
           <PageState kind={UI_STATE.error} message={t('explore_error', locale)} inline />
         ) : events.length === 0 ? (
           <EmptyState
-            icon={BRAND_GLYPH}
+            eyebrow={t('nav_explore', locale)}
             title={t('explore_empty_title', locale)}
             message={t('explore_empty_msg', locale)}
           />
         ) : (
           <div className={styles.grid}>
-            {events.map((event, i) => (
-              <EventCard
-                key={event.id}
-                event={event}
-                index={i}
-                locale={locale}
-                variant="standard"
-              />
-            ))}
+            {gridItems.map((item) =>
+              item.kind === 'upsell' ? (
+                <UpsellCard key="upsell" locale={locale} onCtaClick={handleUpsellCtaClick} />
+              ) : (
+                <EventCard
+                  key={item.event.id}
+                  event={item.event}
+                  index={item.index}
+                  locale={locale}
+                  variant="standard"
+                  onFeedbackBlocked={authed ? undefined : handleFeedbackBlocked}
+                  onCardClick={handleCardClick}
+                />
+              ),
+            )}
           </div>
         )}
 
@@ -339,6 +473,13 @@ export default function Explore() {
           </button>
         )}
       </main>
+
+      <SignInModal
+        open={signInTrigger !== null}
+        trigger={signInTrigger}
+        onClose={() => setSignInTrigger(null)}
+        locale={locale}
+      />
     </div>
   );
 }

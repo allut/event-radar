@@ -1,25 +1,25 @@
 .btnPrimary {
   appearance: none;
   -webkit-appearance: none;
-  background: var(--accent);
-  color: var(--on-accent);
-  border: 1px solid transparent;
-  border-radius: var(--radius);
+  background: transparent;
+  color: var(--accent);
+  border: var(--border-w-hair) solid var(--accent);
+  border-radius: 0;
   font-weight: var(--fw-semibold);
   letter-spacing: var(--tracking-snug);
   line-height: normal;
-  transition: background var(--transition), transform var(--transition), opacity var(--transition);
+  transition: background var(--transition), color var(--transition), opacity var(--transition);
 }
 
-.btnPrimary:hover:not(:disabled) { background: var(--accent-light); color: var(--on-accent); transform: translateY(var(--lift-sm)); }
-.btnPrimary:disabled { opacity: var(--opacity-disabled); cursor: not-allowed; transform: none; }
+.btnPrimary:hover:not(:disabled) { background: var(--accent); color: var(--on-accent); }
+.btnPrimary:disabled { opacity: var(--opacity-disabled); cursor: not-allowed; }
 
 .btnOutline {
   appearance: none;
   -webkit-appearance: none;
   background: none;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border: var(--border-w-hair) solid var(--border);
+  border-radius: 0;
   color: var(--text-muted);
   line-height: normal;
   transition: border-color var(--transition), color var(--transition);

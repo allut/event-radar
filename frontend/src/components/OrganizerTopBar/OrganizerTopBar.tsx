@@ -1,9 +1,11 @@
 import { Link, NavLink } from 'react-router-dom';
 import { t } from '../../i18n';
 import { cx } from '../../utils';
-import { BRAND_GLYPH, ROUTES } from '../../constants';
+import { BRAND_GLYPH, ORGANIZER_NAV_ITEMS, ROUTES } from '../../constants';
 import { useLocalePath } from '../../hooks/useLocalePath';
 import LocaleSelector from '../LocaleSelector';
+import ThemeSelector from '../ThemeSelector';
+import MobileMenu from '../MobileMenu';
 import styles from './OrganizerTopBar.module.css';
 
 interface OrganizerTopBarProps {
@@ -14,8 +16,9 @@ interface OrganizerTopBarProps {
 
 // Organizer-scoped sibling of components/TopBar — deliberately not reused
 // directly, since that component's nav/auth links are hardcoded to the
-// consumer track (/login, /explore, /saved, ...). Kept minimal: two nav
-// links instead of TopBar's four, no mobile hamburger menu.
+// consumer track (/login, /explore, /saved, ...). Shares TopBar's MobileMenu
+// component (parameterized via navItems/navAriaLabelKey) for the mobile
+// hamburger.
 export default function OrganizerTopBar({ locale, onLocaleChange, onLogout }: OrganizerTopBarProps) {
   const localePath = useLocalePath();
   return (
@@ -46,15 +49,35 @@ export default function OrganizerTopBar({ locale, onLocaleChange, onLogout }: Or
         >
           {t('organizer_settings_nav', locale)}
         </NavLink>
+        <NavLink
+          to={localePath(ROUTES.organizerContact)}
+          className={({ isActive }) => cx(styles.navLink, isActive && styles.navLinkActive)}
+        >
+          {t('organizer_contact_nav', locale)}
+        </NavLink>
       </nav>
 
       <div className={styles.actions}>
         <button className={styles.authBtn} onClick={onLogout}>{t('sign_out', locale)}</button>
-        <LocaleSelector
-          locale={locale}
-          onChange={onLocaleChange}
-          ariaLabel={t('section_language', locale)}
-        />
+        <div className={styles.localeWrap}>
+          <LocaleSelector
+            locale={locale}
+            onChange={onLocaleChange}
+            ariaLabel={t('section_language', locale)}
+          />
+        </div>
+        <div className={styles.themeWrap}>
+          <ThemeSelector locale={locale} ariaLabel={t('section_theme', locale)} />
+        </div>
+        <div className={styles.mobileMenuWrap}>
+          <MobileMenu
+            locale={locale}
+            onLocaleChange={onLocaleChange}
+            onLogout={onLogout}
+            navItems={ORGANIZER_NAV_ITEMS}
+            navAriaLabelKey="organizer_dashboard_title"
+          />
+        </div>
       </div>
     </header>
   );

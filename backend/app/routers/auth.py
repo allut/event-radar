@@ -100,6 +100,25 @@ async def get_current_user(
     return user
 
 
+async def get_optional_user(
+    session: str | None = Cookie(default=None, alias=SESSION_COOKIE_NAME),
+    db: AsyncSession = Depends(get_db),
+) -> User | None:
+    """Like get_current_user, but returns None instead of raising 401 when
+    there's no session, the token is expired/invalid, or it's been revoked —
+    for endpoints open to anonymous callers (GET /explore, #234)."""
+    if not session:
+        return None
+    try:
+        user_id, token_version = verify_session_token(session)
+    except (SignatureExpired, BadSignature):
+        return None
+    user = await db.get(User, user_id)
+    if user is None or token_version != user.session_token_version:
+        return None
+    return user
+
+
 async def _get_or_create_user(
     db: AsyncSession, email: str, request: Request, requested_locale: str | None
 ) -> User:
@@ -167,7 +186,9 @@ async def request_magic_link(
     await db.commit()
 
     try:
-        await send_magic_link(email, signed_token, email_locale)
+        await send_magic_link(
+            email, signed_token, email_locale, theme_preference=user.theme_preference
+        )
     except Exception:
         log.exception("Failed to send magic link to %s", mask_email(email))
         # Do not surface email errors to caller — link is in DB, user can retry.

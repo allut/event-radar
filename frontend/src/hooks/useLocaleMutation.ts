@@ -16,10 +16,11 @@ export interface UseLocaleMutationResult {
 export interface UseLocaleMutationCallbacks {
   onSuccess?: () => void;
   onError?: (err: unknown) => void;
-  // Home/Landing/Feed and EventDetail are the two public SEO routes (see
-  // App.tsx's ROUTE_DEFS): their bare path must always render Estonian
-  // regardless of any stored preference, so their initial locale resolves
-  // purely from the URL's `:locale` segment. Every other page falls back to
+  // Home/Landing/Feed, Explore and EventDetail are the three public SEO
+  // routes (see App.tsx's ROUTE_DEFS, issue #236 added Explore): their bare
+  // path must always render Estonian regardless of any stored preference,
+  // so their initial locale resolves purely from the URL's `:locale`
+  // segment. Every other page falls back to
   // the explicitly *stored* preference (getStoredLocale(), not getLocale()'s
   // UI-default fallback of 'en') when no segment is present, defaulting to
   // Estonian when nothing is stored — matching App.tsx's BareLocaleGate,

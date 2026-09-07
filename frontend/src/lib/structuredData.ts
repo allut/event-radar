@@ -1,6 +1,14 @@
-import type { Event as SchemaEvent, Offer, Place, WebSite as SchemaWebSite, WithContext } from 'schema-dts';
+import type {
+  AggregateOffer,
+  Event as SchemaEvent,
+  ItemList,
+  Offer,
+  Place,
+  WebSite as SchemaWebSite,
+  WithContext,
+} from 'schema-dts';
 import type { EventData } from '../components/EventCard';
-import { OG_FALLBACK_IMAGE_PATH, PRODUCTION_ORIGIN } from '../constants';
+import { OG_FALLBACK_IMAGE_PATH, PRODUCTION_ORIGIN, ROUTES, SCHEMA_ORG_CONTEXT } from '../constants';
 import { t } from '../i18n';
 import { localizedPath, safeUrl } from '../utils';
 
@@ -22,17 +30,32 @@ export function buildEventJsonLd(event: EventData): WithContext<SchemaEvent> {
       : undefined;
 
   const offerUrl = safeUrl(event.url);
-  const offers: Offer | undefined =
-    offerUrl || event.currency
+  // Numeric truthiness (CLAUDE.md) — gate on `!== null`, not on `price_min`
+  // being falsy, so a free event's price_min: 0 still emits lowPrice: 0
+  // rather than silently falling through to the plain-Offer branch (issue
+  // #236). highPrice falls back to price_min when price_max is null (a
+  // single-price event, per formatPrice's own price_min/price_max contract,
+  // utils.ts) — AggregateOffer requires lowPrice <= highPrice, which a null
+  // highPrice can't satisfy.
+  const offers: Offer | AggregateOffer | undefined =
+    event.price_min !== null
       ? {
-          '@type': 'Offer',
-          ...(offerUrl ? { url: offerUrl } : {}),
+          '@type': 'AggregateOffer',
+          lowPrice: event.price_min,
+          highPrice: event.price_max ?? event.price_min,
           ...(event.currency ? { priceCurrency: event.currency } : {}),
+          ...(offerUrl ? { url: offerUrl } : {}),
         }
-      : undefined;
+      : offerUrl || event.currency
+        ? {
+            '@type': 'Offer',
+            ...(offerUrl ? { url: offerUrl } : {}),
+            ...(event.currency ? { priceCurrency: event.currency } : {}),
+          }
+        : undefined;
 
   return {
-    '@context': 'https://schema.org',
+    '@context': SCHEMA_ORG_CONTEXT,
     '@type': 'Event',
     name: event.title,
     startDate: event.starts_at,
@@ -45,12 +68,38 @@ export function buildEventJsonLd(event: EventData): WithContext<SchemaEvent> {
   };
 }
 
+/** ItemList JSON-LD for the public /explore page (issue #236) — one
+ * `ListItem` per rendered card, `position` matching render order (also the
+ * value explore_card_click's `position` analytics param uses, EventCard.tsx).
+ * Per #224 (governs over #232's since-superseded "minimal item" note — see
+ * issue #236's own note on the contradiction): each `item` is the *full*
+ * `buildEventJsonLd` payload, not a hand-picked subset — one field-mapping
+ * policy in the codebase rather than two — plus a top-level `url` on that
+ * item pointing at our own locale-matched detail page (never emitted by
+ * buildEventJsonLd itself, and distinct from its `offers.url`, the external
+ * ticket vendor link). `numberOfItems`/`itemListOrder` are deliberately
+ * omitted — see docs/frontend.md's prerender section. */
+export function buildExploreItemListJsonLd(events: EventData[], locale: string): WithContext<ItemList> {
+  return {
+    '@context': SCHEMA_ORG_CONTEXT,
+    '@type': 'ItemList',
+    itemListElement: events.map((event, index) => ({
+      '@type': 'ListItem',
+      position: index + 1,
+      item: {
+        ...buildEventJsonLd(event),
+        url: `${PRODUCTION_ORIGIN}${localizedPath(ROUTES.eventDetail(event.id), locale)}`,
+      },
+    })),
+  };
+}
+
 /** Minimal WebSite node for Landing (issue #49) — name/url/inLanguage only,
  * no SearchAction/Organization/ItemList (see issue #46 for why each is out
  * of scope). */
 export function buildWebsiteJsonLd(locale: string): WithContext<SchemaWebSite> {
   return {
-    '@context': 'https://schema.org',
+    '@context': SCHEMA_ORG_CONTEXT,
     '@type': 'WebSite',
     name: t('brand', locale),
     url: `${PRODUCTION_ORIGIN}${localizedPath('/', locale)}`,

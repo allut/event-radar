@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api, ApiError } from '../../api/client';
 import { setSignedInHint, getLocale } from '../../lib/auth';
+import { syncAccountTheme } from '../../lib/theme';
 import { API, AUTH_REDIRECT_DELAY_MS, ROUTES, UI_STATE, VERIFY_STATE_TO_KIND, type VerifyState } from '../../constants';
 import { t } from '../../i18n';
 import { useLocaleNavigate } from '../../hooks/useLocaleNavigate';
@@ -13,6 +14,7 @@ import styles from './AuthVerify.module.css';
 
 interface MeResponse {
   has_personas: boolean;
+  theme_preference: 'light' | 'dark' | null;
 }
 
 export default function AuthVerify() {
@@ -46,6 +48,9 @@ export default function AuthVerify() {
         try {
           const me = await api.get<MeResponse>(API.authMe);
           if (me.has_personas) dest = ROUTES.home;
+          syncAccountTheme(me.theme_preference, (theme) =>
+            api.patch(API.me, { theme_preference: theme })
+          );
         } catch {
           // /auth/me failure is non-fatal — fall back to /onboarding
         }

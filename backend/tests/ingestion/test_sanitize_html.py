@@ -8,7 +8,11 @@ import pytest
 
 from bs4 import BeautifulSoup
 
-from app.constants import LOCALIZED_TEXT_FIENTA_LOCALES
+from app.constants import (
+    LOCALIZED_TEXT_FIENTA_LOCALES,
+    ORGANIZER_HTML_SANITIZE_ALLOWED_ATTRS,
+    ORGANIZER_HTML_SANITIZE_ALLOWED_TAGS,
+)
 from app.ingestion.http_client import AsyncRateLimiter
 from app.ingestion.locale_urls import locale_from_html_lang
 from app.ingestion.sanitize import decode_cfemail, html_to_text, sanitize_html
@@ -341,6 +345,98 @@ class TestSanitizeHtml:
         result = sanitize_html(html)
         assert result is not None
         assert "[email protected]" in result
+
+
+class TestSanitizeHtmlOrganizerBoundary:
+    """The organizer-submission boundary passes a narrower allowlist via the
+    tags/attrs params (#267) — default (ingestion) calls must be unaffected."""
+
+    def _organizer_clean(self, html: str) -> str | None:
+        return sanitize_html(
+            html,
+            tags=ORGANIZER_HTML_SANITIZE_ALLOWED_TAGS,
+            attrs=ORGANIZER_HTML_SANITIZE_ALLOWED_ATTRS,
+        )
+
+    def test_span_stripped_under_organizer_allowlist(self) -> None:
+        html = "<p>Hello <span>World</span></p>"
+        result = self._organizer_clean(html)
+        assert result is not None
+        assert "<span>" not in result
+        assert "World" in result
+
+    def test_span_preserved_under_default_ingestion_allowlist(self) -> None:
+        # Default (no tags/attrs) call site — proves the override is opt-in
+        # and every existing (non-organizer) call site is unaffected.
+        html = "<p>Hello <span>World</span></p>"
+        result = sanitize_html(html)
+        assert result is not None
+        assert "<span>World</span>" in result
+
+    def test_link_title_attr_stripped_under_organizer_allowlist(self) -> None:
+        # Default ingestion attrs allow a["title"]; the organizer boundary
+        # only allows a["href"].
+        html = '<a href="https://example.com" title="Test">Link</a>'
+        result = self._organizer_clean(html)
+        assert result is not None
+        assert 'href="https://example.com"' in result
+        assert "title=" not in result
+
+    def test_link_title_attr_preserved_under_default_allowlist(self) -> None:
+        html = '<a href="https://example.com" title="Test">Link</a>'
+        result = sanitize_html(html)
+        assert result is not None
+        assert 'title="Test"' in result
+
+    def test_disallowed_tag_stripped_alongside_allowed_ones(self) -> None:
+        html = "<p>Keep <strong>this</strong></p><span>drop this wrapper</span>"
+        result = self._organizer_clean(html)
+        assert result is not None
+        assert "<strong>this</strong>" in result
+        assert "<span>" not in result
+        assert "drop this wrapper" in result
+
+    def test_underline_and_blockquote_preserved(self) -> None:
+        html = "<blockquote><u>Underlined quote</u></blockquote>"
+        result = self._organizer_clean(html)
+        assert result is not None
+        assert "<blockquote>" in result
+        assert "<u>Underlined quote</u>" in result
+
+    def test_rel_noopener_survives_organizer_allowlist(self) -> None:
+        # Regression: an attribute_filter naively enforcing the attrs map
+        # would strip nh3's own injected rel="noopener noreferrer" since
+        # "rel" is absent from ORGANIZER_HTML_SANITIZE_ALLOWED_ATTRS.
+        html = '<a href="https://example.com" target="_blank">Link</a>'
+        result = self._organizer_clean(html)
+        assert result is not None
+        assert 'rel="noopener noreferrer"' in result
+        assert "target=" not in result
+
+    def test_i_tag_stripped_under_organizer_allowlist(self) -> None:
+        # <i> is in the default ingestion allowlist but not the organizer one
+        # (organizer offers <em> for italics via Tiptap, not raw <i>).
+        html = "<i>slanted</i>"
+        result = self._organizer_clean(html)
+        assert result is not None
+        assert "<i>" not in result
+        assert "slanted" in result
+
+
+class TestOrganizerHtmlAllowlistSync:
+    """Guards ORGANIZER_HTML_SANITIZE_ALLOWED_TAGS/ATTRS against silent drift —
+    this set must track the Tiptap toolbar's exact extension list: bold,
+    italic, underline, bulletList, orderedList, link, heading (levels 3-4
+    only), blockquote. No color extension, so no style/class attrs anywhere.
+    A future toolbar change must update both the constant and this test."""
+
+    def test_allowed_tags_match_tiptap_extension_list(self) -> None:
+        assert ORGANIZER_HTML_SANITIZE_ALLOWED_TAGS == frozenset(
+            {"p", "br", "strong", "em", "u", "ul", "ol", "li", "a", "h3", "h4", "blockquote"}
+        )
+
+    def test_allowed_attrs_match_tiptap_extension_list(self) -> None:
+        assert ORGANIZER_HTML_SANITIZE_ALLOWED_ATTRS == {"a": {"href"}}
 
 
 class TestHtmlToText:

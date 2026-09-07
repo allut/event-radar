@@ -4,7 +4,7 @@ import { renderWithProviders } from '../../test/utils';
 import TopBar from './TopBar';
 
 describe('TopBar', () => {
-  it('shows a Sign in link to /login when signed out, no sign-out button/nav, plus hamburger', () => {
+  it('shows a Sign in link to /login when signed out, no sign-out button, only Explore/Contact in nav, plus hamburger', () => {
     renderWithProviders(
       <TopBar locale="en" onLocaleChange={vi.fn()} authed={false} />,
     );
@@ -12,7 +12,12 @@ describe('TopBar', () => {
     const signIn = screen.getByRole('link', { name: /sign in/i });
     expect(signIn).toHaveAttribute('href', '/login');
     expect(screen.queryByRole('button', { name: /sign out/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole('navigation')).not.toBeInTheDocument();
+    expect(screen.getByRole('navigation')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Explore' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Contact' })).toHaveAttribute('href', '/contact');
+    expect(screen.queryByRole('link', { name: 'Daily 5' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Saved' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Settings' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Menu' })).toBeInTheDocument();
   });
 

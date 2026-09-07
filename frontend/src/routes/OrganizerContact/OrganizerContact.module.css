@@ -1,0 +1,75 @@
+.page {
+  composes: page from '../../components/StaticPage/StaticPage.module.css';
+}
+
+.main {
+  composes: main from '../../components/StaticPage/StaticPage.module.css';
+}
+
+.title {
+  composes: title from '../../components/StaticPage/StaticPage.module.css';
+}
+
+.body {
+  composes: body from '../../components/StaticPage/StaticPage.module.css';
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-top: var(--space-2);
+}
+
+.label {
+  composes: fieldLabel from '../../components/shared/Field.module.css';
+}
+
+.textarea {
+  composes: fieldInput from '../../components/shared/Field.module.css';
+  width: 100%;
+  font-family: inherit;
+  resize: vertical;
+  min-height: var(--textarea-height-md);
+}
+
+.error {
+  composes: alert from '../../components/shared/Alert.module.css';
+  font-size: var(--fs-sm);
+  padding: var(--space-2) var(--space-3);
+}
+
+.submit {
+  composes: btnSubmit from '../../components/shared/Button.module.css';
+  padding: var(--space-0-8125) var(--space-5);
+  margin-top: var(--space-1);
+}
+
+.spinner {
+  composes: spinner from '../../components/shared/Spinner.module.css';
+}
+
+.success {
+  composes: successBlock from '../../components/shared/Button.module.css';
+}
+
+.checkCircle {
+  composes: statusCircle statusCircleSuccess statusCircleLg from '../../components/shared/StatusCircle.module.css';
+  font-size: var(--fs-xl);
+  margin-bottom: var(--space-2);
+}
+
+.successTitle {
+  font-size: var(--fs-base);
+  font-weight: var(--fw-semibold);
+  color: var(--text);
+}
+
+.successBody {
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+
+.resend {
+  composes: textButton from '../../components/shared/Button.module.css';
+}

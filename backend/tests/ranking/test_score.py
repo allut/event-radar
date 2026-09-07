@@ -12,6 +12,7 @@ from app.ranking.score import (
     _mmr_pick,
     _select_with_backfill,
     _time_slots_for_event,
+    anonymous_score_event,
     feedback_signal,
     locality_bonus,
     persona_affinity,
@@ -33,12 +34,16 @@ def _event(
     lat: float = 59.437,
     lng: float = 24.745,
     dedup_group: int | None = None,
+    venue_id: int | None = None,
+    venue: MagicMock | None = None,
 ) -> Event:
     e = MagicMock()
     e.id = event_id
     e.starts_at = starts_at or (_now() + timedelta(days=2))
     e.lat = lat
     e.lng = lng
+    e.venue_id = venue_id
+    e.venue = venue
     e.dedup_group_id = dedup_group
     cl = MagicMock()
     cl.categories = categories or ["music"]
@@ -405,8 +410,36 @@ class TestLocalityBonus:
 
 
 # ---------------------------------------------------------------------------
-# score_event
+# score_event / venue-linked locality resolution
 # ---------------------------------------------------------------------------
+
+
+class TestScoreEventVenueLinkedLocality:
+    """A venue-linked event's own lat/lng is never backfilled (#176) — the
+    read path must resolve coordinates through the linked Venue instead of
+    reading Event.lat/lng directly."""
+
+    def _venue_linked_event(self, lat: float | None, lng: float | None) -> Event:
+        venue = MagicMock()
+        venue.lat = lat
+        venue.lng = lng
+        return _event(lat=None, lng=None, venue_id=7, venue=venue)
+
+    def test_venue_linked_event_scores_nonzero_locality(self):
+        e = self._venue_linked_event(59.437, 24.745)  # Tallinn centre
+        v = {"categories": {"music": 1.0}, "vibes": {"underground": 1.0}}
+        result = score_event([(1.0, v)], _ctx(), e, _now())
+        assert result is not None
+        # Own lat/lng are None; without venue resolution locality would be
+        # NEUTRAL_SCORE (0.5) rather than the Tallinn-centre 1.0 the linked
+        # Venue actually reports.
+        no_venue_result = score_event([(1.0, v)], _ctx(), _event(lat=None, lng=None), _now())
+        assert result > no_venue_result
+
+    def test_half_geocoded_venue_falls_back_to_neutral(self):
+        e = self._venue_linked_event(59.437, None)
+        result = score_event([], _ctx(), e, _now())
+        assert result is not None
 
 
 class TestScoreEvent:
@@ -443,6 +476,51 @@ class TestScoreEvent:
         assert score_match is not None
         assert score_miss is not None
         assert score_match > score_miss
+
+
+class TestAnonymousScoreEvent:
+    """Locked formula for anonymous /explore callers (#234): 0.45*NEUTRAL_SCORE
+    + 0.25*recency + 0.125*quality + 0.0625*locality — feedback_signal dropped
+    entirely, never treated as neutral."""
+
+    def test_never_hard_excludes(self):
+        # Even an event whose dedup_group would hard-exclude an authenticated
+        # dislike has no meaning here — no feedback context exists at all.
+        e = _event(dedup_group=5)
+        result = anonymous_score_event(e, _now())
+        assert result is not None
+        assert 0.0 <= result <= 1.0
+
+    def test_matches_locked_formula(self):
+        now = _now()
+        e = _event(starts_at=now, quality=0.8, lat=59.437, lng=24.745)
+        result = anonymous_score_event(e, now)
+        # recency_boost(starts_at == now) == 1.0; locality inside Tallinn bbox == 1.0
+        expected = 0.45 * 0.5 + 0.25 * 1.0 + 0.125 * 0.8 + 0.0625 * 1.0
+        assert result == expected
+
+    def test_no_classification_uses_neutral_quality(self):
+        now = _now()
+        e = _event(starts_at=now)
+        e.classification = None
+        result = anonymous_score_event(e, now)
+        expected = 0.45 * 0.5 + 0.25 * 1.0 + 0.125 * 0.5 + 0.0625 * 1.0
+        assert result == expected
+
+    def test_ignores_feedback_entirely(self):
+        # score_event([], ctx-with-like, e, now) folds a like into the score via
+        # fb_normalized; anonymous_score_event has no feedback parameter at all,
+        # so an identical event scores the same regardless of any such history.
+        now = _now()
+        e1 = _event(event_id=1, starts_at=now)
+        e2 = _event(event_id=2, starts_at=now)
+        assert anonymous_score_event(e1, now) == anonymous_score_event(e2, now)
+
+    def test_higher_recency_scores_higher(self):
+        now = _now()
+        e_soon = _event(starts_at=now)
+        e_later = _event(starts_at=now + timedelta(days=10))
+        assert anonymous_score_event(e_soon, now) > anonymous_score_event(e_later, now)
 
 
 # ---------------------------------------------------------------------------
@@ -913,7 +991,7 @@ class TestBuildDailyFeedsSeriesCooldown:
 
 class TestCollapseSeriesDuplicates:
     def test_keeps_earliest_starts_at_per_series(self):
-        from app.ranking.score import _collapse_series_duplicates
+        from app.routers.utils import collapse_series_duplicates
 
         later = _feed_event(1, "Workshop", "Studio")
         later.starts_at = _now() + timedelta(days=5)
@@ -922,7 +1000,7 @@ class TestCollapseSeriesDuplicates:
         middle = _feed_event(3, "Workshop", "Studio")
         middle.starts_at = _now() + timedelta(days=3)
 
-        collapsed, series_key_by_event_id = _collapse_series_duplicates(
+        collapsed, series_key_by_event_id = collapse_series_duplicates(
             [later, earlier, middle]
         )
 
@@ -933,7 +1011,7 @@ class TestCollapseSeriesDuplicates:
         # Two instances sharing an exact starts_at (e.g. duplicate showtimes)
         # must resolve to the same survivor every call, independent of input
         # order or DB row order (the underlying query has no ORDER BY).
-        from app.ranking.score import _collapse_series_duplicates
+        from app.routers.utils import collapse_series_duplicates
 
         same_time = _now() + timedelta(days=2)
         ev5 = _feed_event(5, "Workshop", "Studio")
@@ -941,19 +1019,19 @@ class TestCollapseSeriesDuplicates:
         ev2 = _feed_event(2, "Workshop", "Studio")
         ev2.starts_at = same_time
 
-        collapsed_a, _ = _collapse_series_duplicates([ev5, ev2])
-        collapsed_b, _ = _collapse_series_duplicates([ev2, ev5])
+        collapsed_a, _ = collapse_series_duplicates([ev5, ev2])
+        collapsed_b, _ = collapse_series_duplicates([ev2, ev5])
 
         assert [e.id for e in collapsed_a] == [2]
         assert [e.id for e in collapsed_b] == [2]
 
     def test_distinct_series_all_kept(self):
-        from app.ranking.score import _collapse_series_duplicates
+        from app.routers.utils import collapse_series_duplicates
 
         ev1 = _feed_event(1, "Concert", "Hall")
         ev2 = _feed_event(2, "Play", "Theater")
 
-        collapsed, series_key_by_event_id = _collapse_series_duplicates([ev1, ev2])
+        collapsed, series_key_by_event_id = collapse_series_duplicates([ev1, ev2])
 
         assert {e.id for e in collapsed} == {1, 2}
         assert set(series_key_by_event_id) == {1, 2}

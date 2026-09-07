@@ -45,7 +45,7 @@
   text-align: left;
   padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-sm);
-  border: 1px solid transparent;
+  border: var(--border-w-hair) solid transparent;
   background: transparent;
   font-family: inherit;
   transition: all var(--transition);
@@ -73,9 +73,9 @@
   padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-sm);
   border-top: var(--rule);
-  border-left: 1px solid transparent;
-  border-right: 1px solid transparent;
-  border-bottom: 1px solid transparent;
+  border-left: var(--border-w-hair) solid transparent;
+  border-right: var(--border-w-hair) solid transparent;
+  border-bottom: var(--border-w-hair) solid transparent;
   background: transparent;
   color: var(--accent);
   font-size: var(--fs-sm);
@@ -115,7 +115,7 @@
   flex-direction: column;
   gap: var(--space-2);
   padding: var(--space-3);
-  border: 1px dashed var(--border);
+  border: var(--border-w-hair) dashed var(--border);
   border-radius: var(--radius);
 }
 
@@ -159,4 +159,13 @@
 .hint {
   font-size: var(--fs-xs);
   color: var(--text-muted);
+}
+
+/* .input/.pop/.miniInput/.saveBtn already square unconditionally via their
+ * composed shared bases (#212) — only these locally radiused controls
+ * still need squaring here. */
+.option,
+.oneOffOption,
+.miniForm {
+  border-radius: 0;
 }

@@ -36,6 +36,9 @@ from app.constants import (
     SCORE_HARD_EXCLUDE,
     SCORE_INSERT_CHUNK_SIZE,
     SCORE_WEIGHT_AFFINITY,
+    SCORE_WEIGHT_ANON_LOCALITY,
+    SCORE_WEIGHT_ANON_QUALITY,
+    SCORE_WEIGHT_ANON_RECENCY,
     SCORE_WEIGHT_FEEDBACK,
     SCORE_WEIGHT_LOCALITY,
     SCORE_WEIGHT_QUALITY,
@@ -72,9 +75,12 @@ from app.models.models import (
 )
 from app.routers.utils import (
     canonical_event_filter,
+    collapse_series_duplicates,
     event_not_ended_filter,
     event_series_key,
     persona_weight_tuple,
+    resolve_venue_coords,
+    resolve_venue_name,
     select_events_with_classification,
 )
 
@@ -403,10 +409,11 @@ def _precompute_event_factors(
     for event in event_rows:
         cl = event.classification
         quality = cl.quality_score if cl and cl.quality_score is not None else NEUTRAL_SCORE
+        lat, lng = resolve_venue_coords(event)
         factors[event.id] = (
             recency_boost(event.starts_at, now),
             quality,
-            locality_bonus(event.lat, event.lng),
+            locality_bonus(lat, lng),
         )
     return factors
 
@@ -445,7 +452,8 @@ def score_event(
         quality = (
             cl.quality_score if cl and cl.quality_score is not None else NEUTRAL_SCORE
         )
-        locality = locality_bonus(event.lat, event.lng)
+        lat, lng = resolve_venue_coords(event)
+        locality = locality_bonus(lat, lng)
     fb_normalized = (fb + 1.0) / 2.0  # map [-1, 1] → [0, 1]
 
     return (
@@ -454,6 +462,30 @@ def score_event(
         + SCORE_WEIGHT_FEEDBACK * fb_normalized
         + SCORE_WEIGHT_QUALITY * quality
         + SCORE_WEIGHT_LOCALITY * locality
+    )
+
+
+def anonymous_score_event(event: Event, now: datetime) -> float:
+    """Persona-free score for anonymous /explore callers (#234).
+
+    score = SCORE_WEIGHT_AFFINITY * NEUTRAL_SCORE + SCORE_WEIGHT_ANON_RECENCY * recency
+          + SCORE_WEIGHT_ANON_QUALITY * quality + SCORE_WEIGHT_ANON_LOCALITY * locality
+
+    feedback_signal is dropped entirely (see the SCORE_WEIGHT_ANON_* constants'
+    docstring) — never hard-excludes, unlike score_event(). persona_affinity is
+    the constant NEUTRAL_SCORE, matching what persona_affinity([], ...) already
+    returns for a request with no persona.
+    """
+    cl: EventClassification | None = event.classification
+    quality = cl.quality_score if cl and cl.quality_score is not None else NEUTRAL_SCORE
+    recency = recency_boost(event.starts_at, now)
+    lat, lng = resolve_venue_coords(event)
+    locality = locality_bonus(lat, lng)
+    return (
+        SCORE_WEIGHT_AFFINITY * NEUTRAL_SCORE
+        + SCORE_WEIGHT_ANON_RECENCY * recency
+        + SCORE_WEIGHT_ANON_QUALITY * quality
+        + SCORE_WEIGHT_ANON_LOCALITY * locality
     )
 
 
@@ -648,51 +680,18 @@ async def _load_recent_series_by_user(
                 select(Event)
                 .where(Event.id.in_(list(shown_event_users.keys())))
                 .options(
-                    load_only(Event.id, Event.title_orig, Event.venue_name)
+                    load_only(
+                        Event.id, Event.title_orig, Event.venue_name, Event.venue_id
+                    ),
+                    selectinload(Event.venue),
                 )
             )
         ).all()
         for shown_ev in shown_event_rows:
-            key = event_series_key(shown_ev.title_orig, shown_ev.venue_name)
+            key = event_series_key(shown_ev.title_orig, resolve_venue_name(shown_ev))
             for uid in shown_event_users[shown_ev.id]:
                 recent_series_by_user.setdefault(uid, set()).add(key)
     return recent_series_by_user
-
-
-def _collapse_series_duplicates(
-    event_rows: list[Event],
-) -> tuple[list[Event], dict[int, tuple[str, str]]]:
-    """One representative per event_series_key — nearest (earliest) starts_at
-    wins; ties broken by event id, so the surviving instance is deterministic
-    across builds even when the underlying query has no ORDER BY.
-
-    A multi-date listing (e.g. a workshop running Tue/Thu/Sat) ingests as
-    several Event rows sharing a series key but distinct dedup_group_ids
-    (recurring series are intentionally not dedup-grouped at ingestion), so
-    without this more than one date-instance of the same series could score
-    well and both land in a single user's Daily 5 on the same day. Runs once
-    per build, upstream of scoring/cooldown/MMR, so every downstream
-    mechanism (series cooldown, backfill tiers) operates on an
-    already-deduped pool with no further changes needed.
-
-    Returns the collapsed events plus their series keys (each key computed
-    exactly once here) so callers building `candidate_series_key` don't
-    recompute `event_series_key()` a second time over the same rows.
-    """
-    earliest_by_key: dict[tuple[str, str], Event] = {}
-    for event in event_rows:
-        key = event_series_key(event.title_orig, event.venue_name)
-        current = earliest_by_key.get(key)
-        if current is None or (event.starts_at, event.id) < (
-            current.starts_at,
-            current.id,
-        ):
-            earliest_by_key[key] = event
-    collapsed = list(earliest_by_key.values())
-    series_key_by_event_id = {
-        event.id: key for key, event in earliest_by_key.items()
-    }
-    return collapsed, series_key_by_event_id
 
 
 async def _load_candidate_events(
@@ -701,7 +700,7 @@ async def _load_candidate_events(
     """Bulk-load published, non-excluded, upcoming-within-lookahead candidate
     events. Identical query for every page of users within one
     build_daily_feeds run — see _SharedFeedContext. Collapses same-series
-    duplicates (see _collapse_series_duplicates) before returning, along with
+    duplicates (see collapse_series_duplicates) before returning, along with
     each survivor's series key and its precomputed per-event score factors
     (see _precompute_event_factors)."""
     cutoff = now + timedelta(days=DAILY_5_LOOKAHEAD_DAYS)
@@ -719,7 +718,7 @@ async def _load_candidate_events(
             )
         ).all()
     )
-    collapsed, candidate_series_key = _collapse_series_duplicates(event_rows)
+    collapsed, candidate_series_key = collapse_series_duplicates(event_rows)
     return collapsed, candidate_series_key, _precompute_event_factors(collapsed, now)
 
 

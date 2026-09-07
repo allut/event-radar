@@ -30,8 +30,7 @@
 .searchInput {
   width: 100%;
   padding: var(--space-0-875) var(--space-1-1) var(--space-0-875) var(--space-2-75);
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--border);
+  border: var(--border-w-hair) solid var(--border);
   background: var(--bg-overlay-soft);
   color: var(--text);
   font-size: var(--fs-base);
@@ -66,8 +65,7 @@
 .switchBox {
   display: inline-flex;
   align-items: stretch;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border: var(--border-w-hair) solid var(--border);
   background: var(--bg-overlay-soft);
   overflow: hidden;
 }
@@ -75,13 +73,12 @@
 .cluster {
   display: inline-flex;
   align-items: stretch;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border: var(--border-w-hair) solid var(--border);
   background: var(--bg-overlay-soft);
 }
 
 .divider {
-  width: 1px;
+  width: var(--border-w-hair);
   background: var(--border);
   align-self: stretch;
 }
@@ -150,7 +147,7 @@
 
   .menuRowBottom .cluster > *:not(.divider) {
     min-width: 0;
-    border-right: 1px solid var(--border);
+    border-right: var(--border-w-hair) solid var(--border);
   }
 
   .menuRowBottom .cluster > *:not(.divider):last-child {

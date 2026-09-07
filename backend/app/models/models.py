@@ -59,6 +59,9 @@ class User(Base):
     home_city: Mapped[str] = mapped_column(
         String(100), nullable=False, default=DEFAULT_USER_CITY
     )
+    # "light"/"dark"/NULL (VALID_THEME_PREFERENCES) — NULL means no explicit
+    # preference (client falls back to "system"). No API/validation wiring yet.
+    theme_preference: Mapped[str | None] = mapped_column(String(10), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
@@ -118,6 +121,8 @@ class Organizer(Base):
     locale: Mapped[str] = mapped_column(
         String(2), nullable=False, default=DEFAULT_USER_LOCALE
     )
+    # "light"/"dark"/NULL (VALID_THEME_PREFERENCES) — mirrors User.theme_preference.
+    theme_preference: Mapped[str | None] = mapped_column(String(10), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
@@ -759,8 +764,7 @@ class AdminAction(Base):
     """Append-only durable record of a destructive/moderation admin action
     (takedown, retract, approve, resolve reports, pipeline run) — the report
     feature carries legal obligations that generally assume this is
-    reconstructible after the fact (see docs/research/ on report-feature
-    legal duties). Written inside the same transaction as the mutation it
+    reconstructible after the fact. Written inside the same transaction as the mutation it
     records where the endpoint has one open; survives an outage of the
     LOG_SHIP_URL log drain, unlike the structured log line alone. There is no
     admins table (see ADR 0001), so there is no actor column — "a login

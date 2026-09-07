@@ -23,8 +23,8 @@
   gap: var(--space-2);
   padding: var(--space-4);
   background: var(--bg-raised);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border: var(--border-w-hair) solid var(--border);
+  border-radius: 0;
 }
 
 .contentHead {
@@ -74,12 +74,9 @@
   font-family: inherit;
 }
 
-.textarea {
-  composes: fieldInput from '../../components/shared/Field.module.css';
-  width: 100%;
-  font-family: inherit;
-  resize: vertical;
+.editorFallback {
   min-height: var(--textarea-height-sm);
+  border: var(--border-w-hair) solid var(--border);
 }
 
 .error {

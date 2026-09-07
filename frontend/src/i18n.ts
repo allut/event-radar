@@ -1,6 +1,6 @@
 // .js extensions required: this module is also imported (transitively) by
 // api/seo-audit.ts, which Vercel runs as unbundled Node ESM.
-import { LOCALE_EN, LOCALE_ET, LOCALE_RU, LOCALES } from './constants.js';
+import { LOCALE_EN, LOCALE_ET, LOCALE_RU } from './constants.js';
 import { PERSONA_TRANSLATIONS, TRANSLATIONS } from './_generated/i18nData.js';
 import { PERSONAS_EN } from './_generated/i18nData.js';
 
@@ -29,7 +29,7 @@ export function personaVibe(slug: string, locale: string): string {
 }
 
 export function t(key: string, locale: string): string {
-  const loc = locale in TRANSLATIONS ? locale as keyof typeof TRANSLATIONS : LOCALES[0].code;
+  const loc = locale in TRANSLATIONS ? locale as keyof typeof TRANSLATIONS : LOCALE_EN;
   return (TRANSLATIONS[loc as keyof typeof TRANSLATIONS] as Record<string, string>)[key]
     ?? (TRANSLATIONS.en as Record<string, string>)[key]
     ?? key;

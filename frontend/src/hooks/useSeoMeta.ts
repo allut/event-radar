@@ -29,7 +29,7 @@ export interface SeoMetaInput {
   locale: string;
   /** Current pathname, bare or locale-prefixed (either is accepted — stripped internally). */
   path: string;
-  /** Landing and /events/:id opt in; every other route defaults to noindex. */
+  /** Landing, Explore and /events/:id opt in; every other route defaults to noindex. */
   indexable?: boolean;
   /** og:description / meta description — only emitted when `indexable` is true. */
   description?: string;
@@ -85,7 +85,7 @@ export function buildSeoMeta(input: SeoMetaInput): SeoMetaResult {
 
 /** Shared per-route SEO hook (issue #48) — every route calls this (directly
  * or via useStaticSeoMeta) to declare its <title>, <html lang>, and default
- * `noindex`. Only Landing and /events/:id pass `indexable: true` to also get
+ * `noindex`. Only Landing, Explore and /events/:id pass `indexable: true` to also get
  * OG tags, a self-referential canonical, and the three hreflang alternates +
  * x-default. Render the result via <SeoTags meta={...} /> (components/SeoTags). */
 export function useSeoMeta(input: SeoMetaInput): SeoMetaResult {
