@@ -291,5 +291,5 @@ class PiletileviAdapter(HtmlListingAdapter):
         if price_min is not None:
             card["price_min"] = price_min
             card["price_max"] = price_max
-            card["currency"] = normalize_currency(None, price_min > 0)
+            card["currency"] = normalize_currency(None, price_min is not None)
             card["has_free_tier"] = has_free_tier

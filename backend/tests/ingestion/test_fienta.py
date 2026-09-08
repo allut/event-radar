@@ -122,10 +122,13 @@ class TestNormalize:
         }
         result = _adapter().normalize(raw)
         assert result is not None
+        # currency defaults to DEFAULT_CURRENCY via NormalizedEvent.__post_init__
+        # (issue #236) — a free event still carries a price, so the JSON-LD
+        # prerender gate's priceCurrency-required check must have something to read.
         assert (result.price_min, result.price_max, result.currency) == (
             0.0,
             0.0,
-            None,
+            "EUR",
         )
 
     def test_missing_title_returns_none(self):

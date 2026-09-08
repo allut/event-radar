@@ -102,6 +102,18 @@ describe('buildEventJsonLd', () => {
     expect(jsonLd.offers).toMatchObject({ '@type': 'AggregateOffer', lowPrice: 0, highPrice: 0 });
   });
 
+  it('defaults priceCurrency to EUR for a free event with no currency (production shape that broke the #236 prerender gate)', () => {
+    const event = makeEvent({ price_min: 0, price_max: 0, currency: null });
+    const jsonLd = buildEventJsonLd(event);
+    expect(jsonLd.offers).toMatchObject({ '@type': 'AggregateOffer', lowPrice: 0, highPrice: 0, priceCurrency: 'EUR' });
+  });
+
+  it('defaults priceCurrency to EUR for a paid event with no currency', () => {
+    const event = makeEvent({ price_min: 10, price_max: null, currency: null });
+    const jsonLd = buildEventJsonLd(event);
+    expect(jsonLd.offers).toMatchObject({ '@type': 'AggregateOffer', lowPrice: 10, highPrice: 10, priceCurrency: 'EUR' });
+  });
+
   it('falls back highPrice to price_min when price_max is null (a single-price event)', () => {
     const event = makeEvent({ price_min: 12, price_max: null, currency: 'EUR' });
     const jsonLd = buildEventJsonLd(event);
