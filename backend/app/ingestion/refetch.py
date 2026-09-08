@@ -30,6 +30,7 @@ from sqlalchemy import exists, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.constants import (
+    DEFAULT_CURRENCY,
     EVENT_STATUS_CLASSIFIED,
     EVENT_STATUS_PUBLISHED,
     GEOCODE_COORD_QUANT_DECIMALS,
@@ -443,6 +444,13 @@ def _reconcile_price(
         price_changed = True
     if has_free_tier and not event.has_free_tier:
         event.has_free_tier = True
+        price_changed = True
+    # A refetch can fill/update price_min/price_max above while leaving
+    # currency NULL (detail page reports no currency) — default it so a
+    # refetched free event doesn't reintroduce the priceCurrency-missing
+    # state the JSON-LD prerender gate rejects (issue #236).
+    if event.price_min is not None and event.currency is None:
+        event.currency = DEFAULT_CURRENCY
         price_changed = True
     if price_changed:
         summary["price_changed"] += 1

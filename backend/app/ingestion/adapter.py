@@ -33,6 +33,7 @@ from app.constants import (
 )
 from app.ingestion.content_filters import is_explicit_text, is_non_event_text
 from app.ingestion.http_client import safe_external_url, safe_fetchable_url
+from app.ingestion.pricing import normalize_currency
 from app.models.models import Event, EventSource, IngestionRun, RawEvent, Source
 
 log = logging.getLogger(__name__)
@@ -78,6 +79,13 @@ class NormalizedEvent:
         if self.venue_address is None:
             self.lat = None
             self.lng = None
+        # A price with no currency (e.g. a free-event adapter path that never
+        # sets one) breaks the JSON-LD prerender gate downstream (issue #236's
+        # priceCurrency-required check) — default it here, the single choke
+        # point every adapter flows through before insert_normalized_event.
+        self.currency = normalize_currency(
+            self.currency, self.price_min is not None or self.price_max is not None
+        )
 
 
 def _make_slug(title: str, starts_at: datetime, external_id: str) -> str:

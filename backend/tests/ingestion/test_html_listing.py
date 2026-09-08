@@ -921,7 +921,7 @@ class TestPiletileviParseDetailPrice:
         assert card["has_free_tier"] is True
 
     @pytest.mark.asyncio
-    async def test_genuinely_free_event_zero_price_no_currency(self):
+    async def test_genuinely_free_event_zero_price_defaults_currency(self):
         adapter = _piletilevi_adapter()
         soup = BeautifulSoup(PILETILEVI_DETAIL_HTML, "html.parser")
         card: dict = {"url": _PILETILEVI_DETAIL_URL}
@@ -936,7 +936,11 @@ class TestPiletileviParseDetailPrice:
         assert mock_post.call_count == 1
         assert card["price_min"] == 0.0
         assert card["price_max"] == 0.0
-        assert card["currency"] is None
+        # currency defaults to DEFAULT_CURRENCY (issue #236) — a free event
+        # still carries a price, and normalize_currency(None, has_price=True)
+        # no longer treats has_price as a numeric-truthiness check on the
+        # amount itself.
+        assert card["currency"] == "EUR"
         assert card["has_free_tier"] is False
 
     @pytest.mark.asyncio

@@ -8,7 +8,7 @@ import type {
   WithContext,
 } from 'schema-dts';
 import type { EventData } from '../components/EventCard';
-import { OG_FALLBACK_IMAGE_PATH, PRODUCTION_ORIGIN, ROUTES, SCHEMA_ORG_CONTEXT } from '../constants';
+import { DEFAULT_CURRENCY, OG_FALLBACK_IMAGE_PATH, PRODUCTION_ORIGIN, ROUTES, SCHEMA_ORG_CONTEXT } from '../constants';
 import { t } from '../i18n';
 import { localizedPath, safeUrl } from '../utils';
 
@@ -36,14 +36,19 @@ export function buildEventJsonLd(event: EventData): WithContext<SchemaEvent> {
   // #236). highPrice falls back to price_min when price_max is null (a
   // single-price event, per formatPrice's own price_min/price_max contract,
   // utils.ts) — AggregateOffer requires lowPrice <= highPrice, which a null
-  // highPrice can't satisfy.
+  // highPrice can't satisfy. seoValidation's assertEventJsonLd requires
+  // priceCurrency whenever lowPrice is present, so once a price is emitted
+  // here priceCurrency must be too — a free event legitimately loses its
+  // currency at ingest (backend/app/ingestion/pricing.py), so default to
+  // DEFAULT_CURRENCY rather than drop the field (issue that broke the
+  // #236 prerender gate: item[15].offers.priceCurrency missing).
   const offers: Offer | AggregateOffer | undefined =
     event.price_min !== null
       ? {
           '@type': 'AggregateOffer',
           lowPrice: event.price_min,
           highPrice: event.price_max ?? event.price_min,
-          ...(event.currency ? { priceCurrency: event.currency } : {}),
+          priceCurrency: event.currency || DEFAULT_CURRENCY,
           ...(offerUrl ? { url: offerUrl } : {}),
         }
       : offerUrl || event.currency
