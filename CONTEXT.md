@@ -10,6 +10,24 @@ The single-use, short-lived link emailed to an address to prove the recipient
 controls it. Proves control of an address; it is not itself a session.
 _Avoid_: login link, verification link, OTP
 
+**Confirmation magic link**:
+A magic link sent solely to prove control of an address before an identity
+link is created, rather than to start a session. Same mechanism as a magic
+link, different purpose.
+_Avoid_: linking email, verification email, challenge link
+
+**Provider identity**:
+An account held at an external identity provider, named by that provider's
+stable subject identifier rather than by its address. The address it reports
+may change; the identifier never does.
+_Avoid_: social login, OAuth account, Google account
+
+**Identity link**:
+The durable binding of one provider identity to one account on one track. A
+track's account may hold several; a provider identity may be linked once per
+track.
+_Avoid_: connected account, linked login, federation
+
 **Session token**:
 The signed, self-verifying value that proves an identity for the life of a
 session. Carried in an httpOnly cookie and never readable by client code.
