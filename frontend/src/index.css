@@ -20,6 +20,11 @@
   --border-subtle: #1c2333;
   --success: #4cad7f;
   --danger: #d95757;
+  /* Google's mandated Dark-theme button triple (docs/adr/0002 Design-system
+     exception) — not part of our palette, never redefine outside this pair. */
+  --google-btn-bg: #131314;
+  --google-btn-border: #8e918f;
+  --google-btn-text: #e3e3e3;
   --radius: 6px;
   --easing: cubic-bezier(0.4, 0, 0.2, 1);
   --easing-breathe: ease-in-out; /* secondary curve for the looping breathe pulse */
@@ -421,6 +426,10 @@
   --border-subtle: #e6e9f0;
   --success: #1f7a4f;     /* darkened from the dark-theme hex for AA as text on white */
   --danger: #b23a3a;      /* darkened from the dark-theme hex for AA as text on white */
+  /* Google's mandated Light-theme button triple (docs/adr/0002). */
+  --google-btn-bg: #ffffff;
+  --google-btn-border: #747775;
+  --google-btn-text: #1f1f1f;
   /* EventCard ghost-numeral text on the category-gradient placeholder --
      literal inversion of the dark rgba(255,255,255,0.06) onto --on-accent's
      dark rgb (15, 17, 25), same alpha, so it stays visible on the new light

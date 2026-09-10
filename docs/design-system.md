@@ -170,6 +170,7 @@ Section order, locked:
 | `--radius: 0` sitewide (containers too) | Rejected — controls only. |
 | Emoji as iconography | Removed from consumer/organizer surfaces; admin status glyphs stay. |
 | Landing wide-screen hero side panel | Specced, never implemented, removed from scope. |
+| Third-party identity-provider brand marks (class exception) | The full-colour Google "G" mark is pictographic iconography, which §1/§9 forbid, and per Google's branding guidelines it may not be made monochrome, redrawn, or dropped. Recorded as a **class** exception — third-party identity-provider brand marks, mandated by that provider's published branding terms, rendered as a local inline SVG (never `<img>` — the current asset is a masked conic-gradient + Gaussian-blur composition that silently loses layers through an `<img>` reference), scoped to the sign-in surface only. Does not reopen §9's general no-iconography rule elsewhere. The button itself ships `border-radius: 0` (composed from the shared `Button` module, unmodified) — Google's written guidelines state no minimum size and no corner radius, so this is a defensible reading against the prose, not a violation, even though it visibly departs from Google's own shipped assets. See `docs/adr/0002-google-sign-in-oauth-pkce.md`. |
 
 ## 13. Working checklist for a visual change
 

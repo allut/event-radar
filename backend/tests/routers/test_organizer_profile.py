@@ -6,13 +6,16 @@ import pytest
 
 class TestGetOwnProfile:
     @pytest.mark.asyncio
-    async def test_returns_serialized_profile(self, make_request, make_organizer):
+    async def test_returns_serialized_profile(self, mock_db, make_request, make_organizer):
         from app.routers.organizer_profile import get_own_profile
 
         organizer = make_organizer(organizer_id=5, name="Tallinn Live", verified=True)
+        unlinked_result = MagicMock()
+        unlinked_result.scalars.return_value = MagicMock(first=MagicMock(return_value=None))
+        mock_db.execute = AsyncMock(return_value=unlinked_result)
 
         result = await get_own_profile(
-            make_request(method="GET", path="/organizer/profile"), organizer
+            make_request(method="GET", path="/organizer/profile"), organizer, mock_db
         )
 
         assert result == {
@@ -22,19 +25,37 @@ class TestGetOwnProfile:
             "theme_preference": None,
             "verified": True,
             "name": "Tallinn Live",
+            "google_linked": False,
         }
 
     @pytest.mark.asyncio
-    async def test_name_null_when_unset(self, make_request, make_organizer):
+    async def test_name_null_when_unset(self, mock_db, make_request, make_organizer):
         from app.routers.organizer_profile import get_own_profile
 
         organizer = make_organizer(organizer_id=5)
 
         result = await get_own_profile(
-            make_request(method="GET", path="/organizer/profile"), organizer
+            make_request(method="GET", path="/organizer/profile"), organizer, mock_db
         )
 
         assert result["name"] is None
+
+    @pytest.mark.asyncio
+    async def test_google_linked_true_when_identity_row_exists(
+        self, mock_db, make_request, make_organizer
+    ):
+        from app.routers.organizer_profile import get_own_profile
+
+        organizer = make_organizer(organizer_id=5)
+        linked_result = MagicMock()
+        linked_result.scalars.return_value = MagicMock(first=MagicMock(return_value=1))
+        mock_db.execute = AsyncMock(return_value=linked_result)
+
+        result = await get_own_profile(
+            make_request(method="GET", path="/organizer/profile"), organizer, mock_db
+        )
+
+        assert result["google_linked"] is True
 
 
 class TestUpdateOwnProfile:
@@ -46,6 +67,9 @@ class TestUpdateOwnProfile:
         )
 
         organizer = make_organizer(organizer_id=5)
+        unlinked_result = MagicMock()
+        unlinked_result.scalars.return_value = MagicMock(first=MagicMock(return_value=None))
+        mock_db.execute = AsyncMock(return_value=unlinked_result)
 
         result = await update_own_profile(
             OrganizerProfilePatchBody(name="Tallinn Live"),
@@ -56,6 +80,7 @@ class TestUpdateOwnProfile:
 
         assert organizer.name == "Tallinn Live"
         assert result["name"] == "Tallinn Live"
+        assert result["google_linked"] is False
         mock_db.commit.assert_awaited_once()
 
     @pytest.mark.asyncio
@@ -131,6 +156,9 @@ class TestUpdateOwnProfile:
         )
 
         organizer = make_organizer(organizer_id=5, theme_preference=None)
+        linked_result = MagicMock()
+        linked_result.scalars.return_value = MagicMock(first=MagicMock(return_value=1))
+        mock_db.execute = AsyncMock(return_value=linked_result)
 
         result = await update_own_profile(
             OrganizerProfilePatchBody(theme_preference="dark"),
@@ -141,6 +169,7 @@ class TestUpdateOwnProfile:
 
         assert organizer.theme_preference == "dark"
         assert result["theme_preference"] == "dark"
+        assert result["google_linked"] is True
         mock_db.commit.assert_awaited_once()
 
     @pytest.mark.asyncio

@@ -33,6 +33,35 @@
   color: var(--text-soft);
 }
 
+.error {
+  composes: alert from '../../components/shared/Alert.module.css';
+  font-size: var(--fs-sm);
+  padding: var(--space-2) var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.emailToggle {
+  composes: textButton from '../../components/shared/Button.module.css';
+  align-self: center;
+}
+
+.divider {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  margin: var(--space-1) 0;
+}
+
+.divider::before,
+.divider::after {
+  content: '';
+  flex: 1;
+  height: var(--border-w-hair);
+  background: var(--border);
+}
+
 .backLink {
   display: block;
   margin-top: var(--space-2);

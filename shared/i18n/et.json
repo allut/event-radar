@@ -296,6 +296,7 @@
     "organizer_section_account": "Konto",
     "organizer_section_display_name": "Kuvatav nimi",
     "organizer_section_security": "Turvalisus",
+    "organizer_section_identities": "Sisselogimisviisid",
     "organizer_profile_name_label": "Kuvatav nimi",
     "organizer_profile_name_placeholder": "nt Tallinn Live",
     "organizer_profile_save": "Salvesta nimi",
@@ -375,7 +376,16 @@
     "seo_title_unsubscribe": "Tellimuse tühistamine",
     "seo_title_organizer_login": "Korraldaja sisselogimine",
     "seo_title_organizer_verify": "Sisselogimise kinnitamine",
-    "seo_title_feed": "Sinu Daily 5"
+    "seo_title_feed": "Sinu Daily 5",
+    "auth.googleSignIn.buttonLabel": "Logi sisse Google'i kontoga",
+    "auth.googleSignIn.continueWithEmail": "Jätka e-postiga",
+    "auth.googleSignIn.orDivider": "või",
+    "auth.googleSignIn.errorCancelled": "Sisselogimine katkestati.",
+    "auth.googleSignIn.errorFailed": "Google'iga sisselogimine ebaõnnestus. Proovi uuesti.",
+    "auth.googleSignIn.confirmationSent": "Konto sidumise lõpetamiseks kontrolli oma e-posti.",
+    "settings.identities.googleLinked": "Google'i konto on seotud",
+    "settings.identities.googleNotLinked": "Google'i konto ei ole seotud",
+    "settings.identities.unlinkGoogle": "Eemalda Google'i seos"
   },
   "email": {
     "email.magic_link.subject": "Sinu What's on Radar sisselogimislink",

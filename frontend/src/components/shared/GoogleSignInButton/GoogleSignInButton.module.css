@@ -1,0 +1,25 @@
+/* Google's mandated Light/Dark button triple (docs/adr/0002 Design-system
+   exception) — --google-btn-* tokens (index.css), not our palette. The
+   shared btnOutline base gives border-radius:0 + the hairline border shape;
+   every color it would otherwise inherit is overridden below since Google's
+   triple is fixed, not theme-derived from our accent. */
+.button {
+  composes: btnOutline from '../Button.module.css';
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  width: 100%;
+  height: var(--control-height-lg);
+  background: var(--google-btn-bg);
+  border-color: var(--google-btn-border);
+  color: var(--google-btn-text);
+  font-family: var(--font-body);
+  font-size: var(--fs-base);
+  font-weight: var(--fw-semibold);
+  text-decoration: none;
+}
+
+.button:focus-visible {
+  box-shadow: var(--shadow-focus-ring);
+}

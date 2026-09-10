@@ -9,7 +9,7 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel, Field, field_validator
-from sqlalchemy import delete, update
+from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.tokens import generate_organizer_session_token
@@ -50,7 +50,7 @@ class OrganizerProfilePatchBody(BaseModel):
         return v
 
 
-def _serialize(organizer: Organizer) -> dict:
+def _serialize(organizer: Organizer, *, google_linked: bool) -> dict:
     return {
         "id": organizer.id,
         "email": organizer.email,
@@ -58,7 +58,18 @@ def _serialize(organizer: Organizer) -> dict:
         "theme_preference": organizer.theme_preference,
         "verified": organizer.verified,
         "name": organizer.name,
+        "google_linked": google_linked,
     }
+
+
+async def _is_google_linked(db: AsyncSession, organizer_id: int) -> bool:
+    result = await db.execute(
+        select(OrganizerIdentity.id).where(
+            OrganizerIdentity.organizer_id == organizer_id,
+            OrganizerIdentity.provider == "google",
+        )
+    )
+    return result.scalars().first() is not None
 
 
 @router.get("")
@@ -66,8 +77,10 @@ def _serialize(organizer: Organizer) -> dict:
 async def get_own_profile(
     request: Request,
     current_organizer: Organizer = Depends(get_current_organizer),
+    db: AsyncSession = Depends(get_db),
 ) -> dict:
-    return _serialize(current_organizer)
+    google_linked = await _is_google_linked(db, current_organizer.id)
+    return _serialize(current_organizer, google_linked=google_linked)
 
 
 @router.patch("")
@@ -89,7 +102,8 @@ async def update_own_profile(
         current_organizer.theme_preference = body.theme_preference
     await db.commit()
     await db.refresh(current_organizer)
-    return _serialize(current_organizer)
+    google_linked = await _is_google_linked(db, current_organizer.id)
+    return _serialize(current_organizer, google_linked=google_linked)
 
 
 @router.delete("/identities/{provider}", status_code=status.HTTP_200_OK)

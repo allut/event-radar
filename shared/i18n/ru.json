@@ -296,6 +296,7 @@
     "organizer_section_account": "Аккаунт",
     "organizer_section_display_name": "Отображаемое имя",
     "organizer_section_security": "Безопасность",
+    "organizer_section_identities": "Способы входа",
     "organizer_profile_name_label": "Отображаемое имя",
     "organizer_profile_name_placeholder": "например, Tallinn Live",
     "organizer_profile_save": "Сохранить имя",
@@ -375,7 +376,16 @@
     "seo_title_unsubscribe": "Отписка от рассылки",
     "seo_title_organizer_login": "Вход для организаторов",
     "seo_title_organizer_verify": "Подтверждение входа",
-    "seo_title_feed": "Ваша подборка на день"
+    "seo_title_feed": "Ваша подборка на день",
+    "auth.googleSignIn.buttonLabel": "Войти с аккаунтом Google",
+    "auth.googleSignIn.continueWithEmail": "Продолжить с email",
+    "auth.googleSignIn.orDivider": "или",
+    "auth.googleSignIn.errorCancelled": "Вход был отменён.",
+    "auth.googleSignIn.errorFailed": "Не удалось войти через Google. Попробуйте снова.",
+    "auth.googleSignIn.confirmationSent": "Проверьте почту, чтобы завершить привязку аккаунта.",
+    "settings.identities.googleLinked": "Аккаунт Google привязан",
+    "settings.identities.googleNotLinked": "Аккаунт Google не привязан",
+    "settings.identities.unlinkGoogle": "Отвязать Google"
   },
   "email": {
     "email.magic_link.subject": "Ваша ссылка для входа в What's on Radar",

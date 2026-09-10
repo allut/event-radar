@@ -296,6 +296,7 @@
     "organizer_section_account": "Account",
     "organizer_section_display_name": "Display name",
     "organizer_section_security": "Security",
+    "organizer_section_identities": "Sign-in methods",
     "organizer_profile_name_label": "Display name",
     "organizer_profile_name_placeholder": "e.g. Tallinn Live",
     "organizer_profile_save": "Save name",
@@ -375,7 +376,16 @@
     "seo_title_unsubscribe": "Unsubscribe",
     "seo_title_organizer_login": "Organizer sign in",
     "seo_title_organizer_verify": "Verifying sign-in",
-    "seo_title_feed": "Your Daily 5"
+    "seo_title_feed": "Your Daily 5",
+    "auth.googleSignIn.buttonLabel": "Sign in with Google",
+    "auth.googleSignIn.continueWithEmail": "Continue with email instead",
+    "auth.googleSignIn.orDivider": "or",
+    "auth.googleSignIn.errorCancelled": "Sign-in was cancelled.",
+    "auth.googleSignIn.errorFailed": "Something went wrong signing in with Google. Try again.",
+    "auth.googleSignIn.confirmationSent": "Check your email to finish linking your account.",
+    "settings.identities.googleLinked": "Google account linked",
+    "settings.identities.googleNotLinked": "Google account not linked",
+    "settings.identities.unlinkGoogle": "Unlink Google"
   },
   "email": {
     "email.magic_link.subject": "Your What's on Radar sign-in link",

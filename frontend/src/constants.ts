@@ -54,6 +54,11 @@ export const THEME_PREFERENCE_KEY = 'theme_preference';
 // Client-only dismissal flag for the profile nudge banner (#175) — no backend
 // field for this, so a stale/cleared browser just re-shows it once.
 export const ORGANIZER_PROFILE_NUDGE_DISMISSED_KEY = 'organizer_profile_nudge_dismissed';
+// Mirrors backend OAUTH_ERROR_QUERY_PARAM/OAUTH_ERROR_DENIED (app/constants.py) —
+// the callback redirect's error query param + the one outcome mapped to the
+// "cancelled" copy; every other OAUTH_ERROR_* code renders the generic failed copy.
+export const GOOGLE_SIGNIN_ERROR_PARAM = 'google_error';
+export const GOOGLE_SIGNIN_ERROR_DENIED = 'access_denied';
 // Mirrors backend ORGANIZER_NAME_MAX_LEN (app/constants.py).
 export const ORGANIZER_NAME_MAX_LEN = 255;
 // Mirrors backend ORGANIZER_VENUE_NAME_MAX_LEN/ORGANIZER_VENUE_ADDRESS_MAX_LEN (app/constants.py).
@@ -754,6 +759,8 @@ export const API = {
   organizerAuthLogoutAll: '/organizer/auth/logout-all',
   organizerAuthVerify: '/organizer/auth/verify',
   organizerAuthRequestLink: '/organizer/auth/request-link',
+  organizerAuthGoogleStart: '/organizer/auth/google/start',
+  organizerProfileIdentity: (provider: string) => `/organizer/profile/identities/${provider}`,
   onboardingPersona: '/onboarding/persona',
   contact: '/contact',
   feed: '/feed',
