@@ -1,8 +1,9 @@
 """Geocoding pipeline: backfill lat/lng for events with an address but no coords.
 
 Sub-passes live in their own modules; ``geocode_pending`` orchestrates them:
-self-heal out-of-bbox coords -> venue_extract (LLM address mining) ->
-sibling_copy -> Nominatim lookup (nominatim.py).
+self-heal out-of-bbox coords -> organizer-Venue pass + coord sync
+(venue_pass.py) -> venue_extract (LLM address mining) -> sibling_copy ->
+Nominatim lookup (nominatim.py).
 """
 
 import asyncio

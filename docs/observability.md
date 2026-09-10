@@ -1,5 +1,7 @@
 # Observability & Monitoring (Axiom)
 
+What's in here: the Axiom logging/monitoring spec — log shipping, dashboards, alerts, and the fields every structured log line carries.
+
 Version-controlled spec for the Axiom monitors that watch the production log
 stream. The backend ships prod logs to Axiom (`app/logging_config.py` →
 `HttpLogShipHandler`); this file defines what to alert on. Monitors are created

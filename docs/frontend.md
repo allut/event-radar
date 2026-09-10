@@ -2,7 +2,7 @@
 
 What's in here: the routes/components/hooks folder structure, and the i18n data pipeline (shared JSON → generated TS/Python).
 
-Read this before touching `frontend/src/routes/`, `frontend/src/components/`, `frontend/src/hooks/`, `frontend/src/lib/`, `shared/i18n/`, or `backend/app/email/`.
+Read this before touching `frontend/src/routes/`, `frontend/src/components/`, `frontend/src/hooks/`, `frontend/src/lib/`, `frontend/src/content/`, `frontend/scripts/`, `frontend/api/`, `shared/i18n/`, or `backend/app/email/`.
 
 ## Frontend Structure
 

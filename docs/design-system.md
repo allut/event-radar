@@ -2,7 +2,7 @@
 
 What's in here: the visual language of What's on Radar — the C1 direction, the token system in `frontend/src/index.css`, the shared CSS layer in `frontend/src/components/shared/`, the type/color/shape/motion rules, the per-surface registers (consumer, organizer, admin), the light/dark theming machinery, and the design decisions that are already settled and must not be re-litigated.
 
-Read this before touching any `.module.css`, `frontend/src/index.css`, `frontend/src/components/shared/`, or any component whose change is visual rather than behavioral. Structure/routing/i18n/SEO detail lives in `docs/frontend.md`; the *rule* form of the token/shared-class imperatives lives in `CLAUDE.md` and `docs/conventions.md`.
+Read this before touching any `.module.css`, `frontend/src/index.css`, `frontend/src/components/shared/`, `frontend/src/lib/theme.ts`, `backend/app/email/styles.py`, or any component whose change is visual rather than behavioral. Structure/routing/i18n/SEO detail lives in `docs/frontend.md`; the *rule* form of the token/shared-class imperatives lives in `CLAUDE.md` and `docs/conventions.md`.
 
 ## 1. The direction: C1 (cinematic-on-brand)
 
@@ -89,7 +89,7 @@ When adding a token: if it encodes a color that reads differently on a near-whit
 
 ## 7. The shared CSS layer
 
-`frontend/src/components/shared/` holds 16 pure-CSS modules — no `.tsx`. Consume them with CSS Modules `composes:`; **never copy-paste** their rules into a route or component stylesheet. Component CSS composes from `'../shared/X.module.css'`, route CSS from `'../../components/shared/X.module.css'`.
+`frontend/src/components/shared/` holds 16 pure-CSS modules plus one component folder, `GoogleSignInButton/` (`.tsx` + `GoogleGMark.tsx` + test) — the one exception to the CSS-only rule. Consume the CSS modules with CSS Modules `composes:`; **never copy-paste** their rules into a route or component stylesheet. Component CSS composes from `'../shared/X.module.css'`, route CSS from `'../../components/shared/X.module.css'`.
 
 | Module | Holds |
 |---|---|

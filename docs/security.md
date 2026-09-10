@@ -2,7 +2,7 @@
 
 What's in here: the OWASP-hardening middleware stack, auth (magic-link, sessions, revocation, residual risks), and the canonical explanations for `require_configured_secret`, the External-URL host-pin rule, and the `email_verified` gate.
 
-Read this before touching `app/main.py`, `app/rate_limit.py`, `app/routers/auth.py`, `app/routers/organizer_auth.py`, `app/routers/utils.py`, `app/ingestion/http_client.py`, or any new endpoint (every endpoint needs a `RATE_LIMIT_*`).
+Read this before touching `app/main.py`, `app/rate_limit.py`, `app/routers/auth.py`, `app/routers/organizer_auth.py`, `app/routers/admin_auth.py`, `app/auth/`, `app/routers/utils.py`, `app/ingestion/http_client.py`, or any new endpoint (every endpoint needs a `RATE_LIMIT_*`).
 
 ## Security Hardening
 

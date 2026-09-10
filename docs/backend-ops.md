@@ -2,7 +2,7 @@
 
 What's in here: deployment topology, admin endpoints, data retention/cleanup, logging, and maintenance scripts.
 
-Read this before touching `render.yaml`, `vercel.json`, `app/routers/admin.py`, `app/cleanup.py`, `app/logging_config.py`, or `backend/scripts/`.
+Read this before touching `render.yaml`, `frontend/vercel.json`, `app/routers/admin.py`, `app/routers/admin_auth.py`, `app/routers/reports.py`, `app/cleanup.py`, `app/logging_config.py`, or `backend/scripts/`.
 
 ## Deployment
 
