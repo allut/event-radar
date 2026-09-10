@@ -176,6 +176,7 @@ class Settings(BaseSettings):
     GOOGLE_OAUTH_CLIENT_ID: str = ""
     GOOGLE_OAUTH_CLIENT_SECRET: str = ""
     GOOGLE_SIGNIN_ORGANIZER_ENABLED: bool = False
+    GOOGLE_SIGNIN_CONSUMER_ENABLED: bool = False
 
     # Webhooks — Svix signing secret ("whsec_...") shown on the webhook's page in the
     # Resend dashboard. Verifies the svix-id/svix-timestamp/svix-signature headers

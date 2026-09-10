@@ -212,3 +212,64 @@ class TestPatchSettings:
 
         assert user.locale == "et"
         assert user.email_digest_opt_in is False
+
+
+class TestUnlinkOwnIdentity:
+    """Mirrors tests/routers/test_organizer_profile.py::TestUnlinkOwnIdentity
+    for the consumer-track DELETE /users/me/identities/{provider} (#296)."""
+
+    @pytest.mark.asyncio
+    async def test_deletes_row_bumps_version_and_reissues_cookie(
+        self, mock_db, make_request, make_user
+    ):
+        from fastapi import Response
+
+        from app.auth.tokens import verify_session_token
+        from app.routers.settings import unlink_own_identity
+        from tests.conftest import assert_hardened_cookie
+
+        user = make_user(user_id=5)
+        user.session_token_version = 1
+
+        delete_result = MagicMock()
+        delete_result.fetchone.return_value = (99,)
+        version_result = MagicMock()
+        version_result.scalar_one.return_value = 2
+        mock_db.execute.side_effect = [delete_result, version_result]
+
+        response = Response()
+        result = await unlink_own_identity(
+            "google",
+            make_request(method="DELETE", path="/users/me/identities/google"),
+            response,
+            user,
+            mock_db,
+        )
+
+        assert result == {"detail": "Identity unlinked."}
+        assert user.session_token_version == 2
+        set_cookie = response.headers["set-cookie"]
+        assert_hardened_cookie(set_cookie, name="session", path="/api")
+        cookie_value = set_cookie.split("session=", 1)[1].split(";", 1)[0]
+        assert verify_session_token(cookie_value) == (5, 2)
+
+    @pytest.mark.asyncio
+    async def test_no_linked_identity_raises_404(self, mock_db, make_request, make_user):
+        from fastapi import HTTPException, Response
+
+        from app.routers.settings import unlink_own_identity
+
+        user = make_user(user_id=5)
+        delete_result = MagicMock()
+        delete_result.fetchone.return_value = None
+        mock_db.execute.return_value = delete_result
+
+        with pytest.raises(HTTPException) as exc_info:
+            await unlink_own_identity(
+                "google",
+                make_request(method="DELETE", path="/users/me/identities/google"),
+                Response(),
+                user,
+                mock_db,
+            )
+        assert exc_info.value.status_code == http.HTTPStatus.NOT_FOUND

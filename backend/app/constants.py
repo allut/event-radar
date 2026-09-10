@@ -689,15 +689,19 @@ GOOGLE_OAUTH_ISSUERS = frozenset({"accounts.google.com", "https://accounts.googl
 # Domains Google is authoritative for (ADR 0002's linking gate) — an `hd` claim
 # on the ID token is the other authoritative signal, checked separately.
 GOOGLE_AUTHORITATIVE_EMAIL_DOMAINS = frozenset({"gmail.com", "googlemail.com"})
-# organizer_oauth_state cookie (Path scoped to the callback route only, unlike
-# the session cookie's broader /api/organizer — this cookie is only ever read
-# on one route). SameSite=Lax, not Strict — see docs/adr/0002 for why.
+# organizer_oauth_state / oauth_state cookies (Path scoped to the callback
+# route only, unlike the session cookie's broader /api/organizer or /api —
+# each is only ever read on one route). SameSite=Lax, not Strict — see
+# docs/adr/0002 for why.
 ORGANIZER_OAUTH_STATE_COOKIE_NAME = "organizer_oauth_state"
 ORGANIZER_OAUTH_STATE_COOKIE_PATH = "/api/organizer/auth/google/callback"
 ORGANIZER_GOOGLE_CALLBACK_PUBLIC_PATH = "/api/organizer/auth/google/callback"
+OAUTH_STATE_COOKIE_NAME = "oauth_state"
+OAUTH_STATE_COOKIE_PATH = "/api/auth/google/callback"
+GOOGLE_CALLBACK_PUBLIC_PATH = "/api/auth/google/callback"
 OAUTH_STATE_COOKIE_SAMESITE: Literal["lax"] = "lax"
-# Google sign-in outcomes (routers/organizer_auth.py callback) — carried on
-# LOG_EVENT_GOOGLE_SIGNIN's `outcome` field.
+# Google sign-in outcomes (routers/organizer_auth.py / routers/auth.py
+# callbacks) — carried on LOG_EVENT_GOOGLE_SIGNIN's `outcome` field.
 GOOGLE_SIGNIN_OUTCOME_EXISTING_LOGIN = "existing_login"
 GOOGLE_SIGNIN_OUTCOME_NEW_ACCOUNT = "new_account"
 GOOGLE_SIGNIN_OUTCOME_AUTO_LINKED = "auto_linked"
@@ -706,6 +710,9 @@ GOOGLE_SIGNIN_OUTCOME_CONFIRMATION_SENT = "confirmation_sent"
 # top-level browser navigation back from Google).
 ORGANIZER_LOGIN_PATH = "/organizer/login"
 ORGANIZER_DASHBOARD_PATH = "/organizer/dashboard"
+LOGIN_PATH = "/login"
+HOME_PATH = "/"
+ONBOARDING_PATH = "/onboarding"
 # Callback redirect-with-error query param + failure reason codes — internal,
 # not i18n keys (mirrors the ERROR_* constants' English-only convention).
 OAUTH_ERROR_QUERY_PARAM = "google_error"
@@ -1491,7 +1498,8 @@ LOG_EVENT_GOOGLE_SIGNIN = "google_signin"
 # upstream-degradation signal.
 LOG_EVENT_GOOGLE_SIGNIN_DEGRADED = "google_signin_degraded"
 LOG_EVENT_IDENTITY_LINKED = "identity_linked"  # provider identity row created
-LOG_EVENT_IDENTITY_UNLINKED = "identity_unlinked"  # DELETE /organizer/profile/identities/{provider}
+# DELETE .../profile/identities/{provider} or .../users/me/identities/{provider}
+LOG_EVENT_IDENTITY_UNLINKED = "identity_unlinked"
 
 # Daily cap (process-wide, not per-IP) on new unverified User/Organizer rows
 # created via the magic-link request endpoints before an operator alert fires
