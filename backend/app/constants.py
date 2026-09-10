@@ -674,6 +674,48 @@ AUTH_ORGANIZER_SESSION_SALT = "organizer-session-v1"
 ORGANIZER_MAGIC_LINK_TTL_MINUTES = _MAGIC_LINK_TTL_MINUTES_SHARED
 ORGANIZER_SESSION_TTL_DAYS = _SESSION_TTL_DAYS_SHARED
 
+# Google sign-in (ADR 0002) — server-side OAuth 2.0 authorization code + PKCE.
+# One salt shared by both tracks' state cookies (payload's "track" field keeps
+# a user state token from verifying against the organizer callback and vice
+# versa, same defense-in-depth shape as the magic-link/session salt split).
+AUTH_OAUTH_STATE_SALT = "oauth-state-v1"
+OAUTH_STATE_TTL_MINUTES = 10
+IDENTITY_PROVIDER_GOOGLE = "google"
+GOOGLE_OAUTH_SCOPE = "openid email"  # never "profile" — no name/picture stored
+GOOGLE_OAUTH_AUTHORIZATION_ENDPOINT = "https://accounts.google.com/o/oauth2/v2/auth"
+GOOGLE_OAUTH_TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token"
+GOOGLE_OAUTH_JWKS_URL = "https://www.googleapis.com/oauth2/v3/certs"
+GOOGLE_OAUTH_ISSUERS = frozenset({"accounts.google.com", "https://accounts.google.com"})
+# Domains Google is authoritative for (ADR 0002's linking gate) — an `hd` claim
+# on the ID token is the other authoritative signal, checked separately.
+GOOGLE_AUTHORITATIVE_EMAIL_DOMAINS = frozenset({"gmail.com", "googlemail.com"})
+# organizer_oauth_state cookie (Path scoped to the callback route only, unlike
+# the session cookie's broader /api/organizer — this cookie is only ever read
+# on one route). SameSite=Lax, not Strict — see docs/adr/0002 for why.
+ORGANIZER_OAUTH_STATE_COOKIE_NAME = "organizer_oauth_state"
+ORGANIZER_OAUTH_STATE_COOKIE_PATH = "/api/organizer/auth/google/callback"
+ORGANIZER_GOOGLE_CALLBACK_PUBLIC_PATH = "/api/organizer/auth/google/callback"
+OAUTH_STATE_COOKIE_SAMESITE: Literal["lax"] = "lax"
+# Google sign-in outcomes (routers/organizer_auth.py callback) — carried on
+# LOG_EVENT_GOOGLE_SIGNIN's `outcome` field.
+GOOGLE_SIGNIN_OUTCOME_EXISTING_LOGIN = "existing_login"
+GOOGLE_SIGNIN_OUTCOME_NEW_ACCOUNT = "new_account"
+GOOGLE_SIGNIN_OUTCOME_AUTO_LINKED = "auto_linked"
+GOOGLE_SIGNIN_OUTCOME_CONFIRMATION_SENT = "confirmation_sent"
+# Frontend redirect targets for the callback (no JSON response — this is a
+# top-level browser navigation back from Google).
+ORGANIZER_LOGIN_PATH = "/organizer/login"
+ORGANIZER_DASHBOARD_PATH = "/organizer/dashboard"
+# Callback redirect-with-error query param + failure reason codes — internal,
+# not i18n keys (mirrors the ERROR_* constants' English-only convention).
+OAUTH_ERROR_QUERY_PARAM = "google_error"
+OAUTH_ERROR_STATE_INVALID = "state_invalid"
+OAUTH_ERROR_TOKEN_EXCHANGE_FAILED = "token_exchange_failed"
+OAUTH_ERROR_VERIFICATION_FAILED = "verification_failed"
+OAUTH_ERROR_DENIED = "access_denied"
+RATE_LIMIT_GOOGLE_SIGNIN_START = "20/minute"
+RATE_LIMIT_GOOGLE_SIGNIN_CALLBACK = "30/minute"
+
 # Admin console auth (issue #154) — third auth track alongside the consumer and
 # organizer ones above. No magic link (password + TOTP instead) and no admins
 # table (a session just asserts "a valid login happened", nothing per-admin —
@@ -1442,6 +1484,14 @@ LOG_EVENT_ADMIN_ACTION = "admin_action"  # /admin/auth/* login/logout (issue #15
 # Global (not per-IP) daily unverified-account-creation budget crossed — see
 # routers/utils.py::record_unverified_account_creation (OWASP audit F10).
 LOG_EVENT_UNVERIFIED_ACCOUNT_BUDGET_EXCEEDED = "unverified_account_budget_exceeded"
+# ADR 0002 (Google sign-in) — carries `track`/`outcome` (see GOOGLE_SIGNIN_OUTCOME_*).
+LOG_EVENT_GOOGLE_SIGNIN = "google_signin"
+# Network/5xx failure talking to Google (token exchange or JWKS fetch) — distinct
+# from auth_failed, which is a caller-side/verification rejection, not an
+# upstream-degradation signal.
+LOG_EVENT_GOOGLE_SIGNIN_DEGRADED = "google_signin_degraded"
+LOG_EVENT_IDENTITY_LINKED = "identity_linked"  # provider identity row created
+LOG_EVENT_IDENTITY_UNLINKED = "identity_unlinked"  # DELETE /organizer/profile/identities/{provider}
 
 # Daily cap (process-wide, not per-IP) on new unverified User/Organizer rows
 # created via the magic-link request endpoints before an operator alert fires
@@ -1588,6 +1638,7 @@ ERROR_MAGIC_LINK_CONSUMED = "Sign-in link already used, expired, or not found."
 ERROR_EVENT_NOT_FOUND = "Event not found."
 ERROR_USER_NOT_FOUND = "User not found."
 ERROR_ORGANIZER_NOT_FOUND = "Organizer not found."
+ERROR_IDENTITY_NOT_FOUND = "No linked identity found for that provider."
 ERROR_SUBMISSION_NOT_FOUND = "Submission not found."
 ERROR_EVENT_CANCELLED = "This event was taken down and can no longer be edited."
 

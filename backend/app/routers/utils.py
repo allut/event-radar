@@ -137,6 +137,8 @@ async def recent_unused_link_exists(
     fk_column: InstrumentedAttribute[Any],
     fk_value: int,
     ttl_seconds: int,
+    *,
+    extra_predicate: ColumnElement[bool] | None = None,
 ) -> bool:
     """Per-account magic-link resend cooldown, shared by the consumer
     (routers/auth.py) and organizer (routers/organizer_auth.py) auth tracks.
@@ -150,19 +152,25 @@ async def recent_unused_link_exists(
     expires_at > now + ttl_seconds - cooldown <-> T < cooldown. Prevents
     Resend quota exhaustion from rapid repeats; IP-level throttling is the
     separate @limiter.limit decorator on the request-link endpoint.
+
+    ``extra_predicate`` narrows the match beyond the fk — e.g. Google
+    sign-in's confirmation-link cooldown (organizer_auth.py) must only
+    suppress a resend against another *pending-confirmation* link for the
+    same sub, not against an unrelated plain sign-in link the organizer
+    happens to have unused, which would silently skip sending the
+    confirmation email while the caller still reports it as sent.
     """
     recent_cutoff = datetime.now(timezone.utc) + timedelta(
         seconds=ttl_seconds - MAGIC_LINK_RESEND_COOLDOWN_SECONDS
     )
-    already_sent = await db.scalar(
-        select(model)
-        .where(
-            fk_column == fk_value,
-            model.used_at.is_(None),
-            model.expires_at > recent_cutoff,
-        )
-        .limit(1)
-    )
+    conditions = [
+        fk_column == fk_value,
+        model.used_at.is_(None),
+        model.expires_at > recent_cutoff,
+    ]
+    if extra_predicate is not None:
+        conditions.append(extra_predicate)
+    already_sent = await db.scalar(select(model).where(*conditions).limit(1))
     return already_sent is not None
 
 

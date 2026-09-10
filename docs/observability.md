@@ -36,6 +36,10 @@ Every shipped line is one JSON object (`JsonLogFormatter`):
 | `contact_honeypot_block` | contact-form honeypot field tripped (bot signal) | `app/routers/contact.py` |
 | `host_rejected` | `HostCheckMiddleware` rejected a request's Host header — signals cache-poisoning/host-spoofing probes | `app/main.py` |
 | `unverified_account_budget_exceeded` | global daily new-unverified-account budget crossed (mail-bomb early warning, OWASP audit F10) | `app/routers/utils.py::record_unverified_account_creation` |
+| `google_signin` | organizer Google sign-in completed (carries `track`, `outcome` — one of `existing_login`/`new_account`/`auto_linked`/`confirmation_sent`) | `app/routers/organizer_auth.py::organizer_google_callback` |
+| `google_signin_degraded` | network/5xx failure talking to Google (token exchange or JWKS fetch) — upstream degradation, distinct from a rejected caller | `app/routers/organizer_auth.py::organizer_google_callback` |
+| `identity_linked` | a provider identity row was created (new account, auto-link, or confirmation-link absorption) | `app/routers/organizer_auth.py` |
+| `identity_unlinked` | `DELETE /organizer/profile/identities/{provider}` succeeded | `app/routers/organizer_profile.py::unlink_own_identity` |
 
 ## Setup
 
@@ -68,6 +72,7 @@ thresholds after observing a few days of baseline volume.
 | 9 | Report abuse spike | Threshold | `['event-radar'] \| where event == "report_submitted" \| summarize count()` over 10 min | placeholder — tune after baseline volume observed |
 | 10 | Admin action audit ⭐ | Match | `['event-radar'] \| where event == "admin_action"` | any match — the audit trail (17 `ADMIN_ACTION_*` values) exists but had no monitor watching it (OWASP audit F11); this makes every console-initiated admin action visible, not alert-worthy on its own |
 | 11 | Host-header probing | Threshold | `['event-radar'] \| where event == "host_rejected" \| summarize count()` over 15 min | count > 5 — signals cache-poisoning/host-spoofing probes (OWASP audit F11) |
+| 12 | Google sign-in degraded | Threshold | `['event-radar'] \| where event == "google_signin_degraded" \| summarize count()` over 15 min | count > 3 — sustained failures talking to Google (token exchange or JWKS fetch), not just an occasional blip |
 
 **Priority if the free tier caps monitor count:** #2 (job failed), #3/#3b (dead
 scheduler), #7 (silence) are the must-haves — they catch the real operational
