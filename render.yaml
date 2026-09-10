@@ -58,3 +58,11 @@ services:
         sync: false
       - key: CLOUDINARY_API_SECRET
         sync: false
+      - key: GOOGLE_OAUTH_CLIENT_ID
+        sync: false
+      - key: GOOGLE_OAUTH_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_SIGNIN_CONSUMER_ENABLED
+        value: "false"
+      - key: GOOGLE_SIGNIN_ORGANIZER_ENABLED
+        value: "false"
