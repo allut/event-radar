@@ -755,6 +755,8 @@ export const API = {
   authLogout: '/auth/logout',
   authLogoutAll: '/auth/logout-all',
   authRequestLink: '/auth/request-link',
+  authGoogleStart: '/auth/google/start',
+  meIdentity: (provider: string) => `/users/me/identities/${provider}`,
   organizerAuthLogout: '/organizer/auth/logout',
   organizerAuthLogoutAll: '/organizer/auth/logout-all',
   organizerAuthVerify: '/organizer/auth/verify',

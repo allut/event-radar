@@ -31,6 +31,7 @@ interface SettingsData {
   email_digest_opt_in: boolean;
   created_at: string;
   personas: PersonaEntry[];
+  google_linked: boolean;
 }
 
 export default function Settings() {
@@ -92,6 +93,15 @@ export default function Settings() {
     setLogoutToast(TOAST_IDLE);
     logoutAllMutation.mutate();
   }
+
+  const unlinkGoogleMutation = useMutation({
+    mutationFn: () => api.delete<{ detail: string }>(API.meIdentity('google')),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.settings] });
+      showSaveToast(UI_STATE.success, t('settings.identities.googleNotLinked', locale));
+    },
+    onError: (err) => showSaveError(err, locale),
+  });
 
   if (isLoading) {
     return (
@@ -188,6 +198,26 @@ export default function Settings() {
           </button>
           {logoutToast.status === UI_STATE.success && <p className={styles.saveSuccess} role="status">{logoutToast.message}</p>}
           {logoutToast.status === UI_STATE.error && <p className={styles.saveError} role="alert">{logoutToast.message}</p>}
+        </section>
+
+        <section className={styles.section}>
+          <h2 className={styles.sectionTitle}>{t('section_identities', locale)}</h2>
+          <div className={styles.toggleRow}>
+            <div>
+              <p className={styles.toggleLabel}>
+                {t(data?.google_linked ? 'settings.identities.googleLinked' : 'settings.identities.googleNotLinked', locale)}
+              </p>
+            </div>
+          </div>
+          {data?.google_linked && (
+            <button
+              className={styles.repickBtn}
+              onClick={() => unlinkGoogleMutation.mutate()}
+              disabled={unlinkGoogleMutation.isPending}
+            >
+              {t('settings.identities.unlinkGoogle', locale)}
+            </button>
+          )}
         </section>
       </main>
     </div>

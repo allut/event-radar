@@ -8,9 +8,13 @@ from app.constants import PERSONA_PRIMARY_WEIGHT
 
 
 def _attach_empty_personas(db) -> None:
-    """Wire mock_db.execute to return zero persona rows."""
+    """Wire mock_db.execute to return zero persona rows and no linked
+    Google identity (both get_settings/patch_settings queries share this
+    single mocked result — .all() feeds the persona query, .scalars().first()
+    feeds _is_google_linked)."""
     result = MagicMock()
     result.all.return_value = []
+    result.scalars.return_value.first.return_value = None
     db.execute.return_value = result
 
 
@@ -34,6 +38,28 @@ class TestGetSettings:
         assert result["personas"] == []
         assert result["preferred_categories"] == []
         assert result["preferred_vibes"] == []
+        assert result["google_linked"] is False
+
+    @pytest.mark.asyncio
+    async def test_google_linked_true_when_identity_row_exists(
+        self, mock_db, make_user, make_request
+    ):
+        from app.routers.settings import get_settings
+
+        persona_result = MagicMock()
+        persona_result.all.return_value = []
+        linked_result = MagicMock()
+        linked_result.scalars.return_value.first.return_value = 1
+        mock_db.execute.side_effect = [persona_result, linked_result]
+
+        user = make_user()
+        result = await get_settings(
+            request=make_request(method="GET", path="/users/me"),
+            current_user=user,
+            db=mock_db,
+        )
+
+        assert result["google_linked"] is True
 
     @pytest.mark.asyncio
     async def test_personas_included(self, mock_db, make_user, make_request):

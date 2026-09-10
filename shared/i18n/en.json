@@ -80,6 +80,7 @@
     "digest_subscribe": "Subscribe to email digest",
     "digest_unsubscribe": "Unsubscribe from email digest",
     "section_security": "Security",
+    "section_identities": "Sign-in methods",
     "logout_all_label": "Log out of all devices",
     "logout_all_desc": "Sign out everywhere — useful if you think your sign-in link was shared or your session was compromised.",
     "logout_all_btn": "Log out everywhere",
