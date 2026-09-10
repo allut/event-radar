@@ -54,11 +54,7 @@
 }
 
 .textarea {
-  composes: fieldInput from '../shared/Field.module.css';
-  width: 100%;
-  font-family: inherit;
-  resize: vertical;
-  min-height: var(--textarea-height-md);
+  composes: textareaField from '../shared/Field.module.css';
 }
 
 .error {

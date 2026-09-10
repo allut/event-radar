@@ -2,7 +2,7 @@ import { Fragment, type CSSProperties } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../../api/client';
-import { ANALYTICS_EVENTS, API, CATEGORIES, LANDING_PLATE_BODY_MAX_LENGTH, LOCALES, MAGIC_LINK_EXPIRY_MINUTES, OG_FALLBACK_IMAGE_PATH, PRODUCTION_ORIGIN, QUERY_KEYS, ROUTES, STEP_KEYS, UI_STATE } from '../../constants';
+import { ANALYTICS_EVENTS, API, CATEGORIES, LANDING_BASE_FIG_COUNT, LANDING_PLATE_BODY_MAX_LENGTH, LOCALES, MAGIC_LINK_EXPIRY_MINUTES, OG_FALLBACK_IMAGE_PATH, PRODUCTION_ORIGIN, QUERY_KEYS, ROUTES, STEP_KEYS, UI_STATE } from '../../constants';
 import { t, ti } from '../../i18n';
 import { categoryGradient, cx, formatCount, formatEventTime, formatHeroDateline, formatHourMinute, formatPrice, padIndex, safeUrl, stripHtmlToText, truncateForMeta, withLocaleQuery } from '../../utils';
 import { useLocaleMutation } from '../../hooks/useLocaleMutation';
@@ -334,7 +334,7 @@ export default function Landing() {
             {counts && (
               <div
                 className={styles.figs}
-                style={{ '--fig-count': String(3 + Number(furthestYear !== null) + Number(counts.cheapest_price !== null)) } as CSSProperties}
+                style={{ '--fig-count': String(LANDING_BASE_FIG_COUNT + Number(furthestYear !== null) + Number(counts.cheapest_price !== null)) } as CSSProperties}
               >
                 <Fig value={`${formatCount(counts.upcoming_count, locale)}+`} labelKey="landing_stat_upcoming" locale={locale} />
                 <Fig value={`${formatCount(counts.venue_count, locale)}+`} labelKey="landing_stat_venues" locale={locale} />

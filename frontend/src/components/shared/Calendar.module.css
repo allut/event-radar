@@ -1,0 +1,101 @@
+/* Calendar grid chrome shared by DatePicker and DateRangeMenu — each
+   consumer's own .calHead/.calNavBtn/.calMonthLabel/.calWeekdays/.calGrid/
+   .calDay class composes one of these instead of repeating the declarations. */
+
+.calHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-3);
+}
+
+.calNavBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--cal-nav-size);
+  height: var(--cal-nav-size);
+  border: var(--border-w-hair) solid var(--border);
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-muted);
+  transition: all var(--transition);
+}
+
+.calNavBtn:hover {
+  color: var(--accent-light);
+  border-color: var(--accent-hover-border);
+  background: var(--accent-subtle);
+}
+
+.calNavBtn:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus-ring);
+}
+
+.calNavBtn svg {
+  width: var(--cal-nav-icon-size);
+  height: var(--cal-nav-icon-size);
+}
+
+.calMonthLabel {
+  font-family: var(--font-display);
+  font-size: var(--fs-lg);
+  font-weight: var(--fw-semibold);
+  color: var(--text);
+  letter-spacing: var(--tracking-snug);
+}
+
+.calWeekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  margin-bottom: var(--space-1);
+}
+
+.calWeekdays span {
+  text-align: center;
+  font-size: var(--fs-2xs);
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--tracking-wider);
+  text-transform: uppercase;
+  color: var(--text-dim);
+  padding: var(--space-1) 0;
+}
+
+.calGrid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: var(--calendar-grid-gap);
+}
+
+.calDay {
+  position: relative;
+  aspect-ratio: 1;
+  min-height: var(--calendar-cell-size);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--fs-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-soft);
+  border-radius: 0;
+  background: transparent;
+  border: var(--border-w-hair) solid transparent;
+  transition: all var(--transition);
+}
+
+.calDay:hover:not(:disabled) {
+  background: var(--bg-card-hover);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+.calDay:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus-ring);
+}
+
+.calDay:disabled {
+  color: var(--text-dim);
+  cursor: default;
+}

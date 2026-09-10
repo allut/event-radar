@@ -4,6 +4,15 @@
   padding: 0;
 }
 
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 :root {
   --bg: #13161e;
   --bg-raised: #191e2b;
@@ -46,7 +55,6 @@
   --accent-border: rgba(200, 146, 42, 0.4);
   --accent-soft: rgba(200, 146, 42, 0.06);
   --accent-muted: rgba(200, 146, 42, 0.35);
-  --accent-minimal: rgba(200, 146, 42, 0.03);
   --accent-transparent: rgba(200, 146, 42, 0);
   --accent-hover-bg: rgba(200, 146, 42, 0.25);
   /* Landing (wayfinder #189, direction C1) — thin gold frame inset on the hero
@@ -97,7 +105,6 @@
   --fs-icon: 0.5rem;     /* decorative icon markers */
   --fs-lg: 1.1rem;      /* above fs-base: logos, status icons */
   --fs-xl: 1.4rem;      /* brand marks, circle icon labels */
-  --fs-brand-sm: 1.15rem; /* Settings brand wordmark */
   --fs-brand-md: 1.25rem; /* Feed brand wordmark */
   --fs-status: 1.2rem;  /* check/error icons in bordered circles */
   --fs-btn-detail: 1.05rem; /* detail-view feedback button labels */
@@ -128,7 +135,6 @@
   --space-0-1875: 0.1875rem;
   --space-0-2: 0.2rem;
   --space-0-3: 0.3rem;
-  --space-0-3125: 0.3125rem;
   --space-0-35: 0.35rem;
   --space-0-375: 0.375rem;
   --space-0-42: 0.42rem;
@@ -142,7 +148,6 @@
   --space-1-1: 1.1rem;
   --space-1-125: 1.125rem;
   --space-1-25: 1.25rem;
-  --space-1-4: 1.4rem;
   --space-1-75: 1.75rem;
   --space-2-5: 2.5rem;
   --space-2-75: 2.75rem;
@@ -157,7 +162,6 @@
   /* Shape */
   --radius-pill: 100px;
   --radius-sm: 3px;
-  --radius-lg: 10px;
   --radius-full: 50%; /* circle shape */
 
   /* Layering */
@@ -181,7 +185,6 @@
   --border-w-accent: 3px;  /* top-rule accent/danger card stripe */
 
   /* Transform lifts + scales */
-  --lift-sm: -1px;
   --lift-md: -2px;
   --scale-hover: 1.1;
   --scale-subtle: 1.02;
@@ -259,7 +262,6 @@
   --page-max-feed: 760px;         /* Feed */
   --page-max-organizer: 840px;    /* OrganizerDashboard, AdminEventDetail */
   --page-max-settings: 640px;     /* Settings, OrganizerSettings */
-  --page-max-showcase: 560px;     /* Landing showcase panel */
   /* Documentation only — CSS custom properties can't drive @media conditions,
      so the 640px mobile breakpoint stays a literal in every @media rule
      (wayfinder #196/#200). */
@@ -274,8 +276,6 @@
   --empty-state-max-sm: 340px;
   --onboarding-submit-max: 320px;
   --onboarding-submit-min: 160px; /* Onboarding .submit min-width */
-  --radar-max: 420px;
-  --radar-max-mobile: 300px;
   --mobile-menu-min: 200px;       /* MobileMenu .pop min-width */
 
   /* Form controls */
@@ -285,7 +285,6 @@
 
   /* Flex-basis geometry (form-field wrap points) */
   --flex-basis-sm: 200px;  /* EventSubmit */
-  --flex-basis-md: 220px;  /* Landing */
   --flex-basis-lg: 240px;  /* OrganizerDashboard */
 
   /* Popover/menu geometry */
@@ -302,7 +301,6 @@
   --admin-trigger-min: 240px;           /* AdminPipeline trigger card grid */
 
   /* Heading scale */
-  --heading-3xl: 3rem;
   --heading-2xl: 2.5rem;
   --heading-xl: 2.125rem;
   --heading-lg: 1.7rem;
@@ -334,14 +332,15 @@
   /* Animation durations */
   --anim-fast: 0.3s;
   --anim-base: 0.65s;
-  --anim-slow: 0.8s;
   --anim-rise-xs: 0.35s;
   --anim-rise-sm: 0.4s;
   --anim-rise-md: 0.5s;
-  --anim-rise-lg: 0.7s;
   --anim-breathe-fast: 2.4s;
   --anim-breathe: 3s; /* Animations.module.css .breathe fallback duration */
-  --anim-spin-slow: 4s;
+  --anim-hero-rise: 1.15s;     /* Animations.module.css .heroRise > span */
+  --anim-hairline-draw: 1.4s;  /* Animations.module.css .hairlineDraw */
+  --anim-poster-drift: 26s;    /* Animations.module.css .posterDrift */
+  --anim-ticker: 42s;          /* Animations.module.css .tickerSlide */
   --rise-distance: 8px;
   --rise-distance-xs: 6px;  /* EventDetail rise-in */
   --rise-distance-md: 10px; /* AuthCard rise-in */

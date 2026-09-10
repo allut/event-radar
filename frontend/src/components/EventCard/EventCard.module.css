@@ -208,12 +208,8 @@
   min-height: auto;
 }
 
-.stretched::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: var(--z-card-overlay);
-  cursor: pointer;
+.stretched {
+  composes: stretchedLink from '../shared/Card.module.css';
 }
 
 .bullets {

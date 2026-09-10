@@ -49,20 +49,20 @@
 }
 .heroRise > span {
   display: block;
-  animation: heroRise 1.15s var(--easing-landing) var(--hero-rise-delay, 0s) both;
+  animation: heroRise var(--anim-hero-rise) var(--easing-landing) var(--hero-rise-delay, 0s) both;
 }
 
 .hairlineDraw {
   transform-origin: left;
-  animation: hairlineDraw 1.4s var(--easing-landing) 0.5s both;
+  animation: hairlineDraw var(--anim-hairline-draw) var(--easing-landing) 0.5s both;
 }
 
 .posterDrift {
-  animation: posterDrift 26s var(--easing-landing) infinite alternate;
+  animation: posterDrift var(--anim-poster-drift) var(--easing-landing) infinite alternate;
 }
 
 .tickerSlide {
-  animation: tickerSlide 42s linear infinite;
+  animation: tickerSlide var(--anim-ticker) linear infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -71,5 +71,13 @@
   .posterDrift,
   .tickerSlide {
     animation: none !important;
+  }
+
+  /* Exempt from index.css's global reduced-motion killswitch: a class selector
+   * beats the killswitch's universal selector even under matching !important,
+   * so .spin keeps reading as a loading indicator instead of freezing at 1ms. */
+  .spin {
+    animation-duration: var(--spin-duration, var(--anim-base)) !important;
+    animation-iteration-count: infinite !important;
   }
 }

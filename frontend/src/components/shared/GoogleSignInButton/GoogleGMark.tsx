@@ -11,7 +11,9 @@
  * JSX render) assigns the foreignObject subtree the HTML namespace
  * automatically.
  */
-export default function GoogleGMark({ size = 20 }: { size?: number }) {
+import { GOOGLE_G_MARK_SIZE, GOOGLE_G_GRADIENT } from '../../../constants';
+
+export default function GoogleGMark({ size = GOOGLE_G_MARK_SIZE }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="10 10 20 20" aria-hidden focusable="false">
       <mask id="google-g-mask" style={{ maskType: 'alpha' }} maskUnits="userSpaceOnUse" x="10" y="10" width="20" height="20">
@@ -27,8 +29,7 @@ export default function GoogleGMark({ size = 20 }: { size?: number }) {
               <foreignObject x="-2105.64" y="-2105.64" width="4211.29" height="4211.29">
                 <div
                   style={{
-                    background:
-                      'conic-gradient(from 90deg,rgba(255, 70, 65, 1) 0deg,rgba(255, 70, 65, 1) 4.14555deg,rgba(49, 134, 255, 1) 39.154deg,rgba(49, 134, 255, 1) 72.0044deg,rgba(0, 165, 183, 1) 96.7463deg,rgba(14, 188, 95, 1) 120.897deg,rgba(14, 188, 95, 1) 154.722deg,rgba(108, 196, 0, 1) 179.136deg,rgba(255, 204, 0, 1) 203.588deg,rgba(255, 211, 20, 1) 226.915deg,rgba(255, 204, 0, 1) 251.688deg,rgba(255, 106, 43, 1) 273.129deg,rgba(253, 70, 65, 1) 289.305deg,rgba(255, 70, 65, 1) 359.593deg,rgba(255, 70, 65, 1) 360deg)',
+                    background: GOOGLE_G_GRADIENT,
                     height: '100%',
                     width: '100%',
                     opacity: 1,

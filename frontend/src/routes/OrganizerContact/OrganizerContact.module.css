@@ -15,10 +15,7 @@
 }
 
 .form {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  margin-top: var(--space-2);
+  composes: formStack from '../../components/shared/Field.module.css';
 }
 
 .label {
@@ -26,11 +23,7 @@
 }
 
 .textarea {
-  composes: fieldInput from '../../components/shared/Field.module.css';
-  width: 100%;
-  font-family: inherit;
-  resize: vertical;
-  min-height: var(--textarea-height-md);
+  composes: textareaField from '../../components/shared/Field.module.css';
 }
 
 .error {

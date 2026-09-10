@@ -18,7 +18,7 @@
 }
 
 .label {
-  color: var(--text-muted);
+  composes: menuLabel from '../shared/Menu.module.css';
 }
 
 .value {
@@ -52,8 +52,3 @@
   color: var(--accent-light);
 }
 
-@media (max-width: 640px) {
-  .label:empty {
-    display: none;
-  }
-}

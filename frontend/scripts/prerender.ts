@@ -44,6 +44,7 @@ import {
   LOCALES,
   OG_FALLBACK_IMAGE_PATH,
   PRERENDER_CHAIN_GITHUB_REPO,
+  PRERENDER_DIAGNOSTIC_EVENT_MAX_LENGTH,
   PRERENDER_ERROR_SELECTOR,
   PRERENDER_READY_SELECTOR,
   PRODUCTION_ORIGIN,
@@ -439,8 +440,8 @@ function attachPageDiagnostics(page: Page): () => string[] {
     events.push(line);
     if (events.length > MAX_EVENTS) events.shift();
   };
-  page.on('console', (msg) => record(`console.${msg.type()}: ${msg.text().slice(0, 300)}`));
-  page.on('pageerror', (err) => record(`pageerror: ${String(err).slice(0, 300)}`));
+  page.on('console', (msg) => record(`console.${msg.type()}: ${msg.text().slice(0, PRERENDER_DIAGNOSTIC_EVENT_MAX_LENGTH)}`));
+  page.on('pageerror', (err) => record(`pageerror: ${String(err).slice(0, PRERENDER_DIAGNOSTIC_EVENT_MAX_LENGTH)}`));
   page.on('requestfailed', (req) =>
     record(`requestfailed: ${req.url()} — ${req.failure()?.errorText ?? 'unknown'}`),
   );

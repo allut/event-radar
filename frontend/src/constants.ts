@@ -59,6 +59,14 @@ export const ORGANIZER_PROFILE_NUDGE_DISMISSED_KEY = 'organizer_profile_nudge_di
 // "cancelled" copy; every other OAUTH_ERROR_* code renders the generic failed copy.
 export const GOOGLE_SIGNIN_ERROR_PARAM = 'google_error';
 export const GOOGLE_SIGNIN_ERROR_DENIED = 'access_denied';
+// GoogleGMark's default render size (px) — the brand mark's own icon-only
+// SVG viewBox scale, not a design-system --fs-* token (docs/adr/0002).
+export const GOOGLE_G_MARK_SIZE = 20;
+// Google's mandated "super G" conic-gradient stops, lifted verbatim from the
+// signin-assets.zip icon-only SVG (docs/adr/0002 Design-system exception) —
+// not part of our palette, never redefine outside GoogleGMark.
+export const GOOGLE_G_GRADIENT =
+  'conic-gradient(from 90deg,rgba(255, 70, 65, 1) 0deg,rgba(255, 70, 65, 1) 4.14555deg,rgba(49, 134, 255, 1) 39.154deg,rgba(49, 134, 255, 1) 72.0044deg,rgba(0, 165, 183, 1) 96.7463deg,rgba(14, 188, 95, 1) 120.897deg,rgba(14, 188, 95, 1) 154.722deg,rgba(108, 196, 0, 1) 179.136deg,rgba(255, 204, 0, 1) 203.588deg,rgba(255, 211, 20, 1) 226.915deg,rgba(255, 204, 0, 1) 251.688deg,rgba(255, 106, 43, 1) 273.129deg,rgba(253, 70, 65, 1) 289.305deg,rgba(255, 70, 65, 1) 359.593deg,rgba(255, 70, 65, 1) 360deg)';
 // Mirrors backend ORGANIZER_NAME_MAX_LEN (app/constants.py).
 export const ORGANIZER_NAME_MAX_LEN = 255;
 // Mirrors backend ORGANIZER_VENUE_NAME_MAX_LEN/ORGANIZER_VENUE_ADDRESS_MAX_LEN (app/constants.py).
@@ -165,6 +173,13 @@ export const ICON_LINK_SELECTOR = `link[rel="${ICON_REL}"]`;
 export const SEO_DESCRIPTION_MAX_LENGTH = 157;
 // Landing showcase plate body truncation (truncateForMeta cuts at a word boundary under this).
 export const LANDING_PLATE_BODY_MAX_LENGTH = 140;
+// Landing hero stat-figure count always shown (upcoming count, venue count,
+// category count) — furthestYear and cheapest_price add up to two more on top.
+export const LANDING_BASE_FIG_COUNT = 3;
+// prerender.ts's per-page diagnostics ring buffer: max chars kept per
+// console/pageerror line (attachPageDiagnostics) — long enough to be useful
+// in a failure log, short enough to keep the buffer bounded.
+export const PRERENDER_DIAGNOSTIC_EVENT_MAX_LENGTH = 300;
 // Hreflang code for "no specific locale matches" — useSeoMeta (producer)
 // and scripts/prerender.ts's buildSitemapXml (producer) both special-case
 // this code to resolve to the bare Estonian URL rather than a localizedPath
@@ -230,6 +245,9 @@ export const SEO_AUDIT_STALE_THRESHOLD_HOURS = 8;
 export const SEO_AUDIT_GITHUB_REPO = 'allut/event-radar';
 export const SEO_AUDIT_ISSUE_LABEL = 'seo-audit-failure';
 export const GITHUB_API_BASE_URL = 'https://api.github.com';
+// GitHub REST API version header (X-GitHub-Api-Version) — pinned so a future
+// GitHub default-version bump can't silently change response shapes.
+export const GITHUB_API_VERSION = '2022-11-28';
 // Shared-secret header cron-job.org sends on its seo-audit ping, mirroring
 // the backend's /internal/tick pattern (docs/backend-ops.md). Distinct from
 // PRERENDER_CADENCE_TOKEN_HEADER and the backend's own X-Internal-Token: the

@@ -7,7 +7,7 @@
 }
 
 .label {
-  composes: label from '../SelectMenu/SelectMenu.module.css';
+  composes: menuLabel from '../shared/Menu.module.css';
 }
 
 .value {
@@ -15,7 +15,7 @@
 }
 
 .chev {
-  composes: chev from '../SelectMenu/SelectMenu.module.css';
+  composes: chev from '../shared/Menu.module.css';
 }
 
 .pop {
@@ -70,15 +70,15 @@
 }
 
 .calHead {
-  composes: calHead from '../DatePicker/DatePicker.module.css';
+  composes: calHead from '../shared/Calendar.module.css';
 }
 
 .calNavBtn {
-  composes: calNavBtn from '../DatePicker/DatePicker.module.css';
+  composes: calNavBtn from '../shared/Calendar.module.css';
 }
 
 .calMonthLabel {
-  composes: calMonthLabel from '../DatePicker/DatePicker.module.css';
+  composes: calMonthLabel from '../shared/Calendar.module.css';
 }
 
 .rangeHint {
@@ -101,15 +101,15 @@
 }
 
 .calWeekdays {
-  composes: calWeekdays from '../DatePicker/DatePicker.module.css';
+  composes: calWeekdays from '../shared/Calendar.module.css';
 }
 
 .calGrid {
-  composes: calGrid from '../DatePicker/DatePicker.module.css';
+  composes: calGrid from '../shared/Calendar.module.css';
 }
 
 .calDay {
-  composes: calDay from '../DatePicker/DatePicker.module.css';
+  composes: calDay from '../shared/Calendar.module.css';
 }
 
 .spill {

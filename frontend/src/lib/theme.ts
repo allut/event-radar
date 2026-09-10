@@ -46,11 +46,30 @@ export function getThemePreference(): ThemePreference {
   return stored === 'light' || stored === 'dark' ? stored : 'system';
 }
 
+// Mirrors --bg's dark (#13161e) and light (#fdfcfa) values (src/index.css) —
+// duplicated here the same way index.html's pre-paint script duplicates
+// resolveTheme(): must never disagree with those tokens. Replaces
+// index.html's two prefers-color-scheme-media <meta name="theme-color">
+// tags with a single tag pinned to the resolved theme, same technique the
+// pre-paint script uses on first load — this keeps it in sync on every
+// runtime theme change too (setThemePreference), not just page load.
+function syncThemeColorMeta(theme: ResolvedTheme): void {
+  document.querySelectorAll('meta[name="theme-color"][media]').forEach((el) => el.remove());
+  let meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]:not([media])');
+  if (!meta) {
+    meta = document.createElement('meta');
+    meta.name = 'theme-color';
+    document.head.appendChild(meta);
+  }
+  meta.content = theme === 'light' ? '#fdfcfa' : '#13161e';
+}
+
 // Re-resolves from current localStorage/system state and applies it to the DOM.
 // No account-preference input yet — see resolveTheme's accountPreference note.
 export function applyTheme(): void {
   const resolved = resolveTheme(null, localStorage.getItem(THEME_PREFERENCE_KEY), systemPrefersDark());
   document.documentElement.dataset.theme = resolved;
+  syncThemeColorMeta(resolved);
 }
 
 export function setThemePreference(pref: ThemePreference): void {

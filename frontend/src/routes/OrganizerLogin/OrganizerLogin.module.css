@@ -19,18 +19,11 @@
 }
 
 .tagline {
-  color: var(--text-muted);
-  font-size: var(--fs-md);
-  margin-bottom: var(--space-6);
-  padding-bottom: var(--space-1-75);
-  border-bottom: var(--border-w-hair) solid var(--border);
+  composes: authTagline from '../../components/shared/Card.module.css';
 }
 
 .note {
-  margin-top: var(--space-2-5);
-  text-align: center;
-  font-size: var(--fs-xs);
-  color: var(--text-soft);
+  composes: authNote from '../../components/shared/Card.module.css';
 }
 
 .error {
@@ -46,20 +39,7 @@
 }
 
 .divider {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  color: var(--text-muted);
-  font-size: var(--fs-xs);
-  margin: var(--space-1) 0;
-}
-
-.divider::before,
-.divider::after {
-  content: '';
-  flex: 1;
-  height: var(--border-w-hair);
-  background: var(--border);
+  composes: authDivider from '../../components/shared/Card.module.css';
 }
 
 .backLink {
