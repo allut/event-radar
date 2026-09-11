@@ -24,7 +24,7 @@ interface DedupGroup {
 interface DedupGroupsResponse {
   group_count: number;
   event_count: number;
-  total_groups: number;
+  total_groups: number | null;
   limit: number;
   offset: number;
   has_more: boolean;

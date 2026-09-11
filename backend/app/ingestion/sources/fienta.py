@@ -12,6 +12,7 @@ from app.config import settings
 from app.constants import (
     DETAIL_FETCH_CONCURRENCY,
     FIENTA_CITY_FILTER,
+    FIENTA_MAX_DETAIL_FETCHES,
     FIENTA_MAX_PAGES,
     FIENTA_MIN_REQUEST_INTERVAL_SECONDS,
     HTML_PARSER,
@@ -279,6 +280,15 @@ class FientaAdapter(SourceAdapter):
                 item for item in all_events
                 if str(item.get("id", "")) not in known_ids
             ]
+            if len(new_items) > FIENTA_MAX_DETAIL_FETCHES:
+                log.warning(
+                    "fienta: %d new items exceed detail-fetch cap %d — truncating "
+                    "(self-healing: skipped items stay 'new' and are picked up "
+                    "next run via known_ids)",
+                    len(new_items),
+                    FIENTA_MAX_DETAIL_FETCHES,
+                )
+                new_items = new_items[:FIENTA_MAX_DETAIL_FETCHES]
             results = await asyncio.gather(
                 *[
                     self._fetch_detail(client, item, base_host, semaphore, limiter)

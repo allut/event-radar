@@ -708,8 +708,9 @@ class TestRunDedupPassLlm:
 
         assert result["candidate_pairs"] == 4
         assert result["fresh_calls"] == 0
-        # 1 prefetch query (M=4 < chunk size) + 1 stale-group cleanup update
-        assert mock_db.execute.call_count == 2
+        # 1 prefetch query (M=4 < chunk size) + 1 description-length lookup
+        # (load_description_lengths, Big-O audit M3) + 1 stale-group cleanup update
+        assert mock_db.execute.call_count == 3
         llm_json_mock.assert_not_awaited()
 
     @pytest.mark.asyncio

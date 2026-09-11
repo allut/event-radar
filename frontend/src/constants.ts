@@ -481,6 +481,11 @@ export const SAVED_EVENTS_PAGE_SIZE = 24;
 // ─── Admin: dedup groups (mirrors backend's ADMIN_DEDUP_GROUPS_PAGE_SIZE) ───
 export const ADMIN_DEDUP_GROUPS_PAGE_SIZE = 50;
 
+// ─── Admin: reports / submissions queues (mirrors backend's
+// ADMIN_REPORTS_QUEUE_PAGE_SIZE / ADMIN_REVIEW_QUEUE_PAGE_SIZE) ────────────
+export const ADMIN_REPORTS_QUEUE_PAGE_SIZE = 50;
+export const ADMIN_REVIEW_QUEUE_PAGE_SIZE = 50;
+
 // ─── Organizer submission ────────────────────────────────────────────────────
 // ORGANIZER_IMAGE_ALLOWED_MIME (re-exported above) is sourced from
 // shared/app-config.json, mirroring the backend's IMAGE_UPLOAD_ALLOWED_MIME.

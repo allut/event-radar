@@ -42,6 +42,9 @@ export default function AdminQueueSplitView<T>({
   }
 
   const current = items.find((item) => getId(item) === selectedId) ?? items[0];
+  // Hoisted out of the .map below — getId(current) is otherwise recomputed
+  // once per row every render (Big-O audit M4).
+  const currentId = getId(current);
 
   function select(id: number) {
     onSelect(id);
@@ -58,7 +61,7 @@ export default function AdminQueueSplitView<T>({
             <button
               key={id}
               type="button"
-              className={cx(styles.row, id === getId(current) && styles.rowActive, resolved && styles.rowResolved)}
+              className={cx(styles.row, id === currentId && styles.rowActive, resolved && styles.rowResolved)}
               onClick={() => select(id)}
             >
               {renderRow(item)}

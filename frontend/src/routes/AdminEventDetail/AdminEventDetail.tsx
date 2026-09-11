@@ -110,6 +110,16 @@ export default function AdminEventDetail({ eventId }: { eventId: string }) {
     () => (data?.event.important_info ? sanitizeHtml(data.event.important_info) : null),
     [data],
   );
+  // Pretty-printing every raw scraped payload (routinely tens of KB each) is
+  // otherwise redone on every render — including every resolution-note
+  // keystroke while the Raw payload tab is open (Big-O audit M5).
+  const rawPayloadsById = useMemo(() => {
+    const map = new Map<number, string>();
+    for (const re of data?.raw_events ?? []) {
+      map.set(re.id, JSON.stringify(re.payload, null, 2));
+    }
+    return map;
+  }, [data]);
 
   const actionMutation = useMutation({
     mutationFn: ({ kind, note }: { kind: ActionKind; note: string }) =>
@@ -281,7 +291,7 @@ export default function AdminEventDetail({ eventId }: { eventId: string }) {
                 <p className={styles.rawMeta}>{re.source_slug} · {re.external_id ?? 'no external id'} · fetched {formatAdminTimestamp(re.fetched_at)}</p>
                 {/* Escaped/pretty-printed text only — never parsed as HTML.
                     The one field in the console not sanitized at ingest. */}
-                <pre className={styles.rawPayload}>{JSON.stringify(re.payload, null, 2)}</pre>
+                <pre className={styles.rawPayload}>{rawPayloadsById.get(re.id)}</pre>
               </div>
             ))
           )

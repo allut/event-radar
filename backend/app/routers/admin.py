@@ -446,14 +446,20 @@ async def admin_dedup_groups(
     list of distinct dedup_group_ids.
     """
     async with AsyncSessionLocal() as db:
-        total_groups = (
-            await db.scalar(
-                select(func.count(func.distinct(Event.dedup_group_id))).where(
-                    Event.dedup_group_id.is_not(None),
-                    Event.status != EVENT_STATUS_CANCELLED,
+        # total only on the first page — see admin_list_submissions's identical
+        # pattern. has_more below no longer needs it (limit+1 sentinel instead),
+        # so this full-table distinct COUNT only ever runs once per queue view,
+        # not once per page (Big-O audit M2).
+        total_groups: int | None = None
+        if offset == 0:
+            total_groups = (
+                await db.scalar(
+                    select(func.count(func.distinct(Event.dedup_group_id))).where(
+                        Event.dedup_group_id.is_not(None),
+                        Event.status != EVENT_STATUS_CANCELLED,
+                    )
                 )
-            )
-        ) or 0
+            ) or 0
 
         page_group_ids = (
             await db.scalars(
@@ -464,10 +470,12 @@ async def admin_dedup_groups(
                 )
                 .distinct()
                 .order_by(Event.dedup_group_id)
-                .limit(limit)
+                .limit(limit + 1)
                 .offset(offset)
             )
         ).all()
+        has_more = len(page_group_ids) > limit
+        page_group_ids = page_group_ids[:limit]
 
         if not page_group_ids:
             return {
@@ -500,7 +508,7 @@ async def admin_dedup_groups(
         "total_groups": total_groups,
         "limit": limit,
         "offset": offset,
-        "has_more": offset + len(page_group_ids) < total_groups,
+        "has_more": has_more,
         "groups": [
             {"dedup_group_id": gid, "events": members}
             for gid, members in sorted(groups.items())

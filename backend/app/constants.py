@@ -538,6 +538,12 @@ DIGEST_SEND_CONCURRENCY: int = 8
 DIGEST_RESULT_SENT = "sent"
 DIGEST_RESULT_SKIPPED = "skipped"
 
+# Concurrency cap when fanning out report-resolution outcome emails
+# (send_report_resolution_emails) — bounded for the same reason as
+# DIGEST_SEND_CONCURRENCY (Resend free-tier rate), and to keep a brigaded
+# event's admin-resolution request from serializing 50-100 Resend round trips.
+REPORT_EMAIL_SEND_CONCURRENCY: int = 8
+
 # Admin endpoint pagination
 ADMIN_DEDUP_GROUPS_PAGE_SIZE: int = 50
 ADMIN_DEDUP_GROUPS_MAX_PAGE_SIZE: int = 500
@@ -908,6 +914,11 @@ DAILY_5_BACKFILL_MAX_PER_CATEGORY = 3  # relaxed per-category cap during backfil
 # Tier-1 MMR keeps DAILY_5_MAX_PER_CATEGORY (2). Exceeded only by the final
 # uncapped sweep, so the feed still reaches DAILY_5_COUNT when events are scarce.
 DAILY_5_LOOKAHEAD_DAYS = 14
+# _select_with_backfill truncates each scored pool to n * this multiplier via
+# heapq.nlargest before running the MMR/backfill tiers, instead of sorting the
+# whole pool — generous enough that the full-sort fallback is rarely needed
+# (score.py Big-O audit H6).
+DAILY_5_BACKFILL_TRUNCATION_MULTIPLIER = 40
 # How many past days' feeds to scan for a recurring-series repeat before allowing
 # that series back into a user's Daily 5 pool — keeps a multi-day series (one
 # canonical event per day) from being re-picked night after night.
@@ -987,7 +998,12 @@ BROWSE_RELEVANCE_MAX_CANDIDATES: int = 300
 # max-entries bounds process memory — single Render process, no cross-process
 # cache needed.
 BROWSE_SCORE_CACHE_TTL_SECONDS: float = 30.0
-BROWSE_SCORE_CACHE_MAX_ENTRIES: int = 512
+# Raised from 512 (Big-O audit M10): at "hundreds of active users" toggling
+# facets within one 30s TTL window, 512 distinct (user, filter) keys thrashed
+# the LRU toward a near-zero hit rate. Each entry is a scored id list bounded
+# by BROWSE_RELEVANCE_MAX_CANDIDATES (300), so this is still a small,
+# single-process, bounded cache — not a per-row cost.
+BROWSE_SCORE_CACHE_MAX_ENTRIES: int = 2048
 # Fixed sentinel in place of a real user id for the anonymous-caller cache key
 # (#234) — anonymous /explore traffic shares one cache entry per filter/sort
 # combination rather than one per caller. Never collides with a real User.id
@@ -1280,6 +1296,12 @@ HTML_LISTING_MAX_DETAIL_FETCHES = (
     300  # cap per ingestion run on capped-detail sources (piletilevi) — headroom
     # above observed 206-220 new-card runs, which truncated detail fetches at 200
 )
+# Same cap, for the Fienta API source (fienta.py) — unlike html_base.py's
+# listing adapters, Fienta had no ceiling on its per-run detail fan-out, so a
+# cold start or organizer bulk-publish could queue thousands of live tasks
+# behind one rate limiter (Big-O audit H10). The skip-id set (known_ids) makes
+# truncation here self-healing across runs, same as HTML_LISTING_MAX_DETAIL_FETCHES.
+FIENTA_MAX_DETAIL_FETCHES = 300
 
 # Geocoding (Nominatim) — used to backfill lat/lng for events that have an address
 # but no coordinates (currently: Fienta). Usage policy requires a descriptive

@@ -47,6 +47,15 @@ class CIText(UserDefinedType):
 
 class User(Base):
     __tablename__ = "users"
+    __table_args__ = (
+        # Serves send_daily_digests' opted-in-population query (email/digest.py)
+        # as an index-only scan instead of a full-table seq scan (Big-O audit M6).
+        Index(
+            "ix_users_digest_eligible",
+            "id",
+            postgresql_where=text("email_digest_opt_in AND email_verified"),
+        ),
+    )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     email: Mapped[str] = mapped_column(CIText(), nullable=False, unique=True)
@@ -688,6 +697,17 @@ class UserEventFeedback(Base):
             "user_id",
             "event_id",
             unique=True,
+            postgresql_where=text(PREFERENCE_SIGNALS_SQL_PREDICATE),
+        ),
+        # Serves GET /feedback/events (Saved Events) as an index-only scan over
+        # just the explicit preference-signal rows — the same partial predicate
+        # as the unique index above, so it never touches the far larger
+        # append-only view/click_external analytics rows (Big-O audit M1).
+        Index(
+            "ix_user_event_feedback_user_signal_created",
+            "user_id",
+            "signal",
+            "created_at",
             postgresql_where=text(PREFERENCE_SIGNALS_SQL_PREDICATE),
         ),
     )

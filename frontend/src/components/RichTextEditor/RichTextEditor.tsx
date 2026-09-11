@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { EditorContent, useEditor, useEditorState } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { t } from '../../i18n';
@@ -49,6 +49,10 @@ export default function RichTextEditor({
 }: RichTextEditorProps) {
   const [linkOpen, setLinkOpen] = useState(false);
   const [linkUrl, setLinkUrl] = useState('');
+  // Caches the HTML this component itself last emitted via onChange, so the
+  // value-sync effect below can compare against it instead of calling
+  // editor.getHTML() a second time on every keystroke (Big-O audit M12).
+  const lastEmittedHtml = useRef(value);
 
   const editor = useEditor({
     extensions: [
@@ -69,7 +73,11 @@ export default function RichTextEditor({
         ...(ariaLabelledBy ? { 'aria-labelledby': ariaLabelledBy } : {}),
       },
     },
-    onUpdate: ({ editor: e }) => onChange(e.getHTML()),
+    onUpdate: ({ editor: e }) => {
+      const html = e.getHTML();
+      lastEmittedHtml.current = html;
+      onChange(html);
+    },
   });
 
   useEffect(() => {
@@ -84,8 +92,9 @@ export default function RichTextEditor({
     // calling getHTML()/setContent() on a destroyed editor throws (its
     // ProseMirror schema is nulled out by destroy()).
     if (!editor || editor.isDestroyed) return;
-    if (value !== editor.getHTML()) {
+    if (value !== lastEmittedHtml.current) {
       editor.commands.setContent(value, { emitUpdate: false });
+      lastEmittedHtml.current = value;
     }
   }, [editor, value]);
 

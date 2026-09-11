@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { memo, useState } from 'react';
 import type { NdjsonLine } from '../../api/client';
 import { ADMIN_PIPELINE_TRIGGERS, API, type AdminPipelineTrigger } from '../../constants';
 import { useTriggerRun, type RunState } from '../../hooks/useTriggerRun';
@@ -28,7 +28,11 @@ function triggerPath(trigger: AdminPipelineTrigger, dryRun: boolean, slug: strin
 // The generic pretty-printed result viewer (issue #159) — every trigger
 // except pipeline_run renders through this. pipeline_run gets the bespoke
 // stage-by-stage breakdown (PipelineRunBreakdown, issue #161) instead.
-function ResultViewer({ line }: { line: NdjsonLine }) {
+// memo'd: `lines` only ever grows by appending new (stable-reference) entries,
+// so without memo every already-rendered line got re-stringified on every new
+// line arriving — O(lines²) JSON.stringify calls across a streamed run
+// (Big-O audit M5).
+const ResultViewer = memo(function ResultViewer({ line }: { line: NdjsonLine }) {
   if (line.status === 'error') {
     return (
       <div className={styles.lineError} role="alert">
@@ -42,7 +46,7 @@ function ResultViewer({ line }: { line: NdjsonLine }) {
       <pre className={styles.pre}>{JSON.stringify(line.result, null, 2)}</pre>
     </div>
   );
-}
+});
 
 function StatusLabel({ state }: { state: RunState }) {
   if (state === 'idle') return null;

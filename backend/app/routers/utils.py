@@ -41,6 +41,7 @@ from app.constants import (
     OAUTH_STATE_COOKIE_SAMESITE,
     PREFERENCE_SIGNALS,
     PREFERRED_TASTE_MIN_WEIGHT,
+    REPORT_EMAIL_SEND_CONCURRENCY,
     REPORT_STATUS_OPEN,
     REPORT_STATUS_RESOLVED,
     SESSION_COOKIE_HTTPONLY,
@@ -910,26 +911,32 @@ async def send_report_resolution_emails(
     user_ids = {report.user_id for report in reports}
     users = (await db.scalars(select(User).where(User.id.in_(user_ids)))).all()
     users_by_id = {u.id: u for u in users}
-    for report in reports:
+
+    semaphore = asyncio.Semaphore(REPORT_EMAIL_SEND_CONCURRENCY)
+
+    async def _send_one(report: EventReport) -> None:
         reporter = users_by_id.get(report.user_id)
         if reporter is None:
-            continue
-        try:
-            await send_report_outcome_email(
-                reporter.email,
-                event,
-                resolution_note,
-                reporter.locale,
-                reporter.theme_preference,
-            )
-        except Exception:
-            log.error(
-                "Failed to send report outcome email (report_id=%s, event_id=%s)",
-                report.id,
-                event.id,
-                exc_info=True,
-                extra={"event": LOG_EVENT_EMAIL_SEND_FAILED},
-            )
+            return
+        async with semaphore:
+            try:
+                await send_report_outcome_email(
+                    reporter.email,
+                    event,
+                    resolution_note,
+                    reporter.locale,
+                    reporter.theme_preference,
+                )
+            except Exception:
+                log.error(
+                    "Failed to send report outcome email (report_id=%s, event_id=%s)",
+                    report.id,
+                    event.id,
+                    exc_info=True,
+                    extra={"event": LOG_EVENT_EMAIL_SEND_FAILED},
+                )
+
+    await asyncio.gather(*(_send_one(report) for report in reports))
 
 
 async def cancel_event_and_resolve_reports(
