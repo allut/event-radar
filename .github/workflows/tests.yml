@@ -37,3 +37,38 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
       - run: npm run test:coverage
+
+  migrations:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      db:
+        image: postgres:16
+        env:
+          POSTGRES_USER: eventradar
+          POSTGRES_PASSWORD: eventradar
+          POSTGRES_DB: eventradar
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U eventradar"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql+asyncpg://eventradar:eventradar@localhost:5432/eventradar
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements-dev.txt
+      # Round-trips the full chain both ways (the 0030/admin_actions incident
+      # was exactly a migration nobody applied) and catches a model changed
+      # without a matching migration (autogenerate diff against Base.metadata).
+      - run: alembic upgrade head
+      - run: alembic downgrade base
+      - run: alembic upgrade head
+      - run: alembic check

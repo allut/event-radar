@@ -69,7 +69,7 @@ npm run test:watch # vitest watch mode
 npm run test:coverage # coverage report (v8, html + text)
 ```
 
-**CI** (`.github/workflows/tests.yml`, push/PR to `master`): `pytest --cov` (Python 3.12) + `npm run test:coverage` (Node 20) only. `dependency-audit.yml` runs `pip-audit` + `npm audit --audit-level=high`, plus weekly cron Mon 04:00 UTC. **Ruff/mypy/eslint/type-check are house rules with no CI enforcement** — a green PR does not mean they were run; run them locally before committing.
+**CI** (`.github/workflows/tests.yml`, push/PR to `master`): `pytest --cov` (Python 3.12) + `npm run test:coverage` (Node 20), plus a `migrations` job against a `postgres:16` service that round-trips the full alembic chain (`upgrade head` → `downgrade base` → `upgrade head`) and runs `alembic check` to catch a model changed without a matching migration — the class of failure behind the 0030/`admin_actions` prod incident, where code shipped a new model+migration but the deployed DB never ran it. `dependency-audit.yml` runs `pip-audit` + `npm audit --audit-level=high`, plus weekly cron Mon 04:00 UTC. **Ruff/mypy/eslint/type-check are house rules with no CI enforcement** — a green PR does not mean they were run; run them locally before committing.
 
 ## Architecture
 

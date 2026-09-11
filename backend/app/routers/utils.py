@@ -312,16 +312,16 @@ async def stream_admin_job(
     async def _runner() -> None:
         try:
             result = await coro
-            log_admin_action(None, action, target, result)
+            log_admin_action(None, action, target, result)()
             await queue.put(ndjson_line(stage, "ok", result, None))
         except HTTPException as exc:
             detail = str(exc.detail)
-            log_admin_action(None, action, target, {"error": detail})
+            log_admin_action(None, action, target, {"error": detail})()
             await queue.put(ndjson_line(stage, "error", None, detail))
         except Exception:
             log.exception("admin %s failed", name)
             detail = ERROR_ADMIN_JOB_FAILED.format(name=name)
-            log_admin_action(None, action, target, {"error": detail})
+            log_admin_action(None, action, target, {"error": detail})()
             await queue.put(ndjson_line(stage, "error", None, detail))
         finally:
             if lock_key is not None:
@@ -338,29 +338,37 @@ async def stream_admin_job(
 
 def log_admin_action(
     db: AsyncSession | None, action: str, target: int | str, result: dict
-) -> None:
-    """Structured log line on the shared Axiom pipe, plus — when *db* is
-    given — a durable AdminAction row added to it. The row rides the
-    caller's own open transaction (added, not committed here) so it lands
-    atomically with the mutation it records, and survives an outage of the
-    LOG_SHIP_URL log drain. Call from inside the same `_run()` closure as the
-    mutation, before that closure's own `await db.commit()`, for the
-    takedown/retract/approve/resolve/pipeline-run actions the report
-    feature's legal obligations bear on (see the admin-console spec's Audit
-    logging section) — pass None for every other admin job, which keeps the
-    pre-existing log-only behavior."""
-    log.info(
-        "admin action: %s",
-        action,
-        extra={
-            "event": LOG_EVENT_ADMIN_ACTION,
-            "action": action,
-            "target": target,
-            "result": result,
-        },
-    )
+) -> Callable[[], None]:
+    """Adds a durable AdminAction row to *db* (when given) and returns a
+    zero-arg closure that emits the structured Axiom log line — the caller
+    must invoke that closure only after its own `await db.commit()`
+    succeeds, so the Axiom line never claims a mutation that a rolled-back
+    transaction actually discarded. The row rides the caller's own open
+    transaction (added, not committed here) so it lands atomically with the
+    mutation it records, and survives an outage of the LOG_SHIP_URL log
+    drain. Call from inside the same `_run()` closure as the mutation, pass
+    *db* (and call the returned closure right after `await db.commit()`)
+    for the takedown/retract/approve/resolve/pipeline-run actions the
+    report feature's legal obligations bear on (see the admin-console
+    spec's Audit logging section) — pass None for every other admin job
+    (no transaction to ride), which keeps the pre-existing log-only
+    behavior; those callers may invoke the closure immediately."""
+
+    def _emit() -> None:
+        log.info(
+            "admin action: %s",
+            action,
+            extra={
+                "event": LOG_EVENT_ADMIN_ACTION,
+                "action": action,
+                "target": target,
+                "result": result,
+            },
+        )
+
     if db is not None:
         db.add(AdminAction(action=action, target=str(target), result=result))
+    return _emit
 
 
 def require_configured_secret(

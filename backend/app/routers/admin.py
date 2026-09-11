@@ -621,8 +621,11 @@ async def admin_retract_submission(
                 REPORT_AUTO_RESOLVE_NOTE,
             )
             result = {"id": event.id, "status": event.status, "note": note}
-            log_admin_action(db, ADMIN_ACTION_RETRACT_SUBMISSION, event_id, result)
+            emit_admin_log = log_admin_action(
+                db, ADMIN_ACTION_RETRACT_SUBMISSION, event_id, result
+            )
             await db.commit()
+            emit_admin_log()
             await send_report_resolution_emails(
                 db, event, resolved, REPORT_AUTO_RESOLVE_NOTE
             )
@@ -659,8 +662,11 @@ async def admin_approve_submission(
             # Diagnostic breakdown is unused by this endpoint's response.
             await publish_pending(db, diagnostics=False)
             result = {"id": event.id, "needs_review": event.needs_review, "note": note}
-            log_admin_action(db, ADMIN_ACTION_APPROVE_SUBMISSION, event_id, result)
+            emit_admin_log = log_admin_action(
+                db, ADMIN_ACTION_APPROVE_SUBMISSION, event_id, result
+            )
             await db.commit()
+            emit_admin_log()
             return result
 
     return await run_admin_job("Approve submission", _run())
@@ -1008,8 +1014,11 @@ async def admin_resolve_reports(
             event = await _event_or_404(db, event_id)
             resolved = await resolve_open_reports(db, event, note)
             result = {"event_id": event.id, "resolved_count": len(resolved)}
-            log_admin_action(db, ADMIN_ACTION_RESOLVE_REPORTS, event_id, result)
+            emit_admin_log = log_admin_action(
+                db, ADMIN_ACTION_RESOLVE_REPORTS, event_id, result
+            )
             await db.commit()
+            emit_admin_log()
             await send_report_resolution_emails(db, event, resolved, note)
             return result
 
@@ -1039,8 +1048,11 @@ async def admin_takedown_reported_event(
                 "status": event.status,
                 "resolved_count": len(resolved),
             }
-            log_admin_action(db, ADMIN_ACTION_TAKEDOWN_REPORTED_EVENT, event_id, result)
+            emit_admin_log = log_admin_action(
+                db, ADMIN_ACTION_TAKEDOWN_REPORTED_EVENT, event_id, result
+            )
             await db.commit()
+            emit_admin_log()
             await send_report_resolution_emails(db, event, resolved, note)
             return result
 
@@ -1268,10 +1280,11 @@ async def _run_pipeline_stages(dry_run: bool, queue: asyncio.Queue[bytes | None]
         # mutation — it gets its own short-lived session instead, still more
         # durable than the log line alone.
         async with AsyncSessionLocal() as audit_db:
-            log_admin_action(
+            emit_admin_log = log_admin_action(
                 audit_db, ADMIN_ACTION_PIPELINE_RUN, "pipeline", {"ok": ok, "stages": stages}
             )
             await audit_db.commit()
+        emit_admin_log()
     finally:
         _release_pipeline_run_locks()
         await queue.put(None)

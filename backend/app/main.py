@@ -73,7 +73,7 @@ from app.constants import (
     TRUSTED_HOST_REJECT_BODY,
 )
 from app.cleanup import cleanup_stale_data
-from app.db import AsyncSessionLocal, engine
+from app.db import AsyncSessionLocal, assert_schema_at_head, engine
 from app.email.digest import send_daily_digests
 from app.ingestion.jobs import (
     classify_pending_drained,
@@ -552,6 +552,7 @@ def _start_scheduler() -> AsyncIOScheduler | None:
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     _check_dev_database_host()
+    await assert_schema_at_head()
     async with AsyncSessionLocal() as db:
         await seed_sources(db)
         await seed_personas(db)

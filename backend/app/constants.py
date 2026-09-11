@@ -1246,6 +1246,14 @@ DETAIL_SIGNED_OUT = "Signed out."
 DETAIL_SIGNED_OUT_ALL = "Signed out of all devices."
 DETAIL_IDENTITY_UNLINKED = "Identity unlinked."
 ERROR_CSRF_ORIGIN_MISMATCH = "Origin header does not match a trusted origin."
+# app/db.py::assert_schema_at_head — the 0030/admin_actions incident: code
+# shipped ahead of a DB still on an older migration, so every admin action
+# 500'd instead of failing at boot. Same text logged at ERROR (production,
+# then raised) or WARNING (development, boot continues) — see LOG_EVENT_SCHEMA_DRIFT.
+ERROR_SCHEMA_DRIFT = (
+    "Database schema drift: DB is at revision {db_revision!r}, code expects "
+    "head {head_revision!r}. Run `alembic upgrade head`."
+)
 
 
 LLM_PROVIDERS: list[dict[str, Any]] = [
@@ -1588,6 +1596,7 @@ LOG_EVENT_GOOGLE_SIGNIN_DEGRADED = "google_signin_degraded"
 LOG_EVENT_IDENTITY_LINKED = "identity_linked"  # provider identity row created
 # DELETE .../profile/identities/{provider} or .../users/me/identities/{provider}
 LOG_EVENT_IDENTITY_UNLINKED = "identity_unlinked"
+LOG_EVENT_SCHEMA_DRIFT = "schema_drift"  # boot-time alembic-head mismatch (see ERROR_SCHEMA_DRIFT)
 
 # Daily cap (process-wide, not per-IP) on new unverified User/Organizer rows
 # created via the magic-link request endpoints before an operator alert fires
