@@ -675,10 +675,10 @@ def _cloudinary_signature(params: dict[str, str | int], api_secret: str) -> str:
     `key=value&...` param string with the API secret appended — per
     https://cloudinary.com/documentation/authentication_signatures. Only
     params actually sent to the upload API are signed; `file`, `cloud_name`,
-    and `api_key` are excluded per that spec. `signature_algorithm` must be
-    one of the signed params (Cloudinary verifies over every param it
-    receives except the excluded set above), so the caller includes it in
-    `params` before calling this."""
+    `resource_type`, and `api_key` are excluded per that spec. The digest
+    algorithm itself must match what the Cloudinary account accepts (both
+    SHA-1 and SHA-256 by default) — `signature_algorithm` is an SDK-side
+    config knob only, never a wire param, and must not be signed or sent."""
     to_sign = "&".join(f"{k}={params[k]}" for k in sorted(params))
     return hashlib.sha256((to_sign + api_secret).encode()).hexdigest()
 
@@ -765,9 +765,13 @@ async def upload_event_image(
             detail=ERROR_UNSUPPORTED_IMAGE_TYPE.format(content_type=file.content_type),
         )
 
-    if not settings.CLOUDINARY_CLOUD_NAME:
+    if not (
+        settings.CLOUDINARY_CLOUD_NAME
+        and settings.CLOUDINARY_API_KEY
+        and settings.CLOUDINARY_API_SECRET
+    ):
         log.warning(
-            "CLOUDINARY_CLOUD_NAME not set — image upload skipped (organizer_id=%d)",
+            "Cloudinary not configured — image upload skipped (organizer_id=%d)",
             current_organizer.id,
         )
         raise HTTPException(
@@ -777,7 +781,7 @@ async def upload_event_image(
 
     timestamp = int(time.time())
     signature = _cloudinary_signature(
-        {"timestamp": timestamp, "signature_algorithm": "sha256"},
+        {"timestamp": timestamp},
         settings.CLOUDINARY_API_SECRET,
     )
     upload_url = CLOUDINARY_UPLOAD_URL_TEMPLATE.format(
@@ -797,13 +801,19 @@ async def upload_event_image(
                     "api_key": settings.CLOUDINARY_API_KEY,
                     "timestamp": timestamp,
                     "signature": signature,
-                    "signature_algorithm": "sha256",
                 },
                 files={"file": (generated_filename, body, sniffed_mime)},
             )
-        except httpx.HTTPError:
+        except httpx.HTTPError as exc:
+            upstream_status = (
+                exc.response.status_code
+                if isinstance(exc, httpx.HTTPStatusError)
+                else None
+            )
             log.exception(
-                "Cloudinary upload failed (organizer_id=%d)", current_organizer.id
+                "Cloudinary upload failed (organizer_id=%d, upstream_status=%s)",
+                current_organizer.id,
+                upstream_status,
             )
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
