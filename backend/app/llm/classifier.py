@@ -124,6 +124,8 @@ def _parse_classification(raw: dict[str, Any]) -> dict[str, Any]:
                 str(b)
                 for b in raw_why_go.get(loc, [])[:LLM_CLASSIFY_WHY_GO_MAX_BULLETS]
             ]
+            if isinstance(raw_why_go.get(loc, []), list)
+            else []
             for loc in VALID_LOCALES
         }
         why_go_bullets = why_go_localized.get(DEFAULT_USER_LOCALE) or []

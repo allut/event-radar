@@ -9,9 +9,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.tokens import generate_session_token
 from app.constants import (
+    DETAIL_IDENTITY_UNLINKED,
     ERROR_IDENTITY_NOT_FOUND,
     ERROR_NO_UPDATE_FIELDS,
-    IDENTITY_PROVIDER_GOOGLE,
     LOG_EVENT_IDENTITY_UNLINKED,
     RATE_LIMIT_AUTHENTICATED_WRITE,
     SECONDS_PER_DAY,
@@ -27,6 +27,7 @@ from app.rate_limit import limiter
 from app.routers.auth import get_current_user
 from app.routers.utils import (
     compute_preferred_taxonomy,
+    is_identity_linked,
     persona_weight_tuple,
     serialize_user,
     set_session_cookie,
@@ -56,17 +57,6 @@ class PatchSettingsBody(BaseModel):
                 f"theme_preference must be one of {sorted(VALID_THEME_PREFERENCES)}"
             )
         return v
-
-
-async def _is_google_linked(db: AsyncSession, user_id: int) -> bool:
-    """Mirrors organizer_profile.py::_is_google_linked."""
-    result = await db.execute(
-        select(UserIdentity.id).where(
-            UserIdentity.user_id == user_id,
-            UserIdentity.provider == IDENTITY_PROVIDER_GOOGLE,
-        )
-    )
-    return result.scalars().first() is not None
 
 
 async def _load_persona_data(
@@ -107,7 +97,9 @@ async def get_settings(
     """Return current user profile + settings."""
     personas, weights = await _load_persona_data(current_user.id, db)
     preferred_categories, preferred_vibes = compute_preferred_taxonomy(weights)
-    google_linked = await _is_google_linked(db, current_user.id)
+    google_linked = await is_identity_linked(
+        db, UserIdentity, UserIdentity.user_id, current_user.id
+    )
     return serialize_user(
         current_user,
         email_digest_opt_in=current_user.email_digest_opt_in,
@@ -170,7 +162,7 @@ async def unlink_own_identity(
         path=SESSION_COOKIE_PATH,
         ttl_seconds=settings.SESSION_TTL_DAYS * SECONDS_PER_DAY,
     )
-    return {"detail": "Identity unlinked."}
+    return {"detail": DETAIL_IDENTITY_UNLINKED}
 
 
 @router.patch("", status_code=status.HTTP_200_OK)
@@ -211,7 +203,9 @@ async def patch_settings(
 
     personas, weights = await _load_persona_data(current_user.id, db)
     preferred_categories, preferred_vibes = compute_preferred_taxonomy(weights)
-    google_linked = await _is_google_linked(db, current_user.id)
+    google_linked = await is_identity_linked(
+        db, UserIdentity, UserIdentity.user_id, current_user.id
+    )
     return serialize_user(
         current_user,
         email_digest_opt_in=current_user.email_digest_opt_in,

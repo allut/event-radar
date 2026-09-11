@@ -71,6 +71,12 @@ TALLINN_TZ = ZoneInfo(TALLINN_TZ_NAME)
 # never import app.config — doing so would create a circular import.
 APP_ENV_DEVELOPMENT = "development"
 
+# require_configured_secret() call-site literals for the ADMIN_PASSWORD gate —
+# duplicated across get_current_admin/_require_admin (routers/admin.py) and
+# admin_login (routers/admin_auth.py); named so all three stay in sync.
+SETTING_NAME_ADMIN_PASSWORD = "ADMIN_PASSWORD"
+FEATURE_ADMIN_ENDPOINTS = "Admin endpoints"
+
 # Default value of settings.ADMIN_USERNAME. In production, _require_admin fails
 # closed if this hasn't been overridden — a guessable, well-known Basic-auth
 # username removes half of the credential pair an attacker needs to brute-force.
@@ -122,6 +128,7 @@ ASGI_MESSAGE_TYPE_RESPONSE_BODY = "http.response.body"
 SECONDS_PER_MINUTE = 60
 SECONDS_PER_HOUR = 3600
 SECONDS_PER_DAY = 86400
+MS_PER_SECOND = 1000
 
 # ingestion/http_client.py::host_guard_hook pins redirects to this port (in
 # addition to hostname + scheme) — every ingestion source is fetched over
@@ -522,6 +529,7 @@ FEED_BUILD_USER_BATCH_SIZE = 500
 
 # Email i18n strings (subjects, labels, templates) live in shared/i18n/*.json.
 DIGEST_SEND_HOUR = 7  # 07:00 Europe/Tallinn, one hour after build_daily_feeds
+DIGEST_SEND_MINUTE = 0
 DIGEST_MAX_WHY_GO_BULLETS = 3
 # Concurrency cap when fanning out digest sends — bounded by Resend free-tier
 # rate (10 req/s). Eight in-flight sends leaves headroom for occasional retries.
@@ -566,6 +574,25 @@ SVIX_SECRET_PREFIX = "whsec_"
 # Bearer-token auth headers used by outbound email/LLM API clients.
 AUTHORIZATION_HEADER = "Authorization"
 BEARER_PREFIX = "Bearer "
+# Other HTTP header names referenced by name across routers/middleware/ingestion —
+# named here rather than as bare string literals so a typo at any call site
+# fails loudly (constant not found) instead of silently missing the header.
+HEADER_INTERNAL_TOKEN = "X-Internal-Token"
+HEADER_ORIGIN = "origin"
+HEADER_HOST = "host"
+HEADER_X_FORWARDED_FOR = "x-forwarded-for"
+HEADER_RETRY_AFTER = "Retry-After"
+HEADER_ACCEPT_LANGUAGE = "Accept-Language"
+HEADER_LIST_UNSUBSCRIBE = "List-Unsubscribe"
+HEADER_CONTENT_TYPE = "Content-Type"
+MIME_APPLICATION_JSON = "application/json"
+MIME_APPLICATION_NDJSON = "application/x-ndjson"
+
+# uvicorn's logging.access record carries a positional args tuple
+# (client_addr, method, path, http_version, status) — app/logging_config.py's
+# _AccessPathFilter reads path/status off it. Named so a future uvicorn
+# version's arg-count change is at least a visible constant, not a bare index.
+UVICORN_ACCESS_STATUS_ARG_INDEX = 4
 # BeautifulSoup's built-in parser name — used everywhere we parse scraped/stored HTML.
 HTML_PARSER = "html.parser"
 # Reject a signature whose svix-timestamp is further than this from "now" (either
@@ -680,6 +707,19 @@ ORGANIZER_SESSION_TTL_DAYS = _SESSION_TTL_DAYS_SHARED
 # versa, same defense-in-depth shape as the magic-link/session salt split).
 AUTH_OAUTH_STATE_SALT = "oauth-state-v1"
 OAUTH_STATE_TTL_MINUTES = 10
+# generate_oauth_state_token/verify_oauth_state_token's "track" discriminator
+# (app/auth/tokens.py) — the cross-track replay guard; a typo at any of the
+# four call sites (auth.py x2, organizer_auth.py x2) would silently break the
+# mint/verify pairing, so both are named constants rather than inline strings.
+AUTH_TRACK_USER = "user"
+AUTH_TRACK_ORGANIZER = "organizer"
+# PyJWKClient's own cache_jwk_set lifespan (app/auth/google_oauth.py) — how
+# long the fetched Google JWKS keyset is cached before a re-fetch.
+GOOGLE_JWKS_CACHE_LIFESPAN_SECONDS = 300
+# secrets.token_urlsafe() byte count for the PKCE code_verifier and the OAuth
+# state value (app/auth/google_oauth.py) — 32 bytes -> 43 URL-safe chars,
+# within RFC 7636's 43-128 char code_verifier bound.
+OAUTH_PKCE_TOKEN_BYTES = 32
 IDENTITY_PROVIDER_GOOGLE = "google"
 GOOGLE_OAUTH_SCOPE = "openid email"  # never "profile" — no name/picture stored
 GOOGLE_OAUTH_AUTHORIZATION_ENDPOINT = "https://accounts.google.com/o/oauth2/v2/auth"
@@ -713,6 +753,11 @@ ORGANIZER_DASHBOARD_PATH = "/organizer/dashboard"
 LOGIN_PATH = "/login"
 HOME_PATH = "/"
 ONBOARDING_PATH = "/onboarding"
+# Frontend paths linked from transactional emails (app/email/report_notify.py,
+# report_reporter.py, digest.py) — built with settings.FRONTEND_URL as a prefix.
+EVENTS_PATH = "/events"
+ADMIN_REPORTS_PATH = "/admin/reports"
+UNSUBSCRIBE_PATH = "/unsubscribe"
 # Callback redirect-with-error query param + failure reason codes — internal,
 # not i18n keys (mirrors the ERROR_* constants' English-only convention).
 OAUTH_ERROR_QUERY_PARAM = "google_error"
@@ -741,6 +786,10 @@ ADMIN_SESSION_TTL_SECONDS = 12 * 60 * 60
 # the admin's authenticator app and this server without materially widening the
 # guess window.
 ADMIN_TOTP_VALID_WINDOW = 1
+# _admin_session_epoch()'s hexdigest truncation length (app/auth/tokens.py) —
+# 16 hex chars (64 bits) of the sha256 digest is ample collision resistance
+# for a value that only ever feeds another hash, not a standalone credential.
+ADMIN_SESSION_EPOCH_HASH_LEN = 16
 # Per-organizer daily submission ceiling (routers/organizer_events.py), computed
 # from Tallinn calendar-day start — an IP rate limit alone can't cap a single
 # organizer account across multiple IPs.
@@ -786,10 +835,16 @@ IMAGE_MAGIC_BYTES: dict[bytes, str] = {
     b"\xff\xd8\xff": "image/jpeg",
     b"\x89PNG\r\n\x1a\n": "image/png",
 }
+MIME_IMAGE_WEBP = "image/webp"
+# RIFF is a generic container format — the fourCC at WEBP_FOURCC_OFFSET is
+# what actually says "WEBP" (organizer_events.py::_sniff_image_mime).
+WEBP_RIFF_MAGIC = b"RIFF"
+WEBP_FOURCC = b"WEBP"
+WEBP_FOURCC_OFFSET = 8
 IMAGE_EXTENSION_BY_MIME: dict[str, str] = {
     "image/jpeg": "jpg",
     "image/png": "png",
-    "image/webp": "webp",
+    MIME_IMAGE_WEBP: "webp",
 }
 # Hosts an organizer-submission event.image_url is allowed to point at — the
 # signed Cloudinary upload endpoint (POST /organizer/events/image) always
@@ -1164,6 +1219,17 @@ CONTACT_FIELD_MIN_LEN = 1
 # Always returned on success, even when the honeypot is tripped — a bot must
 # get no signal that it was caught.
 CONTACT_SUCCESS_DETAIL = "Message sent."
+
+# Auth success-detail response strings, shared verbatim across the consumer,
+# organizer, and admin tracks (each track's endpoint file imports the subset
+# it needs). Anti-enumeration responses (request-link) are deliberately
+# identical whether or not the address is registered.
+DETAIL_MAGIC_LINK_SENT = "If that address is registered, a sign-in link has been sent."
+DETAIL_SIGNED_IN = "Signed in."
+DETAIL_SIGNED_OUT = "Signed out."
+DETAIL_SIGNED_OUT_ALL = "Signed out of all devices."
+DETAIL_IDENTITY_UNLINKED = "Identity unlinked."
+ERROR_CSRF_ORIGIN_MISMATCH = "Origin header does not match a trusted origin."
 
 
 LLM_PROVIDERS: list[dict[str, Any]] = [

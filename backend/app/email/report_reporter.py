@@ -18,6 +18,7 @@ from app.config import settings
 from app.constants import (
     AUTHORIZATION_HEADER,
     BEARER_PREFIX,
+    EVENTS_PATH,
     LOG_EVENT_EMAIL_SEND_FAILED,
     RESEND_ERROR_SNIPPET_LEN,
     RESEND_SEND_URL,
@@ -44,7 +45,7 @@ def build_report_outcome_html(
 ) -> str:
     s = get_email_styles(theme_preference)
     safe_event_url = html_lib.escape(
-        f"{settings.FRONTEND_URL}/events/{event.id}", quote=True
+        f"{settings.FRONTEND_URL}{EVENTS_PATH}/{event.id}", quote=True
     )
     note = resolution_note.strip() or t("email.report_outcome.fallback_note", locale)
 
@@ -81,7 +82,7 @@ def build_report_outcome_html(
 def build_report_outcome_text(event: Event, resolution_note: str, locale: str) -> str:
     note = resolution_note.strip() or t("email.report_outcome.fallback_note", locale)
     intro = ti("email.report_outcome.intro", locale, event_title=event.title_orig)
-    event_url = f"{settings.FRONTEND_URL}/events/{event.id}"
+    event_url = f"{settings.FRONTEND_URL}{EVENTS_PATH}/{event.id}"
     return f"{intro}\n\n{note}\n\n{event_url}"
 
 

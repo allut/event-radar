@@ -15,6 +15,7 @@ from itsdangerous import BadSignature, URLSafeTimedSerializer
 
 from app.config import settings
 from app.constants import (
+    ADMIN_SESSION_EPOCH_HASH_LEN,
     ADMIN_SESSION_TTL_SECONDS,
     AUTH_ADMIN_SESSION_SALT,
     AUTH_MAGIC_SALT,
@@ -175,7 +176,7 @@ def _admin_session_epoch() -> str:
     the mix so a manual bump still works even when credentials are unchanged."""
     return hashlib.sha256(
         f"{settings.ADMIN_SESSION_EPOCH}:{settings.ADMIN_PASSWORD}:{settings.ADMIN_TOTP_SECRET}".encode()
-    ).hexdigest()[:16]
+    ).hexdigest()[:ADMIN_SESSION_EPOCH_HASH_LEN]
 
 
 def generate_admin_session_token() -> str:

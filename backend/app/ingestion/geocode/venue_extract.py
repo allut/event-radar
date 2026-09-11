@@ -18,7 +18,6 @@ from app.constants import (
     VENUE_NAME_PROMPT_MAX_CHARS,
     VENUE_NAME_SUSPECT_MAX_LEN,
 )
-from app.ingestion.content_filters import alternation_pattern
 from app.llm.prompts import LLM_VENUE_EXTRACT_PROMPT_TEMPLATE, escape_prompt_delimiters
 from app.llm.router import (
     LLMError,
@@ -28,6 +27,7 @@ from app.llm.router import (
     llm_json,
 )
 from app.models.models import Event, LlmCall
+from app.routers.utils import alternation_pattern
 
 log = logging.getLogger(__name__)
 

@@ -52,6 +52,7 @@ from app.constants import (
     LOCALE_EN,
     LOCALE_ET,
     LOCALE_RU,
+    MIME_IMAGE_WEBP,
     ORGANIZER_CURRENCY_MAX_LEN,
     ORGANIZER_DAILY_IMAGE_UPLOAD_CAP,
     ORGANIZER_DAILY_SUBMISSION_CAP,
@@ -71,6 +72,9 @@ from app.constants import (
     SOURCE_SLUG_USER_SUBMISSION,
     TALLINN_TZ,
     VALID_CATEGORIES,
+    WEBP_FOURCC,
+    WEBP_FOURCC_OFFSET,
+    WEBP_RIFF_MAGIC,
 )
 from app.db import get_db
 from app.ingestion.adapter import NormalizedEvent, insert_normalized_event
@@ -687,8 +691,9 @@ def _sniff_image_mime(body: bytes) -> str | None:
     for magic, mime in IMAGE_MAGIC_BYTES.items():
         if body.startswith(magic):
             return mime
-    if body[:4] == b"RIFF" and body[8:12] == b"WEBP":
-        return "image/webp"
+    fourcc_end = WEBP_FOURCC_OFFSET + len(WEBP_FOURCC)
+    if body[:4] == WEBP_RIFF_MAGIC and body[WEBP_FOURCC_OFFSET:fourcc_end] == WEBP_FOURCC:
+        return MIME_IMAGE_WEBP
     return None
 
 

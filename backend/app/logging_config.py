@@ -13,6 +13,9 @@ import httpx
 from app.config import settings
 from app.constants import (
     APP_ENV_DEVELOPMENT,
+    AUTHORIZATION_HEADER,
+    BEARER_PREFIX,
+    HEADER_CONTENT_TYPE,
     LOG_DATE_FORMAT,
     LOG_DIR_NAME,
     LOG_FILE_BACKUP_COUNT,
@@ -25,7 +28,9 @@ from app.constants import (
     LOG_SHIP_QUEUE_MAXSIZE,
     LOG_SHIP_SUPPRESS_ACCESS_PATHS,
     LOG_SHIP_TIMEOUT_SECONDS,
+    MIME_APPLICATION_JSON,
     SQLALCHEMY_ENGINE_LOGGER_NAME,
+    UVICORN_ACCESS_STATUS_ARG_INDEX,
 )
 
 _queue_listener: logging.handlers.QueueListener | None = None
@@ -81,8 +86,8 @@ class HttpLogShipHandler(logging.Handler):
                 # array-batch POST (also accepted by other JSON drains).
                 content=f"[{body}]",
                 headers={
-                    "Content-Type": "application/json",
-                    "Authorization": f"Bearer {settings.LOG_SHIP_TOKEN}",
+                    HEADER_CONTENT_TYPE: MIME_APPLICATION_JSON,
+                    AUTHORIZATION_HEADER: f"{BEARER_PREFIX}{settings.LOG_SHIP_TOKEN}",
                 },
             )
         except Exception:
@@ -110,12 +115,12 @@ class _AccessPathFilter(logging.Filter):
         if (
             record.name == "uvicorn.access"
             and isinstance(record.args, tuple)
-            and len(record.args) >= 5
+            and len(record.args) > UVICORN_ACCESS_STATUS_ARG_INDEX
         ):
             path = record.args[2]
             if isinstance(path, str):
                 path = path.split("?", 1)[0]
-            status = record.args[4]
+            status = record.args[UVICORN_ACCESS_STATUS_ARG_INDEX]
             if (
                 path in LOG_SHIP_SUPPRESS_ACCESS_PATHS
                 and isinstance(status, int)

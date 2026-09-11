@@ -9,11 +9,12 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel, Field, field_validator
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.tokens import generate_organizer_session_token
 from app.constants import (
+    DETAIL_IDENTITY_UNLINKED,
     ERROR_IDENTITY_NOT_FOUND,
     LOG_EVENT_IDENTITY_UNLINKED,
     ORGANIZER_NAME_MAX_LEN,
@@ -29,7 +30,7 @@ from app.db import get_db
 from app.models.models import Organizer, OrganizerIdentity
 from app.rate_limit import limiter
 from app.routers.organizer_auth import get_current_organizer
-from app.routers.utils import set_session_cookie
+from app.routers.utils import is_identity_linked, set_session_cookie
 
 log = logging.getLogger(__name__)
 
@@ -62,16 +63,6 @@ def _serialize(organizer: Organizer, *, google_linked: bool) -> dict:
     }
 
 
-async def _is_google_linked(db: AsyncSession, organizer_id: int) -> bool:
-    result = await db.execute(
-        select(OrganizerIdentity.id).where(
-            OrganizerIdentity.organizer_id == organizer_id,
-            OrganizerIdentity.provider == "google",
-        )
-    )
-    return result.scalars().first() is not None
-
-
 @router.get("")
 @limiter.limit(RATE_LIMIT_SUBMIT)
 async def get_own_profile(
@@ -79,7 +70,9 @@ async def get_own_profile(
     current_organizer: Organizer = Depends(get_current_organizer),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    google_linked = await _is_google_linked(db, current_organizer.id)
+    google_linked = await is_identity_linked(
+        db, OrganizerIdentity, OrganizerIdentity.organizer_id, current_organizer.id
+    )
     return _serialize(current_organizer, google_linked=google_linked)
 
 
@@ -102,7 +95,9 @@ async def update_own_profile(
         current_organizer.theme_preference = body.theme_preference
     await db.commit()
     await db.refresh(current_organizer)
-    google_linked = await _is_google_linked(db, current_organizer.id)
+    google_linked = await is_identity_linked(
+        db, OrganizerIdentity, OrganizerIdentity.organizer_id, current_organizer.id
+    )
     return _serialize(current_organizer, google_linked=google_linked)
 
 
@@ -159,4 +154,4 @@ async def unlink_own_identity(
         path=ORGANIZER_SESSION_COOKIE_PATH,
         ttl_seconds=ORGANIZER_SESSION_TTL_DAYS * SECONDS_PER_DAY,
     )
-    return {"detail": "Identity unlinked."}
+    return {"detail": DETAIL_IDENTITY_UNLINKED}

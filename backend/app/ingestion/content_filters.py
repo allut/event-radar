@@ -13,20 +13,7 @@ from app.constants import (
     NON_EVENT_VENUE_KEYWORDS,
 )
 from app.ingestion.sanitize import html_to_text
-
-def alternation_pattern(keywords: frozenset[str]) -> re.Pattern[str]:
-    """One word-boundary alternation regex for a keyword group.
-
-    A single-pass alternation is far cheaper than searching the text once per
-    keyword (K separately-compiled regexes over the same text, O(K*L)) — the
-    regex engine's alternation matching finds the same word-boundary hits in
-    one pass over the text.
-    """
-    return re.compile(
-        r"\b(?:" + "|".join(re.escape(kw) for kw in keywords) + r")\b",
-        re.IGNORECASE,
-    )
-
+from app.routers.utils import alternation_pattern
 
 _EXPLICIT_KEYWORD_PATTERN = alternation_pattern(EXPLICIT_KEYWORDS)
 

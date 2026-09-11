@@ -22,6 +22,7 @@ from app.constants import (
     DIGEST_RESULT_SKIPPED,
     DIGEST_SEND_CONCURRENCY,
     FEED_BUILD_USER_BATCH_SIZE,
+    HEADER_LIST_UNSUBSCRIBE,
     LOCALE_ET,
     LOCALE_RU,
     LOG_EVENT_EMAIL_SEND_FAILED,
@@ -29,6 +30,7 @@ from app.constants import (
     RESEND_SEND_URL,
     RESEND_TIMEOUT_SECONDS,
     TALLINN_TZ,
+    UNSUBSCRIBE_PATH,
 )
 from app.email.styles import EmailStyles, get_email_styles
 from app.email.templates import (
@@ -243,7 +245,7 @@ async def send_digest_email(
         return
 
     unsubscribe_token = generate_unsubscribe_token(user_id)
-    unsubscribe_url = f"{settings.FRONTEND_URL}/unsubscribe?token={unsubscribe_token}"
+    unsubscribe_url = f"{settings.FRONTEND_URL}{UNSUBSCRIBE_PATH}?token={unsubscribe_token}"
     header_url = f"{settings.BACKEND_URL}/email/unsubscribe?token={unsubscribe_token}"
 
     html = build_digest_html(
@@ -272,7 +274,7 @@ async def send_digest_email(
                     "subject": subject,
                     "html": html,
                     "headers": {
-                        "List-Unsubscribe": f"<{header_url}>",
+                        HEADER_LIST_UNSUBSCRIBE: f"<{header_url}>",
                         "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
                     },
                 },

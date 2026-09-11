@@ -34,7 +34,6 @@ from app.auth.tokens import (
     generate_organizer_magic_token,
     generate_organizer_session_token,
     hash_token,
-    oauth_state_ttl_seconds,
     organizer_magic_ttl_seconds,
     verify_oauth_state_token,
     verify_organizer_magic_token,
@@ -42,7 +41,11 @@ from app.auth.tokens import (
 )
 from app.config import settings
 from app.constants import (
+    AUTH_TRACK_ORGANIZER,
     DEFAULT_USER_LOCALE,
+    DETAIL_MAGIC_LINK_SENT,
+    DETAIL_SIGNED_OUT,
+    DETAIL_SIGNED_OUT_ALL,
     ERROR_MAGIC_LINK_CONSUMED,
     ERROR_MAGIC_LINK_EXPIRED,
     ERROR_MAGIC_LINK_INVALID,
@@ -60,11 +63,9 @@ from app.constants import (
     LOG_EVENT_GOOGLE_SIGNIN_DEGRADED,
     LOG_EVENT_IDENTITY_LINKED,
     OAUTH_ERROR_DENIED,
-    OAUTH_ERROR_QUERY_PARAM,
     OAUTH_ERROR_STATE_INVALID,
     OAUTH_ERROR_TOKEN_EXCHANGE_FAILED,
     OAUTH_ERROR_VERIFICATION_FAILED,
-    OAUTH_STATE_COOKIE_SAMESITE,
     ORGANIZER_AUTH_VERIFY_PATH,
     ORGANIZER_DASHBOARD_PATH,
     ORGANIZER_GOOGLE_CALLBACK_PUBLIC_PATH,
@@ -81,8 +82,6 @@ from app.constants import (
     RATE_LIMIT_LOGOUT,
     RATE_LIMIT_LOGOUT_ALL,
     SECONDS_PER_DAY,
-    SESSION_COOKIE_HTTPONLY,
-    SESSION_COOKIE_SECURE,
     VALID_LOCALES,
 )
 from app.db import get_db
@@ -91,10 +90,14 @@ from app.rate_limit import limiter
 from app.routers.utils import (
     RequestLinkBody,
     VerifyTokenBody,
+    build_google_redirect_uri,
+    build_oauth_error_redirect,
+    clear_oauth_state_cookie,
     clear_session_cookie,
     mask_email,
     recent_unused_link_exists,
     record_unverified_account_creation,
+    set_oauth_state_cookie,
     set_session_cookie,
 )
 
@@ -177,9 +180,7 @@ async def request_organizer_magic_link(
         organizer.id,
         organizer_magic_ttl_seconds(),
     ):
-        return {
-            "detail": "If that address is registered, a sign-in link has been sent."
-        }
+        return {"detail": DETAIL_MAGIC_LINK_SENT}
 
     signed_token, token_hash, expires_at = generate_organizer_magic_token(organizer.id)
 
@@ -204,7 +205,7 @@ async def request_organizer_magic_link(
         log.exception("Failed to send organizer magic link to %s", mask_email(email))
         # Do not surface email errors to caller — link is in DB, organizer can retry.
 
-    return {"detail": "If that address is registered, a sign-in link has been sent."}
+    return {"detail": DETAIL_MAGIC_LINK_SENT}
 
 
 @router.post("/verify")
@@ -330,7 +331,7 @@ async def organizer_logout(request: Request, response: Response) -> dict:
     clear_session_cookie(
         response, name=ORGANIZER_SESSION_COOKIE_NAME, path=ORGANIZER_SESSION_COOKIE_PATH
     )
-    return {"detail": "Signed out."}
+    return {"detail": DETAIL_SIGNED_OUT}
 
 
 @router.post("/logout-all", status_code=status.HTTP_200_OK)
@@ -356,34 +357,29 @@ async def organizer_logout_all(
     clear_session_cookie(
         response, name=ORGANIZER_SESSION_COOKIE_NAME, path=ORGANIZER_SESSION_COOKIE_PATH
     )
-    return {"detail": "Signed out of all devices."}
+    return {"detail": DETAIL_SIGNED_OUT_ALL}
 
 
 def _google_redirect_uri() -> str:
     """Browser-facing callback URL — must match what's registered with
     Google and what the state cookie is scoped to (ORGANIZER_OAUTH_STATE_COOKIE_PATH)."""
-    return f"{settings.FRONTEND_URL}{ORGANIZER_GOOGLE_CALLBACK_PUBLIC_PATH}"
+    return build_google_redirect_uri(ORGANIZER_GOOGLE_CALLBACK_PUBLIC_PATH)
 
 
 def _set_oauth_state_cookie(response: Response, token: str) -> None:
-    response.set_cookie(
-        key=ORGANIZER_OAUTH_STATE_COOKIE_NAME,
-        value=token,
-        max_age=oauth_state_ttl_seconds(),
-        path=ORGANIZER_OAUTH_STATE_COOKIE_PATH,
-        secure=SESSION_COOKIE_SECURE,
-        httponly=SESSION_COOKIE_HTTPONLY,
-        samesite=OAUTH_STATE_COOKIE_SAMESITE,
+    set_oauth_state_cookie(
+        response,
+        token,
+        cookie_name=ORGANIZER_OAUTH_STATE_COOKIE_NAME,
+        cookie_path=ORGANIZER_OAUTH_STATE_COOKIE_PATH,
     )
 
 
 def _clear_oauth_state_cookie(response: Response) -> None:
-    response.delete_cookie(
-        key=ORGANIZER_OAUTH_STATE_COOKIE_NAME,
-        path=ORGANIZER_OAUTH_STATE_COOKIE_PATH,
-        secure=SESSION_COOKIE_SECURE,
-        httponly=SESSION_COOKIE_HTTPONLY,
-        samesite=OAUTH_STATE_COOKIE_SAMESITE,
+    clear_oauth_state_cookie(
+        response,
+        cookie_name=ORGANIZER_OAUTH_STATE_COOKIE_NAME,
+        cookie_path=ORGANIZER_OAUTH_STATE_COOKIE_PATH,
     )
 
 
@@ -391,12 +387,12 @@ def _error_redirect(error_code: str) -> RedirectResponse:
     """Every callback failure path lands here: a 302 back to the organizer
     login page carrying an error code, never a 500 — the state cookie (single-
     use) is cleared regardless of outcome."""
-    response = RedirectResponse(
-        f"{settings.FRONTEND_URL}{ORGANIZER_LOGIN_PATH}?{OAUTH_ERROR_QUERY_PARAM}={error_code}",
-        status_code=status.HTTP_302_FOUND,
+    return build_oauth_error_redirect(
+        error_code,
+        login_path=ORGANIZER_LOGIN_PATH,
+        cookie_name=ORGANIZER_OAUTH_STATE_COOKIE_NAME,
+        cookie_path=ORGANIZER_OAUTH_STATE_COOKIE_PATH,
     )
-    _clear_oauth_state_cookie(response)
-    return response
 
 
 @router.get("/google/start")
@@ -415,7 +411,7 @@ async def start_organizer_google_signin(request: Request) -> RedirectResponse:
     )
     response = RedirectResponse(auth_url, status_code=status.HTTP_302_FOUND)
     _set_oauth_state_cookie(
-        response, generate_oauth_state_token(state, code_verifier, track="organizer")
+        response, generate_oauth_state_token(state, code_verifier, track=AUTH_TRACK_ORGANIZER)
     )
     return response
 
@@ -584,7 +580,7 @@ async def organizer_google_callback(
         return _error_redirect(OAUTH_ERROR_STATE_INVALID)
 
     try:
-        state_payload = verify_oauth_state_token(organizer_oauth_state, track="organizer")
+        state_payload = verify_oauth_state_token(organizer_oauth_state, track=AUTH_TRACK_ORGANIZER)
     except (BadSignature, SignatureExpired):
         log.warning(
             "organizer google sign-in failed: bad/expired state token",

@@ -23,6 +23,10 @@ from app.config import settings
 from app.constants import (
     ADMIN_ACTION_APPROVE_SUBMISSION,
     ADMIN_RESOLUTION_NOTE_MAX_CHARS,
+    FEATURE_ADMIN_ENDPOINTS,
+    MIME_APPLICATION_NDJSON,
+    SECURITY_HEADERS,
+    SETTING_NAME_ADMIN_PASSWORD,
     ADMIN_ACTION_BUILD_FEEDS,
     ADMIN_ACTION_CLEANUP,
     ADMIN_ACTION_CLASSIFY,
@@ -262,8 +266,8 @@ def get_current_admin(
     if admin_session is None:
         if not require_configured_secret(
             settings.ADMIN_PASSWORD,
-            feature="Admin endpoints",
-            setting_name="ADMIN_PASSWORD",
+            feature=FEATURE_ADMIN_ENDPOINTS,
+            setting_name=SETTING_NAME_ADMIN_PASSWORD,
             app_env=settings.APP_ENV,
             allow_insecure_dev=settings.ALLOW_INSECURE_DEV,
         ):
@@ -309,8 +313,8 @@ def _require_admin(
     password = settings.ADMIN_PASSWORD
     if not require_configured_secret(
         password,
-        feature="Admin endpoints",
-        setting_name="ADMIN_PASSWORD",
+        feature=FEATURE_ADMIN_ENDPOINTS,
+        setting_name=SETTING_NAME_ADMIN_PASSWORD,
         app_env=settings.APP_ENV,
         allow_insecure_dev=settings.ALLOW_INSECURE_DEV,
     ):
@@ -334,7 +338,9 @@ def _ndjson_response(gen: AsyncIterator[bytes]) -> StreamingResponse:
     """Shared streamed-envelope response wrapper (issue #159) — every job
     trigger endpoint streams NDJSON with caching disabled unconditionally."""
     return StreamingResponse(
-        gen, media_type="application/x-ndjson", headers={"Cache-Control": "no-store"}
+        gen,
+        media_type=MIME_APPLICATION_NDJSON,
+        headers={"Cache-Control": SECURITY_HEADERS["Cache-Control"]},
     )
 
 

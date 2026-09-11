@@ -26,6 +26,7 @@ from app.ingestion.selectors import (
     PILETILEVI_IMAGE_HEIGHT,
     PILETILEVI_IMAGE_SELECTOR,
     PILETILEVI_IMPORTANT_INFO_HEADINGS,
+    PILETILEVI_INFO_BLOCK_CLASS,
     PILETILEVI_LOGIN_EXPRESS_URL,
     PILETILEVI_MAX_PAGES,
     PILETILEVI_PRICES_LANGUAGE,
@@ -126,7 +127,7 @@ def _piletilevi_important_info(soup: BeautifulSoup, locale: str = "en") -> str |
     )
     if heading is None:
         return None
-    block = heading.find_parent("div", class_="white-rounded-block")
+    block = heading.find_parent("div", class_=PILETILEVI_INFO_BLOCK_CLASS)
     if block is None:
         return None
     # Piletilevi's Nuxt SSR markup leaves bare "[" / "]" text nodes as direct

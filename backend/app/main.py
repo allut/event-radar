@@ -33,9 +33,14 @@ from app.constants import (
     DEV_CORS_ORIGINS_DEFAULT,
     DEV_DB_LOCAL_HOSTS,
     DIGEST_SEND_HOUR,
+    DIGEST_SEND_MINUTE,
+    ERROR_CSRF_ORIGIN_MISMATCH,
     ERROR_INTERNAL_TICK_INVALID_TOKEN,
     FEED_BUILD_HOUR,
     FEED_BUILD_MINUTE,
+    HEADER_HOST,
+    HEADER_INTERNAL_TOKEN,
+    HEADER_ORIGIN,
     HOST_CHECK_EXEMPT_PATHS,
     HSTS_HEADER_NAME,
     HSTS_HEADER_VALUE,
@@ -57,6 +62,7 @@ from app.constants import (
     LOG_STATUS_ERROR,
     LOG_STATUS_OK,
     MAX_REQUEST_BODY_BYTES,
+    MS_PER_SECOND,
     ORGANIZER_SYNC_HOUR,
     ORGANIZER_SYNC_MINUTE,
     RATE_LIMIT_INTERNAL_TICK,
@@ -136,7 +142,7 @@ def _scheduled(
                     "event": LOG_EVENT_JOB_RUN,
                     "job": label,
                     "status": LOG_STATUS_OK,
-                    "duration_ms": round((time.monotonic() - start) * 1000),
+                    "duration_ms": round((time.monotonic() - start) * MS_PER_SECOND),
                 },
             )
         except Exception:
@@ -147,7 +153,7 @@ def _scheduled(
                     "event": LOG_EVENT_JOB_RUN,
                     "job": label,
                     "status": LOG_STATUS_ERROR,
-                    "duration_ms": round((time.monotonic() - start) * 1000),
+                    "duration_ms": round((time.monotonic() - start) * MS_PER_SECOND),
                 },
             )
 
@@ -277,7 +283,7 @@ def _register_scheduled_jobs(scheduler: AsyncIOScheduler) -> None:
         _run_send_daily_digests,
         trigger="cron",
         hour=DIGEST_SEND_HOUR,
-        minute=0,
+        minute=DIGEST_SEND_MINUTE,
         id=JOB_ID_SEND_DAILY_DIGESTS,
         replace_existing=True,
     )
@@ -304,7 +310,7 @@ class CsrfOriginCheckMiddleware:
 
     async def _reject(self, scope: Scope, receive: Receive, send: Send) -> None:
         response = JSONResponse(
-            {"detail": "Origin header does not match a trusted origin."},
+            {"detail": ERROR_CSRF_ORIGIN_MISMATCH},
             status_code=status.HTTP_403_FORBIDDEN,
         )
         await response(scope, receive, send)
@@ -317,7 +323,7 @@ class CsrfOriginCheckMiddleware:
             await self.app(scope, receive, send)
             return
 
-        origin = Headers(scope=scope).get("origin")
+        origin = Headers(scope=scope).get(HEADER_ORIGIN)
         if origin is not None and origin not in self.trusted_origins:
             await self._reject(scope, receive, send)
             return
@@ -386,7 +392,7 @@ class HostCheckMiddleware:
         if rejected:
             log.warning(
                 "Host header rejected: host=%r path=%r client=%r",
-                Headers(scope=scope).get("host"),
+                Headers(scope=scope).get(HEADER_HOST),
                 scope.get("path"),
                 client_key(Request(scope)),
                 extra={"event": LOG_EVENT_HOST_REJECTED},
@@ -737,7 +743,7 @@ async def tick(request: Request) -> dict:
         app_env=settings.APP_ENV,
         allow_insecure_dev=settings.ALLOW_INSECURE_DEV,
     ):
-        received = request.headers.get("X-Internal-Token", "")
+        received = request.headers.get(HEADER_INTERNAL_TOKEN, "")
         if not secrets.compare_digest(received.encode(), token.encode()):
             log.warning(
                 "internal/tick: invalid token (client=%s)",

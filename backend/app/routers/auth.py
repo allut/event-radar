@@ -30,14 +30,17 @@ from app.auth.tokens import (
     generate_session_token,
     hash_token,
     magic_ttl_seconds,
-    oauth_state_ttl_seconds,
     verify_magic_token,
     verify_oauth_state_token,
     verify_session_token,
 )
 from app.config import settings
 from app.constants import (
+    AUTH_TRACK_USER,
     DEFAULT_USER_LOCALE,
+    DETAIL_MAGIC_LINK_SENT,
+    DETAIL_SIGNED_OUT,
+    DETAIL_SIGNED_OUT_ALL,
     ERROR_MAGIC_LINK_CONSUMED,
     ERROR_MAGIC_LINK_EXPIRED,
     ERROR_MAGIC_LINK_INVALID,
@@ -50,6 +53,7 @@ from app.constants import (
     GOOGLE_SIGNIN_OUTCOME_CONFIRMATION_SENT,
     GOOGLE_SIGNIN_OUTCOME_EXISTING_LOGIN,
     GOOGLE_SIGNIN_OUTCOME_NEW_ACCOUNT,
+    HEADER_ACCEPT_LANGUAGE,
     HOME_PATH,
     IDENTITY_PROVIDER_GOOGLE,
     LOG_EVENT_AUTH_FAILED,
@@ -58,13 +62,11 @@ from app.constants import (
     LOG_EVENT_IDENTITY_LINKED,
     LOGIN_PATH,
     OAUTH_ERROR_DENIED,
-    OAUTH_ERROR_QUERY_PARAM,
     OAUTH_ERROR_STATE_INVALID,
     OAUTH_ERROR_TOKEN_EXCHANGE_FAILED,
     OAUTH_ERROR_VERIFICATION_FAILED,
     OAUTH_STATE_COOKIE_NAME,
     OAUTH_STATE_COOKIE_PATH,
-    OAUTH_STATE_COOKIE_SAMESITE,
     ONBOARDING_PATH,
     RATE_LIMIT_AUTH_REQUEST_LINK,
     RATE_LIMIT_AUTH_VERIFY,
@@ -74,10 +76,8 @@ from app.constants import (
     RATE_LIMIT_LOGOUT,
     RATE_LIMIT_LOGOUT_ALL,
     SECONDS_PER_DAY,
-    SESSION_COOKIE_HTTPONLY,
     SESSION_COOKIE_NAME,
     SESSION_COOKIE_PATH,
-    SESSION_COOKIE_SECURE,
     VALID_LOCALES,
 )
 from app.db import get_db
@@ -86,11 +86,15 @@ from app.rate_limit import limiter
 from app.routers.utils import (
     RequestLinkBody,
     VerifyTokenBody,
+    build_google_redirect_uri,
+    build_oauth_error_redirect,
+    clear_oauth_state_cookie,
     clear_session_cookie,
     mask_email,
     recent_unused_link_exists,
     record_unverified_account_creation,
     serialize_user,
+    set_oauth_state_cookie,
     set_session_cookie,
 )
 
@@ -181,7 +185,7 @@ async def _get_or_create_user(
     user = await db.scalar(select(User).where(User.email == email))
     if user is None:
         locale = requested_locale or _detect_locale(
-            request.headers.get("Accept-Language", "")
+            request.headers.get(HEADER_ACCEPT_LANGUAGE, "")
         )
         user = User(email=email, locale=locale)
         db.add(user)
@@ -212,9 +216,7 @@ async def request_magic_link(
     if await recent_unused_link_exists(
         db, AuthMagicLink, AuthMagicLink.user_id, user.id, magic_ttl_seconds()
     ):
-        return {
-            "detail": "If that address is registered, a sign-in link has been sent."
-        }
+        return {"detail": DETAIL_MAGIC_LINK_SENT}
 
     signed_token, token_hash, expires_at = generate_magic_token(user.id)
 
@@ -235,7 +237,7 @@ async def request_magic_link(
         log.exception("Failed to send magic link to %s", mask_email(email))
         # Do not surface email errors to caller — link is in DB, user can retry.
 
-    return {"detail": "If that address is registered, a sign-in link has been sent."}
+    return {"detail": DETAIL_MAGIC_LINK_SENT}
 
 
 @router.post("/verify")
@@ -376,7 +378,7 @@ async def logout(request: Request, response: Response) -> dict:
     already expired/revoked still gets a 200 and its stale cookie cleared,
     instead of a 401 that leaves the dead cookie sitting in the browser."""
     clear_session_cookie(response, name=SESSION_COOKIE_NAME, path=SESSION_COOKIE_PATH)
-    return {"detail": "Signed out."}
+    return {"detail": DETAIL_SIGNED_OUT}
 
 
 @router.post("/logout-all", status_code=status.HTTP_200_OK)
@@ -407,7 +409,7 @@ async def logout_all(
     await db.commit()
     current_user.session_token_version = new_version
     clear_session_cookie(response, name=SESSION_COOKIE_NAME, path=SESSION_COOKIE_PATH)
-    return {"detail": "Signed out of all devices."}
+    return {"detail": DETAIL_SIGNED_OUT_ALL}
 
 
 @router.get("/me")
@@ -440,28 +442,21 @@ async def get_me(
 def _google_redirect_uri() -> str:
     """Browser-facing callback URL — must match what's registered with
     Google and what the state cookie is scoped to (OAUTH_STATE_COOKIE_PATH)."""
-    return f"{settings.FRONTEND_URL}{GOOGLE_CALLBACK_PUBLIC_PATH}"
+    return build_google_redirect_uri(GOOGLE_CALLBACK_PUBLIC_PATH)
 
 
 def _set_oauth_state_cookie(response: Response, token: str) -> None:
-    response.set_cookie(
-        key=OAUTH_STATE_COOKIE_NAME,
-        value=token,
-        max_age=oauth_state_ttl_seconds(),
-        path=OAUTH_STATE_COOKIE_PATH,
-        secure=SESSION_COOKIE_SECURE,
-        httponly=SESSION_COOKIE_HTTPONLY,
-        samesite=OAUTH_STATE_COOKIE_SAMESITE,
+    set_oauth_state_cookie(
+        response,
+        token,
+        cookie_name=OAUTH_STATE_COOKIE_NAME,
+        cookie_path=OAUTH_STATE_COOKIE_PATH,
     )
 
 
 def _clear_oauth_state_cookie(response: Response) -> None:
-    response.delete_cookie(
-        key=OAUTH_STATE_COOKIE_NAME,
-        path=OAUTH_STATE_COOKIE_PATH,
-        secure=SESSION_COOKIE_SECURE,
-        httponly=SESSION_COOKIE_HTTPONLY,
-        samesite=OAUTH_STATE_COOKIE_SAMESITE,
+    clear_oauth_state_cookie(
+        response, cookie_name=OAUTH_STATE_COOKIE_NAME, cookie_path=OAUTH_STATE_COOKIE_PATH
     )
 
 
@@ -469,12 +464,12 @@ def _error_redirect(error_code: str) -> RedirectResponse:
     """Every callback failure path lands here: a 302 back to the login page
     carrying an error code, never a 500 — the state cookie (single-use) is
     cleared regardless of outcome."""
-    response = RedirectResponse(
-        f"{settings.FRONTEND_URL}{LOGIN_PATH}?{OAUTH_ERROR_QUERY_PARAM}={error_code}",
-        status_code=status.HTTP_302_FOUND,
+    return build_oauth_error_redirect(
+        error_code,
+        login_path=LOGIN_PATH,
+        cookie_name=OAUTH_STATE_COOKIE_NAME,
+        cookie_path=OAUTH_STATE_COOKIE_PATH,
     )
-    _clear_oauth_state_cookie(response)
-    return response
 
 
 @router.get("/google/start")
@@ -493,7 +488,7 @@ async def start_google_signin(request: Request) -> RedirectResponse:
     )
     response = RedirectResponse(auth_url, status_code=status.HTTP_302_FOUND)
     _set_oauth_state_cookie(
-        response, generate_oauth_state_token(state, code_verifier, track="user")
+        response, generate_oauth_state_token(state, code_verifier, track=AUTH_TRACK_USER)
     )
     return response
 
@@ -685,7 +680,7 @@ async def google_callback(
         return _error_redirect(OAUTH_ERROR_STATE_INVALID)
 
     try:
-        state_payload = verify_oauth_state_token(oauth_state, track="user")
+        state_payload = verify_oauth_state_token(oauth_state, track=AUTH_TRACK_USER)
     except (BadSignature, SignatureExpired):
         log.warning(
             "google sign-in failed: bad/expired state token",
