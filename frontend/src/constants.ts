@@ -234,6 +234,13 @@ export const PRERENDER_ERROR_SELECTOR = `[${PRERENDER_ERROR_ATTR}="true"]`;
 // robots.txt's Sitemap directive and the live audit's production fetch).
 export const SITEMAP_FILENAME = 'sitemap.xml';
 export const SITEMAP_PATH = `/${SITEMAP_FILENAME}`;
+// dist-relative filename of the pristine (never overwritten by prerender)
+// Vite build output — `npm run build` copies dist/index.html here *before*
+// invoking prerender.ts (frontend/package.json's build script), so this is
+// the one file on disk during the round that still carries the current
+// build's real asset hashes. prerender.ts reads it to rewrite the stale
+// asset refs a copied-forward snapshot would otherwise ship (issue #97).
+export const APP_SHELL_FILENAME = 'app-shell.html';
 // Live-audit (issue #54, api/seo-audit.ts + src/lib/seoAudit.ts): sitemap.xml's
 // <lastmod> (target.updatedAt when available, else the build timestamp — see
 // prerender.ts's buildSitemapXml) older than this is treated as a dead prerender cadence.

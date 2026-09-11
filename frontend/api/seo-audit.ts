@@ -24,7 +24,7 @@ import { StatusCodes } from 'http-status-codes';
 import { FAVICON_ICO_PATH, LOCALES, PRODUCTION_ORIGIN, ROUTES, SEO_AUDIT_TOKEN_HEADER, SITEMAP_PATH } from '../src/constants.js';
 import type { LocaleCode } from '../src/constants.js';
 import { localizedPath } from '../src/lib/urlLocale.js';
-import { evaluateLiveAudit, parseSitemapEventUrls } from '../src/lib/seoAudit.js';
+import { evaluateLiveAudit, parseSitemapEventUrls, parseSnapshotAssetUrls } from '../src/lib/seoAudit.js';
 import { reportAuditFailure, reportAuditRecovery } from '../src/lib/seoAuditIssue.js';
 import { isValidAuditToken } from '../src/lib/seoAuditAuth.js';
 import type { VercelRequest, VercelResponse } from './vercel';
@@ -124,6 +124,33 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       `favicon.ico content-type is "${faviconContentType ?? 'missing'}", expected an image/* type — Google can't use it as the site icon`,
     );
     result.ok = false;
+  }
+
+  // Same app-shell-fallthrough failure mode as the favicon check above, for
+  // the event snapshot's own built assets (issue #97): a copied-forward
+  // snapshot that ships a previous build's asset hash gets a 200 `text/html`
+  // app-shell response instead of a 404, which no structural/JSON-LD check
+  // can see. Best-effort, same as eventHtml's own fetch above — no event
+  // snapshot yet means nothing to check here.
+  if (eventHtml) {
+    for (const assetUrl of parseSnapshotAssetUrls(eventHtml)) {
+      const absoluteUrl = `${PRODUCTION_ORIGIN}${assetUrl}`;
+      try {
+        const assetRes = await fetch(absoluteUrl);
+        const assetContentType = assetRes.headers.get('content-type');
+        const isCss = assetUrl.endsWith('.css');
+        const expectedType = isCss ? 'text/css' : 'javascript';
+        if (!assetRes.ok || !assetContentType || !assetContentType.includes(expectedType)) {
+          result.issues.push(
+            `event snapshot asset ${assetUrl} content-type is "${assetContentType ?? 'missing'}" (status ${assetRes.status}), expected ${expectedType} — snapshot likely references a previous build's asset hash`,
+          );
+          result.ok = false;
+        }
+      } catch (error) {
+        result.issues.push(`event snapshot asset ${assetUrl} failed to fetch: ${String(error)}`);
+        result.ok = false;
+      }
+    }
   }
 
   try {

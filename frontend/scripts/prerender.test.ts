@@ -5,6 +5,7 @@ import {
   isPreviewBuild,
   logZeroProgressAbort,
   main,
+  rewriteSnapshotAssetRefs,
   selectValidationTargets,
 } from './prerender';
 import type { PrerenderTarget } from './prerender';
@@ -72,6 +73,61 @@ describe('selectValidationTargets', () => {
     const result = selectValidationTargets(renderQueue, []);
 
     expect(result).toEqual(renderQueue);
+  });
+});
+
+describe('rewriteSnapshotAssetRefs (issue #97)', () => {
+  const shellHtml =
+    '<!doctype html><html><head>' +
+    '<script type="module" crossorigin src="/assets/index-NEW111.js"></script>' +
+    '<link rel="stylesheet" crossorigin href="/assets/index-NEW222.css">' +
+    '</head><body><div id="root"></div></body></html>';
+
+  it('replaces a stale snapshot\'s asset refs with the shell\'s current ones', () => {
+    const staleHtml =
+      '<!doctype html><html><head>' +
+      '<title>Jazz Night</title>' +
+      '<script type="module" crossorigin src="/assets/index-OLD111.js"></script>' +
+      '<link rel="stylesheet" crossorigin href="/assets/index-OLD222.css">' +
+      '</head><body><div id="root">rendered</div></body></html>';
+
+    const result = rewriteSnapshotAssetRefs(staleHtml, shellHtml);
+
+    expect(result).toContain('/assets/index-NEW111.js');
+    expect(result).toContain('/assets/index-NEW222.css');
+    expect(result).not.toContain('OLD111');
+    expect(result).not.toContain('OLD222');
+  });
+
+  it('preserves everything else byte-for-byte — title, JSON-LD, the dateModified change marker', () => {
+    const staleHtml =
+      '<!doctype html><html><head>' +
+      '<title>Jazz Night</title>' +
+      '<script type="application/ld+json">{"@type":"Event","dateModified":"2026-08-01T00:00:00.000Z"}</script>' +
+      '<script type="module" crossorigin src="/assets/index-OLD111.js"></script>' +
+      '</head><body data-rh="true"><div id="root">rendered</div></body></html>';
+
+    const result = rewriteSnapshotAssetRefs(staleHtml, shellHtml);
+
+    expect(result).toContain('<title>Jazz Night</title>');
+    expect(result).toContain('"dateModified":"2026-08-01T00:00:00.000Z"');
+    expect(result).toContain('data-rh="true"');
+  });
+
+  it('appends the shell\'s asset refs when the stale snapshot has none', () => {
+    const staleHtml = '<!doctype html><html><head><title>Jazz Night</title></head><body></body></html>';
+
+    const result = rewriteSnapshotAssetRefs(staleHtml, shellHtml);
+
+    expect(result).toContain('/assets/index-NEW111.js');
+    expect(result).toContain('/assets/index-NEW222.css');
+  });
+
+  it('throws when the shell has no /assets/ references — wrong document guard', () => {
+    const staleHtml = '<!doctype html><html><head></head><body></body></html>';
+    const emptyShell = '<!doctype html><html><head><title>App Shell</title></head><body></body></html>';
+
+    expect(() => rewriteSnapshotAssetRefs(staleHtml, emptyShell)).toThrow(/zero \/assets\//);
   });
 });
 
