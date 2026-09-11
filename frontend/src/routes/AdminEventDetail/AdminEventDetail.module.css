@@ -166,6 +166,52 @@
 .openTag { color: var(--danger); }
 .resolvedTag { color: var(--success); }
 
+.contentSwitch { margin-bottom: var(--space-3); }
+
+.fieldHead {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin-bottom: var(--space-1);
+}
+
+.contentTitle {
+  font-family: var(--font-system);
+  font-size: var(--fs-lg);
+  font-weight: var(--fw-semibold);
+  color: var(--text);
+  margin: 0;
+}
+
+.fallbackTag {
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wider);
+  color: var(--text-muted);
+  border: var(--border-w-hair) solid var(--border);
+  border-radius: var(--radius);
+  padding: 0 var(--space-1);
+}
+
+.factLinkInline { composes: accentLink from '../../components/shared/Link.module.css'; margin-top: 0; }
+
+.imagePreview { margin-top: var(--space-4); }
+.imageThumb {
+  display: block;
+  max-width: var(--admin-image-preview-max);
+  max-height: var(--admin-image-preview-max);
+  border: var(--border-w-hair) solid var(--border);
+  object-fit: contain;
+}
+.imageMeta {
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  color: var(--text-muted);
+  margin-top: var(--space-1);
+  word-break: break-all;
+}
+
 .rawBlock { margin-bottom: var(--space-4); }
 .rawMeta { font-size: var(--fs-sm); font-family: var(--font-mono); color: var(--text-soft); margin-bottom: var(--space-2); }
 .rawPayload {

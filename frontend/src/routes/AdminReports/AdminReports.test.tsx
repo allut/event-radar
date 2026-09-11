@@ -70,6 +70,14 @@ describe('AdminReports', () => {
     expect(screen.getByText('Contains language that may violate local law.')).toBeInTheDocument();
   });
 
+  it('links the detail panel to the full event inspector', async () => {
+    mockGet.mockResolvedValueOnce(sampleReports);
+    renderWithProviders(<AdminReports />);
+
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'MEEDIUM' })).toBeInTheDocument());
+    expect(screen.getByRole('link', { name: /Open full details/ })).toHaveAttribute('href', '/admin/events/1');
+  });
+
   it('shows an empty state when there are no open reports', async () => {
     mockGet.mockResolvedValueOnce({ total: 0, events: [] });
     renderWithProviders(<AdminReports />);

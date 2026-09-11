@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { adminApi, ApiError } from '../../api/client';
-import { ADMIN_REPORTS_PARAM, ADMIN_REPORTS_QUEUE_PAGE_SIZE, API, QUERY_KEYS, REPORT_REASONS, UI_STATE } from '../../constants';
+import { ADMIN_QUEUE_DETAIL_LINK_LABEL, ADMIN_REPORTS_PARAM, ADMIN_REPORTS_QUEUE_PAGE_SIZE, API, QUERY_KEYS, REPORT_REASONS, ROUTES, UI_STATE } from '../../constants';
 import { t } from '../../i18n';
 import { relativeTimeFromNow } from '../../utils';
 import PageState from '../../components/PageState';
@@ -10,6 +10,7 @@ import Toast from '../../components/Toast';
 import { useToast } from '../../hooks/useToast';
 import AdminQueueSplitView from '../../components/AdminQueueSplitView';
 import AdminQueueActionPanel from '../../components/AdminQueueActionPanel';
+import queueStyles from '../../components/shared/AdminQueue.module.css';
 import styles from './AdminReports.module.css';
 
 interface AdminReport {
@@ -182,6 +183,9 @@ export default function AdminReports() {
               <div>
                 <h2 className={styles.detailTitle}>{item.title}</h2>
                 <p className={styles.detailMeta}>{item.venue ?? 'No venue'} · status: {item.status}</p>
+                <Link to={ROUTES.adminEventDetail(item.event_id)} className={queueStyles.queueDetailLink}>
+                  {ADMIN_QUEUE_DETAIL_LINK_LABEL}
+                </Link>
                 <div className={styles.chips}>
                   {item.has_illegal_allegation && <span className={styles.illegalChip}>Illegal content alleged</span>}
                   {item.reasons.map((r) => (

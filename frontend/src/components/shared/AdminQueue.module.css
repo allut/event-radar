@@ -52,3 +52,9 @@
   font-size: var(--fs-2xs);
   margin-bottom: var(--space-1);
 }
+
+.queueDetailLink {
+  composes: accentLink from './Link.module.css';
+  font-size: var(--fs-sm);
+  margin-bottom: var(--space-3);
+}

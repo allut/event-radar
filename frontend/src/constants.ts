@@ -720,6 +720,18 @@ export const ADMIN_NAV_ITEMS = [
 // AdminEventDetail's tab strip — same no-i18n exemption as ADMIN_NAV_ITEMS.
 export const ADMIN_EVENT_DETAIL_TABS = ['Overview', 'Classification', 'Dedup & reports', 'Raw payload'] as const;
 
+// AdminEventDetail's content-locale switch (SegmentedControl marker labels) —
+// plain English, same no-i18n exemption as ADMIN_NAV_ITEMS.
+export const ADMIN_CONTENT_LANG_MARKER_LABELS: Record<ContentMarkerState, string> = {
+  empty: 'not translated',
+  partial: 'partially translated',
+  matched: 'translated',
+};
+
+// Shared "open full details" link on AdminSubmissions/AdminReports detail
+// panes (AdminQueue.module.css's .queueDetailLink) — same no-i18n exemption.
+export const ADMIN_QUEUE_DETAIL_LINK_LABEL = 'Open full details →';
+
 // AdminShell's foot-area theme toggle (issue #255) — same {value, label}
 // shape as THEME_OPTIONS below, but plain-English labels: same no-i18n
 // exemption as ADMIN_NAV_ITEMS, since the admin console has no locale.

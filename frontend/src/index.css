@@ -299,6 +299,7 @@
   --admin-tab-panel-min-height: 320px;  /* AdminEventDetail tab panel */
   --admin-tile-min: 220px;              /* AdminDashboard stat tile grid */
   --admin-trigger-min: 240px;           /* AdminPipeline trigger card grid */
+  --admin-image-preview-max: 320px;     /* AdminEventDetail image field thumbnail */
 
   /* Heading scale */
   --heading-2xl: 2.5rem;

@@ -76,6 +76,7 @@ from app.constants import (
     REPORT_AUTO_RESOLVE_NOTE,
     REPORT_STATUS_OPEN,
     TALLINN_TZ,
+    VALID_LOCALES,
 )
 from app.db import AsyncSessionLocal
 from app.email.digest import send_daily_digests
@@ -110,7 +111,10 @@ from app.routers.utils import (
     ndjson_line,
     release_admin_job_lock,
     require_configured_secret,
+    resolve_description,
+    resolve_important_info,
     resolve_open_reports,
+    resolve_title,
     resolve_venue_address,
     resolve_venue_coords,
     resolve_venue_name,
@@ -853,6 +857,32 @@ def _serialize_raw_event(raw: RawEvent, source_slug: str) -> dict:
     }
 
 
+def _translation_state(m: dict | None, locale: str) -> bool:
+    """True when this locale has its own stored value (not a fallback)."""
+    return bool(m and m.get(locale))
+
+
+def _content_by_locale(event: Event) -> dict:
+    """Per-locale resolved content plus, per field, whether the value is a
+    real translation or the locale -> en -> original fallback."""
+    return {
+        loc: {
+            "title": resolve_title(event, loc),
+            "description": resolve_description(event, loc),
+            "important_info": resolve_important_info(event, loc),
+            "venue_name": resolve_venue_name(event, loc),
+            "translated": {
+                "title": _translation_state(event.title_localized, loc),
+                "description": _translation_state(event.description_localized, loc),
+                "important_info": _translation_state(
+                    event.important_info_localized, loc
+                ),
+            },
+        }
+        for loc in sorted(VALID_LOCALES)
+    }
+
+
 def _serialize_event_detail(event: Event) -> dict:
     cl = event.classification
     lat, lng = resolve_venue_coords(event)
@@ -908,6 +938,7 @@ def _serialize_event_detail(event: Event) -> dict:
             if cl
             else None
         ),
+        "content_by_locale": _content_by_locale(event),
     }
 
 

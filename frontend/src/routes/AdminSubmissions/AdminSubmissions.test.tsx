@@ -57,6 +57,14 @@ describe('AdminSubmissions', () => {
     expect(screen.getByText('Live jazz trio in the museum courtyard.')).toBeInTheDocument();
   });
 
+  it('links the detail panel to the full event inspector', async () => {
+    mockGet.mockResolvedValueOnce(sampleSubmissions);
+    renderWithProviders(<AdminSubmissions />);
+
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Tallinn Jazz Night' })).toBeInTheDocument());
+    expect(screen.getByRole('link', { name: /Open full details/ })).toHaveAttribute('href', '/admin/events/1');
+  });
+
   it('renders the description snippet as plain text, never as HTML markup (out of scope for #271)', async () => {
     mockGet.mockResolvedValueOnce({
       total: 1,

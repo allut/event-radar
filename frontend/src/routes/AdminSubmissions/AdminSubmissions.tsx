@@ -1,13 +1,15 @@
 import { useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { adminApi, ApiError } from '../../api/client';
-import { ADMIN_REVIEW_QUEUE_PAGE_SIZE, API, QUERY_KEYS, UI_STATE } from '../../constants';
+import { ADMIN_QUEUE_DETAIL_LINK_LABEL, ADMIN_REVIEW_QUEUE_PAGE_SIZE, API, QUERY_KEYS, ROUTES, UI_STATE } from '../../constants';
 import { relativeTimeFromNow, safeUrl } from '../../utils';
 import PageState from '../../components/PageState';
 import Toast from '../../components/Toast';
 import { useToast } from '../../hooks/useToast';
 import AdminQueueSplitView from '../../components/AdminQueueSplitView';
 import AdminQueueActionPanel from '../../components/AdminQueueActionPanel';
+import queueStyles from '../../components/shared/AdminQueue.module.css';
 import styles from './AdminSubmissions.module.css';
 
 interface AdminSubmission {
@@ -153,6 +155,9 @@ export default function AdminSubmissions() {
               <div>
                 <h2 className={styles.detailTitle}>{item.title}</h2>
                 <p className={styles.detailMeta}>{item.venue_name ?? 'No venue'} · status: {item.status}</p>
+                <Link to={ROUTES.adminEventDetail(item.id)} className={queueStyles.queueDetailLink}>
+                  {ADMIN_QUEUE_DETAIL_LINK_LABEL}
+                </Link>
                 {item.categories.length > 0 && (
                   <div className={styles.chips}>
                     {item.categories.map((c) => (

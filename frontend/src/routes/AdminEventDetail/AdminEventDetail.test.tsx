@@ -13,36 +13,76 @@ import { adminApi, ApiError } from '../../api/client';
 const mockGet = vi.mocked(adminApi.get);
 const mockPost = vi.mocked(adminApi.post);
 
-function sampleResponse(overrides: Partial<Record<string, unknown>> = {}) {
-  return {
-    event: {
-      id: 42,
-      title_orig: 'Jazz Cellar Night',
-      description_orig: 'A late-night jazz set.',
-      important_info: null,
-      status: 'published',
-      dedup_group_id: null,
-      submitted_by_organizer_id: null,
-      needs_review: false,
-      cancellation_reason: null,
-      created_at: '2026-08-20T04:12:00+03:00',
-      updated_at: '2026-08-24T06:03:00+03:00',
-      detail_refetched_at: null,
-      classification: {
-        categories: ['music'],
-        vibes: ['underground'],
-        quality_score: 0.82,
-        why_go_bullets: ['Great sound'],
-        language_detected: 'en',
-        model_used: 'llama-3.3-70b-versatile',
-        classified_at: '2026-08-20T04:15:00+03:00',
-      },
+// eventOverrides patches the base event; contentByLocale, when omitted, is
+// derived from the (possibly overridden) title/description/important_info/
+// venue_name — et marked as a real translation, en/ru as fallbacks — so most
+// tests never need to touch content_by_locale directly.
+function sampleResponse(overrides: {
+  event?: Partial<Record<string, unknown>>;
+  contentByLocale?: Record<string, unknown>;
+  [key: string]: unknown;
+} = {}) {
+  const { event: eventOverrides, contentByLocale, ...rest } = overrides;
+  const baseEvent = {
+    id: 42,
+    title_orig: 'Jazz Cellar Night',
+    description_orig: 'A late-night jazz set.',
+    important_info: null as string | null,
+    status: 'published',
+    dedup_group_id: null,
+    submitted_by_organizer_id: null,
+    needs_review: false,
+    cancellation_reason: null,
+    created_at: '2026-08-20T04:12:00+03:00',
+    updated_at: '2026-08-24T06:03:00+03:00',
+    detail_refetched_at: null,
+    starts_at: '2026-08-29T19:00:00+03:00',
+    ends_at: null,
+    venue_name: 'Cellar',
+    venue_address: 'Cellar Street 1',
+    lat: 59.43,
+    lng: 24.75,
+    url: 'https://example.com/event',
+    image_url: null as string | null,
+    price_min: null,
+    price_max: null,
+    currency: null,
+    price_hint: null,
+    has_free_tier: false,
+    is_explicit: false,
+    is_out_of_area: false,
+    is_non_event: false,
+    geocode_attempted_at: null,
+    classification: {
+      categories: ['music'],
+      vibes: ['underground'],
+      quality_score: 0.82,
+      why_go_bullets: ['Great sound'],
+      language_detected: 'en',
+      model_used: 'llama-3.3-70b-versatile',
+      classified_at: '2026-08-20T04:15:00+03:00',
     },
+  };
+  const event = { ...baseEvent, ...eventOverrides };
+  const fallbackSlot = {
+    title: event.title_orig,
+    description: event.description_orig,
+    important_info: event.important_info,
+    venue_name: event.venue_name,
+    translated: { title: false, description: false, important_info: false },
+  };
+  const defaultContentByLocale = {
+    et: { ...fallbackSlot, translated: { title: true, description: true, important_info: true } },
+    en: fallbackSlot,
+    ru: fallbackSlot,
+  };
+  return {
+    event: { ...event, content_by_locale: contentByLocale ?? defaultContentByLocale },
     dedup_siblings: [],
     reports: [],
     raw_events: [],
     in_todays_feed: false,
-    ...overrides,
+    ...rest,
   };
 }
 
@@ -56,7 +96,7 @@ describe('AdminEventDetail', () => {
     mockGet.mockResolvedValueOnce(sampleResponse());
     renderWithProviders(<AdminEventDetail eventId="42" />, { route: '/admin/events/42' });
 
-    await waitFor(() => expect(screen.getByRole('heading', { name: 'Jazz Cellar Night' })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Jazz Cellar Night', level: 1 })).toBeInTheDocument());
     expect(mockGet).toHaveBeenCalledWith('/admin/events/42');
     expect(screen.getByText('published')).toBeInTheDocument();
     expect(screen.getByText('A late-night jazz set.')).toBeInTheDocument();
@@ -66,7 +106,6 @@ describe('AdminEventDetail', () => {
     mockGet.mockResolvedValueOnce(
       sampleResponse({
         event: {
-          ...sampleResponse().event,
           description_orig: '<p>Doors at <strong>8pm</strong>.</p><h3>Program</h3><ul><li>Set one</li></ul><script>alert(1)</script>',
           important_info: '<p>18+ only. <a href="https://example.com">Details</a></p>',
         },
@@ -74,7 +113,7 @@ describe('AdminEventDetail', () => {
     );
     renderWithProviders(<AdminEventDetail eventId="42" />, { route: '/admin/events/42' });
 
-    await waitFor(() => expect(screen.getByRole('heading', { name: 'Jazz Cellar Night' })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Jazz Cellar Night', level: 1 })).toBeInTheDocument());
 
     expect(screen.getByRole('heading', { name: 'Program', level: 3 })).toBeInTheDocument();
     expect(screen.getByRole('listitem')).toHaveTextContent('Set one');
@@ -88,7 +127,7 @@ describe('AdminEventDetail', () => {
 
   it('shows a plain-text fallback when there is no description', async () => {
     mockGet.mockResolvedValueOnce(
-      sampleResponse({ event: { ...sampleResponse().event, description_orig: null } }),
+      sampleResponse({ event: { description_orig: null } }),
     );
     renderWithProviders(<AdminEventDetail eventId="42" />, { route: '/admin/events/42' });
 
@@ -126,7 +165,7 @@ describe('AdminEventDetail', () => {
     );
     renderWithProviders(<AdminEventDetail eventId="42" />, { route: '/admin/events/42' });
 
-    await waitFor(() => expect(screen.getByRole('heading', { name: 'Jazz Cellar Night' })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Jazz Cellar Night', level: 1 })).toBeInTheDocument());
     await userEvent.click(screen.getByRole('tab', { name: /Raw payload/ }));
 
     expect(screen.getByText(/<script>alert\(1\)<\/script>/)).toBeInTheDocument();
@@ -150,7 +189,7 @@ describe('AdminEventDetail', () => {
 
   it('shows approve/retract actions only when needs_review is true and it is an organizer submission', async () => {
     mockGet.mockResolvedValueOnce(
-      sampleResponse({ event: { ...sampleResponse().event, needs_review: true, submitted_by_organizer_id: 7 } }),
+      sampleResponse({ event: { needs_review: true, submitted_by_organizer_id: 7 } }),
     );
     renderWithProviders(<AdminEventDetail eventId="42" />, { route: '/admin/events/42' });
 
@@ -161,11 +200,11 @@ describe('AdminEventDetail', () => {
 
   it('hides approve/retract when needs_review is true but there is no organizer submission', async () => {
     mockGet.mockResolvedValueOnce(
-      sampleResponse({ event: { ...sampleResponse().event, needs_review: true, submitted_by_organizer_id: null } }),
+      sampleResponse({ event: { needs_review: true, submitted_by_organizer_id: null } }),
     );
     renderWithProviders(<AdminEventDetail eventId="42" />, { route: '/admin/events/42' });
 
-    await waitFor(() => expect(screen.getByRole('heading', { name: 'Jazz Cellar Night' })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Jazz Cellar Night', level: 1 })).toBeInTheDocument());
     expect(screen.queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Retract' })).not.toBeInTheDocument();
   });
@@ -211,7 +250,7 @@ describe('AdminEventDetail', () => {
   it('links dedup siblings to their own inspector page', async () => {
     mockGet.mockResolvedValueOnce(
       sampleResponse({
-        event: { ...sampleResponse().event, dedup_group_id: 7 },
+        event: { dedup_group_id: 7 },
         dedup_siblings: [
           { id: 43, title: 'Jazz Night (Trio Set)', starts_at: '2026-08-29T19:00:00+03:00', venue: 'Cellar', status: 'draft', url: null, is_explicit: false },
         ],
@@ -219,10 +258,145 @@ describe('AdminEventDetail', () => {
     );
     renderWithProviders(<AdminEventDetail eventId="42" />, { route: '/admin/events/42' });
 
-    await waitFor(() => expect(screen.getByRole('heading', { name: 'Jazz Cellar Night' })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Jazz Cellar Night', level: 1 })).toBeInTheDocument());
     await userEvent.click(screen.getByRole('tab', { name: /Dedup & reports/ }));
 
     const link = screen.getByRole('link', { name: /Jazz Night \(Trio Set\)/ });
     expect(link).toHaveAttribute('href', '/admin/events/43');
+  });
+
+  it('renders the record fact list with starts/venue/price/image', async () => {
+    mockGet.mockResolvedValueOnce(
+      sampleResponse({
+        event: {
+          price_min: 5,
+          price_max: 12,
+          currency: 'EUR',
+          image_url: 'https://example.com/poster.jpg',
+        },
+      }),
+    );
+    renderWithProviders(<AdminEventDetail eventId="42" />, { route: '/admin/events/42' });
+
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Jazz Cellar Night', level: 1 })).toBeInTheDocument());
+
+    expect(screen.getByText('Cellar')).toBeInTheDocument();
+    expect(screen.getByText('5 – 12 EUR')).toBeInTheDocument();
+    expect(screen.getByRole('img')).toHaveAttribute('src', 'https://example.com/poster.jpg');
+    expect(screen.getByText('https://example.com/poster.jpg')).toBeInTheDocument();
+  });
+
+  it('switches the rendered title/description when the language switch moves to RU', async () => {
+    mockGet.mockResolvedValueOnce(
+      sampleResponse({
+        contentByLocale: {
+          et: {
+            title: 'Jazz Cellar Night',
+            description: 'A late-night jazz set.',
+            important_info: null,
+            venue_name: 'Cellar',
+            translated: { title: true, description: true, important_info: true },
+          },
+          en: {
+            title: 'Jazz Cellar Night',
+            description: 'A late-night jazz set.',
+            important_info: null,
+            venue_name: 'Cellar',
+            translated: { title: false, description: false, important_info: false },
+          },
+          ru: {
+            title: 'Ночь джаза в подвале',
+            description: 'Поздний джазовый сет.',
+            important_info: null,
+            venue_name: 'Погреб',
+            translated: { title: true, description: true, important_info: false },
+          },
+        },
+      }),
+    );
+    renderWithProviders(<AdminEventDetail eventId="42" />, { route: '/admin/events/42' });
+
+    await waitFor(() => expect(screen.getByText('A late-night jazz set.')).toBeInTheDocument());
+
+    await userEvent.click(screen.getByRole('button', { name: /^RU/ }));
+
+    expect(await screen.findByText('Ночь джаза в подвале')).toBeInTheDocument();
+    expect(screen.getByText('Поздний джазовый сет.')).toBeInTheDocument();
+  });
+
+  it('shows a fallback tag when the selected locale has no real translation', async () => {
+    mockGet.mockResolvedValueOnce(
+      sampleResponse({
+        contentByLocale: {
+          et: {
+            title: 'Jazz Cellar Night',
+            description: 'A late-night jazz set.',
+            important_info: null,
+            venue_name: 'Cellar',
+            translated: { title: true, description: true, important_info: true },
+          },
+          en: {
+            title: 'Jazz Cellar Night',
+            description: 'A late-night jazz set.',
+            important_info: null,
+            venue_name: 'Cellar',
+            translated: { title: false, description: false, important_info: false },
+          },
+          ru: {
+            title: 'Jazz Cellar Night',
+            description: 'A late-night jazz set.',
+            important_info: null,
+            venue_name: 'Cellar',
+            translated: { title: false, description: false, important_info: false },
+          },
+        },
+      }),
+    );
+    renderWithProviders(<AdminEventDetail eventId="42" />, { route: '/admin/events/42' });
+
+    await waitFor(() => expect(screen.getByText('A late-night jazz set.')).toBeInTheDocument());
+    expect(screen.queryByText('fallback')).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: /^EN/ }));
+
+    expect(await screen.findAllByText('fallback')).not.toHaveLength(0);
+  });
+
+  it('never shows a fallback tag on the base (et) locale, even when its translated flags are false', async () => {
+    // Mirrors an ingestion path where title_localized/etc. never got an
+    // 'et' key (e.g. newsletter-derived events) — translated comes back
+    // false for et, but et's content is still the canonical original, not
+    // a fallback, and must not be tagged as one.
+    mockGet.mockResolvedValueOnce(
+      sampleResponse({
+        contentByLocale: {
+          et: {
+            title: 'Jazz Cellar Night',
+            description: 'A late-night jazz set.',
+            important_info: null,
+            venue_name: 'Cellar',
+            translated: { title: false, description: false, important_info: false },
+          },
+          en: {
+            title: 'Jazz Cellar Night',
+            description: 'A late-night jazz set.',
+            important_info: null,
+            venue_name: 'Cellar',
+            translated: { title: false, description: false, important_info: false },
+          },
+          ru: {
+            title: 'Jazz Cellar Night',
+            description: 'A late-night jazz set.',
+            important_info: null,
+            venue_name: 'Cellar',
+            translated: { title: false, description: false, important_info: false },
+          },
+        },
+      }),
+    );
+    renderWithProviders(<AdminEventDetail eventId="42" />, { route: '/admin/events/42' });
+
+    await waitFor(() => expect(screen.getByText('A late-night jazz set.')).toBeInTheDocument());
+    expect(screen.queryByText('fallback')).not.toBeInTheDocument();
   });
 });

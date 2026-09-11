@@ -153,6 +153,7 @@ def make_event():
         e.description_orig = description_orig
         e.title_localized = None
         e.description_localized = None
+        e.important_info_localized = None
         e.important_info = None
         e.starts_at = starts_at
         e.ends_at = None
