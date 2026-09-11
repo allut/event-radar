@@ -7,6 +7,7 @@ import {
   main,
   rewriteSnapshotAssetRefs,
   selectValidationTargets,
+  stripBakedThemeAttr,
 } from './prerender';
 import type { PrerenderTarget } from './prerender';
 import type { RoundMarker } from '../src/lib/prerenderChain';
@@ -128,6 +129,45 @@ describe('rewriteSnapshotAssetRefs (issue #97)', () => {
     const emptyShell = '<!doctype html><html><head><title>App Shell</title></head><body></body></html>';
 
     expect(() => rewriteSnapshotAssetRefs(staleHtml, emptyShell)).toThrow(/zero \/assets\//);
+  });
+});
+
+describe('stripBakedThemeAttr (theme-revert-on-refresh fix)', () => {
+  it('removes a baked-in data-theme from the <html> element', () => {
+    const html = '<!doctype html><html data-theme="light"><head><title>Jazz Night</title></head><body></body></html>';
+
+    const result = stripBakedThemeAttr(html);
+
+    expect(result).not.toContain('data-theme');
+  });
+
+  it('leaves other <html> attributes untouched', () => {
+    const html =
+      '<!doctype html><html lang="et" data-theme="dark" data-rh="lang"><head></head><body></body></html>';
+
+    const result = stripBakedThemeAttr(html);
+
+    expect(result).toContain('lang="et"');
+    expect(result).toContain('data-rh="lang"');
+    expect(result).not.toContain('data-theme');
+  });
+
+  it('is idempotent — a second call on already-stripped HTML is a no-op', () => {
+    const html = '<!doctype html><html lang="et"><head></head><body></body></html>';
+
+    const once = stripBakedThemeAttr(html);
+    const twice = stripBakedThemeAttr(once);
+
+    expect(twice).toBe(once);
+  });
+
+  it('is a no-op when there is no data-theme attribute at all', () => {
+    const html = '<!doctype html><html lang="en"><head></head><body></body></html>';
+
+    const result = stripBakedThemeAttr(html);
+
+    expect(result).toContain('lang="en"');
+    expect(result).not.toContain('data-theme');
   });
 });
 

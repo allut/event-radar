@@ -353,6 +353,35 @@ export function rewriteSnapshotAssetRefs(html: string, shellHtml: string): strin
   return dom.serialize();
 }
 
+/** Strips a baked-in `data-theme` attribute off `html`'s `<html>` element,
+ * leaving every other attribute (`lang`, `data-rh`, …) untouched. A snapshot
+ * is captured in the build browser, which has no `theme_preference` in
+ * localStorage — the inline pre-paint script (index.html) resolves that to
+ * whatever the build machine's OS `prefers-color-scheme` happens to be and
+ * bakes it into `document.documentElement.dataset.theme` before
+ * `page.content()` ever reads the DOM back. Shipping that baked value means
+ * every visitor sees the build machine's theme, frozen, until JS re-resolves
+ * it at runtime — the theme-revert-on-refresh bug this fixes. Leaving the
+ * attribute absent instead falls through to the dark origin palette
+ * (`:root` in index.css) only until the pre-paint script (now unblocked by
+ * the CSP hash — see src/lib/csp.ts) sets the real value before first paint.
+ * Idempotent — a second call on already-stripped HTML is a no-op. */
+export function stripBakedThemeAttr(html: string): string {
+  const dom = new JSDOM(html);
+  dom.window.document.documentElement.removeAttribute('data-theme');
+  return dom.serialize();
+}
+
+/** Single choke point for every snapshot write, so a future write site can't
+ * skip stripBakedThemeAttr by accident. `shellHtml` is optional: the
+ * fresh-render write site (snapshotTarget) has no stale asset refs to
+ * rewrite (the page was just rendered against the current build), while
+ * both copy-forward write sites in main() do. */
+function finalizeSnapshotHtml(html: string, shellHtml?: string): string {
+  const withAssetsFixed = shellHtml !== undefined ? rewriteSnapshotAssetRefs(html, shellHtml) : html;
+  return stripBakedThemeAttr(withAssetsFixed);
+}
+
 /** Reads the change-detection marker back off a rendered snapshot's JSON-LD
  * (issue #80) — used both to read the currently-live production page during
  * change detection, and (via the same parseSnapshotHtml helper the in-build
@@ -562,7 +591,7 @@ async function snapshotTarget(
   }
   const outPath = outputFilePath(target.bare, target.locale);
   await mkdir(path.dirname(outPath), { recursive: true });
-  await writeFile(outPath, html, 'utf-8');
+  await writeFile(outPath, finalizeSnapshotHtml(html), 'utf-8');
 }
 
 /** Bounded-concurrency runner shared by the change-detection pass, the
@@ -860,7 +889,7 @@ export async function main(): Promise<void> {
     if (unchanged && liveHtml !== null) {
       const outPath = outputFilePath(target.bare, target.locale);
       await mkdir(path.dirname(outPath), { recursive: true });
-      await writeFile(outPath, rewriteSnapshotAssetRefs(liveHtml, shellHtml), 'utf-8');
+      await writeFile(outPath, finalizeSnapshotHtml(liveHtml, shellHtml), 'utf-8');
       copiedForward++;
     } else if (liveHtml !== null) {
       // Needs a fresh render, but a live page exists — held for now rather
@@ -987,7 +1016,7 @@ export async function main(): Promise<void> {
     if (liveHtml === undefined) continue;
     const outPath = outputFilePath(target.bare, target.locale);
     await mkdir(path.dirname(outPath), { recursive: true });
-    await writeFile(outPath, rewriteSnapshotAssetRefs(liveHtml, shellHtml), 'utf-8');
+    await writeFile(outPath, finalizeSnapshotHtml(liveHtml, shellHtml), 'utf-8');
     staleFallbackWritten++;
   }
 
