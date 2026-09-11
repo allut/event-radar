@@ -597,10 +597,9 @@ async def _apply_google_linking_gate(
     user) — user is None only for GOOGLE_SIGNIN_OUTCOME_CONFIRMATION_SENT,
     where no session is minted this request.
 
-    Diverges from organizer_auth.py::_apply_google_linking_gate with the
-    unverified-row-absorption branch (no organizer equivalent — Organizer has
-    no email_verified column) and by flipping User.email_verified on every
-    auto-link/absorb path (Organizer has nothing analogous to flip)."""
+    Diverges from organizer_auth.py::_apply_google_linking_gate only by
+    flipping User.email_verified on every auto-link/absorb path (Organizer
+    has nothing analogous to flip)."""
     existing_identity = await db.scalar(
         select(UserIdentity).where(
             UserIdentity.provider == IDENTITY_PROVIDER_GOOGLE,
@@ -613,19 +612,6 @@ async def _apply_google_linking_gate(
 
     existing_user = await db.scalar(select(User).where(User.email == identity["email"]))
     authoritative = is_authoritative_identity(identity)
-
-    if existing_user is not None and not existing_user.email_verified:
-        # Unverified existing row (ADR 0002) — a placeholder any
-        # unauthenticated caller could have created via /auth/request-link,
-        # holding no personas/feedback/bookmarks. Absorbed unconditionally,
-        # regardless of authoritative-ness, since there is nothing to take
-        # over.
-        return await _link_new_google_identity(
-            db,
-            existing_user,
-            identity["sub"],
-            success_outcome=GOOGLE_SIGNIN_OUTCOME_AUTO_LINKED,
-        )
 
     if authoritative:
         is_new = existing_user is None

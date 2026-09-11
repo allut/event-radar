@@ -1,9 +1,9 @@
 """Tests for the consumer-track Google sign-in endpoints (ADR 0002, #296) —
 _apply_google_linking_gate, /auth/google/start, /auth/google/callback.
 Mirrors tests/auth/test_organizer_auth.py's Google-sign-in sections; the
-extra TestApplyGoogleLinkingGate cases cover the consumer-only unverified-row
-absorption branch (no organizer equivalent — Organizer has no email_verified
-column)."""
+extra TestApplyGoogleLinkingGate cases cover the consumer-only
+email_verified flip on the auto-link/absorb paths (no organizer equivalent —
+Organizer has no email_verified column)."""
 import http
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -179,13 +179,15 @@ class TestApplyGoogleLinkingGate:
         mock_send.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_unverified_existing_row_absorbed_unconditionally(
+    async def test_unverified_existing_row_non_authoritative_requires_confirmation(
         self, mock_db, make_user
     ):
-        """Consumer-only branch (no organizer equivalent): an existing User
-        row with email_verified=False is absorbed regardless of
-        authoritative-ness — it holds no personas/feedback/bookmarks, so
-        there is nothing to take over (ADR 0002)."""
+        """OWASP audit M-1 fix: a non-authoritative Google identity must
+        never absorb an existing unverified User row outright — the row's
+        email address is the very thing being claimed, and Google is not
+        authoritative for it. It must fall through to the confirmation
+        magic-link path instead, exactly like the no-existing-user case, and
+        create no UserIdentity row / session for the caller."""
         from app.routers.auth import _apply_google_linking_gate
 
         existing_user = make_user(user_id=5, email_verified=False)
@@ -193,10 +195,34 @@ class TestApplyGoogleLinkingGate:
         mock_db.add = MagicMock()
         mock_db.commit = AsyncMock()
 
-        # Non-authoritative identity — proves the absorption branch fires
-        # ahead of (and regardless of) the authoritative check.
+        with patch(
+            "app.routers.auth._send_google_confirmation_link", new=AsyncMock()
+        ) as mock_send:
+            outcome, user = await _apply_google_linking_gate(
+                mock_db, GOOGLE_IDENTITY_NON_AUTHORITATIVE
+            )
+
+        assert outcome == "confirmation_sent"
+        assert user is None
+        mock_db.add.assert_not_called()
+        mock_send.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_unverified_existing_row_authoritative_auto_links(
+        self, mock_db, make_user
+    ):
+        """An authoritative identity (e.g. @gmail.com) may still absorb an
+        unverified existing row — that path is gated on authoritative-ness,
+        not bypassed for it."""
+        from app.routers.auth import _apply_google_linking_gate
+
+        existing_user = make_user(user_id=5, email_verified=False)
+        mock_db.scalar = AsyncMock(side_effect=[None, existing_user])
+        mock_db.add = MagicMock()
+        mock_db.commit = AsyncMock()
+
         outcome, user = await _apply_google_linking_gate(
-            mock_db, GOOGLE_IDENTITY_NON_AUTHORITATIVE
+            mock_db, GOOGLE_IDENTITY_AUTHORITATIVE
         )
 
         assert outcome == "auto_linked"
@@ -204,10 +230,10 @@ class TestApplyGoogleLinkingGate:
         assert existing_user.email_verified is True
         added_identity = mock_db.add.call_args.args[0]
         assert added_identity.user_id == 5
-        assert added_identity.provider_sub == "sub-2"
+        assert added_identity.provider_sub == "sub-1"
 
     @pytest.mark.asyncio
-    async def test_unverified_existing_row_absorption_race_falls_back(
+    async def test_unverified_existing_row_authoritative_race_falls_back(
         self, mock_db, make_user
     ):
         from sqlalchemy.exc import IntegrityError
@@ -223,7 +249,7 @@ class TestApplyGoogleLinkingGate:
         mock_db.rollback = AsyncMock()
 
         outcome, user = await _apply_google_linking_gate(
-            mock_db, GOOGLE_IDENTITY_NON_AUTHORITATIVE
+            mock_db, GOOGLE_IDENTITY_AUTHORITATIVE
         )
 
         assert outcome == "existing_login"

@@ -142,15 +142,24 @@ link** (the durable binding of one provider identity to one account on one
 track), **confirmation magic link** (a magic link sent to prove control
 *before* an identity link is created — not to start a session).
 
-- **The gate is authoritative-only.** Auto-link a provider identity into an
-  existing account only where Google is authoritative for the address:
-  `@gmail.com`/`@googlemail.com`, or an `hd` (hosted-domain) claim, in both
-  cases with `email_verified: true`. Every other address goes through one
-  confirmation magic link before the identity link is created.
-- **Exception: an unverified existing row is absorbed unconditionally.** A
-  row with `email_verified = false` is a placeholder any unauthenticated
-  caller could have created via `/auth/request-link` — it holds no personas,
-  feedback, or bookmarks, so there is nothing to take over.
+- **The gate is authoritative-only, with no exceptions.** Auto-link a
+  provider identity into an existing account only where Google is
+  authoritative for the address: `@gmail.com`/`@googlemail.com`, or an `hd`
+  (hosted-domain) claim, in both cases with `email_verified: true`. Every
+  other address goes through one confirmation magic link before the
+  identity link is created — **including** when an existing `User` row is
+  unverified. An earlier revision of this ADR carved out an exception here:
+  a row with `email_verified = false` (a placeholder any unauthenticated
+  caller could have created via `/auth/request-link`, holding no personas,
+  feedback, or bookmarks) was absorbed unconditionally, on the reasoning
+  that "there is nothing to take over." That reasoning missed that the
+  row's *email address* — not its contents — is the thing a non-authoritative
+  Google identity would be claiming, and Google's `email_verified` claim
+  proves nothing about ownership of a non-authoritative address (OWASP audit
+  M-1: an attacker could pre-create the placeholder via `/auth/request-link`
+  for a victim's third-party address, then absorb it with a Google account
+  that merely *claims* that email). The exception was removed; an unverified
+  row now only auto-links when the identity is also authoritative.
 - **Google becomes the second writer of `User.email_verified`**, on the
   authoritative path only. This retires the single-writer invariant
   `auth.py` currently asserts in comment form; the flag's meaning restates
