@@ -59,6 +59,11 @@ jobs:
           --health-retries 5
     env:
       DATABASE_URL: postgresql+asyncpg://eventradar:eventradar@localhost:5432/eventradar
+      # alembic/env.py imports app.config, whose module-level `settings = Settings()`
+      # requires SECRET_KEY (no default; validators reject a "change-me-" prefix and
+      # anything under 32 chars). backend/.env is gitignored, so CI must supply it —
+      # the same dummy-value trick tests/conftest.py uses for pytest. Not a secret.
+      SECRET_KEY: ci-migrations-only-not-a-real-secret-value
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
