@@ -1,104 +1,31 @@
 /**
- * Google's "standard color gradient super G" mark, lifted verbatim (paths,
- * mask, conic-gradient foreignObject, blurred-ellipse layers) from the
- * current signin-assets.zip icon-only SVG — same mark in every theme, only
- * the button plate around it changes. Must stay inline in the DOM: an
- * `<img src>` reference drops the `<foreignObject>` conic-gradient layer
- * silently, leaving only the blurred blobs (docs/adr/0002 Design-system
- * exception). Never approximate with flat brand-color paths. The source
- * asset's `xmlns` on the foreignObject `<div>` is dropped here — needed only
- * when the SVG is parsed standalone as XML; an HTML-parsed document (this
- * JSX render) assigns the foreignObject subtree the HTML namespace
- * automatically.
+ * Google's classic flat four-colour "G" mark, lifted verbatim (paths, fills)
+ * from Google's icon-only asset — same mark in every theme, only the button
+ * plate around it changes. Stays inline in the DOM rather than an `<img src>`:
+ * one fewer request, no `img-src` CSP surface, asserted by the brand-fill
+ * test (docs/adr/0002 Design-system exception).
  */
-import { GOOGLE_G_MARK_SIZE, GOOGLE_G_GRADIENT } from '../../../constants';
+import { GOOGLE_G_MARK_SIZE } from '../../../constants';
 
 export default function GoogleGMark({ size = GOOGLE_G_MARK_SIZE }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="10 10 20 20" aria-hidden focusable="false">
-      <mask id="google-g-mask" style={{ maskType: 'alpha' }} maskUnits="userSpaceOnUse" x="10" y="10" width="20" height="20">
-        <path
-          d="M29.3987 18.1814H19.9849V22.0445H25.3598C25.1286 23.294 24.4294 24.3596 23.3676 25.0712C22.4746 25.6716 21.3266 26.0211 19.9849 26.0211C17.3864 26.0211 15.1823 24.2666 14.3947 21.9004C14.1952 21.2989 14.0853 20.6599 14.0853 19.9983C14.0853 19.3367 14.1952 18.6966 14.3947 18.0962C15.1823 15.7311 17.3864 13.9755 19.9849 13.9755C21.4524 13.9755 22.767 14.4816 23.8039 15.4713L26.6653 12.6057C24.936 10.9908 22.6786 10 19.9849 10C16.0832 10 12.705 12.2414 11.0618 15.5076C10.383 16.8592 10 18.3834 10 19.9994C10 21.6155 10.383 23.1396 11.0618 24.4913C12.705 27.7597 16.0832 30 19.9849 30C22.6797 30 24.9485 29.1137 26.6018 27.5861C28.4887 25.8452 29.5732 23.2702 29.5732 20.2275C29.5732 19.5182 29.5131 18.835 29.3987 18.1825V18.1814Z"
-          fill="#E94FFF"
-        />
-      </mask>
-      <g mask="url(#google-g-mask)">
-        <g filter="url(#google-g-blur-0)">
-          <g clipPath="url(#google-g-angular-clip)" data-figma-skip-parse="true">
-            <g transform="matrix(0.00804129 -0.00805186 0.00804128 0.00805186 19.6819 19.7927)">
-              <foreignObject x="-2105.64" y="-2105.64" width="4211.29" height="4211.29">
-                <div
-                  style={{
-                    background: GOOGLE_G_GRADIENT,
-                    height: '100%',
-                    width: '100%',
-                    opacity: 1,
-                  }}
-                />
-              </foreignObject>
-            </g>
-          </g>
-          <path d="M7.25922 19.7927C7.25922 12.6759 13.0209 6.90668 20.1283 6.90668C27.2357 6.90668 32.9973 12.6759 32.9973 19.7927C32.9973 26.9094 27.2357 32.6786 20.1283 32.6786C13.0209 32.6786 7.25921 26.9094 7.25922 19.7927Z" />
-        </g>
-        <g filter="url(#google-g-blur-1)">
-          <ellipse cx="20.0496" cy="20.2413" rx="5.39634" ry="2.83537" transform="rotate(24.4473 20.0496 20.2413)" fill="#3186FF" />
-        </g>
-        <g filter="url(#google-g-blur-2)">
-          <ellipse cx="33.3538" cy="18.2155" rx="7.43918" ry="3.09357" fill="#3186FF" />
-        </g>
-        <g filter="url(#google-g-blur-3)">
-          <ellipse cx="25.2744" cy="16.2195" rx="7.40854" ry="2.37805" fill="#FF4641" />
-        </g>
-        <g filter="url(#google-g-blur-4)">
-          <ellipse cx="29.5427" cy="12.9268" rx="7.40854" ry="2.37805" fill="#FF5B8B" />
-        </g>
-        <g filter="url(#google-g-blur-5)">
-          <ellipse cx="24.4817" cy="19.878" rx="8.5061" ry="3.10976" fill="#3186FF" />
-        </g>
-        <g filter="url(#google-g-blur-6)">
-          <ellipse cx="25.1842" cy="14.0197" rx="4.53882" ry="2.37805" transform="rotate(-28.6599 25.1842 14.0197)" fill="#FF4641" />
-        </g>
-      </g>
-      <defs>
-        <filter id="google-g-blur-0" x="5.25922" y="4.90668" width="29.7381" height="29.772" filterUnits="userSpaceOnUse" colorInterpolationFilters="sRGB">
-          <feFlood floodOpacity="0" result="BackgroundImageFix" />
-          <feBlend mode="normal" in="SourceGraphic" in2="BackgroundImageFix" result="shape" />
-          <feGaussianBlur stdDeviation="1" result="effect1_foregroundBlur" />
-        </filter>
-        <clipPath id="google-g-angular-clip">
-          <path d="M7.25922 19.7927C7.25922 12.6759 13.0209 6.90668 20.1283 6.90668C27.2357 6.90668 32.9973 12.6759 32.9973 19.7927C32.9973 26.9094 27.2357 32.6786 20.1283 32.6786C13.0209 32.6786 7.25921 26.9094 7.25922 19.7927Z" />
-        </clipPath>
-        <filter id="google-g-blur-1" x="12.9977" y="14.828" width="14.1038" height="10.8265" filterUnits="userSpaceOnUse" colorInterpolationFilters="sRGB">
-          <feFlood floodOpacity="0" result="BackgroundImageFix" />
-          <feBlend mode="normal" in="SourceGraphic" in2="BackgroundImageFix" result="shape" />
-          <feGaussianBlur stdDeviation="1" result="effect1_foregroundBlur" />
-        </filter>
-        <filter id="google-g-blur-2" x="23.9146" y="13.1219" width="18.8784" height="10.1871" filterUnits="userSpaceOnUse" colorInterpolationFilters="sRGB">
-          <feFlood floodOpacity="0" result="BackgroundImageFix" />
-          <feBlend mode="normal" in="SourceGraphic" in2="BackgroundImageFix" result="shape" />
-          <feGaussianBlur stdDeviation="1" result="effect1_foregroundBlur" />
-        </filter>
-        <filter id="google-g-blur-3" x="15.8659" y="11.8415" width="18.8171" height="8.7561" filterUnits="userSpaceOnUse" colorInterpolationFilters="sRGB">
-          <feFlood floodOpacity="0" result="BackgroundImageFix" />
-          <feBlend mode="normal" in="SourceGraphic" in2="BackgroundImageFix" result="shape" />
-          <feGaussianBlur stdDeviation="1" result="effect1_foregroundBlur" />
-        </filter>
-        <filter id="google-g-blur-4" x="20.1341" y="8.54878" width="18.8171" height="8.7561" filterUnits="userSpaceOnUse" colorInterpolationFilters="sRGB">
-          <feFlood floodOpacity="0" result="BackgroundImageFix" />
-          <feBlend mode="normal" in="SourceGraphic" in2="BackgroundImageFix" result="shape" />
-          <feGaussianBlur stdDeviation="1" result="effect1_foregroundBlur" />
-        </filter>
-        <filter id="google-g-blur-5" x="13.9756" y="14.7683" width="21.0122" height="10.2195" filterUnits="userSpaceOnUse" colorInterpolationFilters="sRGB">
-          <feFlood floodOpacity="0" result="BackgroundImageFix" />
-          <feBlend mode="normal" in="SourceGraphic" in2="BackgroundImageFix" result="shape" />
-          <feGaussianBlur stdDeviation="1" result="effect1_foregroundBlur" />
-        </filter>
-        <filter id="google-g-blur-6" x="19.0404" y="9.00419" width="12.2878" height="10.0309" filterUnits="userSpaceOnUse" colorInterpolationFilters="sRGB">
-          <feFlood floodOpacity="0" result="BackgroundImageFix" />
-          <feBlend mode="normal" in="SourceGraphic" in2="BackgroundImageFix" result="shape" />
-          <feGaussianBlur stdDeviation="1" result="effect1_foregroundBlur" />
-        </filter>
-      </defs>
+    <svg width={size} height={size} viewBox="0 0 48 48" aria-hidden focusable="false">
+      <path
+        fill="#4285F4"
+        d="M45.12 24.5c0-1.56-.14-3.06-.4-4.5H24v8.51h11.84c-.51 2.75-2.06 5.08-4.39 6.64v5.52h7.11c4.16-3.83 6.56-9.47 6.56-16.17z"
+      />
+      <path
+        fill="#34A853"
+        d="M24 46c5.94 0 10.92-1.97 14.56-5.33l-7.11-5.52c-1.97 1.32-4.49 2.1-7.45 2.1-5.73 0-10.58-3.87-12.31-9.07H4.34v5.7C7.96 41.07 15.4 46 24 46z"
+      />
+      <path
+        fill="#FBBC05"
+        d="M11.69 28.18C11.25 26.86 11 25.45 11 24s.25-2.86.69-4.18v-5.7H4.34C2.85 17.09 2 20.45 2 24s.85 6.91 2.34 9.88l7.35-5.7z"
+      />
+      <path
+        fill="#EA4335"
+        d="M24 10.75c3.23 0 6.13 1.11 8.41 3.29l6.31-6.31C34.91 4.18 29.93 2 24 2 15.4 2 7.96 6.93 4.34 14.12l7.35 5.7c1.73-5.2 6.58-9.07 12.31-9.07z"
+      />
     </svg>
   );
 }

@@ -29,6 +29,7 @@ from app.constants import (
     ERROR_VENUE_NOT_FOUND,
     EVENT_STATUS_CANCELLED,
     EVENT_STATUS_PUBLISHED,
+    GOOGLE_SIGNIN_RESULT_QUERY_PARAM,
     IDENTITY_PROVIDER_GOOGLE,
     LOCALE_EN,
     LOCALE_RU,
@@ -155,6 +156,17 @@ def clear_oauth_state_cookie(
         httponly=SESSION_COOKIE_HTTPONLY,
         samesite=OAUTH_STATE_COOKIE_SAMESITE,
     )
+
+
+def append_google_signin_result(url: str, track: str) -> str:
+    """Tag a Google OAuth callback's success redirect with which auth track
+    signed in, so the frontend can write that track's signed-in localStorage
+    hint before the router's first render — a server-side redirect runs no
+    app JS between cookie-set and the route guard, unlike the magic-link
+    verify routes where the hint is set in-page. See
+    frontend/src/lib/googleSignInLanding.ts."""
+    separator = "&" if "?" in url else "?"
+    return f"{url}{separator}{GOOGLE_SIGNIN_RESULT_QUERY_PARAM}={track}"
 
 
 def build_oauth_error_redirect(

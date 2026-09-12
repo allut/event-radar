@@ -26,8 +26,12 @@ import './index.css';
 // corrects it the moment JS runs instead of leaving the wrong theme applied
 // for the whole session.
 import { applyTheme } from './lib/theme';
+// Must run before the first render — see the module doc for why this can't
+// be a useEffect.
+import { consumeGoogleSignInLanding } from './lib/googleSignInLanding';
 
 applyTheme();
+consumeGoogleSignInLanding();
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
