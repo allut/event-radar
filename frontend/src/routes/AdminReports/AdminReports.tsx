@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Link, useSearchParams } from 'react-router-dom';
+import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { adminApi, ApiError } from '../../api/client';
-import { ADMIN_REPORTS_PARAM, API, QUERY_KEYS, REPORT_REASONS, UI_STATE } from '../../constants';
+import { ADMIN_QUEUE_DETAIL_LINK_LABEL, ADMIN_REPORTS_PARAM, ADMIN_REPORTS_QUEUE_PAGE_SIZE, API, QUERY_KEYS, REPORT_REASONS, ROUTES, UI_STATE } from '../../constants';
 import { t } from '../../i18n';
 import { relativeTimeFromNow } from '../../utils';
 import PageState from '../../components/PageState';
@@ -10,6 +10,7 @@ import Toast from '../../components/Toast';
 import { useToast } from '../../hooks/useToast';
 import AdminQueueSplitView from '../../components/AdminQueueSplitView';
 import AdminQueueActionPanel from '../../components/AdminQueueActionPanel';
+import queueStyles from '../../components/shared/AdminQueue.module.css';
 import styles from './AdminReports.module.css';
 
 interface AdminReport {
@@ -33,7 +34,10 @@ interface AdminReportedEvent {
 }
 
 interface AdminReportsResponse {
-  total: number;
+  total: number | null;
+  limit: number;
+  offset: number;
+  has_more: boolean;
   events: AdminReportedEvent[];
 }
 
@@ -60,9 +64,22 @@ function reasonLabel(reason: string): string {
 export default function AdminReports() {
   const queryClient = useQueryClient();
   const { toast, showToast } = useToast();
-  const { data, isLoading, isError } = useQuery({
+  const {
+    data,
+    isLoading,
+    isError,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteQuery({
     queryKey: [QUERY_KEYS.adminReports],
-    queryFn: () => adminApi.get<AdminReportsResponse>(API.adminReports),
+    queryFn: ({ pageParam }) =>
+      adminApi.get<AdminReportsResponse>(
+        `${API.adminReports}?limit=${ADMIN_REPORTS_QUEUE_PAGE_SIZE}&offset=${pageParam}`,
+      ),
+    initialPageParam: 0,
+    getNextPageParam: (lastPage) =>
+      lastPage.has_more ? lastPage.offset + lastPage.events.length : undefined,
   });
 
   const [searchParams] = useSearchParams();
@@ -74,11 +91,19 @@ export default function AdminReports() {
     Record<number, { item: AdminReportedEvent; kind: ResolutionKind }>
   >({});
 
-  const serverItems = data?.events;
+  const serverItems = useMemo(() => data?.pages.flatMap((page) => page.events), [data]);
+  const totalReports = data?.pages[0]?.total ?? 0;
+  // Precomputed once per data/resolution change (not per render) — renderRow
+  // below reads this instead of calling relativeTimeFromNow live, so typing
+  // in the resolution-note textarea no longer re-parses every row's date
+  // (Big-O audit M4).
   const items = useMemo(() => {
     const byId = new Map((serverItems ?? []).map((item) => [item.event_id, item]));
     for (const entry of Object.values(resolvedById)) byId.set(entry.item.event_id, entry.item);
-    return Array.from(byId.values());
+    return Array.from(byId.values()).map((item) => ({
+      ...item,
+      oldestOpenReportRelative: relativeTimeFromNow(item.oldest_open_report_at),
+    }));
   }, [serverItems, resolvedById]);
 
   // Adjust state during render (React's documented pattern for "derive from
@@ -129,6 +154,8 @@ export default function AdminReports() {
       ) : isError ? (
         <PageState kind={UI_STATE.error} message="Couldn't load the reports queue." inline />
       ) : (
+        <>
+        <p className={styles.subtitle}>{items.length} of {totalReports} open reports shown</p>
         <AdminQueueSplitView
           items={items}
           getId={(item) => item.event_id}
@@ -146,7 +173,7 @@ export default function AdminReports() {
               <div className={styles.rowTitle}>{item.title}</div>
               <div className={styles.rowMeta}>
                 {item.has_illegal_allegation && <span className={styles.illegalDot} aria-label="Illegal content alleged" />}
-                {item.report_count} report{item.report_count === 1 ? '' : 's'} · {relativeTimeFromNow(item.oldest_open_report_at)}
+                {item.report_count} report{item.report_count === 1 ? '' : 's'} · {item.oldestOpenReportRelative}
               </div>
             </>
           )}
@@ -156,6 +183,9 @@ export default function AdminReports() {
               <div>
                 <h2 className={styles.detailTitle}>{item.title}</h2>
                 <p className={styles.detailMeta}>{item.venue ?? 'No venue'} · status: {item.status}</p>
+                <Link to={ROUTES.adminEventDetail(item.event_id)} className={queueStyles.queueDetailLink}>
+                  {ADMIN_QUEUE_DETAIL_LINK_LABEL}
+                </Link>
                 <div className={styles.chips}>
                   {item.has_illegal_allegation && <span className={styles.illegalChip}>Illegal content alleged</span>}
                   {item.reasons.map((r) => (
@@ -195,6 +225,17 @@ export default function AdminReports() {
             );
           }}
         />
+        {hasNextPage && (
+          <button
+            type="button"
+            className={styles.loadMoreBtn}
+            onClick={() => fetchNextPage()}
+            disabled={isFetchingNextPage}
+          >
+            Load more
+          </button>
+        )}
+        </>
       )}
       {toast.status !== UI_STATE.idle && <Toast status={toast.status} message={toast.message} />}
     </div>

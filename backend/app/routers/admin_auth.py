@@ -23,12 +23,15 @@ from app.constants import (
     ADMIN_SESSION_COOKIE_NAME,
     ADMIN_SESSION_COOKIE_PATH,
     ADMIN_SESSION_TTL_SECONDS,
+    DETAIL_SIGNED_IN,
+    DETAIL_SIGNED_OUT,
     ERROR_ADMIN_DISABLED,
     ERROR_ADMIN_INCORRECT_CREDENTIALS,
     LOG_EVENT_ADMIN_ACTION,
     RATE_LIMIT_ADMIN_LOGIN,
     RATE_LIMIT_BROWSE,
     RATE_LIMIT_LOGOUT,
+    SETTING_NAME_ADMIN_PASSWORD,
 )
 from app.rate_limit import client_key, limiter
 from app.routers.admin import (
@@ -65,7 +68,7 @@ async def admin_login(body: AdminLoginBody, request: Request, response: Response
     password_configured = require_configured_secret(
         password,
         feature="Admin login",
-        setting_name="ADMIN_PASSWORD",
+        setting_name=SETTING_NAME_ADMIN_PASSWORD,
         app_env=settings.APP_ENV,
         allow_insecure_dev=settings.ALLOW_INSECURE_DEV,
     )
@@ -109,7 +112,7 @@ async def admin_login(body: AdminLoginBody, request: Request, response: Response
         ttl_seconds=ADMIN_SESSION_TTL_SECONDS,
     )
     log.info("admin login succeeded", extra={"event": LOG_EVENT_ADMIN_ACTION})
-    return {"detail": "Signed in."}
+    return {"detail": DETAIL_SIGNED_IN}
 
 
 @router.post("/logout", status_code=status.HTTP_200_OK)
@@ -125,7 +128,7 @@ async def admin_logout(request: Request, response: Response) -> dict:
         response, name=ADMIN_SESSION_COOKIE_NAME, path=ADMIN_SESSION_COOKIE_PATH
     )
     log.info("admin logout", extra={"event": LOG_EVENT_ADMIN_ACTION})
-    return {"detail": "Signed out."}
+    return {"detail": DETAIL_SIGNED_OUT}
 
 
 @router.get("/me", status_code=status.HTTP_200_OK)

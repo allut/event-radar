@@ -76,7 +76,7 @@ describe('App route guards', () => {
   // AdminApp is a React.lazy chunk (issue #154) — first-mount compilation of
   // that chunk can outrun waitFor's default 1000ms timeout on a cold cache,
   // so these three give it more room than the rest of this file needs.
-  const ADMIN_CHUNK_TIMEOUT = { timeout: 5000 };
+  const ADMIN_CHUNK_TIMEOUT = { timeout: 10000 };
 
   it('AdminProtected redirects an unauthenticated visitor to /admin/login', async () => {
     setPath('/admin');

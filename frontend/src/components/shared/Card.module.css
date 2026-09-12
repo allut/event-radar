@@ -40,3 +40,53 @@
   color: var(--text);
 }
 
+/* Admin console's --font-system sub-language variant of .authBrand (AdminLogin).
+   Defined after .authBrand in this same file so it always wins the cascade at
+   equal specificity, without needing !important on the composing consumer. */
+.authBrandSystem {
+  composes: authBrand;
+  font-family: var(--font-system);
+}
+
+.authTagline {
+  color: var(--text-muted);
+  font-size: var(--fs-md);
+  margin-bottom: var(--space-6);
+  padding-bottom: var(--space-1-75);
+  border-bottom: var(--border-w-hair) solid var(--border);
+}
+
+.authNote {
+  margin-top: var(--space-2-5);
+  text-align: center;
+  font-size: var(--fs-xs);
+  color: var(--text-soft);
+}
+
+.authDivider {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  margin: var(--space-1) 0;
+}
+
+.authDivider::before,
+.authDivider::after {
+  content: '';
+  flex: 1;
+  height: var(--border-w-hair);
+  background: var(--border);
+}
+
+/* Full-bleed clickable overlay shared by EventCard and Landing's plate cards
+   — makes the whole card a link target via a stretched pseudo-element. */
+.stretchedLink::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: var(--z-card-overlay);
+  cursor: pointer;
+}
+

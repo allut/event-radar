@@ -47,6 +47,15 @@ class CIText(UserDefinedType):
 
 class User(Base):
     __tablename__ = "users"
+    __table_args__ = (
+        # Serves send_daily_digests' opted-in-population query (email/digest.py)
+        # as an index-only scan instead of a full-table seq scan (Big-O audit M6).
+        Index(
+            "ix_users_digest_eligible",
+            "id",
+            postgresql_where=text("email_digest_opt_in AND email_verified"),
+        ),
+    )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     email: Mapped[str] = mapped_column(CIText(), nullable=False, unique=True)
@@ -100,8 +109,37 @@ class AuthMagicLink(Base):
     used_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # Set when this magic link was sent to confirm a pending Google-identity
+    # link (ADR 0002) rather than to start a session — the sub is written
+    # into user_identities only once the link is used.
+    pending_google_sub: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     user: Mapped["User"] = relationship(back_populates="magic_links")
+
+
+class UserIdentity(Base):
+    """A linked external sign-in provider identity (ADR 0002) — e.g. Google's
+    stable `sub`. Never shared with organizer_identities: the same Google
+    account may hold both a User row and an Organizer row that never merge
+    (docs/security.md's track separation)."""
+
+    __tablename__ = "user_identities"
+    __table_args__ = (
+        UniqueConstraint("provider", "provider_sub"),
+        Index("ix_user_identities_user_id", "user_id"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    provider: Mapped[str] = mapped_column(String(50), nullable=False)
+    provider_sub: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    user: Mapped["User"] = relationship()
 
 
 # ---------------------------------------------------------------------------
@@ -166,8 +204,35 @@ class OrganizerMagicLink(Base):
     used_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # Set when this magic link was sent to confirm a pending Google-identity
+    # link (ADR 0002) rather than to start a session — mirrors
+    # AuthMagicLink.pending_google_sub.
+    pending_google_sub: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     organizer: Mapped["Organizer"] = relationship(back_populates="magic_links")
+
+
+class OrganizerIdentity(Base):
+    """Mirrors UserIdentity for the organizer auth track — see its docstring
+    for why this is a separate table rather than a shared one."""
+
+    __tablename__ = "organizer_identities"
+    __table_args__ = (
+        UniqueConstraint("provider", "provider_sub"),
+        Index("ix_organizer_identities_organizer_id", "organizer_id"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    organizer_id: Mapped[int] = mapped_column(
+        ForeignKey("organizers.id", ondelete="CASCADE"), nullable=False
+    )
+    provider: Mapped[str] = mapped_column(String(50), nullable=False)
+    provider_sub: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    organizer: Mapped["Organizer"] = relationship()
 
 
 class OrganizerImageUpload(Base):
@@ -632,6 +697,17 @@ class UserEventFeedback(Base):
             "user_id",
             "event_id",
             unique=True,
+            postgresql_where=text(PREFERENCE_SIGNALS_SQL_PREDICATE),
+        ),
+        # Serves GET /feedback/events (Saved Events) as an index-only scan over
+        # just the explicit preference-signal rows — the same partial predicate
+        # as the unique index above, so it never touches the far larger
+        # append-only view/click_external analytics rows (Big-O audit M1).
+        Index(
+            "ix_user_event_feedback_user_signal_created",
+            "user_id",
+            "signal",
+            "created_at",
             postgresql_where=text(PREFERENCE_SIGNALS_SQL_PREDICATE),
         ),
     )

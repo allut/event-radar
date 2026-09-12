@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { StatusCodes } from 'http-status-codes';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -72,5 +72,49 @@ describe('Login', () => {
     renderWithProviders(<Login />);
     const link = screen.getByRole('link', { name: /organizing an event/i });
     expect(link).toHaveAttribute('href', '/organizer/login');
+  });
+
+  it('does not render the Google button when the flag is off', () => {
+    renderWithProviders(<Login />);
+    expect(screen.queryByRole('link', { name: /sign in with google/i })).not.toBeInTheDocument();
+  });
+});
+
+describe('Login with Google sign-in enabled', () => {
+  beforeEach(() => {
+    vi.stubEnv('VITE_GOOGLE_SIGNIN_CONSUMER_ENABLED', 'true');
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it('renders the Google button pointing at the consumer start endpoint, email form collapsed', () => {
+    renderWithProviders(<Login />);
+
+    const googleLink = screen.getByRole('link', { name: /sign in with google/i });
+    expect(googleLink).toHaveAttribute('href', '/api/auth/google/start');
+    expect(screen.queryByRole('textbox', { name: /email/i })).not.toBeInTheDocument();
+  });
+
+  it('expands the magic-link form behind the "continue with email" toggle', async () => {
+    renderWithProviders(<Login />);
+
+    await userEvent.click(screen.getByRole('button', { name: /continue with email instead/i }));
+
+    expect(screen.getByRole('textbox', { name: /email/i })).toBeInTheDocument();
+    expect(screen.getByText('or')).toBeInTheDocument();
+  });
+
+  it('shows the cancelled banner for the access_denied error code', () => {
+    renderWithProviders(<Login />, { route: '/login?google_error=access_denied' });
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Sign-in was cancelled.');
+  });
+
+  it('shows the generic failed banner for every other error code', () => {
+    renderWithProviders(<Login />, { route: '/login?google_error=state_invalid' });
+
+    expect(screen.getByRole('alert')).toHaveTextContent(/something went wrong signing in with google/i);
   });
 });

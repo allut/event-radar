@@ -109,3 +109,78 @@ async def test_request_link_returns_429_after_burst(mock_db):
 
     assert statuses[:burst] == [http.HTTPStatus.OK] * burst
     assert statuses[burst] == http.HTTPStatus.TOO_MANY_REQUESTS
+
+
+def _build_organizer_auth_app() -> FastAPI:
+    from app.routers.organizer_auth import router
+
+    app = FastAPI()
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
+    app.add_middleware(SlowAPIMiddleware)
+    app.include_router(router)
+    return app
+
+
+@pytest.mark.asyncio
+async def test_google_signin_start_returns_429_after_burst(monkeypatch):
+    """RATE_LIMIT_GOOGLE_SIGNIN_START ("20/minute") enforced per-IP."""
+    from app.config import settings
+    from app.constants import RATE_LIMIT_GOOGLE_SIGNIN_START
+
+    monkeypatch.setattr(settings, "GOOGLE_SIGNIN_ORGANIZER_ENABLED", True)
+    monkeypatch.setattr(settings, "GOOGLE_OAUTH_CLIENT_ID", "cid")
+
+    burst = int(RATE_LIMIT_GOOGLE_SIGNIN_START.split("/")[0])
+    limiter.reset()
+
+    app = _build_organizer_auth_app()
+
+    statuses: list[int] = []
+    try:
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test", follow_redirects=False
+        ) as client:
+            for _ in range(burst + 1):
+                resp = await client.get("/organizer/auth/google/start")
+                statuses.append(resp.status_code)
+    finally:
+        limiter.reset()
+
+    assert statuses[:burst] == [http.HTTPStatus.FOUND] * burst
+    assert statuses[burst] == http.HTTPStatus.TOO_MANY_REQUESTS
+
+
+@pytest.mark.asyncio
+async def test_google_signin_callback_returns_429_after_burst(monkeypatch, mock_db):
+    """RATE_LIMIT_GOOGLE_SIGNIN_CALLBACK ("30/minute") enforced per-IP — even
+    a malformed callback (no code/state) still counts against the bucket."""
+    from app.config import settings
+    from app.constants import RATE_LIMIT_GOOGLE_SIGNIN_CALLBACK
+    from app.db import get_db
+
+    monkeypatch.setattr(settings, "GOOGLE_SIGNIN_ORGANIZER_ENABLED", True)
+
+    burst = int(RATE_LIMIT_GOOGLE_SIGNIN_CALLBACK.split("/")[0])
+    limiter.reset()
+
+    app = _build_organizer_auth_app()
+
+    async def override_db():
+        yield mock_db
+
+    app.dependency_overrides[get_db] = override_db
+
+    statuses: list[int] = []
+    try:
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test", follow_redirects=False
+        ) as client:
+            for _ in range(burst + 1):
+                resp = await client.get("/organizer/auth/google/callback")
+                statuses.append(resp.status_code)
+    finally:
+        limiter.reset()
+
+    assert statuses[:burst] == [http.HTTPStatus.FOUND] * burst
+    assert statuses[burst] == http.HTTPStatus.TOO_MANY_REQUESTS

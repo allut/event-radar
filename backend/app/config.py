@@ -168,6 +168,16 @@ class Settings(BaseSettings):
     CLOUDINARY_API_KEY: str = ""
     CLOUDINARY_API_SECRET: str = ""
 
+    # Google sign-in (docs/adr/0002-google-sign-in-oauth-pkce.md). Both empty in
+    # dev — token exchange/verification code paths are exercised via mocks in
+    # tests, never against real Google endpoints locally. Organizer flag
+    # defaults false regardless of client-id presence (explicit rollout gate,
+    # not just "are credentials configured").
+    GOOGLE_OAUTH_CLIENT_ID: str = ""
+    GOOGLE_OAUTH_CLIENT_SECRET: str = ""
+    GOOGLE_SIGNIN_ORGANIZER_ENABLED: bool = False
+    GOOGLE_SIGNIN_CONSUMER_ENABLED: bool = False
+
     # Webhooks — Svix signing secret ("whsec_...") shown on the webhook's page in the
     # Resend dashboard. Verifies the svix-id/svix-timestamp/svix-signature headers
     # over the raw request body; do NOT pass it as a URL query param.

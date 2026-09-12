@@ -9,19 +9,23 @@ so a compromised DB row cannot be turned back into a valid token.
 
 import hashlib
 from datetime import datetime, timedelta, timezone
+from typing import TypedDict
 
 from itsdangerous import BadSignature, URLSafeTimedSerializer
 
 from app.config import settings
 from app.constants import (
+    ADMIN_SESSION_EPOCH_HASH_LEN,
     ADMIN_SESSION_TTL_SECONDS,
     AUTH_ADMIN_SESSION_SALT,
     AUTH_MAGIC_SALT,
+    AUTH_OAUTH_STATE_SALT,
     AUTH_ORGANIZER_MAGIC_SALT,
     AUTH_ORGANIZER_SESSION_SALT,
     AUTH_SESSION_SALT,
     AUTH_UNSUBSCRIBE_SALT,
     DEFAULT_SESSION_TOKEN_VERSION,
+    OAUTH_STATE_TTL_MINUTES,
     ORGANIZER_MAGIC_LINK_TTL_MINUTES,
     ORGANIZER_SESSION_TTL_DAYS,
     SECONDS_PER_DAY,
@@ -126,6 +130,43 @@ def verify_organizer_session_token(token: str) -> tuple[int, int]:
     return int(payload["oid"]), int(payload.get("v", DEFAULT_SESSION_TOKEN_VERSION))
 
 
+def oauth_state_ttl_seconds() -> int:
+    return OAUTH_STATE_TTL_MINUTES * SECONDS_PER_MINUTE
+
+
+class OAuthStatePayload(TypedDict):
+    state: str
+    code_verifier: str
+    track: str
+
+
+def generate_oauth_state_token(state: str, code_verifier: str, track: str) -> str:
+    """Sign the PKCE state+verifier pair for the organizer_oauth_state /
+    oauth_state cookie (ADR 0002). ``track`` ("organizer" or "user") is
+    checked at verify time so a state token minted for one track's callback
+    can never be replayed against the other's."""
+    return _serializer().dumps(
+        {"state": state, "code_verifier": code_verifier, "track": track},
+        salt=AUTH_OAUTH_STATE_SALT,
+    )
+
+
+def verify_oauth_state_token(token: str, *, track: str) -> OAuthStatePayload:
+    """Decode the signed state cookie value. Raises SignatureExpired or
+    BadSignature on failure, including a track mismatch — the callback must
+    fail closed exactly like any other tampered/expired token."""
+    payload = _serializer().loads(
+        token, salt=AUTH_OAUTH_STATE_SALT, max_age=oauth_state_ttl_seconds()
+    )
+    if payload.get("track") != track:
+        raise BadSignature("oauth state track mismatch")
+    return {
+        "state": str(payload["state"]),
+        "code_verifier": str(payload["code_verifier"]),
+        "track": str(payload["track"]),
+    }
+
+
 def _admin_session_epoch() -> str:
     """Derive the "e" claim from the credentials themselves, not just the
     standalone ADMIN_SESSION_EPOCH var — so rotating ADMIN_PASSWORD or
@@ -135,7 +176,7 @@ def _admin_session_epoch() -> str:
     the mix so a manual bump still works even when credentials are unchanged."""
     return hashlib.sha256(
         f"{settings.ADMIN_SESSION_EPOCH}:{settings.ADMIN_PASSWORD}:{settings.ADMIN_TOTP_SECRET}".encode()
-    ).hexdigest()[:16]
+    ).hexdigest()[:ADMIN_SESSION_EPOCH_HASH_LEN]
 
 
 def generate_admin_session_token() -> str:

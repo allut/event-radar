@@ -12,7 +12,7 @@ import time
 from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, Query, Request
-from sqlalchemy import Select, and_, case, func, select
+from sqlalchemy import Select, case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.constants import (
@@ -88,6 +88,38 @@ def _showcase_stmt(now: datetime) -> Select[tuple[Event]]:
     )
 
 
+# Process-local TTL cache — same shape as _counts_cache below, keyed by locale
+# since the payload is locale-sensitive (event titles/venue names). This is the
+# anonymous landing page, the highest-traffic unauthenticated endpoint, so a
+# per-request 60-day hydrate+sort is not warranted for a grid that only
+# meaningfully changes a few times a day (see docstring below).
+_showcase_cache: dict[str, tuple[float, dict]] = {}
+
+
+async def _load_showcase(db: AsyncSession, locale: str, now: datetime) -> dict:
+    events = list((await db.scalars(_showcase_stmt(now))).all())
+    collapsed, _ = collapse_series_duplicates(events)
+
+    narrow_start = now - timedelta(days=SHOWCASE_WINDOW_DAYS)
+    narrow_end = now + timedelta(days=SHOWCASE_WINDOW_DAYS)
+
+    def _sort_key(event: Event) -> tuple[int, bool, float, datetime]:
+        in_narrow_window = narrow_start <= event.starts_at < narrow_end
+        quality_score = (
+            event.classification.quality_score if event.classification else None
+        )
+        return (
+            0 if in_narrow_window else 1,
+            quality_score is None,
+            -(quality_score or 0),
+            event.starts_at,
+        )
+
+    collapsed.sort(key=_sort_key)
+    events = collapsed[:SHOWCASE_EVENT_COUNT]
+    return {"events": [serialize_event(e, locale=locale) for e in events]}
+
+
 @router.get("/showcase")
 @limiter.limit(RATE_LIMIT_PUBLIC)
 async def showcase(
@@ -113,31 +145,23 @@ async def showcase(
     SQL ORDER BY would have picked first, so the post-collapse order is
     recomputed in Python with the same three keys (narrow-window first,
     quality_score desc/nulls-last, starts_at asc) before the slice.
+
+    Cached in-process for PUBLIC_COUNTS_CACHE_TTL_SECONDS, same TTL and pattern
+    as /public/counts right below — this is the anonymous landing page, so an
+    uncached full-window hydrate+sort per pageview isn't warranted (see H1 in
+    the Big-O audit).
     """
     locale = resolve_locale_param(locale, DEFAULT_USER_LOCALE)
 
+    cached = _showcase_cache.get(locale)
+    now_monotonic = time.monotonic()
+    if cached is not None and now_monotonic - cached[0] < PUBLIC_COUNTS_CACHE_TTL_SECONDS:
+        return cached[1]
+
     now = datetime.now(TALLINN_TZ)
-    events = list((await db.scalars(_showcase_stmt(now))).all())
-    collapsed, _ = collapse_series_duplicates(events)
-
-    narrow_start = now - timedelta(days=SHOWCASE_WINDOW_DAYS)
-    narrow_end = now + timedelta(days=SHOWCASE_WINDOW_DAYS)
-
-    def _sort_key(event: Event) -> tuple[int, bool, float, datetime]:
-        in_narrow_window = narrow_start <= event.starts_at < narrow_end
-        quality_score = (
-            event.classification.quality_score if event.classification else None
-        )
-        return (
-            0 if in_narrow_window else 1,
-            quality_score is None,
-            -(quality_score or 0),
-            event.starts_at,
-        )
-
-    collapsed.sort(key=_sort_key)
-    events = collapsed[:SHOWCASE_EVENT_COUNT]
-    return {"events": [serialize_event(e, locale=locale) for e in events]}
+    payload = await _load_showcase(db, locale, now)
+    _showcase_cache[locale] = (now_monotonic, payload)
+    return payload
 
 
 # Process-local TTL cache — single dict entry, keyed by locale, since the payload
@@ -194,19 +218,19 @@ def _aggregates_stmt(
     Distinct-venue count is coalesced over the linked Venue's name so a
     venue-linked event (whose own venue_name is left NULL, #176) isn't
     silently dropped from the count — see resolve_venue_name()."""
-    live = and_(public_event_filter(), Event.starts_at >= now)
     venue_name = func.coalesce(Venue.name, Event.venue_name)
     return (
         select(
-            func.count(Event.id).filter(live).label("upcoming_count"),
-            func.count(func.distinct(venue_name)).filter(live).label("venue_count"),
-            func.max(Event.starts_at).filter(live).label("furthest_date"),
+            func.count(Event.id).label("upcoming_count"),
+            func.count(func.distinct(venue_name)).label("venue_count"),
+            func.max(Event.starts_at).label("furthest_date"),
             func.min(Event.price_min)
-            .filter(live, Event.price_min > 0)
+            .filter(Event.price_min > 0)
             .label("cheapest_price"),
         )
         .select_from(Event)
         .outerjoin(Event.venue)
+        .where(public_event_filter(), Event.starts_at >= now)
     )
 
 

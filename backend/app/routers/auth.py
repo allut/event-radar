@@ -1,25 +1,46 @@
 """Auth endpoints — magic-link request + verification + current-user."""
 
 import logging
+import secrets
 from datetime import datetime, timezone
 
+import httpx
+import jwt
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response, status
+from fastapi.responses import RedirectResponse
 from itsdangerous import BadSignature, SignatureExpired
 from sqlalchemy import func, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.email import send_magic_link
+from app.auth.google_oauth import (
+    GoogleIdentity,
+    GoogleTokenExchangeError,
+    build_authorization_url,
+    exchange_code_for_id_token,
+    generate_pkce_pair,
+    generate_state,
+    is_authoritative_identity,
+    verify_google_id_token,
+)
 from app.auth.tokens import (
     generate_magic_token,
+    generate_oauth_state_token,
     generate_session_token,
     hash_token,
     magic_ttl_seconds,
     verify_magic_token,
+    verify_oauth_state_token,
     verify_session_token,
 )
 from app.config import settings
 from app.constants import (
+    AUTH_TRACK_USER,
     DEFAULT_USER_LOCALE,
+    DETAIL_MAGIC_LINK_SENT,
+    DETAIL_SIGNED_OUT,
+    DETAIL_SIGNED_OUT_ALL,
     ERROR_MAGIC_LINK_CONSUMED,
     ERROR_MAGIC_LINK_EXPIRED,
     ERROR_MAGIC_LINK_INVALID,
@@ -27,10 +48,31 @@ from app.constants import (
     ERROR_SESSION_INVALID,
     ERROR_SESSION_REVOKED,
     ERROR_USER_NOT_FOUND,
+    GOOGLE_CALLBACK_PUBLIC_PATH,
+    GOOGLE_SIGNIN_OUTCOME_AUTO_LINKED,
+    GOOGLE_SIGNIN_OUTCOME_CONFIRMATION_SENT,
+    GOOGLE_SIGNIN_OUTCOME_EXISTING_LOGIN,
+    GOOGLE_SIGNIN_OUTCOME_NEW_ACCOUNT,
+    HEADER_ACCEPT_LANGUAGE,
+    HOME_PATH,
+    IDENTITY_PROVIDER_GOOGLE,
     LOG_EVENT_AUTH_FAILED,
+    LOG_EVENT_GOOGLE_SIGNIN,
+    LOG_EVENT_GOOGLE_SIGNIN_DEGRADED,
+    LOG_EVENT_IDENTITY_LINKED,
+    LOGIN_PATH,
+    OAUTH_ERROR_DENIED,
+    OAUTH_ERROR_STATE_INVALID,
+    OAUTH_ERROR_TOKEN_EXCHANGE_FAILED,
+    OAUTH_ERROR_VERIFICATION_FAILED,
+    OAUTH_STATE_COOKIE_NAME,
+    OAUTH_STATE_COOKIE_PATH,
+    ONBOARDING_PATH,
     RATE_LIMIT_AUTH_REQUEST_LINK,
     RATE_LIMIT_AUTH_VERIFY,
     RATE_LIMIT_BROWSE,
+    RATE_LIMIT_GOOGLE_SIGNIN_CALLBACK,
+    RATE_LIMIT_GOOGLE_SIGNIN_START,
     RATE_LIMIT_LOGOUT,
     RATE_LIMIT_LOGOUT_ALL,
     SECONDS_PER_DAY,
@@ -39,16 +81,20 @@ from app.constants import (
     VALID_LOCALES,
 )
 from app.db import get_db
-from app.models.models import AuthMagicLink, User, UserPersona
+from app.models.models import AuthMagicLink, User, UserIdentity, UserPersona
 from app.rate_limit import limiter
 from app.routers.utils import (
     RequestLinkBody,
     VerifyTokenBody,
+    build_google_redirect_uri,
+    build_oauth_error_redirect,
+    clear_oauth_state_cookie,
     clear_session_cookie,
     mask_email,
     recent_unused_link_exists,
     record_unverified_account_creation,
     serialize_user,
+    set_oauth_state_cookie,
     set_session_cookie,
 )
 
@@ -139,7 +185,7 @@ async def _get_or_create_user(
     user = await db.scalar(select(User).where(User.email == email))
     if user is None:
         locale = requested_locale or _detect_locale(
-            request.headers.get("Accept-Language", "")
+            request.headers.get(HEADER_ACCEPT_LANGUAGE, "")
         )
         user = User(email=email, locale=locale)
         db.add(user)
@@ -170,9 +216,7 @@ async def request_magic_link(
     if await recent_unused_link_exists(
         db, AuthMagicLink, AuthMagicLink.user_id, user.id, magic_ttl_seconds()
     ):
-        return {
-            "detail": "If that address is registered, a sign-in link has been sent."
-        }
+        return {"detail": DETAIL_MAGIC_LINK_SENT}
 
     signed_token, token_hash, expires_at = generate_magic_token(user.id)
 
@@ -193,7 +237,7 @@ async def request_magic_link(
         log.exception("Failed to send magic link to %s", mask_email(email))
         # Do not surface email errors to caller — link is in DB, user can retry.
 
-    return {"detail": "If that address is registered, a sign-in link has been sent."}
+    return {"detail": DETAIL_MAGIC_LINK_SENT}
 
 
 @router.post("/verify")
@@ -233,6 +277,8 @@ async def verify_magic_link(
 
     # Atomic UPDATE: collapses read-then-write into one statement, preventing the
     # TOCTOU race where two concurrent requests both see used_at IS NULL.
+    # Also returns pending_google_sub (ADR 0002): set when this link was sent
+    # to confirm a Google-identity link rather than to start a session.
     result = await db.execute(
         update(AuthMagicLink)
         .where(
@@ -242,9 +288,10 @@ async def verify_magic_link(
             AuthMagicLink.expires_at > now,
         )
         .values(used_at=now)
-        .returning(AuthMagicLink.user_id)
+        .returning(AuthMagicLink.user_id, AuthMagicLink.pending_google_sub)
     )
-    if result.fetchone() is None:
+    row = result.fetchone()
+    if row is None:
         log.warning(
             "magic-link verify failed: already-used or not-found",
             extra={"event": LOG_EVENT_AUTH_FAILED},
@@ -253,15 +300,17 @@ async def verify_magic_link(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=ERROR_MAGIC_LINK_CONSUMED,
         )
+    pending_google_sub = row[1]
 
     # Same transaction as the link-consume UPDATE above, one shared commit below:
     # marks the account durably verified — a session token can only ever be
-    # issued from here, so this is the one place that gates build_daily_feeds/
-    # send_daily_digests on a real login having happened. Unconditional SET is
-    # idempotent for a user who already verified before. Sharing the
-    # transaction (rather than an intermediate commit) means a failure here
-    # rolls back the link-consume too, instead of leaving the link durably
-    # spent with the user never marked verified.
+    # issued from here or from the Google-sign-in linking gate (ADR 0002:
+    # google_callback's authoritative/absorption branches), so email_verified
+    # now has two writers, not one. Unconditional SET is idempotent for a user
+    # who already verified before. Sharing the transaction (rather than an
+    # intermediate commit) means a failure here rolls back the link-consume
+    # too, instead of leaving the link durably spent with the user never
+    # marked verified.
     user_result = await db.execute(
         update(User)
         .where(User.id == user_id)
@@ -276,6 +325,29 @@ async def verify_magic_link(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=ERROR_USER_NOT_FOUND,
         )
+
+    if pending_google_sub is not None:
+        # ADR 0002 — this magic link was sent to confirm a pending Google
+        # identity link (non-authoritative address), not to start a session
+        # directly. Create the link now that control of the address is proven.
+        try:
+            db.add(
+                UserIdentity(
+                    user_id=user_row.id,
+                    provider=IDENTITY_PROVIDER_GOOGLE,
+                    provider_sub=pending_google_sub,
+                )
+            )
+            await db.commit()
+            log.info(
+                "user identity linked via confirmation: user_id=%s",
+                user_row.id,
+                extra={"event": LOG_EVENT_IDENTITY_LINKED, "provider": IDENTITY_PROVIDER_GOOGLE},
+            )
+        except IntegrityError:
+            # Already linked by a concurrent request (or a stale/reused sub) —
+            # not this request's problem to surface; the session still mints.
+            await db.rollback()
 
     session_token = generate_session_token(user_row.id, user_row.session_token_version)
     set_session_cookie(
@@ -306,7 +378,7 @@ async def logout(request: Request, response: Response) -> dict:
     already expired/revoked still gets a 200 and its stale cookie cleared,
     instead of a 401 that leaves the dead cookie sitting in the browser."""
     clear_session_cookie(response, name=SESSION_COOKIE_NAME, path=SESSION_COOKIE_PATH)
-    return {"detail": "Signed out."}
+    return {"detail": DETAIL_SIGNED_OUT}
 
 
 @router.post("/logout-all", status_code=status.HTTP_200_OK)
@@ -337,7 +409,7 @@ async def logout_all(
     await db.commit()
     current_user.session_token_version = new_version
     clear_session_cookie(response, name=SESSION_COOKIE_NAME, path=SESSION_COOKIE_PATH)
-    return {"detail": "Signed out of all devices."}
+    return {"detail": DETAIL_SIGNED_OUT_ALL}
 
 
 @router.get("/me")
@@ -357,3 +429,318 @@ async def get_me(
         or 0
     )
     return serialize_user(current_user, has_personas=count > 0)
+
+
+# ---------------------------------------------------------------------------
+# Google sign-in (ADR 0002) — consumer track. Mirrors organizer_auth.py's
+# organizer-track implementation; see that module's docstrings for the
+# shared PKCE/state-cookie/linking-gate rationale. Divergences from the
+# organizer track are called out inline where they occur.
+# ---------------------------------------------------------------------------
+
+
+def _google_redirect_uri() -> str:
+    """Browser-facing callback URL — must match what's registered with
+    Google and what the state cookie is scoped to (OAUTH_STATE_COOKIE_PATH)."""
+    return build_google_redirect_uri(GOOGLE_CALLBACK_PUBLIC_PATH)
+
+
+def _set_oauth_state_cookie(response: Response, token: str) -> None:
+    set_oauth_state_cookie(
+        response,
+        token,
+        cookie_name=OAUTH_STATE_COOKIE_NAME,
+        cookie_path=OAUTH_STATE_COOKIE_PATH,
+    )
+
+
+def _clear_oauth_state_cookie(response: Response) -> None:
+    clear_oauth_state_cookie(
+        response, cookie_name=OAUTH_STATE_COOKIE_NAME, cookie_path=OAUTH_STATE_COOKIE_PATH
+    )
+
+
+def _error_redirect(error_code: str) -> RedirectResponse:
+    """Every callback failure path lands here: a 302 back to the login page
+    carrying an error code, never a 500 — the state cookie (single-use) is
+    cleared regardless of outcome."""
+    return build_oauth_error_redirect(
+        error_code,
+        login_path=LOGIN_PATH,
+        cookie_name=OAUTH_STATE_COOKIE_NAME,
+        cookie_path=OAUTH_STATE_COOKIE_PATH,
+    )
+
+
+@router.get("/google/start")
+@limiter.limit(RATE_LIMIT_GOOGLE_SIGNIN_START)
+async def start_google_signin(request: Request) -> RedirectResponse:
+    """Kick off the consumer-track Google sign-in flow (ADR 0002). 404 when
+    the flag is off — the endpoint doesn't exist for an outside prober, not
+    just "disabled"."""
+    if not settings.GOOGLE_SIGNIN_CONSUMER_ENABLED:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+
+    code_verifier, code_challenge = generate_pkce_pair()
+    state = generate_state()
+    auth_url = build_authorization_url(
+        state=state, code_challenge=code_challenge, redirect_uri=_google_redirect_uri()
+    )
+    response = RedirectResponse(auth_url, status_code=status.HTTP_302_FOUND)
+    _set_oauth_state_cookie(
+        response, generate_oauth_state_token(state, code_verifier, track=AUTH_TRACK_USER)
+    )
+    return response
+
+
+async def _get_or_create_user_for_google(db: AsyncSession, email: str) -> User:
+    """Same unverified-row-creation shape as _get_or_create_user, split out so
+    the Google linking-gate paths that need it don't have to carry a
+    locale/Accept-Language-unrelated signature. Used only where a magic link
+    is about to be sent (confirmation branch) — the metric this trips
+    (record_unverified_account_creation) exists specifically to bound
+    magic-link email volume, which is what's happening here too."""
+    user = await db.scalar(select(User).where(User.email == email))
+    if user is None:
+        user = User(email=email, locale=DEFAULT_USER_LOCALE)
+        db.add(user)
+        await db.flush()
+        log.info("auth: new unverified user row created email=%s", mask_email(email))
+        record_unverified_account_creation()
+    return user
+
+
+async def _send_google_confirmation_link(db: AsyncSession, user: User, sub: str) -> None:
+    """Send a confirmation magic link that, once used, absorbs `sub` into
+    user_identities (see verify_magic_link above) rather than starting a
+    session directly — ADR 0002's non-authoritative-address gate."""
+    if await recent_unused_link_exists(
+        db,
+        AuthMagicLink,
+        AuthMagicLink.user_id,
+        user.id,
+        magic_ttl_seconds(),
+        # Scoped to a pending link for this exact sub — an unrelated unused
+        # plain sign-in link (or a pending link for a different Google
+        # account) must never suppress this send.
+        extra_predicate=AuthMagicLink.pending_google_sub == sub,
+    ):
+        return
+
+    signed_token, token_hash, expires_at = generate_magic_token(user.id)
+    db.add(
+        AuthMagicLink(
+            user_id=user.id,
+            token_hash=token_hash,
+            expires_at=expires_at,
+            pending_google_sub=sub,
+        )
+    )
+    await db.commit()
+
+    try:
+        await send_magic_link(
+            user.email, signed_token, user.locale, theme_preference=user.theme_preference
+        )
+    except Exception:
+        log.exception(
+            "Failed to send Google-confirmation link to %s", mask_email(user.email)
+        )
+
+
+async def _link_new_google_identity(
+    db: AsyncSession, user: User, sub: str, *, success_outcome: str
+) -> tuple[str, User | None]:
+    """Flip email_verified, insert the UserIdentity row, and commit in one
+    transaction, falling back to the concurrent winner's row on a unique-
+    constraint collision — shared by the unverified-absorption and
+    existing/new-authoritative branches below, which differ only in what
+    outcome to report on the happy path (``success_outcome``)."""
+    user.email_verified = True
+    db.add(
+        UserIdentity(user_id=user.id, provider=IDENTITY_PROVIDER_GOOGLE, provider_sub=sub)
+    )
+    try:
+        await db.commit()
+    except IntegrityError:
+        # A concurrent callback for the same Google account (double-click,
+        # two tabs) won the identity-link race first — never surface a 500
+        # here (docs/security.md's callback invariant). Roll back (which also
+        # undoes this request's own uncommitted User insert/email_verified
+        # flip, if any — the winning request's row is what persists) and
+        # fall back to that winner's identity.
+        await db.rollback()
+        existing_identity = await db.scalar(
+            select(UserIdentity).where(
+                UserIdentity.provider == IDENTITY_PROVIDER_GOOGLE,
+                UserIdentity.provider_sub == sub,
+            )
+        )
+        winner = (
+            await db.get(User, existing_identity.user_id)
+            if existing_identity is not None
+            else None
+        )
+        return GOOGLE_SIGNIN_OUTCOME_EXISTING_LOGIN, winner
+    log.info(
+        "user identity linked: user_id=%s",
+        user.id,
+        extra={"event": LOG_EVENT_IDENTITY_LINKED, "provider": IDENTITY_PROVIDER_GOOGLE},
+    )
+    return success_outcome, user
+
+
+async def _apply_google_linking_gate(
+    db: AsyncSession, identity: GoogleIdentity
+) -> tuple[str, User | None]:
+    """ADR 0002's linking gate — consumer-track branches. Returns (outcome,
+    user) — user is None only for GOOGLE_SIGNIN_OUTCOME_CONFIRMATION_SENT,
+    where no session is minted this request.
+
+    Diverges from organizer_auth.py::_apply_google_linking_gate only by
+    flipping User.email_verified on every auto-link/absorb path (Organizer
+    has nothing analogous to flip)."""
+    existing_identity = await db.scalar(
+        select(UserIdentity).where(
+            UserIdentity.provider == IDENTITY_PROVIDER_GOOGLE,
+            UserIdentity.provider_sub == identity["sub"],
+        )
+    )
+    if existing_identity is not None:
+        user = await db.get(User, existing_identity.user_id)
+        return GOOGLE_SIGNIN_OUTCOME_EXISTING_LOGIN, user
+
+    existing_user = await db.scalar(select(User).where(User.email == identity["email"]))
+    authoritative = is_authoritative_identity(identity)
+
+    if authoritative:
+        is_new = existing_user is None
+        user = existing_user or User(
+            email=identity["email"], locale=DEFAULT_USER_LOCALE
+        )
+        if is_new:
+            db.add(user)
+            await db.flush()
+        return await _link_new_google_identity(
+            db,
+            user,
+            identity["sub"],
+            success_outcome=(
+                GOOGLE_SIGNIN_OUTCOME_NEW_ACCOUNT if is_new else GOOGLE_SIGNIN_OUTCOME_AUTO_LINKED
+            ),
+        )
+
+    # Non-authoritative address — Google's word on `email_verified` isn't
+    # trusted enough to auto-link (ADR 0002). Prove control via a
+    # confirmation magic link before any identity row is created.
+    user = existing_user or await _get_or_create_user_for_google(db, identity["email"])
+    await db.commit()
+    await _send_google_confirmation_link(db, user, identity["sub"])
+    return GOOGLE_SIGNIN_OUTCOME_CONFIRMATION_SENT, None
+
+
+@router.get("/google/callback")
+@limiter.limit(RATE_LIMIT_GOOGLE_SIGNIN_CALLBACK)
+async def google_callback(
+    request: Request,
+    code: str | None = None,
+    state: str | None = None,
+    error: str | None = None,
+    oauth_state: str | None = Cookie(default=None, alias=OAUTH_STATE_COOKIE_NAME),
+    db: AsyncSession = Depends(get_db),
+) -> RedirectResponse:
+    if not settings.GOOGLE_SIGNIN_CONSUMER_ENABLED:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+
+    if error:
+        log.warning(
+            "google sign-in denied: %s", error, extra={"event": LOG_EVENT_AUTH_FAILED}
+        )
+        return _error_redirect(OAUTH_ERROR_DENIED)
+
+    if not oauth_state or not code or not state:
+        log.warning(
+            "google sign-in failed: missing state cookie/code/state",
+            extra={"event": LOG_EVENT_AUTH_FAILED},
+        )
+        return _error_redirect(OAUTH_ERROR_STATE_INVALID)
+
+    try:
+        state_payload = verify_oauth_state_token(oauth_state, track=AUTH_TRACK_USER)
+    except (BadSignature, SignatureExpired):
+        log.warning(
+            "google sign-in failed: bad/expired state token",
+            extra={"event": LOG_EVENT_AUTH_FAILED},
+        )
+        return _error_redirect(OAUTH_ERROR_STATE_INVALID)
+
+    if not secrets.compare_digest(state_payload["state"], state):
+        log.warning(
+            "google sign-in failed: state mismatch",
+            extra={"event": LOG_EVENT_AUTH_FAILED},
+        )
+        return _error_redirect(OAUTH_ERROR_STATE_INVALID)
+
+    try:
+        id_token = await exchange_code_for_id_token(
+            code=code,
+            code_verifier=state_payload["code_verifier"],
+            redirect_uri=_google_redirect_uri(),
+        )
+    except (httpx.HTTPError, GoogleTokenExchangeError):
+        log.warning(
+            "google sign-in: token exchange failed",
+            extra={"event": LOG_EVENT_GOOGLE_SIGNIN_DEGRADED, "track": "user"},
+        )
+        return _error_redirect(OAUTH_ERROR_TOKEN_EXCHANGE_FAILED)
+
+    try:
+        identity = verify_google_id_token(id_token)
+    except jwt.PyJWKClientError:
+        # JWKS fetch/network failure — an upstream degradation, not a
+        # rejected caller.
+        log.warning(
+            "google sign-in: JWKS fetch failed",
+            extra={"event": LOG_EVENT_GOOGLE_SIGNIN_DEGRADED, "track": "user"},
+        )
+        return _error_redirect(OAUTH_ERROR_TOKEN_EXCHANGE_FAILED)
+    except jwt.PyJWTError:
+        log.warning(
+            "google sign-in failed: id token verification",
+            extra={"event": LOG_EVENT_AUTH_FAILED},
+        )
+        return _error_redirect(OAUTH_ERROR_VERIFICATION_FAILED)
+
+    outcome, user = await _apply_google_linking_gate(db, identity)
+    log.info(
+        "google sign-in: outcome=%s",
+        outcome,
+        extra={"event": LOG_EVENT_GOOGLE_SIGNIN, "track": "user", "outcome": outcome},
+    )
+
+    if user is None:
+        response = RedirectResponse(
+            f"{settings.FRONTEND_URL}{LOGIN_PATH}", status_code=status.HTTP_302_FOUND
+        )
+    else:
+        # A brand-new account has no personas yet — send it through onboarding
+        # rather than straight to the (empty) feed; every other outcome lands
+        # on the feed, mirroring the plain magic-link flow's AuthVerify.tsx.
+        destination = (
+            ONBOARDING_PATH if outcome == GOOGLE_SIGNIN_OUTCOME_NEW_ACCOUNT else HOME_PATH
+        )
+        session_token = generate_session_token(user.id, user.session_token_version)
+        response = RedirectResponse(
+            f"{settings.FRONTEND_URL}{destination}",
+            status_code=status.HTTP_302_FOUND,
+        )
+        set_session_cookie(
+            response,
+            name=SESSION_COOKIE_NAME,
+            token=session_token,
+            path=SESSION_COOKIE_PATH,
+            ttl_seconds=settings.SESSION_TTL_DAYS * SECONDS_PER_DAY,
+        )
+
+    _clear_oauth_state_cookie(response)
+    return response

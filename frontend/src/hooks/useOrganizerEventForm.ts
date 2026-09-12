@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { organizerApi, ApiError } from '../api/client';
 import { API, QUERY_KEYS, ORGANIZER_EVENTS_PAGE_SIZE, DEFAULT_CURRENCY, ORGANIZER_IMAGE_ALLOWED_MIME, ROUTES, LOCALE_EN, LOCALE_ET, LOCALE_RU } from '../constants';
@@ -173,9 +173,14 @@ export function useOrganizerEventForm(locale: string, eventId?: number): UseOrga
   // (see components/LegalPage/LegalPage.tsx for the same pattern).
   const [fields, setFields] = useState<FormFields>(EMPTY_FIELDS);
 
-  function setField<K extends keyof FormFields>(key: K, value: FormFields[K]): void {
+  // useCallback with an empty dep array is safe here: setFields is always
+  // called in its functional-update form, so setField never closes over a
+  // stale `fields` value. A stable setField is what lets the per-field
+  // setters below (and any memo keyed on them, e.g. EventSubmit's `slots`)
+  // stay referentially stable across renders (Big-O audit H4).
+  const setField = useCallback(<K extends keyof FormFields>(key: K, value: FormFields[K]): void => {
     setFields((prev) => ({ ...prev, [key]: value }));
-  }
+  }, []);
 
   // Edit-mode prefill. There is no GET /organizer/events/{id} single-event
   // endpoint — the dashboard's own list is the only read path, so prefill
@@ -325,26 +330,52 @@ export function useOrganizerEventForm(locale: string, eventId?: number): UseOrga
     return err instanceof ApiError ? err.message : t('generic_error', locale);
   }
 
+  // Memoized so every setter keeps a stable identity across renders (setField
+  // itself is stable — see above) — callers that memoize on these setters
+  // (e.g. EventSubmit's `slots`) get a memo that actually hits (Big-O audit H4).
+  const setters = useMemo(
+    () => ({
+      setTitle: (v: string) => setField('title', v),
+      setTitleEn: (v: string) => setField('titleEn', v),
+      setTitleRu: (v: string) => setField('titleRu', v),
+      setDescription: (v: string) => setField('description', v),
+      setDescriptionEn: (v: string) => setField('descriptionEn', v),
+      setDescriptionRu: (v: string) => setField('descriptionRu', v),
+      setImportantInfo: (v: string) => setField('importantInfo', v),
+      setImportantInfoEn: (v: string) => setField('importantInfoEn', v),
+      setImportantInfoRu: (v: string) => setField('importantInfoRu', v),
+      setStartsAt: (v: string) => setField('startsAt', v),
+      setEndsAt: (v: string) => setField('endsAt', v),
+      setVenue: (v: VenuePickerValue) => setField('venue', v),
+      setUrl: (v: string) => setField('url', v),
+      setPriceMin: (v: string) => setField('priceMin', v),
+      setPriceMax: (v: string) => setField('priceMax', v),
+      setCategory: (v: string) => setField('category', v),
+    }),
+    [setField],
+  );
+
   return {
     isEditMode,
-    title: fields.title, setTitle: (v: string) => setField('title', v),
-    titleEn: fields.titleEn, setTitleEn: (v: string) => setField('titleEn', v),
-    titleRu: fields.titleRu, setTitleRu: (v: string) => setField('titleRu', v),
-    description: fields.description, setDescription: (v: string) => setField('description', v),
-    descriptionEn: fields.descriptionEn, setDescriptionEn: (v: string) => setField('descriptionEn', v),
-    descriptionRu: fields.descriptionRu, setDescriptionRu: (v: string) => setField('descriptionRu', v),
-    importantInfo: fields.importantInfo, setImportantInfo: (v: string) => setField('importantInfo', v),
-    importantInfoEn: fields.importantInfoEn, setImportantInfoEn: (v: string) => setField('importantInfoEn', v),
-    importantInfoRu: fields.importantInfoRu, setImportantInfoRu: (v: string) => setField('importantInfoRu', v),
-    startsAt: fields.startsAt, setStartsAt: (v: string) => setField('startsAt', v),
-    endsAt: fields.endsAt, setEndsAt: (v: string) => setField('endsAt', v),
-    venue: fields.venue, setVenue: (v: VenuePickerValue) => setField('venue', v),
-    url: fields.url, setUrl: (v: string) => setField('url', v),
+    title: fields.title,
+    titleEn: fields.titleEn,
+    titleRu: fields.titleRu,
+    description: fields.description,
+    descriptionEn: fields.descriptionEn,
+    descriptionRu: fields.descriptionRu,
+    importantInfo: fields.importantInfo,
+    importantInfoEn: fields.importantInfoEn,
+    importantInfoRu: fields.importantInfoRu,
+    startsAt: fields.startsAt,
+    endsAt: fields.endsAt,
+    venue: fields.venue,
+    url: fields.url,
     imageUrl: fields.imageUrl,
     clearImage: () => { setField('imageUrl', ''); imageMutation.reset(); },
-    priceMin: fields.priceMin, setPriceMin: (v: string) => setField('priceMin', v),
-    priceMax: fields.priceMax, setPriceMax: (v: string) => setField('priceMax', v),
-    category: fields.category, setCategory: (v: string) => setField('category', v),
+    priceMin: fields.priceMin,
+    priceMax: fields.priceMax,
+    category: fields.category,
+    ...setters,
     uploadImage: imageMutation.mutate,
     imageUploading: imageMutation.isPending,
     imageError: imageMutation.isError ? errorText(imageMutation.error) : '',

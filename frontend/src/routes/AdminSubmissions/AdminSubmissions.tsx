@@ -1,13 +1,15 @@
 import { useMemo, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
+import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { adminApi, ApiError } from '../../api/client';
-import { API, QUERY_KEYS, UI_STATE } from '../../constants';
+import { ADMIN_QUEUE_DETAIL_LINK_LABEL, ADMIN_REVIEW_QUEUE_PAGE_SIZE, API, QUERY_KEYS, ROUTES, UI_STATE } from '../../constants';
 import { relativeTimeFromNow, safeUrl } from '../../utils';
 import PageState from '../../components/PageState';
 import Toast from '../../components/Toast';
 import { useToast } from '../../hooks/useToast';
 import AdminQueueSplitView from '../../components/AdminQueueSplitView';
 import AdminQueueActionPanel from '../../components/AdminQueueActionPanel';
+import queueStyles from '../../components/shared/AdminQueue.module.css';
 import styles from './AdminSubmissions.module.css';
 
 interface AdminSubmission {
@@ -23,7 +25,10 @@ interface AdminSubmission {
 }
 
 interface AdminSubmissionsResponse {
-  total: number;
+  total: number | null;
+  limit: number;
+  offset: number;
+  has_more: boolean;
   events: AdminSubmission[];
 }
 
@@ -46,9 +51,22 @@ type ResolutionKind = 'approved' | 'retracted';
 export default function AdminSubmissions() {
   const queryClient = useQueryClient();
   const { toast, showToast } = useToast();
-  const { data, isLoading, isError } = useQuery({
+  const {
+    data,
+    isLoading,
+    isError,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteQuery({
     queryKey: [QUERY_KEYS.adminSubmissions],
-    queryFn: () => adminApi.get<AdminSubmissionsResponse>(API.adminSubmissions),
+    queryFn: ({ pageParam }) =>
+      adminApi.get<AdminSubmissionsResponse>(
+        `${API.adminSubmissions}?limit=${ADMIN_REVIEW_QUEUE_PAGE_SIZE}&offset=${pageParam}`,
+      ),
+    initialPageParam: 0,
+    getNextPageParam: (lastPage) =>
+      lastPage.has_more ? lastPage.offset + lastPage.events.length : undefined,
   });
 
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -57,11 +75,17 @@ export default function AdminSubmissions() {
     Record<number, { item: AdminSubmission; kind: ResolutionKind }>
   >({});
 
-  const serverItems = data?.events;
+  const serverItems = useMemo(() => data?.pages.flatMap((page) => page.events), [data]);
+  const totalSubmissions = data?.pages[0]?.total ?? 0;
+  // Precomputed once per data/resolution change, not per render — see
+  // AdminReports.tsx for why (Big-O audit M4).
   const items = useMemo(() => {
     const byId = new Map((serverItems ?? []).map((item) => [item.id, item]));
     for (const entry of Object.values(resolvedById)) byId.set(entry.item.id, entry.item);
-    return Array.from(byId.values());
+    return Array.from(byId.values()).map((item) => ({
+      ...item,
+      createdAtRelative: relativeTimeFromNow(item.created_at),
+    }));
   }, [serverItems, resolvedById]);
 
   const currentId = selectedId ?? items[0]?.id ?? null;
@@ -99,6 +123,8 @@ export default function AdminSubmissions() {
       ) : isError ? (
         <PageState kind={UI_STATE.error} message="Couldn't load the submissions queue." inline />
       ) : (
+        <>
+        <p className={styles.subtitle}>{items.length} of {totalSubmissions} pending submissions shown</p>
         <AdminQueueSplitView
           items={items}
           getId={(item) => item.id}
@@ -118,7 +144,7 @@ export default function AdminSubmissions() {
                   ? `Organizer #${item.submitted_by_organizer_id}`
                   : 'Unknown organizer'}
                 {' · '}
-                {relativeTimeFromNow(item.created_at)}
+                {item.createdAtRelative}
               </div>
             </>
           )}
@@ -129,6 +155,9 @@ export default function AdminSubmissions() {
               <div>
                 <h2 className={styles.detailTitle}>{item.title}</h2>
                 <p className={styles.detailMeta}>{item.venue_name ?? 'No venue'} · status: {item.status}</p>
+                <Link to={ROUTES.adminEventDetail(item.id)} className={queueStyles.queueDetailLink}>
+                  {ADMIN_QUEUE_DETAIL_LINK_LABEL}
+                </Link>
                 {item.categories.length > 0 && (
                   <div className={styles.chips}>
                     {item.categories.map((c) => (
@@ -175,6 +204,17 @@ export default function AdminSubmissions() {
             );
           }}
         />
+        {hasNextPage && (
+          <button
+            type="button"
+            className={styles.loadMoreBtn}
+            onClick={() => fetchNextPage()}
+            disabled={isFetchingNextPage}
+          >
+            Load more
+          </button>
+        )}
+        </>
       )}
       {toast.status !== UI_STATE.idle && <Toast status={toast.status} message={toast.message} />}
     </div>

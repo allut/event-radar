@@ -13,6 +13,9 @@ import httpx
 from app.config import settings
 from app.constants import (
     APP_ENV_DEVELOPMENT,
+    AUTHORIZATION_HEADER,
+    BEARER_PREFIX,
+    HEADER_CONTENT_TYPE,
     LOG_DATE_FORMAT,
     LOG_DIR_NAME,
     LOG_FILE_BACKUP_COUNT,
@@ -25,7 +28,9 @@ from app.constants import (
     LOG_SHIP_QUEUE_MAXSIZE,
     LOG_SHIP_SUPPRESS_ACCESS_PATHS,
     LOG_SHIP_TIMEOUT_SECONDS,
+    MIME_APPLICATION_JSON,
     SQLALCHEMY_ENGINE_LOGGER_NAME,
+    UVICORN_ACCESS_STATUS_ARG_INDEX,
 )
 
 _queue_listener: logging.handlers.QueueListener | None = None
@@ -81,8 +86,8 @@ class HttpLogShipHandler(logging.Handler):
                 # array-batch POST (also accepted by other JSON drains).
                 content=f"[{body}]",
                 headers={
-                    "Content-Type": "application/json",
-                    "Authorization": f"Bearer {settings.LOG_SHIP_TOKEN}",
+                    HEADER_CONTENT_TYPE: MIME_APPLICATION_JSON,
+                    AUTHORIZATION_HEADER: f"{BEARER_PREFIX}{settings.LOG_SHIP_TOKEN}",
                 },
             )
         except Exception:
@@ -94,7 +99,9 @@ class HttpLogShipHandler(logging.Handler):
 
 
 class _AccessPathFilter(logging.Filter):
-    """Drops uvicorn.access records for high-frequency probe paths.
+    """Drops uvicorn.access records for high-frequency probe paths, and
+    strips the query string from every other uvicorn.access record before
+    it ships.
 
     uvicorn.access records carry args = (client_addr, method, path,
     http_version, status); we match the path (query string stripped, since
@@ -104,18 +111,30 @@ class _AccessPathFilter(logging.Filter):
     monitor should see, so it still ships. Attached only to the shipping
     QueueHandler, so suppressed lines still reach the console handler
     (Render logs).
+
+    The query-string strip is unconditional and applies to every path, not
+    just the suppress list — OAuth callback codes, unsubscribe tokens, and
+    /explore search terms all otherwise reach the third-party Axiom drain
+    verbatim (OWASP audit L-1). Only the shipped record.args tuple is
+    rewritten in place; the console/file handlers format the record
+    independently before this filter runs, so local logs are unaffected.
     """
 
     def filter(self, record: logging.LogRecord) -> bool:
         if (
             record.name == "uvicorn.access"
             and isinstance(record.args, tuple)
-            and len(record.args) >= 5
+            and len(record.args) > UVICORN_ACCESS_STATUS_ARG_INDEX
         ):
             path = record.args[2]
             if isinstance(path, str):
-                path = path.split("?", 1)[0]
-            status = record.args[4]
+                stripped_path = path.split("?", 1)[0]
+                if stripped_path != path:
+                    record.args = (
+                        record.args[:2] + (stripped_path,) + record.args[3:]
+                    )
+                path = stripped_path
+            status = record.args[UVICORN_ACCESS_STATUS_ARG_INDEX]
             if (
                 path in LOG_SHIP_SUPPRESS_ACCESS_PATHS
                 and isinstance(status, int)

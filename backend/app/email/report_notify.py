@@ -12,8 +12,10 @@ import httpx
 
 from app.config import settings
 from app.constants import (
+    ADMIN_REPORTS_PATH,
     AUTHORIZATION_HEADER,
     BEARER_PREFIX,
+    EVENTS_PATH,
     LOG_EVENT_EMAIL_SEND_FAILED,
     RESEND_ERROR_SNIPPET_LEN,
     RESEND_SEND_URL,
@@ -49,8 +51,8 @@ async def send_report_notification(
         )
         return
 
-    event_href = f"{settings.FRONTEND_URL}/events/{event.id}"
-    console_href = f"{settings.FRONTEND_URL}/admin/reports?report={event.id}"
+    event_href = f"{settings.FRONTEND_URL}{EVENTS_PATH}/{event.id}"
+    console_href = f"{settings.FRONTEND_URL}{ADMIN_REPORTS_PATH}?report={event.id}"
 
     safe_title = html.escape(event.title_orig)
     safe_reason = html.escape(reason)

@@ -1,9 +1,5 @@
 .preStreamError {
-  composes: card from '../../components/shared/Card.module.css';
-  padding: var(--space-2) var(--space-3);
-  margin-bottom: var(--space-2);
-  color: var(--danger);
-  font-size: var(--fs-sm);
+  composes: lineError from './AdminPipeline.module.css';
 }
 
 .table { width: 100%; border-collapse: collapse; font-size: var(--fs-2xs); }

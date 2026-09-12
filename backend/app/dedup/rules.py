@@ -19,7 +19,7 @@ from collections.abc import Iterable
 from datetime import date, datetime, timedelta
 
 from rapidfuzz.fuzz import token_set_ratio
-from sqlalchemy import or_, select, update
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased, load_only
 
@@ -246,7 +246,9 @@ def _representative_status_rank(event: Event) -> int:
     return 0
 
 
-def _event_quality_rank(event: Event) -> tuple[bool, bool, bool, int]:
+def _event_quality_rank(
+    event: Event, desc_len_by_id: dict[int, int] | None = None
+) -> tuple[bool, bool, bool, int]:
     """Sortable data-completeness rank for picking a cluster representative.
 
     Higher tuple → better. Mirrors the ingestion-authority signals the pipeline
@@ -257,17 +259,31 @@ def _event_quality_rank(event: Event) -> tuple[bool, bool, bool, int]:
     Raw (un-stripped) length is used for the description tie-break rather than
     a full HTML-to-text parse per member per pass — only the relative ordering
     matters here, not the exact stripped-text length.
+
+    ``desc_len_by_id`` (from ``load_description_lengths``) is the production
+    path — ``event.description_orig`` isn't loaded on events fetched via
+    ``load_dedup_candidate_events`` (Big-O audit M3), and an async session
+    would raise ``MissingGreenlet`` on a lazy-load attempt. Falling back to
+    ``event.description_orig`` when no map is supplied keeps this working for
+    callers (tests) that build plain in-memory Event objects directly.
     """
+    if desc_len_by_id is not None:
+        desc_len = desc_len_by_id.get(event.id, 0)
+    else:
+        desc_len = len(event.description_orig or "")
     return (
         event.price_min is not None,
         event.venue_address is not None,
         event.lat is not None and event.lng is not None,
-        len(event.description_orig or ""),
+        desc_len,
     )
 
 
 def build_cluster_assignments(
-    parent: dict[int, int], ids: list[int], events_by_id: dict[int, Event]
+    parent: dict[int, int],
+    ids: list[int],
+    events_by_id: dict[int, Event],
+    desc_len_by_id: dict[int, int] | None = None,
 ) -> dict[int, int]:
     """Resolve union-find roots → {event_id: group_id} for groups with ≥2 members.
 
@@ -290,7 +306,7 @@ def build_cluster_assignments(
                 members,
                 key=lambda eid: (
                     _representative_status_rank(events_by_id[eid]),
-                    _event_quality_rank(events_by_id[eid]),
+                    _event_quality_rank(events_by_id[eid], desc_len_by_id),
                     -eid,
                 ),
             )
@@ -302,6 +318,7 @@ def build_cluster_assignments(
 def cluster_events(
     events: list[Event],
     candidate_pair_ids: Iterable[tuple[int, int]] | None = None,
+    desc_len_by_id: dict[int, int] | None = None,
 ) -> dict[int, int]:
     """Return {event_id: dedup_group_id} for events that share a group.
 
@@ -310,6 +327,9 @@ def cluster_events(
     If ``candidate_pair_ids`` is provided, only those (a_id, b_id) tuples are
     fuzzy-checked (typically pre-filtered by SQL on the time window). Without
     it, falls back to the original O(N²) Python enumeration.
+
+    ``desc_len_by_id`` is forwarded to ``build_cluster_assignments`` — see
+    ``_event_quality_rank`` for why the production caller supplies it.
     """
     n = len(events)
     if n < 2:
@@ -359,7 +379,7 @@ def cluster_events(
     if pair_count:
         log.debug("dedup: found %d candidate pair(s) among %d events", pair_count, n)
 
-    return build_cluster_assignments(parent, ids, events_by_id)
+    return build_cluster_assignments(parent, ids, events_by_id, desc_len_by_id)
 
 
 # ---------------------------------------------------------------------------
@@ -460,10 +480,12 @@ async def load_dedup_candidate_events(
     Upper-bounded at DEDUP_LOOKAHEAD_DAYS from now — events rows are never
     deleted, so without this an event scheduled arbitrarily far in the future
     would be loaded on every pass. ``load_only`` restricts the SELECT to the
-    columns dedup actually reads/writes (fuzzy title/venue matching, the
-    quality-rank tie-break, and dedup_group_id itself) rather than every Event
-    column, including the large description_localized/important_info/
-    price_hint text and JSONB fields this pass never touches.
+    columns dedup actually reads/writes (fuzzy title/venue matching, and
+    dedup_group_id itself) rather than every Event column, including the large
+    description_orig/description_localized/important_info/price_hint text and
+    JSONB fields this pass never touches. Description *length* (for the
+    quality-rank tie-break) is fetched separately by ``load_description_lengths``
+    — a `func.length()` projection, not the TEXT itself (Big-O audit M3).
     """
     lookahead_cutoff = datetime.now(tz=TALLINN_TZ) + timedelta(days=DEDUP_LOOKAHEAD_DAYS)
     rows = await db.scalars(
@@ -483,12 +505,30 @@ async def load_dedup_candidate_events(
                 Event.lat,
                 Event.lng,
                 Event.price_min,
-                Event.description_orig,
                 Event.dedup_group_id,
             )
         )
     )
     return list(rows.all())
+
+
+async def load_description_lengths(
+    db: AsyncSession, event_ids: list[int]
+) -> dict[int, int]:
+    """{event_id: len(description_orig or "")} for ``event_ids`` — a
+    `func.length()` projection so only integers cross the wire, never the
+    (kilobytes-per-row) description text itself. Feeds the
+    ``_event_quality_rank`` tie-break without ``load_dedup_candidate_events``
+    having to hydrate every in-window event's full description (Big-O audit M3).
+    """
+    if not event_ids:
+        return {}
+    rows = await db.execute(
+        select(Event.id, func.length(Event.description_orig)).where(
+            Event.id.in_(event_ids)
+        )
+    )
+    return {eid: (length or 0) for eid, length in rows.all()}
 
 
 async def clear_stale_dedup_groups(db: AsyncSession, cutoff: datetime) -> None:
@@ -523,8 +563,11 @@ async def run_dedup_pass(db: AsyncSession) -> dict:
         return {"total": 0, "grouped": 0, "groups": 0, "updated": 0}
 
     candidate_pair_ids = await candidate_pair_ids_in_window(db, cutoff)
+    desc_len_by_id = await load_description_lengths(db, [e.id for e in events])
 
-    assignments = cluster_events(events, candidate_pair_ids=candidate_pair_ids)
+    assignments = cluster_events(
+        events, candidate_pair_ids=candidate_pair_ids, desc_len_by_id=desc_len_by_id
+    )
 
     updated = 0
     for event in events:

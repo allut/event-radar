@@ -34,6 +34,7 @@ import { chromium, type Browser, type Page } from 'playwright';
 import { preview, type PreviewServer } from 'vite';
 import type { EventData } from '../src/components/EventCard';
 import {
+  APP_SHELL_FILENAME,
   BROWSE_PAGE_SIZE,
   CANONICAL_LINK_SELECTOR,
   CRAWLABLE_ASSETS_PATH,
@@ -44,6 +45,7 @@ import {
   LOCALES,
   OG_FALLBACK_IMAGE_PATH,
   PRERENDER_CHAIN_GITHUB_REPO,
+  PRERENDER_DIAGNOSTIC_EVENT_MAX_LENGTH,
   PRERENDER_ERROR_SELECTOR,
   PRERENDER_READY_SELECTOR,
   PRODUCTION_ORIGIN,
@@ -280,6 +282,106 @@ function embedChangeMarker(html: string, marker: string): string {
   return dom.serialize();
 }
 
+/** Rewrites `html`'s built-asset `<head>` references (`<script type="module">`,
+ * `<link rel="stylesheet">`, `<link rel="modulepreload">` — anything Vite
+ * emits under CRAWLABLE_ASSETS_PATH) to match `shellHtml`'s, in place.
+ *
+ * Exists because a copied-forward snapshot (issue #80/#82) is a byte-for-byte
+ * capture of a *previous* build's rendered HTML, complete with that build's
+ * content-hashed asset filenames. Vite mints new hashes on every source
+ * change, so those references go dead the moment the next build ships —
+ * and because copy-forward has no staleness signal of its own (its whole
+ * point is "nothing about this route changed"), the dead references would
+ * otherwise persist silently across arbitrarily many future deploys. Vercel
+ * doesn't 404 the request either: vercel.json's catch-all rewrite serves
+ * `app-shell.html` (200, `text/html`) for any unmatched path, which a
+ * browser then rejects as a stylesheet/module script under strict MIME
+ * sniffing — no CSS, and React never mounts.
+ *
+ * `shellHtml` must be `dist/app-shell.html` — the pristine, never-prerendered
+ * Vite output — not `dist/index.html`, which prerender itself overwrites
+ * with the home-route snapshot partway through the same round.
+ *
+ * Throws if `shellHtml` carries zero asset nodes: that means the caller
+ * passed the wrong document, and a silent no-op rewrite here would just
+ * reintroduce the bug it exists to fix. */
+function isAssetNode(node: Element): boolean {
+  const ref = node.getAttribute('src') ?? node.getAttribute('href') ?? '';
+  return ref.startsWith(CRAWLABLE_ASSETS_PATH);
+}
+
+// Caches the one shell document's parsed asset nodes across every call in a
+// round (a copy-forward/stale-fallback round can call rewriteSnapshotAssetRefs
+// thousands of times against the same, invariant shellHtml) — re-parsing an
+// identical string with a fresh JSDOM per call would be pure waste at that
+// scale. Keyed on shellHtml itself rather than assuming "one call per round",
+// so a shellHtml change (e.g. between test cases) still gets a fresh parse.
+let shellAssetNodeCache: { shellHtml: string; nodes: Element[] } | null = null;
+
+function getShellAssetNodes(shellHtml: string): Element[] {
+  if (shellAssetNodeCache !== null && shellAssetNodeCache.shellHtml === shellHtml) {
+    return shellAssetNodeCache.nodes;
+  }
+  const shellDom = new JSDOM(shellHtml);
+  const nodes = [...shellDom.window.document.head.querySelectorAll('script, link')].filter(isAssetNode);
+  shellAssetNodeCache = { shellHtml, nodes };
+  return nodes;
+}
+
+export function rewriteSnapshotAssetRefs(html: string, shellHtml: string): string {
+  const shellAssetNodes = getShellAssetNodes(shellHtml);
+  if (shellAssetNodes.length === 0) {
+    throw new Error(
+      'rewriteSnapshotAssetRefs: shell HTML has zero /assets/ references — wrong document passed as shellHtml?',
+    );
+  }
+
+  const dom = new JSDOM(html);
+  const head = dom.window.document.head;
+  const staleAssetNodes = [...head.querySelectorAll('script, link')].filter(isAssetNode);
+  // Anchor on the node right after the stale block (captured before removal,
+  // so it's untouched by it) — `insertBefore(node, null)` appends at the end,
+  // which is exactly the "no stale nodes" case (append to <head>) the plan
+  // calls for. Fixing the anchor once, rather than re-deriving it per
+  // inserted node, keeps the shell's nodes in their original relative order.
+  const anchor = staleAssetNodes.length > 0 ? staleAssetNodes[staleAssetNodes.length - 1].nextSibling : null;
+  for (const node of staleAssetNodes) node.remove();
+  for (const shellNode of shellAssetNodes) {
+    const imported = dom.window.document.importNode(shellNode, true);
+    head.insertBefore(imported, anchor);
+  }
+  return dom.serialize();
+}
+
+/** Strips a baked-in `data-theme` attribute off `html`'s `<html>` element,
+ * leaving every other attribute (`lang`, `data-rh`, …) untouched. A snapshot
+ * is captured in the build browser, which has no `theme_preference` in
+ * localStorage — the inline pre-paint script (index.html) resolves that to
+ * whatever the build machine's OS `prefers-color-scheme` happens to be and
+ * bakes it into `document.documentElement.dataset.theme` before
+ * `page.content()` ever reads the DOM back. Shipping that baked value means
+ * every visitor sees the build machine's theme, frozen, until JS re-resolves
+ * it at runtime — the theme-revert-on-refresh bug this fixes. Leaving the
+ * attribute absent instead falls through to the dark origin palette
+ * (`:root` in index.css) only until the pre-paint script (now unblocked by
+ * the CSP hash — see src/lib/csp.ts) sets the real value before first paint.
+ * Idempotent — a second call on already-stripped HTML is a no-op. */
+export function stripBakedThemeAttr(html: string): string {
+  const dom = new JSDOM(html);
+  dom.window.document.documentElement.removeAttribute('data-theme');
+  return dom.serialize();
+}
+
+/** Single choke point for every snapshot write, so a future write site can't
+ * skip stripBakedThemeAttr by accident. `shellHtml` is optional: the
+ * fresh-render write site (snapshotTarget) has no stale asset refs to
+ * rewrite (the page was just rendered against the current build), while
+ * both copy-forward write sites in main() do. */
+function finalizeSnapshotHtml(html: string, shellHtml?: string): string {
+  const withAssetsFixed = shellHtml !== undefined ? rewriteSnapshotAssetRefs(html, shellHtml) : html;
+  return stripBakedThemeAttr(withAssetsFixed);
+}
+
 /** Reads the change-detection marker back off a rendered snapshot's JSON-LD
  * (issue #80) — used both to read the currently-live production page during
  * change detection, and (via the same parseSnapshotHtml helper the in-build
@@ -439,8 +541,8 @@ function attachPageDiagnostics(page: Page): () => string[] {
     events.push(line);
     if (events.length > MAX_EVENTS) events.shift();
   };
-  page.on('console', (msg) => record(`console.${msg.type()}: ${msg.text().slice(0, 300)}`));
-  page.on('pageerror', (err) => record(`pageerror: ${String(err).slice(0, 300)}`));
+  page.on('console', (msg) => record(`console.${msg.type()}: ${msg.text().slice(0, PRERENDER_DIAGNOSTIC_EVENT_MAX_LENGTH)}`));
+  page.on('pageerror', (err) => record(`pageerror: ${String(err).slice(0, PRERENDER_DIAGNOSTIC_EVENT_MAX_LENGTH)}`));
   page.on('requestfailed', (req) =>
     record(`requestfailed: ${req.url()} — ${req.failure()?.errorText ?? 'unknown'}`),
   );
@@ -489,7 +591,7 @@ async function snapshotTarget(
   }
   const outPath = outputFilePath(target.bare, target.locale);
   await mkdir(path.dirname(outPath), { recursive: true });
-  await writeFile(outPath, html, 'utf-8');
+  await writeFile(outPath, finalizeSnapshotHtml(html), 'utf-8');
 }
 
 /** Bounded-concurrency runner shared by the change-detection pass, the
@@ -765,6 +867,13 @@ export async function main(): Promise<void> {
   await writeFile(path.join(DIST_DIR, 'robots.txt'), buildRobotsTxt(), 'utf-8');
   console.log(`prerender: wrote sitemap.xml (${targets.length} url(s)) and robots.txt`);
 
+  // The one pristine Vite build output still on disk during this round
+  // (frontend/package.json's build script copies it here before invoking
+  // this script, and nothing below ever touches it) — read once so every
+  // copy-forward/stale-fallback write below can rewrite its stale asset
+  // refs to match the current build (issue #97).
+  const shellHtml = await readFile(path.join(DIST_DIR, APP_SHELL_FILENAME), 'utf-8');
+
   // Change detection (issue #80): for every event route, diff its embedded
   // marker against the currently-live production page. An exact match
   // copies the live page forward as-is (no Playwright render); everything
@@ -780,7 +889,7 @@ export async function main(): Promise<void> {
     if (unchanged && liveHtml !== null) {
       const outPath = outputFilePath(target.bare, target.locale);
       await mkdir(path.dirname(outPath), { recursive: true });
-      await writeFile(outPath, liveHtml, 'utf-8');
+      await writeFile(outPath, finalizeSnapshotHtml(liveHtml, shellHtml), 'utf-8');
       copiedForward++;
     } else if (liveHtml !== null) {
       // Needs a fresh render, but a live page exists — held for now rather
@@ -907,7 +1016,7 @@ export async function main(): Promise<void> {
     if (liveHtml === undefined) continue;
     const outPath = outputFilePath(target.bare, target.locale);
     await mkdir(path.dirname(outPath), { recursive: true });
-    await writeFile(outPath, liveHtml, 'utf-8');
+    await writeFile(outPath, finalizeSnapshotHtml(liveHtml, shellHtml), 'utf-8');
     staleFallbackWritten++;
   }
 

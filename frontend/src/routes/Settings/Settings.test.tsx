@@ -22,6 +22,7 @@ vi.mock('../../api/client', async (importOriginal) => ({
     // (fired alongside every logout-all's follow-up handleLogout) never hits
     // an unmocked call with no return value.
     post: vi.fn().mockResolvedValue({}),
+    delete: vi.fn(),
   },
 }));
 
@@ -29,6 +30,7 @@ import { api } from '../../api/client';
 const mockGet = vi.mocked(api.get);
 const mockPatch = vi.mocked(api.patch);
 const mockPost = vi.mocked(api.post);
+const mockDelete = vi.mocked(api.delete);
 
 const settingsData = {
   id: 1,
@@ -41,6 +43,7 @@ const settingsData = {
     { slug: 'culture_buff', display_name_en: 'Culture Buff', weight: 1.0 },
     { slug: 'weekend_hobbyist', display_name_en: 'Weekend Hobbyist', weight: 0.4 },
   ],
+  google_linked: false,
 };
 
 describe('Settings', () => {
@@ -128,5 +131,32 @@ describe('Settings', () => {
     vi.runAllTimers();
     await waitFor(() => expect(clearSignedInHint).toHaveBeenCalled());
     vi.useRealTimers();
+  });
+
+  it('shows not-linked state and no unlink button when Google is not linked', async () => {
+    mockGet.mockResolvedValueOnce(settingsData);
+    renderWithProviders(<Settings />);
+    await waitFor(() => expect(screen.getByText('Google account not linked')).toBeInTheDocument());
+    expect(screen.queryByRole('button', { name: /unlink google/i })).not.toBeInTheDocument();
+  });
+
+  it('shows linked state and an unlink button when Google is linked', async () => {
+    mockGet.mockResolvedValueOnce({ ...settingsData, google_linked: true });
+    renderWithProviders(<Settings />);
+    await waitFor(() => expect(screen.getByText('Google account linked')).toBeInTheDocument());
+    expect(screen.getByRole('button', { name: /unlink google/i })).toBeInTheDocument();
+  });
+
+  it('unlink calls DELETE /users/me/identities/google and flips to not-linked', async () => {
+    mockGet.mockResolvedValueOnce({ ...settingsData, google_linked: true });
+    mockGet.mockResolvedValueOnce({ ...settingsData, google_linked: false });
+    mockDelete.mockResolvedValueOnce({ detail: 'Identity unlinked.' });
+    renderWithProviders(<Settings />);
+    await waitFor(() => screen.getByRole('button', { name: /unlink google/i }));
+
+    await userEvent.click(screen.getByRole('button', { name: /unlink google/i }));
+
+    expect(mockDelete).toHaveBeenCalledWith('/users/me/identities/google');
+    await waitFor(() => expect(screen.getAllByText('Google account not linked').length).toBeGreaterThan(0));
   });
 });

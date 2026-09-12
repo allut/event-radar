@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { StatusCodes } from 'http-status-codes';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -49,5 +49,49 @@ describe('OrganizerLogin', () => {
     renderWithProviders(<OrganizerLogin />);
     const link = screen.getByRole('link', { name: /back to what's on radar/i });
     expect(link).toHaveAttribute('href', '/');
+  });
+
+  it('does not render the Google button when the flag is off', () => {
+    renderWithProviders(<OrganizerLogin />);
+    expect(screen.queryByRole('link', { name: /sign in with google/i })).not.toBeInTheDocument();
+  });
+});
+
+describe('OrganizerLogin with Google sign-in enabled', () => {
+  beforeEach(() => {
+    vi.stubEnv('VITE_GOOGLE_SIGNIN_ORGANIZER_ENABLED', 'true');
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it('renders the Google button pointing at the organizer start endpoint, email form collapsed', () => {
+    renderWithProviders(<OrganizerLogin />);
+
+    const googleLink = screen.getByRole('link', { name: /sign in with google/i });
+    expect(googleLink).toHaveAttribute('href', '/api/organizer/auth/google/start');
+    expect(screen.queryByRole('textbox', { name: /email/i })).not.toBeInTheDocument();
+  });
+
+  it('expands the magic-link form behind the "continue with email" toggle', async () => {
+    renderWithProviders(<OrganizerLogin />);
+
+    await userEvent.click(screen.getByRole('button', { name: /continue with email instead/i }));
+
+    expect(screen.getByRole('textbox', { name: /email/i })).toBeInTheDocument();
+    expect(screen.getByText('or')).toBeInTheDocument();
+  });
+
+  it('shows the cancelled banner for the access_denied error code', () => {
+    renderWithProviders(<OrganizerLogin />, { route: '/organizer/login?google_error=access_denied' });
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Sign-in was cancelled.');
+  });
+
+  it('shows the generic failed banner for every other error code', () => {
+    renderWithProviders(<OrganizerLogin />, { route: '/organizer/login?google_error=state_invalid' });
+
+    expect(screen.getByRole('alert')).toHaveTextContent(/something went wrong signing in with google/i);
   });
 });

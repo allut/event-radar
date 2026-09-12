@@ -85,101 +85,27 @@
 }
 
 .calHead {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: var(--space-3);
+  composes: calHead from '../shared/Calendar.module.css';
 }
 
 .calNavBtn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: var(--cal-nav-size);
-  height: var(--cal-nav-size);
-  border: var(--border-w-hair) solid var(--border);
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--text-muted);
-  transition: all var(--transition);
-}
-
-.calNavBtn:hover {
-  color: var(--accent-light);
-  border-color: var(--accent-hover-border);
-  background: var(--accent-subtle);
-}
-
-.calNavBtn:focus-visible {
-  outline: none;
-  box-shadow: var(--shadow-focus-ring);
-}
-
-.calNavBtn svg {
-  width: var(--cal-nav-icon-size);
-  height: var(--cal-nav-icon-size);
+  composes: calNavBtn from '../shared/Calendar.module.css';
 }
 
 .calMonthLabel {
-  font-family: var(--font-display);
-  font-size: var(--fs-lg);
-  font-weight: var(--fw-semibold);
-  color: var(--text);
-  letter-spacing: var(--tracking-snug);
+  composes: calMonthLabel from '../shared/Calendar.module.css';
 }
 
 .calWeekdays {
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  margin-bottom: var(--space-1);
-}
-
-.calWeekdays span {
-  text-align: center;
-  font-size: var(--fs-2xs);
-  font-weight: var(--fw-semibold);
-  letter-spacing: var(--tracking-wider);
-  text-transform: uppercase;
-  color: var(--text-dim);
-  padding: var(--space-1) 0;
+  composes: calWeekdays from '../shared/Calendar.module.css';
 }
 
 .calGrid {
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap: var(--calendar-grid-gap);
+  composes: calGrid from '../shared/Calendar.module.css';
 }
 
 .calDay {
-  position: relative;
-  aspect-ratio: 1;
-  min-height: var(--calendar-cell-size);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: var(--fs-sm);
-  font-variant-numeric: tabular-nums;
-  color: var(--text-soft);
-  border-radius: var(--radius-sm);
-  background: transparent;
-  border: var(--border-w-hair) solid transparent;
-  transition: all var(--transition);
-}
-
-.calDay:hover:not(:disabled) {
-  background: var(--bg-card-hover);
-  border-color: var(--border);
-  color: var(--text);
-}
-
-.calDay:focus-visible {
-  outline: none;
-  box-shadow: var(--shadow-focus-ring);
-}
-
-.calDay:disabled {
-  color: var(--text-dim);
-  cursor: default;
+  composes: calDay from '../shared/Calendar.module.css';
 }
 
 .spill {
@@ -322,14 +248,13 @@
   }
 }
 
-/* .field (composed fieldWrap) and .pop (composed menuPop) already square
+/* .field (composed fieldWrap), .pop (composed menuPop), .calNavBtn and
+ * .calDay (composed from shared/Calendar.module.css) already square
  * unconditionally at their shared-base source (#212) — only these locally
  * radiused controls still need squaring here. Decorative radii (.today's
  * dot, .selected's own background) are untouched — not a control's
  * corners. */
 .calendarButton,
-.calNavBtn,
-.calDay,
 .timeInput {
   border-radius: 0;
 }

@@ -51,3 +51,14 @@
 .retractedPanel {
   color: var(--danger);
 }
+
+.subtitle { font-size: var(--fs-sm); color: var(--text-muted); margin-bottom: var(--space-4); }
+
+.loadMoreBtn {
+  composes: btnOutline from '../../components/shared/Button.module.css';
+  display: block;
+  margin: var(--space-5) auto 0;
+  padding: var(--space-2) var(--space-5);
+  cursor: pointer;
+}
+.loadMoreBtn:disabled { opacity: var(--opacity-disabled); cursor: not-allowed; }

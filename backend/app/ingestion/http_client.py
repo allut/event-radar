@@ -31,6 +31,7 @@ from tenacity import (
 from app.constants import (
     ALLOWED_SOURCE_HOSTS,
     DNS_RESOLVE_CACHE_TTL_SECONDS,
+    HEADER_RETRY_AFTER,
     HTTPS_DEFAULT_PORT,
     HTTP_RETRY_AFTER_MAX_SECONDS,
     HTTP_RETRYABLE_STATUS_CODES,
@@ -63,7 +64,7 @@ def retry_after_seconds(exc: BaseException) -> float | None:
         return None
     if exc.response.status_code != http.HTTPStatus.TOO_MANY_REQUESTS:
         return None
-    header = exc.response.headers.get("Retry-After")
+    header = exc.response.headers.get(HEADER_RETRY_AFTER)
     if not header:
         return None
     try:

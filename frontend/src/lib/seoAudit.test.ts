@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { parseSitemapLastmod, parseSitemapEventUrls, evaluateLiveAudit, isPathAllowedByRobots } from './seoAudit';
+import {
+  parseSitemapLastmod,
+  parseSitemapEventUrls,
+  parseSnapshotAssetUrls,
+  evaluateLiveAudit,
+  isPathAllowedByRobots,
+} from './seoAudit';
 import { buildEventJsonLd, buildExploreItemListJsonLd, buildWebsiteJsonLd } from './structuredData';
 import { buildSeoMeta } from '../hooks/useSeoMeta';
 import { makeEvent } from '../test/utils';
@@ -99,6 +105,28 @@ describe('parseSitemapEventUrls', () => {
 
   it('returns an empty list when the catalog has no published events yet', () => {
     expect(parseSitemapEventUrls(sitemapWithLastmod('2026-08-13T04:00:00.000Z'))).toEqual([]);
+  });
+});
+
+describe('parseSnapshotAssetUrls', () => {
+  it('extracts /assets/ script and stylesheet references, deduped', () => {
+    const html =
+      '<!doctype html><html><head>' +
+      '<script type="module" crossorigin src="/assets/index-abc123.js"></script>' +
+      '<link rel="stylesheet" crossorigin href="/assets/index-def456.css">' +
+      '<link rel="icon" href="/favicon.svg">' +
+      '</head><body></body></html>';
+    expect(parseSnapshotAssetUrls(html)).toEqual(['/assets/index-abc123.js', '/assets/index-def456.css']);
+  });
+
+  it('returns an empty list when the snapshot has no built assets', () => {
+    expect(parseSnapshotAssetUrls('<!doctype html><html><head></head><body></body></html>')).toEqual([]);
+  });
+
+  it('dedupes a repeated asset reference', () => {
+    const html =
+      '<script src="/assets/index-abc123.js"></script><script src="/assets/index-abc123.js"></script>';
+    expect(parseSnapshotAssetUrls(html)).toEqual(['/assets/index-abc123.js']);
   });
 });
 

@@ -9,7 +9,10 @@
          minimally rather than importing it (must run synchronously with zero
          module loading) — must never disagree with it. Placed before any
          stylesheet link/injection. Keep the storage key literal in sync with
-         THEME_PREFERENCE_KEY in src/constants.ts. -->
+         THEME_PREFERENCE_KEY in src/constants.ts. Also rewrites the two
+         media-queried theme-color tags below to a single override once an
+         explicit theme is known, so the browser chrome matches --bg exactly
+         instead of falling back to prefers-color-scheme's own guess. -->
     <script>
       (function () {
         try {
@@ -18,6 +21,14 @@
             ? pref
             : (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
           document.documentElement.dataset.theme = theme;
+          if (pref === 'light' || pref === 'dark') {
+            var metas = document.querySelectorAll('meta[name="theme-color"]');
+            for (var i = 0; i < metas.length; i++) metas[i].remove();
+            var meta = document.createElement('meta');
+            meta.name = 'theme-color';
+            meta.content = theme === 'light' ? '#fdfcfa' : '#13161e';
+            document.head.appendChild(meta);
+          }
         } catch (e) {}
       })();
     </script>
@@ -25,7 +36,13 @@
     <link rel="icon" href="/icon-96.png" sizes="96x96" type="image/png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/site.webmanifest" />
-    <meta name="theme-color" content="#13161e" />
+    <!-- Mirrors --bg's dark (#13161e) and light (#fdfcfa) values (src/index.css)
+         — kept as two media-queried tags rather than one so an OS-only
+         preference (no account/localStorage override) still gets a correct
+         theme-color with zero JS. The pre-paint script above replaces both
+         with a single tag once an explicit override is known. -->
+    <meta name="theme-color" content="#13161e" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#fdfcfa" media="(prefers-color-scheme: light)" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <!-- No static description here: useSeoMeta (react-helmet-async) sets one
          per route for Landing/EventDetail; react-helmet-async only manages

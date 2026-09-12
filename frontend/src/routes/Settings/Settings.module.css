@@ -4,36 +4,16 @@
 
 /* ── Main ── */
 .main {
-  flex: 1;
-  max-width: var(--page-max-settings);
-  margin: 0 auto;
-  padding: var(--space-2-5) var(--space-6) var(--space-8);
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2-5);
+  composes: settingsMain from '../../components/shared/Settings.module.css';
 }
 
 /* ── Section ── */
 .section {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-  padding-bottom: var(--space-2-5);
-  border-bottom: var(--rule);
-}
-
-.section:last-of-type {
-  border-bottom: none;
+  composes: settingsSection from '../../components/shared/Settings.module.css';
 }
 
 .sectionTitle {
-  font-family: var(--font-display);
-  font-size: var(--fs-xs);
-  font-weight: var(--fw-bold);
-  color: var(--text-soft);
-  letter-spacing: var(--eyebrow-tracking);
-  text-transform: uppercase;
+  composes: sectionTitle from '../../components/shared/Settings.module.css';
 }
 
 .email {
@@ -87,24 +67,12 @@
 }
 
 .repickBtn {
-  composes: btnOutline from '../../components/shared/Button.module.css';
-  align-self: flex-start;
-  padding: var(--space-0-45) var(--space-4);
-  font-size: var(--fs-sm);
-  letter-spacing: var(--tracking-normal);
-  cursor: pointer;
-}
-
-.repickBtn:hover {
-  color: var(--accent-light);
+  composes: repickBtn from '../../components/shared/Settings.module.css';
 }
 
 /* ── Email toggle ── */
 .toggleRow {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-4);
+  composes: toggleRow from '../../components/shared/Settings.module.css';
 }
 
 .toggleLabel {

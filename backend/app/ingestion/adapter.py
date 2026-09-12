@@ -285,7 +285,13 @@ class SourceAdapter(ABC):
             payload=raw,
         )
         db.add(raw_event)
-        await db.flush()
+        # No flush here (Big-O audit H8): raw_event.id is never read by this
+        # function, so there is nothing that needs it persisted before the
+        # skip check below. A duplicate/non-event raw item (the common case
+        # once known_ids is populated) now costs zero DB round trips per item
+        # instead of one forced flush — it rides along, still pending, to
+        # whatever flush point comes next (a later new item's nested insert,
+        # or the caller's final commit at the end of run()).
 
         normalized = self.normalize(raw)
         if normalized is None or not normalized.external_id:

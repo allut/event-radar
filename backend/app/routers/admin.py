@@ -23,6 +23,10 @@ from app.config import settings
 from app.constants import (
     ADMIN_ACTION_APPROVE_SUBMISSION,
     ADMIN_RESOLUTION_NOTE_MAX_CHARS,
+    FEATURE_ADMIN_ENDPOINTS,
+    MIME_APPLICATION_NDJSON,
+    SECURITY_HEADERS,
+    SETTING_NAME_ADMIN_PASSWORD,
     ADMIN_ACTION_BUILD_FEEDS,
     ADMIN_ACTION_CLEANUP,
     ADMIN_ACTION_CLASSIFY,
@@ -72,6 +76,7 @@ from app.constants import (
     REPORT_AUTO_RESOLVE_NOTE,
     REPORT_STATUS_OPEN,
     TALLINN_TZ,
+    VALID_LOCALES,
 )
 from app.db import AsyncSessionLocal
 from app.email.digest import send_daily_digests
@@ -106,7 +111,10 @@ from app.routers.utils import (
     ndjson_line,
     release_admin_job_lock,
     require_configured_secret,
+    resolve_description,
+    resolve_important_info,
     resolve_open_reports,
+    resolve_title,
     resolve_venue_address,
     resolve_venue_coords,
     resolve_venue_name,
@@ -262,8 +270,8 @@ def get_current_admin(
     if admin_session is None:
         if not require_configured_secret(
             settings.ADMIN_PASSWORD,
-            feature="Admin endpoints",
-            setting_name="ADMIN_PASSWORD",
+            feature=FEATURE_ADMIN_ENDPOINTS,
+            setting_name=SETTING_NAME_ADMIN_PASSWORD,
             app_env=settings.APP_ENV,
             allow_insecure_dev=settings.ALLOW_INSECURE_DEV,
         ):
@@ -309,8 +317,8 @@ def _require_admin(
     password = settings.ADMIN_PASSWORD
     if not require_configured_secret(
         password,
-        feature="Admin endpoints",
-        setting_name="ADMIN_PASSWORD",
+        feature=FEATURE_ADMIN_ENDPOINTS,
+        setting_name=SETTING_NAME_ADMIN_PASSWORD,
         app_env=settings.APP_ENV,
         allow_insecure_dev=settings.ALLOW_INSECURE_DEV,
     ):
@@ -334,7 +342,9 @@ def _ndjson_response(gen: AsyncIterator[bytes]) -> StreamingResponse:
     """Shared streamed-envelope response wrapper (issue #159) — every job
     trigger endpoint streams NDJSON with caching disabled unconditionally."""
     return StreamingResponse(
-        gen, media_type="application/x-ndjson", headers={"Cache-Control": "no-store"}
+        gen,
+        media_type=MIME_APPLICATION_NDJSON,
+        headers={"Cache-Control": SECURITY_HEADERS["Cache-Control"]},
     )
 
 
@@ -440,14 +450,20 @@ async def admin_dedup_groups(
     list of distinct dedup_group_ids.
     """
     async with AsyncSessionLocal() as db:
-        total_groups = (
-            await db.scalar(
-                select(func.count(func.distinct(Event.dedup_group_id))).where(
-                    Event.dedup_group_id.is_not(None),
-                    Event.status != EVENT_STATUS_CANCELLED,
+        # total only on the first page — see admin_list_submissions's identical
+        # pattern. has_more below no longer needs it (limit+1 sentinel instead),
+        # so this full-table distinct COUNT only ever runs once per queue view,
+        # not once per page (Big-O audit M2).
+        total_groups: int | None = None
+        if offset == 0:
+            total_groups = (
+                await db.scalar(
+                    select(func.count(func.distinct(Event.dedup_group_id))).where(
+                        Event.dedup_group_id.is_not(None),
+                        Event.status != EVENT_STATUS_CANCELLED,
+                    )
                 )
-            )
-        ) or 0
+            ) or 0
 
         page_group_ids = (
             await db.scalars(
@@ -458,10 +474,12 @@ async def admin_dedup_groups(
                 )
                 .distinct()
                 .order_by(Event.dedup_group_id)
-                .limit(limit)
+                .limit(limit + 1)
                 .offset(offset)
             )
         ).all()
+        has_more = len(page_group_ids) > limit
+        page_group_ids = page_group_ids[:limit]
 
         if not page_group_ids:
             return {
@@ -494,7 +512,7 @@ async def admin_dedup_groups(
         "total_groups": total_groups,
         "limit": limit,
         "offset": offset,
-        "has_more": offset + len(page_group_ids) < total_groups,
+        "has_more": has_more,
         "groups": [
             {"dedup_group_id": gid, "events": members}
             for gid, members in sorted(groups.items())
@@ -607,8 +625,11 @@ async def admin_retract_submission(
                 REPORT_AUTO_RESOLVE_NOTE,
             )
             result = {"id": event.id, "status": event.status, "note": note}
-            log_admin_action(db, ADMIN_ACTION_RETRACT_SUBMISSION, event_id, result)
+            emit_admin_log = log_admin_action(
+                db, ADMIN_ACTION_RETRACT_SUBMISSION, event_id, result
+            )
             await db.commit()
+            emit_admin_log()
             await send_report_resolution_emails(
                 db, event, resolved, REPORT_AUTO_RESOLVE_NOTE
             )
@@ -645,8 +666,11 @@ async def admin_approve_submission(
             # Diagnostic breakdown is unused by this endpoint's response.
             await publish_pending(db, diagnostics=False)
             result = {"id": event.id, "needs_review": event.needs_review, "note": note}
-            log_admin_action(db, ADMIN_ACTION_APPROVE_SUBMISSION, event_id, result)
+            emit_admin_log = log_admin_action(
+                db, ADMIN_ACTION_APPROVE_SUBMISSION, event_id, result
+            )
             await db.commit()
+            emit_admin_log()
             return result
 
     return await run_admin_job("Approve submission", _run())
@@ -833,6 +857,32 @@ def _serialize_raw_event(raw: RawEvent, source_slug: str) -> dict:
     }
 
 
+def _translation_state(m: dict | None, locale: str) -> bool:
+    """True when this locale has its own stored value (not a fallback)."""
+    return bool(m and m.get(locale))
+
+
+def _content_by_locale(event: Event) -> dict:
+    """Per-locale resolved content plus, per field, whether the value is a
+    real translation or the locale -> en -> original fallback."""
+    return {
+        loc: {
+            "title": resolve_title(event, loc),
+            "description": resolve_description(event, loc),
+            "important_info": resolve_important_info(event, loc),
+            "venue_name": resolve_venue_name(event, loc),
+            "translated": {
+                "title": _translation_state(event.title_localized, loc),
+                "description": _translation_state(event.description_localized, loc),
+                "important_info": _translation_state(
+                    event.important_info_localized, loc
+                ),
+            },
+        }
+        for loc in sorted(VALID_LOCALES)
+    }
+
+
 def _serialize_event_detail(event: Event) -> dict:
     cl = event.classification
     lat, lng = resolve_venue_coords(event)
@@ -888,6 +938,7 @@ def _serialize_event_detail(event: Event) -> dict:
             if cl
             else None
         ),
+        "content_by_locale": _content_by_locale(event),
     }
 
 
@@ -994,8 +1045,11 @@ async def admin_resolve_reports(
             event = await _event_or_404(db, event_id)
             resolved = await resolve_open_reports(db, event, note)
             result = {"event_id": event.id, "resolved_count": len(resolved)}
-            log_admin_action(db, ADMIN_ACTION_RESOLVE_REPORTS, event_id, result)
+            emit_admin_log = log_admin_action(
+                db, ADMIN_ACTION_RESOLVE_REPORTS, event_id, result
+            )
             await db.commit()
+            emit_admin_log()
             await send_report_resolution_emails(db, event, resolved, note)
             return result
 
@@ -1025,8 +1079,11 @@ async def admin_takedown_reported_event(
                 "status": event.status,
                 "resolved_count": len(resolved),
             }
-            log_admin_action(db, ADMIN_ACTION_TAKEDOWN_REPORTED_EVENT, event_id, result)
+            emit_admin_log = log_admin_action(
+                db, ADMIN_ACTION_TAKEDOWN_REPORTED_EVENT, event_id, result
+            )
             await db.commit()
+            emit_admin_log()
             await send_report_resolution_emails(db, event, resolved, note)
             return result
 
@@ -1254,10 +1311,11 @@ async def _run_pipeline_stages(dry_run: bool, queue: asyncio.Queue[bytes | None]
         # mutation — it gets its own short-lived session instead, still more
         # durable than the log line alone.
         async with AsyncSessionLocal() as audit_db:
-            log_admin_action(
+            emit_admin_log = log_admin_action(
                 audit_db, ADMIN_ACTION_PIPELINE_RUN, "pipeline", {"ok": ok, "stages": stages}
             )
             await audit_db.commit()
+        emit_admin_log()
     finally:
         _release_pipeline_run_locks()
         await queue.put(None)

@@ -482,12 +482,8 @@
   color: var(--accent-light);
 }
 
-.plateStretched::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: var(--z-card-overlay);
-  cursor: pointer;
+.plateStretched {
+  composes: stretchedLink from '../../components/shared/Card.module.css';
 }
 
 .plateBody {

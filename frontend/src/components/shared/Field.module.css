@@ -32,6 +32,24 @@
   opacity: var(--opacity-disabled);
 }
 
+/* Contact-form shell shared by Contact, OrganizerContact, ReportModal — each
+   consumer's own .form/.textarea class composes one of these instead of
+   repeating the declarations. */
+.formStack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-top: var(--space-2);
+}
+
+.textareaField {
+  composes: fieldInput;
+  width: 100%;
+  font-family: inherit;
+  resize: vertical;
+  min-height: var(--textarea-height-md);
+}
+
 /* Chrome-only outer box for a composite control (text input + trigger button
    living inside it, e.g. DatePicker/FileField) — padding stays with the
    inner elements, not this wrapper. */

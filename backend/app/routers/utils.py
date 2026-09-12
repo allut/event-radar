@@ -9,13 +9,15 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from fastapi import HTTPException, Response, status
+from fastapi.responses import RedirectResponse
 from itsdangerous import BadSignature, SignatureExpired
 from pydantic import BaseModel, EmailStr
 from sqlalchemy import ColumnElement, Select, and_, delete, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import InstrumentedAttribute, selectinload
 
-from app.auth.tokens import verify_session_token
+from app.auth.tokens import oauth_state_ttl_seconds, verify_session_token
+from app.config import settings
 from app.constants import (
     APP_ENV_DEVELOPMENT,
     DEFAULT_USER_LOCALE,
@@ -27,6 +29,7 @@ from app.constants import (
     ERROR_VENUE_NOT_FOUND,
     EVENT_STATUS_CANCELLED,
     EVENT_STATUS_PUBLISHED,
+    IDENTITY_PROVIDER_GOOGLE,
     LOCALE_EN,
     LOCALE_RU,
     LOG_EVENT_ADMIN_ACTION,
@@ -34,8 +37,11 @@ from app.constants import (
     LOG_EVENT_UNVERIFIED_ACCOUNT_BUDGET_EXCEEDED,
     MASK_DB_URL_PASSWORD_RE,
     MAGIC_LINK_RESEND_COOLDOWN_SECONDS,
+    OAUTH_ERROR_QUERY_PARAM,
+    OAUTH_STATE_COOKIE_SAMESITE,
     PREFERENCE_SIGNALS,
     PREFERRED_TASTE_MIN_WEIGHT,
+    REPORT_EMAIL_SEND_CONCURRENCY,
     REPORT_STATUS_OPEN,
     REPORT_STATUS_RESOLVED,
     SESSION_COOKIE_HTTPONLY,
@@ -53,10 +59,12 @@ from app.models.models import (
     Event,
     EventClassification,
     EventReport,
+    OrganizerIdentity,
     Persona,
     User,
     UserEventFeedback,
     UserEventScore,
+    UserIdentity,
     UserPersona,
     Venue,
 )
@@ -111,6 +119,58 @@ def clear_session_cookie(response: Response, *, name: str, path: str) -> None:
     )
 
 
+def build_google_redirect_uri(callback_path: str) -> str:
+    """Browser-facing Google OAuth callback URL — must match what's
+    registered with Google and what the state cookie is scoped to. Shared by
+    both auth tracks (auth.py's GOOGLE_CALLBACK_PUBLIC_PATH, organizer_auth.py's
+    ORGANIZER_GOOGLE_CALLBACK_PUBLIC_PATH)."""
+    return f"{settings.FRONTEND_URL}{callback_path}"
+
+
+def set_oauth_state_cookie(
+    response: Response, token: str, *, cookie_name: str, cookie_path: str
+) -> None:
+    """Set the PKCE state cookie for a Google OAuth start — shared by both
+    auth tracks, each passing its own track-scoped cookie name/path."""
+    response.set_cookie(
+        key=cookie_name,
+        value=token,
+        max_age=oauth_state_ttl_seconds(),
+        path=cookie_path,
+        secure=SESSION_COOKIE_SECURE,
+        httponly=SESSION_COOKIE_HTTPONLY,
+        samesite=OAUTH_STATE_COOKIE_SAMESITE,
+    )
+
+
+def clear_oauth_state_cookie(
+    response: Response, *, cookie_name: str, cookie_path: str
+) -> None:
+    """Expire the PKCE state cookie (single-use). Attributes must match
+    set_oauth_state_cookie's for the browser to actually clear it."""
+    response.delete_cookie(
+        key=cookie_name,
+        path=cookie_path,
+        secure=SESSION_COOKIE_SECURE,
+        httponly=SESSION_COOKIE_HTTPONLY,
+        samesite=OAUTH_STATE_COOKIE_SAMESITE,
+    )
+
+
+def build_oauth_error_redirect(
+    error_code: str, *, login_path: str, cookie_name: str, cookie_path: str
+) -> RedirectResponse:
+    """Every Google OAuth callback failure path lands here: a 302 back to the
+    track's login page carrying an error code, never a 500 — the state
+    cookie (single-use) is cleared regardless of outcome."""
+    response = RedirectResponse(
+        f"{settings.FRONTEND_URL}{login_path}?{OAUTH_ERROR_QUERY_PARAM}={error_code}",
+        status_code=status.HTTP_302_FOUND,
+    )
+    clear_oauth_state_cookie(response, cookie_name=cookie_name, cookie_path=cookie_path)
+    return response
+
+
 async def run_in_session(
     func: Callable[[AsyncSession], Awaitable[dict]], *, commit: bool
 ) -> dict:
@@ -137,6 +197,8 @@ async def recent_unused_link_exists(
     fk_column: InstrumentedAttribute[Any],
     fk_value: int,
     ttl_seconds: int,
+    *,
+    extra_predicate: ColumnElement[bool] | None = None,
 ) -> bool:
     """Per-account magic-link resend cooldown, shared by the consumer
     (routers/auth.py) and organizer (routers/organizer_auth.py) auth tracks.
@@ -150,19 +212,25 @@ async def recent_unused_link_exists(
     expires_at > now + ttl_seconds - cooldown <-> T < cooldown. Prevents
     Resend quota exhaustion from rapid repeats; IP-level throttling is the
     separate @limiter.limit decorator on the request-link endpoint.
+
+    ``extra_predicate`` narrows the match beyond the fk — e.g. Google
+    sign-in's confirmation-link cooldown (organizer_auth.py) must only
+    suppress a resend against another *pending-confirmation* link for the
+    same sub, not against an unrelated plain sign-in link the organizer
+    happens to have unused, which would silently skip sending the
+    confirmation email while the caller still reports it as sent.
     """
     recent_cutoff = datetime.now(timezone.utc) + timedelta(
         seconds=ttl_seconds - MAGIC_LINK_RESEND_COOLDOWN_SECONDS
     )
-    already_sent = await db.scalar(
-        select(model)
-        .where(
-            fk_column == fk_value,
-            model.used_at.is_(None),
-            model.expires_at > recent_cutoff,
-        )
-        .limit(1)
-    )
+    conditions = [
+        fk_column == fk_value,
+        model.used_at.is_(None),
+        model.expires_at > recent_cutoff,
+    ]
+    if extra_predicate is not None:
+        conditions.append(extra_predicate)
+    already_sent = await db.scalar(select(model).where(*conditions).limit(1))
     return already_sent is not None
 
 
@@ -244,16 +312,16 @@ async def stream_admin_job(
     async def _runner() -> None:
         try:
             result = await coro
-            log_admin_action(None, action, target, result)
+            log_admin_action(None, action, target, result)()
             await queue.put(ndjson_line(stage, "ok", result, None))
         except HTTPException as exc:
             detail = str(exc.detail)
-            log_admin_action(None, action, target, {"error": detail})
+            log_admin_action(None, action, target, {"error": detail})()
             await queue.put(ndjson_line(stage, "error", None, detail))
         except Exception:
             log.exception("admin %s failed", name)
             detail = ERROR_ADMIN_JOB_FAILED.format(name=name)
-            log_admin_action(None, action, target, {"error": detail})
+            log_admin_action(None, action, target, {"error": detail})()
             await queue.put(ndjson_line(stage, "error", None, detail))
         finally:
             if lock_key is not None:
@@ -270,29 +338,37 @@ async def stream_admin_job(
 
 def log_admin_action(
     db: AsyncSession | None, action: str, target: int | str, result: dict
-) -> None:
-    """Structured log line on the shared Axiom pipe, plus — when *db* is
-    given — a durable AdminAction row added to it. The row rides the
-    caller's own open transaction (added, not committed here) so it lands
-    atomically with the mutation it records, and survives an outage of the
-    LOG_SHIP_URL log drain. Call from inside the same `_run()` closure as the
-    mutation, before that closure's own `await db.commit()`, for the
-    takedown/retract/approve/resolve/pipeline-run actions the report
-    feature's legal obligations bear on (see the admin-console spec's Audit
-    logging section) — pass None for every other admin job, which keeps the
-    pre-existing log-only behavior."""
-    log.info(
-        "admin action: %s",
-        action,
-        extra={
-            "event": LOG_EVENT_ADMIN_ACTION,
-            "action": action,
-            "target": target,
-            "result": result,
-        },
-    )
+) -> Callable[[], None]:
+    """Adds a durable AdminAction row to *db* (when given) and returns a
+    zero-arg closure that emits the structured Axiom log line — the caller
+    must invoke that closure only after its own `await db.commit()`
+    succeeds, so the Axiom line never claims a mutation that a rolled-back
+    transaction actually discarded. The row rides the caller's own open
+    transaction (added, not committed here) so it lands atomically with the
+    mutation it records, and survives an outage of the LOG_SHIP_URL log
+    drain. Call from inside the same `_run()` closure as the mutation, pass
+    *db* (and call the returned closure right after `await db.commit()`)
+    for the takedown/retract/approve/resolve/pipeline-run actions the
+    report feature's legal obligations bear on (see the admin-console
+    spec's Audit logging section) — pass None for every other admin job
+    (no transaction to ride), which keeps the pre-existing log-only
+    behavior; those callers may invoke the closure immediately."""
+
+    def _emit() -> None:
+        log.info(
+            "admin action: %s",
+            action,
+            extra={
+                "event": LOG_EVENT_ADMIN_ACTION,
+                "action": action,
+                "target": target,
+                "result": result,
+            },
+        )
+
     if db is not None:
         db.add(AdminAction(action=action, target=str(target), result=result))
+    return _emit
 
 
 def require_configured_secret(
@@ -342,6 +418,20 @@ async def invalidate_user_scores(db: AsyncSession, user_id: int) -> None:
     rebuilding the feed.
     """
     await db.execute(delete(UserEventScore).where(UserEventScore.user_id == user_id))
+
+
+def alternation_pattern(keywords: frozenset[str]) -> re.Pattern[str]:
+    """One word-boundary alternation regex for a keyword group.
+
+    A single-pass alternation is far cheaper than searching the text once per
+    keyword (K separately-compiled regexes over the same text, O(K*L)) — the
+    regex engine's alternation matching finds the same word-boundary hits in
+    one pass over the text.
+    """
+    return re.compile(
+        r"\b(?:" + "|".join(re.escape(kw) for kw in keywords) + r")\b",
+        re.IGNORECASE,
+    )
 
 
 def mask_db_url(url: str) -> str:
@@ -500,6 +590,28 @@ def mask_email(email: str) -> str:
     if not sep:
         return "***"
     return f"{local[:EMAIL_MASK_VISIBLE_CHARS]}***@{domain}"
+
+
+async def is_identity_linked(
+    db: AsyncSession,
+    identity_model: type[UserIdentity] | type[OrganizerIdentity],
+    owner_col: InstrumentedAttribute,
+    owner_id: int,
+) -> bool:
+    """True if ``owner_id`` has a linked Google identity row.
+
+    Shared by settings.py (UserIdentity, UserIdentity.user_id) and
+    organizer_profile.py (OrganizerIdentity, OrganizerIdentity.organizer_id) —
+    both tracks' google_linked flag is otherwise the same query against a
+    different identity table/owner column.
+    """
+    result = await db.execute(
+        select(identity_model.id).where(
+            owner_col == owner_id,
+            identity_model.provider == IDENTITY_PROVIDER_GOOGLE,
+        )
+    )
+    return result.scalars().first() is not None
 
 
 def compute_preferred_taxonomy(
@@ -807,26 +919,32 @@ async def send_report_resolution_emails(
     user_ids = {report.user_id for report in reports}
     users = (await db.scalars(select(User).where(User.id.in_(user_ids)))).all()
     users_by_id = {u.id: u for u in users}
-    for report in reports:
+
+    semaphore = asyncio.Semaphore(REPORT_EMAIL_SEND_CONCURRENCY)
+
+    async def _send_one(report: EventReport) -> None:
         reporter = users_by_id.get(report.user_id)
         if reporter is None:
-            continue
-        try:
-            await send_report_outcome_email(
-                reporter.email,
-                event,
-                resolution_note,
-                reporter.locale,
-                reporter.theme_preference,
-            )
-        except Exception:
-            log.error(
-                "Failed to send report outcome email (report_id=%s, event_id=%s)",
-                report.id,
-                event.id,
-                exc_info=True,
-                extra={"event": LOG_EVENT_EMAIL_SEND_FAILED},
-            )
+            return
+        async with semaphore:
+            try:
+                await send_report_outcome_email(
+                    reporter.email,
+                    event,
+                    resolution_note,
+                    reporter.locale,
+                    reporter.theme_preference,
+                )
+            except Exception:
+                log.error(
+                    "Failed to send report outcome email (report_id=%s, event_id=%s)",
+                    report.id,
+                    event.id,
+                    exc_info=True,
+                    extra={"event": LOG_EVENT_EMAIL_SEND_FAILED},
+                )
+
+    await asyncio.gather(*(_send_one(report) for report in reports))
 
 
 async def cancel_event_and_resolve_reports(

@@ -54,6 +54,7 @@ from app.dedup.rules import (
     dedup_window_cutoff,
     is_candidate_pair,
     load_dedup_candidate_events,
+    load_description_lengths,
     run_dedup_pass,
     same_group,
 )
@@ -425,7 +426,8 @@ async def run_dedup_pass_llm(
             if deferred_pairs == 0:
                 break
 
-    assignments = build_cluster_assignments(parent, ids, events_by_id)
+    desc_len_by_id = await load_description_lengths(db, ids)
+    assignments = build_cluster_assignments(parent, ids, events_by_id, desc_len_by_id)
 
     updated = 0
     for event in events:

@@ -19,18 +19,27 @@
 }
 
 .tagline {
-  color: var(--text-muted);
-  font-size: var(--fs-md);
-  margin-bottom: var(--space-6);
-  padding-bottom: var(--space-1-75);
-  border-bottom: var(--border-w-hair) solid var(--border);
+  composes: authTagline from '../../components/shared/Card.module.css';
 }
 
 .note {
-  margin-top: var(--space-2-5);
-  text-align: center;
-  font-size: var(--fs-xs);
-  color: var(--text-soft);
+  composes: authNote from '../../components/shared/Card.module.css';
+}
+
+.error {
+  composes: alert from '../../components/shared/Alert.module.css';
+  font-size: var(--fs-sm);
+  padding: var(--space-2) var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.emailToggle {
+  composes: textButton from '../../components/shared/Button.module.css';
+  align-self: center;
+}
+
+.divider {
+  composes: authDivider from '../../components/shared/Card.module.css';
 }
 
 .backLink {

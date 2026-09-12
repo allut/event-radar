@@ -115,6 +115,34 @@ export function parseSitemapEventUrls(sitemapXml: string): string[] {
   return locs.filter((loc) => eventUrlRe.test(loc));
 }
 
+/** Every built-asset `<script src>` / `<link rel="stylesheet" href>` in
+ * `html` that points under CRAWLABLE_ASSETS_PATH — the JS/CSS a prerendered
+ * snapshot's `<head>` references, which is also the only shape
+ * `api/seo-audit.ts` knows how to content-type-check (a `.css` extension
+ * means "expect `text/css`", anything else means "expect a JS mime type").
+ * Scoped to `<script>`/`<link rel="stylesheet">` tags specifically, not any
+ * `src`/`href` in the document, so a future non-JS/CSS `/assets/*` reference
+ * (a font preload, an `<img>`) can't produce a false-positive "wrong
+ * content-type" finding from a check that was never meant to cover it.
+ * Regex, not an HTML parser: this only needs to catch the exact tag shape
+ * Vite/prerender.ts emits, and api/seo-audit.ts is already the pure/
+ * network-free-logic-vs-fetching split this repo uses elsewhere
+ * (evaluateLiveAudit above). Used to catch the app-shell-fallthrough failure
+ * mode a copied-forward snapshot can ship (issue #97): a stale asset
+ * reference that 200s as `text/html` (Vercel's SPA catch-all) instead of
+ * 404ing, which no structural/JSON-LD check here would ever notice. */
+export function parseSnapshotAssetUrls(html: string): string[] {
+  const urls = new Set<string>();
+  const tagRe = /<(script|link)\b[^>]*>/g;
+  for (const [tag, tagName] of html.matchAll(tagRe)) {
+    if (tagName === 'link' && !/\brel="stylesheet"/.test(tag)) continue;
+    const attrRe = tagName === 'link' ? /\bhref="([^"]+)"/ : /\bsrc="([^"]+)"/;
+    const match = tag.match(attrRe);
+    if (match && match[1].includes(CRAWLABLE_ASSETS_PATH)) urls.add(match[1]);
+  }
+  return [...urls];
+}
+
 /** The live audit (issue #54): checks production (not a local build) for
  * (1) robots.txt crawlability regressions — sitemap.xml, the OG fallback
  * image, the built `/assets/`, and each `CRAWLABLE_ICON_PATHS` entry all

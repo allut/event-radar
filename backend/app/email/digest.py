@@ -6,6 +6,7 @@ import asyncio
 import html as html_lib
 import logging
 from collections.abc import Sequence
+from contextlib import nullcontext
 from datetime import date, datetime
 
 import httpx
@@ -22,6 +23,7 @@ from app.constants import (
     DIGEST_RESULT_SKIPPED,
     DIGEST_SEND_CONCURRENCY,
     FEED_BUILD_USER_BATCH_SIZE,
+    HEADER_LIST_UNSUBSCRIBE,
     LOCALE_ET,
     LOCALE_RU,
     LOG_EVENT_EMAIL_SEND_FAILED,
@@ -29,6 +31,7 @@ from app.constants import (
     RESEND_SEND_URL,
     RESEND_TIMEOUT_SECONDS,
     TALLINN_TZ,
+    UNSUBSCRIBE_PATH,
 )
 from app.email.styles import EmailStyles, get_email_styles
 from app.email.templates import (
@@ -228,6 +231,15 @@ def build_digest_html(
 # ---------------------------------------------------------------------------
 
 
+def digest_http_client() -> httpx.AsyncClient:
+    """Build an ``httpx.AsyncClient`` configured for digest sends, for
+    ``send_daily_digests`` to open once and reuse across its whole paged loop
+    via ``send_digest_email``'s ``http_client`` param — instead of a fresh
+    connection pool + TLS handshake per user (Big-O audit M7), mirroring
+    ``llm_http_client()``."""
+    return httpx.AsyncClient(timeout=RESEND_TIMEOUT_SECONDS)
+
+
 async def send_digest_email(
     to_email: str,
     locale: str,
@@ -235,6 +247,8 @@ async def send_digest_email(
     feed_date: date,
     user_id: int,
     theme_preference: str | None = None,
+    *,
+    http_client: httpx.AsyncClient | None = None,
 ) -> None:
     if not settings.RESEND_API_KEY:
         log.warning(
@@ -243,7 +257,7 @@ async def send_digest_email(
         return
 
     unsubscribe_token = generate_unsubscribe_token(user_id)
-    unsubscribe_url = f"{settings.FRONTEND_URL}/unsubscribe?token={unsubscribe_token}"
+    unsubscribe_url = f"{settings.FRONTEND_URL}{UNSUBSCRIBE_PATH}?token={unsubscribe_token}"
     header_url = f"{settings.BACKEND_URL}/email/unsubscribe?token={unsubscribe_token}"
 
     html = build_digest_html(
@@ -258,7 +272,7 @@ async def send_digest_email(
         "digest.subject_template", locale, date=_format_feed_date(feed_date, locale)
     )
 
-    async with httpx.AsyncClient(timeout=RESEND_TIMEOUT_SECONDS) as client:
+    async def _send(client: httpx.AsyncClient) -> None:
         try:
             await http_post(
                 client,
@@ -272,7 +286,7 @@ async def send_digest_email(
                     "subject": subject,
                     "html": html,
                     "headers": {
-                        "List-Unsubscribe": f"<{header_url}>",
+                        HEADER_LIST_UNSUBSCRIBE: f"<{header_url}>",
                         "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
                     },
                 },
@@ -287,6 +301,12 @@ async def send_digest_email(
             raise RuntimeError(
                 f"Resend returned {exc.response.status_code} for digest to {mask_email(to_email)}"
             ) from exc
+
+    if http_client is not None:
+        await _send(http_client)
+    else:
+        async with digest_http_client() as client:
+            await _send(client)
     log.info("Digest sent to %s (%d events)", mask_email(to_email), len(events))
 
 
@@ -369,7 +389,12 @@ async def send_daily_digests(
     sent = errored = 0
     user_map: dict[int, User] = {u.id: u for u in users}
 
-    async def _send_one(user: User, eids: list[int], event_map: dict[int, Event]) -> str:
+    async def _send_one(
+        user: User,
+        eids: list[int],
+        event_map: dict[int, Event],
+        http_client: httpx.AsyncClient | None,
+    ) -> str:
         """Returns 'sent' | 'skipped'."""
         ordered_events = [event_map[eid] for eid in eids if eid in event_map]
         if not ordered_events:
@@ -385,6 +410,7 @@ async def send_daily_digests(
                     today,
                     user.id,
                     user.theme_preference,
+                    http_client=http_client,
                 )
                 return DIGEST_RESULT_SENT
             except Exception:
@@ -395,32 +421,36 @@ async def send_daily_digests(
                 )
                 return DIGEST_RESULT_SKIPPED
 
-    for i in range(0, len(users), FEED_BUILD_USER_BATCH_SIZE):
-        page_ids = [u.id for u in users[i : i + FEED_BUILD_USER_BATCH_SIZE]]
+    # One shared client for the whole run (Big-O audit M7) — dry runs never
+    # send, so they skip opening a connection pool entirely.
+    client_ctx = digest_http_client() if not dry_run else nullcontext(None)
+    async with client_ctx as http_client:
+        for i in range(0, len(users), FEED_BUILD_USER_BATCH_SIZE):
+            page_ids = [u.id for u in users[i : i + FEED_BUILD_USER_BATCH_SIZE]]
 
-        feed_by_user, event_map = await _load_digest_data(db, today, page_ids)
-        if event_map is None:
-            continue
+            feed_by_user, event_map = await _load_digest_data(db, today, page_ids)
+            if event_map is None:
+                continue
 
-        # return_exceptions=True is defence-in-depth: _send_one already catches
-        # every send error and returns "skipped", but a programming error inside
-        # the wrapper itself would otherwise abort the whole page's batch.
-        results = await asyncio.gather(
-            *(
-                _send_one(user_map[uid], eids, event_map)
-                for uid, eids in feed_by_user.items()
-            ),
-            return_exceptions=True,
-        )
-        sent += sum(1 for r in results if r == DIGEST_RESULT_SENT)
-        errored += sum(1 for r in results if isinstance(r, Exception))
-        for r in results:
-            if isinstance(r, Exception):
-                log.error(
-                    "digest fanout coroutine raised",
-                    exc_info=r,
-                    extra={"event": LOG_EVENT_EMAIL_SEND_FAILED},
-                )
+            # return_exceptions=True is defence-in-depth: _send_one already catches
+            # every send error and returns "skipped", but a programming error inside
+            # the wrapper itself would otherwise abort the whole page's batch.
+            results = await asyncio.gather(
+                *(
+                    _send_one(user_map[uid], eids, event_map, http_client)
+                    for uid, eids in feed_by_user.items()
+                ),
+                return_exceptions=True,
+            )
+            sent += sum(1 for r in results if r == DIGEST_RESULT_SENT)
+            errored += sum(1 for r in results if isinstance(r, Exception))
+            for r in results:
+                if isinstance(r, Exception):
+                    log.error(
+                        "digest fanout coroutine raised",
+                        exc_info=r,
+                        extra={"event": LOG_EVENT_EMAIL_SEND_FAILED},
+                    )
 
     skipped = len(users) - sent - errored
 

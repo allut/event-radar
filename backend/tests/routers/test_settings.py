@@ -8,9 +8,13 @@ from app.constants import PERSONA_PRIMARY_WEIGHT
 
 
 def _attach_empty_personas(db) -> None:
-    """Wire mock_db.execute to return zero persona rows."""
+    """Wire mock_db.execute to return zero persona rows and no linked
+    Google identity (both get_settings/patch_settings queries share this
+    single mocked result — .all() feeds the persona query, .scalars().first()
+    feeds _is_google_linked)."""
     result = MagicMock()
     result.all.return_value = []
+    result.scalars.return_value.first.return_value = None
     db.execute.return_value = result
 
 
@@ -34,6 +38,28 @@ class TestGetSettings:
         assert result["personas"] == []
         assert result["preferred_categories"] == []
         assert result["preferred_vibes"] == []
+        assert result["google_linked"] is False
+
+    @pytest.mark.asyncio
+    async def test_google_linked_true_when_identity_row_exists(
+        self, mock_db, make_user, make_request
+    ):
+        from app.routers.settings import get_settings
+
+        persona_result = MagicMock()
+        persona_result.all.return_value = []
+        linked_result = MagicMock()
+        linked_result.scalars.return_value.first.return_value = 1
+        mock_db.execute.side_effect = [persona_result, linked_result]
+
+        user = make_user()
+        result = await get_settings(
+            request=make_request(method="GET", path="/users/me"),
+            current_user=user,
+            db=mock_db,
+        )
+
+        assert result["google_linked"] is True
 
     @pytest.mark.asyncio
     async def test_personas_included(self, mock_db, make_user, make_request):
@@ -212,3 +238,64 @@ class TestPatchSettings:
 
         assert user.locale == "et"
         assert user.email_digest_opt_in is False
+
+
+class TestUnlinkOwnIdentity:
+    """Mirrors tests/routers/test_organizer_profile.py::TestUnlinkOwnIdentity
+    for the consumer-track DELETE /users/me/identities/{provider} (#296)."""
+
+    @pytest.mark.asyncio
+    async def test_deletes_row_bumps_version_and_reissues_cookie(
+        self, mock_db, make_request, make_user
+    ):
+        from fastapi import Response
+
+        from app.auth.tokens import verify_session_token
+        from app.routers.settings import unlink_own_identity
+        from tests.conftest import assert_hardened_cookie
+
+        user = make_user(user_id=5)
+        user.session_token_version = 1
+
+        delete_result = MagicMock()
+        delete_result.fetchone.return_value = (99,)
+        version_result = MagicMock()
+        version_result.scalar_one.return_value = 2
+        mock_db.execute.side_effect = [delete_result, version_result]
+
+        response = Response()
+        result = await unlink_own_identity(
+            "google",
+            make_request(method="DELETE", path="/users/me/identities/google"),
+            response,
+            user,
+            mock_db,
+        )
+
+        assert result == {"detail": "Identity unlinked."}
+        assert user.session_token_version == 2
+        set_cookie = response.headers["set-cookie"]
+        assert_hardened_cookie(set_cookie, name="session", path="/api")
+        cookie_value = set_cookie.split("session=", 1)[1].split(";", 1)[0]
+        assert verify_session_token(cookie_value) == (5, 2)
+
+    @pytest.mark.asyncio
+    async def test_no_linked_identity_raises_404(self, mock_db, make_request, make_user):
+        from fastapi import HTTPException, Response
+
+        from app.routers.settings import unlink_own_identity
+
+        user = make_user(user_id=5)
+        delete_result = MagicMock()
+        delete_result.fetchone.return_value = None
+        mock_db.execute.return_value = delete_result
+
+        with pytest.raises(HTTPException) as exc_info:
+            await unlink_own_identity(
+                "google",
+                make_request(method="DELETE", path="/users/me/identities/google"),
+                Response(),
+                user,
+                mock_db,
+            )
+        assert exc_info.value.status_code == http.HTTPStatus.NOT_FOUND

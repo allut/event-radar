@@ -224,7 +224,7 @@ class TestVerifyMagicLink:
         # Atomic UPDATEs: first the magic-link consume, then the user
         # email_verified update — both return a row (success).
         mock_db.execute = _mock_execute_returning_sequence(
-            [(3,), _UserRow(3, "user@example.com", "en", 1)]
+            [(3, None), _UserRow(3, "user@example.com", "en", 1)]
         )
 
         response = Response()
@@ -248,7 +248,7 @@ class TestVerifyMagicLink:
         token, _, _ = generate_magic_token(3)
 
         mock_db.execute = _mock_execute_returning_sequence(
-            [(3,), _UserRow(3, "user@example.com", "en", 1)]
+            [(3, None), _UserRow(3, "user@example.com", "en", 1)]
         )
 
         await verify_magic_link(
@@ -260,6 +260,62 @@ class TestVerifyMagicLink:
         compiled = second_call_stmt.compile(compile_kwargs={"literal_binds": True})
         assert "email_verified" in str(compiled)
         assert "true" in str(compiled).lower()
+
+    @pytest.mark.asyncio
+    async def test_pending_google_sub_links_identity_on_consume(
+        self, mock_db, make_request
+    ):
+        """ADR 0002 — a magic link sent to confirm a pending Google identity
+        (AuthMagicLink.pending_google_sub set) absorbs that sub into
+        user_identities once the link is consumed, mirroring
+        test_organizer_auth.py's organizer equivalent."""
+        from fastapi import Response
+        from app.routers.auth import VerifyTokenBody, verify_magic_link
+
+        token, _, _ = generate_magic_token(3)
+
+        mock_db.execute = _mock_execute_returning_sequence(
+            [(3, "sub-42"), _UserRow(3, "user@example.com", "en", 1)]
+        )
+        mock_db.add = MagicMock()
+        mock_db.commit = AsyncMock()
+
+        await verify_magic_link(
+            make_request(), VerifyTokenBody(token=token), Response(), mock_db
+        )
+
+        added_identity = mock_db.add.call_args.args[0]
+        assert added_identity.user_id == 3
+        assert added_identity.provider == "google"
+        assert added_identity.provider_sub == "sub-42"
+
+    @pytest.mark.asyncio
+    async def test_pending_google_sub_integrity_error_does_not_fail_verify(
+        self, mock_db, make_request
+    ):
+        """A concurrent request already linked this sub — the identity insert
+        collides, but the session still mints (never a 500)."""
+        from fastapi import Response
+        from sqlalchemy.exc import IntegrityError
+        from app.routers.auth import VerifyTokenBody, verify_magic_link
+
+        token, _, _ = generate_magic_token(3)
+
+        mock_db.execute = _mock_execute_returning_sequence(
+            [(3, "sub-42"), _UserRow(3, "user@example.com", "en", 1)]
+        )
+        mock_db.add = MagicMock()
+        mock_db.commit = AsyncMock(
+            side_effect=[None, IntegrityError("stmt", {}, Exception("dup"))]
+        )
+        mock_db.rollback = AsyncMock()
+
+        result = await verify_magic_link(
+            make_request(), VerifyTokenBody(token=token), Response(), mock_db
+        )
+
+        assert result["user"]["id"] == 3
+        mock_db.rollback.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_used_or_expired_link_raises_400(self, mock_db, make_request):

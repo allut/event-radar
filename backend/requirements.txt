@@ -17,3 +17,4 @@ nh3==0.2.21
 slowapi==0.1.9
 python-multipart==0.0.31
 pyotp==2.9.0
+PyJWT[crypto]==2.13.0

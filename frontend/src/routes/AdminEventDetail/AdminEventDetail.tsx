@@ -2,16 +2,43 @@ import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { adminApi, ApiError } from '../../api/client';
-import { API, QUERY_KEYS, ROUTES, UI_STATE, REPORT_STATUS, ADMIN_EVENT_DETAIL_TABS } from '../../constants';
-import { sanitizeHtml, formatAdminTimestamp } from '../../utils';
+import {
+  ADMIN_CONTENT_LANG_MARKER_LABELS,
+  API,
+  CONTENT_LANG_ORDER,
+  LOCALES,
+  QUERY_KEYS,
+  ROUTES,
+  UI_STATE,
+  REPORT_STATUS,
+  ADMIN_EVENT_DETAIL_TABS,
+  type ContentLang,
+  type ContentMarkerState,
+} from '../../constants';
+import { sanitizeHtml, formatAdminTimestamp, safeUrl } from '../../utils';
 import PageState from '../../components/PageState';
 import Toast from '../../components/Toast';
 import { useToast } from '../../hooks/useToast';
 import AdminQueueActionPanel from '../../components/AdminQueueActionPanel';
+import SegmentedControl from '../../components/SegmentedControl';
+import chipStyles from '../../components/shared/Chip.module.css';
 import styles from './AdminEventDetail.module.css';
+
+interface LocaleContent {
+  title: string;
+  description: string | null;
+  important_info: string | null;
+  venue_name: string | null;
+  translated: {
+    title: boolean;
+    description: boolean;
+    important_info: boolean;
+  };
+}
 
 interface InspectorEvent {
   id: number;
+  slug: string;
   title_orig: string;
   description_orig: string | null;
   important_info: string | null;
@@ -23,6 +50,24 @@ interface InspectorEvent {
   created_at: string;
   updated_at: string;
   detail_refetched_at: string | null;
+  starts_at: string;
+  ends_at: string | null;
+  venue_name: string | null;
+  venue_address: string | null;
+  lat: number | null;
+  lng: number | null;
+  url: string | null;
+  image_url: string | null;
+  price_min: number | null;
+  price_max: number | null;
+  currency: string | null;
+  price_hint: string | null;
+  has_free_tier: boolean;
+  is_explicit: boolean;
+  is_out_of_area: boolean;
+  is_non_event: boolean;
+  geocode_attempted_at: string | null;
+  content_by_locale: Record<string, LocaleContent>;
   classification: {
     categories: string[];
     vibes: string[];
@@ -96,20 +141,32 @@ export default function AdminEventDetail({ eventId }: { eventId: string }) {
   const { toast, showToast } = useToast();
   const [tab, setTab] = useState<Tab>('Overview');
   const [note, setNote] = useState('');
+  const [contentLang, setContentLang] = useState<ContentLang>(CONTENT_LANG_ORDER[0]);
 
   const { data, isLoading, isError } = useQuery({
     queryKey: [QUERY_KEYS.adminEventDetail, eventId],
     queryFn: () => adminApi.get<InspectorResponse>(API.adminEventDetail(eventId)),
   });
 
+  const activeContent = data?.event.content_by_locale[contentLang];
   const sanitizedDescription = useMemo(
-    () => (data?.event.description_orig ? sanitizeHtml(data.event.description_orig) : null),
-    [data],
+    () => (activeContent?.description ? sanitizeHtml(activeContent.description) : null),
+    [activeContent],
   );
   const sanitizedImportantInfo = useMemo(
-    () => (data?.event.important_info ? sanitizeHtml(data.event.important_info) : null),
-    [data],
+    () => (activeContent?.important_info ? sanitizeHtml(activeContent.important_info) : null),
+    [activeContent],
   );
+  // Pretty-printing every raw scraped payload (routinely tens of KB each) is
+  // otherwise redone on every render — including every resolution-note
+  // keystroke while the Raw payload tab is open (Big-O audit M5).
+  const rawPayloadsById = useMemo(() => {
+    const map = new Map<number, string>();
+    for (const re of data?.raw_events ?? []) {
+      map.set(re.id, JSON.stringify(re.payload, null, 2));
+    }
+    return map;
+  }, [data]);
 
   const actionMutation = useMutation({
     mutationFn: ({ kind, note }: { kind: ActionKind; note: string }) =>
@@ -154,6 +211,35 @@ export default function AdminEventDetail({ eventId }: { eventId: string }) {
       { label: 'Retract', variant: 'danger', disabled: actionDisabled, onClick: () => act('retracted') },
     );
   }
+
+  const localeLabel = (code: ContentLang) => LOCALES.find((l) => l.code === code)?.label ?? code.toUpperCase();
+  // et is always the base slot — it's never a fallback. For en/ru, all
+  // three fields translated -> matched, some -> partial, none -> empty.
+  const markerState = (code: ContentLang): ContentMarkerState => {
+    if (code === CONTENT_LANG_ORDER[0]) return 'matched';
+    const t = event.content_by_locale[code]?.translated;
+    if (!t) return 'empty';
+    const translatedCount = Number(t.title) + Number(t.description) + Number(t.important_info);
+    if (translatedCount === 0) return 'empty';
+    if (translatedCount === 3) return 'matched';
+    return 'partial';
+  };
+  const langOptions = CONTENT_LANG_ORDER.map((code) => {
+    const state = markerState(code);
+    return {
+      value: code,
+      label: localeLabel(code),
+      marker: { state, stateLabel: ADMIN_CONTENT_LANG_MARKER_LABELS[state] },
+    };
+  });
+  // The base locale (et) is never a fallback, even when its *_localized
+  // dict happens to carry no 'et' key — its content is title_orig/etc.,
+  // the canonical original, not a locale→en→orig fallback. Mirrors
+  // markerState's own base-locale exemption above.
+  const isFallback = (field: keyof LocaleContent['translated']) =>
+    contentLang !== CONTENT_LANG_ORDER[0] && activeContent !== undefined && !activeContent.translated[field];
+  const previewImageUrl = safeUrl(event.image_url);
+  const sourceUrl = safeUrl(event.url);
 
   return (
     <div className={styles.page}>
@@ -201,24 +287,94 @@ export default function AdminEventDetail({ eventId }: { eventId: string }) {
       <div className={styles.tabPanel}>
         {tab === 'Overview' && (
           <>
+            <div className={styles.contentSwitch}>
+              <SegmentedControl
+                variant="dial"
+                options={langOptions}
+                value={contentLang}
+                onChange={(v) => setContentLang(v as ContentLang)}
+                ariaLabel="Content language"
+              />
+            </div>
+
+            <div className={styles.fieldHead}>
+              <h2 className={styles.contentTitle}>{activeContent?.title}</h2>
+              {isFallback('title') && (
+                <span className={styles.fallbackTag}>fallback</span>
+              )}
+            </div>
+
+            <div className={styles.fieldHead}>
+              <span className={styles.subsectionTitle}>Description</span>
+              {isFallback('description') && (
+                <span className={styles.fallbackTag}>fallback</span>
+              )}
+            </div>
+            {sanitizedDescription ? (
+              <div className={styles.proseHtml} dangerouslySetInnerHTML={{ __html: sanitizedDescription }} />
+            ) : (
+              <p className={styles.prose}>No description.</p>
+            )}
+
+            {sanitizedImportantInfo && (
+              <>
+                <div className={styles.fieldHead}>
+                  <span className={styles.subsectionTitle}>Important info</span>
+                  {isFallback('important_info') && (
+                    <span className={styles.fallbackTag}>fallback</span>
+                  )}
+                </div>
+                <div
+                  className={styles.importantInfo}
+                  dangerouslySetInnerHTML={{ __html: sanitizedImportantInfo }}
+                />
+              </>
+            )}
+
+            <h3 className={styles.subsectionTitle}>Record</h3>
             <dl className={styles.factList}>
+              <dt>Starts</dt><dd>{formatAdminTimestamp(event.starts_at)}</dd>
+              <dt>Ends</dt><dd>{formatAdminTimestamp(event.ends_at)}</dd>
+              <dt>Venue</dt><dd>{activeContent?.venue_name ?? event.venue_name ?? '—'}</dd>
+              <dt>Address</dt><dd>{event.venue_address ?? '—'}</dd>
+              <dt>Coords</dt><dd>{event.lat !== null && event.lng !== null ? `${event.lat}, ${event.lng}` : '—'}</dd>
+              <dt>Price</dt>
+              <dd>
+                {event.price_min !== null || event.price_max !== null
+                  ? `${event.price_min ?? '?'} – ${event.price_max ?? '?'} ${event.currency ?? ''}`.trim()
+                  : '—'}
+              </dd>
+              <dt>Free tier</dt><dd>{event.has_free_tier ? 'Yes' : 'No'}</dd>
+              <dt>Price hint</dt><dd>{event.price_hint ?? '—'}</dd>
+              <dt>Source URL</dt>
+              <dd>
+                {sourceUrl ? (
+                  <a href={sourceUrl} target="_blank" rel="noopener noreferrer" className={styles.factLinkInline}>
+                    {sourceUrl}
+                  </a>
+                ) : '—'}
+              </dd>
+              <dt>Flags</dt>
+              <dd className={chipStyles.chips}>
+                {event.is_explicit && <span className={chipStyles.chip}>explicit</span>}
+                {event.is_out_of_area && <span className={chipStyles.chip}>out of area</span>}
+                {event.is_non_event && <span className={chipStyles.chip}>non-event</span>}
+                {!event.is_explicit && !event.is_out_of_area && !event.is_non_event && '—'}
+              </dd>
               <dt>Dedup group</dt><dd>{event.dedup_group_id ?? '—'}</dd>
               <dt>Organizer submission</dt><dd>{event.submitted_by_organizer_id ?? 'No'}</dd>
               <dt>Cancellation reason</dt><dd>{event.cancellation_reason ?? '—'}</dd>
               <dt>Created</dt><dd>{formatAdminTimestamp(event.created_at)}</dd>
               <dt>Updated</dt><dd>{formatAdminTimestamp(event.updated_at)}</dd>
               <dt>Detail refetched</dt><dd>{formatAdminTimestamp(event.detail_refetched_at)}</dd>
+              <dt>Geocode attempted</dt><dd>{formatAdminTimestamp(event.geocode_attempted_at)}</dd>
             </dl>
-            {sanitizedDescription ? (
-              <div className={styles.proseHtml} dangerouslySetInnerHTML={{ __html: sanitizedDescription }} />
-            ) : (
-              <p className={styles.prose}>No description.</p>
-            )}
-            {sanitizedImportantInfo && (
-              <div
-                className={styles.importantInfo}
-                dangerouslySetInnerHTML={{ __html: sanitizedImportantInfo }}
-              />
+
+            {previewImageUrl && (
+              <div className={styles.imagePreview}>
+                <img src={previewImageUrl} alt={event.title_orig} className={styles.imageThumb} />
+                <p className={styles.imageMeta}>{previewImageUrl}</p>
+              </div>
             )}
           </>
         )}
@@ -281,7 +437,7 @@ export default function AdminEventDetail({ eventId }: { eventId: string }) {
                 <p className={styles.rawMeta}>{re.source_slug} · {re.external_id ?? 'no external id'} · fetched {formatAdminTimestamp(re.fetched_at)}</p>
                 {/* Escaped/pretty-printed text only — never parsed as HTML.
                     The one field in the console not sanitized at ingest. */}
-                <pre className={styles.rawPayload}>{JSON.stringify(re.payload, null, 2)}</pre>
+                <pre className={styles.rawPayload}>{rawPayloadsById.get(re.id)}</pre>
               </div>
             ))
           )

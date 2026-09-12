@@ -71,6 +71,12 @@ TALLINN_TZ = ZoneInfo(TALLINN_TZ_NAME)
 # never import app.config — doing so would create a circular import.
 APP_ENV_DEVELOPMENT = "development"
 
+# require_configured_secret() call-site literals for the ADMIN_PASSWORD gate —
+# duplicated across get_current_admin/_require_admin (routers/admin.py) and
+# admin_login (routers/admin_auth.py); named so all three stay in sync.
+SETTING_NAME_ADMIN_PASSWORD = "ADMIN_PASSWORD"
+FEATURE_ADMIN_ENDPOINTS = "Admin endpoints"
+
 # Default value of settings.ADMIN_USERNAME. In production, _require_admin fails
 # closed if this hasn't been overridden — a guessable, well-known Basic-auth
 # username removes half of the credential pair an attacker needs to brute-force.
@@ -122,6 +128,7 @@ ASGI_MESSAGE_TYPE_RESPONSE_BODY = "http.response.body"
 SECONDS_PER_MINUTE = 60
 SECONDS_PER_HOUR = 3600
 SECONDS_PER_DAY = 86400
+MS_PER_SECOND = 1000
 
 # ingestion/http_client.py::host_guard_hook pins redirects to this port (in
 # addition to hostname + scheme) — every ingestion source is fetched over
@@ -522,6 +529,7 @@ FEED_BUILD_USER_BATCH_SIZE = 500
 
 # Email i18n strings (subjects, labels, templates) live in shared/i18n/*.json.
 DIGEST_SEND_HOUR = 7  # 07:00 Europe/Tallinn, one hour after build_daily_feeds
+DIGEST_SEND_MINUTE = 0
 DIGEST_MAX_WHY_GO_BULLETS = 3
 # Concurrency cap when fanning out digest sends — bounded by Resend free-tier
 # rate (10 req/s). Eight in-flight sends leaves headroom for occasional retries.
@@ -529,6 +537,12 @@ DIGEST_SEND_CONCURRENCY: int = 8
 # send_daily_digests per-user outcome sentinels.
 DIGEST_RESULT_SENT = "sent"
 DIGEST_RESULT_SKIPPED = "skipped"
+
+# Concurrency cap when fanning out report-resolution outcome emails
+# (send_report_resolution_emails) — bounded for the same reason as
+# DIGEST_SEND_CONCURRENCY (Resend free-tier rate), and to keep a brigaded
+# event's admin-resolution request from serializing 50-100 Resend round trips.
+REPORT_EMAIL_SEND_CONCURRENCY: int = 8
 
 # Admin endpoint pagination
 ADMIN_DEDUP_GROUPS_PAGE_SIZE: int = 50
@@ -566,6 +580,25 @@ SVIX_SECRET_PREFIX = "whsec_"
 # Bearer-token auth headers used by outbound email/LLM API clients.
 AUTHORIZATION_HEADER = "Authorization"
 BEARER_PREFIX = "Bearer "
+# Other HTTP header names referenced by name across routers/middleware/ingestion —
+# named here rather than as bare string literals so a typo at any call site
+# fails loudly (constant not found) instead of silently missing the header.
+HEADER_INTERNAL_TOKEN = "X-Internal-Token"
+HEADER_ORIGIN = "origin"
+HEADER_HOST = "host"
+HEADER_X_FORWARDED_FOR = "x-forwarded-for"
+HEADER_RETRY_AFTER = "Retry-After"
+HEADER_ACCEPT_LANGUAGE = "Accept-Language"
+HEADER_LIST_UNSUBSCRIBE = "List-Unsubscribe"
+HEADER_CONTENT_TYPE = "Content-Type"
+MIME_APPLICATION_JSON = "application/json"
+MIME_APPLICATION_NDJSON = "application/x-ndjson"
+
+# uvicorn's logging.access record carries a positional args tuple
+# (client_addr, method, path, http_version, status) — app/logging_config.py's
+# _AccessPathFilter reads path/status off it. Named so a future uvicorn
+# version's arg-count change is at least a visible constant, not a bare index.
+UVICORN_ACCESS_STATUS_ARG_INDEX = 4
 # BeautifulSoup's built-in parser name — used everywhere we parse scraped/stored HTML.
 HTML_PARSER = "html.parser"
 # Reject a signature whose svix-timestamp is further than this from "now" (either
@@ -674,6 +707,73 @@ AUTH_ORGANIZER_SESSION_SALT = "organizer-session-v1"
 ORGANIZER_MAGIC_LINK_TTL_MINUTES = _MAGIC_LINK_TTL_MINUTES_SHARED
 ORGANIZER_SESSION_TTL_DAYS = _SESSION_TTL_DAYS_SHARED
 
+# Google sign-in (ADR 0002) — server-side OAuth 2.0 authorization code + PKCE.
+# One salt shared by both tracks' state cookies (payload's "track" field keeps
+# a user state token from verifying against the organizer callback and vice
+# versa, same defense-in-depth shape as the magic-link/session salt split).
+AUTH_OAUTH_STATE_SALT = "oauth-state-v1"
+OAUTH_STATE_TTL_MINUTES = 10
+# generate_oauth_state_token/verify_oauth_state_token's "track" discriminator
+# (app/auth/tokens.py) — the cross-track replay guard; a typo at any of the
+# four call sites (auth.py x2, organizer_auth.py x2) would silently break the
+# mint/verify pairing, so both are named constants rather than inline strings.
+AUTH_TRACK_USER = "user"
+AUTH_TRACK_ORGANIZER = "organizer"
+# PyJWKClient's own cache_jwk_set lifespan (app/auth/google_oauth.py) — how
+# long the fetched Google JWKS keyset is cached before a re-fetch.
+GOOGLE_JWKS_CACHE_LIFESPAN_SECONDS = 300
+# secrets.token_urlsafe() byte count for the PKCE code_verifier and the OAuth
+# state value (app/auth/google_oauth.py) — 32 bytes -> 43 URL-safe chars,
+# within RFC 7636's 43-128 char code_verifier bound.
+OAUTH_PKCE_TOKEN_BYTES = 32
+IDENTITY_PROVIDER_GOOGLE = "google"
+GOOGLE_OAUTH_SCOPE = "openid email"  # never "profile" — no name/picture stored
+GOOGLE_OAUTH_AUTHORIZATION_ENDPOINT = "https://accounts.google.com/o/oauth2/v2/auth"
+GOOGLE_OAUTH_TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token"
+GOOGLE_OAUTH_JWKS_URL = "https://www.googleapis.com/oauth2/v3/certs"
+GOOGLE_OAUTH_ISSUERS = frozenset({"accounts.google.com", "https://accounts.google.com"})
+# Domains Google is authoritative for (ADR 0002's linking gate) — an `hd` claim
+# on the ID token is the other authoritative signal, checked separately.
+GOOGLE_AUTHORITATIVE_EMAIL_DOMAINS = frozenset({"gmail.com", "googlemail.com"})
+# organizer_oauth_state / oauth_state cookies (Path scoped to the callback
+# route only, unlike the session cookie's broader /api/organizer or /api —
+# each is only ever read on one route). SameSite=Lax, not Strict — see
+# docs/adr/0002 for why.
+ORGANIZER_OAUTH_STATE_COOKIE_NAME = "organizer_oauth_state"
+ORGANIZER_OAUTH_STATE_COOKIE_PATH = "/api/organizer/auth/google/callback"
+ORGANIZER_GOOGLE_CALLBACK_PUBLIC_PATH = "/api/organizer/auth/google/callback"
+OAUTH_STATE_COOKIE_NAME = "oauth_state"
+OAUTH_STATE_COOKIE_PATH = "/api/auth/google/callback"
+GOOGLE_CALLBACK_PUBLIC_PATH = "/api/auth/google/callback"
+OAUTH_STATE_COOKIE_SAMESITE: Literal["lax"] = "lax"
+# Google sign-in outcomes (routers/organizer_auth.py / routers/auth.py
+# callbacks) — carried on LOG_EVENT_GOOGLE_SIGNIN's `outcome` field.
+GOOGLE_SIGNIN_OUTCOME_EXISTING_LOGIN = "existing_login"
+GOOGLE_SIGNIN_OUTCOME_NEW_ACCOUNT = "new_account"
+GOOGLE_SIGNIN_OUTCOME_AUTO_LINKED = "auto_linked"
+GOOGLE_SIGNIN_OUTCOME_CONFIRMATION_SENT = "confirmation_sent"
+# Frontend redirect targets for the callback (no JSON response — this is a
+# top-level browser navigation back from Google).
+ORGANIZER_LOGIN_PATH = "/organizer/login"
+ORGANIZER_DASHBOARD_PATH = "/organizer/dashboard"
+LOGIN_PATH = "/login"
+HOME_PATH = "/"
+ONBOARDING_PATH = "/onboarding"
+# Frontend paths linked from transactional emails (app/email/report_notify.py,
+# report_reporter.py, digest.py) — built with settings.FRONTEND_URL as a prefix.
+EVENTS_PATH = "/events"
+ADMIN_REPORTS_PATH = "/admin/reports"
+UNSUBSCRIBE_PATH = "/unsubscribe"
+# Callback redirect-with-error query param + failure reason codes — internal,
+# not i18n keys (mirrors the ERROR_* constants' English-only convention).
+OAUTH_ERROR_QUERY_PARAM = "google_error"
+OAUTH_ERROR_STATE_INVALID = "state_invalid"
+OAUTH_ERROR_TOKEN_EXCHANGE_FAILED = "token_exchange_failed"
+OAUTH_ERROR_VERIFICATION_FAILED = "verification_failed"
+OAUTH_ERROR_DENIED = "access_denied"
+RATE_LIMIT_GOOGLE_SIGNIN_START = "20/minute"
+RATE_LIMIT_GOOGLE_SIGNIN_CALLBACK = "30/minute"
+
 # Admin console auth (issue #154) — third auth track alongside the consumer and
 # organizer ones above. No magic link (password + TOTP instead) and no admins
 # table (a session just asserts "a valid login happened", nothing per-admin —
@@ -692,6 +792,10 @@ ADMIN_SESSION_TTL_SECONDS = 12 * 60 * 60
 # the admin's authenticator app and this server without materially widening the
 # guess window.
 ADMIN_TOTP_VALID_WINDOW = 1
+# _admin_session_epoch()'s hexdigest truncation length (app/auth/tokens.py) —
+# 16 hex chars (64 bits) of the sha256 digest is ample collision resistance
+# for a value that only ever feeds another hash, not a standalone credential.
+ADMIN_SESSION_EPOCH_HASH_LEN = 16
 # Per-organizer daily submission ceiling (routers/organizer_events.py), computed
 # from Tallinn calendar-day start — an IP rate limit alone can't cap a single
 # organizer account across multiple IPs.
@@ -737,10 +841,16 @@ IMAGE_MAGIC_BYTES: dict[bytes, str] = {
     b"\xff\xd8\xff": "image/jpeg",
     b"\x89PNG\r\n\x1a\n": "image/png",
 }
+MIME_IMAGE_WEBP = "image/webp"
+# RIFF is a generic container format — the fourCC at WEBP_FOURCC_OFFSET is
+# what actually says "WEBP" (organizer_events.py::_sniff_image_mime).
+WEBP_RIFF_MAGIC = b"RIFF"
+WEBP_FOURCC = b"WEBP"
+WEBP_FOURCC_OFFSET = 8
 IMAGE_EXTENSION_BY_MIME: dict[str, str] = {
     "image/jpeg": "jpg",
     "image/png": "png",
-    "image/webp": "webp",
+    MIME_IMAGE_WEBP: "webp",
 }
 # Hosts an organizer-submission event.image_url is allowed to point at — the
 # signed Cloudinary upload endpoint (POST /organizer/events/image) always
@@ -804,6 +914,11 @@ DAILY_5_BACKFILL_MAX_PER_CATEGORY = 3  # relaxed per-category cap during backfil
 # Tier-1 MMR keeps DAILY_5_MAX_PER_CATEGORY (2). Exceeded only by the final
 # uncapped sweep, so the feed still reaches DAILY_5_COUNT when events are scarce.
 DAILY_5_LOOKAHEAD_DAYS = 14
+# _select_with_backfill truncates each scored pool to n * this multiplier via
+# heapq.nlargest before running the MMR/backfill tiers, instead of sorting the
+# whole pool — generous enough that the full-sort fallback is rarely needed
+# (score.py Big-O audit H6).
+DAILY_5_BACKFILL_TRUNCATION_MULTIPLIER = 40
 # How many past days' feeds to scan for a recurring-series repeat before allowing
 # that series back into a user's Daily 5 pool — keeps a multi-day series (one
 # canonical event per day) from being re-picked night after night.
@@ -883,7 +998,12 @@ BROWSE_RELEVANCE_MAX_CANDIDATES: int = 300
 # max-entries bounds process memory — single Render process, no cross-process
 # cache needed.
 BROWSE_SCORE_CACHE_TTL_SECONDS: float = 30.0
-BROWSE_SCORE_CACHE_MAX_ENTRIES: int = 512
+# Raised from 512 (Big-O audit M10): at "hundreds of active users" toggling
+# facets within one 30s TTL window, 512 distinct (user, filter) keys thrashed
+# the LRU toward a near-zero hit rate. Each entry is a scored id list bounded
+# by BROWSE_RELEVANCE_MAX_CANDIDATES (300), so this is still a small,
+# single-process, bounded cache — not a per-row cost.
+BROWSE_SCORE_CACHE_MAX_ENTRIES: int = 2048
 # Fixed sentinel in place of a real user id for the anonymous-caller cache key
 # (#234) — anonymous /explore traffic shares one cache entry per filter/sort
 # combination rather than one per caller. Never collides with a real User.id
@@ -1116,6 +1236,25 @@ CONTACT_FIELD_MIN_LEN = 1
 # get no signal that it was caught.
 CONTACT_SUCCESS_DETAIL = "Message sent."
 
+# Auth success-detail response strings, shared verbatim across the consumer,
+# organizer, and admin tracks (each track's endpoint file imports the subset
+# it needs). Anti-enumeration responses (request-link) are deliberately
+# identical whether or not the address is registered.
+DETAIL_MAGIC_LINK_SENT = "If that address is registered, a sign-in link has been sent."
+DETAIL_SIGNED_IN = "Signed in."
+DETAIL_SIGNED_OUT = "Signed out."
+DETAIL_SIGNED_OUT_ALL = "Signed out of all devices."
+DETAIL_IDENTITY_UNLINKED = "Identity unlinked."
+ERROR_CSRF_ORIGIN_MISMATCH = "Origin header does not match a trusted origin."
+# app/db.py::assert_schema_at_head — the 0030/admin_actions incident: code
+# shipped ahead of a DB still on an older migration, so every admin action
+# 500'd instead of failing at boot. Same text logged at ERROR (production,
+# then raised) or WARNING (development, boot continues) — see LOG_EVENT_SCHEMA_DRIFT.
+ERROR_SCHEMA_DRIFT = (
+    "Database schema drift: DB is at revision {db_revision!r}, code expects "
+    "head {head_revision!r}. Run `alembic upgrade head`."
+)
+
 
 LLM_PROVIDERS: list[dict[str, Any]] = [
     {
@@ -1165,6 +1304,12 @@ HTML_LISTING_MAX_DETAIL_FETCHES = (
     300  # cap per ingestion run on capped-detail sources (piletilevi) — headroom
     # above observed 206-220 new-card runs, which truncated detail fetches at 200
 )
+# Same cap, for the Fienta API source (fienta.py) — unlike html_base.py's
+# listing adapters, Fienta had no ceiling on its per-run detail fan-out, so a
+# cold start or organizer bulk-publish could queue thousands of live tasks
+# behind one rate limiter (Big-O audit H10). The skip-id set (known_ids) makes
+# truncation here self-healing across runs, same as HTML_LISTING_MAX_DETAIL_FETCHES.
+FIENTA_MAX_DETAIL_FETCHES = 300
 
 # Geocoding (Nominatim) — used to backfill lat/lng for events that have an address
 # but no coordinates (currently: Fienta). Usage policy requires a descriptive
@@ -1442,6 +1587,16 @@ LOG_EVENT_ADMIN_ACTION = "admin_action"  # /admin/auth/* login/logout (issue #15
 # Global (not per-IP) daily unverified-account-creation budget crossed — see
 # routers/utils.py::record_unverified_account_creation (OWASP audit F10).
 LOG_EVENT_UNVERIFIED_ACCOUNT_BUDGET_EXCEEDED = "unverified_account_budget_exceeded"
+# ADR 0002 (Google sign-in) — carries `track`/`outcome` (see GOOGLE_SIGNIN_OUTCOME_*).
+LOG_EVENT_GOOGLE_SIGNIN = "google_signin"
+# Network/5xx failure talking to Google (token exchange or JWKS fetch) — distinct
+# from auth_failed, which is a caller-side/verification rejection, not an
+# upstream-degradation signal.
+LOG_EVENT_GOOGLE_SIGNIN_DEGRADED = "google_signin_degraded"
+LOG_EVENT_IDENTITY_LINKED = "identity_linked"  # provider identity row created
+# DELETE .../profile/identities/{provider} or .../users/me/identities/{provider}
+LOG_EVENT_IDENTITY_UNLINKED = "identity_unlinked"
+LOG_EVENT_SCHEMA_DRIFT = "schema_drift"  # boot-time alembic-head mismatch (see ERROR_SCHEMA_DRIFT)
 
 # Daily cap (process-wide, not per-IP) on new unverified User/Organizer rows
 # created via the magic-link request endpoints before an operator alert fires
@@ -1588,6 +1743,7 @@ ERROR_MAGIC_LINK_CONSUMED = "Sign-in link already used, expired, or not found."
 ERROR_EVENT_NOT_FOUND = "Event not found."
 ERROR_USER_NOT_FOUND = "User not found."
 ERROR_ORGANIZER_NOT_FOUND = "Organizer not found."
+ERROR_IDENTITY_NOT_FOUND = "No linked identity found for that provider."
 ERROR_SUBMISSION_NOT_FOUND = "Submission not found."
 ERROR_EVENT_CANCELLED = "This event was taken down and can no longer be edited."
 

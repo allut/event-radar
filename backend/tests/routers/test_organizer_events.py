@@ -1040,6 +1040,34 @@ class TestUploadEventImage:
         assert exc_info.value.status_code == http.HTTPStatus.NOT_IMPLEMENTED
 
     @pytest.mark.asyncio
+    async def test_returns_501_when_api_key_or_secret_missing(
+        self, mock_db, make_request, make_organizer
+    ):
+        """CLOUDINARY_CLOUD_NAME alone is not enough — a partially-configured
+        deployment (cloud name set, key/secret blank) must surface as the
+        same explicit 501 rather than reaching Cloudinary and getting an
+        opaque 502."""
+        from fastapi import HTTPException
+        from app.routers.organizer_events import upload_event_image
+
+        mock_db.scalar.return_value = 0
+        organizer = make_organizer(organizer_id=5)
+        file = self._fake_upload()
+
+        with patch("app.routers.organizer_events.settings") as mock_settings:
+            mock_settings.CLOUDINARY_CLOUD_NAME = "demo"
+            mock_settings.CLOUDINARY_API_KEY = ""
+            mock_settings.CLOUDINARY_API_SECRET = ""
+            with pytest.raises(HTTPException) as exc_info:
+                await upload_event_image(
+                    make_request(method="POST", path="/organizer/events/image"),
+                    file,
+                    organizer,
+                    mock_db,
+                )
+        assert exc_info.value.status_code == http.HTTPStatus.NOT_IMPLEMENTED
+
+    @pytest.mark.asyncio
     async def test_successful_upload_returns_secure_url(
         self, mock_db, make_request, make_organizer
     ):
@@ -1081,7 +1109,10 @@ class TestUploadEventImage:
         _, kwargs = mock_post.call_args
         assert kwargs["data"]["api_key"] == "key123"
         assert "signature" in kwargs["data"]
-        assert kwargs["data"]["signature_algorithm"] == "sha256"
+        # signature_algorithm is an SDK-config-only knob, never a Cloudinary
+        # Upload API wire param — sending it desyncs the signed param set
+        # from what Cloudinary verifies against and causes a 401.
+        assert "signature_algorithm" not in kwargs["data"]
         # Generated, not file.filename — M-3 in the OWASP audit: the upload
         # filename is attacker-controlled text otherwise crossing a service
         # boundary unchanged, and nothing downstream reads it.
@@ -1162,6 +1193,40 @@ class TestUploadEventImage:
                     mock_db,
                 )
         assert exc_info.value.status_code == http.HTTPStatus.BAD_GATEWAY
+
+
+class TestCloudinarySignature:
+    """_cloudinary_signature against Cloudinary's documented example vector
+    (https://cloudinary.com/documentation/authentication_signatures):
+    params {"public_id": "sample_image", "timestamp": 1315060510}, secret
+    "abcd". The doc publishes the SHA-1 result of that string-to-sign
+    (bfd09f95f331f558cbd1320e67aa8d488770583e); this helper is SHA-256, so
+    the string-to-sign construction is checked directly and the digest is
+    checked against a hardcoded SHA-256 constant computed once from that
+    same documented input."""
+
+    _DOC_PARAMS = {"public_id": "sample_image", "timestamp": 1315060510}
+    _DOC_SECRET = "abcd"
+    _DOC_STRING_TO_SIGN = "public_id=sample_image&timestamp=1315060510"
+    _DOC_SHA256_DIGEST = (
+        "e3c44b54e67a3ecc918f5d7236ca5faa36250ea8a8cd6cbabfd2d6bb2453acac"
+    )
+
+    def test_string_to_sign_matches_documented_vector(self):
+        from app.routers.organizer_events import _cloudinary_signature
+
+        with patch("app.routers.organizer_events.hashlib.sha256") as mock_sha256:
+            mock_sha256.return_value.hexdigest.return_value = "irrelevant"
+            _cloudinary_signature(self._DOC_PARAMS, self._DOC_SECRET)
+
+        signed_bytes = mock_sha256.call_args[0][0]
+        assert signed_bytes == (self._DOC_STRING_TO_SIGN + self._DOC_SECRET).encode()
+
+    def test_sha256_digest_matches_documented_vector(self):
+        from app.routers.organizer_events import _cloudinary_signature
+
+        signature = _cloudinary_signature(self._DOC_PARAMS, self._DOC_SECRET)
+        assert signature == self._DOC_SHA256_DIGEST
 
 
 class TestListOwnEvents:

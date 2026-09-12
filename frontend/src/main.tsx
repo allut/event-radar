@@ -17,10 +17,17 @@ import '@fontsource/cormorant-garamond/500.css';
 import '@fontsource/cormorant-garamond/600.css';
 import App from './App';
 import './index.css';
-// Side-effect import: registers the matchMedia/storage listeners that keep
-// the theme live (OS flips, cross-tab writes) after the inline pre-paint
-// script in index.html has already set the initial value.
-import './lib/theme';
+// Registers the matchMedia/storage listeners that keep the theme live (OS
+// flips, cross-tab writes) after the inline pre-paint script in index.html
+// has already set the initial value, and re-resolves/applies the theme once
+// more here as a boot-time self-heal: if the pre-paint script is ever
+// blocked (e.g. by a CSP that hasn't caught up with it — see src/lib/csp.ts)
+// or a prerendered snapshot shipped a stale baked-in data-theme, this
+// corrects it the moment JS runs instead of leaving the wrong theme applied
+// for the whole session.
+import { applyTheme } from './lib/theme';
+
+applyTheme();
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

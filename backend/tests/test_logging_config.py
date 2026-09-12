@@ -377,6 +377,56 @@ def test_access_path_filter_keeps_short_args_defensively() -> None:
     assert _AccessPathFilter().filter(record) is True
 
 
+def test_access_path_filter_strips_query_string_from_shipped_record() -> None:
+    # OWASP audit L-1: search terms, OAuth codes, and unsubscribe tokens
+    # must never reach the third-party Axiom drain via the query string.
+    record = _make_access_record("/explore?q=secret+search")
+    assert _AccessPathFilter().filter(record) is True
+    assert record.args[2] == "/explore"
+
+
+def test_access_path_filter_leaves_query_free_path_untouched() -> None:
+    record = _make_access_record("/explore")
+    assert _AccessPathFilter().filter(record) is True
+    assert record.args[2] == "/explore"
+
+
+def test_access_path_filter_leaves_short_args_query_string_unstripped() -> None:
+    # Below the length guard used for the suppress-list check too — args
+    # this short never come from real uvicorn.access records.
+    record = _make_access_record("/health?x=1", args=("127.0.0.1", "GET"))
+    assert _AccessPathFilter().filter(record) is True
+
+
+def test_console_handler_registered_before_ship_queue_handler(monkeypatch) -> None:
+    # _AccessPathFilter mutates the shared LogRecord.args tuple in place to
+    # strip query strings before shipping (OWASP audit L-1). That mutation
+    # is safe for local logs only because logging.Logger.callHandlers()
+    # invokes handlers in registration order and the console handler
+    # already formats/emits the record before the queue handler's filter
+    # runs. Pin that order here so a future reorder trips this test instead
+    # of silently stripping query strings from local dev/file logs too.
+    monkeypatch.setattr(settings, "APP_ENV", "production")
+    monkeypatch.setattr(settings, "LOG_SHIP_URL", "https://logs.example.com/ingest")
+    monkeypatch.setattr(settings, "LOG_SHIP_TOKEN", "secret-token")
+
+    configure_logging()
+
+    root = logging.getLogger()
+    console_index = next(
+        i
+        for i, h in enumerate(root.handlers)
+        if isinstance(h, logging.StreamHandler)
+        and not isinstance(h, logging.handlers.QueueHandler)
+    )
+    queue_index = next(
+        i
+        for i, h in enumerate(root.handlers)
+        if isinstance(h, logging.handlers.QueueHandler)
+    )
+    assert console_index < queue_index
+
+
 def test_prod_ship_queue_handler_has_access_path_filter(monkeypatch) -> None:
     monkeypatch.setattr(settings, "APP_ENV", "production")
     monkeypatch.setattr(settings, "LOG_SHIP_URL", "https://logs.example.com/ingest")

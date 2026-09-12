@@ -71,6 +71,21 @@ def _reset_admin_auth_failures():
 
 
 @pytest.fixture(autouse=True)
+def _reset_public_caches():
+    """_showcase_cache/_counts_cache (routers/public.py) are module-level
+    process-wide TTL caches (by design — see docstrings), shared across every
+    test in this process. Isolate each test so an earlier test's cached
+    payload for a given locale never leaks into a later one."""
+    from app.routers import public as public_module
+
+    public_module._showcase_cache.clear()
+    public_module._counts_cache.clear()
+    yield
+    public_module._showcase_cache.clear()
+    public_module._counts_cache.clear()
+
+
+@pytest.fixture(autouse=True)
 def _reset_rate_limiter():
     """The slowapi Limiter is a module-level singleton shared by every router
     test in this directory. Since L2 (routers/admin.py) moved every /admin/*

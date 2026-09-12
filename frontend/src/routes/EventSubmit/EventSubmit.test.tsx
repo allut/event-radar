@@ -119,6 +119,9 @@ describe('EventSubmit (create)', () => {
 
     const langTabs = screen.getByRole('group', { name: /content language/i });
     await userEvent.click(within(langTabs).getByRole('button', { name: /^EN,/ }));
+    await waitFor(() =>
+      expect(within(langTabs).getByRole('button', { name: /^EN,/ })).toHaveAttribute('aria-pressed', 'true'),
+    );
     await userEvent.type(await screen.findByLabelText(/^description \(en\)$/i), 'An English description');
     await userEvent.type(await screen.findByLabelText(/important info .*\(en\)$/i), 'English ticket info');
 

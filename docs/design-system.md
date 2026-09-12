@@ -2,7 +2,7 @@
 
 What's in here: the visual language of What's on Radar — the C1 direction, the token system in `frontend/src/index.css`, the shared CSS layer in `frontend/src/components/shared/`, the type/color/shape/motion rules, the per-surface registers (consumer, organizer, admin), the light/dark theming machinery, and the design decisions that are already settled and must not be re-litigated.
 
-Read this before touching any `.module.css`, `frontend/src/index.css`, `frontend/src/components/shared/`, or any component whose change is visual rather than behavioral. Structure/routing/i18n/SEO detail lives in `docs/frontend.md`; the *rule* form of the token/shared-class imperatives lives in `CLAUDE.md` and `docs/conventions.md`.
+Read this before touching any `.module.css`, `frontend/src/index.css`, `frontend/src/components/shared/`, `frontend/src/lib/theme.ts`, `backend/app/email/styles.py`, or any component whose change is visual rather than behavioral. Structure/routing/i18n/SEO detail lives in `docs/frontend.md`; the *rule* form of the token/shared-class imperatives lives in `CLAUDE.md` and `docs/conventions.md`.
 
 ## 1. The direction: C1 (cinematic-on-brand)
 
@@ -74,8 +74,9 @@ When adding a token: if it encodes a color that reads differently on a near-whit
 
 **Resolution order** (`frontend/src/lib/theme.ts`, `resolveTheme` — pure, unit-tested): account preference → `localStorage` (`theme_preference`) → OS `prefers-color-scheme`. The resolved value is binary (`light`/`dark`) and lands on `document.documentElement.dataset.theme`; the stored *preference* is tri-state (`system`/`light`/`dark`).
 
-- An inline script in `frontend/index.html` re-resolves this synchronously before first paint to avoid a flash of the wrong theme. It **duplicates** `resolveTheme`'s logic (it must run with zero module loading) — the two must never disagree, and the storage-key literal there must stay in sync with `THEME_PREFERENCE_KEY` in `constants.ts`.
-- `lib/theme.ts` is imported for side effects in `main.tsx`: it listens for cross-tab `storage` writes and for OS theme flips (the latter only while the preference is `system` — an explicit override must not be disturbed).
+- An inline script in `frontend/index.html` re-resolves this synchronously before first paint to avoid a flash of the wrong theme. It **duplicates** `resolveTheme`'s logic (it must run with zero module loading) — the two must never disagree, and the storage-key literal there must stay in sync with `THEME_PREFERENCE_KEY` in `constants.ts`. This script's body is pinned by a `sha256-…` CSP hash in `frontend/vercel.json` (theme-revert-on-refresh fix) — editing the body means regenerating and updating that hash (`docs/security.md`'s CSP paragraph has the exact steps and the drift-guard test), or production silently falls back to the runtime `applyTheme()` self-heal below with a flash of the wrong theme on every load.
+- `lib/theme.ts` is imported in `main.tsx` for its `storage`/OS-theme-flip listeners **and** its `applyTheme()` is called directly at boot, immediately before `createRoot(...).render(...)`. This re-resolves from localStorage/OS and re-applies on every load — a deliberate self-heal in case the pre-paint script above is ever blocked (a CSP regression) or a prerendered snapshot shipped a baked-in `data-theme` (see the prerender bullet below): the wrong theme corrects itself the moment JS runs instead of persisting for the whole session.
+- Prerendered snapshots (`frontend/scripts/prerender.ts`) are theme-neutral: `stripBakedThemeAttr` removes any `data-theme` the build browser baked onto `<html>` before every snapshot write, so a snapshot never ships a frozen copy of the build machine's own OS theme. See `docs/frontend.md`'s prerender section.
 - `syncAccountTheme()` is the shared post-verify policy for both auth tracks: an existing account preference wins and is mirrored locally; otherwise an explicit local override seeds the account. Each track passes its own PATCH so consumer and organizer state stay independent.
 - UI: `ThemeSelector` (consumer + organizer top bars, `useThemePreference`), `AdminThemeToggle` in the admin rail.
 
@@ -89,7 +90,7 @@ When adding a token: if it encodes a color that reads differently on a near-whit
 
 ## 7. The shared CSS layer
 
-`frontend/src/components/shared/` holds 16 pure-CSS modules — no `.tsx`. Consume them with CSS Modules `composes:`; **never copy-paste** their rules into a route or component stylesheet. Component CSS composes from `'../shared/X.module.css'`, route CSS from `'../../components/shared/X.module.css'`.
+`frontend/src/components/shared/` holds 16 pure-CSS modules plus one component folder, `GoogleSignInButton/` (`.tsx` + `GoogleGMark.tsx` + test) — the one exception to the CSS-only rule. Consume the CSS modules with CSS Modules `composes:`; **never copy-paste** their rules into a route or component stylesheet. Component CSS composes from `'../shared/X.module.css'`, route CSS from `'../../components/shared/X.module.css'`.
 
 | Module | Holds |
 |---|---|
@@ -170,6 +171,7 @@ Section order, locked:
 | `--radius: 0` sitewide (containers too) | Rejected — controls only. |
 | Emoji as iconography | Removed from consumer/organizer surfaces; admin status glyphs stay. |
 | Landing wide-screen hero side panel | Specced, never implemented, removed from scope. |
+| Third-party identity-provider brand marks (class exception) | The full-colour Google "G" mark is pictographic iconography, which §1/§9 forbid, and per Google's branding guidelines it may not be made monochrome, redrawn, or dropped. Recorded as a **class** exception — third-party identity-provider brand marks, mandated by that provider's published branding terms, rendered as a local inline SVG (never `<img>` — the current asset is a masked conic-gradient + Gaussian-blur composition that silently loses layers through an `<img>` reference), scoped to the sign-in surface only. Does not reopen §9's general no-iconography rule elsewhere. The button itself ships `border-radius: 0` (composed from the shared `Button` module, unmodified) — Google's written guidelines state no minimum size and no corner radius, so this is a defensible reading against the prose, not a violation, even though it visibly departs from Google's own shipped assets. See `docs/adr/0002-google-sign-in-oauth-pkce.md`. |
 
 ## 13. Working checklist for a visual change
 

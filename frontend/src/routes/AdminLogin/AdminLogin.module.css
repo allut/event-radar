@@ -15,21 +15,12 @@
   composes: authRadar from '../../components/shared/Card.module.css';
 }
 
-/* !important: CSS Modules bundling can place the composed .authBrand rules
-   (from Card.module.css) later in the output than this file's own rules, at
-   equal specificity — this override must win the cascade regardless of that
-   chunk order (confirmed empirically: without !important, Cormorant wins). */
 .brand {
-  composes: authBrand from '../../components/shared/Card.module.css';
-  font-family: var(--font-system) !important;
+  composes: authBrandSystem from '../../components/shared/Card.module.css';
 }
 
 .tag {
-  font-family: var(--font-mono);
-  font-size: var(--fs-2xs);
-  letter-spacing: var(--eyebrow-tracking);
-  text-transform: uppercase;
-  color: var(--text-dim);
+  composes: adminEyebrow from '../../components/shared/Page.module.css';
   margin-bottom: var(--space-6);
   padding-bottom: var(--space-1-75);
   border-bottom: var(--border-w-hair) solid var(--border);

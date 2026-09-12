@@ -31,6 +31,9 @@ PILETILEVI_IMPORTANT_INFO_HEADINGS: dict[str, str] = {
     "et": "Hinnainfo",
     "ru": "Дополнительная информация",
 }
+# Wrapper the important-info heading lives inside — used to scope the sibling
+# text extraction to that one block rather than the whole detail page.
+PILETILEVI_INFO_BLOCK_CLASS = "white-rounded-block"
 
 # Piletilevi image height parameter — the listing page pins height=252; the
 # full-resolution variant uses this value in the same /height=N/ path segment.

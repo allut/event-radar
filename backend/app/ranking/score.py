@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from collections.abc import Sequence
 from datetime import date, datetime, timedelta
 from functools import cached_property, lru_cache
+from heapq import nlargest
 
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -24,6 +25,7 @@ from sqlalchemy.orm import load_only, selectinload
 from app.constants import (
     DAILY5_SERIES_COOLDOWN_DAYS,
     DAILY_5_BACKFILL_MAX_PER_CATEGORY,
+    DAILY_5_BACKFILL_TRUNCATION_MULTIPLIER,
     DAILY_5_COUNT,
     DAILY_5_LOOKAHEAD_DAYS,
     DAILY_5_MAX_PER_CATEGORY,
@@ -129,6 +131,16 @@ class FeedbackContext:
     # that forgets to call build_liked_aggregates() explicitly still gets correct
     # results instead of a silent all-zero indirect signal.
     _liked_aggregates_built_for: datetime | None = field(default=None, repr=False)
+    # Memoizes the catset-overlap sum in _indirect_feedback_signal, keyed on
+    # the *candidate event's* category set — with 14 valid categories the
+    # number of distinct category sets across a scoring pool is tiny relative
+    # to the number of candidates, so every event sharing a set reuses one
+    # computed sum instead of redoing the frozenset intersections (score.py
+    # Big-O audit M11). Reset whenever build_liked_aggregates() rebuilds,
+    # since it depends on liked_decay_by_catset.
+    _indirect_overlap_by_catset: dict[frozenset[str], float] = field(
+        default_factory=dict, repr=False
+    )
 
     @cached_property
     def disliked_categories(self) -> frozenset[str]:
@@ -164,6 +176,7 @@ class FeedbackContext:
             return
         self.liked_decay_by_catset = {}
         self.liked_decay_by_event = {}
+        self._indirect_overlap_by_catset = {}
         for row in self.liked_rows:
             days = max(0.0, (now - row.created_at).total_seconds() / SECONDS_PER_DAY)
             decay = FEEDBACK_INDIRECT_WEIGHT * (FEEDBACK_DECAY_BASE**days)
@@ -343,12 +356,15 @@ def _indirect_feedback_signal(
     subtract decay that was never added; guarding would need the O(L) per-row
     scan this aggregation exists to avoid, so it stays a documented assumption.
     """
-    indirect = sum(
-        decay
-        for cats, decay in ctx.liked_decay_by_catset.items()
-        if cats & event_cat_set
-    )
-    return indirect - ctx.liked_decay_by_event.get(event_id, 0.0)
+    overlap = ctx._indirect_overlap_by_catset.get(event_cat_set)
+    if overlap is None:
+        overlap = sum(
+            decay
+            for cats, decay in ctx.liked_decay_by_catset.items()
+            if cats & event_cat_set
+        )
+        ctx._indirect_overlap_by_catset[event_cat_set] = overlap
+    return overlap - ctx.liked_decay_by_event.get(event_id, 0.0)
 
 
 def feedback_signal(
@@ -567,13 +583,19 @@ def _select_with_backfill(
     over freshness in the relaxed tiers; the uncapped sweep guarantees reaching n
     when scarce. Dislikes are excluded upstream and never re-enter.
 
-    Each pool is sorted by score descending exactly once here and the same sorted
-    list is reused across every tier that consumes it (``scored`` feeds tiers 1, 2,
-    and 4; ``cooled_scored`` feeds tiers 3 and 5) — previously each tier re-sorted
-    its pool independently, repeating identical O(E log E) work up to 3-4x per user.
+    Each pool is truncated to its top ``n * DAILY_5_BACKFILL_TRUNCATION_MULTIPLIER``
+    scores via ``heapq.nlargest`` exactly once here (O(E log k) instead of a full
+    O(E log E) sort), and the same truncated, sorted list is reused across every
+    tier that consumes it (``scored`` feeds tiers 1, 2, and 4; ``cooled_scored``
+    feeds tiers 3 and 5) — previously each tier re-sorted the *whole* pool
+    independently. Only if every tier still leaves the pick short of ``n`` (the
+    truncated top-k didn't contain enough eligible events — pathologically rare
+    at realistic pool sizes) does this fall back to a full sort of the
+    untruncated pool for one last uncapped pass.
     """
-    scored_sorted = sorted(scored, key=lambda x: x[0], reverse=True)
-    cooled_sorted = sorted(cooled_scored, key=lambda x: x[0], reverse=True)
+    truncate_to = n * DAILY_5_BACKFILL_TRUNCATION_MULTIPLIER
+    scored_sorted = nlargest(truncate_to, scored, key=lambda x: x[0])
+    cooled_sorted = nlargest(truncate_to, cooled_scored, key=lambda x: x[0])
 
     picked = _mmr_pick(scored_sorted, n, max_per_category)
     if len(picked) >= n:
@@ -601,6 +623,14 @@ def _select_with_backfill(
         _greedy_fill(picked, picked_ids, category_counts, scored_sorted, n, None)
     if len(picked) < n:
         _greedy_fill(picked, picked_ids, category_counts, cooled_sorted, n, None)
+    # Truncated top-k pools were exhausted without reaching n — pay for the
+    # full sort only now, as a last resort.
+    if len(picked) < n:
+        full_scored_sorted = sorted(scored, key=lambda x: x[0], reverse=True)
+        _greedy_fill(picked, picked_ids, category_counts, full_scored_sorted, n, None)
+    if len(picked) < n:
+        full_cooled_sorted = sorted(cooled_scored, key=lambda x: x[0], reverse=True)
+        _greedy_fill(picked, picked_ids, category_counts, full_cooled_sorted, n, None)
     return picked
 
 

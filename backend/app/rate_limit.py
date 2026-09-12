@@ -15,7 +15,7 @@ from starlette.requests import Request
 from starlette.responses import Response
 from starlette.types import ExceptionHandler
 
-from app.constants import LOG_EVENT_RATE_LIMIT_BLOCK
+from app.constants import HEADER_X_FORWARDED_FOR, LOG_EVENT_RATE_LIMIT_BLOCK
 
 log = logging.getLogger(__name__)
 
@@ -33,7 +33,7 @@ def client_key(request: Request) -> str:
     the client and this process (see the deployment-invariant comment in
     app/main.py next to ProxyHeadersMiddleware).
     """
-    xff = request.headers.get("x-forwarded-for", "")
+    xff = request.headers.get(HEADER_X_FORWARDED_FOR, "")
     if xff:
         return xff.rsplit(",", 1)[-1].strip()
     return get_remote_address(request)

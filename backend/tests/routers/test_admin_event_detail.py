@@ -259,3 +259,39 @@ async def test_in_todays_feed_true(admin_app, make_db_ctx, mock_db):
 
     assert resp.status_code == http.HTTPStatus.OK
     assert resp.json()["in_todays_feed"] is True
+
+
+@pytest.mark.asyncio
+async def test_content_by_locale_marks_real_translation_and_fallback(
+    admin_app, make_db_ctx, mock_db, make_event
+):
+    """A locale with a stored value surfaces it with translated=True; a
+    locale with none falls back to the base/en value with translated=False."""
+    event = make_event(event_id=42, title="Base Title (ET)")
+    event.dedup_group_id = None
+    event.title_localized = {"ru": "Заголовок (RU)"}
+    event.description_localized = None
+    event.important_info_localized = None
+    _fill_event_detail_fields(event)
+
+    db = mock_db
+    db.scalar = AsyncMock(side_effect=[event, None])
+    db.scalars = AsyncMock(side_effect=[scalars_returning([])])
+    db.execute = AsyncMock(return_value=execute_rows([]))
+
+    resp = await _get(db, admin_app, make_db_ctx)
+
+    assert resp.status_code == http.HTTPStatus.OK
+    content = resp.json()["event"]["content_by_locale"]
+    assert set(content.keys()) == {"et", "en", "ru"}
+
+    assert content["ru"]["title"] == "Заголовок (RU)"
+    assert content["ru"]["translated"]["title"] is True
+
+    # en has no stored value -> falls back to the base (Estonian) title
+    assert content["en"]["title"] == "Base Title (ET)"
+    assert content["en"]["translated"]["title"] is False
+
+    # description/important_info were never localized -> fallback everywhere
+    assert content["et"]["translated"]["description"] is False
+    assert content["ru"]["translated"]["important_info"] is False

@@ -1,4 +1,4 @@
-import { GITHUB_API_BASE_URL } from '../constants.js';
+import { GITHUB_API_BASE_URL, GITHUB_API_VERSION } from '../constants.js';
 
 /** Authenticated GitHub REST API request, shared by every caller that reads
  * or writes `allut/event-radar` (private, so unauthenticated calls 404).
@@ -17,7 +17,7 @@ export async function githubRequest(
     headers: {
       Authorization: `Bearer ${token}`,
       Accept: 'application/vnd.github+json',
-      'X-GitHub-Api-Version': '2022-11-28',
+      'X-GitHub-Api-Version': GITHUB_API_VERSION,
       'User-Agent': userAgent,
       ...(init?.headers ?? {}),
     },

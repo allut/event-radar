@@ -121,6 +121,16 @@
   font-size: var(--fs-icon);
 }
 
+.menuLabel {
+  color: var(--text-muted);
+}
+
+@media (max-width: 640px) {
+  .menuLabel:empty {
+    display: none;
+  }
+}
+
 @media (max-width: 640px) {
   .chev {
     display: none;

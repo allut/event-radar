@@ -19,6 +19,7 @@ interface OrganizerProfileResponse {
   locale: string;
   verified: boolean;
   name: string | null;
+  google_linked: boolean;
 }
 
 export default function OrganizerSettings() {
@@ -48,8 +49,11 @@ export default function OrganizerSettings() {
   const saveMutation = useMutation({
     mutationFn: (nextName: string) =>
       organizerApi.patch<OrganizerProfileResponse>(API.organizerProfile, { name: nextName }),
-    onSuccess: (updated) => {
-      queryClient.setQueryData([QUERY_KEYS.organizerProfile], updated);
+    onSuccess: () => {
+      // Refetch rather than write the mutation's own response into the cache
+      // — a direct write can race unlinkGoogleMutation's write below and
+      // clobber whichever field the other mutation just changed.
+      queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.organizerProfile] });
       showToast(UI_STATE.success, t('organizer_profile_saved', locale));
     },
     onError: (err) => {
@@ -80,6 +84,17 @@ export default function OrganizerSettings() {
     setLogoutToast(TOAST_IDLE);
     logoutAllMutation.mutate();
   }
+
+  const unlinkGoogleMutation = useMutation({
+    mutationFn: () => organizerApi.delete<{ detail: string }>(API.organizerProfileIdentity('google')),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.organizerProfile] });
+      showToast(UI_STATE.success, t('settings.identities.googleNotLinked', locale));
+    },
+    onError: (err) => {
+      showToast(UI_STATE.error, err instanceof ApiError ? err.message : t('generic_error', locale));
+    },
+  });
 
   return (
     <div className={styles.page}>
@@ -137,6 +152,26 @@ export default function OrganizerSettings() {
             </button>
             {logoutToast.status === UI_STATE.success && <p className={styles.saveSuccess} role="status">{logoutToast.message}</p>}
             {logoutToast.status === UI_STATE.error && <p className={styles.saveError} role="alert">{logoutToast.message}</p>}
+          </section>
+
+          <section className={styles.section}>
+            <h2 className={styles.sectionTitle}>{t('organizer_section_identities', locale)}</h2>
+            <div className={styles.toggleRow}>
+              <div>
+                <p className={styles.toggleLabel}>
+                  {t(data?.google_linked ? 'settings.identities.googleLinked' : 'settings.identities.googleNotLinked', locale)}
+                </p>
+              </div>
+            </div>
+            {data?.google_linked && (
+              <button
+                className={styles.repickBtn}
+                onClick={() => unlinkGoogleMutation.mutate()}
+                disabled={unlinkGoogleMutation.isPending}
+              >
+                {t('settings.identities.unlinkGoogle', locale)}
+              </button>
+            )}
           </section>
         </main>
       )}
