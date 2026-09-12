@@ -34,8 +34,7 @@
 }
 
 .emailToggle {
-  composes: textButton from '../../components/shared/Button.module.css';
-  align-self: center;
+  composes: textButtonCentered from '../../components/shared/Button.module.css';
 }
 
 .divider {

@@ -248,10 +248,12 @@ forbid, and per Google's branding guidelines it may not be made monochrome,
 redrawn, or dropped. Recorded in `docs/design-system.md`'s Settled table as
 a **class** exception — third-party identity-provider brand marks, mandated
 by that provider's published branding terms, rendered as a local inline SVG
-(never `<img>` — the current asset is a masked conic-gradient +
-Gaussian-blur composition that silently loses layers through an `<img>`
-reference), scoped to the sign-in surface only. This does not reopen §9's
-general no-iconography rule elsewhere. The button itself ships
+(never `<img>` — one fewer request, no `img-src` CSP surface, and the test
+asserts it), scoped to the sign-in surface only. The mark is the flat
+four-colour G (legacy icon-only asset), chosen over Google's current
+gradient "super G" on legibility grounds at the 20px render size. This does
+not reopen §9's general no-iconography rule elsewhere. The button itself
+ships
 `border-radius: 0` (composed from the shared `Button` module, unmodified) —
 Google's written guidelines state no minimum size and no corner radius, so
 this is a defensible reading against the prose, not a violation, even though

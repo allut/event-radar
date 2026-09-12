@@ -19,4 +19,10 @@ describe('GoogleSignInButton', () => {
     expect(container.querySelector('svg')).toBeInTheDocument();
     expect(container.querySelector('img')).not.toBeInTheDocument();
   });
+
+  it('renders the classic four-colour Google G brand fills', () => {
+    const { container } = render(<GoogleSignInButton href="/api/organizer/auth/google/start" locale="en" />);
+    const fills = [...container.querySelectorAll('path')].map((p) => p.getAttribute('fill'));
+    expect(fills).toEqual(expect.arrayContaining(['#4285F4', '#34A853', '#FBBC05', '#EA4335']));
+  });
 });

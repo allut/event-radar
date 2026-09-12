@@ -61,6 +61,16 @@
   color: var(--text);
 }
 
+/* Centred variant for the auth-card email fallback: .authCard is a block
+   container, so align-self does nothing — a fit-content block with auto
+   inline margins is what actually centres it. */
+.textButtonCentered {
+  composes: textButton;
+  display: block;
+  margin-inline: auto;
+  width: fit-content;
+}
+
 .iconAction {
   background: none;
   transition: background var(--transition), border-color var(--transition), transform var(--transition);
