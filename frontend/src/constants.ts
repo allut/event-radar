@@ -59,6 +59,13 @@ export const ORGANIZER_PROFILE_NUDGE_DISMISSED_KEY = 'organizer_profile_nudge_di
 // "cancelled" copy; every other OAUTH_ERROR_* code renders the generic failed copy.
 export const GOOGLE_SIGNIN_ERROR_PARAM = 'google_error';
 export const GOOGLE_SIGNIN_ERROR_DENIED = 'access_denied';
+// Mirrors backend GOOGLE_SIGNIN_RESULT_QUERY_PARAM/AUTH_TRACK_USER/
+// AUTH_TRACK_ORGANIZER (app/constants.py) — the Google callback's success
+// redirect carries this so main.tsx can set the right track's signed-in
+// hint before the router's first render. See lib/googleSignInLanding.ts.
+export const GOOGLE_SIGNIN_RESULT_PARAM = 'google_signin';
+export const GOOGLE_SIGNIN_RESULT_TRACK_USER = 'user';
+export const GOOGLE_SIGNIN_RESULT_TRACK_ORGANIZER = 'organizer';
 // GoogleGMark's default render size (px) — the brand mark's own icon-only
 // SVG viewBox scale, not a design-system --fs-* token (docs/adr/0002).
 export const GOOGLE_G_MARK_SIZE = 20;

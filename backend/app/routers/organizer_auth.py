@@ -91,6 +91,7 @@ from app.routers.utils import (
     RequestLinkBody,
     VerifyTokenBody,
     build_google_redirect_uri,
+    append_google_signin_result,
     build_oauth_error_redirect,
     clear_oauth_state_cookie,
     clear_session_cookie,
@@ -641,7 +642,9 @@ async def organizer_google_callback(
             organizer.id, organizer.session_token_version
         )
         response = RedirectResponse(
-            f"{settings.FRONTEND_URL}{ORGANIZER_DASHBOARD_PATH}",
+            append_google_signin_result(
+                f"{settings.FRONTEND_URL}{ORGANIZER_DASHBOARD_PATH}", AUTH_TRACK_ORGANIZER
+            ),
             status_code=status.HTTP_302_FOUND,
         )
         set_session_cookie(

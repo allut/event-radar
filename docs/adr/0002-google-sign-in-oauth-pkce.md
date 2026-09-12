@@ -233,6 +233,13 @@ only new rows ever get `email_verified` written from this path.
   second overwrites the first tab's state cookie; the first tab's callback
   then fails closed on state mismatch. Accepted as-is — fails safe, user
   retries.
+- **Success redirect carries a `google_signin=<track>` marker** — the
+  callback is a server-side redirect with no app JS running between the
+  session cookie being set and the browser landing on the SPA, so the
+  frontend's localStorage signed-in hint (otherwise only written in-page by
+  the magic-link verify routes) would never get set and the route guard
+  would bounce back to login. `main.tsx` consumes the marker synchronously,
+  before the router's first render, then strips it from the URL.
 
 ## Design-system exception
 

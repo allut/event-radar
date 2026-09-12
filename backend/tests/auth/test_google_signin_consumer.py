@@ -545,7 +545,10 @@ class TestGoogleSigninCallback:
             )
 
         assert response.status_code == http.HTTPStatus.FOUND
-        assert response.headers["location"] == "https://app.example.com/onboarding"
+        assert (
+            response.headers["location"]
+            == "https://app.example.com/onboarding?google_signin=user"
+        )
         cookies = _set_cookie_headers(response)
         assert any("session=" in c and "HttpOnly" in c for c in cookies)
         assert any("oauth_state=" in c and "Max-Age=0" in c for c in cookies)
@@ -580,7 +583,7 @@ class TestGoogleSigninCallback:
             )
 
         assert response.status_code == http.HTTPStatus.FOUND
-        assert response.headers["location"] == "https://app.example.com/"
+        assert response.headers["location"] == "https://app.example.com/?google_signin=user"
         cookies = _set_cookie_headers(response)
         assert any("session=" in c and "HttpOnly" in c for c in cookies)
 

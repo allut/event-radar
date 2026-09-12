@@ -782,7 +782,10 @@ class TestGoogleSigninCallback:
             )
 
         assert response.status_code == http.HTTPStatus.FOUND
-        assert response.headers["location"] == "https://app.example.com/organizer/dashboard"
+        assert (
+            response.headers["location"]
+            == "https://app.example.com/organizer/dashboard?google_signin=organizer"
+        )
         cookies = _set_cookie_headers(response)
         assert any("organizer_session=" in c and "HttpOnly" in c for c in cookies)
         assert any(
