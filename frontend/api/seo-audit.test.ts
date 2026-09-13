@@ -46,13 +46,13 @@ function renderSnapshotHtml(meta: ReturnType<typeof buildSeoMeta>, jsonLd: objec
 }
 
 function renderLandingHtml(assetTags: string): string {
-  const meta = buildSeoMeta({ title: 'Mis toimub Tallinnas | What\'s on Radar', locale: 'et', path: '/', indexable: true });
+  const meta = buildSeoMeta({ title: 'Mis toimub Tallinnas | Event Radar', locale: 'et', path: '/', indexable: true });
   return renderSnapshotHtml(meta, buildWebsiteJsonLd('et'), assetTags);
 }
 
 function renderEventHtml(assetTags: string): string {
   const event = makeEvent({ id: 1, title: 'Jazz Night' });
-  const meta = buildSeoMeta({ title: 'Jazz Night – Kultuurikatel | What\'s on Radar', locale: 'et', path: '/events/1', indexable: true });
+  const meta = buildSeoMeta({ title: 'Jazz Night – Kultuurikatel | Event Radar', locale: 'et', path: '/events/1', indexable: true });
   return renderSnapshotHtml(meta, buildEventJsonLd(event), assetTags);
 }
 

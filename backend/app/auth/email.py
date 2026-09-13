@@ -69,6 +69,7 @@ async def send_magic_link(
             headers={AUTHORIZATION_HEADER: f"{BEARER_PREFIX}{settings.RESEND_API_KEY}"},
             json={
                 "from": settings.RESEND_FROM_ADDRESS,
+                "reply_to": settings.CONTACT_TO_ADDRESS,
                 "to": [to_email],
                 "subject": subject,
                 "html": html,

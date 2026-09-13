@@ -18,7 +18,7 @@ describe('Footer', () => {
     expect(screen.getByText(/Tallinn/)).toBeInTheDocument();
 
     // Brand links back to the consumer site
-    expect(screen.getByRole('link', { name: "What's on Radar" })).toHaveAttribute('href', '/');
+    expect(screen.getByRole('link', { name: 'Event Radar' })).toHaveAttribute('href', '/');
 
     // Legal links point at the stub routes
     expect(screen.getByRole('link', { name: 'Privacy' })).toHaveAttribute('href', '/privacy');
@@ -70,7 +70,7 @@ describe('Footer', () => {
   it('carries the current locale prefix into every link, with no pathPattern (mirrors Footer being mounted outside <Routes> in App.tsx)', () => {
     renderWithProviders(<Footer />, { route: '/ru/contact' });
 
-    expect(screen.getByRole('link', { name: "What's on Radar" })).toHaveAttribute('href', '/ru');
+    expect(screen.getByRole('link', { name: 'Event Radar' })).toHaveAttribute('href', '/ru');
     expect(screen.getByRole('link', { name: 'Privacy' })).toHaveAttribute('href', '/ru/privacy');
     expect(screen.getByRole('link', { name: 'Terms' })).toHaveAttribute('href', '/ru/terms');
     expect(screen.getByRole('link', { name: 'Contact' })).toHaveAttribute('href', '/ru/contact');

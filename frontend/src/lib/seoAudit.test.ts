@@ -57,14 +57,14 @@ function renderSnapshotHtml(meta: ReturnType<typeof buildSeoMeta>, jsonLd: objec
 }
 
 function renderLandingHtml(): string {
-  const meta = buildSeoMeta({ title: 'Mis toimub Tallinnas | What\'s on Radar', locale: 'et', path: '/', indexable: true });
+  const meta = buildSeoMeta({ title: 'Mis toimub Tallinnas | Event Radar', locale: 'et', path: '/', indexable: true });
   return renderSnapshotHtml(meta, buildWebsiteJsonLd('et'));
 }
 
 function renderEventHtml(eventId = 1): string {
   const event = makeEvent({ id: eventId, title: 'Jazz Night' });
   const meta = buildSeoMeta({
-    title: 'Jazz Night – Kultuurikatel | What\'s on Radar',
+    title: 'Jazz Night – Kultuurikatel | Event Radar',
     locale: 'et',
     path: `/events/${eventId}`,
     indexable: true,
@@ -73,7 +73,7 @@ function renderEventHtml(eventId = 1): string {
 }
 
 function renderExploreHtml(locale: string, events = [makeEvent({ id: 1 }), makeEvent({ id: 2 }), makeEvent({ id: 3 })]): string {
-  const meta = buildSeoMeta({ title: 'Explore | What\'s on Radar', locale, path: '/explore', indexable: true });
+  const meta = buildSeoMeta({ title: 'Explore | Event Radar', locale, path: '/explore', indexable: true });
   return renderSnapshotHtml(meta, buildExploreItemListJsonLd(events, locale));
 }
 

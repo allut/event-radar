@@ -34,7 +34,7 @@ EMAIL_DOCUMENT = """\
 </body></html>"""
 
 DIGEST_HEADER = """\
-<p style="{s_eyebrow}">WHAT'S ON RADAR</p>
+<p style="{s_eyebrow}">EVENT RADAR</p>
 <h1 style="{s_h1}">{subject_label}</h1>
 <p style="{s_date}">{date_str}</p>
 <table role="presentation" align="center" cellpadding="0" cellspacing="0" border="0" style="{s_feed_btn_wrap}"><tr><td>
@@ -43,12 +43,12 @@ DIGEST_HEADER = """\
 
 DIGEST_FOOTER = """\
 <a href="{unsubscribe_url}" style="{s_footer_link}">{settings_label}</a>
-&nbsp;·&nbsp; What's on Radar, Tallinn"""
+&nbsp;·&nbsp; Event Radar, Tallinn"""
 
 DIGEST_EMPTY_STATE = "<p>{text}</p>"
 
 MAGIC_LINK_HEADER = """\
-<p style="{s_eyebrow}">WHAT'S ON RADAR</p>
+<p style="{s_eyebrow}">EVENT RADAR</p>
 <h1 style="{s_h1}">{heading}</h1>"""
 
 MAGIC_LINK_BODY = """\
@@ -58,10 +58,10 @@ MAGIC_LINK_BODY = """\
 </td></tr></table>
 <p style="{s_muted_note}">{ignore_note}</p>"""
 
-EMAIL_FOOTER_BRAND = "What's on Radar, Tallinn"
+EMAIL_FOOTER_BRAND = "Event Radar, Tallinn"
 
 REPORT_OUTCOME_HEADER = """\
-<p style="{s_eyebrow}">WHAT'S ON RADAR</p>
+<p style="{s_eyebrow}">EVENT RADAR</p>
 <h1 style="{s_h1}">{heading}</h1>"""
 
 REPORT_OUTCOME_BODY = """\

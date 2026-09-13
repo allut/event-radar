@@ -17,7 +17,7 @@ const enDoc: LegalDoc = {
           kind: 'ul',
           items: [
             ['A plain bullet.'],
-            [{ text: 'contact@whatsonradar.com', href: 'mailto:contact@whatsonradar.com' }],
+            [{ text: 'contact@eventradar.ee', href: 'mailto:contact@eventradar.ee' }],
           ],
         },
       ],
@@ -87,8 +87,8 @@ describe('LegalPage', () => {
 
     // Bullet list with an inline mailto link.
     expect(screen.getAllByRole('listitem').length).toBeGreaterThanOrEqual(1);
-    const link = screen.getByRole('link', { name: 'contact@whatsonradar.com' });
-    expect(link).toHaveAttribute('href', 'mailto:contact@whatsonradar.com');
+    const link = screen.getByRole('link', { name: 'contact@eventradar.ee' });
+    expect(link).toHaveAttribute('href', 'mailto:contact@eventradar.ee');
   });
 
   it('swaps the loaded doc when the locale changes', async () => {

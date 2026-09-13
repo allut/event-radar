@@ -575,7 +575,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 # first-party HTML/script surface"; this makes that statement true everywhere.
 _docs_enabled = settings.APP_ENV == APP_ENV_DEVELOPMENT
 app = FastAPI(
-    title="What's on Radar API",
+    title="Event Radar API",
     version=APP_VERSION,
     lifespan=lifespan,
     docs_url="/docs" if _docs_enabled else None,

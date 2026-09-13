@@ -9,7 +9,7 @@ describe('OrganizerTopBar', () => {
       <OrganizerTopBar locale="en" onLocaleChange={vi.fn()} onLogout={vi.fn()} />,
     );
 
-    expect(screen.getByRole('link', { name: "What's on Radar" })).toHaveAttribute('href', '/');
+    expect(screen.getByRole('link', { name: 'Event Radar' })).toHaveAttribute('href', '/');
     expect(screen.getByRole('link', { name: 'Your events' })).toHaveAttribute(
       'href',
       '/organizer/dashboard',

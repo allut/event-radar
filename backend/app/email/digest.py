@@ -282,6 +282,7 @@ async def send_digest_email(
                 },
                 json_body={
                     "from": settings.RESEND_FROM_ADDRESS,
+                    "reply_to": settings.CONTACT_TO_ADDRESS,
                     "to": [to_email],
                     "subject": subject,
                     "html": html,
