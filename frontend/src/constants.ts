@@ -312,7 +312,7 @@ export const PRERENDER_CADENCE_TOKEN_HEADER = 'x-prerender-cadence-token';
 
 // ─── Analytics ───────────────────────────────────────────────────────────────
 // Matches `/events/:id` (bare or locale-prefixed, e.g. `/en/events/:id`) so
-// Vercel Analytics groups all event detail views under one route instead of
+// Google Analytics groups all event detail views under one route instead of
 // one row per event id — the locale prefix itself is captured (group 1) and
 // kept by maskAnalyticsUrl's replacement, so en/et/ru still group separately.
 // Applied to a pathname with query/hash already stripped (see

@@ -1,0 +1,16 @@
+# Cloudflare Pages build config, checked in as the source of truth for the
+# platform (mirrors how ../render.yaml is checked in for the backend).
+#
+# Static SPA build only (issue #343) — no Pages Functions, no build-time
+# Playwright prerender yet (both are later tickets). The `npm run build`
+# script already gates its own prerender pass on `$VERCEL`, which is unset
+# here, so Cloudflare's plain build naturally skips it without extra flags.
+name = "event-radar"
+compatibility_date = "2025-01-01"
+pages_build_output_dir = "dist"
+
+[build]
+command = "npm run build"
+
+[vars]
+NODE_VERSION = "20"

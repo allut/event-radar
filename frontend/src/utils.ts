@@ -41,7 +41,7 @@ export function isOrganizerPortalPath(pathname: string): boolean {
   return /\/organizer(\/|$)/.test(pathname);
 }
 
-/** Reshapes a URL before it's forwarded to Vercel Analytics: strips the query string and
+/** Reshapes a URL before it's forwarded to Google Analytics: strips the query string and
  * hash (query params can carry sensitive values — the /auth/verify magic-link token, an
  * /explore free-text search — that must never reach a third-party analytics vendor) and
  * groups `/events/:id` under one row instead of one per event id. */

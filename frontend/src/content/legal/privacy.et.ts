@@ -71,7 +71,7 @@ const doc: LegalDoc = {
         {
           kind: 'p',
           content: [
-            'Kasutame üht rangelt vajalikku küpsist: allkirjastatud, httpOnly sessiooniküpsist, mis hoiab sind sisse logituna. Sellel pole reklaami- ega jälgimiseesmärki ja lehel töötavad skriptid ei saa seda lugeda. Kuna see on teenuse toimimiseks rangelt vajalik, ei ole küpsiste nõusolekuriba vaja. Kui logid sisse Google’iga, paneme sisselogimise lõpuleviimise mõneks minutiks ka teise rangelt vajaliku küpsise — allkirjastatud, httpOnly, ühekordse olekuküpsise, mis kaitseb sisselogimist saidiülese võltsimise (CSRF) eest; see kustutatakse kohe pärast sisselogimise lõppu, olenemata tulemusest, ja ükski Google’i seatud küpsis ei puuduta kunagi meie saiti. Sinu keelevalik ja tõeväärtuslipp "oled sisse logitud", mis ei sisalda mandaati, salvestatakse sinu brauseri kohalikku salvestusruumi. Meie kasutus- ja jõudlusanalüütika (Vercel Web Analytics, Speed Insights ja Google Analytics) on küpsisevaba ja koondatud; lehe URL-id maskeeritakse enne mis tahes analüütikapakkujani jõudmist, nii et ühtki sündmuse tunnust ega sessiooni mandaati ei saadeta kunagi, ning Google Analytics on seadistatud nii, et see ei pane kunagi püsivat identifitseerimisküpsist.',
+            'Kasutame üht rangelt vajalikku küpsist: allkirjastatud, httpOnly sessiooniküpsist, mis hoiab sind sisse logituna. Sellel pole reklaami- ega jälgimiseesmärki ja lehel töötavad skriptid ei saa seda lugeda. Kuna see on teenuse toimimiseks rangelt vajalik, ei ole küpsiste nõusolekuriba vaja. Kui logid sisse Google’iga, paneme sisselogimise lõpuleviimise mõneks minutiks ka teise rangelt vajaliku küpsise — allkirjastatud, httpOnly, ühekordse olekuküpsise, mis kaitseb sisselogimist saidiülese võltsimise (CSRF) eest; see kustutatakse kohe pärast sisselogimise lõppu, olenemata tulemusest, ja ükski Google’i seatud küpsis ei puuduta kunagi meie saiti. Sinu keelevalik ja tõeväärtuslipp "oled sisse logitud", mis ei sisalda mandaati, salvestatakse sinu brauseri kohalikku salvestusruumi. Meie kasutusanalüütika (Google Analytics) on küpsisevaba ja koondatud; lehe URL-id maskeeritakse enne mis tahes analüütikapakkujani jõudmist, nii et ühtki sündmuse tunnust ega sessiooni mandaati ei saadeta kunagi, ning Google Analytics on seadistatud nii, et see ei pane kunagi püsivat identifitseerimisküpsist.',
           ],
         },
       ],
@@ -90,7 +90,7 @@ const doc: LegalDoc = {
           items: [
             ['Neon — andmebaasi majutus (ELi piirkond, Frankfurt, Saksamaa).'],
             ['Render — taustarakenduse majutus.'],
-            ['Vercel — esiliidese majutus ja ülalnimetatud küpsisevaba Vercel analüütika.'],
+            ['Vercel — esiliidese majutus.'],
             ['Google — ülalnimetatud küpsisevaba Google Analytics ning, kui kasutad Google’iga sisselogimist, sinu sisselogimisidentiteedi kinnitamine. Sisselogimisel tegutseb Google kahes rollis: meie volitatud töötlejana loa väljastamisel ning iseseisvalt — oma identiteedipakkuja rollis, mitte meie juhiste alusel —, kui ta kinnitab, kes sa oled.'],
             ['Resend — sisselogimise ja kokkuvõtte e-kirjade edastamine.'],
           ],
