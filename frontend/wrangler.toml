@@ -1,12 +1,23 @@
 # Cloudflare Pages build config, checked in as the source of truth for the
 # platform (mirrors how ../render.yaml is checked in for the backend).
 #
-# Static SPA build only (issue #343) — no Pages Functions, no build-time
-# Playwright prerender yet (both are later tickets). The `npm run build`
-# script already gates its own prerender pass on `$VERCEL`, which is unset
-# here, so Cloudflare's plain build naturally skips it without extra flags.
+# Static SPA build (issue #343) plus, as of issue #344, the two Pages
+# Functions under functions/api/ (seo-audit, prerender-cadence) — Cloudflare
+# auto-routes anything under functions/ by convention, with no opt-in step
+# (unlike Vercel's vercel.json rewrite exclusion, which is what currently
+# gates the still-live Vercel copies of this same logic). No build-time
+# Playwright prerender yet (a later ticket). The `npm run build` script
+# already gates its own prerender pass on `$VERCEL`, which is unset here, so
+# Cloudflare's plain build naturally skips it without extra flags.
+#
+# `nodejs_compat` is required: seoAuditAuth.ts's `isValidAuditToken` (used by
+# both Pages Functions) imports `timingSafeEqual` from `node:crypto`, which
+# the Workers runtime only exposes with this flag set — without it, every
+# request to either function throws at import time. vitest doesn't catch
+# this because tests run under real Node, not the Workers runtime.
 name = "event-radar"
 compatibility_date = "2025-01-01"
+compatibility_flags = ["nodejs_compat"]
 pages_build_output_dir = "dist"
 
 [build]
