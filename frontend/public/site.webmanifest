@@ -1,6 +1,6 @@
 {
-  "name": "What's on Radar",
-  "short_name": "What's on Radar",
+  "name": "Event Radar",
+  "short_name": "Event Radar",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#13161e",

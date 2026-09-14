@@ -1,8 +1,8 @@
-# What's on Radar
+# Event Radar
 
 > AI-powered event discovery for Tallinn — a personalized **Daily 5** curated feed for every user.
 
-What's on Radar ingests events from Tallinn's ticketing platforms, venue sites, and organizer submissions, then deduplicates and classifies them with an LLM and ranks them against each user's personas and feedback. The result is a tight, five-event daily digest instead of an endless listings page — delivered in **Estonian, English, or Russian**.
+Event Radar ingests events from Tallinn's ticketing platforms, venue sites, and organizer submissions, then deduplicates and classifies them with an LLM and ranks them against each user's personas and feedback. The result is a tight, five-event daily digest instead of an endless listings page — delivered in **Estonian, English, or Russian**.
 
 The whole platform is designed to run on **free-tier infrastructure** at a steady-state cost of $0/month.
 

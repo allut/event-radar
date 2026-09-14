@@ -110,7 +110,7 @@ export const GOOGLE_MAPS_SEARCH_URL = 'https://www.google.com/maps/search/?api=1
 
 // Published contact / privacy (DSAR) address. Single source for the address used
 // by the Contact page copy and the legal documents.
-export const CONTACT_EMAIL = 'contact@whatsonradar.com';
+export const CONTACT_EMAIL = 'contact@eventradar.ee';
 
 // Footer social links. Placeholder https URLs (valid so safeUrl() passes) — swap
 // for the real handles later. Frontend-only presentation constant, not cross-stack.
@@ -142,7 +142,7 @@ export const LOCALE_URL_PREFIX_CODES: string[] = LOCALES
 // Absolute production origin — canonical/hreflang/og:url/og:image values are
 // meaningless as relative URLs (crawlers and link-unfurlers read them with no
 // browser location context), so useSeoMeta always resolves against this.
-export const PRODUCTION_ORIGIN = 'https://whatsonradar.com';
+export const PRODUCTION_ORIGIN = 'https://eventradar.ee';
 // Branded 1200×630 fallback OG image (frontend/public/og-fallback.png),
 // served whenever an event has no image_url — same asset for all locales.
 export const OG_FALLBACK_IMAGE_PATH = '/og-fallback.png';

@@ -42,7 +42,7 @@ describe('parseSnapshotHtml', () => {
       has_free_tier: false,
     });
     const meta = buildSeoMeta({
-      title: 'Jazz Night – Kultuurikatel | What\'s on Radar',
+      title: 'Jazz Night – Kultuurikatel | Event Radar',
       locale: 'et',
       path: '/events/1',
       indexable: true,
@@ -55,7 +55,7 @@ describe('parseSnapshotHtml', () => {
 
     const parsed = parseSnapshotHtml(html);
 
-    expect(parsed.title).toBe('Jazz Night – Kultuurikatel | What\'s on Radar');
+    expect(parsed.title).toBe('Jazz Night – Kultuurikatel | Event Radar');
     expect(parsed.canonical).toBe(`${PRODUCTION_ORIGIN}/events/1`);
     expect(parsed.hreflangs.et).toBe(`${PRODUCTION_ORIGIN}/events/1`);
     expect(parsed.hreflangs.en).toBe(`${PRODUCTION_ORIGIN}/en/events/1`);
@@ -175,7 +175,7 @@ describe('validateSnapshotStructure', () => {
   function validEventHtml(): string {
     const event = makeEvent({ title: 'Jazz Night' });
     const meta = buildSeoMeta({
-      title: 'Jazz Night – Kultuurikatel | What\'s on Radar',
+      title: 'Jazz Night – Kultuurikatel | Event Radar',
       locale: 'et',
       path: '/events/1',
       indexable: true,
@@ -190,13 +190,13 @@ describe('validateSnapshotStructure', () => {
   });
 
   it('catches a default/missing title', () => {
-    const parsed = parseSnapshotHtml('<html><head><title>What\'s on Radar</title></head><body></body></html>');
+    const parsed = parseSnapshotHtml('<html><head><title>Event Radar</title></head><body></body></html>');
     const issues = validateSnapshotStructure(parsed, { kind: 'event', locale: 'et', originPrefix: PRODUCTION_ORIGIN });
     expect(issues.some((i) => i.includes('app-shell default'))).toBe(true);
   });
 
   it('catches a missing canonical', () => {
-    const meta = buildSeoMeta({ title: 'Event | What\'s on Radar', locale: 'et', path: '/events/1' }); // indexable omitted -> noindex, no canonical
+    const meta = buildSeoMeta({ title: 'Event | Event Radar', locale: 'et', path: '/events/1' }); // indexable omitted -> noindex, no canonical
     const parsed = parseSnapshotHtml(renderSnapshotHtml(meta, buildEventJsonLd(makeEvent())));
     const issues = validateSnapshotStructure(parsed, { kind: 'event', locale: 'et', originPrefix: PRODUCTION_ORIGIN });
     expect(issues.some((i) => i.includes('canonical'))).toBe(true);

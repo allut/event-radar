@@ -8,7 +8,7 @@ the authenticator means rotating ADMIN_TOTP_SECRET (see docs/backend-ops.md).
 
 Run from backend/ with the venv active:
     python scripts/admin_totp_enroll.py
-    python scripts/admin_totp_enroll.py --account admin@whatsonradar.com
+    python scripts/admin_totp_enroll.py --account admin@eventradar.ee
 """
 
 import argparse
@@ -23,7 +23,7 @@ import qrcode  # type: ignore[import-untyped]
 
 # Matches the FastAPI app title / product name (CLAUDE.md's Project Overview) —
 # not worth a shared constant for a script that runs once per admin enrolled.
-ISSUER_NAME = "What's on Radar Admin"
+ISSUER_NAME = "Event Radar Admin"
 DEFAULT_ACCOUNT_NAME = "admin"
 
 

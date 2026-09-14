@@ -5,12 +5,12 @@ const AKI_URL = 'https://www.aki.ee';
 
 const doc: LegalDoc = {
   title: 'Privacy Policy',
-  lastUpdated: '2026-08-11',
+  lastUpdated: '2026-09-13',
   intro: [
     {
       kind: 'p',
       content: [
-        'What’s on Radar ("we", "us", "the Service") is an event-discovery service for Tallinn, Estonia. This policy explains what personal data we collect, why, how long we keep it, who we share it with, and the rights you have under the EU General Data Protection Regulation (GDPR).',
+        'Event Radar ("we", "us", "the Service") is an event-discovery service for Tallinn, Estonia. This policy explains what personal data we collect, why, how long we keep it, who we share it with, and the rights you have under the EU General Data Protection Regulation (GDPR).',
       ],
     },
   ],
@@ -21,7 +21,7 @@ const doc: LegalDoc = {
         {
           kind: 'p',
           content: [
-            'The data controller is Aleksei Lutkov, operating What’s on Radar as a sole trader in Estonia. For any privacy question or to exercise your rights, contact ',
+            'The data controller is Aleksei Lutkov, operating Event Radar as a sole trader in Estonia. For any privacy question or to exercise your rights, contact ',
             { text: CONTACT_EMAIL, href: CONTACT_MAILTO },
             '.',
           ],

@@ -5,12 +5,12 @@ const AKI_URL = 'https://www.aki.ee';
 
 const doc: LegalDoc = {
   title: 'Privaatsuspoliitika',
-  lastUpdated: '2026-08-11',
+  lastUpdated: '2026-09-13',
   intro: [
     {
       kind: 'p',
       content: [
-        'What’s on Radar ("meie", "meid", "teenus") on sündmuste avastamise teenus Tallinnas, Eestis. See poliitika selgitab, milliseid isikuandmeid me kogume, miks, kui kaua me neid säilitame, kellega jagame ning millised õigused sul on ELi isikuandmete kaitse üldmääruse (GDPR) alusel.',
+        'Event Radar ("meie", "meid", "teenus") on sündmuste avastamise teenus Tallinnas, Eestis. See poliitika selgitab, milliseid isikuandmeid me kogume, miks, kui kaua me neid säilitame, kellega jagame ning millised õigused sul on ELi isikuandmete kaitse üldmääruse (GDPR) alusel.',
       ],
     },
   ],
@@ -21,7 +21,7 @@ const doc: LegalDoc = {
         {
           kind: 'p',
           content: [
-            'Vastutav töötleja on Aleksei Lutkov, kes haldab What’s on Radarit füüsilisest isikust ettevõtjana Eestis. Privaatsusküsimuste või oma õiguste kasutamiseks võta ühendust ',
+            'Vastutav töötleja on Aleksei Lutkov, kes haldab Event Radarit füüsilisest isikust ettevõtjana Eestis. Privaatsusküsimuste või oma õiguste kasutamiseks võta ühendust ',
             { text: CONTACT_EMAIL, href: CONTACT_MAILTO },
             '.',
           ],

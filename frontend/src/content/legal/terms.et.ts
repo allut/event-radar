@@ -5,7 +5,7 @@ const ODR_URL = 'https://ec.europa.eu/consumers/odr';
 
 const doc: LegalDoc = {
   title: 'Kasutustingimused',
-  lastUpdated: '2026-07-24',
+  lastUpdated: '2026-09-13',
   intro: [],
   sections: [
     {
@@ -14,7 +14,7 @@ const doc: LegalDoc = {
         {
           kind: 'p',
           content: [
-            'What’s on Radarit ("teenus") kasutades nõustud nende tingimustega. Kui sa ei nõustu, palun ära kasuta teenust.',
+            'Event Radarit ("teenus") kasutades nõustud nende tingimustega. Kui sa ei nõustu, palun ära kasuta teenust.',
           ],
         },
       ],
@@ -25,7 +25,7 @@ const doc: LegalDoc = {
         {
           kind: 'p',
           content: [
-            'What’s on Radar on tasuta teenus, mis avastab, dubleeringutest puhastab ja isikupärastab avalikke sündmusi Tallinnas, Eestis, sealhulgas kureeritud "Päeva 5" voog ja valikuline e-posti kokkuvõte. Me koondame sündmuste teavet kolmandate osapoolte allikatest; me ei korralda, majuta ega müü sündmustele pileteid.',
+            'Event Radar on tasuta teenus, mis avastab, dubleeringutest puhastab ja isikupärastab avalikke sündmusi Tallinnas, Eestis, sealhulgas kureeritud "Päeva 5" voog ja valikuline e-posti kokkuvõte. Me koondame sündmuste teavet kolmandate osapoolte allikatest; me ei korralda, majuta ega müü sündmustele pileteid.',
           ],
         },
       ],

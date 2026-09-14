@@ -147,8 +147,8 @@ class Settings(BaseSettings):
     RESEND_API_KEY: str = (
         ""  # Resend API key for transactional email; empty = log-only (dev)
     )
-    RESEND_FROM_ADDRESS: str = "What's on Radar <onboarding@resend.dev>"
-    CONTACT_TO_ADDRESS: str = "contact@whatsonradar.com"  # owner inbox for contact-form mail
+    RESEND_FROM_ADDRESS: str = "Event Radar <noreply@send.eventradar.ee>"
+    CONTACT_TO_ADDRESS: str = "contact@eventradar.ee"  # owner inbox for contact-form mail
     FRONTEND_URL: str = "http://localhost:5173"  # Base URL for magic-link verification
     BACKEND_URL: str = "http://localhost:8000"  # Absolute API host — needed by the
     # RFC 8058 List-Unsubscribe email header, which mail providers call server-side

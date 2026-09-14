@@ -5,10 +5,10 @@ from __future__ import annotations
 
 TRANSLATIONS: dict[str, dict[str, str]] = {
     "et": {
-        "email.magic_link.subject": "Sinu What's on Radar sisselogimislink",
+        "email.magic_link.subject": "Sinu Event Radar sisselogimislink",
         "email.magic_link.heading": "Logi sisse",
-        "email.magic_link.intro": "Klõpsa allpool, et rakendusse What's on Radar sisse logida. Link aegub {ttl_minutes} minuti pärast.",
-        "email.magic_link.cta": "Logi sisse rakendusse What's on Radar",
+        "email.magic_link.intro": "Klõpsa allpool, et rakendusse Event Radar sisse logida. Link aegub {ttl_minutes} minuti pärast.",
+        "email.magic_link.cta": "Logi sisse rakendusse Event Radar",
         "email.magic_link.ignore_note": "Kui sa seda ei palunud, ignoreeri seda kirja.",
         "email.report_outcome.subject": "Uuendus sinu teatele",
         "email.report_outcome.heading": "Teade vaadatud",
@@ -27,10 +27,10 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "digest.tickets": "Hangi piletid →",
     },
     "en": {
-        "email.magic_link.subject": "Your What's on Radar sign-in link",
+        "email.magic_link.subject": "Your Event Radar sign-in link",
         "email.magic_link.heading": "Sign in",
         "email.magic_link.intro": "Click below to sign in. This link expires in {ttl_minutes} minutes.",
-        "email.magic_link.cta": "Sign in to What's on Radar",
+        "email.magic_link.cta": "Sign in to Event Radar",
         "email.magic_link.ignore_note": "If you didn't request this, ignore this email.",
         "email.report_outcome.subject": "Update on your report",
         "email.report_outcome.heading": "Report reviewed",
@@ -49,10 +49,10 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "digest.tickets": "Get tickets →",
     },
     "ru": {
-        "email.magic_link.subject": "Ваша ссылка для входа в What's on Radar",
+        "email.magic_link.subject": "Ваша ссылка для входа в Event Radar",
         "email.magic_link.heading": "Вход",
-        "email.magic_link.intro": "Нажмите ниже, чтобы войти в What's on Radar. Ссылка действительна {ttl_minutes} минут.",
-        "email.magic_link.cta": "Войти в What's on Radar",
+        "email.magic_link.intro": "Нажмите ниже, чтобы войти в Event Radar. Ссылка действительна {ttl_minutes} минут.",
+        "email.magic_link.cta": "Войти в Event Radar",
         "email.magic_link.ignore_note": "Если вы не запрашивали это, проигнорируйте письмо.",
         "email.report_outcome.subject": "Обновление по вашей жалобе",
         "email.report_outcome.heading": "Жалоба рассмотрена",

@@ -1,4 +1,4 @@
-# What's on Radar
+# Event Radar
 
 AI-powered event discovery for Tallinn. This glossary pins the project's
 domain language so code, issues, and docs use one word per concept.

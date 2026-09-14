@@ -187,7 +187,7 @@ describe('buildWebsiteJsonLd', () => {
     expect(jsonLd).toEqual({
       '@context': 'https://schema.org',
       '@type': 'WebSite',
-      name: "What's on Radar",
+      name: 'Event Radar',
       url: `${PRODUCTION_ORIGIN}/`,
       inLanguage: 'et',
     });

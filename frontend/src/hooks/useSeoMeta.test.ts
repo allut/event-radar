@@ -4,16 +4,16 @@ import { PRODUCTION_ORIGIN } from '../constants';
 
 describe('buildSeoMeta', () => {
   it('defaults to noindex with no OG/canonical/hreflang for a non-indexable route', () => {
-    const meta = buildSeoMeta({ title: 'Settings | What\'s on Radar', locale: 'et', path: '/settings' });
+    const meta = buildSeoMeta({ title: 'Settings | Event Radar', locale: 'et', path: '/settings' });
 
-    expect(meta.title).toBe('Settings | What\'s on Radar');
+    expect(meta.title).toBe('Settings | Event Radar');
     expect(meta.htmlLang).toBe('et');
     expect(meta.metaTags).toEqual([{ name: 'robots', content: 'noindex' }]);
     expect(meta.links).toEqual([]);
   });
 
   it('resolves htmlLang per the resolved route locale, not the bare Estonian default', () => {
-    const meta = buildSeoMeta({ title: 'Explore | What\'s on Radar', locale: 'ru', path: '/ru/explore' });
+    const meta = buildSeoMeta({ title: 'Explore | Event Radar', locale: 'ru', path: '/ru/explore' });
     expect(meta.htmlLang).toBe('ru');
     expect(meta.metaTags).toEqual([{ name: 'robots', content: 'noindex' }]);
   });

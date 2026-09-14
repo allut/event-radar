@@ -5,7 +5,7 @@ const ODR_URL = 'https://ec.europa.eu/consumers/odr';
 
 const doc: LegalDoc = {
   title: 'Terms of Service',
-  lastUpdated: '2026-07-24',
+  lastUpdated: '2026-09-13',
   intro: [],
   sections: [
     {
@@ -14,7 +14,7 @@ const doc: LegalDoc = {
         {
           kind: 'p',
           content: [
-            'By using What’s on Radar (the "Service") you agree to these Terms. If you do not agree, please do not use the Service.',
+            'By using Event Radar (the "Service") you agree to these Terms. If you do not agree, please do not use the Service.',
           ],
         },
       ],
@@ -25,7 +25,7 @@ const doc: LegalDoc = {
         {
           kind: 'p',
           content: [
-            'What’s on Radar is a free service that discovers, deduplicates and personalises public events in Tallinn, Estonia, including a curated "Daily 5" feed and an optional email digest. We aggregate event information from third-party sources; we do not organise, host, or sell tickets to events.',
+            'Event Radar is a free service that discovers, deduplicates and personalises public events in Tallinn, Estonia, including a curated "Daily 5" feed and an optional email digest. We aggregate event information from third-party sources; we do not organise, host, or sell tickets to events.',
           ],
         },
       ],
