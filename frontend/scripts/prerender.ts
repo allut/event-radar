@@ -2,7 +2,7 @@
  * Build-time static-prerender step (issue #50) — added to, not replacing,
  * `vite build`. Boots the just-built dist/ under `vite preview`, drives it
  * with Playwright, and writes a fully-rendered HTML snapshot per route to
- * dist/, so Vercel serves real content to crawlers/link-unfurlers instead of
+ * dist/, so the host serves real content to crawlers/link-unfurlers instead of
  * the empty CSR shell for Landing and every published /events/:id, across
  * all three locale-prefixed URL variants.
  *
@@ -44,6 +44,7 @@ import {
   LOCALE_URL_PREFIX_CODES,
   LOCALES,
   OG_FALLBACK_IMAGE_PATH,
+  PRERENDER_CADENCE_GIT_BRANCH,
   PRERENDER_CHAIN_GITHUB_REPO,
   PRERENDER_DIAGNOSTIC_EVENT_MAX_LENGTH,
   PRERENDER_ERROR_SELECTOR,
@@ -708,39 +709,50 @@ async function validateTarget(target: PrerenderTarget): Promise<string[]> {
   return issues.map((issue) => `${localizedPath(target.bare, target.locale)} — ${issue}`);
 }
 
-/** Commits `marker` to the branch the Vercel Deploy Hook targets (issue #83),
- * advancing the git ref so a later chained round (issue #84) can re-fire the
- * hook against a genuinely new version rather than colliding with Vercel's
- * same-version-cancellation behavior. Uses the GitHub Git Data API — not a
- * local `git push` — since the Vercel build environment's checkout has no
- * guaranteed push credentials; mirrors api/seo-audit.ts's plain-fetch
+/** Shared GitHub Git Data API request for everything in this chain-marker
+ * flow (commitRoundMarker's ref/tree/commit calls, fetchBuildCommitMessage's
+ * commit-message lookup) — one place to keep the auth/User-Agent shape
+ * consistent rather than re-deriving it at each call site. */
+function chainGithubRequest(token: string, path: string, init?: RequestInit): Promise<Response> {
+  return githubRequest(PRERENDER_CHAIN_GITHUB_REPO, path, token, 'event-radar-prerender-chain', init);
+}
+
+/** Commits `marker` to the branch the Deploy Hook targets (issue #83;
+ * extended to Cloudflare Pages under #346, alongside — not instead of — the
+ * original Vercel path, since Vercel stays live in parallel as the
+ * migration's rollback path — see isPreviewBuild's doc comment), advancing
+ * the git ref so a later chained round (issue #84) can re-fire the hook
+ * against a genuinely new version rather than colliding with the platform's
+ * same-version-cancellation behavior. `CF_PAGES_BRANCH` is preferred over
+ * `VERCEL_GIT_COMMIT_REF` when both happen to be set (never expected in
+ * practice — a single build runs on one platform); once Vercel is
+ * decommissioned (#341), the fallback can be dropped. Uses the GitHub Git
+ * Data API — not a local `git push` — since the build environment's checkout
+ * has no guaranteed push credentials; mirrors api/seo-audit.ts's plain-fetch
  * GH_ISSUE_TOKEN pattern rather than adding an SDK dependency. The new
  * commit reuses the branch tip's tree unchanged (no file diff — only the
  * marker embedded in the message changes), so this is effectively an empty
  * commit. No-ops with a log line (not a build failure) when
- * GH_PRERENDER_CHAIN_TOKEN/VERCEL_GIT_COMMIT_REF aren't set, e.g. local/dev
- * builds off Vercel — returns `false` in that case (as opposed to throwing,
+ * GH_PRERENDER_CHAIN_TOKEN/branch aren't set, e.g. local/dev builds off
+ * either platform — returns `false` in that case (as opposed to throwing,
  * its failure path) to distinguish "nothing was committed" from "the commit
  * succeeded". main() only calls this when shouldCommitRoundMarker(marker)
  * says the round is `continuing` (issue #101 — see that function's doc
  * comment for why a `done` round must never reach this call). The advanced
  * ref is this chain's sole continuation trigger (issue #89): the production
- * branch is Vercel-git-connected, so this push alone fires the next round's
- * build — no separate Deploy Hook call is needed or made. */
+ * branch is git-connected on both platforms, so this push alone fires the
+ * next round's build — no separate Deploy Hook call is needed or made. */
 async function commitRoundMarker(marker: RoundMarker): Promise<boolean> {
   const token = process.env.GH_PRERENDER_CHAIN_TOKEN;
-  const branch = process.env.VERCEL_GIT_COMMIT_REF;
+  const branch = process.env.CF_PAGES_BRANCH ?? process.env.VERCEL_GIT_COMMIT_REF;
   if (!token || !branch) {
     console.log(
-      'prerender: GH_PRERENDER_CHAIN_TOKEN/VERCEL_GIT_COMMIT_REF not set — skipping round-marker commit (not a Vercel build)',
+      'prerender: GH_PRERENDER_CHAIN_TOKEN/CF_PAGES_BRANCH/VERCEL_GIT_COMMIT_REF not set — skipping round-marker commit (not a Cloudflare Pages or Vercel build)',
     );
     return false;
   }
 
-  const chainGithubRequest = (path: string, init?: RequestInit): Promise<Response> =>
-    githubRequest(PRERENDER_CHAIN_GITHUB_REPO, path, token, 'event-radar-prerender-chain', init);
-
-  const refRes = await chainGithubRequest(`/git/ref/heads/${branch}`);
+  const refRes = await chainGithubRequest(token, `/git/ref/heads/${branch}`);
   if (!refRes.ok) {
     throw new Error(
       `prerender: failed to read ref heads/${branch} — ${refRes.status} ${refRes.statusText}`,
@@ -748,7 +760,7 @@ async function commitRoundMarker(marker: RoundMarker): Promise<boolean> {
   }
   const parentSha = ((await refRes.json()) as { object: { sha: string } }).object.sha;
 
-  const parentCommitRes = await chainGithubRequest(`/git/commits/${parentSha}`);
+  const parentCommitRes = await chainGithubRequest(token, `/git/commits/${parentSha}`);
   if (!parentCommitRes.ok) {
     throw new Error(
       `prerender: failed to read parent commit ${parentSha} — ${parentCommitRes.status} ${parentCommitRes.statusText}`,
@@ -759,7 +771,7 @@ async function commitRoundMarker(marker: RoundMarker): Promise<boolean> {
   const summary = `round ${marker.round} (${marker.status}) — ${marker.newlyRendered} rendered, ${marker.copiedForward} copied, ${marker.queueRemaining} queued`;
   const message = `prerender: ${summary}\n\n${serializeRoundMarker(marker)}`;
 
-  const commitRes = await chainGithubRequest('/git/commits', {
+  const commitRes = await chainGithubRequest(token, '/git/commits', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ message, tree: treeSha, parents: [parentSha] }),
@@ -771,7 +783,7 @@ async function commitRoundMarker(marker: RoundMarker): Promise<boolean> {
   }
   const newSha = ((await commitRes.json()) as { sha: string }).sha;
 
-  const updateRefRes = await chainGithubRequest(`/git/refs/heads/${branch}`, {
+  const updateRefRes = await chainGithubRequest(token, `/git/refs/heads/${branch}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ sha: newSha }),
@@ -823,36 +835,84 @@ export function logZeroProgressAbort(marker: RoundMarker): void {
   }
 }
 
-/** True on a Vercel Preview build (issue #95) — `VERCEL_ENV` is Vercel's own
- * build-time discriminator (`"production" | "preview" | "development"`),
- * auto-injected regardless of build type. Preview URLs aren't crawled or
- * linked externally, and `vercel.json`'s catch-all rewrite already serves
+/** True on a Preview build (issue #95; extended to Cloudflare Pages under
+ * #346, alongside — not instead of — the original Vercel check). The old
+ * Vercel deployment stays live in parallel as the migration's rollback path
+ * (#341's cutover-sequencing decision) until it's confirmed healthy and
+ * decommissioned, so its preview builds must keep skipping the expensive
+ * prerender pass exactly as before: `VERCEL_ENV` is Vercel's own
+ * build-time discriminator (`"production" | "preview" | "development"`).
+ * Cloudflare Pages exposes no equivalent dedicated flag (confirmed against
+ * Cloudflare's own build-config docs), only `CF_PAGES_BRANCH` (the branch
+ * this build's checkout is on), so a Cloudflare build infers it the same way
+ * Cloudflare's own guidance does: any branch other than the production
+ * branch (`PRERENDER_CADENCE_GIT_BRANCH`, 'release' — the same branch
+ * functions/api/prerender-cadence.ts already treats as production) is a
+ * preview build. Preview URLs aren't crawled or linked externally on either
+ * platform, and both platforms' own fallback routing already serves
  * `app-shell.html` for any route with no snapshot, so skipping prerendering
  * doesn't affect preview functionality. Also sidesteps `commitRoundMarker`
- * reading `VERCEL_GIT_COMMIT_REF` and committing a chain-state marker
- * against a preview branch ref. Local/dev runs (`VERCEL` unset) are
- * unaffected — `VERCEL_ENV` is never set there either. */
+ * committing a chain-state marker against a preview branch ref. Local/dev
+ * runs (neither `VERCEL_ENV` nor `CF_PAGES` set) are unaffected. Once Vercel
+ * is decommissioned (#341), the `VERCEL_ENV` check can be dropped. */
 export function isPreviewBuild(env: NodeJS.ProcessEnv = process.env): boolean {
-  return env.VERCEL_ENV === 'preview';
+  if (env.VERCEL_ENV === 'preview') return true;
+  return env.CF_PAGES === '1' && env.CF_PAGES_BRANCH !== PRERENDER_CADENCE_GIT_BRANCH;
+}
+
+/** Reads back this build's own commit message (issue #83; extended to
+ * Cloudflare Pages under #346, alongside — not instead of — the original
+ * Vercel path, since Vercel stays live in parallel as the migration's
+ * rollback path — see isPreviewBuild's doc comment). Vercel exposes the tip
+ * commit message directly via `VERCEL_GIT_COMMIT_MESSAGE`; Cloudflare Pages
+ * exposes no commit-message env var at all (confirmed against Cloudflare's
+ * build-config docs), only `CF_PAGES_COMMIT_SHA`, so a Cloudflare build
+ * looks the message up via GitHub's Git Data API for that exact sha — not a
+ * branch-tip lookup — so a commit landing on the production branch between
+ * checkout and this call can never be mistaken for this build's own
+ * chain-marker commit (see resolveRoundStart's doc comment in
+ * prerenderChain.ts for why the marker must belong to *this* build). Reuses
+ * GH_PRERENDER_CHAIN_TOKEN (already provisioned with read access for
+ * commitRoundMarker) rather than a separate token. Returns `null` — not a
+ * thrown error — when neither env var is set (local/dev, or a build off
+ * either platform), or on any fetch/parse failure, so a GitHub hiccup starts
+ * a fresh burst at round 1 instead of failing the whole build (mirrors
+ * functions/api/prerender-cadence.ts's `fetchTipCommitMessage`, which fails
+ * open the same way for the same reason). Once Vercel is decommissioned
+ * (#341), the `VERCEL_GIT_COMMIT_MESSAGE` branch can be dropped. */
+async function fetchBuildCommitMessage(env: NodeJS.ProcessEnv): Promise<string | null> {
+  if (env.VERCEL_GIT_COMMIT_MESSAGE) return env.VERCEL_GIT_COMMIT_MESSAGE;
+  const token = env.GH_PRERENDER_CHAIN_TOKEN;
+  const sha = env.CF_PAGES_COMMIT_SHA;
+  if (!token || !sha) return null;
+  try {
+    const res = await chainGithubRequest(token, `/git/commits/${sha}`);
+    if (!res.ok) return null;
+    const body = (await res.json()) as { message?: string };
+    return body.message ?? null;
+  } catch {
+    return null;
+  }
 }
 
 export async function main(): Promise<void> {
   if (isPreviewBuild()) {
-    console.log('prerender: VERCEL_ENV=preview — skipping prerender pass entirely (issue #95)');
+    console.log('prerender: CF_PAGES_BRANCH is a non-production branch — skipping prerender pass entirely (issue #95)');
     return;
   }
 
-  // Read back whatever VERCEL_GIT_COMMIT_MESSAGE carries from the tip commit
-  // at build start, before doing any rendering work, to resume mid-burst
-  // rather than always starting fresh at round 1 (issue #83). Since the
-  // round marker's git push is the only thing that triggers the next round's
-  // build (issue #89 removed the redundant Deploy Hook that used to fire a
-  // second, competing deployment of the same commit), a fresh `continuing`
-  // marker here is exactly the legitimate continuation it was committed for
-  // — see resolveRoundStart's doc comment (src/lib/prerenderChain.ts) for why
-  // it resumes at round + 1 instead of skipping (issue #90), and why a stale
-  // `continuing` marker still falls through to a fresh round 1.
-  const { burstId, round } = resolveRoundStart(process.env.VERCEL_GIT_COMMIT_MESSAGE, new Date());
+  // Read back this build's own commit message at build start, before doing
+  // any rendering work, to resume mid-burst rather than always starting
+  // fresh at round 1 (issue #83). Since the round marker's git push is the
+  // only thing that triggers the next round's build (issue #89 removed the
+  // redundant Deploy Hook that used to fire a second, competing deployment
+  // of the same commit), a fresh `continuing` marker here is exactly the
+  // legitimate continuation it was committed for — see resolveRoundStart's
+  // doc comment (src/lib/prerenderChain.ts) for why it resumes at round + 1
+  // instead of skipping (issue #90), and why a stale `continuing` marker
+  // still falls through to a fresh round 1.
+  const commitMessage = await fetchBuildCommitMessage(process.env);
+  const { burstId, round } = resolveRoundStart(commitMessage, new Date());
   console.log(`prerender: round ${round} of burst ${burstId}${round > 1 ? ' (resumed)' : ' (new)'}`);
 
   const candidates = await fetchPrerenderCandidates();
