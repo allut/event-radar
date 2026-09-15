@@ -17,6 +17,14 @@
  * `prerender.ts` overwrites `dist/index.html` with the Landing route's own
  * prerendered snapshot (APP_SHELL_FILENAME, src/constants.ts) — an unknown
  * client-side route must get the generic shell, not Landing's snapshot.
+ *
+ * `env.ASSETS.fetch()` applies Pages' own redirect rules to the requested
+ * path first, including its default `.html`-extension stripping — so
+ * fetching the `.html` filename directly gets back a 308 to the
+ * extensionless path instead of the shell's content, which this function
+ * would then hand straight to the browser as a visible redirect. Request
+ * the extensionless "pretty path" instead, matching what Cloudflare's docs
+ * say ASSETS.fetch expects.
  */
 import { APP_SHELL_FILENAME } from '../src/constants.js';
 import type { PagesFunction } from './_shared/cloudflare.js';
@@ -30,6 +38,7 @@ export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
     return new Response(null, { status: 405 });
   }
 
-  const shellUrl = new URL(`/${APP_SHELL_FILENAME}`, request.url);
+  const shellPath = APP_SHELL_FILENAME.replace(/\.html$/, '');
+  const shellUrl = new URL(`/${shellPath}`, request.url);
   return env.ASSETS.fetch(new Request(shellUrl, request));
 };
