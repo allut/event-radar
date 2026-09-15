@@ -23,6 +23,18 @@
  * `functions/api/[[path]].ts` (or its exact-path siblings) before they ever
  * reach here — no negative-lookahead exclusion needed, unlike vercel.json.
  *
+ * Post-cutover production incident (2026-09-15, ~2 weeks after #345/#354
+ * shipped): that documented Functions-vs-asset and Function-specificity
+ * precedence did not hold in practice either — every /api/* request on
+ * eventradar.ee was being answered with this file's own SPA-fallback HTML
+ * (the prerendered Landing page, since that's what dist/index.html is)
+ * without ever reaching functions/api/[[path]].ts or the Render backend.
+ * Unlike the #354 static-asset case, a Function can't self-defend against
+ * never being invoked at all — so public/_routes.json now explicitly forces
+ * every request through Pages Functions (include: ["/*"]), removing any
+ * dependence on Cloudflare's implicit, apparently-unreliable default
+ * precedence between static assets and Functions.
+ *
  * Deliberately serves `app-shell.html`, not `index.html`, once a route is
  * confirmed to have no real asset: the build copies the pristine,
  * never-prerendered shell to `app-shell.html` *before* `prerender.ts`
