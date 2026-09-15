@@ -2,8 +2,6 @@ import { lazy, Suspense, useEffect } from 'react';
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { HelmetProvider } from 'react-helmet-async';
-import { Analytics } from '@vercel/analytics/react';
-import { SpeedInsights } from '@vercel/speed-insights/react';
 import { useAuth } from './hooks/useAuth';
 import { useOrganizerAuth } from './hooks/useOrganizerAuth';
 import { useLocalePath } from './hooks/useLocalePath';
@@ -198,8 +196,6 @@ export default function App() {
               <Route path="/:locale/*" element={<Protected><NotFound /></Protected>} />
             </Routes>
             <ConditionalFooter />
-            <Analytics beforeSend={(e) => ({ ...e, url: maskAnalyticsUrl(e.url) })} />
-            <SpeedInsights beforeSend={(e) => ({ ...e, url: maskAnalyticsUrl(e.url) })} />
             <GoogleAnalytics />
           </BrowserRouter>
         </QueryClientProvider>

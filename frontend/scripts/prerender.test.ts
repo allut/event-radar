@@ -225,16 +225,31 @@ describe('logZeroProgressAbort', () => {
 });
 
 describe('isPreviewBuild', () => {
+  it('is true on Cloudflare Pages when the branch is not the production branch', () => {
+    expect(
+      isPreviewBuild({ CF_PAGES: '1', CF_PAGES_BRANCH: 'some-feature-branch' } as NodeJS.ProcessEnv),
+    ).toBe(true);
+  });
+
+  it('is false on Cloudflare Pages for the production branch', () => {
+    expect(isPreviewBuild({ CF_PAGES: '1', CF_PAGES_BRANCH: 'release' } as NodeJS.ProcessEnv)).toBe(
+      false,
+    );
+  });
+
+  it('is false for local/dev runs where CF_PAGES is unset', () => {
+    expect(isPreviewBuild({} as NodeJS.ProcessEnv)).toBe(false);
+    expect(isPreviewBuild({ CF_PAGES_BRANCH: 'some-feature-branch' } as NodeJS.ProcessEnv)).toBe(false);
+  });
+
+  // Vercel stays live in parallel as the migration's rollback path (#341)
+  // until decommissioned — its preview check must keep working unchanged.
   it('is true when VERCEL_ENV is preview', () => {
     expect(isPreviewBuild({ VERCEL_ENV: 'preview' } as NodeJS.ProcessEnv)).toBe(true);
   });
 
-  it('is false for production', () => {
+  it('is false on Vercel for production', () => {
     expect(isPreviewBuild({ VERCEL_ENV: 'production' } as NodeJS.ProcessEnv)).toBe(false);
-  });
-
-  it('is false for local/dev runs where VERCEL_ENV is unset', () => {
-    expect(isPreviewBuild({} as NodeJS.ProcessEnv)).toBe(false);
   });
 });
 
@@ -362,6 +377,8 @@ describe('fetchLiveExploreCount (issue #236)', () => {
 describe('main — Preview short-circuit (issue #95)', () => {
   let logSpy: ReturnType<typeof vi.spyOn>;
   let fetchSpy: ReturnType<typeof vi.spyOn>;
+  const originalCfPages = process.env.CF_PAGES;
+  const originalCfPagesBranch = process.env.CF_PAGES_BRANCH;
   const originalVercelEnv = process.env.VERCEL_ENV;
 
   beforeEach(() => {
@@ -373,13 +390,31 @@ describe('main — Preview short-circuit (issue #95)', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
-    if (originalVercelEnv === undefined) {
-      delete process.env.VERCEL_ENV;
-    } else {
-      process.env.VERCEL_ENV = originalVercelEnv;
+    for (const [key, original] of [
+      ['CF_PAGES', originalCfPages],
+      ['CF_PAGES_BRANCH', originalCfPagesBranch],
+      ['VERCEL_ENV', originalVercelEnv],
+    ] as const) {
+      if (original === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = original;
+      }
     }
   });
 
+  it('exits before any rendering, sitemap/robots, validation, or fetch work on a non-production Cloudflare Pages branch', async () => {
+    process.env.CF_PAGES = '1';
+    process.env.CF_PAGES_BRANCH = 'some-feature-branch';
+
+    await expect(main()).resolves.toBeUndefined();
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('skipping prerender pass'));
+  });
+
+  // Vercel stays live in parallel as the migration's rollback path (#341)
+  // until decommissioned — its preview build must keep skipping too.
   it('exits before any rendering, sitemap/robots, validation, or fetch work when VERCEL_ENV=preview', async () => {
     process.env.VERCEL_ENV = 'preview';
 

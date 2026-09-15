@@ -1,0 +1,48 @@
+# Cloudflare Pages build config, checked in as the source of truth for the
+# platform (mirrors how ../render.yaml is checked in for the backend).
+#
+# Static SPA build (issue #343) plus, as of issue #344, the two Pages
+# Functions under functions/api/ (seo-audit, prerender-cadence) — Cloudflare
+# auto-routes anything under functions/ by convention, with no opt-in step
+# (unlike Vercel's vercel.json rewrite exclusion, which is what currently
+# gates the still-live Vercel copies of this same logic). As of issue #346,
+# the build-time Playwright prerender pass (scripts/prerender.ts) also runs
+# here — the `npm run build` script's gate now checks `$CF_PAGES` (in
+# addition to `$VERCEL`), and unlike Vercel it does run `playwright install
+# chromium` first, since Cloudflare's build container has no
+# `@sparticuz/chromium`-style prebuilt binary and instead runs Playwright's
+# own bundled Chromium directly (the #340 spike confirmed `chromium.launch()`
+# succeeds in this container).
+#
+# CF_PAGES_BRANCH and CF_PAGES_COMMIT_SHA (both auto-injected by Cloudflare
+# Pages) join VERCEL_GIT_COMMIT_REF and VERCEL_GIT_COMMIT_MESSAGE for the
+# prerender-chain machinery (prerender.ts's isPreviewBuild/commitRoundMarker,
+# resolveRoundStart's commit-message read) — Cloudflare exposes neither a
+# dedicated preview/production flag nor a commit-message env var, so
+# isPreviewBuild infers preview from CF_PAGES_BRANCH against the production
+# branch, and the commit message is looked up via the GitHub API against
+# CF_PAGES_COMMIT_SHA instead. The Vercel-env-var paths are additive, not
+# replaced: the Vercel deployment stays live in parallel as the migration's
+# rollback path (#341) until decommissioned, so its own chain/preview
+# handling must keep working unchanged in the meantime.
+#
+# `nodejs_compat` is required: seoAuditAuth.ts's `isValidAuditToken` (used by
+# both Pages Functions) imports `timingSafeEqual` from `node:crypto`, which
+# the Workers runtime only exposes with this flag set — without it, every
+# request to either function throws at import time. vitest doesn't catch
+# this because tests run under real Node, not the Workers runtime.
+#
+# No [build] section: unlike Workers, Pages projects reject a "build" table
+# in wrangler.toml outright ("Configuration file for Pages projects does not
+# support \"build\"") — Wrangler fails config validation before the clone
+# even runs a build. The build command (`npm run build`) and root directory
+# live in the Cloudflare Pages dashboard's per-project build configuration
+# instead; only `pages_build_output_dir` and `[vars]` are read from this file
+# for a Pages project.
+name = "event-radar"
+compatibility_date = "2025-01-01"
+compatibility_flags = ["nodejs_compat"]
+pages_build_output_dir = "dist"
+
+[vars]
+NODE_VERSION = "20"

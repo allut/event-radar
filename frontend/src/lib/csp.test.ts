@@ -3,20 +3,34 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { cspScriptSrcSources, inlineScriptHashes } from './csp';
 
-// Reads the real frontend/index.html and frontend/vercel.json off disk (not
-// fixtures) — a drift guard is only load-bearing if it exercises the actual
-// files that ship, mirroring prerender.test.ts's use of real dist output
-// elsewhere in this pipeline.
+// Reads the real frontend/index.html and frontend/public/_headers off disk
+// (not fixtures) — a drift guard is only load-bearing if it exercises the
+// actual files that ship, mirroring prerender.test.ts's use of real dist
+// output elsewhere in this pipeline. `public/_headers` (not a repo-root
+// `_headers`) because Cloudflare Pages only reads it from the build output
+// directory (`dist/`), which Vite populates by copying `public/` verbatim —
+// see issue #345.
 const FRONTEND_ROOT = path.join(__dirname, '..', '..');
 
+// Cloudflare's `_headers` file is plain text, not JSON: an unindented line
+// starts a new path block, and every indented `Key: value` line below it
+// belongs to that block, until the next unindented line or EOF. This reads
+// the broad `/*` block specifically — not `/api/seo-audit` or
+// `/api/prerender-cadence`, which carry their own locked-down CSP with no
+// inline-script hash to guard.
 async function readDocumentCsp(): Promise<string> {
-  const vercelConfig = JSON.parse(
-    await readFile(path.join(FRONTEND_ROOT, 'vercel.json'), 'utf-8'),
-  ) as { headers: { source: string; headers: { key: string; value: string }[] }[] };
-  const documentHeaders = vercelConfig.headers.find((h) => h.source.includes('api/|_vercel'));
-  const csp = documentHeaders?.headers.find((h) => h.key === 'Content-Security-Policy')?.value;
-  if (!csp) throw new Error('csp.test.ts: could not find the document CSP in vercel.json');
-  return csp;
+  const headersFile = await readFile(path.join(FRONTEND_ROOT, 'public', '_headers'), 'utf-8');
+  let inDocumentBlock = false;
+  for (const line of headersFile.split('\n')) {
+    if (!/^\s/.test(line)) {
+      inDocumentBlock = line.trim() === '/*';
+      continue;
+    }
+    if (!inDocumentBlock) continue;
+    const match = line.match(/^\s+Content-Security-Policy:\s*(.+?)\s*$/);
+    if (match) return match[1];
+  }
+  throw new Error('csp.test.ts: could not find the document CSP in public/_headers');
 }
 
 describe('inline script CSP hash stays in sync (theme-revert-on-refresh fix)', () => {

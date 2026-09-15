@@ -312,7 +312,7 @@ export const PRERENDER_CADENCE_TOKEN_HEADER = 'x-prerender-cadence-token';
 
 // ─── Analytics ───────────────────────────────────────────────────────────────
 // Matches `/events/:id` (bare or locale-prefixed, e.g. `/en/events/:id`) so
-// Vercel Analytics groups all event detail views under one route instead of
+// Google Analytics groups all event detail views under one route instead of
 // one row per event id — the locale prefix itself is captured (group 1) and
 // kept by maskAnalyticsUrl's replacement, so en/et/ru still group separately.
 // Applied to a pathname with query/hash already stripped (see
@@ -784,9 +784,19 @@ export const THEME_OPTIONS = [
 ] as const;
 
 // Prefix every backend request is proxied under (see vercel.json's rewrite
-// rule, which is keyed on this same string) — api/client.ts's fetch wrapper
-// and NDJSON stream path both prepend it.
+// rule and functions/api/[[path]].ts's catch-all proxy, both keyed on this
+// same string) — api/client.ts's fetch wrapper and NDJSON stream path both
+// prepend it.
 export const API_BASE = '/api';
+
+// Render Frankfurt backend origin (issue #342) the `/api/*` proxy forwards
+// to — functions/api/[[path]].ts's Cloudflare Pages Function equivalent of
+// vercel.json's `/api/:path` rewrite destination. Not the same value as
+// vite.config.ts's PRERENDER_BACKEND_TARGET (a Node-only build-time constant
+// scripts/prerender.ts and the dev proxy use — that file can't import from
+// here, and a real dry run needs to override it independently via
+// PRERENDER_API_ORIGIN), but both currently point at the same backend.
+export const BACKEND_ORIGIN = 'https://event-radar-api-r7l6.onrender.com';
 
 // ─── API endpoints ───────────────────────────────────────────────────────────
 // Every backend request path resolves through this map (or a builder function

@@ -1,4 +1,4 @@
-import { JSDOM } from 'jsdom';
+import { parseHTML } from 'linkedom';
 import type { EventData } from '../components/EventCard';
 // .js extensions required: this module is also imported (transitively) by
 // api/seo-audit.ts, which Vercel runs as unbundled Node ESM.
@@ -19,7 +19,10 @@ import {
  * in-build gate, scripts/prerender.ts) or a fetch() against production (the
  * live-audit ticket, issue #54, which reuses this module rather than
  * reimplementing it). Uses `jsdom` directly (not ambient DOM globals) so it
- * behaves identically under plain `tsx` script execution and under vitest. */
+ * behaves identically under plain `tsx` script execution, vitest, and (issue
+ * #54's live audit) a Cloudflare Workers runtime — `linkedom` rather than
+ * `jsdom` specifically because jsdom needs real Node internals (`fs`, `vm`)
+ * that aren't available there, while linkedom is a pure-JS HTML parser. */
 
 export interface ParsedSnapshot {
   title: string | null;
@@ -47,7 +50,7 @@ export interface EventPriceSnapshot {
 }
 
 export function parseSnapshotHtml(html: string): ParsedSnapshot {
-  const { document } = new JSDOM(html).window;
+  const { document } = parseHTML(html);
 
   const title = document.querySelector('title')?.textContent?.trim() ?? null;
   const canonical = document.querySelector(CANONICAL_LINK_SELECTOR)?.getAttribute('href') ?? null;

@@ -71,7 +71,7 @@ const doc: LegalDoc = {
         {
           kind: 'p',
           content: [
-            'We use one strictly-necessary cookie: a signed, httpOnly session cookie that keeps you signed in. It carries no advertising or tracking purpose and cannot be read by scripts running on the page. Because it is strictly necessary for the Service to function, no cookie-consent banner is required. If you sign in with Google, we also set a second strictly-necessary cookie for the few minutes it takes to complete sign-in — a signed, httpOnly, single-use state cookie that protects the sign-in against cross-site request forgery; it is deleted as soon as sign-in finishes, whether it succeeds or fails, and no Google-set cookie ever touches our site. Your language choice, and a boolean "you’re signed in" flag that carries no credential, are stored in your browser’s local storage. Our usage and performance analytics (Vercel Web Analytics, Speed Insights, and Google Analytics) are cookieless and aggregated; page URLs are masked before they reach any analytics provider, so no event identifier or session credential is ever sent, and Google Analytics is configured to never set a persistent identifier cookie.',
+            'We use one strictly-necessary cookie: a signed, httpOnly session cookie that keeps you signed in. It carries no advertising or tracking purpose and cannot be read by scripts running on the page. Because it is strictly necessary for the Service to function, no cookie-consent banner is required. If you sign in with Google, we also set a second strictly-necessary cookie for the few minutes it takes to complete sign-in — a signed, httpOnly, single-use state cookie that protects the sign-in against cross-site request forgery; it is deleted as soon as sign-in finishes, whether it succeeds or fails, and no Google-set cookie ever touches our site. Your language choice, and a boolean "you’re signed in" flag that carries no credential, are stored in your browser’s local storage. Our usage analytics (Google Analytics) are cookieless and aggregated; page URLs are masked before they reach any analytics provider, so no event identifier or session credential is ever sent, and Google Analytics is configured to never set a persistent identifier cookie.',
           ],
         },
       ],
@@ -90,7 +90,7 @@ const doc: LegalDoc = {
           items: [
             ['Neon — database hosting (EU region, Frankfurt, Germany).'],
             ['Render — backend application hosting.'],
-            ['Vercel — frontend hosting and the cookieless Vercel analytics above.'],
+            ['Vercel — frontend hosting.'],
             ['Google — the cookieless Google Analytics above, and, if you use Google sign-in, verification of your sign-in identity. For sign-in, Google acts in two capacities: as our processor when it issues the token, and independently — in its own capacity as an identity provider, not on our instructions — when it vouches for who you are.'],
             ['Resend — delivery of sign-in and digest emails.'],
           ],

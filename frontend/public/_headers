@@ -1,0 +1,38 @@
+/*
+  X-Frame-Options: DENY
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), interest-cohort=()
+  Content-Security-Policy: default-src 'self'; script-src 'self' https://www.googletagmanager.com 'sha256-yRtxs8K27sSx8F0bKES6BviialhMx477xuDrQ9kxVDw='; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' https: data:; connect-src 'self' https://*.google-analytics.com https://*.analytics.google.com https://www.googletagmanager.com; frame-ancestors 'none'; base-uri 'none'; object-src 'none'; form-action 'self'; frame-src 'none'
+
+# Everything under /api/ (proxied straight through to the Render backend by
+# functions/api/[[path]].ts, except the two exact paths below) must carry
+# none of the document-oriented headers above — mirrors vercel.json's
+# `/((?!api/|_vercel/).*)` negative-lookahead, which excluded `api/` from
+# this same block entirely. Cloudflare's `_headers` has no negative
+# lookahead, so this strips them back off instead; the backend's own
+# add_security_headers middleware (app/main.py) sets its own headers on
+# these responses, and this file must not layer a second, document-shaped
+# CSP/HSTS/Permissions-Policy on top of a JSON API response.
+/api/*
+  ! X-Frame-Options
+  ! X-Content-Type-Options
+  ! Referrer-Policy
+  ! Strict-Transport-Security
+  ! Permissions-Policy
+  ! Content-Security-Policy
+
+/api/seo-audit
+  X-Content-Type-Options: nosniff
+  Cache-Control: no-store
+  Referrer-Policy: strict-origin-when-cross-origin
+  X-Frame-Options: DENY
+  Content-Security-Policy: default-src 'none'; frame-ancestors 'none'; base-uri 'none'
+
+/api/prerender-cadence
+  X-Content-Type-Options: nosniff
+  Cache-Control: no-store
+  Referrer-Policy: strict-origin-when-cross-origin
+  X-Frame-Options: DENY
+  Content-Security-Policy: default-src 'none'; frame-ancestors 'none'; base-uri 'none'
