@@ -46,3 +46,12 @@ pages_build_output_dir = "dist"
 
 [vars]
 NODE_VERSION = "20"
+# Non-secret build-time flags. Anything credential-shaped (deploy hook URLs,
+# API tokens) must NOT go here — this file is checked into git. Those stay
+# as encrypted Secrets via the Cloudflare Pages dashboard or
+# `wrangler pages secret put`, which remains available even once [vars] is
+# managed from this file (see the dashboard's own "Only Secrets... can be
+# managed via the Dashboard" notice once [vars] is present).
+VITE_GOOGLE_SIGNIN_CONSUMER_ENABLED = "true"
+VITE_GOOGLE_SIGNIN_ORGANIZER_ENABLED = "true"
+PRERENDER_RENDER_BUDGET_MINUTES = "10"
