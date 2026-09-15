@@ -31,13 +31,18 @@
 # the Workers runtime only exposes with this flag set — without it, every
 # request to either function throws at import time. vitest doesn't catch
 # this because tests run under real Node, not the Workers runtime.
+#
+# No [build] section: unlike Workers, Pages projects reject a "build" table
+# in wrangler.toml outright ("Configuration file for Pages projects does not
+# support \"build\"") — Wrangler fails config validation before the clone
+# even runs a build. The build command (`npm run build`) and root directory
+# live in the Cloudflare Pages dashboard's per-project build configuration
+# instead; only `pages_build_output_dir` and `[vars]` are read from this file
+# for a Pages project.
 name = "event-radar"
 compatibility_date = "2025-01-01"
 compatibility_flags = ["nodejs_compat"]
 pages_build_output_dir = "dist"
-
-[build]
-command = "npm run build"
 
 [vars]
 NODE_VERSION = "20"
