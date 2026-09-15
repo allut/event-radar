@@ -1,30 +1,29 @@
 /**
  * Cadence gate for the independent `prerender-cadence` Deploy Hook (issue
- * #92) — a Cloudflare Pages Function cron-job.org now hits every 6h
- * *instead of* POSTing straight to the Deploy Hook URL. Reads the production
- * branch's tip commit message and skips forwarding the request to the real
- * Deploy Hook when `shouldSkipCadenceTick` (src/lib/prerenderChain.ts) says a
- * chain round is genuinely in flight — removing the race where a
- * cadence-triggered build resumes the same fresh marker as the legitimate
- * chain continuation and both race `commitRoundMarker`'s branch push.
+ * #92) — cron-job.org hits this every 6h *instead of* POSTing straight to
+ * the Deploy Hook URL. Reads the production branch's tip commit message and
+ * skips forwarding the request to the real Deploy Hook when
+ * `shouldSkipCadenceTick` (src/lib/prerenderChain.ts) says a chain round is
+ * genuinely in flight — removing the race where a cadence-triggered build
+ * resumes the same fresh marker as the legitimate chain continuation and
+ * both race `commitRoundMarker`'s branch push.
  *
- * Mirrors api/seo-audit.ts's shape: thin handler, shared-secret auth via the
- * same constant-time comparison (seoAuditAuth.ts's isValidAuditToken is
+ * Mirrors seoAuditHandler.ts's shape: thin handler, shared-secret auth via
+ * the same constant-time comparison (seoAuditAuth.ts's isValidAuditToken is
  * generic, not audit-specific, despite its name/module — reused as-is rather
- * than duplicated), and the same PagesFunction/Env shim
- * (functions/_shared/cloudflare.ts).
+ * than duplicated).
  *
  * Ported from the Vercel Serverless Function this used to be (issue #344):
  * only the platform boundary changed (Fetch API Request/Response instead of
  * the VercelRequest/VercelResponse shim, context.env instead of
  * process.env) — every imported helper is untouched.
  *
- * Routing note: file-based routing puts this at the exact path
- * `/api/prerender-cadence`. Cloudflare Pages matches an exact-path function
- * ahead of any catch-all sibling — so once #345 adds a catch-all
- * `/api/[[path]]` backend-proxy function alongside this one, no
- * negative-lookahead exclusion is needed the way vercel.json requires one
- * today. That catch-all doesn't exist yet as of this ticket (#344).
+ * Lives under `_shared/` rather than at `functions/api/prerender-cadence.ts`
+ * — see `_shared/apiProxy.ts`'s module comment for why: a 2026-09-15
+ * production incident found Cloudflare's documented exact-path-beats-catch-
+ * all Function routing precedence did not hold, so `functions/[[path]].ts`
+ * is now the sole routed Function and dispatches here itself by exact
+ * pathname.
  */
 import { StatusCodes } from 'http-status-codes';
 import {
@@ -36,10 +35,9 @@ import {
 import { githubRequest } from '../../src/lib/githubRequest.js';
 import { shouldSkipCadenceTick } from '../../src/lib/prerenderChain.js';
 import { isValidAuditToken } from '../../src/lib/seoAuditAuth.js';
-import { jsonResponse } from '../_shared/cloudflare.js';
-import type { PagesFunction } from '../_shared/cloudflare.js';
+import { jsonResponse } from './cloudflare.js';
 
-interface Env {
+export interface PrerenderCadenceEnv {
   PRERENDER_CADENCE_TOKEN?: string;
   PRERENDER_CADENCE_DEPLOY_HOOK_URL?: string;
   GH_PRERENDER_CHAIN_TOKEN?: string;
@@ -72,13 +70,14 @@ async function fetchTipCommitMessage(token: string | undefined): Promise<string 
   }
 }
 
-export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
+export async function handlePrerenderCadence(request: Request, env: PrerenderCadenceEnv): Promise<Response> {
   if (request.method !== 'POST') {
     return new Response(null, { status: StatusCodes.METHOD_NOT_ALLOWED });
   }
 
-  // Auth first, opaque 403 either way (OWASP audit F5) — see seo-audit.ts's
-  // handler for why config presence must not be checked pre-auth.
+  // Auth first, opaque 403 either way (OWASP audit F5) — see
+  // seoAuditHandler.ts's handler for why config presence must not be
+  // checked pre-auth.
   const expectedToken = env.PRERENDER_CADENCE_TOKEN;
   const deployHookUrl = env.PRERENDER_CADENCE_DEPLOY_HOOK_URL;
   const received = request.headers.get(PRERENDER_CADENCE_TOKEN_HEADER);
@@ -109,4 +108,4 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     skipped: false,
     deployHookStatus: hookRes.status,
   });
-};
+}

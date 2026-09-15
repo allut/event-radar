@@ -4,28 +4,27 @@
 // import drags in `node:sqlite` via undici, which the Workers bundler can't
 // resolve.
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
-import { onRequestPost } from '../../../functions/api/seo-audit';
-import { PRODUCTION_ORIGIN, SEO_AUDIT_TOKEN_HEADER, CRAWLABLE_ICON_PATHS } from '../../../src/constants';
-import { buildEventJsonLd, buildWebsiteJsonLd } from '../../../src/lib/structuredData';
-import { buildSeoMeta } from '../../../src/hooks/useSeoMeta';
-import { makeEvent } from '../../../src/test/utils';
+import { handleSeoAudit } from '../../functions/_shared/seoAuditHandler';
+import { PRODUCTION_ORIGIN, SEO_AUDIT_TOKEN_HEADER, CRAWLABLE_ICON_PATHS } from '../../src/constants';
+import { buildEventJsonLd, buildWebsiteJsonLd } from '../../src/lib/structuredData';
+import { buildSeoMeta } from '../../src/hooks/useSeoMeta';
+import { makeEvent } from '../../src/test/utils';
 
 interface Env {
   SEO_AUDIT_TOKEN?: string;
   GH_ISSUE_TOKEN?: string;
 }
 
-function makeContext(env: Env = { SEO_AUDIT_TOKEN: 'shared-secret', GH_ISSUE_TOKEN: 'gh-token' }) {
-  return {
-    request: new Request('https://eventradar.ee/api/seo-audit', {
-      method: 'POST',
-      headers: { [SEO_AUDIT_TOKEN_HEADER]: 'shared-secret' },
-    }),
-    env,
-  };
+function makeRequest() {
+  return new Request('https://eventradar.ee/api/seo-audit', {
+    method: 'POST',
+    headers: { [SEO_AUDIT_TOKEN_HEADER]: 'shared-secret' },
+  });
 }
 
-vi.mock('../../../src/lib/seoAuditIssue', () => ({
+const DEFAULT_ENV: Env = { SEO_AUDIT_TOKEN: 'shared-secret', GH_ISSUE_TOKEN: 'gh-token' };
+
+vi.mock('../../src/lib/seoAuditIssue', () => ({
   reportAuditFailure: vi.fn().mockResolvedValue(undefined),
   reportAuditRecovery: vi.fn().mockResolvedValue(undefined),
 }));
@@ -133,7 +132,7 @@ describe('seo-audit handler — event snapshot asset content-type check (issue #
       assetContentTypes: { [jsUrl]: 'application/javascript', [cssUrl]: 'text/css' },
     });
 
-    const res = await onRequestPost(makeContext());
+    const res = await handleSeoAudit(makeRequest(), DEFAULT_ENV);
 
     expect(res.status).toBe(200);
     const body = (await res.json()) as { ok: boolean };
@@ -148,7 +147,7 @@ describe('seo-audit handler — event snapshot asset content-type check (issue #
       assetContentTypes: { [jsUrl]: 'text/html; charset=utf-8' },
     });
 
-    const res = await onRequestPost(makeContext());
+    const res = await handleSeoAudit(makeRequest(), DEFAULT_ENV);
 
     expect(res.status).toBe(200);
     const body = (await res.json()) as { ok: boolean; issues: string[] };

@@ -4,14 +4,11 @@
 // import drags in `node:sqlite` via undici, which the Workers bundler can't
 // resolve.
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
-import { onRequest } from '../../../functions/api/[[path]]';
-import { BACKEND_ORIGIN } from '../../../src/constants';
+import { proxyToBackend } from '../../functions/_shared/apiProxy';
+import { BACKEND_ORIGIN } from '../../src/constants';
 
-function makeContext(path: string, init: RequestInit = {}) {
-  return {
-    request: new Request(`https://eventradar.ee${path}`, init),
-    env: {},
-  };
+function makeRequest(path: string, init: RequestInit = {}) {
+  return new Request(`https://eventradar.ee${path}`, init);
 }
 
 describe('/api/* backend proxy', () => {
@@ -27,7 +24,7 @@ describe('/api/* backend proxy', () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response('ok', { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
 
-    await onRequest(makeContext('/api/events/123'));
+    await proxyToBackend(makeRequest('/api/events/123'));
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const forwarded = fetchMock.mock.calls[0][0] as Request;
@@ -38,7 +35,7 @@ describe('/api/* backend proxy', () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response('ok', { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
 
-    await onRequest(makeContext('/api/explore?category=music'));
+    await proxyToBackend(makeRequest('/api/explore?category=music'));
 
     const forwarded = fetchMock.mock.calls[0][0] as Request;
     expect(forwarded.url).toBe(`${BACKEND_ORIGIN}/explore?category=music`);
@@ -48,8 +45,8 @@ describe('/api/* backend proxy', () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 201 }));
     vi.stubGlobal('fetch', fetchMock);
 
-    await onRequest(
-      makeContext('/api/feedback', {
+    await proxyToBackend(
+      makeRequest('/api/feedback', {
         method: 'POST',
         headers: { 'content-type': 'application/json', cookie: 'session=abc' },
         body: JSON.stringify({ eventId: 1 }),
@@ -67,7 +64,7 @@ describe('/api/* backend proxy', () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response('ok', { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
 
-    await onRequest(makeContext('/api/feed'));
+    await proxyToBackend(makeRequest('/api/feed'));
 
     const forwarded = fetchMock.mock.calls[0][0] as Request;
     expect(forwarded.body).toBeNull();
@@ -80,7 +77,7 @@ describe('/api/* backend proxy', () => {
     });
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(backendResponse));
 
-    const response = await onRequest(makeContext('/api/feed'));
+    const response = await proxyToBackend(makeRequest('/api/feed'));
 
     expect(response.status).toBe(201);
     expect(response.headers.get('content-type')).toBe('application/json');
@@ -100,7 +97,7 @@ describe('/api/* backend proxy', () => {
     });
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(backendResponse));
 
-    const response = await onRequest(makeContext('/api/feed'));
+    const response = await proxyToBackend(makeRequest('/api/feed'));
 
     expect(response.headers.get('content-encoding')).toBeNull();
     expect(response.headers.get('content-length')).toBeNull();

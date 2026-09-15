@@ -847,7 +847,7 @@ export function logZeroProgressAbort(marker: RoundMarker): void {
  * this build's checkout is on), so a Cloudflare build infers it the same way
  * Cloudflare's own guidance does: any branch other than the production
  * branch (`PRERENDER_CADENCE_GIT_BRANCH`, 'release' — the same branch
- * functions/api/prerender-cadence.ts already treats as production) is a
+ * functions/_shared/prerenderCadenceHandler.ts already treats as production) is a
  * preview build. Preview URLs aren't crawled or linked externally on either
  * platform, and both platforms' own fallback routing already serves
  * `app-shell.html` for any route with no snapshot, so skipping prerendering
@@ -877,7 +877,7 @@ export function isPreviewBuild(env: NodeJS.ProcessEnv = process.env): boolean {
  * thrown error — when neither env var is set (local/dev, or a build off
  * either platform), or on any fetch/parse failure, so a GitHub hiccup starts
  * a fresh burst at round 1 instead of failing the whole build (mirrors
- * functions/api/prerender-cadence.ts's `fetchTipCommitMessage`, which fails
+ * functions/_shared/prerenderCadenceHandler.ts's `fetchTipCommitMessage`, which fails
  * open the same way for the same reason). Once Vercel is decommissioned
  * (#341), the `VERCEL_GIT_COMMIT_MESSAGE` branch can be dropped. */
 async function fetchBuildCommitMessage(env: NodeJS.ProcessEnv): Promise<string | null> {

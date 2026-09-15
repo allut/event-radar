@@ -1,23 +1,26 @@
 /**
- * Catch-all backend proxy (issue #345) — Cloudflare Pages Function
- * reproducing vercel.json's `/api/:path` rewrite now that Vercel is being
- * decommissioned (issue #341). Forwards every `/api/*` request to the
- * Render Frankfurt backend (BACKEND_ORIGIN, src/constants.ts) with the
- * `/api` prefix stripped, same as the old rewrite — the backend's own route
- * shape carries no `/api` prefix.
+ * Backend proxy (issue #345) — forwards a `/api/*` request to the Render
+ * Frankfurt backend (BACKEND_ORIGIN, src/constants.ts) with the `/api`
+ * prefix stripped, reproducing vercel.json's old `/api/:path` rewrite. The
+ * backend's own route shape carries no `/api` prefix.
  *
  * Same-origin proxying (rather than the SPA fetching Render directly) is
  * what lets the backend's httpOnly session cookie work as a first-party
  * cookie from the browser's perspective — see docs/adr/0001.
  *
- * Routing note: Cloudflare Pages matches the exact-path sibling functions
- * (api/seo-audit.ts, api/prerender-cadence.ts) ahead of this catch-all, so
- * those two shared-secret endpoints never reach here — their tokens never
- * get forwarded to the backend as if they were public API calls. See the
- * "Routing note" comment in each of those files.
+ * Lives under `_shared/` (a Cloudflare Pages Functions routing exclusion —
+ * an underscore-prefixed *directory*, unlike an underscore-prefixed
+ * filename, is never scanned into the route manifest) rather than at
+ * `functions/api/[[path]].ts`: a 2026-09-15 production incident found
+ * `/api/*` traffic on eventradar.ee being answered entirely by the
+ * SPA-fallback catch-all (`functions/[[path]].ts`) instead of this proxy —
+ * Cloudflare's documented "more specific Function route wins" precedence
+ * between multiple routed files did not hold. This module is now only ever
+ * invoked by that root file's own explicit pathname dispatch, so there is
+ * exactly one routed Function and no cross-file precedence for the platform
+ * to get wrong.
  */
 import { API_BASE, BACKEND_ORIGIN } from '../../src/constants.js';
-import type { PagesFunction } from '../_shared/cloudflare.js';
 
 // Stripped from the backend's response before it's re-emitted: `fetch()`
 // transparently decodes a compressed body (if the backend or anything
@@ -34,7 +37,7 @@ const STRIPPED_RESPONSE_HEADERS = [
   'connection',
 ];
 
-export const onRequest: PagesFunction = async ({ request }) => {
+export async function proxyToBackend(request: Request): Promise<Response> {
   const url = new URL(request.url);
   const backendUrl = new URL(url.pathname.slice(API_BASE.length) + url.search, BACKEND_ORIGIN);
 
@@ -60,4 +63,4 @@ export const onRequest: PagesFunction = async ({ request }) => {
     statusText: backendResponse.statusText,
     headers,
   });
-};
+}

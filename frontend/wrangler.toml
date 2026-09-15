@@ -1,12 +1,16 @@
 # Cloudflare Pages build config, checked in as the source of truth for the
 # platform (mirrors how ../render.yaml is checked in for the backend).
 #
-# Static SPA build (issue #343) plus, as of issue #344, the two Pages
-# Functions under functions/api/ (seo-audit, prerender-cadence) — Cloudflare
-# auto-routes anything under functions/ by convention, with no opt-in step
-# (unlike Vercel's vercel.json rewrite exclusion, which is what currently
-# gates the still-live Vercel copies of this same logic). As of issue #346,
-# the build-time Playwright prerender pass (scripts/prerender.ts) also runs
+# Static SPA build (issue #343) plus, as of issue #344, the seo-audit and
+# prerender-cadence endpoints (originally two exact-path Pages Functions
+# under functions/api/; restructured 2026-09-15 into plain handlers under
+# functions/_shared/ that the sole routed Function, functions/[[path]].ts,
+# dispatches to itself — see that file's module comment for why: Cloudflare's
+# documented Function-routing precedence between multiple routed files did
+# not hold in production). public/_routes.json forces every request through
+# that one Function; Cloudflare no longer gets to choose between competing
+# routed files. As of issue #346, the build-time Playwright prerender pass
+# (scripts/prerender.ts) also runs
 # here — the `npm run build` script's gate now checks `$CF_PAGES` (in
 # addition to `$VERCEL`), and unlike Vercel it does run `playwright install
 # chromium` first, since Cloudflare's build container has no

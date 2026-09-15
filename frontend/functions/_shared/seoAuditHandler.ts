@@ -1,10 +1,10 @@
 /**
- * Independent live SEO audit (issue #54) — a Cloudflare Pages Function, hit
- * every 6h by its own cron-job.org job (offset from the prerender-rebuild
- * job, issue #52), mirroring the backend's `/internal/tick` keepalive
- * pattern but living on the Cloudflare side since the check it runs
- * (src/lib/seoAudit.ts's evaluateLiveAudit) reuses seoValidation.ts's
- * in-build-gate assertions (issue #53) unchanged, and those are TypeScript.
+ * Independent live SEO audit (issue #54) — hit every 6h by its own
+ * cron-job.org job (offset from the prerender-rebuild job, issue #52),
+ * mirroring the backend's `/internal/tick` keepalive pattern but living on
+ * the Cloudflare side since the check it runs (src/lib/seoAudit.ts's
+ * evaluateLiveAudit) reuses seoValidation.ts's in-build-gate assertions
+ * (issue #53) unchanged, and those are TypeScript.
  *
  * Deliberately thin: all real logic lives in src/lib (seoAudit.ts,
  * seoAuditIssue.ts, seoAuditAuth.ts) so it's unit-testable under vitest —
@@ -16,12 +16,11 @@
  * the VercelRequest/VercelResponse shim, context.env instead of
  * process.env) — every imported helper is untouched.
  *
- * Routing note: file-based routing puts this at the exact path
- * `/api/seo-audit`. Cloudflare Pages matches an exact-path function ahead of
- * any catch-all sibling — so once #345 adds a catch-all `/api/[[path]]`
- * backend-proxy function alongside this one, no negative-lookahead exclusion
- * is needed the way vercel.json requires one today. That catch-all doesn't
- * exist yet as of this ticket (#344).
+ * Lives under `_shared/` rather than at `functions/api/seo-audit.ts` — see
+ * `_shared/apiProxy.ts`'s module comment for why: a 2026-09-15 production
+ * incident found Cloudflare's documented exact-path-beats-catch-all Function
+ * routing precedence did not hold, so `functions/[[path]].ts` is now the
+ * sole routed Function and dispatches here itself by exact pathname.
  */
 import { StatusCodes } from 'http-status-codes';
 import { FAVICON_ICO_PATH, LOCALES, PRODUCTION_ORIGIN, ROUTES, SEO_AUDIT_TOKEN_HEADER, SITEMAP_PATH } from '../../src/constants.js';
@@ -30,15 +29,14 @@ import { localizedPath } from '../../src/lib/urlLocale.js';
 import { evaluateLiveAudit, parseSitemapEventUrls, parseSnapshotAssetUrls } from '../../src/lib/seoAudit.js';
 import { reportAuditFailure, reportAuditRecovery } from '../../src/lib/seoAuditIssue.js';
 import { isValidAuditToken } from '../../src/lib/seoAuditAuth.js';
-import { jsonResponse } from '../_shared/cloudflare.js';
-import type { PagesFunction } from '../_shared/cloudflare.js';
+import { jsonResponse } from './cloudflare.js';
 
-interface Env {
+export interface SeoAuditEnv {
   SEO_AUDIT_TOKEN?: string;
   GH_ISSUE_TOKEN?: string;
 }
 
-export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
+export async function handleSeoAudit(request: Request, env: SeoAuditEnv): Promise<Response> {
   if (request.method !== 'POST') {
     return new Response(null, { status: StatusCodes.METHOD_NOT_ALLOWED });
   }
@@ -176,4 +174,4 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   }
 
   return jsonResponse(StatusCodes.OK, result);
-};
+}

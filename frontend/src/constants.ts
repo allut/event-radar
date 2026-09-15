@@ -784,14 +784,14 @@ export const THEME_OPTIONS = [
 ] as const;
 
 // Prefix every backend request is proxied under (see vercel.json's rewrite
-// rule and functions/api/[[path]].ts's catch-all proxy, both keyed on this
-// same string) — api/client.ts's fetch wrapper and NDJSON stream path both
-// prepend it.
+// rule and functions/_shared/apiProxy.ts's catch-all proxy, both keyed on
+// this same string) — api/client.ts's fetch wrapper and NDJSON stream path
+// both prepend it.
 export const API_BASE = '/api';
 
 // Render Frankfurt backend origin (issue #342) the `/api/*` proxy forwards
-// to — functions/api/[[path]].ts's Cloudflare Pages Function equivalent of
-// vercel.json's `/api/:path` rewrite destination. Not the same value as
+// to — functions/_shared/apiProxy.ts's Cloudflare Pages Function equivalent
+// of vercel.json's `/api/:path` rewrite destination. Not the same value as
 // vite.config.ts's PRERENDER_BACKEND_TARGET (a Node-only build-time constant
 // scripts/prerender.ts and the dev proxy use — that file can't import from
 // here, and a real dry run needs to override it independently via

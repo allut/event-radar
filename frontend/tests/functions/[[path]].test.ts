@@ -3,9 +3,20 @@
 // don't exempt them — only whole directories do), and this test's vitest
 // import drags in `node:sqlite` via undici, which the Workers bundler can't
 // resolve.
-import { describe, it, expect, vi } from 'vitest';
-import { onRequest } from '../../functions/[[path]]';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { APP_SHELL_FILENAME } from '../../src/constants';
+
+const proxyToBackend = vi.fn().mockResolvedValue(new Response('proxied', { status: 200 }));
+const handleSeoAudit = vi.fn().mockResolvedValue(new Response('seo-audit', { status: 200 }));
+const handlePrerenderCadence = vi.fn().mockResolvedValue(new Response('prerender-cadence', { status: 200 }));
+
+vi.mock('../../functions/_shared/apiProxy', () => ({ proxyToBackend: (...args: unknown[]) => proxyToBackend(...args) }));
+vi.mock('../../functions/_shared/seoAuditHandler', () => ({ handleSeoAudit: (...args: unknown[]) => handleSeoAudit(...args) }));
+vi.mock('../../functions/_shared/prerenderCadenceHandler', () => ({
+  handlePrerenderCadence: (...args: unknown[]) => handlePrerenderCadence(...args),
+}));
+
+const { onRequest } = await import('../../functions/[[path]]');
 
 function makeContext(path: string, method = 'GET', assetResponses?: Response[]) {
   const responses = assetResponses ?? [new Response(null, { status: 404 }), new Response('<html>shell</html>', { status: 200 })];
@@ -19,6 +30,54 @@ function makeContext(path: string, method = 'GET', assetResponses?: Response[]) 
     fetchAssets,
   };
 }
+
+describe('root Function dispatch (issue #345, restructured 2026-09-15)', () => {
+  afterEach(() => {
+    proxyToBackend.mockClear();
+    handleSeoAudit.mockClear();
+    handlePrerenderCadence.mockClear();
+  });
+
+  it('dispatches /api/seo-audit to the seo-audit handler, not the backend proxy', async () => {
+    const { context } = makeContext('/api/seo-audit', 'POST');
+
+    const response = await onRequest(context);
+
+    expect(handleSeoAudit).toHaveBeenCalledTimes(1);
+    expect(proxyToBackend).not.toHaveBeenCalled();
+    expect(await response.text()).toBe('seo-audit');
+  });
+
+  it('dispatches /api/prerender-cadence to the prerender-cadence handler, not the backend proxy', async () => {
+    const { context } = makeContext('/api/prerender-cadence', 'POST');
+
+    const response = await onRequest(context);
+
+    expect(handlePrerenderCadence).toHaveBeenCalledTimes(1);
+    expect(proxyToBackend).not.toHaveBeenCalled();
+    expect(await response.text()).toBe('prerender-cadence');
+  });
+
+  it('dispatches every other /api/* path to the backend proxy — the bug this fixed', async () => {
+    const { context } = makeContext('/api/explore?for_you=false', 'GET');
+
+    const response = await onRequest(context);
+
+    expect(proxyToBackend).toHaveBeenCalledTimes(1);
+    expect(handleSeoAudit).not.toHaveBeenCalled();
+    expect(handlePrerenderCadence).not.toHaveBeenCalled();
+    expect(await response.text()).toBe('proxied');
+  });
+
+  it('does not dispatch a non-/api path to the backend proxy', async () => {
+    const { context, fetchAssets } = makeContext('/events/42');
+
+    await onRequest(context);
+
+    expect(proxyToBackend).not.toHaveBeenCalled();
+    expect(fetchAssets).toHaveBeenCalled();
+  });
+});
 
 describe('SPA-fallback catch-all', () => {
   it('serves the real asset directly when one exists (issue #354)', async () => {
