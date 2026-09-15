@@ -1,3 +1,6 @@
+// Leading underscore keeps Cloudflare Pages from treating this as a route
+// (and bundling it into the deployed Worker) — its vitest imports drag in
+// `node:sqlite` via undici, which the Workers bundler can't resolve.
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { onRequestPost } from './seo-audit';
 import { PRODUCTION_ORIGIN, SEO_AUDIT_TOKEN_HEADER, CRAWLABLE_ICON_PATHS } from '../../src/constants';
