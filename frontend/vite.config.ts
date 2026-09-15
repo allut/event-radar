@@ -14,7 +14,7 @@ const BACKEND_TARGET = 'http://127.0.0.1:8000';
 // Exported (not just used below) so scripts/prerender.ts's own direct
 // `fetch()` calls to the backend share this exact value instead of
 // redeclaring the same literal a second place to keep in sync by hand.
-export const PRERENDER_BACKEND_TARGET = process.env.PRERENDER_API_ORIGIN ?? 'https://event-radar-api.onrender.com';
+export const PRERENDER_BACKEND_TARGET = process.env.PRERENDER_API_ORIGIN ?? 'https://event-radar-api-r7l6.onrender.com';
 
 export default defineConfig({
   plugins: [react()],
