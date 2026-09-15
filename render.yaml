@@ -53,7 +53,7 @@ services:
       - key: FRONTEND_URL
         sync: false
       - key: BACKEND_URL
-        value: https://event-radar-api.onrender.com
+        value: https://event-radar-api-r7l6.onrender.com
       - key: CLOUDINARY_CLOUD_NAME
         sync: false
       - key: CLOUDINARY_API_KEY
