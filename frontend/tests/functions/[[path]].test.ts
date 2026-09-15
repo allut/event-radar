@@ -7,8 +7,10 @@ import { describe, it, expect, vi } from 'vitest';
 import { onRequest } from '../../functions/[[path]]';
 import { APP_SHELL_FILENAME } from '../../src/constants';
 
-function makeContext(path: string, method = 'GET') {
-  const fetchAssets = vi.fn().mockResolvedValue(new Response('<html>shell</html>', { status: 200 }));
+function makeContext(path: string, method = 'GET', assetResponses?: Response[]) {
+  const responses = assetResponses ?? [new Response(null, { status: 404 }), new Response('<html>shell</html>', { status: 200 })];
+  const fetchAssets = vi.fn();
+  for (const response of responses) fetchAssets.mockResolvedValueOnce(response);
   return {
     context: {
       request: new Request(`https://eventradar.ee${path}`, { method }),
@@ -19,17 +21,29 @@ function makeContext(path: string, method = 'GET') {
 }
 
 describe('SPA-fallback catch-all', () => {
+  it('serves the real asset directly when one exists (issue #354)', async () => {
+    const realAsset = new Response('console.log(1)', { status: 200 });
+    const { context, fetchAssets } = makeContext('/assets/index-abc123.js', 'GET', [realAsset]);
+
+    const response = await onRequest(context);
+
+    expect(fetchAssets).toHaveBeenCalledTimes(1);
+    const firstRequest = fetchAssets.mock.calls[0][0] as Request;
+    expect(firstRequest.url).toBe('https://eventradar.ee/assets/index-abc123.js');
+    expect(await response.text()).toBe('console.log(1)');
+  });
+
   it('serves app-shell.html for an unmatched client-side route', async () => {
     const { context, fetchAssets } = makeContext('/events/42');
 
     const response = await onRequest(context);
 
-    expect(fetchAssets).toHaveBeenCalledTimes(1);
-    const assetsRequest = fetchAssets.mock.calls[0][0] as Request;
+    expect(fetchAssets).toHaveBeenCalledTimes(2);
+    const shellRequest = fetchAssets.mock.calls[1][0] as Request;
     // Extensionless "pretty path" — ASSETS.fetch applies its own .html-stripping
     // redirect rule first, so requesting the .html filename directly would hand
     // back a 308 instead of the shell's content.
-    expect(assetsRequest.url).toBe(`https://eventradar.ee/${APP_SHELL_FILENAME.replace(/\.html$/, '')}`);
+    expect(shellRequest.url).toBe(`https://eventradar.ee/${APP_SHELL_FILENAME.replace(/\.html$/, '')}`);
     expect(await response.text()).toBe('<html>shell</html>');
   });
 
@@ -38,8 +52,8 @@ describe('SPA-fallback catch-all', () => {
 
     await onRequest(context);
 
-    const assetsRequest = fetchAssets.mock.calls[0][0] as Request;
-    expect(assetsRequest.url).toBe(`https://eventradar.ee/${APP_SHELL_FILENAME.replace(/\.html$/, '')}`);
+    const shellRequest = fetchAssets.mock.calls[1][0] as Request;
+    expect(shellRequest.url).toBe(`https://eventradar.ee/${APP_SHELL_FILENAME.replace(/\.html$/, '')}`);
   });
 
   it('rejects a non-GET/HEAD method', async () => {
@@ -56,7 +70,7 @@ describe('SPA-fallback catch-all', () => {
 
     const response = await onRequest(context);
 
-    expect(fetchAssets).toHaveBeenCalledTimes(1);
+    expect(fetchAssets).toHaveBeenCalledTimes(2);
     expect(response.status).toBe(200);
   });
 });
