@@ -1,9 +1,11 @@
-// Leading underscore keeps Cloudflare Pages from treating this as a route
-// (and bundling it into the deployed Worker) — its vitest imports drag in
-// `node:sqlite` via undici, which the Workers bundler can't resolve.
+// Lives outside functions/ on purpose: Cloudflare Pages bundles every file
+// under that tree into the deployed Worker (underscore-prefixed filenames
+// don't exempt them — only whole directories do), and this test's vitest
+// import drags in `node:sqlite` via undici, which the Workers bundler can't
+// resolve.
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
-import { onRequest } from './[[path]]';
-import { BACKEND_ORIGIN } from '../../src/constants';
+import { onRequest } from '../../../functions/api/[[path]]';
+import { BACKEND_ORIGIN } from '../../../src/constants';
 
 function makeContext(path: string, init: RequestInit = {}) {
   return {

@@ -1,12 +1,14 @@
-// Leading underscore keeps Cloudflare Pages from treating this as a route
-// (and bundling it into the deployed Worker) — its vitest imports drag in
-// `node:sqlite` via undici, which the Workers bundler can't resolve.
+// Lives outside functions/ on purpose: Cloudflare Pages bundles every file
+// under that tree into the deployed Worker (underscore-prefixed filenames
+// don't exempt them — only whole directories do), and this test's vitest
+// import drags in `node:sqlite` via undici, which the Workers bundler can't
+// resolve.
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
-import { onRequestPost } from './seo-audit';
-import { PRODUCTION_ORIGIN, SEO_AUDIT_TOKEN_HEADER, CRAWLABLE_ICON_PATHS } from '../../src/constants';
-import { buildEventJsonLd, buildWebsiteJsonLd } from '../../src/lib/structuredData';
-import { buildSeoMeta } from '../../src/hooks/useSeoMeta';
-import { makeEvent } from '../../src/test/utils';
+import { onRequestPost } from '../../../functions/api/seo-audit';
+import { PRODUCTION_ORIGIN, SEO_AUDIT_TOKEN_HEADER, CRAWLABLE_ICON_PATHS } from '../../../src/constants';
+import { buildEventJsonLd, buildWebsiteJsonLd } from '../../../src/lib/structuredData';
+import { buildSeoMeta } from '../../../src/hooks/useSeoMeta';
+import { makeEvent } from '../../../src/test/utils';
 
 interface Env {
   SEO_AUDIT_TOKEN?: string;
@@ -23,7 +25,7 @@ function makeContext(env: Env = { SEO_AUDIT_TOKEN: 'shared-secret', GH_ISSUE_TOK
   };
 }
 
-vi.mock('../../src/lib/seoAuditIssue', () => ({
+vi.mock('../../../src/lib/seoAuditIssue', () => ({
   reportAuditFailure: vi.fn().mockResolvedValue(undefined),
   reportAuditRecovery: vi.fn().mockResolvedValue(undefined),
 }));

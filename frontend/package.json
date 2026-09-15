@@ -24,6 +24,7 @@
     "@tiptap/starter-kit": "3.31.3",
     "dompurify": "^3.2.6",
     "http-status-codes": "^2.3.0",
+    "linkedom": "^0.18.13",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-helmet-async": "^3.0.0",
