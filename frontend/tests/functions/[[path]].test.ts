@@ -26,7 +26,10 @@ describe('SPA-fallback catch-all', () => {
 
     expect(fetchAssets).toHaveBeenCalledTimes(1);
     const assetsRequest = fetchAssets.mock.calls[0][0] as Request;
-    expect(assetsRequest.url).toBe(`https://eventradar.ee/${APP_SHELL_FILENAME}`);
+    // Extensionless "pretty path" — ASSETS.fetch applies its own .html-stripping
+    // redirect rule first, so requesting the .html filename directly would hand
+    // back a 308 instead of the shell's content.
+    expect(assetsRequest.url).toBe(`https://eventradar.ee/${APP_SHELL_FILENAME.replace(/\.html$/, '')}`);
     expect(await response.text()).toBe('<html>shell</html>');
   });
 
@@ -36,7 +39,7 @@ describe('SPA-fallback catch-all', () => {
     await onRequest(context);
 
     const assetsRequest = fetchAssets.mock.calls[0][0] as Request;
-    expect(assetsRequest.url).toBe(`https://eventradar.ee/${APP_SHELL_FILENAME}`);
+    expect(assetsRequest.url).toBe(`https://eventradar.ee/${APP_SHELL_FILENAME.replace(/\.html$/, '')}`);
   });
 
   it('rejects a non-GET/HEAD method', async () => {
