@@ -18,6 +18,14 @@ import { organizerApi } from '../../api/client';
 const mockPost = vi.mocked(organizerApi.post);
 
 describe('OrganizerLogin', () => {
+  beforeEach(() => {
+    vi.stubEnv('VITE_GOOGLE_SIGNIN_ORGANIZER_ENABLED', 'false');
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it('renders email input and submit button', () => {
     renderWithProviders(<OrganizerLogin />);
     expect(screen.getByRole('textbox', { name: /email/i })).toBeInTheDocument();
