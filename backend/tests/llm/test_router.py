@@ -40,12 +40,12 @@ class TestLlmJsonCacheHit:
         cached_record = MagicMock()
         cached_record.response_json = {"same": True, "confidence": 0.9}
         cached_record.provider = "groq"
-        cached_record.model = "llama-3.3-70b-versatile"
+        cached_record.model = "openai/gpt-oss-120b"
         mock_db.scalar = AsyncMock(return_value=cached_record)
 
         result, model_label = await llm_json("dedup", "some prompt", mock_db)
         assert result == {"same": True, "confidence": 0.9}
-        assert model_label == "groq/llama-3.3-70b-versatile"
+        assert model_label == "groq/openai/gpt-oss-120b"
 
 
 class TestLlmJsonProviderFallback:
@@ -121,6 +121,31 @@ class TestLlmJsonProviderFallback:
 
             with pytest.raises(LLMError):
                 await llm_json("dedup", "test prompt", mock_db)
+
+    async def test_groq_request_uses_reasoning_params(self, mock_db):
+        mock_resp = _make_openai_response({"same": False, "confidence": 0.1}, "groq")
+
+        with (
+            patch("app.llm.router.settings") as mock_settings,
+            patch("httpx.AsyncClient") as mock_client_cls,
+        ):
+            mock_settings.GROQ_API_KEY = "gsk_test"
+            mock_settings.CEREBRAS_API_KEY = ""
+            mock_settings.MISTRAL_API_KEY = ""
+
+            mock_client = AsyncMock()
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock(return_value=None)
+            mock_client.post = AsyncMock(return_value=mock_resp)
+            mock_client_cls.return_value = mock_client
+
+            result, model_label = await llm_json("dedup", "test prompt", mock_db)
+
+        assert result == {"same": False, "confidence": 0.1}
+        assert model_label.startswith("groq/")
+        payload = mock_client.post.call_args.kwargs["json"]
+        assert payload["reasoning_effort"] == "low"
+        assert payload["max_tokens"] == LLM_REASONING_MAX_TOKENS
 
     async def test_cerebras_request_uses_reasoning_params(self, mock_db):
         mock_resp = _make_openai_response({"same": False, "confidence": 0.1}, "cerebras")

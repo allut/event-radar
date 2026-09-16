@@ -1262,8 +1262,12 @@ LLM_PROVIDERS: list[dict[str, Any]] = [
     {
         "name": "groq",
         "base_url": "https://api.groq.com/openai/v1",
-        "model": "llama-3.3-70b-versatile",
+        "model": "openai/gpt-oss-120b",
         "key_attr": "GROQ_API_KEY",
+        # gpt-oss-120b is a reasoning model: reasoning tokens precede the answer
+        # and count against max_tokens, so it gets a larger cap and lower effort.
+        "max_tokens": LLM_REASONING_MAX_TOKENS,
+        "params": {"reasoning_effort": "low"},
     },
     {
         "name": "cerebras",

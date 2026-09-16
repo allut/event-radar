@@ -41,9 +41,9 @@ Four user-facing surfaces read `published` events — two authenticated, one opt
 
 ## LLM Usage Constraints
 
-- **Default cap:** `LLM_MAX_TOKENS = 400` per call to avoid quota exhaustion; `LLM_REASONING_MAX_TOKENS = 600` is the project hard-cap ceiling, used only by the Cerebras entry (see below).
+- **Default cap:** `LLM_MAX_TOKENS = 400` per call to avoid quota exhaustion; `LLM_REASONING_MAX_TOKENS = 600` is the project hard-cap ceiling, used by the Groq and Cerebras entries (see below).
 - **Dedup cache:** Cache decisions by content hash — never re-call LLM for identical pairs.
-- **Fallback order:** Groq (primary, `llama-3.3-70b-versatile`) → Cerebras (`gpt-oss-120b`) → Mistral (`mistral-small-latest`, overnight batch, 1B tok/mo). Provider chain defined in `app/constants.py::LLM_PROVIDERS`. Cerebras's `gpt-oss-120b` is a reasoning model — its entry overrides `reasoning_effort=low` and a 600-token cap (`LLM_REASONING_MAX_TOKENS`, vs the 400-token default) so reasoning tokens don't crowd out the JSON answer.
+- **Fallback order:** Groq (primary, `openai/gpt-oss-120b`) → Cerebras (`gpt-oss-120b`) → Mistral (`mistral-small-latest`, overnight batch, 1B tok/mo). Provider chain defined in `app/constants.py::LLM_PROVIDERS`. Both Groq and Cerebras serve `gpt-oss-120b`, a reasoning model — their entries override `reasoning_effort=low` and a 600-token cap (`LLM_REASONING_MAX_TOKENS`, vs the 400-token default) so reasoning tokens don't crowd out the JSON answer.
 - Groq's 30 req/min burst means no sleep loop needed in the classification batch job.
 - **Backlog drain** — `dedup_pass` and `classify_pending` run via `_drain_backlog()` (`app/ingestion/jobs.py`): each re-runs its single pass while work remains, retrying every `LLM_BACKLOG_RETRY_SECONDS` (15 min) up to `LLM_BACKLOG_MAX_DRAIN_PASSES` (12) before deferring the remainder to the next 6h cycle. Admin-triggered runs (`POST /admin/dedup`, `POST /admin/classify`) use `*_drain_now()`, which drains synchronously with no inter-pass sleep since the caller is blocking on the HTTP response.
 

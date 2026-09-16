@@ -76,7 +76,7 @@ async def llm_json(
 ) -> tuple[dict[str, Any], str]:
     """Call the LLM provider chain and return ``(result_dict, model_label)``.
 
-    ``model_label`` is ``"{provider}/{model}"`` (e.g. ``"groq/llama-3.3-70b-versatile"``).
+    ``model_label`` is ``"{provider}/{model}"`` (e.g. ``"groq/openai/gpt-oss-120b"``).
     On a cache hit the label reflects the provider that originally answered.
 
     Checks the ``llm_calls`` cache first — either a caller-supplied
