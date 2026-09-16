@@ -1,12 +1,11 @@
 import logging
-import secrets
 import time
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from urllib.parse import urlsplit
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler  # type: ignore[import-untyped]
-from fastapi import FastAPI, HTTPException, Request, Response, status
+from fastapi import FastAPI, Request, Response, status
 from starlette.middleware.base import RequestResponseEndpoint
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi.errors import RateLimitExceeded
@@ -35,11 +34,9 @@ from app.constants import (
     DIGEST_SEND_HOUR,
     DIGEST_SEND_MINUTE,
     ERROR_CSRF_ORIGIN_MISMATCH,
-    ERROR_INTERNAL_TICK_INVALID_TOKEN,
     FEED_BUILD_HOUR,
     FEED_BUILD_MINUTE,
     HEADER_HOST,
-    HEADER_INTERNAL_TOKEN,
     HEADER_ORIGIN,
     HOST_CHECK_EXEMPT_PATHS,
     HSTS_HEADER_NAME,
@@ -56,7 +53,6 @@ from app.constants import (
     JOB_ID_SEND_DAILY_DIGESTS,
     JOB_ID_SYNC_FIENTA_ORGANIZERS,
     LLM_PASS_INTERVAL_HOURS,
-    LOG_EVENT_AUTH_FAILED,
     LOG_EVENT_HOST_REJECTED,
     LOG_EVENT_JOB_RUN,
     LOG_STATUS_ERROR,
@@ -65,7 +61,6 @@ from app.constants import (
     MS_PER_SECOND,
     ORGANIZER_SYNC_HOUR,
     ORGANIZER_SYNC_MINUTE,
-    RATE_LIMIT_INTERNAL_TICK,
     REFETCH_HOUR,
     REFETCH_MINUTE,
     SECURITY_HEADERS,
@@ -105,7 +100,7 @@ from app.routers.public import router as public_router
 from app.routers.reports import router as reports_router
 from app.routers.settings import router as settings_router
 from app.routers.unsubscribe import router as unsubscribe_router
-from app.routers.utils import require_configured_secret, run_in_session
+from app.routers.utils import run_in_session
 from app.routers.webhooks import router as webhooks_router
 from app.seeds import seed_personas, seed_sources
 
@@ -728,31 +723,3 @@ app.include_router(webhooks_router)
 @app.get("/health")
 async def health() -> dict:
     return {"status": "ok", "version": APP_VERSION}
-
-
-@app.get("/internal/tick")
-@limiter.limit(RATE_LIMIT_INTERNAL_TICK)
-async def tick(request: Request) -> dict:
-    """Keepalive ping — hit by a cron-job.org job every 10 min so Render's free
-    tier never idles out (it sleeps after 15 min), which would halt the embedded
-    APScheduler. Render cron services are paid, hence the external pinger."""
-    token = settings.INTERNAL_TOKEN
-    if require_configured_secret(
-        token,
-        feature="Internal tick",
-        setting_name="INTERNAL_TOKEN",
-        app_env=settings.APP_ENV,
-        allow_insecure_dev=settings.ALLOW_INSECURE_DEV,
-    ):
-        received = request.headers.get(HEADER_INTERNAL_TOKEN, "")
-        if not secrets.compare_digest(received.encode(), token.encode()):
-            log.warning(
-                "internal/tick: invalid token (client=%s)",
-                client_key(request),
-                extra={"event": LOG_EVENT_AUTH_FAILED},
-            )
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=ERROR_INTERNAL_TICK_INVALID_TOKEN,
-            )
-    return {"status": "ok"}

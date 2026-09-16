@@ -92,7 +92,7 @@ FastAPI Backend (single process on Render free tier, port 8000 in dev)
   ├── Routers: /auth  /admin  /admin/auth  /onboarding  /events  /explore  /feed  /feedback  /public
   │            /reports  /users/me  /contact  /email  /webhooks  /organizer/auth  /organizer/events
   │            /organizer/profile  /organizer/venues  /organizer/contact
-  └── APScheduler (embedded, kept alive by a cron-job.org ping of /internal/tick every 10 min)
+  └── APScheduler (embedded)
       ├── Weekly Sun 03:00: sync_fienta_organizers   ├── Weekly Sun 03:30: cleanup_stale_data
       ├── Hourly: ingest_all_sources (job id; callable is ingest_all_enabled) ├── 6-hourly: dedup_pass + classify_pending + publish_pending + geocode_pending
       ├── Daily 04:30: refetch_event_details          ├── Daily 06:00: build_daily_feeds

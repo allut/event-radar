@@ -392,7 +392,7 @@ def require_configured_secret(
     allow_insecure_dev: bool = False,
 ) -> bool:
     """Fail-closed gate shared by every secret-protected surface (admin auth,
-    inbound webhook, /internal/tick).
+    inbound webhook).
 
     Returns True when the secret is configured — the caller must then verify
     it. When unset: 503 unless BOTH ``app_env == development`` AND
@@ -400,9 +400,9 @@ def require_configured_secret(
     False is returned (caller skips verification). Requiring the second,
     explicit opt-in (settings.ALLOW_INSECURE_DEV) means a dev-shaped APP_ENV
     alone — e.g. a misconfigured or never-overridden env var on a real
-    deployment — can never silently open the admin surface, the inbound
-    webhook, or /internal/tick. Callers pass their own module's ``settings``
-    values so tests that patch the caller's settings keep working.
+    deployment — can never silently open the admin surface or the inbound
+    webhook. Callers pass their own module's ``settings`` values so tests
+    that patch the caller's settings keep working.
     """
     if secret:
         return True

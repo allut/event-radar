@@ -26,8 +26,8 @@ class Settings(BaseSettings):
     APP_ENV: str = APP_ENV_DEVELOPMENT
     # Second, explicit opt-in required (alongside APP_ENV == development) before
     # require_configured_secret() fails open on an unset secret. A dev-shaped
-    # APP_ENV alone must never be sufficient to unprotect /admin/*, the inbound
-    # webhook, or /internal/tick — see routers/utils.py::require_configured_secret.
+    # APP_ENV alone must never be sufficient to unprotect /admin/* or the inbound
+    # webhook — see routers/utils.py::require_configured_secret.
     ALLOW_INSECURE_DEV: bool = False
 
     # Development-only kill switch for the embedded APScheduler
@@ -138,9 +138,6 @@ class Settings(BaseSettings):
         # the next deploy — see generate_admin_session_token/verify_admin_session_token.
         # The cheapest durable revocation this no-admins-table design supports; a
         # credential rotation is already a redeploy, so this rides that redeploy.
-    )
-    INTERNAL_TOKEN: str = (
-        ""  # X-Internal-Token header for /internal/tick; empty = disabled (dev only)
     )
 
     # Auth / email

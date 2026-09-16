@@ -28,7 +28,6 @@ def test_security_headers_present_on_every_response():
 def test_hsts_absent_in_development():
     with patch("app.main.settings") as mock_settings:
         mock_settings.APP_ENV = APP_ENV_DEVELOPMENT
-        mock_settings.INTERNAL_TOKEN = ""
         resp = client.get("/health")
 
     assert HSTS_HEADER_NAME not in resp.headers
@@ -37,7 +36,6 @@ def test_hsts_absent_in_development():
 def test_hsts_present_in_production():
     with patch("app.main.settings") as mock_settings:
         mock_settings.APP_ENV = "production"
-        mock_settings.INTERNAL_TOKEN = ""
         resp = client.get("/health")
 
     assert resp.headers[HSTS_HEADER_NAME] == HSTS_HEADER_VALUE

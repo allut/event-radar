@@ -66,7 +66,7 @@ TALLINN_TZ_NAME = "Europe/Tallinn"
 TALLINN_TZ = ZoneInfo(TALLINN_TZ_NAME)
 
 # Application environment — value of settings.APP_ENV that enables dev-only
-# behaviour (unprotected admin endpoints, SQL echo, unauthenticated /internal/tick).
+# behaviour (unprotected admin endpoints, SQL echo).
 # NB: app.config imports this module for the APP_ENV default, so constants.py must
 # never import app.config — doing so would create a circular import.
 APP_ENV_DEVELOPMENT = "development"
@@ -104,8 +104,7 @@ DEV_DB_LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1", "db"})
 # Render's health probe reaches this process over the private network, so its
 # Host header is the instance's rotating internal address, not BACKEND_URL's
 # hostname — allowlisting it isn't viable since Starlette's allowed_hosts has
-# no CIDR support. Only /health: /internal/tick arrives through the public
-# proxy with a correct Host and stays guarded.
+# no CIDR support.
 HOST_CHECK_EXEMPT_PATHS: frozenset[str] = frozenset({"/health"})
 
 # Starlette TrustedHostMiddleware's fixed rejection body — app/main.py's
@@ -583,7 +582,6 @@ BEARER_PREFIX = "Bearer "
 # Other HTTP header names referenced by name across routers/middleware/ingestion —
 # named here rather than as bare string literals so a typo at any call site
 # fails loudly (constant not found) instead of silently missing the header.
-HEADER_INTERNAL_TOKEN = "X-Internal-Token"
 HEADER_ORIGIN = "origin"
 HEADER_HOST = "host"
 HEADER_X_FORWARDED_FOR = "x-forwarded-for"
@@ -651,9 +649,6 @@ RATE_LIMIT_BROWSE = "120/minute"
 # Public, unauthenticated landing-page showcase (GET /public/showcase). No auth,
 # so throttle scraping abuse; generous enough for real visitors loading the page.
 RATE_LIMIT_PUBLIC = "60/minute"
-# /internal/tick (cron-job.org keepalive ping, app/main.py) hits 6x/hour by design;
-# generous ceiling exists only to bound token brute-force / abuse, not real traffic.
-RATE_LIMIT_INTERNAL_TICK = "30/minute"
 # How many events the landing-page showcase returns — a fixed, small teaser grid
 # (top-quality upcoming events), so no pagination is needed.
 SHOWCASE_EVENT_COUNT = 6
@@ -1584,7 +1579,7 @@ LOG_RECORD_RESERVED_ATTRS: frozenset[str] = frozenset(
 LOG_EVENT_JOB_RUN = "job_run"  # scheduled-job completion/failure telemetry
 LOG_EVENT_RATE_LIMIT_BLOCK = "rate_limit_block"  # own per-IP 429 rejection
 LOG_EVENT_LLM_DEGRADED = "llm_degraded"  # provider chain exhausted / backlog deferred
-LOG_EVENT_AUTH_FAILED = "auth_failed"  # magic-link / admin / internal-tick auth reject
+LOG_EVENT_AUTH_FAILED = "auth_failed"  # magic-link / admin auth reject
 LOG_EVENT_WEBHOOK_REJECTED = "webhook_rejected"  # inbound-mail signature / body reject
 LOG_EVENT_EMAIL_SEND_FAILED = "email_send_failed"  # Resend magic-link / digest failure
 LOG_EVENT_CONTACT_HONEYPOT = "contact_honeypot_block"  # contact-form honeypot field tripped
@@ -1754,8 +1749,6 @@ ERROR_IDENTITY_NOT_FOUND = "No linked identity found for that provider."
 ERROR_SUBMISSION_NOT_FOUND = "Submission not found."
 ERROR_EVENT_CANCELLED = "This event was taken down and can no longer be edited."
 
-# main.py (/internal/tick)
-ERROR_INTERNAL_TICK_INVALID_TOKEN = "Invalid token"
 
 # routers/admin.py
 ERROR_ADMIN_LOCKOUT = "Too many failed admin login attempts; try again later."
