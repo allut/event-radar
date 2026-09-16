@@ -1156,7 +1156,7 @@ LLM_DEDUP_VENUE_MAX_LEN = 100
 # site and the cache-prefetch query so they can never drift out of sync.
 LLM_TASK_DEDUP = "dedup"
 # Bounds fresh (cache-miss) network calls per pass — bounds DB session lifetime
-# against slow providers (Cerebras fallback ~1 req/min). Cache hits are cheap
+# against a slow or rate-limited fallback provider. Cache hits are cheap
 # indexed lookups and are NOT counted against this cap; see llm_tiebreaker.py.
 LLM_DEDUP_MAX_FRESH_LLM_CALLS_PER_PASS = 100
 # Chunk size for the bulk llm_calls prefetch IN-list, to bound query size.
@@ -1270,12 +1270,13 @@ LLM_PROVIDERS: list[dict[str, Any]] = [
         "params": {"reasoning_effort": "low"},
     },
     {
-        "name": "cerebras",
-        "base_url": "https://api.cerebras.ai/v1",
-        "model": "gpt-oss-120b",
-        "key_attr": "CEREBRAS_API_KEY",
-        # gpt-oss-120b is a reasoning model: reasoning tokens precede the answer
-        # and count against max_tokens, so it gets a larger cap and lower effort.
+        "name": "cloudflare",
+        # Base URL embeds the account id, so it comes from settings, not a literal here.
+        "base_url_attr": "CLOUDFLARE_WORKERS_AI_BASE_URL",
+        "model": "@cf/openai/gpt-oss-120b",
+        "key_attr": "CLOUDFLARE_WORKERS_AI_API_KEY",
+        # Same reasoning model as the Groq primary: reasoning tokens precede the
+        # answer and count against max_tokens, so it gets a larger cap and lower effort.
         "max_tokens": LLM_REASONING_MAX_TOKENS,
         "params": {"reasoning_effort": "low"},
     },

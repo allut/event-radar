@@ -331,7 +331,7 @@ async def run_dedup_pass_llm(
 
     Caps *fresh* (cache-miss) network calls at
     ``LLM_DEDUP_MAX_FRESH_LLM_CALLS_PER_PASS`` per internal sub-pass to bound
-    each burst against the LLM provider (Cerebras fallback at 1 req/min could
+    each burst against the LLM provider (a slow or rate-limited fallback could
     otherwise hold the connection open indefinitely).
 
     ``retry_seconds`` never sleeps *inside* this call — this function's whole

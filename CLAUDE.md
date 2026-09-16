@@ -100,7 +100,7 @@ FastAPI Backend (single process on Render Frankfurt Starter, port 8000 in dev)
         ↓
 Neon Postgres (eu-central-1, free tier, pgvector available for v1.1)
         ↓
-LLM Router: Groq (primary) → Cerebras → Mistral (fallback chain)
+LLM Router: Groq (primary) → Cloudflare Workers AI → Mistral (fallback chain)
 ```
 
 **No Celery/Redis** — embedded APScheduler suffices for a single-process MVP. Deployment topology (Render Frankfurt/Cloudflare Pages/cron-job.org) is in `docs/backend-ops.md`.
@@ -118,7 +118,7 @@ Full detail (field-level authority tables, sub-pass ordering, tiering) in `docs/
 7. **Geocoding backfill** — bbox self-heal + organizer-`Venue` pass (with coord sync onto venue-linked events) + venue-name extraction + sibling-copy + Nominatim sub-passes, in that order; runs every 6h.
 8. **Detail-refetch sync** — daily 04:30, reconciles venue/price/coords/localized text from source detail pages before the 06:00 feed build.
 
-Four read paths (Daily 5 feed, Explore, Saved Events, public Landing showcase) and the Fienta organizer lifecycle (detect/skip/revive/retire/discover) are documented in `docs/pipeline.md`. LLM usage constraints (`LLM_MAX_TOKENS = 400` per call, `LLM_REASONING_MAX_TOKENS = 600` hard-cap ceiling used by the Cerebras entry, dedup content-hash cache, Groq→Cerebras→Mistral fallback, backlog drain) and the three-layer NSFW/non-event content filters are also there.
+Four read paths (Daily 5 feed, Explore, Saved Events, public Landing showcase) and the Fienta organizer lifecycle (detect/skip/revive/retire/discover) are documented in `docs/pipeline.md`. LLM usage constraints (`LLM_MAX_TOKENS = 400` per call, `LLM_REASONING_MAX_TOKENS = 600` hard-cap ceiling used by the Cloudflare Workers AI entry, dedup content-hash cache, Groq→Cloudflare Workers AI→Mistral fallback, backlog drain) and the three-layer NSFW/non-event content filters are also there.
 
 ## Auth, Security & the Organizer Portal
 

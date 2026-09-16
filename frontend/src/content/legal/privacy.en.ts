@@ -98,7 +98,7 @@ const doc: LegalDoc = {
         {
           kind: 'p',
           content: [
-            'Providers that process event data only, never your personal data: our language-model providers (Groq, Cerebras, Mistral) classify public event listings; OpenStreetMap Nominatim geocodes event venue addresses; cron-job.org pings the Service to keep it awake. We may also disclose data where required by law.',
+            'Providers that process event data only, never your personal data: our language-model providers (Groq, Cloudflare Workers AI, Mistral) classify public event listings; OpenStreetMap Nominatim geocodes event venue addresses; cron-job.org pings the Service to keep it awake. We may also disclose data where required by law.',
           ],
         },
       ],

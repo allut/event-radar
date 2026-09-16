@@ -98,7 +98,7 @@ const doc: LegalDoc = {
         {
           kind: 'p',
           content: [
-            'Pakkujad, kes töötlevad ainult sündmuste andmeid, mitte kunagi sinu isikuandmeid: meie keelemudelite pakkujad (Groq, Cerebras, Mistral) klassifitseerivad avalikke sündmuste kirjeid; OpenStreetMap Nominatim geokodeerib sündmuste toimumiskohtade aadresse; cron-job.org pingib teenust, et hoida see ärkvel. Võime andmeid avaldada ka seaduses nõutud juhtudel.',
+            'Pakkujad, kes töötlevad ainult sündmuste andmeid, mitte kunagi sinu isikuandmeid: meie keelemudelite pakkujad (Groq, Cloudflare Workers AI, Mistral) klassifitseerivad avalikke sündmuste kirjeid; OpenStreetMap Nominatim geokodeerib sündmuste toimumiskohtade aadresse; cron-job.org pingib teenust, et hoida see ärkvel. Võime andmeid avaldada ka seaduses nõutud juhtudel.',
           ],
         },
       ],

@@ -71,7 +71,12 @@ class TestLlmAvailable:
         monkeypatch.setattr(
             router,
             "settings",
-            SimpleNamespace(GROQ_API_KEY="", CEREBRAS_API_KEY="k", MISTRAL_API_KEY=""),
+            SimpleNamespace(
+                GROQ_API_KEY="",
+                CLOUDFLARE_WORKERS_AI_API_KEY="k",
+                CLOUDFLARE_WORKERS_AI_BASE_URL="https://api.cloudflare.com/client/v4/accounts/acct/ai/v1",
+                MISTRAL_API_KEY="",
+            ),
         )
         assert router.llm_available() is True
 
@@ -79,7 +84,12 @@ class TestLlmAvailable:
         monkeypatch.setattr(
             router,
             "settings",
-            SimpleNamespace(GROQ_API_KEY="", CEREBRAS_API_KEY="", MISTRAL_API_KEY=""),
+            SimpleNamespace(
+                GROQ_API_KEY="",
+                CLOUDFLARE_WORKERS_AI_API_KEY="",
+                CLOUDFLARE_WORKERS_AI_BASE_URL="",
+                MISTRAL_API_KEY="",
+            ),
         )
         assert router.llm_available() is False
 

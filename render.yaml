@@ -42,7 +42,9 @@ services:
         sync: false
       - key: GROQ_API_KEY
         sync: false
-      - key: CEREBRAS_API_KEY
+      - key: CLOUDFLARE_WORKERS_AI_API_KEY
+        sync: false
+      - key: CLOUDFLARE_WORKERS_AI_BASE_URL
         sync: false
       - key: MISTRAL_API_KEY
         sync: false

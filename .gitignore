@@ -71,7 +71,7 @@ pnpm-debug.log*
 
 # -----------------------------------------------------------------------------
 # Environment / secrets
-# Critical: Resend, Cerebras, Groq, Mistral keys, Neon DSN, magic-link signer
+# Critical: Resend, Cloudflare, Groq, Mistral keys, Neon DSN, magic-link signer
 # -----------------------------------------------------------------------------
 .env
 .env.*

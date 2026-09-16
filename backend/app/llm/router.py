@@ -1,4 +1,4 @@
-"""LLM provider chain: Groq → Cerebras → Mistral.
+"""LLM provider chain: Groq → Cloudflare Workers AI → Mistral.
 
 Entry point: ``llm_json(task, prompt, db)``
 
@@ -47,6 +47,15 @@ def content_hash(text: str) -> str:
     return _content_hash(text)
 
 
+def _provider_base_url(provider: dict[str, Any]) -> str:
+    """Provider base URL — a literal, or a settings attr when it's deployment-specific
+    (Cloudflare Workers AI embeds the account id in the path)."""
+    attr = provider.get("base_url_attr")
+    if attr:
+        return str(getattr(settings, attr, ""))
+    return str(provider["base_url"])
+
+
 def llm_http_client() -> httpx.AsyncClient:
     """Build an ``httpx.AsyncClient`` configured for LLM calls, for a batch
     caller (``classify_pending``, ``run_dedup_pass_llm``) to open once and
@@ -62,7 +71,10 @@ def llm_available() -> bool:
     rule-only clustering) instead of issuing calls that would all fail when no
     key is set — local dev, or lapsed keys in production.
     """
-    return any(getattr(settings, p["key_attr"], "") for p in LLM_PROVIDERS)
+    return any(
+        getattr(settings, p["key_attr"], "") and _provider_base_url(p)
+        for p in LLM_PROVIDERS
+    )
 
 
 async def llm_json(
@@ -137,7 +149,8 @@ async def llm_json(
 
     for provider in LLM_PROVIDERS:
         api_key: str = getattr(settings, provider["key_attr"], "")
-        if not api_key:
+        base_url = _provider_base_url(provider)
+        if not api_key or not base_url:
             continue
 
         record = LlmCall(
@@ -164,14 +177,14 @@ async def llm_json(
             # of failing fast into it.
             if http_client is not None:
                 resp = await http_client.post(
-                    f"{provider['base_url']}/chat/completions",
+                    f"{base_url}/chat/completions",
                     headers={AUTHORIZATION_HEADER: f"{BEARER_PREFIX}{api_key}"},
                     json=payload,
                 )
             else:
                 async with httpx.AsyncClient(timeout=LLM_REQUEST_TIMEOUT_SECONDS) as client:
                     resp = await client.post(
-                        f"{provider['base_url']}/chat/completions",
+                        f"{base_url}/chat/completions",
                         headers={AUTHORIZATION_HEADER: f"{BEARER_PREFIX}{api_key}"},
                         json=payload,
                     )

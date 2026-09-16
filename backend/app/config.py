@@ -182,7 +182,9 @@ class Settings(BaseSettings):
 
     # LLM providers — empty key means that provider is skipped in the fallback chain
     GROQ_API_KEY: str = ""
-    CEREBRAS_API_KEY: str = ""
+    # Workers AI base URL embeds the account id; both must be set or the provider is skipped
+    CLOUDFLARE_WORKERS_AI_API_KEY: str = ""
+    CLOUDFLARE_WORKERS_AI_BASE_URL: str = ""
     MISTRAL_API_KEY: str = ""
 
     # CORS — pydantic-settings parses a JSON array from the env var (e.g. '["https://eventradar.ee"]')
