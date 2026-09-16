@@ -88,7 +88,7 @@ Vite + React SPA (frontend, port 5173 in dev)
   ├── State: React Query (@tanstack/react-query) for server state
   └── API client: frontend/src/api/client.ts (httpOnly session-cookie auth, `credentials: "include"`)
         ↓
-FastAPI Backend (single process on Render free tier, port 8000 in dev)
+FastAPI Backend (single process on Render Frankfurt Starter, port 8000 in dev)
   ├── Routers: /auth  /admin  /admin/auth  /onboarding  /events  /explore  /feed  /feedback  /public
   │            /reports  /users/me  /contact  /email  /webhooks  /organizer/auth  /organizer/events
   │            /organizer/profile  /organizer/venues  /organizer/contact
@@ -103,7 +103,7 @@ Neon Postgres (eu-central-1, free tier, pgvector available for v1.1)
 LLM Router: Groq (primary) → Cerebras → Mistral (fallback chain)
 ```
 
-**No Celery/Redis** — embedded APScheduler suffices for a single-process MVP. Deployment topology (Render/Vercel/cron-job.org) is in `docs/backend-ops.md`.
+**No Celery/Redis** — embedded APScheduler suffices for a single-process MVP. Deployment topology (Render Frankfurt/Cloudflare Pages/cron-job.org) is in `docs/backend-ops.md`.
 
 ## Pipeline at a Glance
 
@@ -138,7 +138,7 @@ Frontend imports generated strings via `frontend/src/i18n.ts`; backend via `back
 
 ## Frontend Structure
 
-Each component/route lives in its own folder: `Name.tsx` + (usually) `Name.module.css` + a one-line `index.ts` barrel — a handful of folders (`AdminApp/`, `Privacy/`, `Terms/`, `AdminThemeToggle/`, `LocaleSelector/`, `SeoTags/`, `ThemeSelector/`) have no stylesheet. Routes in `frontend/src/routes/`, shared components in `frontend/src/components/`, CSS design tokens are **mandatory** (never hardcode colors/spacing/radii — see Code Quality Rules below), shared CSS chrome composes from `frontend/src/components/shared/`. Hooks/utils/constants each have one canonical home (`frontend/src/hooks/`, `frontend/src/utils.ts`, `frontend/src/constants.ts`) — check there before writing a new one. Non-component homes: `frontend/src/api/client.ts` (the single fetch wrapper), `frontend/src/lib/` (auth/locale/theme/analytics/SEO-prerender modules), `frontend/src/content/legal/` (per-locale legal-doc data behind `LegalPage`), `frontend/scripts/` (build-time prerender + icon generation), `frontend/api/` (the live Vercel Serverless Functions — SEO audit and prerender-cadence — still serving production) and `frontend/functions/` (their Cloudflare Pages Functions port, not yet cut over; same logic, `context.env`/Fetch API boundary instead of the `VercelRequest`/`VercelResponse` shim). Tests are co-located as `Name.test.tsx`/`Name.test.ts`. Full folder-by-folder breakdown in `docs/frontend.md`.
+Each component/route lives in its own folder: `Name.tsx` + (usually) `Name.module.css` + a one-line `index.ts` barrel — a handful of folders (`AdminApp/`, `Privacy/`, `Terms/`, `AdminThemeToggle/`, `LocaleSelector/`, `SeoTags/`, `ThemeSelector/`) have no stylesheet. Routes in `frontend/src/routes/`, shared components in `frontend/src/components/`, CSS design tokens are **mandatory** (never hardcode colors/spacing/radii — see Code Quality Rules below), shared CSS chrome composes from `frontend/src/components/shared/`. Hooks/utils/constants each have one canonical home (`frontend/src/hooks/`, `frontend/src/utils.ts`, `frontend/src/constants.ts`) — check there before writing a new one. Non-component homes: `frontend/src/api/client.ts` (the single fetch wrapper), `frontend/src/lib/` (auth/locale/theme/analytics/SEO-prerender modules), `frontend/src/content/legal/` (per-locale legal-doc data behind `LegalPage`), `frontend/scripts/` (build-time prerender + icon generation), `frontend/functions/` (the live Cloudflare Pages Functions — API proxy, SPA fallback, SEO audit, prerender-cadence — see `docs/backend-ops.md`) and `frontend/api/` (their now-idle Vercel Serverless Functions predecessor, kept as the migration's rollback path per issue #341/#348, not deleted). Tests are co-located as `Name.test.tsx`/`Name.test.ts`. Full folder-by-folder breakdown in `docs/frontend.md`.
 
 Two routing facts that bite: every `ROUTE_DEFS` entry is registered at both its bare path and a `/:locale` prefix (`/`, `/explore` and `/events/:id` are the three `noRedirect` SEO routes — their bare path always renders Estonian and never redirects); the admin console lives entirely outside that loop in its own `React.lazy` chunk (`routes/AdminApp/`), un-i18n'd and reachable only by typed URL.
 
