@@ -492,7 +492,7 @@ function extractChangeMarker(html: string): string | null {
   return null;
 }
 
-interface ChangeDetectionResult {
+export interface ChangeDetectionResult {
   target: PrerenderTarget;
   /** True when the live page's embedded marker matches — the Playwright
    * render is skipped entirely and `liveHtml` copied forward as-is. */
@@ -534,6 +534,69 @@ async function classifyTarget(target: PrerenderTarget): Promise<ChangeDetectionR
   const liveMarker = extractChangeMarker(html);
   const unchanged = liveMarker !== null && liveMarker === target.updatedAt;
   return { target, unchanged, liveHtml: html };
+}
+
+/** A resolved-in-manifest target — narrows `eventId` to non-undefined so
+ * fetchResolvedTarget never needs a runtime check for what
+ * partitionByChainState already guarantees. */
+export type ResolvedTarget = PrerenderTarget & { eventId: number };
+
+/** Round-2+ read-side split (issue #368) — every event target whose
+ * `locale:eventId` key is already in the manifest index skips
+ * classifyTarget's production fetch entirely; home/explore targets (no
+ * eventId, per ChangeDetectionResult's doc comment) and any event target
+ * the index hasn't resolved yet fall through to today's classifyTarget path
+ * unchanged. */
+export function partitionByChainState(
+  targets: PrerenderTarget[],
+  index: ChainStateIndex,
+): { resolved: ResolvedTarget[]; unresolved: PrerenderTarget[] } {
+  const resolved: ResolvedTarget[] = [];
+  const unresolved: PrerenderTarget[] = [];
+  for (const target of targets) {
+    const key = target.eventId === undefined ? null : `${target.locale}:${target.eventId}`;
+    if (key !== null && Object.prototype.hasOwnProperty.call(index, key)) {
+      resolved.push(target as ResolvedTarget);
+    } else {
+      unresolved.push(target);
+    }
+  }
+  return { resolved, unresolved };
+}
+
+/** Read path (issue #368) — round-2+ substitute for classifyTarget on a
+ * target the manifest index already resolved earlier in this burst: reads
+ * its finalized snapshot HTML out of R2 instead of re-fetching production.
+ * Returns the same ChangeDetectionResult shape classifyTarget produces
+ * (`unchanged: true`, `liveHtml` set) so every downstream consumer — the
+ * copy-forward write loop, prioritizeRenderQueue's `!unchanged` filter, the
+ * sitemap builder — needs no change to tell the two apart. A content-object
+ * read miss (evicted, corrupt, or a stale index entry) falls back to a
+ * fresh classifyTarget fetch for this one target only, exactly like an
+ * unresolved target — never blocks or fails the round. */
+export async function fetchResolvedTarget(
+  sanitizedBurstId: string,
+  target: ResolvedTarget,
+  manifestHits: Set<PrerenderTarget>,
+): Promise<ChangeDetectionResult> {
+  const html = await getR2Object(chainStateContentKey(sanitizedBurstId, target.locale, target.eventId));
+  if (html === null) return classifyTarget(target);
+  // A burst can span several rounds (resolveRoundStart/CHAIN_MAX_ROUNDS),
+  // and fetchPrerenderCandidates() re-fetches Event.updated_at fresh every
+  // round — so the manifest's cached snapshot, written whichever earlier
+  // round first resolved this target, can have gone stale in the meantime.
+  // Re-run the same marker diff classifyTarget performs against a live
+  // fetch (extractChangeMarker/target.updatedAt) before trusting it as
+  // `unchanged`; a mismatch falls back to a fresh production fetch exactly
+  // like a manifest miss, rather than serving stale content forward.
+  if (target.updatedAt === undefined || extractChangeMarker(html) !== target.updatedAt) {
+    return classifyTarget(target);
+  }
+  // Marks this target as actually sourced from the manifest (as opposed to
+  // either fallback classifyTarget call above) so main()'s copy-forward
+  // write loop knows not to re-PUT it (issue #368).
+  manifestHits.add(target);
+  return { target, unchanged: true, liveHtml: html };
 }
 
 /** sitemap.xml for `targets` (issue #51) — one `<url>` per locale-variant
@@ -1013,11 +1076,16 @@ export async function main(): Promise<void> {
   const { burstId, round } = resolveRoundStart(commitMessage, new Date());
   console.log(`prerender: round ${round} of burst ${burstId}${round > 1 ? ' (resumed)' : ' (new)'}`);
 
-  // Chain-state manifest (issue #367) — read-side is only enough here to
-  // avoid the end-of-round PUT clobbering an earlier round's entries in the
-  // same burst; skip-refetch on this read is #368's job, not this ticket's.
+  // Chain-state manifest (issues #367/#368) — round 1's burstId is freshly
+  // minted (resolveRoundStart), guaranteed to have no manifest yet, so no
+  // read is attempted; round 2+ reads it both to merge #367's end-of-round
+  // accumulation onto what an earlier round already wrote and to drive
+  // #368's skip-refetch partition below.
   const sanitizedBurstId = sanitizeBurstIdForR2(burstId);
-  const chainStateIndex = parseChainStateIndex(await getR2Object(chainStateIndexKey(sanitizedBurstId)));
+  const isResumedRound = round > 1;
+  const chainStateIndex: ChainStateIndex = isResumedRound
+    ? parseChainStateIndex(await getR2Object(chainStateIndexKey(sanitizedBurstId)))
+    : {};
 
   const candidates = await fetchPrerenderCandidates();
   const targets = buildTargets(candidates);
@@ -1042,7 +1110,23 @@ export async function main(): Promise<void> {
   // marker against the currently-live production page. An exact match
   // copies the live page forward as-is (no Playwright render); everything
   // else (never-rendered, changed, or a fetch/parse miss) renders fresh.
-  const classification = await mapPool(targets, CHANGE_DETECTION_CONCURRENCY, classifyTarget);
+  // Round 2+ (issue #368) skips this production fetch for any event target
+  // the manifest index already resolved earlier in the burst, substituting
+  // fetchResolvedTarget's cheaper R2 read instead — both routes run through
+  // the same mapPool/CHANGE_DETECTION_CONCURRENCY pool `targets` already
+  // did pre-#368, so the concurrency cap against PRODUCTION_ORIGIN never
+  // stacks and the result stays ordered like `targets` with no separate
+  // merge step.
+  const resolvedTargets: ResolvedTarget[] = isResumedRound
+    ? partitionByChainState(targets, chainStateIndex).resolved
+    : [];
+  const resolvedTargetSet = new Set<PrerenderTarget>(resolvedTargets);
+  const resolvedFromManifest = new Set<PrerenderTarget>();
+  const classification = await mapPool(targets, CHANGE_DETECTION_CONCURRENCY, (target) =>
+    resolvedTargetSet.has(target)
+      ? fetchResolvedTarget(sanitizedBurstId, target as ResolvedTarget, resolvedFromManifest)
+      : classifyTarget(target),
+  );
   let copiedForward = 0;
   // Stale-but-real fallback (issue #82) content, held in memory rather than
   // written to dist/ yet — see the write-out below (after the render pool)
@@ -1056,7 +1140,12 @@ export async function main(): Promise<void> {
       const finalized = finalizeSnapshotHtml(liveHtml, shellHtml);
       await writeFile(outPath, finalized, 'utf-8');
       copiedForward++;
-      await persistChainStateTarget(sanitizedBurstId, round, target, finalized, chainStateIndex);
+      // A target fetchResolvedTarget already sourced from the manifest is
+      // already in the bucket under this exact key — re-PUTting identical
+      // bytes would be a pure-waste duplicate write (issue #368).
+      if (!resolvedFromManifest.has(target)) {
+        await persistChainStateTarget(sanitizedBurstId, round, target, finalized, chainStateIndex);
+      }
     } else if (liveHtml !== null) {
       // Needs a fresh render, but a live page exists — held for now rather
       // than written to its final path immediately (issue #86 investigation:

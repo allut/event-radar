@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { deleteR2ObjectsByPrefix, putR2Object } from '../src/lib/r2ChainState';
+import { deleteR2ObjectsByPrefix, getR2Object, putR2Object } from '../src/lib/r2ChainState';
 
 vi.mock('../src/lib/r2ChainState', () => ({
   getR2Object: vi.fn(),
@@ -12,20 +12,28 @@ import {
   chainStateContentKey,
   chainStateIndexKey,
   fetchLiveExploreCount,
+  fetchResolvedTarget,
   finalizeChainState,
   isPreviewBuild,
   logZeroProgressAbort,
   main,
   parseChainStateIndex,
+  partitionByChainState,
   persistChainStateTarget,
   rewriteSnapshotAssetRefs,
   sanitizeBurstIdForR2,
   selectValidationTargets,
   stripBakedThemeAttr,
 } from './prerender';
-import type { ChainStateIndex, PrerenderTarget } from './prerender';
+import type { ChainStateIndex, PrerenderTarget, ResolvedTarget } from './prerender';
 import type { RoundMarker } from '../src/lib/prerenderChain';
-import { BROWSE_PAGE_SIZE, CHAIN_STATE_PREFIX, CRAWLABLE_ICON_PATHS, SITEMAP_PATH } from '../src/constants';
+import {
+  BROWSE_PAGE_SIZE,
+  CHAIN_STATE_PREFIX,
+  CRAWLABLE_ICON_PATHS,
+  PRODUCTION_ORIGIN,
+  SITEMAP_PATH,
+} from '../src/constants';
 
 function makeTarget(bare: string): PrerenderTarget {
   return { bare, locale: 'en' };
@@ -582,6 +590,118 @@ describe('chain-state manifest write path (issue #367)', () => {
 
       await expect(finalizeChainState('burst-1', {}, true)).resolves.toBeUndefined();
       await expect(finalizeChainState('burst-1', {}, false)).resolves.toBeUndefined();
+    });
+  });
+});
+
+describe('chain-state manifest read path (issue #368)', () => {
+  const getR2ObjectMock = vi.mocked(getR2Object);
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  describe('partitionByChainState', () => {
+    it('routes an event target whose locale:eventId key is in the index to resolved', () => {
+      const target: PrerenderTarget = { bare: '/events/42', locale: 'en', eventId: 42 };
+      const index: ChainStateIndex = { 'en:42': { resolvedAtRound: 1 } };
+
+      const { resolved, unresolved } = partitionByChainState([target], index);
+
+      expect(resolved).toEqual([target]);
+      expect(unresolved).toEqual([]);
+    });
+
+    it('routes an event target with no matching index entry to unresolved', () => {
+      const target: PrerenderTarget = { bare: '/events/9', locale: 'en', eventId: 9 };
+      const index: ChainStateIndex = { 'en:42': { resolvedAtRound: 1 } };
+
+      const { resolved, unresolved } = partitionByChainState([target], index);
+
+      expect(resolved).toEqual([]);
+      expect(unresolved).toEqual([target]);
+    });
+
+    it('always routes a home/explore target (no eventId) to unresolved, even against a non-empty index', () => {
+      const target: PrerenderTarget = { bare: '/explore', locale: 'en' };
+      const index: ChainStateIndex = { 'en:42': { resolvedAtRound: 1 } };
+
+      const { resolved, unresolved } = partitionByChainState([target], index);
+
+      expect(resolved).toEqual([]);
+      expect(unresolved).toEqual([target]);
+    });
+
+    it('keys the index lookup on locale:eventId, so the same eventId under a different locale is unresolved', () => {
+      const target: PrerenderTarget = { bare: '/events/42', locale: 'ru', eventId: 42 };
+      const index: ChainStateIndex = { 'en:42': { resolvedAtRound: 1 } };
+
+      const { resolved, unresolved } = partitionByChainState([target], index);
+
+      expect(resolved).toEqual([]);
+      expect(unresolved).toEqual([target]);
+    });
+  });
+
+  function snapshotHtmlWithMarker(marker: string): string {
+    return `<html><head><script type="application/ld+json">{"@type":"Event","dateModified":"${marker}"}</script></head><body></body></html>`;
+  }
+
+  describe('fetchResolvedTarget', () => {
+    it('returns a ChangeDetectionResult indistinguishable from a successful classifyTarget result, sourced from R2, when the cached marker still matches', async () => {
+      const target: ResolvedTarget = {
+        bare: '/events/42',
+        locale: 'en',
+        eventId: 42,
+        updatedAt: '2026-08-01T00:00:00.000Z',
+      };
+      const cachedHtml = snapshotHtmlWithMarker('2026-08-01T00:00:00.000Z');
+      getR2ObjectMock.mockResolvedValue(cachedHtml);
+      const manifestHits = new Set<PrerenderTarget>();
+
+      const result = await fetchResolvedTarget('burst-1', target, manifestHits);
+
+      expect(getR2ObjectMock).toHaveBeenCalledWith(`${CHAIN_STATE_PREFIX}burst-1/targets/en-42.html`);
+      expect(result).toEqual({ target, unchanged: true, liveHtml: cachedHtml });
+      expect(manifestHits.has(target)).toBe(true);
+    });
+
+    it('falls back to a fresh production fetch (classifyTarget) on a content-read miss, without marking the target as a manifest hit', async () => {
+      const target: ResolvedTarget = { bare: '/events/9', locale: 'en', eventId: 9, updatedAt: '2026-08-01T00:00:00.000Z' };
+      getR2ObjectMock.mockResolvedValue(null);
+      const fetchMock = vi.fn().mockResolvedValue({ ok: false } as Response);
+      vi.stubGlobal('fetch', fetchMock);
+      const manifestHits = new Set<PrerenderTarget>();
+
+      const result = await fetchResolvedTarget('burst-1', target, manifestHits);
+
+      expect(fetchMock).toHaveBeenCalledWith(`${PRODUCTION_ORIGIN}/en/events/9`);
+      expect(result).toEqual({ target, unchanged: false, liveHtml: null });
+      expect(manifestHits.has(target)).toBe(false);
+
+      vi.unstubAllGlobals();
+    });
+
+    it('falls back to a fresh production fetch when the cached snapshot predates a later change to the event (stale manifest entry, issue #368 staleness fix)', async () => {
+      const target: ResolvedTarget = {
+        bare: '/events/42',
+        locale: 'en',
+        eventId: 42,
+        updatedAt: '2026-08-02T00:00:00.000Z',
+      };
+      getR2ObjectMock.mockResolvedValue(snapshotHtmlWithMarker('2026-08-01T00:00:00.000Z'));
+      const freshHtml = snapshotHtmlWithMarker('2026-08-02T00:00:00.000Z');
+      const fetchMock = vi.fn().mockResolvedValue({ ok: true, text: () => Promise.resolve(freshHtml) } as Response);
+      vi.stubGlobal('fetch', fetchMock);
+      const manifestHits = new Set<PrerenderTarget>();
+
+      const result = await fetchResolvedTarget('burst-1', target, manifestHits);
+
+      expect(fetchMock).toHaveBeenCalledWith(`${PRODUCTION_ORIGIN}/en/events/42`);
+      expect(result).toEqual({ target, unchanged: true, liveHtml: freshHtml });
+      expect(manifestHits.has(target)).toBe(false);
+
+      vi.unstubAllGlobals();
     });
   });
 });
