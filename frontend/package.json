@@ -36,6 +36,7 @@
     "js-yaml": "5.4.1"
   },
   "devDependencies": {
+    "@aws-sdk/client-s3": "^3.1133.0",
     "@eslint/js": "^9.39.4",
     "@sparticuz/chromium": "^147.0.0",
     "@testing-library/jest-dom": "^6.9.1",

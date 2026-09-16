@@ -295,6 +295,20 @@ export const CHAIN_MAX_ROUNDS = 10;
 // chain rather than an active one, so cron resumes instead of skipping
 // forever and a genuinely active chain isn't mistaken for a stale one.
 export const CHAIN_STALENESS_TIMEOUT_MINUTES = 30;
+// R2 key prefix (issue #366/#365) under which the prerender chain-state
+// manifest lives — one burst's index + content objects sit at
+// `${CHAIN_STATE_PREFIX}${sanitizedBurstId}/...`. Parallel optimization
+// layer to the CHAIN_MARKER_PREFIX git-commit flow above, not a replacement
+// — see docs/frontend.md's prerender section.
+export const CHAIN_STATE_PREFIX = 'prerender-chain-state/';
+// R2 bucket lifecycle rule expiring everything under CHAIN_STATE_PREFIX
+// after this many days — a crash backstop, comfortably past
+// CHAIN_STALENESS_TIMEOUT_MINUTES, for a burst whose explicit
+// delete-on-`done` never ran (build crashed mid-burst). Mirrors
+// isMarkerStale's existing crash-recovery posture. The lifecycle rule
+// itself is bucket configuration, not application code — this constant
+// documents the intended value for whoever configures it.
+export const CHAIN_STATE_LIFECYCLE_DAYS = 3;
 // Repo the round-state marker is committed to (issue #83) via the GitHub Git
 // Data API — the branch the Vercel Deploy Hook targets lives here. Same repo
 // as SEO_AUDIT_GITHUB_REPO (both point at this codebase); kept as a separate
