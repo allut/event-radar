@@ -30,6 +30,7 @@ from app.constants import (
     LOG_SHIP_TIMEOUT_SECONDS,
     MIME_APPLICATION_JSON,
     SQLALCHEMY_ENGINE_LOGGER_NAME,
+    UVICORN_ACCESS_PATH_ARG_INDEX,
     UVICORN_ACCESS_STATUS_ARG_INDEX,
 )
 
@@ -126,12 +127,14 @@ class _AccessPathFilter(logging.Filter):
             and isinstance(record.args, tuple)
             and len(record.args) > UVICORN_ACCESS_STATUS_ARG_INDEX
         ):
-            path = record.args[2]
+            path = record.args[UVICORN_ACCESS_PATH_ARG_INDEX]
             if isinstance(path, str):
                 stripped_path = path.split("?", 1)[0]
                 if stripped_path != path:
                     record.args = (
-                        record.args[:2] + (stripped_path,) + record.args[3:]
+                        record.args[:UVICORN_ACCESS_PATH_ARG_INDEX]
+                        + (stripped_path,)
+                        + record.args[UVICORN_ACCESS_PATH_ARG_INDEX + 1 :]
                     )
                 path = stripped_path
             status = record.args[UVICORN_ACCESS_STATUS_ARG_INDEX]

@@ -22,6 +22,7 @@ from app._generated.shared_constants import (
     VALID_CATEGORIES,
     VALID_LOCALES,
     VALID_SIGNALS,
+    VALID_THEME_PREFERENCES,
     VALID_VIBES,
 )
 
@@ -597,6 +598,10 @@ MIME_APPLICATION_NDJSON = "application/x-ndjson"
 # _AccessPathFilter reads path/status off it. Named so a future uvicorn
 # version's arg-count change is at least a visible constant, not a bare index.
 UVICORN_ACCESS_STATUS_ARG_INDEX = 4
+# Same args tuple, the path slot — app/logging_config.py's _AccessPathFilter
+# strips the query string in place, so this index (and its :N / N: slice
+# derivatives) must stay consistent with UVICORN_ACCESS_STATUS_ARG_INDEX above.
+UVICORN_ACCESS_PATH_ARG_INDEX = 2
 # BeautifulSoup's built-in parser name — used everywhere we parse scraped/stored HTML.
 HTML_PARSER = "html.parser"
 # Reject a signature whose svix-timestamp is further than this from "now" (either
@@ -721,6 +726,10 @@ GOOGLE_JWKS_CACHE_LIFESPAN_SECONDS = 300
 # state value (app/auth/google_oauth.py) — 32 bytes -> 43 URL-safe chars,
 # within RFC 7636's 43-128 char code_verifier bound.
 OAUTH_PKCE_TOKEN_BYTES = 32
+# Timeout for the server-to-server code-for-token exchange
+# (app/auth/google_oauth.py::exchange_code_for_id_token), awaited inline in
+# the OAuth callback — deliberately shorter than HTTP_TIMEOUT_SECONDS.
+GOOGLE_OAUTH_TOKEN_TIMEOUT_SECONDS = 10.0
 IDENTITY_PROVIDER_GOOGLE = "google"
 GOOGLE_OAUTH_SCOPE = "openid email"  # never "profile" — no name/picture stored
 GOOGLE_OAUTH_AUTHORIZATION_ENDPOINT = "https://accounts.google.com/o/oauth2/v2/auth"
@@ -881,10 +890,10 @@ LOCALE_ET = "et"
 LOCALE_EN = "en"
 LOCALE_RU = "ru"
 
-# Server-side theme_preference column values (users/organizers) — mirrors
-# VALID_LOCALES. The tri-state UI value "system" is never sent to or stored
-# on this column; only "light"/"dark"/NULL are valid here.
-VALID_THEME_PREFERENCES = {"light", "dark"}
+# VALID_THEME_PREFERENCES imported from app._generated.shared_constants
+# (shared/app-config.json → generate_shared.py) — server-side theme_preference
+# column values (users/organizers). The tri-state UI value "system" is never
+# sent to or stored on this column; only "light"/"dark"/NULL are valid here.
 
 # The one theme_preference value that keeps an email's dark styling unchanged —
 # every other value (including None/"system") selects the light style set.
@@ -1611,6 +1620,9 @@ LOG_EVENT_SCHEMA_DRIFT = "schema_drift"  # boot-time alembic-head mismatch (see 
 # (OWASP audit F10). Well above realistic organic signup volume for this
 # single-city MVP; tune from real data once there's a baseline.
 UNVERIFIED_ACCOUNT_DAILY_BUDGET = 200
+# app/db.py::assert_schema_at_head — the migrations directory name under
+# backend/, pinned absolute so the alembic-head guard doesn't depend on cwd.
+ALEMBIC_DIR_NAME = "alembic"
 # `action` field values for LOG_EVENT_ADMIN_ACTION (issue #155).
 ADMIN_ACTION_RESOLVE_REPORTS = "resolve_reports"
 ADMIN_ACTION_TAKEDOWN_REPORTED_EVENT = "takedown_reported_event"
@@ -1629,6 +1641,15 @@ ADMIN_ACTION_CLEANUP = "cleanup"
 ADMIN_ACTION_BUILD_FEEDS = "build_feeds"
 ADMIN_ACTION_SEND_DIGESTS = "send_digests"
 ADMIN_ACTION_PIPELINE_RUN = "pipeline_run"
+# Sub-stages that are also standalone triggers with their own single-flight
+# guard (issue #160) — held for pipeline/run's whole duration too, or a
+# standalone ingest/classify/send-digests click mid-pipeline would run
+# concurrently with the pipeline's own execution of that same stage.
+PIPELINE_RUN_OVERLAPPING_LOCK_KEYS = (
+    ADMIN_ACTION_INGEST,
+    ADMIN_ACTION_CLASSIFY,
+    ADMIN_ACTION_SEND_DIGESTS,
+)
 # `status` field values for LOG_EVENT_JOB_RUN.
 LOG_STATUS_OK = "ok"
 LOG_STATUS_ERROR = "error"

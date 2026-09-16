@@ -50,8 +50,10 @@ from app.constants import (
     SESSION_COOKIE_SECURE,
     TALLINN_TZ,
     UNVERIFIED_ACCOUNT_DAILY_BUDGET,
+    VALID_CATEGORIES,
     VALID_LOCALES,
     VALID_REPORT_REASONS,
+    VALID_THEME_PREFERENCES,
 )
 from app.db import AsyncSessionLocal
 from app.email.report_reporter import send_report_outcome_email
@@ -956,7 +958,15 @@ async def send_report_resolution_emails(
                     extra={"event": LOG_EVENT_EMAIL_SEND_FAILED},
                 )
 
-    await asyncio.gather(*(_send_one(report) for report in reports))
+    # return_exceptions=True is defence-in-depth, mirroring app/email/digest.py's
+    # fan-out: _send_one already catches every send error and logs it, but
+    # anything raised outside that try/except (e.g. a BaseException such as
+    # CancelledError) would otherwise cancel every other in-flight reporter
+    # email and propagate into the caller, after resolution has already
+    # been committed.
+    await asyncio.gather(
+        *(_send_one(report) for report in reports), return_exceptions=True
+    )
 
 
 async def cancel_event_and_resolve_reports(
@@ -971,6 +981,43 @@ async def cancel_event_and_resolve_reports(
     event.status = EVENT_STATUS_CANCELLED
     event.cancellation_reason = cancellation_reason
     return await resolve_open_reports(db, event, resolution_note)
+
+
+def validate_theme_preference(v: str | None) -> str | None:
+    """Shared by settings.py's PatchSettingsBody and organizer_profile.py's
+    OrganizerProfilePatchBody — the consumer and organizer theme tracks are
+    independent, but this validation isn't track-specific."""
+    if v is not None and v not in VALID_THEME_PREFERENCES:
+        raise ValueError(
+            f"theme_preference must be one of {sorted(VALID_THEME_PREFERENCES)}"
+        )
+    return v
+
+
+def validate_tz_aware(v: datetime | None) -> datetime | None:
+    """Shared by organizer_events.py's SubmitEventBody/PatchEventBody
+    starts_at/ends_at validators."""
+    if v is not None and v.tzinfo is None:
+        raise ValueError("must be timezone-aware")
+    return v
+
+
+def validate_category(v: str | None) -> str | None:
+    """Shared by organizer_events.py's SubmitEventBody/PatchEventBody
+    category validators."""
+    if v is not None and v not in VALID_CATEGORIES:
+        raise ValueError(f"invalid category: {v!r}")
+    return v
+
+
+def validate_price_ordering(
+    price_min: float | None, price_max: float | None
+) -> None:
+    """Shared by organizer_events.py's SubmitEventBody/PatchEventBody and
+    organizer_venues.py's VenueBody/VenuePatchBody `price_min > price_max`
+    ordering check."""
+    if price_min is not None and price_max is not None and price_min > price_max:
+        raise ValueError("price_min must not be greater than price_max")
 
 
 def validate_report_reason(reason: str) -> None:

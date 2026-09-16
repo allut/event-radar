@@ -71,7 +71,6 @@ from app.constants import (
     REPORT_AUTO_RESOLVE_NOTE,
     SOURCE_SLUG_USER_SUBMISSION,
     TALLINN_TZ,
-    VALID_CATEGORIES,
     WEBP_FOURCC,
     WEBP_FOURCC_OFFSET,
     WEBP_RIFF_MAGIC,
@@ -100,6 +99,9 @@ from app.routers.utils import (
     select_events_with_classification,
     send_report_resolution_emails,
     serialize_event,
+    validate_category,
+    validate_price_ordering,
+    validate_tz_aware,
 )
 
 log = logging.getLogger(__name__)
@@ -141,27 +143,18 @@ class SubmitEventBody(BaseModel):
     @field_validator("starts_at", "ends_at")
     @classmethod
     def _tz_aware(cls, v: datetime | None) -> datetime | None:
-        if v is not None and v.tzinfo is None:
-            raise ValueError("must be timezone-aware")
-        return v
+        return validate_tz_aware(v)
 
     @field_validator("category")
     @classmethod
     def _valid_category(cls, v: str | None) -> str | None:
-        if v is not None and v not in VALID_CATEGORIES:
-            raise ValueError(f"invalid category: {v!r}")
-        return v
+        return validate_category(v)
 
     @model_validator(mode="after")
     def _ordering(self) -> "SubmitEventBody":
         if self.ends_at is not None and self.ends_at < self.starts_at:
             raise ValueError("ends_at must not be before starts_at")
-        if (
-            self.price_min is not None
-            and self.price_max is not None
-            and self.price_min > self.price_max
-        ):
-            raise ValueError("price_min must not be greater than price_max")
+        validate_price_ordering(self.price_min, self.price_max)
         return self
 
 
@@ -196,16 +189,12 @@ class PatchEventBody(BaseModel):
     @field_validator("starts_at", "ends_at")
     @classmethod
     def _tz_aware(cls, v: datetime | None) -> datetime | None:
-        if v is not None and v.tzinfo is None:
-            raise ValueError("must be timezone-aware")
-        return v
+        return validate_tz_aware(v)
 
     @field_validator("category")
     @classmethod
     def _valid_category(cls, v: str | None) -> str | None:
-        if v is not None and v not in VALID_CATEGORIES:
-            raise ValueError(f"invalid category: {v!r}")
-        return v
+        return validate_category(v)
 
     @model_validator(mode="after")
     def _ordering(self) -> "PatchEventBody":
@@ -219,12 +208,7 @@ class PatchEventBody(BaseModel):
             and self.ends_at < self.starts_at
         ):
             raise ValueError("ends_at must not be before starts_at")
-        if (
-            self.price_min is not None
-            and self.price_max is not None
-            and self.price_min > self.price_max
-        ):
-            raise ValueError("price_min must not be greater than price_max")
+        validate_price_ordering(self.price_min, self.price_max)
         return self
 
 

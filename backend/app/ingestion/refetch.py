@@ -49,11 +49,10 @@ from app.constants import (
     VENUE_NAME_MAX_LEN,
 )
 from app.ingestion.selectors import (
-    ECH_SITE_NAME_ET,
     ESTONIA_CONCERT_HALL_HOST,
     KUMU_HOST,
-    KUMU_SITE_NAME_ET,
     PILETILEVI_HOST,
+    SUSPECT_LOCALE_TITLE_PREFIXES,
 )
 from app.ingestion.content_filters import is_explicit_text, is_non_event_text
 from app.ingestion.http_client import host_guard_hook, host_is_allowed, http_get
@@ -95,12 +94,6 @@ _LOCALE_TEXT_EXTRACTORS: dict[str, _LocaleTextExtractor] = {
 }
 
 
-_SUSPECT_LOCALE_TITLE_PREFIXES: dict[str, str] = {
-    KUMU_HOST: KUMU_SITE_NAME_ET,
-    ESTONIA_CONCERT_HALL_HOST: ECH_SITE_NAME_ET,
-}
-
-
 def _is_suspect_locale_title(title: str, normalized_host: str) -> bool:
     """True when a stored localized title looks like site-level (homepage) content.
 
@@ -110,7 +103,7 @@ def _is_suspect_locale_title(title: str, normalized_host: str) -> bool:
     avoid rejecting legitimate event titles in the genitive form (e.g.
     "Kumu kunstimuuseumi 100. aastapäeva näitus").
     """
-    prefix = _SUSPECT_LOCALE_TITLE_PREFIXES.get(normalized_host)
+    prefix = SUSPECT_LOCALE_TITLE_PREFIXES.get(normalized_host)
     if prefix is None:
         return False
     return title == prefix or title.startswith(prefix + " -")

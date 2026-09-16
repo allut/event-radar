@@ -26,7 +26,7 @@ from app.ingestion.pricing import normalize_currency
 from app.models.models import Organizer, Venue
 from app.rate_limit import limiter
 from app.routers.organizer_auth import get_current_organizer
-from app.routers.utils import own_venue_or_404
+from app.routers.utils import own_venue_or_404, validate_price_ordering
 
 router = APIRouter(prefix="/organizer/venues", tags=["organizer-venues"])
 
@@ -42,12 +42,7 @@ class VenueBody(BaseModel):
 
     @model_validator(mode="after")
     def _price_ordering(self) -> "VenueBody":
-        if (
-            self.price_min is not None
-            and self.price_max is not None
-            and self.price_min > self.price_max
-        ):
-            raise ValueError("price_min must not be greater than price_max")
+        validate_price_ordering(self.price_min, self.price_max)
         return self
 
 
@@ -65,12 +60,7 @@ class VenuePatchBody(BaseModel):
         # Both-present check only — a patch touching just one bound can't be
         # validated against the other without a DB round-trip (mirrors
         # organizer_events.py's PatchEventBody._ordering).
-        if (
-            self.price_min is not None
-            and self.price_max is not None
-            and self.price_min > self.price_max
-        ):
-            raise ValueError("price_min must not be greater than price_max")
+        validate_price_ordering(self.price_min, self.price_max)
         return self
 
 

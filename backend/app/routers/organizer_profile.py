@@ -24,13 +24,16 @@ from app.constants import (
     RATE_LIMIT_AUTHENTICATED_WRITE,
     RATE_LIMIT_SUBMIT,
     SECONDS_PER_DAY,
-    VALID_THEME_PREFERENCES,
 )
 from app.db import get_db
 from app.models.models import Organizer, OrganizerIdentity
 from app.rate_limit import limiter
 from app.routers.organizer_auth import get_current_organizer
-from app.routers.utils import is_identity_linked, set_session_cookie
+from app.routers.utils import (
+    is_identity_linked,
+    set_session_cookie,
+    validate_theme_preference,
+)
 
 log = logging.getLogger(__name__)
 
@@ -44,11 +47,7 @@ class OrganizerProfilePatchBody(BaseModel):
     @field_validator("theme_preference")
     @classmethod
     def theme_preference_must_be_valid(cls, v: str | None) -> str | None:
-        if v is not None and v not in VALID_THEME_PREFERENCES:
-            raise ValueError(
-                f"theme_preference must be one of {sorted(VALID_THEME_PREFERENCES)}"
-            )
-        return v
+        return validate_theme_preference(v)
 
 
 def _serialize(organizer: Organizer, *, google_linked: bool) -> dict:

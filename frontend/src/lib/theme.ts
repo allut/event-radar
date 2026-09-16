@@ -1,10 +1,13 @@
 import { THEME_PREFERENCE_KEY } from '../constants';
+import { THEME_PREFERENCES } from '../_generated/sharedConstants.js';
 
+// What actually gets applied to the DOM / rendered — always binary. Derived
+// from THEME_PREFERENCES (shared/app-config.json) so this never drifts from
+// the backend's VALID_THEME_PREFERENCES.
+export type ResolvedTheme = (typeof THEME_PREFERENCES)[number];
 // Tri-state stored/selectable preference. "system" (or an unset/invalid
 // localStorage value) falls through to the OS media query.
-export type ThemePreference = 'system' | 'light' | 'dark';
-// What actually gets applied to the DOM / rendered — always binary.
-export type ResolvedTheme = 'light' | 'dark';
+export type ThemePreference = 'system' | ResolvedTheme;
 
 // Theme-change subscriber store, mirroring auth.ts's authListeners/localeListeners
 // — lets globally mounted chrome re-render when the effective theme changes from

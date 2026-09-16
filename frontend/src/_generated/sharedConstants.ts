@@ -26,6 +26,8 @@ export const SANITIZE_ALLOWED_ATTR = ['href', 'title'];
 export const CATEGORIES = ['music', 'theater', 'exhibitions', 'workshops', 'sports', 'food_drink', 'networking', 'literature', 'family', 'cinema', 'alternative', 'nightlife', 'comedy', 'romantic'];
 export const VIBES = ['trendy', 'casual', 'intimate', 'high_energy', 'educational', 'indie', 'underground', 'mainstream', 'accessible', 'niche'];
 
+export const THEME_PREFERENCES = ['light', 'dark'] as const;
+
 export const BROWSE_PAGE_SIZE = 24;
 
 export const ORGANIZER_IMAGE_ALLOWED_MIME: readonly string[] = ['image/jpeg', 'image/png', 'image/webp'];

@@ -18,7 +18,6 @@ from app.constants import (
     SESSION_COOKIE_NAME,
     SESSION_COOKIE_PATH,
     VALID_LOCALES,
-    VALID_THEME_PREFERENCES,
 )
 from app.config import settings
 from app.db import get_db
@@ -31,6 +30,7 @@ from app.routers.utils import (
     persona_weight_tuple,
     serialize_user,
     set_session_cookie,
+    validate_theme_preference,
 )
 
 log = logging.getLogger(__name__)
@@ -52,11 +52,7 @@ class PatchSettingsBody(BaseModel):
     @field_validator("theme_preference")
     @classmethod
     def theme_preference_must_be_valid(cls, v: str | None) -> str | None:
-        if v is not None and v not in VALID_THEME_PREFERENCES:
-            raise ValueError(
-                f"theme_preference must be one of {sorted(VALID_THEME_PREFERENCES)}"
-            )
-        return v
+        return validate_theme_preference(v)
 
 
 async def _load_persona_data(

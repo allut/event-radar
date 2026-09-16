@@ -35,6 +35,7 @@ from app.constants import (
     ADMIN_ACTION_INGEST,
     ADMIN_ACTION_INGEST_SOURCE,
     ADMIN_ACTION_PIPELINE_RUN,
+    PIPELINE_RUN_OVERLAPPING_LOCK_KEYS,
     ADMIN_ACTION_PUBLISH,
     ADMIN_ACTION_REFETCH,
     ADMIN_ACTION_RESOLVE_REPORTS,
@@ -1236,21 +1237,10 @@ async def admin_send_digests(
     )
 
 
-# Sub-stages that are also standalone triggers with their own single-flight
-# guard (issue #160) — held for pipeline/run's whole duration too, or a
-# standalone ingest/classify/send-digests click mid-pipeline would run
-# concurrently with the pipeline's own execution of that same stage.
-_PIPELINE_RUN_OVERLAPPING_LOCK_KEYS = (
-    ADMIN_ACTION_INGEST,
-    ADMIN_ACTION_CLASSIFY,
-    ADMIN_ACTION_SEND_DIGESTS,
-)
-
-
 def _acquire_pipeline_run_locks() -> None:
     acquired: list[str] = []
     try:
-        for key in (ADMIN_ACTION_PIPELINE_RUN, *_PIPELINE_RUN_OVERLAPPING_LOCK_KEYS):
+        for key in (ADMIN_ACTION_PIPELINE_RUN, *PIPELINE_RUN_OVERLAPPING_LOCK_KEYS):
             acquire_admin_job_lock(key)
             acquired.append(key)
     except HTTPException:
@@ -1260,7 +1250,7 @@ def _acquire_pipeline_run_locks() -> None:
 
 
 def _release_pipeline_run_locks() -> None:
-    for key in (ADMIN_ACTION_PIPELINE_RUN, *_PIPELINE_RUN_OVERLAPPING_LOCK_KEYS):
+    for key in (ADMIN_ACTION_PIPELINE_RUN, *PIPELINE_RUN_OVERLAPPING_LOCK_KEYS):
         release_admin_job_lock(key)
 
 
