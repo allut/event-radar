@@ -37,6 +37,7 @@ import {
   APP_SHELL_FILENAME,
   BROWSE_PAGE_SIZE,
   CANONICAL_LINK_SELECTOR,
+  CHAIN_STATE_PREFIX,
   CRAWLABLE_ASSETS_PATH,
   CRAWLABLE_ICON_PATHS,
   EXPLORE_PARAM,
@@ -62,6 +63,7 @@ import { localizedPath } from '../src/lib/urlLocale';
 import { githubRequest } from '../src/lib/githubRequest';
 import { compareEventStaleness, parseSnapshotHtml, validateSnapshotStructure } from '../src/lib/seoValidation';
 import { createBudgetedCursor, prioritizeRenderQueue } from '../src/lib/prerenderQueue';
+import { deleteR2ObjectsByPrefix, getR2Object, putR2Object } from '../src/lib/r2ChainState';
 import {
   buildRoundMarker,
   isChainDepthExceeded,
@@ -383,6 +385,100 @@ function finalizeSnapshotHtml(html: string, shellHtml?: string): string {
   return stripBakedThemeAttr(withAssetsFixed);
 }
 
+/** A resumed round's accumulated manifest entries (issue #367) — keyed
+ * `${locale}:${eventId}` so home/explore targets (no eventId) can never
+ * form a key. */
+export interface ChainStateIndexEntry {
+  resolvedAtRound: number;
+}
+export type ChainStateIndex = Record<string, ChainStateIndexEntry>;
+
+/** R2 object keys are plain strings with no escaping of `:`/`.` the way a
+ * git ref would need — but burstId is an ISO timestamp (resolveRoundStart),
+ * and some S3-compatible tooling/CLIs choke on colons in a key path, so it
+ * gets a display-only substitution here. RoundMarker.burstId itself (the
+ * git-committed value other rounds compare against) is never touched. */
+export function sanitizeBurstIdForR2(burstId: string): string {
+  return burstId.replace(/[:.]/g, '-');
+}
+
+function chainStatePrefix(sanitizedBurstId: string): string {
+  return `${CHAIN_STATE_PREFIX}${sanitizedBurstId}/`;
+}
+
+export function chainStateContentKey(sanitizedBurstId: string, locale: string, eventId: number): string {
+  return `${chainStatePrefix(sanitizedBurstId)}targets/${locale}-${eventId}.html`;
+}
+
+export function chainStateIndexKey(sanitizedBurstId: string): string {
+  return `${chainStatePrefix(sanitizedBurstId)}index.json`;
+}
+
+/** Round-start read (issue #367) — merges onto whatever an earlier round in
+ * this same burst already accumulated, so the single end-of-round PUT below
+ * never clobbers it. A missing/corrupt index (no manifest yet, or a
+ * genuinely malformed one) degrades to "start fresh", same fail-open
+ * posture as every other R2 read in this path. */
+export function parseChainStateIndex(raw: string | null): ChainStateIndex {
+  if (raw === null) return {};
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return parsed as ChainStateIndex;
+    }
+    console.error('prerender: chain-state index was not a plain object — starting fresh:', parsed);
+  } catch (error) {
+    console.error('prerender: chain-state index JSON parse failed — starting fresh:', error);
+  }
+  return {};
+}
+
+/** Shared by both manifest write points (issue #367's copy-forward branch
+ * and successful-render branch) — a target only earns a manifest entry once
+ * finalized HTML is in hand, and only when it carries an eventId (home/
+ * explore never do). Never called for the stale-fallback write: that
+ * content isn't done, so it must not look resolved to a later round's
+ * read-side skip-refetch (#368). */
+export async function persistChainStateTarget(
+  sanitizedBurstId: string,
+  round: number,
+  target: PrerenderTarget,
+  finalizedHtml: string,
+  index: ChainStateIndex,
+): Promise<void> {
+  if (target.eventId === undefined) return;
+  const wrote = await putR2Object(
+    chainStateContentKey(sanitizedBurstId, target.locale, target.eventId),
+    finalizedHtml,
+    'text/html',
+  );
+  // Only record the index entry once the content object is actually in the
+  // bucket — an index entry with no matching content object would tell a
+  // later round's read-side (#368) this target is resolved when it isn't.
+  if (wrote) {
+    index[`${target.locale}:${target.eventId}`] = { resolvedAtRound: round };
+  }
+}
+
+/** End-of-round manifest write (issue #367), placed next to
+ * commitRoundMarker's call site since both fire off the same "this round
+ * just finished" event. A `done` round (shouldCommit false) has nothing
+ * left for a later round to resume, so its manifest is deleted outright
+ * rather than given one final index write nobody will ever read back —
+ * CHAIN_STATE_LIFECYCLE_DAYS is only the crash backstop for a burst whose
+ * `done` round never got this far. */
+export async function finalizeChainState(
+  sanitizedBurstId: string,
+  index: ChainStateIndex,
+  shouldCommit: boolean,
+): Promise<void> {
+  if (shouldCommit) {
+    await putR2Object(chainStateIndexKey(sanitizedBurstId), JSON.stringify(index), 'application/json');
+  } else {
+    await deleteR2ObjectsByPrefix(chainStatePrefix(sanitizedBurstId));
+  }
+}
+
 /** Reads the change-detection marker back off a rendered snapshot's JSON-LD
  * (issue #80) — used both to read the currently-live production page during
  * change detection, and (via the same parseSnapshotHtml helper the in-build
@@ -554,7 +650,7 @@ async function snapshotTarget(
   page: Page,
   previewOrigin: string,
   target: PrerenderTarget,
-): Promise<void> {
+): Promise<string> {
   // Re-keyed on eventId, not `bare !== ROUTES.home` (issue #236) — /explore
   // never calls GET /events/{id}, so it must not consume this budget either.
   if (target.eventId !== undefined) {
@@ -592,7 +688,9 @@ async function snapshotTarget(
   }
   const outPath = outputFilePath(target.bare, target.locale);
   await mkdir(path.dirname(outPath), { recursive: true });
-  await writeFile(outPath, finalizeSnapshotHtml(html), 'utf-8');
+  const finalized = finalizeSnapshotHtml(html);
+  await writeFile(outPath, finalized, 'utf-8');
+  return finalized;
 }
 
 /** Bounded-concurrency runner shared by the change-detection pass, the
@@ -915,6 +1013,12 @@ export async function main(): Promise<void> {
   const { burstId, round } = resolveRoundStart(commitMessage, new Date());
   console.log(`prerender: round ${round} of burst ${burstId}${round > 1 ? ' (resumed)' : ' (new)'}`);
 
+  // Chain-state manifest (issue #367) — read-side is only enough here to
+  // avoid the end-of-round PUT clobbering an earlier round's entries in the
+  // same burst; skip-refetch on this read is #368's job, not this ticket's.
+  const sanitizedBurstId = sanitizeBurstIdForR2(burstId);
+  const chainStateIndex = parseChainStateIndex(await getR2Object(chainStateIndexKey(sanitizedBurstId)));
+
   const candidates = await fetchPrerenderCandidates();
   const targets = buildTargets(candidates);
 
@@ -949,8 +1053,10 @@ export async function main(): Promise<void> {
     if (unchanged && liveHtml !== null) {
       const outPath = outputFilePath(target.bare, target.locale);
       await mkdir(path.dirname(outPath), { recursive: true });
-      await writeFile(outPath, finalizeSnapshotHtml(liveHtml, shellHtml), 'utf-8');
+      const finalized = finalizeSnapshotHtml(liveHtml, shellHtml);
+      await writeFile(outPath, finalized, 'utf-8');
       copiedForward++;
+      await persistChainStateTarget(sanitizedBurstId, round, target, finalized, chainStateIndex);
     } else if (liveHtml !== null) {
       // Needs a fresh render, but a live page exists — held for now rather
       // than written to its final path immediately (issue #86 investigation:
@@ -1013,8 +1119,9 @@ export async function main(): Promise<void> {
             if (i === null) break;
             const target = renderQueue[i];
             try {
-              await snapshotTarget(page, resolvedPreviewOrigin, target);
+              const finalizedHtml = await snapshotTarget(page, resolvedPreviewOrigin, target);
               newlyRendered++;
+              await persistChainStateTarget(sanitizedBurstId, round, target, finalizedHtml, chainStateIndex);
             } catch (error) {
               failures.push({ target, error, diagnostics: recentEvents() });
             } finally {
@@ -1146,13 +1253,17 @@ export async function main(): Promise<void> {
   // fails, the chain simply resumes via the next 6-hourly cron tick instead
   // of self-triggering (degraded, not broken — same fallback as any other
   // lost marker commit).
-  if (shouldCommitRoundMarker(marker)) {
+  const commitMarker = shouldCommitRoundMarker(marker);
+  if (commitMarker) {
     try {
       await commitRoundMarker(marker);
     } catch (error) {
       console.error('prerender: failed to commit round marker — deploy proceeds anyway:', error);
     }
   }
+  // Chain-state manifest write (issue #367) — see finalizeChainState's doc
+  // comment for why a `done` round deletes instead of writing.
+  await finalizeChainState(sanitizedBurstId, chainStateIndex, commitMarker);
   logZeroProgressAbort(marker);
 }
 

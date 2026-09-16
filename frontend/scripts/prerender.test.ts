@@ -1,17 +1,31 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { deleteR2ObjectsByPrefix, putR2Object } from '../src/lib/r2ChainState';
+
+vi.mock('../src/lib/r2ChainState', () => ({
+  getR2Object: vi.fn(),
+  putR2Object: vi.fn(),
+  deleteR2ObjectsByPrefix: vi.fn(),
+}));
+
 import {
   buildRobotsTxt,
+  chainStateContentKey,
+  chainStateIndexKey,
   fetchLiveExploreCount,
+  finalizeChainState,
   isPreviewBuild,
   logZeroProgressAbort,
   main,
+  parseChainStateIndex,
+  persistChainStateTarget,
   rewriteSnapshotAssetRefs,
+  sanitizeBurstIdForR2,
   selectValidationTargets,
   stripBakedThemeAttr,
 } from './prerender';
-import type { PrerenderTarget } from './prerender';
+import type { ChainStateIndex, PrerenderTarget } from './prerender';
 import type { RoundMarker } from '../src/lib/prerenderChain';
-import { BROWSE_PAGE_SIZE, CRAWLABLE_ICON_PATHS, SITEMAP_PATH } from '../src/constants';
+import { BROWSE_PAGE_SIZE, CHAIN_STATE_PREFIX, CRAWLABLE_ICON_PATHS, SITEMAP_PATH } from '../src/constants';
 
 function makeTarget(bare: string): PrerenderTarget {
   return { bare, locale: 'en' };
@@ -422,5 +436,152 @@ describe('main — Preview short-circuit (issue #95)', () => {
 
     expect(fetchSpy).not.toHaveBeenCalled();
     expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('skipping prerender pass'));
+  });
+});
+
+describe('chain-state manifest write path (issue #367)', () => {
+  const putR2ObjectMock = vi.mocked(putR2Object);
+  const deleteR2ObjectsByPrefixMock = vi.mocked(deleteR2ObjectsByPrefix);
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  describe('sanitizeBurstIdForR2', () => {
+    it('replaces colons and dots so an ISO burstId is a valid R2 key segment', () => {
+      expect(sanitizeBurstIdForR2('2026-08-15T10:00:00.000Z')).toBe('2026-08-15T10-00-00-000Z');
+    });
+  });
+
+  describe('chainStateContentKey / chainStateIndexKey', () => {
+    it('builds the target content key under the sanitized burst prefix', () => {
+      expect(chainStateContentKey('2026-08-15T10-00-00-000Z', 'en', 42)).toBe(
+        `${CHAIN_STATE_PREFIX}2026-08-15T10-00-00-000Z/targets/en-42.html`,
+      );
+    });
+
+    it('builds the index key under the sanitized burst prefix', () => {
+      expect(chainStateIndexKey('2026-08-15T10-00-00-000Z')).toBe(
+        `${CHAIN_STATE_PREFIX}2026-08-15T10-00-00-000Z/index.json`,
+      );
+    });
+  });
+
+  describe('parseChainStateIndex', () => {
+    it('returns an empty index when no manifest exists yet (null read)', () => {
+      expect(parseChainStateIndex(null)).toEqual({});
+    });
+
+    it('returns an empty index and logs rather than throwing on malformed JSON', () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      expect(parseChainStateIndex('not json')).toEqual({});
+
+      expect(errorSpy).toHaveBeenCalled();
+      errorSpy.mockRestore();
+    });
+
+    it('round-trips a previously-written index', () => {
+      const index: ChainStateIndex = { 'en:42': { resolvedAtRound: 2 } };
+
+      expect(parseChainStateIndex(JSON.stringify(index))).toEqual(index);
+    });
+
+    it('returns an empty index and logs rather than trusting a JSON array as the manifest shape', () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      expect(parseChainStateIndex(JSON.stringify(['not', 'a', 'map']))).toEqual({});
+
+      expect(errorSpy).toHaveBeenCalled();
+      errorSpy.mockRestore();
+    });
+  });
+
+  describe('persistChainStateTarget — shared by the copy-forward and successful-render resolution points', () => {
+    it('PUTs the finalized HTML and records the index entry for an event target (copy-forward resolution point)', async () => {
+      putR2ObjectMock.mockResolvedValue(true);
+      const index: ChainStateIndex = {};
+      const target: PrerenderTarget = { bare: '/events/42', locale: 'en', eventId: 42 };
+
+      await persistChainStateTarget('burst-1', 3, target, '<html>copied-forward</html>', index);
+
+      expect(putR2ObjectMock).toHaveBeenCalledWith(
+        `${CHAIN_STATE_PREFIX}burst-1/targets/en-42.html`,
+        '<html>copied-forward</html>',
+        'text/html',
+      );
+      expect(index).toEqual({ 'en:42': { resolvedAtRound: 3 } });
+    });
+
+    it('PUTs the finalized HTML and records the index entry for an event target (successful-render resolution point)', async () => {
+      putR2ObjectMock.mockResolvedValue(true);
+      const index: ChainStateIndex = {};
+      const target: PrerenderTarget = { bare: '/events/7', locale: 'ru', eventId: 7 };
+
+      await persistChainStateTarget('burst-1', 1, target, '<html>freshly-rendered</html>', index);
+
+      expect(putR2ObjectMock).toHaveBeenCalledWith(
+        `${CHAIN_STATE_PREFIX}burst-1/targets/ru-7.html`,
+        '<html>freshly-rendered</html>',
+        'text/html',
+      );
+      expect(index).toEqual({ 'ru:7': { resolvedAtRound: 1 } });
+    });
+
+    it('never writes a manifest entry for a home/explore target (no eventId)', async () => {
+      const index: ChainStateIndex = {};
+      const target: PrerenderTarget = { bare: '/explore', locale: 'en' };
+
+      await persistChainStateTarget('burst-1', 1, target, '<html>explore</html>', index);
+
+      expect(putR2ObjectMock).not.toHaveBeenCalled();
+      expect(index).toEqual({});
+    });
+
+    it('never records an index entry when the content PUT fails, so the manifest cannot claim a target is resolved with no matching object in the bucket', async () => {
+      putR2ObjectMock.mockResolvedValue(false);
+      const index: ChainStateIndex = {};
+      const target: PrerenderTarget = { bare: '/events/9', locale: 'en', eventId: 9 };
+
+      await persistChainStateTarget('burst-1', 1, target, '<html>unwritten</html>', index);
+
+      expect(putR2ObjectMock).toHaveBeenCalled();
+      expect(index).toEqual({});
+    });
+  });
+
+  describe('finalizeChainState — end-of-round manifest write', () => {
+    it('PUTs the accumulated index exactly once when the round is continuing', async () => {
+      putR2ObjectMock.mockResolvedValue(true);
+      const index: ChainStateIndex = { 'en:1': { resolvedAtRound: 2 } };
+
+      await finalizeChainState('burst-1', index, true);
+
+      expect(putR2ObjectMock).toHaveBeenCalledTimes(1);
+      expect(putR2ObjectMock).toHaveBeenCalledWith(
+        `${CHAIN_STATE_PREFIX}burst-1/index.json`,
+        JSON.stringify(index),
+        'application/json',
+      );
+      expect(deleteR2ObjectsByPrefixMock).not.toHaveBeenCalled();
+    });
+
+    it('deletes the whole burst prefix instead of writing the index when the round is done', async () => {
+      deleteR2ObjectsByPrefixMock.mockResolvedValue(true);
+      const index: ChainStateIndex = { 'en:1': { resolvedAtRound: 2 } };
+
+      await finalizeChainState('burst-1', index, false);
+
+      expect(deleteR2ObjectsByPrefixMock).toHaveBeenCalledWith(`${CHAIN_STATE_PREFIX}burst-1/`);
+      expect(putR2ObjectMock).not.toHaveBeenCalled();
+    });
+
+    it('never throws when the underlying R2 operation fails open (fail-open fallback)', async () => {
+      putR2ObjectMock.mockResolvedValue(false);
+      deleteR2ObjectsByPrefixMock.mockResolvedValue(false);
+
+      await expect(finalizeChainState('burst-1', {}, true)).resolves.toBeUndefined();
+      await expect(finalizeChainState('burst-1', {}, false)).resolves.toBeUndefined();
+    });
   });
 });
