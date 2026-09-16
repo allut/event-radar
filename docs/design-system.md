@@ -90,7 +90,7 @@ When adding a token: if it encodes a color that reads differently on a near-whit
 
 ## 7. The shared CSS layer
 
-`frontend/src/components/shared/` holds 16 pure-CSS modules plus one component folder, `GoogleSignInButton/` (`.tsx` + `GoogleGMark.tsx` + test) — the one exception to the CSS-only rule. Consume the CSS modules with CSS Modules `composes:`; **never copy-paste** their rules into a route or component stylesheet. Component CSS composes from `'../shared/X.module.css'`, route CSS from `'../../components/shared/X.module.css'`.
+`frontend/src/components/shared/` holds 18 pure-CSS modules plus one component folder, `GoogleSignInButton/` (`.tsx` + `GoogleGMark.tsx` + test) — the one exception to the CSS-only rule. Consume the CSS modules with CSS Modules `composes:`; **never copy-paste** their rules into a route or component stylesheet. Component CSS composes from `'../shared/X.module.css'`, route CSS from `'../../components/shared/X.module.css'`.
 
 | Module | Holds |
 |---|---|
@@ -102,11 +102,13 @@ When adding a token: if it encodes a color that reads differently on a near-whit
 | `Bar.module.css` | Top-bar chrome shared by `TopBar` and `OrganizerTopBar` |
 | `Animations.module.css` | Keyframes + classes — see §8 |
 | `AdminQueue.module.css` | Admin queue row/detail typography, resolved panel |
+| `Calendar.module.css` | Calendar grid chrome (`.calHead`, `.calNavBtn`, `.calMonthLabel`, `.calWeekdays`, `.calGrid`, `.calDay`) shared by `DatePicker` and `DateRangeMenu` |
+| `Settings.module.css` | Settings-page shell (`.settingsMain`, section/toggle-row/repick-button chrome) shared by `Settings` and `OrganizerSettings` |
 | `Alert`, `Chip`, `Link`, `Media`, `Spinner`, `StatusCircle`, `Visually`, `DesktopGate` | Inline alert, chip pill, accent link, image backdrop, spinner rings, status circles, sr-only/offscreen utilities, the admin desktop-only gate |
 
 Add a new shared pattern here rather than growing a second copy. New variants follow base-class + modifier (`.card` / `.cardAccentTop`) — **never restyle a base class in place** to suit one consumer.
 
-**A note on Landing:** `Landing.module.css` is the least shared-dependent stylesheet (it composes `Page`, `Alert`, `Spinner`, `StatusCircle`, `Animations`, `Media` and re-rolls the hero/ticker/plate/proof/footer chrome locally). That is deliberate — its hero treatment has no second consumer. Don't "fix" it by hoisting hero CSS into `shared/`.
+**A note on Landing:** `Landing.module.css` is the least shared-dependent stylesheet (it composes `Page`, `Card`, `Alert`, `Spinner`, `StatusCircle`, `Animations`, `Media` and re-rolls the hero/ticker/plate/proof/footer chrome locally). That is deliberate — its hero treatment has no second consumer. Don't "fix" it by hoisting hero CSS into `shared/`.
 
 **One exception to "never copy-paste":** `composes:` resolves to a class-name string at build time, so it cannot be scoped inside a `@media` block — a shared rule that must apply only above/below a breakpoint has to be restated locally rather than composed. `Feed.module.css`'s media-scoped `.srOnly` override is the one live instance (`Visually.module.css`'s own `.srOnly` is unconditional); keep any such restatement in sync with the shared rule it mirrors.
 

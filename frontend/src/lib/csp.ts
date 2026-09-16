@@ -2,8 +2,9 @@ import { createHash } from 'node:crypto';
 import { JSDOM } from 'jsdom';
 
 // Pure functions — disk I/O stays in the caller (csp.test.ts), mirroring
-// seoValidation.ts's shape. Exists to keep the CSP hash in frontend/vercel.json
-// from silently drifting out of sync with the inline pre-paint script in
+// seoValidation.ts's shape. Exists to keep the CSP hash in
+// frontend/public/_headers from silently drifting out of sync with the
+// inline pre-paint script in
 // index.html — a mismatch means the browser refuses to execute the script
 // (CSP `script-src` blocks it), which is exactly the theme-revert-on-refresh
 // bug this module's caller (csp.test.ts) guards against.
