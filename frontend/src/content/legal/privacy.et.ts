@@ -5,7 +5,7 @@ const AKI_URL = 'https://www.aki.ee';
 
 const doc: LegalDoc = {
   title: 'Privaatsuspoliitika',
-  lastUpdated: '2026-09-13',
+  lastUpdated: '2026-09-16',
   intro: [
     {
       kind: 'p',
@@ -90,7 +90,7 @@ const doc: LegalDoc = {
           items: [
             ['Neon — andmebaasi majutus (ELi piirkond, Frankfurt, Saksamaa).'],
             ['Render — taustarakenduse majutus.'],
-            ['Vercel — esiliidese majutus.'],
+            ['Cloudflare — esiliidese majutus (Cloudflare Pages).'],
             ['Google — ülalnimetatud küpsisevaba Google Analytics ning, kui kasutad Google’iga sisselogimist, sinu sisselogimisidentiteedi kinnitamine. Sisselogimisel tegutseb Google kahes rollis: meie volitatud töötlejana loa väljastamisel ning iseseisvalt — oma identiteedipakkuja rollis, mitte meie juhiste alusel —, kui ta kinnitab, kes sa oled.'],
             ['Resend — sisselogimise ja kokkuvõtte e-kirjade edastamine.'],
           ],
@@ -109,7 +109,7 @@ const doc: LegalDoc = {
         {
           kind: 'p',
           content: [
-            'Sinu põhilised konto andmed säilitatakse ELis (Frankfurt, Saksamaa). Mõned pakkujad (nt Render, Vercel) asuvad USAs; kui isikuandmeid edastatakse väljapoole EMPd, kaitsevad neid Euroopa Komisjoni standardsed lepingutingimused ja pakkujate andmetöötlustingimused.',
+            'Sinu põhilised konto andmed säilitatakse ELis (Frankfurt, Saksamaa). Mõned pakkujad (nt Render, Cloudflare) asuvad USAs; kui isikuandmeid edastatakse väljapoole EMPd, kaitsevad neid Euroopa Komisjoni standardsed lepingutingimused ja pakkujate andmetöötlustingimused.',
           ],
         },
       ],
