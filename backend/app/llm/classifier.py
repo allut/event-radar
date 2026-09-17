@@ -103,8 +103,10 @@ def _build_classify_prompt(event: Event, price_context: str | None = None) -> st
         important_info=escape_prompt_delimiters(
             important_info or LLM_CLASSIFY_IMPORTANT_INFO_FALLBACK
         ),
-        price_hint=price_hint or LLM_CLASSIFY_PRICE_HINT_FALLBACK,
-        price_context=price_context or LLM_CLASSIFY_PRICE_CONTEXT_FALLBACK,
+        price_hint=escape_prompt_delimiters(price_hint)
+        or LLM_CLASSIFY_PRICE_HINT_FALLBACK,
+        price_context=escape_prompt_delimiters(price_context)
+        or LLM_CLASSIFY_PRICE_CONTEXT_FALLBACK,
     )
 
 

@@ -692,11 +692,14 @@ if _allowed_hosts:
 #
 # HOP-COUNT ASSUMPTION: ProxyHeadersMiddleware itself trusts the *leftmost* XFF
 # hop (attacker-controlled if forwarded verbatim), so app.rate_limit.client_key
-# derives the limiter/audit-log key from the *rightmost* XFF entry instead — the
-# one appended by the single trusted hop (Render's proxy) — which is correct only
-# if there is exactly one trusted hop between the client and this process. Adding
-# another proxy/CDN in front of Render breaks this the same way it would break
-# trusted_hosts="*" above.
+# never trusts request.client. Production is a two-hop path — browser ->
+# Cloudflare Pages Function proxy -> Render -> uvicorn — so the rightmost XFF
+# entry Render's own proxy appends is always Cloudflare's egress address, not
+# the visitor. client_key() instead prefers an edge-authenticated X-Client-IP
+# (proven via X-Edge-Auth against settings.EDGE_SHARED_SECRET, set by the
+# Cloudflare Function), falling back to rightmost-XFF only when that pair is
+# absent or invalid — correct for a direct-to-Render caller with exactly one
+# trusted hop. See docs/security.md and OWASP audit finding G-1.
 app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
 
 app.include_router(admin_router)

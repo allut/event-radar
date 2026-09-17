@@ -99,33 +99,27 @@ class HttpLogShipHandler(logging.Handler):
         super().close()
 
 
-class _AccessPathFilter(logging.Filter):
-    """Drops uvicorn.access records for high-frequency probe paths, and
-    strips the query string from every other uvicorn.access record before
-    it ships.
+class _AccessPathStripFilter(logging.Filter):
+    """Strips the query string from every uvicorn.access record's path arg,
+    in place, before ANY handler formats it.
 
     uvicorn.access records carry args = (client_addr, method, path,
-    http_version, status); we match the path (query string stripped, since
-    uvicorn includes it in this arg, e.g. "/health?x=1") against
-    LOG_SHIP_SUPPRESS_ACCESS_PATHS. Only a successful (< 400) response is
-    suppressed — a failing health check is exactly the signal the Axiom
-    monitor should see, so it still ships. Attached only to the shipping
-    QueueHandler, so suppressed lines still reach the console handler
-    (Render logs).
-
-    The query-string strip is unconditional and applies to every path, not
-    just the suppress list — OAuth callback codes, unsubscribe tokens, and
-    /explore search terms all otherwise reach the third-party Axiom drain
-    verbatim (OWASP audit L-1). Only the shipped record.args tuple is
-    rewritten in place; the console/file handlers format the record
-    independently before this filter runs, so local logs are unaffected.
+    http_version, status); OAuth callback codes, unsubscribe tokens, and
+    /explore search terms otherwise reach every sink verbatim — including
+    Render's console log stream, a third-party retention surface, not just
+    the Axiom drain (OWASP audit G-4; the original L-1 fix only stripped it
+    for the shipping QueueHandler, since logging.Logger.callHandlers runs
+    handlers in registration order and the console handler — registered
+    first — had already formatted the record by the time a queue-handler-only
+    filter ran). Attached to the uvicorn.access logger itself instead, so the
+    mutation happens before any handler sees the record.
     """
 
     def filter(self, record: logging.LogRecord) -> bool:
         if (
             record.name == "uvicorn.access"
             and isinstance(record.args, tuple)
-            and len(record.args) > UVICORN_ACCESS_STATUS_ARG_INDEX
+            and len(record.args) > UVICORN_ACCESS_PATH_ARG_INDEX
         ):
             path = record.args[UVICORN_ACCESS_PATH_ARG_INDEX]
             if isinstance(path, str):
@@ -136,7 +130,28 @@ class _AccessPathFilter(logging.Filter):
                         + (stripped_path,)
                         + record.args[UVICORN_ACCESS_PATH_ARG_INDEX + 1 :]
                     )
-                path = stripped_path
+        return True
+
+
+class _AccessPathSuppressFilter(logging.Filter):
+    """Drops uvicorn.access records for high-frequency probe paths before
+    they ship to Axiom.
+
+    Matches the (already query-string-stripped, see _AccessPathStripFilter)
+    path against LOG_SHIP_SUPPRESS_ACCESS_PATHS. Only a successful (< 400)
+    response is suppressed — a failing health check is exactly the signal the
+    Axiom monitor should see, so it still ships. Attached only to the
+    shipping QueueHandler, so suppressed lines still reach the console
+    handler (Render logs).
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if (
+            record.name == "uvicorn.access"
+            and isinstance(record.args, tuple)
+            and len(record.args) > UVICORN_ACCESS_STATUS_ARG_INDEX
+        ):
+            path = record.args[UVICORN_ACCESS_PATH_ARG_INDEX]
             status = record.args[UVICORN_ACCESS_STATUS_ARG_INDEX]
             if (
                 path in LOG_SHIP_SUPPRESS_ACCESS_PATHS
@@ -214,7 +229,7 @@ def configure_logging() -> None:
     if not is_dev and settings.LOG_SHIP_URL:
         ship_queue: queue.Queue = queue.Queue(LOG_SHIP_QUEUE_MAXSIZE)
         queue_handler = logging.handlers.QueueHandler(ship_queue)
-        queue_handler.addFilter(_AccessPathFilter())
+        queue_handler.addFilter(_AccessPathSuppressFilter())
         root.addHandler(queue_handler)
         global _queue_listener
         _queue_listener = logging.handlers.QueueListener(
@@ -226,6 +241,12 @@ def configure_logging() -> None:
         logger = logging.getLogger(name)
         logger.handlers.clear()
         logger.propagate = True
+        if name == "uvicorn.access":
+            # Attached at the logger level (not a handler) so the mutation
+            # runs before ANY handler formats the record — see
+            # _AccessPathStripFilter's docstring (OWASP audit G-4).
+            logger.filters.clear()
+            logger.addFilter(_AccessPathStripFilter())
         if name == SQLALCHEMY_ENGINE_LOGGER_NAME:
             logger.setLevel(logging.INFO if is_dev else logging.WARNING)
         else:

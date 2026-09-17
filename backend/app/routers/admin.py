@@ -295,13 +295,16 @@ def _require_admin(
     credentials: HTTPBasicCredentials | None = Depends(_security),
     admin_session: str | None = Cookie(default=None, alias=ADMIN_SESSION_COOKIE_NAME),
 ) -> None:
-    """Read-only surface: accept EITHER a valid admin console session cookie
-    (issued by POST /admin/auth/login) OR HTTP Basic (curl / existing
-    integrations) — see docs/backend-ops.md's Admin Endpoints section. An
-    invalid/expired cookie falls through to requiring Basic rather than
-    rejecting outright, so a stale browser cookie doesn't lock a curl caller
-    out of the same request path. Every mutating route uses get_current_admin
-    instead (session-only, no Basic) — see its docstring."""
+    """Non-PII read-only surface — GET /admin/counts and /admin/stats only
+    (OWASP audit G-5: /admin/dedup/groups moved to get_current_admin, since
+    it discloses moderation-sensitive event content, not aggregate counts).
+    Accepts EITHER a valid admin console session cookie (issued by POST
+    /admin/auth/login) OR HTTP Basic (curl / existing integrations) — see
+    docs/backend-ops.md's Admin Endpoints section. An invalid/expired cookie
+    falls through to requiring Basic rather than rejecting outright, so a
+    stale browser cookie doesn't lock a curl caller out of the same request
+    path. Every other route uses get_current_admin instead (session-only, no
+    Basic) — see its docstring."""
     if admin_session is not None and _valid_admin_session(admin_session):
         return
 
@@ -431,7 +434,7 @@ def _serialize_dedup_groups(rows: Sequence[Event]) -> dict[int, list[dict]]:
     return groups
 
 
-@router.get("/dedup/groups", dependencies=[Depends(_require_admin)])
+@router.get("/dedup/groups", dependencies=[Depends(get_current_admin)])
 @limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
 async def admin_dedup_groups(
     request: Request,

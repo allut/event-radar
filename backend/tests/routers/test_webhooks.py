@@ -24,6 +24,18 @@ from httpx import ASGITransport, AsyncClient
 TEST_SECRET = "whsec_" + base64.b64encode(b"0" * 24).decode()
 
 
+@pytest.fixture(autouse=True)
+def _clear_seen_webhook_ids():
+    """The svix-id replay guard (OWASP audit G-6) is module-level, in-memory
+    state — clear it before/after each test so one test's recorded id can't
+    leak into another's replay check."""
+    from app.routers.webhooks import _seen_webhook_ids
+
+    _seen_webhook_ids.clear()
+    yield
+    _seen_webhook_ids.clear()
+
+
 def _build_app() -> FastAPI:
     """Create a minimal FastAPI app with the webhooks router and patched settings."""
     from app.routers.webhooks import router
@@ -84,6 +96,7 @@ async def test_inbound_mail_accepted_with_valid_body(mock_db):
 
     with patch("app.routers.webhooks.settings") as mock_settings, \
          patch("app.routers.webhooks.RawInboundEmail", return_value=email_obj), \
+         patch("app.routers.webhooks.NEWSLETTER_SENDER_ALLOWED_DOMAINS", frozenset({"example.com"})), \
          patch("app.routers.webhooks._run_extraction"):
         mock_settings.RESEND_WEBHOOK_SECRET = ""
         mock_settings.APP_ENV = APP_ENV_DEVELOPMENT
@@ -267,6 +280,52 @@ async def test_inbound_mail_accepts_valid_signature(mock_db):
 
 
 @pytest.mark.asyncio
+async def test_inbound_mail_rejects_replayed_svix_id(mock_db):
+    """A second, identically-signed request carrying the same svix-id must be
+    rejected — otherwise a captured request replayed within the timestamp
+    tolerance re-verifies and creates a duplicate RawInboundEmail row
+    (OWASP audit G-6)."""
+    email_obj = MagicMock()
+    email_obj.id = 1
+    mock_db.flush.side_effect = lambda: setattr(email_obj, "id", 3)
+
+    app = _build_app()
+    payload = _email_payload()
+    body = json.dumps(payload).encode()
+    headers = _svix_headers(body)
+
+    async def override_db():
+        yield mock_db
+
+    from app.db import get_db
+    app.dependency_overrides[get_db] = override_db
+
+    with patch("app.routers.webhooks.settings") as mock_settings, \
+         patch("app.routers.webhooks.RawInboundEmail", return_value=email_obj), \
+         patch("app.routers.webhooks.NEWSLETTER_SENDER_ALLOWED_DOMAINS", frozenset({"example.com"})), \
+         patch("app.routers.webhooks._run_extraction"):
+        mock_settings.RESEND_WEBHOOK_SECRET = TEST_SECRET
+
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            first = await client.post(
+                "/webhooks/inbound-mail",
+                content=body,
+                headers={**headers, "Content-Type": "application/json"},
+            )
+            second = await client.post(
+                "/webhooks/inbound-mail",
+                content=body,
+                headers={**headers, "Content-Type": "application/json"},
+            )
+
+    assert first.status_code == http.HTTPStatus.OK
+    assert first.json()["status"] == "accepted"
+    assert second.status_code == http.HTTPStatus.UNAUTHORIZED
+    assert second.json()["status"] == "rejected"
+    mock_db.add.assert_called_once()  # only the first request persisted
+
+
+@pytest.mark.asyncio
 async def test_inbound_mail_rejects_non_json_body(mock_db):
     app = _build_app()
 
@@ -314,6 +373,7 @@ async def test_inbound_mail_to_field_as_list_is_joined(mock_db):
 
     with patch("app.routers.webhooks.settings") as mock_settings, \
          patch("app.routers.webhooks.RawInboundEmail", side_effect=capture_email), \
+         patch("app.routers.webhooks.NEWSLETTER_SENDER_ALLOWED_DOMAINS", frozenset({"example.com"})), \
          patch("app.routers.webhooks._run_extraction"):
         mock_settings.RESEND_WEBHOOK_SECRET = ""
         mock_settings.APP_ENV = APP_ENV_DEVELOPMENT
@@ -353,7 +413,8 @@ async def test_inbound_mail_no_text_and_no_subject_skips_extraction(mock_db):
     bg = BackgroundTasks()
 
     with patch("app.routers.webhooks.settings") as s, \
-         patch("app.routers.webhooks.RawInboundEmail", return_value=email_obj):
+         patch("app.routers.webhooks.RawInboundEmail", return_value=email_obj), \
+         patch("app.routers.webhooks.NEWSLETTER_SENDER_ALLOWED_DOMAINS", frozenset({"x.com"})):
         s.RESEND_WEBHOOK_SECRET = ""
         s.APP_ENV = APP_ENV_DEVELOPMENT
         result = await inbound_mail(
@@ -411,7 +472,8 @@ async def test_inbound_mail_with_text_body_queues_extraction(mock_db):
 @pytest.mark.asyncio
 async def test_inbound_mail_sender_not_allowlisted_skips_extraction(mock_db):
     """Sender domain absent from NEWSLETTER_SENDER_ALLOWED_DOMAINS — email is
-    stored but extraction is not queued, even with a non-empty text body."""
+    rejected before it's ever stored (OWASP audit G-6), so extraction is
+    never queued either, even with a non-empty text body."""
     email_obj = MagicMock()
     email_obj.id = 1
     mock_db.flush.side_effect = lambda: setattr(email_obj, "id", 13)
@@ -449,3 +511,4 @@ async def test_inbound_mail_sender_not_allowlisted_skips_extraction(mock_db):
 
     assert result.status_code == http.HTTPStatus.OK
     assert len(bg.tasks) == 0  # sender domain not allowlisted
+    mock_db.add.assert_not_called()  # never persisted (OWASP audit G-6)

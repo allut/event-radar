@@ -618,6 +618,22 @@ export async function fetchResolvedTarget(
   return { target, unchanged: true, liveHtml: html };
 }
 
+/** Escapes the five XML predefined entities. `id` (sitemap targets are only
+ * ever numeric event ids or static bare paths) can't carry these, but
+ * `lastmod` is `Event.updated_at` straight from the API (OWASP audit G-12) —
+ * a DB timestamp today, but nothing here has ever asserted that shape holds
+ * against a compromised backend. Applied to every interpolated value below
+ * as defense-in-depth, not just the ones currently reachable by untrusted
+ * input. */
+function escapeXml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
 /** sitemap.xml for `targets` (issue #51) — one `<url>` per locale-variant
  * URL (mirrors `buildTargets`'s flat "every locale × every bare path"
  * shape), each carrying the same en/et/ru/x-default hreflang cross-references
@@ -628,15 +644,15 @@ export async function fetchResolvedTarget(
 function buildSitemapXml(targets: PrerenderTarget[], buildTimestamp: string): string {
   const urlEntries = targets
     .map((target) => {
-      const loc = `${PRODUCTION_ORIGIN}${localizedPath(target.bare, target.locale)}`;
+      const loc = escapeXml(`${PRODUCTION_ORIGIN}${localizedPath(target.bare, target.locale)}`);
       const alternates = SEO_HREFLANG_CODES.map((code) => {
         const href =
           code === SEO_XDEFAULT_CODE
             ? `${PRODUCTION_ORIGIN}${target.bare}`
             : `${PRODUCTION_ORIGIN}${localizedPath(target.bare, code)}`;
-        return `    <xhtml:link rel="alternate" hreflang="${code}" href="${href}"/>`;
+        return `    <xhtml:link rel="alternate" hreflang="${code}" href="${escapeXml(href)}"/>`;
       }).join('\n');
-      const lastmod = target.updatedAt ?? buildTimestamp;
+      const lastmod = escapeXml(String(target.updatedAt ?? buildTimestamp));
       return `  <url>\n    <loc>${loc}</loc>\n    <lastmod>${lastmod}</lastmod>\n${alternates}\n  </url>`;
     })
     .join('\n');

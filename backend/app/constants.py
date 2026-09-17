@@ -586,6 +586,10 @@ BEARER_PREFIX = "Bearer "
 HEADER_ORIGIN = "origin"
 HEADER_HOST = "host"
 HEADER_X_FORWARDED_FOR = "x-forwarded-for"
+# Edge-authenticated real-client-IP handoff across the Cloudflare Pages proxy
+# hop — see app.rate_limit.client_key() and settings.EDGE_SHARED_SECRET.
+HEADER_X_CLIENT_IP = "x-client-ip"
+HEADER_X_EDGE_AUTH = "x-edge-auth"
 HEADER_RETRY_AFTER = "Retry-After"
 HEADER_ACCEPT_LANGUAGE = "Accept-Language"
 HEADER_LIST_UNSUBSCRIBE = "List-Unsubscribe"
@@ -595,12 +599,14 @@ MIME_APPLICATION_NDJSON = "application/x-ndjson"
 
 # uvicorn's logging.access record carries a positional args tuple
 # (client_addr, method, path, http_version, status) — app/logging_config.py's
-# _AccessPathFilter reads path/status off it. Named so a future uvicorn
-# version's arg-count change is at least a visible constant, not a bare index.
+# _AccessPathSuppressFilter reads path/status off it. Named so a future
+# uvicorn version's arg-count change is at least a visible constant, not a
+# bare index.
 UVICORN_ACCESS_STATUS_ARG_INDEX = 4
-# Same args tuple, the path slot — app/logging_config.py's _AccessPathFilter
-# strips the query string in place, so this index (and its :N / N: slice
-# derivatives) must stay consistent with UVICORN_ACCESS_STATUS_ARG_INDEX above.
+# Same args tuple, the path slot — app/logging_config.py's
+# _AccessPathStripFilter strips the query string in place, so this index (and
+# its :N / N: slice derivatives) must stay consistent with
+# UVICORN_ACCESS_STATUS_ARG_INDEX above.
 UVICORN_ACCESS_PATH_ARG_INDEX = 2
 # BeautifulSoup's built-in parser name — used everywhere we parse scraped/stored HTML.
 HTML_PARSER = "html.parser"
@@ -608,6 +614,11 @@ HTML_PARSER = "html.parser"
 # direction), blocking replay of an old, legitimately-signed request. Matches
 # Svix's own recommended default tolerance.
 WEBHOOK_TIMESTAMP_TOLERANCE_SECONDS = 300
+# Bounds the in-memory seen-svix-id LRU (routers/webhooks.py::_seen_webhook_ids)
+# the same way ADMIN_AUTH_FAILURES_MAX_ENTRIES bounds admin.py's lockout dict —
+# a validly-signed request replayed inside WEBHOOK_TIMESTAMP_TOLERANCE_SECONDS
+# would otherwise re-verify and re-trigger extraction (OWASP audit G-6).
+WEBHOOK_SEEN_IDS_MAX_ENTRIES = 4096
 # Public read endpoint — generous enough for normal browsing while throttling
 # ID-enumeration / scraping abuse (GET /events/{id} takes no auth).
 RATE_LIMIT_EVENTS_DETAIL = "120/minute"

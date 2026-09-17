@@ -15,6 +15,7 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from starlette.requests import Request
 
+from app.config import settings
 from app.constants import RATE_LIMIT_AUTH_REQUEST_LINK
 from app.rate_limit import client_key, limiter, rate_limit_exceeded_handler
 
@@ -61,6 +62,65 @@ def test_client_key_attacker_prepended_leftmost_entry_does_not_win():
     )
     assert client_key(req) != attacker_supplied
     assert client_key(req) == real_client_as_seen_by_proxy
+
+
+# ---------------------------------------------------------------------------
+# G-1: client_key must prefer an edge-authenticated X-Client-IP (proven via
+# X-Edge-Auth against settings.EDGE_SHARED_SECRET) over the rightmost-XFF
+# heuristic — production is a two-hop path (Cloudflare Pages proxy -> Render)
+# where the rightmost XFF entry is always Cloudflare's own egress address,
+# not the real visitor.
+# ---------------------------------------------------------------------------
+
+
+def test_client_key_prefers_edge_authenticated_client_ip(monkeypatch):
+    monkeypatch.setattr(settings, "EDGE_SHARED_SECRET", "edge-secret")
+    req = _request(
+        [
+            (b"x-client-ip", b"198.51.100.7"),
+            (b"x-edge-auth", b"edge-secret"),
+            (b"x-forwarded-for", b"1.2.3.4, 9.9.9.9"),  # Cloudflare's own egress
+        ]
+    )
+    assert client_key(req) == "198.51.100.7"
+
+
+def test_client_key_rejects_forged_client_ip_with_wrong_secret(monkeypatch):
+    monkeypatch.setattr(settings, "EDGE_SHARED_SECRET", "edge-secret")
+    req = _request(
+        [
+            (b"x-client-ip", b"198.51.100.7"),
+            (b"x-edge-auth", b"wrong-secret"),
+            (b"x-forwarded-for", b"1.2.3.4, 9.9.9.9"),
+        ]
+    )
+    # Falls back to the rightmost-XFF heuristic, not the forged X-Client-IP.
+    assert client_key(req) == "9.9.9.9"
+
+
+def test_client_key_rejects_forged_client_ip_with_no_secret_configured(monkeypatch):
+    monkeypatch.setattr(settings, "EDGE_SHARED_SECRET", "edge-secret")
+    req = _request(
+        [
+            (b"x-client-ip", b"198.51.100.7"),
+            # No X-Edge-Auth header at all — onrender.com is directly
+            # reachable, so this must not be trusted.
+            (b"x-forwarded-for", b"1.2.3.4, 9.9.9.9"),
+        ]
+    )
+    assert client_key(req) == "9.9.9.9"
+
+
+def test_client_key_ignores_edge_headers_when_secret_unset(monkeypatch):
+    monkeypatch.setattr(settings, "EDGE_SHARED_SECRET", "")
+    req = _request(
+        [
+            (b"x-client-ip", b"198.51.100.7"),
+            (b"x-edge-auth", b"anything"),
+            (b"x-forwarded-for", b"1.2.3.4, 9.9.9.9"),
+        ]
+    )
+    assert client_key(req) == "9.9.9.9"
 
 
 def _build_app() -> FastAPI:

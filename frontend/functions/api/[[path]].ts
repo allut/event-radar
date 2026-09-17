@@ -34,14 +34,44 @@ const STRIPPED_RESPONSE_HEADERS = [
   'connection',
 ];
 
-export const onRequest: PagesFunction = async ({ request }) => {
+interface Env {
+  EDGE_SHARED_SECRET?: string;
+}
+
+export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
   const url = new URL(request.url);
   const backendUrl = new URL(url.pathname.slice(API_BASE.length) + url.search, BACKEND_ORIGIN);
+
+  // OWASP audit G-2: `new URL(relative, base)` discards `base`'s authority
+  // when `relative` is protocol-relative (starts with `//`), which a request
+  // path beginning `/api//host/...` produces after the API_BASE prefix is
+  // stripped — resolving to an attacker-controlled host instead of the
+  // backend. Cloudflare's router happens not to route such a path to this
+  // function today, but that's undocumented platform behavior, not a
+  // guarantee this code should rely on. Assert the resolved origin instead.
+  if (backendUrl.origin !== BACKEND_ORIGIN) {
+    return new Response(null, { status: 400 });
+  }
+
+  // OWASP audit G-1: strip any client-supplied X-Forwarded-For/X-Client-IP
+  // (forgeable) and replace with the edge-authenticated pair the backend's
+  // client_key() trusts — cf-connecting-ip is set by the Cloudflare edge
+  // itself, before this Function runs, so it can't be spoofed by the caller.
+  const headers = new Headers(request.headers);
+  headers.delete('x-forwarded-for');
+  headers.delete('forwarded');
+  headers.delete('x-client-ip');
+  headers.delete('x-edge-auth');
+  const clientIp = request.headers.get('cf-connecting-ip');
+  if (clientIp && env.EDGE_SHARED_SECRET) {
+    headers.set('x-client-ip', clientIp);
+    headers.set('x-edge-auth', env.EDGE_SHARED_SECRET);
+  }
 
   const hasBody = request.method !== 'GET' && request.method !== 'HEAD';
   const init: RequestInit & { duplex?: 'half' } = {
     method: request.method,
-    headers: request.headers,
+    headers,
     redirect: 'manual',
   };
   if (hasBody) {
@@ -52,12 +82,12 @@ export const onRequest: PagesFunction = async ({ request }) => {
   }
 
   const backendResponse = await fetch(new Request(backendUrl, init));
-  const headers = new Headers(backendResponse.headers);
-  for (const header of STRIPPED_RESPONSE_HEADERS) headers.delete(header);
+  const responseHeaders = new Headers(backendResponse.headers);
+  for (const header of STRIPPED_RESPONSE_HEADERS) responseHeaders.delete(header);
 
   return new Response(backendResponse.body, {
     status: backendResponse.status,
     statusText: backendResponse.statusText,
-    headers,
+    headers: responseHeaders,
   });
 };

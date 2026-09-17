@@ -16,7 +16,8 @@ from app.constants import (
 from app.logging_config import (
     HttpLogShipHandler,
     JsonLogFormatter,
-    _AccessPathFilter,
+    _AccessPathStripFilter,
+    _AccessPathSuppressFilter,
     _text_formatter,
     configure_logging,
     shutdown_log_shipping,
@@ -342,92 +343,107 @@ def _make_access_record(path: str, args=None) -> logging.LogRecord:
     return record
 
 
-def test_access_path_filter_drops_health_check() -> None:
+def test_access_path_suppress_filter_drops_health_check() -> None:
     record = _make_access_record("/health")
-    assert _AccessPathFilter().filter(record) is False
+    assert _AccessPathSuppressFilter().filter(record) is False
 
 
-def test_access_path_filter_keeps_other_paths() -> None:
+def test_access_path_suppress_filter_keeps_other_paths() -> None:
     record = _make_access_record("/explore")
-    assert _AccessPathFilter().filter(record) is True
+    assert _AccessPathSuppressFilter().filter(record) is True
 
 
-def test_access_path_filter_keeps_non_access_records() -> None:
+def test_access_path_suppress_filter_keeps_non_access_records() -> None:
     record = _make_record("some app log line")
-    assert _AccessPathFilter().filter(record) is True
+    assert _AccessPathSuppressFilter().filter(record) is True
 
 
-def test_access_path_filter_drops_health_check_with_query_string() -> None:
-    # uvicorn includes the query string in the same args slot as the path.
-    record = _make_access_record("/health?x=1")
-    assert _AccessPathFilter().filter(record) is False
-
-
-def test_access_path_filter_keeps_failing_health_check() -> None:
+def test_access_path_suppress_filter_keeps_failing_health_check() -> None:
     # A failing health check (5xx) must still ship — that's the signal an
     # ops monitor needs, unlike the routine 200 keepalive noise.
     record = _make_access_record(
         "/health", args=("127.0.0.1", "GET", "/health", "1.1", 503)
     )
-    assert _AccessPathFilter().filter(record) is True
+    assert _AccessPathSuppressFilter().filter(record) is True
 
 
-def test_access_path_filter_keeps_short_args_defensively() -> None:
+def test_access_path_suppress_filter_keeps_short_args_defensively() -> None:
     record = _make_access_record("/health", args=("127.0.0.1", "GET"))
-    assert _AccessPathFilter().filter(record) is True
+    assert _AccessPathSuppressFilter().filter(record) is True
 
 
-def test_access_path_filter_strips_query_string_from_shipped_record() -> None:
-    # OWASP audit L-1: search terms, OAuth codes, and unsubscribe tokens
-    # must never reach the third-party Axiom drain via the query string.
+def test_access_path_strip_filter_strips_query_string() -> None:
+    # OWASP audit L-1/G-4: search terms, OAuth codes, and unsubscribe tokens
+    # must never reach the third-party Axiom drain, or Render's own console
+    # log stream, via the query string.
     record = _make_access_record("/explore?q=secret+search")
-    assert _AccessPathFilter().filter(record) is True
+    assert _AccessPathStripFilter().filter(record) is True
     assert record.args[2] == "/explore"
 
 
-def test_access_path_filter_leaves_query_free_path_untouched() -> None:
+def test_access_path_strip_filter_drops_query_before_suppress_check() -> None:
+    # uvicorn includes the query string in the same args slot as the path —
+    # the suppress filter (which runs after the strip filter, per
+    # configure_logging's attach order) must see the already-stripped path.
+    record = _make_access_record("/health?x=1")
+    assert _AccessPathStripFilter().filter(record) is True
+    assert record.args[2] == "/health"
+    assert _AccessPathSuppressFilter().filter(record) is False
+
+
+def test_access_path_strip_filter_leaves_query_free_path_untouched() -> None:
     record = _make_access_record("/explore")
-    assert _AccessPathFilter().filter(record) is True
+    assert _AccessPathStripFilter().filter(record) is True
     assert record.args[2] == "/explore"
 
 
-def test_access_path_filter_leaves_short_args_query_string_unstripped() -> None:
-    # Below the length guard used for the suppress-list check too — args
-    # this short never come from real uvicorn.access records.
+def test_access_path_strip_filter_leaves_short_args_unstripped() -> None:
+    # Below the length guard — args this short never come from real
+    # uvicorn.access records.
     record = _make_access_record("/health?x=1", args=("127.0.0.1", "GET"))
-    assert _AccessPathFilter().filter(record) is True
+    assert _AccessPathStripFilter().filter(record) is True
 
 
-def test_console_handler_registered_before_ship_queue_handler(monkeypatch) -> None:
-    # _AccessPathFilter mutates the shared LogRecord.args tuple in place to
-    # strip query strings before shipping (OWASP audit L-1). That mutation
-    # is safe for local logs only because logging.Logger.callHandlers()
-    # invokes handlers in registration order and the console handler
-    # already formats/emits the record before the queue handler's filter
-    # runs. Pin that order here so a future reorder trips this test instead
-    # of silently stripping query strings from local dev/file logs too.
-    monkeypatch.setattr(settings, "APP_ENV", "production")
-    monkeypatch.setattr(settings, "LOG_SHIP_URL", "https://logs.example.com/ingest")
-    monkeypatch.setattr(settings, "LOG_SHIP_TOKEN", "secret-token")
+def test_uvicorn_access_logger_has_strip_filter_in_dev_too(monkeypatch) -> None:
+    # OWASP audit G-4: the strip filter must run for every environment,
+    # including dev — it's attached to the uvicorn.access logger itself
+    # (not a shipping-only handler), so local console/file logs get the
+    # same query-string strip as the shipped copy.
+    monkeypatch.setattr(settings, "APP_ENV", "development")
 
     configure_logging()
 
-    root = logging.getLogger()
-    console_index = next(
-        i
-        for i, h in enumerate(root.handlers)
+    access_logger = logging.getLogger("uvicorn.access")
+    assert any(isinstance(f, _AccessPathStripFilter) for f in access_logger.filters)
+
+
+def test_console_formatter_output_never_contains_query_string(monkeypatch) -> None:
+    # OWASP audit G-4: the console handler (Render's log stream in prod) must
+    # never see the raw query string — it's attached to the root logger
+    # before uvicorn.access records reach it, and callHandlers() would format
+    # the unstripped record if the strip filter weren't attached at the
+    # logger level instead of the shipping-only handler level.
+    monkeypatch.setattr(settings, "APP_ENV", "production")
+    monkeypatch.setattr(settings, "LOG_SHIP_URL", "")
+
+    configure_logging()
+
+    record = _make_access_record("/explore?q=secret+search")
+    access_logger = logging.getLogger("uvicorn.access")
+    for f in access_logger.filters:
+        f.filter(record)
+    console_handler = next(
+        h
+        for h in logging.getLogger().handlers
         if isinstance(h, logging.StreamHandler)
         and not isinstance(h, logging.handlers.QueueHandler)
     )
-    queue_index = next(
-        i
-        for i, h in enumerate(root.handlers)
-        if isinstance(h, logging.handlers.QueueHandler)
-    )
-    assert console_index < queue_index
+    formatted = console_handler.format(record)
+    assert "?" not in formatted
+    assert "secret" not in formatted
 
 
-def test_prod_ship_queue_handler_has_access_path_filter(monkeypatch) -> None:
+def test_prod_ship_queue_handler_has_suppress_filter(monkeypatch) -> None:
     monkeypatch.setattr(settings, "APP_ENV", "production")
     monkeypatch.setattr(settings, "LOG_SHIP_URL", "https://logs.example.com/ingest")
     monkeypatch.setattr(settings, "LOG_SHIP_TOKEN", "secret-token")
@@ -439,4 +455,6 @@ def test_prod_ship_queue_handler_has_access_path_filter(monkeypatch) -> None:
         h for h in root.handlers if isinstance(h, logging.handlers.QueueHandler)
     ]
     assert len(queue_handlers) == 1
-    assert any(isinstance(f, _AccessPathFilter) for f in queue_handlers[0].filters)
+    assert any(
+        isinstance(f, _AccessPathSuppressFilter) for f in queue_handlers[0].filters
+    )

@@ -54,6 +54,8 @@ services:
         sync: false
       - key: BACKEND_URL
         value: https://event-radar-api-r7l6.onrender.com
+      - key: EDGE_SHARED_SECRET
+        sync: false
       - key: CLOUDINARY_CLOUD_NAME
         sync: false
       - key: CLOUDINARY_API_KEY

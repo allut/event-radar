@@ -81,7 +81,10 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     [sitemapXml, landingHtml, robotsTxt] = await Promise.all([sitemapRes.text(), landingRes.text(), robotsRes.text()]);
     faviconContentType = faviconRes.headers.get('content-type');
   } catch (error) {
-    return jsonResponse(StatusCodes.BAD_GATEWAY, { error: `failed to fetch production pages: ${String(error)}` });
+    // Never interpolate the raw error into the response (OWASP audit G-7) —
+    // a fetch TypeError can embed request details a caller shouldn't see.
+    console.error('seo-audit: failed to fetch production pages', error);
+    return jsonResponse(StatusCodes.BAD_GATEWAY, { error: 'failed to fetch production pages' });
   }
 
   // One live event page, if the catalog has any published yet — lets the
@@ -171,8 +174,11 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     // new alerting channel), so if reporting itself is broken, that must be
     // visible somewhere an operator would notice — a non-2xx status, which
     // cron-job.org's own monitoring surfaces, rather than a 200 with the
-    // problem buried in a JSON field nobody's watching.
-    return jsonResponse(StatusCodes.INTERNAL_SERVER_ERROR, { ...result, reportError: String(error) });
+    // problem buried in a JSON field nobody's watching. The error itself is
+    // logged, not echoed in the response (OWASP audit G-7) — this call path
+    // stringifies errors from GitHub API requests made with GH_ISSUE_TOKEN.
+    console.error('seo-audit: failed to report audit result to GitHub', error);
+    return jsonResponse(StatusCodes.INTERNAL_SERVER_ERROR, { ...result, reportError: 'failed to report audit result to GitHub' });
   }
 
   return jsonResponse(StatusCodes.OK, result);

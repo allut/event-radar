@@ -96,6 +96,22 @@ describe('RichTextEditor', () => {
     );
   });
 
+  it('rejects a disallowed URL scheme instead of inserting it as a link (OWASP audit G-13)', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    const { container } = render(<RichTextEditor value="<p>Hello</p>" onChange={onChange} locale="en" />);
+    const content = await waitFor(() => getContent(container));
+
+    await user.click(content);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.click(screen.getByRole('button', { name: 'Insert link' }));
+    await user.type(screen.getByPlaceholderText('https://…'), 'javascript:alert(1)');
+    await user.click(screen.getByRole('button', { name: 'Insert' }));
+
+    expect(screen.queryByPlaceholderText('https://…')).not.toBeInTheDocument();
+    await waitFor(() => expect(onChange).not.toHaveBeenCalledWith(expect.stringContaining('javascript:')));
+  });
+
   it('strips disallowed tags/attributes from pasted content to the allowed mark set', async () => {
     const onChange = vi.fn();
     const { container } = render(<RichTextEditor value="<p></p>" onChange={onChange} locale="en" />);

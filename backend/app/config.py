@@ -125,6 +125,16 @@ class Settings(BaseSettings):
         "times": {"evening": 0.9, "weekend": 0.7},
     }
 
+    # Edge proxy — shared secret the Cloudflare Pages Function
+    # (frontend/functions/api/[[path]].ts) presents alongside X-Client-IP so
+    # app.rate_limit.client_key() can trust that header as the real client IP
+    # across the browser -> Cloudflare -> Render two-hop path. Empty = fall
+    # back to today's rightmost-XFF behavior (dev, or the secret not yet
+    # provisioned). Never trust X-Client-IP without a matching secret — the
+    # Render origin is directly reachable, so an unauthenticated X-Client-IP
+    # would be trivially forgeable (OWASP audit G-1).
+    EDGE_SHARED_SECRET: str = ""
+
     # Admin / internal security
     ADMIN_USERNAME: str = ADMIN_USERNAME_DEFAULT  # Basic-auth username for /admin/* endpoints
     ADMIN_PASSWORD: str = (

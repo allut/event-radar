@@ -103,7 +103,12 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   try {
     hookRes = await fetch(deployHookUrl, { method: 'POST' });
   } catch (error) {
-    return jsonResponse(StatusCodes.BAD_GATEWAY, { error: `failed to fire deploy hook: ${String(error)}` });
+    // Never interpolate the error into the response (OWASP audit G-7): a
+    // fetch TypeError commonly embeds the failed URL, which would disclose
+    // PRERENDER_CADENCE_DEPLOY_HOOK_URL — itself a credential (an
+    // unauthenticated POST endpoint that triggers a production rebuild).
+    console.error('prerender-cadence: failed to fire deploy hook', error);
+    return jsonResponse(StatusCodes.BAD_GATEWAY, { error: 'failed to fire deploy hook' });
   }
   return jsonResponse(hookRes.ok ? StatusCodes.OK : StatusCodes.BAD_GATEWAY, {
     skipped: false,
