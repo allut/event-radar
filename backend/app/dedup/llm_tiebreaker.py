@@ -49,6 +49,7 @@ from app.dedup.rules import (
     union,
     apply_same_day_title_unions,
     build_cluster_assignments,
+    bulk_assign_dedup_groups,
     candidate_pair_ids_in_window,
     clear_stale_dedup_groups,
     dedup_window_cutoff,
@@ -64,22 +65,54 @@ from app.models.models import Event, LlmCall
 log = logging.getLogger(__name__)
 
 
-def _build_prompt(a: Event, b: Event) -> str:
+_EventFragment = tuple[str, str, str]
+
+
+def _event_fragment(
+    event: Event, fragment_cache: dict[int, _EventFragment]
+) -> _EventFragment:
+    """Escaped/truncated (title, date, venue) prompt fragment for one event,
+    memoized per event id in ``fragment_cache``.
+
+    These fragments are invariant per event but rebuilt by ``_build_prompt``
+    on every pair — up to DEDUP_CANDIDATE_PAIR_MAX pairs, most of them sharing
+    an event with several other pairs — so without this memo the same
+    strftime/escape/truncate/slice work runs once per *pair* instead of once
+    per *event* (Big-O audit #5, item 2.6).
+    """
+    cached = fragment_cache.get(event.id)
+    if cached is not None:
+        return cached
+    fragment: _EventFragment = (
+        escape_prompt_delimiters(event.title_orig[:LLM_DEDUP_TITLE_MAX_LEN]),
+        event.starts_at.strftime("%Y-%m-%d %H:%M"),
+        escape_prompt_delimiters(
+            (event.venue_name or LLM_CLASSIFY_VENUE_FALLBACK)[:LLM_DEDUP_VENUE_MAX_LEN]
+        ),
+    )
+    fragment_cache[event.id] = fragment
+    return fragment
+
+
+def _build_prompt(
+    a: Event, b: Event, fragment_cache: dict[int, _EventFragment] | None = None
+) -> str:
+    cache = fragment_cache if fragment_cache is not None else {}
+    title_a, date_a, venue_a = _event_fragment(a, cache)
+    title_b, date_b, venue_b = _event_fragment(b, cache)
     return LLM_DEDUP_PROMPT_TEMPLATE.format(
-        title_a=escape_prompt_delimiters(a.title_orig[:LLM_DEDUP_TITLE_MAX_LEN]),
-        date_a=a.starts_at.strftime("%Y-%m-%d %H:%M"),
-        venue_a=escape_prompt_delimiters(
-            (a.venue_name or LLM_CLASSIFY_VENUE_FALLBACK)[:LLM_DEDUP_VENUE_MAX_LEN]
-        ),
-        title_b=escape_prompt_delimiters(b.title_orig[:LLM_DEDUP_TITLE_MAX_LEN]),
-        date_b=b.starts_at.strftime("%Y-%m-%d %H:%M"),
-        venue_b=escape_prompt_delimiters(
-            (b.venue_name or LLM_CLASSIFY_VENUE_FALLBACK)[:LLM_DEDUP_VENUE_MAX_LEN]
-        ),
+        title_a=title_a,
+        date_a=date_a,
+        venue_a=venue_a,
+        title_b=title_b,
+        date_b=date_b,
+        venue_b=venue_b,
     )
 
 
-def _dedup_pair_hash(a: Event, b: Event) -> str:
+def _dedup_pair_hash(
+    a: Event, b: Event, fragment_cache: dict[int, _EventFragment] | None = None
+) -> str:
     """Content hash for the (a, b) dedup prompt.
 
     Must derive the *identical* hash ``llm_json`` stores in
@@ -89,7 +122,7 @@ def _dedup_pair_hash(a: Event, b: Event) -> str:
     invalidates the entire dedup LLM cache (expected one-time re-warm, not a
     bug).
     """
-    return content_hash(_build_prompt(a, b))
+    return content_hash(_build_prompt(a, b, fragment_cache))
 
 
 def _verdict_confirms(result: dict) -> bool:
@@ -106,7 +139,11 @@ def _verdict_confirms(result: dict) -> bool:
 
 
 async def _llm_confirms_pair(
-    a: Event, b: Event, db: AsyncSession, http_client: httpx.AsyncClient | None = None
+    a: Event,
+    b: Event,
+    db: AsyncSession,
+    http_client: httpx.AsyncClient | None = None,
+    fragment_cache: dict[int, _EventFragment] | None = None,
 ) -> bool:
     """Return True if the LLM says the pair is the same event with sufficient confidence.
 
@@ -117,7 +154,7 @@ async def _llm_confirms_pair(
     already established there is no cached row — pass an empty
     ``prefetched_cache`` to make ``llm_json`` skip its own per-call SELECT.
     """
-    prompt = _build_prompt(a, b)
+    prompt = _build_prompt(a, b, fragment_cache)
     response = await llm_json_or_none(
         LLM_TASK_DEDUP,
         prompt,
@@ -189,6 +226,7 @@ async def _find_llm_survivor_pairs(
     cutoff: datetime,
     events_by_id: dict[int, Event],
     parent: dict[int, int],
+    fragment_cache: dict[int, _EventFragment] | None = None,
 ) -> list[tuple[Event, Event, str]]:
     """Stage 1: SQL time pre-filter (shared with the rule-only pass) → Python
     fuzzy title/venue check. Pairs already collapsed by the same-day union are
@@ -209,7 +247,7 @@ async def _find_llm_survivor_pairs(
             bypass_title_on_exact_time_and_venue=True,
         ):
             continue
-        survivors.append((a, b, _dedup_pair_hash(a, b)))
+        survivors.append((a, b, _dedup_pair_hash(a, b, fragment_cache)))
     return survivors
 
 
@@ -221,6 +259,7 @@ async def _resolve_survivor_pairs(
     http_client: httpx.AsyncClient,
     *,
     max_fresh_calls: int = LLM_DEDUP_MAX_FRESH_LLM_CALLS_PER_PASS,
+    fragment_cache: dict[int, _EventFragment] | None = None,
 ) -> tuple[int, int, int]:
     """Stage 2: resolve each survivor via the cache, else a fresh LLM call
     (bounded by ``max_fresh_calls``). Unions confirmed pairs into ``parent``
@@ -264,7 +303,7 @@ async def _resolve_survivor_pairs(
 
     async def _confirm_one(a: Event, b: Event) -> bool:
         async with semaphore:
-            return await _llm_confirms_pair(a, b, db, http_client)
+            return await _llm_confirms_pair(a, b, db, http_client, fragment_cache)
 
     remaining = to_call
     while remaining:
@@ -395,7 +434,12 @@ async def run_dedup_pass_llm(
     # budget — this removes the timed-entry / session storm from the LLM path.
     apply_same_day_title_unions(parent, events)
 
-    survivors = await _find_llm_survivor_pairs(db, cutoff, events_by_id, parent)
+    # Per-event prompt-fragment memo, shared across the whole pass (Big-O
+    # audit #5, item 2.6) — see _event_fragment.
+    fragment_cache: dict[int, _EventFragment] = {}
+    survivors = await _find_llm_survivor_pairs(
+        db, cutoff, events_by_id, parent, fragment_cache
+    )
 
     # Bulk prefetch (once, before the loop) — satisfies the no-N+1 batch rule.
     cached_decisions = await _prefetch_cached_decisions(
@@ -420,6 +464,7 @@ async def run_dedup_pass_llm(
                 parent,
                 http_client,
                 max_fresh_calls=LLM_DEDUP_MAX_FRESH_LLM_CALLS_PER_PASS,
+                fragment_cache=fragment_cache,
             )
             llm_confirmed += sub_confirmed
             fresh_calls += sub_fresh
@@ -429,12 +474,7 @@ async def run_dedup_pass_llm(
     desc_len_by_id = await load_description_lengths(db, ids)
     assignments = build_cluster_assignments(parent, ids, events_by_id, desc_len_by_id)
 
-    updated = 0
-    for event in events:
-        new_gid = assignments.get(event.id)
-        if event.dedup_group_id != new_gid:
-            event.dedup_group_id = new_gid
-            updated += 1
+    updated = await bulk_assign_dedup_groups(db, events, assignments)
 
     await clear_stale_dedup_groups(db, cutoff)
 

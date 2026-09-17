@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { organizerApi } from '../../api/client';
 import {
-  API, LOCALE_EN, LOCALE_RU, LOCALES,
+  API, LOCALE_EN, LOCALE_RU, LOCALES_BY_CODE,
   ORGANIZER_VENUE_NAME_MAX_LEN, ORGANIZER_VENUE_ADDRESS_MAX_LEN, QUERY_KEYS,
   type ContentLang,
 } from '../../constants';
@@ -47,7 +47,7 @@ interface VenuePickerProps {
 }
 
 function langLabel(lang: ContentLang): string {
-  return LOCALES.find((l) => l.code === lang)?.label ?? lang.toUpperCase();
+  return LOCALES_BY_CODE.get(lang)?.label ?? lang.toUpperCase();
 }
 
 function fieldLabel(key: string, locale: string, contentLang: ContentLang): string {

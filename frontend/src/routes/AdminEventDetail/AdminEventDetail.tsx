@@ -9,7 +9,7 @@ import {
   ADMIN_TRANSLATABLE_FIELD_COUNT,
   API,
   CONTENT_LANG_ORDER,
-  LOCALES,
+  LOCALES_BY_CODE,
   QUERY_KEYS,
   ROUTES,
   UI_STATE,
@@ -170,6 +170,36 @@ export default function AdminEventDetail({ eventId }: { eventId: string }) {
     return map;
   }, [data]);
 
+  // Re-run only when the loaded event/reports change, not on every
+  // resolution-note keystroke (Big-O audit #5, item 3.5). Hoisted above the
+  // isLoading/isError early returns below — hooks must run unconditionally.
+  const openReports = useMemo(
+    () => (data?.reports ?? []).filter((r) => r.status === REPORT_STATUS.open),
+    [data],
+  );
+  const langOptions = useMemo(() => {
+    if (!data) return [];
+    const { event } = data;
+    const localeLabel = (code: ContentLang) => LOCALES_BY_CODE.get(code)?.label ?? code.toUpperCase();
+    const markerState = (code: ContentLang): ContentMarkerState => {
+      if (code === CONTENT_LANG_ORDER[0]) return 'matched';
+      const t = event.content_by_locale[code]?.translated;
+      if (!t) return 'empty';
+      const translatedCount = Number(t.title) + Number(t.description) + Number(t.important_info);
+      if (translatedCount === 0) return 'empty';
+      if (translatedCount === ADMIN_TRANSLATABLE_FIELD_COUNT) return 'matched';
+      return 'partial';
+    };
+    return CONTENT_LANG_ORDER.map((code) => {
+      const state = markerState(code);
+      return {
+        value: code,
+        label: localeLabel(code),
+        marker: { state, stateLabel: ADMIN_CONTENT_LANG_MARKER_LABELS[state] },
+      };
+    });
+  }, [data]);
+
   const actionMutation = useMutation({
     mutationFn: ({ kind, note }: { kind: ActionKind; note: string }) =>
       adminApi.post(ACTION_CONFIG[kind].path(Number(eventId)), { resolution_note: note }),
@@ -193,7 +223,6 @@ export default function AdminEventDetail({ eventId }: { eventId: string }) {
   if (isError || !data) return <PageState kind={UI_STATE.error} message="Couldn't load this event." inline />;
 
   const { event, dedup_siblings, reports, raw_events, in_todays_feed } = data;
-  const openReports = reports.filter((r) => r.status === REPORT_STATUS.open);
   const cl = event.classification;
   const actionDisabled = actionMutation.isPending || !note.trim();
 
@@ -214,26 +243,6 @@ export default function AdminEventDetail({ eventId }: { eventId: string }) {
     );
   }
 
-  const localeLabel = (code: ContentLang) => LOCALES.find((l) => l.code === code)?.label ?? code.toUpperCase();
-  // et is always the base slot — it's never a fallback. For en/ru, all
-  // three fields translated -> matched, some -> partial, none -> empty.
-  const markerState = (code: ContentLang): ContentMarkerState => {
-    if (code === CONTENT_LANG_ORDER[0]) return 'matched';
-    const t = event.content_by_locale[code]?.translated;
-    if (!t) return 'empty';
-    const translatedCount = Number(t.title) + Number(t.description) + Number(t.important_info);
-    if (translatedCount === 0) return 'empty';
-    if (translatedCount === ADMIN_TRANSLATABLE_FIELD_COUNT) return 'matched';
-    return 'partial';
-  };
-  const langOptions = CONTENT_LANG_ORDER.map((code) => {
-    const state = markerState(code);
-    return {
-      value: code,
-      label: localeLabel(code),
-      marker: { state, stateLabel: ADMIN_CONTENT_LANG_MARKER_LABELS[state] },
-    };
-  });
   // The base locale (et) is never a fallback, even when its *_localized
   // dict happens to carry no 'et' key — its content is title_orig/etc.,
   // the canonical original, not a locale→en→orig fallback. Mirrors

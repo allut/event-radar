@@ -86,12 +86,21 @@ def build_report_outcome_text(event: Event, resolution_note: str, locale: str) -
     return f"{intro}\n\n{note}\n\n{event_url}"
 
 
+def report_outcome_http_client() -> httpx.AsyncClient:
+    """Build an ``httpx.AsyncClient`` for ``send_report_resolution_emails`` to
+    open once and reuse across its whole REPORT_EMAIL_SEND_CONCURRENCY-bounded
+    fan-out, instead of a fresh connection pool + TLS handshake per reporter
+    (Big-O audit #5, item 2.7 — mirrors ``digest_http_client()``)."""
+    return httpx.AsyncClient(timeout=RESEND_TIMEOUT_SECONDS)
+
+
 async def send_report_outcome_email(
     to_email: str,
     event: Event,
     resolution_note: str,
     locale: str,
     theme_preference: str | None = None,
+    http_client: httpx.AsyncClient | None = None,
 ) -> None:
     if not settings.RESEND_API_KEY:
         log.warning(
@@ -106,19 +115,20 @@ async def send_report_outcome_email(
     )
     text_body = build_report_outcome_text(event, resolution_note, locale)
 
-    async with httpx.AsyncClient(timeout=RESEND_TIMEOUT_SECONDS) as client:
-        resp = await client.post(
-            RESEND_SEND_URL,
-            headers={AUTHORIZATION_HEADER: f"{BEARER_PREFIX}{settings.RESEND_API_KEY}"},
-            json={
-                "from": settings.RESEND_FROM_ADDRESS,
-                "to": [to_email],
-                "reply_to": settings.CONTACT_TO_ADDRESS,
-                "subject": subject,
-                "html": html_body,
-                "text": text_body,
-            },
-        )
+    payload = {
+        "from": settings.RESEND_FROM_ADDRESS,
+        "to": [to_email],
+        "reply_to": settings.CONTACT_TO_ADDRESS,
+        "subject": subject,
+        "html": html_body,
+        "text": text_body,
+    }
+    headers = {AUTHORIZATION_HEADER: f"{BEARER_PREFIX}{settings.RESEND_API_KEY}"}
+    if http_client is not None:
+        resp = await http_client.post(RESEND_SEND_URL, headers=headers, json=payload)
+    else:
+        async with httpx.AsyncClient(timeout=RESEND_TIMEOUT_SECONDS) as client:
+            resp = await client.post(RESEND_SEND_URL, headers=headers, json=payload)
 
     if resp.status_code not in (httpx.codes.OK, httpx.codes.CREATED):
         log.error(

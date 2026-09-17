@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { adminApi } from '../../api/client';
@@ -22,6 +22,27 @@ interface AdminSubmission {
   status: string;
   submitted_by_organizer_id: number | null;
   created_at: string;
+}
+
+// Module-scope — referentially stable forever, so QueueRowList's memo
+// (AdminQueueSplitView.tsx, Big-O audit #5, item 3.5) never sees these
+// change identity on a resolution-note keystroke.
+function getSubmissionId(item: AdminSubmission): number {
+  return item.id;
+}
+function renderSubmissionRow(item: AdminSubmission & { createdAtRelative: string }) {
+  return (
+    <>
+      <div className={styles.rowTitle}>{item.title}</div>
+      <div className={styles.rowMeta}>
+        {item.submitted_by_organizer_id !== null
+          ? `Organizer #${item.submitted_by_organizer_id}`
+          : 'Unknown organizer'}
+        {' · '}
+        {item.createdAtRelative}
+      </div>
+    </>
+  );
 }
 
 interface AdminSubmissionsResponse {
@@ -110,6 +131,21 @@ export default function AdminSubmissions() {
     actionMutation.mutate({ item, kind, note: note.trim() });
   }
 
+  // Stable across note keystrokes (only resolvedById changes them) — see
+  // renderSubmissionRow's module-scope siblings above for why this matters.
+  const isResolved = useCallback(
+    (item: AdminSubmission) => item.id in resolvedById,
+    [resolvedById],
+  );
+  const resolvedTag = useCallback(
+    (item: AdminSubmission) => (resolvedById[item.id]?.kind === 'retracted' ? 'Retracted' : 'Approved'),
+    [resolvedById],
+  );
+  const selectRow = useCallback((id: number) => {
+    setSelectedId(id);
+    setNote('');
+  }, []);
+
   return (
     <div>
       <div className={styles.head}>
@@ -126,27 +162,13 @@ export default function AdminSubmissions() {
         <p className={styles.subtitle}>{items.length} of {totalSubmissions} pending submissions shown</p>
         <AdminQueueSplitView
           items={items}
-          getId={(item) => item.id}
-          isResolved={(item) => item.id in resolvedById}
-          resolvedTag={(item) => (resolvedById[item.id]?.kind === 'retracted' ? 'Retracted' : 'Approved')}
+          getId={getSubmissionId}
+          isResolved={isResolved}
+          resolvedTag={resolvedTag}
           selectedId={currentId}
-          onSelect={(id) => {
-            setSelectedId(id);
-            setNote('');
-          }}
+          onSelect={selectRow}
           emptyLabel="No pending submissions."
-          renderRow={(item) => (
-            <>
-              <div className={styles.rowTitle}>{item.title}</div>
-              <div className={styles.rowMeta}>
-                {item.submitted_by_organizer_id !== null
-                  ? `Organizer #${item.submitted_by_organizer_id}`
-                  : 'Unknown organizer'}
-                {' · '}
-                {item.createdAtRelative}
-              </div>
-            </>
-          )}
+          renderRow={renderSubmissionRow}
           renderDetail={(item) => {
             const resolution = resolvedById[item.id];
             const previewUrl = safeUrl(item.url);

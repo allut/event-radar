@@ -117,11 +117,22 @@ export function useDropdown(
     setFlip(measure());
     if (!open) return;
 
+    // rAF-coalesced — an unthrottled resize listener otherwise forces a
+    // synchronous layout (2x getComputedStyle + 2x getBoundingClientRect)
+    // on every resize tick while a popover is open (Big-O audit #5, item 3.7).
+    let rafId: number | null = null;
     function handleResize() {
-      setFlip(measure());
+      if (rafId !== null) return;
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+        setFlip(measure());
+      });
     }
     window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      if (rafId !== null) cancelAnimationFrame(rafId);
+    };
   }, [open, defaultAnchor]);
 
   return { open, setOpen, flip, rootRef, popRef, triggerRef, close };

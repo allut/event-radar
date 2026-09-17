@@ -216,8 +216,13 @@ function PopoverBody({ id, value, onChange, min, locale, required, disabled, pop
     () => monthGridDays(viewYear, viewMonth, CALENDAR_WEEK_START),
     [viewYear, viewMonth],
   );
-  const headers = weekdayHeaders(locale);
-  const monthYearLabel = formatMonthYearLabel(viewYear, viewMonth, locale);
+  // Re-runs only on locale change, not every hour/minute keystroke (7
+  // Intl.format + 7 Date allocations) — same rationale as `cells` above.
+  const headers = useMemo(() => weekdayHeaders(locale), [locale]);
+  const monthYearLabel = useMemo(
+    () => formatMonthYearLabel(viewYear, viewMonth, locale),
+    [viewYear, viewMonth, locale],
+  );
 
   const monthLabelId = `${id}-picker-month-label`;
 

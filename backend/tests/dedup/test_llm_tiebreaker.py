@@ -57,7 +57,7 @@ def _wire_execute(mock_db, rows: list | None = None) -> None:
     mock_db.execute.return_value = result
 
 
-def _hash_by_ids(a, b) -> str:
+def _hash_by_ids(a, b, fragment_cache=None) -> str:
     return f"hash-{a.id}-{b.id}"
 
 

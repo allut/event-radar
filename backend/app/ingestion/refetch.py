@@ -54,7 +54,7 @@ from app.ingestion.selectors import (
     PILETILEVI_HOST,
     SUSPECT_LOCALE_TITLE_PREFIXES,
 )
-from app.ingestion.content_filters import is_explicit_text, is_non_event_text
+from app.ingestion.content_filters import content_flags
 from app.ingestion.http_client import host_guard_hook, host_is_allowed, http_get
 from app.ingestion.jsonld import (
     extract_jsonld_event_text,
@@ -204,13 +204,15 @@ def _allowed_refetch_hosts(candidates: list[Event]) -> frozenset[str]:
     is untrusted (parsed from third-party content); deriving the guard purely
     from it would let a malicious stored URL allowlist itself. The intersection
     permits every legitimate source host while never widening the guard beyond
-    known-good hosts.
+    known-good hosts. Hostnames are deduped before the host_is_allowed scan —
+    up to 1,000 candidates typically share ~4 hostnames, so checking each
+    candidate individually reruns the same ALLOWED_SOURCE_HOSTS scan for
+    hosts already known good or already known bad.
     """
-    return frozenset(
-        h
-        for e in candidates
-        if (h := urlsplit(e.url or "").hostname) and host_is_allowed(h)
-    )
+    candidate_hosts = {
+        h for e in candidates if (h := urlsplit(e.url or "").hostname)
+    }
+    return frozenset(h for h in candidate_hosts if host_is_allowed(h))
 
 
 async def _backfill_localized_text(
@@ -512,20 +514,26 @@ def _reconcile_venue_name(event: Event, summary: dict, detail_name: object) -> b
         return False
 
     summary["venue_changed"] += 1
-    if not event.is_explicit and is_explicit_text(
-        event.title_orig, event.description_orig, event.venue_name, event.important_info
-    ):
-        event.is_explicit = True
-        summary["flagged_explicit"] += 1
-        if event.status == EVENT_STATUS_PUBLISHED:
-            event.status = EVENT_STATUS_CLASSIFIED
-    if not event.is_non_event and is_non_event_text(
-        event.title_orig, event.venue_name
-    ):
-        event.is_non_event = True
-        summary["flagged_non_event"] += 1
-        if event.status == EVENT_STATUS_PUBLISHED:
-            event.status = EVENT_STATUS_CLASSIFIED
+    if not event.is_explicit or not event.is_non_event:
+        # Single pass over both flags (Big-O audit #5, item 2.3) — title and
+        # venue_name would otherwise each be re-parsed by is_explicit_text and
+        # is_non_event_text.
+        newly_explicit, newly_non_event = content_flags(
+            event.title_orig,
+            event.description_orig,
+            event.venue_name,
+            event.important_info,
+        )
+        if not event.is_explicit and newly_explicit:
+            event.is_explicit = True
+            summary["flagged_explicit"] += 1
+            if event.status == EVENT_STATUS_PUBLISHED:
+                event.status = EVENT_STATUS_CLASSIFIED
+        if not event.is_non_event and newly_non_event:
+            event.is_non_event = True
+            summary["flagged_non_event"] += 1
+            if event.status == EVENT_STATUS_PUBLISHED:
+                event.status = EVENT_STATUS_CLASSIFIED
     return True
 
 

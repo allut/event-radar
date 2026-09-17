@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { cx } from '../../utils';
 import type { ContentMarkerState } from '../../constants';
 import styles from './SegmentedControl.module.css';
@@ -19,8 +20,12 @@ interface SegmentedControlProps {
   variant?: 'plain' | 'dial';
 }
 
-/** Two(+)-segment mode switch — used for Explore's All events / For you control. */
-export default function SegmentedControl({ options, value, onChange, ariaLabel, variant = 'plain' }: SegmentedControlProps) {
+/** Two(+)-segment mode switch — used for Explore's All events / For you control.
+ * memo'd — a caller re-rendering for unrelated reasons (e.g. Explore on every
+ * search-box keystroke) shouldn't re-render this when its own props are
+ * unchanged (Big-O audit #5, item 3.6). Requires callers to keep onChange
+ * referentially stable (useCallback) for the memo to actually pay off. */
+const SegmentedControl = memo(function SegmentedControl({ options, value, onChange, ariaLabel, variant = 'plain' }: SegmentedControlProps) {
   const isDial = variant === 'dial';
   const activeIndex = options.findIndex((o) => o.value === value);
   return (
@@ -53,4 +58,6 @@ export default function SegmentedControl({ options, value, onChange, ariaLabel, 
       })}
     </div>
   );
-}
+});
+
+export default SegmentedControl;

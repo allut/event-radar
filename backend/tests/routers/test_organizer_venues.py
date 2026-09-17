@@ -43,7 +43,11 @@ class TestListOwnVenues:
         mock_db.scalars.return_value = scalars_result
 
         result = await list_own_venues(
-            make_request(method="GET", path="/organizer/venues"), organizer, mock_db
+            make_request(method="GET", path="/organizer/venues"),
+            limit=50,
+            offset=0,
+            current_organizer=organizer,
+            db=mock_db,
         )
 
         assert result == [
@@ -76,7 +80,11 @@ class TestListOwnVenues:
         mock_db.scalars.return_value = scalars_result
 
         await list_own_venues(
-            make_request(method="GET", path="/organizer/venues"), organizer, mock_db
+            make_request(method="GET", path="/organizer/venues"),
+            limit=50,
+            offset=0,
+            current_organizer=organizer,
+            db=mock_db,
         )
 
         stmt = mock_db.scalars.call_args[0][0]

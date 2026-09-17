@@ -505,9 +505,20 @@ export function formatHeroDateline(locale: string): string {
   return `${weekday}, ${dayMonth}`;
 }
 
+const NUMBER_FORMATTERS = new Map<string, Intl.NumberFormat>();
+function numberFormatter(locale: string): Intl.NumberFormat {
+  const localeCode = toLocaleCode(locale);
+  let fmt = NUMBER_FORMATTERS.get(localeCode);
+  if (!fmt) {
+    fmt = new Intl.NumberFormat(localeCode);
+    NUMBER_FORMATTERS.set(localeCode, fmt);
+  }
+  return fmt;
+}
+
 /** Locale-grouped integer, e.g. 1008 → "1,008" (en) / "1 008" (et). */
 export function formatCount(n: number, locale: string): string {
-  return new Intl.NumberFormat(toLocaleCode(locale)).format(n);
+  return numberFormatter(locale).format(n);
 }
 
 /** Formats a `YYYY-MM-DD` date-only string (e.g. `daily_feeds.feed_date`) using

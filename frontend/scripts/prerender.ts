@@ -267,14 +267,16 @@ function buildTargets(candidates: PrerenderCandidate[]): PrerenderTarget[] {
   return targets;
 }
 
-/** Embeds `marker` under CHANGE_MARKER_JSONLD_FIELD in `html`'s single
+/** Embeds `marker` under CHANGE_MARKER_JSONLD_FIELD in `document`'s single
  * JSON-LD script (issue #80), at render time — after the page's real
- * content (including its JSON-LD) has already been captured. Leaves `html`
- * unchanged if there's no JSON-LD script or its body doesn't parse; the
- * in-build validation gate below is what actually catches/blocks on that. */
-function embedChangeMarker(html: string, marker: string): string {
-  const dom = new JSDOM(html);
-  const script = dom.window.document.querySelector(JSONLD_SCRIPT_SELECTOR);
+ * content (including its JSON-LD) has already been captured. Leaves
+ * `document` unchanged if there's no JSON-LD script or its body doesn't
+ * parse; the in-build validation gate below is what actually catches/blocks
+ * on that. In-place (mutates `document`, no JSDOM of its own) so
+ * snapshotTarget's fresh-render path can share one JSDOM parse/serialize
+ * with stripBakedThemeAttrInPlace instead of two (Big-O audit #5, Tier 4). */
+function embedChangeMarkerInPlace(document: Document, marker: string): void {
+  const script = document.querySelector(JSONLD_SCRIPT_SELECTOR);
   if (script) {
     try {
       const data = JSON.parse(script.textContent ?? '{}') as Record<string, unknown>;
@@ -284,7 +286,6 @@ function embedChangeMarker(html: string, marker: string): string {
       // Malformed JSON-LD — leave untouched, validateTarget() catches it.
     }
   }
-  return dom.serialize();
 }
 
 /** Rewrites `html`'s built-asset `<head>` references (`<script type="module">`,
@@ -333,7 +334,12 @@ function getShellAssetNodes(shellHtml: string): Element[] {
   return nodes;
 }
 
-export function rewriteSnapshotAssetRefs(html: string, shellHtml: string): string {
+// In-place — mutates `document`, no JSDOM/serialize of its own, so
+// finalizeSnapshotHtml can share one JSDOM parse/serialize with
+// stripBakedThemeAttrInPlace instead of chaining two (Big-O audit #5, Tier
+// 4). The exported, string-in-string-out rewriteSnapshotAssetRefs below
+// wraps this for its own standalone callers/tests.
+function rewriteSnapshotAssetRefsInPlace(document: Document, shellHtml: string): void {
   const shellAssetNodes = getShellAssetNodes(shellHtml);
   if (shellAssetNodes.length === 0) {
     throw new Error(
@@ -341,8 +347,7 @@ export function rewriteSnapshotAssetRefs(html: string, shellHtml: string): strin
     );
   }
 
-  const dom = new JSDOM(html);
-  const head = dom.window.document.head;
+  const head = document.head;
   const staleAssetNodes = [...head.querySelectorAll('script, link')].filter(isAssetNode);
   // Anchor on the node right after the stale block (captured before removal,
   // so it's untouched by it) — `insertBefore(node, null)` appends at the end,
@@ -352,9 +357,14 @@ export function rewriteSnapshotAssetRefs(html: string, shellHtml: string): strin
   const anchor = staleAssetNodes.length > 0 ? staleAssetNodes[staleAssetNodes.length - 1].nextSibling : null;
   for (const node of staleAssetNodes) node.remove();
   for (const shellNode of shellAssetNodes) {
-    const imported = dom.window.document.importNode(shellNode, true);
+    const imported = document.importNode(shellNode, true);
     head.insertBefore(imported, anchor);
   }
+}
+
+export function rewriteSnapshotAssetRefs(html: string, shellHtml: string): string {
+  const dom = new JSDOM(html);
+  rewriteSnapshotAssetRefsInPlace(dom.window.document, shellHtml);
   return dom.serialize();
 }
 
@@ -371,9 +381,13 @@ export function rewriteSnapshotAssetRefs(html: string, shellHtml: string): strin
  * (`:root` in index.css) only until the pre-paint script (now unblocked by
  * the CSP hash — see src/lib/csp.ts) sets the real value before first paint.
  * Idempotent — a second call on already-stripped HTML is a no-op. */
+function stripBakedThemeAttrInPlace(document: Document): void {
+  document.documentElement.removeAttribute('data-theme');
+}
+
 export function stripBakedThemeAttr(html: string): string {
   const dom = new JSDOM(html);
-  dom.window.document.documentElement.removeAttribute('data-theme');
+  stripBakedThemeAttrInPlace(dom.window.document);
   return dom.serialize();
 }
 
@@ -381,10 +395,13 @@ export function stripBakedThemeAttr(html: string): string {
  * skip stripBakedThemeAttr by accident. `shellHtml` is optional: the
  * fresh-render write site (snapshotTarget) has no stale asset refs to
  * rewrite (the page was just rendered against the current build), while
- * both copy-forward write sites in main() do. */
+ * both copy-forward write sites in main() do. One JSDOM parse/serialize for
+ * both steps, not two chained string round trips (Big-O audit #5, Tier 4). */
 function finalizeSnapshotHtml(html: string, shellHtml?: string): string {
-  const withAssetsFixed = shellHtml !== undefined ? rewriteSnapshotAssetRefs(html, shellHtml) : html;
-  return stripBakedThemeAttr(withAssetsFixed);
+  const dom = new JSDOM(html);
+  if (shellHtml !== undefined) rewriteSnapshotAssetRefsInPlace(dom.window.document, shellHtml);
+  stripBakedThemeAttrInPlace(dom.window.document);
+  return dom.serialize();
 }
 
 /** A resumed round's accumulated manifest entries (issue #367) — keyed
@@ -747,13 +764,17 @@ async function snapshotTarget(
     // path every other render failure takes, below.
     throw new Error(`prerender: /explore query errored for ${localizedPath(target.bare, target.locale)}`);
   }
-  let html = await page.content();
+  const html = await page.content();
+  // One JSDOM parse/serialize for both steps below, not two chained ones
+  // (Big-O audit #5, Tier 4) — mirrors finalizeSnapshotHtml's own merge.
+  const dom = new JSDOM(html);
   if (target.eventId !== undefined && target.updatedAt !== undefined) {
-    html = embedChangeMarker(html, target.updatedAt);
+    embedChangeMarkerInPlace(dom.window.document, target.updatedAt);
   }
+  stripBakedThemeAttrInPlace(dom.window.document);
+  const finalized = dom.serialize();
   const outPath = outputFilePath(target.bare, target.locale);
   await mkdir(path.dirname(outPath), { recursive: true });
-  const finalized = finalizeSnapshotHtml(html);
   await writeFile(outPath, finalized, 'utf-8');
   return finalized;
 }
@@ -843,8 +864,8 @@ export async function fetchLiveExploreCount(locale: string): Promise<number | un
   }
 }
 
-async function validateTarget(target: PrerenderTarget): Promise<string[]> {
-  const html = await readFile(outputFilePath(target.bare, target.locale), 'utf-8');
+async function validateTarget(target: PrerenderTarget, renderedHtml?: string): Promise<string[]> {
+  const html = renderedHtml ?? (await readFile(outputFilePath(target.bare, target.locale), 'utf-8'));
   const parsed = parseSnapshotHtml(html);
   const kind = target.bare === ROUTES.home ? 'website' : target.bare === ROUTES.explore ? 'list' : 'event';
 
@@ -1135,7 +1156,14 @@ export async function main(): Promise<void> {
   // for why. Keyed by target so a successfully-rendered or -failed target
   // can drop its entry once the render loop has an answer for it either way.
   const staleFallbackHtml = new Map<PrerenderTarget, string>();
-  for (const { target, unchanged, liveHtml } of classification) {
+  // runPool, not a sequential for-of — each iteration's mkdir/writeFile/
+  // persistChainStateTarget (an R2 network round trip) was the dominant
+  // wall-clock cost of a copy-forward-heavy round, run one at a time for
+  // events x 3 locales (Big-O audit #5, item Tier 4, biggest single win).
+  // copiedForward++ and staleFallbackHtml.set() are plain synchronous
+  // statements with no await between read and write, so concurrent workers
+  // touching them (distinct target keys) never race.
+  await runPool(classification, CHANGE_DETECTION_CONCURRENCY, async ({ target, unchanged, liveHtml }) => {
     if (unchanged && liveHtml !== null) {
       const outPath = outputFilePath(target.bare, target.locale);
       await mkdir(path.dirname(outPath), { recursive: true });
@@ -1170,7 +1198,7 @@ export async function main(): Promise<void> {
       // render loop resolves each one) without the self-sabotage.
       staleFallbackHtml.set(target, liveHtml);
     }
-  }
+  });
   // Priority queue (issue #82): home routes (all locales) first, then event
   // routes oldest-unrendered-first — so a large event backlog can never
   // starve the highest-traffic pages, and among event routes the
@@ -1184,6 +1212,11 @@ export async function main(): Promise<void> {
 
   let newlyRendered = 0;
   let skippedTargets: PrerenderTarget[] = [];
+  // Feeds validateTarget below — every successfully-rendered target this
+  // round already has its finalized HTML sitting in memory right here, so
+  // the validation pass doesn't need to re-readFile + re-parse a file this
+  // same process just wrote (Big-O audit #5, Tier 4).
+  const renderedHtmlByTarget = new Map<PrerenderTarget, string>();
   if (renderQueue.length > 0) {
     let server: PreviewServer | undefined;
     const browser = await launchBrowser();
@@ -1212,6 +1245,7 @@ export async function main(): Promise<void> {
             try {
               const finalizedHtml = await snapshotTarget(page, resolvedPreviewOrigin, target);
               newlyRendered++;
+              renderedHtmlByTarget.set(target, finalizedHtml);
               await persistChainStateTarget(sanitizedBurstId, round, target, finalizedHtml, chainStateIndex);
             } catch (error) {
               failures.push({ target, error, diagnostics: recentEvents() });
@@ -1269,14 +1303,16 @@ export async function main(): Promise<void> {
   // nothing on disk, which falls through to the CSR shell via vercel.json's
   // catch-all rewrite rather than a build failure — see outputFilePath/vercel.json.
   let staleFallbackWritten = 0;
-  for (const target of skippedTargets) {
+  // runPool, not a sequential for-of — same rationale as the copy-forward
+  // loop above (Big-O audit #5, Tier 4).
+  await runPool(skippedTargets, CHANGE_DETECTION_CONCURRENCY, async (target) => {
     const liveHtml = staleFallbackHtml.get(target);
-    if (liveHtml === undefined) continue;
+    if (liveHtml === undefined) return;
     const outPath = outputFilePath(target.bare, target.locale);
     await mkdir(path.dirname(outPath), { recursive: true });
     await writeFile(outPath, finalizeSnapshotHtml(liveHtml, shellHtml), 'utf-8');
     staleFallbackWritten++;
-  }
+  });
 
   console.log(
     `prerender: round summary — newly-rendered ${newlyRendered}, copied-forward ${copiedForward}, queue-remaining ${skippedTargets.length} (${staleFallbackWritten} of those still serving stale-but-real content)`,
@@ -1300,7 +1336,7 @@ export async function main(): Promise<void> {
   const validationTargets = selectValidationTargets(renderQueue, skippedTargets);
   const validationIssues: string[] = [];
   await runPool(validationTargets, PRERENDER_CONCURRENCY, async (target) => {
-    validationIssues.push(...(await validateTarget(target)));
+    validationIssues.push(...(await validateTarget(target, renderedHtmlByTarget.get(target))));
   });
   if (validationIssues.length > 0) {
     for (const issue of validationIssues) {

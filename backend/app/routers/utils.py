@@ -8,6 +8,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+import httpx
 from fastapi import HTTPException, Response, status
 from fastapi.responses import RedirectResponse
 from itsdangerous import BadSignature, SignatureExpired
@@ -56,7 +57,10 @@ from app.constants import (
     VALID_THEME_PREFERENCES,
 )
 from app.db import AsyncSessionLocal
-from app.email.report_reporter import send_report_outcome_email
+from app.email.report_reporter import (
+    report_outcome_http_client,
+    send_report_outcome_email,
+)
 from app.models.models import (
     AdminAction,
     Event,
@@ -936,7 +940,7 @@ async def send_report_resolution_emails(
 
     semaphore = asyncio.Semaphore(REPORT_EMAIL_SEND_CONCURRENCY)
 
-    async def _send_one(report: EventReport) -> None:
+    async def _send_one(report: EventReport, http_client: httpx.AsyncClient) -> None:
         reporter = users_by_id.get(report.user_id)
         if reporter is None:
             return
@@ -948,6 +952,7 @@ async def send_report_resolution_emails(
                     resolution_note,
                     reporter.locale,
                     reporter.theme_preference,
+                    http_client=http_client,
                 )
             except Exception:
                 log.error(
@@ -964,9 +969,13 @@ async def send_report_resolution_emails(
     # CancelledError) would otherwise cancel every other in-flight reporter
     # email and propagate into the caller, after resolution has already
     # been committed.
-    await asyncio.gather(
-        *(_send_one(report) for report in reports), return_exceptions=True
-    )
+    # One shared client for the whole fan-out (Big-O audit #5, item 2.7),
+    # mirroring digest.py's Big-O audit M7 fix.
+    async with report_outcome_http_client() as http_client:
+        await asyncio.gather(
+            *(_send_one(report, http_client) for report in reports),
+            return_exceptions=True,
+        )
 
 
 async def cancel_event_and_resolve_reports(

@@ -1,7 +1,7 @@
 """Tests for organizer event submission CRUD (routers/organizer_events.py)."""
 import http
 from datetime import datetime, timedelta, timezone
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
 from pydantic import ValidationError
@@ -1335,6 +1335,7 @@ class TestDeleteOwnEvent:
             "auto-resolved: event cancelled",
             reporter.locale,
             reporter.theme_preference,
+            http_client=ANY,
         )
 
     @pytest.mark.asyncio

@@ -704,13 +704,25 @@ async def admin_list_reports(
     if reason is not None:
         validate_report_reason(reason)
 
-    match_conditions = [EventReport.status == REPORT_STATUS_OPEN]
-    if reason is not None:
-        match_conditions.append(EventReport.reason == reason)
-    if illegal_only:
-        match_conditions.append(EventReport.is_illegal_allegation.is_(True))
-
-    matching_event_ids = select(EventReport.event_id).where(*match_conditions).distinct()
+    agg_conditions = [
+        EventReport.status == REPORT_STATUS_OPEN,
+        Event.status != EVENT_STATUS_CANCELLED,
+    ]
+    # With no reason/illegal_only filter, "at least one matching open report"
+    # degenerates to "has an open report" — already covered by the OPEN
+    # condition above, so the DISTINCT event_id subquery (a full scan of
+    # open reports on every plain queue load, the console's default view)
+    # is a no-op and skipped (Big-O audit #5, item 2.10).
+    if reason is not None or illegal_only:
+        match_conditions = [EventReport.status == REPORT_STATUS_OPEN]
+        if reason is not None:
+            match_conditions.append(EventReport.reason == reason)
+        if illegal_only:
+            match_conditions.append(EventReport.is_illegal_allegation.is_(True))
+        matching_event_ids = (
+            select(EventReport.event_id).where(*match_conditions).distinct()
+        )
+        agg_conditions.append(EventReport.event_id.in_(matching_event_ids))
 
     has_illegal_col = func.bool_or(EventReport.is_illegal_allegation).label(
         "has_illegal_allegation"
@@ -726,11 +738,7 @@ async def admin_list_reports(
             oldest_col,
         )
         .join(Event, Event.id == EventReport.event_id)
-        .where(
-            EventReport.status == REPORT_STATUS_OPEN,
-            Event.status != EVENT_STATUS_CANCELLED,
-            EventReport.event_id.in_(matching_event_ids),
-        )
+        .where(*agg_conditions)
         .group_by(EventReport.event_id)
     )
 

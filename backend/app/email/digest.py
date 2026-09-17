@@ -361,23 +361,28 @@ async def send_daily_digests(
     Pages the opted-in population at FEED_BUILD_USER_BATCH_SIZE, mirroring
     build_daily_feeds — memory is bounded by a batch size (feeds + their
     referenced events + in-flight send coroutines) instead of by the total
-    opted-in count. DIGEST_SEND_CONCURRENCY bounds in-flight HTTP across the
-    whole run via one shared semaphore, not per page.
+    opted-in count. Only user ids are held for the full run; full User rows
+    are hydrated one page at a time (Big-O audit #5, item 1.5 — the feeds and
+    events were already paged, but the `users`/`user_map` collections weren't).
+    DIGEST_SEND_CONCURRENCY bounds in-flight HTTP across the whole run via one
+    shared semaphore, not per page.
 
     Returns summary dict for logging.
     """
     today = datetime.now(TALLINN_TZ).date()
 
-    users = (
-        await db.scalars(
-            select(User).where(
-                User.email_digest_opt_in.is_(True),
-                User.email_verified.is_(True),
+    user_ids = list(
+        (
+            await db.scalars(
+                select(User.id).where(
+                    User.email_digest_opt_in.is_(True),
+                    User.email_verified.is_(True),
+                )
             )
-        )
-    ).all()
+        ).all()
+    )
 
-    if not users:
+    if not user_ids:
         return {
             DIGEST_RESULT_SENT: 0,
             DIGEST_RESULT_SKIPPED: 0,
@@ -388,7 +393,6 @@ async def send_daily_digests(
 
     semaphore = asyncio.Semaphore(DIGEST_SEND_CONCURRENCY)
     sent = errored = 0
-    user_map: dict[int, User] = {u.id: u for u in users}
 
     async def _send_one(
         user: User,
@@ -426,8 +430,13 @@ async def send_daily_digests(
     # send, so they skip opening a connection pool entirely.
     client_ctx = digest_http_client() if not dry_run else nullcontext(None)
     async with client_ctx as http_client:
-        for i in range(0, len(users), FEED_BUILD_USER_BATCH_SIZE):
-            page_ids = [u.id for u in users[i : i + FEED_BUILD_USER_BATCH_SIZE]]
+        for i in range(0, len(user_ids), FEED_BUILD_USER_BATCH_SIZE):
+            page_ids = user_ids[i : i + FEED_BUILD_USER_BATCH_SIZE]
+
+            page_users = (
+                await db.scalars(select(User).where(User.id.in_(page_ids)))
+            ).all()
+            user_map: dict[int, User] = {u.id: u for u in page_users}
 
             feed_by_user, event_map = await _load_digest_data(db, today, page_ids)
             if event_map is None:
@@ -440,6 +449,7 @@ async def send_daily_digests(
                 *(
                     _send_one(user_map[uid], eids, event_map, http_client)
                     for uid, eids in feed_by_user.items()
+                    if uid in user_map
                 ),
                 return_exceptions=True,
             )
@@ -453,12 +463,13 @@ async def send_daily_digests(
                         extra={"event": LOG_EVENT_EMAIL_SEND_FAILED},
                     )
 
-    skipped = len(users) - sent - errored
+    total_opted_in = len(user_ids)
+    skipped = total_opted_in - sent - errored
 
     return {
         DIGEST_RESULT_SENT: sent,
         DIGEST_RESULT_SKIPPED: skipped,
         "errored": errored,
-        "total_opted_in": len(users),
+        "total_opted_in": total_opted_in,
         "dry_run": dry_run,
     }

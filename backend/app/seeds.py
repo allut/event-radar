@@ -71,11 +71,21 @@ def _fienta_source() -> dict[str, Any]:
 
 
 async def seed_sources(db: AsyncSession) -> None:
+    # Bulk-prefetch existing rows once rather than one SELECT per source
+    # (Big-O audit #5, item 2.10) — mirrors seed_personas' bulk form below.
+    slugs = [sdef.slug for sdef in SOURCE_CATALOG]
+    existing_by_slug = {
+        source.slug: source
+        for source in (
+            await db.scalars(select(Source).where(Source.slug.in_(slugs)))
+        ).all()
+    }
     for sdef in SOURCE_CATALOG:
+        existing = existing_by_slug.get(sdef.slug)
         if sdef.slug == SOURCE_SLUG_FIENTA:
-            await _upsert_fienta(db)
+            await _upsert_fienta(db, existing)
         else:
-            await _upsert_simple(db, _simple_source_def(sdef))
+            await _upsert_simple(db, _simple_source_def(sdef), existing)
 
 
 def _validate_affinity_vector(slug: str, vector: dict) -> None:
@@ -123,9 +133,8 @@ async def seed_personas(db: AsyncSession) -> None:
     await db.flush()
 
 
-async def _upsert_fienta(db: AsyncSession) -> None:
+async def _upsert_fienta(db: AsyncSession, existing: Source | None) -> None:
     source = _fienta_source()
-    existing = await db.scalar(select(Source).where(Source.slug == source["slug"]))
     if existing:
         desired = source["config"]
         db_cfg = existing.config or {}
@@ -157,10 +166,11 @@ async def _upsert_fienta(db: AsyncSession) -> None:
     await db.flush()
 
 
-async def _upsert_simple(db: AsyncSession, source_def: dict[str, Any]) -> None:
+async def _upsert_simple(
+    db: AsyncSession, source_def: dict[str, Any], existing: Source | None
+) -> None:
     """Insert source if absent; reconcile config['url'] and enabled (e.g. env override,
     or a source disabled in registry.py after already being seeded)."""
-    existing = await db.scalar(select(Source).where(Source.slug == source_def["slug"]))
     if existing:
         changed = False
         new_url = source_def.get("config", {}).get("url")

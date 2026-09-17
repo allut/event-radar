@@ -64,12 +64,17 @@ from app.ingestion.sanitize import html_to_text
 from app.llm.router import content_hash, llm_http_client, llm_json_or_none
 from app.models.models import Event, EventClassification, LlmCall
 from app.routers.utils import (
+    alternation_pattern,
     canonical_event_filter,
     event_ended_filter,
     event_not_ended_filter,
 )
 
 log = logging.getLogger(__name__)
+
+# Single-pass alternation instead of a K=3 any()-over-keywords scan per event
+# (Big-O audit #5, item 2.10) — see alternation_pattern's own docstring.
+_FREE_TIER_PATTERN = alternation_pattern(FREE_TIER_KEYWORDS)
 
 
 def _price_context(event: Event) -> str:
@@ -213,7 +218,7 @@ def _validate_llm_prices(
     text = f"{event.price_hint or ''}\n{price_context}"
     amounts = eur_amounts_from_text(strip_fee_amounts(text))
     lowered = text.lower()
-    is_free_signaled = any(kw in lowered for kw in FREE_TIER_KEYWORDS) or 0.0 in amounts
+    is_free_signaled = _FREE_TIER_PATTERN.search(lowered) is not None or 0.0 in amounts
 
     def _is_backed(value: float | None) -> bool:
         if value is None:

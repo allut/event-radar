@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { cx } from '../../utils';
 import { useDropdown } from '../../hooks/useDropdown';
 import { DROPDOWN_DEFAULT_FOCUS_SELECTOR } from '../../constants';
@@ -17,8 +18,9 @@ interface FacetMenuProps {
 }
 
 /** Trigger button + popover for one Explore facet (Category/Vibe/When).
- * Popover options reuse the shared Chip pill component. */
-export default function FacetMenu({
+ * Popover options reuse the shared Chip pill component. memo'd — see
+ * SegmentedControl's docstring (Big-O audit #5, item 3.6). */
+const FacetMenu = memo(function FacetMenu({
   label,
   options,
   selected,
@@ -56,4 +58,6 @@ export default function FacetMenu({
       )}
     </div>
   );
-}
+});
+
+export default FacetMenu;

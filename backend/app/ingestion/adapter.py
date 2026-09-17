@@ -31,12 +31,16 @@ from app.constants import (
     TALLINN_REGION_BBOX,
     TALLINN_TZ,
 )
-from app.ingestion.content_filters import is_explicit_text, is_non_event_text
+from app.ingestion.content_filters import content_flags
 from app.ingestion.http_client import safe_external_url, safe_fetchable_url
 from app.ingestion.pricing import normalize_currency
 from app.models.models import Event, EventSource, IngestionRun, RawEvent, Source
 
 log = logging.getLogger(__name__)
+
+# Precompiled once at import time rather than per-event (Big-O audit #5, item 2.10)
+# — matches the module-level precompile convention used elsewhere in ingestion/.
+_SLUG_SANITIZE_PATTERN = re.compile(SLUG_SANITIZE_RE)
 
 
 def parse_dt(value: str) -> datetime | None:
@@ -89,7 +93,7 @@ class NormalizedEvent:
 
 
 def _make_slug(title: str, starts_at: datetime, external_id: str) -> str:
-    safe = re.sub(SLUG_SANITIZE_RE, "-", title.lower()).strip("-")
+    safe = _SLUG_SANITIZE_PATTERN.sub("-", title.lower()).strip("-")
     date_part = starts_at.strftime("%Y%m%d")
     # short hex keeps collision probability <0.1% up to ~10k events/run
     h = hashlib.md5(external_id.encode(), usedforsecurity=False).hexdigest()[
@@ -175,6 +179,12 @@ async def insert_normalized_event(
         safe_url = safe_external_url(normalized.url, source.slug)
     else:
         safe_url = await safe_fetchable_url(normalized.url, source.slug)
+    is_explicit, is_non_event = content_flags(
+        normalized.title,
+        normalized.description,
+        normalized.venue_name,
+        normalized.important_info,
+    )
     try:
         async with db.begin_nested():
             event = Event(
@@ -199,16 +209,8 @@ async def insert_normalized_event(
                 description_localized=normalized.description_localized,
                 important_info_localized=normalized.important_info_localized,
                 status=EVENT_STATUS_DRAFT,
-                is_explicit=is_explicit_text(
-                    normalized.title,
-                    normalized.description,
-                    normalized.venue_name,
-                    normalized.important_info,
-                ),
-                is_non_event=is_non_event_text(
-                    normalized.title,
-                    normalized.venue_name,
-                ),
+                is_explicit=is_explicit,
+                is_non_event=is_non_event,
             )
             db.add(event)
             await db.flush()

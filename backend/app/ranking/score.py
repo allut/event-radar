@@ -14,7 +14,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from collections.abc import Sequence
 from datetime import date, datetime, timedelta
-from functools import cached_property, lru_cache
+from functools import cached_property
 from heapq import nlargest
 
 from sqlalchemy import select
@@ -63,7 +63,6 @@ from app.constants import (
     TIME_SLOT_MORNING,
     TIME_SLOT_WEEKDAY,
     TIME_SLOT_WEEKEND,
-    TIME_SLOTS_CACHE_MAXSIZE,
     WEEKEND_START_WEEKDAY,
 )
 from app.models.models import (
@@ -239,18 +238,19 @@ class FeedbackContext:
 # ---------------------------------------------------------------------------
 
 
-@lru_cache(maxsize=TIME_SLOTS_CACHE_MAXSIZE)
 def _time_slots_for_event(starts_at: datetime) -> list[str]:
     """
     Derive time-of-day and day-of-week slots from a timezone-aware starts_at.
     An event can match multiple slots (e.g. Saturday evening → ['weekend', 'evening']).
 
-    Memoized: build_daily_feeds calls this once per (user, candidate-event) pair, but
-    the result depends only on the event's starts_at — without caching this repeats the
-    same astimezone conversion + branch ladder for every user scoring the same event
-    (O(U*E) calls where only O(E) distinct results exist). Callers must not mutate the
-    returned list — the cache hands out the same object on every hit; nothing in this
-    module does (each caller only iterates it).
+    build_daily_feeds calls this once per (user, candidate-event) pair via
+    score_event, but the result depends only on the event's starts_at. Rather
+    than an LRU cache keyed on starts_at (which thrashed to a near-0% hit rate
+    once the number of distinct start times exceeded the cache's maxsize —
+    Big-O audit #5, item 2.2), build_daily_feeds precomputes this once per
+    event into _precompute_event_factors' result and threads it through as
+    part of ``precomputed``; ad hoc single-user callers (browse.py) still call
+    this directly and pay the cost once per event, which is fine at that scale.
     """
     local = starts_at.astimezone(TALLINN_TZ)
     hour = local.hour
@@ -411,17 +411,23 @@ def locality_bonus(lat: float | None, lng: float | None) -> float:
     return 0.0
 
 
+_EventFactors = tuple[float, float, float, list[str]]
+
+
 def _precompute_event_factors(
     event_rows: list[Event], now: datetime
-) -> dict[int, tuple[float, float, float]]:
-    """Per-event (recency, quality, locality) — invariant across every user.
+) -> dict[int, _EventFactors]:
+    """Per-event (recency, quality, locality, time_slots) — invariant across
+    every user.
 
     build_daily_feeds' inner loop calls score_event once per (user, candidate)
-    pair; these three factors depend only on the event and the run's fixed
+    pair; these four factors depend only on the event and the run's fixed
     ``now``, so without this they're recomputed identically U times per event
-    at U x E scale. Hoisted once here and threaded through as ``precomputed``.
+    at U x E scale. Hoisted once here and threaded through as ``precomputed``
+    (time_slots joined this tuple in Big-O audit #5, item 2.2 — see
+    _time_slots_for_event).
     """
-    factors: dict[int, tuple[float, float, float]] = {}
+    factors: dict[int, _EventFactors] = {}
     for event in event_rows:
         cl = event.classification
         quality = cl.quality_score if cl and cl.quality_score is not None else NEUTRAL_SCORE
@@ -430,6 +436,7 @@ def _precompute_event_factors(
             recency_boost(event.starts_at, now),
             quality,
             locality_bonus(lat, lng),
+            _time_slots_for_event(event.starts_at),
         )
     return factors
 
@@ -439,13 +446,13 @@ def score_event(
     ctx: FeedbackContext,
     event: Event,
     now: datetime,
-    precomputed: tuple[float, float, float] | None = None,
+    precomputed: _EventFactors | None = None,
 ) -> float | None:
     """
     Compute personalized score for one event. Returns None if hard-excluded.
     Score is in [0, 1].
 
-    ``precomputed`` is the (recency, quality, locality) triple from
+    ``precomputed`` is the (recency, quality, locality, time_slots) tuple from
     ``_precompute_event_factors`` — pass it from a caller iterating many users
     over the same candidate pool to skip recomputing these per-event-only
     values on every call. Callers scoring a single user's events ad hoc (e.g.
@@ -454,22 +461,22 @@ def score_event(
     cl: EventClassification | None = event.classification
     categories: list[str] = cl.categories if cl else []
     vibes: list[str] = cl.vibes if cl else []
-    time_slots = _time_slots_for_event(event.starts_at)
 
     fb = feedback_signal(event.id, categories, event.dedup_group_id, ctx, now)
     if fb == SCORE_HARD_EXCLUDE:
         return None  # hard exclude
 
-    affinity = persona_affinity(user_persona_weights, categories, vibes, time_slots)
     if precomputed is not None:
-        recency, quality, locality = precomputed
+        recency, quality, locality, time_slots = precomputed
     else:
+        time_slots = _time_slots_for_event(event.starts_at)
         recency = recency_boost(event.starts_at, now)
         quality = (
             cl.quality_score if cl and cl.quality_score is not None else NEUTRAL_SCORE
         )
         lat, lng = resolve_venue_coords(event)
         locality = locality_bonus(lat, lng)
+    affinity = persona_affinity(user_persona_weights, categories, vibes, time_slots)
     fb_normalized = (fb + 1.0) / 2.0  # map [-1, 1] → [0, 1]
 
     return (
@@ -646,7 +653,7 @@ class _SharedFeedContext:
 
     event_rows: list[Event]
     candidate_series_key: dict[int, tuple[str, str]]
-    event_factors: dict[int, tuple[float, float, float]]
+    event_factors: dict[int, _EventFactors]
 
 
 @dataclass
@@ -672,7 +679,7 @@ class _FeedBuildContext:
         return self.shared.candidate_series_key
 
     @property
-    def event_factors(self) -> dict[int, tuple[float, float, float]]:
+    def event_factors(self) -> dict[int, _EventFactors]:
         return self.shared.event_factors
 
 
@@ -703,20 +710,31 @@ async def _load_recent_series_by_user(
         for eid in feed_row.event_ids or []:
             shown_event_users.setdefault(eid, set()).add(feed_row.user_id)
     if shown_event_users:
-        # One bulk SELECT — shown events may be outside the current lookahead
-        # window, so resolve them directly rather than from event_rows.
-        shown_event_rows = (
-            await db.scalars(
-                select(Event)
-                .where(Event.id.in_(list(shown_event_users.keys())))
-                .options(
-                    load_only(
-                        Event.id, Event.title_orig, Event.venue_name, Event.venue_id
-                    ),
-                    selectinload(Event.venue),
-                )
+        # Bulk SELECT, chunked at SCORE_INSERT_CHUNK_SIZE — shown events may be
+        # outside the current lookahead window, so resolve them directly rather
+        # than from event_rows. Unchunked this hits Postgres's per-statement
+        # bind-param limit past ~32k ids (Big-O audit #5, item 1.6).
+        shown_event_ids = list(shown_event_users.keys())
+        shown_event_rows: list[Event] = []
+        for i in range(0, len(shown_event_ids), SCORE_INSERT_CHUNK_SIZE):
+            chunk = shown_event_ids[i : i + SCORE_INSERT_CHUNK_SIZE]
+            shown_event_rows.extend(
+                (
+                    await db.scalars(
+                        select(Event)
+                        .where(Event.id.in_(chunk))
+                        .options(
+                            load_only(
+                                Event.id,
+                                Event.title_orig,
+                                Event.venue_name,
+                                Event.venue_id,
+                            ),
+                            selectinload(Event.venue),
+                        )
+                    )
+                ).all()
             )
-        ).all()
         for shown_ev in shown_event_rows:
             key = event_series_key(shown_ev.title_orig, resolve_venue_name(shown_ev))
             for uid in shown_event_users[shown_ev.id]:
@@ -726,7 +744,7 @@ async def _load_recent_series_by_user(
 
 async def _load_candidate_events(
     db: AsyncSession, now: datetime
-) -> tuple[list[Event], dict[int, tuple[str, str]], dict[int, tuple[float, float, float]]]:
+) -> tuple[list[Event], dict[int, tuple[str, str]], dict[int, _EventFactors]]:
     """Bulk-load published, non-excluded, upcoming-within-lookahead candidate
     events. Identical query for every page of users within one
     build_daily_feeds run — see _SharedFeedContext. Collapses same-series

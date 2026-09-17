@@ -109,10 +109,13 @@ export function parseSitemapLastmod(sitemapXml: string): string | null {
  * would only ever exercise validateSnapshotStructure's `kind: 'website'`
  * path, never `kind: 'event'` (assertEventJsonLd), even though event pages
  * are the higher-value SEO surface. */
+// Hoisted — PRODUCTION_ORIGIN is constant, so this never needs to be
+// rebuilt per call (Big-O audit #5, Tier 4).
+const EVENT_URL_RE = new RegExp(`^${PRODUCTION_ORIGIN.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/events/\\d+$`);
+
 export function parseSitemapEventUrls(sitemapXml: string): string[] {
   const locs = [...sitemapXml.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1]);
-  const eventUrlRe = new RegExp(`^${PRODUCTION_ORIGIN.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/events/\\d+$`);
-  return locs.filter((loc) => eventUrlRe.test(loc));
+  return locs.filter((loc) => EVENT_URL_RE.test(loc));
 }
 
 /** Every built-asset `<script src>` / `<link rel="stylesheet" href>` in
@@ -131,12 +134,18 @@ export function parseSitemapEventUrls(sitemapXml: string): string[] {
  * mode a copied-forward snapshot can ship (issue #97): a stale asset
  * reference that 200s as `text/html` (Vercel's SPA catch-all) instead of
  * 404ing, which no structural/JSON-LD check here would ever notice. */
+const SNAPSHOT_TAG_RE = /<(script|link)\b[^>]*>/g;
+const SNAPSHOT_STYLESHEET_REL_RE = /\brel="stylesheet"/;
+const SNAPSHOT_HREF_RE = /\bhref="([^"]+)"/;
+const SNAPSHOT_SRC_RE = /\bsrc="([^"]+)"/;
+
 export function parseSnapshotAssetUrls(html: string): string[] {
   const urls = new Set<string>();
-  const tagRe = /<(script|link)\b[^>]*>/g;
-  for (const [tag, tagName] of html.matchAll(tagRe)) {
-    if (tagName === 'link' && !/\brel="stylesheet"/.test(tag)) continue;
-    const attrRe = tagName === 'link' ? /\bhref="([^"]+)"/ : /\bsrc="([^"]+)"/;
+  // Regexes hoisted above, not re-literaled every matchAll iteration
+  // (Big-O audit #5, Tier 4).
+  for (const [tag, tagName] of html.matchAll(SNAPSHOT_TAG_RE)) {
+    if (tagName === 'link' && !SNAPSHOT_STYLESHEET_REL_RE.test(tag)) continue;
+    const attrRe = tagName === 'link' ? SNAPSHOT_HREF_RE : SNAPSHOT_SRC_RE;
     const match = tag.match(attrRe);
     if (match && match[1].includes(CRAWLABLE_ASSETS_PATH)) urls.add(match[1]);
   }

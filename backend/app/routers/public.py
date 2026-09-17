@@ -320,6 +320,16 @@ def _prerender_event_ids_stmt(now: datetime) -> Select[tuple[int, datetime]]:
     )
 
 
+# Process-local TTL cache — single entry (payload isn't locale-sensitive),
+# same pattern as _showcase_cache/_counts_cache above. This endpoint is public
+# and RATE_LIMIT_PUBLIC-only, so it can be hit far more often than its actual
+# build-time consumer calls it; caching bounds the cost of a repeated full
+# table scan without weakening the atomic-snapshot guarantee below — each
+# refresh is still one atomic query, just reused for the TTL window (Big-O
+# audit #5, item 1.3).
+_prerender_event_ids_cache: tuple[float, dict] | None = None
+
+
 @router.get("/prerender-events")
 @limiter.limit(RATE_LIMIT_PUBLIC)
 async def prerender_events(request: Request, db: AsyncSession = Depends(get_db)) -> dict:
@@ -332,17 +342,27 @@ async def prerender_events(request: Request, db: AsyncSession = Depends(get_db))
     change-detection marker the pipeline diffs against each route's
     currently-live snapshot to decide render-vs-copy-forward.
 
-    Deliberately unpaginated: the build-time consumer needs a single atomic
-    snapshot of the published id set, which paging would break. The payload
-    is small per row (``{id, updated_at}``) and the caller isn't a browser,
-    so this is exempt from the `limit`/`offset` + cap pattern every other
-    list endpoint follows.
+    Deliberately unpaginated and un-LIMIT-ed: the build-time consumer needs a
+    single atomic snapshot of the *entire* published id set, and a row-count
+    cap would silently drop events from prerendering rather than just being
+    slower to compute. The payload is small per row (``{id, updated_at}``).
+    Cached for PUBLIC_COUNTS_CACHE_TTL_SECONDS — see _prerender_event_ids_cache.
     """
+    global _prerender_event_ids_cache
+    now_monotonic = time.monotonic()
+    if (
+        _prerender_event_ids_cache is not None
+        and now_monotonic - _prerender_event_ids_cache[0] < PUBLIC_COUNTS_CACHE_TTL_SECONDS
+    ):
+        return _prerender_event_ids_cache[1]
+
     now = datetime.now(TALLINN_TZ)
     rows = (await db.execute(_prerender_event_ids_stmt(now))).all()
-    return {
+    payload = {
         "events": [
             {"id": event_id, "updated_at": updated_at.isoformat()}
             for event_id, updated_at in rows
         ]
     }
+    _prerender_event_ids_cache = (now_monotonic, payload)
+    return payload

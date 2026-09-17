@@ -139,6 +139,12 @@ export const SOCIAL_LINKS: { label: string; url: string; icon: SocialIcon }[] = 
 
 // ─── Locale ──────────────────────────────────────────────────────────────────
 export type LocaleCode = (typeof LOCALES)[number]['code'];
+
+// Built once — avoids a linear LOCALES.find() per call at each of its
+// duplicated call sites (Big-O audit #5, item 3.4), mirroring PERSONAS_BY_SLUG.
+export const LOCALES_BY_CODE: Map<string, (typeof LOCALES)[number]> = new Map(
+  LOCALES.map((l) => [l.code, l]),
+);
 export const LOCALE_EN = 'en' as const;
 export const LOCALE_ET = 'et' as const;
 export const LOCALE_RU = 'ru' as const;
@@ -397,6 +403,11 @@ export const REPORT_REASONS: { value: string; labelKey: string; descriptionKey: 
   { value: 'wrong_location', labelKey: 'report_reason_wrong_location', descriptionKey: 'report_reason_wrong_location_description' },
   { value: REPORT_REASON_OTHER, labelKey: 'report_reason_other', descriptionKey: 'report_reason_other_description' },
 ];
+// Built once — avoids a linear REPORT_REASONS.find() per call (Big-O audit
+// #5, item 3.4), mirroring PERSONAS_BY_SLUG/LOCALES_BY_CODE.
+export const REPORT_REASONS_BY_VALUE: Map<string, (typeof REPORT_REASONS)[number]> = new Map(
+  REPORT_REASONS.map((r) => [r.value, r]),
+);
 // Mirrors the backend's REPORT_DETAIL_MAX_CHARS (app/constants.py) — client-side
 // validation only, the server re-validates and is the real boundary.
 export const REPORT_DETAIL_MAX_CHARS = 500;
@@ -824,6 +835,13 @@ export const NAV_ITEMS = [
 // anonymous visitor (Saved has nothing in it, the others require auth).
 // Shared by TopBar and MobileMenu so their signed-out filtering can't diverge.
 export const SIGNED_OUT_NAV_ROUTES: readonly string[] = [ROUTES.explore, ROUTES.contact];
+
+// NAV_ITEMS filtered to SIGNED_OUT_NAV_ROUTES, computed once rather than on
+// every TopBar/MobileMenu render (Big-O audit #5, item 3.4) — both filter
+// the same constant data identically.
+export const SIGNED_OUT_NAV_ITEMS = NAV_ITEMS.filter((item) =>
+  SIGNED_OUT_NAV_ROUTES.includes(item.route),
+);
 
 // Same {route, labelKey} shape as NAV_ITEMS, rendered by both OrganizerTopBar
 // (desktop) and its MobileMenu (mobile) — kept in one place so they can't

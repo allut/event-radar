@@ -8,12 +8,16 @@ interface LocaleSelectorProps {
   disabled?: boolean;
 }
 
+// Hoisted — LOCALES is constant, so this never needs to be rebuilt per
+// render (Big-O audit #5, item 3.6); also keeps SelectMenu's memo effective.
+const LOCALE_OPTIONS = LOCALES.map(({ code, label }) => ({ value: code, label }));
+
 export default function LocaleSelector({ locale, onChange, ariaLabel, disabled }: LocaleSelectorProps) {
   return (
     <SelectMenu
       label=""
       value={locale}
-      options={LOCALES.map(({ code, label }) => ({ value: code, label }))}
+      options={LOCALE_OPTIONS}
       onChange={onChange}
       ariaLabel={ariaLabel}
       variant="button"

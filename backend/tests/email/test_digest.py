@@ -348,9 +348,15 @@ def _make_db_with_user_and_feed(
         r.all.return_value = rows
         return r
 
-    # First call → users, second call → feeds, third call → events
+    # First call → opted-in user ids, second call → the page's User rows,
+    # third call → feeds, fourth call → events.
     db.scalars = AsyncMock(
-        side_effect=[_sync_result([user]), _sync_result([feed]), _sync_result([event])]
+        side_effect=[
+            _sync_result([user_id]),
+            _sync_result([user]),
+            _sync_result([feed]),
+            _sync_result([event]),
+        ]
     )
     return db
 
@@ -395,7 +401,7 @@ class TestSendDailyDigestsDryRun:
             mock_dt.now.return_value.date.return_value = date(2026, 6, 9)
             await send_daily_digests(db, dry_run=True)
 
-        stmt = db.scalars.call_args_list[2].args[0]
+        stmt = db.scalars.call_args_list[3].args[0]
         compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
         assert "is_explicit" in compiled
         assert "is_non_event" in compiled
@@ -446,7 +452,7 @@ class TestSendDailyDigestsDryRun:
 
         db = mock_db
         db.scalars = AsyncMock(
-            side_effect=[_sync_result([user]), _sync_result([feed])]
+            side_effect=[_sync_result([user.id]), _sync_result([user]), _sync_result([feed])]
         )
 
         with patch("app.email.digest.datetime") as mock_dt:

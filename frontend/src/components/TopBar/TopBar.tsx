@@ -1,7 +1,7 @@
 import { Link, NavLink } from 'react-router-dom';
 import { t } from '../../i18n';
 import { cx } from '../../utils';
-import { BRAND_GLYPH, NAV_ITEMS, ROUTES, SIGNED_OUT_NAV_ROUTES } from '../../constants';
+import { BRAND_GLYPH, NAV_ITEMS, ROUTES, SIGNED_OUT_NAV_ITEMS } from '../../constants';
 import { useLocalePath } from '../../hooks/useLocalePath';
 import LocaleSelector from '../LocaleSelector';
 import ThemeSelector from '../ThemeSelector';
@@ -23,7 +23,7 @@ export default function TopBar({ locale, onLocaleChange, onLogout, localeDisable
   // Signed-out chrome (issue #235): only the public routes in
   // SIGNED_OUT_NAV_ROUTES stay visible — the rest are dead ends for an
   // anonymous visitor.
-  const visibleNavItems = authed ? NAV_ITEMS : NAV_ITEMS.filter((item) => SIGNED_OUT_NAV_ROUTES.includes(item.route));
+  const visibleNavItems = authed ? NAV_ITEMS : SIGNED_OUT_NAV_ITEMS;
   return (
     <header className={styles.topBar}>
       <div className={styles.left}>

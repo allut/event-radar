@@ -135,9 +135,24 @@ export default function Explore() {
     setSearchInput(filters.q);
   }
 
-  function commitFilters(next: ExploreFilters) {
-    setSearchParams(exploreFiltersToSearchParams(next));
-  }
+  // Stable identities below (useCallback) — Explore re-renders on every
+  // search-box keystroke (searchInput), and these are passed as onChange/
+  // onToggle props to SegmentedControl/SelectMenu/FacetMenu/DateRangeMenu,
+  // none of which are memo'd, so a fresh closure per render defeated any
+  // future memoization (Big-O audit #5, item 3.6) — mirrors requestSignIn's
+  // rationale above for EventCard.
+  const commitFilters = useCallback(
+    (next: ExploreFilters) => setSearchParams(exploreFiltersToSearchParams(next)),
+    [setSearchParams],
+  );
+  // filter_type is a fixed vocabulary (EXPLORE_FILTER_TYPES) — see
+  // ANALYTICS_EVENTS.exploreFilterChange in constants.ts's Code Quality Rule
+  // on not inlining literal event/param values at call sites.
+  const trackFilterChange = useCallback(
+    (filterType: ExploreFilterType) =>
+      trackEvent(ANALYTICS_EVENTS.exploreFilterChange, { filter_type: filterType, signed_in: authed }),
+    [authed],
+  );
 
   // Debounced write-through: the URL (and thus the query) only updates
   // EXPLORE_SEARCH_DEBOUNCE_MS after the user stops typing. `filters` is a
@@ -190,74 +205,90 @@ export default function Explore() {
     enabled: filters.category.length > 0 && filters.vibe.length > 0,
   });
 
-  // filter_type is a fixed vocabulary (EXPLORE_FILTER_TYPES) — see
-  // ANALYTICS_EVENTS.exploreFilterChange in constants.ts's Code Quality Rule
-  // on not inlining literal event/param values at call sites.
-  function trackFilterChange(filterType: ExploreFilterType) {
-    trackEvent(ANALYTICS_EVENTS.exploreFilterChange, { filter_type: filterType, signed_in: authed });
-  }
+  const toggleFacet = useCallback(
+    (kind: 'category' | 'vibe', value: string) => {
+      const current = filters[kind];
+      const isRemoving = current.includes(value);
+      const next = isRemoving ? current.filter((v) => v !== value) : [...current, value];
 
-  function toggleFacet(kind: 'category' | 'vibe', value: string) {
-    const current = filters[kind];
-    const isRemoving = current.includes(value);
-    const next = isRemoving ? current.filter((v) => v !== value) : [...current, value];
+      // Auto-flip: adding a facet outside the user's persona taste switches
+      // For-you off (a selected-not-in-taste conflict would otherwise hide
+      // every result). Removing a facet never re-enables For-you.
+      let forYou = filters.forYou;
+      if (forYou && !isRemoving) {
+        const preferred = kind === 'category' ? currentUser?.preferred_categories : currentUser?.preferred_vibes;
+        if (preferred && !preferred.includes(value)) forYou = false;
+      }
+      trackFilterChange(EXPLORE_FILTER_TYPES[kind]);
+      commitFilters({ ...filters, [kind]: next, forYou });
+    },
+    [filters, currentUser, trackFilterChange, commitFilters],
+  );
 
-    // Auto-flip: adding a facet outside the user's persona taste switches
-    // For-you off (a selected-not-in-taste conflict would otherwise hide
-    // every result). Removing a facet never re-enables For-you.
-    let forYou = filters.forYou;
-    if (forYou && !isRemoving) {
-      const preferred = kind === 'category' ? currentUser?.preferred_categories : currentUser?.preferred_vibes;
-      if (preferred && !preferred.includes(value)) forYou = false;
-    }
-    trackFilterChange(EXPLORE_FILTER_TYPES[kind]);
-    commitFilters({ ...filters, [kind]: next, forYou });
-  }
+  const setDatePreset = useCallback(
+    (preset: DatePreset) => {
+      trackFilterChange(EXPLORE_FILTER_TYPES.date);
+      commitFilters({ ...filters, datePreset: preset });
+    },
+    [filters, trackFilterChange, commitFilters],
+  );
 
-  function setDatePreset(preset: DatePreset) {
-    trackFilterChange(EXPLORE_FILTER_TYPES.date);
-    commitFilters({ ...filters, datePreset: preset });
-  }
+  const setCustomRange = useCallback(
+    (from: string, to: string) => {
+      trackFilterChange(EXPLORE_FILTER_TYPES.date);
+      commitFilters({ ...filters, datePreset: 'custom', customFrom: from, customTo: to });
+    },
+    [filters, trackFilterChange, commitFilters],
+  );
 
-  function setCustomRange(from: string, to: string) {
-    trackFilterChange(EXPLORE_FILTER_TYPES.date);
-    commitFilters({ ...filters, datePreset: 'custom', customFrom: from, customTo: to });
-  }
-
-  function toggleFree() {
+  const toggleFree = useCallback(() => {
     trackFilterChange(EXPLORE_FILTER_TYPES.free);
     commitFilters({ ...filters, free: !filters.free });
-  }
+  }, [filters, trackFilterChange, commitFilters]);
 
-  function setSort(sort: SortOption) {
-    trackFilterChange(EXPLORE_FILTER_TYPES.sort);
-    commitFilters({ ...filters, sort });
-  }
+  const setSort = useCallback(
+    (sort: SortOption) => {
+      trackFilterChange(EXPLORE_FILTER_TYPES.sort);
+      commitFilters({ ...filters, sort });
+    },
+    [filters, trackFilterChange, commitFilters],
+  );
 
-  function setForYou(next: boolean) {
-    // Anonymous visitor: turning For-you on intercepts into the sign-in
-    // modal instead of applying the filter — never reaches the backend.
-    if (next && !authed) {
-      handleUpsellCtaClick();
-      return;
-    }
-    trackFilterChange(EXPLORE_FILTER_TYPES.forYou);
-    if (next) {
-      // Fall back to "all" when the persona hasn't loaded yet (or has no
-      // preference set) — avoids an accidental empty-selection/no-results
-      // flash before /users/me resolves.
-      const category = currentUser?.preferred_categories?.length ? currentUser.preferred_categories : [...CATEGORIES];
-      const vibe = currentUser?.preferred_vibes?.length ? currentUser.preferred_vibes : [...VIBES];
-      commitFilters({ ...filters, forYou: true, category, vibe });
-    } else {
-      commitFilters({ ...filters, forYou: false, category: [...CATEGORIES], vibe: [...VIBES] });
-    }
-  }
+  const setForYou = useCallback(
+    (next: boolean) => {
+      // Anonymous visitor: turning For-you on intercepts into the sign-in
+      // modal instead of applying the filter — never reaches the backend.
+      if (next && !authed) {
+        handleUpsellCtaClick();
+        return;
+      }
+      trackFilterChange(EXPLORE_FILTER_TYPES.forYou);
+      if (next) {
+        // Fall back to "all" when the persona hasn't loaded yet (or has no
+        // preference set) — avoids an accidental empty-selection/no-results
+        // flash before /users/me resolves.
+        const category = currentUser?.preferred_categories?.length ? currentUser.preferred_categories : [...CATEGORIES];
+        const vibe = currentUser?.preferred_vibes?.length ? currentUser.preferred_vibes : [...VIBES];
+        commitFilters({ ...filters, forYou: true, category, vibe });
+      } else {
+        commitFilters({ ...filters, forYou: false, category: [...CATEGORIES], vibe: [...VIBES] });
+      }
+    },
+    [authed, currentUser, filters, trackFilterChange, commitFilters, handleUpsellCtaClick],
+  );
 
-  function clearFilters() {
+  const clearFilters = useCallback(() => {
     setSearchInput('');
     commitFilters(DEFAULT_EXPLORE_FILTERS);
-  }
+  }, [commitFilters]);
+
+  const handleForYouChange = useCallback(
+    (v: string) => setForYou(v === EXPLORE_AUDIENCE_FOR_YOU),
+    [setForYou],
+  );
+  const handleSortChange = useCallback((v: string) => setSort(v as SortOption), [setSort]);
+  const handleCategoryToggle = useCallback((v: string) => toggleFacet('category', v), [toggleFacet]);
+  const handleVibeToggle = useCallback((v: string) => toggleFacet('vibe', v), [toggleFacet]);
 
   const events = useMemo(() => data?.pages.flatMap((page) => page.events) ?? [], [data]);
   // Grid render list: for anonymous visitors, the persistent upsell card is
@@ -363,7 +394,7 @@ export default function Explore() {
             <SegmentedControl
               options={forYouOptions}
               value={filters.forYou ? EXPLORE_AUDIENCE_FOR_YOU : EXPLORE_AUDIENCE_ALL}
-              onChange={(v) => setForYou(v === EXPLORE_AUDIENCE_FOR_YOU)}
+              onChange={handleForYouChange}
               ariaLabel={`${t('all_events', locale)} / ${t('for_you', locale)}`}
             />
           </div>
@@ -374,7 +405,7 @@ export default function Explore() {
               label={t('sort_by', locale)}
               value={filters.sort}
               options={sortOptions}
-              onChange={(v) => setSort(v as SortOption)}
+              onChange={handleSortChange}
               ariaLabel={t('sort_by', locale)}
             />
             <span className={styles.divider} aria-hidden />
@@ -398,7 +429,7 @@ export default function Explore() {
               label={t('filter_categories', locale)}
               options={categoryOpts}
               selected={filters.category}
-              onToggle={(v) => toggleFacet('category', v)}
+              onToggle={handleCategoryToggle}
               ariaLabel={t('filter_categories', locale)}
             />
             <span className={styles.divider} aria-hidden />
@@ -407,7 +438,7 @@ export default function Explore() {
               label={t('filter_vibes', locale)}
               options={vibeOpts}
               selected={filters.vibe}
-              onToggle={(v) => toggleFacet('vibe', v)}
+              onToggle={handleVibeToggle}
               ariaLabel={t('filter_vibes', locale)}
             />
             <span className={styles.divider} aria-hidden />

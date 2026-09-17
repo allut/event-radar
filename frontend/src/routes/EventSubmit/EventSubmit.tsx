@@ -12,7 +12,7 @@ import FileField from '../../components/FileField';
 import VenuePicker from '../../components/VenuePicker';
 import { t, ti } from '../../i18n';
 import {
-  CONTENT_LANG_ORDER, DEFAULT_CURRENCY, LOCALE_EN, LOCALE_ET, LOCALE_RU, LOCALES,
+  CONTENT_LANG_ORDER, DEFAULT_CURRENCY, LOCALE_EN, LOCALE_ET, LOCALE_RU, LOCALES_BY_CODE,
   ORGANIZER_BASE_CONTENT_LANG, ORGANIZER_IMAGE_ACCEPT,
   PRICE_INPUT_MIN, PRICE_INPUT_STEP,
   type ContentLang, type ContentMarkerState,
@@ -99,7 +99,7 @@ export default function EventSubmit() {
   ]);
   const activeSlot = slots[contentLang];
   const contentLangLabel = (code: ContentLang) =>
-    LOCALES.find((l) => l.code === code)?.label ?? code.toUpperCase();
+    LOCALES_BY_CODE.get(code)?.label ?? code.toUpperCase();
   // Field-by-field against the ET base slot.
   const markerState = (code: ContentLang): ContentMarkerState => {
     const slot = slots[code];

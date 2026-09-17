@@ -60,7 +60,10 @@ export default function PipelineRunBreakdown({
   // AdminPipeline.tsx) — e.g. a 429 from the shared admin rate limiter, or
   // any non-2xx before the stream body even starts. It can't be placed in a
   // stage row, so it's surfaced on its own rather than silently dropped.
-  const preStreamErrors = lines.filter((l) => !stages.includes(l.stage));
+  // stages as a Set — re-run per streamed line, and byStage above already
+  // builds the Map for the opposite direction (Big-O audit #5, item 3.4).
+  const stageSet = new Set(stages);
+  const preStreamErrors = lines.filter((l) => !stageSet.has(l.stage));
 
   return (
     <>

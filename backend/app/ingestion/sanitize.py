@@ -30,6 +30,7 @@ from app.ingestion.selectors import CFEMAIL_HREF_MARKER
 
 _MULTI_BR_RE = re.compile(HTML_MULTI_BR_TEMPLATE_RE % (HTML_SANITIZE_MAX_CONSECUTIVE_BR + 1))
 _EDGE_BR_RE = re.compile(HTML_EDGE_BR_RE)
+_SELF_CLOSING_BR_PATTERN = re.compile(HTML_SELF_CLOSING_BR_RE)
 
 
 def decode_cfemail(hex_str: str) -> str | None:
@@ -160,7 +161,7 @@ def _collapse_text_whitespace(html: str) -> str:
     _strip_empty_blocks(soup)
     # BeautifulSoup serializes void elements as "<br/>"; normalize back to the
     # bare "<br>" form the rest of sanitize_html and its callers expect.
-    return re.sub(HTML_SELF_CLOSING_BR_RE, "<br>", str(soup))
+    return _SELF_CLOSING_BR_PATTERN.sub("<br>", str(soup))
 
 
 def _strip_empty_blocks(soup: BeautifulSoup) -> None:

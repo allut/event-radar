@@ -10,6 +10,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.constants import (
+    CONTENT_FILTER_WHITESPACE_COLLAPSE_RE,
     GEOCODE_COORD_QUANT_DECIMALS,
     GEOCODE_DONOR_LOOKBACK_DAYS,
     GEOCODE_MAX_PER_RUN,
@@ -22,6 +23,7 @@ from app.models.models import Event
 log = logging.getLogger(__name__)
 
 _VENUE_PARENS_PATTERN = re.compile(VENUE_NAME_PARENS_RE)
+_WHITESPACE_COLLAPSE_PATTERN = re.compile(CONTENT_FILTER_WHITESPACE_COLLAPSE_RE)
 
 
 def canonical_venue_name(name: str) -> str:
@@ -33,7 +35,7 @@ def canonical_venue_name(name: str) -> str:
     """
     core = _VENUE_PARENS_PATTERN.sub("", name)
     core = core.split(",", 1)[0]
-    return re.sub(r"\s+", " ", core).strip().lower()
+    return _WHITESPACE_COLLAPSE_PATTERN.sub(" ", core).strip().lower()
 
 
 def _representative_address(
@@ -162,23 +164,40 @@ def _distinct_coords(matched: list[_DonorRow]) -> set[tuple[float, float]]:
     }
 
 
-def _fill_from_donors(event: Event, matched_rows: list[_DonorRow]) -> bool:
+def _representative_coords(
+    matched_rows: list[_DonorRow],
+) -> tuple[float, float] | None:
+    """First donor row carrying coords — see the per-canon memo note in
+    copy_venue_from_siblings for why this is computed once per canon rather
+    than per target event."""
+    return next(
+        ((la, ln) for _addr, la, ln in matched_rows if la is not None and ln is not None),
+        None,
+    )
+
+
+def _fill_from_donors(
+    event: Event,
+    matched_rows: list[_DonorRow],
+    representative_address: str | None,
+    representative_coords: tuple[float, float] | None,
+) -> bool:
     """Fill whichever location field the target is missing; True when written.
 
     When the target has no coords, its address (if any) never geocoded →
     unreliable → overwrite with the house-numbered sibling address; when it
     already has coords (set at ingest) keep them, only backfill the address.
+    ``representative_address``/``representative_coords`` are canon-invariant
+    and passed in precomputed — see copy_venue_from_siblings.
     """
     if event.lat is None or event.lng is None:
-        event.lat, event.lng = next(
-            (la, ln)
-            for _addr, la, ln in matched_rows
-            if la is not None and ln is not None
-        )
-        event.venue_address = _representative_address(matched_rows)
+        if representative_coords is None:
+            return False
+        event.lat, event.lng = representative_coords
+        event.venue_address = representative_address
         return True
     if event.venue_address is None:
-        event.venue_address = _representative_address(matched_rows)
+        event.venue_address = representative_address
         return True
     return False
 
@@ -215,9 +234,13 @@ async def copy_venue_from_siblings(db: AsyncSession, now: datetime) -> int:
     copied = 0
     warned_ambiguous: set[str] = set()
     # Memoized per distinct target canon — many targets share one venue_name,
-    # so the fuzzy scan (and the coord set derived from it) runs once per name.
+    # so the fuzzy scan (and everything derived from it: the coord set,
+    # representative address, and representative coords) runs once per name
+    # instead of once per event sharing that name (Big-O audit #5, item 2.4).
     matched_by_canon: dict[str, list[_DonorRow]] = {}
     coords_by_canon: dict[str, set[tuple[float, float]]] = {}
+    address_by_canon: dict[str, str | None] = {}
+    rep_coords_by_canon: dict[str, tuple[float, float] | None] = {}
     for event in targets:
         name = event.venue_name
         if name is None:
@@ -230,9 +253,10 @@ async def copy_venue_from_siblings(db: AsyncSession, now: datetime) -> int:
             matched_by_canon[target_canon] = _matched_donor_rows(
                 target_canon, donor_addrs_by_canon, donor_canons_by_length
             )
-            coords_by_canon[target_canon] = _distinct_coords(
-                matched_by_canon[target_canon]
-            )
+            matched_rows = matched_by_canon[target_canon]
+            coords_by_canon[target_canon] = _distinct_coords(matched_rows)
+            address_by_canon[target_canon] = _representative_address(matched_rows)
+            rep_coords_by_canon[target_canon] = _representative_coords(matched_rows)
 
         matched_rows = matched_by_canon[target_canon]
         distinct_coords = coords_by_canon[target_canon]
@@ -249,7 +273,12 @@ async def copy_venue_from_siblings(db: AsyncSession, now: datetime) -> int:
                 )
             continue
 
-        if _fill_from_donors(event, matched_rows):
+        if _fill_from_donors(
+            event,
+            matched_rows,
+            address_by_canon[target_canon],
+            rep_coords_by_canon[target_canon],
+        ):
             copied += 1
 
     if copied:

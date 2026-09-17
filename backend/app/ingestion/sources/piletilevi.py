@@ -10,7 +10,11 @@ from bs4 import BeautifulSoup, NavigableString, Tag
 
 from app.constants import TALLINN_TZ
 from app.ingestion.http_client import http_get, http_post
-from app.ingestion.jsonld import extract_jsonld_event_location, extract_jsonld_event_text
+from app.ingestion.jsonld import (
+    location_from_jsonld_items,
+    parse_jsonld_event_items,
+    text_from_jsonld_items,
+)
 from app.ingestion.pricing import normalize_currency, to_float
 from app.ingestion.sanitize import sanitize_html
 from app.ingestion.selectors import (
@@ -148,17 +152,34 @@ def _piletilevi_important_info(soup: BeautifulSoup, locale: str = "en") -> str |
     return raw.strip() or None if raw else None
 
 
+def _cached_jsonld_items(soup: BeautifulSoup) -> list[dict[str, Any]]:
+    """Parse a detail page's JSON-LD once and cache it on the soup object.
+
+    For the base locale, parse_detail() and extract_localized_text() both run
+    against the identical detail_soup (html_base.py::_fetch_detail passes the
+    same object to both) — without this they'd each re-parse every
+    <script type="application/ld+json"> block from scratch (Big-O audit #5,
+    item 2.1). Caching on the soup instance (rather than a module-level dict)
+    is safe under concurrent detail fetches: each fetch creates its own soup.
+    """
+    cached = getattr(soup, "_piletilevi_jsonld_items", None)
+    if cached is None:
+        cached = parse_jsonld_event_items(soup)
+        soup._piletilevi_jsonld_items = cached  # type: ignore[attr-defined]
+    return cached
+
+
 def piletilevi_localized_text(soup: BeautifulSoup) -> tuple[str | None, str | None]:
     """Extract (title, description) from a Piletilevi locale-variant detail page.
 
     Title comes from schema.org JSON-LD (``<h1>`` fallback inside
-    extract_jsonld_event_text) — Piletilevi's JSON-LD ``name`` is reliable.
+    text_from_jsonld_items) — Piletilevi's JSON-LD ``name`` is reliable.
     Description comes from the same ``.event__description`` HTML block
     ``parse_detail`` already uses, not the JSON-LD ``description`` string —
     that string is source-flattened plain text with paragraph breaks already
     collapsed, gluing sentences together (e.g. "...maagia.Lisainfo: ...").
     """
-    title, _ = extract_jsonld_event_text(soup)
+    title, _ = text_from_jsonld_items(_cached_jsonld_items(soup), soup)
     return title, localized_description(soup, PILETILEVI_DETAIL_DESC_SELECTOR)
 
 
@@ -264,7 +285,7 @@ class PiletileviAdapter(HtmlListingAdapter):
         card["description"] = sanitize_html(desc_tag.decode_contents()) if desc_tag else None
         card["important_info"] = _piletilevi_important_info(soup, "en")
 
-        location = extract_jsonld_event_location(soup)
+        location = location_from_jsonld_items(_cached_jsonld_items(soup))
         if location:
             card["venue_address"] = location["venue_address"]
             card["lat"] = location["lat"]

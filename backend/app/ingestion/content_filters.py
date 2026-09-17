@@ -52,3 +52,35 @@ def is_non_event_text(title: str | None, venue_name: str | None) -> bool:
         return True
     venue_text = (html_to_text(venue_name) or "") if venue_name else ""
     return bool(_NON_EVENT_VENUE_PATTERN.search(venue_text))
+
+
+def content_flags(
+    title: str | None,
+    description: str | None,
+    venue_name: str | None,
+    important_info: str | None,
+) -> tuple[bool, bool]:
+    """(is_explicit, is_non_event) computed together, converting each distinct
+    field's HTML to plain text exactly once.
+
+    is_explicit_text() and is_non_event_text() called separately (as every
+    call site did before Big-O audit #5, item 2.3) each re-run html_to_text —
+    a fresh BeautifulSoup parse — on title and venue_name, since both filters
+    need them. Call sites needing both flags (adapter.py, refetch.py) should
+    use this instead.
+    """
+    title_text = (html_to_text(title) or "") if title else ""
+    description_text = (html_to_text(description) or "") if description else ""
+    venue_text = (html_to_text(venue_name) or "") if venue_name else ""
+    important_info_text = (html_to_text(important_info) or "") if important_info else ""
+
+    explicit_input = " ".join(
+        t for t in (title_text, description_text, venue_text, important_info_text) if t
+    )
+    explicit_input = re.sub(CONTENT_FILTER_WHITESPACE_COLLAPSE_RE, " ", explicit_input)
+    is_explicit = bool(_EXPLICIT_KEYWORD_PATTERN.search(explicit_input))
+
+    is_non_event = bool(_NON_EVENT_TITLE_PATTERN.search(title_text)) or bool(
+        _NON_EVENT_VENUE_PATTERN.search(venue_text)
+    )
+    return is_explicit, is_non_event

@@ -1,4 +1,4 @@
-import { useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type RefObject } from 'react';
+import { useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type RefObject } from 'react';
 import { cx } from '../../utils';
 import { useDropdown } from '../../hooks/useDropdown';
 import type { ChipOption } from '../Chip';
@@ -96,7 +96,12 @@ function Listbox({ flatOptions, value, onSelect, ariaLabel, popRef }: ListboxPro
 export default function SelectField({ id, value, options, onChange, placeholder, ariaLabel, disabled = false }: SelectFieldProps) {
   const { open, setOpen, rootRef, popRef, triggerRef, close } = useDropdown('[data-selected="true"]');
   const current = options.find((o) => o.value === value);
-  const flatOptions: ChipOption[] = [{ value: '', label: placeholder }, ...options];
+  // Stable identity across renders — a fresh array every render defeats
+  // Listbox's findIndex(value) below (Big-O audit #5, item 3.6).
+  const flatOptions: ChipOption[] = useMemo(
+    () => [{ value: '', label: placeholder }, ...options],
+    [placeholder, options],
+  );
 
   function handleSelect(next: string) {
     onChange(next);
