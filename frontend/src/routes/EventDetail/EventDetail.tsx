@@ -22,7 +22,7 @@ import SeoTags from '../../components/SeoTags';
 import Toast from '../../components/Toast';
 import TopBar from '../../components/TopBar';
 import { useFeedback } from '../../hooks/useFeedback';
-import { API, EVENT_PRICE_TESTID, OG_FALLBACK_IMAGE_PATH, PRICE_DATA_ATTR, PRODUCTION_ORIGIN, QUERY_KEYS, ROUTES, SEO_DESCRIPTION_MAX_LENGTH, UI_STATE } from '../../constants';
+import { API, EVENT_PRICE_TESTID, EXPLORE_PARAM, OG_FALLBACK_IMAGE_PATH, PRICE_DATA_ATTR, PRODUCTION_ORIGIN, QUERY_KEYS, ROUTES, SEO_DESCRIPTION_MAX_LENGTH, UI_STATE } from '../../constants';
 import styles from './EventDetail.module.css';
 
 interface EventDetailData extends EventData {
@@ -260,12 +260,12 @@ export default function EventDetail() {
               {(data.categories.length > 0 || data.vibes.length > 0) && (
                 <div className={styles.tags}>
                   {data.categories.map(cat => (
-                    <Link key={cat} to={localePath(`/explore?category=${cat}`)} className={styles.tag}>
+                    <Link key={cat} to={localePath(`${ROUTES.explore}?${EXPLORE_PARAM.category}=${cat}`)} className={styles.tag}>
                       {t(`category_${cat}`, locale)}
                     </Link>
                   ))}
                   {data.vibes.map(vibe => (
-                    <Link key={vibe} to={localePath(`/explore?vibe=${vibe}`)} className={cx(styles.tag, styles.tagVibe)}>
+                    <Link key={vibe} to={localePath(`${ROUTES.explore}?${EXPLORE_PARAM.vibe}=${vibe}`)} className={cx(styles.tag, styles.tagVibe)}>
                       {t(`vibe_${vibe}`, locale)}
                     </Link>
                   ))}

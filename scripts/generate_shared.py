@@ -233,6 +233,7 @@ def write_backend_shared_constants(cfg: dict, version: str) -> str:
     cats = _py_frozenset(cfg["categories"])
     vibes = _py_frozenset(cfg["vibes"])
     signals = _py_frozenset(cfg["signals"])
+    theme_prefs = _py_frozenset(cfg["theme_preferences"])
     valid_locales = _py_frozenset([loc["code"] for loc in cfg["locales"]])
     locale_code_map_pairs = ", ".join(
         f"{_py_str(k)}: {_py_str(v)}" for k, v in cfg["locale_code_map"].items()
@@ -262,6 +263,9 @@ def write_backend_shared_constants(cfg: dict, version: str) -> str:
         f"VALID_SIGNALS: frozenset[str] = {signals}",
         f"VALID_CATEGORIES: frozenset[str] = {cats}",
         f"VALID_VIBES: frozenset[str] = {vibes}",
+        # Server-side theme_preference column values (users/organizers) — mirrors
+        # frontend THEME_PREFERENCES (shared/app-config.json).
+        f"VALID_THEME_PREFERENCES: frozenset[str] = {theme_prefs}",
         # Schemes accepted for ingested event url/image_url — matches frontend SAFE_URL_SCHEMES.
         # Backend urlsplit().scheme returns colon-less names ("http", "https").
         f"SAFE_URL_SCHEMES: frozenset[str] = {safe_schemes}",
@@ -326,6 +330,10 @@ def write_frontend_shared_constants(cfg: dict, version: str) -> str:
         # /explore filter chips (matches backend VALID_CATEGORIES/VALID_VIBES).
         f"export const CATEGORIES = {_ts_str_list(cfg['categories'])};",
         f"export const VIBES = {_ts_str_list(cfg['vibes'])};",
+        "",
+        # `as const` so frontend/src/lib/theme.ts can derive its ResolvedTheme
+        # union type from this array instead of redeclaring the literal.
+        f"export const THEME_PREFERENCES = {_ts_str_list(cfg['theme_preferences'])} as const;",
         "",
         f"export const BROWSE_PAGE_SIZE = {cfg['browse_page_size']};",
         "",

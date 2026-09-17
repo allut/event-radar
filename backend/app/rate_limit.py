@@ -6,6 +6,7 @@ both app.main (middleware/exception-handler wiring) and routers (per-endpoint
 """
 
 import logging
+import secrets
 from typing import cast
 
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -15,24 +16,40 @@ from starlette.requests import Request
 from starlette.responses import Response
 from starlette.types import ExceptionHandler
 
-from app.constants import HEADER_X_FORWARDED_FOR, LOG_EVENT_RATE_LIMIT_BLOCK
+from app.config import settings
+from app.constants import (
+    HEADER_X_CLIENT_IP,
+    HEADER_X_EDGE_AUTH,
+    HEADER_X_FORWARDED_FOR,
+    LOG_EVENT_RATE_LIMIT_BLOCK,
+)
 
 log = logging.getLogger(__name__)
 
 
 def client_key(request: Request) -> str:
-    """Rate-limit / audit-log key: the rightmost X-Forwarded-For entry.
+    """Rate-limit / audit-log key: the real client IP.
 
-    ProxyHeadersMiddleware(trusted_hosts="*") rewrites request.client from the
-    *leftmost* XFF hop (uvicorn's _TrustedHosts.get_trusted_client_address),
-    which is attacker-controlled — a client can prepend an arbitrary
-    X-Forwarded-For value and every @limiter.limit(...) becomes a no-op. The
-    rightmost entry is the one appended by the single trusted hop immediately
-    adjacent to this process (Render's proxy), so it is correct whether Render
-    appends to or overwrites the header, given exactly one trusted hop between
-    the client and this process (see the deployment-invariant comment in
-    app/main.py next to ProxyHeadersMiddleware).
+    Production topology is two hops — browser -> Cloudflare Pages Function
+    proxy -> Render -> uvicorn (see frontend/functions/api/[[path]].ts and
+    docs/security.md) — so the rightmost X-Forwarded-For entry Render's own
+    proxy appends is always a Cloudflare egress address, not the visitor
+    (OWASP audit G-1). The Cloudflare Function forwards the true client IP as
+    X-Client-IP alongside X-Edge-Auth, a shared secret proving the header came
+    from that Function and not directly from an onrender.com caller (who could
+    otherwise forge X-Client-IP outright). Only trusted when both the secret
+    is configured and the header matches it — a stray/absent header falls
+    back to the rightmost-XFF heuristic below, which is still correct for the
+    single Render hop when accessed directly.
     """
+    edge_auth = request.headers.get(HEADER_X_EDGE_AUTH, "")
+    if settings.EDGE_SHARED_SECRET and secrets.compare_digest(
+        edge_auth, settings.EDGE_SHARED_SECRET
+    ):
+        client_ip = request.headers.get(HEADER_X_CLIENT_IP, "").strip()
+        if client_ip:
+            return client_ip
+
     xff = request.headers.get(HEADER_X_FORWARDED_FOR, "")
     if xff:
         return xff.rsplit(",", 1)[-1].strip()

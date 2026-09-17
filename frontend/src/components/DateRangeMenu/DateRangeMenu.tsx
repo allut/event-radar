@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { memo, useMemo, useState } from 'react';
 import {
   cx, monthGridDays, weekdayHeaders, formatMonthYearLabel, formatDateRangeShort, formatDateShort,
   parseISODateLocal, toDateStr, startOfDay, isSameDay, addMonths,
@@ -6,6 +6,7 @@ import {
 import { useDropdown } from '../../hooks/useDropdown';
 import { CALENDAR_WEEK_START, DATE_PRESETS, type DatePreset } from '../../constants';
 import { t } from '../../i18n';
+import { PrevIcon, NextIcon } from '../ChevronIcons';
 import styles from './DateRangeMenu.module.css';
 
 interface DateRangeMenuProps {
@@ -18,13 +19,6 @@ interface DateRangeMenuProps {
   locale: string;
   ariaLabel: string;
 }
-
-const PrevIcon = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden><path d="M15 6l-6 6 6 6" /></svg>
-);
-const NextIcon = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden><path d="M9 6l6 6-6 6" /></svg>
-);
 
 interface CalendarBodyProps {
   customFrom: string | null;
@@ -69,9 +63,17 @@ function CalendarBody({ customFrom, customTo, locale, onBack, onCommit }: Calend
     onCommit(toDateStr(pendingFrom), toDateStr(date));
   }
 
-  const cells = monthGridDays(viewYear, viewMonth, CALENDAR_WEEK_START);
-  const headers = weekdayHeaders(locale);
-  const monthYearLabel = formatMonthYearLabel(viewYear, viewMonth, locale);
+  // Re-run only when the visible month/locale changes, not on every day
+  // click (pendingFrom) — matches DatePicker's `cells` memoization.
+  const cells = useMemo(
+    () => monthGridDays(viewYear, viewMonth, CALENDAR_WEEK_START),
+    [viewYear, viewMonth],
+  );
+  const headers = useMemo(() => weekdayHeaders(locale), [locale]);
+  const monthYearLabel = useMemo(
+    () => formatMonthYearLabel(viewYear, viewMonth, locale),
+    [viewYear, viewMonth, locale],
+  );
   const isCurrentMonth = viewYear === today.getFullYear() && viewMonth === today.getMonth();
 
   return (
@@ -139,8 +141,9 @@ function CalendarBody({ customFrom, customTo, locale, onBack, onCommit }: Calend
 /** Explore's Date filter: same trigger-button + popover shape as SelectMenu,
  * but the 'custom' preset entry opens a calendar-grid range picker instead of
  * selecting-and-closing. Explore-date-specific, not a general-purpose list
- * picker — see SelectMenu for that. */
-export default function DateRangeMenu({
+ * picker — see SelectMenu for that. memo'd — see SegmentedControl's
+ * docstring (Big-O audit #5, item 3.6). */
+const DateRangeMenu = memo(function DateRangeMenu({
   label, value, customFrom, customTo, onSelectPreset, onChangeCustomRange, locale, ariaLabel,
 }: DateRangeMenuProps) {
   const { open, setOpen, flip, rootRef, popRef, triggerRef, close } = useDropdown();
@@ -217,4 +220,6 @@ export default function DateRangeMenu({
       )}
     </div>
   );
-}
+});
+
+export default DateRangeMenu;

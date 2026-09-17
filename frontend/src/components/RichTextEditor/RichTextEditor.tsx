@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { EditorContent, useEditor, useEditorState } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { t } from '../../i18n';
+import { safeUrl } from '../../utils';
 import { BoldIcon, ItalicIcon, UnderlineIcon, BulletListIcon, NumberedListIcon, LinkIcon, QuoteIcon } from './icons';
 import styles from './RichTextEditor.module.css';
 
@@ -145,7 +146,13 @@ export default function RichTextEditor({
 
   const insertLink = () => {
     const url = linkUrl.trim();
-    if (!url) {
+    // safeUrl() enforces the same http(s)-only scheme allowlist every other
+    // untrusted URL in the app is rendered through (OWASP audit G-13) — both
+    // the backend's stored-HTML sanitizer and DOMPurify at render already
+    // strip a disallowed scheme, so this is immediate authoring feedback
+    // rather than a new guard: a rejected URL is treated the same as an
+    // empty one instead of appearing to save, then silently vanishing later.
+    if (!url || !safeUrl(url)) {
       editor.chain().focus().extendMarkRange('link').unsetLink().run();
     } else {
       editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run();

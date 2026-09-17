@@ -1,10 +1,10 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { adminApi, ApiError } from '../../api/client';
-import { ADMIN_QUEUE_DETAIL_LINK_LABEL, ADMIN_REPORTS_PARAM, ADMIN_REPORTS_QUEUE_PAGE_SIZE, API, QUERY_KEYS, REPORT_REASONS, ROUTES, UI_STATE } from '../../constants';
+import { adminApi } from '../../api/client';
+import { ADMIN_GENERIC_ERROR, ADMIN_QUEUE_DETAIL_LINK_LABEL, ADMIN_REPORTS_PARAM, ADMIN_REPORTS_QUEUE_PAGE_SIZE, API, LOCALE_EN, PAGE_PARAM, QUERY_KEYS, REPORT_REASONS_BY_VALUE, ROUTES, UI_STATE } from '../../constants';
 import { t } from '../../i18n';
-import { relativeTimeFromNow } from '../../utils';
+import { apiErrorMessage, nextOffsetParam, relativeTimeFromNow } from '../../utils';
 import PageState from '../../components/PageState';
 import Toast from '../../components/Toast';
 import { useToast } from '../../hooks/useToast';
@@ -33,6 +33,27 @@ interface AdminReportedEvent {
   oldest_open_report_at: string;
 }
 
+// Module-scope — referentially stable forever, so QueueRowList's memo
+// (AdminQueueSplitView.tsx, Big-O audit #5, item 3.5) never sees these
+// change identity on a resolution-note keystroke.
+function getReportId(item: AdminReportedEvent): number {
+  return item.event_id;
+}
+function reportResolvedTag(): string {
+  return 'Resolved';
+}
+function renderReportRow(item: AdminReportedEvent & { oldestOpenReportRelative: string }) {
+  return (
+    <>
+      <div className={styles.rowTitle}>{item.title}</div>
+      <div className={styles.rowMeta}>
+        {item.has_illegal_allegation && <span className={styles.illegalDot} aria-label="Illegal content alleged" />}
+        {item.report_count} report{item.report_count === 1 ? '' : 's'} · {item.oldestOpenReportRelative}
+      </div>
+    </>
+  );
+}
+
 interface AdminReportsResponse {
   total: number | null;
   limit: number;
@@ -50,7 +71,7 @@ interface AdminReportActionResult {
 type ResolutionKind = 'resolved' | 'taken_down';
 
 function reasonLabel(reason: string): string {
-  return t(REPORT_REASONS.find((r) => r.value === reason)?.labelKey ?? reason, 'en');
+  return t(REPORT_REASONS_BY_VALUE.get(reason)?.labelKey ?? reason, LOCALE_EN);
 }
 
 // The reports moderation queue (issue #155) — establishes the shared
@@ -75,11 +96,10 @@ export default function AdminReports() {
     queryKey: [QUERY_KEYS.adminReports],
     queryFn: ({ pageParam }) =>
       adminApi.get<AdminReportsResponse>(
-        `${API.adminReports}?limit=${ADMIN_REPORTS_QUEUE_PAGE_SIZE}&offset=${pageParam}`,
+        `${API.adminReports}?${PAGE_PARAM.limit}=${ADMIN_REPORTS_QUEUE_PAGE_SIZE}&${PAGE_PARAM.offset}=${pageParam}`,
       ),
     initialPageParam: 0,
-    getNextPageParam: (lastPage) =>
-      lastPage.has_more ? lastPage.offset + lastPage.events.length : undefined,
+    getNextPageParam: (lastPage) => nextOffsetParam(lastPage, lastPage.events.length),
   });
 
   const [searchParams] = useSearchParams();
@@ -133,7 +153,7 @@ export default function AdminReports() {
       void queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.adminCounts] });
     },
     onError: (err) => {
-      showToast(UI_STATE.error, err instanceof ApiError ? err.message : 'Something went wrong. Try again.');
+      showToast(UI_STATE.error, apiErrorMessage(err, ADMIN_GENERIC_ERROR));
     },
   });
 
@@ -141,6 +161,17 @@ export default function AdminReports() {
     if (!note.trim()) return;
     actionMutation.mutate({ item, kind, note: note.trim() });
   }
+
+  // Stable across note keystrokes (only resolvedById changes them) — see
+  // renderReportRow's module-scope siblings above for why this matters.
+  const isResolved = useCallback(
+    (item: AdminReportedEvent) => item.event_id in resolvedById,
+    [resolvedById],
+  );
+  const selectRow = useCallback((id: number) => {
+    setSelectedId(id);
+    setNote('');
+  }, []);
 
   return (
     <div>
@@ -158,25 +189,14 @@ export default function AdminReports() {
         <p className={styles.subtitle}>{items.length} of {totalReports} open reports shown</p>
         <AdminQueueSplitView
           items={items}
-          getId={(item) => item.event_id}
-          isResolved={(item) => item.event_id in resolvedById}
-          resolvedTag={() => 'Resolved'}
+          getId={getReportId}
+          isResolved={isResolved}
+          resolvedTag={reportResolvedTag}
           selectedId={currentId}
-          onSelect={(id) => {
-            setSelectedId(id);
-            setNote('');
-          }}
+          onSelect={selectRow}
           emptyLabel="No open reports."
           initialDetailOpen={deepLinkMatchedId !== null}
-          renderRow={(item) => (
-            <>
-              <div className={styles.rowTitle}>{item.title}</div>
-              <div className={styles.rowMeta}>
-                {item.has_illegal_allegation && <span className={styles.illegalDot} aria-label="Illegal content alleged" />}
-                {item.report_count} report{item.report_count === 1 ? '' : 's'} · {item.oldestOpenReportRelative}
-              </div>
-            </>
-          )}
+          renderRow={renderReportRow}
           renderDetail={(item) => {
             const resolution = resolvedById[item.event_id];
             return (

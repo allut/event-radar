@@ -1,15 +1,15 @@
-import { useEffect, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { getLocale } from '../../lib/auth';
 import {
   API,
   API_BASE,
   BRAND_GLYPH,
-  GOOGLE_SIGNIN_ERROR_DENIED,
-  GOOGLE_SIGNIN_ERROR_PARAM,
+  isGoogleSignInOrganizerEnabled,
   ROUTES,
 } from '../../constants';
 import { t } from '../../i18n';
+import { useGoogleSignInError } from '../../hooks/useGoogleSignInError';
 import { useLocalePath } from '../../hooks/useLocalePath';
 import { useStaticSeoMeta } from '../../hooks/useStaticSeoMeta';
 import MagicLinkForm from '../../components/MagicLinkForm';
@@ -18,36 +18,12 @@ import SeoTags from '../../components/SeoTags';
 import styles from './OrganizerLogin.module.css';
 
 export default function OrganizerLogin() {
-  const googleSignInEnabled = import.meta.env.VITE_GOOGLE_SIGNIN_ORGANIZER_ENABLED === 'true';
+  const googleSignInEnabled = isGoogleSignInOrganizerEnabled();
   const locale = getLocale();
   const localePath = useLocalePath();
   const seoMeta = useStaticSeoMeta('seo_title_organizer_login', locale);
-  const [searchParams, setSearchParams] = useSearchParams();
   const [emailExpanded, setEmailExpanded] = useState(!googleSignInEnabled);
-  // Frozen at mount, not re-read from searchParams on every render — the
-  // effect below strips the param from the URL right after, so a later
-  // refresh/revisit on the same history entry doesn't resurface a stale
-  // failure banner for a sign-in that already succeeded or was abandoned.
-  const [googleError] = useState(() => searchParams.get(GOOGLE_SIGNIN_ERROR_PARAM));
-
-  useEffect(() => {
-    if (!googleError) return;
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev);
-      next.delete(GOOGLE_SIGNIN_ERROR_PARAM);
-      return next;
-    }, { replace: true });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const errorMessage = googleError
-    ? t(
-      googleError === GOOGLE_SIGNIN_ERROR_DENIED
-        ? 'auth.googleSignIn.errorCancelled'
-        : 'auth.googleSignIn.errorFailed',
-      locale,
-    )
-    : null;
+  const errorMessage = useGoogleSignInError(locale);
 
   return (
     <div className={styles.page}>

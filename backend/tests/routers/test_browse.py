@@ -182,6 +182,40 @@ class TestBrowseScoredPath:
         assert result["total"] == 1
 
     @pytest.mark.asyncio
+    async def test_hydration_query_reapplies_public_event_filter(self, mock_db, make_event):
+        """OWASP audit G-3: the scored id list is cached for
+        BROWSE_SCORE_CACHE_TTL_SECONDS, so the full-row hydration query must
+        re-apply public_event_filter() itself — otherwise an id that went
+        non-public (e.g. a takedown) in the meantime keeps hydrating for
+        every caller sharing that cache entry until the cache expires."""
+        from app.routers.browse import _browse_scored_path
+
+        event_music = make_event(1)
+
+        mock_db.scalars.side_effect = [
+            _scalars_result([event_music]),  # candidates
+            _scalars_result([]),  # personas
+            _scalars_result([]),  # feedback
+            _scalars_result([event_music]),  # full-row refetch of survivors
+        ]
+
+        user = MagicMock()
+        user.id = 1
+        user.locale = "en"
+        now = datetime(2026, 5, 10, tzinfo=timezone.utc)
+
+        await _browse_scored_path(
+            mock_db, [], for_you=False, sort="relevance", limit=24, offset=0,
+            current_user=user, now=now, locale="en",
+        )
+
+        hydration_stmt = mock_db.scalars.call_args_list[-1].args[0]
+        compiled = str(hydration_stmt.compile(compile_kwargs={"literal_binds": True}))
+        assert "'published'" in compiled
+        assert "is_explicit" in compiled
+        assert "is_non_event" in compiled
+
+    @pytest.mark.asyncio
     async def test_for_you_drops_below_affinity_threshold(self, mock_db, make_event):
         from app.routers.browse import _browse_scored_path
 

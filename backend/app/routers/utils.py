@@ -8,6 +8,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+import httpx
 from fastapi import HTTPException, Response, status
 from fastapi.responses import RedirectResponse
 from itsdangerous import BadSignature, SignatureExpired
@@ -50,11 +51,16 @@ from app.constants import (
     SESSION_COOKIE_SECURE,
     TALLINN_TZ,
     UNVERIFIED_ACCOUNT_DAILY_BUDGET,
+    VALID_CATEGORIES,
     VALID_LOCALES,
     VALID_REPORT_REASONS,
+    VALID_THEME_PREFERENCES,
 )
 from app.db import AsyncSessionLocal
-from app.email.report_reporter import send_report_outcome_email
+from app.email.report_reporter import (
+    report_outcome_http_client,
+    send_report_outcome_email,
+)
 from app.models.models import (
     AdminAction,
     Event,
@@ -392,7 +398,7 @@ def require_configured_secret(
     allow_insecure_dev: bool = False,
 ) -> bool:
     """Fail-closed gate shared by every secret-protected surface (admin auth,
-    inbound webhook, /internal/tick).
+    inbound webhook).
 
     Returns True when the secret is configured — the caller must then verify
     it. When unset: 503 unless BOTH ``app_env == development`` AND
@@ -400,9 +406,9 @@ def require_configured_secret(
     False is returned (caller skips verification). Requiring the second,
     explicit opt-in (settings.ALLOW_INSECURE_DEV) means a dev-shaped APP_ENV
     alone — e.g. a misconfigured or never-overridden env var on a real
-    deployment — can never silently open the admin surface, the inbound
-    webhook, or /internal/tick. Callers pass their own module's ``settings``
-    values so tests that patch the caller's settings keep working.
+    deployment — can never silently open the admin surface or the inbound
+    webhook. Callers pass their own module's ``settings`` values so tests
+    that patch the caller's settings keep working.
     """
     if secret:
         return True
@@ -934,7 +940,7 @@ async def send_report_resolution_emails(
 
     semaphore = asyncio.Semaphore(REPORT_EMAIL_SEND_CONCURRENCY)
 
-    async def _send_one(report: EventReport) -> None:
+    async def _send_one(report: EventReport, http_client: httpx.AsyncClient) -> None:
         reporter = users_by_id.get(report.user_id)
         if reporter is None:
             return
@@ -946,6 +952,7 @@ async def send_report_resolution_emails(
                     resolution_note,
                     reporter.locale,
                     reporter.theme_preference,
+                    http_client=http_client,
                 )
             except Exception:
                 log.error(
@@ -956,7 +963,19 @@ async def send_report_resolution_emails(
                     extra={"event": LOG_EVENT_EMAIL_SEND_FAILED},
                 )
 
-    await asyncio.gather(*(_send_one(report) for report in reports))
+    # return_exceptions=True is defence-in-depth, mirroring app/email/digest.py's
+    # fan-out: _send_one already catches every send error and logs it, but
+    # anything raised outside that try/except (e.g. a BaseException such as
+    # CancelledError) would otherwise cancel every other in-flight reporter
+    # email and propagate into the caller, after resolution has already
+    # been committed.
+    # One shared client for the whole fan-out (Big-O audit #5, item 2.7),
+    # mirroring digest.py's Big-O audit M7 fix.
+    async with report_outcome_http_client() as http_client:
+        await asyncio.gather(
+            *(_send_one(report, http_client) for report in reports),
+            return_exceptions=True,
+        )
 
 
 async def cancel_event_and_resolve_reports(
@@ -971,6 +990,43 @@ async def cancel_event_and_resolve_reports(
     event.status = EVENT_STATUS_CANCELLED
     event.cancellation_reason = cancellation_reason
     return await resolve_open_reports(db, event, resolution_note)
+
+
+def validate_theme_preference(v: str | None) -> str | None:
+    """Shared by settings.py's PatchSettingsBody and organizer_profile.py's
+    OrganizerProfilePatchBody — the consumer and organizer theme tracks are
+    independent, but this validation isn't track-specific."""
+    if v is not None and v not in VALID_THEME_PREFERENCES:
+        raise ValueError(
+            f"theme_preference must be one of {sorted(VALID_THEME_PREFERENCES)}"
+        )
+    return v
+
+
+def validate_tz_aware(v: datetime | None) -> datetime | None:
+    """Shared by organizer_events.py's SubmitEventBody/PatchEventBody
+    starts_at/ends_at validators."""
+    if v is not None and v.tzinfo is None:
+        raise ValueError("must be timezone-aware")
+    return v
+
+
+def validate_category(v: str | None) -> str | None:
+    """Shared by organizer_events.py's SubmitEventBody/PatchEventBody
+    category validators."""
+    if v is not None and v not in VALID_CATEGORIES:
+        raise ValueError(f"invalid category: {v!r}")
+    return v
+
+
+def validate_price_ordering(
+    price_min: float | None, price_max: float | None
+) -> None:
+    """Shared by organizer_events.py's SubmitEventBody/PatchEventBody and
+    organizer_venues.py's VenueBody/VenuePatchBody `price_min > price_max`
+    ordering check."""
+    if price_min is not None and price_max is not None and price_min > price_max:
+        raise ValueError("price_min must not be greater than price_max")
 
 
 def validate_report_reason(reason: str) -> None:

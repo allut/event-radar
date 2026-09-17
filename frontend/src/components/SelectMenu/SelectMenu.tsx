@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { cx } from '../../utils';
 import { useDropdown } from '../../hooks/useDropdown';
 import type { ChipOption } from '../Chip';
@@ -23,8 +24,9 @@ interface SelectMenuProps {
 }
 
 /** Single-select trigger + popover of a vertical, equal-width option list.
- * Used for Explore's Sort-by (inline) and Date (button) controls. */
-export default function SelectMenu({
+ * Used for Explore's Sort-by (inline) and Date (button) controls. memo'd —
+ * see SegmentedControl's docstring (Big-O audit #5, item 3.6). */
+const SelectMenu = memo(function SelectMenu({
   label,
   value,
   options,
@@ -89,4 +91,6 @@ export default function SelectMenu({
       )}
     </div>
   );
-}
+});
+
+export default SelectMenu;

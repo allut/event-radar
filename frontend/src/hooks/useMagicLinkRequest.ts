@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { api, organizerApi, ApiError } from '../api/client';
+import { api, organizerApi } from '../api/client';
 import { API, UI_STATE, type LoginState } from '../constants';
 import { t } from '../i18n';
+import { apiErrorMessage } from '../utils';
 
 export interface UseMagicLinkRequestResult {
   email: string;
@@ -37,7 +38,7 @@ export function useMagicLinkRequest(locale: string, requestPath: string = API.au
       }
       setState(UI_STATE.success);
     } catch (err) {
-      setErrorMsg(err instanceof ApiError ? err.message : t('generic_error', locale));
+      setErrorMsg(apiErrorMessage(err, t('generic_error', locale)));
       setState(UI_STATE.error);
     }
   }

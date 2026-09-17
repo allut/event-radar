@@ -7,6 +7,7 @@ import hmac
 import json
 import logging
 import time
+from collections import OrderedDict
 from email.utils import parseaddr
 
 from fastapi import (
@@ -28,6 +29,7 @@ from app.constants import (
     SVIX_SECRET_PREFIX,
     SVIX_SIGNATURE_HEADER,
     SVIX_TIMESTAMP_HEADER,
+    WEBHOOK_SEEN_IDS_MAX_ENTRIES,
     WEBHOOK_TIMESTAMP_TOLERANCE_SECONDS,
 )
 from app.db import AsyncSessionLocal, get_db
@@ -38,6 +40,25 @@ from app.routers.utils import require_configured_secret
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
+
+# In-memory, single-process nonce store (svix_id -> None, insertion order)
+# closing the replay window described in OWASP audit G-6: a captured,
+# validly-signed request replayed inside WEBHOOK_TIMESTAMP_TOLERANCE_SECONDS
+# re-verifies and would otherwise re-trigger extraction. Bounded LRU mirrors
+# admin.py's _admin_auth_failures pattern — resets on deploy/restart, which
+# is fine since the replay window itself is only 5 minutes.
+_seen_webhook_ids: OrderedDict[str, None] = OrderedDict()
+
+
+def _webhook_id_already_seen(svix_id: str) -> bool:
+    """True (and records the id) the first time; True again on replay."""
+    if svix_id in _seen_webhook_ids:
+        _seen_webhook_ids.move_to_end(svix_id)
+        return True
+    _seen_webhook_ids[svix_id] = None
+    while len(_seen_webhook_ids) > WEBHOOK_SEEN_IDS_MAX_ENTRIES:
+        _seen_webhook_ids.popitem(last=False)
+    return False
 
 
 def _timestamp_within_tolerance(svix_timestamp: str) -> bool:
@@ -146,19 +167,38 @@ async def inbound_mail(
     """
     body = await request.body()
 
-    if require_configured_secret(
+    secret_configured = require_configured_secret(
         settings.RESEND_WEBHOOK_SECRET,
         feature="Webhook",
         setting_name="RESEND_WEBHOOK_SECRET",
         app_env=settings.APP_ENV,
         allow_insecure_dev=settings.ALLOW_INSECURE_DEV,
-    ) and not _request_signature_valid(request, body):
+    )
+    if secret_configured and not _request_signature_valid(request, body):
         log.warning(
             "inbound-mail: invalid or missing webhook signature",
             extra={"event": LOG_EVENT_WEBHOOK_REJECTED},
         )
         return JSONResponse(
             {"status": "rejected"}, status_code=status.HTTP_401_UNAUTHORIZED
+        )
+
+    # OWASP audit G-6: a captured, validly-signed request replayed inside
+    # WEBHOOK_TIMESTAMP_TOLERANCE_SECONDS otherwise re-verifies and creates a
+    # duplicate RawInboundEmail row — nothing else collapses the duplicate
+    # (no message-id unique constraint, and RawEvent.external_id is derived
+    # from a fresh email_id per replay). Only enforced once signature
+    # verification itself is enforced — an unsigned dev request has no
+    # meaningful nonce to dedupe against.
+    svix_id = request.headers.get(SVIX_ID_HEADER, "")
+    if secret_configured and svix_id and _webhook_id_already_seen(svix_id):
+        log.warning(
+            "inbound-mail: replayed svix-id, rejecting",
+            extra={"event": LOG_EVENT_WEBHOOK_REJECTED},
+        )
+        return JSONResponse(
+            {"status": "rejected", "reason": "replay"},
+            status_code=status.HTTP_401_UNAUTHORIZED,
         )
 
     try:
@@ -174,6 +214,17 @@ async def inbound_mail(
         )
 
     from_addr = str(payload.get("from", ""))
+
+    # OWASP audit G-6: checked (and, on failure, returned early) BEFORE the
+    # RawInboundEmail insert below — previously every inbound mail was stored
+    # in full regardless of sender, a data-minimisation cost with no
+    # corresponding benefit while NEWSLETTER_SENDER_ALLOWED_DOMAINS is empty
+    # (extraction never runs today) and an unnecessary retention cost once it
+    # isn't.
+    if not _sender_domain_allowed(from_addr):
+        log.warning("inbound-mail: sender domain not allowlisted, skipping")
+        return JSONResponse({"status": "skipped", "reason": "sender not allowlisted"})
+
     to_raw = payload.get("to", "")
     to_addr = ", ".join(to_raw) if isinstance(to_raw, list) else str(to_raw)
     subject = str(payload.get("subject", ""))
@@ -190,12 +241,7 @@ async def inbound_mail(
     email_id: int = email.id
     await db.commit()
 
-    if not _sender_domain_allowed(from_addr):
-        log.warning(
-            "inbound-mail %d: sender domain not allowlisted, skipping extraction",
-            email_id,
-        )
-    elif text_body or subject:
+    if text_body or subject:
         background_tasks.add_task(_run_extraction, email_id, subject, text_body)
     else:
         log.info("inbound-mail %d: no text body, skipping extraction", email_id)

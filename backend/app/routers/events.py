@@ -1,7 +1,9 @@
 """GET /events/{event_id} — full event detail."""
 
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Query, Request, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import joinedload
 
 from app.constants import (
     DEFAULT_USER_LOCALE,
@@ -18,7 +20,6 @@ from app.routers.utils import (
     parse_session_cookie_user,
     public_event_filter,
     resolve_locale_param,
-    select_events_with_classification,
     serialize_event,
 )
 
@@ -35,8 +36,14 @@ async def get_event(
     session: str | None = Cookie(default=None, alias=SESSION_COOKIE_NAME),
 ) -> dict:
     """Return full event detail by ID. No auth required — events are public."""
+    # joinedload, not select_events_with_classification()'s selectinload — this
+    # is a single-row fetch, so one JOINed query beats the extra round trips
+    # selectinload pays to stay O(1) across the bulk-listing callers that
+    # share that helper (Big-O audit #5, item 2.10).
     event = await db.scalar(
-        select_events_with_classification().where(
+        select(Event)
+        .options(joinedload(Event.classification), joinedload(Event.venue))
+        .where(
             Event.id == event_id,
             public_event_filter(),
         )

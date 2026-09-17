@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { api, ApiError } from '../../api/client';
+import { api } from '../../api/client';
 import { t, ti } from '../../i18n';
 import { API, REPORT_DETAIL_MAX_CHARS, REPORT_DETAIL_TEXTAREA_ROWS, REPORT_REASON_OTHER, REPORT_REASONS } from '../../constants';
+import { apiErrorMessage } from '../../utils';
 import Modal from '../Modal';
 import styles from './ReportModal.module.css';
 
@@ -59,7 +60,7 @@ export default function ReportModal({ open, onClose, eventId, locale, onSubmitte
       setSubmitted(true);
       onSubmitted();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : t('report_submit_failed', locale));
+      setError(apiErrorMessage(err, t('report_submit_failed', locale)));
     } finally {
       setSubmitting(false);
     }

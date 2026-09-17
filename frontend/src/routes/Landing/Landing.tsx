@@ -1,8 +1,8 @@
-import { Fragment, type CSSProperties } from 'react';
+import { Fragment, memo, useMemo, type CSSProperties } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../../api/client';
-import { ANALYTICS_EVENTS, API, CATEGORIES, LANDING_BASE_FIG_COUNT, LANDING_PLATE_BODY_MAX_LENGTH, LOCALES, MAGIC_LINK_EXPIRY_MINUTES, OG_FALLBACK_IMAGE_PATH, PRODUCTION_ORIGIN, QUERY_KEYS, ROUTES, STEP_KEYS, UI_STATE } from '../../constants';
+import { ANALYTICS_EVENTS, API, CATEGORIES, EUR_SYMBOL, LANDING_BASE_FIG_COUNT, LANDING_PLATE_BODY_MAX_LENGTH, LANDING_SHOWCASE_PLATE_COUNT, LOCALES, MAGIC_LINK_EXPIRY_MINUTES, OG_FALLBACK_IMAGE_PATH, PRODUCTION_ORIGIN, QUERY_KEYS, ROUTES, STEP_KEYS, UI_STATE } from '../../constants';
 import { t, ti } from '../../i18n';
 import { categoryGradient, cx, formatCount, formatEventTime, formatHeroDateline, formatHourMinute, formatPrice, padIndex, safeUrl, stripHtmlToText, truncateForMeta, withLocaleQuery } from '../../utils';
 import { useLocaleMutation } from '../../hooks/useLocaleMutation';
@@ -38,6 +38,11 @@ interface CountsResponse {
   tonight_events: TonightEvent[];
 }
 
+// Hoisted — both are constant across renders (Big-O audit #5, item 3.7): a
+// page reload picks up a year rollover regardless.
+const FOOTER_LOCALE_NAMES = LOCALES.map((l) => l.nativeName).join(' · ');
+const FOOTER_YEAR = new Date().getFullYear();
+
 /** Renders an i18n template containing a single `{count}` placeholder with
  * just the count bolded, e.g. "1,008+ events on the radar right now". */
 function CountSegment({ template, count }: { template: string; count: string }) {
@@ -45,11 +50,13 @@ function CountSegment({ template, count }: { template: string; count: string }) 
   return <>{before}<b>{count}</b>{after ?? ''}</>;
 }
 
+const ACCENT_MARKER_RE = /_(.+?)_/;
+
 /** Renders an i18n string with an `_accented_` word wrapped in markup, e.g.
  * "…tasub kodust _välja_ minna." → "…tasub kodust <em>välja</em> minna."
  * No-op when the string carries no underscore markers. */
 function AccentedText({ text }: { text: string }) {
-  const parts = text.split(/_(.+?)_/);
+  const parts = text.split(ACCENT_MARKER_RE);
   const seen = new Map<string, number>();
   return (
     <>
@@ -125,7 +132,9 @@ function TickerRow({ event, locale }: { event: TonightEvent; locale: string }) {
   );
 }
 
-function Ticker({ locale, events, isFallback }: { locale: string; events: TonightEvent[]; isFallback: boolean }) {
+// memo'd — the doubled `track` array (marquee duplication) was otherwise
+// rebuilt on every unrelated Landing render (Big-O audit #5, item 3.7).
+const Ticker = memo(function Ticker({ locale, events, isFallback }: { locale: string; events: TonightEvent[]; isFallback: boolean }) {
   const reducedMotion = usePrefersReducedMotion();
   if (events.length === 0) return null;
 
@@ -152,9 +161,11 @@ function Ticker({ locale, events, isFallback }: { locale: string; events: Tonigh
       </div>
     </div>
   );
-}
+});
 
-function Plate({ event, index, locale }: { event: EventData; index: number; locale: string }) {
+// memo'd — sanitizes/truncates event.description (DOMPurify) on every
+// render otherwise, on Landing's LCP path (Big-O audit #5, item 3.7).
+const Plate = memo(function Plate({ event, index, locale }: { event: EventData; index: number; locale: string }) {
   const localePath = useLocalePath();
   const isFlipped = index % 2 === 1;
   const category = event.categories[0];
@@ -194,7 +205,7 @@ function Plate({ event, index, locale }: { event: EventData; index: number; loca
       </div>
     </article>
   );
-}
+});
 
 function Fig({ value, labelKey, locale }: { value: string; labelKey: string; locale: string }) {
   return (
@@ -217,14 +228,17 @@ export default function Landing() {
     description: t('seo_landing_description', locale),
     image: `${PRODUCTION_ORIGIN}${OG_FALLBACK_IMAGE_PATH}`,
   });
-  const jsonLd = buildWebsiteJsonLd(locale);
+  // Stable identity across renders — SeoTags is memo'd and internally
+  // useMemo's on jsonLd's identity (Big-O audit #5, item 3.1); a fresh
+  // object per render was defeating both.
+  const jsonLd = useMemo(() => buildWebsiteJsonLd(locale), [locale]);
 
   const { data: showcaseData } = useQuery({
     queryKey: [QUERY_KEYS.showcase, locale],
     queryFn: () => api.get<ShowcaseResponse>(withLocaleQuery(API.publicShowcase, locale)),
     retry: false,
   });
-  const plateEvents = (showcaseData?.events ?? []).slice(0, 3);
+  const plateEvents = (showcaseData?.events ?? []).slice(0, LANDING_SHOWCASE_PLATE_COUNT);
 
   const { data: counts } = useQuery({
     queryKey: [QUERY_KEYS.counts, locale],
@@ -343,7 +357,7 @@ export default function Landing() {
                   <Fig value={String(furthestYear)} labelKey="landing_stat_horizon" locale={locale} />
                 )}
                 {counts.cheapest_price !== null && (
-                  <Fig value={`€${counts.cheapest_price}`} labelKey="landing_stat_price" locale={locale} />
+                  <Fig value={`${EUR_SYMBOL}${counts.cheapest_price}`} labelKey="landing_stat_price" locale={locale} />
                 )}
               </div>
             )}
@@ -384,8 +398,8 @@ export default function Landing() {
             <span className={styles.trustItem}>{t('landing_trust_nopassword', locale)}</span>
             <span className={styles.trustItem}>{t('landing_trust_notracking', locale)}</span>
             <span className={styles.trustItem}>{t('landing_trust_free', locale)}</span>
-            <span className={styles.footerLocales}>{LOCALES.map((l) => l.nativeName).join(' · ')}</span>
-            <span className={styles.footerYear}>{t('brand', locale)}, {new Date().getFullYear()}</span>
+            <span className={styles.footerLocales}>{FOOTER_LOCALE_NAMES}</span>
+            <span className={styles.footerYear}>{t('brand', locale)}, {FOOTER_YEAR}</span>
           </footer>
         </div>
       </main>

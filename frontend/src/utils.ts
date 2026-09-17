@@ -1,5 +1,5 @@
 import DOMPurify from 'dompurify';
-import { api } from './api/client';
+import { api, ApiError } from './api/client';
 import { API, CATEGORY_GRADIENTS, FALLBACK_GRADIENT, EUR_SYMBOL, DEFAULT_CURRENCY, GOOGLE_MAPS_SEARCH_URL, type Signal, toLocaleCode, SAFE_URL_SCHEMES, SANITIZE_ALLOWED_TAGS, SANITIZE_ALLOWED_ATTR, SIGNAL_TO_CLASS, BROWSE_PAGE_SIZE, CATEGORIES, VIBES, type DatePreset, type SortOption, ANALYTICS_EVENT_PATH_RE, ANALYTICS_ORGANIZER_EDIT_PATH_RE, CALENDAR_WEEK_START, CALENDAR_WEEKS_SHOWN, CALENDAR_DAYS_PER_WEEK, CALENDAR_REFERENCE_MONDAY, MAX_HOUR, MAX_MINUTE, DATE_PRESET_DAYS, DATE_PRESET_DAYS_FALLBACK, DATE_PRESET_DEFAULT, DATE_PRESET_TODAY, DATE_PRESET_WEEKEND, EXPLORE_PARAM, EXPLORE_URL_FLAG_TRUE, EXPLORE_API_FLAG_TRUE, SORT_DEFAULT, TIME_FIELD_MAX_LENGTH, LOCALES, type LocaleCode, DEFAULT_LOCALE_CODE, MS_PER_HOUR, HOURS_PER_DAY } from './constants';
 import { t, ti } from './i18n';
 import { stripLocalePrefix, localizedPath, localeFromPath, localizedTo } from './lib/urlLocale';
@@ -31,6 +31,38 @@ export function withQueryParam(path: string, key: string, value: string): string
  * to the API — `?` when `path` has no query string yet, `&` otherwise. */
 export function withLocaleQuery(path: string, locale: string): string {
   return withQueryParam(path, 'locale', locale);
+}
+
+/** A caught error's server-provided message when it's an ApiError, else a
+ * caller-supplied fallback — the `err instanceof ApiError ? err.message :
+ * <fallback>` ternary repeated at every mutation's onError. */
+export function apiErrorMessage(err: unknown, fallback: string): string {
+  return err instanceof ApiError ? err.message : fallback;
+}
+
+/** { value, label } options for every CATEGORIES slug, localized — callers
+ * still wrap the call in their own useMemo(() => categoryOptions(locale),
+ * [locale]) to avoid rebuilding the 14-option list (+14 t() lookups) on
+ * every render. */
+export function categoryOptions(locale: string): { value: string; label: string }[] {
+  return CATEGORIES.map((slug) => ({ value: slug, label: t(`category_${slug}`, locale) }));
+}
+
+/** Same shape as categoryOptions, for VIBES. */
+export function vibeOptions(locale: string): { value: string; label: string }[] {
+  return VIBES.map((slug) => ({ value: slug, label: t(`vibe_${slug}`, locale) }));
+}
+
+/** useInfiniteQuery's getNextPageParam cursor for every offset-paginated
+ * list (Explore, Saved Events, admin queues): the next offset when the page
+ * says there's more, else undefined to stop paging. `itemCount` is the
+ * caller's page-array length (`events.length`/`groups.length` — the key
+ * differs per response shape, so it's passed rather than read off `page`). */
+export function nextOffsetParam(
+  page: { has_more: boolean; offset: number },
+  itemCount: number,
+): number | undefined {
+  return page.has_more ? page.offset + itemCount : undefined;
 }
 
 /** True for any organizer-portal route, with or without a `/:locale` prefix
@@ -473,9 +505,20 @@ export function formatHeroDateline(locale: string): string {
   return `${weekday}, ${dayMonth}`;
 }
 
+const NUMBER_FORMATTERS = new Map<string, Intl.NumberFormat>();
+function numberFormatter(locale: string): Intl.NumberFormat {
+  const localeCode = toLocaleCode(locale);
+  let fmt = NUMBER_FORMATTERS.get(localeCode);
+  if (!fmt) {
+    fmt = new Intl.NumberFormat(localeCode);
+    NUMBER_FORMATTERS.set(localeCode, fmt);
+  }
+  return fmt;
+}
+
 /** Locale-grouped integer, e.g. 1008 → "1,008" (en) / "1 008" (et). */
 export function formatCount(n: number, locale: string): string {
-  return new Intl.NumberFormat(toLocaleCode(locale)).format(n);
+  return numberFormatter(locale).format(n);
 }
 
 /** Formats a `YYYY-MM-DD` date-only string (e.g. `daily_feeds.feed_date`) using

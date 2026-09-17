@@ -35,6 +35,7 @@ from app.constants import (
     ADMIN_ACTION_INGEST,
     ADMIN_ACTION_INGEST_SOURCE,
     ADMIN_ACTION_PIPELINE_RUN,
+    PIPELINE_RUN_OVERLAPPING_LOCK_KEYS,
     ADMIN_ACTION_PUBLISH,
     ADMIN_ACTION_REFETCH,
     ADMIN_ACTION_RESOLVE_REPORTS,
@@ -294,13 +295,16 @@ def _require_admin(
     credentials: HTTPBasicCredentials | None = Depends(_security),
     admin_session: str | None = Cookie(default=None, alias=ADMIN_SESSION_COOKIE_NAME),
 ) -> None:
-    """Read-only surface: accept EITHER a valid admin console session cookie
-    (issued by POST /admin/auth/login) OR HTTP Basic (curl / existing
-    integrations) — see docs/backend-ops.md's Admin Endpoints section. An
-    invalid/expired cookie falls through to requiring Basic rather than
-    rejecting outright, so a stale browser cookie doesn't lock a curl caller
-    out of the same request path. Every mutating route uses get_current_admin
-    instead (session-only, no Basic) — see its docstring."""
+    """Non-PII read-only surface — GET /admin/counts and /admin/stats only
+    (OWASP audit G-5: /admin/dedup/groups moved to get_current_admin, since
+    it discloses moderation-sensitive event content, not aggregate counts).
+    Accepts EITHER a valid admin console session cookie (issued by POST
+    /admin/auth/login) OR HTTP Basic (curl / existing integrations) — see
+    docs/backend-ops.md's Admin Endpoints section. An invalid/expired cookie
+    falls through to requiring Basic rather than rejecting outright, so a
+    stale browser cookie doesn't lock a curl caller out of the same request
+    path. Every other route uses get_current_admin instead (session-only, no
+    Basic) — see its docstring."""
     if admin_session is not None and _valid_admin_session(admin_session):
         return
 
@@ -430,7 +434,7 @@ def _serialize_dedup_groups(rows: Sequence[Event]) -> dict[int, list[dict]]:
     return groups
 
 
-@router.get("/dedup/groups", dependencies=[Depends(_require_admin)])
+@router.get("/dedup/groups", dependencies=[Depends(get_current_admin)])
 @limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
 async def admin_dedup_groups(
     request: Request,
@@ -703,13 +707,25 @@ async def admin_list_reports(
     if reason is not None:
         validate_report_reason(reason)
 
-    match_conditions = [EventReport.status == REPORT_STATUS_OPEN]
-    if reason is not None:
-        match_conditions.append(EventReport.reason == reason)
-    if illegal_only:
-        match_conditions.append(EventReport.is_illegal_allegation.is_(True))
-
-    matching_event_ids = select(EventReport.event_id).where(*match_conditions).distinct()
+    agg_conditions = [
+        EventReport.status == REPORT_STATUS_OPEN,
+        Event.status != EVENT_STATUS_CANCELLED,
+    ]
+    # With no reason/illegal_only filter, "at least one matching open report"
+    # degenerates to "has an open report" — already covered by the OPEN
+    # condition above, so the DISTINCT event_id subquery (a full scan of
+    # open reports on every plain queue load, the console's default view)
+    # is a no-op and skipped (Big-O audit #5, item 2.10).
+    if reason is not None or illegal_only:
+        match_conditions = [EventReport.status == REPORT_STATUS_OPEN]
+        if reason is not None:
+            match_conditions.append(EventReport.reason == reason)
+        if illegal_only:
+            match_conditions.append(EventReport.is_illegal_allegation.is_(True))
+        matching_event_ids = (
+            select(EventReport.event_id).where(*match_conditions).distinct()
+        )
+        agg_conditions.append(EventReport.event_id.in_(matching_event_ids))
 
     has_illegal_col = func.bool_or(EventReport.is_illegal_allegation).label(
         "has_illegal_allegation"
@@ -725,11 +741,7 @@ async def admin_list_reports(
             oldest_col,
         )
         .join(Event, Event.id == EventReport.event_id)
-        .where(
-            EventReport.status == REPORT_STATUS_OPEN,
-            Event.status != EVENT_STATUS_CANCELLED,
-            EventReport.event_id.in_(matching_event_ids),
-        )
+        .where(*agg_conditions)
         .group_by(EventReport.event_id)
     )
 
@@ -1236,21 +1248,10 @@ async def admin_send_digests(
     )
 
 
-# Sub-stages that are also standalone triggers with their own single-flight
-# guard (issue #160) — held for pipeline/run's whole duration too, or a
-# standalone ingest/classify/send-digests click mid-pipeline would run
-# concurrently with the pipeline's own execution of that same stage.
-_PIPELINE_RUN_OVERLAPPING_LOCK_KEYS = (
-    ADMIN_ACTION_INGEST,
-    ADMIN_ACTION_CLASSIFY,
-    ADMIN_ACTION_SEND_DIGESTS,
-)
-
-
 def _acquire_pipeline_run_locks() -> None:
     acquired: list[str] = []
     try:
-        for key in (ADMIN_ACTION_PIPELINE_RUN, *_PIPELINE_RUN_OVERLAPPING_LOCK_KEYS):
+        for key in (ADMIN_ACTION_PIPELINE_RUN, *PIPELINE_RUN_OVERLAPPING_LOCK_KEYS):
             acquire_admin_job_lock(key)
             acquired.append(key)
     except HTTPException:
@@ -1260,7 +1261,7 @@ def _acquire_pipeline_run_locks() -> None:
 
 
 def _release_pipeline_run_locks() -> None:
-    for key in (ADMIN_ACTION_PIPELINE_RUN, *_PIPELINE_RUN_OVERLAPPING_LOCK_KEYS):
+    for key in (ADMIN_ACTION_PIPELINE_RUN, *PIPELINE_RUN_OVERLAPPING_LOCK_KEYS):
         release_admin_job_lock(key)
 
 

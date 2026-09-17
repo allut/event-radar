@@ -6,6 +6,7 @@ import re
 import httpx
 
 from app.constants import (
+    CONTENT_FILTER_WHITESPACE_COLLAPSE_RE,
     ESTONIAN_STREET_TYPE_WORDS,
     GEOCODE_COUNTRY_SUFFIX,
     GEOCODE_COUNTY_RE,
@@ -30,6 +31,7 @@ _UNIT_SUFFIX_RE = re.compile(GEOCODE_UNIT_SUFFIX_RE, re.IGNORECASE)
 _FLOOR_RE = re.compile(GEOCODE_FLOOR_RE, re.IGNORECASE)
 _COUNTY_RE = re.compile(GEOCODE_COUNTY_RE, re.IGNORECASE)
 _SECONDARY_UNIT_RE = re.compile(GEOCODE_SECONDARY_UNIT_RE, re.IGNORECASE)
+_WHITESPACE_COLLAPSE_PATTERN = re.compile(CONTENT_FILTER_WHITESPACE_COLLAPSE_RE)
 
 
 def normalize_address_for_geocoding(address: str) -> str:
@@ -48,7 +50,7 @@ def normalize_address_for_geocoding(address: str) -> str:
     result = _SECONDARY_UNIT_RE.sub("", result)
     result = _UNIT_SUFFIX_RE.sub("", result)
     result = _STREET_TYPE_PATTERN.sub("", result)
-    result = re.sub(r"\s+", " ", result).strip().rstrip(",").strip()
+    result = _WHITESPACE_COLLAPSE_PATTERN.sub(" ", result).strip().rstrip(",").strip()
     if not result.endswith(GEOCODE_COUNTRY_SUFFIX):
         result += GEOCODE_COUNTRY_SUFFIX
     return result

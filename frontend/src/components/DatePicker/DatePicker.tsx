@@ -11,6 +11,7 @@ import {
   TIME_FIELD_MAX_LENGTH, PICKER_VALUE_PLACEHOLDER,
 } from '../../constants';
 import { t, ti } from '../../i18n';
+import { PrevIcon, NextIcon } from '../ChevronIcons';
 import styles from './DatePicker.module.css';
 
 interface DatePickerProps {
@@ -46,12 +47,6 @@ function weekdayOffset(d: Date): number {
   return (d.getDay() - CALENDAR_WEEK_START + CALENDAR_DAYS_PER_WEEK) % CALENDAR_DAYS_PER_WEEK;
 }
 
-const PrevIcon = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden><path d="M15 6l-6 6 6 6" /></svg>
-);
-const NextIcon = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden><path d="M9 6l6 6-6 6" /></svg>
-);
 const CalendarIcon = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden>
     <rect x="3" y="5" width="18" height="16" rx="2" />
@@ -221,8 +216,13 @@ function PopoverBody({ id, value, onChange, min, locale, required, disabled, pop
     () => monthGridDays(viewYear, viewMonth, CALENDAR_WEEK_START),
     [viewYear, viewMonth],
   );
-  const headers = weekdayHeaders(locale);
-  const monthYearLabel = formatMonthYearLabel(viewYear, viewMonth, locale);
+  // Re-runs only on locale change, not every hour/minute keystroke (7
+  // Intl.format + 7 Date allocations) — same rationale as `cells` above.
+  const headers = useMemo(() => weekdayHeaders(locale), [locale]);
+  const monthYearLabel = useMemo(
+    () => formatMonthYearLabel(viewYear, viewMonth, locale),
+    [viewYear, viewMonth, locale],
+  );
 
   const monthLabelId = `${id}-picker-month-label`;
 

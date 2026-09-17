@@ -26,8 +26,8 @@ class Settings(BaseSettings):
     APP_ENV: str = APP_ENV_DEVELOPMENT
     # Second, explicit opt-in required (alongside APP_ENV == development) before
     # require_configured_secret() fails open on an unset secret. A dev-shaped
-    # APP_ENV alone must never be sufficient to unprotect /admin/*, the inbound
-    # webhook, or /internal/tick — see routers/utils.py::require_configured_secret.
+    # APP_ENV alone must never be sufficient to unprotect /admin/* or the inbound
+    # webhook — see routers/utils.py::require_configured_secret.
     ALLOW_INSECURE_DEV: bool = False
 
     # Development-only kill switch for the embedded APScheduler
@@ -125,6 +125,16 @@ class Settings(BaseSettings):
         "times": {"evening": 0.9, "weekend": 0.7},
     }
 
+    # Edge proxy — shared secret the Cloudflare Pages Function
+    # (frontend/functions/api/[[path]].ts) presents alongside X-Client-IP so
+    # app.rate_limit.client_key() can trust that header as the real client IP
+    # across the browser -> Cloudflare -> Render two-hop path. Empty = fall
+    # back to today's rightmost-XFF behavior (dev, or the secret not yet
+    # provisioned). Never trust X-Client-IP without a matching secret — the
+    # Render origin is directly reachable, so an unauthenticated X-Client-IP
+    # would be trivially forgeable (OWASP audit G-1).
+    EDGE_SHARED_SECRET: str = ""
+
     # Admin / internal security
     ADMIN_USERNAME: str = ADMIN_USERNAME_DEFAULT  # Basic-auth username for /admin/* endpoints
     ADMIN_PASSWORD: str = (
@@ -138,9 +148,6 @@ class Settings(BaseSettings):
         # the next deploy — see generate_admin_session_token/verify_admin_session_token.
         # The cheapest durable revocation this no-admins-table design supports; a
         # credential rotation is already a redeploy, so this rides that redeploy.
-    )
-    INTERNAL_TOKEN: str = (
-        ""  # X-Internal-Token header for /internal/tick; empty = disabled (dev only)
     )
 
     # Auth / email
@@ -185,7 +192,9 @@ class Settings(BaseSettings):
 
     # LLM providers — empty key means that provider is skipped in the fallback chain
     GROQ_API_KEY: str = ""
-    CEREBRAS_API_KEY: str = ""
+    # Workers AI base URL embeds the account id; both must be set or the provider is skipped
+    CLOUDFLARE_WORKERS_AI_API_KEY: str = ""
+    CLOUDFLARE_WORKERS_AI_BASE_URL: str = ""
     MISTRAL_API_KEY: str = ""
 
     # CORS — pydantic-settings parses a JSON array from the env var (e.g. '["https://eventradar.ee"]')

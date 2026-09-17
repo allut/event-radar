@@ -1,3 +1,4 @@
+import { useCallback, useMemo } from 'react';
 import { t } from '../../i18n';
 import { THEME_OPTIONS, API } from '../../constants';
 import { useThemePreference } from '../../hooks/useThemePreference';
@@ -30,9 +31,10 @@ interface ThemeSelectorProps {
 export default function ThemeSelector({ locale, ariaLabel }: ThemeSelectorProps) {
   const preference = useThemePreference();
 
-  function handleChange(next: ThemePreference) {
-    setThemePreference(next);
-    const value = next === 'system' ? null : next;
+  const handleChange = useCallback((next: string) => {
+    const pref = next as ThemePreference;
+    setThemePreference(pref);
+    const value = pref === 'system' ? null : pref;
     if (isAuthenticated()) {
       void api.patch(API.me, { theme_preference: value }).catch(() => {
         // Non-fatal — the device already applied the choice locally regardless.
@@ -42,14 +44,21 @@ export default function ThemeSelector({ locale, ariaLabel }: ThemeSelectorProps)
         // Non-fatal — the device already applied the choice locally regardless.
       });
     }
-  }
+  }, []);
+
+  // Stable per locale — rebuilding on every render defeats SelectMenu's
+  // memo (Big-O audit #5, item 3.6).
+  const options = useMemo(
+    () => THEME_OPTIONS.map(({ value, labelKey }) => ({ value, label: t(labelKey, locale) })),
+    [locale],
+  );
 
   return (
     <SelectMenu
       label=""
       value={preference}
-      options={THEME_OPTIONS.map(({ value, labelKey }) => ({ value, label: t(labelKey, locale) }))}
-      onChange={(next) => handleChange(next as ThemePreference)}
+      options={options}
+      onChange={handleChange}
       ariaLabel={ariaLabel}
       variant="button"
     />

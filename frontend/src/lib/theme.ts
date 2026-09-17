@@ -1,10 +1,13 @@
-import { THEME_PREFERENCE_KEY } from '../constants';
+import { COLOR_SCHEME_DARK_QUERY, THEME_PREFERENCE_KEY } from '../constants';
+import { THEME_PREFERENCES } from '../_generated/sharedConstants.js';
 
+// What actually gets applied to the DOM / rendered — always binary. Derived
+// from THEME_PREFERENCES (shared/app-config.json) so this never drifts from
+// the backend's VALID_THEME_PREFERENCES.
+export type ResolvedTheme = (typeof THEME_PREFERENCES)[number];
 // Tri-state stored/selectable preference. "system" (or an unset/invalid
 // localStorage value) falls through to the OS media query.
-export type ThemePreference = 'system' | 'light' | 'dark';
-// What actually gets applied to the DOM / rendered — always binary.
-export type ResolvedTheme = 'light' | 'dark';
+export type ThemePreference = 'system' | ResolvedTheme;
 
 // Theme-change subscriber store, mirroring auth.ts's authListeners/localeListeners
 // — lets globally mounted chrome re-render when the effective theme changes from
@@ -34,7 +37,7 @@ export function resolveTheme(
 }
 
 function systemPrefersDark(): boolean {
-  return window.matchMedia('(prefers-color-scheme: dark)').matches;
+  return window.matchMedia(COLOR_SCHEME_DARK_QUERY).matches;
 }
 
 // Raw stored preference, defaulting to "system" when unset/invalid — unlike a
@@ -112,7 +115,7 @@ if (typeof window !== 'undefined') {
   // Live-reacts to an OS theme flip while a tab is open, but only while the
   // effective preference is "System" — an explicit light/dark override must
   // not be disturbed by the OS changing underneath it.
-  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+  window.matchMedia(COLOR_SCHEME_DARK_QUERY).addEventListener('change', () => {
     if (getThemePreference() === 'system') {
       applyTheme();
       emitThemeChange();

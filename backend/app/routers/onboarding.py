@@ -2,7 +2,14 @@
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    HTTPException,
+    Request,
+    status,
+)
 from pydantic import BaseModel
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -35,6 +42,7 @@ class PersonaBody(BaseModel):
 async def set_persona(
     body: PersonaBody,
     request: Request,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
@@ -82,9 +90,21 @@ async def set_persona(
     await invalidate_user_scores(db, current_user.id)
     await db.commit()
 
-    try:
-        await build_daily_feed_for_user(db, current_user.id)
-    except Exception:
-        log.exception("initial feed build failed for user %s", current_user.id)
+    background_tasks.add_task(_build_initial_feed, current_user.id)
 
     return {"personas": result}
+
+
+async def _build_initial_feed(user_id: int) -> None:
+    """Best-effort initial feed build, run after the response is sent.
+
+    Moved off the request path (Big-O audit #5, item 1.2) — the full
+    candidate-catalogue load + scoring pass in build_daily_feed_for_user is
+    too expensive to run synchronously inside a rate-limited HTTP request.
+    Uses its own DB session since the request-scoped one is already closed.
+    """
+    async for session in get_db():
+        try:
+            await build_daily_feed_for_user(session, user_id)
+        except Exception:
+            log.exception("initial feed build failed for user %s", user_id)

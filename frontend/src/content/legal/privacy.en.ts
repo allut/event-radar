@@ -5,7 +5,7 @@ const AKI_URL = 'https://www.aki.ee';
 
 const doc: LegalDoc = {
   title: 'Privacy Policy',
-  lastUpdated: '2026-09-13',
+  lastUpdated: '2026-09-16',
   intro: [
     {
       kind: 'p',
@@ -90,7 +90,7 @@ const doc: LegalDoc = {
           items: [
             ['Neon — database hosting (EU region, Frankfurt, Germany).'],
             ['Render — backend application hosting.'],
-            ['Vercel — frontend hosting.'],
+            ['Cloudflare — frontend hosting (Cloudflare Pages).'],
             ['Google — the cookieless Google Analytics above, and, if you use Google sign-in, verification of your sign-in identity. For sign-in, Google acts in two capacities: as our processor when it issues the token, and independently — in its own capacity as an identity provider, not on our instructions — when it vouches for who you are.'],
             ['Resend — delivery of sign-in and digest emails.'],
           ],
@@ -98,7 +98,7 @@ const doc: LegalDoc = {
         {
           kind: 'p',
           content: [
-            'Providers that process event data only, never your personal data: our language-model providers (Groq, Cerebras, Mistral) classify public event listings; OpenStreetMap Nominatim geocodes event venue addresses; cron-job.org pings the Service to keep it awake. We may also disclose data where required by law.',
+            'Providers that process event data only, never your personal data: our language-model providers (Groq, Cloudflare Workers AI, Mistral) classify public event listings; OpenStreetMap Nominatim geocodes event venue addresses; cron-job.org pings the Service to keep it awake. We may also disclose data where required by law.',
           ],
         },
       ],
@@ -109,7 +109,7 @@ const doc: LegalDoc = {
         {
           kind: 'p',
           content: [
-            'Your core account data is stored in the EU (Frankfurt, Germany). Some providers (e.g. Render, Vercel) are US-based; where personal data is transferred outside the EEA, it is protected by the European Commission’s Standard Contractual Clauses and the providers’ data-processing terms.',
+            'Your core account data is stored in the EU (Frankfurt, Germany). Some providers (e.g. Render, Cloudflare) are US-based; where personal data is transferred outside the EEA, it is protected by the European Commission’s Standard Contractual Clauses and the providers’ data-processing terms.',
           ],
         },
       ],

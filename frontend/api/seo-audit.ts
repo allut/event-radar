@@ -76,7 +76,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     [sitemapXml, landingHtml, robotsTxt] = await Promise.all([sitemapRes.text(), landingRes.text(), robotsRes.text()]);
     faviconContentType = faviconRes.headers.get('content-type');
   } catch (error) {
-    res.status(StatusCodes.BAD_GATEWAY).json({ error: `failed to fetch production pages: ${String(error)}` });
+    // Never interpolate the raw error into the response (OWASP audit G-7) —
+    // a fetch TypeError can embed request details a caller shouldn't see.
+    console.error('seo-audit: failed to fetch production pages', error);
+    res.status(StatusCodes.BAD_GATEWAY).json({ error: 'failed to fetch production pages' });
     return;
   }
 
@@ -167,8 +170,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     // new alerting channel), so if reporting itself is broken, that must be
     // visible somewhere an operator would notice — a non-2xx status, which
     // cron-job.org's own monitoring surfaces, rather than a 200 with the
-    // problem buried in a JSON field nobody's watching.
-    res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ ...result, reportError: String(error) });
+    // problem buried in a JSON field nobody's watching. The error itself is
+    // logged, not echoed in the response (OWASP audit G-7) — this call path
+    // stringifies errors from GitHub API requests made with GH_ISSUE_TOKEN.
+    console.error('seo-audit: failed to report audit result to GitHub', error);
+    res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ ...result, reportError: 'failed to report audit result to GitHub' });
     return;
   }
 

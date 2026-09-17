@@ -6,7 +6,9 @@ _require_admin fail-closed tests below target a read-only (GET) route —
 mutating (POST) routes require the session-only get_current_admin (H-1 in
 the OWASP audit) and no longer accept Basic auth at all, so they can't
 exercise _require_admin's Basic-branch checks (admin_username_disabled,
-admin_credentials_ok)."""
+admin_credentials_ok). GET /admin/dedup/groups also moved to get_current_admin
+(OWASP audit G-5, since it discloses moderation-sensitive event content, not
+aggregate counts) — see test_dedup_groups_rejects_basic_auth_alone below."""
 
 import http
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -198,6 +200,27 @@ async def test_simple_job_triggers(path, target, admin_app):
 # ---------------------------------------------------------------------------
 # GET /admin/dedup/groups
 # ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_dedup_groups_rejects_basic_auth_alone(admin_app):
+    """OWASP audit G-5: unpublished/moderation-sensitive event content
+    (title, venue, url, is_explicit for draft/classified/rejected rows) must
+    require the TOTP-backed session cookie — correct HTTP Basic credentials
+    alone are no longer sufficient, even though they used to be (this route
+    was one of the three _require_admin Basic-eligible GETs)."""
+    app = admin_app
+    with patch("app.routers.admin.settings") as mock_settings:
+        mock_settings.ADMIN_PASSWORD = "s3cret"
+        mock_settings.ADMIN_USERNAME = "admin"
+        mock_settings.APP_ENV = "production"
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            resp = await client.get("/admin/dedup/groups", auth=("admin", "s3cret"))
+
+    assert resp.status_code == http.HTTPStatus.UNAUTHORIZED
 
 
 @pytest.mark.asyncio

@@ -475,9 +475,17 @@ async def _browse_scored_path(
 
     events_by_id: dict[int, Event] = {}
     if page_ids:
+        # public_event_filter() re-applied here, not just in the scoring query
+        # above — the scored id list is cached for BROWSE_SCORE_CACHE_TTL_SECONDS,
+        # so without this an id that went non-public in the meantime (e.g. a
+        # takedown) would keep hydrating for every caller sharing that cache
+        # entry until it expires (OWASP audit G-3). ordered_events' `if eid in
+        # events_by_id` guard below already handles an id silently dropping out.
         full_rows = (
             await db.scalars(
-                select_events_with_classification().where(Event.id.in_(page_ids))
+                select_events_with_classification().where(
+                    Event.id.in_(page_ids), public_event_filter()
+                )
             )
         ).all()
         events_by_id = {e.id: e for e in full_rows}

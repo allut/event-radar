@@ -1,21 +1,23 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { adminApi, ApiError } from '../../api/client';
+import { adminApi } from '../../api/client';
 import {
   ADMIN_CONTENT_LANG_MARKER_LABELS,
+  ADMIN_EVENT_DETAIL_TABS,
+  ADMIN_GENERIC_ERROR,
+  ADMIN_TRANSLATABLE_FIELD_COUNT,
   API,
   CONTENT_LANG_ORDER,
-  LOCALES,
+  LOCALES_BY_CODE,
   QUERY_KEYS,
   ROUTES,
   UI_STATE,
   REPORT_STATUS,
-  ADMIN_EVENT_DETAIL_TABS,
   type ContentLang,
   type ContentMarkerState,
 } from '../../constants';
-import { sanitizeHtml, formatAdminTimestamp, safeUrl } from '../../utils';
+import { apiErrorMessage, sanitizeHtml, formatAdminTimestamp, safeUrl } from '../../utils';
 import PageState from '../../components/PageState';
 import Toast from '../../components/Toast';
 import { useToast } from '../../hooks/useToast';
@@ -139,7 +141,7 @@ type Tab = (typeof ADMIN_EVENT_DETAIL_TABS)[number];
 export default function AdminEventDetail({ eventId }: { eventId: string }) {
   const queryClient = useQueryClient();
   const { toast, showToast } = useToast();
-  const [tab, setTab] = useState<Tab>('Overview');
+  const [tab, setTab] = useState<Tab>(ADMIN_EVENT_DETAIL_TABS[0]);
   const [note, setNote] = useState('');
   const [contentLang, setContentLang] = useState<ContentLang>(CONTENT_LANG_ORDER[0]);
 
@@ -168,6 +170,36 @@ export default function AdminEventDetail({ eventId }: { eventId: string }) {
     return map;
   }, [data]);
 
+  // Re-run only when the loaded event/reports change, not on every
+  // resolution-note keystroke (Big-O audit #5, item 3.5). Hoisted above the
+  // isLoading/isError early returns below — hooks must run unconditionally.
+  const openReports = useMemo(
+    () => (data?.reports ?? []).filter((r) => r.status === REPORT_STATUS.open),
+    [data],
+  );
+  const langOptions = useMemo(() => {
+    if (!data) return [];
+    const { event } = data;
+    const localeLabel = (code: ContentLang) => LOCALES_BY_CODE.get(code)?.label ?? code.toUpperCase();
+    const markerState = (code: ContentLang): ContentMarkerState => {
+      if (code === CONTENT_LANG_ORDER[0]) return 'matched';
+      const t = event.content_by_locale[code]?.translated;
+      if (!t) return 'empty';
+      const translatedCount = Number(t.title) + Number(t.description) + Number(t.important_info);
+      if (translatedCount === 0) return 'empty';
+      if (translatedCount === ADMIN_TRANSLATABLE_FIELD_COUNT) return 'matched';
+      return 'partial';
+    };
+    return CONTENT_LANG_ORDER.map((code) => {
+      const state = markerState(code);
+      return {
+        value: code,
+        label: localeLabel(code),
+        marker: { state, stateLabel: ADMIN_CONTENT_LANG_MARKER_LABELS[state] },
+      };
+    });
+  }, [data]);
+
   const actionMutation = useMutation({
     mutationFn: ({ kind, note }: { kind: ActionKind; note: string }) =>
       adminApi.post(ACTION_CONFIG[kind].path(Number(eventId)), { resolution_note: note }),
@@ -178,7 +210,7 @@ export default function AdminEventDetail({ eventId }: { eventId: string }) {
       showToast(UI_STATE.success, ACTION_CONFIG[kind].message);
     },
     onError: (err) => {
-      showToast(UI_STATE.error, err instanceof ApiError ? err.message : 'Something went wrong. Try again.');
+      showToast(UI_STATE.error, apiErrorMessage(err, ADMIN_GENERIC_ERROR));
     },
   });
 
@@ -191,7 +223,6 @@ export default function AdminEventDetail({ eventId }: { eventId: string }) {
   if (isError || !data) return <PageState kind={UI_STATE.error} message="Couldn't load this event." inline />;
 
   const { event, dedup_siblings, reports, raw_events, in_todays_feed } = data;
-  const openReports = reports.filter((r) => r.status === REPORT_STATUS.open);
   const cl = event.classification;
   const actionDisabled = actionMutation.isPending || !note.trim();
 
@@ -212,26 +243,6 @@ export default function AdminEventDetail({ eventId }: { eventId: string }) {
     );
   }
 
-  const localeLabel = (code: ContentLang) => LOCALES.find((l) => l.code === code)?.label ?? code.toUpperCase();
-  // et is always the base slot — it's never a fallback. For en/ru, all
-  // three fields translated -> matched, some -> partial, none -> empty.
-  const markerState = (code: ContentLang): ContentMarkerState => {
-    if (code === CONTENT_LANG_ORDER[0]) return 'matched';
-    const t = event.content_by_locale[code]?.translated;
-    if (!t) return 'empty';
-    const translatedCount = Number(t.title) + Number(t.description) + Number(t.important_info);
-    if (translatedCount === 0) return 'empty';
-    if (translatedCount === 3) return 'matched';
-    return 'partial';
-  };
-  const langOptions = CONTENT_LANG_ORDER.map((code) => {
-    const state = markerState(code);
-    return {
-      value: code,
-      label: localeLabel(code),
-      marker: { state, stateLabel: ADMIN_CONTENT_LANG_MARKER_LABELS[state] },
-    };
-  });
   // The base locale (et) is never a fallback, even when its *_localized
   // dict happens to carry no 'et' key — its content is title_orig/etc.,
   // the canonical original, not a locale→en→orig fallback. Mirrors

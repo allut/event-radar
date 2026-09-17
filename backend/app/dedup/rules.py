@@ -15,7 +15,7 @@ fall back to ``min(event_id)``).
 """
 
 import logging
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from datetime import date, datetime, timedelta
 
 from rapidfuzz.fuzz import token_set_ratio
@@ -32,6 +32,7 @@ from app.constants import (
     EVENT_STATUS_CANCELLED,
     EVENT_STATUS_CLASSIFIED,
     EVENT_STATUS_PUBLISHED,
+    SCORE_INSERT_CHUNK_SIZE,
     SECONDS_PER_HOUR,
     TALLINN_TZ,
     TIME_WINDOW_HOURS,
@@ -520,15 +521,24 @@ async def load_description_lengths(
     (kilobytes-per-row) description text itself. Feeds the
     ``_event_quality_rank`` tie-break without ``load_dedup_candidate_events``
     having to hydrate every in-window event's full description (Big-O audit M3).
+
+    Chunked at SCORE_INSERT_CHUNK_SIZE — the dedup window has no row-count
+    LIMIT, and SQLAlchemy expands ``IN`` to one bind param per id, which would
+    hit Postgres's per-statement parameter limit past ~32k events (Big-O
+    audit #5, item 1.1; same rationale as score.py's chunked score_cache load).
     """
     if not event_ids:
         return {}
-    rows = await db.execute(
-        select(Event.id, func.length(Event.description_orig)).where(
-            Event.id.in_(event_ids)
+    lengths: dict[int, int] = {}
+    for i in range(0, len(event_ids), SCORE_INSERT_CHUNK_SIZE):
+        chunk = event_ids[i : i + SCORE_INSERT_CHUNK_SIZE]
+        rows = await db.execute(
+            select(Event.id, func.length(Event.description_orig)).where(
+                Event.id.in_(chunk)
+            )
         )
-    )
-    return {eid: (length or 0) for eid, length in rows.all()}
+        lengths.update({eid: (length or 0) for eid, length in rows.all()})
+    return lengths
 
 
 async def clear_stale_dedup_groups(db: AsyncSession, cutoff: datetime) -> None:
@@ -550,6 +560,38 @@ async def clear_stale_dedup_groups(db: AsyncSession, cutoff: datetime) -> None:
     )
 
 
+async def bulk_assign_dedup_groups(
+    db: AsyncSession, events: list[Event], assignments: Mapping[int, int | None]
+) -> int:
+    """Write ``assignments`` onto ``events``, grouping changed rows by target
+    group id and issuing one bulk ``UPDATE ... WHERE id IN (...)`` per group
+    instead of one UPDATE per changed row at flush (Big-O audit #5, item 2.8).
+
+    Also updates each changed event's in-memory ``dedup_group_id`` directly —
+    deliberately *not* going through the ORM's dirty-tracking (no later flush
+    should re-issue a per-row UPDATE for a value the bulk UPDATE above already
+    wrote), so this sets the attribute via ``__dict__`` rather than normal
+    attribute assignment. Returns the number of events whose group id changed.
+    """
+    by_new_gid: dict[int | None, list[Event]] = {}
+    for event in events:
+        new_gid = assignments.get(event.id)
+        if event.dedup_group_id != new_gid:
+            by_new_gid.setdefault(new_gid, []).append(event)
+
+    for new_gid, changed_events in by_new_gid.items():
+        await db.execute(
+            update(Event)
+            .where(Event.id.in_([e.id for e in changed_events]))
+            .values(dedup_group_id=new_gid),
+            execution_options={"synchronize_session": False},
+        )
+        for event in changed_events:
+            event.__dict__["dedup_group_id"] = new_gid
+
+    return sum(len(changed) for changed in by_new_gid.values())
+
+
 async def run_dedup_pass(db: AsyncSession) -> dict:
     """Find duplicate events and assign dedup_group_id.
 
@@ -569,12 +611,7 @@ async def run_dedup_pass(db: AsyncSession) -> dict:
         events, candidate_pair_ids=candidate_pair_ids, desc_len_by_id=desc_len_by_id
     )
 
-    updated = 0
-    for event in events:
-        new_gid = assignments.get(event.id)
-        if event.dedup_group_id != new_gid:
-            event.dedup_group_id = new_gid
-            updated += 1
+    updated = await bulk_assign_dedup_groups(db, events, assignments)
 
     await clear_stale_dedup_groups(db, cutoff)
 

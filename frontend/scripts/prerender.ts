@@ -37,10 +37,12 @@ import {
   APP_SHELL_FILENAME,
   BROWSE_PAGE_SIZE,
   CANONICAL_LINK_SELECTOR,
+  CHAIN_STATE_PREFIX,
   CRAWLABLE_ASSETS_PATH,
   CRAWLABLE_ICON_PATHS,
   EXPLORE_PARAM,
   JSONLD_SCRIPT_SELECTOR,
+  LOCALE_KEY,
   LOCALE_URL_PREFIX_CODES,
   LOCALES,
   OG_FALLBACK_IMAGE_PATH,
@@ -50,6 +52,7 @@ import {
   PRERENDER_ERROR_SELECTOR,
   PRERENDER_READY_SELECTOR,
   PRODUCTION_ORIGIN,
+  ROBOTS_TXT_FILENAME,
   ROUND_STATUS,
   ROUTES,
   SEO_HREFLANG_CODES,
@@ -62,6 +65,7 @@ import { localizedPath } from '../src/lib/urlLocale';
 import { githubRequest } from '../src/lib/githubRequest';
 import { compareEventStaleness, parseSnapshotHtml, validateSnapshotStructure } from '../src/lib/seoValidation';
 import { createBudgetedCursor, prioritizeRenderQueue } from '../src/lib/prerenderQueue';
+import { deleteR2ObjectsByPrefix, getR2Object, putR2Object } from '../src/lib/r2ChainState';
 import {
   buildRoundMarker,
   isChainDepthExceeded,
@@ -263,14 +267,16 @@ function buildTargets(candidates: PrerenderCandidate[]): PrerenderTarget[] {
   return targets;
 }
 
-/** Embeds `marker` under CHANGE_MARKER_JSONLD_FIELD in `html`'s single
+/** Embeds `marker` under CHANGE_MARKER_JSONLD_FIELD in `document`'s single
  * JSON-LD script (issue #80), at render time — after the page's real
- * content (including its JSON-LD) has already been captured. Leaves `html`
- * unchanged if there's no JSON-LD script or its body doesn't parse; the
- * in-build validation gate below is what actually catches/blocks on that. */
-function embedChangeMarker(html: string, marker: string): string {
-  const dom = new JSDOM(html);
-  const script = dom.window.document.querySelector(JSONLD_SCRIPT_SELECTOR);
+ * content (including its JSON-LD) has already been captured. Leaves
+ * `document` unchanged if there's no JSON-LD script or its body doesn't
+ * parse; the in-build validation gate below is what actually catches/blocks
+ * on that. In-place (mutates `document`, no JSDOM of its own) so
+ * snapshotTarget's fresh-render path can share one JSDOM parse/serialize
+ * with stripBakedThemeAttrInPlace instead of two (Big-O audit #5, Tier 4). */
+function embedChangeMarkerInPlace(document: Document, marker: string): void {
+  const script = document.querySelector(JSONLD_SCRIPT_SELECTOR);
   if (script) {
     try {
       const data = JSON.parse(script.textContent ?? '{}') as Record<string, unknown>;
@@ -280,7 +286,6 @@ function embedChangeMarker(html: string, marker: string): string {
       // Malformed JSON-LD — leave untouched, validateTarget() catches it.
     }
   }
-  return dom.serialize();
 }
 
 /** Rewrites `html`'s built-asset `<head>` references (`<script type="module">`,
@@ -329,7 +334,12 @@ function getShellAssetNodes(shellHtml: string): Element[] {
   return nodes;
 }
 
-export function rewriteSnapshotAssetRefs(html: string, shellHtml: string): string {
+// In-place — mutates `document`, no JSDOM/serialize of its own, so
+// finalizeSnapshotHtml can share one JSDOM parse/serialize with
+// stripBakedThemeAttrInPlace instead of chaining two (Big-O audit #5, Tier
+// 4). The exported, string-in-string-out rewriteSnapshotAssetRefs below
+// wraps this for its own standalone callers/tests.
+function rewriteSnapshotAssetRefsInPlace(document: Document, shellHtml: string): void {
   const shellAssetNodes = getShellAssetNodes(shellHtml);
   if (shellAssetNodes.length === 0) {
     throw new Error(
@@ -337,8 +347,7 @@ export function rewriteSnapshotAssetRefs(html: string, shellHtml: string): strin
     );
   }
 
-  const dom = new JSDOM(html);
-  const head = dom.window.document.head;
+  const head = document.head;
   const staleAssetNodes = [...head.querySelectorAll('script, link')].filter(isAssetNode);
   // Anchor on the node right after the stale block (captured before removal,
   // so it's untouched by it) — `insertBefore(node, null)` appends at the end,
@@ -348,9 +357,14 @@ export function rewriteSnapshotAssetRefs(html: string, shellHtml: string): strin
   const anchor = staleAssetNodes.length > 0 ? staleAssetNodes[staleAssetNodes.length - 1].nextSibling : null;
   for (const node of staleAssetNodes) node.remove();
   for (const shellNode of shellAssetNodes) {
-    const imported = dom.window.document.importNode(shellNode, true);
+    const imported = document.importNode(shellNode, true);
     head.insertBefore(imported, anchor);
   }
+}
+
+export function rewriteSnapshotAssetRefs(html: string, shellHtml: string): string {
+  const dom = new JSDOM(html);
+  rewriteSnapshotAssetRefsInPlace(dom.window.document, shellHtml);
   return dom.serialize();
 }
 
@@ -367,9 +381,13 @@ export function rewriteSnapshotAssetRefs(html: string, shellHtml: string): strin
  * (`:root` in index.css) only until the pre-paint script (now unblocked by
  * the CSP hash — see src/lib/csp.ts) sets the real value before first paint.
  * Idempotent — a second call on already-stripped HTML is a no-op. */
+function stripBakedThemeAttrInPlace(document: Document): void {
+  document.documentElement.removeAttribute('data-theme');
+}
+
 export function stripBakedThemeAttr(html: string): string {
   const dom = new JSDOM(html);
-  dom.window.document.documentElement.removeAttribute('data-theme');
+  stripBakedThemeAttrInPlace(dom.window.document);
   return dom.serialize();
 }
 
@@ -377,10 +395,107 @@ export function stripBakedThemeAttr(html: string): string {
  * skip stripBakedThemeAttr by accident. `shellHtml` is optional: the
  * fresh-render write site (snapshotTarget) has no stale asset refs to
  * rewrite (the page was just rendered against the current build), while
- * both copy-forward write sites in main() do. */
+ * both copy-forward write sites in main() do. One JSDOM parse/serialize for
+ * both steps, not two chained string round trips (Big-O audit #5, Tier 4). */
 function finalizeSnapshotHtml(html: string, shellHtml?: string): string {
-  const withAssetsFixed = shellHtml !== undefined ? rewriteSnapshotAssetRefs(html, shellHtml) : html;
-  return stripBakedThemeAttr(withAssetsFixed);
+  const dom = new JSDOM(html);
+  if (shellHtml !== undefined) rewriteSnapshotAssetRefsInPlace(dom.window.document, shellHtml);
+  stripBakedThemeAttrInPlace(dom.window.document);
+  return dom.serialize();
+}
+
+/** A resumed round's accumulated manifest entries (issue #367) — keyed
+ * `${locale}:${eventId}` so home/explore targets (no eventId) can never
+ * form a key. */
+export interface ChainStateIndexEntry {
+  resolvedAtRound: number;
+}
+export type ChainStateIndex = Record<string, ChainStateIndexEntry>;
+
+/** R2 object keys are plain strings with no escaping of `:`/`.` the way a
+ * git ref would need — but burstId is an ISO timestamp (resolveRoundStart),
+ * and some S3-compatible tooling/CLIs choke on colons in a key path, so it
+ * gets a display-only substitution here. RoundMarker.burstId itself (the
+ * git-committed value other rounds compare against) is never touched. */
+export function sanitizeBurstIdForR2(burstId: string): string {
+  return burstId.replace(/[:.]/g, '-');
+}
+
+function chainStatePrefix(sanitizedBurstId: string): string {
+  return `${CHAIN_STATE_PREFIX}${sanitizedBurstId}/`;
+}
+
+export function chainStateContentKey(sanitizedBurstId: string, locale: string, eventId: number): string {
+  return `${chainStatePrefix(sanitizedBurstId)}targets/${locale}-${eventId}.html`;
+}
+
+export function chainStateIndexKey(sanitizedBurstId: string): string {
+  return `${chainStatePrefix(sanitizedBurstId)}index.json`;
+}
+
+/** Round-start read (issue #367) — merges onto whatever an earlier round in
+ * this same burst already accumulated, so the single end-of-round PUT below
+ * never clobbers it. A missing/corrupt index (no manifest yet, or a
+ * genuinely malformed one) degrades to "start fresh", same fail-open
+ * posture as every other R2 read in this path. */
+export function parseChainStateIndex(raw: string | null): ChainStateIndex {
+  if (raw === null) return {};
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return parsed as ChainStateIndex;
+    }
+    console.error('prerender: chain-state index was not a plain object — starting fresh:', parsed);
+  } catch (error) {
+    console.error('prerender: chain-state index JSON parse failed — starting fresh:', error);
+  }
+  return {};
+}
+
+/** Shared by both manifest write points (issue #367's copy-forward branch
+ * and successful-render branch) — a target only earns a manifest entry once
+ * finalized HTML is in hand, and only when it carries an eventId (home/
+ * explore never do). Never called for the stale-fallback write: that
+ * content isn't done, so it must not look resolved to a later round's
+ * read-side skip-refetch (#368). */
+export async function persistChainStateTarget(
+  sanitizedBurstId: string,
+  round: number,
+  target: PrerenderTarget,
+  finalizedHtml: string,
+  index: ChainStateIndex,
+): Promise<void> {
+  if (target.eventId === undefined) return;
+  const wrote = await putR2Object(
+    chainStateContentKey(sanitizedBurstId, target.locale, target.eventId),
+    finalizedHtml,
+    'text/html',
+  );
+  // Only record the index entry once the content object is actually in the
+  // bucket — an index entry with no matching content object would tell a
+  // later round's read-side (#368) this target is resolved when it isn't.
+  if (wrote) {
+    index[`${target.locale}:${target.eventId}`] = { resolvedAtRound: round };
+  }
+}
+
+/** End-of-round manifest write (issue #367), placed next to
+ * commitRoundMarker's call site since both fire off the same "this round
+ * just finished" event. A `done` round (shouldCommit false) has nothing
+ * left for a later round to resume, so its manifest is deleted outright
+ * rather than given one final index write nobody will ever read back —
+ * CHAIN_STATE_LIFECYCLE_DAYS is only the crash backstop for a burst whose
+ * `done` round never got this far. */
+export async function finalizeChainState(
+  sanitizedBurstId: string,
+  index: ChainStateIndex,
+  shouldCommit: boolean,
+): Promise<void> {
+  if (shouldCommit) {
+    await putR2Object(chainStateIndexKey(sanitizedBurstId), JSON.stringify(index), 'application/json');
+  } else {
+    await deleteR2ObjectsByPrefix(chainStatePrefix(sanitizedBurstId));
+  }
 }
 
 /** Reads the change-detection marker back off a rendered snapshot's JSON-LD
@@ -396,7 +511,7 @@ function extractChangeMarker(html: string): string | null {
   return null;
 }
 
-interface ChangeDetectionResult {
+export interface ChangeDetectionResult {
   target: PrerenderTarget;
   /** True when the live page's embedded marker matches — the Playwright
    * render is skipped entirely and `liveHtml` copied forward as-is. */
@@ -440,6 +555,85 @@ async function classifyTarget(target: PrerenderTarget): Promise<ChangeDetectionR
   return { target, unchanged, liveHtml: html };
 }
 
+/** A resolved-in-manifest target — narrows `eventId` to non-undefined so
+ * fetchResolvedTarget never needs a runtime check for what
+ * partitionByChainState already guarantees. */
+export type ResolvedTarget = PrerenderTarget & { eventId: number };
+
+/** Round-2+ read-side split (issue #368) — every event target whose
+ * `locale:eventId` key is already in the manifest index skips
+ * classifyTarget's production fetch entirely; home/explore targets (no
+ * eventId, per ChangeDetectionResult's doc comment) and any event target
+ * the index hasn't resolved yet fall through to today's classifyTarget path
+ * unchanged. */
+export function partitionByChainState(
+  targets: PrerenderTarget[],
+  index: ChainStateIndex,
+): { resolved: ResolvedTarget[]; unresolved: PrerenderTarget[] } {
+  const resolved: ResolvedTarget[] = [];
+  const unresolved: PrerenderTarget[] = [];
+  for (const target of targets) {
+    const key = target.eventId === undefined ? null : `${target.locale}:${target.eventId}`;
+    if (key !== null && Object.prototype.hasOwnProperty.call(index, key)) {
+      resolved.push(target as ResolvedTarget);
+    } else {
+      unresolved.push(target);
+    }
+  }
+  return { resolved, unresolved };
+}
+
+/** Read path (issue #368) — round-2+ substitute for classifyTarget on a
+ * target the manifest index already resolved earlier in this burst: reads
+ * its finalized snapshot HTML out of R2 instead of re-fetching production.
+ * Returns the same ChangeDetectionResult shape classifyTarget produces
+ * (`unchanged: true`, `liveHtml` set) so every downstream consumer — the
+ * copy-forward write loop, prioritizeRenderQueue's `!unchanged` filter, the
+ * sitemap builder — needs no change to tell the two apart. A content-object
+ * read miss (evicted, corrupt, or a stale index entry) falls back to a
+ * fresh classifyTarget fetch for this one target only, exactly like an
+ * unresolved target — never blocks or fails the round. */
+export async function fetchResolvedTarget(
+  sanitizedBurstId: string,
+  target: ResolvedTarget,
+  manifestHits: Set<PrerenderTarget>,
+): Promise<ChangeDetectionResult> {
+  const html = await getR2Object(chainStateContentKey(sanitizedBurstId, target.locale, target.eventId));
+  if (html === null) return classifyTarget(target);
+  // A burst can span several rounds (resolveRoundStart/CHAIN_MAX_ROUNDS),
+  // and fetchPrerenderCandidates() re-fetches Event.updated_at fresh every
+  // round — so the manifest's cached snapshot, written whichever earlier
+  // round first resolved this target, can have gone stale in the meantime.
+  // Re-run the same marker diff classifyTarget performs against a live
+  // fetch (extractChangeMarker/target.updatedAt) before trusting it as
+  // `unchanged`; a mismatch falls back to a fresh production fetch exactly
+  // like a manifest miss, rather than serving stale content forward.
+  if (target.updatedAt === undefined || extractChangeMarker(html) !== target.updatedAt) {
+    return classifyTarget(target);
+  }
+  // Marks this target as actually sourced from the manifest (as opposed to
+  // either fallback classifyTarget call above) so main()'s copy-forward
+  // write loop knows not to re-PUT it (issue #368).
+  manifestHits.add(target);
+  return { target, unchanged: true, liveHtml: html };
+}
+
+/** Escapes the five XML predefined entities. `id` (sitemap targets are only
+ * ever numeric event ids or static bare paths) can't carry these, but
+ * `lastmod` is `Event.updated_at` straight from the API (OWASP audit G-12) —
+ * a DB timestamp today, but nothing here has ever asserted that shape holds
+ * against a compromised backend. Applied to every interpolated value below
+ * as defense-in-depth, not just the ones currently reachable by untrusted
+ * input. */
+function escapeXml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
 /** sitemap.xml for `targets` (issue #51) — one `<url>` per locale-variant
  * URL (mirrors `buildTargets`'s flat "every locale × every bare path"
  * shape), each carrying the same en/et/ru/x-default hreflang cross-references
@@ -450,15 +644,15 @@ async function classifyTarget(target: PrerenderTarget): Promise<ChangeDetectionR
 function buildSitemapXml(targets: PrerenderTarget[], buildTimestamp: string): string {
   const urlEntries = targets
     .map((target) => {
-      const loc = `${PRODUCTION_ORIGIN}${localizedPath(target.bare, target.locale)}`;
+      const loc = escapeXml(`${PRODUCTION_ORIGIN}${localizedPath(target.bare, target.locale)}`);
       const alternates = SEO_HREFLANG_CODES.map((code) => {
         const href =
           code === SEO_XDEFAULT_CODE
             ? `${PRODUCTION_ORIGIN}${target.bare}`
             : `${PRODUCTION_ORIGIN}${localizedPath(target.bare, code)}`;
-        return `    <xhtml:link rel="alternate" hreflang="${code}" href="${href}"/>`;
+        return `    <xhtml:link rel="alternate" hreflang="${code}" href="${escapeXml(href)}"/>`;
       }).join('\n');
-      const lastmod = target.updatedAt ?? buildTimestamp;
+      const lastmod = escapeXml(String(target.updatedAt ?? buildTimestamp));
       return `  <url>\n    <loc>${loc}</loc>\n    <lastmod>${lastmod}</lastmod>\n${alternates}\n  </url>`;
     })
     .join('\n');
@@ -554,7 +748,7 @@ async function snapshotTarget(
   page: Page,
   previewOrigin: string,
   target: PrerenderTarget,
-): Promise<void> {
+): Promise<string> {
   // Re-keyed on eventId, not `bare !== ROUTES.home` (issue #236) — /explore
   // never calls GET /events/{id}, so it must not consume this budget either.
   if (target.eventId !== undefined) {
@@ -586,13 +780,19 @@ async function snapshotTarget(
     // path every other render failure takes, below.
     throw new Error(`prerender: /explore query errored for ${localizedPath(target.bare, target.locale)}`);
   }
-  let html = await page.content();
+  const html = await page.content();
+  // One JSDOM parse/serialize for both steps below, not two chained ones
+  // (Big-O audit #5, Tier 4) — mirrors finalizeSnapshotHtml's own merge.
+  const dom = new JSDOM(html);
   if (target.eventId !== undefined && target.updatedAt !== undefined) {
-    html = embedChangeMarker(html, target.updatedAt);
+    embedChangeMarkerInPlace(dom.window.document, target.updatedAt);
   }
+  stripBakedThemeAttrInPlace(dom.window.document);
+  const finalized = dom.serialize();
   const outPath = outputFilePath(target.bare, target.locale);
   await mkdir(path.dirname(outPath), { recursive: true });
-  await writeFile(outPath, finalizeSnapshotHtml(html), 'utf-8');
+  await writeFile(outPath, finalized, 'utf-8');
+  return finalized;
 }
 
 /** Bounded-concurrency runner shared by the change-detection pass, the
@@ -669,7 +869,7 @@ export async function fetchLiveExploreCount(locale: string): Promise<number | un
   params.set(EXPLORE_PARAM.sort, SORT_DEFAULT);
   params.set(EXPLORE_PARAM.limit, '1');
   params.set(EXPLORE_PARAM.offset, '0');
-  params.set('locale', locale);
+  params.set(LOCALE_KEY, locale);
   try {
     const res = await fetch(`${API_ORIGIN}/explore?${params.toString()}`);
     if (!res.ok) return undefined;
@@ -680,8 +880,8 @@ export async function fetchLiveExploreCount(locale: string): Promise<number | un
   }
 }
 
-async function validateTarget(target: PrerenderTarget): Promise<string[]> {
-  const html = await readFile(outputFilePath(target.bare, target.locale), 'utf-8');
+async function validateTarget(target: PrerenderTarget, renderedHtml?: string): Promise<string[]> {
+  const html = renderedHtml ?? (await readFile(outputFilePath(target.bare, target.locale), 'utf-8'));
   const parsed = parseSnapshotHtml(html);
   const kind = target.bare === ROUTES.home ? 'website' : target.bare === ROUTES.explore ? 'list' : 'event';
 
@@ -915,6 +1115,17 @@ export async function main(): Promise<void> {
   const { burstId, round } = resolveRoundStart(commitMessage, new Date());
   console.log(`prerender: round ${round} of burst ${burstId}${round > 1 ? ' (resumed)' : ' (new)'}`);
 
+  // Chain-state manifest (issues #367/#368) — round 1's burstId is freshly
+  // minted (resolveRoundStart), guaranteed to have no manifest yet, so no
+  // read is attempted; round 2+ reads it both to merge #367's end-of-round
+  // accumulation onto what an earlier round already wrote and to drive
+  // #368's skip-refetch partition below.
+  const sanitizedBurstId = sanitizeBurstIdForR2(burstId);
+  const isResumedRound = round > 1;
+  const chainStateIndex: ChainStateIndex = isResumedRound
+    ? parseChainStateIndex(await getR2Object(chainStateIndexKey(sanitizedBurstId)))
+    : {};
+
   const candidates = await fetchPrerenderCandidates();
   const targets = buildTargets(candidates);
 
@@ -924,7 +1135,7 @@ export async function main(): Promise<void> {
     buildSitemapXml(targets, buildTimestamp),
     'utf-8',
   );
-  await writeFile(path.join(DIST_DIR, 'robots.txt'), buildRobotsTxt(), 'utf-8');
+  await writeFile(path.join(DIST_DIR, ROBOTS_TXT_FILENAME), buildRobotsTxt(), 'utf-8');
   console.log(`prerender: wrote sitemap.xml (${targets.length} url(s)) and robots.txt`);
 
   // The one pristine Vite build output still on disk during this round
@@ -938,19 +1149,49 @@ export async function main(): Promise<void> {
   // marker against the currently-live production page. An exact match
   // copies the live page forward as-is (no Playwright render); everything
   // else (never-rendered, changed, or a fetch/parse miss) renders fresh.
-  const classification = await mapPool(targets, CHANGE_DETECTION_CONCURRENCY, classifyTarget);
+  // Round 2+ (issue #368) skips this production fetch for any event target
+  // the manifest index already resolved earlier in the burst, substituting
+  // fetchResolvedTarget's cheaper R2 read instead — both routes run through
+  // the same mapPool/CHANGE_DETECTION_CONCURRENCY pool `targets` already
+  // did pre-#368, so the concurrency cap against PRODUCTION_ORIGIN never
+  // stacks and the result stays ordered like `targets` with no separate
+  // merge step.
+  const resolvedTargets: ResolvedTarget[] = isResumedRound
+    ? partitionByChainState(targets, chainStateIndex).resolved
+    : [];
+  const resolvedTargetSet = new Set<PrerenderTarget>(resolvedTargets);
+  const resolvedFromManifest = new Set<PrerenderTarget>();
+  const classification = await mapPool(targets, CHANGE_DETECTION_CONCURRENCY, (target) =>
+    resolvedTargetSet.has(target)
+      ? fetchResolvedTarget(sanitizedBurstId, target as ResolvedTarget, resolvedFromManifest)
+      : classifyTarget(target),
+  );
   let copiedForward = 0;
   // Stale-but-real fallback (issue #82) content, held in memory rather than
   // written to dist/ yet — see the write-out below (after the render pool)
   // for why. Keyed by target so a successfully-rendered or -failed target
   // can drop its entry once the render loop has an answer for it either way.
   const staleFallbackHtml = new Map<PrerenderTarget, string>();
-  for (const { target, unchanged, liveHtml } of classification) {
+  // runPool, not a sequential for-of — each iteration's mkdir/writeFile/
+  // persistChainStateTarget (an R2 network round trip) was the dominant
+  // wall-clock cost of a copy-forward-heavy round, run one at a time for
+  // events x 3 locales (Big-O audit #5, item Tier 4, biggest single win).
+  // copiedForward++ and staleFallbackHtml.set() are plain synchronous
+  // statements with no await between read and write, so concurrent workers
+  // touching them (distinct target keys) never race.
+  await runPool(classification, CHANGE_DETECTION_CONCURRENCY, async ({ target, unchanged, liveHtml }) => {
     if (unchanged && liveHtml !== null) {
       const outPath = outputFilePath(target.bare, target.locale);
       await mkdir(path.dirname(outPath), { recursive: true });
-      await writeFile(outPath, finalizeSnapshotHtml(liveHtml, shellHtml), 'utf-8');
+      const finalized = finalizeSnapshotHtml(liveHtml, shellHtml);
+      await writeFile(outPath, finalized, 'utf-8');
       copiedForward++;
+      // A target fetchResolvedTarget already sourced from the manifest is
+      // already in the bucket under this exact key — re-PUTting identical
+      // bytes would be a pure-waste duplicate write (issue #368).
+      if (!resolvedFromManifest.has(target)) {
+        await persistChainStateTarget(sanitizedBurstId, round, target, finalized, chainStateIndex);
+      }
     } else if (liveHtml !== null) {
       // Needs a fresh render, but a live page exists — held for now rather
       // than written to its final path immediately (issue #86 investigation:
@@ -973,7 +1214,7 @@ export async function main(): Promise<void> {
       // render loop resolves each one) without the self-sabotage.
       staleFallbackHtml.set(target, liveHtml);
     }
-  }
+  });
   // Priority queue (issue #82): home routes (all locales) first, then event
   // routes oldest-unrendered-first — so a large event backlog can never
   // starve the highest-traffic pages, and among event routes the
@@ -987,6 +1228,11 @@ export async function main(): Promise<void> {
 
   let newlyRendered = 0;
   let skippedTargets: PrerenderTarget[] = [];
+  // Feeds validateTarget below — every successfully-rendered target this
+  // round already has its finalized HTML sitting in memory right here, so
+  // the validation pass doesn't need to re-readFile + re-parse a file this
+  // same process just wrote (Big-O audit #5, Tier 4).
+  const renderedHtmlByTarget = new Map<PrerenderTarget, string>();
   if (renderQueue.length > 0) {
     let server: PreviewServer | undefined;
     const browser = await launchBrowser();
@@ -1013,8 +1259,10 @@ export async function main(): Promise<void> {
             if (i === null) break;
             const target = renderQueue[i];
             try {
-              await snapshotTarget(page, resolvedPreviewOrigin, target);
+              const finalizedHtml = await snapshotTarget(page, resolvedPreviewOrigin, target);
               newlyRendered++;
+              renderedHtmlByTarget.set(target, finalizedHtml);
+              await persistChainStateTarget(sanitizedBurstId, round, target, finalizedHtml, chainStateIndex);
             } catch (error) {
               failures.push({ target, error, diagnostics: recentEvents() });
             } finally {
@@ -1071,14 +1319,16 @@ export async function main(): Promise<void> {
   // nothing on disk, which falls through to the CSR shell via vercel.json's
   // catch-all rewrite rather than a build failure — see outputFilePath/vercel.json.
   let staleFallbackWritten = 0;
-  for (const target of skippedTargets) {
+  // runPool, not a sequential for-of — same rationale as the copy-forward
+  // loop above (Big-O audit #5, Tier 4).
+  await runPool(skippedTargets, CHANGE_DETECTION_CONCURRENCY, async (target) => {
     const liveHtml = staleFallbackHtml.get(target);
-    if (liveHtml === undefined) continue;
+    if (liveHtml === undefined) return;
     const outPath = outputFilePath(target.bare, target.locale);
     await mkdir(path.dirname(outPath), { recursive: true });
     await writeFile(outPath, finalizeSnapshotHtml(liveHtml, shellHtml), 'utf-8');
     staleFallbackWritten++;
-  }
+  });
 
   console.log(
     `prerender: round summary — newly-rendered ${newlyRendered}, copied-forward ${copiedForward}, queue-remaining ${skippedTargets.length} (${staleFallbackWritten} of those still serving stale-but-real content)`,
@@ -1102,7 +1352,7 @@ export async function main(): Promise<void> {
   const validationTargets = selectValidationTargets(renderQueue, skippedTargets);
   const validationIssues: string[] = [];
   await runPool(validationTargets, PRERENDER_CONCURRENCY, async (target) => {
-    validationIssues.push(...(await validateTarget(target)));
+    validationIssues.push(...(await validateTarget(target, renderedHtmlByTarget.get(target))));
   });
   if (validationIssues.length > 0) {
     for (const issue of validationIssues) {
@@ -1146,13 +1396,17 @@ export async function main(): Promise<void> {
   // fails, the chain simply resumes via the next 6-hourly cron tick instead
   // of self-triggering (degraded, not broken — same fallback as any other
   // lost marker commit).
-  if (shouldCommitRoundMarker(marker)) {
+  const commitMarker = shouldCommitRoundMarker(marker);
+  if (commitMarker) {
     try {
       await commitRoundMarker(marker);
     } catch (error) {
       console.error('prerender: failed to commit round marker — deploy proceeds anyway:', error);
     }
   }
+  // Chain-state manifest write (issue #367) — see finalizeChainState's doc
+  // comment for why a `done` round deletes instead of writing.
+  await finalizeChainState(sanitizedBurstId, chainStateIndex, commitMarker);
   logZeroProgressAbort(marker);
 }
 

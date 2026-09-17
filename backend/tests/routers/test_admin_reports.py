@@ -3,7 +3,7 @@ GET /admin/reports, POST /admin/reports/{id}/resolve,
 POST /admin/reports/{id}/takedown."""
 
 import http
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -262,6 +262,7 @@ async def test_resolve_reports_closes_open_reports_no_event_mutation(
         "Looked into it, event is fine.",
         reporter.locale,
         reporter.theme_preference,
+        http_client=ANY,
     )
 
 

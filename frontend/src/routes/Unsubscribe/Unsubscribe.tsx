@@ -4,7 +4,7 @@ import { StatusCodes } from 'http-status-codes';
 import { api, ApiError } from '../../api/client';
 import { getLocale } from '../../lib/auth';
 import { t } from '../../i18n';
-import { API, ROUTES, UI_STATE, type UnsubscribeState } from '../../constants';
+import { API, AUTH_TOKEN_PARAM, ROUTES, UI_STATE, type UnsubscribeState } from '../../constants';
 import { withQueryParam } from '../../utils';
 import { useLocalePath } from '../../hooks/useLocalePath';
 import { useStaticSeoMeta } from '../../hooks/useStaticSeoMeta';
@@ -24,7 +24,7 @@ export default function Unsubscribe() {
   const localePath = useLocalePath();
   const seoMeta = useStaticSeoMeta('seo_title_unsubscribe', locale);
   const [searchParams] = useSearchParams();
-  const token = searchParams.get('token');
+  const token = searchParams.get(AUTH_TOKEN_PARAM);
   const [state, setState] = useState<UnsubscribeState>(token ? UI_STATE.working : UI_STATE.error);
   const [errorMsg, setErrorMsg] = useState(token ? '' : t('unsubscribe.error', locale));
   const [resubscribePending, setResubscribePending] = useState(false);
@@ -37,7 +37,7 @@ export default function Unsubscribe() {
 
     async function run(tok: string) {
       try {
-        await api.post(withQueryParam(API.emailUnsubscribe, 'token', tok));
+        await api.post(withQueryParam(API.emailUnsubscribe, AUTH_TOKEN_PARAM, tok));
         setState(UI_STATE.success);
       } catch (err) {
         setState(UI_STATE.error);
@@ -55,7 +55,7 @@ export default function Unsubscribe() {
     if (!token || resubscribePending) return;
     setResubscribePending(true);
     try {
-      await api.post(withQueryParam(API.emailResubscribe, 'token', token));
+      await api.post(withQueryParam(API.emailResubscribe, AUTH_TOKEN_PARAM, token));
       setState(UI_STATE.resubscribed);
     } catch {
       setErrorMsg(t('unsubscribe.error', locale));

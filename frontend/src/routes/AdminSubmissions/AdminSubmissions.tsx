@@ -1,9 +1,9 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { adminApi, ApiError } from '../../api/client';
-import { ADMIN_QUEUE_DETAIL_LINK_LABEL, ADMIN_REVIEW_QUEUE_PAGE_SIZE, API, QUERY_KEYS, ROUTES, UI_STATE } from '../../constants';
-import { relativeTimeFromNow, safeUrl } from '../../utils';
+import { adminApi } from '../../api/client';
+import { ADMIN_GENERIC_ERROR, ADMIN_QUEUE_DETAIL_LINK_LABEL, ADMIN_REVIEW_QUEUE_PAGE_SIZE, API, PAGE_PARAM, QUERY_KEYS, ROUTES, UI_STATE } from '../../constants';
+import { apiErrorMessage, nextOffsetParam, relativeTimeFromNow, safeUrl } from '../../utils';
 import PageState from '../../components/PageState';
 import Toast from '../../components/Toast';
 import { useToast } from '../../hooks/useToast';
@@ -22,6 +22,27 @@ interface AdminSubmission {
   status: string;
   submitted_by_organizer_id: number | null;
   created_at: string;
+}
+
+// Module-scope — referentially stable forever, so QueueRowList's memo
+// (AdminQueueSplitView.tsx, Big-O audit #5, item 3.5) never sees these
+// change identity on a resolution-note keystroke.
+function getSubmissionId(item: AdminSubmission): number {
+  return item.id;
+}
+function renderSubmissionRow(item: AdminSubmission & { createdAtRelative: string }) {
+  return (
+    <>
+      <div className={styles.rowTitle}>{item.title}</div>
+      <div className={styles.rowMeta}>
+        {item.submitted_by_organizer_id !== null
+          ? `Organizer #${item.submitted_by_organizer_id}`
+          : 'Unknown organizer'}
+        {' · '}
+        {item.createdAtRelative}
+      </div>
+    </>
+  );
 }
 
 interface AdminSubmissionsResponse {
@@ -62,11 +83,10 @@ export default function AdminSubmissions() {
     queryKey: [QUERY_KEYS.adminSubmissions],
     queryFn: ({ pageParam }) =>
       adminApi.get<AdminSubmissionsResponse>(
-        `${API.adminSubmissions}?limit=${ADMIN_REVIEW_QUEUE_PAGE_SIZE}&offset=${pageParam}`,
+        `${API.adminSubmissions}?${PAGE_PARAM.limit}=${ADMIN_REVIEW_QUEUE_PAGE_SIZE}&${PAGE_PARAM.offset}=${pageParam}`,
       ),
     initialPageParam: 0,
-    getNextPageParam: (lastPage) =>
-      lastPage.has_more ? lastPage.offset + lastPage.events.length : undefined,
+    getNextPageParam: (lastPage) => nextOffsetParam(lastPage, lastPage.events.length),
   });
 
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -102,7 +122,7 @@ export default function AdminSubmissions() {
       void queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.adminCounts] });
     },
     onError: (err) => {
-      showToast(UI_STATE.error, err instanceof ApiError ? err.message : 'Something went wrong. Try again.');
+      showToast(UI_STATE.error, apiErrorMessage(err, ADMIN_GENERIC_ERROR));
     },
   });
 
@@ -110,6 +130,21 @@ export default function AdminSubmissions() {
     if (!note.trim()) return;
     actionMutation.mutate({ item, kind, note: note.trim() });
   }
+
+  // Stable across note keystrokes (only resolvedById changes them) — see
+  // renderSubmissionRow's module-scope siblings above for why this matters.
+  const isResolved = useCallback(
+    (item: AdminSubmission) => item.id in resolvedById,
+    [resolvedById],
+  );
+  const resolvedTag = useCallback(
+    (item: AdminSubmission) => (resolvedById[item.id]?.kind === 'retracted' ? 'Retracted' : 'Approved'),
+    [resolvedById],
+  );
+  const selectRow = useCallback((id: number) => {
+    setSelectedId(id);
+    setNote('');
+  }, []);
 
   return (
     <div>
@@ -127,27 +162,13 @@ export default function AdminSubmissions() {
         <p className={styles.subtitle}>{items.length} of {totalSubmissions} pending submissions shown</p>
         <AdminQueueSplitView
           items={items}
-          getId={(item) => item.id}
-          isResolved={(item) => item.id in resolvedById}
-          resolvedTag={(item) => (resolvedById[item.id]?.kind === 'retracted' ? 'Retracted' : 'Approved')}
+          getId={getSubmissionId}
+          isResolved={isResolved}
+          resolvedTag={resolvedTag}
           selectedId={currentId}
-          onSelect={(id) => {
-            setSelectedId(id);
-            setNote('');
-          }}
+          onSelect={selectRow}
           emptyLabel="No pending submissions."
-          renderRow={(item) => (
-            <>
-              <div className={styles.rowTitle}>{item.title}</div>
-              <div className={styles.rowMeta}>
-                {item.submitted_by_organizer_id !== null
-                  ? `Organizer #${item.submitted_by_organizer_id}`
-                  : 'Unknown organizer'}
-                {' · '}
-                {item.createdAtRelative}
-              </div>
-            </>
-          )}
+          renderRow={renderSubmissionRow}
           renderDetail={(item) => {
             const resolution = resolvedById[item.id];
             const previewUrl = safeUrl(item.url);

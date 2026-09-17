@@ -248,7 +248,13 @@ class OrganizerImageUpload(Base):
 
     __tablename__ = "organizer_image_uploads"
     __table_args__ = (
-        Index("ix_organizer_image_uploads_organizer_id", "organizer_id"),
+        # Composite, not single-column: the daily-cap count query filters on
+        # both organizer_id and created_at, and this table has no retention
+        # sweep (see class docstring), so a single-column index leaves
+        # created_at as a heap filter over the organizer's entire history —
+        # same treatment events.submitted_by_organizer_id got in 0023 (Big-O
+        # audit #5, item 2.9).
+        Index("ix_organizer_image_uploads_organizer_created", "organizer_id", "created_at"),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
@@ -382,6 +388,11 @@ class RawEvent(Base):
         # predicate directly instead of a bitmap-AND over two single-column
         # indexes; also covers source_id-only lookups (leftmost prefix).
         Index("ix_raw_events_source_fetched", "source_id", "fetched_at"),
+        # admin.py's event-inspector RawEvent↔EventSource join matches on
+        # (source_id, external_id) — only (source_id, fetched_at) existed, so
+        # external_id was a heap filter over the source's whole raw history
+        # (Big-O audit #5, item 2.9).
+        Index("ix_raw_events_source_external", "source_id", "external_id"),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
@@ -467,6 +478,25 @@ class Event(Base):
         # ORDER BY events.price_min ASC NULLS LAST (browse.py's price sort, Path A).
         Index("ix_events_price_min", "price_min"),
         Index("ix_events_venue_id", "venue_id"),
+        # public_event_filter() (utils.py) is applied on every public read path;
+        # is_explicit/is_non_event had no index at all, so both were a heap
+        # filter after status narrowed the scan. Partial on starts_at — the
+        # dominant sort/range column on the public read paths that apply this
+        # filter (Big-O audit #5, item 2.9).
+        Index(
+            "ix_events_public_starts_at",
+            "starts_at",
+            postgresql_where=text(
+                "status = 'published' AND NOT is_explicit AND NOT is_non_event"
+            ),
+        ),
+        # browse.py's _free_filter() OR-arm (has_free_tier IS TRUE) — the other
+        # arm (price_min = 0) is already covered by ix_events_price_min.
+        Index(
+            "ix_events_has_free_tier",
+            "has_free_tier",
+            postgresql_where=text("has_free_tier"),
+        ),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
@@ -763,6 +793,10 @@ class DailyFeed(Base):
         # UniqueConstraint above leads with user_id, so this indexless-for-that-
         # predicate query was unusable by it.
         Index("ix_daily_feeds_feed_date", "feed_date"),
+        # admin.py's event-inspector event_ids.contains([id]) (`@>`) check was
+        # a full scan of every active user's feed row per event-inspector open
+        # (Big-O audit #5, item 2.9).
+        Index("ix_daily_feeds_event_ids_gin", "event_ids", postgresql_using="gin"),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)

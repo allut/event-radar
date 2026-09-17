@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { organizerApi, ApiError } from '../../api/client';
+import { organizerApi } from '../../api/client';
 import { useOrganizerLogout } from '../../hooks/useOrganizerLogout';
 import { useLocalLocale } from '../../hooks/useLocalLocale';
 import { useToast } from '../../hooks/useToast';
@@ -9,7 +9,8 @@ import PageState from '../../components/PageState';
 import Toast from '../../components/Toast';
 import { useStaticSeoMeta } from '../../hooks/useStaticSeoMeta';
 import { t } from '../../i18n';
-import { API, AUTH_REDIRECT_DELAY_MS, ORGANIZER_NAME_MAX_LEN, QUERY_KEYS, TOAST_IDLE, UI_STATE, type ToastState } from '../../constants';
+import { API, AUTH_REDIRECT_DELAY_MS, GOOGLE_IDENTITY_PROVIDER, ORGANIZER_NAME_MAX_LEN, QUERY_KEYS, TOAST_IDLE, UI_STATE, type ToastState } from '../../constants';
+import { apiErrorMessage } from '../../utils';
 import SeoTags from '../../components/SeoTags';
 import styles from './OrganizerSettings.module.css';
 
@@ -57,7 +58,7 @@ export default function OrganizerSettings() {
       showToast(UI_STATE.success, t('organizer_profile_saved', locale));
     },
     onError: (err) => {
-      showToast(UI_STATE.error, err instanceof ApiError ? err.message : t('generic_error', locale));
+      showToast(UI_STATE.error, apiErrorMessage(err, t('generic_error', locale)));
     },
   });
 
@@ -75,7 +76,7 @@ export default function OrganizerSettings() {
     onError: (err) => {
       setLogoutToast({
         status: UI_STATE.error,
-        message: err instanceof ApiError ? err.message : t('organizer_logout_all_failed', locale),
+        message: apiErrorMessage(err, t('organizer_logout_all_failed', locale)),
       });
     },
   });
@@ -86,13 +87,13 @@ export default function OrganizerSettings() {
   }
 
   const unlinkGoogleMutation = useMutation({
-    mutationFn: () => organizerApi.delete<{ detail: string }>(API.organizerProfileIdentity('google')),
+    mutationFn: () => organizerApi.delete<{ detail: string }>(API.organizerProfileIdentity(GOOGLE_IDENTITY_PROVIDER)),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.organizerProfile] });
       showToast(UI_STATE.success, t('settings.identities.googleNotLinked', locale));
     },
     onError: (err) => {
-      showToast(UI_STATE.error, err instanceof ApiError ? err.message : t('generic_error', locale));
+      showToast(UI_STATE.error, apiErrorMessage(err, t('generic_error', locale)));
     },
   });
 

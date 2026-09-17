@@ -22,6 +22,7 @@ from app._generated.shared_constants import (
     VALID_CATEGORIES,
     VALID_LOCALES,
     VALID_SIGNALS,
+    VALID_THEME_PREFERENCES,
     VALID_VIBES,
 )
 
@@ -66,7 +67,7 @@ TALLINN_TZ_NAME = "Europe/Tallinn"
 TALLINN_TZ = ZoneInfo(TALLINN_TZ_NAME)
 
 # Application environment — value of settings.APP_ENV that enables dev-only
-# behaviour (unprotected admin endpoints, SQL echo, unauthenticated /internal/tick).
+# behaviour (unprotected admin endpoints, SQL echo).
 # NB: app.config imports this module for the APP_ENV default, so constants.py must
 # never import app.config — doing so would create a circular import.
 APP_ENV_DEVELOPMENT = "development"
@@ -104,8 +105,7 @@ DEV_DB_LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1", "db"})
 # Render's health probe reaches this process over the private network, so its
 # Host header is the instance's rotating internal address, not BACKEND_URL's
 # hostname — allowlisting it isn't viable since Starlette's allowed_hosts has
-# no CIDR support. Only /health: /internal/tick arrives through the public
-# proxy with a correct Host and stays guarded.
+# no CIDR support.
 HOST_CHECK_EXEMPT_PATHS: frozenset[str] = frozenset({"/health"})
 
 # Starlette TrustedHostMiddleware's fixed rejection body — app/main.py's
@@ -583,10 +583,13 @@ BEARER_PREFIX = "Bearer "
 # Other HTTP header names referenced by name across routers/middleware/ingestion —
 # named here rather than as bare string literals so a typo at any call site
 # fails loudly (constant not found) instead of silently missing the header.
-HEADER_INTERNAL_TOKEN = "X-Internal-Token"
 HEADER_ORIGIN = "origin"
 HEADER_HOST = "host"
 HEADER_X_FORWARDED_FOR = "x-forwarded-for"
+# Edge-authenticated real-client-IP handoff across the Cloudflare Pages proxy
+# hop — see app.rate_limit.client_key() and settings.EDGE_SHARED_SECRET.
+HEADER_X_CLIENT_IP = "x-client-ip"
+HEADER_X_EDGE_AUTH = "x-edge-auth"
 HEADER_RETRY_AFTER = "Retry-After"
 HEADER_ACCEPT_LANGUAGE = "Accept-Language"
 HEADER_LIST_UNSUBSCRIBE = "List-Unsubscribe"
@@ -596,15 +599,26 @@ MIME_APPLICATION_NDJSON = "application/x-ndjson"
 
 # uvicorn's logging.access record carries a positional args tuple
 # (client_addr, method, path, http_version, status) — app/logging_config.py's
-# _AccessPathFilter reads path/status off it. Named so a future uvicorn
-# version's arg-count change is at least a visible constant, not a bare index.
+# _AccessPathSuppressFilter reads path/status off it. Named so a future
+# uvicorn version's arg-count change is at least a visible constant, not a
+# bare index.
 UVICORN_ACCESS_STATUS_ARG_INDEX = 4
+# Same args tuple, the path slot — app/logging_config.py's
+# _AccessPathStripFilter strips the query string in place, so this index (and
+# its :N / N: slice derivatives) must stay consistent with
+# UVICORN_ACCESS_STATUS_ARG_INDEX above.
+UVICORN_ACCESS_PATH_ARG_INDEX = 2
 # BeautifulSoup's built-in parser name — used everywhere we parse scraped/stored HTML.
 HTML_PARSER = "html.parser"
 # Reject a signature whose svix-timestamp is further than this from "now" (either
 # direction), blocking replay of an old, legitimately-signed request. Matches
 # Svix's own recommended default tolerance.
 WEBHOOK_TIMESTAMP_TOLERANCE_SECONDS = 300
+# Bounds the in-memory seen-svix-id LRU (routers/webhooks.py::_seen_webhook_ids)
+# the same way ADMIN_AUTH_FAILURES_MAX_ENTRIES bounds admin.py's lockout dict —
+# a validly-signed request replayed inside WEBHOOK_TIMESTAMP_TOLERANCE_SECONDS
+# would otherwise re-verify and re-trigger extraction (OWASP audit G-6).
+WEBHOOK_SEEN_IDS_MAX_ENTRIES = 4096
 # Public read endpoint — generous enough for normal browsing while throttling
 # ID-enumeration / scraping abuse (GET /events/{id} takes no auth).
 RATE_LIMIT_EVENTS_DETAIL = "120/minute"
@@ -651,9 +665,6 @@ RATE_LIMIT_BROWSE = "120/minute"
 # Public, unauthenticated landing-page showcase (GET /public/showcase). No auth,
 # so throttle scraping abuse; generous enough for real visitors loading the page.
 RATE_LIMIT_PUBLIC = "60/minute"
-# /internal/tick (cron-job.org keepalive ping, app/main.py) hits 6x/hour by design;
-# generous ceiling exists only to bound token brute-force / abuse, not real traffic.
-RATE_LIMIT_INTERNAL_TICK = "30/minute"
 # How many events the landing-page showcase returns — a fixed, small teaser grid
 # (top-quality upcoming events), so no pagination is needed.
 SHOWCASE_EVENT_COUNT = 6
@@ -726,6 +737,10 @@ GOOGLE_JWKS_CACHE_LIFESPAN_SECONDS = 300
 # state value (app/auth/google_oauth.py) — 32 bytes -> 43 URL-safe chars,
 # within RFC 7636's 43-128 char code_verifier bound.
 OAUTH_PKCE_TOKEN_BYTES = 32
+# Timeout for the server-to-server code-for-token exchange
+# (app/auth/google_oauth.py::exchange_code_for_id_token), awaited inline in
+# the OAuth callback — deliberately shorter than HTTP_TIMEOUT_SECONDS.
+GOOGLE_OAUTH_TOKEN_TIMEOUT_SECONDS = 10.0
 IDENTITY_PROVIDER_GOOGLE = "google"
 GOOGLE_OAUTH_SCOPE = "openid email"  # never "profile" — no name/picture stored
 GOOGLE_OAUTH_AUTHORIZATION_ENDPOINT = "https://accounts.google.com/o/oauth2/v2/auth"
@@ -886,10 +901,10 @@ LOCALE_ET = "et"
 LOCALE_EN = "en"
 LOCALE_RU = "ru"
 
-# Server-side theme_preference column values (users/organizers) — mirrors
-# VALID_LOCALES. The tri-state UI value "system" is never sent to or stored
-# on this column; only "light"/"dark"/NULL are valid here.
-VALID_THEME_PREFERENCES = {"light", "dark"}
+# VALID_THEME_PREFERENCES imported from app._generated.shared_constants
+# (shared/app-config.json → generate_shared.py) — server-side theme_preference
+# column values (users/organizers). The tri-state UI value "system" is never
+# sent to or stored on this column; only "light"/"dark"/NULL are valid here.
 
 # The one theme_preference value that keeps an email's dark styling unchanged —
 # every other value (including None/"system") selects the light style set.
@@ -1161,7 +1176,7 @@ LLM_DEDUP_VENUE_MAX_LEN = 100
 # site and the cache-prefetch query so they can never drift out of sync.
 LLM_TASK_DEDUP = "dedup"
 # Bounds fresh (cache-miss) network calls per pass — bounds DB session lifetime
-# against slow providers (Cerebras fallback ~1 req/min). Cache hits are cheap
+# against a slow or rate-limited fallback provider. Cache hits are cheap
 # indexed lookups and are NOT counted against this cap; see llm_tiebreaker.py.
 LLM_DEDUP_MAX_FRESH_LLM_CALLS_PER_PASS = 100
 # Chunk size for the bulk llm_calls prefetch IN-list, to bound query size.
@@ -1267,16 +1282,21 @@ LLM_PROVIDERS: list[dict[str, Any]] = [
     {
         "name": "groq",
         "base_url": "https://api.groq.com/openai/v1",
-        "model": "llama-3.3-70b-versatile",
+        "model": "openai/gpt-oss-120b",
         "key_attr": "GROQ_API_KEY",
-    },
-    {
-        "name": "cerebras",
-        "base_url": "https://api.cerebras.ai/v1",
-        "model": "gpt-oss-120b",
-        "key_attr": "CEREBRAS_API_KEY",
         # gpt-oss-120b is a reasoning model: reasoning tokens precede the answer
         # and count against max_tokens, so it gets a larger cap and lower effort.
+        "max_tokens": LLM_REASONING_MAX_TOKENS,
+        "params": {"reasoning_effort": "low"},
+    },
+    {
+        "name": "cloudflare",
+        # Base URL embeds the account id, so it comes from settings, not a literal here.
+        "base_url_attr": "CLOUDFLARE_WORKERS_AI_BASE_URL",
+        "model": "@cf/openai/gpt-oss-120b",
+        "key_attr": "CLOUDFLARE_WORKERS_AI_API_KEY",
+        # Same reasoning model as the Groq primary: reasoning tokens precede the
+        # answer and count against max_tokens, so it gets a larger cap and lower effort.
         "max_tokens": LLM_REASONING_MAX_TOKENS,
         "params": {"reasoning_effort": "low"},
     },
@@ -1584,7 +1604,7 @@ LOG_RECORD_RESERVED_ATTRS: frozenset[str] = frozenset(
 LOG_EVENT_JOB_RUN = "job_run"  # scheduled-job completion/failure telemetry
 LOG_EVENT_RATE_LIMIT_BLOCK = "rate_limit_block"  # own per-IP 429 rejection
 LOG_EVENT_LLM_DEGRADED = "llm_degraded"  # provider chain exhausted / backlog deferred
-LOG_EVENT_AUTH_FAILED = "auth_failed"  # magic-link / admin / internal-tick auth reject
+LOG_EVENT_AUTH_FAILED = "auth_failed"  # magic-link / admin auth reject
 LOG_EVENT_WEBHOOK_REJECTED = "webhook_rejected"  # inbound-mail signature / body reject
 LOG_EVENT_EMAIL_SEND_FAILED = "email_send_failed"  # Resend magic-link / digest failure
 LOG_EVENT_CONTACT_HONEYPOT = "contact_honeypot_block"  # contact-form honeypot field tripped
@@ -1611,6 +1631,9 @@ LOG_EVENT_SCHEMA_DRIFT = "schema_drift"  # boot-time alembic-head mismatch (see 
 # (OWASP audit F10). Well above realistic organic signup volume for this
 # single-city MVP; tune from real data once there's a baseline.
 UNVERIFIED_ACCOUNT_DAILY_BUDGET = 200
+# app/db.py::assert_schema_at_head — the migrations directory name under
+# backend/, pinned absolute so the alembic-head guard doesn't depend on cwd.
+ALEMBIC_DIR_NAME = "alembic"
 # `action` field values for LOG_EVENT_ADMIN_ACTION (issue #155).
 ADMIN_ACTION_RESOLVE_REPORTS = "resolve_reports"
 ADMIN_ACTION_TAKEDOWN_REPORTED_EVENT = "takedown_reported_event"
@@ -1629,6 +1652,15 @@ ADMIN_ACTION_CLEANUP = "cleanup"
 ADMIN_ACTION_BUILD_FEEDS = "build_feeds"
 ADMIN_ACTION_SEND_DIGESTS = "send_digests"
 ADMIN_ACTION_PIPELINE_RUN = "pipeline_run"
+# Sub-stages that are also standalone triggers with their own single-flight
+# guard (issue #160) — held for pipeline/run's whole duration too, or a
+# standalone ingest/classify/send-digests click mid-pipeline would run
+# concurrently with the pipeline's own execution of that same stage.
+PIPELINE_RUN_OVERLAPPING_LOCK_KEYS = (
+    ADMIN_ACTION_INGEST,
+    ADMIN_ACTION_CLASSIFY,
+    ADMIN_ACTION_SEND_DIGESTS,
+)
 # `status` field values for LOG_EVENT_JOB_RUN.
 LOG_STATUS_OK = "ok"
 LOG_STATUS_ERROR = "error"
@@ -1754,8 +1786,6 @@ ERROR_IDENTITY_NOT_FOUND = "No linked identity found for that provider."
 ERROR_SUBMISSION_NOT_FOUND = "Submission not found."
 ERROR_EVENT_CANCELLED = "This event was taken down and can no longer be edited."
 
-# main.py (/internal/tick)
-ERROR_INTERNAL_TICK_INVALID_TOKEN = "Invalid token"
 
 # routers/admin.py
 ERROR_ADMIN_LOCKOUT = "Too many failed admin login attempts; try again later."

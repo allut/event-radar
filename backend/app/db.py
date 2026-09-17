@@ -10,6 +10,7 @@ from sqlalchemy.orm import DeclarativeBase
 
 from app.config import settings
 from app.constants import (
+    ALEMBIC_DIR_NAME,
     APP_ENV_DEVELOPMENT,
     DB_POOL_RECYCLE_SECONDS,
     ERROR_SCHEMA_DRIFT,
@@ -49,7 +50,7 @@ async def assert_schema_at_head() -> None:
     # script_location ("alembic") in alembic.ini is cwd-relative by alembic's
     # own resolution — pin it absolute so this guard doesn't depend on the
     # process's working directory matching backend/.
-    alembic_cfg.set_main_option("script_location", str(_BACKEND_DIR / "alembic"))
+    alembic_cfg.set_main_option("script_location", str(_BACKEND_DIR / ALEMBIC_DIR_NAME))
     script = ScriptDirectory.from_config(alembic_cfg)
     head_revision = script.get_current_head()
 

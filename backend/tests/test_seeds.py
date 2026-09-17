@@ -26,14 +26,12 @@ async def test_retired_organizer_not_resurrected_by_seed_union(mock_db):
             "retired_organizer_ids": [99],
         }
     )
-    mock_db.scalar.return_value = existing
-
     with patch("app.seeds.settings") as mock_settings:
         mock_settings.FIENTA_BASE_URL = "https://fienta.com/api/v1/public/events"
         mock_settings.FIENTA_ORGANIZER_IDS = [42, 99]  # 99 still hardcoded in config.py
         mock_settings.FIENTA_ORGANIZER_NAMES = {"42": "Org A", "99": "Retired Org"}
 
-        await _upsert_fienta(mock_db)
+        await _upsert_fienta(mock_db, existing)
 
     assert 99 not in existing.config["organizer_ids"]
     assert existing.config["organizer_ids"] == [42]
@@ -48,14 +46,12 @@ async def test_auto_discovered_organizer_preserved_across_reseed(mock_db):
             "organizer_names": {"42": "Org A", "555": "Auto-discovered Org"},
         }
     )
-    mock_db.scalar.return_value = existing
-
     with patch("app.seeds.settings") as mock_settings:
         mock_settings.FIENTA_BASE_URL = "https://fienta.com/api/v1/public/events"
         mock_settings.FIENTA_ORGANIZER_IDS = [42]
         mock_settings.FIENTA_ORGANIZER_NAMES = {"42": "Org A"}
 
-        await _upsert_fienta(mock_db)
+        await _upsert_fienta(mock_db, existing)
 
     assert set(existing.config["organizer_ids"]) == {42, 555}
 
@@ -71,14 +67,12 @@ async def test_retirement_metadata_survives_reseed(mock_db):
             "stale_since": {"7": "2026-01-01T00:00:00+02:00"},
         }
     )
-    mock_db.scalar.return_value = existing
-
     with patch("app.seeds.settings") as mock_settings:
         mock_settings.FIENTA_BASE_URL = "https://fienta.com/api/v1/public/events"
         mock_settings.FIENTA_ORGANIZER_IDS = [42]
         mock_settings.FIENTA_ORGANIZER_NAMES = {"42": "Org A"}
 
-        await _upsert_fienta(mock_db)
+        await _upsert_fienta(mock_db, existing)
 
     assert existing.config["retired_organizer_ids"] == [99]
     assert existing.config["stale_since"] == {"7": "2026-01-01T00:00:00+02:00"}

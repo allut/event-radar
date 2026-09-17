@@ -34,7 +34,7 @@ async function readDocumentCsp(): Promise<string> {
 }
 
 describe('inline script CSP hash stays in sync (theme-revert-on-refresh fix)', () => {
-  it('every inline script hash in index.html appears in vercel.json\'s script-src', async () => {
+  it('every inline script hash in index.html appears in public/_headers\' script-src', async () => {
     const html = await readFile(path.join(FRONTEND_ROOT, 'index.html'), 'utf-8');
     const hashes = inlineScriptHashes(html);
     expect(hashes.length).toBeGreaterThan(0);

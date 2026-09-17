@@ -160,7 +160,7 @@ async def _build_geocode_cache(
             continue
         coords_by_query[normalize_address_for_geocoding(address)][(lat, lng)] += count
     return {
-        query: min(counter.most_common(), key=lambda kv: (-kv[1], kv[0]))[0]
+        query: min(counter.items(), key=lambda kv: (-kv[1], kv[0]))[0]
         for query, counter in coords_by_query.items()
     }
 

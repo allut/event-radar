@@ -1,14 +1,14 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api, ApiError } from '../../api/client';
+import { api } from '../../api/client';
 import { getLocale } from '../../lib/auth';
 import { useLocaleMutation } from '../../hooks/useLocaleMutation';
 import { useLocaleNavigate } from '../../hooks/useLocaleNavigate';
 import { useLogout } from '../../hooks/useLogout';
 import { useToast } from '../../hooks/useToast';
 import { useStaticSeoMeta } from '../../hooks/useStaticSeoMeta';
-import { API, AUTH_REDIRECT_DELAY_MS, QUERY_KEYS, RANK_LABEL_KEYS, ROUTES, UI_STATE, TOAST_IDLE, type ToastState } from '../../constants';
-import { cx } from '../../utils';
+import { API, AUTH_REDIRECT_DELAY_MS, GOOGLE_IDENTITY_PROVIDER, QUERY_KEYS, RANK_LABEL_KEYS, ROUTES, UI_STATE, TOAST_IDLE, type ToastState } from '../../constants';
+import { apiErrorMessage, cx } from '../../utils';
 import { t, personaName } from '../../i18n';
 import PageState from '../../components/PageState';
 import Toast from '../../components/Toast';
@@ -52,7 +52,7 @@ export default function Settings() {
   }
 
   function showSaveError(err: unknown, currentLocale: string) {
-    showSaveToast(UI_STATE.error, err instanceof ApiError ? err.message : t('save_failed', currentLocale));
+    showSaveToast(UI_STATE.error, apiErrorMessage(err, t('save_failed', currentLocale)));
   }
 
   const { locale, handleLocaleChange, isPending: localePending } = useLocaleMutation({
@@ -84,7 +84,7 @@ export default function Settings() {
     onError: (err) => {
       setLogoutToast({
         status: UI_STATE.error,
-        message: err instanceof ApiError ? err.message : t('logout_all_failed', locale),
+        message: apiErrorMessage(err, t('logout_all_failed', locale)),
       });
     },
   });
@@ -95,7 +95,7 @@ export default function Settings() {
   }
 
   const unlinkGoogleMutation = useMutation({
-    mutationFn: () => api.delete<{ detail: string }>(API.meIdentity('google')),
+    mutationFn: () => api.delete<{ detail: string }>(API.meIdentity(GOOGLE_IDENTITY_PROVIDER)),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.settings] });
       showSaveToast(UI_STATE.success, t('settings.identities.googleNotLinked', locale));

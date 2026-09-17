@@ -12,12 +12,12 @@ import FileField from '../../components/FileField';
 import VenuePicker from '../../components/VenuePicker';
 import { t, ti } from '../../i18n';
 import {
-  CATEGORIES, CONTENT_LANG_ORDER, DEFAULT_CURRENCY, LOCALE_EN, LOCALE_ET, LOCALE_RU, LOCALES,
+  CONTENT_LANG_ORDER, DEFAULT_CURRENCY, LOCALE_EN, LOCALE_ET, LOCALE_RU, LOCALES_BY_CODE,
   ORGANIZER_BASE_CONTENT_LANG, ORGANIZER_IMAGE_ACCEPT,
   PRICE_INPUT_MIN, PRICE_INPUT_STEP,
   type ContentLang, type ContentMarkerState,
 } from '../../constants';
-import { currencySymbol, hasHtmlContent, titleWithBrand } from '../../utils';
+import { categoryOptions, currencySymbol, hasHtmlContent, titleWithBrand } from '../../utils';
 
 import { useSeoMeta } from '../../hooks/useSeoMeta';
 import SeoTags from '../../components/SeoTags';
@@ -99,7 +99,7 @@ export default function EventSubmit() {
   ]);
   const activeSlot = slots[contentLang];
   const contentLangLabel = (code: ContentLang) =>
-    LOCALES.find((l) => l.code === code)?.label ?? code.toUpperCase();
+    LOCALES_BY_CODE.get(code)?.label ?? code.toUpperCase();
   // Field-by-field against the ET base slot.
   const markerState = (code: ContentLang): ContentMarkerState => {
     const slot = slots[code];
@@ -122,10 +122,7 @@ export default function EventSubmit() {
   });
   // Rebuilding this 14-option list (+14 t() lookups) only needs to happen when
   // the locale changes, not on every keystroke elsewhere in the form.
-  const categoryOptions = useMemo(
-    () => CATEGORIES.map((slug) => ({ value: slug, label: t(`category_${slug}`, locale) })),
-    [locale],
-  );
+  const categoryOpts = useMemo(() => categoryOptions(locale), [locale]);
   const langField = (key: string) =>
     ti('organizer_field_lang_suffix', locale, {
       field: t(key, locale),
@@ -241,7 +238,7 @@ export default function EventSubmit() {
           <SelectField
             id="category"
             value={form.category}
-            options={categoryOptions}
+            options={categoryOpts}
             onChange={form.setCategory}
             placeholder={t('organizer_category_none', locale)}
             ariaLabel={t('organizer_field_category', locale)}

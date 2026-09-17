@@ -107,7 +107,7 @@ export function buildWebsiteJsonLd(locale: string): WithContext<SchemaWebSite> {
     '@context': SCHEMA_ORG_CONTEXT,
     '@type': 'WebSite',
     name: t('brand', locale),
-    url: `${PRODUCTION_ORIGIN}${localizedPath('/', locale)}`,
+    url: `${PRODUCTION_ORIGIN}${localizedPath(ROUTES.home, locale)}`,
     inLanguage: locale,
   };
 }

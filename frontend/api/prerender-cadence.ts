@@ -97,7 +97,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   try {
     hookRes = await fetch(deployHookUrl, { method: 'POST' });
   } catch (error) {
-    res.status(StatusCodes.BAD_GATEWAY).json({ error: `failed to fire deploy hook: ${String(error)}` });
+    // Never interpolate the error into the response (OWASP audit G-7): a
+    // fetch TypeError commonly embeds the failed URL, which would disclose
+    // PRERENDER_CADENCE_DEPLOY_HOOK_URL — itself a credential (an
+    // unauthenticated POST endpoint that triggers a production rebuild).
+    console.error('prerender-cadence: failed to fire deploy hook', error);
+    res.status(StatusCodes.BAD_GATEWAY).json({ error: 'failed to fire deploy hook' });
     return;
   }
   res.status(hookRes.ok ? StatusCodes.OK : StatusCodes.BAD_GATEWAY).json({

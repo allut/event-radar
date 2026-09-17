@@ -49,12 +49,19 @@
 }
 .heroRise > span {
   display: block;
-  animation: heroRise var(--anim-hero-rise) var(--easing-landing) var(--hero-rise-delay, 0s) both;
+  /* backwards, not both — see .rise's comment above: holding the end
+   * transform (translateY(0), which already matches the unanimated resting
+   * state) forever would make this a new containing block for any
+   * `position: fixed` descendant. Latent only today (this always wraps
+   * text), but avoid reintroducing the hazard. */
+  animation: heroRise var(--anim-hero-rise) var(--easing-landing) var(--hero-rise-delay, 0s) backwards;
 }
 
 .hairlineDraw {
   transform-origin: left;
-  animation: hairlineDraw var(--anim-hairline-draw) var(--easing-landing) 0.5s both;
+  /* backwards, not both — same reasoning as .heroRise > span above; the end
+   * state (scaleX(1)) already matches the unanimated resting scale. */
+  animation: hairlineDraw var(--anim-hairline-draw) var(--easing-landing) 0.5s backwards;
 }
 
 .posterDrift {

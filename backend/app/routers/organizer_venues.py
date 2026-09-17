@@ -7,17 +7,21 @@ next geocode_pending pass re-resolves lat/lng from the new address.
 
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.constants import (
+    BROWSE_MAX_PAGE_SIZE,
     ERROR_DAILY_VENUE_CREATION_LIMIT,
     ORGANIZER_CURRENCY_MAX_LEN,
     ORGANIZER_DAILY_VENUE_CREATION_CAP,
     ORGANIZER_VENUE_ADDRESS_MAX_LEN,
     ORGANIZER_VENUE_NAME_MAX_LEN,
+    PAGINATION_MAX_OFFSET,
+    PAGINATION_MIN_LIMIT,
+    PAGINATION_MIN_OFFSET,
     RATE_LIMIT_SUBMIT,
     TALLINN_TZ,
 )
@@ -26,7 +30,7 @@ from app.ingestion.pricing import normalize_currency
 from app.models.models import Organizer, Venue
 from app.rate_limit import limiter
 from app.routers.organizer_auth import get_current_organizer
-from app.routers.utils import own_venue_or_404
+from app.routers.utils import own_venue_or_404, validate_price_ordering
 
 router = APIRouter(prefix="/organizer/venues", tags=["organizer-venues"])
 
@@ -42,12 +46,7 @@ class VenueBody(BaseModel):
 
     @model_validator(mode="after")
     def _price_ordering(self) -> "VenueBody":
-        if (
-            self.price_min is not None
-            and self.price_max is not None
-            and self.price_min > self.price_max
-        ):
-            raise ValueError("price_min must not be greater than price_max")
+        validate_price_ordering(self.price_min, self.price_max)
         return self
 
 
@@ -65,12 +64,7 @@ class VenuePatchBody(BaseModel):
         # Both-present check only — a patch touching just one bound can't be
         # validated against the other without a DB round-trip (mirrors
         # organizer_events.py's PatchEventBody._ordering).
-        if (
-            self.price_min is not None
-            and self.price_max is not None
-            and self.price_min > self.price_max
-        ):
-            raise ValueError("price_min must not be greater than price_max")
+        validate_price_ordering(self.price_min, self.price_max)
         return self
 
 
@@ -94,9 +88,21 @@ def _serialize(venue: Venue) -> dict:
 @limiter.limit(RATE_LIMIT_SUBMIT)
 async def list_own_venues(
     request: Request,
+    limit: int = Query(
+        BROWSE_MAX_PAGE_SIZE, ge=PAGINATION_MIN_LIMIT, le=BROWSE_MAX_PAGE_SIZE
+    ),
+    offset: int = Query(
+        PAGINATION_MIN_OFFSET, ge=PAGINATION_MIN_OFFSET, le=PAGINATION_MAX_OFFSET
+    ),
     current_organizer: Organizer = Depends(get_current_organizer),
     db: AsyncSession = Depends(get_db),
 ) -> list[dict]:
+    """Bounded (Big-O audit #5, item 1.4) — VenuePicker fetches this as a
+    flat array with no "load more" UI, so limit/offset are added to close the
+    no-LIMIT-at-all gap without changing the response shape; default limit is
+    the page-size ceiling so today's unbounded-in-practice UX is unaffected
+    for any organizer under that many saved venues.
+    """
     venues = (
         await db.scalars(
             select(Venue)
@@ -105,6 +111,8 @@ async def list_own_venues(
                 Venue.deleted_at.is_(None),
             )
             .order_by(Venue.created_at.desc())
+            .limit(limit)
+            .offset(offset)
         )
     ).all()
     return [_serialize(v) for v in venues]

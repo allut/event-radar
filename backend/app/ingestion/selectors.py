@@ -111,6 +111,14 @@ ESTONIA_CONCERT_HALL_DESCRIPTION_SELECTOR = ".main"
 ECH_SITE_TITLE_SUFFIX = " - Eesti Kontsert"
 ECH_SITE_NAME_ET = "Eesti Kontsert"  # ET site name; homepage og:title starts with this
 
+# Host -> ET site name, for app/ingestion/refetch.py's suspect-locale-title
+# check: a stored localized title that starts with the site's own homepage
+# name (rather than an actual event title) looks like site-level content.
+SUSPECT_LOCALE_TITLE_PREFIXES: dict[str, str] = {
+    KUMU_HOST: KUMU_SITE_NAME_ET,
+    ESTONIA_CONCERT_HALL_HOST: ECH_SITE_NAME_ET,
+}
+
 
 class VenueInfo(NamedTuple):
     name: str

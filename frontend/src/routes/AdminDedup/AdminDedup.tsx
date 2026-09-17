@@ -1,7 +1,8 @@
 import { useMemo } from 'react';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { adminApi } from '../../api/client';
-import { API, QUERY_KEYS, UI_STATE, ADMIN_DEDUP_GROUPS_PAGE_SIZE, EVENT_STATUS } from '../../constants';
+import { API, QUERY_KEYS, UI_STATE, ADMIN_DEDUP_GROUPS_PAGE_SIZE, EVENT_STATUS, PAGE_PARAM } from '../../constants';
+import { nextOffsetParam } from '../../utils';
 import PageState from '../../components/PageState';
 import EmptyState from '../../components/EmptyState';
 import styles from './AdminDedup.module.css';
@@ -47,11 +48,10 @@ export default function AdminDedup() {
     queryKey: [QUERY_KEYS.adminDedupGroups],
     queryFn: ({ pageParam }) =>
       adminApi.get<DedupGroupsResponse>(
-        `${API.adminDedupGroups}?limit=${ADMIN_DEDUP_GROUPS_PAGE_SIZE}&offset=${pageParam}`,
+        `${API.adminDedupGroups}?${PAGE_PARAM.limit}=${ADMIN_DEDUP_GROUPS_PAGE_SIZE}&${PAGE_PARAM.offset}=${pageParam}`,
       ),
     initialPageParam: 0,
-    getNextPageParam: (lastPage) =>
-      lastPage.has_more ? lastPage.offset + lastPage.groups.length : undefined,
+    getNextPageParam: (lastPage) => nextOffsetParam(lastPage, lastPage.groups.length),
   });
 
   const groups = useMemo(() => data?.pages.flatMap((page) => page.groups) ?? [], [data]);

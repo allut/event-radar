@@ -1,7 +1,7 @@
 {
   "name": "event-radar-frontend",
   "private": true,
-  "version": "0.1.28",
+  "version": "0.1.30",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -36,6 +36,7 @@
     "js-yaml": "5.4.1"
   },
   "devDependencies": {
+    "@aws-sdk/client-s3": "^3.1133.0",
     "@eslint/js": "^9.39.4",
     "@sparticuz/chromium": "^147.0.0",
     "@testing-library/jest-dom": "^6.9.1",

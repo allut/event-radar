@@ -266,6 +266,13 @@
      so the 640px mobile breakpoint stays a literal in every @media rule
      (wayfinder #196/#200). */
   --bp-narrow: 640px;
+  /* Same documentation-only role as --bp-narrow, for the three @media
+     breakpoints that don't reuse it: DesktopGate.module.css's tablet
+     cutoff, Landing.module.css's stat-row wrap, Onboarding.module.css's
+     persona-grid collapse. */
+  --bp-desktop-gate: 1024px;      /* shared/DesktopGate.module.css */
+  --bp-landing-stats: 900px;      /* Landing.module.css */
+  --bp-onboarding-narrow: 560px;  /* Onboarding.module.css */
 
   /* Component max/min-widths */
   --card-max-narrow: 400px;       /* shared/Card.module.css .cardPage */
@@ -378,6 +385,7 @@
   --gradient-family:       linear-gradient(135deg, #1a0a10 0%, #2a1020 100%);
   --gradient-cinema:       linear-gradient(135deg, #0a1510 0%, #103020 100%);
   --gradient-alternative:  linear-gradient(135deg, #100f0a 0%, #201a0a 100%);
+  --gradient-comedy:       linear-gradient(135deg, #201806 0%, #4a3808 100%);
   --gradient-romantic:     linear-gradient(135deg, #1a0a12 0%, #3a1128 100%);
   --gradient-fallback:     linear-gradient(135deg, #1a1f2e 0%, #13161e 100%);
 
@@ -472,6 +480,7 @@
   --gradient-family:       linear-gradient(135deg, #f8f4f6 0%, #e6c1d8 100%);
   --gradient-cinema:       linear-gradient(135deg, #f4f8f6 0%, #c1e6d4 100%);
   --gradient-alternative:  linear-gradient(135deg, #f8f7f4 0%, #e6dcc1 100%);
+  --gradient-comedy:       linear-gradient(135deg, #f9f6ea 0%, #ecdd9a 100%);
   --gradient-romantic:     linear-gradient(135deg, #f8f4f6 0%, #e6c1d6 100%);
   --gradient-fallback:     linear-gradient(135deg, #f8f8f9 0%, #e2e4e9 100%);
 

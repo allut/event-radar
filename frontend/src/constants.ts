@@ -66,6 +66,22 @@ export const GOOGLE_SIGNIN_ERROR_DENIED = 'access_denied';
 export const GOOGLE_SIGNIN_RESULT_PARAM = 'google_signin';
 export const GOOGLE_SIGNIN_RESULT_TRACK_USER = 'user';
 export const GOOGLE_SIGNIN_RESULT_TRACK_ORGANIZER = 'organizer';
+// Resolved VITE_GOOGLE_SIGNIN_*_ENABLED build gates — one place so Login/
+// OrganizerLogin can't drift on how the env string is parsed. Functions, not
+// frozen booleans: each test file's vi.stubEnv() sets the var per-test, and
+// a module-scope-evaluated constant would freeze the first test's value for
+// the whole run (ES modules are cached singletons).
+export function isGoogleSignInConsumerEnabled(): boolean {
+  return import.meta.env.VITE_GOOGLE_SIGNIN_CONSUMER_ENABLED === 'true';
+}
+export function isGoogleSignInOrganizerEnabled(): boolean {
+  return import.meta.env.VITE_GOOGLE_SIGNIN_ORGANIZER_ENABLED === 'true';
+}
+// Identity-provider slug returned by /users/me & /organizer/profile for a
+// Google-linked account (vs. magic-link-only).
+export const GOOGLE_IDENTITY_PROVIDER = 'google';
+// Magic-link verify token query param (AuthVerify/OrganizerVerify/Unsubscribe).
+export const AUTH_TOKEN_PARAM = 'token';
 // GoogleGMark's default render size (px) — the brand mark's own icon-only
 // SVG viewBox scale, not a design-system --fs-* token (docs/adr/0002).
 export const GOOGLE_G_MARK_SIZE = 20;
@@ -123,6 +139,12 @@ export const SOCIAL_LINKS: { label: string; url: string; icon: SocialIcon }[] = 
 
 // ─── Locale ──────────────────────────────────────────────────────────────────
 export type LocaleCode = (typeof LOCALES)[number]['code'];
+
+// Built once — avoids a linear LOCALES.find() per call at each of its
+// duplicated call sites (Big-O audit #5, item 3.4), mirroring PERSONAS_BY_SLUG.
+export const LOCALES_BY_CODE: Map<string, (typeof LOCALES)[number]> = new Map(
+  LOCALES.map((l) => [l.code, l]),
+);
 export const LOCALE_EN = 'en' as const;
 export const LOCALE_ET = 'et' as const;
 export const LOCALE_RU = 'ru' as const;
@@ -156,13 +178,17 @@ export const CRAWLABLE_ASSETS_PATH = '/assets/';
 // its own live-audit content-type check (api/seo-audit.ts) since it's the
 // one that silently 200s as the SPA shell when missing rather than 404ing.
 export const FAVICON_ICO_PATH = '/favicon.ico';
+export const ICON_96_PATH = '/icon-96.png';
+export const ICON_192_PATH = '/icon-192.png';
+export const ICON_512_PATH = '/icon-512.png';
+export const APPLE_TOUCH_ICON_PATH = '/apple-touch-icon.png';
 export const CRAWLABLE_ICON_PATHS: string[] = [
   FAVICON_ICO_PATH,
   '/favicon.svg',
-  '/icon-96.png',
-  '/icon-192.png',
-  '/icon-512.png',
-  '/apple-touch-icon.png',
+  ICON_96_PATH,
+  ICON_192_PATH,
+  ICON_512_PATH,
+  APPLE_TOUCH_ICON_PATH,
   '/site.webmanifest',
 ];
 // <link rel> value index.html emits for the site icon, read back by
@@ -175,6 +201,8 @@ export const ICON_LINK_SELECTOR = `link[rel="${ICON_REL}"]`;
 export const SEO_DESCRIPTION_MAX_LENGTH = 157;
 // Landing showcase plate body truncation (truncateForMeta cuts at a word boundary under this).
 export const LANDING_PLATE_BODY_MAX_LENGTH = 140;
+// Number of showcase events rendered as plates on Landing.
+export const LANDING_SHOWCASE_PLATE_COUNT = 3;
 // Landing hero stat-figure count always shown (upcoming count, venue count,
 // category count) — furthestYear and cheapest_price add up to two more on top.
 export const LANDING_BASE_FIG_COUNT = 3;
@@ -194,6 +222,9 @@ export const SEO_HREFLANG_CODES: string[] = [...LOCALES.map((l) => l.code), SEO_
 // in-build validation gate (issue #53) — one pair of constants so the two
 // can't silently drift.
 export const ROBOTS_INDEX_FOLLOW = 'index, follow';
+// seoValidation.ts's rich-result minimum item count for a JSON-LD ItemList
+// (below this, Google's rich-result eligibility for the list drops).
+export const SEO_RICH_ITEM_LIST_MIN = 3;
 export const ROBOTS_NOINDEX = 'noindex';
 // <link rel> value useSeoMeta emits for the canonical URL, read back by both
 // seoValidation.ts (in-build gate) and scripts/prerender.ts (content-ready
@@ -236,6 +267,8 @@ export const PRERENDER_ERROR_SELECTOR = `[${PRERENDER_ERROR_ATTR}="true"]`;
 // robots.txt's Sitemap directive and the live audit's production fetch).
 export const SITEMAP_FILENAME = 'sitemap.xml';
 export const SITEMAP_PATH = `/${SITEMAP_FILENAME}`;
+export const ROBOTS_TXT_FILENAME = 'robots.txt';
+export const ROBOTS_TXT_PATH = `/${ROBOTS_TXT_FILENAME}`;
 // dist-relative filename of the pristine (never overwritten by prerender)
 // Vite build output — `npm run build` copies dist/index.html here *before*
 // invoking prerender.ts (frontend/package.json's build script), so this is
@@ -295,6 +328,20 @@ export const CHAIN_MAX_ROUNDS = 10;
 // chain rather than an active one, so cron resumes instead of skipping
 // forever and a genuinely active chain isn't mistaken for a stale one.
 export const CHAIN_STALENESS_TIMEOUT_MINUTES = 30;
+// R2 key prefix (issue #366/#365) under which the prerender chain-state
+// manifest lives — one burst's index + content objects sit at
+// `${CHAIN_STATE_PREFIX}${sanitizedBurstId}/...`. Parallel optimization
+// layer to the CHAIN_MARKER_PREFIX git-commit flow above, not a replacement
+// — see docs/frontend.md's prerender section.
+export const CHAIN_STATE_PREFIX = 'prerender-chain-state/';
+// R2 bucket lifecycle rule expiring everything under CHAIN_STATE_PREFIX
+// after this many days — a crash backstop, comfortably past
+// CHAIN_STALENESS_TIMEOUT_MINUTES, for a burst whose explicit
+// delete-on-`done` never ran (build crashed mid-burst). Mirrors
+// isMarkerStale's existing crash-recovery posture. The lifecycle rule
+// itself is bucket configuration, not application code — this constant
+// documents the intended value for whoever configures it.
+export const CHAIN_STATE_LIFECYCLE_DAYS = 3;
 // Repo the round-state marker is committed to (issue #83) via the GitHub Git
 // Data API — the branch the Vercel Deploy Hook targets lives here. Same repo
 // as SEO_AUDIT_GITHUB_REPO (both point at this codebase); kept as a separate
@@ -356,6 +403,11 @@ export const REPORT_REASONS: { value: string; labelKey: string; descriptionKey: 
   { value: 'wrong_location', labelKey: 'report_reason_wrong_location', descriptionKey: 'report_reason_wrong_location_description' },
   { value: REPORT_REASON_OTHER, labelKey: 'report_reason_other', descriptionKey: 'report_reason_other_description' },
 ];
+// Built once — avoids a linear REPORT_REASONS.find() per call (Big-O audit
+// #5, item 3.4), mirroring PERSONAS_BY_SLUG/LOCALES_BY_CODE.
+export const REPORT_REASONS_BY_VALUE: Map<string, (typeof REPORT_REASONS)[number]> = new Map(
+  REPORT_REASONS.map((r) => [r.value, r]),
+);
 // Mirrors the backend's REPORT_DETAIL_MAX_CHARS (app/constants.py) — client-side
 // validation only, the server re-validates and is the real boundary.
 export const REPORT_DETAIL_MAX_CHARS = 500;
@@ -394,6 +446,7 @@ export const CATEGORY_GRADIENTS: Record<string, string> = {
   family:       'var(--gradient-family)',
   cinema:       'var(--gradient-cinema)',
   alternative:  'var(--gradient-alternative)',
+  comedy:       'var(--gradient-comedy)',
   romantic:     'var(--gradient-romantic)',
 };
 export const FALLBACK_GRADIENT = 'var(--gradient-fallback)';
@@ -639,6 +692,17 @@ export const EXPLORE_PARAM = {
   offset: 'offset',
 } as const;
 
+// Pagination query-param names shared by every paginated list fetch
+// (Saved Events, admin queues, organizer dashboard) — /explore routes its
+// own copies through EXPLORE_PARAM above.
+export const PAGE_PARAM = {
+  limit: 'limit',
+  offset: 'offset',
+} as const;
+// Feedback-signal filter query-param name for the Saved Events feed
+// (values are the Signal union: 'bookmark' | 'like' | 'dislike').
+export const SIGNAL_PARAM = 'signal';
+
 // Query-param name for the report-notification email's deep link into
 // AdminReports — carries the reported event's id so the matching row's
 // detail panel auto-opens on load.
@@ -722,6 +786,10 @@ export const ADMIN_NAV_ITEMS = [
 // AdminEventDetail's tab strip — same no-i18n exemption as ADMIN_NAV_ITEMS.
 export const ADMIN_EVENT_DETAIL_TABS = ['Overview', 'Classification', 'Dedup & reports', 'Raw payload'] as const;
 
+// title/description/important_info — the fields markerState() counts to
+// decide 'matched' vs 'partial' vs 'empty' translation coverage per locale.
+export const ADMIN_TRANSLATABLE_FIELD_COUNT = 3;
+
 // AdminEventDetail's content-locale switch (SegmentedControl marker labels) —
 // plain English, same no-i18n exemption as ADMIN_NAV_ITEMS.
 export const ADMIN_CONTENT_LANG_MARKER_LABELS: Record<ContentMarkerState, string> = {
@@ -733,6 +801,10 @@ export const ADMIN_CONTENT_LANG_MARKER_LABELS: Record<ContentMarkerState, string
 // Shared "open full details" link on AdminSubmissions/AdminReports detail
 // panes (AdminQueue.module.css's .queueDetailLink) — same no-i18n exemption.
 export const ADMIN_QUEUE_DETAIL_LINK_LABEL = 'Open full details →';
+
+// Fallback error toast copy shared across admin mutations that don't get a
+// server-provided message — same no-i18n exemption as the rest of admin.
+export const ADMIN_GENERIC_ERROR = 'Something went wrong. Try again.';
 
 // AdminShell's foot-area theme toggle (issue #255) — same {value, label}
 // shape as THEME_OPTIONS below, but plain-English labels: same no-i18n
@@ -763,6 +835,13 @@ export const NAV_ITEMS = [
 // anonymous visitor (Saved has nothing in it, the others require auth).
 // Shared by TopBar and MobileMenu so their signed-out filtering can't diverge.
 export const SIGNED_OUT_NAV_ROUTES: readonly string[] = [ROUTES.explore, ROUTES.contact];
+
+// NAV_ITEMS filtered to SIGNED_OUT_NAV_ROUTES, computed once rather than on
+// every TopBar/MobileMenu render (Big-O audit #5, item 3.4) — both filter
+// the same constant data identically.
+export const SIGNED_OUT_NAV_ITEMS = NAV_ITEMS.filter((item) =>
+  SIGNED_OUT_NAV_ROUTES.includes(item.route),
+);
 
 // Same {route, labelKey} shape as NAV_ITEMS, rendered by both OrganizerTopBar
 // (desktop) and its MobileMenu (mobile) — kept in one place so they can't
@@ -942,6 +1021,9 @@ export const ADMIN_PIPELINE_STAGE_LABELS: Record<string, string> = {
 
 // usePrefersReducedMotion's matchMedia query.
 export const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)';
+// theme.ts's OS-preference matchMedia query (the "system" fallback of the
+// account → localStorage → OS resolution order).
+export const COLOR_SCHEME_DARK_QUERY = '(prefers-color-scheme: dark)';
 
 // JSON-LD @context (structuredData.ts).
 export const SCHEMA_ORG_CONTEXT = 'https://schema.org';

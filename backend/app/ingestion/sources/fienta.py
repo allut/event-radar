@@ -36,6 +36,7 @@ from app.ingestion.jsonld import (
     location_from_jsonld_items,
     offers_from_jsonld_items,
     parse_jsonld_event_items,
+    text_from_jsonld_items,
 )
 from app.ingestion.locale_urls import (
     locale_from_html_lang,
@@ -58,9 +59,10 @@ def address_city(address: str) -> str | None:
     return m.group(1) if m else None
 
 
-def _parse_detail_fields(soup: BeautifulSoup) -> dict[str, Any]:
-    """Parse a detail page's JSON-LD location + offers into the _detail dict."""
-    items = parse_jsonld_event_items(soup)
+def _parse_detail_fields(items: list[dict[str, Any]]) -> dict[str, Any]:
+    """Build the _detail dict's location + offers fields from a detail page's
+    pre-parsed JSON-LD ``Event`` items (parse once via parse_jsonld_event_items,
+    per jsonld.py's docstring — Big-O audit #5, item 2.1)."""
     loc = location_from_jsonld_items(items)
     price_min, price_max, currency, has_free_tier = offers_from_jsonld_items(items)
     return {
@@ -408,7 +410,8 @@ class FientaAdapter(SourceAdapter):
             try:
                 response = await http_get(client, url)
                 soup = BeautifulSoup(response.text, HTML_PARSER)
-                item["_detail"] = _parse_detail_fields(soup)
+                jsonld_items = parse_jsonld_event_items(soup)
+                item["_detail"] = _parse_detail_fields(jsonld_items)
 
                 # The canonical URL 302s to a locale-prefixed path (e.g. /et/slug).
                 # That redirected URL tells us which language the listing API returned.
@@ -422,7 +425,7 @@ class FientaAdapter(SourceAdapter):
                     # Reuse this page for the primary locale; the listing API HTML
                     # is authoritative for its description, with JSON-LD plain
                     # text as fallback when the API field is absent.
-                    loc_name, jsonld_desc = extract_jsonld_event_text(soup)
+                    loc_name, jsonld_desc = text_from_jsonld_items(jsonld_items, soup)
                     html_desc = sanitize_html(item.get("description")) or sanitize_html(jsonld_desc)
                     if loc_name:
                         loc_titles[primary_locale] = loc_name

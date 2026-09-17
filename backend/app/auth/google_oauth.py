@@ -32,6 +32,7 @@ from app.constants import (
     GOOGLE_OAUTH_JWKS_URL,
     GOOGLE_OAUTH_SCOPE,
     GOOGLE_OAUTH_TOKEN_ENDPOINT,
+    GOOGLE_OAUTH_TOKEN_TIMEOUT_SECONDS,
     OAUTH_PKCE_TOKEN_BYTES,
 )
 from app.ingestion.http_client import http_post
@@ -94,7 +95,7 @@ async def exchange_code_for_id_token(
     GoogleTokenExchangeError on a malformed 2xx body — the caller
     (routers/organizer_auth.py) maps both to LOG_EVENT_GOOGLE_SIGNIN_DEGRADED
     and a redirect-with-error, never a 500."""
-    async with httpx.AsyncClient(timeout=10.0) as client:
+    async with httpx.AsyncClient(timeout=GOOGLE_OAUTH_TOKEN_TIMEOUT_SECONDS) as client:
         response = await http_post(
             client,
             GOOGLE_OAUTH_TOKEN_ENDPOINT,

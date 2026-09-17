@@ -45,8 +45,6 @@
 
 .error {
   composes: alert from '../../components/shared/Alert.module.css';
-  font-size: var(--fs-sm);
-  padding: var(--space-2) var(--space-3);
 }
 
 .submit {

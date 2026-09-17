@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { api, ApiError } from '../api/client';
+import { api } from '../api/client';
 import { API, UI_STATE, type LoginState } from '../constants';
 import { t } from '../i18n';
+import { apiErrorMessage } from '../utils';
 
 export interface UseContactSubmitResult {
   name: string;
@@ -38,7 +39,7 @@ export function useContactSubmit(locale: string): UseContactSubmitResult {
       await api.post(API.contact, { name: name.trim(), email: email.trim(), message: message.trim(), website });
       setState(UI_STATE.success);
     } catch (err) {
-      setErrorMsg(err instanceof ApiError ? err.message : t('generic_error', locale));
+      setErrorMsg(apiErrorMessage(err, t('generic_error', locale)));
       setState(UI_STATE.error);
     }
   }

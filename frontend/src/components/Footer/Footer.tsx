@@ -30,6 +30,15 @@ const SOCIAL_ICONS: Record<SocialIcon, ReactNode> = {
   ),
 };
 
+// Hoisted — SOCIAL_LINKS is constant, so resolving/filtering it (3x new
+// URL() via safeUrl) never needs to happen more than once (Big-O audit #5,
+// item 3.7). Same for the copyright year — a page reload picks up a
+// year rollover regardless.
+const SOCIAL_LINK_HREFS = SOCIAL_LINKS.map((s) => ({ icon: s.icon, href: safeUrl(s.url) })).filter(
+  (s): s is { icon: SocialIcon; href: string } => s.href !== null,
+);
+const COPYRIGHT_YEAR = String(new Date().getFullYear());
+
 export default function Footer() {
   const locale = useLocale();
   const localePath = useLocalePath();
@@ -63,26 +72,22 @@ export default function Footer() {
         </nav>
 
         <div className={styles.social} aria-label={t('footer_social', locale)}>
-          {SOCIAL_LINKS.map((s) => {
-            const href = safeUrl(s.url);
-            if (!href) return null;
-            return (
-              <a
-                key={s.icon}
-                href={href}
-                target="_blank"
-                rel="noopener noreferrer"
-                className={styles.socialLink}
-                aria-label={t(`social_${s.icon}`, locale)}
-              >
-                {SOCIAL_ICONS[s.icon]}
-              </a>
-            );
-          })}
+          {SOCIAL_LINK_HREFS.map((s) => (
+            <a
+              key={s.icon}
+              href={s.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={styles.socialLink}
+              aria-label={t(`social_${s.icon}`, locale)}
+            >
+              {SOCIAL_ICONS[s.icon]}
+            </a>
+          ))}
         </div>
 
         <p className={styles.copyright}>
-          {ti('footer_copyright', locale, { year: String(new Date().getFullYear()) })}
+          {ti('footer_copyright', locale, { year: COPYRIGHT_YEAR })}
         </p>
       </div>
     </footer>
