@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { NavLink } from 'react-router-dom';
-import { ADMIN_NAV_ITEMS, BRAND_GLYPH } from '../../constants';
+import { ADMIN_NAV_ITEMS, BRAND_GLYPH, ROUTES } from '../../constants';
 import { useAdminLogout } from '../../hooks/useAdminLogout';
 import AdminThemeToggle from '../AdminThemeToggle';
 import styles from './AdminShell.module.css';
@@ -29,7 +29,7 @@ export default function AdminShell({ children }: AdminShellProps) {
             <NavLink
               key={route}
               to={route}
-              end={route === '/admin'}
+              end={route === ROUTES.adminDashboard}
               className={({ isActive }) => (isActive ? `${styles.navLink} ${styles.navLinkActive}` : styles.navLink)}
             >
               {label}

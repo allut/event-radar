@@ -6,6 +6,7 @@ import {
 import { useDropdown } from '../../hooks/useDropdown';
 import { CALENDAR_WEEK_START, DATE_PRESETS, type DatePreset } from '../../constants';
 import { t } from '../../i18n';
+import { PrevIcon, NextIcon } from '../ChevronIcons';
 import styles from './DateRangeMenu.module.css';
 
 interface DateRangeMenuProps {
@@ -18,13 +19,6 @@ interface DateRangeMenuProps {
   locale: string;
   ariaLabel: string;
 }
-
-const PrevIcon = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden><path d="M15 6l-6 6 6 6" /></svg>
-);
-const NextIcon = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden><path d="M9 6l6 6-6 6" /></svg>
-);
 
 interface CalendarBodyProps {
   customFrom: string | null;

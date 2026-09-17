@@ -1,9 +1,9 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { adminApi, ApiError } from '../../api/client';
-import { ADMIN_QUEUE_DETAIL_LINK_LABEL, ADMIN_REVIEW_QUEUE_PAGE_SIZE, API, QUERY_KEYS, ROUTES, UI_STATE } from '../../constants';
-import { relativeTimeFromNow, safeUrl } from '../../utils';
+import { adminApi } from '../../api/client';
+import { ADMIN_GENERIC_ERROR, ADMIN_QUEUE_DETAIL_LINK_LABEL, ADMIN_REVIEW_QUEUE_PAGE_SIZE, API, PAGE_PARAM, QUERY_KEYS, ROUTES, UI_STATE } from '../../constants';
+import { apiErrorMessage, nextOffsetParam, relativeTimeFromNow, safeUrl } from '../../utils';
 import PageState from '../../components/PageState';
 import Toast from '../../components/Toast';
 import { useToast } from '../../hooks/useToast';
@@ -62,11 +62,10 @@ export default function AdminSubmissions() {
     queryKey: [QUERY_KEYS.adminSubmissions],
     queryFn: ({ pageParam }) =>
       adminApi.get<AdminSubmissionsResponse>(
-        `${API.adminSubmissions}?limit=${ADMIN_REVIEW_QUEUE_PAGE_SIZE}&offset=${pageParam}`,
+        `${API.adminSubmissions}?${PAGE_PARAM.limit}=${ADMIN_REVIEW_QUEUE_PAGE_SIZE}&${PAGE_PARAM.offset}=${pageParam}`,
       ),
     initialPageParam: 0,
-    getNextPageParam: (lastPage) =>
-      lastPage.has_more ? lastPage.offset + lastPage.events.length : undefined,
+    getNextPageParam: (lastPage) => nextOffsetParam(lastPage, lastPage.events.length),
   });
 
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -102,7 +101,7 @@ export default function AdminSubmissions() {
       void queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.adminCounts] });
     },
     onError: (err) => {
-      showToast(UI_STATE.error, err instanceof ApiError ? err.message : 'Something went wrong. Try again.');
+      showToast(UI_STATE.error, apiErrorMessage(err, ADMIN_GENERIC_ERROR));
     },
   });
 

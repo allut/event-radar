@@ -46,6 +46,8 @@ export default function Contact() {
       prefilled.current = true;
       setEmail(me.email);
     }
+    // setEmail omitted: a stable dispatch identity, and including it would
+    // only churn the deps array without changing when this effect re-runs.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [me]);
 

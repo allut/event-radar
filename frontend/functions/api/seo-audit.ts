@@ -24,7 +24,7 @@
  * exist yet as of this ticket (#344).
  */
 import { StatusCodes } from 'http-status-codes';
-import { FAVICON_ICO_PATH, LOCALES, PRODUCTION_ORIGIN, ROUTES, SEO_AUDIT_TOKEN_HEADER, SITEMAP_PATH } from '../../src/constants.js';
+import { FAVICON_ICO_PATH, LOCALES, PRODUCTION_ORIGIN, ROBOTS_TXT_PATH, ROUTES, SEO_AUDIT_TOKEN_HEADER, SITEMAP_PATH } from '../../src/constants.js';
 import type { LocaleCode } from '../../src/constants.js';
 import { localizedPath } from '../../src/lib/urlLocale.js';
 import { evaluateLiveAudit, parseSitemapEventUrls, parseSnapshotAssetUrls } from '../../src/lib/seoAudit.js';
@@ -70,7 +70,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     const [sitemapRes, landingRes, robotsRes, faviconRes] = await Promise.all([
       fetch(`${PRODUCTION_ORIGIN}${SITEMAP_PATH}`),
       fetch(`${PRODUCTION_ORIGIN}/`),
-      fetch(`${PRODUCTION_ORIGIN}/robots.txt`),
+      fetch(`${PRODUCTION_ORIGIN}${ROBOTS_TXT_PATH}`),
       fetch(`${PRODUCTION_ORIGIN}${FAVICON_ICO_PATH}`),
     ]);
     if (!sitemapRes.ok || !landingRes.ok || !robotsRes.ok || !faviconRes.ok) {

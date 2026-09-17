@@ -1,9 +1,6 @@
 .danger {
-  background: var(--danger-subtle);
-  border-left: var(--border-w-alert) solid var(--danger);
-  color: var(--danger);
+  composes: alert from '../../components/shared/Alert.module.css';
   padding: var(--space-3);
-  font-size: var(--fs-sm);
   margin-bottom: var(--space-4);
 }
 

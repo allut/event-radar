@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { api } from '../../api/client';
 import { t } from '../../i18n';
-import { withLocaleQuery } from '../../utils';
+import { nextOffsetParam, withLocaleQuery } from '../../utils';
 import { useLocaleMutation } from '../../hooks/useLocaleMutation';
 import { useLogout } from '../../hooks/useLogout';
 import { useStaticSeoMeta } from '../../hooks/useStaticSeoMeta';
@@ -12,7 +12,7 @@ import PageState from '../../components/PageState';
 import TopBar from '../../components/TopBar';
 import SeoTags from '../../components/SeoTags';
 import SegmentedControl from '../../components/SegmentedControl';
-import { API, SAVED_TABS, SIGNAL_CONFIG, SAVED_EVENTS_PAGE_SIZE, QUERY_KEYS, UI_STATE, type Signal } from '../../constants';
+import { API, SAVED_TABS, SIGNAL_CONFIG, SAVED_EVENTS_PAGE_SIZE, QUERY_KEYS, UI_STATE, type Signal, PAGE_PARAM, SIGNAL_PARAM } from '../../constants';
 import styles from './SavedEvents.module.css';
 
 interface SavedEventsResponse {
@@ -40,11 +40,13 @@ export default function SavedEvents() {
     queryKey: [QUERY_KEYS.saved, locale, signal],
     queryFn: ({ pageParam }) =>
       api.get<SavedEventsResponse>(
-        withLocaleQuery(`${API.feedbackEvents}?signal=${signal}&limit=${SAVED_EVENTS_PAGE_SIZE}&offset=${pageParam}`, locale),
+        withLocaleQuery(
+          `${API.feedbackEvents}?${SIGNAL_PARAM}=${signal}&${PAGE_PARAM.limit}=${SAVED_EVENTS_PAGE_SIZE}&${PAGE_PARAM.offset}=${pageParam}`,
+          locale,
+        ),
       ),
     initialPageParam: 0,
-    getNextPageParam: (lastPage) =>
-      lastPage.has_more ? lastPage.offset + lastPage.events.length : undefined,
+    getNextPageParam: (lastPage) => nextOffsetParam(lastPage, lastPage.events.length),
   });
 
   const events = useMemo(() => data?.pages.flatMap((page) => page.events) ?? [], [data]);

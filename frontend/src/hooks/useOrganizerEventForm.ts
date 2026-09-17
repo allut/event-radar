@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { organizerApi, ApiError } from '../api/client';
-import { API, QUERY_KEYS, ORGANIZER_EVENTS_PAGE_SIZE, DEFAULT_CURRENCY, ORGANIZER_IMAGE_ALLOWED_MIME, ROUTES, LOCALE_EN, LOCALE_ET, LOCALE_RU } from '../constants';
+import { organizerApi } from '../api/client';
+import { API, QUERY_KEYS, ORGANIZER_EVENTS_PAGE_SIZE, DEFAULT_CURRENCY, ORGANIZER_IMAGE_ALLOWED_MIME, ROUTES, LOCALE_EN, LOCALE_ET, LOCALE_RU, PAGE_PARAM } from '../constants';
 import { t } from '../i18n';
-import { hasHtmlContent, toIsoOrUndefined, toLocalInput } from '../utils';
+import { apiErrorMessage, hasHtmlContent, toIsoOrUndefined, toLocalInput } from '../utils';
 import { useLocaleNavigate } from './useLocaleNavigate';
 import type { SavedVenue, VenuePickerValue } from '../components/VenuePicker';
 
@@ -190,7 +190,9 @@ export function useOrganizerEventForm(locale: string, eventId?: number): UseOrga
   const { data: listData } = useQuery({
     queryKey: [QUERY_KEYS.organizerEvents, locale],
     queryFn: () =>
-      organizerApi.get<OrganizerEventsResponse>(`${API.organizerEvents}?limit=${ORGANIZER_EVENTS_PAGE_SIZE}`),
+      organizerApi.get<OrganizerEventsResponse>(
+        `${API.organizerEvents}?${PAGE_PARAM.limit}=${ORGANIZER_EVENTS_PAGE_SIZE}`,
+      ),
     enabled: isEditMode,
   });
 
@@ -327,7 +329,7 @@ export function useOrganizerEventForm(locale: string, eventId?: number): UseOrga
   }
 
   function errorText(err: unknown): string {
-    return err instanceof ApiError ? err.message : t('generic_error', locale);
+    return apiErrorMessage(err, t('generic_error', locale));
   }
 
   // Memoized so every setter keeps a stable identity across renders (setField

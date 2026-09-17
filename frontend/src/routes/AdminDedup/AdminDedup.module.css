@@ -6,7 +6,7 @@
   composes: adminPageTitle from '../../components/shared/Page.module.css';
 }
 
-.subtitle { font-size: var(--fs-sm); color: var(--text-muted); margin-bottom: var(--space-4); }
+.subtitle { composes: queueSubtitle from '../../components/shared/AdminQueue.module.css'; }
 
 .group {
   composes: card from '../../components/shared/Card.module.css';
@@ -52,14 +52,7 @@
 .badgePublished { color: var(--success); border-color: var(--success-border); }
 .badgeExplicit { color: var(--danger); border-color: var(--danger-border); }
 
-.loadMoreBtn {
-  composes: btnOutline from '../../components/shared/Button.module.css';
-  display: block;
-  margin: var(--space-5) auto 0;
-  padding: var(--space-2) var(--space-5);
-  cursor: pointer;
-}
-.loadMoreBtn:disabled { opacity: var(--opacity-disabled); cursor: not-allowed; }
+.loadMoreBtn { composes: queueLoadMore from '../../components/shared/AdminQueue.module.css'; }
 
 /* Desktop-only screen — see components/shared/DesktopGate.module.css. */
 .desktopGate { composes: gate from '../../components/shared/DesktopGate.module.css'; }

@@ -50,6 +50,7 @@
   margin-bottom: var(--space-6);
 }
 
+/* --bp-onboarding-narrow in index.css (documentation only — see --bp-narrow's comment there). */
 @media (max-width: 560px) {
   .grid {
     grid-template-columns: 1fr 1fr;

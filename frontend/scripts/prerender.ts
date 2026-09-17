@@ -42,6 +42,7 @@ import {
   CRAWLABLE_ICON_PATHS,
   EXPLORE_PARAM,
   JSONLD_SCRIPT_SELECTOR,
+  LOCALE_KEY,
   LOCALE_URL_PREFIX_CODES,
   LOCALES,
   OG_FALLBACK_IMAGE_PATH,
@@ -51,6 +52,7 @@ import {
   PRERENDER_ERROR_SELECTOR,
   PRERENDER_READY_SELECTOR,
   PRODUCTION_ORIGIN,
+  ROBOTS_TXT_FILENAME,
   ROUND_STATUS,
   ROUTES,
   SEO_HREFLANG_CODES,
@@ -830,7 +832,7 @@ export async function fetchLiveExploreCount(locale: string): Promise<number | un
   params.set(EXPLORE_PARAM.sort, SORT_DEFAULT);
   params.set(EXPLORE_PARAM.limit, '1');
   params.set(EXPLORE_PARAM.offset, '0');
-  params.set('locale', locale);
+  params.set(LOCALE_KEY, locale);
   try {
     const res = await fetch(`${API_ORIGIN}/explore?${params.toString()}`);
     if (!res.ok) return undefined;
@@ -1096,7 +1098,7 @@ export async function main(): Promise<void> {
     buildSitemapXml(targets, buildTimestamp),
     'utf-8',
   );
-  await writeFile(path.join(DIST_DIR, 'robots.txt'), buildRobotsTxt(), 'utf-8');
+  await writeFile(path.join(DIST_DIR, ROBOTS_TXT_FILENAME), buildRobotsTxt(), 'utf-8');
   console.log(`prerender: wrote sitemap.xml (${targets.length} url(s)) and robots.txt`);
 
   // The one pristine Vite build output still on disk during this round

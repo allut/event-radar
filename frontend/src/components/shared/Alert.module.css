@@ -3,4 +3,6 @@
   background: var(--danger-subtle);
   border-radius: var(--radius);
   border-left: var(--border-w-alert) solid var(--danger);
+  font-size: var(--fs-sm);
+  padding: var(--space-2) var(--space-3);
 }

@@ -47,11 +47,14 @@ import {
 import {
   activeFacetCount,
   buildExploreApiQuery,
+  categoryOptions,
   cx,
   DEFAULT_EXPLORE_FILTERS,
   exploreFiltersToSearchParams,
+  nextOffsetParam,
   parseExploreFilters,
   titleWithBrand,
+  vibeOptions,
   type ExploreFilters,
 } from '../../utils';
 import styles from './Explore.module.css';
@@ -180,8 +183,7 @@ export default function Explore() {
         withLocaleQuery(`/explore?${buildExploreApiQuery(filters, pageParam)}`, locale),
       ),
     initialPageParam: 0,
-    getNextPageParam: (lastPage) =>
-      lastPage.has_more ? lastPage.offset + lastPage.events.length : undefined,
+    getNextPageParam: (lastPage) => nextOffsetParam(lastPage, lastPage.events.length),
     // A facet emptied down to zero chips means "match nothing" — skip the
     // request entirely rather than round-tripping to the backend, which
     // would treat an absent/full param as "all" and return unfiltered results.
@@ -280,14 +282,8 @@ export default function Explore() {
   const hasActiveFilters =
     activeCount > 0 || filters.q.length > 0 || filters.forYou || filters.sort !== SORT_DEFAULT;
 
-  const categoryOptions = useMemo(
-    () => CATEGORIES.map((slug) => ({ value: slug, label: t(`category_${slug}`, locale) })),
-    [locale],
-  );
-  const vibeOptions = useMemo(
-    () => VIBES.map((slug) => ({ value: slug, label: t(`vibe_${slug}`, locale) })),
-    [locale],
-  );
+  const categoryOpts = useMemo(() => categoryOptions(locale), [locale]);
+  const vibeOpts = useMemo(() => vibeOptions(locale), [locale]);
   const forYouOptions = useMemo(
     () => [
       { value: EXPLORE_AUDIENCE_ALL, label: t('all_events', locale) },
@@ -400,7 +396,7 @@ export default function Explore() {
             <FacetMenu
               variant="inline"
               label={t('filter_categories', locale)}
-              options={categoryOptions}
+              options={categoryOpts}
               selected={filters.category}
               onToggle={(v) => toggleFacet('category', v)}
               ariaLabel={t('filter_categories', locale)}
@@ -409,7 +405,7 @@ export default function Explore() {
             <FacetMenu
               variant="inline"
               label={t('filter_vibes', locale)}
-              options={vibeOptions}
+              options={vibeOpts}
               selected={filters.vibe}
               onToggle={(v) => toggleFacet('vibe', v)}
               ariaLabel={t('filter_vibes', locale)}

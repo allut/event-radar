@@ -1,11 +1,11 @@
 import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { organizerApi, ApiError } from '../../api/client';
+import { organizerApi } from '../../api/client';
 import { useOrganizerLogout } from '../../hooks/useOrganizerLogout';
 import { useLocalLocale } from '../../hooks/useLocalLocale';
 import { useLocalePath } from '../../hooks/useLocalePath';
 import { t } from '../../i18n';
-import { formatEventTime, withQueryParam } from '../../utils';
+import { apiErrorMessage, formatEventTime, withQueryParam } from '../../utils';
 import OrganizerTopBar from '../../components/OrganizerTopBar';
 import OrganizerProfileNudge from '../../components/OrganizerProfileNudge';
 import PageState from '../../components/PageState';
@@ -13,7 +13,7 @@ import EmptyState from '../../components/EmptyState';
 import Toast from '../../components/Toast';
 import { useToast } from '../../hooks/useToast';
 import { useStaticSeoMeta } from '../../hooks/useStaticSeoMeta';
-import { API, QUERY_KEYS, ORGANIZER_EVENTS_PAGE_SIZE, ROUTES, UI_STATE } from '../../constants';
+import { API, QUERY_KEYS, ORGANIZER_EVENTS_PAGE_SIZE, ROUTES, UI_STATE, PAGE_PARAM } from '../../constants';
 import SeoTags from '../../components/SeoTags';
 import styles from './OrganizerDashboard.module.css';
 
@@ -44,7 +44,7 @@ export default function OrganizerDashboard() {
     queryKey: [QUERY_KEYS.organizerEvents, locale],
     queryFn: () =>
       organizerApi.get<OrganizerEventsResponse>(
-        withQueryParam(API.organizerEvents, 'limit', String(ORGANIZER_EVENTS_PAGE_SIZE)),
+        withQueryParam(API.organizerEvents, PAGE_PARAM.limit, String(ORGANIZER_EVENTS_PAGE_SIZE)),
       ),
   });
 
@@ -55,7 +55,7 @@ export default function OrganizerDashboard() {
       showToast(UI_STATE.success, t('organizer_delete_success', locale));
     },
     onError: (err) => {
-      showToast(UI_STATE.error, err instanceof ApiError ? err.message : t('generic_error', locale));
+      showToast(UI_STATE.error, apiErrorMessage(err, t('generic_error', locale)));
     },
   });
 

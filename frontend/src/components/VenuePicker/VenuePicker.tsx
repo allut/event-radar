@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { organizerApi, ApiError } from '../../api/client';
+import { organizerApi } from '../../api/client';
 import {
   API, LOCALE_EN, LOCALE_RU, LOCALES,
   ORGANIZER_VENUE_NAME_MAX_LEN, ORGANIZER_VENUE_ADDRESS_MAX_LEN, QUERY_KEYS,
   type ContentLang,
 } from '../../constants';
 import { t, ti } from '../../i18n';
-import { cx } from '../../utils';
+import { apiErrorMessage, cx } from '../../utils';
 import styles from './VenuePicker.module.css';
 
 export interface SavedVenue {
@@ -266,7 +266,7 @@ export default function VenuePicker({ id, value, onChange, locale, contentLang, 
           </div>
           {updateMutation.isError && (
             <p className={styles.error} role="alert">
-              {updateMutation.error instanceof ApiError ? updateMutation.error.message : t('generic_error', locale)}
+              {apiErrorMessage(updateMutation.error, t('generic_error', locale))}
             </p>
           )}
           <p className={styles.hint}>{t('organizer_venue_edit_hint', locale)}</p>

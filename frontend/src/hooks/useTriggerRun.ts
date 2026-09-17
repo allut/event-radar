@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { adminStream, ApiError, StreamDisconnectedError, type NdjsonLine } from '../api/client';
+import { adminStream, StreamDisconnectedError, type NdjsonLine } from '../api/client';
+import { ADMIN_GENERIC_ERROR } from '../constants';
+import { apiErrorMessage } from '../utils';
 
 export type RunState = 'idle' | 'starting' | 'streaming' | 'done' | 'disconnected';
 
@@ -38,7 +40,7 @@ export function useTriggerRun(): { state: RunState; lines: NdjsonLine[]; run: (p
         // The request never even started streaming (network error, or a
         // non-2xx before any body arrived) — surface it the same generic
         // way a streamed error line would have.
-        const message = err instanceof ApiError ? err.message : 'Something went wrong.';
+        const message = apiErrorMessage(err, ADMIN_GENERIC_ERROR);
         setLines((prev) => (prev.length ? prev : [{ stage: path, status: 'error', result: null, error: message }]));
         setState('done');
       });

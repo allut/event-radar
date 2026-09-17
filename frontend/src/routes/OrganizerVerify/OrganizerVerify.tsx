@@ -4,7 +4,7 @@ import { organizerApi, ApiError } from '../../api/client';
 import { setOrganizerSignedInHint } from '../../lib/organizerAuth';
 import { getLocale } from '../../lib/auth';
 import { syncAccountTheme } from '../../lib/theme';
-import { API, AUTH_REDIRECT_DELAY_MS, ROUTES, UI_STATE, VERIFY_STATE_TO_KIND, type VerifyState } from '../../constants';
+import { API, AUTH_REDIRECT_DELAY_MS, AUTH_TOKEN_PARAM, ROUTES, UI_STATE, VERIFY_STATE_TO_KIND, type VerifyState } from '../../constants';
 import { t } from '../../i18n';
 import { useLocaleNavigate } from '../../hooks/useLocaleNavigate';
 import { useLocalePath } from '../../hooks/useLocalePath';
@@ -23,7 +23,7 @@ export default function OrganizerVerify() {
   const [searchParams] = useSearchParams();
   const navigate = useLocaleNavigate();
   const localePath = useLocalePath();
-  const token = searchParams.get('token');
+  const token = searchParams.get(AUTH_TOKEN_PARAM);
   const [state, setState] = useState<VerifyState>(token ? UI_STATE.verifying : UI_STATE.error);
   const [errorMsg, setErrorMsg] = useState(token ? '' : t('no_token', locale));
   const called = useRef(false);

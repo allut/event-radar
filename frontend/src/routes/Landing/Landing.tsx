@@ -2,7 +2,7 @@ import { Fragment, type CSSProperties } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../../api/client';
-import { ANALYTICS_EVENTS, API, CATEGORIES, LANDING_BASE_FIG_COUNT, LANDING_PLATE_BODY_MAX_LENGTH, LOCALES, MAGIC_LINK_EXPIRY_MINUTES, OG_FALLBACK_IMAGE_PATH, PRODUCTION_ORIGIN, QUERY_KEYS, ROUTES, STEP_KEYS, UI_STATE } from '../../constants';
+import { ANALYTICS_EVENTS, API, CATEGORIES, EUR_SYMBOL, LANDING_BASE_FIG_COUNT, LANDING_PLATE_BODY_MAX_LENGTH, LANDING_SHOWCASE_PLATE_COUNT, LOCALES, MAGIC_LINK_EXPIRY_MINUTES, OG_FALLBACK_IMAGE_PATH, PRODUCTION_ORIGIN, QUERY_KEYS, ROUTES, STEP_KEYS, UI_STATE } from '../../constants';
 import { t, ti } from '../../i18n';
 import { categoryGradient, cx, formatCount, formatEventTime, formatHeroDateline, formatHourMinute, formatPrice, padIndex, safeUrl, stripHtmlToText, truncateForMeta, withLocaleQuery } from '../../utils';
 import { useLocaleMutation } from '../../hooks/useLocaleMutation';
@@ -224,7 +224,7 @@ export default function Landing() {
     queryFn: () => api.get<ShowcaseResponse>(withLocaleQuery(API.publicShowcase, locale)),
     retry: false,
   });
-  const plateEvents = (showcaseData?.events ?? []).slice(0, 3);
+  const plateEvents = (showcaseData?.events ?? []).slice(0, LANDING_SHOWCASE_PLATE_COUNT);
 
   const { data: counts } = useQuery({
     queryKey: [QUERY_KEYS.counts, locale],
@@ -343,7 +343,7 @@ export default function Landing() {
                   <Fig value={String(furthestYear)} labelKey="landing_stat_horizon" locale={locale} />
                 )}
                 {counts.cheapest_price !== null && (
-                  <Fig value={`€${counts.cheapest_price}`} labelKey="landing_stat_price" locale={locale} />
+                  <Fig value={`${EUR_SYMBOL}${counts.cheapest_price}`} labelKey="landing_stat_price" locale={locale} />
                 )}
               </div>
             )}

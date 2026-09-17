@@ -1,11 +1,12 @@
 import { useState } from 'react';
-import { api, ApiError } from '../../api/client';
+import { api } from '../../api/client';
 import { setLocale } from '../../lib/auth';
 import { useLocaleNavigate } from '../../hooks/useLocaleNavigate';
 import { useLogout } from '../../hooks/useLogout';
 import { useLocalLocale } from '../../hooks/useLocalLocale';
 import { API, PERSONAS, PERSONA_MAX_SELECTABLE, ROUTES } from '../../constants';
 import { t, ti, personaName, personaVibe } from '../../i18n';
+import { apiErrorMessage } from '../../utils';
 import { useStaticSeoMeta } from '../../hooks/useStaticSeoMeta';
 import PersonaCard from '../../components/PersonaCard';
 import TopBar from '../../components/TopBar';
@@ -43,7 +44,7 @@ export default function Onboarding() {
       setLocale(locale);
       navigate(ROUTES.home, { replace: true });
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : t('generic_error', locale));
+      setError(apiErrorMessage(err, t('generic_error', locale)));
       setIsLoading(false);
     }
   }

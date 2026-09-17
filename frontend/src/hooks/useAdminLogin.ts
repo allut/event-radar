@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { adminApi, ApiError } from '../api/client';
-import { API, ROUTES, UI_STATE, type LoginState } from '../constants';
+import { adminApi } from '../api/client';
+import { ADMIN_GENERIC_ERROR, API, ROUTES, UI_STATE, type LoginState } from '../constants';
 import { setAdminSignedInHint } from '../lib/adminAuth';
+import { apiErrorMessage } from '../utils';
 
 export interface UseAdminLoginResult {
   username: string;
@@ -43,7 +44,7 @@ export function useAdminLogin(): UseAdminLoginResult {
       setAdminSignedInHint();
       navigate(ROUTES.adminDashboard, { replace: true });
     } catch (err) {
-      setErrorMsg(err instanceof ApiError ? err.message : 'Something went wrong. Try again.');
+      setErrorMsg(apiErrorMessage(err, ADMIN_GENERIC_ERROR));
       setState(UI_STATE.error);
     }
   }

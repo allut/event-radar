@@ -1,10 +1,10 @@
 import { useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { adminApi, ApiError } from '../../api/client';
-import { ADMIN_QUEUE_DETAIL_LINK_LABEL, ADMIN_REPORTS_PARAM, ADMIN_REPORTS_QUEUE_PAGE_SIZE, API, QUERY_KEYS, REPORT_REASONS, ROUTES, UI_STATE } from '../../constants';
+import { adminApi } from '../../api/client';
+import { ADMIN_GENERIC_ERROR, ADMIN_QUEUE_DETAIL_LINK_LABEL, ADMIN_REPORTS_PARAM, ADMIN_REPORTS_QUEUE_PAGE_SIZE, API, LOCALE_EN, PAGE_PARAM, QUERY_KEYS, REPORT_REASONS, ROUTES, UI_STATE } from '../../constants';
 import { t } from '../../i18n';
-import { relativeTimeFromNow } from '../../utils';
+import { apiErrorMessage, nextOffsetParam, relativeTimeFromNow } from '../../utils';
 import PageState from '../../components/PageState';
 import Toast from '../../components/Toast';
 import { useToast } from '../../hooks/useToast';
@@ -50,7 +50,7 @@ interface AdminReportActionResult {
 type ResolutionKind = 'resolved' | 'taken_down';
 
 function reasonLabel(reason: string): string {
-  return t(REPORT_REASONS.find((r) => r.value === reason)?.labelKey ?? reason, 'en');
+  return t(REPORT_REASONS.find((r) => r.value === reason)?.labelKey ?? reason, LOCALE_EN);
 }
 
 // The reports moderation queue (issue #155) — establishes the shared
@@ -75,11 +75,10 @@ export default function AdminReports() {
     queryKey: [QUERY_KEYS.adminReports],
     queryFn: ({ pageParam }) =>
       adminApi.get<AdminReportsResponse>(
-        `${API.adminReports}?limit=${ADMIN_REPORTS_QUEUE_PAGE_SIZE}&offset=${pageParam}`,
+        `${API.adminReports}?${PAGE_PARAM.limit}=${ADMIN_REPORTS_QUEUE_PAGE_SIZE}&${PAGE_PARAM.offset}=${pageParam}`,
       ),
     initialPageParam: 0,
-    getNextPageParam: (lastPage) =>
-      lastPage.has_more ? lastPage.offset + lastPage.events.length : undefined,
+    getNextPageParam: (lastPage) => nextOffsetParam(lastPage, lastPage.events.length),
   });
 
   const [searchParams] = useSearchParams();
@@ -133,7 +132,7 @@ export default function AdminReports() {
       void queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.adminCounts] });
     },
     onError: (err) => {
-      showToast(UI_STATE.error, err instanceof ApiError ? err.message : 'Something went wrong. Try again.');
+      showToast(UI_STATE.error, apiErrorMessage(err, ADMIN_GENERIC_ERROR));
     },
   });
 

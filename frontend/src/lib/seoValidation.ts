@@ -11,6 +11,7 @@ import {
   PRICE_DATA_ATTR,
   ROBOTS_INDEX_FOLLOW,
   SEO_HREFLANG_CODES,
+  SEO_RICH_ITEM_LIST_MIN,
 } from '../constants.js';
 
 /** In-build validation gate for the prerender pipeline (issue #53) — pure
@@ -177,9 +178,12 @@ export function assertListJsonLd(jsonLd: unknown, options: { originPrefix: strin
     return [...issues, 'itemListElement must be an array'];
   }
 
-  if (rawItems.length < 3 && (options.liveItemCount === undefined || options.liveItemCount >= 3)) {
+  if (
+    rawItems.length < SEO_RICH_ITEM_LIST_MIN &&
+    (options.liveItemCount === undefined || options.liveItemCount >= SEO_RICH_ITEM_LIST_MIN)
+  ) {
     issues.push(
-      `itemListElement has only ${rawItems.length} entr${rawItems.length === 1 ? 'y' : 'ies'}, expected at least 3`,
+      `itemListElement has only ${rawItems.length} entr${rawItems.length === 1 ? 'y' : 'ies'}, expected at least ${SEO_RICH_ITEM_LIST_MIN}`,
     );
   }
 

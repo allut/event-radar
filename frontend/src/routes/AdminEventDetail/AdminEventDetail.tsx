@@ -1,9 +1,12 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { adminApi, ApiError } from '../../api/client';
+import { adminApi } from '../../api/client';
 import {
   ADMIN_CONTENT_LANG_MARKER_LABELS,
+  ADMIN_EVENT_DETAIL_TABS,
+  ADMIN_GENERIC_ERROR,
+  ADMIN_TRANSLATABLE_FIELD_COUNT,
   API,
   CONTENT_LANG_ORDER,
   LOCALES,
@@ -11,11 +14,10 @@ import {
   ROUTES,
   UI_STATE,
   REPORT_STATUS,
-  ADMIN_EVENT_DETAIL_TABS,
   type ContentLang,
   type ContentMarkerState,
 } from '../../constants';
-import { sanitizeHtml, formatAdminTimestamp, safeUrl } from '../../utils';
+import { apiErrorMessage, sanitizeHtml, formatAdminTimestamp, safeUrl } from '../../utils';
 import PageState from '../../components/PageState';
 import Toast from '../../components/Toast';
 import { useToast } from '../../hooks/useToast';
@@ -139,7 +141,7 @@ type Tab = (typeof ADMIN_EVENT_DETAIL_TABS)[number];
 export default function AdminEventDetail({ eventId }: { eventId: string }) {
   const queryClient = useQueryClient();
   const { toast, showToast } = useToast();
-  const [tab, setTab] = useState<Tab>('Overview');
+  const [tab, setTab] = useState<Tab>(ADMIN_EVENT_DETAIL_TABS[0]);
   const [note, setNote] = useState('');
   const [contentLang, setContentLang] = useState<ContentLang>(CONTENT_LANG_ORDER[0]);
 
@@ -178,7 +180,7 @@ export default function AdminEventDetail({ eventId }: { eventId: string }) {
       showToast(UI_STATE.success, ACTION_CONFIG[kind].message);
     },
     onError: (err) => {
-      showToast(UI_STATE.error, err instanceof ApiError ? err.message : 'Something went wrong. Try again.');
+      showToast(UI_STATE.error, apiErrorMessage(err, ADMIN_GENERIC_ERROR));
     },
   });
 
@@ -221,7 +223,7 @@ export default function AdminEventDetail({ eventId }: { eventId: string }) {
     if (!t) return 'empty';
     const translatedCount = Number(t.title) + Number(t.description) + Number(t.important_info);
     if (translatedCount === 0) return 'empty';
-    if (translatedCount === 3) return 'matched';
+    if (translatedCount === ADMIN_TRANSLATABLE_FIELD_COUNT) return 'matched';
     return 'partial';
   };
   const langOptions = CONTENT_LANG_ORDER.map((code) => {

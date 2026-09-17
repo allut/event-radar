@@ -7,6 +7,7 @@
 .gate {
   display: none;
 }
+/* --bp-desktop-gate in index.css (documentation only — see --bp-narrow's comment there). */
 @media (max-width: 1024px) {
   .gate {
     composes: card from './Card.module.css';

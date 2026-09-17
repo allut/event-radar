@@ -1,2 +1,1 @@
-export { default } from './VenuePicker';
-export type { SavedVenue, VenuePickerValue } from './VenuePicker';
+export { default, type SavedVenue, type VenuePickerValue } from './VenuePicker';

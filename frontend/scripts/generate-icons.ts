@@ -11,16 +11,27 @@ import { writeFileSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
+import {
+  APPLE_TOUCH_ICON_PATH,
+  FAVICON_ICO_PATH,
+  ICON_96_PATH,
+  ICON_192_PATH,
+  ICON_512_PATH,
+} from '../src/constants';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 const SVG_PATH = path.join(PUBLIC_DIR, 'favicon.svg');
 
+// Public-facing constants are site-root paths (leading '/'); this script
+// writes bare filenames into public/, so strip it once here.
+const filename = (crawlablePath: string): string => crawlablePath.slice(1);
+
 /** Raster sizes written straight to public/ as named PNG assets. */
 const OUTPUT_SIZES: { size: number; name: string }[] = [
-  { size: 96, name: 'icon-96.png' },
-  { size: 192, name: 'icon-192.png' },
-  { size: 512, name: 'icon-512.png' },
+  { size: 96, name: filename(ICON_96_PATH) },
+  { size: 192, name: filename(ICON_192_PATH) },
+  { size: 512, name: filename(ICON_512_PATH) },
 ];
 
 /** iOS applies its own rounding/mask to apple-touch-icon — the source must be
@@ -97,7 +108,7 @@ async function main(): Promise<void> {
     }
 
     const appleTouchIcon = await screenshotSvgAtSize(page, APPLE_TOUCH_ICON_SIZE, false);
-    writeFileSync(path.join(PUBLIC_DIR, 'apple-touch-icon.png'), appleTouchIcon);
+    writeFileSync(path.join(PUBLIC_DIR, filename(APPLE_TOUCH_ICON_PATH)), appleTouchIcon);
     console.log(`wrote apple-touch-icon.png (${APPLE_TOUCH_ICON_SIZE}x${APPLE_TOUCH_ICON_SIZE})`);
 
     // Sequential, not Promise.all: all three renders share one Playwright
@@ -108,7 +119,7 @@ async function main(): Promise<void> {
       icoBuffers.push(await screenshotSvgAtSize(page, size));
     }
     const ico = buildIco(icoBuffers, ICO_SIZES);
-    writeFileSync(path.join(PUBLIC_DIR, 'favicon.ico'), ico);
+    writeFileSync(path.join(PUBLIC_DIR, filename(FAVICON_ICO_PATH)), ico);
     console.log(`wrote favicon.ico (${ICO_SIZES.join('/')} multi-size)`);
   } finally {
     await browser.close();

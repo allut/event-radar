@@ -3,20 +3,14 @@
 }
 
 .trigger {
+  composes: fieldInput from '../shared/Field.module.css';
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-2);
   width: 100%;
-  background: var(--bg-raised);
-  border: var(--border-w-hair) solid var(--border);
-  border-radius: var(--radius);
-  padding: var(--space-3) var(--space-4);
-  color: var(--text);
-  font-size: var(--fs-base);
   font-family: inherit;
   text-align: left;
-  transition: border-color var(--transition), box-shadow var(--transition);
 }
 
 .trigger:hover:not(:disabled) {
@@ -28,10 +22,6 @@
   outline: none;
   border-color: var(--accent);
   box-shadow: var(--shadow-focus-ring);
-}
-
-.trigger:disabled {
-  opacity: var(--opacity-disabled);
 }
 
 .value {
@@ -135,9 +125,8 @@
 }
 
 /* .pop (composed menuPop) already squares unconditionally at its
- * shared-base source (#212) — only these locally radiused controls still
- * need squaring here. */
-.trigger,
+ * shared-base source (#212); .trigger's own square corners now come from
+ * the composed fieldInput base — only .option still needs squaring here. */
 .option {
   border-radius: 0;
 }
