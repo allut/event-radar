@@ -5,10 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build && cp dist/index.html dist/app-shell.html && ([ -z \"$VERCEL$CF_PAGES$PRERENDER_LOCAL\" ] || (([ -n \"$VERCEL\" ] || playwright install chromium) && tsx scripts/prerender.ts))",
+    "build": "tsc --noEmit && vite build && cp dist/index.html dist/app-shell.html && ([ -z \"$CF_PAGES$PRERENDER_LOCAL\" ] || (playwright install chromium && tsx scripts/prerender.ts))",
     "preview": "vite preview",
     "type-check": "tsc --noEmit",
-    "lint": "eslint src scripts api functions",
+    "lint": "eslint src scripts functions",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage"
@@ -38,7 +38,6 @@
   "devDependencies": {
     "@aws-sdk/client-s3": "^3.1133.0",
     "@eslint/js": "^9.39.4",
-    "@sparticuz/chromium": "^147.0.0",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",

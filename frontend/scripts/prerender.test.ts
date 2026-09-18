@@ -263,16 +263,6 @@ describe('isPreviewBuild', () => {
     expect(isPreviewBuild({} as NodeJS.ProcessEnv)).toBe(false);
     expect(isPreviewBuild({ CF_PAGES_BRANCH: 'some-feature-branch' } as NodeJS.ProcessEnv)).toBe(false);
   });
-
-  // Vercel stays live in parallel as the migration's rollback path (#341)
-  // until decommissioned — its preview check must keep working unchanged.
-  it('is true when VERCEL_ENV is preview', () => {
-    expect(isPreviewBuild({ VERCEL_ENV: 'preview' } as NodeJS.ProcessEnv)).toBe(true);
-  });
-
-  it('is false on Vercel for production', () => {
-    expect(isPreviewBuild({ VERCEL_ENV: 'production' } as NodeJS.ProcessEnv)).toBe(false);
-  });
 });
 
 /** Google's robots.txt matching semantics (`*` wildcard, `$` end-anchor,
@@ -401,7 +391,6 @@ describe('main — Preview short-circuit (issue #95)', () => {
   let fetchSpy: ReturnType<typeof vi.spyOn>;
   const originalCfPages = process.env.CF_PAGES;
   const originalCfPagesBranch = process.env.CF_PAGES_BRANCH;
-  const originalVercelEnv = process.env.VERCEL_ENV;
 
   beforeEach(() => {
     logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
@@ -415,7 +404,6 @@ describe('main — Preview short-circuit (issue #95)', () => {
     for (const [key, original] of [
       ['CF_PAGES', originalCfPages],
       ['CF_PAGES_BRANCH', originalCfPagesBranch],
-      ['VERCEL_ENV', originalVercelEnv],
     ] as const) {
       if (original === undefined) {
         delete process.env[key];
@@ -428,17 +416,6 @@ describe('main — Preview short-circuit (issue #95)', () => {
   it('exits before any rendering, sitemap/robots, validation, or fetch work on a non-production Cloudflare Pages branch', async () => {
     process.env.CF_PAGES = '1';
     process.env.CF_PAGES_BRANCH = 'some-feature-branch';
-
-    await expect(main()).resolves.toBeUndefined();
-
-    expect(fetchSpy).not.toHaveBeenCalled();
-    expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('skipping prerender pass'));
-  });
-
-  // Vercel stays live in parallel as the migration's rollback path (#341)
-  // until decommissioned — its preview build must keep skipping too.
-  it('exits before any rendering, sitemap/robots, validation, or fetch work when VERCEL_ENV=preview', async () => {
-    process.env.VERCEL_ENV = 'preview';
 
     await expect(main()).resolves.toBeUndefined();
 

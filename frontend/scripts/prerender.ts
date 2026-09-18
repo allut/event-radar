@@ -80,50 +80,28 @@ import { PRERENDER_BACKEND_TARGET } from '../vite.config';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DIST_DIR = path.resolve(__dirname, '../dist');
 const API_ORIGIN = PRERENDER_BACKEND_TARGET;
-// Both timeouts are 3x wider on Vercel. Confirmed via local repro (same
-// @sparticuz/chromium binary, same real backend) that a page which renders
-// in ~3.6s off Vercel can still consistently blow past 15s on Vercel's
-// build machine — every attempted route timed out identically at both
-// concurrency 6 and concurrency 1 (RENDER_POOL_CONCURRENCY above), even the
-// static, no-data-dependency Landing route, which rules out contention or
-// backend latency as the sole cause and points at the shared/throttled
-// 2-core build machine simply running this single-process, software-
-// rendered (SwiftShader) Chromium slower across the board. Widening the
-// timeout costs throughput (fewer routes fit in the render budget per
-// round), which the render-budget/chaining mechanism (issues #82/#84)
-// already exists to absorb across rounds — a hard build failure from a
-// route that would have succeeded given a few more seconds is worse than a
-// slower round.
-const NAV_TIMEOUT_MS = process.env.VERCEL ? 90_000 : 30_000;
-const CONTENT_READY_TIMEOUT_MS = process.env.VERCEL ? 45_000 : 15_000;
+// These were 3x wider on Vercel (90s/45s) vs local (30s/15s) — confirmed via
+// local repro (same Chromium binary, same real backend) that a page which
+// renders in ~3.6s locally could still consistently blow past the narrower
+// value on Vercel's shared/throttled 2-core build machine running
+// single-process, software-rendered (SwiftShader) Chromium. Left at the
+// wider values unconditionally rather than collapsed to the local-dev
+// numbers: issue #373 asked for this collapse to be justified against a
+// real Cloudflare Pages production build log, and that log wasn't available
+// when this landed. Revisit with real numbers before narrowing.
+const NAV_TIMEOUT_MS = 90_000;
+const CONTENT_READY_TIMEOUT_MS = 45_000;
 // Targets run through a bounded pool of pages rather than one at a time —
 // with a growing published-event catalog (three locale variants each), a
-// fully sequential run risks Vercel's Hobby-plan 45-minute build cap.
+// fully sequential run risks blowing past Cloudflare Pages' build cap.
 // Bounded, not unbounded, mirroring
 // this repo's external-API fan-out convention (CLAUDE.md). Used by the
 // filesystem/`fetch()`-only validation pass below, which has no Chromium
 // involvement and so isn't subject to RENDER_POOL_CONCURRENCY's constraint.
 const PRERENDER_CONCURRENCY = 6;
 // Concurrency for the actual Playwright render pool (the `browser.newPage()`
-// pool in main(), below) — narrower than PRERENDER_CONCURRENCY on Vercel.
-// `@sparticuz/chromium`'s launch args always include `--single-process`
-// (required — Lambda's sandbox rejects the `prctl` calls a multi-process
-// Chromium needs), which forces every concurrently-open page through one OS
-// process/thread — multiple pages there compete for that one thread rather
-// than getting Chromium's normal per-page process isolation. (An earlier
-// version of this comment blamed that contention for routes failing in an
-// apparent simultaneous burst; that read the failure *logging* — which is
-// batched into one loop after the whole pool settles, not emitted live — as
-// the failures themselves happening at once. The real cause, confirmed by a
-// follow-up run at concurrency 1 that failed the exact same routes, is
-// CONTENT_READY_TIMEOUT_MS being too tight for Vercel's build machine
-// regardless of concurrency — see the timeout comment above.) Keeping this
-// at 1 on Vercel still avoids adding avoidable single-thread contention on
-// top of that base slowness; the render-budget/chaining mechanism (issues
-// #82/#84) covers the resulting lower single-round throughput across later
-// rounds. Off Vercel, Playwright's own bundled Chromium has no such
-// constraint, so this stays at PRERENDER_CONCURRENCY's original width.
-const RENDER_POOL_CONCURRENCY = process.env.VERCEL ? 1 : PRERENDER_CONCURRENCY;
+// pool in main(), below).
+const RENDER_POOL_CONCURRENCY = PRERENDER_CONCURRENCY;
 // GET /events/{id} is rate-limited server-side to RATE_LIMIT_EVENTS_DETAIL =
 // "120/minute" per IP (backend/app/constants.py) — every worker's build
 // machine shares one IP, so an unthrottled pool would eventually 429 as the
@@ -691,32 +669,8 @@ function outputFilePath(bare: string, locale: string): string {
   return path.join(DIST_DIR, relDir, 'index.html');
 }
 
-/**
- * On Vercel, launches `@sparticuz/chromium` explicitly rather than falling
- * through to Playwright-bundled Chromium (issue #87, reusing Wave 1's fix
- * from issue #72) — the build script's `[ -n "$VERCEL" ] || playwright
- * install chromium` step skips installing Playwright's own browser on
- * Vercel, so `chromium.launch()` alone would have nothing to launch there.
- * `@sparticuz/chromium`'s bundled binary is linked against a handful of
- * AL2023 shared libs (`libnspr4.so`/`libnss3.so`/`libnssutil3.so`) that
- * aren't present on the build image by default; `executablePath()` only
- * extracts them and points `LD_LIBRARY_PATH` at the extraction dir when its
- * own `isRunningInAmazonLinux2023` check sees `VERCEL` set — so `VERCEL`
- * must stay visible through this call, not hidden, or the launch fails with
- * `error while loading shared libraries: libnspr4.so: cannot open shared
- * object file`. Off Vercel (local/dev, any OS), Playwright's own bundled
- * Chromium is used unchanged — `@sparticuz/chromium`'s binary is Linux-only.
- */
 async function launchBrowser(): Promise<Browser> {
-  if (!process.env.VERCEL) {
-    return chromium.launch();
-  }
-  const { default: sparticuzChromium } = await import('@sparticuz/chromium');
-  return await chromium.launch({
-    args: sparticuzChromium.args,
-    executablePath: await sparticuzChromium.executablePath(),
-    headless: true,
-  });
+  return chromium.launch();
 }
 
 /** Rolling buffer of a page's recent console/pageerror/requestfailed
@@ -841,8 +795,8 @@ async function runPool<T>(items: T[], concurrency: number, worker: (item: T) => 
  * doubles the build's GET /events/{id} volume; accepted for now since the
  * gate still runs sequentially after the snapshot pass under the same
  * rate-limited budget, bounded rather than unbounded — worth revisiting if
- * the published-event catalog grows enough to threaten the Vercel
- * Hobby-plan 45-minute build cap (see PRERENDER_CONCURRENCY above). Returns
+ * the published-event catalog grows enough to threaten Cloudflare Pages'
+ * build cap (see PRERENDER_CONCURRENCY above). Returns
  * one message per violation, prefixed with the target's path — never
  * throws for a validation failure itself. */
 /** Live count backing the /explore validator's >=3-items check (issue #236)
@@ -918,36 +872,31 @@ function chainGithubRequest(token: string, path: string, init?: RequestInit): Pr
 }
 
 /** Commits `marker` to the branch the Deploy Hook targets (issue #83;
- * extended to Cloudflare Pages under #346, alongside — not instead of — the
- * original Vercel path, since Vercel stays live in parallel as the
- * migration's rollback path — see isPreviewBuild's doc comment), advancing
- * the git ref so a later chained round (issue #84) can re-fire the hook
- * against a genuinely new version rather than colliding with the platform's
- * same-version-cancellation behavior. `CF_PAGES_BRANCH` is preferred over
- * `VERCEL_GIT_COMMIT_REF` when both happen to be set (never expected in
- * practice — a single build runs on one platform); once Vercel is
- * decommissioned (#341), the fallback can be dropped. Uses the GitHub Git
- * Data API — not a local `git push` — since the build environment's checkout
- * has no guaranteed push credentials; mirrors api/seo-audit.ts's plain-fetch
+ * extended to Cloudflare Pages under #346), advancing the git ref so a later
+ * chained round (issue #84) can re-fire the hook against a genuinely new
+ * version rather than colliding with the platform's same-version-
+ * cancellation behavior. Uses the GitHub Git Data API — not a local
+ * `git push` — since the build environment's checkout has no guaranteed
+ * push credentials; mirrors the removed api/seo-audit.ts's plain-fetch
  * GH_ISSUE_TOKEN pattern rather than adding an SDK dependency. The new
  * commit reuses the branch tip's tree unchanged (no file diff — only the
  * marker embedded in the message changes), so this is effectively an empty
  * commit. No-ops with a log line (not a build failure) when
- * GH_PRERENDER_CHAIN_TOKEN/branch aren't set, e.g. local/dev builds off
- * either platform — returns `false` in that case (as opposed to throwing,
- * its failure path) to distinguish "nothing was committed" from "the commit
- * succeeded". main() only calls this when shouldCommitRoundMarker(marker)
- * says the round is `continuing` (issue #101 — see that function's doc
- * comment for why a `done` round must never reach this call). The advanced
- * ref is this chain's sole continuation trigger (issue #89): the production
- * branch is git-connected on both platforms, so this push alone fires the
- * next round's build — no separate Deploy Hook call is needed or made. */
+ * GH_PRERENDER_CHAIN_TOKEN/branch aren't set, e.g. local/dev builds —
+ * returns `false` in that case (as opposed to throwing, its failure path) to
+ * distinguish "nothing was committed" from "the commit succeeded". main()
+ * only calls this when shouldCommitRoundMarker(marker) says the round is
+ * `continuing` (issue #101 — see that function's doc comment for why a
+ * `done` round must never reach this call). The advanced ref is this
+ * chain's sole continuation trigger (issue #89): the production branch is
+ * git-connected, so this push alone fires the next round's build — no
+ * separate Deploy Hook call is needed or made. */
 async function commitRoundMarker(marker: RoundMarker): Promise<boolean> {
   const token = process.env.GH_PRERENDER_CHAIN_TOKEN;
-  const branch = process.env.CF_PAGES_BRANCH ?? process.env.VERCEL_GIT_COMMIT_REF;
+  const branch = process.env.CF_PAGES_BRANCH;
   if (!token || !branch) {
     console.log(
-      'prerender: GH_PRERENDER_CHAIN_TOKEN/CF_PAGES_BRANCH/VERCEL_GIT_COMMIT_REF not set — skipping round-marker commit (not a Cloudflare Pages or Vercel build)',
+      'prerender: GH_PRERENDER_CHAIN_TOKEN/CF_PAGES_BRANCH not set — skipping round-marker commit (not a Cloudflare Pages build)',
     );
     return false;
   }
@@ -1036,52 +985,38 @@ export function logZeroProgressAbort(marker: RoundMarker): void {
 }
 
 /** True on a Preview build (issue #95; extended to Cloudflare Pages under
- * #346, alongside — not instead of — the original Vercel check). The old
- * Vercel deployment stays live in parallel as the migration's rollback path
- * (#341's cutover-sequencing decision) until it's confirmed healthy and
- * decommissioned, so its preview builds must keep skipping the expensive
- * prerender pass exactly as before: `VERCEL_ENV` is Vercel's own
- * build-time discriminator (`"production" | "preview" | "development"`).
- * Cloudflare Pages exposes no equivalent dedicated flag (confirmed against
- * Cloudflare's own build-config docs), only `CF_PAGES_BRANCH` (the branch
- * this build's checkout is on), so a Cloudflare build infers it the same way
- * Cloudflare's own guidance does: any branch other than the production
- * branch (`PRERENDER_CADENCE_GIT_BRANCH`, 'release' — the same branch
- * functions/api/prerender-cadence.ts already treats as production) is a
- * preview build. Preview URLs aren't crawled or linked externally on either
- * platform, and both platforms' own fallback routing already serves
+ * #346). Cloudflare Pages exposes no dedicated preview/production flag
+ * (confirmed against Cloudflare's own build-config docs), only
+ * `CF_PAGES_BRANCH` (the branch this build's checkout is on), so a build
+ * infers it the same way Cloudflare's own guidance does: any branch other
+ * than the production branch (`PRERENDER_CADENCE_GIT_BRANCH`, 'release' —
+ * the same branch functions/api/prerender-cadence.ts already treats as
+ * production) is a preview build. Preview URLs aren't crawled or linked
+ * externally, and Cloudflare's own fallback routing already serves
  * `app-shell.html` for any route with no snapshot, so skipping prerendering
  * doesn't affect preview functionality. Also sidesteps `commitRoundMarker`
  * committing a chain-state marker against a preview branch ref. Local/dev
- * runs (neither `VERCEL_ENV` nor `CF_PAGES` set) are unaffected. Once Vercel
- * is decommissioned (#341), the `VERCEL_ENV` check can be dropped. */
+ * runs (`CF_PAGES` not set) are unaffected. */
 export function isPreviewBuild(env: NodeJS.ProcessEnv = process.env): boolean {
-  if (env.VERCEL_ENV === 'preview') return true;
   return env.CF_PAGES === '1' && env.CF_PAGES_BRANCH !== PRERENDER_CADENCE_GIT_BRANCH;
 }
 
 /** Reads back this build's own commit message (issue #83; extended to
- * Cloudflare Pages under #346, alongside — not instead of — the original
- * Vercel path, since Vercel stays live in parallel as the migration's
- * rollback path — see isPreviewBuild's doc comment). Vercel exposes the tip
- * commit message directly via `VERCEL_GIT_COMMIT_MESSAGE`; Cloudflare Pages
- * exposes no commit-message env var at all (confirmed against Cloudflare's
- * build-config docs), only `CF_PAGES_COMMIT_SHA`, so a Cloudflare build
- * looks the message up via GitHub's Git Data API for that exact sha — not a
- * branch-tip lookup — so a commit landing on the production branch between
- * checkout and this call can never be mistaken for this build's own
- * chain-marker commit (see resolveRoundStart's doc comment in
- * prerenderChain.ts for why the marker must belong to *this* build). Reuses
- * GH_PRERENDER_CHAIN_TOKEN (already provisioned with read access for
- * commitRoundMarker) rather than a separate token. Returns `null` — not a
- * thrown error — when neither env var is set (local/dev, or a build off
- * either platform), or on any fetch/parse failure, so a GitHub hiccup starts
- * a fresh burst at round 1 instead of failing the whole build (mirrors
- * functions/api/prerender-cadence.ts's `fetchTipCommitMessage`, which fails
- * open the same way for the same reason). Once Vercel is decommissioned
- * (#341), the `VERCEL_GIT_COMMIT_MESSAGE` branch can be dropped. */
+ * Cloudflare Pages under #346). Cloudflare Pages exposes no commit-message
+ * env var at all (confirmed against Cloudflare's build-config docs), only
+ * `CF_PAGES_COMMIT_SHA`, so a build looks the message up via GitHub's Git
+ * Data API for that exact sha — not a branch-tip lookup — so a commit
+ * landing on the production branch between checkout and this call can never
+ * be mistaken for this build's own chain-marker commit (see
+ * resolveRoundStart's doc comment in prerenderChain.ts for why the marker
+ * must belong to *this* build). Reuses GH_PRERENDER_CHAIN_TOKEN (already
+ * provisioned with read access for commitRoundMarker) rather than a
+ * separate token. Returns `null` — not a thrown error — when either env var
+ * is unset (local/dev), or on any fetch/parse failure, so a GitHub hiccup
+ * starts a fresh burst at round 1 instead of failing the whole build
+ * (mirrors functions/api/prerender-cadence.ts's `fetchTipCommitMessage`,
+ * which fails open the same way for the same reason). */
 async function fetchBuildCommitMessage(env: NodeJS.ProcessEnv): Promise<string | null> {
-  if (env.VERCEL_GIT_COMMIT_MESSAGE) return env.VERCEL_GIT_COMMIT_MESSAGE;
   const token = env.GH_PRERENDER_CHAIN_TOKEN;
   const sha = env.CF_PAGES_COMMIT_SHA;
   if (!token || !sha) return null;
