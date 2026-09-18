@@ -7,15 +7,22 @@ enhancement (web fonts, link hover, mobile tweaks) that degrades safely when
 stripped.
 
 ``get_email_styles(theme_preference)`` is the seam every email builder calls
-at render time: ``"dark"`` returns DARK_STYLES (today's values, unchanged);
-anything else (``"light"``, ``None``, ``"system"``) returns LIGHT_STYLES.
+at render time: ``"dark"`` returns DARK_STYLES, ``"light"`` returns
+LIGHT_STYLES, and an unset preference (``None`` — the only other value the
+``theme_preference`` column ever holds) returns SYSTEM_STYLES — the light
+palette with a ``prefers-color-scheme:dark`` override, so a client that
+honors OS dark mode still renders dark instead of getting a light email
+force-inverted by the client's own dark-mode heuristics. All three bundles
+declare their scheme via ``<meta name="color-scheme">`` (see
+``EmailStyles.color_scheme`` and ``EMAIL_DOCUMENT``) so clients stop guessing
+and inverting on their own.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
-from app.constants import THEME_PREFERENCE_DARK
+from app.constants import THEME_PREFERENCE_DARK, THEME_PREFERENCE_LIGHT
 
 # Tokens shared by both themes (accent hue, on-accent, accent-alpha overlay —
 # already translucent/brand-fixed, no light variant per the mapping table).
@@ -56,7 +63,30 @@ S_IMG = "display:block;width:100%;max-width:600px;height:auto;border:0;"
 S_BODY = "padding:18px 20px 8px 20px;"
 S_META = "font-family:Helvetica,Arial,sans-serif;font-size:14px;margin:0 0 10px 0;"
 
+# Class hooks in templates.py -> the palette tokens a prefers-color-scheme:dark
+# client must repaint for the SYSTEM_STYLES (unset-preference) bundle. Inline
+# styles win unless the rule is !important, since inline always beats a <style>
+# block absent that.
+_THEME_CLASS_RULES: dict[str, tuple[tuple[str, str], ...]] = {
+    "e-page": (("background-color", "bg"),),
+    "e-h1": (("color", "text"),),
+    "e-date": (("color", "text_muted"),),
+    "e-body-text": (("color", "text"),),
+    "e-muted": (("color", "text_muted"),),
+    "e-card": (("background-color", "bg_card"), ("border-color", "border")),
+    "e-band": (("background-color", "bg_raised"),),
+    "e-band-cat": (("color", "text_muted"),),
+    "e-venue": (("color", "text_muted"),),
+    "e-price": (("color", "accent_light"),),
+    "e-title": (("color", "text"),),
+    "e-bullet": (("color", "text_muted"),),
+    "e-ticket-row": (("border-top-color", "border_subtle"),),
+    "e-footer": (("color", "footer_text"), ("border-top-color", "border")),
+    "e-footer-link": (("color", "text_muted"),),
+}
+
 _EMAIL_CSS_TEMPLATE = """
+:root{color-scheme:COLOR_SCHEME;supported-color-schemes:COLOR_SCHEME;}
 @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600&display=swap');
 body{margin:0;padding:0;}
 a{text-decoration:none;}
@@ -70,13 +100,29 @@ a{text-decoration:none;}
 """
 
 
-def _build_css(accent_light: str) -> str:
-    return _EMAIL_CSS_TEMPLATE.replace("ACCENT_LIGHT", accent_light)
+def _build_dark_override_css() -> str:
+    rules = "\n".join(
+        f"  .{cls}{{{''.join(f'{prop}:{_DARK_PALETTE[key]} !important;' for prop, key in decls)}}}"
+        for cls, decls in _THEME_CLASS_RULES.items()
+    )
+    return f"@media (prefers-color-scheme:dark){{\n{rules}\n}}\n"
+
+
+def _build_css(
+    accent_light: str, *, color_scheme: str, dark_overrides: bool = False
+) -> str:
+    css = _EMAIL_CSS_TEMPLATE.replace("ACCENT_LIGHT", accent_light).replace(
+        "COLOR_SCHEME", color_scheme
+    )
+    if dark_overrides:
+        css += _build_dark_override_css()
+    return css
 
 
 @dataclass(frozen=True)
 class EmailStyles:
     css: str
+    color_scheme: str
     s_page: str
     s_container: str
     s_header_pad: str
@@ -108,9 +154,16 @@ class EmailStyles:
     s_footer_link: str
 
 
-def _build_styles(p: dict[str, str]) -> EmailStyles:
+def _build_styles(
+    p: dict[str, str], *, color_scheme: str, dark_overrides: bool = False
+) -> EmailStyles:
     return EmailStyles(
-        css=_build_css(p["accent_light"]),
+        css=_build_css(
+            p["accent_light"],
+            color_scheme=color_scheme,
+            dark_overrides=dark_overrides,
+        ),
+        color_scheme=color_scheme,
         s_page=f"margin:0;padding:0;background-color:{p['bg']};",
         s_container=S_CONTAINER,
         s_header_pad=S_HEADER_PAD,
@@ -189,10 +242,20 @@ def _build_styles(p: dict[str, str]) -> EmailStyles:
     )
 
 
-DARK_STYLES = _build_styles(_DARK_PALETTE)
-LIGHT_STYLES = _build_styles(_LIGHT_PALETTE)
+DARK_STYLES = _build_styles(_DARK_PALETTE, color_scheme="dark")
+LIGHT_STYLES = _build_styles(_LIGHT_PALETTE, color_scheme="light")
+SYSTEM_STYLES = _build_styles(
+    _LIGHT_PALETTE, color_scheme="light dark", dark_overrides=True
+)
 
 
 def get_email_styles(theme_preference: str | None) -> EmailStyles:
-    """'dark' keeps today's styling; anything else ('light'/None/'system') is light."""
-    return DARK_STYLES if theme_preference == THEME_PREFERENCE_DARK else LIGHT_STYLES
+    """'dark' -> DARK_STYLES, 'light' -> LIGHT_STYLES, unset (None) ->
+    SYSTEM_STYLES — light base, but declares 'light dark' and carries a
+    prefers-color-scheme:dark override so a client honoring OS theme still
+    renders dark instead of force-inverting a purely-light email."""
+    if theme_preference == THEME_PREFERENCE_DARK:
+        return DARK_STYLES
+    if theme_preference == THEME_PREFERENCE_LIGHT:
+        return LIGHT_STYLES
+    return SYSTEM_STYLES

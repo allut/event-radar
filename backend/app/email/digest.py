@@ -192,7 +192,9 @@ def build_digest_html(
     events_html = (
         "\n".join(event_blocks)
         if event_blocks
-        else DIGEST_EMPTY_STATE.format(text=t("digest.no_events", locale))
+        else DIGEST_EMPTY_STATE.format(
+            s_body_text=s.s_body_text, text=t("digest.no_events", locale)
+        )
     )
     settings_label = t("digest.unsubscribe", locale)
 
@@ -215,6 +217,7 @@ def build_digest_html(
 
     return EMAIL_DOCUMENT.format(
         css=s.css,
+        color_scheme=s.color_scheme,
         s_page=s.s_page,
         s_container=s.s_container,
         s_header_pad=s.s_header_pad,

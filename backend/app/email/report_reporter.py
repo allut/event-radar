@@ -68,6 +68,7 @@ def build_report_outcome_html(
 
     return EMAIL_DOCUMENT.format(
         css=s.css,
+        color_scheme=s.color_scheme,
         s_page=s.s_page,
         s_container=s.s_container,
         s_header_pad=s.s_header_pad,

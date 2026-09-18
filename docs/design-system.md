@@ -80,7 +80,15 @@ When adding a token: if it encodes a color that reads differently on a near-whit
 - `syncAccountTheme()` is the shared post-verify policy for both auth tracks: an existing account preference wins and is mirrored locally; otherwise an explicit local override seeds the account. Each track passes its own PATCH so consumer and organizer state stay independent.
 - UI: `ThemeSelector` (consumer + organizer top bars, `useThemePreference`), `AdminThemeToggle` in the admin rail.
 
-**Email theming.** Emails can't read a media query reliably, so `backend/app/email/styles.py::get_email_styles(theme_preference)` returns a `DARK_STYLES`/`LIGHT_STYLES` bundle keyed on the recipient's stored preference — **light is the default**; only an explicit `dark` preference gets the dark bundle. Structural (non-color) email styling is shared between the two. Presentation stays split three ways per the repo rule: CSS in `styles.py`, markup in `templates.py`, assembly in the delivery module.
+**Email theming.** `backend/app/email/styles.py::get_email_styles(theme_preference)` returns a three-way bundle keyed on the recipient's stored preference:
+
+| `theme_preference` | bundle | declared `color-scheme` | dark override CSS |
+|---|---|---|---|
+| `"dark"` | `DARK_STYLES` | `dark` | no |
+| `"light"` | `LIGHT_STYLES` | `light` | no |
+| `None` (unset) | `SYSTEM_STYLES` | `light dark` | yes |
+
+`SYSTEM_STYLES` is the light palette as its base (so a client that strips `<style>` still gets a readable, intentional render) plus a `@media (prefers-color-scheme:dark)` override block (`_THEME_CLASS_RULES` in `styles.py`, driving `e-*` class hooks in `templates.py`) that repaints it dark for a client honoring OS theme. Every bundle declares its scheme via `<meta name="color-scheme">`/`<meta name="supported-color-schemes">` on `EMAIL_DOCUMENT` — without it, a client (notably Apple Mail) may apply its own undeclared dark-mode inversion, which can disagree with the palette actually rendered (e.g. inverting an already-dark email to a washed-out, contrast-broken "light" render). Structural (non-color) email styling is shared across all three bundles. Presentation stays split three ways per the repo rule: CSS in `styles.py`, markup in `templates.py`, assembly in the delivery module.
 
 ## 6. Shape
 

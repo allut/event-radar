@@ -103,9 +103,12 @@ def test_theme_preference_selects_style_set(make_event):
     default_html = report_reporter.build_report_outcome_html(event, "Fine.", "en")
 
     assert "#13161e" in dark_html
+    assert 'content="dark"' in dark_html
     assert "#fdfcfa" in light_html
-    # unset theme_preference resolves to light, matching get_email_styles(None)
+    assert 'content="light"' in light_html
+    # unset theme_preference resolves to SYSTEM_STYLES: light base, client-adaptive
     assert "#fdfcfa" in default_html
+    assert 'content="light dark"' in default_html
 
 
 @pytest.mark.asyncio

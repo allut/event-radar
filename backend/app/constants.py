@@ -906,10 +906,12 @@ LOCALE_RU = "ru"
 # column values (users/organizers). The tri-state UI value "system" is never
 # sent to or stored on this column; only "light"/"dark"/NULL are valid here.
 
-# The one theme_preference value that keeps an email's dark styling unchanged —
-# every other value (including None/"system") selects the light style set.
-# See app/email/styles.py::get_email_styles.
+# The three-way split app/email/styles.py::get_email_styles branches emails
+# on: "dark" -> DARK_STYLES, "light" -> LIGHT_STYLES, None -> SYSTEM_STYLES
+# (light base + a prefers-color-scheme:dark override, since an unset
+# preference should follow the recipient's own client theme).
 THEME_PREFERENCE_DARK = "dark"
+THEME_PREFERENCE_LIGHT = "light"
 
 # Admin review-queue pagination (routers/admin.py GET /admin/submissions) — mirrors
 # ADMIN_DEDUP_GROUPS_PAGE_SIZE's sizing rationale (small default page, generous cap).
