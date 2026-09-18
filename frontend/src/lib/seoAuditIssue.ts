@@ -1,5 +1,5 @@
 // .js extension required: this module is also imported (transitively) by
-// api/seo-audit.ts, which Vercel runs as unbundled Node ESM.
+// functions/api/seo-audit.ts, which Cloudflare Pages runs as unbundled ESM.
 import { SEO_AUDIT_GITHUB_REPO, SEO_AUDIT_ISSUE_LABEL } from '../constants.js';
 import { githubRequest } from './githubRequest.js';
 

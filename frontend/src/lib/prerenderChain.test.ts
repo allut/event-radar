@@ -39,7 +39,7 @@ describe('serializeRoundMarker / parseRoundMarker', () => {
     expect(parseRoundMarker(commitMessage)).toEqual(marker);
   });
 
-  it('fits within the 2048-byte VERCEL_GIT_COMMIT_MESSAGE cap for thousands-of-routes progress counts', () => {
+  it('fits within the commit message 2048-byte cap for thousands-of-routes progress counts', () => {
     const marker = makeMarker({
       newlyRendered: 9999,
       copiedForward: 9999,
@@ -333,7 +333,7 @@ describe('shouldCommitRoundMarker', () => {
       // This is the bug under test: scripts/prerender.ts's main() used to call
       // commitRoundMarker(marker) unconditionally here, instead of gating on
       // shouldCommitRoundMarker(marker) — so it always pushed, and the push
-      // alone triggers the next Vercel build (docs/backend-ops.md).
+      // alone triggers the next build (docs/backend-ops.md).
       if (shouldCommitRoundMarker(marker)) {
         selfTriggeredPushes++;
         commitMessage = `prerender: round ${marker.round} (${marker.status})\n\n${serializeRoundMarker(marker)}`;

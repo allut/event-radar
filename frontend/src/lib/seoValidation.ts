@@ -1,7 +1,7 @@
 import { parseHTML } from 'linkedom';
 import type { EventData } from '../components/EventCard';
 // .js extensions required: this module is also imported (transitively) by
-// api/seo-audit.ts, which Vercel runs as unbundled Node ESM.
+// functions/api/seo-audit.ts, which Cloudflare Pages runs as unbundled ESM.
 import { t } from '../i18n.js';
 import {
   CANONICAL_LINK_SELECTOR,

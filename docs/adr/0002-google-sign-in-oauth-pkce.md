@@ -34,7 +34,7 @@ loaded; no rendered Google widget or iframe.**
 The button is a plain first-party link/form. Clicking it top-level-navigates
 the browser to `accounts.google.com/o/oauth2/v2/auth` with a PKCE
 `code_challenge` attached. Google redirects back to a first-party callback
-route on our own origin (through the Vercel `/api` rewrite). The authorization
+route on our own origin (through the `/api` proxy). The authorization
 code is exchanged for tokens entirely server-to-server (with a client
 secret), the ID token is verified, and only then is our normal session
 cookie minted — exactly like `POST /auth/verify` mints it today.
@@ -226,7 +226,7 @@ only new rows ever get `email_verified` written from this path.
 - **`CORS_ORIGINS`: unchanged**, gains no third job — the code-for-token
   exchange is server-to-server (`httpx` from our backend to Google), never a
   browser CORS request.
-- **CSP (`frontend/vercel.json`): zero change.** The redirect to
+- **CSP (`frontend/public/_headers`): zero change.** The redirect to
   `accounts.google.com` and the return are both top-level navigations,
   ungoverned by `script-src`/`connect-src`/`frame-src`.
 - **Concurrent-login race** (two tabs, both starting Google sign-in): the

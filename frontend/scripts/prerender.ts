@@ -80,15 +80,15 @@ import { PRERENDER_BACKEND_TARGET } from '../vite.config';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DIST_DIR = path.resolve(__dirname, '../dist');
 const API_ORIGIN = PRERENDER_BACKEND_TARGET;
-// These were 3x wider on Vercel (90s/45s) vs local (30s/15s) — confirmed via
-// local repro (same Chromium binary, same real backend) that a page which
-// renders in ~3.6s locally could still consistently blow past the narrower
-// value on Vercel's shared/throttled 2-core build machine running
-// single-process, software-rendered (SwiftShader) Chromium. Left at the
-// wider values unconditionally rather than collapsed to the local-dev
-// numbers: issue #373 asked for this collapse to be justified against a
-// real Cloudflare Pages production build log, and that log wasn't available
-// when this landed. Revisit with real numbers before narrowing.
+// These are 3x wider than local (90s/45s vs 30s/15s) — confirmed via local
+// repro (same Chromium binary, same real backend) that a page which renders
+// in ~3.6s locally could still consistently blow past the narrower value on
+// a shared/throttled build machine running single-process,
+// software-rendered (SwiftShader) Chromium. Left at the wider values
+// unconditionally rather than collapsed to the local-dev numbers: issue #373
+// asked for this collapse to be justified against a real Cloudflare Pages
+// production build log, and that log wasn't available when this landed.
+// Revisit with real numbers before narrowing.
 const NAV_TIMEOUT_MS = 90_000;
 const CONTENT_READY_TIMEOUT_MS = 45_000;
 // Targets run through a bounded pool of pages rather than one at a time —
@@ -128,7 +128,7 @@ const CHANGE_MARKER_JSONLD_FIELD = 'dateModified';
 // stops handing out new routes; unreached routes keep serving whatever's
 // already live (copy-forward doubles as the "stale but real" fallback) or,
 // for a route that's never been rendered at all, the CSR shell that
-// vercel.json's catch-all rewrite falls back to. Overridable so the
+// `functions/[[path]].ts`'s SPA fallback serves instead. Overridable so the
 // stop-at-cap behavior is verifiable without a real 10-minute wait (e.g.
 // `PRERENDER_RENDER_BUDGET_MINUTES=0 npm run build`).
 const DEFAULT_RENDER_BUDGET_MINUTES = 10;
@@ -276,11 +276,11 @@ function embedChangeMarkerInPlace(document: Document, marker: string): void {
  * change, so those references go dead the moment the next build ships —
  * and because copy-forward has no staleness signal of its own (its whole
  * point is "nothing about this route changed"), the dead references would
- * otherwise persist silently across arbitrarily many future deploys. Vercel
- * doesn't 404 the request either: vercel.json's catch-all rewrite serves
- * `app-shell.html` (200, `text/html`) for any unmatched path, which a
- * browser then rejects as a stylesheet/module script under strict MIME
- * sniffing — no CSS, and React never mounts.
+ * otherwise persist silently across arbitrarily many future deploys.
+ * Cloudflare doesn't 404 the request either: `functions/[[path]].ts`'s SPA
+ * fallback serves `app-shell.html` (200, `text/html`) for any unmatched
+ * path, which a browser then rejects as a stylesheet/module script under
+ * strict MIME sniffing — no CSS, and React never mounts.
  *
  * `shellHtml` must be `dist/app-shell.html` — the pristine, never-prerendered
  * Vite output — not `dist/index.html`, which prerender itself overwrites
@@ -501,8 +501,8 @@ export interface ChangeDetectionResult {
    * *does* need a fresh render but the render budget runs out before
    * reaching it — copying the last-known-good page forward beats leaving
    * the route with nothing this round. A route with no live page at all
-   * (null here) falls through to the CSR shell via vercel.json's catch-all
-   * rewrite instead. */
+   * (null here) falls through to the CSR shell via `functions/[[path]].ts`'s
+   * SPA fallback instead. */
   liveHtml: string | null;
 }
 
@@ -661,8 +661,8 @@ export function buildRobotsTxt(): string {
   return lines.join('\n') + '\n';
 }
 
-/** dist-relative output file for a locale-prefixed URL — mirrors how Vercel's
- * static file server resolves a directory path to its index.html. */
+/** dist-relative output file for a locale-prefixed URL — mirrors how a static
+ * file server resolves a directory path to its index.html. */
 function outputFilePath(bare: string, locale: string): string {
   const localized = localizedPath(bare, locale);
   const relDir = localized === '/' ? '' : localized;
@@ -674,10 +674,10 @@ async function launchBrowser(): Promise<Browser> {
 }
 
 /** Rolling buffer of a page's recent console/pageerror/requestfailed
- * activity (issue #86 investigation) — three consecutive Vercel-only
- * `waitForSelector` timeout theories (single-process contention, then a
- * flat timeout bump) each failed to explain the next production run, always
- * on the exact same routes including the static, no-fetch Landing page.
+ * activity (issue #86 investigation) — three consecutive `waitForSelector`
+ * timeout theories (single-process contention, then a flat timeout bump)
+ * each failed to explain the next production run, always on the exact same
+ * routes including the static, no-fetch Landing page.
  * Rather than guess a fourth time, capture what the page itself was doing
  * when a render times out, so the next failure's log says what actually
  * happened instead of just that it didn't. Attached once per page (workers
@@ -956,9 +956,9 @@ async function commitRoundMarker(marker: RoundMarker): Promise<boolean> {
  * that also rendered nothing new). No-op for a `continuing` marker.
  *
  * Chaining to the next round (issue #84) no longer fires an explicit Deploy
- * Hook here — `commitRoundMarker`'s branch push already triggers Vercel's
- * git-connected auto-deploy, and firing a second hook against the same
- * commit produced two competing deployments (issue #89). */
+ * Hook here — `commitRoundMarker`'s branch push already triggers Cloudflare
+ * Pages' git-connected auto-deploy, and firing a second hook against the
+ * same commit produced two competing deployments (issue #89). */
 /** Scopes the in-build validation gate to this round's newly-rendered
  * routes only (issue #94) — `renderQueue` minus whatever the render budget
  * left in `skippedTargets`. Copied-forward routes (never in `renderQueue`)
@@ -1251,8 +1251,9 @@ export async function main(): Promise<void> {
   // one existed (held in staleFallbackHtml above — see that block for why
   // this write is deferred to here instead of happening ahead of the render
   // pool). A route with no live page at all (never rendered before) has
-  // nothing on disk, which falls through to the CSR shell via vercel.json's
-  // catch-all rewrite rather than a build failure — see outputFilePath/vercel.json.
+  // nothing on disk, which falls through to the CSR shell via
+  // `functions/[[path]].ts`'s SPA fallback rather than a build failure —
+  // see outputFilePath above.
   let staleFallbackWritten = 0;
   // runPool, not a sequential for-of — same rationale as the copy-forward
   // loop above (Big-O audit #5, Tier 4).
@@ -1300,7 +1301,7 @@ export async function main(): Promise<void> {
   console.log(`prerender: validated ${validationTargets.length} snapshot(s), no issues found`);
 
   // Round-state marker (issue #83): built from this round's actual outcome
-  // and committed to the Vercel-git-connected production branch, whose push
+  // and committed to the git-connected production branch, whose push
   // is what triggers any later round's build (issue #84/#89 — see the
   // comment below). `status` already accounts for the chain-depth cap and
   // zero-progress abort so the committed marker is truthful. A failure here
@@ -1319,11 +1320,11 @@ export async function main(): Promise<void> {
   );
   // Chaining (issue #84, fixed in #89, gated in #101): the branch push
   // inside commitRoundMarker is the chain's sole continuation trigger — the
-  // production branch is Vercel-git-connected, so advancing its ref alone
-  // triggers the next round's build. No separate Deploy Hook fire happens
-  // here. Only push when shouldCommitRoundMarker(marker) says a round is
-  // actually `continuing` — pushing a `done` marker has nothing left to
-  // resume, yet the push itself still triggers a fresh Vercel build (any
+  // production branch is git-connected to Cloudflare Pages, so advancing its
+  // ref alone triggers the next round's build. No separate Deploy Hook fire
+  // happens here. Only push when shouldCommitRoundMarker(marker) says a
+  // round is actually `continuing` — pushing a `done` marker has nothing
+  // left to resume, yet the push itself still triggers a fresh build (any
   // push does), which starts a brand-new burst that (home routes never
   // classify `unchanged` — see classifyTarget) reliably finishes `done`
   // again, forever. That self-sustaining loop is what shipped overnight

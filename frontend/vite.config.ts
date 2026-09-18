@@ -9,7 +9,7 @@ const BACKEND_TARGET = 'http://127.0.0.1:8000';
 // `vite preview`'s target during the prerender build step (scripts/prerender.ts) —
 // there's no dev server proxy at that point, so the built SPA's same-origin
 // `/api` fetches need a real backend to hit. Defaults to the same Render origin
-// vercel.json's `/api/:path*` rewrite already points at in production;
+// functions/api/[[path]].ts's proxy already points at in production;
 // overridable via env for a local dry run against a different backend.
 // Exported (not just used below) so scripts/prerender.ts's own direct
 // `fetch()` calls to the backend share this exact value instead of

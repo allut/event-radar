@@ -89,7 +89,7 @@ class RequestLinkBody(BaseModel):
 
 class VerifyTokenBody(BaseModel):
     """Shared /verify request body — the magic-link token moves from a query
-    parameter to the body so it stops landing in server access logs (Vercel
+    parameter to the body so it stops landing in server access logs (Cloudflare
     edge, Render). Identical shape for both auth tracks, mirroring
     RequestLinkBody."""
 

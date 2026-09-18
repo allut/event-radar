@@ -1,5 +1,5 @@
 // .js extensions required: this module is also imported (transitively) by
-// api/seo-audit.ts, which Vercel runs as unbundled Node ESM.
+// functions/api/seo-audit.ts, which Cloudflare Pages runs as unbundled ESM.
 import {
   CRAWLABLE_ASSETS_PATH,
   CRAWLABLE_ICON_PATHS,
@@ -128,12 +128,12 @@ export function parseSitemapEventUrls(sitemapXml: string): string[] {
  * (a font preload, an `<img>`) can't produce a false-positive "wrong
  * content-type" finding from a check that was never meant to cover it.
  * Regex, not an HTML parser: this only needs to catch the exact tag shape
- * Vite/prerender.ts emits, and api/seo-audit.ts is already the pure/
- * network-free-logic-vs-fetching split this repo uses elsewhere
+ * Vite/prerender.ts emits, and functions/api/seo-audit.ts is already the
+ * pure/network-free-logic-vs-fetching split this repo uses elsewhere
  * (evaluateLiveAudit above). Used to catch the app-shell-fallthrough failure
  * mode a copied-forward snapshot can ship (issue #97): a stale asset
- * reference that 200s as `text/html` (Vercel's SPA catch-all) instead of
- * 404ing, which no structural/JSON-LD check here would ever notice. */
+ * reference that 200s as `text/html` (the SPA fallback's catch-all) instead
+ * of 404ing, which no structural/JSON-LD check here would ever notice. */
 const SNAPSHOT_TAG_RE = /<(script|link)\b[^>]*>/g;
 const SNAPSHOT_STYLESHEET_REL_RE = /\brel="stylesheet"/;
 const SNAPSHOT_HREF_RE = /\bhref="([^"]+)"/;

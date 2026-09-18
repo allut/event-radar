@@ -593,8 +593,8 @@ app.add_middleware(
     allow_origins=settings.CORS_ORIGINS,
     # Auth is now a Set-Cookie session (see #26 / docs/adr/0001), but
     # allow_credentials stays False deliberately: the cookie is scoped to this
-    # API's own origin and only ever travels through the same-origin Vercel
-    # `/api` rewrite the SPA is served behind, never via a cross-origin
+    # API's own origin and only ever travels through the same-origin `/api`
+    # proxy the SPA is served behind, never via a cross-origin
     # browser fetch/XHR — so credentialed CORS would only widen the attack
     # surface for no functional gain, regardless of what CORS_ORIGINS lists.
     allow_credentials=False,

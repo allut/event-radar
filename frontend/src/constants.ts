@@ -1,6 +1,6 @@
 // .js extensions required: this module is also imported (transitively) by
-// api/prerender-cadence.ts and api/seo-audit.ts, which Vercel runs as
-// unbundled Node ESM.
+// functions/api/prerender-cadence.ts and functions/api/seo-audit.ts, which
+// Cloudflare Pages runs as unbundled ESM.
 import { PERSONAS_EN, type PersonaData } from './_generated/i18nData.js';
 import {
   LOCALE_CODE_MAP as _LOCALE_CODE_MAP,
@@ -292,15 +292,15 @@ export const GITHUB_API_BASE_URL = 'https://api.github.com';
 export const GITHUB_API_VERSION = '2022-11-28';
 // Shared-secret header cron-job.org sends on its seo-audit ping, mirroring
 // the backend's /internal/tick pattern (docs/backend-ops.md). Distinct from
-// PRERENDER_CADENCE_TOKEN_HEADER and the backend's own X-Internal-Token: the
-// vercel.json rewrite excludes both of this function's path variants by
-// exact-anchored negative lookahead, so any variant that doesn't match exactly
-// gets proxied to Render carrying this header — a shared name with the
+// PRERENDER_CADENCE_TOKEN_HEADER and the backend's own X-Internal-Token: if
+// both Cloudflare Pages Functions ever shared one header name, a future
+// refactor that merged their handlers could forward this header's value to
+// the backend under a name it wasn't meant for — a shared name with the
 // backend's header would leak SEO_AUDIT_TOKEN into that proxied request.
 export const SEO_AUDIT_TOKEN_HEADER = 'x-seo-audit-token';
 
 // ─── Prerender chaining (issue #79/#81) ────────────────────────────────────
-// Round-state marker embedded in the git commit message (VERCEL_GIT_COMMIT_MESSAGE
+// Round-state marker embedded in the git commit message (the commit message
 // has a 2048-byte cap) a chained round reads back on the next round/cron tick —
 // see src/lib/prerenderChain.ts.
 export const CHAIN_MARKER_PREFIX = 'prerender-chain:';
@@ -343,18 +343,18 @@ export const CHAIN_STATE_PREFIX = 'prerender-chain-state/';
 // documents the intended value for whoever configures it.
 export const CHAIN_STATE_LIFECYCLE_DAYS = 3;
 // Repo the round-state marker is committed to (issue #83) via the GitHub Git
-// Data API — the branch the Vercel Deploy Hook targets lives here. Same repo
-// as SEO_AUDIT_GITHUB_REPO (both point at this codebase); kept as a separate
-// constant since the two features are unrelated and may diverge.
+// Data API — the branch the Cloudflare Pages Deploy Hook targets lives here.
+// Same repo as SEO_AUDIT_GITHUB_REPO (both point at this codebase); kept as a
+// separate constant since the two features are unrelated and may diverge.
 export const PRERENDER_CHAIN_GITHUB_REPO = 'allut/event-radar';
-// Production/Vercel-git-connected branch the round-state marker is pushed to
-// and the cadence gate (issue #92, api/prerender-cadence.ts) reads its tip
-// commit from.
+// Production, git-connected branch the round-state marker is pushed to and
+// the cadence gate (issue #92, functions/api/prerender-cadence.ts) reads its
+// tip commit from.
 export const PRERENDER_CADENCE_GIT_BRANCH = 'release';
 // Shared-secret header cron-job.org sends on its prerender-cadence ping
 // (issue #92). Distinct name from SEO_AUDIT_TOKEN_HEADER and the backend's own
 // X-Internal-Token — see that constant's comment for why a shared name is a
-// cross-service secret-disclosure risk via the vercel.json rewrite exclusion.
+// cross-service secret-disclosure risk.
 export const PRERENDER_CADENCE_TOKEN_HEADER = 'x-prerender-cadence-token';
 
 // ─── Analytics ───────────────────────────────────────────────────────────────
@@ -371,7 +371,7 @@ export const ANALYTICS_EVENT_PATH_RE = new RegExp(`^${_LOCALE_PREFIX_RE_SRC}/eve
 export const ANALYTICS_ORGANIZER_EDIT_PATH_RE = new RegExp(`^${_LOCALE_PREFIX_RE_SRC}/organizer/events/\\d+/edit$`);
 
 // GA4 loader src — googletagmanager.com only, matching the CSP script-src
-// widened for it (frontend/vercel.json, see docs/security.md).
+// widened for it (frontend/public/_headers, see docs/security.md).
 export const GTAG_SCRIPT_SRC = 'https://www.googletagmanager.com/gtag/js';
 
 // GA4 custom event names for the public-Explore + sign-in-upsell flow (issue
@@ -862,16 +862,14 @@ export const THEME_OPTIONS = [
   { value: 'dark', labelKey: 'theme_dark' },
 ] as const;
 
-// Prefix every backend request is proxied under (see vercel.json's rewrite
-// rule and functions/api/[[path]].ts's catch-all proxy, both keyed on this
-// same string) — api/client.ts's fetch wrapper and NDJSON stream path both
-// prepend it.
+// Prefix every backend request is proxied under (see
+// functions/api/[[path]].ts's catch-all proxy, keyed on this same string) —
+// api/client.ts's fetch wrapper and NDJSON stream path both prepend it.
 export const API_BASE = '/api';
 
-// Render Frankfurt backend origin (issue #342) the `/api/*` proxy forwards
-// to — functions/api/[[path]].ts's Cloudflare Pages Function equivalent of
-// vercel.json's `/api/:path` rewrite destination. Not the same value as
-// vite.config.ts's PRERENDER_BACKEND_TARGET (a Node-only build-time constant
+// Render Frankfurt backend origin (issue #342) the `/api/*` proxy
+// (functions/api/[[path]].ts, a Cloudflare Pages Function) forwards to. Not
+// the same value as vite.config.ts's PRERENDER_BACKEND_TARGET (a Node-only build-time constant
 // scripts/prerender.ts and the dev proxy use — that file can't import from
 // here, and a real dry run needs to override it independently via
 // PRERENDER_API_ORIGIN), but both currently point at the same backend.

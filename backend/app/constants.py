@@ -689,7 +689,7 @@ AUTH_MAGIC_SALT = "magic-link-v1"
 AUTH_SESSION_SALT = "session-v1"
 # Session-cookie transport (issue #26 / docs/adr/0001). Path scoping is what
 # keeps the higher-value organizer credential off ordinary consumer requests —
-# both paths sit under the Vercel `/api` rewrite that makes the SPA same-origin
+# both paths sit under the `/api` proxy that makes the SPA same-origin
 # with this API, so a browser only ever attaches SESSION_COOKIE_NAME under
 # /api and ORGANIZER_SESSION_COOKIE_NAME under /api/organizer.
 SESSION_COOKIE_NAME = "session"
@@ -1537,7 +1537,7 @@ CURRENCY_AMOUNT_RE = (
 # CORS — restricted to the methods/headers the SPA actually sends (see
 # frontend/src/api/client.ts and routers/*.py route decorators). allow_credentials
 # stays False regardless (see main.py's CORSMiddleware call site) — the session
-# cookie only ever travels same-origin through the Vercel `/api` rewrite, never
+# cookie only ever travels same-origin through the `/api` proxy, never
 # via a credentialed cross-origin request.
 CORS_ALLOWED_METHODS: list[str] = ["GET", "POST", "PATCH", "DELETE"]
 CORS_ALLOWED_HEADERS: list[str] = ["Authorization", "Content-Type"]

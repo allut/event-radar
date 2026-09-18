@@ -198,7 +198,7 @@ class Settings(BaseSettings):
     MISTRAL_API_KEY: str = ""
 
     # CORS — pydantic-settings parses a JSON array from the env var (e.g. '["https://eventradar.ee"]')
-    # In Render: set CORS_ORIGINS to your Vercel/CF Pages URL before deploying.
+    # In Render: set CORS_ORIGINS to your Cloudflare Pages URL before deploying.
     # Dual role: this set also seeds CsrfOriginCheckMiddleware's trusted-origin
     # allowlist (app/main.py, CORS_ORIGINS ∪ {FRONTEND_URL}) — widening it for CORS
     # also widens which Origins are trusted for the CSRF check.

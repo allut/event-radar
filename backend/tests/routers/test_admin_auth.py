@@ -148,9 +148,10 @@ async def test_login_and_logout_and_me_roundtrip():
             )
             assert login_resp.status_code == http.HTTPStatus.OK
             # The cookie is Path-scoped to /api/admin (the app-served path
-            # here has no /api prefix — that's added by Vercel's rewrite in
-            # production), so httpx's jar won't auto-attach it to these
-            # requests; pass it explicitly instead of relying on the jar.
+            # here has no /api prefix — that's added by the Cloudflare Pages
+            # Function proxy in production), so httpx's jar won't auto-attach
+            # it to these requests; pass it explicitly instead of relying on
+            # the jar.
             session_cookie = login_resp.cookies["admin_session"]
 
             me_resp = await client.get(

@@ -11,17 +11,13 @@
  * this file only wires auth, the two production fetches, and the GitHub
  * report/recover calls together.
  *
- * Ported from the Vercel Serverless Function this used to be (issue #344):
- * only the platform boundary changed (Fetch API Request/Response instead of
- * the VercelRequest/VercelResponse shim, context.env instead of
- * process.env) — every imported helper is untouched.
+ * Fetch API Request/Response, context.env for config (issue #344).
  *
  * Routing note: file-based routing puts this at the exact path
  * `/api/seo-audit`. Cloudflare Pages matches an exact-path function ahead of
- * any catch-all sibling — so once #345 adds a catch-all `/api/[[path]]`
- * backend-proxy function alongside this one, no negative-lookahead exclusion
- * is needed the way vercel.json requires one today. That catch-all doesn't
- * exist yet as of this ticket (#344).
+ * any catch-all sibling — so the catch-all `/api/[[path]]` backend-proxy
+ * function (#345) never claims this path, no negative-lookahead exclusion
+ * needed.
  */
 import { StatusCodes } from 'http-status-codes';
 import { FAVICON_ICO_PATH, LOCALES, PRODUCTION_ORIGIN, ROBOTS_TXT_PATH, ROUTES, SEO_AUDIT_TOKEN_HEADER, SITEMAP_PATH } from '../../src/constants.js';
