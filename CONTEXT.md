@@ -77,3 +77,23 @@ The admin action that closes out an open report, optionally with a
 resolution note. Distinct from "review," which is reserved for the
 organizer submission queue.
 _Avoid_: review, approve, dismiss
+
+## Theming
+
+**Device theme**:
+The light-or-dark setting the viewer's platform reports for the surface an
+Event Radar page or email is being viewed on. It belongs to the device, not
+to an account, and it may change at any time.
+_Avoid_: system theme, OS theme, prefers-color-scheme
+
+**Resolved theme**:
+The binary light-or-dark actually painted for one view. Always exactly one of
+the two; there is no third value to render.
+_Avoid_: effective theme, active theme, current theme
+
+**Theme override**:
+A viewer's explicit choice of the resolved theme on one browser, held only
+until that browser's device theme next changes. It is scoped to the browser
+that made it, never to an account, and it expires rather than being cleared
+by hand.
+_Avoid_: theme preference, theme setting, saved theme
