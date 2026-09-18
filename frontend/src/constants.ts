@@ -47,10 +47,18 @@ export const LOCALE_KEY = 'locale';
 // two independent auth tracks (own account table, own token salts on the
 // backend) that must never be confused for one another. See lib/organizerAuth.ts.
 export const ORGANIZER_SIGNED_IN_HINT_KEY = 'organizer_session_token';
-// Tri-state theme override, shared across consumer/organizer/admin (one SPA
-// bundle, one light palette) — see lib/theme.ts's resolveTheme(). Holds
-// "system" | "light" | "dark"; "system"/unset falls through to matchMedia.
-export const THEME_PREFERENCE_KEY = 'theme_preference';
+// Legacy tri-state theme key ("system" | "light" | "dark") from the
+// permanent-preference model this app replaced (ADR 0003) — wiped on every
+// boot (lib/theme.ts) rather than reinterpreted, since its "system" value
+// has no equivalent under the new expiring-override semantics.
+export const LEGACY_THEME_PREFERENCE_KEY = 'theme_preference';
+// Device-theme-following override, shared across consumer/organizer/admin
+// (one SPA bundle, one light palette) — see lib/theme.ts's resolveTheme().
+// Holds "light" | "dark" only; paired with THEME_OVERRIDE_DEVICE_KEY, which
+// records the device theme the override was chosen under, so a later device
+// flip can be detected and the override discarded (ADR 0003).
+export const THEME_OVERRIDE_KEY = 'theme_override';
+export const THEME_OVERRIDE_DEVICE_KEY = 'theme_override_device';
 // Client-only dismissal flag for the profile nudge banner (#175) — no backend
 // field for this, so a stale/cleared browser just re-shows it once.
 export const ORGANIZER_PROFILE_NUDGE_DISMISSED_KEY = 'organizer_profile_nudge_dismissed';
@@ -809,8 +817,9 @@ export const ADMIN_GENERIC_ERROR = 'Something went wrong. Try again.';
 // AdminShell's foot-area theme toggle (issue #255) — same {value, label}
 // shape as THEME_OPTIONS below, but plain-English labels: same no-i18n
 // exemption as ADMIN_NAV_ITEMS, since the admin console has no locale.
+// Two options only (ADR 0003) — device-following is the default state, not
+// a picker entry.
 export const ADMIN_THEME_OPTIONS = [
-  { value: 'system', label: 'System' },
   { value: 'light', label: 'Light' },
   { value: 'dark', label: 'Dark' },
 ] as const;
@@ -853,11 +862,12 @@ export const ORGANIZER_NAV_ITEMS = [
   { route: ROUTES.organizerContact, labelKey: 'organizer_contact_nav' },
 ] as const;
 
-// The three theme options rendered by both ThemeSelector (desktop) and
+// The two theme options rendered by both ThemeSelector (desktop) and
 // MobileMenu (mobile), kept in one place so they can't drift out of sync —
-// mirrors NAV_ITEMS' {value, labelKey} pattern above.
+// mirrors NAV_ITEMS' {value, labelKey} pattern above. No "System" entry
+// (ADR 0003) — device-following is the default state a viewer falls back to
+// once their override expires, not something offered as a third choice.
 export const THEME_OPTIONS = [
-  { value: 'system', labelKey: 'theme_system' },
   { value: 'light', labelKey: 'theme_light' },
   { value: 'dark', labelKey: 'theme_dark' },
 ] as const;

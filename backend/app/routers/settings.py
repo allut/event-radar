@@ -30,7 +30,6 @@ from app.routers.utils import (
     persona_weight_tuple,
     serialize_user,
     set_session_cookie,
-    validate_theme_preference,
 )
 
 log = logging.getLogger(__name__)
@@ -40,7 +39,6 @@ router = APIRouter(prefix="/users/me", tags=["settings"])
 class PatchSettingsBody(BaseModel):
     locale: str | None = None
     email_digest_opt_in: bool | None = None
-    theme_preference: str | None = None
 
     @field_validator("locale")
     @classmethod
@@ -48,11 +46,6 @@ class PatchSettingsBody(BaseModel):
         if v is not None and v not in VALID_LOCALES:
             raise ValueError(f"locale must be one of {sorted(VALID_LOCALES)}")
         return v
-
-    @field_validator("theme_preference")
-    @classmethod
-    def theme_preference_must_be_valid(cls, v: str | None) -> str | None:
-        return validate_theme_preference(v)
 
 
 async def _load_persona_data(
@@ -169,19 +162,8 @@ async def patch_settings(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    """Update locale, email digest preference, and/or theme preference.
-
-    An explicitly-sent `theme_preference: null` clears the account column
-    back to "no preference" (the client's way of durably reverting to
-    System, #257) — distinct from omitting the field, which leaves the
-    existing value untouched. Distinguished via `model_fields_set` since
-    both cases parse to `None` on the model.
-    """
-    if (
-        body.locale is None
-        and body.email_digest_opt_in is None
-        and "theme_preference" not in body.model_fields_set
-    ):
+    """Update locale and/or email digest preference."""
+    if body.locale is None and body.email_digest_opt_in is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=ERROR_NO_UPDATE_FIELDS,
@@ -191,8 +173,6 @@ async def patch_settings(
         current_user.locale = body.locale
     if body.email_digest_opt_in is not None:
         current_user.email_digest_opt_in = body.email_digest_opt_in
-    if "theme_preference" in body.model_fields_set:
-        current_user.theme_preference = body.theme_preference
 
     await db.commit()
     await db.refresh(current_user)

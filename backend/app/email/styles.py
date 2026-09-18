@@ -6,23 +6,19 @@ many email clients strip <style> blocks; the css field covers only progressive
 enhancement (web fonts, link hover, mobile tweaks) that degrades safely when
 stripped.
 
-``get_email_styles(theme_preference)`` is the seam every email builder calls
-at render time: ``"dark"`` returns DARK_STYLES, ``"light"`` returns
-LIGHT_STYLES, and an unset preference (``None`` — the only other value the
-``theme_preference`` column ever holds) returns SYSTEM_STYLES — the light
-palette with a ``prefers-color-scheme:dark`` override, so a client that
-honors OS dark mode still renders dark instead of getting a light email
-force-inverted by the client's own dark-mode heuristics. All three bundles
-declare their scheme via ``<meta name="color-scheme">`` (see
-``EmailStyles.color_scheme`` and ``EMAIL_DOCUMENT``) so clients stop guessing
-and inverting on their own.
+``get_email_styles()`` is the seam every email builder calls at render time —
+one bundle, the light palette with a ``prefers-color-scheme:dark`` override,
+so a client that honors OS dark mode renders dark and one that doesn't (or
+strips ``<style>``) still gets a readable, intentional light render. There is
+no per-recipient theme column to branch on (ADR 0003) — a stored theme can't
+track a device that changes after the mail is sent. The bundle declares its
+scheme via ``<meta name="color-scheme">`` (see ``EmailStyles.color_scheme``
+and ``EMAIL_DOCUMENT``) so clients stop guessing and inverting on their own.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-
-from app.constants import THEME_PREFERENCE_DARK, THEME_PREFERENCE_LIGHT
 
 # Tokens shared by both themes (accent hue, on-accent, accent-alpha overlay —
 # already translucent/brand-fixed, no light variant per the mapping table).
@@ -242,20 +238,13 @@ def _build_styles(
     )
 
 
-DARK_STYLES = _build_styles(_DARK_PALETTE, color_scheme="dark")
-LIGHT_STYLES = _build_styles(_LIGHT_PALETTE, color_scheme="light")
-SYSTEM_STYLES = _build_styles(
+EMAIL_STYLES = _build_styles(
     _LIGHT_PALETTE, color_scheme="light dark", dark_overrides=True
 )
 
 
-def get_email_styles(theme_preference: str | None) -> EmailStyles:
-    """'dark' -> DARK_STYLES, 'light' -> LIGHT_STYLES, unset (None) ->
-    SYSTEM_STYLES — light base, but declares 'light dark' and carries a
-    prefers-color-scheme:dark override so a client honoring OS theme still
-    renders dark instead of force-inverting a purely-light email."""
-    if theme_preference == THEME_PREFERENCE_DARK:
-        return DARK_STYLES
-    if theme_preference == THEME_PREFERENCE_LIGHT:
-        return LIGHT_STYLES
-    return SYSTEM_STYLES
+def get_email_styles() -> EmailStyles:
+    """The one email bundle (ADR 0003) — light base, declares 'light dark',
+    and carries a prefers-color-scheme:dark override so a client honoring OS
+    theme still renders dark instead of force-inverting a purely-light email."""
+    return EMAIL_STYLES

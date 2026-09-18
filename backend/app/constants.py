@@ -22,7 +22,6 @@ from app._generated.shared_constants import (
     VALID_CATEGORIES,
     VALID_LOCALES,
     VALID_SIGNALS,
-    VALID_THEME_PREFERENCES,
     VALID_VIBES,
 )
 
@@ -44,7 +43,6 @@ __all__ = [
     "VALID_CATEGORIES",
     "VALID_LOCALES",
     "VALID_SIGNALS",
-    "VALID_THEME_PREFERENCES",
     "VALID_VIBES",
 ]
 
@@ -900,18 +898,6 @@ ORGANIZER_SUBMISSION_EXTERNAL_ID_PREFIX = "org:"
 LOCALE_ET = "et"
 LOCALE_EN = "en"
 LOCALE_RU = "ru"
-
-# VALID_THEME_PREFERENCES imported from app._generated.shared_constants
-# (shared/app-config.json → generate_shared.py) — server-side theme_preference
-# column values (users/organizers). The tri-state UI value "system" is never
-# sent to or stored on this column; only "light"/"dark"/NULL are valid here.
-
-# The three-way split app/email/styles.py::get_email_styles branches emails
-# on: "dark" -> DARK_STYLES, "light" -> LIGHT_STYLES, None -> SYSTEM_STYLES
-# (light base + a prefers-color-scheme:dark override, since an unset
-# preference should follow the recipient's own client theme).
-THEME_PREFERENCE_DARK = "dark"
-THEME_PREFERENCE_LIGHT = "light"
 
 # Admin review-queue pagination (routers/admin.py GET /admin/submissions) — mirrors
 # ADMIN_DEDUP_GROUPS_PAGE_SIZE's sizing rationale (small default page, generous cap).

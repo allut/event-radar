@@ -25,7 +25,7 @@
     "trendy", "casual", "intimate", "high_energy", "educational",
     "indie", "underground", "mainstream", "accessible", "niche"
   ],
-  "theme_preferences": ["light", "dark"],
+  "themes": ["light", "dark"],
   "browse_page_size": 24,
   "safe_url_schemes": ["http", "https"],
   "image_upload_allowed_mime": ["image/jpeg", "image/png", "image/webp"],

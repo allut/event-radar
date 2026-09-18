@@ -348,7 +348,7 @@ export function rewriteSnapshotAssetRefs(html: string, shellHtml: string): strin
 
 /** Strips a baked-in `data-theme` attribute off `html`'s `<html>` element,
  * leaving every other attribute (`lang`, `data-rh`, …) untouched. A snapshot
- * is captured in the build browser, which has no `theme_preference` in
+ * is captured in the build browser, which has no `theme_override` in
  * localStorage — the inline pre-paint script (index.html) resolves that to
  * whatever the build machine's OS `prefers-color-scheme` happens to be and
  * bakes it into `document.documentElement.dataset.theme` before

@@ -54,7 +54,6 @@ from app.constants import (
     VALID_CATEGORIES,
     VALID_LOCALES,
     VALID_REPORT_REASONS,
-    VALID_THEME_PREFERENCES,
 )
 from app.db import AsyncSessionLocal
 from app.email.report_reporter import (
@@ -661,7 +660,6 @@ def serialize_user(user: User, **extras) -> dict:
         "id": user.id,
         "email": user.email,
         "locale": user.locale,
-        "theme_preference": user.theme_preference,
         "home_city": user.home_city,
         "created_at": user.created_at.isoformat(),
         **extras,
@@ -951,7 +949,6 @@ async def send_report_resolution_emails(
                     event,
                     resolution_note,
                     reporter.locale,
-                    reporter.theme_preference,
                     http_client=http_client,
                 )
             except Exception:
@@ -990,17 +987,6 @@ async def cancel_event_and_resolve_reports(
     event.status = EVENT_STATUS_CANCELLED
     event.cancellation_reason = cancellation_reason
     return await resolve_open_reports(db, event, resolution_note)
-
-
-def validate_theme_preference(v: str | None) -> str | None:
-    """Shared by settings.py's PatchSettingsBody and organizer_profile.py's
-    OrganizerProfilePatchBody — the consumer and organizer theme tracks are
-    independent, but this validation isn't track-specific."""
-    if v is not None and v not in VALID_THEME_PREFERENCES:
-        raise ValueError(
-            f"theme_preference must be one of {sorted(VALID_THEME_PREFERENCES)}"
-        )
-    return v
 
 
 def validate_tz_aware(v: datetime | None) -> datetime | None:

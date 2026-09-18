@@ -68,9 +68,6 @@ class User(Base):
     home_city: Mapped[str] = mapped_column(
         String(100), nullable=False, default=DEFAULT_USER_CITY
     )
-    # "light"/"dark"/NULL (VALID_THEME_PREFERENCES) — NULL means no explicit
-    # preference (client falls back to "system"). No API/validation wiring yet.
-    theme_preference: Mapped[str | None] = mapped_column(String(10), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
@@ -159,8 +156,6 @@ class Organizer(Base):
     locale: Mapped[str] = mapped_column(
         String(2), nullable=False, default=DEFAULT_USER_LOCALE
     )
-    # "light"/"dark"/NULL (VALID_THEME_PREFERENCES) — mirrors User.theme_preference.
-    theme_preference: Mapped[str | None] = mapped_column(String(10), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

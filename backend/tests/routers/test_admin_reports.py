@@ -261,7 +261,6 @@ async def test_resolve_reports_closes_open_reports_no_event_mutation(
         event,
         "Looked into it, event is fine.",
         reporter.locale,
-        reporter.theme_preference,
         http_client=ANY,
     )
 

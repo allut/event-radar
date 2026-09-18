@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, screen } from '@testing-library/react';
 import { renderWithProviders } from '../../test/utils';
-import { getThemePreference } from '../../lib/theme';
+import { getResolvedTheme } from '../../lib/theme';
 import MobileMenu from './MobileMenu';
 
 describe('MobileMenu', () => {
@@ -94,7 +94,7 @@ describe('MobileMenu', () => {
     expect(screen.getByRole('link', { name: 'Daily 5' })).toHaveAttribute('href', '/ru');
   });
 
-  it('fires setThemePreference and closes on a theme option click', () => {
+  it('fires setThemeOverride and closes on a theme option click', () => {
     renderWithProviders(
       <MobileMenu locale="en" onLocaleChange={vi.fn()} onLogout={vi.fn()} />,
     );
@@ -102,7 +102,7 @@ describe('MobileMenu', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
     fireEvent.click(screen.getByText('Dark'));
 
-    expect(getThemePreference()).toBe('dark');
+    expect(getResolvedTheme()).toBe('dark');
     expect(screen.queryByText('Dark')).not.toBeInTheDocument();
   });
 

@@ -8,7 +8,7 @@ organizer set a name yet?); PATCH updates it, scoped to get_current_organizer.
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
 from sqlalchemy import delete, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -32,7 +32,6 @@ from app.routers.organizer_auth import get_current_organizer
 from app.routers.utils import (
     is_identity_linked,
     set_session_cookie,
-    validate_theme_preference,
 )
 
 log = logging.getLogger(__name__)
@@ -42,12 +41,6 @@ router = APIRouter(prefix="/organizer/profile", tags=["organizer-profile"])
 
 class OrganizerProfilePatchBody(BaseModel):
     name: str | None = Field(None, max_length=ORGANIZER_NAME_MAX_LEN)
-    theme_preference: str | None = None
-
-    @field_validator("theme_preference")
-    @classmethod
-    def theme_preference_must_be_valid(cls, v: str | None) -> str | None:
-        return validate_theme_preference(v)
 
 
 def _serialize(organizer: Organizer, *, google_linked: bool) -> dict:
@@ -55,7 +48,6 @@ def _serialize(organizer: Organizer, *, google_linked: bool) -> dict:
         "id": organizer.id,
         "email": organizer.email,
         "locale": organizer.locale,
-        "theme_preference": organizer.theme_preference,
         "verified": organizer.verified,
         "name": organizer.name,
         "google_linked": google_linked,
@@ -86,12 +78,6 @@ async def update_own_profile(
     if "name" in body.model_fields_set:
         stripped = body.name.strip() if body.name else None
         current_organizer.name = stripped or None
-    # An explicitly-sent `theme_preference: null` clears the column back to
-    # "no preference" (durable revert-to-System, #257); omitting the field
-    # leaves the existing value untouched — distinguished via
-    # `model_fields_set` since both parse to `None` on the model.
-    if "theme_preference" in body.model_fields_set:
-        current_organizer.theme_preference = body.theme_preference
     await db.commit()
     await db.refresh(current_organizer)
     google_linked = await is_identity_linked(

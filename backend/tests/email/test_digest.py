@@ -140,21 +140,7 @@ class TestBuildDigestHtml:
         html = build_digest_html(events, date(2026, 5, 20), "en", "https://eventradar.ee")
         assert "https://eventradar.ee/events/42" in html
 
-    def test_dark_theme_preference_keeps_todays_colors(self):
-        html = build_digest_html(
-            [], date(2026, 5, 20), "en", "https://eventradar.ee", theme_preference="dark"
-        )
-        assert "#13161e" in html
-        assert 'content="dark"' in html
-
-    def test_light_theme_preference_uses_light_colors(self):
-        html = build_digest_html(
-            [], date(2026, 5, 20), "en", "https://eventradar.ee", theme_preference="light"
-        )
-        assert "#fdfcfa" in html
-        assert 'content="light"' in html
-
-    def test_unset_theme_preference_uses_light_base_client_adaptive(self):
+    def test_light_base_client_adaptive(self):
         html = build_digest_html([], date(2026, 5, 20), "en", "https://eventradar.ee")
         assert "#fdfcfa" in html
         assert 'content="light dark"' in html

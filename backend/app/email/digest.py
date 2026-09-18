@@ -180,9 +180,8 @@ def build_digest_html(
     locale: str,
     frontend_url: str,
     unsubscribe_url: str | None = None,
-    theme_preference: str | None = None,
 ) -> str:
-    s = get_email_styles(theme_preference)
+    s = get_email_styles()
     date_str = _format_feed_date(feed_date, locale)
     subject_label = t("digest.subject_label", locale)
     if unsubscribe_url is None:
@@ -249,7 +248,6 @@ async def send_digest_email(
     events: Sequence[Event],
     feed_date: date,
     user_id: int,
-    theme_preference: str | None = None,
     *,
     http_client: httpx.AsyncClient | None = None,
 ) -> None:
@@ -269,7 +267,6 @@ async def send_digest_email(
         locale,
         settings.FRONTEND_URL,
         unsubscribe_url,
-        theme_preference,
     )
     subject = ti(
         "digest.subject_template", locale, date=_format_feed_date(feed_date, locale)
@@ -417,7 +414,6 @@ async def send_daily_digests(
                     ordered_events,
                     today,
                     user.id,
-                    user.theme_preference,
                     http_client=http_client,
                 )
                 return DIGEST_RESULT_SENT

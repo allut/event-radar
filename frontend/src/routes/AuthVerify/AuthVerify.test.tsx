@@ -15,16 +15,13 @@ vi.mock('../../api/client', async (importOriginal) => ({
   api: {
     get: vi.fn(),
     post: vi.fn(),
-    patch: vi.fn(),
   },
 }));
 
 import { api } from '../../api/client';
 import { setSignedInHint } from '../../lib/auth';
-import { getThemePreference } from '../../lib/theme';
 const mockGet = vi.mocked(api.get);
 const mockPost = vi.mocked(api.post);
-const mockPatch = vi.mocked(api.patch);
 const mockSetSignedInHint = vi.mocked(setSignedInHint);
 
 describe('AuthVerify', () => {
@@ -46,51 +43,13 @@ describe('AuthVerify', () => {
 
   it('on success: POSTs the token in the body, calls setSignedInHint, and shows success state', async () => {
     mockPost.mockResolvedValueOnce(undefined);
-    mockGet.mockResolvedValueOnce({ has_personas: true, theme_preference: null });
+    mockGet.mockResolvedValueOnce({ has_personas: true });
 
     renderWithProviders(<AuthVerify />, { route: '/auth/verify?token=valid' });
 
     await waitFor(() => expect(mockPost).toHaveBeenCalledWith('/auth/verify', { token: 'valid' }));
     await waitFor(() => expect(mockSetSignedInHint).toHaveBeenCalled());
     await waitFor(() => expect(screen.getByRole('status')).toBeInTheDocument());
-  });
-
-  it('seeds the account theme when local has an explicit override and the account has none', async () => {
-    localStorage.setItem('theme_preference', 'dark');
-    mockPost.mockResolvedValueOnce(undefined);
-    mockGet.mockResolvedValueOnce({ has_personas: true, theme_preference: null });
-    mockPatch.mockResolvedValueOnce(undefined);
-
-    renderWithProviders(<AuthVerify />, { route: '/auth/verify?token=valid' });
-
-    await waitFor(() => expect(mockPatch).toHaveBeenCalledWith('/users/me', { theme_preference: 'dark' }));
-    // Local value is untouched — it's the source being seeded, not overwritten.
-    expect(getThemePreference()).toBe('dark');
-  });
-
-  it('does not seed the account theme when local has no explicit override', async () => {
-    mockPost.mockResolvedValueOnce(undefined);
-    mockGet.mockResolvedValueOnce({ has_personas: true, theme_preference: null });
-
-    renderWithProviders(<AuthVerify />, { route: '/auth/verify?token=valid' });
-
-    await waitFor(() => expect(mockSetSignedInHint).toHaveBeenCalled());
-    expect(mockPatch).not.toHaveBeenCalled();
-  });
-
-  it('applies an existing non-null account theme locally instead of overwriting it', async () => {
-    localStorage.setItem('theme_preference', 'dark');
-    mockPost.mockResolvedValueOnce(undefined);
-    mockGet.mockResolvedValueOnce({ has_personas: true, theme_preference: 'light' });
-
-    renderWithProviders(<AuthVerify />, { route: '/auth/verify?token=valid' });
-
-    await waitFor(() => expect(mockSetSignedInHint).toHaveBeenCalled());
-    // Account value wins visually and is mirrored locally; no PATCH is sent
-    // since the account already holds this preference.
-    expect(getThemePreference()).toBe('light');
-    expect(document.documentElement.dataset.theme).toBe('light');
-    expect(mockPatch).not.toHaveBeenCalled();
   });
 
   it('strips the token from the address bar before verifying', () => {

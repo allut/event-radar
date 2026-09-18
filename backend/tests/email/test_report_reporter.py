@@ -91,41 +91,13 @@ async def test_renders_per_locale(monkeypatch, make_event):
     assert "Report reviewed" in en_html
 
 
-def test_theme_preference_selects_style_set(make_event):
+def test_uses_the_one_light_base_client_adaptive_bundle(make_event):
     event = make_event(10, title="Concert")
 
-    dark_html = report_reporter.build_report_outcome_html(
-        event, "Fine.", "en", "dark"
-    )
-    light_html = report_reporter.build_report_outcome_html(
-        event, "Fine.", "en", "light"
-    )
-    default_html = report_reporter.build_report_outcome_html(event, "Fine.", "en")
+    html = report_reporter.build_report_outcome_html(event, "Fine.", "en")
 
-    assert "#13161e" in dark_html
-    assert 'content="dark"' in dark_html
-    assert "#fdfcfa" in light_html
-    assert 'content="light"' in light_html
-    # unset theme_preference resolves to SYSTEM_STYLES: light base, client-adaptive
-    assert "#fdfcfa" in default_html
-    assert 'content="light dark"' in default_html
-
-
-@pytest.mark.asyncio
-async def test_send_passes_theme_preference_through(
-    patch_client, monkeypatch, make_event
-):
-    monkeypatch.setattr(report_reporter.settings, "RESEND_API_KEY", "re_key")
-    monkeypatch.setattr(report_reporter.settings, "FRONTEND_URL", "https://radar.ee")
-    resp = MagicMock(status_code=httpx.codes.OK, text="ok")
-    post = patch_client(report_reporter, resp)
-
-    await report_reporter.send_report_outcome_email(
-        "reporter@example.com", make_event(10), "note", "en", "dark"
-    )
-
-    html_body = post.call_args.kwargs["json"]["html"]
-    assert "#13161e" in html_body
+    assert "#fdfcfa" in html
+    assert 'content="light dark"' in html
 
 
 @pytest.mark.asyncio

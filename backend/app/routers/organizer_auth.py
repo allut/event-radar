@@ -200,7 +200,6 @@ async def request_organizer_magic_link(
             signed_token,
             email_locale,
             verify_path=ORGANIZER_AUTH_VERIFY_PATH,
-            theme_preference=organizer.theme_preference,
         )
     except Exception:
         log.exception("Failed to send organizer magic link to %s", mask_email(email))
@@ -463,7 +462,6 @@ async def _send_google_confirmation_link(
             signed_token,
             organizer.locale,
             verify_path=ORGANIZER_AUTH_VERIFY_PATH,
-            theme_preference=organizer.theme_preference,
         )
     except Exception:
         log.exception(

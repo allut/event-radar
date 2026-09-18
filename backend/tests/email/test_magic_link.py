@@ -41,21 +41,7 @@ class TestBuildMagicLinkHtml:
 
 
 class TestBuildMagicLinkHtmlTheme:
-    def test_dark_theme_preference_keeps_todays_colors(self):
-        html = build_magic_link_html(
-            "https://example.com/verify?token=x", 15, "en", "dark"
-        )
-        assert "#13161e" in html
-        assert 'content="dark"' in html
-
-    def test_light_theme_preference_uses_light_colors(self):
-        html = build_magic_link_html(
-            "https://example.com/verify?token=x", 15, "en", "light"
-        )
-        assert "#fdfcfa" in html
-        assert 'content="light"' in html
-
-    def test_unset_theme_preference_uses_light_base_client_adaptive(self):
+    def test_light_base_client_adaptive(self):
         html = build_magic_link_html("https://example.com/verify?token=x", 15, "en")
         assert "#fdfcfa" in html
         assert 'content="light dark"' in html

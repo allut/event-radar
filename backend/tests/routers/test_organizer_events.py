@@ -1334,7 +1334,6 @@ class TestDeleteOwnEvent:
             event,
             "auto-resolved: event cancelled",
             reporter.locale,
-            reporter.theme_preference,
             http_client=ANY,
         )
 

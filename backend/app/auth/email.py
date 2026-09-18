@@ -31,7 +31,6 @@ async def send_magic_link(
     magic_token: str,
     locale: str = DEFAULT_USER_LOCALE,
     verify_path: str = AUTH_VERIFY_PATH,
-    theme_preference: str | None = None,
 ) -> None:
     """Send a magic-link sign-in email. ``verify_path`` lets the organizer auth
     flow (routers/organizer_auth.py) point the link at ``/organizer/verify``
@@ -54,7 +53,7 @@ async def send_magic_link(
 
     subject = t("email.magic_link.subject", locale)
     html = build_magic_link_html(
-        verify_url, settings.MAGIC_LINK_TTL_MINUTES, locale, theme_preference
+        verify_url, settings.MAGIC_LINK_TTL_MINUTES, locale
     )
     text = build_magic_link_text(verify_url, settings.MAGIC_LINK_TTL_MINUTES, locale)
 

@@ -231,9 +231,7 @@ async def request_magic_link(
     await db.commit()
 
     try:
-        await send_magic_link(
-            email, signed_token, email_locale, theme_preference=user.theme_preference
-        )
+        await send_magic_link(email, signed_token, email_locale)
     except Exception:
         log.exception("Failed to send magic link to %s", mask_email(email))
         # Do not surface email errors to caller — link is in DB, user can retry.
@@ -540,9 +538,7 @@ async def _send_google_confirmation_link(db: AsyncSession, user: User, sub: str)
     await db.commit()
 
     try:
-        await send_magic_link(
-            user.email, signed_token, user.locale, theme_preference=user.theme_preference
-        )
+        await send_magic_link(user.email, signed_token, user.locale)
     except Exception:
         log.exception(
             "Failed to send Google-confirmation link to %s", mask_email(user.email)

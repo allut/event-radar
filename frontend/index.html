@@ -8,20 +8,28 @@
          no flash of the wrong theme. Duplicates lib/theme.ts's resolveTheme()
          minimally rather than importing it (must run synchronously with zero
          module loading) — must never disagree with it. Placed before any
-         stylesheet link/injection. Keep the storage key literal in sync with
-         THEME_PREFERENCE_KEY in src/constants.ts. Also rewrites the two
-         media-queried theme-color tags below to a single override once an
-         explicit theme is known, so the browser chrome matches --bg exactly
-         instead of falling back to prefers-color-scheme's own guess. -->
+         stylesheet link/injection. Keep the storage key literals in sync with
+         THEME_OVERRIDE_KEY/THEME_OVERRIDE_DEVICE_KEY in src/constants.ts. An
+         override only counts if it was chosen under the device theme in
+         effect right now (ADR 0003) — a mismatch means it expired since, so
+         the device theme wins; the legacy tri-state key from before that ADR
+         is wiped outright rather than read, since it has no equivalent value
+         under the new semantics. Also rewrites the two media-queried
+         theme-color tags below to a single override once an explicit theme
+         is known, so the browser chrome matches --bg exactly instead of
+         falling back to prefers-color-scheme's own guess. -->
     <script>
       (function () {
         try {
-          var pref = localStorage.getItem('theme_preference');
-          var theme = pref === 'light' || pref === 'dark'
-            ? pref
-            : (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+          localStorage.removeItem('theme_preference');
+          var device = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+          var override = localStorage.getItem('theme_override');
+          var overrideDevice = localStorage.getItem('theme_override_device');
+          var theme = (override === 'light' || override === 'dark') && overrideDevice === device
+            ? override
+            : device;
           document.documentElement.dataset.theme = theme;
-          if (pref === 'light' || pref === 'dark') {
+          if (theme !== device) {
             var metas = document.querySelectorAll('meta[name="theme-color"]');
             for (var i = 0; i < metas.length; i++) metas[i].remove();
             var meta = document.createElement('meta');

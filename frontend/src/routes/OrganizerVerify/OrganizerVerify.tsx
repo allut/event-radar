@@ -3,7 +3,6 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { organizerApi, ApiError } from '../../api/client';
 import { setOrganizerSignedInHint } from '../../lib/organizerAuth';
 import { getLocale } from '../../lib/auth';
-import { syncAccountTheme } from '../../lib/theme';
 import { API, AUTH_REDIRECT_DELAY_MS, AUTH_TOKEN_PARAM, ROUTES, UI_STATE, VERIFY_STATE_TO_KIND, type VerifyState } from '../../constants';
 import { t } from '../../i18n';
 import { useLocaleNavigate } from '../../hooks/useLocaleNavigate';
@@ -12,10 +11,6 @@ import { useStaticSeoMeta } from '../../hooks/useStaticSeoMeta';
 import AuthCard from '../../components/AuthCard';
 import SeoTags from '../../components/SeoTags';
 import styles from './OrganizerVerify.module.css';
-
-interface OrganizerProfileResponse {
-  theme_preference: 'light' | 'dark' | null;
-}
 
 export default function OrganizerVerify() {
   const locale = getLocale();
@@ -42,14 +37,6 @@ export default function OrganizerVerify() {
         await organizerApi.post(API.organizerAuthVerify, { token: tok });
         setOrganizerSignedInHint();
         setState(UI_STATE.success);
-        try {
-          const profile = await organizerApi.get<OrganizerProfileResponse>(API.organizerProfile);
-          syncAccountTheme(profile.theme_preference, (theme) =>
-            organizerApi.patch(API.organizerProfile, { theme_preference: theme })
-          );
-        } catch {
-          // GET /organizer/profile failure is non-fatal — sign-in already succeeded
-        }
         setTimeout(() => navigate(ROUTES.organizerDashboard, { replace: true }), AUTH_REDIRECT_DELAY_MS);
       } catch (err) {
         setState(UI_STATE.error);

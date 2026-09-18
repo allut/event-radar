@@ -41,9 +41,8 @@ def build_report_outcome_html(
     event: Event,
     resolution_note: str,
     locale: str,
-    theme_preference: str | None = None,
 ) -> str:
-    s = get_email_styles(theme_preference)
+    s = get_email_styles()
     safe_event_url = html_lib.escape(
         f"{settings.FRONTEND_URL}{EVENTS_PATH}/{event.id}", quote=True
     )
@@ -100,7 +99,6 @@ async def send_report_outcome_email(
     event: Event,
     resolution_note: str,
     locale: str,
-    theme_preference: str | None = None,
     http_client: httpx.AsyncClient | None = None,
 ) -> None:
     if not settings.RESEND_API_KEY:
@@ -111,9 +109,7 @@ async def send_report_outcome_email(
         return
 
     subject = t("email.report_outcome.subject", locale)
-    html_body = build_report_outcome_html(
-        event, resolution_note, locale, theme_preference
-    )
+    html_body = build_report_outcome_html(event, resolution_note, locale)
     text_body = build_report_outcome_text(event, resolution_note, locale)
 
     payload = {

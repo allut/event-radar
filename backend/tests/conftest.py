@@ -52,7 +52,6 @@ def make_user():
         locale: str = DEFAULT_USER_LOCALE,
         opt_in: bool = True,
         email_verified: bool = True,
-        theme_preference: str | None = None,
     ) -> MagicMock:
         u = MagicMock()
         u.id = user_id
@@ -61,7 +60,6 @@ def make_user():
         u.home_city = DEFAULT_USER_CITY
         u.email_digest_opt_in = opt_in
         u.email_verified = email_verified
-        u.theme_preference = theme_preference
         u.created_at = MagicMock()
         u.created_at.isoformat.return_value = "2026-05-13T06:00:00+00:00"
         return u
@@ -109,7 +107,6 @@ def make_organizer():
         session_token_version: int = 1,
         verified: bool = False,
         name: str | None = None,
-        theme_preference: str | None = None,
     ) -> MagicMock:
         o = MagicMock()
         o.id = organizer_id
@@ -118,7 +115,6 @@ def make_organizer():
         o.session_token_version = session_token_version
         o.verified = verified
         o.name = name
-        o.theme_preference = theme_preference
         o.created_at = MagicMock()
         o.created_at.isoformat.return_value = "2026-05-13T06:00:00+00:00"
         return o
