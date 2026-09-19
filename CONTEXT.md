@@ -78,6 +78,31 @@ resolution note. Distinct from "review," which is reserved for the
 organizer submission queue.
 _Avoid_: review, approve, dismiss
 
+## Event Claiming
+
+**Publisher**:
+The real-world entity a claim is granted against, resolved per source: one
+per Fienta organizer id, or the whole source for KUMU and Estonia Concert
+Hall (each a single institution, the latter booking several halls under one
+feed). Piletilevi has no Publisher — its listings carry no resolvable entity;
+see Series claim. Distinct from `Organizer` (the portal account that holds a
+claim) and `Venue` (an organizer's saved-venue directory) — a Publisher is
+neither.
+_Avoid_: organizer (source sense), source organizer, feed organizer
+
+**Publisher claim**:
+A claim granted against a Publisher, covering every event traced back to
+that entity across ingestion runs.
+_Avoid_: organizer claim, source claim
+
+**Series claim**:
+A Piletilevi claim granted against an `event_series_key` (normalized title +
+lowercased venue) instead of a resolved entity, since Piletilevi is a
+multi-promoter marketplace with no Publisher to claim. Covers every past and
+future event sharing that series key, reusing the grouping series cooldown
+already uses.
+_Avoid_: listing claim, recurrence claim, per-event claim
+
 ## Theming
 
 **Device theme**:
