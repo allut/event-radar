@@ -138,6 +138,33 @@ class TestUpdateOwnProfile:
 
         assert organizer.name == "Existing Name"
 
+    @pytest.mark.asyncio
+    async def test_stale_theme_preference_field_is_silently_ignored(
+        self, mock_db, make_request, make_organizer
+    ):
+        """A tab left open from before #378's deploy may still send the
+        retired theme_preference field — it must be a no-op, not a 422
+        (extra fields are ignored by default, no explicit-reject config)."""
+        from app.routers.organizer_profile import (
+            OrganizerProfilePatchBody,
+            update_own_profile,
+        )
+
+        organizer = make_organizer(organizer_id=5, name="Existing Name")
+        unlinked_result = MagicMock()
+        unlinked_result.scalars.return_value = MagicMock(first=MagicMock(return_value=None))
+        mock_db.execute = AsyncMock(return_value=unlinked_result)
+
+        result = await update_own_profile(
+            OrganizerProfilePatchBody(name="New Name", theme_preference="dark"),
+            make_request(method="PATCH", path="/organizer/profile"),
+            organizer,
+            mock_db,
+        )
+
+        assert organizer.name == "New Name"
+        assert "theme_preference" not in result
+
     def test_name_over_max_length_rejected(self):
         from pydantic import ValidationError
 

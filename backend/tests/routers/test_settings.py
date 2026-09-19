@@ -173,6 +173,43 @@ class TestPatchSettings:
         assert user.locale == "et"
         assert user.email_digest_opt_in is False
 
+    @pytest.mark.asyncio
+    async def test_stale_theme_preference_field_is_silently_ignored(
+        self, mock_db, make_user, make_request
+    ):
+        """A tab left open from before #378's deploy may still send the
+        retired theme_preference field — it must be a no-op, not a 422
+        (extra fields are ignored by default, no explicit-reject config)."""
+        from app.routers.settings import patch_settings, PatchSettingsBody
+
+        _attach_empty_personas(mock_db)
+        user = make_user(locale="en")
+
+        result = await patch_settings(
+            body=PatchSettingsBody(locale="ru", theme_preference="dark"),
+            request=make_request(method="PATCH", path="/users/me"),
+            current_user=user,
+            db=mock_db,
+        )
+
+        assert user.locale == "ru"
+        assert "theme_preference" not in result
+
+    @pytest.mark.asyncio
+    async def test_response_never_serializes_theme(self, mock_db, make_user, make_request):
+        from app.routers.settings import get_settings
+
+        _attach_empty_personas(mock_db)
+        user = make_user()
+
+        result = await get_settings(
+            request=make_request(method="GET", path="/users/me"),
+            current_user=user,
+            db=mock_db,
+        )
+
+        assert "theme_preference" not in result
+
 
 class TestUnlinkOwnIdentity:
     """Mirrors tests/routers/test_organizer_profile.py::TestUnlinkOwnIdentity
