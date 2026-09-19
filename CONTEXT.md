@@ -103,6 +103,17 @@ future event sharing that series key, reusing the grouping series cooldown
 already uses.
 _Avoid_: listing claim, recurrence claim, per-event claim
 
+**Trusted claimant**:
+An organizer whose Series claims auto-grant without a fresh admin review,
+earned by having one prior claim of any kind admin-approved — a Publisher
+claim on KUMU/Estonia Concert Hall, or an earlier Series claim — never by an
+automated Fienta claim, which carries no admin judgment to build on.
+Revoking any of that organizer's claims strips this status, and a revoked
+claim is removed from the count that granted it.
+_Avoid_: verified claimant, trusted organizer (collides with
+`Organizer.verified`, a separate submission-trust track — see #385/#381's
+"Claim ↔ `Organizer.verified`" open question)
+
 ## Theming
 
 **Device theme**:
