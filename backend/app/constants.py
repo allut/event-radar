@@ -519,6 +519,31 @@ VALID_CLAIM_VERIFICATION_OUTCOMES = frozenset(
 # (#413) — resets on every POST /organizer/claims/{id}/recheck.
 CLAIM_EXPIRY_DAYS = 7
 
+# Claim-discovery status (#414) — computed on read from an event's
+# representative EventSource + any active Claim on its target key, never
+# persisted. Feeds the public event page's "is this your event?" CTA and the
+# search/suggestions surfaces' exclusion filter.
+CLAIM_DISCOVERY_STATUS_UNCLAIMED = "unclaimed"
+CLAIM_DISCOVERY_STATUS_PENDING = "pending"
+CLAIM_DISCOVERY_STATUS_CLAIMED = "claimed"
+VALID_CLAIM_DISCOVERY_STATUSES = frozenset(
+    {
+        CLAIM_DISCOVERY_STATUS_UNCLAIMED,
+        CLAIM_DISCOVERY_STATUS_PENDING,
+        CLAIM_DISCOVERY_STATUS_CLAIMED,
+    }
+)
+
+# GET /organizer/claims/search and .../suggestions (#414) result caps —
+# small, human-browsable lists, not paginated collections. Candidates are
+# over-fetched by this multiplier before the in-Python already-claimed
+# filter, since that filter can't be pushed into the query (a Series claim's
+# key is a normalized title+venue tuple, not a column).
+CLAIM_SEARCH_RESULT_LIMIT = 20
+CLAIM_SUGGESTIONS_LIMIT = 10
+CLAIM_SEARCH_CANDIDATE_MULTIPLIER = 3
+CLAIM_SEARCH_QUERY_MIN_LENGTH = 2
+
 # DNS-TXT domain-control check, resolved via DNS-over-HTTPS (no new
 # fetchable-content SSRF surface — this is a fixed, hardcoded resolver, never
 # a source-supplied URL). Shared by the KUMU/Estonia Concert Hall hardcoded
@@ -1954,6 +1979,7 @@ ERROR_CLAIM_ALREADY_EXISTS = (
 )
 ERROR_CLAIM_NOT_PENDING = "Only a pending claim can be cancelled or rechecked."
 ERROR_DAILY_CLAIM_LIMIT = "Daily claim limit reached. Try again tomorrow."
+ERROR_CLAIM_SEARCH_QUERY_TOO_SHORT = "Search query is too short."
 ERROR_EVENT_CREATE_FAILED = "Could not create event; please try again."
 ERROR_EVENT_URL_SCHEME = "Event URL is not allowed (unsupported scheme)."
 ERROR_IMAGE_URL_SCHEME = "Image URL is not allowed (unsupported scheme)."

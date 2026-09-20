@@ -1,8 +1,9 @@
-import { describe, it, expect, vi } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import EventDetail from './EventDetail';
 import { renderWithProviders, makeEvent } from '../../test/utils';
+import { ORGANIZER_SIGNED_IN_HINT_KEY } from '../../constants';
 
 const mockNavigate = vi.fn();
 vi.mock('react-router-dom', async (importOriginal) => {
@@ -25,6 +26,10 @@ vi.mock('../../api/client', () => ({
     post: vi.fn(),
     patch: vi.fn(),
   },
+  organizerApi: {
+    get: vi.fn(),
+    post: vi.fn(),
+  },
 }));
 
 vi.mock('../../hooks/useFeedback', () => ({
@@ -43,7 +48,7 @@ vi.mock('../../utils', async (importOriginal) => {
   };
 });
 
-import { api } from '../../api/client';
+import { api, organizerApi } from '../../api/client';
 import { isAuthenticated } from '../../lib/auth';
 const mockGet = vi.mocked(api.get);
 const mockIsAuthenticated = vi.mocked(isAuthenticated);
@@ -65,6 +70,7 @@ const eventData = {
     currency: 'EUR',
   }),
   language: 'en',
+  claim_status: 'unclaimed',
 };
 
 describe('EventDetail', () => {
@@ -266,5 +272,55 @@ describe('EventDetail', () => {
       await userEvent.click(screen.getByRole('link', { name: /ticket/i }));
       expect(trackExternalClick).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe('EventDetail claim discovery (#414)', () => {
+  const mockOrganizerPost = vi.mocked(organizerApi.post);
+
+  afterEach(() => {
+    localStorage.removeItem(ORGANIZER_SIGNED_IN_HINT_KEY);
+    mockOrganizerPost.mockReset();
+  });
+
+  it('shows the claim panel for an unclaimed event, no pill', async () => {
+    mockGet.mockResolvedValueOnce(eventData);
+    renderWithProviders(<EventDetail />, { route: '/en/events/1', pathPattern: '/:locale/events/:id' });
+    await waitFor(() => expect(screen.getByText('Is this your event?')).toBeInTheDocument());
+    expect(screen.queryByText(/pending review|verified/i)).not.toBeInTheDocument();
+  });
+
+  it('shows a pill and no panel once a claim is pending', async () => {
+    mockGet.mockResolvedValueOnce({ ...eventData, claim_status: 'pending' });
+    renderWithProviders(<EventDetail />, { route: '/en/events/1', pathPattern: '/:locale/events/:id' });
+    await waitFor(() => expect(screen.getByText('Claim pending review')).toBeInTheDocument());
+    expect(screen.queryByText('Is this your event?')).not.toBeInTheDocument();
+  });
+
+  it('shows a pill and no panel once a claim is granted', async () => {
+    mockGet.mockResolvedValueOnce({ ...eventData, claim_status: 'claimed' });
+    renderWithProviders(<EventDetail />, { route: '/en/events/1', pathPattern: '/:locale/events/:id' });
+    await waitFor(() => expect(screen.getByText('Organizer-verified')).toBeInTheDocument());
+    expect(screen.queryByText('Is this your event?')).not.toBeInTheDocument();
+  });
+
+  it('a signed-out visitor gets the email-capture form, not a direct claim', async () => {
+    mockGet.mockResolvedValueOnce(eventData);
+    renderWithProviders(<EventDetail />, { route: '/en/events/1', pathPattern: '/:locale/events/:id' });
+    await waitFor(() => expect(screen.getByText('Is this your event?')).toBeInTheDocument());
+    await userEvent.click(screen.getByRole('button', { name: 'Claim this event' }));
+    expect(await screen.findByLabelText(/email/i)).toBeInTheDocument();
+    expect(mockOrganizerPost).not.toHaveBeenCalled();
+  });
+
+  it('a signed-in organizer claims directly on click', async () => {
+    localStorage.setItem(ORGANIZER_SIGNED_IN_HINT_KEY, '1');
+    mockOrganizerPost.mockResolvedValueOnce({ status: 'pending' });
+    mockGet.mockResolvedValueOnce(eventData);
+    renderWithProviders(<EventDetail />, { route: '/en/events/1', pathPattern: '/:locale/events/:id' });
+    await waitFor(() => expect(screen.getByText('Is this your event?')).toBeInTheDocument());
+    await userEvent.click(screen.getByRole('button', { name: 'Claim this event' }));
+    expect(mockOrganizerPost).toHaveBeenCalledWith('/organizer/claims', { event_id: 1 });
+    expect(await screen.findByText('Claim pending review')).toBeInTheDocument();
   });
 });

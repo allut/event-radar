@@ -24,9 +24,11 @@ import TopBar from '../../components/TopBar';
 import { useFeedback } from '../../hooks/useFeedback';
 import { API, EVENT_PRICE_TESTID, EXPLORE_PARAM, OG_FALLBACK_IMAGE_PATH, PRICE_DATA_ATTR, PRODUCTION_ORIGIN, QUERY_KEYS, ROUTES, SEO_DESCRIPTION_MAX_LENGTH, UI_STATE } from '../../constants';
 import styles from './EventDetail.module.css';
+import { ClaimPanel, ClaimPill, type EventClaimStatus } from '../../components/ClaimStrip';
 
 interface EventDetailData extends EventData {
   language: string | null;
+  claim_status: EventClaimStatus;
 }
 
 export default function EventDetail() {
@@ -177,6 +179,9 @@ export default function EventDetail() {
                 {ti('ends_at', locale, { time: formatHourMinute(data.ends_at, locale) })}
               </span>
             )}
+            {(data.claim_status === 'pending' || data.claim_status === 'claimed') && (
+              <ClaimPill status={data.claim_status} locale={locale} />
+            )}
           </div>
 
           <h1 className={styles.title}>{data.title}</h1>
@@ -274,6 +279,7 @@ export default function EventDetail() {
             </section>
           )}
 
+          {data.claim_status === 'unclaimed' && <ClaimPanel eventId={data.id} locale={locale} />}
         </div>
       </main>
 

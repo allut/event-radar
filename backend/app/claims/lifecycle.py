@@ -24,7 +24,11 @@ from app.claims.verification import (
 )
 from app.config import settings
 from app.constants import (
+    CLAIM_ACTIVE_STATUSES,
     CLAIM_AUTOMATED_VERIFICATION_MECHANISMS,
+    CLAIM_DISCOVERY_STATUS_CLAIMED,
+    CLAIM_DISCOVERY_STATUS_PENDING,
+    CLAIM_DISCOVERY_STATUS_UNCLAIMED,
     CLAIM_EXPIRY_DAYS,
     CLAIM_KIND_PUBLISHER,
     CLAIM_KIND_SERIES,
@@ -72,7 +76,7 @@ class ClaimTarget:
     event_series_key: str | None
 
 
-async def _representative_event_source(
+async def representative_event_source(
     db: AsyncSession, *, event_id: int | None = None, publisher_id: int | None = None
 ) -> EventSource | None:
     """One EventSource row to verify against — the event the organizer named
@@ -90,13 +94,51 @@ async def _representative_event_source(
     return await db.scalar(query.limit(1))
 
 
-def _resolve_target(event: Event, es: EventSource) -> ClaimTarget:
+def resolve_claim_target(event: Event, es: EventSource) -> ClaimTarget:
     if es.publisher_id is not None:
         return ClaimTarget(CLAIM_KIND_PUBLISHER, es.publisher_id, None)
     key = serialize_event_series_key(
         event_series_key(event.title_orig, resolve_venue_name(event))
     )
     return ClaimTarget(CLAIM_KIND_SERIES, None, key)
+
+
+async def active_claim_for_target(db: AsyncSession, target: ClaimTarget) -> Claim | None:
+    """The pending/approved Claim already sitting on `target`, if any (#414) —
+    backs both the public event page's claim_status and the search/
+    suggestions surfaces' cross-surface-retirement exclusion."""
+    if target.kind == CLAIM_KIND_PUBLISHER:
+        return await db.scalar(
+            select(Claim).where(
+                Claim.publisher_id == target.publisher_id,
+                Claim.status.in_(CLAIM_ACTIVE_STATUSES),
+            )
+        )
+    return await db.scalar(
+        select(Claim).where(
+            Claim.event_series_key == target.event_series_key,
+            Claim.status.in_(CLAIM_ACTIVE_STATUSES),
+        )
+    )
+
+
+async def claim_status_for_event(db: AsyncSession, event: Event) -> str:
+    """(#414) unclaimed/pending/claimed for `event`'s public page CTA — an
+    event with no resolvable EventSource (never ingested, i.e. an organizer's
+    own direct submission) is always unclaimed, since it has no Publisher/
+    Series target to claim against in the first place."""
+    es = await representative_event_source(db, event_id=event.id)
+    if es is None or es.source is None:
+        return CLAIM_DISCOVERY_STATUS_UNCLAIMED
+    target = resolve_claim_target(event, es)
+    claim = await active_claim_for_target(db, target)
+    if claim is None:
+        return CLAIM_DISCOVERY_STATUS_UNCLAIMED
+    return (
+        CLAIM_DISCOVERY_STATUS_CLAIMED
+        if claim.status == CLAIM_STATUS_APPROVED
+        else CLAIM_DISCOVERY_STATUS_PENDING
+    )
 
 
 async def _run_verification(
@@ -175,11 +217,11 @@ async def create_claim(
     if event is None:
         raise ClaimError(404, ERROR_EVENT_NOT_FOUND)
 
-    es = await _representative_event_source(db, event_id=event_id)
+    es = await representative_event_source(db, event_id=event_id)
     if es is None or es.source is None:
         raise ClaimError(422, ERROR_CLAIM_NOT_CLAIMABLE)
 
-    target = _resolve_target(event, es)
+    target = resolve_claim_target(event, es)
     claim = Claim(
         organizer_id=organizer.id,
         kind=target.kind,
@@ -249,7 +291,7 @@ async def recheck_claim(
     if claim.verification_mechanism not in CLAIM_AUTOMATED_VERIFICATION_MECHANISMS:
         raise ClaimError(409, ERROR_CLAIM_NOT_PENDING)
 
-    es = await _representative_event_source(db, publisher_id=claim.publisher_id)
+    es = await representative_event_source(db, publisher_id=claim.publisher_id)
     if es is None or es.source is None:
         raise ClaimError(422, ERROR_CLAIM_NOT_CLAIMABLE)
     event = await db.get(Event, es.event_id)

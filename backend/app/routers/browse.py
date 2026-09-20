@@ -59,6 +59,7 @@ from app.rate_limit import limiter
 from app.routers.auth import get_optional_user
 from app.routers.utils import (
     canonical_event_filter,
+    escape_ilike_pattern,
     event_not_ended_filter,
     load_user_reported_events,
     load_user_signals,
@@ -90,10 +91,7 @@ def _free_filter() -> ColumnElement[bool]:
 
 
 def _keyword_filter(q: str) -> ColumnElement[bool]:
-    """Escape SQL LIKE wildcards in user input before building the pattern —
-    otherwise a literal '%' or '_' in the search box would wildcard-match."""
-    escaped = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-    pattern = f"%{escaped}%"
+    pattern = escape_ilike_pattern(q)
     return or_(
         Event.title_orig.ilike(pattern, escape="\\"),
         Event.description_orig.ilike(pattern, escape="\\"),

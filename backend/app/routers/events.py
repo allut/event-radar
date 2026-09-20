@@ -5,6 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
+from app.claims.lifecycle import claim_status_for_event
 from app.constants import (
     DEFAULT_USER_LOCALE,
     ERROR_EVENT_NOT_FOUND,
@@ -72,9 +73,15 @@ async def get_event(
 
     effective_locale = resolve_locale_param(locale_query, locale)
 
-    return serialize_event(
+    serialized = serialize_event(
         event,
         locale=effective_locale,
         feedback_by_event=sigs,
         reported_event_ids=reported,
     )
+    # claim_status (#414) is computed only here, not in serialize_event
+    # itself — the claim CTA is public-event-page-only, so the bulk-listing
+    # callers of serialize_event (feed/explore/saved) shouldn't each pay for
+    # a per-event EventSource+Claim lookup they never render.
+    serialized["claim_status"] = await claim_status_for_event(db, event)
+    return serialized

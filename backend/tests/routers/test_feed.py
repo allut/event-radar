@@ -386,3 +386,43 @@ class TestGetEvent:
         )
 
         assert result["why_go"] == ["EN bullet"]
+
+    @pytest.mark.asyncio
+    async def test_claim_status_unclaimed_when_never_ingested(self, mock_db, make_event, make_request):
+        """No resolvable EventSource (an organizer's own direct submission,
+        never scraped) -> always unclaimed, per claim_status_for_event's
+        docstring (#414)."""
+        from app.routers.events import get_event
+
+        event = make_event(42)
+        mock_db.scalar.side_effect = [event, None]
+
+        result = await get_event(event_id=42, request=make_request(), db=mock_db)
+
+        assert result["claim_status"] == "unclaimed"
+
+    @pytest.mark.asyncio
+    async def test_claim_status_pending(self, mock_db, make_event, make_request):
+        from app.routers.events import get_event
+
+        event = make_event(42)
+        es = MagicMock(publisher_id=7, source=MagicMock())
+        claim = MagicMock(status="pending")
+        mock_db.scalar.side_effect = [event, es, claim]
+
+        result = await get_event(event_id=42, request=make_request(), db=mock_db)
+
+        assert result["claim_status"] == "pending"
+
+    @pytest.mark.asyncio
+    async def test_claim_status_claimed(self, mock_db, make_event, make_request):
+        from app.routers.events import get_event
+
+        event = make_event(42)
+        es = MagicMock(publisher_id=7, source=MagicMock())
+        claim = MagicMock(status="approved")
+        mock_db.scalar.side_effect = [event, es, claim]
+
+        result = await get_event(event_id=42, request=make_request(), db=mock_db)
+
+        assert result["claim_status"] == "claimed"

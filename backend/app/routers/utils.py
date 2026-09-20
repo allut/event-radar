@@ -551,6 +551,16 @@ def persona_weight_tuple(
     )
 
 
+def escape_ilike_pattern(q: str) -> str:
+    """Escape SQL LIKE wildcards in user-supplied search text, wrapped as a
+    ``%...%`` substring pattern — otherwise a literal ``%``/``_`` in the
+    search box would wildcard-match. Shared by browse.py's keyword search and
+    organizer_claims.py's claim-discovery search (#414); pass the result to
+    ``.ilike(pattern, escape="\\\\")``."""
+    escaped = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return f"%{escaped}%"
+
+
 def canonical_event_filter() -> ColumnElement[bool]:
     """Event is dedup-canonical: ungrouped, or the representative of its group.
 

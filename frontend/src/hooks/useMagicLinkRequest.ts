@@ -14,11 +14,14 @@ export interface UseMagicLinkRequestResult {
 }
 
 /** Magic-link request state machine, shared by the Login page, the landing
- * page's email-capture forms, and OrganizerLogin (via `requestPath` +
- * `organizer`). POSTs `requestPath` (through the organizer-scoped client when
- * `organizer` is set) and tracks idle → loading → success | error. Centralized
- * so the entry points can't drift. */
-export function useMagicLinkRequest(locale: string, requestPath: string = API.authRequestLink, organizer = false): UseMagicLinkRequestResult {
+ * page's email-capture forms, OrganizerLogin (via `requestPath` +
+ * `organizer`), and the claim-discovery CTA (via `extraBody`, which carries
+ * the claim intent — event_id — into the request body alongside email/locale;
+ * see app/routers/organizer_claims.py::request_claim_link). POSTs
+ * `requestPath` (through the organizer-scoped client when `organizer` is
+ * set) and tracks idle → loading → success | error. Centralized so the entry
+ * points can't drift. */
+export function useMagicLinkRequest(locale: string, requestPath: string = API.authRequestLink, organizer = false, extraBody?: Record<string, unknown>): UseMagicLinkRequestResult {
   const [email, setEmail] = useState('');
   const [state, setState] = useState<LoginState>(UI_STATE.idle);
   const [errorMsg, setErrorMsg] = useState('');
@@ -30,7 +33,7 @@ export function useMagicLinkRequest(locale: string, requestPath: string = API.au
     setState(UI_STATE.loading);
     setErrorMsg('');
     try {
-      const body = { email: trimmed.toLowerCase(), locale };
+      const body = { email: trimmed.toLowerCase(), locale, ...extraBody };
       if (organizer) {
         await organizerApi.post(requestPath, body);
       } else {

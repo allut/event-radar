@@ -1,0 +1,106 @@
+.wrap {
+  margin-bottom: var(--space-6);
+  padding: var(--space-5);
+  background: var(--bg-raised);
+  border: var(--border-w-hair) solid var(--border-subtle);
+  border-radius: var(--radius);
+}
+
+.heading {
+  font-family: var(--font-display);
+  font-size: var(--heading-md);
+  font-weight: var(--fw-semibold);
+  color: var(--text);
+  margin-bottom: var(--space-3);
+}
+
+.subheading {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-bold);
+  letter-spacing: var(--eyebrow-tracking);
+  text-transform: uppercase;
+  color: var(--text-soft);
+  margin-bottom: var(--space-2);
+}
+
+.suggestions {
+  margin-bottom: var(--space-4);
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.box {
+  position: relative;
+}
+
+.input {
+  composes: fieldInput from '../shared/Field.module.css';
+  width: 100%;
+  font-family: inherit;
+}
+
+.pop {
+  composes: menuPop from '../shared/Menu.module.css';
+  top: calc(100% + var(--space-0-45));
+  left: 0;
+  right: 0;
+  width: auto;
+  min-width: 0;
+  max-width: none;
+  max-height: var(--select-pop-max-height);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.option {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  border: var(--border-w-hair) solid var(--border-subtle);
+}
+
+.optionTitle {
+  color: var(--text);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  flex: 1 1 auto;
+}
+
+.optionMeta {
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+}
+
+.claimBtn {
+  composes: btnOutline from '../shared/Button.module.css';
+  font-size: var(--fs-xs);
+  padding: var(--space-0-375) var(--space-0-875);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.claimBtn:hover:not(:disabled) {
+  border-color: var(--accent-hover-border);
+}
+
+.emptyOption {
+  padding: var(--space-2) var(--space-3);
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+
+.error {
+  font-size: var(--fs-sm);
+  color: var(--danger);
+  margin-top: var(--space-3);
+}

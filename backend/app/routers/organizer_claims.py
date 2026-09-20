@@ -6,13 +6,15 @@ business logic these endpoints just wire up to HTTP.
 
 import logging
 from datetime import datetime, timezone
+from urllib.parse import urlparse
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from itsdangerous import BadSignature, SignatureExpired
 from pydantic import BaseModel, EmailStr
-from sqlalchemy import update
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.auth.email import send_magic_link
 from app.auth.tokens import (
@@ -22,13 +24,27 @@ from app.auth.tokens import (
     organizer_magic_ttl_seconds,
     verify_organizer_claim_link_token,
 )
-from app.claims.lifecycle import ClaimError, cancel_claim, create_claim, recheck_claim
+from app.claims.lifecycle import (
+    ClaimError,
+    cancel_claim,
+    create_claim,
+    recheck_claim,
+    resolve_claim_target,
+)
 from app.constants import (
+    CLAIM_ACTIVE_STATUSES,
+    CLAIM_KIND_PUBLISHER,
+    CLAIM_SEARCH_CANDIDATE_MULTIPLIER,
+    CLAIM_SEARCH_QUERY_MIN_LENGTH,
+    CLAIM_SEARCH_RESULT_LIMIT,
+    CLAIM_SUGGESTIONS_LIMIT,
     DETAIL_MAGIC_LINK_SENT,
+    ERROR_CLAIM_SEARCH_QUERY_TOO_SHORT,
     ERROR_MAGIC_LINK_CONSUMED,
     ERROR_MAGIC_LINK_EXPIRED,
     ERROR_MAGIC_LINK_INVALID,
     ERROR_ORGANIZER_NOT_FOUND,
+    FREE_EMAIL_PROVIDER_DOMAINS,
     HTTP_TIMEOUT_SECONDS,
     LOG_EVENT_AUTH_FAILED,
     ORGANIZER_AUTH_VERIFY_PATH,
@@ -37,18 +53,23 @@ from app.constants import (
     ORGANIZER_SESSION_TTL_DAYS,
     RATE_LIMIT_AUTH_REQUEST_LINK,
     RATE_LIMIT_AUTH_VERIFY,
+    RATE_LIMIT_BROWSE,
     RATE_LIMIT_CLAIM,
     SECONDS_PER_DAY,
     VALID_LOCALES,
 )
 from app.db import get_db
-from app.models.models import Claim, Organizer, OrganizerMagicLink
+from app.models.models import Claim, Event, EventSource, Organizer, OrganizerMagicLink
 from app.rate_limit import limiter
 from app.routers.organizer_auth import get_current_organizer
 from app.routers.utils import (
+    escape_ilike_pattern,
+    event_not_ended_filter,
     get_or_create_organizer,
     mask_email,
+    public_event_filter,
     recent_unused_link_exists,
+    resolve_venue_name,
     set_session_cookie,
 )
 
@@ -273,3 +294,162 @@ async def verify_claim_link(
         },
         "claim": _serialize(claim),
     }
+
+
+# ---------------------------------------------------------------------------
+# Claim discovery (#414): search, onboarding suggestions. Both exclude events
+# that already carry a pending or approved claim on their Publisher/Series
+# target — claiming an event via any one discovery surface retires it from
+# the other two. The public-page "is this your event?" CTA is the third
+# surface; it reads GET /events/{id}'s claim_status field instead (see
+# app/claims/lifecycle.py::claim_status_for_event, wired in routers/events.py)
+# rather than this router, since it has no search/suggestion query to run.
+# ---------------------------------------------------------------------------
+
+
+def _serialize_claim_candidate(event: Event) -> dict:
+    return {
+        "id": event.id,
+        "title": event.title_orig,
+        "venue_name": resolve_venue_name(event),
+        "starts_at": event.starts_at.isoformat(),
+        "image_url": event.image_url,
+    }
+
+
+async def _load_active_claim_keys(db: AsyncSession) -> tuple[set[int], set[str]]:
+    """One query for every currently-active claim's target key — cheap
+    (claims is a small table) and lets search/suggestions filter a page of
+    candidates in Python instead of a per-candidate claim lookup, since a
+    Series claim's key (normalized title+venue) isn't a column either query
+    could push a WHERE clause against directly."""
+    rows = (
+        await db.execute(
+            select(Claim.publisher_id, Claim.event_series_key).where(
+                Claim.status.in_(CLAIM_ACTIVE_STATUSES)
+            )
+        )
+    ).all()
+    publisher_ids = {row.publisher_id for row in rows if row.publisher_id is not None}
+    series_keys = {row.event_series_key for row in rows if row.event_series_key is not None}
+    return publisher_ids, series_keys
+
+
+def _is_already_claimed(
+    event: Event, es: EventSource, publisher_ids: set[int], series_keys: set[str]
+) -> bool:
+    target = resolve_claim_target(event, es)
+    if target.kind == CLAIM_KIND_PUBLISHER:
+        return target.publisher_id in publisher_ids
+    return target.event_series_key in series_keys
+
+
+@router.get("/search")
+@limiter.limit(RATE_LIMIT_BROWSE)
+async def search_claimable_events(
+    request: Request,
+    q: str = Query(..., min_length=1),
+    current_organizer: Organizer = Depends(get_current_organizer),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Search over published, not-yet-ended events by title, for the
+    organizer to pick one to claim (#414) — the chosen id feeds POST
+    /organizer/claims directly."""
+    query = q.strip()
+    if len(query) < CLAIM_SEARCH_QUERY_MIN_LENGTH:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=ERROR_CLAIM_SEARCH_QUERY_TOO_SHORT,
+        )
+
+    now = datetime.now(timezone.utc)
+    pattern = escape_ilike_pattern(query)
+    candidates = (
+        (
+            await db.execute(
+                select(Event)
+                .options(selectinload(Event.sources), selectinload(Event.venue))
+                .where(
+                    public_event_filter(),
+                    event_not_ended_filter(now),
+                    Event.title_orig.ilike(pattern, escape="\\"),
+                )
+                .order_by(Event.starts_at)
+                .limit(CLAIM_SEARCH_RESULT_LIMIT * CLAIM_SEARCH_CANDIDATE_MULTIPLIER)
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    publisher_ids, series_keys = await _load_active_claim_keys(db)
+    results = []
+    for event in candidates:
+        if not event.sources:
+            continue
+        es = min(event.sources, key=lambda s: s.id)
+        if _is_already_claimed(event, es, publisher_ids, series_keys):
+            continue
+        results.append(_serialize_claim_candidate(event))
+        if len(results) >= CLAIM_SEARCH_RESULT_LIMIT:
+            break
+    return {"events": results}
+
+
+@router.get("/suggestions")
+@limiter.limit(RATE_LIMIT_BROWSE)
+async def suggested_claimable_events(
+    request: Request,
+    current_organizer: Organizer = Depends(get_current_organizer),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Onboarding suggestions (#414): published, not-yet-ended events whose
+    ticket URL resolves to the same domain as the organizer account's email —
+    skipped entirely for a free/shared-mailbox domain
+    (FREE_EMAIL_PROVIDER_DOMAINS), since a gmail.com match says nothing about
+    which events are plausibly "theirs". No Google Workspace `hd` check —
+    ruled out at spec time (#409): plain email-domain matching is the whole
+    mechanism."""
+    domain = current_organizer.email.rsplit("@", 1)[-1].lower()
+    if domain in FREE_EMAIL_PROVIDER_DOMAINS:
+        return {"events": []}
+
+    now = datetime.now(timezone.utc)
+    pattern = escape_ilike_pattern(domain)
+    candidates = (
+        (
+            await db.execute(
+                select(Event)
+                .options(selectinload(Event.sources), selectinload(Event.venue))
+                .where(
+                    public_event_filter(),
+                    event_not_ended_filter(now),
+                    Event.url.isnot(None),
+                    Event.url.ilike(pattern, escape="\\"),
+                )
+                .order_by(Event.starts_at)
+                .limit(CLAIM_SUGGESTIONS_LIMIT * CLAIM_SEARCH_CANDIDATE_MULTIPLIER)
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    publisher_ids, series_keys = await _load_active_claim_keys(db)
+    results = []
+    for event in candidates:
+        if not event.sources or not event.url:
+            continue
+        # The ILIKE above is a cheap substring pre-filter (narrows the scan);
+        # this is the precise check — "notgmail.com" contains "gmail.com" as
+        # a substring but isn't the same host.
+        host = urlparse(event.url).hostname or ""
+        if host != domain and not host.endswith(f".{domain}"):
+            continue
+        es = min(event.sources, key=lambda s: s.id)
+        if _is_already_claimed(event, es, publisher_ids, series_keys):
+            continue
+        results.append(_serialize_claim_candidate(event))
+        if len(results) >= CLAIM_SUGGESTIONS_LIMIT:
+            break
+    return {"events": results}

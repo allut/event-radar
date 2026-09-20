@@ -33,10 +33,16 @@ const sampleEvents = {
 // resolve in either order. Defaults to a name set, so the nudge banner
 // (covered by OrganizerProfileNudge.test.tsx) doesn't interfere with these
 // event-list assertions unless a test overrides it.
-function mockOrganizerGet(eventsResponse: unknown, profileResponse: unknown = { name: 'Test Organizer' }) {
-  mockGet.mockImplementation((path: string) =>
-    path.includes('/organizer/profile') ? Promise.resolve(profileResponse) : Promise.resolve(eventsResponse),
-  );
+// ClaimEventPicker (#414) also fires its own organizerApi.get calls
+// (suggestions on mount) — defaults to an empty list so it doesn't leak
+// duplicate event titles into these event-list assertions unless a test
+// overrides it.
+function mockOrganizerGet(eventsResponse: unknown, profileResponse: unknown = { name: 'Test Organizer' }, claimSuggestionsResponse: unknown = { events: [] }) {
+  mockGet.mockImplementation((path: string) => {
+    if (path.includes('/organizer/profile')) return Promise.resolve(profileResponse);
+    if (path.includes('/organizer/claims/suggestions')) return Promise.resolve(claimSuggestionsResponse);
+    return Promise.resolve(eventsResponse);
+  });
 }
 
 beforeEach(() => {

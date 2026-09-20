@@ -15,15 +15,18 @@ interface MagicLinkFormProps {
   emailFieldId: string;
   /** Login's original design fades the success block in; OrganizerLogin's didn't. */
   successAnimated?: boolean;
+  /** Extra fields merged into the request body — e.g. { event_id } for the
+   * claim-discovery CTA's magic link (see useMagicLinkRequest). */
+  extraBody?: Record<string, unknown>;
 }
 
-/** Email input + submit + success/resend block shared by Login and
- * OrganizerLogin — parameterized by requestPath (which auth track's
- * request-link endpoint to POST) and the email field's id. Page chrome
- * (card/header/tagline/footer links) stays in each route, since those
- * differ per track. */
-export default function MagicLinkForm({ locale, requestPath, organizer = false, emailFieldId, successAnimated = false }: MagicLinkFormProps) {
-  const { email, setEmail, state, errorMsg, submit, reset } = useMagicLinkRequest(locale, requestPath, organizer);
+/** Email input + submit + success/resend block shared by Login,
+ * OrganizerLogin, and the claim-discovery CTA — parameterized by requestPath
+ * (which auth track's request-link endpoint to POST) and the email field's
+ * id. Page chrome (card/header/tagline/footer links) stays in each caller,
+ * since those differ per track. */
+export default function MagicLinkForm({ locale, requestPath, organizer = false, emailFieldId, successAnimated = false, extraBody }: MagicLinkFormProps) {
+  const { email, setEmail, state, errorMsg, submit, reset } = useMagicLinkRequest(locale, requestPath, organizer, extraBody);
 
   if (state === UI_STATE.success) {
     return (

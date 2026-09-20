@@ -240,3 +240,124 @@ class TestVerifyClaimLink:
             )
 
         assert exc.value.status_code == http.HTTPStatus.BAD_REQUEST
+
+
+def _make_source(event_id: int = 42, source_id: int = 1, publisher_id: int | None = 99) -> MagicMock:
+    es = MagicMock()
+    es.id = source_id
+    es.event_id = event_id
+    es.publisher_id = publisher_id
+    return es
+
+
+class TestSearchClaimableEvents(object):
+    @pytest.mark.asyncio
+    async def test_query_too_short_rejected(self, mock_db, make_request, make_organizer):
+        from app.routers.organizer_claims import search_claimable_events
+
+        with pytest.raises(HTTPException) as exc:
+            await search_claimable_events(
+                make_request(method="GET", path="/organizer/claims/search"),
+                q="a",
+                current_organizer=make_organizer(),
+                db=mock_db,
+            )
+        assert exc.value.status_code == http.HTTPStatus.UNPROCESSABLE_ENTITY
+
+    @pytest.mark.asyncio
+    async def test_excludes_already_claimed_event(self, mock_db, make_event, make_request, make_organizer):
+        """An event whose Publisher already has an active claim (#414) is
+        filtered out of search results — cross-surface retirement."""
+        from app.routers.organizer_claims import search_claimable_events
+
+        claimed_event = make_event(event_id=1, title="Jazz Night")
+        claimed_event.sources = [_make_source(event_id=1, publisher_id=99)]
+        open_event = make_event(event_id=2, title="Jazz Brunch")
+        open_event.sources = [_make_source(event_id=2, publisher_id=100)]
+
+        candidates_result = MagicMock()
+        candidates_result.scalars.return_value.all.return_value = [claimed_event, open_event]
+        claim_keys_result = MagicMock()
+        claim_keys_row = MagicMock(publisher_id=99, event_series_key=None)
+        claim_keys_result.all.return_value = [claim_keys_row]
+        mock_db.execute.side_effect = [candidates_result, claim_keys_result]
+
+        result = await search_claimable_events(
+            make_request(method="GET", path="/organizer/claims/search"),
+            q="jazz",
+            current_organizer=make_organizer(),
+            db=mock_db,
+        )
+
+        assert [e["id"] for e in result["events"]] == [2]
+
+    @pytest.mark.asyncio
+    async def test_event_with_no_source_excluded(self, mock_db, make_event, make_request, make_organizer):
+        """An organizer's own direct submission (no EventSource at all) has
+        nothing to claim against and must not appear."""
+        from app.routers.organizer_claims import search_claimable_events
+
+        event = make_event(event_id=1)
+        event.sources = []
+
+        candidates_result = MagicMock()
+        candidates_result.scalars.return_value.all.return_value = [event]
+        claim_keys_result = MagicMock()
+        claim_keys_result.all.return_value = []
+        mock_db.execute.side_effect = [candidates_result, claim_keys_result]
+
+        result = await search_claimable_events(
+            make_request(method="GET", path="/organizer/claims/search"),
+            q="jazz",
+            current_organizer=make_organizer(),
+            db=mock_db,
+        )
+
+        assert result["events"] == []
+
+
+class TestSuggestedClaimableEvents:
+    @pytest.mark.asyncio
+    async def test_free_email_domain_returns_no_suggestions(self, mock_db, make_request, make_organizer):
+        from app.routers.organizer_claims import suggested_claimable_events
+
+        organizer = make_organizer()
+        organizer.email = "promoter@gmail.com"
+
+        result = await suggested_claimable_events(
+            make_request(method="GET", path="/organizer/claims/suggestions"),
+            current_organizer=organizer,
+            db=mock_db,
+        )
+
+        assert result["events"] == []
+        mock_db.execute.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_matches_event_url_domain(self, mock_db, make_event, make_request, make_organizer):
+        from app.routers.organizer_claims import suggested_claimable_events
+
+        organizer = make_organizer()
+        organizer.email = "team@example-promoter.ee"
+
+        matching = make_event(event_id=1, title="Their show")
+        matching.url = "https://tickets.example-promoter.ee/event/1"
+        matching.sources = [_make_source(event_id=1, publisher_id=1)]
+
+        decoy = make_event(event_id=2, title="Someone else's show")
+        decoy.url = "https://notexample-promoter.ee/event/2"
+        decoy.sources = [_make_source(event_id=2, publisher_id=2)]
+
+        candidates_result = MagicMock()
+        candidates_result.scalars.return_value.all.return_value = [matching, decoy]
+        claim_keys_result = MagicMock()
+        claim_keys_result.all.return_value = []
+        mock_db.execute.side_effect = [candidates_result, claim_keys_result]
+
+        result = await suggested_claimable_events(
+            make_request(method="GET", path="/organizer/claims/suggestions"),
+            current_organizer=organizer,
+            db=mock_db,
+        )
+
+        assert [e["id"] for e in result["events"]] == [1]
