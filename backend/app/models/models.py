@@ -373,6 +373,17 @@ class Publisher(Base):
             "external_id",
             unique=True,
         ),
+        # Postgres unique indexes don't treat NULL as a duplicate, so the
+        # index above alone allows two KUMU/ECH-style constant rows
+        # (external_id NULL) per source — this partial index closes that gap
+        # for the one-per-source-with-no-external_id case (#411 review
+        # finding).
+        Index(
+            "ix_publishers_source_null_external",
+            "source_id",
+            unique=True,
+            postgresql_where=text("external_id IS NULL"),
+        ),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)

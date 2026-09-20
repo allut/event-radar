@@ -22,6 +22,7 @@ from app.ingestion.adapter import (
     coords_in_estonia,
     coords_in_tallinn,
     insert_normalized_event,
+    load_publisher_lookup,
 )
 from app.ingestion.content_filters import is_explicit_text, is_non_event_text
 from app.ingestion.http_client import (
@@ -774,6 +775,20 @@ class TestSourceAdapterRun:
         assert run.error is None
 
     @pytest.mark.asyncio
+    async def test_publisher_lookup_populated_before_crawl(self, mock_db):
+        """#411: run() bulk-loads the source's Publisher mirror once, before
+        the crawl, for insert_normalized_event to resolve without per-row
+        SELECTs."""
+        source = MagicMock(id=1)
+        mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=[]))
+        mock_db.execute.return_value.all.return_value = [("42", 5)]
+        adapter = _FakeAdapter(source, fetch_result=[])
+
+        await adapter.run(mock_db)
+
+        assert adapter._publisher_lookup == {"42": 5}
+
+    @pytest.mark.asyncio
     async def test_recently_rejected_raw_event_id_is_skipped(self, mock_db):
         """A raw_events row fetched within INGEST_REJECT_RECHECK_DAYS with no
         event_sources row (a recent reject) still ends up in known_ids."""
@@ -936,6 +951,21 @@ class TestNormalizedEventAddressGate:
         assert event.lng == 24.75
 
 
+class TestLoadPublisherLookup:
+    @pytest.mark.asyncio
+    async def test_bulk_loads_external_id_to_publisher_id(self, mock_db):
+        mock_db.execute.return_value.all.return_value = [("42", 5), (None, 6)]
+
+        result = await load_publisher_lookup(mock_db, source_id=1)
+
+        assert result == {"42": 5, None: 6}
+
+    @pytest.mark.asyncio
+    async def test_empty_when_no_publishers(self, mock_db):
+        result = await load_publisher_lookup(mock_db, source_id=1)
+        assert result == {}
+
+
 class TestInsertNormalizedEvent:
     """insert_normalized_event() is the shared write path extracted from
     SourceAdapter._insert_event (P1 organizer-submission refactor) — used by
@@ -1065,6 +1095,67 @@ class TestInsertNormalizedEvent:
 
         assert result is not None
         assert result.url is None
+
+    @pytest.mark.asyncio
+    async def test_publisher_id_resolved_from_lookup(self, mock_db):
+        self._nested_cm(mock_db)
+        source = MagicMock(id=1, slug="test-source")
+        normalized = NormalizedEvent(
+            external_id="ext-5",
+            title="Published By Org",
+            starts_at=datetime(2026, 6, 1, 18, 0, tzinfo=TALLINN_TZ),
+            publisher_external_id="42",
+        )
+
+        await insert_normalized_event(mock_db, source, normalized, {"42": 7})
+
+        event_sources = [
+            c.args[0]
+            for c in mock_db.add.call_args_list
+            if hasattr(c.args[0], "publisher_id")
+        ]
+        assert event_sources[0].publisher_id == 7
+
+    @pytest.mark.asyncio
+    async def test_publisher_id_none_when_no_lookup_match(self, mock_db):
+        self._nested_cm(mock_db)
+        source = MagicMock(id=1, slug="test-source")
+        normalized = NormalizedEvent(
+            external_id="ext-6",
+            title="Unmatched",
+            starts_at=datetime(2026, 6, 1, 18, 0, tzinfo=TALLINN_TZ),
+            publisher_external_id="99",
+        )
+
+        await insert_normalized_event(mock_db, source, normalized, {"42": 7})
+
+        event_sources = [
+            c.args[0]
+            for c in mock_db.add.call_args_list
+            if hasattr(c.args[0], "publisher_id")
+        ]
+        assert event_sources[0].publisher_id is None
+
+    @pytest.mark.asyncio
+    async def test_publisher_id_none_when_lookup_not_passed(self, mock_db):
+        """organizer_events.py's direct-submission call site never passes a
+        lookup — publisher_id must stay NULL, never raise."""
+        self._nested_cm(mock_db)
+        source = MagicMock(id=1, slug="user_submission", kind=SOURCE_KIND_USER_SUBMISSION)
+        normalized = NormalizedEvent(
+            external_id="ext-7",
+            title="Organizer Submission",
+            starts_at=datetime(2026, 6, 1, 18, 0, tzinfo=TALLINN_TZ),
+        )
+
+        await insert_normalized_event(mock_db, source, normalized)
+
+        event_sources = [
+            c.args[0]
+            for c in mock_db.add.call_args_list
+            if hasattr(c.args[0], "publisher_id")
+        ]
+        assert event_sources[0].publisher_id is None
 
 
 class TestStripFeeAmounts:

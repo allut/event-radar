@@ -209,6 +209,11 @@ class FientaAdapter(SourceAdapter):
     (`meta.current_page` / `meta.last_page`) pagination automatically.
     Plain list responses (no pagination envelope) are also supported.
 
+    fetch_organizer() stamps every collected item with its requesting
+    organizer_id (#409/#411) — normalize() reads it into
+    NormalizedEvent.publisher_external_id, resolved against the source's
+    mirrored Publisher rows (organizer_sync.py) by insert_normalized_event.
+
     For each new event (not yet in event_sources), the adapter fetches the
     detail page concurrently and attaches parsed JSON-LD data under
     ``raw["_detail"]``. normalize() merges listing + detail per a fixed
@@ -222,7 +227,7 @@ class FientaAdapter(SourceAdapter):
     host — so a `request` event hook (`host_guard_hook`, `app/ingestion/http_client.py`)
     re-validates the host of *every* request the client sends, including each
     redirect hop, against base_host. This is the actual SSRF enforcement for
-    the redirect case; the pre-fetch checks in `_fetch_organizer`/`_fetch_detail`
+    the redirect case; the pre-fetch checks in `fetch_organizer`/`_fetch_detail`
     remain as defense-in-depth on the un-redirected URL.
 
     All listing and detail requests share one AsyncRateLimiter per fetch_raw()
@@ -252,7 +257,7 @@ class FientaAdapter(SourceAdapter):
             for org_id in organizer_ids:
                 try:
                     all_events.extend(
-                        await self._fetch_organizer(client, base_url, org_id, limiter)
+                        await self.fetch_organizer(client, base_url, org_id, limiter)
                     )
                 except httpx.HTTPStatusError as exc:
                     log.warning(
@@ -313,7 +318,7 @@ class FientaAdapter(SourceAdapter):
 
         return new_items
 
-    async def _fetch_organizer(
+    async def fetch_organizer(
         self,
         client: httpx.AsyncClient,
         base_url: str,
@@ -339,10 +344,14 @@ class FientaAdapter(SourceAdapter):
             data = response.json()
 
             if isinstance(data, list):
+                for event in data:
+                    event["organizer_id"] = org_id
                 collected.extend(data)
                 break  # plain list — no pagination
 
             events = data.get("data", data.get("events", []))
+            for event in events:
+                event["organizer_id"] = org_id
             collected.extend(events)
 
             # link-based pagination: follow links.next (validated against base host)
@@ -519,8 +528,12 @@ class FientaAdapter(SourceAdapter):
         loc_titles = detail_localized.get("title") or {}
         loc_descs = detail_localized.get("description") or {}
 
+        organizer_id = raw.get("organizer_id")
+        publisher_external_id = str(organizer_id) if organizer_id is not None else None
+
         return NormalizedEvent(
             external_id=external_id,
+            publisher_external_id=publisher_external_id,
             title=str(title),
             description=sanitize_html(raw.get("description") or raw.get("body")),
             starts_at=starts_at,

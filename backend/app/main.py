@@ -102,7 +102,7 @@ from app.routers.settings import router as settings_router
 from app.routers.unsubscribe import router as unsubscribe_router
 from app.routers.utils import run_in_session
 from app.routers.webhooks import router as webhooks_router
-from app.seeds import seed_personas, seed_sources
+from app.seeds import seed_personas, seed_publishers, seed_sources
 
 # uvicorn configures its own logging during Config.load(), before importing this
 # module — calling configure_logging() here runs last and wins, so every logger
@@ -551,6 +551,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     async with AsyncSessionLocal() as db:
         await seed_sources(db)
         await seed_personas(db)
+        await seed_publishers(db)
         await db.commit()
 
     scheduler = _start_scheduler()

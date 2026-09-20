@@ -34,7 +34,7 @@ from app.constants import (
 from app.ingestion.content_filters import content_flags
 from app.ingestion.http_client import safe_external_url, safe_fetchable_url
 from app.ingestion.pricing import normalize_currency
-from app.models.models import Event, EventSource, IngestionRun, RawEvent, Source
+from app.models.models import Event, EventSource, IngestionRun, Publisher, RawEvent, Source
 
 log = logging.getLogger(__name__)
 
@@ -75,6 +75,11 @@ class NormalizedEvent:
     title_localized: dict[str, str] | None = None
     description_localized: dict[str, str] | None = None
     important_info_localized: dict[str, str] | None = None
+    # Key into this run's publisher lookup (Publisher.external_id) — resolved
+    # to EventSource.publisher_id by insert_normalized_event (#409/#411).
+    # None both means "no publisher" and matches a source's single constant
+    # Publisher row (external_id NULL) for a single-institution source.
+    publisher_external_id: str | None = None
 
     def __post_init__(self) -> None:
         # Coords without an address are orphan data here — the geocode/sibling-copy
@@ -140,6 +145,28 @@ async def ingest_skip_ids(db: AsyncSession, source_id: int) -> set[str]:
     return stored | recent
 
 
+async def load_publisher_lookup(
+    db: AsyncSession, source_id: int
+) -> dict[str | None, int]:
+    """Bulk-load {Publisher.external_id: Publisher.id} for source_id.
+
+    One query per adapter run (Code Quality Rules' "Batch jobs" — fixed query
+    count independent of row count) so insert_normalized_event resolves
+    EventSource.publisher_id via an in-memory dict instead of a per-row
+    SELECT. The publishers table is mirrored ahead of ingest — by
+    organizer_sync.py for Fienta, by seed_publishers() for KUMU/Estonia
+    Concert Hall — so this is read-only here.
+    """
+    rows = (
+        await db.execute(
+            select(Publisher.external_id, Publisher.id).where(
+                Publisher.source_id == source_id
+            )
+        )
+    ).all()
+    return {external_id: publisher_id for external_id, publisher_id in rows}
+
+
 def coords_in_estonia(lat: float, lng: float) -> bool:
     """Return True when (lat, lng) falls within Estonia's bounding box."""
     lat_min, lat_max, lng_min, lng_max = ESTONIA_BBOX
@@ -153,7 +180,10 @@ def coords_in_tallinn(lat: float, lng: float) -> bool:
 
 
 async def insert_normalized_event(
-    db: AsyncSession, source: Source, normalized: NormalizedEvent
+    db: AsyncSession,
+    source: Source,
+    normalized: NormalizedEvent,
+    publisher_id_by_external_id: dict[str | None, int] | None = None,
 ) -> Event | None:
     """Insert the Event + EventSource rows inside a savepoint.
 
@@ -161,7 +191,8 @@ async def insert_normalized_event(
     SourceAdapter._insert_event below) and the organizer direct-submission
     router (routers/organizer_events.py), which has no adapter/normalize()
     step of its own but still needs the same slug/SSRF-guard/content-flag/
-    collision-handling behavior.
+    collision-handling behavior — the latter never passes
+    publisher_id_by_external_id, so its EventSource.publisher_id stays NULL.
 
     Returns None on a slug collision (IntegrityError) — the savepoint rolls
     back just this event, not the whole batch. Callers that need description/
@@ -214,11 +245,15 @@ async def insert_normalized_event(
             )
             db.add(event)
             await db.flush()
+            publisher_id = (publisher_id_by_external_id or {}).get(
+                normalized.publisher_external_id
+            )
             db.add(
                 EventSource(
                     event_id=event.id,
                     source_id=source.id,
                     external_id=normalized.external_id,
+                    publisher_id=publisher_id,
                 )
             )
     except IntegrityError:
@@ -251,6 +286,9 @@ async def insert_normalized_event(
 class SourceAdapter(ABC):
     def __init__(self, source: Source) -> None:
         self.source = source
+        # Populated by run() before the crawl; stays {} for a caller that
+        # invokes _insert_event without run() (e.g. a direct-insert test).
+        self._publisher_lookup: dict[str | None, int] = {}
 
     @abstractmethod
     async def fetch_raw(self, known_ids: set[str]) -> list[dict[str, Any]]: ...
@@ -268,7 +306,9 @@ class SourceAdapter(ABC):
     ) -> Event | None:
         """Insert via the shared insert_normalized_event() helper, bound to
         this adapter's source. Returns None on a slug collision."""
-        return await insert_normalized_event(db, self.source, normalized)
+        return await insert_normalized_event(
+            db, self.source, normalized, self._publisher_lookup
+        )
 
     async def _process_raw_item(
         self,
@@ -322,6 +362,7 @@ class SourceAdapter(ABC):
         the failure record (instead of rolling back the entire transaction).
         """
         known_ids = await ingest_skip_ids(db, self.source.id)
+        self._publisher_lookup = await load_publisher_lookup(db, self.source.id)
         # Release the connection for the crawl below — fetch_raw is network I/O only
         # (no db access), often taking minutes, which would otherwise hold a checked-out
         # connection idle past Neon's auto-suspend window. Nothing has been written yet,

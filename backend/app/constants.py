@@ -445,12 +445,17 @@ REPORT_STATUS_RESOLVED = "resolved"
 VALID_REPORT_STATUSES = frozenset({REPORT_STATUS_OPEN, REPORT_STATUS_RESOLVED})
 REPORT_DETAIL_MAX_CHARS = 500
 
-# Event claiming (#409/#410) — see CONTEXT.md's Event Claiming glossary.
+# Event claiming (#409/#410/#411) — see CONTEXT.md's Event Claiming glossary.
 PUBLISHER_STATUS_ACTIVE = "active"
 PUBLISHER_STATUS_RETIRED = "retired"
 VALID_PUBLISHER_STATUSES = frozenset(
     {PUBLISHER_STATUS_ACTIVE, PUBLISHER_STATUS_RETIRED}
 )
+# KUMU/Estonia Concert Hall are each a single institution — one Publisher row
+# per source (external_id NULL), named here rather than seeds.py per the
+# "backend constants" rule.
+PUBLISHER_NAME_KUMU = "Kumu Art Museum"
+PUBLISHER_NAME_ESTONIA_CONCERT_HALL = "Estonia Concert Hall"
 
 CLAIM_KIND_PUBLISHER = "publisher"
 CLAIM_KIND_SERIES = "series"

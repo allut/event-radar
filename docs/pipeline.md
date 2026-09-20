@@ -39,6 +39,8 @@ Four user-facing surfaces read `published` events — two authenticated, one opt
 
 `POST /admin/sync-organizers` triggers this synchronously; it is also stage 1 of `POST /admin/pipeline/run`.
 
+**Publisher mirroring (#409/#411):** every run, `sync_fienta_organizers()` also mirrors a `publishers` row per organizer id (active or retired) via `_sync_publishers()` — a read mirror of `organizer_ids`/`retired_organizer_ids`, never the other way around. `FientaAdapter.fetch_organizer()` stamps each collected item with its requesting `organizer_id`; `normalize()` carries it as `NormalizedEvent.publisher_external_id`, resolved to `EventSource.publisher_id` by `insert_normalized_event()` against a per-run bulk-loaded lookup (`load_publisher_lookup()`, `app/ingestion/adapter.py`) — never a per-row SELECT. KUMU/Estonia Concert Hall get one constant `publishers` row each (`external_id` NULL, seeded once by `app/seeds.py::seed_publishers()`), matched the same way since their `NormalizedEvent.publisher_external_id` is always `None`. Piletilevi never populates `EventSource.publisher_id` — its Publisher resolves from a promoter id (`app/ingestion/jsonld.py::organizer_from_jsonld_items()`), a later verification-mechanisms ticket. `backend/scripts/backfill_publisher_ids.py` (`app/ingestion/publisher_backfill.py`) is the one-time backfill for currently-claimable (published, not-yet-ended) events, scoped via live re-query, never `raw_events.payload` replay. See CONTEXT.md's Event Claiming glossary.
+
 ## LLM Usage Constraints
 
 - **Default cap:** `LLM_MAX_TOKENS = 400` per call to avoid quota exhaustion; `LLM_REASONING_MAX_TOKENS = 600` is the project hard-cap ceiling, used by the Groq and Cloudflare Workers AI entries (see below).
