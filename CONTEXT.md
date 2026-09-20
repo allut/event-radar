@@ -82,12 +82,14 @@ _Avoid_: review, approve, dismiss
 
 **Publisher**:
 The real-world entity a claim is granted against, resolved per source: one
-per Fienta organizer id, or the whole source for KUMU and Estonia Concert
-Hall (each a single institution, the latter booking several halls under one
-feed). Piletilevi has no Publisher — its listings carry no resolvable entity;
-see Series claim. Distinct from `Organizer` (the portal account that holds a
-claim) and `Venue` (an organizer's saved-venue directory) — a Publisher is
-neither.
+per Fienta organizer id, the whole source for KUMU and Estonia Concert Hall
+(each a single institution, the latter booking several halls under one
+feed), or one per Piletilevi promoter id — read from a listing's schema.org
+`Event.organizer` and resolved to that promoter's public profile page —
+when that identity resolves. A Piletilevi listing whose organizer field
+doesn't resolve has no Publisher; see Series claim. Distinct from
+`Organizer` (the portal account that holds a claim) and `Venue` (an
+organizer's saved-venue directory) — a Publisher is neither.
 _Avoid_: organizer (source sense), source organizer, feed organizer
 
 **Publisher claim**:
@@ -97,10 +99,11 @@ _Avoid_: organizer claim, source claim
 
 **Series claim**:
 A Piletilevi claim granted against an `event_series_key` (normalized title +
-lowercased venue) instead of a resolved entity, since Piletilevi is a
-multi-promoter marketplace with no Publisher to claim. Covers every past and
-future event sharing that series key, reusing the grouping series cooldown
-already uses.
+lowercased venue) instead of a resolved entity — the fallback for a listing
+whose promoter identity doesn't resolve to a Publisher. Where it does
+resolve, a Publisher claim applies instead (see Publisher). Covers every
+past and future event sharing that series key, reusing the grouping series
+cooldown already uses.
 _Avoid_: listing claim, recurrence claim, per-event claim
 
 **Trusted claimant**:
