@@ -44,6 +44,23 @@ def _jsonld_event_items(data: Any) -> list[dict[str, Any]]:
     return [item for item in items if isinstance(item, dict)]
 
 
+def parse_jsonld_graph_items(soup: BeautifulSoup) -> list[dict[str, Any]]:
+    """Every schema.org item across a page's JSON-LD script blocks, with no
+    ``@type`` filter — unlike ``parse_jsonld_event_items``, which keeps only
+    ``Event``-typed items. Needed by callers that resolve an ``@id`` reference
+    (e.g. Piletilevi's ``organizer`` field, app/claims/piletilevi_promoter.py)
+    against a sibling node of a different type in the same ``@graph``.
+    """
+    items: list[dict[str, Any]] = []
+    for script in soup.find_all("script", type=JSONLD_SCRIPT_TYPE):
+        try:
+            data = json.loads(script.string or "")
+        except (TypeError, ValueError):
+            continue
+        items.extend(_jsonld_event_items(data))
+    return items
+
+
 def parse_jsonld_event_items(soup: BeautifulSoup) -> list[dict[str, Any]]:
     """Parse every <script type="application/ld+json"> block once and return the
     flattened list of schema.org ``Event``-typed item dicts, in document order.

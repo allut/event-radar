@@ -468,6 +468,60 @@ VALID_CLAIM_STATUSES = frozenset(
     {CLAIM_STATUS_PENDING, CLAIM_STATUS_APPROVED, CLAIM_STATUS_REVOKED}
 )
 
+# Claim-proof verification mechanisms (#412) — app/claims/. Standalone
+# verification engine, not yet wired into a claim lifecycle (#413).
+CLAIM_TOKEN_BYTE_LENGTH = 16  # secrets.token_hex(16) -> 32 lowercase hex chars
+CLAIM_TOKEN_PREFIX = "er-verify-"
+
+CLAIM_VERIFICATION_MECHANISM_FIENTA_TOKEN = "fienta_token"
+CLAIM_VERIFICATION_MECHANISM_DNS_TXT = "dns_txt"
+CLAIM_VERIFICATION_MECHANISM_PILETILEVI_PROMOTER = "piletilevi_promoter"
+CLAIM_VERIFICATION_MECHANISM_ADMIN_REVIEW = "admin_review"
+VALID_CLAIM_VERIFICATION_MECHANISMS = frozenset(
+    {
+        CLAIM_VERIFICATION_MECHANISM_FIENTA_TOKEN,
+        CLAIM_VERIFICATION_MECHANISM_DNS_TXT,
+        CLAIM_VERIFICATION_MECHANISM_PILETILEVI_PROMOTER,
+        CLAIM_VERIFICATION_MECHANISM_ADMIN_REVIEW,
+    }
+)
+
+CLAIM_VERIFICATION_OUTCOME_AUTO_GRANT = "auto_grant"
+CLAIM_VERIFICATION_OUTCOME_ADMIN_REVIEW = "admin_review"
+VALID_CLAIM_VERIFICATION_OUTCOMES = frozenset(
+    {CLAIM_VERIFICATION_OUTCOME_AUTO_GRANT, CLAIM_VERIFICATION_OUTCOME_ADMIN_REVIEW}
+)
+
+# DNS-TXT domain-control check, resolved via DNS-over-HTTPS (no new
+# fetchable-content SSRF surface — this is a fixed, hardcoded resolver, never
+# a source-supplied URL). Shared by the KUMU/Estonia Concert Hall hardcoded
+# domains and a resolved Piletilevi promoter's contact domain.
+CLAIM_DNS_TXT_RECORD_LABEL = "_eventradar-verify"
+CLAIM_DNS_DOH_URL = "https://cloudflare-dns.com/dns-query"
+DNS_RECORD_TYPE_TXT = "TXT"
+
+KUMU_VERIFICATION_DOMAIN = "kumu.ekm.ee"
+ESTONIA_CONCERT_HALL_VERIFICATION_DOMAIN = "concert.ee"
+
+# Free/shared-mailbox email providers excluded when resolving a Piletilevi
+# promoter's contact email to a domain-control target — a promoter can't
+# prove DNS control of a provider they don't own.
+FREE_EMAIL_PROVIDER_DOMAINS = frozenset(
+    {
+        "gmail.com",
+        "mail.ee",
+        "hot.ee",
+        "hotmail.com",
+        "outlook.com",
+        "yahoo.com",
+        "live.com",
+        "icloud.com",
+        "mail.ru",
+        "yandex.ru",
+        "inbox.lv",
+    }
+)
+
 # Admin-authenticated but persisted to a Text column and emailed verbatim to
 # every reporter (see app/email/report_reporter.py) — bounded so validation
 # rejects an oversized note before it's stored/mailed rather than only being
