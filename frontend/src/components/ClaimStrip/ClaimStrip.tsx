@@ -3,7 +3,7 @@ import { organizerApi } from '../../api/client';
 import { API, ROUTES, UI_STATE } from '../../constants';
 import { t } from '../../i18n';
 import { apiErrorMessage } from '../../utils';
-import { useLocalePath } from '../../hooks/useLocalePath';
+import { useLocaleNavigate } from '../../hooks/useLocaleNavigate';
 import { useOrganizerAuth } from '../../hooks/useOrganizerAuth';
 import MagicLinkForm from '../MagicLinkForm';
 import styles from './ClaimStrip.module.css';
@@ -39,10 +39,9 @@ interface ClaimPanelProps {
  * intent (event_id) through sign-in, per #413's claim-link tokens. */
 export function ClaimPanel({ eventId, locale }: ClaimPanelProps) {
   const organizerAuthed = useOrganizerAuth();
-  const localePath = useLocalePath();
-  const [state, setState] = useState<'idle' | 'loading' | 'email-form' | 'created' | 'error'>('idle');
+  const navigate = useLocaleNavigate();
+  const [state, setState] = useState<'idle' | 'loading' | 'email-form' | 'error'>('idle');
   const [errorMsg, setErrorMsg] = useState('');
-  const [createdStatus, setCreatedStatus] = useState<'pending' | 'approved'>('pending');
 
   async function handleClaimClick() {
     if (!organizerAuthed) {
@@ -52,31 +51,12 @@ export function ClaimPanel({ eventId, locale }: ClaimPanelProps) {
     setState('loading');
     setErrorMsg('');
     try {
-      const claim = await organizerApi.post<{ status: 'pending' | 'approved' }>(
-        API.organizerClaims,
-        { event_id: eventId },
-      );
-      setCreatedStatus(claim.status);
-      setState('created');
+      const claim = await organizerApi.post<{ id: number }>(API.organizerClaims, { event_id: eventId });
+      navigate(ROUTES.organizerClaimPending(claim.id));
     } catch (err) {
       setErrorMsg(apiErrorMessage(err, t('generic_error', locale)));
       setState('error');
     }
-  }
-
-  if (state === 'created') {
-    return (
-      <section className={styles.panel}>
-        <h2 className={styles.heading}>
-          {t(createdStatus === 'approved' ? 'claim_pill_claimed' : 'claim_pill_pending', locale)}
-        </h2>
-        <p className={styles.body}>
-          <a href={localePath(ROUTES.organizerDashboard)} className={styles.dashboardLink}>
-            {t('organizer_dashboard_title', locale)}
-          </a>
-        </p>
-      </section>
-    );
   }
 
   return (

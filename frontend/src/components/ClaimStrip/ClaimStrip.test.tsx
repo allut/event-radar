@@ -45,4 +45,19 @@ describe('ClaimPanel', () => {
     await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
     expect(screen.getByRole('button', { name: 'Claim this event' })).not.toBeDisabled();
   });
+
+  it('lands an already-authenticated organizer on the pending screen for the created claim (#415)', async () => {
+    localStorage.setItem(ORGANIZER_SIGNED_IN_HINT_KEY, '1');
+    mockOrganizerPost.mockResolvedValueOnce({ id: 42, status: 'pending' });
+    renderWithProviders(null, {
+      routes: [
+        { path: '/', element: <ClaimPanel eventId={7} locale="en" /> },
+        { path: '/organizer/claims/:id/pending', element: <div>pending-screen-42</div> },
+      ],
+    });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Claim this event' }));
+
+    await waitFor(() => expect(screen.getByText('pending-screen-42')).toBeInTheDocument());
+  });
 });

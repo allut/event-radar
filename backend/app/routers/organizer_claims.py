@@ -28,16 +28,22 @@ from app.claims.lifecycle import (
     ClaimError,
     cancel_claim,
     create_claim,
+    get_own_claim,
     recheck_claim,
     resolve_claim_target,
 )
 from app.constants import (
     CLAIM_ACTIVE_STATUSES,
+    CLAIM_AUTOMATED_VERIFICATION_MECHANISMS,
+    CLAIM_DNS_TXT_RECORD_LABEL,
     CLAIM_KIND_PUBLISHER,
     CLAIM_SEARCH_CANDIDATE_MULTIPLIER,
     CLAIM_SEARCH_QUERY_MIN_LENGTH,
     CLAIM_SEARCH_RESULT_LIMIT,
+    CLAIM_STATUS_PENDING,
     CLAIM_SUGGESTIONS_LIMIT,
+    CLAIM_VERIFICATION_MECHANISM_DNS_TXT,
+    CLAIM_VERIFICATION_MECHANISM_PILETILEVI_PROMOTER,
     DETAIL_MAGIC_LINK_SENT,
     ERROR_CLAIM_SEARCH_QUERY_TOO_SHORT,
     ERROR_MAGIC_LINK_CONSUMED,
@@ -47,7 +53,7 @@ from app.constants import (
     FREE_EMAIL_PROVIDER_DOMAINS,
     HTTP_TIMEOUT_SECONDS,
     LOG_EVENT_AUTH_FAILED,
-    ORGANIZER_AUTH_VERIFY_PATH,
+    ORGANIZER_CLAIM_VERIFY_PATH,
     ORGANIZER_SESSION_COOKIE_NAME,
     ORGANIZER_SESSION_COOKIE_PATH,
     ORGANIZER_SESSION_TTL_DAYS,
@@ -91,7 +97,19 @@ class ClaimLinkVerifyBody(BaseModel):
     token: str
 
 
+_DNS_MECHANISMS = frozenset(
+    {CLAIM_VERIFICATION_MECHANISM_DNS_TXT, CLAIM_VERIFICATION_MECHANISM_PILETILEVI_PROMOTER}
+)
+
+
 def _serialize(claim: Claim) -> dict:
+    """#415's pending screen picks its variant off `verification_mechanism`
+    and never has to know CLAIM_DNS_TXT_RECORD_LABEL itself — the DNS
+    instructions are pre-assembled here from `verification_domain` (#412's
+    resolved KUMU/ECH/Piletilevi-promoter domain, persisted at verify time)."""
+    dns_record_name = None
+    if claim.verification_mechanism in _DNS_MECHANISMS and claim.verification_domain:
+        dns_record_name = f"{CLAIM_DNS_TXT_RECORD_LABEL}.{claim.verification_domain}"
     return {
         "id": claim.id,
         "kind": claim.kind,
@@ -99,7 +117,14 @@ def _serialize(claim: Claim) -> dict:
         "event_series_key": claim.event_series_key,
         "status": claim.status,
         "verification_mechanism": claim.verification_mechanism,
+        "verification_domain": claim.verification_domain,
+        "dns_record_name": dns_record_name,
+        "dns_record_value": claim.proof_token,
         "proof_token": claim.proof_token,
+        "can_recheck": (
+            claim.status == CLAIM_STATUS_PENDING
+            and claim.verification_mechanism in CLAIM_AUTOMATED_VERIFICATION_MECHANISMS
+        ),
         "created_at": claim.created_at,
         "last_checked_at": claim.last_checked_at,
         "resolved_at": claim.resolved_at,
@@ -194,7 +219,7 @@ async def request_claim_link(
 
     try:
         await send_magic_link(
-            email, signed_token, email_locale, verify_path=ORGANIZER_AUTH_VERIFY_PATH
+            email, signed_token, email_locale, verify_path=ORGANIZER_CLAIM_VERIFY_PATH
         )
     except Exception:
         log.exception("Failed to send organizer claim link to %s", mask_email(email))
@@ -453,3 +478,24 @@ async def suggested_claimable_events(
         if len(results) >= CLAIM_SUGGESTIONS_LIMIT:
             break
     return {"events": results}
+
+
+# Registered after the literal /search and /suggestions paths above —
+# Starlette matches path routes in registration order and {claim_id} has no
+# int converter in the path itself, so it must not shadow those two literals.
+@router.get("/{claim_id}")
+@limiter.limit(RATE_LIMIT_BROWSE)
+async def get_claim(
+    claim_id: int,
+    request: Request,
+    current_organizer: Organizer = Depends(get_current_organizer),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """#415's pending screen: fetch a claim's current state on direct
+    navigation/reload (create/verify-link already return it inline for the
+    same-request landing case)."""
+    try:
+        claim = await get_own_claim(db, current_organizer, claim_id)
+    except ClaimError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+    return _serialize(claim)

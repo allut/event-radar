@@ -21,6 +21,15 @@ function mockClaimGet(suggestions: unknown = { events: [] }, search: unknown = {
   );
 }
 
+function renderPicker() {
+  return renderWithProviders(null, {
+    routes: [
+      { path: '/', element: <ClaimEventPicker locale="en" /> },
+      { path: '/organizer/claims/:id/pending', element: <div>pending-screen</div> },
+    ],
+  });
+}
+
 beforeEach(() => {
   mockGet.mockReset();
   mockPost.mockReset();
@@ -29,23 +38,22 @@ beforeEach(() => {
 describe('ClaimEventPicker', () => {
   it('shows the suggestions list when the account has matches', async () => {
     mockClaimGet({ events: [candidate] });
-    renderWithProviders(<ClaimEventPicker locale="en" onClaimed={vi.fn()} />);
+    renderPicker();
     await waitFor(() => expect(screen.getByText('Jazz Night')).toBeInTheDocument());
     expect(screen.getByText('Suggested for you')).toBeInTheDocument();
   });
 
   it('hides the suggestions section when there are none', async () => {
     mockClaimGet({ events: [] });
-    renderWithProviders(<ClaimEventPicker locale="en" onClaimed={vi.fn()} />);
+    renderPicker();
     await waitFor(() => expect(mockGet).toHaveBeenCalled());
     expect(screen.queryByText('Suggested for you')).not.toBeInTheDocument();
   });
 
-  it('searches on typing and claims a result', async () => {
+  it('searches on typing and lands on the pending screen after claiming (#415)', async () => {
     mockClaimGet({ events: [] }, { events: [candidate] });
-    mockPost.mockResolvedValueOnce({ status: 'pending' });
-    const onClaimed = vi.fn();
-    renderWithProviders(<ClaimEventPicker locale="en" onClaimed={onClaimed} />);
+    mockPost.mockResolvedValueOnce({ id: 42, status: 'pending' });
+    renderPicker();
 
     await userEvent.type(screen.getByRole('combobox'), 'jazz');
     await waitFor(() => expect(screen.getByText('Jazz Night')).toBeInTheDocument(), { timeout: 2000 });
@@ -53,13 +61,13 @@ describe('ClaimEventPicker', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Claim this event' }));
 
     expect(mockPost).toHaveBeenCalledWith('/organizer/claims', { event_id: 42 });
-    await waitFor(() => expect(onClaimed).toHaveBeenCalledWith('pending'));
+    await waitFor(() => expect(screen.getByText('pending-screen')).toBeInTheDocument());
   });
 
   it('shows an inline error when claiming fails', async () => {
     mockClaimGet({ events: [candidate] });
     mockPost.mockRejectedValueOnce(new Error('network'));
-    renderWithProviders(<ClaimEventPicker locale="en" onClaimed={vi.fn()} />);
+    renderPicker();
 
     await waitFor(() => expect(screen.getByText('Jazz Night')).toBeInTheDocument());
     await userEvent.click(screen.getByRole('button', { name: 'Claim this event' }));

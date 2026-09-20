@@ -74,12 +74,7 @@ export default function OrganizerDashboard() {
 
       <main className={styles.main}>
         <OrganizerProfileNudge locale={locale} />
-        <ClaimEventPicker
-          locale={locale}
-          onClaimed={(status) =>
-            showToast(UI_STATE.success, t(status === 'approved' ? 'claim_pill_claimed' : 'claim_pill_pending', locale))
-          }
-        />
+        <ClaimEventPicker locale={locale} />
         <header className={styles.masthead}>
           <h1 className={styles.heading}>{t('organizer_dashboard_title', locale)}</h1>
           <Link to={localePath(ROUTES.organizerSubmit)} className={styles.newBtn}>{t('organizer_new_event', locale)}</Link>

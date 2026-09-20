@@ -99,6 +99,34 @@ export const ORGANIZER_NAME_MAX_LEN = 255;
 export const ORGANIZER_VENUE_NAME_MAX_LEN = 255;
 export const ORGANIZER_VENUE_ADDRESS_MAX_LEN = 500;
 
+// Mirrors backend CLAIM_VERIFICATION_MECHANISM_* / CLAIM_STATUS_* (app/constants.py)
+// — #415's ClaimPending screen switches its mechanism-specific copy off these.
+export const CLAIM_VERIFICATION_MECHANISM_FIENTA_TOKEN = 'fienta_token';
+export const CLAIM_VERIFICATION_MECHANISM_DNS_TXT = 'dns_txt';
+export const CLAIM_VERIFICATION_MECHANISM_PILETILEVI_PROMOTER = 'piletilevi_promoter';
+export const CLAIM_VERIFICATION_MECHANISM_ADMIN_REVIEW = 'admin_review';
+export type ClaimVerificationMechanism =
+  | typeof CLAIM_VERIFICATION_MECHANISM_FIENTA_TOKEN
+  | typeof CLAIM_VERIFICATION_MECHANISM_DNS_TXT
+  | typeof CLAIM_VERIFICATION_MECHANISM_PILETILEVI_PROMOTER
+  | typeof CLAIM_VERIFICATION_MECHANISM_ADMIN_REVIEW;
+export const CLAIM_DNS_VERIFICATION_MECHANISMS: ReadonlySet<ClaimVerificationMechanism> = new Set([
+  CLAIM_VERIFICATION_MECHANISM_DNS_TXT,
+  CLAIM_VERIFICATION_MECHANISM_PILETILEVI_PROMOTER,
+]);
+
+export const CLAIM_STATUS_PENDING = 'pending';
+export const CLAIM_STATUS_APPROVED = 'approved';
+export const CLAIM_STATUS_CANCELLED = 'cancelled';
+export const CLAIM_STATUS_EXPIRED = 'expired';
+export const CLAIM_STATUS_REVOKED = 'revoked';
+export type ClaimStatus =
+  | typeof CLAIM_STATUS_PENDING
+  | typeof CLAIM_STATUS_APPROVED
+  | typeof CLAIM_STATUS_CANCELLED
+  | typeof CLAIM_STATUS_EXPIRED
+  | typeof CLAIM_STATUS_REVOKED;
+
 // ─── Auth / magic link ───────────────────────────────────────────────────────
 export const AUTH_REDIRECT_DELAY_MS = 600;
 // Upper bound on the post-logout 401-redirect suppression window (lib/auth.ts
@@ -475,6 +503,7 @@ export const QUERY_KEYS = {
   organizerVenues: 'organizerVenues',
   organizerClaimSuggestions: 'organizerClaimSuggestions',
   organizerClaimSearch: 'organizerClaimSearch',
+  organizerClaim: 'organizerClaim',
   adminCounts: 'adminCounts',
   adminReports: 'adminReports',
   adminSubmissions: 'adminSubmissions',
@@ -755,7 +784,10 @@ export const ROUTES = {
   contact: '/contact',
   organizerLogin: '/organizer/login',
   organizerVerify: '/organizer/verify',
+  organizerClaimVerify: '/organizer/claims/verify',
   organizerDashboard: '/organizer/dashboard',
+  organizerClaimPending: (id: number | string) => `/organizer/claims/${id}/pending`,
+  organizerClaimPendingPattern: '/organizer/claims/:id/pending',
   organizerSubmit: '/organizer/submit',
   organizerSettings: '/organizer/settings',
   organizerContact: '/organizer/contact',
@@ -925,7 +957,11 @@ export const API = {
   organizerVenues: '/organizer/venues',
   organizerVenue: (id: number | string) => `/organizer/venues/${id}`,
   organizerClaims: '/organizer/claims',
+  organizerClaim: (id: number | string) => `/organizer/claims/${id}`,
+  organizerClaimCancel: (id: number | string) => `/organizer/claims/${id}/cancel`,
+  organizerClaimRecheck: (id: number | string) => `/organizer/claims/${id}/recheck`,
   organizerClaimLinkRequest: '/organizer/claims/request-link',
+  organizerClaimLinkVerify: '/organizer/claims/verify-link',
   organizerClaimSearch: '/organizer/claims/search',
   organizerClaimSuggestions: '/organizer/claims/suggestions',
   reports: '/reports',

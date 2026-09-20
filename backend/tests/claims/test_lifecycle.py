@@ -22,11 +22,14 @@ from app.constants import (
     CLAIM_STATUS_CANCELLED,
     CLAIM_STATUS_PENDING,
     CLAIM_VERIFICATION_MECHANISM_ADMIN_REVIEW,
+    CLAIM_VERIFICATION_MECHANISM_DNS_TXT,
     CLAIM_VERIFICATION_MECHANISM_FIENTA_TOKEN,
     CLAIM_VERIFICATION_OUTCOME_ADMIN_REVIEW,
     CLAIM_VERIFICATION_OUTCOME_AUTO_GRANT,
+    KUMU_VERIFICATION_DOMAIN,
     ORGANIZER_DAILY_CLAIM_CAP,
     SOURCE_SLUG_FIENTA,
+    SOURCE_SLUG_KUMU,
 )
 
 
@@ -126,6 +129,31 @@ class TestCreateClaim:
         mock_db.commit.assert_awaited_once()
 
     @pytest.mark.asyncio
+    async def test_dns_txt_grant_persists_verification_domain(
+        self, mock_db, make_organizer, make_event
+    ):
+        """#415's pending screen needs the domain a DNS-TXT check ran against
+        to render its record-name instructions, so it's persisted on the
+        Claim row rather than only living in the transient VerificationResult."""
+        es = _fake_event_source(publisher_id=99, source_slug=SOURCE_SLUG_KUMU)
+        mock_db.scalar = AsyncMock(side_effect=[0, es])
+        mock_db.get.return_value = make_event()
+        organizer = make_organizer(organizer_id=5)
+
+        with patch(
+            "app.claims.lifecycle.verify_institutional_publisher_claim",
+            new_callable=AsyncMock,
+            return_value=VerificationResult(
+                CLAIM_VERIFICATION_MECHANISM_DNS_TXT,
+                CLAIM_VERIFICATION_OUTCOME_AUTO_GRANT,
+                domain=KUMU_VERIFICATION_DOMAIN,
+            ),
+        ):
+            claim = await create_claim(mock_db, AsyncMock(), organizer, event_id=10)
+
+        assert claim.verification_domain == KUMU_VERIFICATION_DOMAIN
+
+    @pytest.mark.asyncio
     async def test_series_claim_not_trusted_stays_pending_admin_review(
         self, mock_db, make_organizer, make_event
     ):
@@ -173,6 +201,34 @@ class TestCreateClaim:
 
         assert exc.value.status_code == 409
         mock_db.rollback.assert_awaited_once()
+
+
+class TestGetOwnClaim:
+    @pytest.mark.asyncio
+    async def test_returns_claim_regardless_of_status(self, mock_db, make_organizer):
+        """Unlike cancel/recheck's _own_pending_claim_or_404, #415's pending
+        screen needs to read a resolved claim too (approved/cancelled/expired)
+        so it can render that outcome instead of erroring."""
+        from app.claims.lifecycle import get_own_claim
+
+        claim = _fake_claim(status=CLAIM_STATUS_APPROVED)
+        mock_db.scalar.return_value = claim
+        organizer = make_organizer(organizer_id=5)
+
+        result = await get_own_claim(mock_db, organizer, claim_id=1)
+
+        assert result is claim
+
+    @pytest.mark.asyncio
+    async def test_not_found_404(self, mock_db, make_organizer):
+        from app.claims.lifecycle import get_own_claim
+
+        mock_db.scalar.return_value = None
+        organizer = make_organizer(organizer_id=5)
+
+        with pytest.raises(ClaimError) as exc:
+            await get_own_claim(mock_db, organizer, claim_id=1)
+        assert exc.value.status_code == 404
 
 
 class TestCancelClaim:

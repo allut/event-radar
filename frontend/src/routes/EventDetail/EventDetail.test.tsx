@@ -313,14 +313,16 @@ describe('EventDetail claim discovery (#414)', () => {
     expect(mockOrganizerPost).not.toHaveBeenCalled();
   });
 
-  it('a signed-in organizer claims directly on click', async () => {
+  it('navigates a signed-in organizer to the pending screen after claiming (#415)', async () => {
     localStorage.setItem(ORGANIZER_SIGNED_IN_HINT_KEY, '1');
-    mockOrganizerPost.mockResolvedValueOnce({ status: 'pending' });
+    mockOrganizerPost.mockResolvedValueOnce({ id: 99, status: 'pending' });
     mockGet.mockResolvedValueOnce(eventData);
     renderWithProviders(<EventDetail />, { route: '/en/events/1', pathPattern: '/:locale/events/:id' });
     await waitFor(() => expect(screen.getByText('Is this your event?')).toBeInTheDocument());
     await userEvent.click(screen.getByRole('button', { name: 'Claim this event' }));
     expect(mockOrganizerPost).toHaveBeenCalledWith('/organizer/claims', { event_id: 1 });
-    expect(await screen.findByText('Claim pending review')).toBeInTheDocument();
+    // react-router-dom is mocked file-wide (above) so useNavigate resolves to
+    // this spy rather than performing a real route change.
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/en/organizer/claims/99/pending', undefined));
   });
 });

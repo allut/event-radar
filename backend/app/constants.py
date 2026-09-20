@@ -1854,6 +1854,12 @@ HTTP_METHOD_POST = "POST"
 # verify_path parameter, and organizer_auth.py's override of it.
 AUTH_VERIFY_PATH = "/auth/verify"
 ORGANIZER_AUTH_VERIFY_PATH = "/organizer/verify"
+# Claim-link magic links (#415) land on a distinct frontend route from a plain
+# organizer sign-in link, so the frontend knows to POST
+# /organizer/claims/verify-link (which also creates the claim) instead of
+# /organizer/auth/verify — the two token types share a signing salt
+# (generate_organizer_claim_link_token) but carry different claims.
+ORGANIZER_CLAIM_VERIFY_PATH = "/organizer/claims/verify"
 
 # app/routers/utils.py::mask_db_url — redacts the password in a DB URL
 # ("user:pass@host" -> "user:***@host") for safe logging.

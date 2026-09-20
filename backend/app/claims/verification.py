@@ -47,6 +47,9 @@ INSTITUTIONAL_VERIFICATION_DOMAINS: dict[str, str] = {
 class VerificationResult:
     mechanism: str
     outcome: str
+    # DNS-TXT domain the check ran against (#415's pending screen) — None for
+    # fienta_token/admin_review, which have no domain to show.
+    domain: str | None = None
 
 
 def _outcome_for(verified: bool) -> str:
@@ -76,7 +79,9 @@ async def verify_institutional_publisher_claim(
     """KUMU/Estonia Concert Hall: DNS-TXT against the hardcoded institutional domain."""
     domain = INSTITUTIONAL_VERIFICATION_DOMAINS[source_slug]
     verified = await verify_dns_txt_token(client, domain, token)
-    return VerificationResult(CLAIM_VERIFICATION_MECHANISM_DNS_TXT, _outcome_for(verified))
+    return VerificationResult(
+        CLAIM_VERIFICATION_MECHANISM_DNS_TXT, _outcome_for(verified), domain=domain
+    )
 
 
 async def verify_piletilevi_claim(
@@ -96,7 +101,9 @@ async def verify_piletilevi_claim(
         )
     verified = await verify_dns_txt_token(client, domain, token)
     return VerificationResult(
-        CLAIM_VERIFICATION_MECHANISM_PILETILEVI_PROMOTER, _outcome_for(verified)
+        CLAIM_VERIFICATION_MECHANISM_PILETILEVI_PROMOTER,
+        _outcome_for(verified),
+        domain=domain,
     )
 
 

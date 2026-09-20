@@ -42,16 +42,6 @@
   color: var(--on-accent);
 }
 
-.dashboardLink {
-  color: var(--accent);
-  font-weight: var(--fw-medium);
-  transition: color var(--transition);
-}
-
-.dashboardLink:hover {
-  color: var(--accent-light);
-}
-
 /* ─── Pill (pending/claimed) — sits in the meta row, right of the date ──────
    .meta already has flex-wrap: wrap + gap, so this wraps onto its own line
    on mobile for free; margin-left: auto pushes it to the far right on wide

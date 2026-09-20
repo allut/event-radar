@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { organizerApi } from '../../api/client';
-import { API, EXPLORE_SEARCH_DEBOUNCE_MS, QUERY_KEYS } from '../../constants';
+import { API, EXPLORE_SEARCH_DEBOUNCE_MS, QUERY_KEYS, ROUTES } from '../../constants';
 import { t, ti } from '../../i18n';
+import { useLocaleNavigate } from '../../hooks/useLocaleNavigate';
 import { apiErrorMessage, formatEventTime, withQueryParam } from '../../utils';
 import styles from './ClaimEventPicker.module.css';
 
@@ -20,7 +21,6 @@ interface ClaimCandidatesResponse {
 
 interface ClaimEventPickerProps {
   locale: string;
-  onClaimed: (status: 'pending' | 'approved') => void;
 }
 
 /** The organizer-portal discovery surface (#414): a searchable combobox over
@@ -28,11 +28,12 @@ interface ClaimEventPickerProps {
  * established pattern, not a new design question) plus an email-domain-
  * matched suggestions list, fetched once on mount — the dashboard *is* the
  * organizer's onboarding moment (no separate organizer onboarding route
- * exists to hang this off instead). Selecting either claims immediately;
- * the claim lifecycle itself (pending/approved) is tracked from the
- * dashboard's own event list once #415's claim-editing surface exists. */
-export default function ClaimEventPicker({ locale, onClaimed }: ClaimEventPickerProps) {
+ * exists to hang this off instead). Selecting either claims immediately and
+ * lands the organizer pre-selected on #415's mechanism-specific pending
+ * screen, same as the public-page ClaimPanel. */
+export default function ClaimEventPicker({ locale }: ClaimEventPickerProps) {
   const queryClient = useQueryClient();
+  const navigate = useLocaleNavigate();
   const rootRef = useRef<HTMLDivElement>(null);
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
@@ -72,7 +73,7 @@ export default function ClaimEventPicker({ locale, onClaimed }: ClaimEventPicker
 
   const claimMutation = useMutation({
     mutationFn: (eventId: number) =>
-      organizerApi.post<{ status: 'pending' | 'approved' }>(API.organizerClaims, { event_id: eventId }),
+      organizerApi.post<{ id: number }>(API.organizerClaims, { event_id: eventId }),
     onMutate: (eventId) => {
       setClaimingId(eventId);
       setClaimError('');
@@ -80,13 +81,9 @@ export default function ClaimEventPicker({ locale, onClaimed }: ClaimEventPicker
     onSuccess: (claim) => {
       queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.organizerClaimSuggestions] });
       queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.organizerEvents] });
-      // Not invalidating organizerClaimSearch: query/results are cleared
-      // and the popover closes on the same tick, so a refetch here would
-      // just be wasted — nothing is left mounted to show it.
-      setQuery('');
-      setOpen(false);
-      setClaimingId(null);
-      onClaimed(claim.status);
+      // Not invalidating organizerClaimSearch: navigating away unmounts this
+      // popover on the same tick, so a refetch here would be wasted.
+      navigate(ROUTES.organizerClaimPending(claim.id));
     },
     onError: (err) => {
       setClaimError(apiErrorMessage(err, t('generic_error', locale)));

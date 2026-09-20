@@ -248,6 +248,7 @@ async def create_claim(
         token=claim.proof_token,
     )
     claim.verification_mechanism = result.mechanism
+    claim.verification_domain = result.domain
     if result.outcome == CLAIM_VERIFICATION_OUTCOME_AUTO_GRANT:
         claim.status = CLAIM_STATUS_APPROVED
         claim.resolved_at = datetime.now(timezone.utc)
@@ -255,15 +256,28 @@ async def create_claim(
     return claim
 
 
-async def _own_pending_claim_or_404(db: AsyncSession, claim_id: int, organizer_id: int) -> Claim:
+async def _own_claim_or_404(db: AsyncSession, claim_id: int, organizer_id: int) -> Claim:
+    """Read-only fetch (#415's pending screen, reloaded or opened fresh) —
+    unlike `_own_pending_claim_or_404`, any status is returned so the screen
+    can render its resolved (approved/expired/...) state too."""
     claim = await db.scalar(
         select(Claim).where(Claim.id == claim_id, Claim.organizer_id == organizer_id)
     )
     if claim is None:
         raise ClaimError(404, ERROR_CLAIM_NOT_FOUND)
+    return claim
+
+
+async def _own_pending_claim_or_404(db: AsyncSession, claim_id: int, organizer_id: int) -> Claim:
+    claim = await _own_claim_or_404(db, claim_id, organizer_id)
     if claim.status != CLAIM_STATUS_PENDING:
         raise ClaimError(409, ERROR_CLAIM_NOT_PENDING)
     return claim
+
+
+async def get_own_claim(db: AsyncSession, organizer: Organizer, claim_id: int) -> Claim:
+    """GET-by-id for #415's pending screen."""
+    return await _own_claim_or_404(db, claim_id, organizer.id)
 
 
 async def cancel_claim(db: AsyncSession, organizer: Organizer, claim_id: int) -> Claim:
@@ -306,6 +320,7 @@ async def recheck_claim(
         token=claim.proof_token,
     )
     claim.verification_mechanism = result.mechanism
+    claim.verification_domain = result.domain
     claim.last_checked_at = datetime.now(timezone.utc)
     if result.outcome == CLAIM_VERIFICATION_OUTCOME_AUTO_GRANT:
         claim.status = CLAIM_STATUS_APPROVED

@@ -20,6 +20,7 @@ from app.constants import (
     CLAIM_VERIFICATION_MECHANISM_PILETILEVI_PROMOTER,
     CLAIM_VERIFICATION_OUTCOME_ADMIN_REVIEW,
     CLAIM_VERIFICATION_OUTCOME_AUTO_GRANT,
+    KUMU_VERIFICATION_DOMAIN,
     SOURCE_SLUG_KUMU,
 )
 
@@ -69,7 +70,9 @@ class TestVerifyInstitutionalPublisherClaim:
             )
 
         assert result == VerificationResult(
-            CLAIM_VERIFICATION_MECHANISM_DNS_TXT, CLAIM_VERIFICATION_OUTCOME_AUTO_GRANT
+            CLAIM_VERIFICATION_MECHANISM_DNS_TXT,
+            CLAIM_VERIFICATION_OUTCOME_AUTO_GRANT,
+            domain=KUMU_VERIFICATION_DOMAIN,
         )
 
     @pytest.mark.asyncio
@@ -84,7 +87,9 @@ class TestVerifyInstitutionalPublisherClaim:
             )
 
         assert result == VerificationResult(
-            CLAIM_VERIFICATION_MECHANISM_DNS_TXT, CLAIM_VERIFICATION_OUTCOME_ADMIN_REVIEW
+            CLAIM_VERIFICATION_MECHANISM_DNS_TXT,
+            CLAIM_VERIFICATION_OUTCOME_ADMIN_REVIEW,
+            domain=KUMU_VERIFICATION_DOMAIN,
         )
 
 
@@ -108,6 +113,7 @@ class TestVerifyPiletileviClaim:
         assert result == VerificationResult(
             CLAIM_VERIFICATION_MECHANISM_PILETILEVI_PROMOTER,
             CLAIM_VERIFICATION_OUTCOME_AUTO_GRANT,
+            domain="own-domain.ee",
         )
 
     @pytest.mark.asyncio
@@ -129,6 +135,7 @@ class TestVerifyPiletileviClaim:
         assert result == VerificationResult(
             CLAIM_VERIFICATION_MECHANISM_PILETILEVI_PROMOTER,
             CLAIM_VERIFICATION_OUTCOME_ADMIN_REVIEW,
+            domain="own-domain.ee",
         )
 
     @pytest.mark.asyncio

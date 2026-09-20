@@ -28,6 +28,7 @@ def _fake_claim(**overrides) -> MagicMock:
     c.event_series_key = None
     c.status = CLAIM_STATUS_PENDING
     c.verification_mechanism = CLAIM_VERIFICATION_MECHANISM_FIENTA_TOKEN
+    c.verification_domain = None
     c.proof_token = "er-verify-abc"
     c.created_at = "2026-09-20T06:00:00+00:00"
     c.last_checked_at = "2026-09-20T06:00:00+00:00"
@@ -142,6 +143,81 @@ class TestRecheckOwnClaim:
             )
 
         assert result["status"] == CLAIM_STATUS_APPROVED
+
+
+class TestGetClaim:
+    """#415's pending screen fetch — GET /organizer/claims/{claim_id}."""
+
+    @pytest.mark.asyncio
+    async def test_assembles_dns_instructions_for_dns_txt_mechanism(
+        self, mock_db, make_request, make_organizer
+    ):
+        from app.constants import CLAIM_VERIFICATION_MECHANISM_DNS_TXT
+        from app.routers.organizer_claims import get_claim
+
+        organizer = make_organizer(organizer_id=5)
+        claim = _fake_claim(
+            verification_mechanism=CLAIM_VERIFICATION_MECHANISM_DNS_TXT,
+            verification_domain="kumu.ekm.ee",
+        )
+
+        with patch(
+            "app.routers.organizer_claims.get_own_claim", new_callable=AsyncMock, return_value=claim
+        ):
+            result = await get_claim(
+                1,
+                make_request(method="GET", path="/organizer/claims/1"),
+                current_organizer=organizer,
+                db=mock_db,
+            )
+
+        assert result["dns_record_name"] == "_eventradar-verify.kumu.ekm.ee"
+        assert result["dns_record_value"] == "er-verify-abc"
+        assert result["can_recheck"] is True
+
+    @pytest.mark.asyncio
+    async def test_no_dns_instructions_for_admin_review_mechanism(
+        self, mock_db, make_request, make_organizer
+    ):
+        from app.constants import CLAIM_VERIFICATION_MECHANISM_ADMIN_REVIEW
+        from app.routers.organizer_claims import get_claim
+
+        organizer = make_organizer(organizer_id=5)
+        claim = _fake_claim(verification_mechanism=CLAIM_VERIFICATION_MECHANISM_ADMIN_REVIEW)
+
+        with patch(
+            "app.routers.organizer_claims.get_own_claim", new_callable=AsyncMock, return_value=claim
+        ):
+            result = await get_claim(
+                1,
+                make_request(method="GET", path="/organizer/claims/1"),
+                current_organizer=organizer,
+                db=mock_db,
+            )
+
+        assert result["dns_record_name"] is None
+        assert result["can_recheck"] is False
+
+    @pytest.mark.asyncio
+    async def test_404_when_not_the_organizers_own_claim(self, mock_db, make_request, make_organizer):
+        from app.routers.organizer_claims import get_claim
+
+        organizer = make_organizer(organizer_id=5)
+
+        with patch(
+            "app.routers.organizer_claims.get_own_claim",
+            new_callable=AsyncMock,
+            side_effect=ClaimError(http.HTTPStatus.NOT_FOUND, ERROR_CLAIM_NOT_FOUND),
+        ):
+            with pytest.raises(HTTPException) as exc_info:
+                await get_claim(
+                    1,
+                    make_request(method="GET", path="/organizer/claims/1"),
+                    current_organizer=organizer,
+                    db=mock_db,
+                )
+
+        assert exc_info.value.status_code == http.HTTPStatus.NOT_FOUND
 
 
 class TestRequestClaimLink:

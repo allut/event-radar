@@ -464,6 +464,12 @@ class Claim(Base):
     # System-generated proof token (app/claims/fienta_token.py::generate_claim_token)
     # the organizer places in their listing/DNS — reused by every recheck.
     proof_token: Mapped[str] = mapped_column(String(64), nullable=False)
+    # Domain the DNS-TXT check ran against (KUMU/ECH's hardcoded institutional
+    # domain, or a Piletilevi promoter's resolved contact domain) — persisted
+    # so the #415 pending screen can render "add this TXT record" without
+    # re-resolving a Piletilevi promoter's domain on every page load. NULL for
+    # the fienta_token/admin_review mechanisms, which have no domain to show.
+    verification_domain: Mapped[str | None] = mapped_column(String(255), nullable=True)
     # Bumped at creation and by every POST .../recheck — expire_stale_claims
     # (app/claims/lifecycle.py) compares this, not created_at, against
     # CLAIM_EXPIRY_DAYS so an organizer actively retrying isn't expired out
