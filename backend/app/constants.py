@@ -445,6 +445,24 @@ REPORT_STATUS_RESOLVED = "resolved"
 VALID_REPORT_STATUSES = frozenset({REPORT_STATUS_OPEN, REPORT_STATUS_RESOLVED})
 REPORT_DETAIL_MAX_CHARS = 500
 
+# Event claiming (#409/#410) — see CONTEXT.md's Event Claiming glossary.
+PUBLISHER_STATUS_ACTIVE = "active"
+PUBLISHER_STATUS_RETIRED = "retired"
+VALID_PUBLISHER_STATUSES = frozenset(
+    {PUBLISHER_STATUS_ACTIVE, PUBLISHER_STATUS_RETIRED}
+)
+
+CLAIM_KIND_PUBLISHER = "publisher"
+CLAIM_KIND_SERIES = "series"
+VALID_CLAIM_KINDS = frozenset({CLAIM_KIND_PUBLISHER, CLAIM_KIND_SERIES})
+
+CLAIM_STATUS_PENDING = "pending"
+CLAIM_STATUS_APPROVED = "approved"
+CLAIM_STATUS_REVOKED = "revoked"
+VALID_CLAIM_STATUSES = frozenset(
+    {CLAIM_STATUS_PENDING, CLAIM_STATUS_APPROVED, CLAIM_STATUS_REVOKED}
+)
+
 # Admin-authenticated but persisted to a Text column and emailed verbatim to
 # every reporter (see app/email/report_reporter.py) — bounded so validation
 # rejects an oversized note before it's stored/mailed rather than only being

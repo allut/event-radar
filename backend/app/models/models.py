@@ -26,7 +26,9 @@ from app.constants import (
     DEFAULT_USER_CITY,
     DEFAULT_USER_LOCALE,
     EVENT_STATUS_DRAFT,
+    CLAIM_STATUS_PENDING,
     PREFERENCE_SIGNALS_SQL_PREDICATE,
+    PUBLISHER_STATUS_ACTIVE,
 )
 from app.db import Base
 
@@ -356,6 +358,77 @@ class Source(Base):
     event_sources: Mapped[list["EventSource"]] = relationship(back_populates="source")
 
 
+class Publisher(Base):
+    """The real-world entity an event-claiming Claim is granted against — see
+    CONTEXT.md's Event Claiming glossary. One per Fienta organizer id, the
+    whole source for KUMU/Estonia Concert Hall (external_id NULL), or one per
+    resolved Piletilevi promoter id. Distinct from `Organizer` (the portal
+    account that holds a claim)."""
+
+    __tablename__ = "publishers"
+    __table_args__ = (
+        Index(
+            "ix_publishers_source_external",
+            "source_id",
+            "external_id",
+            unique=True,
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    source_id: Mapped[int] = mapped_column(ForeignKey("sources.id"), nullable=False)
+    external_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        server_default=text(f"'{PUBLISHER_STATUS_ACTIVE}'"),
+        default=PUBLISHER_STATUS_ACTIVE,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    source: Mapped["Source"] = relationship()
+
+
+class Claim(Base):
+    """An organizer's claim over a Publisher or an event series — see
+    CONTEXT.md's Event Claiming glossary (Publisher claim / Series claim /
+    Trusted claimant). Polymorphic over `kind`: a Publisher claim sets
+    `publisher_id`, a Series claim sets `event_series_key` (the
+    `event_series_key()` tuple from `routers/utils.py`, serialized as
+    `"<normalized_title>\\x1f<normalized_venue>"`)."""
+
+    __tablename__ = "claims"
+    __table_args__ = (
+        Index("ix_claims_organizer_id", "organizer_id"),
+        Index("ix_claims_publisher_id", "publisher_id"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    organizer_id: Mapped[int] = mapped_column(
+        ForeignKey("organizers.id", ondelete="CASCADE"), nullable=False
+    )
+    kind: Mapped[str] = mapped_column(String(20), nullable=False)
+    publisher_id: Mapped[int | None] = mapped_column(
+        ForeignKey("publishers.id"), nullable=True
+    )
+    event_series_key: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        server_default=text(f"'{CLAIM_STATUS_PENDING}'"),
+        default=CLAIM_STATUS_PENDING,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    organizer: Mapped["Organizer"] = relationship()
+    publisher: Mapped["Publisher | None"] = relationship()
+
+
 class IngestionRun(Base):
     __tablename__ = "ingestion_runs"
     __table_args__ = (Index("ix_ingestion_runs_started_at", "started_at"),)
@@ -577,6 +650,15 @@ class Event(Base):
     # this column existed (no backfill of historical rows) and for events
     # that were never cancelled. See VALID_EVENT_CANCELLATION_REASONS.
     cancellation_reason: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # Fields a claim (#409/#410) has pinned against overwrite by ingestion/
+    # detail-refetch. Entries are field names, or "<field>:<locale>" for a
+    # per-locale text field (title_localized/description_localized/
+    # important_info_localized). Price fields (price_min/price_max/currency/
+    # has_free_tier) never participate — see CONTEXT.md's Event Claiming
+    # glossary and issue #410.
+    pinned_fields: Mapped[list] = mapped_column(
+        JSONB, nullable=False, server_default=text("'[]'::jsonb"), default=list
+    )
 
     sources: Mapped[list["EventSource"]] = relationship(back_populates="event")
     classification: Mapped["EventClassification | None"] = relationship(
@@ -609,9 +691,15 @@ class EventSource(Base):
     )
     source_id: Mapped[int] = mapped_column(ForeignKey("sources.id"), nullable=False)
     external_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Resolved Publisher this listing traces back to (#409/#410). NULL when
+    # the source has no resolvable publisher identity yet.
+    publisher_id: Mapped[int | None] = mapped_column(
+        ForeignKey("publishers.id", ondelete="SET NULL"), nullable=True
+    )
 
     event: Mapped["Event"] = relationship(back_populates="sources")
     source: Mapped["Source"] = relationship(back_populates="event_sources")
+    publisher: Mapped["Publisher | None"] = relationship()
 
 
 class EventClassification(Base):
