@@ -65,6 +65,7 @@ from app.models.models import (
     Event,
     EventClassification,
     EventReport,
+    Organizer,
     OrganizerIdentity,
     Persona,
     User,
@@ -483,6 +484,16 @@ def event_series_key(title_orig: str, venue_name: str | None) -> tuple[str, str]
     filter, not a correctness gate.
     """
     return (normalized_title(title_orig), normalized_title(venue_name or ""))
+
+
+def serialize_event_series_key(key: tuple[str, str]) -> str:
+    """``event_series_key()``'s tuple, flattened to the single-string form
+    stored in ``Claim.event_series_key`` (models.py docstring) — a Series
+    claim's key column can't hold a tuple, and the U+001F separator can never
+    appear in either half (both go through ``normalized_title``, which only
+    ever produces lowercase text and single spaces)."""
+    title_key, venue_key = key
+    return f"{title_key}\x1f{venue_key}"
 
 
 def collapse_series_duplicates(
@@ -1048,6 +1059,27 @@ async def own_venue_or_404(db: AsyncSession, venue_id: int, organizer_id: int) -
 # lost day of budget tracking, not a security regression.
 _unverified_account_creation_counts: dict[str, int] = {}
 _unverified_account_budget_alerted: set[str] = set()
+
+
+async def get_or_create_organizer(
+    db: AsyncSession, email: str, requested_locale: str | None
+) -> Organizer:
+    """Look up (or insert) the organizer for a magic-link request — shared by
+    organizer_auth.py's own sign-in link and organizer_claims.py's claim-
+    intent link (#413), which both need the identical unverified-row-creation
+    trade-off (mitigated by RATE_LIMIT_AUTH_REQUEST_LINK + recent_unused_link_exists).
+    Mirrors auth.py::_get_or_create_user."""
+    organizer = await db.scalar(select(Organizer).where(Organizer.email == email))
+    if organizer is None:
+        organizer = Organizer(email=email, locale=requested_locale or DEFAULT_USER_LOCALE)
+        db.add(organizer)
+        await db.flush()
+        log.info(
+            "organizer auth: new unverified organizer row created email=%s",
+            mask_email(email),
+        )
+        record_unverified_account_creation()
+    return organizer
 
 
 def record_unverified_account_creation() -> None:

@@ -95,9 +95,9 @@ from app.routers.utils import (
     build_oauth_error_redirect,
     clear_oauth_state_cookie,
     clear_session_cookie,
+    get_or_create_organizer,
     mask_email,
     recent_unused_link_exists,
-    record_unverified_account_creation,
     set_oauth_state_cookie,
     set_session_cookie,
 )
@@ -142,25 +142,6 @@ async def get_current_organizer(
     return organizer
 
 
-async def _get_or_create_organizer(
-    db: AsyncSession, email: str, requested_locale: str | None
-) -> Organizer:
-    """Look up (or insert) the organizer for a magic-link request. Mirrors
-    auth.py::_get_or_create_user — same unverified-row-creation trade-off,
-    mitigated the same way (RATE_LIMIT_AUTH_REQUEST_LINK + cooldown)."""
-    organizer = await db.scalar(select(Organizer).where(Organizer.email == email))
-    if organizer is None:
-        organizer = Organizer(email=email, locale=requested_locale or DEFAULT_USER_LOCALE)
-        db.add(organizer)
-        await db.flush()
-        log.info(
-            "organizer auth: new unverified organizer row created email=%s",
-            mask_email(email),
-        )
-        record_unverified_account_creation()
-    return organizer
-
-
 @router.post("/request-link", status_code=status.HTTP_200_OK)
 @limiter.limit(RATE_LIMIT_AUTH_REQUEST_LINK)
 async def request_organizer_magic_link(
@@ -171,7 +152,7 @@ async def request_organizer_magic_link(
     """Request an organizer sign-in link. Always returns 200 (anti-enumeration)."""
     email = body.email.lower()
     requested_locale = body.locale if body.locale in VALID_LOCALES else None
-    organizer = await _get_or_create_organizer(db, email, requested_locale)
+    organizer = await get_or_create_organizer(db, email, requested_locale)
     email_locale = requested_locale or organizer.locale
 
     if await recent_unused_link_exists(
@@ -417,13 +398,13 @@ async def start_organizer_google_signin(request: Request) -> RedirectResponse:
 
 
 async def _get_or_create_organizer_for_google(db: AsyncSession, email: str) -> Organizer:
-    """Same unverified-row-creation shape as _get_or_create_organizer, split
+    """Same unverified-row-creation shape as get_or_create_organizer, split
     out so the Google linking-gate paths that need it don't have to carry a
     locale/cooldown-unrelated signature. Used only where a magic link is
     about to be sent (confirmation branch) — the metric this trips
     (record_unverified_account_creation) exists specifically to bound
     magic-link email volume, which is what's happening here too."""
-    return await _get_or_create_organizer(db, email, None)
+    return await get_or_create_organizer(db, email, None)
 
 
 async def _send_google_confirmation_link(

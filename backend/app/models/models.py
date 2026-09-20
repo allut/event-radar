@@ -26,6 +26,7 @@ from app.constants import (
     DEFAULT_USER_CITY,
     DEFAULT_USER_LOCALE,
     EVENT_STATUS_DRAFT,
+    CLAIM_STATUS_APPROVED,
     CLAIM_STATUS_PENDING,
     PREFERENCE_SIGNALS_SQL_PREDICATE,
     PUBLISHER_STATUS_ACTIVE,
@@ -415,6 +416,28 @@ class Claim(Base):
     __table_args__ = (
         Index("ix_claims_organizer_id", "organizer_id"),
         Index("ix_claims_publisher_id", "publisher_id"),
+        # Reject a duplicate/racing claim against the same Publisher or
+        # Series at the DB layer (#413) — Postgres unique indexes don't treat
+        # NULL as a duplicate, so each is scoped to the rows that actually
+        # carry that key, exactly like ix_publishers_source_null_external.
+        Index(
+            "ix_claims_active_publisher",
+            "publisher_id",
+            unique=True,
+            postgresql_where=text(
+                f"status IN ('{CLAIM_STATUS_PENDING}', '{CLAIM_STATUS_APPROVED}')"
+                " AND publisher_id IS NOT NULL"
+            ),
+        ),
+        Index(
+            "ix_claims_active_series",
+            "event_series_key",
+            unique=True,
+            postgresql_where=text(
+                f"status IN ('{CLAIM_STATUS_PENDING}', '{CLAIM_STATUS_APPROVED}')"
+                " AND event_series_key IS NOT NULL"
+            ),
+        ),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
@@ -431,6 +454,27 @@ class Claim(Base):
         nullable=False,
         server_default=text(f"'{CLAIM_STATUS_PENDING}'"),
         default=CLAIM_STATUS_PENDING,
+    )
+    # #412's verdict for this claim — one of VALID_CLAIM_VERIFICATION_MECHANISMS.
+    # NULL only for the brief window between insert and the inline
+    # verification call that fills it in the same request (#413).
+    verification_mechanism: Mapped[str | None] = mapped_column(
+        String(30), nullable=True
+    )
+    # System-generated proof token (app/claims/fienta_token.py::generate_claim_token)
+    # the organizer places in their listing/DNS — reused by every recheck.
+    proof_token: Mapped[str] = mapped_column(String(64), nullable=False)
+    # Bumped at creation and by every POST .../recheck — expire_stale_claims
+    # (app/claims/lifecycle.py) compares this, not created_at, against
+    # CLAIM_EXPIRY_DAYS so an organizer actively retrying isn't expired out
+    # from under them.
+    last_checked_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    # Set once status leaves CLAIM_STATUS_PENDING (approved/cancelled/expired/
+    # revoked) — NULL while pending.
+    resolved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()

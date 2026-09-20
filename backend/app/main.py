@@ -34,6 +34,8 @@ from app.constants import (
     DIGEST_SEND_HOUR,
     DIGEST_SEND_MINUTE,
     ERROR_CSRF_ORIGIN_MISMATCH,
+    EXPIRE_STALE_CLAIMS_HOUR,
+    EXPIRE_STALE_CLAIMS_MINUTE,
     FEED_BUILD_HOUR,
     FEED_BUILD_MINUTE,
     HEADER_HOST,
@@ -46,6 +48,7 @@ from app.constants import (
     JOB_ID_CLASSIFY_PENDING,
     JOB_ID_CLEANUP_STALE_DATA,
     JOB_ID_DEDUP_PASS,
+    JOB_ID_EXPIRE_STALE_CLAIMS,
     JOB_ID_GEOCODE_PENDING,
     JOB_ID_INGEST_ALL_SOURCES,
     JOB_ID_PUBLISH_PENDING,
@@ -67,6 +70,7 @@ from app.constants import (
     TALLINN_TZ_NAME,
     TRUSTED_HOST_REJECT_BODY,
 )
+from app.claims.lifecycle import expire_stale_claims
 from app.cleanup import cleanup_stale_data
 from app.db import AsyncSessionLocal, assert_schema_at_head, engine
 from app.email.digest import send_daily_digests
@@ -92,6 +96,7 @@ from app.routers.feed import router as feed_router
 from app.routers.feedback import router as feedback_router
 from app.routers.onboarding import router as onboarding_router
 from app.routers.organizer_auth import router as organizer_auth_router
+from app.routers.organizer_claims import router as organizer_claims_router
 from app.routers.organizer_contact import router as organizer_contact_router
 from app.routers.organizer_events import router as organizer_events_router
 from app.routers.organizer_profile import router as organizer_profile_router
@@ -188,6 +193,9 @@ _run_build_daily_feeds = _scheduled(
 _run_send_daily_digests = _scheduled(
     JOB_ID_SEND_DAILY_DIGESTS, _in_session(send_daily_digests, commit=False)
 )
+_run_expire_stale_claims = _scheduled(
+    JOB_ID_EXPIRE_STALE_CLAIMS, _in_session(expire_stale_claims, commit=True)
+)
 
 
 def _register_scheduled_jobs(scheduler: AsyncIOScheduler) -> None:
@@ -280,6 +288,16 @@ def _register_scheduled_jobs(scheduler: AsyncIOScheduler) -> None:
         hour=DIGEST_SEND_HOUR,
         minute=DIGEST_SEND_MINUTE,
         id=JOB_ID_SEND_DAILY_DIGESTS,
+        replace_existing=True,
+    )
+    # Daily 05:00 EET: expire a pending automated-mechanism claim abandoned
+    # for CLAIM_EXPIRY_DAYS (#413) — between the 04:30 refetch and 06:00 feed build.
+    scheduler.add_job(
+        _run_expire_stale_claims,
+        trigger="cron",
+        hour=EXPIRE_STALE_CLAIMS_HOUR,
+        minute=EXPIRE_STALE_CLAIMS_MINUTE,
+        id=JOB_ID_EXPIRE_STALE_CLAIMS,
         replace_existing=True,
     )
 
@@ -713,6 +731,7 @@ app.include_router(feed_router)
 app.include_router(feedback_router)
 app.include_router(onboarding_router)
 app.include_router(organizer_auth_router)
+app.include_router(organizer_claims_router)
 app.include_router(organizer_contact_router)
 app.include_router(organizer_events_router)
 app.include_router(organizer_profile_router)

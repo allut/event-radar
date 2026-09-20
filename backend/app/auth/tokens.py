@@ -130,6 +130,32 @@ def verify_organizer_session_token(token: str) -> tuple[int, int]:
     return int(payload["oid"]), int(payload.get("v", DEFAULT_SESSION_TOKEN_VERSION))
 
 
+def generate_organizer_claim_link_token(organizer_id: int, event_id: int) -> tuple[str, str, datetime]:
+    """Sign-in link that also carries claim intent (#413): the Publisher/
+    Series-claim key round-trips inside the token itself — never
+    sessionStorage or a query param — so it survives being opened on a
+    different device/session than the one that requested it. Same salt as
+    generate_organizer_magic_token (identical trust boundary: proof of
+    control over the organizer's email); verify_organizer_claim_link_token
+    is the only thing that reads the extra "eid" claim back out."""
+    token = _serializer().dumps(
+        {"oid": organizer_id, "eid": event_id}, salt=AUTH_ORGANIZER_MAGIC_SALT
+    )
+    token_hash = hashlib.sha256(token.encode()).hexdigest()
+    expires_at = datetime.now(timezone.utc) + timedelta(
+        seconds=organizer_magic_ttl_seconds()
+    )
+    return token, token_hash, expires_at
+
+
+def verify_organizer_claim_link_token(token: str) -> tuple[int, int]:
+    """Return (organizer_id, event_id). Raises SignatureExpired or BadSignature."""
+    payload = _serializer().loads(
+        token, salt=AUTH_ORGANIZER_MAGIC_SALT, max_age=organizer_magic_ttl_seconds()
+    )
+    return int(payload["oid"]), int(payload["eid"])
+
+
 def oauth_state_ttl_seconds() -> int:
     return OAUTH_STATE_TTL_MINUTES * SECONDS_PER_MINUTE
 

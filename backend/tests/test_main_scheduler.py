@@ -16,6 +16,7 @@ _KNOWN_JOB_IDS = {
     "refetch_event_details",
     "build_daily_feeds",
     "send_daily_digests",
+    "expire_stale_claims",
 }
 
 

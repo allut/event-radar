@@ -464,9 +464,21 @@ VALID_CLAIM_KINDS = frozenset({CLAIM_KIND_PUBLISHER, CLAIM_KIND_SERIES})
 CLAIM_STATUS_PENDING = "pending"
 CLAIM_STATUS_APPROVED = "approved"
 CLAIM_STATUS_REVOKED = "revoked"
+CLAIM_STATUS_CANCELLED = "cancelled"
+CLAIM_STATUS_EXPIRED = "expired"
 VALID_CLAIM_STATUSES = frozenset(
-    {CLAIM_STATUS_PENDING, CLAIM_STATUS_APPROVED, CLAIM_STATUS_REVOKED}
+    {
+        CLAIM_STATUS_PENDING,
+        CLAIM_STATUS_APPROVED,
+        CLAIM_STATUS_REVOKED,
+        CLAIM_STATUS_CANCELLED,
+        CLAIM_STATUS_EXPIRED,
+    }
 )
+# A Publisher/Series key is free to claim again only once every prior claim
+# against it has left this set (#413) — backs the partial unique indexes in
+# migration 0043 that reject a duplicate/racing claim at insert time.
+CLAIM_ACTIVE_STATUSES = frozenset({CLAIM_STATUS_PENDING, CLAIM_STATUS_APPROVED})
 
 # Claim-proof verification mechanisms (#412) — app/claims/. Standalone
 # verification engine, not yet wired into a claim lifecycle (#413).
@@ -485,12 +497,27 @@ VALID_CLAIM_VERIFICATION_MECHANISMS = frozenset(
         CLAIM_VERIFICATION_MECHANISM_ADMIN_REVIEW,
     }
 )
+# The three mechanisms an organizer can self-service re-trigger (POST
+# /organizer/claims/{id}/recheck) and whose pending claim expires after
+# CLAIM_EXPIRY_DAYS of inactivity (#413) — admin_review carries no proof an
+# organizer controls, so it never auto-expires (CONTEXT.md's Event Claiming
+# glossary; see app/claims/lifecycle.py::expire_stale_claims).
+CLAIM_AUTOMATED_VERIFICATION_MECHANISMS = frozenset(
+    {
+        CLAIM_VERIFICATION_MECHANISM_FIENTA_TOKEN,
+        CLAIM_VERIFICATION_MECHANISM_DNS_TXT,
+        CLAIM_VERIFICATION_MECHANISM_PILETILEVI_PROMOTER,
+    }
+)
 
 CLAIM_VERIFICATION_OUTCOME_AUTO_GRANT = "auto_grant"
 CLAIM_VERIFICATION_OUTCOME_ADMIN_REVIEW = "admin_review"
 VALID_CLAIM_VERIFICATION_OUTCOMES = frozenset(
     {CLAIM_VERIFICATION_OUTCOME_AUTO_GRANT, CLAIM_VERIFICATION_OUTCOME_ADMIN_REVIEW}
 )
+# Inactivity window before an unverified automated-mechanism claim expires
+# (#413) — resets on every POST /organizer/claims/{id}/recheck.
+CLAIM_EXPIRY_DAYS = 7
 
 # DNS-TXT domain-control check, resolved via DNS-over-HTTPS (no new
 # fetchable-content SSRF surface — this is a fixed, hardcoded resolver, never
@@ -597,6 +624,10 @@ REFETCH_HOUR = 4  # daily 04:30 Europe/Tallinn, before the 06:00 feed build
 REFETCH_MINUTE = 30
 FEED_BUILD_HOUR = 6  # daily 06:00 Europe/Tallinn
 FEED_BUILD_MINUTE = 0
+# Daily 05:00 Europe/Tallinn, between the 04:30 refetch and the 06:00 feed
+# build — cheap DB-only sweep (#413), off-peak like every other cron entry.
+EXPIRE_STALE_CLAIMS_HOUR = 5
+EXPIRE_STALE_CLAIMS_MINUTE = 0
 # Users per page in build_daily_feeds (score.py) — bounds the per-page
 # personas_by_user/fb_by_user/score_cache dicts and the event_rows x users
 # scoring loop in RAM regardless of total registered-user count.
@@ -642,6 +673,11 @@ RATE_LIMIT_SUBMIT = "10/minute"
 # modeled on RATE_LIMIT_CONTACT: session-gated, but each hit still sends an
 # email, so keep the same tight per-IP cap.
 RATE_LIMIT_ORGANIZER_CONTACT = "3/minute"
+# Organizer event-claiming endpoints (routers/organizer_claims.py) — modeled
+# on RATE_LIMIT_SUBMIT: a claim create/recheck hit runs live verification
+# I/O (Fienta/DNS-TXT/Piletilevi fetch), so keep it tight per-IP; the
+# DB-backed ORGANIZER_DAILY_CLAIM_CAP is the per-organizer ceiling.
+RATE_LIMIT_CLAIM = "10/minute"
 
 # Resend inbound-mail webhook signature verification (Svix scheme; see
 # https://resend.com/docs/dashboard/webhooks/verify-webhooks-requests and
@@ -906,6 +942,16 @@ ORGANIZER_DAILY_IMAGE_UPLOAD_CAP = 20
 # are created independently of a submission, so neither existing cap bounds
 # them (routers/organizer_venues.py).
 ORGANIZER_DAILY_VENUE_CREATION_CAP = 20
+# Same count-then-act soft ceiling, but for POST /organizer/claims — counts
+# every claim-creation attempt (not just auto-granted ones), computed from
+# Tallinn calendar-day start like ORGANIZER_DAILY_SUBMISSION_CAP (#413).
+ORGANIZER_DAILY_CLAIM_CAP = 5
+# Per-organizer ceiling on pinned-field edits to already-claimed events,
+# scoped across every event the organizer holds a claim on (not per-event) —
+# counts edit attempts, not successful saves. Declared here ahead of the
+# pinned-edit endpoint itself (a later #409 slice), which is the one that
+# will enforce it.
+ORGANIZER_DAILY_CLAIM_EDIT_CAP = 20
 
 # Field length caps for SubmitEventBody/PatchEventBody (routers/organizer_events.py).
 # venue_name and currency mirror the Event column widths (models/models.py) so an
@@ -1827,6 +1873,7 @@ JOB_ID_GEOCODE_PENDING = "geocode_pending"
 JOB_ID_REFETCH_EVENT_DETAILS = "refetch_event_details"
 JOB_ID_BUILD_DAILY_FEEDS = "build_daily_feeds"
 JOB_ID_SEND_DAILY_DIGESTS = "send_daily_digests"
+JOB_ID_EXPIRE_STALE_CLAIMS = "expire_stale_claims"
 
 # HTTP error `detail` strings (app/routers/*). English-only server strings,
 # not i18n keys (contrast shared/i18n/*.json, the user-facing string source
@@ -1900,6 +1947,13 @@ ERROR_DAILY_VENUE_CREATION_LIMIT = (
     "Daily venue creation limit reached. Try again tomorrow."
 )
 ERROR_VENUE_NOT_FOUND = "Venue not found."
+ERROR_CLAIM_NOT_FOUND = "Claim not found."
+ERROR_CLAIM_NOT_CLAIMABLE = "This event has no publisher or series that can be claimed."
+ERROR_CLAIM_ALREADY_EXISTS = (
+    "This publisher or series already has a pending or approved claim."
+)
+ERROR_CLAIM_NOT_PENDING = "Only a pending claim can be cancelled or rechecked."
+ERROR_DAILY_CLAIM_LIMIT = "Daily claim limit reached. Try again tomorrow."
 ERROR_EVENT_CREATE_FAILED = "Could not create event; please try again."
 ERROR_EVENT_URL_SCHEME = "Event URL is not allowed (unsupported scheme)."
 ERROR_IMAGE_URL_SCHEME = "Image URL is not allowed (unsupported scheme)."
