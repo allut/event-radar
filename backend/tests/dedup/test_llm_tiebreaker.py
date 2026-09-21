@@ -529,6 +529,7 @@ class TestRunDedupPassLlm:
         # reaches the LLM at all.
         monkeypatch.setattr(tiebreaker, "llm_available", lambda: True)
         monkeypatch.setattr(tiebreaker, "LLM_DEDUP_MAX_FRESH_LLM_CALLS_PER_PASS", 1)
+        monkeypatch.setattr(tiebreaker, "load_claims_for_events", AsyncMock(return_value={}))
         events = [_event(make_event, 1), _event(make_event, 2), _event(make_event, 3)]
         _wire_db(mock_db, events)
         monkeypatch.setattr(
@@ -557,6 +558,7 @@ class TestRunDedupPassLlm:
     @pytest.mark.asyncio
     async def test_cached_reject_is_respected(self, mock_db, monkeypatch, make_event):
         monkeypatch.setattr(tiebreaker, "llm_available", lambda: True)
+        monkeypatch.setattr(tiebreaker, "load_claims_for_events", AsyncMock(return_value={}))
         a, b = _event(make_event, 1), _event(make_event, 2)
         _wire_db(mock_db, [a, b])
         monkeypatch.setattr(
@@ -585,6 +587,7 @@ class TestRunDedupPassLlm:
         # high-id pair's already-cached confirmation from being applied.
         monkeypatch.setattr(tiebreaker, "llm_available", lambda: True)
         monkeypatch.setattr(tiebreaker, "LLM_DEDUP_MAX_FRESH_LLM_CALLS_PER_PASS", 1)
+        monkeypatch.setattr(tiebreaker, "load_claims_for_events", AsyncMock(return_value={}))
         low_a, low_b = _event(make_event, 1), _event(make_event, 2)
         high_a, high_b = _event(make_event, 100), _event(make_event, 101)
         events = [low_a, low_b, high_a, high_b]
@@ -676,6 +679,7 @@ class TestRunDedupPassLlm:
     async def test_complete_clustering_at_warm_cache(self, mock_db, monkeypatch, make_event):
         monkeypatch.setattr(tiebreaker, "llm_available", lambda: True)
         monkeypatch.setattr(tiebreaker, "LLM_DEDUP_MAX_FRESH_LLM_CALLS_PER_PASS", 1)
+        monkeypatch.setattr(tiebreaker, "load_claims_for_events", AsyncMock(return_value={}))
         a, b = _event(make_event, 1), _event(make_event, 2)
         _wire_db(mock_db, [a, b])
         monkeypatch.setattr(
@@ -699,6 +703,7 @@ class TestRunDedupPassLlm:
         # M=4 cached-reject pairs → one bulk prefetch query (plus the final
         # stale-group cleanup), never one query per pair; llm_json untouched.
         monkeypatch.setattr(tiebreaker, "llm_available", lambda: True)
+        monkeypatch.setattr(tiebreaker, "load_claims_for_events", AsyncMock(return_value={}))
         events = [_event(make_event, i) for i in range(1, 6)]
         _wire_db(mock_db, events)
         pairs = [(1, 2), (1, 3), (1, 4), (1, 5)]
@@ -728,6 +733,7 @@ class TestRunDedupPassLlm:
         # Two rows for the same hash, returned oldest-first (older reject,
         # newer confirm) → the newer confirm wins by dict overwrite.
         monkeypatch.setattr(tiebreaker, "llm_available", lambda: True)
+        monkeypatch.setattr(tiebreaker, "load_claims_for_events", AsyncMock(return_value={}))
         a, b = _event(make_event, 1), _event(make_event, 2)
         _wire_db(mock_db, [a, b])
         monkeypatch.setattr(
@@ -759,6 +765,7 @@ class TestRunDedupPassLlm:
         # Bad confidence in the cached row → treated as absent, falls through
         # to a fresh call (not a cached reject).
         monkeypatch.setattr(tiebreaker, "llm_available", lambda: True)
+        monkeypatch.setattr(tiebreaker, "load_claims_for_events", AsyncMock(return_value={}))
         a, b = _event(make_event, 1), _event(make_event, 2)
         _wire_db(mock_db, [a, b])
         monkeypatch.setattr(
@@ -785,6 +792,7 @@ class TestRunDedupPassLlm:
         # array) must not crash the pass — treated as absent, falls through
         # to a fresh call.
         monkeypatch.setattr(tiebreaker, "llm_available", lambda: True)
+        monkeypatch.setattr(tiebreaker, "load_claims_for_events", AsyncMock(return_value={}))
         a, b = _event(make_event, 1), _event(make_event, 2)
         _wire_db(mock_db, [a, b])
         monkeypatch.setattr(

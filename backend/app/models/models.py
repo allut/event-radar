@@ -485,6 +485,15 @@ class Claim(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
+    # Set by dedup's canonical-selection pass (#418) when this claim's event
+    # lost a claimed-vs-claimed collision to a better-quality duplicate —
+    # its pins stop applying while dormant, but the row is never
+    # deleted/revoked; re-cleared the moment this claim's target is
+    # canonical again. Orthogonal to `status` (an APPROVED claim can be
+    # dormant) — see CONTEXT.md's Event Claiming glossary.
+    dormant: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=false(), default=False
+    )
 
     organizer: Mapped["Organizer"] = relationship()
     publisher: Mapped["Publisher | None"] = relationship()

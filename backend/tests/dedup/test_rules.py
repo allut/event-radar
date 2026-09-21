@@ -1,10 +1,13 @@
 """Tests for app.dedup.rules — rule-based deduplication pre-filter."""
 from datetime import datetime, timedelta, timezone
-from unittest.mock import MagicMock
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock
 
+import pytest
 from rapidfuzz.fuzz import token_set_ratio
 
 from app.constants import (
+    CLAIM_STATUS_APPROVED,
     DEDUP_LOOKBACK_DAYS,
     TALLINN_TZ,
     TIME_WINDOW_HOURS,
@@ -12,13 +15,17 @@ from app.constants import (
     TITLE_RATIO_VENUE_BYPASS_THRESHOLD,
 )
 from app.dedup.rules import (
+    apply_claim_dormancy,
     apply_same_day_title_unions,
     build_cluster_assignments,
     cluster_events,
     is_candidate_pair,
+    load_claims_for_events,
+    resolve_claim_dormancy,
     same_group,
     _venue_compatible,
 )
+from app.routers.utils import event_series_key, serialize_event_series_key
 
 
 def _event(
@@ -583,3 +590,273 @@ class TestBuildClusterAssignments:
         scraped.submitted_by_organizer_id = None
         # Published pin wins regardless of source or the richer scraped data.
         assert self._cluster([submitted, scraped]) == {1: 1, 2: 1}
+
+
+# ---------------------------------------------------------------------------
+# build_cluster_assignments — claimed tiebreak (#418)
+# ---------------------------------------------------------------------------
+
+
+class TestBuildClusterAssignmentsClaimedTiebreak:
+    def _cluster(self, events: list, claimed_event_ids: frozenset[int]) -> dict[int, int]:
+        from app.dedup.rules import union
+
+        parent = _parent_for(events)
+        for e in events[1:]:
+            union(parent, events[0].id, e.id)
+        ids = [e.id for e in events]
+        events_by_id = {e.id: e for e in events}
+        return build_cluster_assignments(
+            parent, ids, events_by_id, claimed_event_ids=claimed_event_ids
+        )
+
+    def test_claimed_beats_unclaimed_at_equal_status_and_quality(self):
+        claimed = _event(1, "Show", _BASE)
+        unclaimed = _event(2, "Show", _BASE)
+        assert self._cluster([claimed, unclaimed], frozenset({1})) == {1: 1, 2: 1}
+        # Order flips when the claim sits on the other member — not just min(id).
+        assert self._cluster([claimed, unclaimed], frozenset({2})) == {1: 2, 2: 2}
+
+    def test_claimed_beats_richer_unclaimed_quality(self):
+        # Ranked between status-rank and quality-rank (docs/pipeline.md) —
+        # claimed outranks quality-completeness outright: a data-poor claimed
+        # member still wins over a richer unclaimed one.
+        claimed = _event(1, "Show", _BASE)
+        richer_unclaimed = _event(
+            2, "Show", _BASE,
+            price_min=10.0, venue_address="Main St 1",
+            lat=59.4, lng=24.7, description_orig="full description",
+        )
+        assert self._cluster([claimed, richer_unclaimed], frozenset({1})) == {1: 1, 2: 1}
+
+    def test_published_status_pin_outranks_claimed_draft(self):
+        # Status-rank still dominates the claimed tiebreak — an already-
+        # published unclaimed member is never demoted below a claimed draft.
+        published_unclaimed = _event(1, "Show", _BASE, status="published")
+        claimed_draft = _event(2, "Show", _BASE, status="draft")
+        assert self._cluster([published_unclaimed, claimed_draft], frozenset({2})) == {
+            1: 1,
+            2: 1,
+        }
+
+    def test_claimed_vs_claimed_falls_back_to_quality_rank(self):
+        # Both claimed → the tiebreak is a wash, quality-rank decides same as
+        # an unclaimed cluster would.
+        a = _event(1, "Show", _BASE)
+        b = _event(
+            2, "Show", _BASE,
+            price_min=10.0, venue_address="Main St 1",
+            lat=59.4, lng=24.7, description_orig="full description",
+        )
+        assert self._cluster([a, b], frozenset({1, 2})) == {1: 2, 2: 2}
+
+    def test_no_claims_behaves_like_before(self):
+        a = _event(10, "Show", _BASE)
+        b = _event(5, "Show", _BASE)
+        assert self._cluster([a, b], frozenset()) == {10: 5, 5: 5}
+
+
+# ---------------------------------------------------------------------------
+# resolve_claim_dormancy / apply_claim_dormancy (#418)
+# ---------------------------------------------------------------------------
+
+
+def _claim(claim_id: int, *, publisher_id=None, event_series_key=None, status=CLAIM_STATUS_APPROVED):
+    return SimpleNamespace(
+        id=claim_id, publisher_id=publisher_id, event_series_key=event_series_key, status=status
+    )
+
+
+class TestResolveClaimDormancy:
+    def test_claimed_vs_claimed_collision_loser_goes_dormant(self):
+        # Cluster {1, 2} collapses onto representative 2; both are claimed
+        # by different claims — claim on the losing member (1) goes dormant,
+        # the representative's own claim (on 2) reactivates.
+        claim_a, claim_b = _claim(101), _claim(102)
+        dormant, reactivate = resolve_claim_dormancy(
+            {1: 2, 2: 2}, {1: claim_a, 2: claim_b}
+        )
+        assert dormant == {101}
+        assert reactivate == {102}
+
+    def test_unclaimed_loser_produces_no_dormancy(self):
+        dormant, reactivate = resolve_claim_dormancy({1: 2, 2: 2}, {2: _claim(102)})
+        assert dormant == set()
+        assert reactivate == {102}
+
+    def test_same_claim_on_both_sides_is_not_dormant(self):
+        # One Claim (e.g. a Series claim) can legitimately match more than
+        # one clustered event's series key — it never marks itself dormant.
+        claim = _claim(101, event_series_key="k")
+        dormant, reactivate = resolve_claim_dormancy({1: 2, 2: 2}, {1: claim, 2: claim})
+        assert dormant == set()
+        assert reactivate == {101}
+
+    def test_singleton_claimed_event_reactivates(self):
+        # build_cluster_assignments excludes singleton events entirely — a
+        # claimed event with no colliding duplicate this pass is trivially
+        # its own canonical representative and must reactivate.
+        dormant, reactivate = resolve_claim_dormancy({}, {1: _claim(101)})
+        assert dormant == set()
+        assert reactivate == {101}
+
+    def test_decollision_reactivates_a_previously_dormant_claim(self):
+        # Claim 101 went dormant in a prior pass because event 1 lost to
+        # event 2. This pass, event 2 is gone (cancelled/aged out) — event 1
+        # is now a singleton, absent from `assignments` entirely — its claim
+        # must reactivate, not stay dormant forever.
+        dormant, reactivate = resolve_claim_dormancy({}, {1: _claim(101)})
+        assert 101 not in dormant
+        assert 101 in reactivate
+
+
+class TestApplyClaimDormancy:
+    @pytest.mark.asyncio
+    async def test_dormant_wins_over_reactivate_for_same_claim(self, mock_db):
+        # The same claim id colliding in one cluster and winning in another
+        # within one pass (see resolve_claim_dormancy docstring) must end up
+        # dormant, not reactivated.
+        await apply_claim_dormancy(mock_db, {101}, {101, 102})
+
+        assert mock_db.execute.await_count == 2
+
+    @pytest.mark.asyncio
+    async def test_no_op_when_both_sets_empty(self, mock_db):
+        await apply_claim_dormancy(mock_db, set(), set())
+
+        mock_db.execute.assert_not_awaited()
+
+
+# ---------------------------------------------------------------------------
+# load_claims_for_events — durable-key re-matching (#418)
+# ---------------------------------------------------------------------------
+
+
+class TestLoadClaimsForEvents:
+    def _mock_db(self, publisher_rows: list[tuple[int, int]], claims: list) -> MagicMock:
+        db = MagicMock()
+        exec_result = MagicMock()
+        exec_result.all = MagicMock(return_value=publisher_rows)
+        db.execute = AsyncMock(return_value=exec_result)
+        scalars_result = MagicMock()
+        scalars_result.all = MagicMock(return_value=claims)
+        db.scalars = AsyncMock(return_value=scalars_result)
+        return db
+
+    @pytest.mark.asyncio
+    async def test_publisher_matched_event_resolves_fienta_claim(self):
+        # Mirrors a Fienta organizer_id claim: the event's EventSource row
+        # carries the durable Publisher id (itself keyed on organizer_id),
+        # never the event's own id.
+        event = _event(501, "Show", _BASE)
+        claim = _claim(9, publisher_id=55)
+        db = self._mock_db(publisher_rows=[(501, 55)], claims=[claim])
+
+        result = await load_claims_for_events(db, [event])
+
+        assert result == {501: claim}
+
+    @pytest.mark.asyncio
+    async def test_kumu_ech_style_constant_publisher_matches_too(self):
+        # KUMU/ECH Publishers carry no external_id (whole-source constant) —
+        # matching is identical, just a different-sourced publisher_id.
+        event = _event(777, "Exhibit", _BASE)
+        claim = _claim(9, publisher_id=3)
+        db = self._mock_db(publisher_rows=[(777, 3)], claims=[claim])
+
+        result = await load_claims_for_events(db, [event])
+
+        assert result == {777: claim}
+
+    @pytest.mark.asyncio
+    async def test_piletilevi_series_key_recomputed_from_this_rows_own_fields(self):
+        # No Publisher (unresolved promoter) → falls back to the Piletilevi
+        # Series claim key, recomputed fresh from *this* event row's own
+        # title_orig/venue_name — never the event's primary key.
+        event = _event(9001, "Jazz Night", _BASE, venue_name="Club X")
+        key = serialize_event_series_key(event_series_key("Jazz Night", "Club X"))
+        claim = _claim(9, event_series_key=key)
+        db = self._mock_db(publisher_rows=[], claims=[claim])
+
+        result = await load_claims_for_events(db, [event])
+
+        assert result == {9001: claim}
+
+    @pytest.mark.asyncio
+    async def test_new_reingested_occurrence_rematches_series_claim_by_key(self):
+        # A freshly re-ingested occurrence is a BRAND NEW Event row (never
+        # seen before, distinct id from whatever row the claim was first
+        # granted against) — re-matching must still succeed purely from its
+        # own source-provided title/venue.
+        original_grant_event_id = 1
+        new_occurrence = _event(99999, "Jazz Night", _BASE, venue_name="Club X")
+        key = serialize_event_series_key(event_series_key("Jazz Night", "Club X"))
+        claim = _claim(9, event_series_key=key)
+        db = self._mock_db(publisher_rows=[], claims=[claim])
+
+        result = await load_claims_for_events(db, [new_occurrence])
+
+        assert result == {new_occurrence.id: claim}
+        assert new_occurrence.id != original_grant_event_id
+
+    @pytest.mark.asyncio
+    async def test_no_matching_claim_leaves_event_out_of_result(self):
+        event = _event(1, "Unclaimed Show", _BASE, venue_name="Nowhere")
+        db = self._mock_db(publisher_rows=[], claims=[])
+
+        result = await load_claims_for_events(db, [event])
+
+        assert result == {}
+
+    @pytest.mark.asyncio
+    async def test_empty_events_short_circuits_with_no_queries(self):
+        db = self._mock_db(publisher_rows=[], claims=[])
+
+        result = await load_claims_for_events(db, [])
+
+        assert result == {}
+        db.execute.assert_not_awaited()
+        db.scalars.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_publisher_match_takes_precedence_over_series_key(self):
+        # An event with a resolved Publisher never falls back to the
+        # series-key path, even if its title/venue would also collide with
+        # an unrelated Series claim's key.
+        event = _event(501, "Jazz Night", _BASE, venue_name="Club X")
+        publisher_claim = _claim(9, publisher_id=55)
+        stray_series_claim = _claim(
+            10, event_series_key=serialize_event_series_key(
+                event_series_key("Jazz Night", "Club X")
+            )
+        )
+        db = self._mock_db(
+            publisher_rows=[(501, 55)], claims=[publisher_claim, stray_series_claim]
+        )
+
+        result = await load_claims_for_events(db, [event])
+
+        assert result == {501: publisher_claim}
+
+    @pytest.mark.asyncio
+    async def test_venue_linked_event_matches_via_resolved_venue_name(self):
+        # A venue-linked event (Event.venue_id set) has its bare venue_name
+        # left NULL at write time (#176) — the series-key fallback must
+        # resolve the linked Venue's name (as resolve_claim_target() did at
+        # claim-creation time), not read the NULL column directly.
+        event = _event(501, "Jazz Night", _BASE, venue_name=None)
+        key = serialize_event_series_key(event_series_key("Jazz Night", "Club X"))
+        claim = _claim(9, event_series_key=key)
+
+        db = MagicMock()
+        publisher_exec_result = MagicMock(all=MagicMock(return_value=[]))
+        venue_exec_result = MagicMock(
+            all=MagicMock(return_value=[(501, None, "Club X", None)])
+        )
+        db.execute = AsyncMock(side_effect=[publisher_exec_result, venue_exec_result])
+        scalars_result = MagicMock(all=MagicMock(return_value=[claim]))
+        db.scalars = AsyncMock(return_value=scalars_result)
+
+        result = await load_claims_for_events(db, [event])
+
+        assert result == {501: claim}

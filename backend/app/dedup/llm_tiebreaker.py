@@ -47,6 +47,7 @@ from app.constants import (
 from app.llm.prompts import LLM_DEDUP_PROMPT_TEMPLATE, escape_prompt_delimiters
 from app.dedup.rules import (
     union,
+    apply_claim_dormancy,
     apply_same_day_title_unions,
     build_cluster_assignments,
     bulk_assign_dedup_groups,
@@ -54,8 +55,10 @@ from app.dedup.rules import (
     clear_stale_dedup_groups,
     dedup_window_cutoff,
     is_candidate_pair,
+    load_claims_for_events,
     load_dedup_candidate_events,
     load_description_lengths,
+    resolve_claim_dormancy,
     run_dedup_pass,
     same_group,
 )
@@ -472,7 +475,13 @@ async def run_dedup_pass_llm(
                 break
 
     desc_len_by_id = await load_description_lengths(db, ids)
-    assignments = build_cluster_assignments(parent, ids, events_by_id, desc_len_by_id)
+    claims_by_event_id = await load_claims_for_events(db, events)
+    assignments = build_cluster_assignments(
+        parent, ids, events_by_id, desc_len_by_id, frozenset(claims_by_event_id)
+    )
+
+    dormant_ids, reactivate_ids = resolve_claim_dormancy(assignments, claims_by_event_id)
+    await apply_claim_dormancy(db, dormant_ids, reactivate_ids)
 
     updated = await bulk_assign_dedup_groups(db, events, assignments)
 

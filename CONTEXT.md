@@ -116,6 +116,14 @@ claim is removed from the count that granted it.
 _Avoid_: verified claimant, trusted organizer (collides with
 `Organizer.verified`, a permanently separate submission-trust track per #385)
 
+**Dormant claim**:
+An approved claim whose event lost a claimed-vs-claimed dedup collision to a
+better-quality duplicate (#418) — its pins stop applying while dormant, but
+the row is never deleted or revoked, and `status` (which still gates
+duplicate-claim creation) is untouched. Reactivates automatically the next
+dedup pass in which its target is canonical again.
+_Avoid_: revoked claim, suspended claim, inactive claim
+
 ## Theming
 
 **Device theme**:
