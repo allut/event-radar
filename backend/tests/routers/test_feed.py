@@ -51,6 +51,28 @@ class TestGetFeed:
         assert result["built_at"] is not None
 
     @pytest.mark.asyncio
+    async def test_events_never_carry_listed_by_credit(
+        self, mock_db, make_user, make_event, make_request
+    ):
+        """The "Listed by X" credit is public-event-page-only (#419) — Daily 5
+        must never carry it, regardless of claim status."""
+        from app.routers.feed import get_feed
+
+        feed = MagicMock()
+        feed.event_ids = [10]
+        feed.built_at = datetime(2026, 5, 10, 6, 0, 0, tzinfo=timezone.utc)
+        mock_db.scalar.return_value = feed
+
+        scalars_result = MagicMock()
+        scalars_result.all.return_value = [make_event(10)]
+        mock_db.scalars.return_value = scalars_result
+
+        user = make_user()
+        result = await get_feed(request=make_request(), current_user=user, db=mock_db)
+
+        assert "listed_by" not in result["events"][0]
+
+    @pytest.mark.asyncio
     async def test_falls_back_to_prior_feed_when_none_today(
         self, mock_db, make_user, make_event, make_request
     ):
@@ -390,7 +412,7 @@ class TestGetEvent:
     @pytest.mark.asyncio
     async def test_claim_status_unclaimed_when_never_ingested(self, mock_db, make_event, make_request):
         """No resolvable EventSource (an organizer's own direct submission,
-        never scraped) -> always unclaimed, per claim_status_for_event's
+        never scraped) -> always unclaimed, per claim_status_from_claim's
         docstring (#414)."""
         from app.routers.events import get_event
 
@@ -415,14 +437,74 @@ class TestGetEvent:
         assert result["claim_status"] == "pending"
 
     @pytest.mark.asyncio
-    async def test_claim_status_claimed(self, mock_db, make_event, make_request):
+    async def test_claim_status_claimed(self, mock_db, make_event, make_request, make_organizer):
         from app.routers.events import get_event
 
         event = make_event(42)
         es = MagicMock(publisher_id=7, source=MagicMock())
-        claim = MagicMock(status="approved")
+        claim = MagicMock(status="approved", organizer=make_organizer(organizer_id=5))
         mock_db.scalar.side_effect = [event, es, claim]
 
         result = await get_event(event_id=42, request=make_request(), db=mock_db)
 
         assert result["claim_status"] == "claimed"
+
+    @pytest.mark.asyncio
+    async def test_listed_by_absent_when_unclaimed(self, mock_db, make_event, make_request):
+        from app.routers.events import get_event
+
+        event = make_event(42)
+        mock_db.scalar.side_effect = [event, None]
+
+        result = await get_event(event_id=42, request=make_request(), db=mock_db)
+
+        assert result["listed_by"] is None
+
+    @pytest.mark.asyncio
+    async def test_listed_by_absent_when_pending(
+        self, mock_db, make_event, make_request, make_organizer
+    ):
+        from app.routers.events import get_event
+
+        event = make_event(42)
+        es = MagicMock(publisher_id=7, source=MagicMock())
+        claim = MagicMock(
+            status="pending", organizer=make_organizer(organizer_id=5, name="Tallinn Jazz Club")
+        )
+        mock_db.scalar.side_effect = [event, es, claim]
+
+        result = await get_event(event_id=42, request=make_request(), db=mock_db)
+
+        assert result["listed_by"] is None
+
+    @pytest.mark.asyncio
+    async def test_listed_by_absent_when_organizer_name_unset(
+        self, mock_db, make_event, make_request, make_organizer
+    ):
+        from app.routers.events import get_event
+
+        event = make_event(42)
+        es = MagicMock(publisher_id=7, source=MagicMock())
+        claim = MagicMock(status="approved", organizer=make_organizer(organizer_id=5))
+        mock_db.scalar.side_effect = [event, es, claim]
+
+        result = await get_event(event_id=42, request=make_request(), db=mock_db)
+
+        assert result["listed_by"] is None
+
+    @pytest.mark.asyncio
+    async def test_listed_by_present_when_claimed_with_organizer_name(
+        self, mock_db, make_event, make_request, make_organizer
+    ):
+        from app.routers.events import get_event
+
+        event = make_event(42)
+        es = MagicMock(publisher_id=7, source=MagicMock())
+        claim = MagicMock(
+            status="approved", organizer=make_organizer(organizer_id=5, name="Tallinn Jazz Club")
+        )
+        mock_db.scalar.side_effect = [event, es, claim]
+
+        result = await get_event(event_id=42, request=make_request(), db=mock_db)
+
+        assert result["listed_by"] == "Tallinn Jazz Club"

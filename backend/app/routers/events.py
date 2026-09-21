@@ -5,7 +5,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
-from app.claims.lifecycle import claim_status_for_event
+from app.claims.lifecycle import (
+    claim_status_from_claim,
+    claiming_organizer_name,
+    resolve_claim_for_event,
+)
 from app.constants import (
     DEFAULT_USER_LOCALE,
     ERROR_EVENT_NOT_FOUND,
@@ -79,9 +83,13 @@ async def get_event(
         feedback_by_event=sigs,
         reported_event_ids=reported,
     )
-    # claim_status (#414) is computed only here, not in serialize_event
-    # itself — the claim CTA is public-event-page-only, so the bulk-listing
-    # callers of serialize_event (feed/explore/saved) shouldn't each pay for
-    # a per-event EventSource+Claim lookup they never render.
-    serialized["claim_status"] = await claim_status_for_event(db, event)
+    # claim_status (#414) and listed_by (#419) are computed only here, not in
+    # serialize_event itself — the claim CTA and "Listed by X" credit are
+    # public-event-page-only, so the bulk-listing callers of serialize_event
+    # (feed/explore/saved) shouldn't each pay for a per-event
+    # EventSource+Claim lookup they never render, and must never surface the
+    # credit either (ranking-neutrality boundary, #419).
+    claim = await resolve_claim_for_event(db, event)
+    serialized["claim_status"] = claim_status_from_claim(claim)
+    serialized["listed_by"] = await claiming_organizer_name(claim)
     return serialized

@@ -29,6 +29,7 @@ import { ClaimPanel, ClaimPill, type EventClaimStatus } from '../../components/C
 interface EventDetailData extends EventData {
   language: string | null;
   claim_status: EventClaimStatus;
+  listed_by: string | null;
 }
 
 export default function EventDetail() {
@@ -185,6 +186,10 @@ export default function EventDetail() {
           </div>
 
           <h1 className={styles.title}>{data.title}</h1>
+
+          {data.listed_by && (
+            <p className={styles.listedBy}>{ti('listed_by', locale, { name: data.listed_by })}</p>
+          )}
 
           <div className={styles.actions}>
             {authed && (

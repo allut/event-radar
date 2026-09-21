@@ -10,12 +10,18 @@ from sqlalchemy.exc import IntegrityError
 from app.claims.lifecycle import (
     ClaimError,
     cancel_claim,
+    claim_status_from_claim,
+    claiming_organizer_name,
     create_claim,
     expire_stale_claims,
     recheck_claim,
+    resolve_claim_for_event,
 )
 from app.claims.verification import VerificationResult
 from app.constants import (
+    CLAIM_DISCOVERY_STATUS_CLAIMED,
+    CLAIM_DISCOVERY_STATUS_PENDING,
+    CLAIM_DISCOVERY_STATUS_UNCLAIMED,
     CLAIM_KIND_PUBLISHER,
     CLAIM_KIND_SERIES,
     CLAIM_STATUS_APPROVED,
@@ -304,6 +310,65 @@ class TestRecheckClaim:
         assert result.status == CLAIM_STATUS_PENDING
         assert result.last_checked_at > stale_checked_at
         mock_db.commit.assert_awaited_once()
+
+
+class TestClaimStatusFromClaim:
+    def test_none_is_unclaimed(self):
+        assert claim_status_from_claim(None) == CLAIM_DISCOVERY_STATUS_UNCLAIMED
+
+    def test_approved_is_claimed(self):
+        assert (
+            claim_status_from_claim(_fake_claim(status=CLAIM_STATUS_APPROVED))
+            == CLAIM_DISCOVERY_STATUS_CLAIMED
+        )
+
+    def test_pending_is_pending(self):
+        assert (
+            claim_status_from_claim(_fake_claim(status=CLAIM_STATUS_PENDING))
+            == CLAIM_DISCOVERY_STATUS_PENDING
+        )
+
+
+class TestResolveClaimForEvent:
+    @pytest.mark.asyncio
+    async def test_no_event_source_returns_none(self, mock_db, make_event):
+        mock_db.scalar = AsyncMock(return_value=None)
+
+        assert await resolve_claim_for_event(mock_db, make_event()) is None
+
+    @pytest.mark.asyncio
+    async def test_returns_active_claim_for_resolved_target(self, mock_db, make_event):
+        claim = _fake_claim(status=CLAIM_STATUS_APPROVED)
+        mock_db.scalar = AsyncMock(side_effect=[_fake_event_source(publisher_id=99), claim])
+
+        assert await resolve_claim_for_event(mock_db, make_event()) is claim
+
+
+class TestClaimingOrganizerName:
+    @pytest.mark.asyncio
+    async def test_none_claim_returns_none(self):
+        assert await claiming_organizer_name(None) is None
+
+    @pytest.mark.asyncio
+    async def test_pending_claim_returns_none(self, make_organizer):
+        claim = _fake_claim(status=CLAIM_STATUS_PENDING, organizer=make_organizer(name="Tallinn Jazz Club"))
+
+        assert await claiming_organizer_name(claim) is None
+
+    @pytest.mark.asyncio
+    async def test_approved_claim_with_no_organizer_name_returns_none(self, make_organizer):
+        claim = _fake_claim(status=CLAIM_STATUS_APPROVED, organizer=make_organizer(organizer_id=5))
+
+        assert await claiming_organizer_name(claim) is None
+
+    @pytest.mark.asyncio
+    async def test_approved_claim_with_organizer_name_returns_it(self, make_organizer):
+        claim = _fake_claim(
+            status=CLAIM_STATUS_APPROVED,
+            organizer=make_organizer(organizer_id=5, name="Tallinn Jazz Club"),
+        )
+
+        assert await claiming_organizer_name(claim) == "Tallinn Jazz Club"
 
 
 class TestExpireStaleClaims:

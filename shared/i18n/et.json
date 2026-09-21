@@ -53,6 +53,7 @@
     "claim_strip_cta": "Nõua see üritus enda omaks",
     "claim_pill_claimed": "Korraldaja kinnitatud",
     "claim_pill_pending": "Nõue ootab ülevaatust",
+    "listed_by": "Lisanud {name}",
     "claim_pending_fienta_eyebrow": "Kinnita Fientas",
     "claim_pending_fienta_title": "Lisa oma kood Fientasse",
     "claim_pending_fienta_body": "Kleebi see kood oma sündmuse kirjeldusse või välja \"Märkused aja kohta\" Fientas. Kontrollime seda automaatselt või vajuta \"Kontrolli nüüd\" kohese vastuse saamiseks.",

@@ -118,6 +118,21 @@ class TestBrowseSqlPath:
         assert [e["id"] for e in result["events"]] == [1, 2]
 
     @pytest.mark.asyncio
+    async def test_events_never_carry_listed_by_credit(self, mock_db, make_event):
+        """The "Listed by X" credit is public-event-page-only (#419) — Explore
+        must never carry it, regardless of claim status."""
+        from app.routers.browse import _browse_sql_path
+
+        mock_db.scalar.return_value = 1
+        mock_db.scalars.return_value = _scalars_result([make_event(1)])
+
+        result = await _browse_sql_path(
+            mock_db, [], "date", limit=2, offset=0, locale="en", user_id=1
+        )
+
+        assert "listed_by" not in result["events"][0]
+
+    @pytest.mark.asyncio
     async def test_last_page_has_more_false(self, mock_db, make_event):
         from app.routers.browse import _browse_sql_path
 

@@ -190,6 +190,31 @@ class TestSubmitReport:
         assert exc_info.value.status_code == http.HTTPStatus.NOT_FOUND
         mock_db.execute.assert_not_called()
 
+    @pytest.mark.asyncio
+    async def test_claimed_event_reports_through_ordinary_path(
+        self, mock_db, make_user, make_event, make_request
+    ):
+        """Regression (#419): reporting a claimed event must be indistinguishable
+        from reporting any other event — no claim-aware branch, no second/
+        weaker moderation path."""
+        from app.routers.reports import ReportBody, submit_report
+
+        claimed_event = make_event(10)
+        claimed_event.claim_status = "claimed"
+        claimed_event.listed_by = "Tallinn Jazz Club"
+        mock_db.scalar.return_value = claimed_event
+
+        result = await submit_report(
+            body=ReportBody(event_id=10, reason="spam_or_scam"),
+            request=make_request(method="POST", path="/reports"),
+            current_user=make_user(),
+            db=mock_db,
+        )
+
+        assert result == {"ok": True}
+        mock_db.execute.assert_called_once()
+        mock_db.commit.assert_called_once()
+
 
 class TestFirstReportNotification:
     @pytest.mark.asyncio

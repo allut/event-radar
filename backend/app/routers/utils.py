@@ -835,6 +835,10 @@ def serialize_event(
     feedback_by_event: dict[int, str] | None = None,
     reported_event_ids: set[int] | None = None,
 ) -> dict:
+    # Shared by every listing surface (feed/explore/saved) as well as the
+    # single-event page — never add claim_status/listed_by here. Both are
+    # public-event-page-only (ranking-neutrality boundary, #419) and are
+    # bolted onto this dict's return value solely in routers/events.py.
     cl = event.classification
     why_go = resolve_why_go(cl, locale)
     lat, lng = resolve_venue_coords(event)

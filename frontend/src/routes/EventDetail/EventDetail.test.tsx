@@ -71,6 +71,7 @@ const eventData = {
   }),
   language: 'en',
   claim_status: 'unclaimed',
+  listed_by: null,
 };
 
 describe('EventDetail', () => {
@@ -302,6 +303,19 @@ describe('EventDetail claim discovery (#414)', () => {
     renderWithProviders(<EventDetail />, { route: '/en/events/1', pathPattern: '/:locale/events/:id' });
     await waitFor(() => expect(screen.getByText('Organizer-verified')).toBeInTheDocument());
     expect(screen.queryByText('Is this your event?')).not.toBeInTheDocument();
+  });
+
+  it('shows the "Listed by X" credit for a claimed event with an organizer name', async () => {
+    mockGet.mockResolvedValueOnce({ ...eventData, claim_status: 'claimed', listed_by: 'Tallinn Jazz Club' });
+    renderWithProviders(<EventDetail />, { route: '/en/events/1', pathPattern: '/:locale/events/:id' });
+    await waitFor(() => expect(screen.getByText('Listed by Tallinn Jazz Club')).toBeInTheDocument());
+  });
+
+  it('omits the "Listed by X" credit when the organizer has no name set', async () => {
+    mockGet.mockResolvedValueOnce({ ...eventData, claim_status: 'claimed', listed_by: null });
+    renderWithProviders(<EventDetail />, { route: '/en/events/1', pathPattern: '/:locale/events/:id' });
+    await waitFor(() => expect(screen.getByText('Organizer-verified')).toBeInTheDocument());
+    expect(screen.queryByText(/^Listed by/)).not.toBeInTheDocument();
   });
 
   it('a signed-out visitor gets the email-capture form, not a direct claim', async () => {

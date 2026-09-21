@@ -53,6 +53,7 @@
     "claim_strip_cta": "Claim this event",
     "claim_pill_claimed": "Organizer-verified",
     "claim_pill_pending": "Claim pending review",
+    "listed_by": "Listed by {name}",
     "claim_pending_fienta_eyebrow": "Verify with Fienta",
     "claim_pending_fienta_title": "Add your code to Fienta",
     "claim_pending_fienta_body": "Paste this code into your event's description or its \"Notes about time\" field on Fienta. We check for it automatically, or check now for an instant answer.",

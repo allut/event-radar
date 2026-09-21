@@ -105,33 +105,46 @@ def resolve_claim_target(event: Event, es: EventSource) -> ClaimTarget:
 
 async def active_claim_for_target(db: AsyncSession, target: ClaimTarget) -> Claim | None:
     """The pending/approved Claim already sitting on `target`, if any (#414) —
-    backs both the public event page's claim_status and the search/
-    suggestions surfaces' cross-surface-retirement exclusion."""
+    backs both the public event page's claim_status/listed_by and the search/
+    suggestions surfaces' cross-surface-retirement exclusion. Eager-loads
+    `Claim.organizer` (#419) so callers needing the organizer's display name
+    don't pay a second round trip."""
     if target.kind == CLAIM_KIND_PUBLISHER:
         return await db.scalar(
-            select(Claim).where(
+            select(Claim)
+            .options(selectinload(Claim.organizer))
+            .where(
                 Claim.publisher_id == target.publisher_id,
                 Claim.status.in_(CLAIM_ACTIVE_STATUSES),
             )
         )
     return await db.scalar(
-        select(Claim).where(
+        select(Claim)
+        .options(selectinload(Claim.organizer))
+        .where(
             Claim.event_series_key == target.event_series_key,
             Claim.status.in_(CLAIM_ACTIVE_STATUSES),
         )
     )
 
 
-async def claim_status_for_event(db: AsyncSession, event: Event) -> str:
-    """(#414) unclaimed/pending/claimed for `event`'s public page CTA — an
-    event with no resolvable EventSource (never ingested, i.e. an organizer's
-    own direct submission) is always unclaimed, since it has no Publisher/
-    Series target to claim against in the first place."""
+async def resolve_claim_for_event(db: AsyncSession, event: Event) -> Claim | None:
+    """Active pending/approved Claim covering `event`, if any — shared by the
+    public event page's claim_status (via claim_status_from_claim) and its
+    "Listed by X" organizer-name lookup (#419) so the page pays for one
+    EventSource/Claim round trip, not two."""
     es = await representative_event_source(db, event_id=event.id)
     if es is None or es.source is None:
-        return CLAIM_DISCOVERY_STATUS_UNCLAIMED
+        return None
     target = resolve_claim_target(event, es)
-    claim = await active_claim_for_target(db, target)
+    return await active_claim_for_target(db, target)
+
+
+def claim_status_from_claim(claim: Claim | None) -> str:
+    """(#414) unclaimed/pending/claimed for `claim`'s public page CTA — an
+    event whose resolve_claim_for_event() came back None (never ingested,
+    i.e. an organizer's own direct submission, or no active claim on its
+    Publisher/Series target) is always unclaimed."""
     if claim is None:
         return CLAIM_DISCOVERY_STATUS_UNCLAIMED
     return (
@@ -139,6 +152,18 @@ async def claim_status_for_event(db: AsyncSession, event: Event) -> str:
         if claim.status == CLAIM_STATUS_APPROVED
         else CLAIM_DISCOVERY_STATUS_PENDING
     )
+
+
+async def claiming_organizer_name(claim: Claim | None) -> str | None:
+    """Organizer.name for the public event page's "Listed by X" credit
+    (#419) — only for an approved claim (a pending claimant isn't yet a
+    verified listing maintainer) and only when the organizer has set a
+    display name. Reads `claim.organizer`, eager-loaded by
+    active_claim_for_target() — no extra query here."""
+    if claim is None or claim.status != CLAIM_STATUS_APPROVED:
+        return None
+    organizer = claim.organizer
+    return organizer.name if organizer is not None and organizer.name else None
 
 
 async def _run_verification(

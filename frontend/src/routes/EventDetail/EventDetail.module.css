@@ -137,6 +137,15 @@
   margin-bottom: var(--space-4);
 }
 
+.listedBy {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: var(--fs-md);
+  color: var(--text-soft);
+  margin-top: calc(var(--space-4) * -1 + var(--space-2));
+  margin-bottom: var(--space-4);
+}
+
 /* ─── Venue ───────────────────────────────────────────────────────────────── */
 
 .venue {

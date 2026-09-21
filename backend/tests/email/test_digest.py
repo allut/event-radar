@@ -91,6 +91,17 @@ class TestBuildDigestHtml:
         assert "Great music" in html
         assert "Central venue" in html
 
+    def test_never_shows_listed_by_credit(self, make_event):
+        """The "Listed by X" credit is public-event-page-only (#419) — the
+        digest must never render it, even for a claimed event with an
+        organizer display name set."""
+        event = make_event(title="Jazz Night in Tallinn")
+        event.claim_status = "claimed"
+        event.listed_by = "Tallinn Jazz Club"
+        html = build_digest_html([event], date(2026, 5, 20), "en", "https://eventradar.ee")
+        assert "Tallinn Jazz Club" not in html
+        assert "Listed by" not in html
+
     def test_at_most_3_bullets(self, make_event):
         bullets = ["A", "B", "C", "D", "E"]
         events = [make_event(why_go=bullets)]

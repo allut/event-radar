@@ -326,9 +326,10 @@ async def verify_claim_link(
 # that already carry a pending or approved claim on their Publisher/Series
 # target — claiming an event via any one discovery surface retires it from
 # the other two. The public-page "is this your event?" CTA is the third
-# surface; it reads GET /events/{id}'s claim_status field instead (see
-# app/claims/lifecycle.py::claim_status_for_event, wired in routers/events.py)
-# rather than this router, since it has no search/suggestion query to run.
+# surface; it reads GET /events/{id}'s claim_status field instead (built from
+# app/claims/lifecycle.py::resolve_claim_for_event + claim_status_from_claim,
+# wired in routers/events.py) rather than this router, since it has no
+# search/suggestion query to run.
 # ---------------------------------------------------------------------------
 
 

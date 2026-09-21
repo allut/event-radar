@@ -53,6 +53,7 @@
     "claim_strip_cta": "Подтвердить права на мероприятие",
     "claim_pill_claimed": "Подтверждено организатором",
     "claim_pill_pending": "Заявка на рассмотрении",
+    "listed_by": "Организатор: {name}",
     "claim_pending_fienta_eyebrow": "Подтверждение через Fienta",
     "claim_pending_fienta_title": "Добавьте код в Fienta",
     "claim_pending_fienta_body": "Вставьте этот код в описание своего события или в поле \"Заметки о времени\" в Fienta. Мы проверим это автоматически, либо нажмите \"Проверить сейчас\" для мгновенного ответа.",

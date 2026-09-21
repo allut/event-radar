@@ -478,6 +478,35 @@ class TestScoreEvent:
         assert score_match > score_miss
 
 
+class TestClaimStatusRankingNeutrality:
+    """Regression (#419): claim status must contribute nothing to the ranking
+    formula. Neither score_event nor anonymous_score_event reads claim/
+    organizer state at all, so two otherwise-identical events — one claimed,
+    one not — must score identically."""
+
+    def test_score_event_ignores_claim_status(self):
+        now = _now()
+        unclaimed = _event(event_id=1)
+        claimed = _event(event_id=2)
+        claimed.claim_status = "claimed"
+        claimed.listed_by = "Tallinn Jazz Club"
+        v = {"categories": {"music": 1.0}, "vibes": {"underground": 1.0}}
+        ctx = _ctx()
+
+        assert score_event([(1.0, v)], ctx, unclaimed, now) == score_event(
+            [(1.0, v)], ctx, claimed, now
+        )
+
+    def test_anonymous_score_event_ignores_claim_status(self):
+        now = _now()
+        unclaimed = _event(event_id=1)
+        claimed = _event(event_id=2)
+        claimed.claim_status = "claimed"
+        claimed.listed_by = "Tallinn Jazz Club"
+
+        assert anonymous_score_event(unclaimed, now) == anonymous_score_event(claimed, now)
+
+
 class TestAnonymousScoreEvent:
     """Locked formula for anonymous /explore callers (#234): 0.45*NEUTRAL_SCORE
     + 0.25*recency + 0.125*quality + 0.0625*locality — feedback_signal dropped
