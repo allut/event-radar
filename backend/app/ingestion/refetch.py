@@ -15,6 +15,14 @@ Coexists with the geocode passes (``extract_address_from_venue_name`` /
 reconciled as one coupled unit so they never drift apart, and a clean stored
 ``venue_name`` is never overwritten by a suspect detail name. See the module
 docstring of ``geocode.py`` and the project plan for the full rationale.
+
+A locale pinned via the claim-editing surface (#416/#417,
+``Event.pinned_fields``, ``app/claims/pinning.py``) is skipped by the
+title/description locale backfill — see ``_backfill_localized_text``. Price
+fields are never pinned (co-authoritative per #416) so this pass keeps
+reconciling them unconditionally; a claimed event is excluded from
+``_select_candidates`` by the same organizer-submission signals every other
+organizer-owned event already is, so no additional filtering is needed there.
 """
 
 import asyncio
@@ -67,6 +75,7 @@ from app.ingestion.locale_urls import (
     locale_from_html_lang,
     locale_from_url_path,
 )
+from app.claims.pinning import pin_key
 from app.ingestion.sanitize import sanitize_html
 from app.ingestion.geocode import is_suspect_venue_name
 from app.ingestion.sources.estonia_concert_hall import (
@@ -227,7 +236,10 @@ async def _backfill_localized_text(
     Gated per-locale (not per-column) and merged into the existing dicts, so a
     partially-filled column self-heals missing locales. A stored title that
     looks like site-level homepage content (see _is_suspect_locale_title)
-    counts as missing and is re-fetched.
+    counts as missing and is re-fetched. A locale pinned via the claim-editing
+    surface (#416/#417) is excluded regardless of missing/suspect state — an
+    organizer's correction (including an intentional clear) must not be
+    silently refilled from the source.
     """
     base_host = urlsplit(url).hostname
     normalized_host = (base_host or "").removeprefix("www.")
@@ -237,14 +249,18 @@ async def _backfill_localized_text(
     existing_descs: dict[str, str] = (
         dict(event.description_localized) if event.description_localized else {}
     )
+    pinned = set(event.pinned_fields)
     missing_title_locales = {
         loc for loc in LOCALIZED_TEXT_FIENTA_LOCALES
-        if loc not in existing_titles
-        or _is_suspect_locale_title(existing_titles[loc], normalized_host)
+        if pin_key("title", loc) not in pinned
+        and (
+            loc not in existing_titles
+            or _is_suspect_locale_title(existing_titles[loc], normalized_host)
+        )
     }
     missing_desc_locales = {
         loc for loc in LOCALIZED_TEXT_FIENTA_LOCALES
-        if loc not in existing_descs
+        if pin_key("description", loc) not in pinned and loc not in existing_descs
     }
     locales_to_fetch = missing_title_locales | missing_desc_locales
     if not locales_to_fetch:

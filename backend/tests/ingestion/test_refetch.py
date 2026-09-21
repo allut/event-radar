@@ -16,6 +16,7 @@ from app.constants import (
     TALLINN_CENTER_LNG,
     TALLINN_TZ,
 )
+from app.claims.pinning import pin_key
 from app.ingestion.locale_urls import locale_from_url_path
 from app.ingestion.refetch import (
     _is_empty_venue_name,
@@ -88,6 +89,7 @@ def _future_event(**overrides) -> MagicMock:
     e.title_localized = None
     e.description_localized = None
     e.important_info = None
+    e.pinned_fields = []
     e.venue_name = "Test Venue"
     e.venue_address = "Old Street 1, Tallinn"
     e.lat = TALLINN_CENTER_LAT
@@ -639,6 +641,101 @@ class TestLocalizedTextBackfill:
         # localized_text_backfilled counter stays 0.
         assert summary["localized_text_backfilled"] == 0
         assert event.title_localized is None
+
+
+class TestPinnedFieldsRespected:
+    """#417: a claim-editing (#416) pin blocks the refetch pass's source-side
+    write to that field, per-locale, while every unpinned field/locale keeps
+    syncing normally. Price fields are never pinnable (co-authoritative) and
+    must never be gated here."""
+
+    def _locale_pages(self, en_title: str, et_title: str) -> tuple[str, str]:
+        en_html = _hreflang_html(
+            base_url="https://kumu.ekm.ee/en/syndmus/some-event/",
+            en_url="https://kumu.ekm.ee/en/syndmus/some-event/",
+            et_url="https://kumu.ekm.ee/et/syndmus/some-event/",
+            og_title=en_title,
+        )
+        et_html = _hreflang_html(
+            base_url="https://kumu.ekm.ee/et/syndmus/some-event/",
+            en_url="https://kumu.ekm.ee/en/syndmus/some-event/",
+            et_url="https://kumu.ekm.ee/et/syndmus/some-event/",
+            og_title=et_title,
+        )
+        return en_html, et_html
+
+    async def _run_locale_backfill(self, mock_db, event, en_html, et_html) -> dict:
+        mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=[event]))
+        pages = {
+            "https://kumu.ekm.ee/en/syndmus/some-event/": en_html,
+            "https://kumu.ekm.ee/et/syndmus/some-event/": et_html,
+        }
+
+        async def _fake_get(client, url):
+            r = _resp(pages[url])
+            r.url = httpx.URL(url)
+            return r
+
+        with (
+            patch("app.ingestion.refetch.http_get", new=_fake_get),
+            patch("app.ingestion.refetch.asyncio.sleep", new=AsyncMock()),
+        ):
+            return await refetch_event_details(mock_db)
+
+    @pytest.mark.asyncio
+    async def test_pinned_locale_survives_conflicting_source_data(self, mock_db):
+        event = _future_event(
+            url="https://kumu.ekm.ee/en/syndmus/some-event/",
+            title_localized={"et": "Organizer-corrected title"},
+            description_localized=None,
+            pinned_fields=[pin_key("title", "et")],
+        )
+        en_html, et_html = self._locale_pages("Fresh EN Title", "Fresh ET Title")
+        await self._run_locale_backfill(mock_db, event, en_html, et_html)
+
+        assert event.title_localized["et"] == "Organizer-corrected title"
+
+    @pytest.mark.asyncio
+    async def test_unpinned_locale_still_updates_normally(self, mock_db):
+        event = _future_event(
+            url="https://kumu.ekm.ee/en/syndmus/some-event/",
+            title_localized=None,
+            description_localized=None,
+            pinned_fields=[],
+        )
+        en_html, et_html = self._locale_pages("Fresh EN Title", "Fresh ET Title")
+        summary = await self._run_locale_backfill(mock_db, event, en_html, et_html)
+
+        assert summary["localized_text_backfilled"] == 1
+        assert event.title_localized["en"] == "Fresh EN Title"
+        assert event.title_localized["et"] == "Fresh ET Title"
+
+    @pytest.mark.asyncio
+    async def test_per_locale_pin_independence(self, mock_db):
+        """title:et pinned, title:en not — en still backfills, et does not."""
+        event = _future_event(
+            url="https://kumu.ekm.ee/en/syndmus/some-event/",
+            title_localized=None,
+            description_localized=None,
+            pinned_fields=[pin_key("title", "et")],
+        )
+        en_html, et_html = self._locale_pages("Fresh EN Title", "Fresh ET Title")
+        await self._run_locale_backfill(mock_db, event, en_html, et_html)
+
+        assert event.title_localized is not None
+        assert event.title_localized.get("en") == "Fresh EN Title"
+        assert "et" not in event.title_localized
+
+    @pytest.mark.asyncio
+    async def test_price_unaffected_by_pin_state(self, mock_db):
+        event = _future_event(
+            price_min=None,
+            pinned_fields=[pin_key("title", "et"), pin_key("url")],
+        )
+        summary = await _run(mock_db, event, _event_html(price=12.0))
+
+        assert summary["price_changed"] == 1
+        assert event.price_min == 12.0
 
 
 # ---------------------------------------------------------------------------
