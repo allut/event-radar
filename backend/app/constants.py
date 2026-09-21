@@ -978,6 +978,17 @@ ORGANIZER_DAILY_CLAIM_CAP = 5
 # will enforce it.
 ORGANIZER_DAILY_CLAIM_EDIT_CAP = 20
 
+# Claim-editing surface (#416). Field-name pinning vocabulary lives directly
+# in organizer_claim_edits.py (pin_key() calls) rather than as constants
+# here — see CONTEXT.md's Event Claiming glossary for the pinned/synced
+# rules (price fields and categories never participate).
+#
+# How many not-yet-ended events to scan (newest-starting first) when
+# resolving the representative event for a Series claim — there is no FK
+# from Claim to a specific event row for that kind (unlike a Publisher
+# claim's EventSource.publisher_id lookup), so this bounds the scan.
+CLAIM_EDIT_SERIES_EVENT_SCAN_LIMIT = 2000
+
 # Field length caps for SubmitEventBody/PatchEventBody (routers/organizer_events.py).
 # venue_name and currency mirror the Event column widths (models/models.py) so an
 # over-length value 422s instead of raising asyncpg.StringDataRightTruncation; the
@@ -1986,6 +1997,10 @@ ERROR_CLAIM_ALREADY_EXISTS = (
 ERROR_CLAIM_NOT_PENDING = "Only a pending claim can be cancelled or rechecked."
 ERROR_DAILY_CLAIM_LIMIT = "Daily claim limit reached. Try again tomorrow."
 ERROR_CLAIM_SEARCH_QUERY_TOO_SHORT = "Search query is too short."
+ERROR_CLAIM_NOT_GRANTED = "This claim is not yet granted — editing stays locked until then."
+ERROR_DAILY_CLAIM_EDIT_LIMIT = "Daily claim-edit limit reached. Try again tomorrow."
+ERROR_CLAIM_EVENT_NOT_FOUND = "No event could be resolved for this claim."
+ERROR_CLAIM_EDIT_URL_DOMAIN = "URL must stay on the domain this claim was verified against."
 ERROR_EVENT_CREATE_FAILED = "Could not create event; please try again."
 ERROR_EVENT_URL_SCHEME = "Event URL is not allowed (unsupported scheme)."
 ERROR_IMAGE_URL_SCHEME = "Image URL is not allowed (unsupported scheme)."

@@ -27,6 +27,7 @@ import OrganizerLogin from './routes/OrganizerLogin';
 import OrganizerVerify from './routes/OrganizerVerify';
 import OrganizerClaimVerify from './routes/OrganizerClaimVerify';
 import ClaimPending from './routes/ClaimPending';
+import ClaimEventEdit from './routes/ClaimEventEdit';
 import OrganizerDashboard from './routes/OrganizerDashboard';
 import OrganizerSettings from './routes/OrganizerSettings';
 import OrganizerContact from './routes/OrganizerContact';
@@ -159,6 +160,7 @@ const ROUTE_DEFS: RouteDef[] = [
   { path: ROUTES.organizerVerify, element: <OrganizerVerify /> },
   { path: ROUTES.organizerClaimVerify, element: <OrganizerClaimVerify /> },
   { path: ROUTES.organizerClaimPendingPattern, element: <OrganizerProtected><ClaimPending /></OrganizerProtected> },
+  { path: ROUTES.organizerClaimEditPattern, element: <OrganizerProtected><ClaimEventEdit /></OrganizerProtected> },
   { path: ROUTES.organizerDashboard, element: <OrganizerProtected><OrganizerDashboard /></OrganizerProtected> },
   { path: ROUTES.organizerSettings, element: <OrganizerProtected><OrganizerSettings /></OrganizerProtected> },
   { path: ROUTES.organizerContact, element: <OrganizerProtected><OrganizerContact /></OrganizerProtected> },

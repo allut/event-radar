@@ -794,6 +794,27 @@ def resolve_venue_coords(event: Event) -> tuple[float | None, float | None]:
     return event.lat, event.lng
 
 
+async def apply_organizer_category(db: AsyncSession, event_id: int, category: str) -> None:
+    """Prepend an organizer-chosen category onto an event's classification.
+
+    Categories are LLM-derived (Event.classification.categories, an array) —
+    there is no dedicated organizer-facing column. An explicit organizer pick
+    leads the list (any LLM-derived categories, if present, follow); if no
+    classification row exists yet (e.g. classify_event's LLM call failed), a
+    bare one is created so the pick isn't silently dropped. Shared by
+    organizer_events.py (own-submission edits) and organizer_claim_edits.py
+    (#416's prepend-only claim-edit categories rule) — identical prepend
+    semantics, so it lives here rather than being duplicated."""
+    classification = await db.scalar(
+        select(EventClassification).where(EventClassification.event_id == event_id)
+    )
+    if classification is None:
+        db.add(EventClassification(event_id=event_id, categories=[category]))
+        return
+    if category not in classification.categories:
+        classification.categories = [category, *classification.categories]
+
+
 def resolve_why_go(cl: EventClassification | None, locale: str) -> list[str]:
     """Return localized why_go bullets for a classification, with locale → en → raw fallback."""
     if cl is None:

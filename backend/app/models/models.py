@@ -490,6 +490,29 @@ class Claim(Base):
     publisher: Mapped["Publisher | None"] = relationship()
 
 
+class ClaimEditAttempt(Base):
+    """One row per claim-editing-surface save attempt (#416) — backs
+    ORGANIZER_DAILY_CLAIM_EDIT_CAP, which counts attempts (not successful
+    publishes) scoped per-organizer across every event they hold a claim on,
+    mirroring how ORGANIZER_DAILY_SUBMISSION_CAP counts `Event` rows. A
+    dedicated table rather than reusing an existing one because no other row
+    is written unconditionally on every claim-edit PATCH regardless of
+    outcome."""
+
+    __tablename__ = "claim_edit_attempts"
+    __table_args__ = (
+        Index("ix_claim_edit_attempts_organizer_created", "organizer_id", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    organizer_id: Mapped[int] = mapped_column(
+        ForeignKey("organizers.id", ondelete="CASCADE"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
 class IngestionRun(Base):
     __tablename__ = "ingestion_runs"
     __table_args__ = (Index("ix_ingestion_runs_started_at", "started_at"),)

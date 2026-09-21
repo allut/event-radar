@@ -216,9 +216,9 @@ export default function ClaimPending() {
               <button
                 type="button"
                 className={styles.primaryBtn}
-                onClick={() => navigate(ROUTES.organizerDashboard)}
+                onClick={() => navigate(ROUTES.organizerClaimEdit(claim.id))}
               >
-                {t('claim_go_to_dashboard', locale)}
+                {t('claim_edit_open_cta', locale)}
               </button>
             )}
             {isPending && claim.can_recheck && (

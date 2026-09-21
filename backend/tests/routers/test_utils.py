@@ -2,13 +2,14 @@
 import asyncio
 import json
 from datetime import datetime, timezone
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import HTTPException
 
 from app.constants import APP_ENV_DEVELOPMENT
 from app.routers.utils import (
+    apply_organizer_category,
     collapse_series_duplicates,
     compute_preferred_taxonomy,
     event_ended_filter,
@@ -28,6 +29,43 @@ from app.routers.utils import (
     serialize_event,
     stream_admin_job,
 )
+
+
+class TestApplyOrganizerCategory:
+    """Shared by organizer_events.py (own-submission edits) and
+    organizer_claim_edits.py (#416's prepend-only claim-edit categories)."""
+
+    @pytest.mark.asyncio
+    async def test_creates_classification_when_none_exists(self, mock_db):
+        mock_db.scalar.return_value = None
+        mock_db.add = MagicMock()
+
+        await apply_organizer_category(mock_db, 10, "music")
+
+        mock_db.add.assert_called_once()
+        added = mock_db.add.call_args[0][0]
+        assert added.event_id == 10
+        assert added.categories == ["music"]
+
+    @pytest.mark.asyncio
+    async def test_prepends_to_existing_categories(self, mock_db):
+        classification = MagicMock()
+        classification.categories = ["theater"]
+        mock_db.scalar.return_value = classification
+
+        await apply_organizer_category(mock_db, 10, "music")
+
+        assert classification.categories == ["music", "theater"]
+
+    @pytest.mark.asyncio
+    async def test_no_duplicate_when_already_present(self, mock_db):
+        classification = MagicMock()
+        classification.categories = ["music", "theater"]
+        mock_db.scalar.return_value = classification
+
+        await apply_organizer_category(mock_db, 10, "music")
+
+        assert classification.categories == ["music", "theater"]
 
 
 class TestRequireConfiguredSecret:

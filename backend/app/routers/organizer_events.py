@@ -84,7 +84,6 @@ from app.ingestion.sanitize import sanitize_html
 from app.llm.classifier import classify_event
 from app.models.models import (
     Event,
-    EventClassification,
     Organizer,
     OrganizerImageUpload,
     Source,
@@ -94,6 +93,7 @@ from app.publish import publish_pending
 from app.rate_limit import limiter
 from app.routers.organizer_auth import get_current_organizer
 from app.routers.utils import (
+    apply_organizer_category,
     cancel_event_and_resolve_reports,
     own_venue_or_404,
     select_events_with_classification,
@@ -247,26 +247,6 @@ async def _get_user_submission_source(db: AsyncSession) -> Source:
             detail=ERROR_SUBMISSION_SOURCE_NOT_CONFIGURED,
         )
     return source
-
-
-async def _apply_organizer_category(
-    db: AsyncSession, event_id: int, category: str
-) -> None:
-    """Prepend an organizer-chosen category onto the event's classification.
-
-    Categories are LLM-derived (Event.classification.categories, an array) —
-    there is no dedicated organizer-facing column. An explicit organizer pick
-    leads the list (any LLM-derived categories, if present, follow); if no
-    classification row exists yet (e.g. classify_event's LLM call failed), a
-    bare one is created so the pick isn't silently dropped."""
-    classification = await db.scalar(
-        select(EventClassification).where(EventClassification.event_id == event_id)
-    )
-    if classification is None:
-        db.add(EventClassification(event_id=event_id, categories=[category]))
-        return
-    if category not in classification.categories:
-        classification.categories = [category, *classification.categories]
 
 
 def _check_image_host(image_url: str | None) -> None:
@@ -434,7 +414,7 @@ async def submit_event(
         # backlog drain will retry it, but this is worth surfacing in ops.
         log.warning("organizer submission event_id=%d classify failed", event.id)
     if body.category:
-        await _apply_organizer_category(db, event_id, body.category)
+        await apply_organizer_category(db, event_id, body.category)
     # Single known event, verified status unchanged by this call — scope the
     # UPDATE to it and skip the reject-breakdown diagnostic (unused here, and
     # its cost grows with all-time reject history — see publish_pending()).
@@ -529,7 +509,7 @@ async def update_own_event(
         raw_currency = body.currency if "currency" in fields_set else event.currency
         event.currency = normalize_currency(raw_currency, has_price)
     if "category" in fields_set and body.category is not None:
-        await _apply_organizer_category(db, event.id, body.category)
+        await apply_organizer_category(db, event.id, body.category)
     if "description" in fields_set:
         event.description_orig = _organizer_sanitize(body.description)
     if "important_info" in fields_set:

@@ -101,7 +101,7 @@ describe('ClaimPending (#415)', () => {
     expect(screen.getByRole('button', { name: 'Cancel this claim' })).toBeInTheDocument();
   });
 
-  it('shows the approved state with a link to the dashboard', async () => {
+  it('shows the approved state with a link to the claim-editing surface', async () => {
     mockGet.mockResolvedValueOnce({
       id: 10,
       status: 'approved',
@@ -113,7 +113,7 @@ describe('ClaimPending (#415)', () => {
     renderPending();
 
     await waitFor(() => expect(screen.getByText("You're verified")).toBeInTheDocument());
-    expect(screen.getByRole('button', { name: 'Go to dashboard' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Edit event' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Cancel this claim' })).not.toBeInTheDocument();
   });
 

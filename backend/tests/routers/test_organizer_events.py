@@ -74,46 +74,6 @@ class TestCheckImageHost:
             _check_image_host("https://res.cloudinary.com.evil.com/x.png")
 
 
-class TestApplyOrganizerCategory:
-    @pytest.mark.asyncio
-    async def test_creates_classification_when_none_exists(self, mock_db):
-        from app.routers.organizer_events import _apply_organizer_category
-
-        mock_db.scalar.return_value = None
-        mock_db.add = MagicMock()
-
-        await _apply_organizer_category(mock_db, 10, "music")
-
-        mock_db.add.assert_called_once()
-        added = mock_db.add.call_args[0][0]
-        assert added.event_id == 10
-        assert added.categories == ["music"]
-
-    @pytest.mark.asyncio
-    async def test_prepends_to_existing_categories(self, mock_db):
-        from app.routers.organizer_events import _apply_organizer_category
-
-        classification = MagicMock()
-        classification.categories = ["theater"]
-        mock_db.scalar.return_value = classification
-
-        await _apply_organizer_category(mock_db, 10, "music")
-
-        assert classification.categories == ["music", "theater"]
-
-    @pytest.mark.asyncio
-    async def test_no_duplicate_when_already_present(self, mock_db):
-        from app.routers.organizer_events import _apply_organizer_category
-
-        classification = MagicMock()
-        classification.categories = ["music", "theater"]
-        mock_db.scalar.return_value = classification
-
-        await _apply_organizer_category(mock_db, 10, "music")
-
-        assert classification.categories == ["music", "theater"]
-
-
 class TestSubmitEvent:
     @pytest.mark.asyncio
     async def test_creates_classifies_publishes_and_flags_review(
@@ -263,7 +223,7 @@ class TestSubmitEvent:
                 "app.routers.organizer_events.publish_pending", new_callable=AsyncMock
             ),
             patch(
-                "app.routers.organizer_events._apply_organizer_category",
+                "app.routers.organizer_events.apply_organizer_category",
                 new_callable=AsyncMock,
             ) as mock_apply_category,
         ):
@@ -621,7 +581,7 @@ class TestUpdateOwnEvent:
         mock_db.commit = AsyncMock()
 
         with patch(
-            "app.routers.organizer_events._apply_organizer_category",
+            "app.routers.organizer_events.apply_organizer_category",
             new_callable=AsyncMock,
         ) as mock_apply_category:
             body = PatchEventBody(category=picked_category)
