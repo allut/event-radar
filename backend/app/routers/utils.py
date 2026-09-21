@@ -68,6 +68,7 @@ from app.models.models import (
     Event,
     EventClassification,
     EventReport,
+    EventSource,
     Organizer,
     OrganizerIdentity,
     Persona,
@@ -925,6 +926,44 @@ async def load_user_reported_events(
         )
     ).all()
     return {row.event_id for row in rows}
+
+
+async def bulk_resolve_publisher_events(
+    db: AsyncSession, publisher_ids: set[int]
+) -> dict[int, Event]:
+    """One representative Event per Publisher id in ``publisher_ids``,
+    bulk-loaded in two fixed queries regardless of how many ids are passed —
+    shared by admin.py::admin_list_claims and
+    app.claims.lifecycle._send_claim_expiry_emails (#421). "Freshest listing
+    wins" (highest EventSource.id per publisher_id) mirrors
+    app.claims.lifecycle.representative_event_source's own single-row
+    ordering — keep the two in sync if that tie-break ever changes."""
+    if not publisher_ids:
+        return {}
+    es_rows = (
+        await db.scalars(
+            select(EventSource)
+            .where(EventSource.publisher_id.in_(publisher_ids))
+            .order_by(EventSource.publisher_id, EventSource.id.desc())
+        )
+    ).all()
+    event_id_by_publisher: dict[int, int] = {}
+    for es in es_rows:
+        if es.publisher_id is not None:
+            event_id_by_publisher.setdefault(es.publisher_id, es.event_id)
+    if not event_id_by_publisher:
+        return {}
+    events = (
+        await db.scalars(
+            select(Event).where(Event.id.in_(set(event_id_by_publisher.values())))
+        )
+    ).all()
+    events_by_id = {e.id: e for e in events}
+    return {
+        publisher_id: events_by_id[event_id]
+        for publisher_id, event_id in event_id_by_publisher.items()
+        if event_id in events_by_id
+    }
 
 
 async def resolve_open_reports(

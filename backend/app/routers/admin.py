@@ -84,6 +84,7 @@ from app.constants import (
     EVENT_CANCELLATION_REASON_REPORT_TAKEDOWN,
     EVENT_STATUS_CANCELLED,
     LOG_EVENT_AUTH_FAILED,
+    LOG_EVENT_EMAIL_SEND_FAILED,
     PAGINATION_MAX_OFFSET,
     PAGINATION_MIN_LIMIT,
     PAGINATION_MIN_OFFSET,
@@ -95,6 +96,7 @@ from app.constants import (
 )
 from app.claims.pinning import representative_event_for_claim
 from app.db import AsyncSessionLocal
+from app.email.claim_resolution import send_claim_declined_email, send_claim_granted_email
 from app.email.digest import send_daily_digests
 from app.ingestion.jobs import (
     classify_pending_drain_now,
@@ -121,6 +123,7 @@ from app.publish import publish_pending
 from app.ranking.score import build_daily_feeds
 from app.rate_limit import client_key, limiter
 from app.routers.utils import (
+    bulk_resolve_publisher_events,
     acquire_admin_job_lock,
     cancel_event_and_resolve_reports,
     canonical_event_filter,
@@ -799,41 +802,22 @@ async def admin_list_claims(
         claims = claims[:limit]
 
         # Bulk-load the representative event per Publisher-kind claim in this
-        # page — two fixed queries total, never one per row.
+        # page — two fixed queries total, never one per row (shared with the
+        # #421 expiry-notification sweep via bulk_resolve_publisher_events).
         publisher_ids = {
             claim.publisher_id
             for claim in claims
             if claim.kind == CLAIM_KIND_PUBLISHER and claim.publisher_id is not None
         }
-        event_id_by_publisher: dict[int, int] = {}
-        if publisher_ids:
-            es_rows = (
-                await db.scalars(
-                    select(EventSource)
-                    .where(EventSource.publisher_id.in_(publisher_ids))
-                    .order_by(EventSource.publisher_id, EventSource.id.desc())
-                )
-            ).all()
-            # First row per publisher_id wins — rows arrive id-desc within
-            # each publisher_id group, i.e. freshest first (mirrors
-            # representative_event_source's own single-row ordering).
-            for es in es_rows:
-                if es.publisher_id is not None:
-                    event_id_by_publisher.setdefault(es.publisher_id, es.event_id)
-
-        events_by_id: dict[int, Event] = {}
-        event_ids = set(event_id_by_publisher.values())
-        if event_ids:
-            events = (
-                await db.scalars(select(Event).where(Event.id.in_(event_ids)))
-            ).all()
-            events_by_id = {e.id: e for e in events}
+        event_by_publisher = await bulk_resolve_publisher_events(db, publisher_ids)
 
         rows = []
         for claim in claims:
-            event = None
-            if claim.publisher_id in event_id_by_publisher:
-                event = events_by_id.get(event_id_by_publisher[claim.publisher_id])
+            event = (
+                event_by_publisher.get(claim.publisher_id)
+                if claim.publisher_id is not None
+                else None
+            )
             rows.append(_serialize_admin_claim(claim, event))
 
     return {
@@ -871,10 +855,27 @@ async def admin_grant_claim(claim_id: int, body: _ResolutionBody, request: Reque
                 )
             claim.status = CLAIM_STATUS_APPROVED
             claim.resolved_at = datetime.now(timezone.utc)
+            organizer = await db.get(Organizer, claim.organizer_id)
+            event = await representative_event_for_claim(db, claim)
             result = {"id": claim.id, "status": claim.status, "note": note}
             emit_admin_log = log_admin_action(db, ADMIN_ACTION_GRANT_CLAIM, claim_id, result)
             await db.commit()
             emit_admin_log()
+            if organizer is not None:
+                try:
+                    await send_claim_granted_email(
+                        organizer.email,
+                        event.title_orig if event else None,
+                        note,
+                        organizer.locale,
+                    )
+                except Exception:
+                    log.error(
+                        "Failed to send claim-granted email (claim_id=%s)",
+                        claim_id,
+                        exc_info=True,
+                        extra={"event": LOG_EVENT_EMAIL_SEND_FAILED},
+                    )
             return result
 
     return await run_admin_job("Grant claim", _run())
@@ -886,12 +887,7 @@ async def admin_decline_claim(claim_id: int, body: _ResolutionBody, request: Req
     """Decline a pending claim — frees its Publisher/Series key immediately
     (CLAIM_ACTIVE_STATUSES excludes revoked, same as a self-cancel). Unlike
     POST .../revoke this never touches Event.pinned_fields: a pending claim
-    was never granted, so nothing was ever pinned against it.
-
-    TODO(#421): send the claimant a decline notification email once that
-    ticket lands — the acceptance criteria explicitly allow this to ship
-    stubbed if #421 lands after this one, and there's no existing "email not
-    built yet" stub pattern in app/email/ worth inventing dead code for."""
+    was never granted, so nothing was ever pinned against it."""
     note = _validated_resolution_note(body)
 
     async def _run() -> dict:
@@ -904,10 +900,27 @@ async def admin_decline_claim(claim_id: int, body: _ResolutionBody, request: Req
                 )
             claim.status = CLAIM_STATUS_REVOKED
             claim.resolved_at = datetime.now(timezone.utc)
+            organizer = await db.get(Organizer, claim.organizer_id)
+            event = await representative_event_for_claim(db, claim)
             result = {"id": claim.id, "status": claim.status, "note": note}
             emit_admin_log = log_admin_action(db, ADMIN_ACTION_DECLINE_CLAIM, claim_id, result)
             await db.commit()
             emit_admin_log()
+            if organizer is not None:
+                try:
+                    await send_claim_declined_email(
+                        organizer.email,
+                        event.title_orig if event else None,
+                        note,
+                        organizer.locale,
+                    )
+                except Exception:
+                    log.error(
+                        "Failed to send claim-declined email (claim_id=%s)",
+                        claim_id,
+                        exc_info=True,
+                        extra={"event": LOG_EVENT_EMAIL_SEND_FAILED},
+                    )
             return result
 
     return await run_admin_job("Decline claim", _run())

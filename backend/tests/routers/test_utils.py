@@ -10,6 +10,7 @@ from fastapi import HTTPException
 from app.constants import APP_ENV_DEVELOPMENT
 from app.routers.utils import (
     apply_organizer_category,
+    bulk_resolve_publisher_events,
     collapse_series_duplicates,
     compute_preferred_taxonomy,
     event_ended_filter,
@@ -263,6 +264,47 @@ class TestLoadUserReportedEvents:
 
         result = await load_user_reported_events(mock_db, user_id=1, event_ids=[10, 20])
         assert result == {10}
+
+
+class TestBulkResolvePublisherEvents:
+    """Shared by admin.py::admin_list_claims and
+    app.claims.lifecycle._send_claim_expiry_emails (#421) — two fixed
+    queries regardless of how many publisher_ids are passed, freshest
+    EventSource (highest id) wins per publisher."""
+
+    @pytest.mark.asyncio
+    async def test_empty_input_short_circuits_with_no_queries(self, mock_db):
+        result = await bulk_resolve_publisher_events(mock_db, set())
+
+        assert result == {}
+        mock_db.scalars.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_freshest_event_source_wins_per_publisher(self, mock_db, make_event):
+        es_old = MagicMock(publisher_id=99, event_id=1)
+        es_new = MagicMock(publisher_id=99, event_id=2)
+        event = make_event(event_id=2)
+        mock_db.scalars = AsyncMock(
+            side_effect=[
+                # order_by(publisher_id, id.desc()) — freshest (id-desc) first.
+                MagicMock(all=MagicMock(return_value=[es_new, es_old])),
+                MagicMock(all=MagicMock(return_value=[event])),
+            ]
+        )
+
+        result = await bulk_resolve_publisher_events(mock_db, {99})
+
+        assert result == {99: event}
+
+    @pytest.mark.asyncio
+    async def test_no_matching_event_sources_returns_empty(self, mock_db):
+        mock_db.scalars = AsyncMock(
+            side_effect=[MagicMock(all=MagicMock(return_value=[]))]
+        )
+
+        result = await bulk_resolve_publisher_events(mock_db, {99})
+
+        assert result == {}
 
 
 class TestResolveOpenReports:

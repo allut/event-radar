@@ -194,8 +194,10 @@ _run_build_daily_feeds = _scheduled(
 _run_send_daily_digests = _scheduled(
     JOB_ID_SEND_DAILY_DIGESTS, _in_session(send_daily_digests, commit=False)
 )
+# expire_stale_claims commits internally (#421 — its expiry-notification
+# fan-out must only see durably expired rows, mirrors build_daily_feeds above).
 _run_expire_stale_claims = _scheduled(
-    JOB_ID_EXPIRE_STALE_CLAIMS, _in_session(expire_stale_claims, commit=True)
+    JOB_ID_EXPIRE_STALE_CLAIMS, _in_session(expire_stale_claims, commit=False)
 )
 
 

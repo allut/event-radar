@@ -73,6 +73,17 @@ REPORT_OUTCOME_BODY = """\
 <a href="{event_url}" class="cta-btn" style="{s_feed_btn}">{cta_label}</a>
 </td></tr></table>"""
 
+CLAIM_RESOLUTION_HEADER = """\
+<p style="{s_eyebrow}">EVENT RADAR</p>
+<h1 class="e-h1" style="{s_h1}">{heading}</h1>"""
+
+CLAIM_RESOLUTION_BODY = """\
+<p class="e-body-text" style="{s_body_text}">{intro}</p>
+<p class="e-body-text" style="{s_body_text}">{note}</p>
+<table role="presentation" align="center" cellpadding="0" cellspacing="0" border="0" style="{s_feed_btn_wrap}"><tr><td>
+<a href="{dashboard_url}" class="cta-btn" style="{s_feed_btn}">{cta_label}</a>
+</td></tr></table>"""
+
 EVENT_BLOCK = (
     '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="{s_card_wrap}">'
     "<tr><td>"

@@ -208,6 +208,61 @@ class TestCreateClaim:
         assert exc.value.status_code == 409
         mock_db.rollback.assert_awaited_once()
 
+    @pytest.mark.asyncio
+    async def test_auto_grant_sends_claim_granted_email(self, mock_db, make_organizer, make_event):
+        """#421: create_claim's inline auto-grant path notifies the claimant
+        immediately — no admin note, so the email falls back to its default
+        copy (empty string in, fallback_note used)."""
+        es = _fake_event_source(publisher_id=99)
+        mock_db.scalar = AsyncMock(side_effect=[0, es])
+        event = make_event()
+        event.title_orig = "Jazz Night"
+        mock_db.get.return_value = event
+        organizer = make_organizer(organizer_id=5)
+
+        with (
+            patch(
+                "app.claims.lifecycle.verify_fienta_publisher_claim",
+                new_callable=AsyncMock,
+                return_value=VerificationResult(
+                    CLAIM_VERIFICATION_MECHANISM_FIENTA_TOKEN,
+                    CLAIM_VERIFICATION_OUTCOME_AUTO_GRANT,
+                ),
+            ),
+            patch(
+                "app.claims.lifecycle.send_claim_granted_email", new_callable=AsyncMock
+            ) as send_mock,
+        ):
+            await create_claim(mock_db, AsyncMock(), organizer, event_id=10)
+
+        send_mock.assert_awaited_once()
+        args, kwargs = send_mock.call_args
+        assert args == (organizer.email, "Jazz Night", "", organizer.locale)
+        assert "http_client" in kwargs
+
+    @pytest.mark.asyncio
+    async def test_pending_admin_review_sends_no_email(self, mock_db, make_organizer, make_event):
+        """A claim that stays pending (routed to admin review) must not send
+        the granted email — only an actual grant does."""
+        es = _fake_event_source(publisher_id=None)
+        mock_db.scalar = AsyncMock(side_effect=[0, es])
+        mock_db.get.return_value = make_event()
+        organizer = make_organizer(organizer_id=5)
+
+        with (
+            patch(
+                "app.claims.lifecycle.is_trusted_claimant",
+                new_callable=AsyncMock,
+                return_value=False,
+            ),
+            patch(
+                "app.claims.lifecycle.send_claim_granted_email", new_callable=AsyncMock
+            ) as send_mock,
+        ):
+            await create_claim(mock_db, AsyncMock(), organizer, event_id=10)
+
+        send_mock.assert_not_awaited()
+
 
 class TestGetOwnClaim:
     @pytest.mark.asyncio
@@ -269,6 +324,30 @@ class TestCancelClaim:
             await cancel_claim(mock_db, organizer, claim_id=1)
         assert exc.value.status_code == 409
 
+    @pytest.mark.asyncio
+    async def test_cancel_sends_self_cancelled_email(self, mock_db, make_organizer, make_event):
+        """#421: a self-cancel notifies the organizer, using the resolved
+        representative event's title when one can be resolved."""
+        claim = _fake_claim(status=CLAIM_STATUS_PENDING)
+        mock_db.scalar.return_value = claim
+        organizer = make_organizer(organizer_id=5)
+        event = make_event()
+        event.title_orig = "Jazz Night"
+
+        with (
+            patch(
+                "app.claims.pinning.representative_event_for_claim",
+                new_callable=AsyncMock,
+                return_value=event,
+            ),
+            patch(
+                "app.claims.lifecycle.send_claim_self_cancelled_email", new_callable=AsyncMock
+            ) as send_mock,
+        ):
+            await cancel_claim(mock_db, organizer, claim_id=1)
+
+        send_mock.assert_awaited_once_with(organizer.email, "Jazz Night", organizer.locale)
+
 
 class TestRecheckClaim:
     @pytest.mark.asyncio
@@ -310,6 +389,45 @@ class TestRecheckClaim:
         assert result.status == CLAIM_STATUS_PENDING
         assert result.last_checked_at > stale_checked_at
         mock_db.commit.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_recheck_auto_grant_sends_claim_granted_email(
+        self, mock_db, make_organizer, make_event
+    ):
+        """#421: a recheck that auto-grants (e.g. a DNS-TXT record that has
+        now propagated) must notify the claimant too, same as the initial
+        create_claim auto-grant path."""
+        claim = _fake_claim(
+            status=CLAIM_STATUS_PENDING,
+            verification_mechanism=CLAIM_VERIFICATION_MECHANISM_FIENTA_TOKEN,
+        )
+        es = _fake_event_source(publisher_id=99)
+        mock_db.scalar = AsyncMock(side_effect=[claim, es])
+        event = make_event()
+        event.title_orig = "Jazz Night"
+        mock_db.get.return_value = event
+        organizer = make_organizer(organizer_id=5)
+
+        with (
+            patch(
+                "app.claims.lifecycle.verify_fienta_publisher_claim",
+                new_callable=AsyncMock,
+                return_value=VerificationResult(
+                    CLAIM_VERIFICATION_MECHANISM_FIENTA_TOKEN,
+                    CLAIM_VERIFICATION_OUTCOME_AUTO_GRANT,
+                ),
+            ),
+            patch(
+                "app.claims.lifecycle.send_claim_granted_email", new_callable=AsyncMock
+            ) as send_mock,
+        ):
+            result = await recheck_claim(mock_db, AsyncMock(), organizer, claim_id=1)
+
+        assert result.status == CLAIM_STATUS_APPROVED
+        send_mock.assert_awaited_once()
+        args, kwargs = send_mock.call_args
+        assert args == (organizer.email, "Jazz Night", "", organizer.locale)
+        assert "http_client" in kwargs
 
 
 class TestClaimStatusFromClaim:
@@ -374,11 +492,79 @@ class TestClaimingOrganizerName:
 class TestExpireStaleClaims:
     @pytest.mark.asyncio
     async def test_returns_expired_count(self, mock_db):
+        expired_claims = [
+            MagicMock(id=i, organizer_id=100 + i, kind=CLAIM_KIND_SERIES, publisher_id=None)
+            for i in (1, 2, 3)
+        ]
         execute_result = MagicMock()
-        execute_result.scalars.return_value = MagicMock(all=MagicMock(return_value=[1, 2, 3]))
+        execute_result.scalars.return_value = MagicMock(all=MagicMock(return_value=expired_claims))
         mock_db.execute.return_value = execute_result
+        # _send_claim_expiry_emails' organizer bulk-load — no matching
+        # organizers, so it sends nothing (each row's send is a no-op skip).
+        mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=[]))
 
         summary = await expire_stale_claims(mock_db)
 
         assert summary == {"expired": 3}
         mock_db.execute.assert_awaited_once()
+        mock_db.commit.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_sends_one_expiry_email_per_row(self, mock_db, make_organizer):
+        """#421: each expired row notifies its organizer — bulk-loaded, not
+        a per-row SELECT. A Series-kind claim (no publisher_id) never
+        triggers the EventSource bulk-load, so mock_db.scalars is called
+        just once here, for the organizer lookup."""
+        claim = MagicMock(
+            id=1, organizer_id=5, kind=CLAIM_KIND_SERIES, publisher_id=None
+        )
+        execute_result = MagicMock()
+        execute_result.scalars.return_value = MagicMock(all=MagicMock(return_value=[claim]))
+        mock_db.execute.return_value = execute_result
+
+        organizer = make_organizer(organizer_id=5)
+        mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=[organizer]))
+
+        with patch(
+            "app.claims.lifecycle.send_claim_expired_email", new_callable=AsyncMock
+        ) as send_mock:
+            summary = await expire_stale_claims(mock_db)
+
+        assert summary == {"expired": 1}
+        send_mock.assert_awaited_once()
+        args, kwargs = send_mock.call_args
+        assert args == (organizer.email, None, organizer.locale)
+        assert "http_client" in kwargs
+
+    @pytest.mark.asyncio
+    async def test_publisher_kind_expiry_resolves_event_title(self, mock_db, make_organizer, make_event):
+        """A Publisher-kind expired claim's email gets a real event title,
+        bulk-resolved via EventSource/Event (mirrors admin_list_claims'
+        publisher-event bulk-load) rather than a per-row lookup."""
+        claim = MagicMock(id=1, organizer_id=5, kind=CLAIM_KIND_PUBLISHER, publisher_id=99)
+        execute_result = MagicMock()
+        execute_result.scalars.return_value = MagicMock(all=MagicMock(return_value=[claim]))
+        mock_db.execute.return_value = execute_result
+
+        organizer = make_organizer(organizer_id=5)
+        es = _fake_event_source(publisher_id=99)
+        es.event_id = 42
+        event = make_event(event_id=42)
+        event.title_orig = "Jazz Night"
+        mock_db.scalars = AsyncMock(
+            side_effect=[
+                MagicMock(all=MagicMock(return_value=[organizer])),
+                MagicMock(all=MagicMock(return_value=[es])),
+                MagicMock(all=MagicMock(return_value=[event])),
+            ]
+        )
+
+        with patch(
+            "app.claims.lifecycle.send_claim_expired_email", new_callable=AsyncMock
+        ) as send_mock:
+            summary = await expire_stale_claims(mock_db)
+
+        assert summary == {"expired": 1}
+        send_mock.assert_awaited_once()
+        args, _kwargs = send_mock.call_args
+        assert args == (organizer.email, "Jazz Night", organizer.locale)

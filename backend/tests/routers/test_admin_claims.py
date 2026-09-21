@@ -278,6 +278,40 @@ async def test_grant_missing_claim_404s(admin_app, make_db_ctx, mock_db):
 
 
 @pytest.mark.asyncio
+async def test_grant_claim_sends_granted_email(admin_app, make_db_ctx, mock_db):
+    """#421: approving a pending claim notifies the claimant, using the
+    admin's typed note and the claim's representative event title."""
+    app = admin_app
+    claim = _make_claim(claim_id=1, status=CLAIM_STATUS_PENDING)
+    organizer = MagicMock(id=9, email="organizer@example.com", locale="en")
+    event = _make_event(event_id=42)
+    event.title_orig = "Jazz Night"
+
+    db = mock_db
+    db.get = AsyncMock(side_effect=[claim, organizer])
+    send_mock = AsyncMock()
+
+    with (
+        patch("app.routers.admin.settings") as mock_settings,
+        patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
+        patch("app.routers.admin.representative_event_for_claim", new=AsyncMock(return_value=event)),
+        patch("app.routers.admin.send_claim_granted_email", new=send_mock),
+    ):
+        _admin_settings(mock_settings)
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post(
+                "/admin/claims/1/grant",
+                json={"resolution_note": "DNS record confirmed manually."},
+                auth=("admin", ""),
+            )
+
+    assert resp.status_code == http.HTTPStatus.OK
+    send_mock.assert_awaited_once_with(
+        "organizer@example.com", "Jazz Night", "DNS record confirmed manually.", "en"
+    )
+
+
+@pytest.mark.asyncio
 async def test_grant_requires_nonblank_note(admin_app, make_db_ctx, mock_db):
     app = admin_app
     with (
@@ -329,6 +363,43 @@ async def test_decline_claim_revokes_status_without_deleting_row(admin_app, make
 
     admin_action_records = [r for r in caplog.records if getattr(r, "event", None) == "admin_action"]
     assert admin_action_records[0].action == ADMIN_ACTION_DECLINE_CLAIM
+
+
+@pytest.mark.asyncio
+async def test_decline_claim_sends_declined_email(admin_app, make_db_ctx, mock_db):
+    """#421: declining a pending claim notifies the claimant — and must not
+    also fire the granted email."""
+    app = admin_app
+    claim = _make_claim(claim_id=1, status=CLAIM_STATUS_PENDING)
+    organizer = MagicMock(id=9, email="organizer@example.com", locale="et")
+    event = _make_event(event_id=42)
+    event.title_orig = "Jazz Night"
+
+    db = mock_db
+    db.get = AsyncMock(side_effect=[claim, organizer])
+    declined_mock = AsyncMock()
+    granted_mock = AsyncMock()
+
+    with (
+        patch("app.routers.admin.settings") as mock_settings,
+        patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
+        patch("app.routers.admin.representative_event_for_claim", new=AsyncMock(return_value=event)),
+        patch("app.routers.admin.send_claim_declined_email", new=declined_mock),
+        patch("app.routers.admin.send_claim_granted_email", new=granted_mock),
+    ):
+        _admin_settings(mock_settings)
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post(
+                "/admin/claims/1/decline",
+                json={"resolution_note": "Domain didn't match the Fienta listing."},
+                auth=("admin", ""),
+            )
+
+    assert resp.status_code == http.HTTPStatus.OK
+    declined_mock.assert_awaited_once_with(
+        "organizer@example.com", "Jazz Night", "Domain didn't match the Fienta listing.", "et"
+    )
+    granted_mock.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -395,6 +466,40 @@ async def test_revoke_claim_deletes_row_and_clears_pins(admin_app, make_db_ctx, 
     admin_action_records = [r for r in caplog.records if getattr(r, "event", None) == "admin_action"]
     assert admin_action_records[0].action == ADMIN_ACTION_REVOKE_CLAIM
     assert admin_action_records[0].target == 1
+
+
+@pytest.mark.asyncio
+async def test_revoke_claim_sends_no_resolution_email(admin_app, make_db_ctx, mock_db):
+    """#421 acceptance criteria: revoke is a distinct action from decline —
+    it never fires the decline (or any other claim-resolution) email."""
+    app = admin_app
+    claim = _make_claim(claim_id=1, status=CLAIM_STATUS_APPROVED, kind=CLAIM_KIND_PUBLISHER)
+    event = _make_event(event_id=42, pinned_fields=["title"])
+
+    db = mock_db
+    db.get = AsyncMock(return_value=claim)
+    db.delete = AsyncMock()
+    declined_mock = AsyncMock()
+    granted_mock = AsyncMock()
+
+    with (
+        patch("app.routers.admin.settings") as mock_settings,
+        patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
+        patch("app.routers.admin.representative_event_for_claim", new=AsyncMock(return_value=event)),
+        patch("app.routers.admin.send_claim_declined_email", new=declined_mock),
+        patch("app.routers.admin.send_claim_granted_email", new=granted_mock),
+    ):
+        _admin_settings(mock_settings)
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post(
+                "/admin/claims/1/revoke",
+                json={"resolution_note": "Escalated from a content report."},
+                auth=("admin", ""),
+            )
+
+    assert resp.status_code == http.HTTPStatus.OK
+    declined_mock.assert_not_awaited()
+    granted_mock.assert_not_awaited()
 
 
 @pytest.mark.asyncio

@@ -3,6 +3,7 @@ wiring #412's standalone verification engine into real `Claim` rows. See
 CONTEXT.md's Event Claiming glossary and docs/organizer-portal.md.
 """
 
+import asyncio
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -29,6 +30,7 @@ from app.constants import (
     CLAIM_DISCOVERY_STATUS_CLAIMED,
     CLAIM_DISCOVERY_STATUS_PENDING,
     CLAIM_DISCOVERY_STATUS_UNCLAIMED,
+    CLAIM_EMAIL_SEND_CONCURRENCY,
     CLAIM_EXPIRY_DAYS,
     CLAIM_KIND_PUBLISHER,
     CLAIM_KIND_SERIES,
@@ -44,16 +46,28 @@ from app.constants import (
     ERROR_CLAIM_NOT_PENDING,
     ERROR_DAILY_CLAIM_LIMIT,
     ERROR_EVENT_NOT_FOUND,
+    LOG_EVENT_EMAIL_SEND_FAILED,
     ORGANIZER_DAILY_CLAIM_CAP,
+    RESEND_TIMEOUT_SECONDS,
     SOURCE_SLUG_ESTONIA_CONCERT_HALL,
     SOURCE_SLUG_FIENTA,
     SOURCE_SLUG_KUMU,
     SOURCE_SLUG_PILETILEVI,
     TALLINN_TZ,
 )
+from app.email.claim_resolution import (
+    send_claim_expired_email,
+    send_claim_granted_email,
+    send_claim_self_cancelled_email,
+)
 from app.ingestion.http_client import http_get
 from app.models.models import Claim, Event, EventSource, Organizer
-from app.routers.utils import event_series_key, resolve_venue_name, serialize_event_series_key
+from app.routers.utils import (
+    bulk_resolve_publisher_events,
+    event_series_key,
+    resolve_venue_name,
+    serialize_event_series_key,
+)
 
 log = logging.getLogger(__name__)
 
@@ -274,10 +288,23 @@ async def create_claim(
     )
     claim.verification_mechanism = result.mechanism
     claim.verification_domain = result.domain
-    if result.outcome == CLAIM_VERIFICATION_OUTCOME_AUTO_GRANT:
+    auto_granted = result.outcome == CLAIM_VERIFICATION_OUTCOME_AUTO_GRANT
+    if auto_granted:
         claim.status = CLAIM_STATUS_APPROVED
         claim.resolved_at = datetime.now(timezone.utc)
     await db.commit()
+    if auto_granted:
+        try:
+            await send_claim_granted_email(
+                organizer.email, event.title_orig, "", organizer.locale, http_client=client
+            )
+        except Exception:
+            log.error(
+                "Failed to send claim-granted email (claim_id=%s)",
+                claim.id,
+                exc_info=True,
+                extra={"event": LOG_EVENT_EMAIL_SEND_FAILED},
+            )
     return claim
 
 
@@ -313,6 +340,24 @@ async def cancel_claim(db: AsyncSession, organizer: Organizer, claim_id: int) ->
     claim.status = CLAIM_STATUS_CANCELLED
     claim.resolved_at = datetime.now(timezone.utc)
     await db.commit()
+
+    # Local import: app.claims.pinning imports representative_event_source
+    # from this module, so a module-level import here would deadlock the
+    # two modules' load order.
+    from app.claims.pinning import representative_event_for_claim
+
+    try:
+        event = await representative_event_for_claim(db, claim)
+        await send_claim_self_cancelled_email(
+            organizer.email, event.title_orig if event else None, organizer.locale
+        )
+    except Exception:
+        log.error(
+            "Failed to send claim-self-cancelled email (claim_id=%s)",
+            claim_id,
+            exc_info=True,
+            extra={"event": LOG_EVENT_EMAIL_SEND_FAILED},
+        )
     return claim
 
 
@@ -347,19 +392,108 @@ async def recheck_claim(
     claim.verification_mechanism = result.mechanism
     claim.verification_domain = result.domain
     claim.last_checked_at = datetime.now(timezone.utc)
-    if result.outcome == CLAIM_VERIFICATION_OUTCOME_AUTO_GRANT:
+    auto_granted = result.outcome == CLAIM_VERIFICATION_OUTCOME_AUTO_GRANT
+    if auto_granted:
         claim.status = CLAIM_STATUS_APPROVED
         claim.resolved_at = claim.last_checked_at
     await db.commit()
+    if auto_granted:
+        try:
+            await send_claim_granted_email(
+                organizer.email, event.title_orig if event else None, "", organizer.locale,
+                http_client=client,
+            )
+        except Exception:
+            log.error(
+                "Failed to send claim-granted email (claim_id=%s)",
+                claim.id,
+                exc_info=True,
+                extra={"event": LOG_EVENT_EMAIL_SEND_FAILED},
+            )
     return claim
 
 
+async def _send_claim_expiry_emails(db: AsyncSession, expired: list[Claim]) -> None:
+    """One expiry email per row in ``expired`` (#421) — bulk-loads organizers
+    and Publisher-kind claims' representative event in two fixed queries
+    (bulk_resolve_publisher_events, shared with admin_list_claims), rather
+    than a per-row SELECT. A Series-kind claim gets no title resolved here
+    for the same cost reason admin_list_claims skips it for lists — the
+    email falls back to generic wording (app.email.claim_resolution._target_label).
+    Called after the sweep's own commit (mirrors send_report_resolution_emails).
+    The whole body is exception-guarded: the expiry status transition is
+    already durable at this point, so a bulk-load failure here must not
+    surface as a failed sweep (which would make expire_stale_claims re-raise
+    into _scheduled's failure log while masking that the DB mutation
+    actually succeeded) — it only costs this run's notifications, which the
+    next sweep cannot retry since these rows are no longer PENDING."""
+    if not expired:
+        return
+
+    try:
+        organizer_ids = {claim.organizer_id for claim in expired}
+        organizers = (
+            await db.scalars(select(Organizer).where(Organizer.id.in_(organizer_ids)))
+        ).all()
+        organizers_by_id = {o.id: o for o in organizers}
+
+        publisher_ids = {
+            claim.publisher_id
+            for claim in expired
+            if claim.kind == CLAIM_KIND_PUBLISHER and claim.publisher_id is not None
+        }
+        event_by_publisher = await bulk_resolve_publisher_events(db, publisher_ids)
+    except Exception:
+        log.error(
+            "Failed to bulk-load claim-expiry email recipients (%d expired claims)",
+            len(expired),
+            exc_info=True,
+            extra={"event": LOG_EVENT_EMAIL_SEND_FAILED},
+        )
+        return
+
+    semaphore = asyncio.Semaphore(CLAIM_EMAIL_SEND_CONCURRENCY)
+
+    async def _send_one(claim: Claim, http_client: httpx.AsyncClient) -> None:
+        organizer = organizers_by_id.get(claim.organizer_id)
+        if organizer is None:
+            return
+        event = (
+            event_by_publisher.get(claim.publisher_id)
+            if claim.publisher_id is not None
+            else None
+        )
+        async with semaphore:
+            try:
+                await send_claim_expired_email(
+                    organizer.email,
+                    event.title_orig if event else None,
+                    organizer.locale,
+                    http_client=http_client,
+                )
+            except Exception:
+                log.error(
+                    "Failed to send claim-expired email (claim_id=%s)",
+                    claim.id,
+                    exc_info=True,
+                    extra={"event": LOG_EVENT_EMAIL_SEND_FAILED},
+                )
+
+    async with httpx.AsyncClient(timeout=RESEND_TIMEOUT_SECONDS) as http_client:
+        await asyncio.gather(
+            *(_send_one(claim, http_client) for claim in expired),
+            return_exceptions=True,
+        )
+
+
 async def expire_stale_claims(db: AsyncSession) -> dict:
-    """Sweep job (#413): expire a pending automated-mechanism claim that has
-    gone CLAIM_EXPIRY_DAYS without a recheck. Admin-review claims (Series,
-    and any Publisher claim that fell back to it) never expire on their own —
-    excluded by the verification_mechanism filter, not just the status one.
-    Caller commits (mirrors cleanup_stale_data / run_in_session)."""
+    """Sweep job (#413/#421): expire a pending automated-mechanism claim that
+    has gone CLAIM_EXPIRY_DAYS without a recheck, then notify each claimant.
+    Admin-review claims (Series, and any Publisher claim that fell back to
+    it) never expire on their own — excluded by the verification_mechanism
+    filter, not just the status one. Commits internally (mirrors
+    build_daily_feeds) so the expiry emails below reflect only durably
+    expired rows — app/main.py wires this job with commit=False."""
     cutoff = datetime.now(timezone.utc) - timedelta(days=CLAIM_EXPIRY_DAYS)
     result = await db.execute(
         update(Claim)
@@ -369,7 +503,9 @@ async def expire_stale_claims(db: AsyncSession) -> dict:
             Claim.last_checked_at < cutoff,
         )
         .values(status=CLAIM_STATUS_EXPIRED, resolved_at=func.now())
-        .returning(Claim.id)
+        .returning(Claim)
     )
-    expired_ids = result.scalars().all()
-    return {"expired": len(expired_ids)}
+    expired = list(result.scalars().all())
+    await db.commit()
+    await _send_claim_expiry_emails(db, expired)
+    return {"expired": len(expired)}

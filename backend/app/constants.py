@@ -519,6 +519,11 @@ VALID_CLAIM_VERIFICATION_OUTCOMES = frozenset(
 # (#413) — resets on every POST /organizer/claims/{id}/recheck.
 CLAIM_EXPIRY_DAYS = 7
 
+# Bounded concurrency for expire_stale_claims' expiry-notification fan-out
+# (#421) — same rationale as REPORT_EMAIL_SEND_CONCURRENCY (Resend free-tier
+# rate; a large sweep shouldn't serialize dozens of Resend round trips).
+CLAIM_EMAIL_SEND_CONCURRENCY: int = 8
+
 # Claim-discovery status (#414) — computed on read from an event's
 # representative EventSource + any active Claim on its target key, never
 # persisted. Feeds the public event page's "is this your event?" CTA and the
