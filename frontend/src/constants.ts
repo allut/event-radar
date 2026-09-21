@@ -508,6 +508,7 @@ export const QUERY_KEYS = {
   adminCounts: 'adminCounts',
   adminReports: 'adminReports',
   adminSubmissions: 'adminSubmissions',
+  adminClaims: 'adminClaims',
   adminDedupGroups: 'adminDedupGroups',
   adminEventDetail: 'adminEventDetail',
 } as const;
@@ -587,6 +588,7 @@ export const ADMIN_DEDUP_GROUPS_PAGE_SIZE = 50;
 // ADMIN_REPORTS_QUEUE_PAGE_SIZE / ADMIN_REVIEW_QUEUE_PAGE_SIZE) ────────────
 export const ADMIN_REPORTS_QUEUE_PAGE_SIZE = 50;
 export const ADMIN_REVIEW_QUEUE_PAGE_SIZE = 50;
+export const ADMIN_CLAIMS_QUEUE_PAGE_SIZE = 50;
 
 // ─── Organizer submission ────────────────────────────────────────────────────
 // ORGANIZER_IMAGE_ALLOWED_MIME (re-exported above) is sourced from
@@ -806,6 +808,7 @@ export const ROUTES = {
   adminDashboard: '/admin',
   adminReports: '/admin/reports',
   adminSubmissions: '/admin/submissions',
+  adminClaims: '/admin/claims',
   adminEventDetail: (id: number | string) => `/admin/events/${id}`,
   adminEventDetailPattern: '/admin/events/:id',
   // Path-prefix form of adminEventDetail, for AdminApp's manual pathname
@@ -815,15 +818,15 @@ export const ROUTES = {
   adminDedup: '/admin/dedup',
 } as const;
 
-// The admin console's persistent nav — the 5 clickable screens of the
-// ticket's 7 (the other 2, /admin/login and /admin/events/:id, are reached
-// by URL/click-through, not nav links). Always lists all 5, even before
-// later tickets build the still-stubbed ones (issue #154). No i18n: the
-// console is an internal operator tool, not user-facing product surface.
+// The admin console's persistent nav — the clickable screens (issue #154,
+// Claims added #420); /admin/login and /admin/events/:id are reached by
+// URL/click-through, not nav links. No i18n: the console is an internal
+// operator tool, not user-facing product surface.
 export const ADMIN_NAV_ITEMS = [
   { route: ROUTES.adminDashboard, label: 'Dashboard' },
   { route: ROUTES.adminReports, label: 'Reports' },
   { route: ROUTES.adminSubmissions, label: 'Submissions' },
+  { route: ROUTES.adminClaims, label: 'Claims' },
   { route: ROUTES.adminPipeline, label: 'Pipeline' },
   { route: ROUTES.adminDedup, label: 'Dedup groups' },
 ] as const;
@@ -980,6 +983,10 @@ export const API = {
   adminDedupGroups: '/admin/dedup/groups',
   adminSubmissionApprove: (id: number) => `/admin/submissions/${id}/approve`,
   adminSubmissionRetract: (id: number) => `/admin/submissions/${id}/retract`,
+  adminClaims: '/admin/claims',
+  adminClaimGrant: (id: number) => `/admin/claims/${id}/grant`,
+  adminClaimDecline: (id: number) => `/admin/claims/${id}/decline`,
+  adminClaimRevoke: (id: number) => `/admin/claims/${id}/revoke`,
   adminEventDetail: (id: number | string) => `/admin/events/${id}`,
   adminIngestAll: '/admin/ingest',
   adminIngestSource: (slug: string) => `/admin/ingest/${slug}`,

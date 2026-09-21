@@ -39,34 +39,18 @@
 }
 
 .tabStrip {
-  display: flex;
-  gap: var(--space-1);
-  border-bottom: var(--border-w-hair) solid var(--border);
-  margin-bottom: var(--space-4);
-  overflow-x: auto;
+  composes: queueTabStrip from '../../components/shared/AdminQueue.module.css';
 }
 
-.tab, .tabActive {
-  background: none;
-  border: none;
-  border-bottom: var(--border-w-ring) solid transparent;
-  color: var(--text-muted);
-  font-size: var(--fs-sm);
-  padding: var(--space-2) var(--space-3);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  white-space: nowrap;
+.tab {
+  composes: queueTab from '../../components/shared/AdminQueue.module.css';
 }
-.tabActive { color: var(--accent-light); border-bottom-color: var(--accent); }
+.tabActive {
+  composes: queueTabActive from '../../components/shared/AdminQueue.module.css';
+}
 
 .tabCount {
-  font-size: var(--fs-2xs);
-  background: var(--bg-raised);
-  border-radius: var(--radius-pill);
-  padding: 0 var(--space-1);
-  color: var(--text-soft);
+  composes: queueTabCount from '../../components/shared/AdminQueue.module.css';
 }
 
 .tabPanel { min-height: var(--admin-tab-panel-min-height); }

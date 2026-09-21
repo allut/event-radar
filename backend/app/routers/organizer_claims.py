@@ -35,15 +35,12 @@ from app.claims.lifecycle import (
 from app.constants import (
     CLAIM_ACTIVE_STATUSES,
     CLAIM_AUTOMATED_VERIFICATION_MECHANISMS,
-    CLAIM_DNS_TXT_RECORD_LABEL,
     CLAIM_KIND_PUBLISHER,
     CLAIM_SEARCH_CANDIDATE_MULTIPLIER,
     CLAIM_SEARCH_QUERY_MIN_LENGTH,
     CLAIM_SEARCH_RESULT_LIMIT,
     CLAIM_STATUS_PENDING,
     CLAIM_SUGGESTIONS_LIMIT,
-    CLAIM_VERIFICATION_MECHANISM_DNS_TXT,
-    CLAIM_VERIFICATION_MECHANISM_PILETILEVI_PROMOTER,
     DETAIL_MAGIC_LINK_SENT,
     ERROR_CLAIM_SEARCH_QUERY_TOO_SHORT,
     ERROR_MAGIC_LINK_CONSUMED,
@@ -69,6 +66,7 @@ from app.models.models import Claim, Event, EventSource, Organizer, OrganizerMag
 from app.rate_limit import limiter
 from app.routers.organizer_auth import get_current_organizer
 from app.routers.utils import (
+    claim_dns_record_name,
     escape_ilike_pattern,
     event_not_ended_filter,
     get_or_create_organizer,
@@ -97,19 +95,14 @@ class ClaimLinkVerifyBody(BaseModel):
     token: str
 
 
-_DNS_MECHANISMS = frozenset(
-    {CLAIM_VERIFICATION_MECHANISM_DNS_TXT, CLAIM_VERIFICATION_MECHANISM_PILETILEVI_PROMOTER}
-)
-
-
 def _serialize(claim: Claim) -> dict:
     """#415's pending screen picks its variant off `verification_mechanism`
     and never has to know CLAIM_DNS_TXT_RECORD_LABEL itself — the DNS
     instructions are pre-assembled here from `verification_domain` (#412's
     resolved KUMU/ECH/Piletilevi-promoter domain, persisted at verify time)."""
-    dns_record_name = None
-    if claim.verification_mechanism in _DNS_MECHANISMS and claim.verification_domain:
-        dns_record_name = f"{CLAIM_DNS_TXT_RECORD_LABEL}.{claim.verification_domain}"
+    dns_record_name = claim_dns_record_name(
+        claim.verification_mechanism, claim.verification_domain
+    )
     return {
         "id": claim.id,
         "kind": claim.kind,

@@ -1,0 +1,92 @@
+.head {
+  margin-bottom: var(--space-4);
+}
+
+.eyebrow {
+  composes: adminEyebrow from '../../components/shared/Page.module.css';
+}
+
+.title {
+  composes: adminPageTitle from '../../components/shared/Page.module.css';
+}
+
+.subtitle {
+  composes: queueSubtitle from '../../components/shared/AdminQueue.module.css';
+}
+
+.rowTitle {
+  composes: queueRowTitle from '../../components/shared/AdminQueue.module.css';
+}
+
+.rowMeta {
+  composes: queueRowMeta from '../../components/shared/AdminQueue.module.css';
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.mechBadge {
+  composes: chip from '../../components/shared/Chip.module.css';
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-snug);
+}
+
+.detailTitle {
+  composes: queueDetailTitle from '../../components/shared/AdminQueue.module.css';
+}
+
+.detailMeta {
+  composes: queueDetailMeta from '../../components/shared/AdminQueue.module.css';
+}
+
+.evidence {
+  composes: card cardAccentTop from '../../components/shared/Card.module.css';
+  padding: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.evidenceLabel {
+  font-size: var(--fs-2xs);
+  text-transform: uppercase;
+  letter-spacing: var(--eyebrow-tracking);
+  color: var(--text-dim);
+  margin: 0 0 var(--space-2);
+}
+
+.evidenceRow {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  font-size: var(--fs-sm);
+  padding: var(--space-1) 0;
+  border-bottom: var(--border-w-hair) solid var(--border-subtle);
+}
+.evidenceRow:last-child {
+  border-bottom: none;
+}
+
+.evidenceKey {
+  color: var(--text-muted);
+}
+
+.evidenceValue {
+  font-family: var(--font-mono);
+  color: var(--text);
+  word-break: break-all;
+}
+
+.warnCallout {
+  composes: card cardDangerTop from '../../components/shared/Card.module.css';
+  padding: var(--space-3);
+  font-size: var(--fs-xs);
+  color: var(--text-soft);
+  margin-bottom: var(--space-4);
+}
+.warnCallout strong {
+  color: var(--danger);
+}
+
+.resolvedPanel {
+  composes: queueResolvedPanel from '../../components/shared/AdminQueue.module.css';
+}

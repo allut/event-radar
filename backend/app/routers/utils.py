@@ -21,6 +21,9 @@ from app.auth.tokens import oauth_state_ttl_seconds, verify_session_token
 from app.config import settings
 from app.constants import (
     APP_ENV_DEVELOPMENT,
+    CLAIM_DNS_TXT_RECORD_LABEL,
+    CLAIM_VERIFICATION_MECHANISM_DNS_TXT,
+    CLAIM_VERIFICATION_MECHANISM_PILETILEVI_PROMOTER,
     DEFAULT_USER_LOCALE,
     EMAIL_MASK_VISIBLE_CHARS,
     ERROR_ADMIN_JOB_ALREADY_RUNNING,
@@ -1150,3 +1153,18 @@ def record_unverified_account_creation() -> None:
     for stale_day in [d for d in _unverified_account_creation_counts if d != today]:
         del _unverified_account_creation_counts[stale_day]
         _unverified_account_budget_alerted.discard(stale_day)
+
+
+CLAIM_DNS_VERIFICATION_MECHANISMS = frozenset(
+    {CLAIM_VERIFICATION_MECHANISM_DNS_TXT, CLAIM_VERIFICATION_MECHANISM_PILETILEVI_PROMOTER}
+)
+
+
+def claim_dns_record_name(mechanism: str | None, domain: str | None) -> str | None:
+    """The TXT record name a DNS-TXT/Piletilevi-promoter claim's organizer is
+    told to add (#412/#413) — shared by the organizer-facing pending screen
+    (organizer_claims.py) and the admin claims queue (admin.py, #420) so the
+    two never disagree on the record name shown for the same claim."""
+    if mechanism in CLAIM_DNS_VERIFICATION_MECHANISMS and domain:
+        return f"{CLAIM_DNS_TXT_RECORD_LABEL}.{domain}"
+    return None

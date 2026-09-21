@@ -1063,6 +1063,11 @@ LOCALE_RU = "ru"
 ADMIN_REVIEW_QUEUE_PAGE_SIZE: int = 50
 ADMIN_REVIEW_QUEUE_MAX_PAGE_SIZE: int = 500
 
+# Admin claims-queue pagination (routers/admin.py GET /admin/claims, issue #420) —
+# same sizing rationale as ADMIN_REVIEW_QUEUE_PAGE_SIZE.
+ADMIN_CLAIMS_QUEUE_PAGE_SIZE: int = 50
+ADMIN_CLAIMS_QUEUE_MAX_PAGE_SIZE: int = 500
+
 # Per-email magic-link resend cooldown (routers/auth.py::_recent_unused_link_exists) —
 # prevents Resend quota exhaustion from rapid repeat requests for the same address.
 MAGIC_LINK_RESEND_COOLDOWN_SECONDS = 120
@@ -1786,6 +1791,10 @@ ADMIN_ACTION_RESOLVE_REPORTS = "resolve_reports"
 ADMIN_ACTION_TAKEDOWN_REPORTED_EVENT = "takedown_reported_event"
 ADMIN_ACTION_APPROVE_SUBMISSION = "approve_submission"
 ADMIN_ACTION_RETRACT_SUBMISSION = "retract_submission"
+# `action` field values for /admin/claims (issue #420).
+ADMIN_ACTION_GRANT_CLAIM = "grant_claim"
+ADMIN_ACTION_DECLINE_CLAIM = "decline_claim"
+ADMIN_ACTION_REVOKE_CLAIM = "revoke_claim"
 # `action` field values for the /admin/pipeline job triggers (issue #159).
 ADMIN_ACTION_INGEST = "ingest"
 ADMIN_ACTION_INGEST_SOURCE = "ingest_source"
@@ -1995,6 +2004,12 @@ ERROR_CLAIM_ALREADY_EXISTS = (
     "This publisher or series already has a pending or approved claim."
 )
 ERROR_CLAIM_NOT_PENDING = "Only a pending claim can be cancelled or rechecked."
+ERROR_CLAIM_ALREADY_RESOLVED = (
+    "This claim has already been decided — only a pending claim can be"
+    " granted or declined."
+)
+ERROR_CLAIM_NOT_APPROVED = "Only a granted claim can be revoked."
+ERROR_CLAIM_QUEUE_INVALID_STATUS = "status must be 'pending' or 'approved'."
 ERROR_DAILY_CLAIM_LIMIT = "Daily claim limit reached. Try again tomorrow."
 ERROR_CLAIM_SEARCH_QUERY_TOO_SHORT = "Search query is too short."
 ERROR_CLAIM_NOT_GRANTED = "This claim is not yet granted — editing stays locked until then."

@@ -6,7 +6,7 @@ import secrets
 import time
 from collections import OrderedDict
 from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
@@ -30,11 +30,14 @@ from app.constants import (
     ADMIN_ACTION_BUILD_FEEDS,
     ADMIN_ACTION_CLEANUP,
     ADMIN_ACTION_CLASSIFY,
+    ADMIN_ACTION_DECLINE_CLAIM,
     ADMIN_ACTION_DEDUP,
     ADMIN_ACTION_GEOCODE,
+    ADMIN_ACTION_GRANT_CLAIM,
     ADMIN_ACTION_INGEST,
     ADMIN_ACTION_INGEST_SOURCE,
     ADMIN_ACTION_PIPELINE_RUN,
+    ADMIN_ACTION_REVOKE_CLAIM,
     PIPELINE_RUN_OVERLAPPING_LOCK_KEYS,
     ADMIN_ACTION_PUBLISH,
     ADMIN_ACTION_REFETCH,
@@ -46,6 +49,8 @@ from app.constants import (
     ADMIN_AUTH_FAILURES_MAX_ENTRIES,
     ADMIN_AUTH_LOCKOUT_SECONDS,
     ADMIN_AUTH_MAX_FAILURES,
+    ADMIN_CLAIMS_QUEUE_MAX_PAGE_SIZE,
+    ADMIN_CLAIMS_QUEUE_PAGE_SIZE,
     ADMIN_DEDUP_GROUPS_MAX_PAGE_SIZE,
     ADMIN_DEDUP_GROUPS_PAGE_SIZE,
     ADMIN_EVENT_INSPECTOR_RAW_EVENTS_LIMIT,
@@ -54,10 +59,19 @@ from app.constants import (
     ADMIN_SESSION_COOKIE_NAME,
     ADMIN_USERNAME_DEFAULT,
     APP_ENV_DEVELOPMENT,
+    CLAIM_KIND_PUBLISHER,
+    CLAIM_STATUS_APPROVED,
+    CLAIM_STATUS_PENDING,
+    CLAIM_STATUS_REVOKED,
+    CLAIM_VERIFICATION_MECHANISM_FIENTA_TOKEN,
     DEFAULT_USER_LOCALE,
     ERROR_ADMIN_DISABLED,
     ERROR_ADMIN_INCORRECT_CREDENTIALS,
     ERROR_ADMIN_LOCKOUT,
+    ERROR_CLAIM_ALREADY_RESOLVED,
+    ERROR_CLAIM_NOT_APPROVED,
+    ERROR_CLAIM_NOT_FOUND,
+    ERROR_CLAIM_QUEUE_INVALID_STATUS,
     ERROR_MISSING_SESSION_COOKIE,
     ERROR_SESSION_INVALID,
     ERROR_SUBMISSION_NOT_FOUND,
@@ -79,6 +93,7 @@ from app.constants import (
     TALLINN_TZ,
     VALID_LOCALES,
 )
+from app.claims.pinning import representative_event_for_claim
 from app.db import AsyncSessionLocal
 from app.email.digest import send_daily_digests
 from app.ingestion.jobs import (
@@ -93,6 +108,7 @@ from app.ingestion.jobs import (
 from app.ingestion.organizer_sync import sync_fienta_organizers
 from app.ingestion.registry import ADAPTER_REGISTRY
 from app.models.models import (
+    Claim,
     DailyFeed,
     Event,
     EventReport,
@@ -108,6 +124,7 @@ from app.routers.utils import (
     acquire_admin_job_lock,
     cancel_event_and_resolve_reports,
     canonical_event_filter,
+    claim_dns_record_name,
     log_admin_action,
     ndjson_line,
     release_admin_job_lock,
@@ -678,6 +695,260 @@ async def admin_approve_submission(
             return result
 
     return await run_admin_job("Approve submission", _run())
+
+
+# ---------------------------------------------------------------------------
+# Claims queue (#420): grant/decline an admin-review-routed claim, revoke an
+# already-granted one. Distinct from /admin/submissions (organizer-trust
+# review) and /admin/reports (content moderation) — a claim's grant/decline/
+# revoke is its own decision shape. See CONTEXT.md's Event Claiming glossary
+# and app/claims/lifecycle.py for the organizer-facing create/cancel/recheck
+# endpoints this complements.
+# ---------------------------------------------------------------------------
+
+def _serialize_admin_claim(claim: Claim, event: Event | None) -> dict:
+    """Evidence shown varies by mechanism, all derived from columns already
+    on the row — no live re-verification: DNS-TXT/Piletilevi-promoter claims
+    get the expected TXT record (claim_dns_record_name — shared with the
+    organizer-facing pending screen's identical serializer), Fienta claims
+    get the round-trip token, Series claims (and any Publisher claim that
+    fell back to admin_review) get claimant identity only.
+    `counts_toward_trust` mirrors #412's is_trusted_claimant() rule (any
+    approved claim that isn't a Fienta-sourced Publisher claim) — a per-row
+    hint for the revoke warning, not a query of the organizer's other
+    claims, so it can overstate "this is their only qualifying claim" when
+    they hold more than one."""
+    dns_record_name = claim_dns_record_name(
+        claim.verification_mechanism, claim.verification_domain
+    )
+    return {
+        "id": claim.id,
+        "kind": claim.kind,
+        "status": claim.status,
+        "organizer": {
+            "id": claim.organizer.id,
+            "email": claim.organizer.email,
+            "name": claim.organizer.name,
+        },
+        "publisher": (
+            {"id": claim.publisher.id, "name": claim.publisher.name}
+            if claim.publisher is not None
+            else None
+        ),
+        "event_series_key": claim.event_series_key,
+        "verification_mechanism": claim.verification_mechanism,
+        "verification_domain": claim.verification_domain,
+        "dns_record_name": dns_record_name,
+        "proof_token": claim.proof_token,
+        "event_id": event.id if event is not None else None,
+        "event_title": event.title_orig if event is not None else None,
+        "counts_toward_trust": (
+            claim.verification_mechanism != CLAIM_VERIFICATION_MECHANISM_FIENTA_TOKEN
+        ),
+        "created_at": claim.created_at.isoformat(),
+        "resolved_at": claim.resolved_at.isoformat() if claim.resolved_at else None,
+    }
+
+
+@router.get("/claims", dependencies=[Depends(get_current_admin)])
+@limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
+async def admin_list_claims(
+    request: Request,
+    status_filter: str = Query(CLAIM_STATUS_PENDING, alias="status"),
+    limit: int = Query(
+        ADMIN_CLAIMS_QUEUE_PAGE_SIZE,
+        ge=PAGINATION_MIN_LIMIT,
+        le=ADMIN_CLAIMS_QUEUE_MAX_PAGE_SIZE,
+    ),
+    offset: int = Query(
+        PAGINATION_MIN_OFFSET, ge=PAGINATION_MIN_OFFSET, le=PAGINATION_MAX_OFFSET
+    ),
+) -> dict:
+    """The Pending review / Granted tabs. Event evidence for the "Open full
+    details" link is only resolved for Publisher-kind claims, bulk-loaded in
+    two fixed queries regardless of page size (mirrors admin_list_reports'
+    own bulk `.in_()` pattern) — a Series claim's event is a bounded scan
+    (representative_event_for_claim), too expensive to run per row on a list
+    endpoint, so event_id/event_title stay null for those and the frontend
+    hides the link."""
+    if status_filter not in (CLAIM_STATUS_PENDING, CLAIM_STATUS_APPROVED):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=ERROR_CLAIM_QUEUE_INVALID_STATUS,
+        )
+
+    async with AsyncSessionLocal() as db:
+        queue_filter = (Claim.status == status_filter,)
+        total: int | None = None
+        if offset == 0:
+            total = (
+                await db.scalar(select(func.count(Claim.id)).where(*queue_filter))
+            ) or 0
+
+        order_col = Claim.created_at if status_filter == CLAIM_STATUS_PENDING else Claim.resolved_at
+        stmt = (
+            select(Claim)
+            .options(selectinload(Claim.organizer), selectinload(Claim.publisher))
+            .where(*queue_filter)
+            .order_by(order_col.desc())
+            .limit(limit + 1)
+            .offset(offset)
+        )
+        claims = list((await db.scalars(stmt)).all())
+        has_more = len(claims) > limit
+        claims = claims[:limit]
+
+        # Bulk-load the representative event per Publisher-kind claim in this
+        # page — two fixed queries total, never one per row.
+        publisher_ids = {
+            claim.publisher_id
+            for claim in claims
+            if claim.kind == CLAIM_KIND_PUBLISHER and claim.publisher_id is not None
+        }
+        event_id_by_publisher: dict[int, int] = {}
+        if publisher_ids:
+            es_rows = (
+                await db.scalars(
+                    select(EventSource)
+                    .where(EventSource.publisher_id.in_(publisher_ids))
+                    .order_by(EventSource.publisher_id, EventSource.id.desc())
+                )
+            ).all()
+            # First row per publisher_id wins — rows arrive id-desc within
+            # each publisher_id group, i.e. freshest first (mirrors
+            # representative_event_source's own single-row ordering).
+            for es in es_rows:
+                if es.publisher_id is not None:
+                    event_id_by_publisher.setdefault(es.publisher_id, es.event_id)
+
+        events_by_id: dict[int, Event] = {}
+        event_ids = set(event_id_by_publisher.values())
+        if event_ids:
+            events = (
+                await db.scalars(select(Event).where(Event.id.in_(event_ids)))
+            ).all()
+            events_by_id = {e.id: e for e in events}
+
+        rows = []
+        for claim in claims:
+            event = None
+            if claim.publisher_id in event_id_by_publisher:
+                event = events_by_id.get(event_id_by_publisher[claim.publisher_id])
+            rows.append(_serialize_admin_claim(claim, event))
+
+    return {
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+        "has_more": has_more,
+        "claims": rows,
+    }
+
+
+async def _claim_or_404(db: AsyncSession, claim_id: int) -> Claim:
+    claim = await db.get(Claim, claim_id)
+    if claim is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=ERROR_CLAIM_NOT_FOUND)
+    return claim
+
+
+@router.post("/claims/{claim_id}/grant", dependencies=[Depends(get_current_admin)])
+@limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
+async def admin_grant_claim(claim_id: int, body: _ResolutionBody, request: Request) -> dict:
+    """Manually approve a pending claim — available for any pending claim
+    regardless of mechanism, letting an admin override an inconclusive or
+    failed automated check (e.g. a DNS-TXT lookup that hasn't propagated
+    yet) as well as decide a genuine admin_review (Series) claim."""
+    note = _validated_resolution_note(body)
+
+    async def _run() -> dict:
+        async with AsyncSessionLocal() as db:
+            claim = await _claim_or_404(db, claim_id)
+            if claim.status != CLAIM_STATUS_PENDING:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=ERROR_CLAIM_ALREADY_RESOLVED,
+                )
+            claim.status = CLAIM_STATUS_APPROVED
+            claim.resolved_at = datetime.now(timezone.utc)
+            result = {"id": claim.id, "status": claim.status, "note": note}
+            emit_admin_log = log_admin_action(db, ADMIN_ACTION_GRANT_CLAIM, claim_id, result)
+            await db.commit()
+            emit_admin_log()
+            return result
+
+    return await run_admin_job("Grant claim", _run())
+
+
+@router.post("/claims/{claim_id}/decline", dependencies=[Depends(get_current_admin)])
+@limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
+async def admin_decline_claim(claim_id: int, body: _ResolutionBody, request: Request) -> dict:
+    """Decline a pending claim — frees its Publisher/Series key immediately
+    (CLAIM_ACTIVE_STATUSES excludes revoked, same as a self-cancel). Unlike
+    POST .../revoke this never touches Event.pinned_fields: a pending claim
+    was never granted, so nothing was ever pinned against it.
+
+    TODO(#421): send the claimant a decline notification email once that
+    ticket lands — the acceptance criteria explicitly allow this to ship
+    stubbed if #421 lands after this one, and there's no existing "email not
+    built yet" stub pattern in app/email/ worth inventing dead code for."""
+    note = _validated_resolution_note(body)
+
+    async def _run() -> dict:
+        async with AsyncSessionLocal() as db:
+            claim = await _claim_or_404(db, claim_id)
+            if claim.status != CLAIM_STATUS_PENDING:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=ERROR_CLAIM_ALREADY_RESOLVED,
+                )
+            claim.status = CLAIM_STATUS_REVOKED
+            claim.resolved_at = datetime.now(timezone.utc)
+            result = {"id": claim.id, "status": claim.status, "note": note}
+            emit_admin_log = log_admin_action(db, ADMIN_ACTION_DECLINE_CLAIM, claim_id, result)
+            await db.commit()
+            emit_admin_log()
+            return result
+
+    return await run_admin_job("Decline claim", _run())
+
+
+@router.post("/claims/{claim_id}/revoke", dependencies=[Depends(get_current_admin)])
+@limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
+async def admin_revoke_claim(claim_id: int, body: _ResolutionBody, request: Request) -> dict:
+    """Revoke an already-granted claim (report escalation or discretion) —
+    deletes the row outright (unlike decline, which just flips status) and
+    reverts the event's pinned fields to source authority immediately so the
+    next ingestion/refetch pass can overwrite them again. Trusted-claimant
+    status is derived on read (app/claims/verification.py::is_trusted_claimant
+    scans approved claims), never stored, so deleting this row is the whole
+    strip — no separate bookkeeping needed even when this was the
+    organizer's only non-Fienta-excluded approved claim."""
+    note = _validated_resolution_note(body)
+
+    async def _run() -> dict:
+        async with AsyncSessionLocal() as db:
+            claim = await _claim_or_404(db, claim_id)
+            if claim.status != CLAIM_STATUS_APPROVED:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=ERROR_CLAIM_NOT_APPROVED,
+                )
+            event = await representative_event_for_claim(db, claim)
+            if event is not None and event.pinned_fields:
+                event.pinned_fields = []
+            await db.delete(claim)
+            result = {
+                "id": claim_id,
+                "event_id": event.id if event is not None else None,
+                "note": note,
+            }
+            emit_admin_log = log_admin_action(db, ADMIN_ACTION_REVOKE_CLAIM, claim_id, result)
+            await db.commit()
+            emit_admin_log()
+            return result
+
+    return await run_admin_job("Revoke claim", _run())
 
 
 @router.get("/reports", dependencies=[Depends(get_current_admin)])
@@ -1355,10 +1626,10 @@ async def admin_pipeline_run(
 @router.get("/counts", dependencies=[Depends(_require_admin)])
 @limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
 async def admin_counts(request: Request) -> dict:
-    """Open-reports + pending-submissions counts for the admin console landing
-    screen (issue #154). Mirrors the filters admin_list_reports/
-    admin_list_submissions use for their own totals, so the landing tiles
-    match what those (later-ticket) screens will show."""
+    """Open-reports + pending-submissions + pending-claims counts for the
+    admin console landing screen (issue #154, extended #420). Mirrors the
+    filters admin_list_reports/admin_list_submissions/admin_list_claims use
+    for their own totals, so the landing tiles match what those screens show."""
     async with AsyncSessionLocal() as db:
         open_reports = (
             await db.scalar(
@@ -1379,10 +1650,16 @@ async def admin_counts(request: Request) -> dict:
                 )
             )
         ) or 0
+        pending_claims = (
+            await db.scalar(
+                select(func.count(Claim.id)).where(Claim.status == CLAIM_STATUS_PENDING)
+            )
+        ) or 0
 
     return {
         "open_reports": open_reports,
         "pending_submissions": pending_submissions,
+        "pending_claims": pending_claims,
     }
 
 
