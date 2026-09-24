@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react';
 import { useLocation, useParams } from 'react-router-dom';
 import { useOrganizerLogout } from '../../hooks/useOrganizerLogout';
 import { useLocalLocale } from '../../hooks/useLocalLocale';
@@ -11,6 +12,8 @@ import { categoryOptions, cx, currencySymbol, titleWithBrand } from '../../utils
 import { useSeoMeta } from '../../hooks/useSeoMeta';
 import SeoTags from '../../components/SeoTags';
 import styles from './ClaimEventEdit.module.css';
+
+const RichTextEditor = lazy(() => import('../../components/RichTextEditor'));
 
 function langLabel(code: string): string {
   return LOCALES_BY_CODE.get(code)?.label ?? code.toUpperCase();
@@ -123,7 +126,7 @@ export default function ClaimEventEdit() {
                 {([LOCALE_ET, LOCALE_EN, LOCALE_RU] as const).map((code) => (
                   <div className={styles.fieldCol} key={`description_${code}`}>
                     <div className={styles.fieldHead}>
-                      <label className={styles.label} htmlFor={`description_${code}`}>
+                      <label className={styles.label} id={`description_${code}_label`}>
                         {code === LOCALE_ET
                           ? t('claim_edit_field_description', locale)
                           : ti('organizer_field_lang_suffix', locale, {
@@ -133,22 +136,25 @@ export default function ClaimEventEdit() {
                       </label>
                       {renderPin('description', code)}
                     </div>
-                    <textarea
-                      id={`description_${code}`}
-                      className={styles.textarea}
-                      value={
-                        code === LOCALE_ET
-                          ? form.fields.description
-                          : code === LOCALE_EN
-                            ? form.fields.descriptionEn
-                            : form.fields.descriptionRu
-                      }
-                      onChange={(e) => {
-                        if (code === LOCALE_ET) form.setField('description', 'description', e.target.value);
-                        else if (code === LOCALE_EN) form.setField('descriptionEn', 'description_en', e.target.value);
-                        else form.setField('descriptionRu', 'description_ru', e.target.value);
-                      }}
-                    />
+                    <Suspense fallback={<div className={styles.editorFallback} />}>
+                      <RichTextEditor
+                        id={`description_${code}`}
+                        aria-labelledby={`description_${code}_label`}
+                        value={
+                          code === LOCALE_ET
+                            ? form.fields.description
+                            : code === LOCALE_EN
+                              ? form.fields.descriptionEn
+                              : form.fields.descriptionRu
+                        }
+                        onChange={(html) => {
+                          if (code === LOCALE_ET) form.setField('description', 'description', html);
+                          else if (code === LOCALE_EN) form.setField('descriptionEn', 'description_en', html);
+                          else form.setField('descriptionRu', 'description_ru', html);
+                        }}
+                        locale={locale}
+                      />
+                    </Suspense>
                   </div>
                 ))}
 
@@ -304,7 +310,13 @@ export default function ClaimEventEdit() {
 
             {form.saveError && <p className={styles.error} role="alert">{form.saveError}</p>}
             {form.savedStatus && (
-              <p className={styles.hint} role="status">
+              <p
+                className={cx(
+                  styles.saveStatus,
+                  form.savedStatus === EVENT_STATUS.published && styles.saveStatusSuccess,
+                )}
+                role="status"
+              >
                 {form.savedStatus === EVENT_STATUS.published
                   ? t('claim_edit_save_success', locale)
                   : t('claim_edit_save_needs_fix', locale)}

@@ -58,8 +58,11 @@
   flex-wrap: wrap;
 }
 
-.fieldCol {
+.fieldRow > .fieldCol {
   flex: 1 1 var(--flex-basis-sm);
+}
+
+.fieldCol {
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
@@ -82,8 +85,9 @@
   font-family: inherit;
 }
 
-.textarea {
-  composes: textareaField from '../../components/shared/Field.module.css';
+.editorFallback {
+  min-height: var(--textarea-height-sm);
+  border: var(--border-w-hair) solid var(--border);
 }
 
 .hint {
@@ -97,6 +101,7 @@
   color: var(--accent-light);
   border: var(--border-w-hair) solid var(--accent-border);
   padding: var(--space-0-125) var(--space-2);
+  line-height: normal;
 }
 
 .syncTag {
@@ -107,8 +112,15 @@
 
 .unpinBtn {
   composes: textButton from '../../components/shared/Button.module.css';
-  margin-top: 0;
   font-size: var(--fs-2xs);
+}
+
+/* Doubled selector: see ClaimPending.module.css's .cancelBtn.cancelBtn for
+   the cross-file cascade-order rationale (same textButton base). */
+.unpinBtn.unpinBtn {
+  margin-top: 0;
+  padding: 0;
+  line-height: normal;
 }
 
 .chips {
@@ -184,6 +196,19 @@
 
 .error {
   composes: alert from '../../components/shared/Alert.module.css';
+}
+
+.saveStatus {
+  composes: alert from '../../components/shared/Alert.module.css';
+  margin-top: var(--space-6);
+}
+
+/* Doubled selector: overriding alert's danger colors cross-file needs the
+   same cascade-order guard as the textButton overrides above. */
+.saveStatusSuccess.saveStatusSuccess {
+  color: var(--success);
+  background: var(--success-faint);
+  border-left-color: var(--success);
 }
 
 .spinner {

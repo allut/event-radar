@@ -17,7 +17,7 @@
   --rise-distance: var(--rise-distance-md);
   --rise-duration: var(--anim-rise-xs);
   width: 100%;
-  max-width: var(--card-max-auth);
+  max-width: var(--card-max-claim);
   padding: var(--space-6);
 }
 
@@ -83,11 +83,12 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--space-2);
-  overflow-x: auto;
 }
 
 .codeValue {
-  white-space: nowrap;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
   color: var(--text);
 }
 
@@ -118,7 +119,14 @@
 
 .cancelBtn {
   composes: textButton from '../../components/shared/Button.module.css';
+}
+
+/* Doubled selector: a local override of textButton's margin-top isn't
+   guaranteed to win — cascade order across CSS-module files depends on
+   bundler import order (see Menu.module.css's same-file rationale). */
+.cancelBtn.cancelBtn {
   margin-top: 0;
+  padding: 0;
 }
 
 .hairline {

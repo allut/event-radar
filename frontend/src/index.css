@@ -279,6 +279,7 @@
   --modal-max-width: 480px;       /* Modal panel */
   --card-max-auth: 360px;         /* AuthCard */
   --card-max-auth-inner: 280px;   /* AuthCard inner content */
+  --card-max-claim: 520px;        /* ClaimPending */
   --empty-state-max: 380px;
   --empty-state-max-sm: 340px;
   --onboarding-submit-max: 320px;

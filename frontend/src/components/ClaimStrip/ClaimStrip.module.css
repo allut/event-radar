@@ -56,7 +56,7 @@
   text-transform: uppercase;
   padding: var(--space-0-375) var(--space-0-875);
   border: var(--border-w-hair) solid var(--border-subtle);
-  border-radius: var(--radius-pill);
+  border-radius: 0;
   white-space: nowrap;
 }
 

@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { organizerApi, ApiError } from '../api/client';
 import { API, QUERY_KEYS, LOCALE_EN, LOCALE_ET, LOCALE_RU } from '../constants';
 import { t } from '../i18n';
-import { apiErrorMessage, toIsoOrUndefined, toLocalInput } from '../utils';
+import { apiErrorMessage, hasHtmlContent, toIsoOrUndefined, toLocalInput } from '../utils';
 
 export interface ClaimEventData {
   id: number;
@@ -172,9 +172,9 @@ export function useClaimEventEdit(claimId: number, locale: string): UseClaimEven
       if (touched.has('title')) body.title = fields.title;
       if (touched.has('title_en')) body.title_en = fields.titleEn || null;
       if (touched.has('title_ru')) body.title_ru = fields.titleRu || null;
-      if (touched.has('description')) body.description = fields.description || null;
-      if (touched.has('description_en')) body.description_en = fields.descriptionEn || null;
-      if (touched.has('description_ru')) body.description_ru = fields.descriptionRu || null;
+      if (touched.has('description')) body.description = hasHtmlContent(fields.description) ? fields.description : null;
+      if (touched.has('description_en')) body.description_en = hasHtmlContent(fields.descriptionEn) ? fields.descriptionEn : null;
+      if (touched.has('description_ru')) body.description_ru = hasHtmlContent(fields.descriptionRu) ? fields.descriptionRu : null;
       if (touched.has('starts_at')) body.starts_at = toIsoOrUndefined(fields.startsAt);
       if (touched.has('ends_at')) body.ends_at = fields.endsAt ? toIsoOrUndefined(fields.endsAt) : null;
       if (touched.has('url')) body.url = fields.url || null;

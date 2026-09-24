@@ -161,10 +161,19 @@ describe('ClaimEventEdit (#416)', () => {
     await userEvent.type(urlInput, 'https://fienta.com/e/updated');
     await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
 
-    await waitFor(() =>
-      expect(
-        screen.getByText(/didn't pass our publish checks/),
-      ).toBeInTheDocument(),
-    );
+    const status = await waitFor(() => screen.getByRole('status'));
+    expect(status).toHaveTextContent(/didn't pass our publish checks/);
+  });
+
+  it('mounts a RichTextEditor toolbar for Description on every locale, not a textarea', async () => {
+    mockGet.mockResolvedValueOnce(baseEvent());
+    renderEdit();
+
+    await screen.findByDisplayValue('Sügisõhtu jazziklubis');
+    expect(await screen.findByLabelText(/^description$/i)).toHaveAttribute('contenteditable', 'true');
+    expect(screen.getByLabelText(/description \(en\)/i)).toHaveAttribute('contenteditable', 'true');
+    expect(screen.getByLabelText(/description \(ru\)/i)).toHaveAttribute('contenteditable', 'true');
+    expect(screen.getAllByRole('toolbar', { name: 'Formatting' })).toHaveLength(3);
+    expect(document.querySelector('textarea')).not.toBeInTheDocument();
   });
 });
