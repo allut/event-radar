@@ -190,6 +190,33 @@ class TestPriceReconcile:
         assert event.price_min == 17.0
         assert event.has_free_tier is True
 
+    @pytest.mark.asyncio
+    async def test_kumu_falls_back_to_selector_price_when_no_jsonld_offers(self, mock_db):
+        """KUMU pages (#424) carry no Event/offers JSON-LD at all — the
+        reconciliation must fall back to the selector-based price hint
+        instead of leaving price_min untouched forever."""
+        event = _future_event(
+            url="https://kumu.ekm.ee/en/syndmus/some-event/",
+            price_min=None, price_max=None,
+        )
+        html = (
+            "<html><body>"
+            '<div class="event-header__ticket-price">&euro;16</div>'
+            "</body></html>"
+        )
+        summary = await _run(mock_db, event, html)
+        assert event.price_min == 16.0
+        assert event.price_max == 16.0
+        assert summary["price_changed"] == 1
+
+    @pytest.mark.asyncio
+    async def test_non_kumu_host_with_no_offers_leaves_price_unchanged(self, mock_db):
+        event = _future_event(price_min=None, price_max=None)  # fienta.com host
+        html = "<html><body>no price selector here</body></html>"
+        summary = await _run(mock_db, event, html)
+        assert event.price_min is None
+        assert summary["price_changed"] == 0
+
 
 # --- address <-> coords coupling --------------------------------------------
 

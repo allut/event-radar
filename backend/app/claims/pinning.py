@@ -17,8 +17,9 @@ from app.constants import (
     HTML_PARSER,
     REFETCH_PRICE_TOLERANCE,
 )
-from app.ingestion.http_client import http_get
+from app.ingestion.http_client import http_get, normalized_hostname
 from app.ingestion.jsonld import offers_from_jsonld_items, parse_jsonld_event_items
+from app.ingestion.price_fallback import PRICE_FALLBACK_EXTRACTORS
 from app.models.models import Claim, Event
 from app.routers.utils import (
     event_not_ended_filter,
@@ -97,8 +98,11 @@ async def fetch_fresh_price(client: httpx.AsyncClient, event: Event) -> FreshPri
     the same JSON-LD parse refetch_event_details() uses, but read-only (no
     row mutation): the claim-editing surface only ever writes price fields
     through an explicit organizer action (direct edit or "Accept new
-    price"). Returns None when there's no url to check or the page carries
-    no offers at all, in which case the surface shows no mismatch badge."""
+    price"). Falls back to the same per-host selector-based price extraction
+    (PRICE_FALLBACK_EXTRACTORS, #424) refetch_event_details() uses when the
+    page carries no Event/offers JSON-LD at all. Returns None when there's
+    no url to check or neither path finds a price, in which case the surface
+    shows no mismatch badge."""
     if not event.url:
         return None
     try:
@@ -108,6 +112,10 @@ async def fetch_fresh_price(client: httpx.AsyncClient, event: Event) -> FreshPri
     soup = BeautifulSoup(response.text, HTML_PARSER)
     jsonld_items = parse_jsonld_event_items(soup)
     price_min, price_max, currency, has_free_tier = offers_from_jsonld_items(jsonld_items)
+    if price_min is None and price_max is None and currency is None and not has_free_tier:
+        fallback = PRICE_FALLBACK_EXTRACTORS.get(normalized_hostname(event.url))
+        if fallback is not None:
+            price_min, price_max, currency, has_free_tier = fallback(soup)
     if price_min is None and price_max is None and currency is None and not has_free_tier:
         return None
     return FreshPrice(price_min, price_max, currency, has_free_tier)

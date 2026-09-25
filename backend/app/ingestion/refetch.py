@@ -63,7 +63,12 @@ from app.ingestion.selectors import (
     SUSPECT_LOCALE_TITLE_PREFIXES,
 )
 from app.ingestion.content_filters import content_flags
-from app.ingestion.http_client import host_guard_hook, host_is_allowed, http_get
+from app.ingestion.http_client import (
+    host_guard_hook,
+    host_is_allowed,
+    http_get,
+    normalized_hostname,
+)
 from app.ingestion.jsonld import (
     extract_jsonld_event_text,
     location_from_jsonld_items,
@@ -77,6 +82,7 @@ from app.ingestion.locale_urls import (
 )
 from app.claims.lifecycle import bulk_dormant_pinned_event_ids
 from app.claims.pinning import pin_key
+from app.ingestion.price_fallback import PRICE_FALLBACK_EXTRACTORS
 from app.ingestion.sanitize import sanitize_html
 from app.ingestion.geocode import is_suspect_venue_name
 from app.ingestion.sources.estonia_concert_hall import (
@@ -230,6 +236,7 @@ async def _backfill_localized_text(
     event: Event,
     soup: BeautifulSoup,
     url: str,
+    normalized_host: str,
     summary: dict,
     dormant_event_ids: set[int],
 ) -> None:
@@ -245,8 +252,6 @@ async def _backfill_localized_text(
     gone dormant (#422: a dormant claim's pins stop applying), in which case
     the pin is treated as absent and the source value backfills normally.
     """
-    base_host = urlsplit(url).hostname
-    normalized_host = (base_host or "").removeprefix("www.")
     existing_titles: dict[str, str] = (
         dict(event.title_localized) if event.title_localized else {}
     )
@@ -343,13 +348,20 @@ async def _process_one(
 
     summary["fetched"] += 1
     soup = BeautifulSoup(response.text, HTML_PARSER)
+    normalized_host = normalized_hostname(url)
     jsonld_items = parse_jsonld_event_items(soup)
     location = location_from_jsonld_items(jsonld_items)
     price_min, price_max, currency, has_free_tier = offers_from_jsonld_items(jsonld_items)
+    if price_min is None and price_max is None and currency is None and not has_free_tier:
+        fallback = PRICE_FALLBACK_EXTRACTORS.get(normalized_host)
+        if fallback is not None:
+            price_min, price_max, currency, has_free_tier = fallback(soup)
 
     # Runs before the no_data gate so events whose JSON-LD has only text
     # (no location/offers) still receive localized titles/descriptions.
-    await _backfill_localized_text(client, event, soup, url, summary, dormant_event_ids)
+    await _backfill_localized_text(
+        client, event, soup, url, normalized_host, summary, dormant_event_ids
+    )
 
     parsed_anything = location is not None or any(
         v is not None for v in (price_min, price_max, currency)
@@ -448,6 +460,12 @@ def _reconcile_price(
 
     Overrides the "ingest-set prices are authoritative" rule — a price change
     at the source should win — but a no-offers refetch leaves stored prices.
+    Caller-supplied values come either from structured JSON-LD offers or,
+    for a host with no offers block at all (PRICE_FALLBACK_EXTRACTORS, #424),
+    a selector/regex heuristic over page text — both are treated as equally
+    trustworthy here; the heuristic path (kumu_price_bounds) already strips
+    fee clauses and truncates to the same window ingest/classify use to keep
+    its false-positive rate low.
     """
     price_changed = False
     if price_min is not None and _price_differs(event.price_min, price_min):

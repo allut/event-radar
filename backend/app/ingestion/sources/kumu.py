@@ -8,9 +8,11 @@ import httpx
 from bs4 import BeautifulSoup, Tag
 
 from app.constants import (
+    DEFAULT_CURRENCY,
     PRICE_HINT_MAX_CHARS,
     TALLINN_TZ,
 )
+from app.ingestion.pricing import eur_price_bounds_from_text, strip_fee_amounts
 from app.ingestion.sanitize import sanitize_html
 from app.ingestion.selectors import (
     KUMU_CARD_SELECTOR,
@@ -68,6 +70,35 @@ def kumu_price_hint(price_tag: Tag) -> str:
         if entry:
             parts.append(entry)
     return ", ".join(parts) if parts else price_tag.get_text(" ", strip=True)
+
+
+def kumu_price_bounds(
+    soup: BeautifulSoup,
+) -> tuple[float | None, float | None, str | None, bool]:
+    """(price_min, price_max, currency, has_free_tier) from a KUMU detail page.
+
+    KUMU's pages carry no schema.org Event/offers JSON-LD (#424) — the
+    JSON-LD price reconciliation refetch.py/pinning.py otherwise share never
+    fires for this source. Reuses the same KUMU_PRICE_SELECTOR block the
+    ingest adapter reads (kumu_price_hint), truncated to PRICE_HINT_MAX_CHARS
+    same as the stored price_hint (so a tier past the cutoff at ingest time
+    can't manufacture a spurious "price changed" diff here), then derives
+    bounds the same deterministic way classify_event's price-widening step
+    does: strip_fee_amounts() first (drops booking/service-fee clauses like
+    "agenditasu 3,20 €" so a fee isn't mistaken for a ticket price), then
+    eur_price_bounds_from_text() over what's left. has_free_tier is always
+    False here — the hint's tiers aren't individually priceable enough to
+    tell a free companion ticket from a €0 typo, so this fallback only ever
+    widens/fills the paid bounds, never sets the free-tier flag.
+    """
+    price_tag = soup.select_one(KUMU_PRICE_SELECTOR)
+    if price_tag is None:
+        return (None, None, None, False)
+    hint = kumu_price_hint(price_tag)[:PRICE_HINT_MAX_CHARS]
+    price_min, price_max = eur_price_bounds_from_text(strip_fee_amounts(hint))
+    if price_min is None:
+        return (None, None, None, False)
+    return (price_min, price_max, DEFAULT_CURRENCY, False)
 
 
 def kumu_localized_text(soup: BeautifulSoup) -> tuple[str | None, str | None]:

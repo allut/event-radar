@@ -249,6 +249,17 @@ def safe_external_url(url: str | None, source: str | None = None) -> str | None:
     return url
 
 
+def normalized_hostname(url: str | None) -> str:
+    """URL hostname, lowercased with any leading "www." stripped, or "" if none.
+
+    Shared by refetch.py/pinning.py's per-host dispatch (locale-text and
+    price-fallback extractors) so both bare and www variants of a source host
+    match the same lookup key.
+    """
+    hostname = urlsplit(url or "").hostname or ""
+    return hostname.removeprefix("www.")
+
+
 def host_is_allowed(hostname: str | None) -> bool:
     """True when hostname is (or is a subdomain of) an ALLOWED_SOURCE_HOSTS entry."""
     if not hostname:

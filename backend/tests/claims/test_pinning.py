@@ -137,6 +137,30 @@ class TestFetchFreshPrice:
             fresh = await fetch_fresh_price(client, event)
         assert fresh == FreshPrice(12.0, 18.0, "EUR", False)
 
+    @pytest.mark.asyncio
+    async def test_kumu_falls_back_to_selector_price_when_no_jsonld_offers(self, make_event):
+        """KUMU pages (#424) carry no Event/offers JSON-LD — falls back to
+        the same selector-based price hint refetch.py uses."""
+        event = make_event()
+        event.url = "https://kumu.ekm.ee/en/syndmus/some-event/"
+        response = MagicMock()
+        response.text = (
+            "<html><body>"
+            '<div class="event-header__ticket-price">&euro;16</div>'
+            "</body></html>"
+        )
+        client = AsyncMock()
+        with (
+            patch("app.claims.pinning.http_get", new_callable=AsyncMock, return_value=response),
+            patch("app.claims.pinning.parse_jsonld_event_items", return_value=[]),
+            patch(
+                "app.claims.pinning.offers_from_jsonld_items",
+                return_value=(None, None, None, False),
+            ),
+        ):
+            fresh = await fetch_fresh_price(client, event)
+        assert fresh == FreshPrice(16.0, 16.0, "EUR", False)
+
 
 class TestRepresentativeEventForClaim:
     @pytest.mark.asyncio
