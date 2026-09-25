@@ -56,14 +56,18 @@ export default function OrganizerClaimVerify() {
           API.organizerClaimLinkVerify,
           { token: tok },
         );
+        const { claim } = result;
         setOrganizerSignedInHint();
         setState(UI_STATE.success);
-        if (result.needs_justification || !result.claim) {
+        if (result.needs_justification || !claim) {
           setNeedsJustification(true);
           return;
         }
+        // `claim` (not `result.claim`) below — TS doesn't carry a property
+        // access's narrowing into a closure created later (the setTimeout
+        // callback), only a plain local binding's.
         setTimeout(
-          () => navigate(ROUTES.organizerClaimPending(result.claim.id), { replace: true }),
+          () => navigate(ROUTES.organizerClaimPending(claim.id), { replace: true }),
           AUTH_REDIRECT_DELAY_MS,
         );
       } catch (err) {
