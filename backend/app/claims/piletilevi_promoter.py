@@ -1,19 +1,24 @@
-"""Piletilevi promoter resolution (#412): resolves a Piletilevi event page's
-schema.org ``organizer`` reference to a promoter profile page
+"""Piletilevi promoter resolution (#412/#427): resolves a Piletilevi event
+page's schema.org ``organizer`` reference to a promoter profile page
 (``/en/promoters/{id}/{slug}``), then extracts that promoter's public contact
 email domain as the domain-control target for
-``app.claims.dns_txt.verify_dns_txt_token``.
+``app.claims.dns_txt.verify_dns_txt_token``, and (#427) the promoter's own
+identity (profile URL + name) as the ``Publisher`` a Piletilevi claim resolves
+against — see CONTEXT.md's Event Claiming glossary and models.py's
+``Publisher`` docstring (the promoter profile URL is the ``external_id`` key
+a Piletilevi Publisher resolves against).
 
 Piletilevi's JSON-LD wraps ``organizer`` as an ``@id`` reference into the same
 document's ``@graph`` rather than inlining it (unlike Fienta/KUMU/ECH, which
 ``app/ingestion/jsonld.py::organizer_from_jsonld_items`` already handles) — a
 listing with no specific promoter set resolves that reference back to
 Piletilevi's own site identity node, which carries no ``/promoters/`` url and
-is treated as non-resolving (falls back to admin review, same as an
-unresolved promoter or a Series claim — see CONTEXT.md's Event Claiming
-glossary).
+is treated as non-resolving (falls back to a Series claim target — see
+CONTEXT.md's Event Claiming glossary — this is the *only* case that does).
 """
 
+from dataclasses import dataclass
+from typing import Any
 from urllib.parse import urljoin, urlsplit
 
 import httpx
@@ -28,6 +33,17 @@ _PROMOTER_URL_MARKER = "/promoters/"
 _MAILTO_PREFIX = "mailto:"
 
 
+@dataclass(frozen=True)
+class PromoterIdentity:
+    """A resolved promoter — ``external_id`` (the promoter's absolute profile
+    URL) is the key a Piletilevi ``Publisher`` resolves against; ``name`` is
+    the promoter's schema.org display name, when the organizer node carries
+    one."""
+
+    external_id: str
+    name: str | None
+
+
 def _is_piletilevi_host(url: str) -> bool:
     hostname = urlsplit(url).hostname
     return hostname is not None and (
@@ -35,12 +51,14 @@ def _is_piletilevi_host(url: str) -> bool:
     )
 
 
-def resolve_promoter_url(html: str, event_page_url: str) -> str | None:
-    """The event page's organizer ``@id`` resolved against its own ``@graph``
-    to an absolute promoter profile URL, or None when it isn't present,
-    resolves back to Piletilevi's own site identity (no specific promoter),
-    or — page content being untrusted input — resolves off Piletilevi's own
-    host (SSRF guard; `resolve_promoter_domain` fetches this URL server-side)."""
+def _resolve_organizer_node(
+    html: str, event_page_url: str
+) -> tuple[str, dict[str, Any]] | None:
+    """(resolved absolute promoter URL, its @graph node) or None when the
+    organizer reference is absent, resolves back to Piletilevi's own site
+    identity (no specific promoter), or — page content being untrusted
+    input — resolves off Piletilevi's own host (SSRF guard; callers that
+    fetch this URL server-side rely on this check)."""
     items = parse_jsonld_graph_items(BeautifulSoup(html, HTML_PARSER))
     by_id = {item["@id"]: item for item in items if "@id" in item}
 
@@ -61,7 +79,29 @@ def resolve_promoter_url(html: str, event_page_url: str) -> str | None:
     resolved = urljoin(event_page_url, str(url))
     if not _is_piletilevi_host(resolved):
         return None
-    return resolved
+    return resolved, organizer_node
+
+
+def resolve_promoter_url(html: str, event_page_url: str) -> str | None:
+    """The event page's organizer ``@id`` resolved against its own ``@graph``
+    to an absolute promoter profile URL, or None when it doesn't resolve
+    (`_resolve_organizer_node`'s docstring covers the non-resolving cases;
+    `resolve_promoter_domain` fetches this URL server-side)."""
+    resolved = _resolve_organizer_node(html, event_page_url)
+    return resolved[0] if resolved is not None else None
+
+
+def resolve_promoter_identity(html: str, event_page_url: str) -> PromoterIdentity | None:
+    """(#427) The event page's promoter as a claim-target identity — the
+    profile URL plus its schema.org ``name``, or None when the promoter
+    reference doesn't resolve (see `_resolve_organizer_node`)."""
+    resolved = _resolve_organizer_node(html, event_page_url)
+    if resolved is None:
+        return None
+    url, organizer_node = resolved
+    name_raw = organizer_node.get("name")
+    name = name_raw.strip() if isinstance(name_raw, str) and name_raw.strip() else None
+    return PromoterIdentity(external_id=url, name=name)
 
 
 def extract_contact_domain(promoter_html: str) -> str | None:

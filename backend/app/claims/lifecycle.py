@@ -5,7 +5,6 @@ CONTEXT.md's Event Claiming glossary and docs/organizer-portal.md.
 
 import asyncio
 import logging
-from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
 import httpx
@@ -15,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.claims.fienta_token import generate_claim_token
+from app.claims.target_resolution import ClaimTarget, ClaimTargetError, resolve_claim_target_live
 from app.claims.verification import (
     VerificationResult,
     is_trusted_claimant,
@@ -83,13 +83,6 @@ class ClaimError(Exception):
         self.detail = detail
 
 
-@dataclass(frozen=True)
-class ClaimTarget:
-    kind: str
-    publisher_id: int | None
-    event_series_key: str | None
-
-
 async def representative_event_source(
     db: AsyncSession, *, event_id: int | None = None, publisher_id: int | None = None
 ) -> EventSource | None:
@@ -109,6 +102,14 @@ async def representative_event_source(
 
 
 def resolve_claim_target(event: Event, es: EventSource) -> ClaimTarget:
+    """Cheap, HTTP-free target lookup for an *existing* claim (used by
+    resolve_claim_for_event's public-page lookup and
+    organizer_claims._is_already_claimed's bulk cross-retirement check) —
+    trusts `es.publisher_id` as already-stamped, which is safe here because
+    any active claim was only ever created via `resolve_claim_target_live()`
+    (`app.claims.target_resolution`, #427), which stamps the row before a
+    Claim can be created against it. Do not reuse this for deciding a *new*
+    claim's target — see `resolve_claim_target_live` for that."""
     if es.publisher_id is not None:
         return ClaimTarget(CLAIM_KIND_PUBLISHER, es.publisher_id, None)
     key = serialize_event_series_key(
@@ -277,6 +278,12 @@ async def _run_verification(
         if source_slug in (SOURCE_SLUG_KUMU, SOURCE_SLUG_ESTONIA_CONCERT_HALL):
             return await verify_institutional_publisher_claim(client, source_slug, token)
         if source_slug == SOURCE_SLUG_PILETILEVI and event is not None and event.url:
+            # A second live fetch of event.url — target resolution
+            # (resolve_claim_target_live, #427) already fetched it once to
+            # decide Publisher-vs-Series, but verify_piletilevi_claim needs
+            # the promoter's *contact-page domain* for the DNS-TXT check,
+            # which target resolution never fetches (it only needs the
+            # promoter's identity, not its domain) — not reusable here.
             response = await http_get(client, event.url)
             return await verify_piletilevi_claim(client, response.text, event.url, token)
     except httpx.HTTPError:
@@ -326,7 +333,10 @@ async def create_claim(
     if es is None or es.source is None:
         raise ClaimError(422, ERROR_CLAIM_NOT_CLAIMABLE)
 
-    target = resolve_claim_target(event, es)
+    try:
+        target = await resolve_claim_target_live(db, client, event, es)
+    except ClaimTargetError:
+        raise ClaimError(422, ERROR_CLAIM_NOT_CLAIMABLE) from None
     claim = Claim(
         organizer_id=organizer.id,
         kind=target.kind,
@@ -435,7 +445,11 @@ async def recheck_claim(
     outcome — resets the inactivity clock expire_stale_claims sweeps against,
     since the organizer is actively engaged. Admin-review claims (including
     every Series claim not fast-tracked by Trusted-claimant status) have
-    nothing to re-verify and are rejected the same as an already-resolved one.
+    nothing to re-verify and are rejected the same as an already-resolved one
+    — so every claim reaching this function is Publisher-kind, and its
+    target was already decided once, at creation, by
+    `resolve_claim_target_live` (#427): this function re-verifies against
+    that same `claim.publisher_id`, it never re-decides the target.
     """
     claim = await _own_pending_claim_or_404(db, claim_id, organizer.id)
     if claim.verification_mechanism not in CLAIM_AUTOMATED_VERIFICATION_MECHANISMS:

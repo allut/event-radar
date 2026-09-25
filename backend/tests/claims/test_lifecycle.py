@@ -4,6 +4,7 @@ wired to #412's verification engine via mocked db + httpx client."""
 from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 from sqlalchemy.exc import IntegrityError
 
@@ -37,6 +38,7 @@ from app.constants import (
     ORGANIZER_DAILY_CLAIM_CAP,
     SOURCE_SLUG_FIENTA,
     SOURCE_SLUG_KUMU,
+    SOURCE_SLUG_PILETILEVI,
 )
 from app.routers.utils import event_series_key, serialize_event_series_key
 
@@ -144,7 +146,8 @@ class TestCreateClaim:
         to render its record-name instructions, so it's persisted on the
         Claim row rather than only living in the transient VerificationResult."""
         es = _fake_event_source(publisher_id=99, source_slug=SOURCE_SLUG_KUMU)
-        mock_db.scalar = AsyncMock(side_effect=[0, es])
+        institutional_publisher = MagicMock(id=99)
+        mock_db.scalar = AsyncMock(side_effect=[0, es, institutional_publisher])
         mock_db.get.return_value = make_event()
         organizer = make_organizer(organizer_id=5)
 
@@ -165,13 +168,25 @@ class TestCreateClaim:
     async def test_series_claim_not_trusted_stays_pending_admin_review(
         self, mock_db, make_organizer, make_event
     ):
-        es = _fake_event_source(publisher_id=None)
+        """A Piletilevi event whose promoter identity fails to resolve at
+        all (event-page fetch error here) is the one case that still yields
+        a Series target (#427)."""
+        es = _fake_event_source(publisher_id=None, source_slug=SOURCE_SLUG_PILETILEVI)
         mock_db.scalar = AsyncMock(side_effect=[0, es])
         mock_db.get.return_value = make_event()
         organizer = make_organizer(organizer_id=5)
 
-        with patch(
-            "app.claims.lifecycle.is_trusted_claimant", new_callable=AsyncMock, return_value=False
+        with (
+            patch(
+                "app.claims.target_resolution.http_get",
+                new_callable=AsyncMock,
+                side_effect=httpx.HTTPError("boom"),
+            ),
+            patch(
+                "app.claims.lifecycle.is_trusted_claimant",
+                new_callable=AsyncMock,
+                return_value=False,
+            ),
         ):
             claim = await create_claim(mock_db, AsyncMock(), organizer, event_id=10)
 
@@ -184,13 +199,22 @@ class TestCreateClaim:
     async def test_series_claim_trusted_claimant_auto_grants(
         self, mock_db, make_organizer, make_event
     ):
-        es = _fake_event_source(publisher_id=None)
+        es = _fake_event_source(publisher_id=None, source_slug=SOURCE_SLUG_PILETILEVI)
         mock_db.scalar = AsyncMock(side_effect=[0, es])
         mock_db.get.return_value = make_event()
         organizer = make_organizer(organizer_id=5)
 
-        with patch(
-            "app.claims.lifecycle.is_trusted_claimant", new_callable=AsyncMock, return_value=True
+        with (
+            patch(
+                "app.claims.target_resolution.http_get",
+                new_callable=AsyncMock,
+                side_effect=httpx.HTTPError("boom"),
+            ),
+            patch(
+                "app.claims.lifecycle.is_trusted_claimant",
+                new_callable=AsyncMock,
+                return_value=True,
+            ),
         ):
             claim = await create_claim(mock_db, AsyncMock(), organizer, event_id=10)
 
@@ -246,12 +270,17 @@ class TestCreateClaim:
     async def test_pending_admin_review_sends_no_email(self, mock_db, make_organizer, make_event):
         """A claim that stays pending (routed to admin review) must not send
         the granted email — only an actual grant does."""
-        es = _fake_event_source(publisher_id=None)
+        es = _fake_event_source(publisher_id=None, source_slug=SOURCE_SLUG_PILETILEVI)
         mock_db.scalar = AsyncMock(side_effect=[0, es])
         mock_db.get.return_value = make_event()
         organizer = make_organizer(organizer_id=5)
 
         with (
+            patch(
+                "app.claims.target_resolution.http_get",
+                new_callable=AsyncMock,
+                side_effect=httpx.HTTPError("boom"),
+            ),
             patch(
                 "app.claims.lifecycle.is_trusted_claimant",
                 new_callable=AsyncMock,

@@ -2,9 +2,9 @@
 claimable events (#409/#411). Live re-query only — never replays
 raw_events.payload history (Publisher rows didn't always exist, so a historic
 raw_events row's payload may predate the organizer_id stamp fix in
-sources/fienta.py). Piletilevi is out of scope: its Publisher resolves from a
-promoter id, handled by a later verification-mechanisms ticket, never via
-event_sources.publisher_id directly.
+sources/fienta.py). Piletilevi is out of scope: its Publisher resolves live,
+at claim time, from the event page's promoter identity
+(`app.claims.target_resolution`, #427) — never backfilled here.
 
 Batch-job discipline (CLAUDE.md's Code Quality Rules): bulk-load, no N+1,
 fixed DB-query count independent of row count. Fienta's HTTP re-query is
