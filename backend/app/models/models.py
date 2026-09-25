@@ -406,11 +406,12 @@ class Publisher(Base):
 
 class Claim(Base):
     """An organizer's claim over a Publisher or an event series — see
-    CONTEXT.md's Event Claiming glossary (Publisher claim / Series claim /
-    Trusted claimant). Polymorphic over `kind`: a Publisher claim sets
-    `publisher_id`, a Series claim sets `event_series_key` (the
-    `event_series_key()` tuple from `routers/utils.py`, serialized as
-    `"<normalized_title>\\x1f<normalized_venue>"`)."""
+    CONTEXT.md's Event Claiming glossary (Publisher claim / Series claim).
+    Polymorphic over `kind`: a Publisher claim sets `publisher_id`, a Series
+    claim sets `event_series_key` (the `event_series_key()` tuple from
+    `routers/utils.py`, serialized as `"<normalized_title>\\x1f<normalized_venue>"`)
+    and always requires `justification` (#428 — a Series claim never
+    auto-grants, so this is the claimant's only input at creation time)."""
 
     __tablename__ = "claims"
     __table_args__ = (
@@ -470,6 +471,17 @@ class Claim(Base):
     # re-resolving a Piletilevi promoter's domain on every page load. NULL for
     # the fienta_token/admin_review mechanisms, which have no domain to show.
     verification_domain: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # (#428) The resolved Piletilevi promoter contact mailbox a
+    # piletilevi_mailbox check compared the claimant's account email
+    # against — persisted (match or mismatch) so the admin queue can show
+    # both emails as evidence without re-resolving the promoter page. NULL
+    # for every other mechanism.
+    verification_contact: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    # (#428) Organizer-supplied reason a Series claim was made — required
+    # only for kind=CLAIM_KIND_SERIES (enforced in app/claims/lifecycle.py,
+    # not a DB constraint, same pattern as verification_domain's
+    # mechanism-conditional NULL-ness). NULL for a Publisher claim.
+    justification: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Bumped at creation and by every POST .../recheck — expire_stale_claims
     # (app/claims/lifecycle.py) compares this, not created_at, against
     # CLAIM_EXPIRY_DAYS so an organizer actively retrying isn't expired out

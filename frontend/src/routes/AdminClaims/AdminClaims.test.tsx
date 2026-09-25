@@ -14,7 +14,7 @@ const mockGet = vi.mocked(adminApi.get);
 const mockPost = vi.mocked(adminApi.post);
 
 const pendingClaims = {
-  total: 2,
+  total: 3,
   claims: [
     {
       id: 1,
@@ -25,11 +25,12 @@ const pendingClaims = {
       event_series_key: null,
       verification_mechanism: 'dns_txt',
       verification_domain: 'kesklinnajazz.ee',
+      verification_contact: null,
       dns_record_name: '_eventradar-verify.kesklinnajazz.ee',
       proof_token: 'er-verify-abc123',
+      justification: null,
       event_id: 42,
       event_title: 'Jazz Night',
-      counts_toward_trust: true,
       created_at: '2026-09-19T07:00:00Z',
       resolved_at: null,
     },
@@ -42,12 +43,31 @@ const pendingClaims = {
       event_series_key: 'Vinyl Nights\x1fKultuurikatel',
       verification_mechanism: 'admin_review',
       verification_domain: null,
+      verification_contact: null,
       dns_record_name: null,
       proof_token: 'er-verify-def456',
+      justification: "We've run this monthly night at Kultuurikatel since 2023.",
       event_id: null,
       event_title: null,
-      counts_toward_trust: true,
       created_at: '2026-09-18T07:00:00Z',
+      resolved_at: null,
+    },
+    {
+      id: 4,
+      kind: 'publisher',
+      status: 'pending',
+      organizer: { id: 12, email: 'promoter@example.com', name: null },
+      publisher: { id: 7, name: 'Nikulin Circus' },
+      event_series_key: null,
+      verification_mechanism: 'piletilevi_mailbox',
+      verification_domain: null,
+      verification_contact: 'bookings@nikulincircus.ee',
+      dns_record_name: null,
+      proof_token: 'er-verify-jkl012',
+      justification: null,
+      event_id: null,
+      event_title: null,
+      created_at: '2026-09-17T07:00:00Z',
       resolved_at: null,
     },
   ],
@@ -65,11 +85,12 @@ const approvedClaims = {
       event_series_key: null,
       verification_mechanism: 'fienta_token',
       verification_domain: null,
+      verification_contact: null,
       dns_record_name: null,
       proof_token: 'er-verify-ghi789',
+      justification: null,
       event_id: 55,
       event_title: 'Boat Party',
-      counts_toward_trust: false,
       created_at: '2026-09-01T07:00:00Z',
       resolved_at: '2026-09-01T08:00:00Z',
     },
@@ -92,13 +113,26 @@ describe('AdminClaims', () => {
     expect(mockGet).toHaveBeenCalledWith(expect.stringContaining('status=pending'));
   });
 
-  it('shows claimant-identity-only evidence for a series claim with no automated check', async () => {
+  it('shows claimant identity plus the justification for a series claim', async () => {
     mockGet.mockResolvedValueOnce(pendingClaims);
     renderWithProviders(<AdminClaims />);
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Kesklinna Jazz Klubi' })).toBeInTheDocument());
 
     await userEvent.click(screen.getByRole('button', { name: /vinyl@example.com/ }));
     expect(screen.getByText('Claimant identity')).toBeInTheDocument();
+    expect(screen.getByText(/We've run this monthly night at Kultuurikatel since 2023\./)).toBeInTheDocument();
+  });
+
+  it('shows the claimant email vs. resolved contact for a piletilevi_mailbox mismatch', async () => {
+    mockGet.mockResolvedValueOnce(pendingClaims);
+    renderWithProviders(<AdminClaims />);
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Kesklinna Jazz Klubi' })).toBeInTheDocument());
+
+    await userEvent.click(screen.getByRole('button', { name: /promoter@example.com/ }));
+    expect(screen.getByText('Contact-mailbox check')).toBeInTheDocument();
+    expect(screen.getAllByText('promoter@example.com').length).toBeGreaterThan(0);
+    expect(screen.getByText('bookings@nikulincircus.ee')).toBeInTheDocument();
+    expect(screen.getByText('No match')).toBeInTheDocument();
   });
 
   it('links the detail panel to the full event inspector only when an event is resolved', async () => {
@@ -198,7 +232,7 @@ describe('AdminClaims', () => {
     expect(await screen.findByText(/Revoked\./)).toBeInTheDocument();
   });
 
-  it('does not show the trust-strip warning for a Fienta-sourced approved claim', async () => {
+  it('warns about revoking an approved claim without mentioning Trusted-claimant status', async () => {
     mockGet.mockResolvedValueOnce({ total: 0, claims: [] });
     mockGet.mockResolvedValueOnce(approvedClaims);
     renderWithProviders(<AdminClaims />);
@@ -207,6 +241,7 @@ describe('AdminClaims', () => {
     await userEvent.click(screen.getByRole('tab', { name: 'Granted' }));
 
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Öölaev Events' })).toBeInTheDocument());
+    expect(screen.getByText(/reverts the event's pinned fields to source/)).toBeInTheDocument();
     expect(screen.queryByText(/Trusted-claimant status/)).not.toBeInTheDocument();
   });
 });

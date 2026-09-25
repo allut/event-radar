@@ -43,11 +43,12 @@ interface AdminClaim {
   event_series_key: string | null;
   verification_mechanism: string | null;
   verification_domain: string | null;
+  verification_contact: string | null;
   dns_record_name: string | null;
   proof_token: string;
+  justification: string | null;
   event_id: number | null;
   event_title: string | null;
-  counts_toward_trust: boolean;
   created_at: string;
   resolved_at: string | null;
 }
@@ -73,6 +74,7 @@ const MECHANISM_LABELS: Record<string, string> = {
   fienta_token: 'Fienta',
   dns_txt: 'DNS-TXT',
   piletilevi_promoter: 'DNS-TXT',
+  piletilevi_mailbox: 'Contact mailbox',
   admin_review: 'Admin review',
 };
 
@@ -293,6 +295,28 @@ export default function AdminClaims() {
                           <span className={styles.evidenceValue}>{item.proof_token}</span>
                         </div>
                       </>
+                    ) : item.verification_mechanism === 'piletilevi_mailbox' ? (
+                      <>
+                        <p className={styles.evidenceLabel}>Contact-mailbox check</p>
+                        <div className={styles.evidenceRow}>
+                          <span className={styles.evidenceKey}>Claimant account email</span>
+                          <span className={styles.evidenceValue}>{item.organizer.email}</span>
+                        </div>
+                        <div className={styles.evidenceRow}>
+                          <span className={styles.evidenceKey}>Published promoter contact</span>
+                          <span className={styles.evidenceValue}>{item.verification_contact ?? '—'}</span>
+                        </div>
+                        <div className={styles.evidenceRow}>
+                          <span className={styles.evidenceKey}>Result</span>
+                          <span className={styles.evidenceValue}>
+                            {item.verification_contact === null
+                              ? 'No contact info published'
+                              : item.verification_contact.toLowerCase() === item.organizer.email.toLowerCase()
+                                ? 'Match'
+                                : 'No match'}
+                          </span>
+                        </div>
+                      </>
                     ) : (
                       <>
                         <p className={styles.evidenceLabel}>Claimant identity</p>
@@ -301,13 +325,18 @@ export default function AdminClaims() {
                         </div>
                       </>
                     )}
+                    {item.kind === 'series' && item.justification && (
+                      <>
+                        <p className={styles.evidenceLabelSpaced}>Claimant&apos;s justification</p>
+                        <p className={styles.justificationBlock}>&ldquo;{item.justification}&rdquo;</p>
+                      </>
+                    )}
                   </div>
 
-                  {item.status === 'approved' && item.counts_toward_trust && (
+                  {item.status === 'approved' && (
                     <div className={styles.warnCallout}>
-                      <strong>Revoking</strong> deletes this claim, reverts the event&apos;s pinned fields to source
-                      authority immediately, and may strip this organizer&apos;s Trusted-claimant status if this is
-                      their only qualifying claim.
+                      <strong>Revoking</strong> deletes this claim and reverts the event&apos;s pinned fields to
+                      source authority immediately.
                     </div>
                   )}
 

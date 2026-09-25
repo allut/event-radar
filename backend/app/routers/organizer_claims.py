@@ -11,7 +11,7 @@ from urllib.parse import urlparse
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from itsdangerous import BadSignature, SignatureExpired
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -35,6 +35,7 @@ from app.claims.lifecycle import (
 from app.constants import (
     CLAIM_ACTIVE_STATUSES,
     CLAIM_AUTOMATED_VERIFICATION_MECHANISMS,
+    CLAIM_JUSTIFICATION_MAX_CHARS,
     CLAIM_KIND_PUBLISHER,
     CLAIM_SEARCH_CANDIDATE_MULTIPLIER,
     CLAIM_SEARCH_QUERY_MIN_LENGTH,
@@ -42,6 +43,7 @@ from app.constants import (
     CLAIM_STATUS_PENDING,
     CLAIM_SUGGESTIONS_LIMIT,
     DETAIL_MAGIC_LINK_SENT,
+    ERROR_CLAIM_JUSTIFICATION_REQUIRED,
     ERROR_CLAIM_SEARCH_QUERY_TOO_SHORT,
     ERROR_MAGIC_LINK_CONSUMED,
     ERROR_MAGIC_LINK_EXPIRED,
@@ -83,6 +85,11 @@ router = APIRouter(prefix="/organizer/claims", tags=["organizer-claims"])
 
 class CreateClaimBody(BaseModel):
     event_id: int
+    # Required only when the event resolves to a Series claim (#428) — the
+    # kind isn't known until create_claim resolves it server-side, so this
+    # stays optional here and create_claim itself raises
+    # ERROR_CLAIM_JUSTIFICATION_REQUIRED when it's needed and missing.
+    justification: str | None = Field(default=None, max_length=CLAIM_JUSTIFICATION_MAX_CHARS)
 
 
 class ClaimLinkRequestBody(BaseModel):
@@ -114,6 +121,7 @@ def _serialize(claim: Claim) -> dict:
         "dns_record_name": dns_record_name,
         "dns_record_value": claim.proof_token,
         "proof_token": claim.proof_token,
+        "justification": claim.justification,
         "can_recheck": (
             claim.status == CLAIM_STATUS_PENDING
             and claim.verification_mechanism in CLAIM_AUTOMATED_VERIFICATION_MECHANISMS
@@ -134,7 +142,9 @@ async def create_own_claim(
 ) -> dict:
     async with httpx.AsyncClient(timeout=HTTP_TIMEOUT_SECONDS) as client:
         try:
-            claim = await create_claim(db, client, current_organizer, body.event_id)
+            claim = await create_claim(
+                db, client, current_organizer, body.event_id, body.justification
+            )
         except ClaimError as exc:
             raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
     return _serialize(claim)
@@ -302,6 +312,28 @@ async def verify_claim_link(
         try:
             claim = await create_claim(db, client, organizer, event_id)
         except ClaimError as exc:
+            if exc.detail == ERROR_CLAIM_JUSTIFICATION_REQUIRED:
+                # (#428 review finding) This listing resolves to a Series
+                # claim, which the signed-out email-capture step never had a
+                # chance to collect a justification for — the magic link is
+                # already single-use-consumed above, so raising here would
+                # strand the organizer with no way to retry. Sign-in has
+                # already succeeded (the cookie is already set on `response`
+                # above), so return that success without a claim rather than
+                # raise — raising here would discard those headers and lose
+                # the sign-in too. The frontend sends the organizer to
+                # their dashboard, now signed in, to search for the event
+                # again and claim it with a justification via
+                # ClaimEventPicker.
+                return {
+                    "organizer": {
+                        "id": organizer.id,
+                        "email": organizer.email,
+                        "locale": organizer.locale,
+                    },
+                    "claim": None,
+                    "needs_justification": True,
+                }
             raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
 
     return {

@@ -104,16 +104,39 @@ export const ORGANIZER_VENUE_ADDRESS_MAX_LEN = 500;
 export const CLAIM_VERIFICATION_MECHANISM_FIENTA_TOKEN = 'fienta_token';
 export const CLAIM_VERIFICATION_MECHANISM_DNS_TXT = 'dns_txt';
 export const CLAIM_VERIFICATION_MECHANISM_PILETILEVI_PROMOTER = 'piletilevi_promoter';
+// (#428) Piletilevi's mailbox-match fallback tier — never self-service: the
+// organizer can't fix a mismatch from this screen (unlike DNS-TXT/Fienta),
+// so it's deliberately excluded from CLAIM_SELF_SERVICE_VERIFICATION_MECHANISMS
+// below and behaves like admin_review in #415's pending screen.
+export const CLAIM_VERIFICATION_MECHANISM_PILETILEVI_MAILBOX = 'piletilevi_mailbox';
 export const CLAIM_VERIFICATION_MECHANISM_ADMIN_REVIEW = 'admin_review';
 export type ClaimVerificationMechanism =
   | typeof CLAIM_VERIFICATION_MECHANISM_FIENTA_TOKEN
   | typeof CLAIM_VERIFICATION_MECHANISM_DNS_TXT
   | typeof CLAIM_VERIFICATION_MECHANISM_PILETILEVI_PROMOTER
+  | typeof CLAIM_VERIFICATION_MECHANISM_PILETILEVI_MAILBOX
   | typeof CLAIM_VERIFICATION_MECHANISM_ADMIN_REVIEW;
 export const CLAIM_DNS_VERIFICATION_MECHANISMS: ReadonlySet<ClaimVerificationMechanism> = new Set([
   CLAIM_VERIFICATION_MECHANISM_DNS_TXT,
   CLAIM_VERIFICATION_MECHANISM_PILETILEVI_PROMOTER,
 ]);
+// The mechanisms with something an organizer can actually go do (add a DNS
+// record, place a code in their listing) — #415's pending screen shows the
+// "keep checking in background" hint only for these; every other mechanism
+// (admin_review, piletilevi_mailbox) gets the admin-review hint instead.
+export const CLAIM_SELF_SERVICE_VERIFICATION_MECHANISMS: ReadonlySet<ClaimVerificationMechanism> = new Set([
+  CLAIM_VERIFICATION_MECHANISM_FIENTA_TOKEN,
+  CLAIM_VERIFICATION_MECHANISM_DNS_TXT,
+  CLAIM_VERIFICATION_MECHANISM_PILETILEVI_PROMOTER,
+]);
+
+// Mirrors backend ERROR_CLAIM_JUSTIFICATION_REQUIRED (app/constants.py) — the
+// one claim-creation error the UI reacts to structurally (revealing the
+// justification field, #428) rather than just displaying; matched by exact
+// string since claim creation has no structured error-code contract.
+export const CLAIM_JUSTIFICATION_REQUIRED_ERROR =
+  'A justification is required for a series claim (no specific promoter' +
+  ' could be identified for this listing).';
 
 export const CLAIM_STATUS_PENDING = 'pending';
 export const CLAIM_STATUS_APPROVED = 'approved';

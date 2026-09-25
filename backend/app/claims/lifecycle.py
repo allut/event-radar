@@ -17,7 +17,6 @@ from app.claims.fienta_token import generate_claim_token
 from app.claims.target_resolution import ClaimTarget, ClaimTargetError, resolve_claim_target_live
 from app.claims.verification import (
     VerificationResult,
-    is_trusted_claimant,
     series_claim_result,
     verify_fienta_publisher_claim,
     verify_institutional_publisher_claim,
@@ -41,6 +40,7 @@ from app.constants import (
     CLAIM_VERIFICATION_MECHANISM_ADMIN_REVIEW,
     CLAIM_VERIFICATION_OUTCOME_AUTO_GRANT,
     ERROR_CLAIM_ALREADY_EXISTS,
+    ERROR_CLAIM_JUSTIFICATION_REQUIRED,
     ERROR_CLAIM_NOT_CLAIMABLE,
     ERROR_CLAIM_NOT_FOUND,
     ERROR_CLAIM_NOT_PENDING,
@@ -248,21 +248,18 @@ async def claiming_organizer_name(claim: Claim | None) -> str | None:
 
 
 async def _run_verification(
-    db: AsyncSession,
     client: httpx.AsyncClient,
     *,
     kind: str,
-    organizer_id: int,
+    organizer_email: str,
     es: EventSource,
     event: Event | None,
     token: str,
 ) -> VerificationResult:
     if kind == CLAIM_KIND_SERIES:
-        if await is_trusted_claimant(db, organizer_id):
-            return VerificationResult(
-                CLAIM_VERIFICATION_MECHANISM_ADMIN_REVIEW,
-                CLAIM_VERIFICATION_OUTCOME_AUTO_GRANT,
-            )
+        # (#428) No auto-grant path for a Series claim, ever — the
+        # Trusted-claimant fast-track that used to sit here is deleted, not
+        # gated off.
         return series_claim_result()
 
     source_slug = es.source.slug if es.source else None
@@ -285,7 +282,9 @@ async def _run_verification(
             # which target resolution never fetches (it only needs the
             # promoter's identity, not its domain) — not reusable here.
             response = await http_get(client, event.url)
-            return await verify_piletilevi_claim(client, response.text, event.url, token)
+            return await verify_piletilevi_claim(
+                client, response.text, event.url, token, organizer_email
+            )
     except httpx.HTTPError:
         log.warning(
             "claim verification fetch failed, falling back to admin review: "
@@ -313,14 +312,22 @@ async def _claims_created_today(db: AsyncSession, organizer_id: int) -> int:
 
 
 async def create_claim(
-    db: AsyncSession, client: httpx.AsyncClient, organizer: Organizer, event_id: int
+    db: AsyncSession,
+    client: httpx.AsyncClient,
+    organizer: Organizer,
+    event_id: int,
+    justification: str | None = None,
 ) -> Claim:
     """Create a Publisher or Series claim for `event_id`, auto-detecting
     which kind applies from that event's resolved EventSource, then invoking
     #412's verification engine to decide auto-grant vs. admin-review routing.
-    Daily-capped and duplicate/race-rejected at the DB layer (#413) — best-
-    effort like ORGANIZER_DAILY_SUBMISSION_CAP: the count-then-insert has no
-    row lock, so concurrent requests could exceed the cap by a small margin.
+    A Series claim (#428) requires a non-blank `justification` — the kind
+    isn't known until `resolve_claim_target_live` resolves it, so this is
+    checked after that resolution and before any row is inserted, not up
+    front. Daily-capped and duplicate/race-rejected at the DB layer (#413) —
+    best-effort like ORGANIZER_DAILY_SUBMISSION_CAP: the count-then-insert
+    has no row lock, so concurrent requests could exceed the cap by a small
+    margin.
     """
     if await _claims_created_today(db, organizer.id) >= ORGANIZER_DAILY_CLAIM_CAP:
         raise ClaimError(429, ERROR_DAILY_CLAIM_LIMIT)
@@ -337,6 +344,11 @@ async def create_claim(
         target = await resolve_claim_target_live(db, client, event, es)
     except ClaimTargetError:
         raise ClaimError(422, ERROR_CLAIM_NOT_CLAIMABLE) from None
+
+    justification_clean = justification.strip() if justification else None
+    if target.kind == CLAIM_KIND_SERIES and not justification_clean:
+        raise ClaimError(422, ERROR_CLAIM_JUSTIFICATION_REQUIRED)
+
     claim = Claim(
         organizer_id=organizer.id,
         kind=target.kind,
@@ -345,6 +357,7 @@ async def create_claim(
         proof_token=generate_claim_token(),
         verification_mechanism=CLAIM_VERIFICATION_MECHANISM_ADMIN_REVIEW,
         status=CLAIM_STATUS_PENDING,
+        justification=justification_clean if target.kind == CLAIM_KIND_SERIES else None,
     )
     db.add(claim)
     try:
@@ -354,16 +367,16 @@ async def create_claim(
         raise ClaimError(409, ERROR_CLAIM_ALREADY_EXISTS) from None
 
     result = await _run_verification(
-        db,
         client,
         kind=target.kind,
-        organizer_id=organizer.id,
+        organizer_email=organizer.email,
         es=es,
         event=event,
         token=claim.proof_token,
     )
     claim.verification_mechanism = result.mechanism
     claim.verification_domain = result.domain
+    claim.verification_contact = result.contact
     auto_granted = result.outcome == CLAIM_VERIFICATION_OUTCOME_AUTO_GRANT
     if auto_granted:
         claim.status = CLAIM_STATUS_APPROVED
@@ -443,13 +456,13 @@ async def recheck_claim(
     """Organizer-triggered "check now": re-run verification for a pending
     automated-mechanism claim. Always bumps last_checked_at, whatever the
     outcome — resets the inactivity clock expire_stale_claims sweeps against,
-    since the organizer is actively engaged. Admin-review claims (including
-    every Series claim not fast-tracked by Trusted-claimant status) have
-    nothing to re-verify and are rejected the same as an already-resolved one
-    — so every claim reaching this function is Publisher-kind, and its
-    target was already decided once, at creation, by
-    `resolve_claim_target_live` (#427): this function re-verifies against
-    that same `claim.publisher_id`, it never re-decides the target.
+    since the organizer is actively engaged. Admin-review claims (every
+    Series claim, and any Publisher claim that fell back to it) have nothing
+    to re-verify and are rejected the same as an already-resolved one — so
+    every claim reaching this function is Publisher-kind, and its target was
+    already decided once, at creation, by `resolve_claim_target_live` (#427):
+    this function re-verifies against that same `claim.publisher_id`, it
+    never re-decides the target.
     """
     claim = await _own_pending_claim_or_404(db, claim_id, organizer.id)
     if claim.verification_mechanism not in CLAIM_AUTOMATED_VERIFICATION_MECHANISMS:
@@ -461,16 +474,16 @@ async def recheck_claim(
     event = await db.get(Event, es.event_id)
 
     result = await _run_verification(
-        db,
         client,
         kind=claim.kind,
-        organizer_id=organizer.id,
+        organizer_email=organizer.email,
         es=es,
         event=event,
         token=claim.proof_token,
     )
     claim.verification_mechanism = result.mechanism
     claim.verification_domain = result.domain
+    claim.verification_contact = result.contact
     claim.last_checked_at = datetime.now(timezone.utc)
     auto_granted = result.outcome == CLAIM_VERIFICATION_OUTCOME_AUTO_GRANT
     if auto_granted:

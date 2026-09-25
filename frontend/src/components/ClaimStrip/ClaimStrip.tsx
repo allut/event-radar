@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { organizerApi } from '../../api/client';
 import { API, ROUTES, UI_STATE } from '../../constants';
 import { t } from '../../i18n';
-import { apiErrorMessage } from '../../utils';
+import { apiErrorMessage, isClaimJustificationRequiredError } from '../../utils';
 import { useLocaleNavigate } from '../../hooks/useLocaleNavigate';
 import { useOrganizerAuth } from '../../hooks/useOrganizerAuth';
 import MagicLinkForm from '../MagicLinkForm';
@@ -40,23 +40,35 @@ interface ClaimPanelProps {
 export function ClaimPanel({ eventId, locale }: ClaimPanelProps) {
   const organizerAuthed = useOrganizerAuth();
   const navigate = useLocaleNavigate();
-  const [state, setState] = useState<'idle' | 'loading' | 'email-form' | 'error'>('idle');
+  const [state, setState] = useState<'idle' | 'loading' | 'email-form' | 'error' | 'needs-justification'>('idle');
   const [errorMsg, setErrorMsg] = useState('');
+  const [justification, setJustification] = useState('');
 
-  async function handleClaimClick() {
+  async function submitClaim(withJustification?: string) {
+    setState('loading');
+    setErrorMsg('');
+    try {
+      const claim = await organizerApi.post<{ id: number }>(API.organizerClaims, {
+        event_id: eventId,
+        justification: withJustification,
+      });
+      navigate(ROUTES.organizerClaimPending(claim.id));
+    } catch (err) {
+      if (isClaimJustificationRequiredError(err)) {
+        setState('needs-justification');
+        return;
+      }
+      setErrorMsg(apiErrorMessage(err, t('generic_error', locale)));
+      setState('error');
+    }
+  }
+
+  function handleClaimClick() {
     if (!organizerAuthed) {
       setState('email-form');
       return;
     }
-    setState('loading');
-    setErrorMsg('');
-    try {
-      const claim = await organizerApi.post<{ id: number }>(API.organizerClaims, { event_id: eventId });
-      navigate(ROUTES.organizerClaimPending(claim.id));
-    } catch (err) {
-      setErrorMsg(apiErrorMessage(err, t('generic_error', locale)));
-      setState('error');
-    }
+    void submitClaim();
   }
 
   return (
@@ -71,6 +83,24 @@ export function ClaimPanel({ eventId, locale }: ClaimPanelProps) {
           emailFieldId="claim-email"
           extraBody={{ event_id: eventId }}
         />
+      ) : state === 'needs-justification' ? (
+        <>
+          <p className={styles.body}>{t('claim_justification_prompt', locale)}</p>
+          <textarea
+            className={styles.justifyInput}
+            value={justification}
+            onChange={(e) => setJustification(e.target.value)}
+            placeholder={t('claim_justification_placeholder', locale)}
+          />
+          <button
+            type="button"
+            className={styles.cta}
+            onClick={() => void submitClaim(justification.trim())}
+            disabled={!justification.trim()}
+          >
+            {t('claim_justification_submit', locale)}
+          </button>
+        </>
       ) : (
         <>
           <p className={styles.body}>{t('claim_strip_body', locale)}</p>

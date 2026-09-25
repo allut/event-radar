@@ -10,12 +10,12 @@ import { t } from '../../i18n';
 import {
   API,
   CLAIM_DNS_VERIFICATION_MECHANISMS,
+  CLAIM_SELF_SERVICE_VERIFICATION_MECHANISMS,
   CLAIM_STATUS_APPROVED,
   CLAIM_STATUS_CANCELLED,
   CLAIM_STATUS_EXPIRED,
   CLAIM_STATUS_PENDING,
   CLAIM_STATUS_REVOKED,
-  CLAIM_VERIFICATION_MECHANISM_ADMIN_REVIEW,
   CLAIM_VERIFICATION_MECHANISM_FIENTA_TOKEN,
   QUERY_KEYS,
   ROUTES,
@@ -243,13 +243,13 @@ export default function ClaimPending() {
             )}
           </div>
 
-          {isPending && mechanism && mechanism !== CLAIM_VERIFICATION_MECHANISM_ADMIN_REVIEW && (
+          {isPending && mechanism && CLAIM_SELF_SERVICE_VERIFICATION_MECHANISMS.has(mechanism) && (
             <>
               <hr className={styles.hairline} />
               <p className={styles.hint}>{t('claim_pending_automated_hint', locale)}</p>
             </>
           )}
-          {isPending && mechanism === CLAIM_VERIFICATION_MECHANISM_ADMIN_REVIEW && (
+          {isPending && mechanism && !CLAIM_SELF_SERVICE_VERIFICATION_MECHANISMS.has(mechanism) && (
             <>
               <hr className={styles.hairline} />
               <p className={styles.hint}>{t('claim_pending_review_hint', locale)}</p>

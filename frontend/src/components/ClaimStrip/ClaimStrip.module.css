@@ -29,6 +29,15 @@
   margin-bottom: var(--space-3);
 }
 
+/* Justification prompt (#428) — replaces the CTA when a claim attempt
+ * resolves to a Series claim (no specific promoter). */
+.justifyInput {
+  composes: textareaField from '../shared/Field.module.css';
+  min-height: var(--textarea-height-sm);
+  width: 100%;
+  margin-bottom: var(--space-3);
+}
+
 .cta {
   composes: btnPrimary from '../shared/Button.module.css';
   display: inline-flex;

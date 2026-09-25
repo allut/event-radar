@@ -3,7 +3,7 @@ import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ClaimPanel, ClaimPill } from './ClaimStrip';
 import { renderWithProviders } from '../../test/utils';
-import { ORGANIZER_SIGNED_IN_HINT_KEY } from '../../constants';
+import { CLAIM_JUSTIFICATION_REQUIRED_ERROR, ORGANIZER_SIGNED_IN_HINT_KEY } from '../../constants';
 
 vi.mock('../../api/client', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../api/client')>();
@@ -14,7 +14,7 @@ vi.mock('../../api/client', async (importOriginal) => {
   };
 });
 
-import { organizerApi } from '../../api/client';
+import { ApiError, organizerApi } from '../../api/client';
 const mockOrganizerPost = vi.mocked(organizerApi.post);
 
 describe('ClaimPill', () => {
@@ -58,6 +58,34 @@ describe('ClaimPanel', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Claim this event' }));
 
+    await waitFor(() => expect(screen.getByText('pending-screen-42')).toBeInTheDocument());
+  });
+
+  it('reveals a justification field when the claim resolves to a series claim (#428), then resubmits with it', async () => {
+    localStorage.setItem(ORGANIZER_SIGNED_IN_HINT_KEY, '1');
+    mockOrganizerPost
+      .mockRejectedValueOnce(new ApiError(422, CLAIM_JUSTIFICATION_REQUIRED_ERROR))
+      .mockResolvedValueOnce({ id: 42, status: 'pending' });
+    renderWithProviders(null, {
+      routes: [
+        { path: '/', element: <ClaimPanel eventId={7} locale="en" /> },
+        { path: '/organizer/claims/:id/pending', element: <div>pending-screen-42</div> },
+      ],
+    });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Claim this event' }));
+
+    const textarea = await screen.findByPlaceholderText(/organize this recurring night/);
+    const submitBtn = screen.getByRole('button', { name: 'Submit for review' });
+    expect(submitBtn).toBeDisabled();
+
+    await userEvent.type(textarea, 'I run this recurring night.');
+    await userEvent.click(submitBtn);
+
+    expect(mockOrganizerPost).toHaveBeenLastCalledWith('/organizer/claims', {
+      event_id: 7,
+      justification: 'I run this recurring night.',
+    });
     await waitFor(() => expect(screen.getByText('pending-screen-42')).toBeInTheDocument());
   });
 });

@@ -9,7 +9,8 @@ vi.mock('../../api/client', async (importOriginal) => ({
   organizerApi: { get: vi.fn(), post: vi.fn() },
 }));
 
-import { organizerApi } from '../../api/client';
+import { ApiError, organizerApi } from '../../api/client';
+import { CLAIM_JUSTIFICATION_REQUIRED_ERROR } from '../../constants';
 const mockGet = vi.mocked(organizerApi.get);
 const mockPost = vi.mocked(organizerApi.post);
 
@@ -60,7 +61,7 @@ describe('ClaimEventPicker', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Claim this event' }));
 
-    expect(mockPost).toHaveBeenCalledWith('/organizer/claims', { event_id: 42 });
+    expect(mockPost).toHaveBeenCalledWith('/organizer/claims', { event_id: 42, justification: undefined });
     await waitFor(() => expect(screen.getByText('pending-screen')).toBeInTheDocument());
   });
 
@@ -73,5 +74,47 @@ describe('ClaimEventPicker', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Claim this event' }));
 
     expect(await screen.findByRole('alert')).toBeInTheDocument();
+  });
+
+  it('reveals a justification field when the claim resolves to a series claim (#428), then resubmits with it', async () => {
+    mockClaimGet({ events: [candidate] });
+    mockPost
+      .mockRejectedValueOnce(new ApiError(422, CLAIM_JUSTIFICATION_REQUIRED_ERROR))
+      .mockResolvedValueOnce({ id: 42, status: 'pending' });
+    renderPicker();
+
+    await waitFor(() => expect(screen.getByText('Jazz Night')).toBeInTheDocument());
+    await userEvent.click(screen.getByRole('button', { name: 'Claim this event' }));
+
+    const textarea = await screen.findByPlaceholderText(/organize this recurring night/);
+    const submitBtn = screen.getByRole('button', { name: 'Submit for review' });
+    expect(submitBtn).toBeDisabled();
+
+    await userEvent.type(textarea, 'I run this recurring night.');
+    expect(submitBtn).toBeEnabled();
+    await userEvent.click(submitBtn);
+
+    expect(mockPost).toHaveBeenLastCalledWith('/organizer/claims', {
+      event_id: 42,
+      justification: 'I run this recurring night.',
+    });
+    await waitFor(() => expect(screen.getByText('pending-screen')).toBeInTheDocument());
+  });
+
+  it('closes the justification panel when a later attempt fails for an unrelated reason', async () => {
+    mockClaimGet({ events: [candidate] });
+    mockPost
+      .mockRejectedValueOnce(new ApiError(422, CLAIM_JUSTIFICATION_REQUIRED_ERROR))
+      .mockRejectedValueOnce(new Error('network'));
+    renderPicker();
+
+    await waitFor(() => expect(screen.getByText('Jazz Night')).toBeInTheDocument());
+    await userEvent.click(screen.getByRole('button', { name: 'Claim this event' }));
+    const textarea = await screen.findByPlaceholderText(/organize this recurring night/);
+    await userEvent.type(textarea, 'reason');
+    await userEvent.click(screen.getByRole('button', { name: 'Submit for review' }));
+
+    expect(await screen.findByRole('alert')).toBeInTheDocument();
+    expect(screen.queryByPlaceholderText(/organize this recurring night/)).not.toBeInTheDocument();
   });
 });

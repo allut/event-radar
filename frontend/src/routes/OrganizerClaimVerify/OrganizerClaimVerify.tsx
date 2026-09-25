@@ -13,7 +13,8 @@ import SeoTags from '../../components/SeoTags';
 import styles from './OrganizerClaimVerify.module.css';
 
 interface ClaimLinkVerifyResponse {
-  claim: { id: number };
+  claim: { id: number } | null;
+  needs_justification?: boolean;
 }
 
 /** Verifies a claim-intent magic link (#413's request-link/verify-link pair,
@@ -32,6 +33,12 @@ export default function OrganizerClaimVerify() {
   const token = searchParams.get(AUTH_TOKEN_PARAM);
   const [state, setState] = useState<VerifyState>(token ? UI_STATE.verifying : UI_STATE.error);
   const [errorMsg, setErrorMsg] = useState(token ? '' : t('no_token', locale));
+  // (#428) The one outcome that isn't a plain success/error: sign-in
+  // succeeded but this listing resolved to a Series claim, which the
+  // signed-out email-capture step never collected a justification for — see
+  // organizer_claims.py::verify_claim_link. Sends the organizer to their
+  // dashboard, now signed in, to claim it again with a reason.
+  const [needsJustification, setNeedsJustification] = useState(false);
   const called = useRef(false);
 
   useEffect(() => {
@@ -51,6 +58,10 @@ export default function OrganizerClaimVerify() {
         );
         setOrganizerSignedInHint();
         setState(UI_STATE.success);
+        if (result.needs_justification || !result.claim) {
+          setNeedsJustification(true);
+          return;
+        }
         setTimeout(
           () => navigate(ROUTES.organizerClaimPending(result.claim.id), { replace: true }),
           AUTH_REDIRECT_DELAY_MS,
@@ -69,7 +80,8 @@ export default function OrganizerClaimVerify() {
 
   const message =
     state === UI_STATE.verifying ? t('verifying', locale)
-    : state === UI_STATE.success ? t('signed_in', locale)
+    : state === UI_STATE.success
+      ? needsJustification ? t('claim_link_needs_justification_message', locale) : t('signed_in', locale)
     : errorMsg;
 
   return (
@@ -79,8 +91,12 @@ export default function OrganizerClaimVerify() {
         locale={locale}
         kind={VERIFY_STATE_TO_KIND[state]}
         message={message}
-        action={state === UI_STATE.error && (
+        action={state === UI_STATE.error ? (
           <Link to={localePath(ROUTES.organizerLogin)} className={styles.retry}>{t('request_new_link', locale)}</Link>
+        ) : needsJustification && (
+          <Link to={localePath(ROUTES.organizerDashboard)} className={styles.retry}>
+            {t('claim_link_needs_justification_cta', locale)}
+          </Link>
         )}
       />
     </>

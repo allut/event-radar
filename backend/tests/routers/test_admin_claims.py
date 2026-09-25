@@ -20,6 +20,7 @@ from app.constants import (
     CLAIM_STATUS_REVOKED,
     CLAIM_VERIFICATION_MECHANISM_ADMIN_REVIEW,
     CLAIM_VERIFICATION_MECHANISM_DNS_TXT,
+    CLAIM_VERIFICATION_MECHANISM_PILETILEVI_MAILBOX,
 )
 from tests.routers.conftest import scalars_returning
 
@@ -33,6 +34,8 @@ def _make_claim(
     event_series_key: str | None = None,
     verification_mechanism: str | None = CLAIM_VERIFICATION_MECHANISM_DNS_TXT,
     verification_domain: str | None = "example.ee",
+    verification_contact: str | None = None,
+    justification: str | None = None,
     proof_token: str = "er-verify-abc123",
     pinned_fields: list[str] | None = None,
 ) -> MagicMock:
@@ -44,6 +47,8 @@ def _make_claim(
     claim.event_series_key = event_series_key
     claim.verification_mechanism = verification_mechanism
     claim.verification_domain = verification_domain
+    claim.verification_contact = verification_contact
+    claim.justification = justification
     claim.proof_token = proof_token
     claim.resolved_at = None
     claim.created_at = datetime(2026, 5, 1, tzinfo=timezone.utc)
@@ -174,6 +179,7 @@ async def test_list_pending_claims_series_has_no_publisher_or_event(
         event_series_key="vinyl-nights\x1fkultuurikatel",
         verification_mechanism=CLAIM_VERIFICATION_MECHANISM_ADMIN_REVIEW,
         verification_domain=None,
+        justification="I've run this listing for three years.",
     )
 
     db = mock_db
@@ -193,7 +199,49 @@ async def test_list_pending_claims_series_has_no_publisher_or_event(
     assert row["publisher"] is None
     assert row["event_id"] is None
     assert row["dns_record_name"] is None
-    assert row["counts_toward_trust"] is True
+    assert row["justification"] == "I've run this listing for three years."
+
+
+@pytest.mark.asyncio
+async def test_list_pending_claims_shows_mailbox_mismatch_evidence(
+    admin_app, make_db_ctx, mock_db
+):
+    """(#428) A piletilevi_mailbox claim that fell back to admin review still
+    surfaces the claimant's account email alongside the resolved contact
+    mailbox it didn't match."""
+    app = admin_app
+    claim = _make_claim(
+        claim_id=3,
+        kind=CLAIM_KIND_PUBLISHER,
+        publisher_id=7,
+        verification_mechanism=CLAIM_VERIFICATION_MECHANISM_PILETILEVI_MAILBOX,
+        verification_domain=None,
+        verification_contact="promoter@other.com",
+    )
+
+    db = mock_db
+    db.scalar = AsyncMock(return_value=1)
+    db.scalars = AsyncMock(
+        side_effect=[
+            scalars_returning([claim]),
+            scalars_returning([]),
+            scalars_returning([]),
+        ]
+    )
+
+    with (
+        patch("app.routers.admin.settings") as mock_settings,
+        patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
+    ):
+        _admin_settings(mock_settings)
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.get("/admin/claims?status=pending", auth=("admin", ""))
+
+    assert resp.status_code == http.HTTPStatus.OK
+    row = resp.json()["claims"][0]
+    assert row["verification_mechanism"] == CLAIM_VERIFICATION_MECHANISM_PILETILEVI_MAILBOX
+    assert row["verification_contact"] == "promoter@other.com"
+    assert row["organizer"]["email"] == "organizer@example.com"
 
 
 # ---------------------------------------------------------------------------

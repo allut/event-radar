@@ -1,8 +1,11 @@
-"""Piletilevi promoter resolution (#412/#427): resolves a Piletilevi event
-page's schema.org ``organizer`` reference to a promoter profile page
+"""Piletilevi promoter resolution (#412/#427/#428): resolves a Piletilevi
+event page's schema.org ``organizer`` reference to a promoter profile page
 (``/en/promoters/{id}/{slug}``), then extracts that promoter's public contact
-email domain as the domain-control target for
-``app.claims.dns_txt.verify_dns_txt_token``, and (#427) the promoter's own
+details as the two-tier auto-grant evidence ``verify_piletilevi_claim``
+(#428) evaluates: a non-free-provider mailto domain as the domain-control
+target for ``app.claims.dns_txt.verify_dns_txt_token``, or (no such domain)
+the raw mailto address for an exact-match check against the claiming
+organizer's own account email. Also resolves (#427) the promoter's own
 identity (profile URL + name) as the ``Publisher`` a Piletilevi claim resolves
 against — see CONTEXT.md's Event Claiming glossary and models.py's
 ``Publisher`` docstring (the promoter profile URL is the ``external_id`` key
@@ -86,7 +89,7 @@ def resolve_promoter_url(html: str, event_page_url: str) -> str | None:
     """The event page's organizer ``@id`` resolved against its own ``@graph``
     to an absolute promoter profile URL, or None when it doesn't resolve
     (`_resolve_organizer_node`'s docstring covers the non-resolving cases;
-    `resolve_promoter_domain` fetches this URL server-side)."""
+    `resolve_promoter_contact` fetches this URL server-side)."""
     resolved = _resolve_organizer_node(html, event_page_url)
     return resolved[0] if resolved is not None else None
 
@@ -104,10 +107,11 @@ def resolve_promoter_identity(html: str, event_page_url: str) -> PromoterIdentit
     return PromoterIdentity(external_id=url, name=name)
 
 
-def extract_contact_domain(promoter_html: str) -> str | None:
-    """The promoter page's contact-details mailto domain, or None when there
-    is no mailto link or its domain is a free/shared provider the promoter
-    can't prove DNS control of."""
+def extract_contact_email(promoter_html: str) -> str | None:
+    """The promoter page's contact-details mailto address, lowercased, or
+    None when there is no mailto link — every domain included (unlike
+    `extract_contact_domain`, which drops a free/shared-provider domain since
+    that path proves DNS control, not account-email identity)."""
     soup = BeautifulSoup(promoter_html, HTML_PARSER)
     link = soup.select_one(PILETILEVI_PROMOTER_CONTACT_SELECTOR)
     if not link:
@@ -115,22 +119,54 @@ def extract_contact_domain(promoter_html: str) -> str | None:
     href = str(link.get("href", ""))
     if not href.startswith(_MAILTO_PREFIX):
         return None
-    email = href[len(_MAILTO_PREFIX) :].split("?", 1)[0]
+    email = href[len(_MAILTO_PREFIX) :].split("?", 1)[0].strip().lower()
     if "@" not in email:
         return None
-    domain = email.rsplit("@", 1)[1].strip().lower()
-    if not domain or domain in FREE_EMAIL_PROVIDER_DOMAINS:
-        return None
-    return domain
+    return email
 
 
-async def resolve_promoter_domain(
+def _domain_if_provable(email: str) -> str | None:
+    """`email`'s domain, or None when it's a free/shared provider the
+    promoter can't prove DNS control of — the shared tail of
+    `extract_contact_domain` and `resolve_promoter_contact`, split out so the
+    latter can derive it from an email it already extracted instead of
+    re-parsing the promoter page a second time."""
+    domain = email.rsplit("@", 1)[1]
+    return domain if domain and domain not in FREE_EMAIL_PROVIDER_DOMAINS else None
+
+
+def extract_contact_domain(promoter_html: str) -> str | None:
+    """The promoter page's contact-details mailto domain, or None when there
+    is no mailto link or its domain is a free/shared provider the promoter
+    can't prove DNS control of."""
+    email = extract_contact_email(promoter_html)
+    return _domain_if_provable(email) if email is not None else None
+
+
+@dataclass(frozen=True)
+class PromoterContact:
+    """(#428) A resolved promoter's contact evidence — `domain` is set only
+    for a DNS-provable (non-free-provider) mailto domain; `email` is the raw
+    mailto address regardless, for the exact-account-email-match auto-grant
+    path. Both None when the promoter page carries no mailto contact link at
+    all."""
+
+    domain: str | None
+    email: str | None
+
+
+async def resolve_promoter_contact(
     client: httpx.AsyncClient, event_page_html: str, event_page_url: str
-) -> str | None:
-    """End-to-end: event page -> promoter page -> controllable contact domain,
-    or None at any non-resolving step (falls back to admin review)."""
+) -> PromoterContact | None:
+    """End-to-end: event page -> promoter page -> its contact evidence
+    (`PromoterContact`), fetching the promoter page once — `verify_piletilevi_claim`
+    (#428) needs both the domain and the raw mailbox off the one page, not two
+    separate fetches. None when the promoter reference doesn't resolve at
+    all."""
     promoter_url = resolve_promoter_url(event_page_html, event_page_url)
     if promoter_url is None:
         return None
     response = await http_get(client, promoter_url)
-    return extract_contact_domain(response.text)
+    email = extract_contact_email(response.text)
+    domain = _domain_if_provable(email) if email is not None else None
+    return PromoterContact(domain=domain, email=email)

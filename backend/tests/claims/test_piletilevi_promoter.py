@@ -1,7 +1,8 @@
-"""Unit tests for app/claims/piletilevi_promoter.py (#412) — resolving a
-Piletilevi event's organizer @graph reference to a promoter page, and
-extracting that promoter's controllable contact domain. Fixture shapes are
-grounded in the real JSON-LD Piletilevi serves (verified live 2026-09-20)."""
+"""Unit tests for app/claims/piletilevi_promoter.py (#412, #428) — resolving
+a Piletilevi event's organizer @graph reference to a promoter page, and
+extracting that promoter's controllable contact domain / raw mailbox.
+Fixture shapes are grounded in the real JSON-LD Piletilevi serves (verified
+live 2026-09-20)."""
 
 import json
 
@@ -10,7 +11,8 @@ import pytest
 
 from app.claims.piletilevi_promoter import (
     extract_contact_domain,
-    resolve_promoter_domain,
+    extract_contact_email,
+    resolve_promoter_contact,
     resolve_promoter_url,
 )
 
@@ -106,6 +108,26 @@ class TestResolvePromoterUrl:
         assert resolve_promoter_url(html, _EVENT_URL) is None
 
 
+class TestExtractContactEmail:
+    def test_extracts_raw_mailto_address(self):
+        html = _promoter_page("mailto:Nikulincircus@Own-Domain.ee")
+
+        assert extract_contact_email(html) == "nikulincircus@own-domain.ee"
+
+    def test_free_email_provider_address_is_not_excluded(self):
+        """Unlike extract_contact_domain, the raw mailbox is kept even on a
+        free/shared provider (#428) — the mailbox-match path checks exact
+        account-email identity, not DNS control."""
+        html = _promoter_page("mailto:nikulincircus@gmail.com")
+
+        assert extract_contact_email(html) == "nikulincircus@gmail.com"
+
+    def test_no_mailto_link_returns_none(self):
+        html = "<html><body><p>no contact link</p></body></html>"
+
+        assert extract_contact_email(html) is None
+
+
 class TestExtractContactDomain:
     def test_extracts_domain_from_mailto(self):
         html = _promoter_page("mailto:nikulincircus@own-domain.ee")
@@ -123,18 +145,19 @@ class TestExtractContactDomain:
         assert extract_contact_domain(html) is None
 
 
-class TestResolvePromoterDomain:
+class TestResolvePromoterContact:
     @pytest.mark.asyncio
     async def test_resolving_promoter_returns_controllable_domain(self):
         async def handler(request):
             return httpx.Response(200, text=_promoter_page("mailto:info@own-domain.ee"))
 
         async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-            result = await resolve_promoter_domain(
+            result = await resolve_promoter_contact(
                 client, _event_page_with_promoter(), _EVENT_URL
             )
 
-        assert result == "own-domain.ee"
+        assert result.domain == "own-domain.ee"
+        assert result.email == "info@own-domain.ee"
 
     @pytest.mark.asyncio
     async def test_non_resolving_promoter_never_fetches_promoter_page(self):
@@ -146,7 +169,7 @@ class TestResolvePromoterDomain:
             return httpx.Response(200, text="")
 
         async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-            result = await resolve_promoter_domain(
+            result = await resolve_promoter_contact(
                 client, _event_page_no_specific_promoter(), _EVENT_URL
             )
 
@@ -154,13 +177,29 @@ class TestResolvePromoterDomain:
         assert called is False
 
     @pytest.mark.asyncio
-    async def test_promoter_page_with_only_free_email_returns_none(self):
+    async def test_promoter_page_with_only_free_email_has_no_domain_but_has_email(self):
+        """(#428) A free-provider mailbox carries no DNS-provable domain, but
+        the raw address survives as mailbox-match evidence."""
         async def handler(request):
             return httpx.Response(200, text=_promoter_page("mailto:info@gmail.com"))
 
         async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-            result = await resolve_promoter_domain(
+            result = await resolve_promoter_contact(
                 client, _event_page_with_promoter(), _EVENT_URL
             )
 
-        assert result is None
+        assert result.domain is None
+        assert result.email == "info@gmail.com"
+
+    @pytest.mark.asyncio
+    async def test_promoter_page_with_no_contact_link_returns_empty_contact(self):
+        async def handler(request):
+            return httpx.Response(200, text="<html><body>no contact</body></html>")
+
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            result = await resolve_promoter_contact(
+                client, _event_page_with_promoter(), _EVENT_URL
+            )
+
+        assert result.domain is None
+        assert result.email is None

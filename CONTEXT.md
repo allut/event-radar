@@ -103,18 +103,16 @@ lowercased venue) instead of a resolved entity — the fallback for a listing
 whose promoter identity doesn't resolve to a Publisher. Where it does
 resolve, a Publisher claim applies instead (see Publisher). Covers every
 past and future event sharing that series key, reusing the grouping series
-cooldown already uses.
+cooldown already uses. Always routes to admin review — there is no
+auto-grant path for it — and always requires a claim justification (below).
 _Avoid_: listing claim, recurrence claim, per-event claim
 
-**Trusted claimant**:
-An organizer whose Series claims auto-grant without a fresh admin review,
-earned by having one prior claim of any kind admin-approved — a Publisher
-claim on KUMU/Estonia Concert Hall, or an earlier Series claim — never by an
-automated Fienta claim, which carries no admin judgment to build on.
-Revoking any of that organizer's claims strips this status, and a revoked
-claim is removed from the count that granted it.
-_Avoid_: verified claimant, trusted organizer (collides with
-`Organizer.verified`, a permanently separate submission-trust track per #385)
+**Claim justification**:
+The non-blank, organizer-supplied reason required to create a Series claim
+(#428) — its only claimant-supplied input, since a Series claim carries no
+verifiable identity of its own. Stored on the claim and shown to the admin
+reviewing it. Not required for, and not shown on, a Publisher claim.
+_Avoid_: claim reason, claim note (collides with an admin resolution note)
 
 **Dormant claim**:
 An approved claim whose event lost a claimed-vs-claimed dedup collision to a

@@ -108,3 +108,27 @@
   color: var(--danger);
   margin-top: var(--space-3);
 }
+
+/* Justification prompt (#428) — revealed under a candidate row when its
+ * claim attempt resolves to a Series claim (no specific promoter). */
+.justifyPanel {
+  composes: alert from '../shared/Alert.module.css';
+  width: 100%;
+  margin-top: var(--space-2);
+}
+
+.justifyMsg {
+  margin: 0 0 var(--space-2);
+  line-height: var(--leading-snug);
+}
+
+.justifyInput {
+  composes: textareaField from '../shared/Field.module.css';
+  min-height: var(--textarea-height-sm);
+}
+
+.justifyActions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: var(--space-2);
+}

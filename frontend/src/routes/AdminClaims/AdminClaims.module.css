@@ -76,6 +76,19 @@
   word-break: break-all;
 }
 
+.evidenceLabelSpaced {
+  composes: evidenceLabel;
+  margin-top: var(--space-3);
+}
+
+.justificationBlock {
+  font-size: var(--fs-sm);
+  font-style: italic;
+  color: var(--text-soft);
+  line-height: var(--leading-snug);
+  margin: 0;
+}
+
 .warnCallout {
   composes: card cardDangerTop from '../../components/shared/Card.module.css';
   padding: var(--space-3);

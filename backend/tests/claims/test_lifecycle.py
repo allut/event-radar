@@ -165,38 +165,36 @@ class TestCreateClaim:
         assert claim.verification_domain == KUMU_VERIFICATION_DOMAIN
 
     @pytest.mark.asyncio
-    async def test_series_claim_not_trusted_stays_pending_admin_review(
+    async def test_series_claim_with_justification_stays_pending_admin_review(
         self, mock_db, make_organizer, make_event
     ):
         """A Piletilevi event whose promoter identity fails to resolve at
         all (event-page fetch error here) is the one case that still yields
-        a Series target (#427)."""
+        a Series target (#427). #428: a Series claim always stays
+        admin-review — there is no auto-grant path for it — but a non-blank
+        justification lets it through creation at all."""
         es = _fake_event_source(publisher_id=None, source_slug=SOURCE_SLUG_PILETILEVI)
         mock_db.scalar = AsyncMock(side_effect=[0, es])
         mock_db.get.return_value = make_event()
         organizer = make_organizer(organizer_id=5)
 
-        with (
-            patch(
-                "app.claims.target_resolution.http_get",
-                new_callable=AsyncMock,
-                side_effect=httpx.HTTPError("boom"),
-            ),
-            patch(
-                "app.claims.lifecycle.is_trusted_claimant",
-                new_callable=AsyncMock,
-                return_value=False,
-            ),
+        with patch(
+            "app.claims.target_resolution.http_get",
+            new_callable=AsyncMock,
+            side_effect=httpx.HTTPError("boom"),
         ):
-            claim = await create_claim(mock_db, AsyncMock(), organizer, event_id=10)
+            claim = await create_claim(
+                mock_db, AsyncMock(), organizer, event_id=10, justification="I run this series."
+            )
 
         assert claim.kind == CLAIM_KIND_SERIES
         assert claim.event_series_key is not None
         assert claim.status == CLAIM_STATUS_PENDING
         assert claim.verification_mechanism == CLAIM_VERIFICATION_MECHANISM_ADMIN_REVIEW
+        assert claim.justification == "I run this series."
 
     @pytest.mark.asyncio
-    async def test_series_claim_trusted_claimant_auto_grants(
+    async def test_series_claim_without_justification_rejected(
         self, mock_db, make_organizer, make_event
     ):
         es = _fake_event_source(publisher_id=None, source_slug=SOURCE_SLUG_PILETILEVI)
@@ -204,21 +202,41 @@ class TestCreateClaim:
         mock_db.get.return_value = make_event()
         organizer = make_organizer(organizer_id=5)
 
-        with (
-            patch(
-                "app.claims.target_resolution.http_get",
-                new_callable=AsyncMock,
-                side_effect=httpx.HTTPError("boom"),
-            ),
-            patch(
-                "app.claims.lifecycle.is_trusted_claimant",
-                new_callable=AsyncMock,
-                return_value=True,
-            ),
+        with patch(
+            "app.claims.target_resolution.http_get",
+            new_callable=AsyncMock,
+            side_effect=httpx.HTTPError("boom"),
         ):
-            claim = await create_claim(mock_db, AsyncMock(), organizer, event_id=10)
+            with pytest.raises(ClaimError) as exc:
+                await create_claim(mock_db, AsyncMock(), organizer, event_id=10, justification="   ")
 
-        assert claim.status == CLAIM_STATUS_APPROVED
+        assert exc.value.status_code == 422
+        mock_db.add.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_series_claim_never_auto_grants_regardless_of_prior_approved_claims(
+        self, mock_db, make_organizer, make_event
+    ):
+        """Regression guard (#428 acceptance criteria): a prior approved claim
+        of any kind must never auto-grant an unrelated Series claim — the
+        Trusted-claimant fast-track is deleted, not gated off, so there is no
+        code path left that could even consult the organizer's other claims."""
+        es = _fake_event_source(publisher_id=None, source_slug=SOURCE_SLUG_PILETILEVI)
+        mock_db.scalar = AsyncMock(side_effect=[0, es])
+        mock_db.get.return_value = make_event()
+        organizer = make_organizer(organizer_id=5)
+
+        with patch(
+            "app.claims.target_resolution.http_get",
+            new_callable=AsyncMock,
+            side_effect=httpx.HTTPError("boom"),
+        ):
+            claim = await create_claim(
+                mock_db, AsyncMock(), organizer, event_id=10, justification="justification"
+            )
+
+        assert claim.status == CLAIM_STATUS_PENDING
+        mock_db.scalars.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_race_rejected_with_409(self, mock_db, make_organizer, make_event):
@@ -282,15 +300,12 @@ class TestCreateClaim:
                 side_effect=httpx.HTTPError("boom"),
             ),
             patch(
-                "app.claims.lifecycle.is_trusted_claimant",
-                new_callable=AsyncMock,
-                return_value=False,
-            ),
-            patch(
                 "app.claims.lifecycle.send_claim_granted_email", new_callable=AsyncMock
             ) as send_mock,
         ):
-            await create_claim(mock_db, AsyncMock(), organizer, event_id=10)
+            await create_claim(
+                mock_db, AsyncMock(), organizer, event_id=10, justification="justification"
+            )
 
         send_mock.assert_not_awaited()
 

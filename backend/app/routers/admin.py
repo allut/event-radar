@@ -63,7 +63,6 @@ from app.constants import (
     CLAIM_STATUS_APPROVED,
     CLAIM_STATUS_PENDING,
     CLAIM_STATUS_REVOKED,
-    CLAIM_VERIFICATION_MECHANISM_FIENTA_TOKEN,
     DEFAULT_USER_LOCALE,
     ERROR_ADMIN_DISABLED,
     ERROR_ADMIN_INCORRECT_CREDENTIALS,
@@ -714,13 +713,12 @@ def _serialize_admin_claim(claim: Claim, event: Event | None) -> dict:
     on the row — no live re-verification: DNS-TXT/Piletilevi-promoter claims
     get the expected TXT record (claim_dns_record_name — shared with the
     organizer-facing pending screen's identical serializer), Fienta claims
-    get the round-trip token, Series claims (and any Publisher claim that
-    fell back to admin_review) get claimant identity only.
-    `counts_toward_trust` mirrors #412's is_trusted_claimant() rule (any
-    approved claim that isn't a Fienta-sourced Publisher claim) — a per-row
-    hint for the revoke warning, not a query of the organizer's other
-    claims, so it can overstate "this is their only qualifying claim" when
-    they hold more than one."""
+    get the round-trip token, a piletilevi_mailbox claim (#428) gets the
+    claimant's account email alongside the resolved contact
+    (verification_contact) so the admin can see the match/mismatch, and a
+    Series claim (always admin_review, and always carrying a justification —
+    #428) or any other Publisher claim that fell back to admin_review gets
+    claimant identity plus that justification text."""
     dns_record_name = claim_dns_record_name(
         claim.verification_mechanism, claim.verification_domain
     )
@@ -741,13 +739,12 @@ def _serialize_admin_claim(claim: Claim, event: Event | None) -> dict:
         "event_series_key": claim.event_series_key,
         "verification_mechanism": claim.verification_mechanism,
         "verification_domain": claim.verification_domain,
+        "verification_contact": claim.verification_contact,
         "dns_record_name": dns_record_name,
         "proof_token": claim.proof_token,
+        "justification": claim.justification,
         "event_id": event.id if event is not None else None,
         "event_title": event.title_orig if event is not None else None,
-        "counts_toward_trust": (
-            claim.verification_mechanism != CLAIM_VERIFICATION_MECHANISM_FIENTA_TOKEN
-        ),
         "created_at": claim.created_at.isoformat(),
         "resolved_at": claim.resolved_at.isoformat() if claim.resolved_at else None,
     }
@@ -932,11 +929,7 @@ async def admin_revoke_claim(claim_id: int, body: _ResolutionBody, request: Requ
     """Revoke an already-granted claim (report escalation or discretion) —
     deletes the row outright (unlike decline, which just flips status) and
     reverts the event's pinned fields to source authority immediately so the
-    next ingestion/refetch pass can overwrite them again. Trusted-claimant
-    status is derived on read (app/claims/verification.py::is_trusted_claimant
-    scans approved claims), never stored, so deleting this row is the whole
-    strip — no separate bookkeeping needed even when this was the
-    organizer's only non-Fienta-excluded approved claim."""
+    next ingestion/refetch pass can overwrite them again."""
     note = _validated_resolution_note(body)
 
     async def _run() -> dict:

@@ -488,20 +488,32 @@ CLAIM_TOKEN_PREFIX = "er-verify-"
 CLAIM_VERIFICATION_MECHANISM_FIENTA_TOKEN = "fienta_token"
 CLAIM_VERIFICATION_MECHANISM_DNS_TXT = "dns_txt"
 CLAIM_VERIFICATION_MECHANISM_PILETILEVI_PROMOTER = "piletilevi_promoter"
+# (#428) The Piletilevi Publisher fallback tier — a resolved promoter with
+# only a plain contact mailbox (no domain-provable channel): auto-grants on
+# an exact claimant-account-email match, else admin review with both emails
+# shown as evidence (Claim.verification_contact carries the resolved one).
+CLAIM_VERIFICATION_MECHANISM_PILETILEVI_MAILBOX = "piletilevi_mailbox"
 CLAIM_VERIFICATION_MECHANISM_ADMIN_REVIEW = "admin_review"
 VALID_CLAIM_VERIFICATION_MECHANISMS = frozenset(
     {
         CLAIM_VERIFICATION_MECHANISM_FIENTA_TOKEN,
         CLAIM_VERIFICATION_MECHANISM_DNS_TXT,
         CLAIM_VERIFICATION_MECHANISM_PILETILEVI_PROMOTER,
+        CLAIM_VERIFICATION_MECHANISM_PILETILEVI_MAILBOX,
         CLAIM_VERIFICATION_MECHANISM_ADMIN_REVIEW,
     }
 )
-# The three mechanisms an organizer can self-service re-trigger (POST
+# The mechanisms an organizer can self-service re-trigger (POST
 # /organizer/claims/{id}/recheck) and whose pending claim expires after
 # CLAIM_EXPIRY_DAYS of inactivity (#413) — admin_review carries no proof an
 # organizer controls, so it never auto-expires (CONTEXT.md's Event Claiming
-# glossary; see app/claims/lifecycle.py::expire_stale_claims).
+# glossary; see app/claims/lifecycle.py::expire_stale_claims). piletilevi_mailbox
+# is deliberately excluded (#428 review finding): unlike DNS-TXT (add a
+# record) or Fienta (place a code), there is nothing an organizer can act on
+# to fix a mismatch — the promoter's published contact and the organizer's
+# own account email are both outside their control from this screen — so a
+# mismatched/no-contact mailbox claim behaves exactly like admin_review:
+# no recheck button, no self-service auto-expiry.
 CLAIM_AUTOMATED_VERIFICATION_MECHANISMS = frozenset(
     {
         CLAIM_VERIFICATION_MECHANISM_FIENTA_TOKEN,
@@ -2015,6 +2027,14 @@ ERROR_CLAIM_ALREADY_RESOLVED = (
 )
 ERROR_CLAIM_NOT_APPROVED = "Only a granted claim can be revoked."
 ERROR_CLAIM_QUEUE_INVALID_STATUS = "status must be 'pending' or 'approved'."
+# (#428) Series claims never auto-grant — a non-blank justification is the
+# only thing an organizer supplies at creation time, surfaced to the admin
+# reviewing the claim.
+ERROR_CLAIM_JUSTIFICATION_REQUIRED = (
+    "A justification is required for a series claim (no specific promoter"
+    " could be identified for this listing)."
+)
+CLAIM_JUSTIFICATION_MAX_CHARS = 2000
 ERROR_DAILY_CLAIM_LIMIT = "Daily claim limit reached. Try again tomorrow."
 ERROR_CLAIM_SEARCH_QUERY_TOO_SHORT = "Search query is too short."
 ERROR_CLAIM_NOT_GRANTED = "This claim is not yet granted — editing stays locked until then."

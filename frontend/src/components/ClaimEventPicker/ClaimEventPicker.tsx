@@ -4,7 +4,7 @@ import { organizerApi } from '../../api/client';
 import { API, EXPLORE_SEARCH_DEBOUNCE_MS, QUERY_KEYS, ROUTES } from '../../constants';
 import { t, ti } from '../../i18n';
 import { useLocaleNavigate } from '../../hooks/useLocaleNavigate';
-import { apiErrorMessage, formatEventTime, withQueryParam } from '../../utils';
+import { apiErrorMessage, formatEventTime, isClaimJustificationRequiredError, withQueryParam } from '../../utils';
 import styles from './ClaimEventPicker.module.css';
 
 interface ClaimCandidate {
@@ -40,6 +40,11 @@ export default function ClaimEventPicker({ locale }: ClaimEventPickerProps) {
   const [open, setOpen] = useState(false);
   const [claimingId, setClaimingId] = useState<number | null>(null);
   const [claimError, setClaimError] = useState('');
+  // A claim attempt that comes back needing a justification (a Piletilevi
+  // listing with no specific promoter — a Series claim, #428) reveals this
+  // candidate's reason field instead of erroring outright.
+  const [justifyId, setJustifyId] = useState<number | null>(null);
+  const [justification, setJustification] = useState('');
 
   useEffect(() => {
     const handle = setTimeout(() => setDebouncedQuery(query.trim()), EXPLORE_SEARCH_DEBOUNCE_MS);
@@ -72,9 +77,9 @@ export default function ClaimEventPicker({ locale }: ClaimEventPickerProps) {
   const searchResults = searchData?.events ?? [];
 
   const claimMutation = useMutation({
-    mutationFn: (eventId: number) =>
-      organizerApi.post<{ id: number }>(API.organizerClaims, { event_id: eventId }),
-    onMutate: (eventId) => {
+    mutationFn: ({ eventId, justification }: { eventId: number; justification?: string }) =>
+      organizerApi.post<{ id: number }>(API.organizerClaims, { event_id: eventId, justification }),
+    onMutate: ({ eventId }) => {
       setClaimingId(eventId);
       setClaimError('');
     },
@@ -85,13 +90,24 @@ export default function ClaimEventPicker({ locale }: ClaimEventPickerProps) {
       // popover on the same tick, so a refetch here would be wasted.
       navigate(ROUTES.organizerClaimPending(claim.id));
     },
-    onError: (err) => {
+    onError: (err, { eventId }) => {
+      if (isClaimJustificationRequiredError(err)) {
+        setJustifyId(eventId);
+        setClaimingId(null);
+        return;
+      }
+      setJustifyId(null);
       setClaimError(apiErrorMessage(err, t('generic_error', locale)));
       setClaimingId(null);
     },
   });
 
+  function claim(eventId: number, withJustification?: string) {
+    claimMutation.mutate({ eventId, justification: withJustification });
+  }
+
   function renderCandidate(candidate: ClaimCandidate) {
+    const awaitingJustification = justifyId === candidate.id;
     return (
       <li key={candidate.id} className={styles.option}>
         <span className={styles.optionTitle}>{candidate.title}</span>
@@ -102,13 +118,36 @@ export default function ClaimEventPicker({ locale }: ClaimEventPickerProps) {
         <button
           type="button"
           className={styles.claimBtn}
-          disabled={claimMutation.isPending && claimingId === candidate.id}
-          onClick={() => claimMutation.mutate(candidate.id)}
+          disabled={awaitingJustification || (claimMutation.isPending && claimingId === candidate.id)}
+          onClick={() => claim(candidate.id)}
         >
           {claimMutation.isPending && claimingId === candidate.id
             ? t('loading', locale)
             : t('claim_strip_cta', locale)}
         </button>
+        {awaitingJustification && (
+          <div className={styles.justifyPanel}>
+            <p className={styles.justifyMsg}>{t('claim_justification_prompt', locale)}</p>
+            <textarea
+              className={styles.justifyInput}
+              value={justification}
+              onChange={(e) => setJustification(e.target.value)}
+              placeholder={t('claim_justification_placeholder', locale)}
+            />
+            <div className={styles.justifyActions}>
+              <button
+                type="button"
+                className={styles.claimBtn}
+                disabled={!justification.trim() || claimMutation.isPending}
+                onClick={() => claim(candidate.id, justification.trim())}
+              >
+                {claimMutation.isPending && claimingId === candidate.id
+                  ? t('loading', locale)
+                  : t('claim_justification_submit', locale)}
+              </button>
+            </div>
+          </div>
+        )}
       </li>
     );
   }
