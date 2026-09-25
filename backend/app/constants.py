@@ -506,14 +506,15 @@ VALID_CLAIM_VERIFICATION_MECHANISMS = frozenset(
 # The mechanisms an organizer can self-service re-trigger (POST
 # /organizer/claims/{id}/recheck) and whose pending claim expires after
 # CLAIM_EXPIRY_DAYS of inactivity (#413) — admin_review carries no proof an
-# organizer controls, so it never auto-expires (CONTEXT.md's Event Claiming
-# glossary; see app/claims/lifecycle.py::expire_stale_claims). piletilevi_mailbox
-# is deliberately excluded (#428 review finding): unlike DNS-TXT (add a
+# organizer controls, so it has no recheck button and instead expires on the
+# longer CLAIM_ADMIN_REVIEW_EXPIRY_DAYS window (#430; see
+# app/claims/lifecycle.py::expire_stale_claims). piletilevi_mailbox is
+# deliberately excluded here too (#428 review finding): unlike DNS-TXT (add a
 # record) or Fienta (place a code), there is nothing an organizer can act on
 # to fix a mismatch — the promoter's published contact and the organizer's
 # own account email are both outside their control from this screen — so a
-# mismatched/no-contact mailbox claim behaves exactly like admin_review:
-# no recheck button, no self-service auto-expiry.
+# mismatched/no-contact mailbox claim behaves exactly like admin_review: no
+# recheck button, and the same longer expiry window.
 CLAIM_AUTOMATED_VERIFICATION_MECHANISMS = frozenset(
     {
         CLAIM_VERIFICATION_MECHANISM_FIENTA_TOKEN,
@@ -530,6 +531,17 @@ VALID_CLAIM_VERIFICATION_OUTCOMES = frozenset(
 # Inactivity window before an unverified automated-mechanism claim expires
 # (#413) — resets on every POST /organizer/claims/{id}/recheck.
 CLAIM_EXPIRY_DAYS = 7
+
+# Inactivity window before a pending claim with no self-service recheck path
+# (admin_review, and piletilevi_mailbox — see the
+# CLAIM_AUTOMATED_VERIFICATION_MECHANISMS comment above) expires unresolved
+# (#430, slice 1 of #425) — longer than CLAIM_EXPIRY_DAYS so a genuine admin
+# turnaround keeps real room, while still bounding how long an abandoned or
+# squatting claim can lock a Publisher/Series target. Never reset by a
+# recheck (there is none for these mechanisms) — measured from
+# Claim.last_checked_at, which for these rows only ever holds its
+# creation-time value.
+CLAIM_ADMIN_REVIEW_EXPIRY_DAYS = 30
 
 # Bounded concurrency for expire_stale_claims' expiry-notification fan-out
 # (#421) — same rationale as REPORT_EMAIL_SEND_CONCURRENCY (Resend free-tier

@@ -8,7 +8,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 
 import httpx
-from sqlalchemy import func, select, update
+from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -25,6 +25,7 @@ from app.claims.verification import (
 from app.config import settings
 from app.constants import (
     CLAIM_ACTIVE_STATUSES,
+    CLAIM_ADMIN_REVIEW_EXPIRY_DAYS,
     CLAIM_AUTOMATED_VERIFICATION_MECHANISMS,
     CLAIM_DISCOVERY_STATUS_CLAIMED,
     CLAIM_DISCOVERY_STATUS_PENDING,
@@ -531,6 +532,10 @@ async def _send_claim_expiry_emails(db: AsyncSession, expired: list[Claim]) -> N
     than a per-row SELECT. A Series-kind claim gets no title resolved here
     for the same cost reason admin_list_claims skips it for lists — the
     email falls back to generic wording (app.email.claim_resolution._target_label).
+    Each row's ``days`` figure is picked from its own verification_mechanism
+    (#430) — CLAIM_EXPIRY_DAYS for an automated one, CLAIM_ADMIN_REVIEW_EXPIRY_DAYS
+    otherwise — so the email states the window that actually applied to it,
+    not always the shorter automated one.
     Called after the sweep's own commit (mirrors send_report_resolution_emails).
     The whole body is exception-guarded: the expiry status transition is
     already durable at this point, so a bulk-load failure here must not
@@ -574,6 +579,11 @@ async def _send_claim_expiry_emails(db: AsyncSession, expired: list[Claim]) -> N
             if claim.publisher_id is not None
             else None
         )
+        days = (
+            CLAIM_EXPIRY_DAYS
+            if claim.verification_mechanism in CLAIM_AUTOMATED_VERIFICATION_MECHANISMS
+            else CLAIM_ADMIN_REVIEW_EXPIRY_DAYS
+        )
         async with semaphore:
             try:
                 await send_claim_expired_email(
@@ -581,6 +591,7 @@ async def _send_claim_expiry_emails(db: AsyncSession, expired: list[Claim]) -> N
                     event.title_orig if event else None,
                     organizer.locale,
                     http_client=http_client,
+                    days=days,
                 )
             except Exception:
                 log.error(
@@ -598,20 +609,38 @@ async def _send_claim_expiry_emails(db: AsyncSession, expired: list[Claim]) -> N
 
 
 async def expire_stale_claims(db: AsyncSession) -> dict:
-    """Sweep job (#413/#421): expire a pending automated-mechanism claim that
-    has gone CLAIM_EXPIRY_DAYS without a recheck, then notify each claimant.
-    Admin-review claims (Series, and any Publisher claim that fell back to
-    it) never expire on their own — excluded by the verification_mechanism
-    filter, not just the status one. Commits internally (mirrors
-    build_daily_feeds) so the expiry emails below reflect only durably
-    expired rows — app/main.py wires this job with commit=False."""
-    cutoff = datetime.now(timezone.utc) - timedelta(days=CLAIM_EXPIRY_DAYS)
+    """Sweep job (#413/#421/#430): expire a pending claim that has gone too
+    long without resolution, then notify each claimant. Two windows, one
+    pass: an automated-mechanism claim (Fienta token, DNS-TXT, Piletilevi
+    promoter — CLAIM_AUTOMATED_VERIFICATION_MECHANISMS) expires after
+    CLAIM_EXPIRY_DAYS without a recheck; everything else (admin_review,
+    piletilevi_mailbox — neither has a recheck path, see that constant's
+    comment) expires after the longer CLAIM_ADMIN_REVIEW_EXPIRY_DAYS instead
+    of never, closing the permanent-lock hole #425 flagged. Commits
+    internally (mirrors build_daily_feeds) so the expiry emails below
+    reflect only durably expired rows — app/main.py wires this job with
+    commit=False."""
+    now = datetime.now(timezone.utc)
+    automated_cutoff = now - timedelta(days=CLAIM_EXPIRY_DAYS)
+    admin_review_cutoff = now - timedelta(days=CLAIM_ADMIN_REVIEW_EXPIRY_DAYS)
     result = await db.execute(
         update(Claim)
         .where(
             Claim.status == CLAIM_STATUS_PENDING,
-            Claim.verification_mechanism.in_(CLAIM_AUTOMATED_VERIFICATION_MECHANISMS),
-            Claim.last_checked_at < cutoff,
+            or_(
+                and_(
+                    Claim.verification_mechanism.in_(
+                        CLAIM_AUTOMATED_VERIFICATION_MECHANISMS
+                    ),
+                    Claim.last_checked_at < automated_cutoff,
+                ),
+                and_(
+                    Claim.verification_mechanism.notin_(
+                        CLAIM_AUTOMATED_VERIFICATION_MECHANISMS
+                    ),
+                    Claim.last_checked_at < admin_review_cutoff,
+                ),
+            ),
         )
         .values(status=CLAIM_STATUS_EXPIRED, resolved_at=func.now())
         .returning(Claim)

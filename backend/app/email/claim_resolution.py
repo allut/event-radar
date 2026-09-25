@@ -53,11 +53,9 @@ def _prepare_declined(event_title: str | None, note: str, locale: str) -> tuple[
     return intro, note.strip() or t("email.claim_declined.fallback_note", locale)
 
 
-def _prepare_expired(event_title: str | None, locale: str) -> tuple[str, str]:
+def _prepare_expired(event_title: str | None, locale: str, days: int) -> tuple[str, str]:
     label = _target_label(event_title, locale)
-    intro = ti(
-        "email.claim_expired.intro", locale, event_title=label, days=CLAIM_EXPIRY_DAYS
-    )
+    intro = ti("email.claim_expired.intro", locale, event_title=label, days=days)
     return intro, t("email.claim_expired.fallback_note", locale)
 
 
@@ -118,8 +116,10 @@ def build_claim_declined_html(event_title: str | None, note: str, locale: str) -
     )
 
 
-def build_claim_expired_html(event_title: str | None, locale: str) -> str:
-    intro, note = _prepare_expired(event_title, locale)
+def build_claim_expired_html(
+    event_title: str | None, locale: str, days: int = CLAIM_EXPIRY_DAYS
+) -> str:
+    intro, note = _prepare_expired(event_title, locale, days)
     return _build_html(subject_key="email.claim_expired", intro=intro, note=note, locale=locale)
 
 
@@ -209,8 +209,14 @@ async def send_claim_expired_email(
     event_title: str | None,
     locale: str,
     http_client: httpx.AsyncClient | None = None,
+    days: int = CLAIM_EXPIRY_DAYS,
 ) -> None:
-    intro, note = _prepare_expired(event_title, locale)
+    """`days` is the window that actually fired — CLAIM_EXPIRY_DAYS for an
+    automated-mechanism claim, or the caller's CLAIM_ADMIN_REVIEW_EXPIRY_DAYS
+    for an admin_review/piletilevi_mailbox one (#430); defaults to
+    CLAIM_EXPIRY_DAYS so existing non-expiry-sweep callers, if any, need no
+    change."""
+    intro, note = _prepare_expired(event_title, locale, days)
     html_body = _build_html(
         subject_key="email.claim_expired", intro=intro, note=note, locale=locale
     )

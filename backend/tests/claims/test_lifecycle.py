@@ -21,9 +21,11 @@ from app.claims.lifecycle import (
 )
 from app.claims.verification import VerificationResult
 from app.constants import (
+    CLAIM_ADMIN_REVIEW_EXPIRY_DAYS,
     CLAIM_DISCOVERY_STATUS_CLAIMED,
     CLAIM_DISCOVERY_STATUS_PENDING,
     CLAIM_DISCOVERY_STATUS_UNCLAIMED,
+    CLAIM_EXPIRY_DAYS,
     CLAIM_KIND_PUBLISHER,
     CLAIM_KIND_SERIES,
     CLAIM_STATUS_APPROVED,
@@ -687,6 +689,54 @@ class TestExpireStaleClaims:
         assert "http_client" in kwargs
 
     @pytest.mark.asyncio
+    async def test_expiry_email_reports_the_window_that_actually_fired(
+        self, mock_db, make_organizer
+    ):
+        """#430: an automated-mechanism claim's expiry email states
+        CLAIM_EXPIRY_DAYS; an admin_review (or piletilevi_mailbox) one states
+        CLAIM_ADMIN_REVIEW_EXPIRY_DAYS instead — never the shorter automated
+        figure, which would misstate how long the claim actually sat."""
+        automated_claim = MagicMock(
+            id=1,
+            organizer_id=5,
+            kind=CLAIM_KIND_PUBLISHER,
+            publisher_id=None,
+            verification_mechanism=CLAIM_VERIFICATION_MECHANISM_DNS_TXT,
+        )
+        admin_review_claim = MagicMock(
+            id=2,
+            organizer_id=6,
+            kind=CLAIM_KIND_SERIES,
+            publisher_id=None,
+            verification_mechanism=CLAIM_VERIFICATION_MECHANISM_ADMIN_REVIEW,
+        )
+        execute_result = MagicMock()
+        execute_result.scalars.return_value = MagicMock(
+            all=MagicMock(return_value=[automated_claim, admin_review_claim])
+        )
+        mock_db.execute.return_value = execute_result
+
+        organizer_5 = make_organizer(organizer_id=5)
+        organizer_6 = make_organizer(organizer_id=6)
+        mock_db.scalars.return_value = MagicMock(
+            all=MagicMock(return_value=[organizer_5, organizer_6])
+        )
+
+        organizer_5.email = "organizer-5@example.com"
+        organizer_6.email = "organizer-6@example.com"
+
+        with patch(
+            "app.claims.lifecycle.send_claim_expired_email", new_callable=AsyncMock
+        ) as send_mock:
+            await expire_stale_claims(mock_db)
+
+        days_by_organizer = {
+            call.args[0]: call.kwargs["days"] for call in send_mock.await_args_list
+        }
+        assert days_by_organizer[organizer_5.email] == CLAIM_EXPIRY_DAYS
+        assert days_by_organizer[organizer_6.email] == CLAIM_ADMIN_REVIEW_EXPIRY_DAYS
+
+    @pytest.mark.asyncio
     async def test_publisher_kind_expiry_resolves_event_title(self, mock_db, make_organizer, make_event):
         """A Publisher-kind expired claim's email gets a real event title,
         bulk-resolved via EventSource/Event (mirrors admin_list_claims'
@@ -718,6 +768,40 @@ class TestExpireStaleClaims:
         send_mock.assert_awaited_once()
         args, _kwargs = send_mock.call_args
         assert args == (organizer.email, "Jazz Night", organizer.locale)
+
+    @pytest.mark.asyncio
+    async def test_selects_distinct_cutoff_per_mechanism_group(self, mock_db):
+        """#430: an automated-mechanism claim (Fienta token/DNS-TXT/Piletilevi
+        promoter) is swept against the CLAIM_EXPIRY_DAYS cutoff; everything
+        else (admin_review, piletilevi_mailbox) is swept against the longer
+        CLAIM_ADMIN_REVIEW_EXPIRY_DAYS cutoff — one UPDATE, two OR-ed
+        mechanism/cutoff branches. Asserted against the compiled statement
+        rather than row outcomes, since mock_db never runs real SQL."""
+        execute_result = MagicMock()
+        execute_result.scalars.return_value = MagicMock(all=MagicMock(return_value=[]))
+        mock_db.execute.return_value = execute_result
+        mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=[]))
+
+        before = datetime.now(timezone.utc)
+        await expire_stale_claims(mock_db)
+        after = datetime.now(timezone.utc)
+
+        statement = mock_db.execute.call_args.args[0]
+        sql = str(statement.compile())
+        params = statement.compile().params
+
+        assert "claims.verification_mechanism IN" in sql
+        assert "claims.verification_mechanism NOT IN" in sql
+
+        automated_cutoff = params["last_checked_at_1"]
+        admin_review_cutoff = params["last_checked_at_2"]
+        assert automated_cutoff > admin_review_cutoff
+
+        expected_automated = before - timedelta(days=CLAIM_EXPIRY_DAYS)
+        expected_admin_review = before - timedelta(days=CLAIM_ADMIN_REVIEW_EXPIRY_DAYS)
+        tolerance = after - before + timedelta(seconds=1)
+        assert abs(automated_cutoff - expected_automated) <= tolerance
+        assert abs(admin_review_cutoff - expected_admin_review) <= tolerance
 
 
 class TestBulkDormantPinnedEventIds:
