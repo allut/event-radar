@@ -2018,6 +2018,10 @@ ERROR_CLAIM_QUEUE_INVALID_STATUS = "status must be 'pending' or 'approved'."
 ERROR_DAILY_CLAIM_LIMIT = "Daily claim limit reached. Try again tomorrow."
 ERROR_CLAIM_SEARCH_QUERY_TOO_SHORT = "Search query is too short."
 ERROR_CLAIM_NOT_GRANTED = "This claim is not yet granted — editing stays locked until then."
+ERROR_CLAIM_DORMANT = (
+    "This claim is dormant — a duplicate claimed event now takes precedence, "
+    "so editing stays locked until that's resolved."
+)
 ERROR_DAILY_CLAIM_EDIT_LIMIT = "Daily claim-edit limit reached. Try again tomorrow."
 ERROR_CLAIM_EVENT_NOT_FOUND = "No event could be resolved for this claim."
 ERROR_CLAIM_EDIT_URL_DOMAIN = "URL must stay on the domain this claim was verified against."

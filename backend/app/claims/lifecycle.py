@@ -154,6 +154,72 @@ async def resolve_claim_for_event(db: AsyncSession, event: Event) -> Claim | Non
     return await active_claim_for_target(db, target)
 
 
+async def bulk_dormant_pinned_event_ids(db: AsyncSession, events: list[Event]) -> set[int]:
+    """Ids of `events` whose pins should be treated as not applying right
+    now — pinned_fields is set AND the covering claim is dormant (#422).
+    Batched EventSource + Claim lookup (fixed query count, not one
+    resolve_claim_for_event per event) for passes that scan many events at
+    once, e.g. refetch_event_details."""
+    candidate_ids = [e.id for e in events if e.pinned_fields]
+    if not candidate_ids:
+        return set()
+
+    es_rows = (
+        await db.execute(
+            select(EventSource.event_id, EventSource.publisher_id)
+            .where(EventSource.event_id.in_(candidate_ids))
+            .order_by(EventSource.event_id, EventSource.id)
+        )
+    ).all()
+    es_by_event: dict[int, int | None] = {}
+    for event_id, publisher_id in es_rows:
+        es_by_event.setdefault(event_id, publisher_id)
+
+    events_by_id = {e.id: e for e in events}
+    publisher_ids: set[int] = set()
+    series_keys: dict[str, set[int]] = {}
+    for event_id, publisher_id in es_by_event.items():
+        if publisher_id is not None:
+            publisher_ids.add(publisher_id)
+        else:
+            event = events_by_id[event_id]
+            key = serialize_event_series_key(
+                event_series_key(event.title_orig, resolve_venue_name(event))
+            )
+            series_keys.setdefault(key, set()).add(event_id)
+
+    dormant_event_ids: set[int] = set()
+    if publisher_ids:
+        rows = (
+            await db.execute(
+                select(Claim.publisher_id).where(
+                    Claim.publisher_id.in_(publisher_ids),
+                    Claim.status.in_(CLAIM_ACTIVE_STATUSES),
+                    Claim.dormant.is_(True),
+                )
+            )
+        ).all()
+        dormant_publisher_ids = {r[0] for r in rows}
+        dormant_event_ids.update(
+            event_id
+            for event_id, publisher_id in es_by_event.items()
+            if publisher_id in dormant_publisher_ids
+        )
+    if series_keys:
+        series_rows = (
+            await db.execute(
+                select(Claim.event_series_key).where(
+                    Claim.event_series_key.in_(series_keys),
+                    Claim.status.in_(CLAIM_ACTIVE_STATUSES),
+                    Claim.dormant.is_(True),
+                )
+            )
+        ).all()
+        for (key,) in series_rows:
+            dormant_event_ids.update(series_keys.get(key, set()))
+    return dormant_event_ids
+
+
 def claim_status_from_claim(claim: Claim | None) -> str:
     """(#414) unclaimed/pending/claimed for `claim`'s public page CTA — an
     event whose resolve_claim_for_event() came back None (never ingested,

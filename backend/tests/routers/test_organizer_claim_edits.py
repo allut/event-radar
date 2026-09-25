@@ -18,6 +18,7 @@ from app.constants import (
     CLAIM_KIND_PUBLISHER,
     CLAIM_STATUS_APPROVED,
     CLAIM_STATUS_PENDING,
+    ERROR_CLAIM_DORMANT,
     ERROR_CLAIM_EDIT_URL_DOMAIN,
     ERROR_CLAIM_NOT_GRANTED,
     ERROR_DAILY_CLAIM_EDIT_LIMIT,
@@ -35,6 +36,7 @@ def _fake_claim(**overrides) -> MagicMock:
     c.kind = CLAIM_KIND_PUBLISHER
     c.publisher_id = 99
     c.status = CLAIM_STATUS_APPROVED
+    c.dormant = False
     c.verification_domain = None
     for k, v in overrides.items():
         setattr(c, k, v)
@@ -80,6 +82,30 @@ class TestGetClaimEvent:
                 )
         assert exc.value.status_code == http.HTTPStatus.CONFLICT
         assert exc.value.detail == ERROR_CLAIM_NOT_GRANTED
+
+    @pytest.mark.asyncio
+    async def test_locked_while_dormant(self, mock_db, make_request, make_organizer):
+        """#422: a granted claim that has since gone dormant (lost a dedup
+        collision to another claimed duplicate) must lock editing too, not
+        just a not-yet-granted one."""
+        from app.routers.organizer_claim_edits import get_claim_event
+
+        organizer = make_organizer(organizer_id=5)
+        stack, mocks = _patched(
+            own_claim_or_404=AsyncMock(
+                return_value=_fake_claim(status=CLAIM_STATUS_APPROVED, dormant=True)
+            )
+        )
+        with stack:
+            with pytest.raises(HTTPException) as exc:
+                await get_claim_event(
+                    1,
+                    make_request(method="GET", path="/organizer/claims/1/event"),
+                    current_organizer=organizer,
+                    db=mock_db,
+                )
+        assert exc.value.status_code == http.HTTPStatus.CONFLICT
+        assert exc.value.detail == ERROR_CLAIM_DORMANT
 
     @pytest.mark.asyncio
     async def test_claim_not_found_propagates_404(self, mock_db, make_request, make_organizer):
@@ -173,6 +199,34 @@ class TestUpdateClaimEvent:
                 )
         assert exc.value.status_code == http.HTTPStatus.CONFLICT
         assert exc.value.detail == ERROR_CLAIM_NOT_GRANTED
+        mocks["publish_pending"].assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_save_locked_while_dormant(
+        self, mock_db, make_request, make_organizer
+    ):
+        """#422: PATCH must lock the same way GET does once the claim goes
+        dormant — otherwise a save here would just get silently reverted by
+        the next refetch pass."""
+        from app.routers.organizer_claim_edits import PatchClaimEventBody, update_claim_event
+
+        organizer = make_organizer(organizer_id=5)
+        stack, mocks = _patched(
+            own_claim_or_404=AsyncMock(
+                return_value=_fake_claim(status=CLAIM_STATUS_APPROVED, dormant=True)
+            )
+        )
+        with stack:
+            with pytest.raises(HTTPException) as exc:
+                await update_claim_event(
+                    1,
+                    PatchClaimEventBody(title="New title"),
+                    make_request(method="PATCH", path="/organizer/claims/1/event"),
+                    current_organizer=organizer,
+                    db=mock_db,
+                )
+        assert exc.value.status_code == http.HTTPStatus.CONFLICT
+        assert exc.value.detail == ERROR_CLAIM_DORMANT
         mocks["publish_pending"].assert_not_called()
 
     @pytest.mark.asyncio

@@ -25,6 +25,7 @@ from app.claims.pinning import (
 )
 from app.constants import (
     CLAIM_STATUS_APPROVED,
+    ERROR_CLAIM_DORMANT,
     ERROR_CLAIM_EDIT_URL_DOMAIN,
     ERROR_CLAIM_EVENT_NOT_FOUND,
     ERROR_CLAIM_NOT_GRANTED,
@@ -155,6 +156,12 @@ async def _own_granted_claim_or_404(db: AsyncSession, claim_id: int, organizer_i
         raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
     if claim.status != CLAIM_STATUS_APPROVED:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=ERROR_CLAIM_NOT_GRANTED)
+    # #422: a dormant claim lost a dedup collision to another claimed
+    # duplicate — its pins stop applying, so editing must lock too (a save
+    # here would just get silently reverted by the next refetch pass, per
+    # bulk_dormant_pinned_event_ids in app/claims/lifecycle.py).
+    if claim.dormant:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=ERROR_CLAIM_DORMANT)
     return claim
 
 

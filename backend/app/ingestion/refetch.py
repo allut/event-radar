@@ -75,6 +75,7 @@ from app.ingestion.locale_urls import (
     locale_from_html_lang,
     locale_from_url_path,
 )
+from app.claims.lifecycle import bulk_dormant_pinned_event_ids
 from app.claims.pinning import pin_key
 from app.ingestion.sanitize import sanitize_html
 from app.ingestion.geocode import is_suspect_venue_name
@@ -230,6 +231,7 @@ async def _backfill_localized_text(
     soup: BeautifulSoup,
     url: str,
     summary: dict,
+    dormant_event_ids: set[int],
 ) -> None:
     """Backfill missing locale keys of title/description from locale-variant pages.
 
@@ -239,7 +241,9 @@ async def _backfill_localized_text(
     counts as missing and is re-fetched. A locale pinned via the claim-editing
     surface (#416/#417) is excluded regardless of missing/suspect state — an
     organizer's correction (including an intentional clear) must not be
-    silently refilled from the source.
+    silently refilled from the source — UNLESS the covering claim has since
+    gone dormant (#422: a dormant claim's pins stop applying), in which case
+    the pin is treated as absent and the source value backfills normally.
     """
     base_host = urlsplit(url).hostname
     normalized_host = (base_host or "").removeprefix("www.")
@@ -249,7 +253,7 @@ async def _backfill_localized_text(
     existing_descs: dict[str, str] = (
         dict(event.description_localized) if event.description_localized else {}
     )
-    pinned = set(event.pinned_fields)
+    pinned = set() if event.id in dormant_event_ids else set(event.pinned_fields)
     missing_title_locales = {
         loc for loc in LOCALIZED_TEXT_FIENTA_LOCALES
         if pin_key("title", loc) not in pinned
@@ -318,6 +322,7 @@ async def _process_one(
     event: Event,
     summary: dict,
     now: datetime,
+    dormant_event_ids: set[int],
 ) -> bool:
     """Fetch one event's detail page, backfill locales, and reconcile fields.
 
@@ -344,7 +349,7 @@ async def _process_one(
 
     # Runs before the no_data gate so events whose JSON-LD has only text
     # (no location/offers) still receive localized titles/descriptions.
-    await _backfill_localized_text(client, event, soup, url, summary)
+    await _backfill_localized_text(client, event, soup, url, summary, dormant_event_ids)
 
     parsed_anything = location is not None or any(
         v is not None for v in (price_min, price_max, currency)
@@ -381,6 +386,7 @@ async def refetch_event_details(db: AsyncSession) -> dict:
     """
     now = datetime.now(TALLINN_TZ)
     candidates = await _select_candidates(db, now)
+    dormant_event_ids = await bulk_dormant_pinned_event_ids(db, candidates)
 
     summary = {
         "candidates": len(candidates),
@@ -414,7 +420,7 @@ async def refetch_event_details(db: AsyncSession) -> dict:
                 # events left unprocessed here sort first next run.
                 summary["deadline_stopped"] = True
                 break
-            fetched = await _process_one(client, event, summary, now)
+            fetched = await _process_one(client, event, summary, now, dormant_event_ids)
             if fetched:
                 await asyncio.sleep(REFETCH_REQUEST_DELAY_SECONDS)
             if time.monotonic() - last_commit >= REFETCH_COMMIT_INTERVAL_SECONDS:

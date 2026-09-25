@@ -737,6 +737,47 @@ class TestPinnedFieldsRespected:
         assert summary["price_changed"] == 1
         assert event.price_min == 12.0
 
+    @pytest.mark.asyncio
+    async def test_dormant_claim_pin_no_longer_applies(self, mock_db):
+        """#422: once the covering claim goes dormant, an intentional-clear
+        pin (title_localized carries no 'et' key, kept out of missing-locale
+        backfill only by the pin) stops blocking the source-side backfill —
+        treated as if never pinned."""
+        event = _future_event(
+            url="https://kumu.ekm.ee/en/syndmus/some-event/",
+            title_localized=None,
+            description_localized=None,
+            pinned_fields=[pin_key("title", "et")],
+        )
+        en_html, et_html = self._locale_pages("Fresh EN Title", "Fresh ET Title")
+        with patch(
+            "app.ingestion.refetch.bulk_dormant_pinned_event_ids",
+            new=AsyncMock(return_value={event.id}),
+        ):
+            await self._run_locale_backfill(mock_db, event, en_html, et_html)
+
+        assert event.title_localized["et"] == "Fresh ET Title"
+
+    @pytest.mark.asyncio
+    async def test_reactivated_claim_pin_applies_again(self, mock_db):
+        """A claim NOT in the dormant set (e.g. reactivated) keeps its pin —
+        the et locale stays out of the missing-locale backfill."""
+        event = _future_event(
+            url="https://kumu.ekm.ee/en/syndmus/some-event/",
+            title_localized=None,
+            description_localized=None,
+            pinned_fields=[pin_key("title", "et")],
+        )
+        en_html, et_html = self._locale_pages("Fresh EN Title", "Fresh ET Title")
+        with patch(
+            "app.ingestion.refetch.bulk_dormant_pinned_event_ids",
+            new=AsyncMock(return_value=set()),
+        ):
+            await self._run_locale_backfill(mock_db, event, en_html, et_html)
+
+        assert event.title_localized is not None
+        assert "et" not in event.title_localized
+
 
 # ---------------------------------------------------------------------------
 # locale_from_url_path

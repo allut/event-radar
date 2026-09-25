@@ -9,6 +9,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.claims.lifecycle import (
     ClaimError,
+    bulk_dormant_pinned_event_ids,
     cancel_claim,
     claim_status_from_claim,
     claiming_organizer_name,
@@ -37,6 +38,7 @@ from app.constants import (
     SOURCE_SLUG_FIENTA,
     SOURCE_SLUG_KUMU,
 )
+from app.routers.utils import event_series_key, serialize_event_series_key
 
 
 def _fake_event_source(
@@ -568,3 +570,74 @@ class TestExpireStaleClaims:
         send_mock.assert_awaited_once()
         args, _kwargs = send_mock.call_args
         assert args == (organizer.email, "Jazz Night", organizer.locale)
+
+
+class TestBulkDormantPinnedEventIds:
+    """#422: pinned_fields must not keep applying once the covering claim
+    is dormant — batched over many events (refetch_event_details), fixed
+    query count."""
+
+    @pytest.mark.asyncio
+    async def test_no_pinned_events_short_circuits(self, mock_db, make_event):
+        event = make_event(event_id=1)
+        event.pinned_fields = []
+
+        result = await bulk_dormant_pinned_event_ids(mock_db, [event])
+
+        assert result == set()
+        mock_db.execute.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_publisher_kind_dormant_claim_flagged(self, mock_db, make_event):
+        event = make_event(event_id=42)
+        event.pinned_fields = ["title:et"]
+        mock_db.execute.side_effect = [
+            MagicMock(all=MagicMock(return_value=[(42, 99)])),  # EventSource rows
+            MagicMock(all=MagicMock(return_value=[(99,)])),  # dormant publisher_ids
+        ]
+
+        result = await bulk_dormant_pinned_event_ids(mock_db, [event])
+
+        assert result == {42}
+
+    @pytest.mark.asyncio
+    async def test_publisher_kind_active_claim_not_flagged(self, mock_db, make_event):
+        event = make_event(event_id=42)
+        event.pinned_fields = ["title:et"]
+        mock_db.execute.side_effect = [
+            MagicMock(all=MagicMock(return_value=[(42, 99)])),  # EventSource rows
+            MagicMock(all=MagicMock(return_value=[])),  # no dormant publishers
+        ]
+
+        result = await bulk_dormant_pinned_event_ids(mock_db, [event])
+
+        assert result == set()
+
+    @pytest.mark.asyncio
+    async def test_series_kind_dormant_claim_flagged(self, mock_db, make_event):
+        event = make_event(event_id=7, venue_name="Kumu")
+        event.title_orig = "Jazz Night"
+        event.pinned_fields = ["title:et"]
+        key = serialize_event_series_key(event_series_key("Jazz Night", "Kumu"))
+        mock_db.execute.side_effect = [
+            MagicMock(all=MagicMock(return_value=[(7, None)])),  # EventSource rows
+            MagicMock(all=MagicMock(return_value=[(key,)])),  # dormant series keys
+        ]
+
+        result = await bulk_dormant_pinned_event_ids(mock_db, [event])
+
+        assert result == {7}
+
+    @pytest.mark.asyncio
+    async def test_no_event_source_row_never_dormant(self, mock_db, make_event):
+        """An organizer's own direct submission (no EventSource row) has no
+        claim to go dormant — its pin always keeps applying."""
+        event = make_event(event_id=5)
+        event.pinned_fields = ["title:et"]
+        mock_db.execute.side_effect = [
+            MagicMock(all=MagicMock(return_value=[])),  # no EventSource rows
+        ]
+
+        result = await bulk_dormant_pinned_event_ids(mock_db, [event])
+
+        assert result == set()
