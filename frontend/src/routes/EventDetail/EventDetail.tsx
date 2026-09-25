@@ -10,6 +10,7 @@ import { useLocaleMutation } from '../../hooks/useLocaleMutation';
 import { useLocaleNavigate } from '../../hooks/useLocaleNavigate';
 import { useLocalePath } from '../../hooks/useLocalePath';
 import { useLogout } from '../../hooks/useLogout';
+import { useOrganizerAuth } from '../../hooks/useOrganizerAuth';
 import { useToast } from '../../hooks/useToast';
 import { useSeoMeta } from '../../hooks/useSeoMeta';
 import { buildEventJsonLd } from '../../lib/structuredData';
@@ -37,6 +38,7 @@ export default function EventDetail() {
   const navigate = useLocaleNavigate();
   const localePath = useLocalePath();
   const authed = useAuth();
+  const organizerAuthed = useOrganizerAuth();
   const { locale, handleLocaleChange, isPending: localePending } = useLocaleMutation({ publicRoute: true });
   const handleLogout = useLogout();
   const { toast, showToast } = useToast();
@@ -180,7 +182,8 @@ export default function EventDetail() {
                 {ti('ends_at', locale, { time: formatHourMinute(data.ends_at, locale) })}
               </span>
             )}
-            {(data.claim_status === 'pending' || data.claim_status === 'claimed') && (
+            {(data.claim_status === 'claimed' ||
+              (data.claim_status === 'pending' && organizerAuthed)) && (
               <ClaimPill status={data.claim_status} locale={locale} />
             )}
           </div>
