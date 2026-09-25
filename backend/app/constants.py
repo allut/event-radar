@@ -2017,6 +2017,10 @@ ERROR_DAILY_VENUE_CREATION_LIMIT = (
 ERROR_VENUE_NOT_FOUND = "Venue not found."
 ERROR_CLAIM_NOT_FOUND = "Claim not found."
 ERROR_CLAIM_NOT_CLAIMABLE = "This event has no publisher or series that can be claimed."
+# (#429) Explicit guard — a direct organizer submission has no ingested
+# EventSource to claim against; keeps the claim mechanism (ingested events)
+# and the submission-trust track (Organizer.verified) separate.
+ERROR_CLAIM_OWN_SUBMISSION = "You cannot claim your own directly submitted event."
 ERROR_CLAIM_ALREADY_EXISTS = (
     "This publisher or series already has a pending or approved claim."
 )

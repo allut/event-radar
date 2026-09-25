@@ -139,6 +139,7 @@ def make_event():
         why_go: list[str] | None = None,
         why_go_localized: dict | None = None,
         image_url: str | None = None,
+        submitted_by_organizer_id: int | None = None,
     ) -> MagicMock:
         if starts_at is None:
             starts_at = datetime(2026, 5, 15, 18, 0, 0, tzinfo=timezone.utc)
@@ -171,6 +172,7 @@ def make_event():
         e.is_out_of_area = False
         e.has_free_tier = False
         e.dedup_group_id = None
+        e.submitted_by_organizer_id = submitted_by_organizer_id
         e.created_at = MagicMock()
         e.created_at.isoformat.return_value = "2026-05-13T06:00:00+00:00"
 

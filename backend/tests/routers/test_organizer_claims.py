@@ -16,7 +16,9 @@ from app.constants import (
     CLAIM_VERIFICATION_MECHANISM_FIENTA_TOKEN,
     DETAIL_MAGIC_LINK_SENT,
     ERROR_CLAIM_NOT_FOUND,
+    ERROR_CLAIM_OWN_SUBMISSION,
     ERROR_DAILY_CLAIM_LIMIT,
+    ERROR_EVENT_NOT_FOUND,
 )
 
 
@@ -80,6 +82,59 @@ class TestCreateOwnClaim:
 
         assert exc.value.status_code == http.HTTPStatus.TOO_MANY_REQUESTS
         assert exc.value.detail == ERROR_DAILY_CLAIM_LIMIT
+
+    @pytest.mark.asyncio
+    async def test_not_published_or_canonical_maps_to_404(
+        self, mock_db, make_request, make_organizer
+    ):
+        """Draft, cancelled, or non-canonical-duplicate events are rejected
+        the same way a nonexistent event_id is (#429)."""
+        from app.routers.organizer_claims import CreateClaimBody, create_own_claim
+
+        organizer = make_organizer(organizer_id=5)
+
+        with patch(
+            "app.routers.organizer_claims.create_claim",
+            new_callable=AsyncMock,
+            side_effect=ClaimError(http.HTTPStatus.NOT_FOUND, ERROR_EVENT_NOT_FOUND),
+        ):
+            with pytest.raises(HTTPException) as exc:
+                await create_own_claim(
+                    CreateClaimBody(event_id=10),
+                    make_request(method="POST", path="/organizer/claims"),
+                    current_organizer=organizer,
+                    db=mock_db,
+                )
+
+        assert exc.value.status_code == http.HTTPStatus.NOT_FOUND
+        assert exc.value.detail == ERROR_EVENT_NOT_FOUND
+
+    @pytest.mark.asyncio
+    async def test_own_submission_maps_to_422(self, mock_db, make_request, make_organizer):
+        """An organizer's own direct submission is rejected via the explicit
+        ERROR_CLAIM_OWN_SUBMISSION guard, not the generic not-claimable
+        error (#429)."""
+        from app.routers.organizer_claims import CreateClaimBody, create_own_claim
+
+        organizer = make_organizer(organizer_id=5)
+
+        with patch(
+            "app.routers.organizer_claims.create_claim",
+            new_callable=AsyncMock,
+            side_effect=ClaimError(
+                http.HTTPStatus.UNPROCESSABLE_ENTITY, ERROR_CLAIM_OWN_SUBMISSION
+            ),
+        ):
+            with pytest.raises(HTTPException) as exc:
+                await create_own_claim(
+                    CreateClaimBody(event_id=10),
+                    make_request(method="POST", path="/organizer/claims"),
+                    current_organizer=organizer,
+                    db=mock_db,
+                )
+
+        assert exc.value.status_code == http.HTTPStatus.UNPROCESSABLE_ENTITY
+        assert exc.value.detail == ERROR_CLAIM_OWN_SUBMISSION
 
 
 class TestCancelOwnClaim:

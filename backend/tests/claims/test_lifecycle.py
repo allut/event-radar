@@ -34,6 +34,8 @@ from app.constants import (
     CLAIM_VERIFICATION_MECHANISM_FIENTA_TOKEN,
     CLAIM_VERIFICATION_OUTCOME_ADMIN_REVIEW,
     CLAIM_VERIFICATION_OUTCOME_AUTO_GRANT,
+    ERROR_CLAIM_OWN_SUBMISSION,
+    ERROR_EVENT_NOT_FOUND,
     KUMU_VERIFICATION_DOMAIN,
     ORGANIZER_DAILY_CLAIM_CAP,
     SOURCE_SLUG_FIENTA,
@@ -114,6 +116,108 @@ class TestCreateClaim:
             await create_claim(mock_db, AsyncMock(), organizer, event_id=10)
 
         assert exc.value.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_draft_event_rejected_404(self, mock_db, make_organizer, make_event):
+        mock_db.scalar.return_value = 0
+        mock_db.get.return_value = make_event(status="draft")
+        organizer = make_organizer(organizer_id=5)
+
+        with pytest.raises(ClaimError) as exc:
+            await create_claim(mock_db, AsyncMock(), organizer, event_id=10)
+
+        assert exc.value.status_code == 404
+        assert exc.value.detail == ERROR_EVENT_NOT_FOUND
+
+    @pytest.mark.asyncio
+    async def test_cancelled_event_rejected_404(self, mock_db, make_organizer, make_event):
+        mock_db.scalar.return_value = 0
+        mock_db.get.return_value = make_event(status="cancelled")
+        organizer = make_organizer(organizer_id=5)
+
+        with pytest.raises(ClaimError) as exc:
+            await create_claim(mock_db, AsyncMock(), organizer, event_id=10)
+
+        assert exc.value.status_code == 404
+        assert exc.value.detail == ERROR_EVENT_NOT_FOUND
+
+    @pytest.mark.asyncio
+    async def test_non_canonical_duplicate_rejected_404(self, mock_db, make_organizer, make_event):
+        mock_db.scalar.return_value = 0
+        event = make_event(event_id=10)
+        event.dedup_group_id = 999  # canonical representative is a different row
+        mock_db.get.return_value = event
+        organizer = make_organizer(organizer_id=5)
+
+        with pytest.raises(ClaimError) as exc:
+            await create_claim(mock_db, AsyncMock(), organizer, event_id=10)
+
+        assert exc.value.status_code == 404
+        assert exc.value.detail == ERROR_EVENT_NOT_FOUND
+
+    @pytest.mark.asyncio
+    async def test_canonical_representative_not_rejected(
+        self, mock_db, make_organizer, make_event
+    ):
+        mock_db.scalar = AsyncMock(side_effect=[0, None])
+        event = make_event(event_id=10)
+        event.dedup_group_id = 10  # own group's representative — still canonical
+        mock_db.get.return_value = event
+        organizer = make_organizer(organizer_id=5)
+
+        with pytest.raises(ClaimError) as exc:
+            await create_claim(mock_db, AsyncMock(), organizer, event_id=10)
+
+        # Passes the published/canonical gate and falls through to the
+        # (unrelated) no-resolvable-source check, not the 404 gate.
+        assert exc.value.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_explicit_event_rejected_404(self, mock_db, make_organizer, make_event):
+        mock_db.scalar.return_value = 0
+        event = make_event()
+        event.is_explicit = True
+        mock_db.get.return_value = event
+        organizer = make_organizer(organizer_id=5)
+
+        with pytest.raises(ClaimError) as exc:
+            await create_claim(mock_db, AsyncMock(), organizer, event_id=10)
+
+        assert exc.value.status_code == 404
+        assert exc.value.detail == ERROR_EVENT_NOT_FOUND
+
+    @pytest.mark.asyncio
+    async def test_own_submission_rejected_422(self, mock_db, make_organizer, make_event):
+        mock_db.scalar.return_value = 0
+        mock_db.get.return_value = make_event(submitted_by_organizer_id=5)
+        organizer = make_organizer(organizer_id=5)
+
+        with pytest.raises(ClaimError) as exc:
+            await create_claim(mock_db, AsyncMock(), organizer, event_id=10)
+
+        assert exc.value.status_code == 422
+        assert exc.value.detail == ERROR_CLAIM_OWN_SUBMISSION
+
+    @pytest.mark.asyncio
+    async def test_ended_event_still_claimable(self, mock_db, make_organizer, make_event):
+        """An already-ended Publisher/Series target stays claimable — the
+        claim covers future re-matched occurrences too (#429)."""
+        es = _fake_event_source(publisher_id=99)
+        mock_db.scalar = AsyncMock(side_effect=[0, es])
+        event = make_event(starts_at=datetime(2020, 1, 1, 18, 0, 0, tzinfo=timezone.utc))
+        mock_db.get.return_value = event
+        organizer = make_organizer(organizer_id=5)
+
+        with patch(
+            "app.claims.lifecycle.verify_fienta_publisher_claim",
+            new_callable=AsyncMock,
+            return_value=VerificationResult(
+                CLAIM_VERIFICATION_MECHANISM_FIENTA_TOKEN, CLAIM_VERIFICATION_OUTCOME_AUTO_GRANT
+            ),
+        ):
+            claim = await create_claim(mock_db, AsyncMock(), organizer, event_id=10)
+
+        assert claim.kind == CLAIM_KIND_PUBLISHER
 
     @pytest.mark.asyncio
     async def test_fienta_publisher_claim_auto_grants(self, mock_db, make_organizer, make_event):

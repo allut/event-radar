@@ -44,8 +44,10 @@ from app.constants import (
     ERROR_CLAIM_NOT_CLAIMABLE,
     ERROR_CLAIM_NOT_FOUND,
     ERROR_CLAIM_NOT_PENDING,
+    ERROR_CLAIM_OWN_SUBMISSION,
     ERROR_DAILY_CLAIM_LIMIT,
     ERROR_EVENT_NOT_FOUND,
+    EVENT_STATUS_PUBLISHED,
     LOG_EVENT_EMAIL_SEND_FAILED,
     ORGANIZER_DAILY_CLAIM_CAP,
     RESEND_TIMEOUT_SECONDS,
@@ -333,8 +335,24 @@ async def create_claim(
         raise ClaimError(429, ERROR_DAILY_CLAIM_LIMIT)
 
     event = await db.get(Event, event_id)
-    if event is None:
+    if (
+        event is None
+        or event.status != EVENT_STATUS_PUBLISHED
+        or event.is_explicit
+        or event.is_non_event
+        or not (event.dedup_group_id is None or event.dedup_group_id == event.id)
+    ):
+        # Same published+canonical (+ not explicit/non-event) bar as
+        # public_event_filter()/canonical_event_filter() (utils.py) — a
+        # draft, cancelled, or non-canonical-duplicate event is rejected the
+        # same way a nonexistent one is, so id probing can't distinguish them.
         raise ClaimError(404, ERROR_EVENT_NOT_FOUND)
+
+    if event.submitted_by_organizer_id is not None:
+        # Explicit guard (#429) — a direct organizer submission has no
+        # ingested EventSource to claim against; without this check that
+        # would surface as the unrelated ERROR_CLAIM_NOT_CLAIMABLE below.
+        raise ClaimError(422, ERROR_CLAIM_OWN_SUBMISSION)
 
     es = await representative_event_source(db, event_id=event_id)
     if es is None or es.source is None:
