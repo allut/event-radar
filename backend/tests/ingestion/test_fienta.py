@@ -981,3 +981,88 @@ class TestFetchRawRateLimiting:
             await _adapter(organizer_ids=[1, 2]).fetch_raw({"1", "2"})
 
         assert mock_acquire.await_count == 2  # one listing request per organizer
+
+
+class TestFientaPresyncPublishers:
+    """#433: the fresh-deploy race between hourly ingest and the weekly
+    organizer sync — an empty publisher lookup at run() start must trigger
+    sync_fienta_organizers() before any event is inserted this run."""
+
+    @pytest.mark.asyncio
+    async def test_empty_lookup_triggers_sync_then_reloads_lookup(self, mock_db):
+        adapter = _adapter(organizer_ids=[42])
+
+        with patch(
+            "app.ingestion.sources.fienta.sync_fienta_organizers",
+            new_callable=AsyncMock,
+        ) as mock_sync, patch(
+            "app.ingestion.sources.fienta.load_publisher_lookup",
+            new_callable=AsyncMock,
+            return_value={"42": 7},
+        ) as mock_reload:
+            result = await adapter._presync_publishers(mock_db, {})
+
+        mock_sync.assert_awaited_once_with(mock_db)
+        mock_reload.assert_awaited_once_with(mock_db, adapter.source.id)
+        assert result == {"42": 7}
+
+    @pytest.mark.asyncio
+    async def test_populated_lookup_skips_sync(self, mock_db):
+        """A non-empty lookup means the mirror already ran — no need to
+        trigger another sync inline (that stays the weekly job's job)."""
+        adapter = _adapter(organizer_ids=[42])
+
+        with patch(
+            "app.ingestion.sources.fienta.sync_fienta_organizers",
+            new_callable=AsyncMock,
+        ) as mock_sync:
+            result = await adapter._presync_publishers(mock_db, {"42": 7})
+
+        mock_sync.assert_not_awaited()
+        assert result == {"42": 7}
+
+    @pytest.mark.asyncio
+    async def test_run_syncs_organizers_before_any_event_is_inserted(self, mock_db):
+        """Job-level: a fresh-deploy run() with an empty lookup must sync
+        organizers and reload the lookup before the crawl/insert phase, so
+        every event this run resolves against a populated lookup."""
+        adapter = _adapter(organizer_ids=[42])
+        adapter.fetch_raw = AsyncMock(return_value=[])
+
+        empty_lookup = MagicMock(all=MagicMock(return_value=[]))
+        populated_lookup = MagicMock(all=MagicMock(return_value=[("42", 7)]))
+        mock_db.execute.side_effect = [empty_lookup, populated_lookup]
+
+        with patch(
+            "app.ingestion.sources.fienta.sync_fienta_organizers",
+            new_callable=AsyncMock,
+        ) as mock_sync:
+            await adapter.run(mock_db)
+
+        mock_sync.assert_awaited_once_with(mock_db)
+        assert adapter._publisher_lookup == {"42": 7}
+
+    @pytest.mark.asyncio
+    async def test_presync_failure_is_recorded_as_run_error(self, mock_db):
+        """A presync failure (e.g. Fienta's organizer-sync HTTP probe timing
+        out) must land in IngestionRun.error and flip source.last_status,
+        exactly like a fetch_raw() failure — not escape unlogged before any
+        run row exists."""
+        source = _make_source(organizer_ids=[42])
+        adapter = FientaAdapter(source)
+        adapter.fetch_raw = AsyncMock()
+
+        mock_db.execute.return_value = MagicMock(all=MagicMock(return_value=[]))
+        with patch(
+            "app.ingestion.sources.fienta.sync_fienta_organizers",
+            new_callable=AsyncMock,
+            side_effect=httpx.ConnectTimeout("boom"),
+        ):
+            with pytest.raises(httpx.ConnectTimeout):
+                await adapter.run(mock_db)
+
+        adapter.fetch_raw.assert_not_awaited()
+        added_runs = [c.args[0] for c in mock_db.add.call_args_list]
+        assert len(added_runs) == 1
+        assert "boom" in added_runs[0].error
+        assert source.last_status == "error"

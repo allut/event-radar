@@ -7,6 +7,7 @@ from urllib.parse import urlparse
 
 import httpx
 from bs4 import BeautifulSoup
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.constants import (
@@ -28,9 +29,11 @@ from app.ingestion.adapter import (
     NormalizedEvent,
     SourceAdapter,
     coords_in_estonia,
+    load_publisher_lookup,
     parse_dt,
 )
 from app.ingestion.http_client import AsyncRateLimiter, host_guard_hook, http_get
+from app.ingestion.organizer_sync import sync_fienta_organizers
 from app.ingestion.jsonld import (
     extract_jsonld_event_text,
     location_from_jsonld_items,
@@ -235,6 +238,25 @@ class FientaAdapter(SourceAdapter):
     below Fienta's rate limit; a 429 also pushes the limiter's backoff out so
     remaining organizers/details pause together instead of piling on.
     """
+
+    async def _presync_publishers(
+        self, db: AsyncSession, lookup: dict[str | None, int]
+    ) -> dict[str | None, int]:
+        """Close the fresh-deploy race (#433): the weekly organizer sync
+        (organizer_sync.py) mirrors this source's Publisher rows, but hourly
+        ingest can run first. An empty lookup here means that mirror hasn't
+        run yet, so trigger it inline before any event is inserted this run
+        — every event this run resolves against a populated lookup instead of
+        landing permanently unstamped."""
+        if lookup:
+            return lookup
+        log.warning(
+            "fienta: publisher lookup empty for source=%s — syncing organizers "
+            "before ingest",
+            self.source.slug,
+        )
+        await sync_fienta_organizers(db)
+        return await load_publisher_lookup(db, self.source.id)
 
     async def fetch_raw(self, known_ids: set[str]) -> list[dict[str, Any]]:
         stale_ids: set[int] = set(self.source.config.get("stale_organizer_ids", []))

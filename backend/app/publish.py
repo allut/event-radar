@@ -12,11 +12,67 @@ from app.constants import (
     EVENT_STATUS_PUBLISHED,
     PUBLISH_DIAGNOSTICS_WINDOW_DAYS,
     PUBLISH_MIN_QUALITY_SCORE,
+    SOURCE_SLUG_FIENTA,
     TALLINN_REGION_BBOX,
     TALLINN_TZ,
 )
-from app.models.models import Event, EventClassification, Organizer
+from app.models.models import (
+    Event,
+    EventClassification,
+    EventSource,
+    Organizer,
+    Publisher,
+    RawEvent,
+    Source,
+)
 from app.routers.utils import event_ended_filter, event_not_ended_filter
+
+
+async def _stamp_missing_fienta_publishers(db: AsyncSession) -> int:
+    """Safety net for #433's stamping race: stamp EventSource.publisher_id
+    for any published Fienta row still NULL, resolving it the same way
+    ingestion does — the organizer id stamped on the matching RawEvent
+    payload (see sources/fienta.py's fetch_organizer) mapped through
+    Publisher.external_id. Catches events that were draft/classified while
+    the publisher lookup was still empty (see adapter.py's
+    ``_presync_publishers`` hook, which closes the race for new events going
+    forward). Single bulk UPDATE, no N+1; a no-op once nothing is missing.
+    """
+    fienta_source_id = (
+        select(Source.id).where(Source.slug == SOURCE_SLUG_FIENTA).scalar_subquery()
+    )
+    organizer_external_id = (
+        select(RawEvent.payload["organizer_id"].astext)
+        .where(
+            RawEvent.source_id == EventSource.source_id,
+            RawEvent.external_id == EventSource.external_id,
+            RawEvent.payload["organizer_id"].isnot(None),
+        )
+        .order_by(RawEvent.fetched_at.desc())
+        .limit(1)
+        .scalar_subquery()
+    )
+    publisher_id = (
+        select(Publisher.id)
+        .where(
+            Publisher.source_id == EventSource.source_id,
+            Publisher.external_id == organizer_external_id,
+        )
+        .scalar_subquery()
+    )
+    stmt = (
+        update(EventSource)
+        .where(
+            EventSource.publisher_id.is_(None),
+            EventSource.source_id == fienta_source_id,
+            EventSource.event_id.in_(
+                select(Event.id).where(Event.status == EVENT_STATUS_PUBLISHED)
+            ),
+        )
+        .values(publisher_id=publisher_id)
+    )
+    result = await db.execute(stmt)
+    return cast(CursorResult, result).rowcount or 0
 
 
 async def publish_pending(
@@ -110,6 +166,7 @@ async def publish_pending(
     summary: dict = {"published": cast(CursorResult, result).rowcount}
 
     if not diagnostics:
+        await _stamp_missing_fienta_publishers(db)
         return summary
 
     reject_stmt = (
@@ -179,4 +236,5 @@ async def publish_pending(
             "fail_coords_bbox": reject_row.fail_coords_bbox or 0,
         }
     )
+    await _stamp_missing_fienta_publishers(db)
     return summary

@@ -301,6 +301,16 @@ class SourceAdapter(ABC):
         v = raw.get("id", "")
         return str(v) if v else None
 
+    async def _presync_publishers(
+        self, db: AsyncSession, lookup: dict[str | None, int]
+    ) -> dict[str | None, int]:
+        """Hook run once, before the crawl, right after the initial publisher
+        lookup load. Default: no-op — most sources (KUMU/Estonia Concert Hall)
+        have their Publisher rows seeded at startup, so the lookup is never
+        empty at ingest time. FientaAdapter overrides this to close the race
+        where its weekly organizer sync hasn't run yet (#433)."""
+        return lookup
+
     async def _insert_event(
         self, db: AsyncSession, normalized: NormalizedEvent
     ) -> Event | None:
@@ -363,16 +373,20 @@ class SourceAdapter(ABC):
         """
         known_ids = await ingest_skip_ids(db, self.source.id)
         self._publisher_lookup = await load_publisher_lookup(db, self.source.id)
-        # Release the connection for the crawl below — fetch_raw is network I/O only
-        # (no db access), often taking minutes, which would otherwise hold a checked-out
-        # connection idle past Neon's auto-suspend window. Nothing has been written yet,
-        # so this is a no-op beyond ending the transaction and returning the connection
-        # to the pool. Must be commit(), not rollback(): Session.rollback() unconditionally
-        # expires every ORM object in the identity map regardless of expire_on_commit,
-        # which would make every later `self.source.*` read below (and in fetch_raw()
-        # overrides) trigger an implicit lazy-load — disallowed under AsyncSession outside
-        # the greenlet-spawn context (raises MissingGreenlet). commit() respects
-        # expire_on_commit=False (app/db.py), so self.source stays usable.
+        # Release the connection before the crawl below and before
+        # _presync_publishers' own network I/O just after (fetch_raw is network
+        # I/O only — no db access, often taking minutes; FientaAdapter's
+        # override can likewise run a full organizer-sync HTTP pass here on a
+        # fresh deploy, #433) — either would otherwise hold a checked-out
+        # connection idle past Neon's auto-suspend window. Nothing has been
+        # written yet, so this is a no-op beyond ending the transaction and
+        # returning the connection to the pool. Must be commit(), not
+        # rollback(): Session.rollback() unconditionally expires every ORM
+        # object in the identity map regardless of expire_on_commit, which
+        # would make every later `self.source.*` read below (and in fetch_raw()
+        # overrides) trigger an implicit lazy-load — disallowed under AsyncSession
+        # outside the greenlet-spawn context (raises MissingGreenlet). commit()
+        # respects expire_on_commit=False (app/db.py), so self.source stays usable.
         await db.commit()
 
         # Captured before the crawl: the IngestionRun row is now inserted after
@@ -383,6 +397,14 @@ class SourceAdapter(ABC):
         run = IngestionRun(source_id=self.source.id, started_at=started_at)
 
         try:
+            # Inside the try/except (not above, with the initial lookup load):
+            # a presync failure (e.g. Fienta's organizer-sync HTTP probe
+            # timing out) must still produce an IngestionRun.error record and
+            # flip source.last_status, exactly like a fetch_raw() failure —
+            # not escape unlogged before run even exists (#433 review finding).
+            self._publisher_lookup = await self._presync_publishers(
+                db, self._publisher_lookup
+            )
             raw_items = await self.fetch_raw(known_ids)
             db.add(run)
             await db.flush()
