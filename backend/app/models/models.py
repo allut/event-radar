@@ -417,17 +417,19 @@ class Claim(Base):
     __table_args__ = (
         Index("ix_claims_organizer_id", "organizer_id"),
         Index("ix_claims_publisher_id", "publisher_id"),
-        # Reject a duplicate/racing claim against the same Publisher or
-        # Series at the DB layer (#413) — Postgres unique indexes don't treat
-        # NULL as a duplicate, so each is scoped to the rows that actually
-        # carry that key, exactly like ix_publishers_source_null_external.
+        # Reject a duplicate/racing *approved* claim against the same
+        # Publisher or Series at the DB layer (#431, slice 1 of #425) —
+        # narrowed from pending-or-approved so multiple pending claims can
+        # coexist on the same target (proof-preempts-assertion at auto-grant
+        # time instead). Postgres unique indexes don't treat NULL as a
+        # duplicate, so each is scoped to the rows that actually carry that
+        # key, exactly like ix_publishers_source_null_external.
         Index(
             "ix_claims_active_publisher",
             "publisher_id",
             unique=True,
             postgresql_where=text(
-                f"status IN ('{CLAIM_STATUS_PENDING}', '{CLAIM_STATUS_APPROVED}')"
-                " AND publisher_id IS NOT NULL"
+                f"status = '{CLAIM_STATUS_APPROVED}' AND publisher_id IS NOT NULL"
             ),
         ),
         Index(
@@ -435,8 +437,7 @@ class Claim(Base):
             "event_series_key",
             unique=True,
             postgresql_where=text(
-                f"status IN ('{CLAIM_STATUS_PENDING}', '{CLAIM_STATUS_APPROVED}')"
-                " AND event_series_key IS NOT NULL"
+                f"status = '{CLAIM_STATUS_APPROVED}' AND event_series_key IS NOT NULL"
             ),
         ),
     )

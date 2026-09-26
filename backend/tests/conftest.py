@@ -24,7 +24,12 @@ def mock_db():
     db = AsyncMock()
     db.get = AsyncMock()
     db.scalar = AsyncMock()
-    db.scalars = AsyncMock()
+    # Default no-op result for `(await db.scalars(...)).all()` — same
+    # plain-list rationale as _execute_result below. Tests that care about
+    # hydrated rows override this return value.
+    _scalars_result = MagicMock()
+    _scalars_result.all.return_value = []
+    db.scalars = AsyncMock(return_value=_scalars_result)
     db.execute = AsyncMock()
     # Default no-op result for load_user_signals()'s `(await db.execute(...)).all()` —
     # an explicit MagicMock (not the auto-AsyncMock child unittest.mock would give an

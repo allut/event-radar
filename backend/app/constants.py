@@ -2033,8 +2033,12 @@ ERROR_CLAIM_NOT_CLAIMABLE = "This event has no publisher or series that can be c
 # EventSource to claim against; keeps the claim mechanism (ingested events)
 # and the submission-trust track (Organizer.verified) separate.
 ERROR_CLAIM_OWN_SUBMISSION = "You cannot claim your own directly submitted event."
-ERROR_CLAIM_ALREADY_EXISTS = (
-    "This publisher or series already has a pending or approved claim."
+# (#431, slice 1 of #425) — a target already holding an *approved* claim
+# still rejects a new one outright (no contest/override flow); a target
+# holding only pending claims no longer does — see create_claim.
+ERROR_CLAIM_TARGET_ALREADY_APPROVED = (
+    "This publisher or series has already been claimed and verified."
+    " Contact support if you believe this is a mistake."
 )
 ERROR_CLAIM_NOT_PENDING = "Only a pending claim can be cancelled or rechecked."
 ERROR_CLAIM_ALREADY_RESOLVED = (

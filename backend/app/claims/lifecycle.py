@@ -38,14 +38,15 @@ from app.constants import (
     CLAIM_STATUS_CANCELLED,
     CLAIM_STATUS_EXPIRED,
     CLAIM_STATUS_PENDING,
+    CLAIM_STATUS_REVOKED,
     CLAIM_VERIFICATION_MECHANISM_ADMIN_REVIEW,
     CLAIM_VERIFICATION_OUTCOME_AUTO_GRANT,
-    ERROR_CLAIM_ALREADY_EXISTS,
     ERROR_CLAIM_JUSTIFICATION_REQUIRED,
     ERROR_CLAIM_NOT_CLAIMABLE,
     ERROR_CLAIM_NOT_FOUND,
     ERROR_CLAIM_NOT_PENDING,
     ERROR_CLAIM_OWN_SUBMISSION,
+    ERROR_CLAIM_TARGET_ALREADY_APPROVED,
     ERROR_DAILY_CLAIM_LIMIT,
     ERROR_EVENT_NOT_FOUND,
     EVENT_STATUS_PUBLISHED,
@@ -59,6 +60,7 @@ from app.constants import (
     TALLINN_TZ,
 )
 from app.email.claim_resolution import (
+    send_claim_declined_email,
     send_claim_expired_email,
     send_claim_granted_email,
     send_claim_self_cancelled_email,
@@ -122,27 +124,27 @@ def resolve_claim_target(event: Event, es: EventSource) -> ClaimTarget:
 
 
 async def active_claim_for_target(db: AsyncSession, target: ClaimTarget) -> Claim | None:
-    """The pending/approved Claim already sitting on `target`, if any (#414) —
-    backs both the public event page's claim_status/listed_by and the search/
-    suggestions surfaces' cross-surface-retirement exclusion. Eager-loads
-    `Claim.organizer` (#419) so callers needing the organizer's display name
-    don't pay a second round trip."""
+    """The Claim to represent `target`'s pending/approved state, if any
+    (#414) — backs both the public event page's claim_status/listed_by and
+    the search/suggestions surfaces' cross-surface-retirement exclusion.
+    Since #431 (slice 1 of #425) a target can carry several coexisting
+    pending claims, so this needs a deterministic pick, not "whichever row
+    the index scan happens to return first": an approved claim always wins
+    (there's at most one, and it's the target's real resolved state) over
+    any number of pending ones, and among pending-only claims the newest one
+    wins (the most recently asserted claimant). Eager-loads `Claim.organizer`
+    (#419) so callers needing the organizer's display name don't pay a
+    second round trip."""
     if target.kind == CLAIM_KIND_PUBLISHER:
-        return await db.scalar(
-            select(Claim)
-            .options(selectinload(Claim.organizer))
-            .where(
-                Claim.publisher_id == target.publisher_id,
-                Claim.status.in_(CLAIM_ACTIVE_STATUSES),
-            )
-        )
+        where = (Claim.publisher_id == target.publisher_id,)
+    else:
+        where = (Claim.event_series_key == target.event_series_key,)
     return await db.scalar(
         select(Claim)
         .options(selectinload(Claim.organizer))
-        .where(
-            Claim.event_series_key == target.event_series_key,
-            Claim.status.in_(CLAIM_ACTIVE_STATUSES),
-        )
+        .where(*where, Claim.status.in_(CLAIM_ACTIVE_STATUSES))
+        .order_by((Claim.status == CLAIM_STATUS_APPROVED).desc(), Claim.id.desc())
+        .limit(1)
     )
 
 
@@ -314,6 +316,90 @@ async def _claims_created_today(db: AsyncSession, organizer_id: int) -> int:
     )
 
 
+async def _approved_claim_exists(db: AsyncSession, target: ClaimTarget) -> bool:
+    """(#431) Approved-only counterpart of `active_claim_for_target` — the
+    narrowed unique index (migration 0048) no longer rejects a new pending
+    claim against a target that already has other *pending* claims, only
+    against one with an existing *approved* claim, so that case needs an
+    explicit pre-insert check instead of relying on IntegrityError."""
+    if target.kind == CLAIM_KIND_PUBLISHER:
+        where = (Claim.publisher_id == target.publisher_id,)
+    else:
+        where = (Claim.event_series_key == target.event_series_key,)
+    return (
+        await db.scalar(
+            select(Claim.id).where(*where, Claim.status == CLAIM_STATUS_APPROVED).limit(1)
+        )
+    ) is not None
+
+
+async def _auto_decline_other_pending_claims(
+    db: AsyncSession,
+    client: httpx.AsyncClient,
+    target: ClaimTarget,
+    winning_claim_id: int,
+) -> None:
+    """(#431) Proof preempts assertion: once a claim on `target` passes
+    automated verification, every other still-pending claim on that same
+    target auto-declines — mirrors admin_decline_claim's status transition
+    and reuses its decline email, just with no admin note (falls back to the
+    email's generic decline copy). Each declined claim's own
+    representative_event_for_claim() resolves its own email's event title —
+    not the winning claim's event — since a Publisher target's freshest
+    traced-back listing can differ from whichever specific event the winner
+    happened to claim through."""
+    # Local import: app.claims.pinning imports representative_event_source
+    # from this module, so a module-level import here would deadlock the
+    # two modules' load order (see cancel_claim, same reason).
+    from app.claims.pinning import representative_event_for_claim
+
+    if target.kind == CLAIM_KIND_PUBLISHER:
+        where = (Claim.publisher_id == target.publisher_id,)
+    else:
+        where = (Claim.event_series_key == target.event_series_key,)
+    others = (
+        await db.scalars(
+            select(Claim)
+            .options(selectinload(Claim.organizer))
+            .where(*where, Claim.status == CLAIM_STATUS_PENDING, Claim.id != winning_claim_id)
+        )
+    ).all()
+    if not others:
+        return
+
+    now = datetime.now(timezone.utc)
+    for other in others:
+        other.status = CLAIM_STATUS_REVOKED
+        other.resolved_at = now
+    await db.commit()
+
+    semaphore = asyncio.Semaphore(CLAIM_EMAIL_SEND_CONCURRENCY)
+
+    async def _send_one(claim: Claim) -> None:
+        organizer = claim.organizer
+        if organizer is None:
+            return
+        async with semaphore:
+            try:
+                event = await representative_event_for_claim(db, claim)
+                await send_claim_declined_email(
+                    organizer.email,
+                    event.title_orig if event else None,
+                    "",
+                    organizer.locale,
+                    http_client=client,
+                )
+            except Exception:
+                log.error(
+                    "Failed to send auto-decline claim-declined email (claim_id=%s)",
+                    claim.id,
+                    exc_info=True,
+                    extra={"event": LOG_EVENT_EMAIL_SEND_FAILED},
+                )
+
+    await asyncio.gather(*(_send_one(c) for c in others), return_exceptions=True)
+
+
 async def create_claim(
     db: AsyncSession,
     client: httpx.AsyncClient,
@@ -364,6 +450,12 @@ async def create_claim(
     except ClaimTargetError:
         raise ClaimError(422, ERROR_CLAIM_NOT_CLAIMABLE) from None
 
+    if await _approved_claim_exists(db, target):
+        # (#431) Unchanged from pre-0048 behavior for the approved case — no
+        # contest/override flow for an already-granted claim, support-facing
+        # message. Only the pending-vs-pending case below is new.
+        raise ClaimError(409, ERROR_CLAIM_TARGET_ALREADY_APPROVED)
+
     justification_clean = justification.strip() if justification else None
     if target.kind == CLAIM_KIND_SERIES and not justification_clean:
         raise ClaimError(422, ERROR_CLAIM_JUSTIFICATION_REQUIRED)
@@ -379,11 +471,12 @@ async def create_claim(
         justification=justification_clean if target.kind == CLAIM_KIND_SERIES else None,
     )
     db.add(claim)
-    try:
-        await db.flush()
-    except IntegrityError:
-        await db.rollback()
-        raise ClaimError(409, ERROR_CLAIM_ALREADY_EXISTS) from None
+    # No IntegrityError guard needed here (#431): this insert always lands as
+    # CLAIM_STATUS_PENDING, and the narrowed unique indexes (migration 0048)
+    # only constrain approved rows, so a duplicate-pending insert can't
+    # violate them — the approved-vs-approved race is instead caught at the
+    # commit below, after this claim's own verification result is known.
+    await db.flush()
 
     result = await _run_verification(
         client,
@@ -400,7 +493,13 @@ async def create_claim(
     if auto_granted:
         claim.status = CLAIM_STATUS_APPROVED
         claim.resolved_at = datetime.now(timezone.utc)
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError:
+        # (#431) Race: another claim on the same target was approved between
+        # the pre-insert check above and this claim's own auto-grant landing.
+        await db.rollback()
+        raise ClaimError(409, ERROR_CLAIM_TARGET_ALREADY_APPROVED) from None
     if auto_granted:
         try:
             await send_claim_granted_email(
@@ -413,6 +512,7 @@ async def create_claim(
                 exc_info=True,
                 extra={"event": LOG_EVENT_EMAIL_SEND_FAILED},
             )
+        await _auto_decline_other_pending_claims(db, client, target, claim.id)
     return claim
 
 
@@ -508,7 +608,13 @@ async def recheck_claim(
     if auto_granted:
         claim.status = CLAIM_STATUS_APPROVED
         claim.resolved_at = claim.last_checked_at
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError:
+        # (#431) Another claim on the same Publisher was approved since this
+        # one was created — same race as create_claim's commit guard.
+        await db.rollback()
+        raise ClaimError(409, ERROR_CLAIM_TARGET_ALREADY_APPROVED) from None
     if auto_granted:
         try:
             await send_claim_granted_email(
@@ -522,6 +628,8 @@ async def recheck_claim(
                 exc_info=True,
                 extra={"event": LOG_EVENT_EMAIL_SEND_FAILED},
             )
+        target = ClaimTarget(claim.kind, claim.publisher_id, claim.event_series_key)
+        await _auto_decline_other_pending_claims(db, client, target, claim.id)
     return claim
 
 
