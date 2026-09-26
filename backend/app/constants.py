@@ -1000,12 +1000,26 @@ ORGANIZER_DAILY_VENUE_CREATION_CAP = 20
 # every claim-creation attempt (not just auto-granted ones), computed from
 # Tallinn calendar-day start like ORGANIZER_DAILY_SUBMISSION_CAP (#413).
 ORGANIZER_DAILY_CLAIM_CAP = 5
-# Per-organizer ceiling on pinned-field edits to already-claimed events,
+# Per-organizer BASE ceiling on pinned-field edits to already-claimed events,
 # scoped across every event the organizer holds a claim on (not per-event) —
 # counts edit attempts, not successful saves. Declared here ahead of the
 # pinned-edit endpoint itself (a later #409 slice), which is the one that
-# will enforce it.
+# will enforce it. This is the effective cap for an organizer whose claim(s)
+# cover a single event — scaled up by ORGANIZER_CLAIM_EDIT_CAP_PER_EVENT for
+# every additional covered event, bounded by ORGANIZER_CLAIM_EDIT_CAP_CEILING
+# (#438 — see claims/pinning.py::scaled_claim_edit_cap).
 ORGANIZER_DAILY_CLAIM_EDIT_CAP = 20
+# How many extra edits/day a covered event beyond the first adds to the
+# organizer's daily claim-edit cap (#438) — e.g. a 61-event Estonia Concert
+# Hall Publisher claim gets meaningfully more headroom than a single-event
+# claim without the cap tracking claim size 1:1 (which would make a large
+# institutional claim effectively unbounded).
+ORGANIZER_CLAIM_EDIT_CAP_PER_EVENT = 2
+# Upper ceiling on the scaled daily claim-edit cap (#438) — however many
+# events an organizer's claim(s) cover, the cap never exceeds this, so it
+# remains a genuine bounded limit rather than effectively unbounded for a
+# very large institutional Publisher claim.
+ORGANIZER_CLAIM_EDIT_CAP_CEILING = 100
 
 # Claim-editing surface (#416). Field-name pinning vocabulary lives directly
 # in organizer_claim_edits.py (pin_key() calls) rather than as constants

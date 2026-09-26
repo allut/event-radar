@@ -513,10 +513,12 @@ class Claim(Base):
 
 
 class ClaimEditAttempt(Base):
-    """One row per claim-editing-surface save attempt (#416) — backs
-    ORGANIZER_DAILY_CLAIM_EDIT_CAP, which counts attempts (not successful
-    publishes) scoped per-organizer across every event they hold a claim on,
-    mirroring how ORGANIZER_DAILY_SUBMISSION_CAP counts `Event` rows. A
+    """One row per claim-editing-surface save attempt (#416) — backs the
+    daily claim-edit cap, which counts attempts (not successful publishes)
+    scoped per-organizer across every event they hold a claim on, mirroring
+    how ORGANIZER_DAILY_SUBMISSION_CAP counts `Event` rows. The cap itself is
+    ORGANIZER_DAILY_CLAIM_EDIT_CAP scaled by covered-event count (#438 — see
+    claims/pinning.py::scaled_claim_edit_cap), not a flat constant. A
     dedicated table rather than reusing an existing one because no other row
     is written unconditionally on every claim-edit PATCH regardless of
     outcome."""

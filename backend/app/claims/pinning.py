@@ -9,18 +9,24 @@ from datetime import datetime, timezone
 
 import httpx
 from bs4 import BeautifulSoup
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.constants import (
     CLAIM_EDIT_SERIES_EVENT_SCAN_LIMIT,
     CLAIM_KIND_PUBLISHER,
+    CLAIM_KIND_SERIES,
+    CLAIM_STATUS_APPROVED,
     HTML_PARSER,
+    ORGANIZER_CLAIM_EDIT_CAP_CEILING,
+    ORGANIZER_CLAIM_EDIT_CAP_PER_EVENT,
+    ORGANIZER_DAILY_CLAIM_EDIT_CAP,
     REFETCH_PRICE_TOLERANCE,
 )
 from app.ingestion.http_client import http_get, normalized_hostname
 from app.ingestion.jsonld import offers_from_jsonld_items, parse_jsonld_event_items
 from app.ingestion.price_fallback import PRICE_FALLBACK_EXTRACTORS
-from app.models.models import Claim, Event
+from app.models.models import Claim, Event, EventSource
 from app.routers.utils import (
     event_not_ended_filter,
     event_series_key,
@@ -105,6 +111,57 @@ def apply_pins(current: list[str], *, pin: set[str], unpin: set[str]) -> list[st
     pins = set(current) - unpin
     pins |= pin
     return sorted(pins)
+
+
+async def organizer_covered_event_count(db: AsyncSession, organizer_id: int) -> int:
+    """How many events the organizer's approved, non-dormant claim(s)
+    currently cover — feeds scaled_claim_edit_cap() (#438). A Publisher
+    claim's coverage is the same EventSource.publisher_id match
+    list_claim_events (#436) uses, bulk-counted (distinct event id) across
+    every approved Publisher claim the organizer holds in one query — fixed
+    query count regardless of how many claims or events (CLAUDE.md's Batch
+    jobs rule). A Series claim has no FK to bulk-count against (Claim carries
+    only a normalized title/venue key, per the Claim model docstring), so it
+    counts as the one representative event the claim-editing surface
+    actually exposes for it. A dormant claim's pins don't apply (#422), so it
+    contributes nothing here either."""
+    rows = (
+        await db.execute(
+            select(Claim.kind, Claim.publisher_id).where(
+                Claim.organizer_id == organizer_id,
+                Claim.status == CLAIM_STATUS_APPROVED,
+                Claim.dormant.is_(False),
+            )
+        )
+    ).all()
+    publisher_ids = [r.publisher_id for r in rows if r.kind == CLAIM_KIND_PUBLISHER]
+    series_count = sum(1 for r in rows if r.kind == CLAIM_KIND_SERIES)
+    publisher_event_count = 0
+    if publisher_ids:
+        publisher_event_count = (
+            await db.execute(
+                select(func.count(func.distinct(EventSource.event_id))).where(
+                    EventSource.publisher_id.in_(publisher_ids)
+                )
+            )
+        ).scalar() or 0
+    return publisher_event_count + series_count
+
+
+def scaled_claim_edit_cap(covered_event_count: int) -> int:
+    """The daily claim-edit cap (#438), scaled from
+    ORGANIZER_DAILY_CLAIM_EDIT_CAP by how many events the organizer's
+    claim(s) cover. A single covered event (the common case) yields exactly
+    the flat baseline unchanged; every additional covered event adds
+    ORGANIZER_CLAIM_EDIT_CAP_PER_EVENT, bounded by
+    ORGANIZER_CLAIM_EDIT_CAP_CEILING so a large institutional claim (e.g.
+    Estonia Concert Hall's 61 events) still hits a genuine limit rather than
+    an effectively unbounded one."""
+    extra_events = max(0, covered_event_count - 1)
+    return min(
+        ORGANIZER_CLAIM_EDIT_CAP_CEILING,
+        ORGANIZER_DAILY_CLAIM_EDIT_CAP + extra_events * ORGANIZER_CLAIM_EDIT_CAP_PER_EVENT,
+    )
 
 
 @dataclass(frozen=True)

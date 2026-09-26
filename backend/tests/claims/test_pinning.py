@@ -1,6 +1,6 @@
 """Tests for app/claims/pinning.py (#416): pin/unpin bookkeeping, the
-representative-event lookup for both claim kinds, and the price-mismatch
-diff."""
+representative-event lookup for both claim kinds, the price-mismatch diff,
+and (#438) the daily claim-edit cap's covered-event-count scaling."""
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -12,11 +12,19 @@ from app.claims.pinning import (
     apply_pins,
     claim_event_for_id,
     fetch_fresh_price,
+    organizer_covered_event_count,
     pin_key,
     price_mismatch,
     representative_event_for_claim,
+    scaled_claim_edit_cap,
 )
-from app.constants import CLAIM_KIND_PUBLISHER, CLAIM_KIND_SERIES
+from app.constants import (
+    CLAIM_KIND_PUBLISHER,
+    CLAIM_KIND_SERIES,
+    ORGANIZER_CLAIM_EDIT_CAP_CEILING,
+    ORGANIZER_CLAIM_EDIT_CAP_PER_EVENT,
+    ORGANIZER_DAILY_CLAIM_EDIT_CAP,
+)
 
 
 class TestPinKey:
@@ -267,3 +275,120 @@ class TestClaimEventForId:
         mock_db.scalar = AsyncMock(return_value=None)
         result = await claim_event_for_id(mock_db, claim, 999)
         assert result is None
+
+
+def _execute_rows(rows):
+    """A sync MagicMock whose `.all()` returns `rows` — stands in for the
+    object `(await db.execute(...))` resolves to. Mirrors
+    tests/routers/conftest.py's execute_rows(), kept local rather than
+    imported cross-package since that helper's existing precedent is
+    routers-test-module-only (grep the repo for `from tests.routers.conftest
+    import` — every prior use lives inside tests/routers/ itself)."""
+    r = MagicMock()
+    r.all.return_value = rows
+    return r
+
+
+def _execute_scalar(value):
+    """A sync MagicMock whose `.scalar()` returns `value` — stands in for
+    the object `(await db.execute(...))` resolves to when the query is a
+    scalar aggregate rather than a row set (see _execute_rows() for the
+    row-set counterpart)."""
+    r = MagicMock()
+    r.scalar.return_value = value
+    return r
+
+
+def _claim_row(kind: str, publisher_id: int | None = None):
+    return MagicMock(kind=kind, publisher_id=publisher_id)
+
+
+class TestOrganizerCoveredEventCount:
+    """#438: how many events the organizer's approved, non-dormant claim(s)
+    cover — feeds the scaled daily claim-edit cap."""
+
+    @pytest.mark.asyncio
+    async def test_no_claims_is_zero(self, mock_db):
+        mock_db.execute.side_effect = [_execute_rows([])]
+        result = await organizer_covered_event_count(mock_db, 5)
+        assert result == 0
+
+    @pytest.mark.asyncio
+    async def test_single_publisher_claim_uses_bulk_distinct_count(self, mock_db):
+        mock_db.execute.side_effect = [
+            _execute_rows([_claim_row(CLAIM_KIND_PUBLISHER, publisher_id=99)]),
+            _execute_scalar(61),
+        ]
+        result = await organizer_covered_event_count(mock_db, 5)
+        assert result == 61
+        assert mock_db.execute.await_count == 2
+
+    @pytest.mark.asyncio
+    async def test_series_claim_counts_as_one(self, mock_db):
+        """A Series claim has no FK to bulk-count against, so it counts as
+        the single representative event the claim-editing surface actually
+        exposes for it — no second query is issued."""
+        mock_db.execute.side_effect = [
+            _execute_rows([_claim_row(CLAIM_KIND_SERIES)]),
+        ]
+        result = await organizer_covered_event_count(mock_db, 5)
+        assert result == 1
+        assert mock_db.execute.await_count == 1
+
+    @pytest.mark.asyncio
+    async def test_multiple_publisher_claims_share_one_bulk_query(self, mock_db):
+        mock_db.execute.side_effect = [
+            _execute_rows(
+                [
+                    _claim_row(CLAIM_KIND_PUBLISHER, publisher_id=1),
+                    _claim_row(CLAIM_KIND_PUBLISHER, publisher_id=2),
+                ]
+            ),
+            _execute_scalar(75),
+        ]
+        result = await organizer_covered_event_count(mock_db, 5)
+        assert result == 75
+        assert mock_db.execute.await_count == 2
+
+    @pytest.mark.asyncio
+    async def test_publisher_and_series_claims_combine(self, mock_db):
+        mock_db.execute.side_effect = [
+            _execute_rows(
+                [
+                    _claim_row(CLAIM_KIND_PUBLISHER, publisher_id=1),
+                    _claim_row(CLAIM_KIND_SERIES),
+                ]
+            ),
+            _execute_scalar(10),
+        ]
+        result = await organizer_covered_event_count(mock_db, 5)
+        assert result == 11
+
+
+class TestScaledClaimEditCap:
+    """#438: the daily claim-edit cap scales with covered-event count, with
+    a single covered event landing exactly on the pre-existing flat
+    baseline and a large claim bounded by the ceiling."""
+
+    def test_single_event_matches_flat_baseline(self):
+        assert scaled_claim_edit_cap(1) == ORGANIZER_DAILY_CLAIM_EDIT_CAP
+
+    def test_zero_covered_events_matches_flat_baseline(self):
+        # Shouldn't happen in practice (the request always resolves through
+        # an approved claim covering at least one event), but treating it
+        # the same as one keeps the function total.
+        assert scaled_claim_edit_cap(0) == ORGANIZER_DAILY_CLAIM_EDIT_CAP
+
+    def test_scales_past_flat_baseline_below_ceiling(self):
+        covered = 10
+        expected = ORGANIZER_DAILY_CLAIM_EDIT_CAP + (covered - 1) * ORGANIZER_CLAIM_EDIT_CAP_PER_EVENT
+        assert ORGANIZER_DAILY_CLAIM_EDIT_CAP < expected < ORGANIZER_CLAIM_EDIT_CAP_CEILING
+        assert scaled_claim_edit_cap(covered) == expected
+
+    def test_large_claim_hits_ceiling(self):
+        # Estonia Concert Hall's 61-event Publisher claim (#426) — well past
+        # where the linear scale would exceed the ceiling.
+        assert scaled_claim_edit_cap(61) == ORGANIZER_CLAIM_EDIT_CAP_CEILING
+
+    def test_cap_never_exceeds_ceiling_for_very_large_claims(self):
+        assert scaled_claim_edit_cap(10_000) == ORGANIZER_CLAIM_EDIT_CAP_CEILING

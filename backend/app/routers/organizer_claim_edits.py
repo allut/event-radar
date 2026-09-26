@@ -20,8 +20,10 @@ from app.claims.pinning import (
     apply_pins,
     claim_event_for_id,
     fetch_fresh_price,
+    organizer_covered_event_count,
     pin_key,
     price_mismatch,
+    scaled_claim_edit_cap,
 )
 from app.constants import (
     CLAIM_STATUS_APPROVED,
@@ -40,7 +42,6 @@ from app.constants import (
     LOCALE_ET,
     LOCALE_RU,
     ORGANIZER_CURRENCY_MAX_LEN,
-    ORGANIZER_DAILY_CLAIM_EDIT_CAP,
     ORGANIZER_DESCRIPTION_MAX_LEN,
     ORGANIZER_HTML_SANITIZE_ALLOWED_ATTRS,
     ORGANIZER_HTML_SANITIZE_ALLOWED_TAGS,
@@ -244,16 +245,18 @@ async def update_claim_event(
     at 'classified' with no retry job (#416)."""
     claim = await _own_granted_claim_or_404(db, claim_id, current_organizer.id)
 
-    if await _claims_edited_today(db, current_organizer.id) >= ORGANIZER_DAILY_CLAIM_EDIT_CAP:
+    covered = await organizer_covered_event_count(db, current_organizer.id)
+    cap = scaled_claim_edit_cap(covered)
+    if await _claims_edited_today(db, current_organizer.id) >= cap:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=ERROR_DAILY_CLAIM_EDIT_LIMIT
         )
-    # Counts this attempt regardless of outcome (ORGANIZER_DAILY_CLAIM_EDIT_CAP
-    # docstring) — committed now, in its own transaction, before any event
-    # mutation. get_db's session has no implicit commit-on-exit, so without
-    # this eager commit a later 4xx (unknown event, cancelled event, a bad
-    # url/image_url) would roll the insert back along with everything else,
-    # silently exempting failing requests from the cap.
+    # Counts this attempt regardless of outcome (ClaimEditAttempt docstring)
+    # — committed now, in its own transaction, before any event mutation.
+    # get_db's session has no implicit commit-on-exit, so without this eager
+    # commit a later 4xx (unknown event, cancelled event, a bad url/image_url)
+    # would roll the insert back along with everything else, silently
+    # exempting failing requests from the cap.
     db.add(ClaimEditAttempt(organizer_id=current_organizer.id))
     await db.commit()
 

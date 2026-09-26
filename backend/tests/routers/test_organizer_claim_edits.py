@@ -24,6 +24,7 @@ from app.constants import (
     ERROR_DAILY_CLAIM_EDIT_LIMIT,
     EVENT_STATUS_CLASSIFIED,
     EVENT_STATUS_PUBLISHED,
+    ORGANIZER_CLAIM_EDIT_CAP_CEILING,
     ORGANIZER_DAILY_CLAIM_EDIT_CAP,
 )
 
@@ -52,6 +53,10 @@ def _patched(**kwargs):
         "fetch_fresh_price": AsyncMock(return_value=None),
         "publish_pending": AsyncMock(return_value={"published": 1}),
         "apply_organizer_category": AsyncMock(),
+        # A single covered event scales to exactly the flat baseline (#438),
+        # so every pre-existing test that doesn't care about cap scaling
+        # keeps seeing the unchanged ORGANIZER_DAILY_CLAIM_EDIT_CAP value.
+        "organizer_covered_event_count": AsyncMock(return_value=1),
     }
     defaults.update(kwargs)
     from contextlib import ExitStack
@@ -289,6 +294,66 @@ class TestUpdateClaimEvent:
         event.pinned_fields = []
         mock_db.scalar.side_effect = [ORGANIZER_DAILY_CLAIM_EDIT_CAP]
         stack, mocks = _patched(claim_event_for_id=AsyncMock(return_value=event))
+        with stack:
+            with pytest.raises(HTTPException) as exc:
+                await update_claim_event(
+                    1,
+                    PatchClaimEventBody(title="New title"),
+                    make_request(method="PATCH", path="/organizer/claims/1/event"),
+                    current_organizer=organizer,
+                    db=mock_db,
+                )
+        assert exc.value.status_code == http.HTTPStatus.TOO_MANY_REQUESTS
+        assert exc.value.detail == ERROR_DAILY_CLAIM_EDIT_LIMIT
+        mocks["publish_pending"].assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_daily_edit_cap_scales_past_flat_value_for_large_claim(
+        self, mock_db, make_request, make_organizer, make_event
+    ):
+        """#438: an organizer whose claim(s) cover 61 events (e.g. Estonia
+        Concert Hall) gets a cap scaled well above the flat 20/day
+        baseline — 99 prior attempts today must not 429 once covered-event
+        count pushes the cap up to the 100 ceiling."""
+        from app.routers.organizer_claim_edits import PatchClaimEventBody, update_claim_event
+
+        organizer = make_organizer(organizer_id=5)
+        event = make_event()
+        event.pinned_fields = []
+        self._mock_db_for_save(mock_db, edits_today=99)
+        stack, mocks = _patched(
+            claim_event_for_id=AsyncMock(return_value=event),
+            organizer_covered_event_count=AsyncMock(return_value=61),
+        )
+        with stack:
+            result = await update_claim_event(
+                1,
+                PatchClaimEventBody(title="New title"),
+                make_request(method="PATCH", path="/organizer/claims/1/event"),
+                current_organizer=organizer,
+                db=mock_db,
+            )
+        assert result["status"] == EVENT_STATUS_PUBLISHED
+        mocks["publish_pending"].assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_daily_edit_cap_ceiling_still_429s_for_large_claim(
+        self, mock_db, make_request, make_organizer, make_event
+    ):
+        """#438: however many events a claim covers, the scaled cap never
+        exceeds ORGANIZER_CLAIM_EDIT_CAP_CEILING — it remains a genuine
+        bounded limit, not effectively unbounded for a large institutional
+        Publisher claim."""
+        from app.routers.organizer_claim_edits import PatchClaimEventBody, update_claim_event
+
+        organizer = make_organizer(organizer_id=5)
+        event = make_event()
+        event.pinned_fields = []
+        mock_db.scalar.side_effect = [ORGANIZER_CLAIM_EDIT_CAP_CEILING]
+        stack, mocks = _patched(
+            claim_event_for_id=AsyncMock(return_value=event),
+            organizer_covered_event_count=AsyncMock(return_value=61),
+        )
         with stack:
             with pytest.raises(HTTPException) as exc:
                 await update_claim_event(
