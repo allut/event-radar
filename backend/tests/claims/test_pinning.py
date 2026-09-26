@@ -10,6 +10,7 @@ import pytest
 from app.claims.pinning import (
     FreshPrice,
     apply_pins,
+    claim_event_for_id,
     fetch_fresh_price,
     pin_key,
     price_mismatch,
@@ -216,4 +217,53 @@ class TestRepresentativeEventForClaim:
         mock_db.execute.return_value = execute_result
 
         result = await representative_event_for_claim(mock_db, claim)
+        assert result is None
+
+
+class TestClaimEventForId:
+    """#437: a Publisher claim given an explicit event_id re-derives claim
+    coverage server-side instead of trusting the client-supplied pairing."""
+
+    @pytest.mark.asyncio
+    async def test_no_event_id_falls_back_to_representative_event(self, mock_db, make_event):
+        claim = MagicMock(kind=CLAIM_KIND_PUBLISHER, publisher_id=7)
+        event = make_event(event_id=1)
+        with patch(
+            "app.claims.pinning.representative_event_for_claim",
+            new_callable=AsyncMock,
+            return_value=event,
+        ) as mocked:
+            result = await claim_event_for_id(mock_db, claim, None)
+        mocked.assert_awaited_once_with(mock_db, claim)
+        assert result is event
+
+    @pytest.mark.asyncio
+    async def test_series_claim_ignores_event_id_uses_representative(self, mock_db, make_event):
+        """Series claims retain their existing single-event resolution — this
+        ticket only changes the Publisher-claim path."""
+        claim = MagicMock(kind=CLAIM_KIND_SERIES, event_series_key="k")
+        event = make_event(event_id=1)
+        with patch(
+            "app.claims.pinning.representative_event_for_claim",
+            new_callable=AsyncMock,
+            return_value=event,
+        ) as mocked:
+            result = await claim_event_for_id(mock_db, claim, 999)
+        mocked.assert_awaited_once_with(mock_db, claim)
+        assert result is event
+
+    @pytest.mark.asyncio
+    async def test_publisher_claim_with_event_id_queries_membership(self, mock_db, make_event):
+        claim = MagicMock(kind=CLAIM_KIND_PUBLISHER, publisher_id=7)
+        event = make_event(event_id=42)
+        mock_db.scalar = AsyncMock(return_value=event)
+        result = await claim_event_for_id(mock_db, claim, 42)
+        assert result is event
+        mock_db.scalar.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_publisher_claim_with_uncovered_event_id_returns_none(self, mock_db):
+        claim = MagicMock(kind=CLAIM_KIND_PUBLISHER, publisher_id=7)
+        mock_db.scalar = AsyncMock(return_value=None)
+        result = await claim_event_for_id(mock_db, claim, 999)
         assert result is None

@@ -50,15 +50,15 @@ describe('ClaimEvents (#436)', () => {
     expect(mockGet).toHaveBeenCalledWith(expect.stringContaining('/organizer/claims/7/events'));
   });
 
-  it('links each row to the existing single-event editor for that claim', async () => {
+  it('links each row to the editor with its own event_id (#437)', async () => {
     mockGet.mockResolvedValueOnce(page());
     renderList();
 
     await waitFor(() => expect(screen.getByText('Jazzkaar Late Night')).toBeInTheDocument());
     const rowLink = screen.getByText('Jazzkaar Late Night').closest('a');
-    expect(rowLink).toHaveAttribute('href', '/organizer/claims/7/edit');
+    expect(rowLink).toHaveAttribute('href', '/organizer/claims/7/edit?event_id=1');
     const otherRowLink = screen.getByText('Winter Chamber Series').closest('a');
-    expect(otherRowLink).toHaveAttribute('href', '/organizer/claims/7/edit');
+    expect(otherRowLink).toHaveAttribute('href', '/organizer/claims/7/edit?event_id=2');
   });
 
   it('shows the empty state when the claim covers no events', async () => {

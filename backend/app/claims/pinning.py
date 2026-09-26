@@ -24,12 +24,34 @@ from app.models.models import Claim, Event
 from app.routers.utils import (
     event_not_ended_filter,
     event_series_key,
+    publisher_claim_event_ids,
     resolve_venue_name,
     select_events_with_classification,
     serialize_event_series_key,
 )
 
 from .lifecycle import representative_event_source
+
+
+async def claim_event_for_id(
+    db: AsyncSession, claim: Claim, event_id: int | None
+) -> Event | None:
+    """Resolve the specific Event a claim edit (#437) targets. A Publisher
+    claim given an explicit event_id re-derives claim coverage server-side
+    via the same EventSource.publisher_id match list_claim_events (#436)
+    uses — never trusts the client-supplied claim/event pairing; an event
+    outside that set resolves to None (caller 404s). With no event_id, or
+    for a Series claim (no bulk coverage query to run — Claim carries only
+    a normalized title/venue key), falls back to the existing
+    single-representative-event resolution."""
+    if event_id is not None and claim.kind == CLAIM_KIND_PUBLISHER:
+        matching_event_ids = publisher_claim_event_ids(claim.publisher_id)
+        return await db.scalar(
+            select_events_with_classification().where(
+                Event.id == event_id, Event.id.in_(matching_event_ids)
+            )
+        )
+    return await representative_event_for_claim(db, claim)
 
 
 async def representative_event_for_claim(db: AsyncSession, claim: Claim) -> Event | None:

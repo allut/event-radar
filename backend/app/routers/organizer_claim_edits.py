@@ -18,10 +18,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.claims.lifecycle import ClaimError, own_claim_or_404
 from app.claims.pinning import (
     apply_pins,
+    claim_event_for_id,
     fetch_fresh_price,
     pin_key,
     price_mismatch,
-    representative_event_for_claim,
 )
 from app.constants import (
     CLAIM_STATUS_APPROVED,
@@ -92,6 +92,9 @@ def _localized(et: str | None, en: str | None, ru: str | None) -> dict[str, str]
 
 
 class PatchClaimEventBody(BaseModel):
+    # Targets one specific event covered by a Publisher claim (#437); omitted,
+    # or on a Series claim, falls back to the single representative event.
+    event_id: int | None = None
     title: str | None = Field(None, max_length=ORGANIZER_TITLE_MAX_LEN)
     title_en: str | None = Field(None, max_length=ORGANIZER_TITLE_MAX_LEN)
     title_ru: str | None = Field(None, max_length=ORGANIZER_TITLE_MAX_LEN)
@@ -165,8 +168,8 @@ async def _own_granted_claim_or_404(db: AsyncSession, claim_id: int, organizer_i
     return claim
 
 
-async def _claim_event_or_404(db: AsyncSession, claim) -> Event:
-    event = await representative_event_for_claim(db, claim)
+async def _claim_event_or_404(db: AsyncSession, claim, event_id: int | None = None) -> Event:
+    event = await claim_event_for_id(db, claim, event_id)
     if event is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail=ERROR_CLAIM_EVENT_NOT_FOUND
@@ -193,14 +196,17 @@ def _serialize_claim_event(event: Event, mismatch: dict | None) -> dict:
 async def get_claim_event(
     claim_id: int,
     request: Request,
+    event_id: int | None = None,
     current_organizer: Organizer = Depends(get_current_organizer),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     """The claim-editing surface's load: current field values, which are
     pinned, and any price-mismatch diff (recomputed fresh on every load —
-    #416 stores no persisted mismatch record)."""
+    #416 stores no persisted mismatch record). event_id (#437) targets one
+    specific event covered by a Publisher claim's #436 event list; omitted,
+    or on a Series claim, falls back to the single representative event."""
     claim = await _own_granted_claim_or_404(db, claim_id, current_organizer.id)
-    event = await _claim_event_or_404(db, claim)
+    event = await _claim_event_or_404(db, claim, event_id)
     async with httpx.AsyncClient(timeout=HTTP_TIMEOUT_SECONDS) as client:
         fresh = await fetch_fresh_price(client, event)
     return _serialize_claim_event(event, price_mismatch(event, fresh))
@@ -251,7 +257,7 @@ async def update_claim_event(
     db.add(ClaimEditAttempt(organizer_id=current_organizer.id))
     await db.commit()
 
-    event = await _claim_event_or_404(db, claim)
+    event = await _claim_event_or_404(db, claim, body.event_id)
     if event.status == EVENT_STATUS_CANCELLED:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=ERROR_EVENT_CANCELLED)
 

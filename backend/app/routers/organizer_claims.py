@@ -82,6 +82,7 @@ from app.routers.utils import (
     get_or_create_organizer,
     mask_email,
     public_event_filter,
+    publisher_claim_event_ids,
     recent_unused_link_exists,
     resolve_venue_name,
     select_events_with_classification,
@@ -582,9 +583,7 @@ async def list_claim_events(
     sized down for organizer-portal use via CLAIM_EVENTS_PAGE_SIZE."""
     claim = await _own_publisher_claim_or_404(db, claim_id, current_organizer.id)
 
-    matching_event_ids = select(EventSource.event_id).where(
-        EventSource.publisher_id == claim.publisher_id
-    )
+    matching_event_ids = publisher_claim_event_ids(claim.publisher_id)
 
     # total only on the first page — see admin.py's admin_list_submissions.
     total: int | None = None

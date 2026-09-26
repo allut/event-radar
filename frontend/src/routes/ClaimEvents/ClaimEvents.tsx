@@ -36,11 +36,10 @@ interface ClaimEventsResponse {
 }
 
 /** Every event a Publisher claim covers (#436) — a list view alongside the
- * single-event editor (ClaimEventEdit), which so far only ever loads the one
- * event representative_event_for_claim() picks. Every row links into that
- * same existing editor page rather than a per-event one — reused as-is per
- * #436's scope; the parent #426 is where the editor itself would grow a
- * per-event id. */
+ * single-event editor (ClaimEventEdit). Each row links into that same editor
+ * page with an `event_id` query param (#437), so the editor loads/saves that
+ * specific event instead of always resolving the one representative_event_
+ * for_claim() picks. */
 export default function ClaimEvents() {
   const params = useParams();
   const claimId = Number(params.id);
@@ -94,7 +93,10 @@ export default function ClaimEvents() {
             <ul className={styles.list}>
               {events.map((event) => (
                 <li key={event.id}>
-                  <Link to={ROUTES.organizerClaimEdit(claimId)} className={styles.row}>
+                  <Link
+                    to={`${ROUTES.organizerClaimEdit(claimId)}?event_id=${event.id}`}
+                    className={styles.row}
+                  >
                     <div className={styles.rowMain}>
                       <span className={styles.rowTitle}>{event.title}</span>
                       <span className={styles.rowMeta}>{formatEventTime(event.starts_at, locale)}</span>

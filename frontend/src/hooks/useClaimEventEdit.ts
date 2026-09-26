@@ -113,29 +113,34 @@ export interface UseClaimEventEditResult {
  * actually included in the PATCH body, so `touched` tracks exactly which
  * fields this session has edited since the last load/save; untouched
  * fields are never sent, however their current value looks. */
-export function useClaimEventEdit(claimId: number, locale: string): UseClaimEventEditResult {
+export function useClaimEventEdit(
+  claimId: number,
+  locale: string,
+  eventId?: number,
+): UseClaimEventEditResult {
   const queryClient = useQueryClient();
   const [fields, setFields] = useState<FormFields>(EMPTY_FIELDS);
   const [touched, setTouched] = useState<Set<TouchKey>>(new Set());
   const [pendingCategory, setPendingCategory] = useState('');
   const [unpinningKey, setUnpinningKey] = useState<string | null>(null);
   const [savedStatus, setSavedStatus] = useState<string | null>(null);
-  const loadedForRef = useRef<number | undefined>(undefined);
+  const loadedForRef = useRef<string | undefined>(undefined);
+  const loadKey = `${claimId}:${eventId ?? ''}`;
 
   const query = useQuery({
-    queryKey: [QUERY_KEYS.organizerClaimEvent, claimId],
-    queryFn: () => organizerApi.get<ClaimEventData>(API.organizerClaimEvent(claimId)),
+    queryKey: [QUERY_KEYS.organizerClaimEvent, claimId, eventId],
+    queryFn: () => organizerApi.get<ClaimEventData>(API.organizerClaimEvent(claimId, eventId)),
     retry: false,
   });
 
   useEffect(() => {
-    if (!query.data || loadedForRef.current === claimId) return;
-    loadedForRef.current = claimId;
+    if (!query.data || loadedForRef.current === loadKey) return;
+    loadedForRef.current = loadKey;
     void Promise.resolve().then(() => {
       setFields(fieldsFromData(query.data as ClaimEventData));
       setTouched(new Set());
     });
-  }, [claimId, query.data]);
+  }, [loadKey, query.data]);
 
   const setField = useCallback(
     <K extends keyof FormFields>(key: K, touchKey: TouchKey, value: FormFields[K]) => {
@@ -150,13 +155,16 @@ export function useClaimEventEdit(claimId: number, locale: string): UseClaimEven
     pinnedFields.includes(fieldLocale ? `${field}:${fieldLocale}` : field);
 
   function applyResponse(next: ClaimEventData) {
-    queryClient.setQueryData([QUERY_KEYS.organizerClaimEvent, claimId], next);
+    queryClient.setQueryData([QUERY_KEYS.organizerClaimEvent, claimId, eventId], next);
     setSavedStatus(next.status);
   }
 
   const unpinMutation = useMutation({
     mutationFn: (key: string) =>
-      organizerApi.patch<ClaimEventData>(API.organizerClaimEvent(claimId), { unpin: [key] }),
+      organizerApi.patch<ClaimEventData>(API.organizerClaimEvent(claimId), {
+        unpin: [key],
+        ...(eventId !== undefined && { event_id: eventId }),
+      }),
     onMutate: (key) => setUnpinningKey(key),
     onSuccess: applyResponse,
     onSettled: () => setUnpinningKey(null),
@@ -184,6 +192,7 @@ export function useClaimEventEdit(claimId: number, locale: string): UseClaimEven
       if (touched.has('currency')) body.currency = fields.currency || null;
       if (touched.has('has_free_tier')) body.has_free_tier = fields.hasFreeTier;
       if (pendingCategory) body.category = pendingCategory;
+      if (eventId !== undefined) body.event_id = eventId;
       return organizerApi.patch<ClaimEventData>(API.organizerClaimEvent(claimId), body);
     },
     onSuccess: (next) => {
@@ -196,7 +205,10 @@ export function useClaimEventEdit(claimId: number, locale: string): UseClaimEven
 
   const acceptPriceMutation = useMutation({
     mutationFn: () =>
-      organizerApi.patch<ClaimEventData>(API.organizerClaimEvent(claimId), { accept_new_price: true }),
+      organizerApi.patch<ClaimEventData>(API.organizerClaimEvent(claimId), {
+        accept_new_price: true,
+        ...(eventId !== undefined && { event_id: eventId }),
+      }),
     onSuccess: (next) => {
       applyResponse(next);
       setFields((prev) => ({

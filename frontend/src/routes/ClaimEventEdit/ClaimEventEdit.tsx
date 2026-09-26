@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react';
-import { useLocation, useParams } from 'react-router-dom';
+import { useLocation, useParams, useSearchParams } from 'react-router-dom';
 import { useOrganizerLogout } from '../../hooks/useOrganizerLogout';
 import { useLocalLocale } from '../../hooks/useLocalLocale';
 import { useClaimEventEdit } from '../../hooks/useClaimEventEdit';
@@ -43,10 +43,13 @@ function PinTag({ locale, pinned, onUnpin, unpinning }: PinTagProps) {
 export default function ClaimEventEdit() {
   const params = useParams();
   const claimId = Number(params.id);
+  const [searchParams] = useSearchParams();
+  const parsedEventId = Number(searchParams.get('event_id'));
+  const eventId = Number.isFinite(parsedEventId) && parsedEventId > 0 ? parsedEventId : undefined;
   const [locale, handleLocaleChange] = useLocalLocale();
   const handleLogout = useOrganizerLogout();
   const { pathname } = useLocation();
-  const form = useClaimEventEdit(claimId, locale);
+  const form = useClaimEventEdit(claimId, locale, eventId);
   const seoMeta = useSeoMeta({
     title: titleWithBrand(t('claim_edit_title', locale), locale),
     locale,

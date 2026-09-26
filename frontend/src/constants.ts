@@ -1000,7 +1000,8 @@ export const API = {
   organizerClaimLinkVerify: '/organizer/claims/verify-link',
   organizerClaimSearch: '/organizer/claims/search',
   organizerClaimSuggestions: '/organizer/claims/suggestions',
-  organizerClaimEvent: (id: number | string) => `/organizer/claims/${id}/event`,
+  organizerClaimEvent: (id: number | string, eventId?: number) =>
+    `/organizer/claims/${id}/event${eventId !== undefined ? `?event_id=${eventId}` : ''}`,
   organizerClaimEvents: (id: number | string) => `/organizer/claims/${id}/events`,
   reports: '/reports',
   adminAuthLogin: '/admin/auth/login',

@@ -710,6 +710,14 @@ def select_events_with_classification() -> Select[tuple[Event]]:
     )
 
 
+def publisher_claim_event_ids(publisher_id: int | None) -> Select[tuple[int]]:
+    """Event ids a Publisher claim covers (#436) — one EventSource.publisher_id
+    match, shared by organizer_claims.py::list_claim_events (the bulk list)
+    and claims/pinning.py::claim_event_for_id (the #437 per-event membership
+    check), so the two never drift on what "covered" means."""
+    return select(EventSource.event_id).where(EventSource.publisher_id == publisher_id)
+
+
 def resolve_locale_param(locale: str | None, fallback: str) -> str:
     """Validate an optional ?locale= param, falling back when absent/invalid."""
     return locale if locale in VALID_LOCALES else fallback

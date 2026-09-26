@@ -41,9 +41,9 @@ function baseEvent(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function renderEdit() {
+function renderEdit(route = '/organizer/claims/42/edit') {
   return renderWithProviders(<ClaimEventEdit />, {
-    route: '/organizer/claims/42/edit',
+    route,
     pathPattern: '/organizer/claims/:id/edit',
   });
 }
@@ -60,6 +60,23 @@ describe('ClaimEventEdit (#416)', () => {
 
     await waitFor(() => expect(screen.getByText('Not yet editable')).toBeInTheDocument());
     expect(screen.queryByLabelText('Title')).not.toBeInTheDocument();
+  });
+
+  it('loads and saves against the event_id from the URL (#437)', async () => {
+    mockGet.mockResolvedValueOnce(baseEvent({ id: 7 }));
+    mockPatch.mockResolvedValueOnce(baseEvent({ id: 7, title: 'New title' }));
+    renderEdit('/organizer/claims/42/edit?event_id=7');
+
+    const titleInput = await screen.findByDisplayValue('Sügisõhtu jazziklubis');
+    expect(mockGet).toHaveBeenCalledWith(expect.stringContaining('event_id=7'));
+
+    await userEvent.clear(titleInput);
+    await userEvent.type(titleInput, 'New title');
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    await waitFor(() => expect(mockPatch).toHaveBeenCalledTimes(1));
+    const [, body] = mockPatch.mock.calls[0];
+    expect(body).toEqual({ event_id: 7, title: 'New title' });
   });
 
   it('renders loaded fields and marks a pinned field distinctly from a synced one', async () => {
