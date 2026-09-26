@@ -624,6 +624,15 @@ def event_ended_filter(now: datetime, entity: Any = Event) -> ColumnElement[bool
     return func.coalesce(entity.ends_at, entity.starts_at) < now
 
 
+def normalize_email(email: str) -> str:
+    """Canonical comparison form for an email address — strip surrounding
+    whitespace, lowercase. Shared by both sides of the Piletilevi mailbox-
+    match auto-grant check (`piletilevi_promoter.py::extract_contact_email`'s
+    stored contact and `verification.py::verify_piletilevi_claim`'s claimant
+    email) so the two normalizations can't drift independently (#439)."""
+    return email.strip().lower()
+
+
 def mask_email(email: str) -> str:
     """Mask an email for log output — keep the first few local-part characters and
     the full domain so entries stay correlatable without persisting raw PII in

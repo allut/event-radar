@@ -274,7 +274,9 @@ class TestPiletileviResolution:
         get_or_create.assert_awaited_once_with(
             mock_db, source_id=source.id, external_id=identity.external_id, name="X OÜ"
         )
-        assert target == ClaimTarget(CLAIM_KIND_PUBLISHER, 33, None)
+        assert target == ClaimTarget(
+            CLAIM_KIND_PUBLISHER, 33, None, event_page_html="<html></html>"
+        )
 
     @pytest.mark.asyncio
     async def test_resolving_promoter_with_no_usable_domain_still_yields_publisher(
@@ -311,6 +313,7 @@ class TestPiletileviResolution:
             mock_db, source_id=source.id, external_id=identity.external_id, name=identity.external_id
         )
         assert target.kind == CLAIM_KIND_PUBLISHER
+        assert target.event_page_html == "<html></html>"
 
     @pytest.mark.asyncio
     async def test_no_url_yields_series_without_fetching(self, mock_db, make_event):

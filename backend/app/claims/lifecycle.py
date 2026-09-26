@@ -266,6 +266,7 @@ async def _run_verification(
     es: EventSource,
     event: Event | None,
     token: str,
+    event_page_html: str | None = None,
 ) -> VerificationResult:
     if kind == CLAIM_KIND_SERIES:
         # (#428) No auto-grant path for a Series claim, ever — the
@@ -286,15 +287,18 @@ async def _run_verification(
         if source_slug in (SOURCE_SLUG_KUMU, SOURCE_SLUG_ESTONIA_CONCERT_HALL):
             return await verify_institutional_publisher_claim(client, source_slug, token)
         if source_slug == SOURCE_SLUG_PILETILEVI and event is not None and event.url:
-            # A second live fetch of event.url — target resolution
-            # (resolve_claim_target_live, #427) already fetched it once to
-            # decide Publisher-vs-Series, but verify_piletilevi_claim needs
-            # the promoter's *contact-page domain* for the DNS-TXT check,
-            # which target resolution never fetches (it only needs the
-            # promoter's identity, not its domain) — not reusable here.
-            response = await http_get(client, event.url)
+            # (#439) Reuse target resolution's already-fetched event.url HTML
+            # on the create_claim path instead of a second live fetch of the
+            # same page — event_page_html is None on recheck_claim (which
+            # never calls resolve_claim_target_live) and for a Publisher
+            # already stamped before this claim was created, so this still
+            # falls back to fetching it here in either case.
+            html = event_page_html
+            if html is None:
+                response = await http_get(client, event.url)
+                html = response.text
             return await verify_piletilevi_claim(
-                client, response.text, event.url, token, organizer_email
+                client, html, event.url, token, organizer_email
             )
     except httpx.HTTPError:
         log.warning(
@@ -493,6 +497,7 @@ async def create_claim(
         es=es,
         event=event,
         token=claim.proof_token,
+        event_page_html=target.event_page_html,
     )
     claim.verification_mechanism = result.mechanism
     claim.verification_domain = result.domain

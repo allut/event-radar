@@ -29,6 +29,7 @@ from app.constants import (
     SOURCE_SLUG_ESTONIA_CONCERT_HALL,
     SOURCE_SLUG_KUMU,
 )
+from app.routers.utils import normalize_email
 
 # KUMU and Estonia Concert Hall are each a single institution with one
 # hardcoded verification domain — see CONTEXT.md's Publisher glossary entry.
@@ -117,7 +118,7 @@ async def verify_piletilevi_claim(
             _outcome_for(verified),
             domain=contact.domain,
         )
-    matched = contact.email is not None and contact.email == claimant_email.strip().lower()
+    matched = contact.email is not None and contact.email == normalize_email(claimant_email)
     return VerificationResult(
         CLAIM_VERIFICATION_MECHANISM_PILETILEVI_MAILBOX,
         _outcome_for(matched),

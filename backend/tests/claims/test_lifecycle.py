@@ -379,6 +379,62 @@ class TestCreateClaim:
         assert "http_client" in kwargs
 
     @pytest.mark.asyncio
+    async def test_piletilevi_auto_grant_reuses_target_resolutions_event_fetch(
+        self, mock_db, make_organizer, make_event
+    ):
+        """(#439) resolve_claim_target_live already fetches event.url once to
+        resolve the promoter identity; verification must reuse that HTML
+        rather than fetching event.url a second time."""
+        from app.claims.piletilevi_promoter import PromoterContact, PromoterIdentity
+
+        es = _fake_event_source(publisher_id=None, source_slug=SOURCE_SLUG_PILETILEVI)
+        mock_db.scalar = AsyncMock(side_effect=[0, es, None])
+        event = make_event()
+        event.url = "https://www.piletilevi.ee/en/tickets/x/some-event"
+        mock_db.get.return_value = event
+        organizer = make_organizer(organizer_id=5)
+        publisher = MagicMock(id=33)
+        identity = PromoterIdentity(
+            external_id="https://www.piletilevi.ee/en/promoters/1/x", name="X OÜ"
+        )
+
+        with (
+            patch(
+                "app.claims.target_resolution.http_get",
+                new_callable=AsyncMock,
+                return_value=MagicMock(text="<html>event page</html>"),
+            ) as target_http_get,
+            patch(
+                "app.claims.target_resolution.resolve_promoter_identity",
+                return_value=identity,
+            ),
+            patch(
+                "app.claims.target_resolution._get_or_create_publisher",
+                new_callable=AsyncMock,
+                return_value=publisher,
+            ),
+            patch("app.claims.lifecycle.http_get", new_callable=AsyncMock) as lifecycle_http_get,
+            patch(
+                "app.claims.verification.resolve_promoter_contact",
+                new_callable=AsyncMock,
+                return_value=PromoterContact(domain="own-domain.ee", email=None),
+            ) as resolve_contact,
+            patch(
+                "app.claims.verification.verify_dns_txt_token",
+                new_callable=AsyncMock,
+                return_value=True,
+            ),
+        ):
+            claim = await create_claim(mock_db, AsyncMock(), organizer, event_id=10)
+
+        assert target_http_get.await_count == 1
+        lifecycle_http_get.assert_not_awaited()
+        resolve_contact.assert_awaited_once()
+        # The reused HTML, not a re-fetch, is what verification saw.
+        assert resolve_contact.call_args[0][1] == "<html>event page</html>"
+        assert claim.status == CLAIM_STATUS_APPROVED
+
+    @pytest.mark.asyncio
     async def test_pending_admin_review_sends_no_email(self, mock_db, make_organizer, make_event):
         """A claim that stays pending (routed to admin review) must not send
         the granted email — only an actual grant does."""

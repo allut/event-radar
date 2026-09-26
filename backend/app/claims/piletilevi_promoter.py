@@ -31,6 +31,7 @@ from app.constants import FREE_EMAIL_PROVIDER_DOMAINS, HTML_PARSER
 from app.ingestion.http_client import http_get
 from app.ingestion.jsonld import parse_jsonld_graph_items
 from app.ingestion.selectors import PILETILEVI_HOST, PILETILEVI_PROMOTER_CONTACT_SELECTOR
+from app.routers.utils import normalize_email
 
 _PROMOTER_URL_MARKER = "/promoters/"
 _MAILTO_PREFIX = "mailto:"
@@ -119,7 +120,7 @@ def extract_contact_email(promoter_html: str) -> str | None:
     href = str(link.get("href", ""))
     if not href.startswith(_MAILTO_PREFIX):
         return None
-    email = href[len(_MAILTO_PREFIX) :].split("?", 1)[0].strip().lower()
+    email = normalize_email(href[len(_MAILTO_PREFIX) :].split("?", 1)[0])
     if "@" not in email:
         return None
     return email

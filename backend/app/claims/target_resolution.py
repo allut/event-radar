@@ -44,6 +44,15 @@ class ClaimTarget:
     kind: str
     publisher_id: int | None
     event_series_key: str | None
+    # (#439) The Piletilevi event page's HTML, when this resolution fetched it
+    # to decide Publisher-vs-Series — set only on that first-fetch path, so
+    # `create_claim` can hand it straight to `verify_piletilevi_claim` instead
+    # of a second live fetch of the same `event.url`. None for every other
+    # source, and for a Piletilevi target whose Publisher was already
+    # stamped (no fetch needed here). `recheck_claim` never sees this value —
+    # it re-verifies live on purpose (current DNS/contact state), never via
+    # this dataclass.
+    event_page_html: str | None = None
 
 
 class ClaimTargetError(Exception):
@@ -206,10 +215,12 @@ async def _resolve_piletilevi_target(
         return ClaimTarget(CLAIM_KIND_PUBLISHER, es.publisher_id, None)
 
     identity = None
+    html: str | None = None
     if event.url:
         try:
             response = await http_get(client, event.url)
-            identity = resolve_promoter_identity(response.text, event.url)
+            html = response.text
+            identity = resolve_promoter_identity(html, event.url)
         except httpx.HTTPError as exc:
             log.warning("claim target resolution: piletilevi event fetch failed: %s", exc)
             identity = None
@@ -227,7 +238,7 @@ async def _resolve_piletilevi_target(
     es.publisher_id = publisher.id
     es.publisher = publisher
     await db.flush()
-    return ClaimTarget(CLAIM_KIND_PUBLISHER, publisher.id, None)
+    return ClaimTarget(CLAIM_KIND_PUBLISHER, publisher.id, None, event_page_html=html)
 
 
 async def resolve_claim_target_live(
