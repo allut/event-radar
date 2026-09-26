@@ -19,10 +19,10 @@ Deep-dive docs live in `docs/` and are **not** auto-loaded — read the relevant
 | `docs/design-system.md` | any `.module.css`, `frontend/src/index.css`, `frontend/src/components/shared/`, `frontend/src/lib/theme.ts`, `backend/app/email/styles.py`, or any change that is visual rather than behavioral |
 | `docs/conventions.md` | the *why* behind a Code Quality Rule below (full rationale + examples) |
 | `docs/data-model.md` | writing a migration, a query touching a new column, or a serializer |
-| `docs/organizer-portal.md` | `app/routers/organizer_auth.py`, `app/routers/organizer_events.py`, `app/routers/organizer_profile.py`, `app/routers/organizer_venues.py`, `app/routers/organizer_contact.py`, `frontend/src/routes/EventSubmit/`, `frontend/src/routes/OrganizerSettings/`, `frontend/src/routes/OrganizerContact/`, `frontend/src/components/VenuePicker/`, `frontend/src/components/RichTextEditor/` |
+| `docs/organizer-portal.md` | `app/routers/organizer_auth.py`, `app/routers/organizer_events.py`, `app/routers/organizer_profile.py`, `app/routers/organizer_venues.py`, `app/routers/organizer_contact.py`, `app/routers/organizer_claims.py`, `app/routers/organizer_claim_edits.py`, `app/claims/`, `frontend/src/routes/EventSubmit/`, `frontend/src/routes/OrganizerSettings/`, `frontend/src/routes/OrganizerContact/`, `frontend/src/components/VenuePicker/`, `frontend/src/components/RichTextEditor/` |
 | `docs/observability.md` | the Axiom monitoring spec (linked from `docs/backend-ops.md`'s Logging section) |
 | `CONTEXT.md` | before naming a new domain concept — repo-root domain glossary |
-| `docs/adr/` | architectural decisions — three: `0001-session-tokens-in-httponly-cookies.md`, `0002-google-sign-in-oauth-pkce.md`, `0003-device-theme-with-expiring-override.md` |
+| `docs/adr/` | architectural decisions — four: `0001-session-tokens-in-httponly-cookies.md`, `0002-google-sign-in-oauth-pkce.md`, `0003-device-theme-with-expiring-override.md`, `0004-claim-eligibility-tightening.md` |
 | `docs/agents/` | agent-facing workflow docs (issue tracker, triage labels, domain docs) — see Agent skills below |
 
 ## Commands

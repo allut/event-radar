@@ -86,11 +86,28 @@ per Fienta organizer id, the whole source for KUMU and Estonia Concert Hall
 (each a single institution, the latter booking several halls under one
 feed), or one per Piletilevi promoter id — read from a listing's schema.org
 `Event.organizer` and resolved to that promoter's public profile page —
-when that identity resolves. A Piletilevi listing whose organizer field
-doesn't resolve has no Publisher; see Series claim. Distinct from
-`Organizer` (the portal account that holds a claim) and `Venue` (an
-organizer's saved-venue directory) — a Publisher is neither.
+when that identity resolves. A resolved Piletilevi promoter always yields a
+Publisher and splits into two tiers by what its public contact channel
+proves (see Proof channel): a domain-provable promoter auto-grants the same
+DNS-TXT way as KUMU/ECH; a mailbox-provable promoter (contact info with no
+verifiable domain) auto-grants only on an exact match to the claimant's own
+account email, else falls to admin review. A Piletilevi listing whose
+organizer field doesn't resolve at all has no Publisher; see Series claim.
+Distinct from `Organizer` (the portal account that holds a claim) and
+`Venue` (an organizer's saved-venue directory) — a Publisher is neither.
 _Avoid_: organizer (source sense), source organizer, feed organizer
+
+**Proof channel**:
+What a resolved Publisher's public contact info actually lets a claim
+verify against, not whether the Publisher itself resolved. A working proof
+channel is a Fienta token round-trip or a DNS-verifiable domain (KUMU, ECH,
+or a domain-provable Piletilevi promoter) — these auto-grant. A resolved
+identity with no such channel (a Piletilevi promoter with only a contact
+mailbox) falls to a mailbox match against the claimant's account email, and
+short of that, to admin review. Absence of a proof channel is not absence
+of a Publisher — the two are resolved and verified in separate steps.
+_Avoid_: verification method, proof mechanism (collides with
+`verification_mechanism`, the stored field name for the specific check run)
 
 **Publisher claim**:
 A claim granted against a Publisher, covering every event traced back to
@@ -100,11 +117,13 @@ _Avoid_: organizer claim, source claim
 **Series claim**:
 A Piletilevi claim granted against an `event_series_key` (normalized title +
 lowercased venue) instead of a resolved entity — the fallback for a listing
-whose promoter identity doesn't resolve to a Publisher. Where it does
-resolve, a Publisher claim applies instead (see Publisher). Covers every
-past and future event sharing that series key, reusing the grouping series
-cooldown already uses. Always routes to admin review — there is no
-auto-grant path for it — and always requires a claim justification (below).
+whose promoter identity fails to resolve at all, i.e. neither Piletilevi
+Publisher tier applies (see Proof channel). A promoter that resolves to
+either tier — domain-provable or mailbox-provable — always yields a
+Publisher claim instead, never a Series claim. Covers every past and future
+event sharing that series key, reusing the grouping series cooldown already
+uses. Always routes to admin review — there is no auto-grant path for it —
+and always requires a claim justification (below).
 _Avoid_: listing claim, recurrence claim, per-event claim
 
 **Claim justification**:
