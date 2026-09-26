@@ -117,6 +117,11 @@
   padding: var(--space-0-8125) var(--space-5);
 }
 
+.secondaryBtn {
+  composes: btnOutline from '../../components/shared/Button.module.css';
+  padding: var(--space-0-8125) var(--space-5);
+}
+
 .cancelBtn {
   composes: textButton from '../../components/shared/Button.module.css';
 }

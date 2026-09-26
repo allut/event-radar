@@ -12,7 +12,7 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from itsdangerous import BadSignature, SignatureExpired
 from pydantic import BaseModel, EmailStr, Field
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -29,20 +29,25 @@ from app.claims.lifecycle import (
     cancel_claim,
     create_claim,
     get_own_claim,
+    own_claim_or_404,
     recheck_claim,
     resolve_claim_target,
 )
 from app.constants import (
     CLAIM_ACTIVE_STATUSES,
     CLAIM_AUTOMATED_VERIFICATION_MECHANISMS,
+    CLAIM_EVENTS_MAX_PAGE_SIZE,
+    CLAIM_EVENTS_PAGE_SIZE,
     CLAIM_JUSTIFICATION_MAX_CHARS,
     CLAIM_KIND_PUBLISHER,
     CLAIM_SEARCH_CANDIDATE_MULTIPLIER,
     CLAIM_SEARCH_QUERY_MIN_LENGTH,
     CLAIM_SEARCH_RESULT_LIMIT,
+    CLAIM_STATUS_APPROVED,
     CLAIM_STATUS_PENDING,
     CLAIM_SUGGESTIONS_LIMIT,
     DETAIL_MAGIC_LINK_SENT,
+    ERROR_CLAIM_EVENTS_NOT_PUBLISHER,
     ERROR_CLAIM_JUSTIFICATION_REQUIRED,
     ERROR_CLAIM_SEARCH_QUERY_TOO_SHORT,
     ERROR_MAGIC_LINK_CONSUMED,
@@ -56,6 +61,9 @@ from app.constants import (
     ORGANIZER_SESSION_COOKIE_NAME,
     ORGANIZER_SESSION_COOKIE_PATH,
     ORGANIZER_SESSION_TTL_DAYS,
+    PAGINATION_MIN_LIMIT,
+    PAGINATION_MIN_OFFSET,
+    PAGINATION_MAX_OFFSET,
     RATE_LIMIT_AUTH_REQUEST_LINK,
     RATE_LIMIT_AUTH_VERIFY,
     RATE_LIMIT_BROWSE,
@@ -76,6 +84,8 @@ from app.routers.utils import (
     public_event_filter,
     recent_unused_link_exists,
     resolve_venue_name,
+    select_events_with_classification,
+    serialize_event,
     set_session_cookie,
 )
 
@@ -525,3 +535,84 @@ async def get_claim(
     except ClaimError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
     return _serialize(claim)
+
+
+async def _own_publisher_claim_or_404(
+    db: AsyncSession, claim_id: int, organizer_id: int
+) -> Claim:
+    """Publisher-claim-only guard (#436) — a Series claim carries no
+    `EventSource.publisher_id` to bulk-match events against, and an
+    unapproved claim has no granted coverage yet, so both 404 the same way
+    a nonexistent claim id would rather than returning a misleading empty
+    page."""
+    try:
+        claim = await own_claim_or_404(db, claim_id, organizer_id)
+    except ClaimError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+    if (
+        claim.kind != CLAIM_KIND_PUBLISHER
+        or claim.publisher_id is None
+        or claim.status != CLAIM_STATUS_APPROVED
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=ERROR_CLAIM_EVENTS_NOT_PUBLISHER
+        )
+    return claim
+
+
+@router.get("/{claim_id}/events")
+@limiter.limit(RATE_LIMIT_BROWSE)
+async def list_claim_events(
+    claim_id: int,
+    request: Request,
+    limit: int = Query(
+        CLAIM_EVENTS_PAGE_SIZE, ge=PAGINATION_MIN_LIMIT, le=CLAIM_EVENTS_MAX_PAGE_SIZE
+    ),
+    offset: int = Query(
+        PAGINATION_MIN_OFFSET, ge=PAGINATION_MIN_OFFSET, le=PAGINATION_MAX_OFFSET
+    ),
+    current_organizer: Organizer = Depends(get_current_organizer),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Every event this approved Publisher claim currently covers (#436) —
+    not just the one representative_event_for_claim() picks for the
+    single-event editor. Bulk-loaded off one EventSource.publisher_id match
+    (fixed query count regardless of row count), paginated with the same
+    limit/offset/has_more/total shape as the admin queues (routers/admin.py),
+    sized down for organizer-portal use via CLAIM_EVENTS_PAGE_SIZE."""
+    claim = await _own_publisher_claim_or_404(db, claim_id, current_organizer.id)
+
+    matching_event_ids = select(EventSource.event_id).where(
+        EventSource.publisher_id == claim.publisher_id
+    )
+
+    # total only on the first page — see admin.py's admin_list_submissions.
+    total: int | None = None
+    if offset == 0:
+        total = (
+            await db.scalar(
+                select(func.count(Event.id)).where(Event.id.in_(matching_event_ids))
+            )
+        ) or 0
+
+    stmt = (
+        select_events_with_classification()
+        .where(Event.id.in_(matching_event_ids))
+        .order_by(Event.starts_at.desc())
+        .limit(limit + 1)
+        .offset(offset)
+    )
+    events = list((await db.scalars(stmt)).all())
+    has_more = len(events) > limit
+    events = events[:limit]
+
+    return {
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+        "has_more": has_more,
+        "events": [
+            {**serialize_event(e, locale=current_organizer.locale), "status": e.status}
+            for e in events
+        ],
+    }

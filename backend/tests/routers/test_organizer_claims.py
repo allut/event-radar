@@ -11,10 +11,12 @@ from fastapi import HTTPException
 from app.claims.lifecycle import ClaimError
 from app.constants import (
     CLAIM_KIND_PUBLISHER,
+    CLAIM_KIND_SERIES,
     CLAIM_STATUS_APPROVED,
     CLAIM_STATUS_PENDING,
     CLAIM_VERIFICATION_MECHANISM_FIENTA_TOKEN,
     DETAIL_MAGIC_LINK_SENT,
+    ERROR_CLAIM_EVENTS_NOT_PUBLISHER,
     ERROR_CLAIM_NOT_FOUND,
     ERROR_CLAIM_OWN_SUBMISSION,
     ERROR_DAILY_CLAIM_LIMIT,
@@ -492,3 +494,224 @@ class TestSuggestedClaimableEvents:
         )
 
         assert [e["id"] for e in result["events"]] == [1]
+
+
+class TestListClaimEvents:
+    """GET /organizer/claims/{claim_id}/events (#436) — the Publisher-claim
+    event list, paginated the same limit/offset/has_more/total shape as the
+    admin queues (see tests/routers/test_admin.py's pagination tests)."""
+
+    @pytest.mark.asyncio
+    async def test_returns_paginated_events(
+        self, mock_db, make_event, make_request, make_organizer
+    ):
+        from app.routers.organizer_claims import list_claim_events
+
+        organizer = make_organizer(organizer_id=5)
+        claim = _fake_claim(status=CLAIM_STATUS_APPROVED, publisher_id=99)
+        events = [make_event(event_id=1), make_event(event_id=2)]
+
+        scalars_result = MagicMock()
+        scalars_result.all.return_value = events
+        mock_db.scalars.return_value = scalars_result
+        mock_db.scalar.return_value = 2
+
+        with patch(
+            "app.routers.organizer_claims.own_claim_or_404",
+            new_callable=AsyncMock,
+            return_value=claim,
+        ):
+            result = await list_claim_events(
+                1,
+                make_request(method="GET", path="/organizer/claims/1/events"),
+                limit=20,
+                offset=0,
+                current_organizer=organizer,
+                db=mock_db,
+            )
+
+        assert result["total"] == 2
+        assert result["limit"] == 20
+        assert result["offset"] == 0
+        assert result["has_more"] is False
+        assert [e["id"] for e in result["events"]] == [1, 2]
+        assert result["events"][0]["status"] == "published"
+
+    @pytest.mark.asyncio
+    async def test_has_more_true_across_page_boundary(
+        self, mock_db, make_event, make_request, make_organizer
+    ):
+        from app.routers.organizer_claims import list_claim_events
+
+        organizer = make_organizer(organizer_id=5)
+        claim = _fake_claim(status=CLAIM_STATUS_APPROVED, publisher_id=99)
+        # limit+1 sentinel row past the requested page of 2.
+        events = [make_event(event_id=1), make_event(event_id=2), make_event(event_id=3)]
+
+        scalars_result = MagicMock()
+        scalars_result.all.return_value = events
+        mock_db.scalars.return_value = scalars_result
+        mock_db.scalar.return_value = 5
+
+        with patch(
+            "app.routers.organizer_claims.own_claim_or_404",
+            new_callable=AsyncMock,
+            return_value=claim,
+        ):
+            result = await list_claim_events(
+                1,
+                make_request(method="GET", path="/organizer/claims/1/events"),
+                limit=2,
+                offset=0,
+                current_organizer=organizer,
+                db=mock_db,
+            )
+
+        assert result["has_more"] is True
+        assert [e["id"] for e in result["events"]] == [1, 2]
+
+    @pytest.mark.asyncio
+    async def test_total_omitted_past_first_page(
+        self, mock_db, make_event, make_request, make_organizer
+    ):
+        from app.routers.organizer_claims import list_claim_events
+
+        organizer = make_organizer(organizer_id=5)
+        claim = _fake_claim(status=CLAIM_STATUS_APPROVED, publisher_id=99)
+
+        scalars_result = MagicMock()
+        scalars_result.all.return_value = [make_event(event_id=3)]
+        mock_db.scalars.return_value = scalars_result
+
+        with patch(
+            "app.routers.organizer_claims.own_claim_or_404",
+            new_callable=AsyncMock,
+            return_value=claim,
+        ):
+            result = await list_claim_events(
+                1,
+                make_request(method="GET", path="/organizer/claims/1/events"),
+                limit=2,
+                offset=2,
+                current_organizer=organizer,
+                db=mock_db,
+            )
+
+        assert result["total"] is None
+        mock_db.scalar.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_series_claim_rejected_404(
+        self, mock_db, make_request, make_organizer
+    ):
+        from app.routers.organizer_claims import list_claim_events
+
+        organizer = make_organizer(organizer_id=5)
+        claim = _fake_claim(
+            kind=CLAIM_KIND_SERIES,
+            publisher_id=None,
+            event_series_key="the-show|the-venue",
+            status=CLAIM_STATUS_APPROVED,
+        )
+
+        with patch(
+            "app.routers.organizer_claims.own_claim_or_404",
+            new_callable=AsyncMock,
+            return_value=claim,
+        ):
+            with pytest.raises(HTTPException) as exc:
+                await list_claim_events(
+                    1,
+                    make_request(method="GET", path="/organizer/claims/1/events"),
+                    limit=20,
+                    offset=0,
+                    current_organizer=organizer,
+                    db=mock_db,
+                )
+
+        assert exc.value.status_code == http.HTTPStatus.NOT_FOUND
+        assert exc.value.detail == ERROR_CLAIM_EVENTS_NOT_PUBLISHER
+
+    @pytest.mark.asyncio
+    async def test_publisher_claim_with_no_publisher_id_rejected_404(
+        self, mock_db, make_request, make_organizer
+    ):
+        from app.routers.organizer_claims import list_claim_events
+
+        organizer = make_organizer(organizer_id=5)
+        claim = _fake_claim(
+            kind=CLAIM_KIND_PUBLISHER, publisher_id=None, status=CLAIM_STATUS_APPROVED
+        )
+
+        with patch(
+            "app.routers.organizer_claims.own_claim_or_404",
+            new_callable=AsyncMock,
+            return_value=claim,
+        ):
+            with pytest.raises(HTTPException) as exc:
+                await list_claim_events(
+                    1,
+                    make_request(method="GET", path="/organizer/claims/1/events"),
+                    limit=20,
+                    offset=0,
+                    current_organizer=organizer,
+                    db=mock_db,
+                )
+
+        assert exc.value.status_code == http.HTTPStatus.NOT_FOUND
+        assert exc.value.detail == ERROR_CLAIM_EVENTS_NOT_PUBLISHER
+
+    @pytest.mark.asyncio
+    async def test_not_yet_approved_claim_rejected_404(
+        self, mock_db, make_request, make_organizer
+    ):
+        from app.routers.organizer_claims import list_claim_events
+
+        organizer = make_organizer(organizer_id=5)
+        claim = _fake_claim(
+            kind=CLAIM_KIND_PUBLISHER, publisher_id=99, status=CLAIM_STATUS_PENDING
+        )
+
+        with patch(
+            "app.routers.organizer_claims.own_claim_or_404",
+            new_callable=AsyncMock,
+            return_value=claim,
+        ):
+            with pytest.raises(HTTPException) as exc:
+                await list_claim_events(
+                    1,
+                    make_request(method="GET", path="/organizer/claims/1/events"),
+                    limit=20,
+                    offset=0,
+                    current_organizer=organizer,
+                    db=mock_db,
+                )
+
+        assert exc.value.status_code == http.HTTPStatus.NOT_FOUND
+        assert exc.value.detail == ERROR_CLAIM_EVENTS_NOT_PUBLISHER
+
+    @pytest.mark.asyncio
+    async def test_claim_not_found_propagates_404(
+        self, mock_db, make_request, make_organizer
+    ):
+        from app.routers.organizer_claims import list_claim_events
+
+        organizer = make_organizer(organizer_id=5)
+
+        with patch(
+            "app.routers.organizer_claims.own_claim_or_404",
+            new_callable=AsyncMock,
+            side_effect=ClaimError(http.HTTPStatus.NOT_FOUND, ERROR_CLAIM_NOT_FOUND),
+        ):
+            with pytest.raises(HTTPException) as exc:
+                await list_claim_events(
+                    1,
+                    make_request(method="GET", path="/organizer/claims/1/events"),
+                    limit=20,
+                    offset=0,
+                    current_organizer=organizer,
+                    db=mock_db,
+                )
+
+        assert exc.value.status_code == http.HTTPStatus.NOT_FOUND
+        assert exc.value.detail == ERROR_CLAIM_NOT_FOUND

@@ -528,6 +528,7 @@ export const QUERY_KEYS = {
   organizerClaimSearch: 'organizerClaimSearch',
   organizerClaim: 'organizerClaim',
   organizerClaimEvent: 'organizerClaimEvent',
+  organizerClaimEvents: 'organizerClaimEvents',
   adminCounts: 'adminCounts',
   adminReports: 'adminReports',
   adminSubmissions: 'adminSubmissions',
@@ -612,6 +613,10 @@ export const ADMIN_DEDUP_GROUPS_PAGE_SIZE = 50;
 export const ADMIN_REPORTS_QUEUE_PAGE_SIZE = 50;
 export const ADMIN_REVIEW_QUEUE_PAGE_SIZE = 50;
 export const ADMIN_CLAIMS_QUEUE_PAGE_SIZE = 50;
+
+// ─── Organizer: Publisher-claim event list (mirrors backend's
+// CLAIM_EVENTS_PAGE_SIZE, issue #436) ──────────────────────────────────────
+export const CLAIM_EVENTS_PAGE_SIZE = 20;
 
 // ─── Organizer submission ────────────────────────────────────────────────────
 // ORGANIZER_IMAGE_ALLOWED_MIME (re-exported above) is sourced from
@@ -816,6 +821,8 @@ export const ROUTES = {
   organizerClaimPendingPattern: '/organizer/claims/:id/pending',
   organizerClaimEdit: (id: number | string) => `/organizer/claims/${id}/edit`,
   organizerClaimEditPattern: '/organizer/claims/:id/edit',
+  organizerClaimEvents: (id: number | string) => `/organizer/claims/${id}/events`,
+  organizerClaimEventsPattern: '/organizer/claims/:id/events',
   organizerSubmit: '/organizer/submit',
   organizerSettings: '/organizer/settings',
   organizerContact: '/organizer/contact',
@@ -994,6 +1001,7 @@ export const API = {
   organizerClaimSearch: '/organizer/claims/search',
   organizerClaimSuggestions: '/organizer/claims/suggestions',
   organizerClaimEvent: (id: number | string) => `/organizer/claims/${id}/event`,
+  organizerClaimEvents: (id: number | string) => `/organizer/claims/${id}/events`,
   reports: '/reports',
   adminAuthLogin: '/admin/auth/login',
   adminAuthLogout: '/admin/auth/logout',

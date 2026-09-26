@@ -31,6 +31,7 @@ import styles from './ClaimPending.module.css';
 
 interface ClaimResponse {
   id: number;
+  kind: 'publisher' | 'series';
   status: ClaimStatus;
   verification_mechanism: ClaimVerificationMechanism | null;
   dns_record_name: string | null;
@@ -219,6 +220,15 @@ export default function ClaimPending() {
                 onClick={() => navigate(ROUTES.organizerClaimEdit(claim.id))}
               >
                 {t('claim_edit_open_cta', locale)}
+              </button>
+            )}
+            {claim.status === 'approved' && claim.kind === 'publisher' && (
+              <button
+                type="button"
+                className={styles.secondaryBtn}
+                onClick={() => navigate(ROUTES.organizerClaimEvents(claim.id))}
+              >
+                {t('claim_events_view_cta', locale)}
               </button>
             )}
             {isPending && claim.can_recheck && (

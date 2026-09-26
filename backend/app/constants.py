@@ -1097,6 +1097,13 @@ ADMIN_REVIEW_QUEUE_MAX_PAGE_SIZE: int = 500
 ADMIN_CLAIMS_QUEUE_PAGE_SIZE: int = 50
 ADMIN_CLAIMS_QUEUE_MAX_PAGE_SIZE: int = 500
 
+# Publisher-claim event-list pagination (routers/organizer_claims.py GET
+# /organizer/claims/{claim_id}/events, issue #436) — smaller default/cap than
+# the admin queues above since this is one organizer's own claimed events,
+# not an operator-wide queue.
+CLAIM_EVENTS_PAGE_SIZE: int = 20
+CLAIM_EVENTS_MAX_PAGE_SIZE: int = 100
+
 # Per-email magic-link resend cooldown (routers/auth.py::_recent_unused_link_exists) —
 # prevents Resend quota exhaustion from rapid repeat requests for the same address.
 MAGIC_LINK_RESEND_COOLDOWN_SECONDS = 120
@@ -2030,6 +2037,9 @@ ERROR_DAILY_VENUE_CREATION_LIMIT = (
 ERROR_VENUE_NOT_FOUND = "Venue not found."
 ERROR_CLAIM_NOT_FOUND = "Claim not found."
 ERROR_CLAIM_NOT_CLAIMABLE = "This event has no publisher or series that can be claimed."
+ERROR_CLAIM_EVENTS_NOT_PUBLISHER = (
+    "Only an approved Publisher claim has an event list."
+)
 # (#429) Explicit guard — a direct organizer submission has no ingested
 # EventSource to claim against; keeps the claim mechanism (ingested events)
 # and the submission-trust track (Organizer.verified) separate.
