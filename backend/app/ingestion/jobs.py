@@ -149,6 +149,14 @@ async def geocode_pending_job() -> dict:
     return await _run_db_job("geocode_pending", geocode_pending)
 
 
+async def backfill_publisher_ids_job() -> dict:
+    """Stamp publisher_id onto claimable event_sources rows missing it
+    (one bounded batch pass per call; no-op once nothing is unstamped)."""
+    from app.ingestion.publisher_backfill import backfill_publisher_ids
+
+    return await _run_db_job("backfill_publisher_ids", backfill_publisher_ids)
+
+
 async def refetch_event_details_job() -> dict:
     """Re-fetch detail pages for all future events and reconcile stored fields."""
     from app.ingestion.refetch import refetch_event_details

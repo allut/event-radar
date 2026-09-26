@@ -199,6 +199,7 @@ async def test_run_db_job_rolls_back_and_reraises(mock_db, monkeypatch):
         "classify_pending_job",
         "publish_pending_job",
         "geocode_pending_job",
+        "backfill_publisher_ids_job",
         "refetch_event_details_job",
     ],
 )

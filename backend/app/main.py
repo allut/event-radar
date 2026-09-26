@@ -47,6 +47,7 @@ from app.constants import (
     JOB_ID_BUILD_DAILY_FEEDS,
     JOB_ID_CLASSIFY_PENDING,
     JOB_ID_CLEANUP_STALE_DATA,
+    JOB_ID_BACKFILL_PUBLISHER_IDS,
     JOB_ID_DEDUP_PASS,
     JOB_ID_EXPIRE_STALE_CLAIMS,
     JOB_ID_GEOCODE_PENDING,
@@ -75,6 +76,7 @@ from app.cleanup import cleanup_stale_data
 from app.db import AsyncSessionLocal, assert_schema_at_head, engine
 from app.email.digest import send_daily_digests
 from app.ingestion.jobs import (
+    backfill_publisher_ids_job,
     classify_pending_drained,
     dedup_pass_drained,
     geocode_pending_job,
@@ -184,6 +186,9 @@ _run_dedup_pass = _scheduled("dedup pass", dedup_pass_drained)
 _run_classify_pending = _scheduled(JOB_ID_CLASSIFY_PENDING, classify_pending_drained)
 _run_publish_pending = _scheduled(JOB_ID_PUBLISH_PENDING, publish_pending_job)
 _run_geocode_pending = _scheduled(JOB_ID_GEOCODE_PENDING, geocode_pending_job)
+_run_backfill_publisher_ids = _scheduled(
+    JOB_ID_BACKFILL_PUBLISHER_IDS, backfill_publisher_ids_job
+)
 _run_refetch_details = _scheduled(
     JOB_ID_REFETCH_EVENT_DETAILS, refetch_event_details_job
 )
@@ -261,6 +266,13 @@ def _register_scheduled_jobs(scheduler: AsyncIOScheduler) -> None:
         trigger="interval",
         hours=LLM_PASS_INTERVAL_HOURS,
         id=JOB_ID_GEOCODE_PENDING,
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        _run_backfill_publisher_ids,
+        trigger="interval",
+        hours=LLM_PASS_INTERVAL_HOURS,
+        id=JOB_ID_BACKFILL_PUBLISHER_IDS,
         replace_existing=True,
     )
     # Daily 04:30 EET: re-fetch every future event's detail page and reconcile
