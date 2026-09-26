@@ -123,6 +123,16 @@ def resolve_claim_target(event: Event, es: EventSource) -> ClaimTarget:
     return ClaimTarget(CLAIM_KIND_SERIES, None, key)
 
 
+def _target_where(target: ClaimTarget) -> tuple:
+    """The Publisher-vs-Series column match for `target`, shared by every
+    Claim query scoped to a single target (active_claim_for_target,
+    approved_claim_exists, auto_decline_other_pending_claims) so the
+    kind-branch lives in exactly one place."""
+    if target.kind == CLAIM_KIND_PUBLISHER:
+        return (Claim.publisher_id == target.publisher_id,)
+    return (Claim.event_series_key == target.event_series_key,)
+
+
 async def active_claim_for_target(db: AsyncSession, target: ClaimTarget) -> Claim | None:
     """The Claim to represent `target`'s pending/approved state, if any
     (#414) — backs both the public event page's claim_status/listed_by and
@@ -135,14 +145,10 @@ async def active_claim_for_target(db: AsyncSession, target: ClaimTarget) -> Clai
     wins (the most recently asserted claimant). Eager-loads `Claim.organizer`
     (#419) so callers needing the organizer's display name don't pay a
     second round trip."""
-    if target.kind == CLAIM_KIND_PUBLISHER:
-        where = (Claim.publisher_id == target.publisher_id,)
-    else:
-        where = (Claim.event_series_key == target.event_series_key,)
     return await db.scalar(
         select(Claim)
         .options(selectinload(Claim.organizer))
-        .where(*where, Claim.status.in_(CLAIM_ACTIVE_STATUSES))
+        .where(*_target_where(target), Claim.status.in_(CLAIM_ACTIVE_STATUSES))
         .order_by((Claim.status == CLAIM_STATUS_APPROVED).desc(), Claim.id.desc())
         .limit(1)
     )
@@ -316,52 +322,54 @@ async def _claims_created_today(db: AsyncSession, organizer_id: int) -> int:
     )
 
 
-async def _approved_claim_exists(db: AsyncSession, target: ClaimTarget) -> bool:
+async def approved_claim_exists(db: AsyncSession, target: ClaimTarget) -> bool:
     """(#431) Approved-only counterpart of `active_claim_for_target` — the
     narrowed unique index (migration 0048) no longer rejects a new pending
     claim against a target that already has other *pending* claims, only
     against one with an existing *approved* claim, so that case needs an
-    explicit pre-insert check instead of relying on IntegrityError."""
-    if target.kind == CLAIM_KIND_PUBLISHER:
-        where = (Claim.publisher_id == target.publisher_id,)
-    else:
-        where = (Claim.event_series_key == target.event_series_key,)
+    explicit pre-insert check instead of relying on IntegrityError. Not
+    module-private: also called from admin.py's manual grant endpoint, which
+    needs the same pre-flip guard as the organizer-facing auto-grant path."""
     return (
         await db.scalar(
-            select(Claim.id).where(*where, Claim.status == CLAIM_STATUS_APPROVED).limit(1)
+            select(Claim.id)
+            .where(*_target_where(target), Claim.status == CLAIM_STATUS_APPROVED)
+            .limit(1)
         )
     ) is not None
 
 
-async def _auto_decline_other_pending_claims(
+async def auto_decline_other_pending_claims(
     db: AsyncSession,
     client: httpx.AsyncClient,
     target: ClaimTarget,
     winning_claim_id: int,
 ) -> None:
-    """(#431) Proof preempts assertion: once a claim on `target` passes
-    automated verification, every other still-pending claim on that same
-    target auto-declines — mirrors admin_decline_claim's status transition
-    and reuses its decline email, just with no admin note (falls back to the
-    email's generic decline copy). Each declined claim's own
+    """(#431) Proof preempts assertion: once a claim on `target` is granted —
+    either the organizer-facing auto-grant path or an admin's manual grant
+    (admin.py's admin_grant_claim) — every other still-pending claim on that
+    same target auto-declines, mirroring admin_decline_claim's status
+    transition and reusing its decline email, just with no admin note (falls
+    back to the email's generic decline copy). Each declined claim's own
     representative_event_for_claim() resolves its own email's event title —
     not the winning claim's event — since a Publisher target's freshest
     traced-back listing can differ from whichever specific event the winner
-    happened to claim through."""
+    happened to claim through. Not module-private: also called from
+    admin.py's manual grant endpoint."""
     # Local import: app.claims.pinning imports representative_event_source
     # from this module, so a module-level import here would deadlock the
     # two modules' load order (see cancel_claim, same reason).
     from app.claims.pinning import representative_event_for_claim
 
-    if target.kind == CLAIM_KIND_PUBLISHER:
-        where = (Claim.publisher_id == target.publisher_id,)
-    else:
-        where = (Claim.event_series_key == target.event_series_key,)
     others = (
         await db.scalars(
             select(Claim)
             .options(selectinload(Claim.organizer))
-            .where(*where, Claim.status == CLAIM_STATUS_PENDING, Claim.id != winning_claim_id)
+            .where(
+                *_target_where(target),
+                Claim.status == CLAIM_STATUS_PENDING,
+                Claim.id != winning_claim_id,
+            )
         )
     ).all()
     if not others:
@@ -450,7 +458,7 @@ async def create_claim(
     except ClaimTargetError:
         raise ClaimError(422, ERROR_CLAIM_NOT_CLAIMABLE) from None
 
-    if await _approved_claim_exists(db, target):
+    if await approved_claim_exists(db, target):
         # (#431) Unchanged from pre-0048 behavior for the approved case — no
         # contest/override flow for an already-granted claim, support-facing
         # message. Only the pending-vs-pending case below is new.
@@ -512,7 +520,7 @@ async def create_claim(
                 exc_info=True,
                 extra={"event": LOG_EVENT_EMAIL_SEND_FAILED},
             )
-        await _auto_decline_other_pending_claims(db, client, target, claim.id)
+        await auto_decline_other_pending_claims(db, client, target, claim.id)
     return claim
 
 
@@ -629,7 +637,7 @@ async def recheck_claim(
                 extra={"event": LOG_EVENT_EMAIL_SEND_FAILED},
             )
         target = ClaimTarget(claim.kind, claim.publisher_id, claim.event_series_key)
-        await _auto_decline_other_pending_claims(db, client, target, claim.id)
+        await auto_decline_other_pending_claims(db, client, target, claim.id)
     return claim
 
 

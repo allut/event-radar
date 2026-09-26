@@ -8,12 +8,14 @@ from collections import OrderedDict
 from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from datetime import datetime, timezone
 
+import httpx
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from itsdangerous import BadSignature, SignatureExpired
 from pydantic import BaseModel, Field
 from sqlalchemy import and_, func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -71,6 +73,7 @@ from app.constants import (
     ERROR_CLAIM_NOT_APPROVED,
     ERROR_CLAIM_NOT_FOUND,
     ERROR_CLAIM_QUEUE_INVALID_STATUS,
+    ERROR_CLAIM_TARGET_ALREADY_APPROVED,
     ERROR_MISSING_SESSION_COOKIE,
     ERROR_SESSION_INVALID,
     ERROR_SUBMISSION_NOT_FOUND,
@@ -82,6 +85,7 @@ from app.constants import (
     EVENT_CANCELLATION_REASON_ADMIN_RETRACT,
     EVENT_CANCELLATION_REASON_REPORT_TAKEDOWN,
     EVENT_STATUS_CANCELLED,
+    HTTP_TIMEOUT_SECONDS,
     LOG_EVENT_AUTH_FAILED,
     LOG_EVENT_EMAIL_SEND_FAILED,
     PAGINATION_MAX_OFFSET,
@@ -93,7 +97,9 @@ from app.constants import (
     TALLINN_TZ,
     VALID_LOCALES,
 )
+from app.claims.lifecycle import approved_claim_exists, auto_decline_other_pending_claims
 from app.claims.pinning import representative_event_for_claim
+from app.claims.target_resolution import ClaimTarget
 from app.db import AsyncSessionLocal
 from app.email.claim_resolution import send_claim_declined_email, send_claim_granted_email
 from app.email.digest import send_daily_digests
@@ -839,7 +845,18 @@ async def admin_grant_claim(claim_id: int, body: _ResolutionBody, request: Reque
     """Manually approve a pending claim — available for any pending claim
     regardless of mechanism, letting an admin override an inconclusive or
     failed automated check (e.g. a DNS-TXT lookup that hasn't propagated
-    yet) as well as decide a genuine admin_review (Series) claim."""
+    yet) as well as decide a genuine admin_review (Series) claim.
+
+    Since #431 (multiple pending claims can coexist on the same target),
+    this must apply the same guard/preemption as the organizer-facing
+    auto-grant path (app.claims.lifecycle.create_claim/recheck_claim):
+    reject with the same support-facing conflict when the target already
+    has an *approved* claim (checked up front, and again via IntegrityError
+    on the narrowed migration-0048 unique index for the race where another
+    claim on this target was approved concurrently), and auto-decline every
+    other still-pending sibling claim on the same target once this grant
+    lands.
+    """
     note = _validated_resolution_note(body)
 
     async def _run() -> dict:
@@ -850,13 +867,26 @@ async def admin_grant_claim(claim_id: int, body: _ResolutionBody, request: Reque
                     status_code=status.HTTP_409_CONFLICT,
                     detail=ERROR_CLAIM_ALREADY_RESOLVED,
                 )
+            target = ClaimTarget(claim.kind, claim.publisher_id, claim.event_series_key)
+            if await approved_claim_exists(db, target):
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=ERROR_CLAIM_TARGET_ALREADY_APPROVED,
+                )
             claim.status = CLAIM_STATUS_APPROVED
             claim.resolved_at = datetime.now(timezone.utc)
             organizer = await db.get(Organizer, claim.organizer_id)
             event = await representative_event_for_claim(db, claim)
             result = {"id": claim.id, "status": claim.status, "note": note}
             emit_admin_log = log_admin_action(db, ADMIN_ACTION_GRANT_CLAIM, claim_id, result)
-            await db.commit()
+            try:
+                await db.commit()
+            except IntegrityError:
+                await db.rollback()
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=ERROR_CLAIM_TARGET_ALREADY_APPROVED,
+                ) from None
             emit_admin_log()
             if organizer is not None:
                 try:
@@ -873,6 +903,8 @@ async def admin_grant_claim(claim_id: int, body: _ResolutionBody, request: Reque
                         exc_info=True,
                         extra={"event": LOG_EVENT_EMAIL_SEND_FAILED},
                     )
+            async with httpx.AsyncClient(timeout=HTTP_TIMEOUT_SECONDS) as client:
+                await auto_decline_other_pending_claims(db, client, target, claim.id)
             return result
 
     return await run_admin_job("Grant claim", _run())

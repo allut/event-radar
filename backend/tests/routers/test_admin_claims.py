@@ -21,6 +21,7 @@ from app.constants import (
     CLAIM_VERIFICATION_MECHANISM_ADMIN_REVIEW,
     CLAIM_VERIFICATION_MECHANISM_DNS_TXT,
     CLAIM_VERIFICATION_MECHANISM_PILETILEVI_MAILBOX,
+    ERROR_CLAIM_TARGET_ALREADY_APPROVED,
 )
 from tests.routers.conftest import scalars_returning
 
@@ -256,6 +257,9 @@ async def test_grant_claim_approves_pending_claim(admin_app, make_db_ctx, mock_d
 
     db = mock_db
     db.get = AsyncMock(return_value=claim)
+    # No pre-existing approved claim on this target, and no other pending
+    # siblings to auto-decline (#431 guard/preemption in admin_grant_claim).
+    db.scalar = AsyncMock(return_value=None)
 
     with (
         patch("app.routers.admin.settings") as mock_settings,
@@ -337,6 +341,7 @@ async def test_grant_claim_sends_granted_email(admin_app, make_db_ctx, mock_db):
 
     db = mock_db
     db.get = AsyncMock(side_effect=[claim, organizer])
+    db.scalar = AsyncMock(return_value=None)
     send_mock = AsyncMock()
 
     with (
@@ -375,6 +380,94 @@ async def test_grant_requires_nonblank_note(admin_app, make_db_ctx, mock_db):
             )
 
     assert resp.status_code == http.HTTPStatus.UNPROCESSABLE_ENTITY
+
+
+@pytest.mark.asyncio
+async def test_grant_claim_conflicts_when_target_already_approved(admin_app, make_db_ctx, mock_db):
+    """#431: admin_grant_claim must apply the same approved-target guard as
+    the organizer-facing auto-grant path. Since migration 0048, multiple
+    pending claims can coexist on one target — granting one of them, then
+    granting a sibling, must 409 (ERROR_CLAIM_TARGET_ALREADY_APPROVED)
+    instead of crashing on the narrowed unique index."""
+    app = admin_app
+    claim = _make_claim(claim_id=2, status=CLAIM_STATUS_PENDING, publisher_id=5)
+
+    db = mock_db
+    db.get = AsyncMock(return_value=claim)
+    db.scalar = AsyncMock(return_value=1)  # an approved claim already exists on this target
+
+    with (
+        patch("app.routers.admin.settings") as mock_settings,
+        patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
+    ):
+        _admin_settings(mock_settings)
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post(
+                "/admin/claims/2/grant",
+                json={"resolution_note": "note"},
+                auth=("admin", ""),
+            )
+
+    assert resp.status_code == http.HTTPStatus.CONFLICT
+    assert resp.json()["detail"] == ERROR_CLAIM_TARGET_ALREADY_APPROVED
+    assert claim.status == CLAIM_STATUS_PENDING  # never flipped
+    db.commit.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_grant_claim_auto_declines_other_pending_claims_on_target(admin_app, make_db_ctx, mock_db):
+    """#431: manually granting one pending claim must auto-decline every
+    other still-pending claim on the same target and notify each declined
+    claimant — otherwise sibling pending claims are stuck forever with no
+    automatic path to resolution."""
+    app = admin_app
+    claim = _make_claim(claim_id=1, status=CLAIM_STATUS_PENDING, publisher_id=5)
+    organizer = MagicMock(id=9, email="organizer@example.com", locale="en")
+
+    other_organizer = MagicMock(id=6, email="other@example.com", locale="en")
+    loser = _make_claim(claim_id=2, status=CLAIM_STATUS_PENDING, publisher_id=5)
+    loser.organizer = other_organizer
+    loser_event = _make_event(event_id=43)
+    loser_event.title_orig = "Loser's own listing"
+
+    db = mock_db
+    db.get = AsyncMock(side_effect=[claim, organizer])
+    db.scalar = AsyncMock(return_value=None)  # no existing approved claim on this target
+    db.scalars.return_value = MagicMock(all=MagicMock(return_value=[loser]))
+
+    with (
+        patch("app.routers.admin.settings") as mock_settings,
+        patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
+        patch(
+            "app.routers.admin.representative_event_for_claim",
+            new=AsyncMock(return_value=_make_event(event_id=42)),
+        ),
+        patch("app.routers.admin.send_claim_granted_email", new=AsyncMock()),
+        patch(
+            "app.claims.pinning.representative_event_for_claim",
+            new_callable=AsyncMock,
+            return_value=loser_event,
+        ),
+        patch(
+            "app.claims.lifecycle.send_claim_declined_email", new_callable=AsyncMock
+        ) as decline_mock,
+    ):
+        _admin_settings(mock_settings)
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post(
+                "/admin/claims/1/grant",
+                json={"resolution_note": "Verified manually."},
+                auth=("admin", ""),
+            )
+
+    assert resp.status_code == http.HTTPStatus.OK
+    assert claim.status == CLAIM_STATUS_APPROVED
+    assert loser.status == CLAIM_STATUS_REVOKED
+    assert loser.resolved_at is not None
+    decline_mock.assert_awaited_once()
+    args, kwargs = decline_mock.call_args
+    assert args[0] == "other@example.com"
+    assert args[1] == "Loser's own listing"
 
 
 # ---------------------------------------------------------------------------
