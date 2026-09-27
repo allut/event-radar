@@ -287,7 +287,10 @@ export default function EventDetail() {
             </section>
           )}
 
-          {data.claim_status === 'unclaimed' && <ClaimPanel eventId={data.id} locale={locale} />}
+          {/* #441: a pending-only target is still claimable by a rival —
+              ADR 0004's "proof preempts assertion" only blocks the CTA once
+              a claim is actually approved. */}
+          {data.claim_status !== 'claimed' && <ClaimPanel eventId={data.id} locale={locale} />}
         </div>
       </main>
 

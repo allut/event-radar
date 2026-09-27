@@ -399,8 +399,8 @@ class TestSearchClaimableEvents(object):
 
     @pytest.mark.asyncio
     async def test_excludes_already_claimed_event(self, mock_db, make_event, make_request, make_organizer):
-        """An event whose Publisher already has an active claim (#414) is
-        filtered out of search results — cross-surface retirement."""
+        """An event whose Publisher already has an *approved* claim (#441/ADR
+        0004) is filtered out of search results — cross-surface retirement."""
         from app.routers.organizer_claims import search_claimable_events
 
         claimed_event = make_event(event_id=1, title="Jazz Night")
@@ -423,6 +423,33 @@ class TestSearchClaimableEvents(object):
         )
 
         assert [e["id"] for e in result["events"]] == [2]
+
+    @pytest.mark.asyncio
+    async def test_includes_pending_only_claim_event(self, mock_db, make_event, make_request, make_organizer):
+        """(#441) A Publisher target with only a *pending* claim must still
+        surface in search — a rival claimant needs a product path to start
+        proving ownership, per ADR 0004."""
+        from app.routers.organizer_claims import search_claimable_events
+
+        pending_event = make_event(event_id=1, title="Jazz Night")
+        pending_event.sources = [_make_source(event_id=1, publisher_id=99)]
+
+        candidates_result = MagicMock()
+        candidates_result.scalars.return_value.all.return_value = [pending_event]
+        claim_keys_result = MagicMock()
+        # The DB-side query itself filters to approved claims only, so a
+        # pending-only Publisher never appears in this row set.
+        claim_keys_result.all.return_value = []
+        mock_db.execute.side_effect = [candidates_result, claim_keys_result]
+
+        result = await search_claimable_events(
+            make_request(method="GET", path="/organizer/claims/search"),
+            q="jazz",
+            current_organizer=make_organizer(),
+            db=mock_db,
+        )
+
+        assert [e["id"] for e in result["events"]] == [1]
 
     @pytest.mark.asyncio
     async def test_event_with_no_source_excluded(self, mock_db, make_event, make_request, make_organizer):

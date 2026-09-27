@@ -31,12 +31,15 @@ interface ClaimPanelProps {
   locale: string;
 }
 
-/** The "is this your event?" discovery surface (#414) — always shown for an
- * unclaimed event, gated only on organizer-auth state: a signed-in
- * *organizer* claims in one click; a signed-out visitor or a signed-in
- * *consumer* (deliberately treated the same — no gating on consumer auth)
- * gets an inline email-capture step whose magic link carries the claim
- * intent (event_id) through sign-in, per #413's claim-link tokens. */
+/** The "is this your event?" discovery surface (#414) — shown for an
+ * unclaimed event and, per #441/ADR 0004, also for a target that only has
+ * pending claim(s) (a rival claimant can still start proving ownership;
+ * hidden only once a claim is approved). Gated only on organizer-auth
+ * state: a signed-in *organizer* claims in one click; a signed-out visitor
+ * or a signed-in *consumer* (deliberately treated the same — no gating on
+ * consumer auth) gets an inline email-capture step whose magic link
+ * carries the claim intent (event_id) through sign-in, per #413's
+ * claim-link tokens. */
 export function ClaimPanel({ eventId, locale }: ClaimPanelProps) {
   const organizerAuthed = useOrganizerAuth();
   const navigate = useLocaleNavigate();

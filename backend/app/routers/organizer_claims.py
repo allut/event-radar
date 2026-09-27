@@ -34,7 +34,6 @@ from app.claims.lifecycle import (
     resolve_claim_target,
 )
 from app.constants import (
-    CLAIM_ACTIVE_STATUSES,
     CLAIM_AUTOMATED_VERIFICATION_MECHANISMS,
     CLAIM_EVENTS_MAX_PAGE_SIZE,
     CLAIM_EVENTS_PAGE_SIZE,
@@ -358,11 +357,14 @@ async def verify_claim_link(
 
 
 # ---------------------------------------------------------------------------
-# Claim discovery (#414): search, onboarding suggestions. Both exclude events
-# that already carry a pending or approved claim on their Publisher/Series
-# target — claiming an event via any one discovery surface retires it from
-# the other two. The public-page "is this your event?" CTA is the third
-# surface; it reads GET /events/{id}'s claim_status field instead (built from
+# Claim discovery (#414, narrowed by #441/ADR 0004): search, onboarding
+# suggestions. Both exclude events that already carry an *approved* claim on
+# their Publisher/Series target — a pending-only target still surfaces, since
+# a rival claimant must be able to start proving ownership through the
+# product, not just via a direct API call. An event claimed via any one
+# discovery surface retires it from the other two once that claim is
+# approved. The public-page "is this your event?" CTA is the third surface;
+# it reads GET /events/{id}'s claim_status field instead (built from
 # app/claims/lifecycle.py::resolve_claim_for_event + claim_status_from_claim,
 # wired in routers/events.py) rather than this router, since it has no
 # search/suggestion query to run.
@@ -379,16 +381,19 @@ def _serialize_claim_candidate(event: Event) -> dict:
     }
 
 
-async def _load_active_claim_keys(db: AsyncSession) -> tuple[set[int], set[str]]:
-    """One query for every currently-active claim's target key — cheap
-    (claims is a small table) and lets search/suggestions filter a page of
-    candidates in Python instead of a per-candidate claim lookup, since a
-    Series claim's key (normalized title+venue) isn't a column either query
-    could push a WHERE clause against directly."""
+async def _load_approved_claim_keys(db: AsyncSession) -> tuple[set[int], set[str]]:
+    """One query for every approved claim's target key — cheap (claims is a
+    small table) and lets search/suggestions filter a page of candidates in
+    Python instead of a per-candidate claim lookup, since a Series claim's
+    key (normalized title+venue) isn't a column either query could push a
+    WHERE clause against directly. Approved-only since #441/ADR 0004: a
+    pending-only target still has to surface as claimable so a rival
+    claimant can start proving ownership — only an approved claim actually
+    retires a target from discovery."""
     rows = (
         await db.execute(
             select(Claim.publisher_id, Claim.event_series_key).where(
-                Claim.status.in_(CLAIM_ACTIVE_STATUSES)
+                Claim.status == CLAIM_STATUS_APPROVED
             )
         )
     ).all()
@@ -444,7 +449,7 @@ async def search_claimable_events(
         .all()
     )
 
-    publisher_ids, series_keys = await _load_active_claim_keys(db)
+    publisher_ids, series_keys = await _load_approved_claim_keys(db)
     results = []
     for event in candidates:
         if not event.sources:
@@ -497,7 +502,7 @@ async def suggested_claimable_events(
         .all()
     )
 
-    publisher_ids, series_keys = await _load_active_claim_keys(db)
+    publisher_ids, series_keys = await _load_approved_claim_keys(db)
     results = []
     for event in candidates:
         if not event.sources or not event.url:

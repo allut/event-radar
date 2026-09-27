@@ -291,20 +291,20 @@ describe('EventDetail claim discovery (#414)', () => {
     expect(screen.queryByText(/pending review|verified/i)).not.toBeInTheDocument();
   });
 
-  it('hides the pending pill (and the panel) from a non-organizer viewer', async () => {
+  it('hides the pending pill from a non-organizer viewer, but still shows the claim panel (#441)', async () => {
     mockGet.mockResolvedValueOnce({ ...eventData, claim_status: 'pending' });
     renderWithProviders(<EventDetail />, { route: '/en/events/1', pathPattern: '/:locale/events/:id' });
     await waitFor(() => expect(screen.getByText('Test Concert')).toBeInTheDocument());
     expect(screen.queryByText('Claim pending review')).not.toBeInTheDocument();
-    expect(screen.queryByText('Is this your event?')).not.toBeInTheDocument();
+    expect(screen.getByText('Is this your event?')).toBeInTheDocument();
   });
 
-  it('shows the pending pill to a signed-in organizer', async () => {
+  it('shows the pending pill and the claim panel to a signed-in organizer (#441 rival claim)', async () => {
     localStorage.setItem(ORGANIZER_SIGNED_IN_HINT_KEY, '1');
     mockGet.mockResolvedValueOnce({ ...eventData, claim_status: 'pending' });
     renderWithProviders(<EventDetail />, { route: '/en/events/1', pathPattern: '/:locale/events/:id' });
     await waitFor(() => expect(screen.getByText('Claim pending review')).toBeInTheDocument());
-    expect(screen.queryByText('Is this your event?')).not.toBeInTheDocument();
+    expect(screen.getByText('Is this your event?')).toBeInTheDocument();
   });
 
   it('shows a pill and no panel once a claim is granted', async () => {
