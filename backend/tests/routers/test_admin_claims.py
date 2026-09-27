@@ -53,6 +53,7 @@ def _make_claim(
     claim.proof_token = proof_token
     claim.resolved_at = None
     claim.created_at = datetime(2026, 5, 1, tzinfo=timezone.utc)
+    claim.organizer_id = 9
     organizer = MagicMock()
     organizer.id = 9
     organizer.email = "organizer@example.com"
@@ -607,6 +608,8 @@ async def test_revoke_claim_deletes_row_and_clears_pins(admin_app, make_db_ctx, 
         "id": 1,
         "event_id": 42,
         "note": "Escalated from a content report.",
+        "organizer_id": 9,
+        "kind": CLAIM_KIND_PUBLISHER,
     }
 
     admin_action_records = [r for r in caplog.records if getattr(r, "event", None) == "admin_action"]

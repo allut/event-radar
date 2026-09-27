@@ -33,7 +33,9 @@ from app.claims.lifecycle import (
     recheck_claim,
     resolve_claim_target,
 )
+from app.claims.pinning import representative_event_for_claim
 from app.constants import (
+    ADMIN_ACTION_REVOKE_CLAIM,
     CLAIM_AUTOMATED_VERIFICATION_MECHANISMS,
     CLAIM_EVENTS_MAX_PAGE_SIZE,
     CLAIM_EVENTS_PAGE_SIZE,
@@ -44,6 +46,7 @@ from app.constants import (
     CLAIM_SEARCH_RESULT_LIMIT,
     CLAIM_STATUS_APPROVED,
     CLAIM_STATUS_PENDING,
+    CLAIM_STATUS_REVOKED,
     CLAIM_SUGGESTIONS_LIMIT,
     DETAIL_MAGIC_LINK_SENT,
     ERROR_CLAIM_EVENTS_NOT_PUBLISHER,
@@ -71,10 +74,11 @@ from app.constants import (
     VALID_LOCALES,
 )
 from app.db import get_db
-from app.models.models import Claim, Event, EventSource, Organizer, OrganizerMagicLink
+from app.models.models import AdminAction, Claim, Event, EventSource, Organizer, OrganizerMagicLink
 from app.rate_limit import limiter
 from app.routers.organizer_auth import get_current_organizer
 from app.routers.utils import (
+    bulk_resolve_publisher_events,
     claim_dns_record_name,
     escape_ilike_pattern,
     event_not_ended_filter,
@@ -141,6 +145,55 @@ def _serialize(claim: Claim) -> dict:
         "last_checked_at": claim.last_checked_at,
         "resolved_at": claim.resolved_at,
     }
+
+
+def _revoked_tombstone(claim_id: int, admin_action: AdminAction) -> dict:
+    """Stand-in for `_serialize()` when a claim's row is gone (admin revoke
+    deletes it outright, #442) — built from the AdminAction audit row
+    admin_revoke_claim() writes, so ClaimPending's already-built
+    CLAIM_STATUS_REVOKED branch (#446) has something to render instead of a
+    generic 404."""
+    return {
+        "id": claim_id,
+        "kind": admin_action.result.get("kind"),
+        "publisher_id": None,
+        "event_series_key": None,
+        "status": CLAIM_STATUS_REVOKED,
+        "dormant": False,
+        "verification_mechanism": None,
+        "verification_domain": None,
+        "dns_record_name": None,
+        "dns_record_value": "",
+        "proof_token": "",
+        "justification": None,
+        "can_recheck": False,
+        "created_at": None,
+        "last_checked_at": None,
+        "resolved_at": admin_action.created_at,
+    }
+
+
+async def _get_own_claim_or_tombstone(
+    db: AsyncSession, organizer: Organizer, claim_id: int
+) -> dict:
+    """`get_own_claim` first; on 404, check whether that id was a claim of
+    *this* organizer's that an admin revoked (row deleted) rather than one
+    that never existed — see `_revoked_tombstone`."""
+    try:
+        claim = await get_own_claim(db, organizer, claim_id)
+    except ClaimError as exc:
+        admin_action = await db.scalar(
+            select(AdminAction)
+            .where(
+                AdminAction.action == ADMIN_ACTION_REVOKE_CLAIM,
+                AdminAction.target == str(claim_id),
+            )
+            .order_by(AdminAction.created_at.desc())
+        )
+        if admin_action is None or admin_action.result.get("organizer_id") != organizer.id:
+            raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+        return _revoked_tombstone(claim_id, admin_action)
+    return _serialize(claim)
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
@@ -523,6 +576,67 @@ async def suggested_claimable_events(
     return {"events": results}
 
 
+def _serialize_own_claim_summary(
+    claim: Claim, event: Event | None
+) -> dict:
+    return {
+        "id": claim.id,
+        "kind": claim.kind,
+        "status": claim.status,
+        "verification_mechanism": claim.verification_mechanism,
+        "dormant": claim.dormant,
+        "publisher_name": claim.publisher.name if claim.publisher is not None else None,
+        "event_id": event.id if event is not None else None,
+        "event_title": event.title_orig if event is not None else None,
+        "created_at": claim.created_at,
+        "resolved_at": claim.resolved_at,
+    }
+
+
+@router.get("")
+@limiter.limit(RATE_LIMIT_BROWSE)
+async def list_own_claims(
+    request: Request,
+    current_organizer: Organizer = Depends(get_current_organizer),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """#446's "Your claims" dashboard section: every claim this organizer has
+    ever made (any status), newest first — the daily-cap-bounded per-organizer
+    row count (ORGANIZER_DAILY_CLAIM_CAP) keeps this small enough that a
+    bulk-then-scan mix (Publisher claims bulk-resolved in two fixed queries;
+    the rare Series claim resolved with its own bounded scan,
+    representative_event_for_claim) doesn't need admin_list_claims'
+    series-skips-to-null tradeoff."""
+    claims = (
+        (
+            await db.execute(
+                select(Claim)
+                .options(selectinload(Claim.publisher))
+                .where(Claim.organizer_id == current_organizer.id)
+                .order_by(Claim.created_at.desc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    publisher_ids = {c.publisher_id for c in claims if c.publisher_id is not None}
+    events_by_publisher = await bulk_resolve_publisher_events(db, publisher_ids)
+
+    results = []
+    for claim in claims:
+        if claim.kind == CLAIM_KIND_PUBLISHER:
+            event = (
+                events_by_publisher.get(claim.publisher_id)
+                if claim.publisher_id is not None
+                else None
+            )
+        else:
+            event = await representative_event_for_claim(db, claim)
+        results.append(_serialize_own_claim_summary(claim, event))
+    return {"claims": results}
+
+
 # Registered after the literal /search and /suggestions paths above —
 # Starlette matches path routes in registration order and {claim_id} has no
 # int converter in the path itself, so it must not shadow those two literals.
@@ -536,12 +650,9 @@ async def get_claim(
 ) -> dict:
     """#415's pending screen: fetch a claim's current state on direct
     navigation/reload (create/verify-link already return it inline for the
-    same-request landing case)."""
-    try:
-        claim = await get_own_claim(db, current_organizer, claim_id)
-    except ClaimError as exc:
-        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
-    return _serialize(claim)
+    same-request landing case). Falls back to a revoked tombstone (#446)
+    when the row itself is gone."""
+    return await _get_own_claim_or_tombstone(db, current_organizer, claim_id)
 
 
 async def _own_publisher_claim_or_404(

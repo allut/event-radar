@@ -974,12 +974,20 @@ async def admin_revoke_claim(claim_id: int, body: _ResolutionBody, request: Requ
                     detail=ERROR_CLAIM_NOT_APPROVED,
                 )
             event = await representative_event_for_claim(db, claim)
+            organizer_id = claim.organizer_id
+            kind = claim.kind
             await clear_claim_pins(db, claim)
             await db.delete(claim)
             result = {
                 "id": claim_id,
                 "event_id": event.id if event is not None else None,
                 "note": note,
+                # organizer_id/kind: not shown in the admin UI, only read back
+                # by organizer_claims.py's tombstone lookup (#446) — the row
+                # itself is gone, so this AdminAction entry is the only place
+                # left to confirm the caller actually owned the deleted claim.
+                "organizer_id": organizer_id,
+                "kind": kind,
             }
             emit_admin_log = log_admin_action(db, ADMIN_ACTION_REVOKE_CLAIM, claim_id, result)
             await db.commit()

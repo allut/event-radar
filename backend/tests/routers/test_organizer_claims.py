@@ -283,6 +283,7 @@ class TestGetClaim:
         from app.routers.organizer_claims import get_claim
 
         organizer = make_organizer(organizer_id=5)
+        mock_db.scalar.return_value = None  # no revoke AdminAction on record either
 
         with patch(
             "app.routers.organizer_claims.get_own_claim",
@@ -298,6 +299,149 @@ class TestGetClaim:
                 )
 
         assert exc_info.value.status_code == http.HTTPStatus.NOT_FOUND
+
+    @pytest.mark.asyncio
+    async def test_revoked_tombstone_when_admin_action_matches_organizer(
+        self, mock_db, make_request, make_organizer
+    ):
+        """#446: the row is gone (admin_revoke_claim deletes it), but the
+        AdminAction audit row it left behind lets the pending screen render
+        CLAIM_STATUS_REVOKED instead of a bare 404."""
+        from app.constants import CLAIM_STATUS_REVOKED
+        from app.routers.organizer_claims import get_claim
+
+        organizer = make_organizer(organizer_id=5)
+        admin_action = MagicMock()
+        admin_action.result = {"organizer_id": 5, "kind": CLAIM_KIND_PUBLISHER, "event_id": 42}
+        admin_action.created_at = "2026-09-25T06:00:00+00:00"
+        mock_db.scalar.return_value = admin_action
+
+        with patch(
+            "app.routers.organizer_claims.get_own_claim",
+            new_callable=AsyncMock,
+            side_effect=ClaimError(http.HTTPStatus.NOT_FOUND, ERROR_CLAIM_NOT_FOUND),
+        ):
+            result = await get_claim(
+                1,
+                make_request(method="GET", path="/organizer/claims/1"),
+                current_organizer=organizer,
+                db=mock_db,
+            )
+
+        assert result["status"] == CLAIM_STATUS_REVOKED
+        assert result["kind"] == CLAIM_KIND_PUBLISHER
+
+    @pytest.mark.asyncio
+    async def test_no_tombstone_when_admin_action_belongs_to_other_organizer(
+        self, mock_db, make_request, make_organizer
+    ):
+        from app.routers.organizer_claims import get_claim
+
+        organizer = make_organizer(organizer_id=5)
+        admin_action = MagicMock()
+        admin_action.result = {"organizer_id": 999, "kind": CLAIM_KIND_PUBLISHER}
+        mock_db.scalar.return_value = admin_action
+
+        with patch(
+            "app.routers.organizer_claims.get_own_claim",
+            new_callable=AsyncMock,
+            side_effect=ClaimError(http.HTTPStatus.NOT_FOUND, ERROR_CLAIM_NOT_FOUND),
+        ):
+            with pytest.raises(HTTPException) as exc_info:
+                await get_claim(
+                    1,
+                    make_request(method="GET", path="/organizer/claims/1"),
+                    current_organizer=organizer,
+                    db=mock_db,
+                )
+
+        assert exc_info.value.status_code == http.HTTPStatus.NOT_FOUND
+
+
+class TestListOwnClaims:
+    """GET /organizer/claims (#446) — the caller's own claims, newest first."""
+
+    @pytest.mark.asyncio
+    async def test_bulk_resolves_publisher_event_and_name(
+        self, mock_db, make_request, make_organizer
+    ):
+        from app.routers.organizer_claims import list_own_claims
+
+        organizer = make_organizer(organizer_id=5)
+        claim = _fake_claim(status=CLAIM_STATUS_APPROVED)
+        claim.publisher = MagicMock(name="Jazzkaar")
+        claim.publisher.name = "Jazzkaar"
+
+        scalars_result = MagicMock()
+        scalars_result.all.return_value = [claim]
+        mock_db.execute.return_value.scalars.return_value = scalars_result
+
+        event = MagicMock()
+        event.id = 42
+        event.title_orig = "Jazzkaar Festival Night"
+
+        with patch(
+            "app.routers.organizer_claims.bulk_resolve_publisher_events",
+            new_callable=AsyncMock,
+            return_value={99: event},
+        ):
+            result = await list_own_claims(
+                make_request(method="GET", path="/organizer/claims"),
+                current_organizer=organizer,
+                db=mock_db,
+            )
+
+        assert result["claims"] == [
+            {
+                "id": 1,
+                "kind": CLAIM_KIND_PUBLISHER,
+                "status": CLAIM_STATUS_APPROVED,
+                "verification_mechanism": CLAIM_VERIFICATION_MECHANISM_FIENTA_TOKEN,
+                "dormant": False,
+                "publisher_name": "Jazzkaar",
+                "event_id": 42,
+                "event_title": "Jazzkaar Festival Night",
+                "created_at": "2026-09-20T06:00:00+00:00",
+                "resolved_at": None,
+            }
+        ]
+
+    @pytest.mark.asyncio
+    async def test_series_claim_uses_representative_event_scan(
+        self, mock_db, make_request, make_organizer
+    ):
+        from app.routers.organizer_claims import list_own_claims
+
+        organizer = make_organizer(organizer_id=5)
+        claim = _fake_claim(kind=CLAIM_KIND_SERIES, publisher_id=None, event_series_key="k")
+        claim.publisher = None
+
+        scalars_result = MagicMock()
+        scalars_result.all.return_value = [claim]
+        mock_db.execute.return_value.scalars.return_value = scalars_result
+
+        event = MagicMock()
+        event.id = 7
+        event.title_orig = "Winter Market"
+
+        with patch(
+            "app.routers.organizer_claims.bulk_resolve_publisher_events",
+            new_callable=AsyncMock,
+            return_value={},
+        ), patch(
+            "app.routers.organizer_claims.representative_event_for_claim",
+            new_callable=AsyncMock,
+            return_value=event,
+        ):
+            result = await list_own_claims(
+                make_request(method="GET", path="/organizer/claims"),
+                current_organizer=organizer,
+                db=mock_db,
+            )
+
+        assert result["claims"][0]["event_id"] == 7
+        assert result["claims"][0]["event_title"] == "Winter Market"
+        assert result["claims"][0]["publisher_name"] is None
 
 
 class TestRequestClaimLink:

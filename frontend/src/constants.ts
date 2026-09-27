@@ -534,6 +534,7 @@ export const QUERY_KEYS = {
   organizerVenues: 'organizerVenues',
   organizerClaimSuggestions: 'organizerClaimSuggestions',
   organizerClaimSearch: 'organizerClaimSearch',
+  organizerClaims: 'organizerClaims',
   organizerClaim: 'organizerClaim',
   organizerClaimEvent: 'organizerClaimEvent',
   organizerClaimEvents: 'organizerClaimEvents',

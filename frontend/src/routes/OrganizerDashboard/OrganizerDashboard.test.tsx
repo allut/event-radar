@@ -37,10 +37,16 @@ const sampleEvents = {
 // (suggestions on mount) — defaults to an empty list so it doesn't leak
 // duplicate event titles into these event-list assertions unless a test
 // overrides it.
-function mockOrganizerGet(eventsResponse: unknown, profileResponse: unknown = { name: 'Test Organizer' }, claimSuggestionsResponse: unknown = { events: [] }) {
+function mockOrganizerGet(
+  eventsResponse: unknown,
+  profileResponse: unknown = { name: 'Test Organizer' },
+  claimSuggestionsResponse: unknown = { events: [] },
+  ownClaimsResponse: unknown = { claims: [] },
+) {
   mockGet.mockImplementation((path: string) => {
     if (path.includes('/organizer/profile')) return Promise.resolve(profileResponse);
     if (path.includes('/organizer/claims/suggestions')) return Promise.resolve(claimSuggestionsResponse);
+    if (path === '/organizer/claims') return Promise.resolve(ownClaimsResponse);
     return Promise.resolve(eventsResponse);
   });
 }
@@ -92,5 +98,57 @@ describe('OrganizerDashboard', () => {
 
     expect(mockDelete).not.toHaveBeenCalled();
     confirmSpy.mockRestore();
+  });
+
+  it('shows a "Your claims" section with status and shortcuts, hidden when there are none', async () => {
+    mockOrganizerGet(sampleEvents, undefined, undefined, {
+      claims: [
+        {
+          id: 1,
+          kind: 'publisher',
+          status: 'approved',
+          verification_mechanism: 'fienta_token',
+          dormant: false,
+          publisher_name: 'Jazzkaar',
+          event_id: 42,
+          event_title: 'Jazzkaar Festival Night',
+          created_at: '2026-08-01T00:00:00Z',
+          resolved_at: '2026-08-02T00:00:00Z',
+        },
+        {
+          id: 2,
+          kind: 'series',
+          status: 'revoked',
+          verification_mechanism: null,
+          dormant: false,
+          publisher_name: null,
+          event_id: null,
+          event_title: null,
+          created_at: '2026-08-01T00:00:00Z',
+          resolved_at: '2026-08-03T00:00:00Z',
+        },
+      ],
+    });
+    renderWithProviders(<OrganizerDashboard />);
+
+    await waitFor(() => expect(screen.getByText('Your claims')).toBeInTheDocument());
+    expect(screen.getByText('Jazzkaar Festival Night')).toBeInTheDocument();
+    expect(screen.getByText('Granted')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Edit event' })).toHaveAttribute(
+      'href',
+      expect.stringContaining('/organizer/claims/1/edit'),
+    );
+    expect(screen.getByText('Revoked')).toBeInTheDocument();
+    expect(screen.getAllByRole('link', { name: 'View status' })[0]).toHaveAttribute(
+      'href',
+      expect.stringContaining('/organizer/claims/2/pending'),
+    );
+  });
+
+  it('hides the "Your claims" section when the organizer has no claims', async () => {
+    mockOrganizerGet(sampleEvents);
+    renderWithProviders(<OrganizerDashboard />);
+    await waitFor(() => expect(screen.getByText('Jazz Night')).toBeInTheDocument());
+    expect(screen.queryByText('Your claims')).not.toBeInTheDocument();
   });
 });
