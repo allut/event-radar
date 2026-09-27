@@ -227,7 +227,7 @@ class TestCreateClaim:
         """An already-ended Publisher/Series target stays claimable — the
         claim covers future re-matched occurrences too (#429)."""
         es = _fake_event_source(publisher_id=99)
-        mock_db.scalar = AsyncMock(side_effect=[0, es, None])
+        mock_db.scalar = AsyncMock(side_effect=[0, es, None, None])
         event = make_event(starts_at=datetime(2020, 1, 1, 18, 0, 0, tzinfo=timezone.utc))
         mock_db.get.return_value = event
         organizer = make_organizer(organizer_id=5)
@@ -239,14 +239,15 @@ class TestCreateClaim:
                 CLAIM_VERIFICATION_MECHANISM_FIENTA_TOKEN, CLAIM_VERIFICATION_OUTCOME_AUTO_GRANT
             ),
         ):
-            claim = await create_claim(mock_db, AsyncMock(), organizer, event_id=10)
+            claim, created = await create_claim(mock_db, AsyncMock(), organizer, event_id=10)
 
         assert claim.kind == CLAIM_KIND_PUBLISHER
+        assert created is True
 
     @pytest.mark.asyncio
     async def test_fienta_publisher_claim_auto_grants(self, mock_db, make_organizer, make_event):
         es = _fake_event_source(publisher_id=99)
-        mock_db.scalar = AsyncMock(side_effect=[0, es, None])
+        mock_db.scalar = AsyncMock(side_effect=[0, es, None, None])
         mock_db.get.return_value = make_event()
         organizer = make_organizer(organizer_id=5)
 
@@ -257,13 +258,14 @@ class TestCreateClaim:
                 CLAIM_VERIFICATION_MECHANISM_FIENTA_TOKEN, CLAIM_VERIFICATION_OUTCOME_AUTO_GRANT
             ),
         ):
-            claim = await create_claim(mock_db, AsyncMock(), organizer, event_id=10)
+            claim, created = await create_claim(mock_db, AsyncMock(), organizer, event_id=10)
 
         assert claim.kind == CLAIM_KIND_PUBLISHER
         assert claim.publisher_id == 99
         assert claim.status == CLAIM_STATUS_APPROVED
         assert claim.verification_mechanism == CLAIM_VERIFICATION_MECHANISM_FIENTA_TOKEN
         assert claim.resolved_at is not None
+        assert created is True
         mock_db.commit.assert_awaited_once()
 
     @pytest.mark.asyncio
@@ -275,7 +277,7 @@ class TestCreateClaim:
         Claim row rather than only living in the transient VerificationResult."""
         es = _fake_event_source(publisher_id=99, source_slug=SOURCE_SLUG_KUMU)
         institutional_publisher = MagicMock(id=99)
-        mock_db.scalar = AsyncMock(side_effect=[0, es, institutional_publisher, None])
+        mock_db.scalar = AsyncMock(side_effect=[0, es, institutional_publisher, None, None])
         mock_db.get.return_value = make_event()
         organizer = make_organizer(organizer_id=5)
 
@@ -288,7 +290,7 @@ class TestCreateClaim:
                 domain=KUMU_VERIFICATION_DOMAIN,
             ),
         ):
-            claim = await create_claim(mock_db, AsyncMock(), organizer, event_id=10)
+            claim, _created = await create_claim(mock_db, AsyncMock(), organizer, event_id=10)
 
         assert claim.verification_domain == KUMU_VERIFICATION_DOMAIN
 
@@ -302,7 +304,7 @@ class TestCreateClaim:
         admin-review — there is no auto-grant path for it — but a non-blank
         justification lets it through creation at all."""
         es = _fake_event_source(publisher_id=None, source_slug=SOURCE_SLUG_PILETILEVI)
-        mock_db.scalar = AsyncMock(side_effect=[0, es, None])
+        mock_db.scalar = AsyncMock(side_effect=[0, es, None, None])
         mock_db.get.return_value = make_event()
         organizer = make_organizer(organizer_id=5)
 
@@ -311,7 +313,7 @@ class TestCreateClaim:
             new_callable=AsyncMock,
             side_effect=httpx.HTTPError("boom"),
         ):
-            claim = await create_claim(
+            claim, created = await create_claim(
                 mock_db, AsyncMock(), organizer, event_id=10, justification="I run this series."
             )
 
@@ -320,13 +322,14 @@ class TestCreateClaim:
         assert claim.status == CLAIM_STATUS_PENDING
         assert claim.verification_mechanism == CLAIM_VERIFICATION_MECHANISM_ADMIN_REVIEW
         assert claim.justification == "I run this series."
+        assert created is True
 
     @pytest.mark.asyncio
     async def test_series_claim_without_justification_rejected(
         self, mock_db, make_organizer, make_event
     ):
         es = _fake_event_source(publisher_id=None, source_slug=SOURCE_SLUG_PILETILEVI)
-        mock_db.scalar = AsyncMock(side_effect=[0, es, None])
+        mock_db.scalar = AsyncMock(side_effect=[0, es, None, None])
         mock_db.get.return_value = make_event()
         organizer = make_organizer(organizer_id=5)
 
@@ -350,7 +353,7 @@ class TestCreateClaim:
         Trusted-claimant fast-track is deleted, not gated off, so there is no
         code path left that could even consult the organizer's other claims."""
         es = _fake_event_source(publisher_id=None, source_slug=SOURCE_SLUG_PILETILEVI)
-        mock_db.scalar = AsyncMock(side_effect=[0, es, None])
+        mock_db.scalar = AsyncMock(side_effect=[0, es, None, None])
         mock_db.get.return_value = make_event()
         organizer = make_organizer(organizer_id=5)
 
@@ -359,7 +362,7 @@ class TestCreateClaim:
             new_callable=AsyncMock,
             side_effect=httpx.HTTPError("boom"),
         ):
-            claim = await create_claim(
+            claim, _created = await create_claim(
                 mock_db, AsyncMock(), organizer, event_id=10, justification="justification"
             )
 
@@ -372,7 +375,7 @@ class TestCreateClaim:
         immediately — no admin note, so the email falls back to its default
         copy (empty string in, fallback_note used)."""
         es = _fake_event_source(publisher_id=99)
-        mock_db.scalar = AsyncMock(side_effect=[0, es, None])
+        mock_db.scalar = AsyncMock(side_effect=[0, es, None, None])
         event = make_event()
         event.title_orig = "Jazz Night"
         mock_db.get.return_value = event
@@ -408,7 +411,7 @@ class TestCreateClaim:
         from app.claims.piletilevi_promoter import PromoterContact, PromoterIdentity
 
         es = _fake_event_source(publisher_id=None, source_slug=SOURCE_SLUG_PILETILEVI)
-        mock_db.scalar = AsyncMock(side_effect=[0, es, None])
+        mock_db.scalar = AsyncMock(side_effect=[0, es, None, None])
         event = make_event()
         event.url = "https://www.piletilevi.ee/en/tickets/x/some-event"
         mock_db.get.return_value = event
@@ -445,7 +448,7 @@ class TestCreateClaim:
                 return_value=True,
             ),
         ):
-            claim = await create_claim(mock_db, AsyncMock(), organizer, event_id=10)
+            claim, _created = await create_claim(mock_db, AsyncMock(), organizer, event_id=10)
 
         assert target_http_get.await_count == 1
         lifecycle_http_get.assert_not_awaited()
@@ -459,7 +462,7 @@ class TestCreateClaim:
         """A claim that stays pending (routed to admin review) must not send
         the granted email — only an actual grant does."""
         es = _fake_event_source(publisher_id=None, source_slug=SOURCE_SLUG_PILETILEVI)
-        mock_db.scalar = AsyncMock(side_effect=[0, es, None])
+        mock_db.scalar = AsyncMock(side_effect=[0, es, None, None])
         mock_db.get.return_value = make_event()
         organizer = make_organizer(organizer_id=5)
 
@@ -578,7 +581,7 @@ class TestContestedClaims:
         still applies) — this one falls back to admin review, its own
         independent proof token already set on the Claim constructor."""
         es = _fake_event_source(publisher_id=99, source_slug=SOURCE_SLUG_KUMU)
-        mock_db.scalar = AsyncMock(side_effect=[0, es, MagicMock(id=99), None])
+        mock_db.scalar = AsyncMock(side_effect=[0, es, MagicMock(id=99), None, None])
         mock_db.get.return_value = make_event()
         organizer = make_organizer(organizer_id=5)
 
@@ -589,10 +592,11 @@ class TestContestedClaims:
                 CLAIM_VERIFICATION_MECHANISM_DNS_TXT, CLAIM_VERIFICATION_OUTCOME_ADMIN_REVIEW
             ),
         ):
-            claim = await create_claim(mock_db, AsyncMock(), organizer, event_id=10)
+            claim, created = await create_claim(mock_db, AsyncMock(), organizer, event_id=10)
 
         assert claim.status == CLAIM_STATUS_PENDING
         assert claim.proof_token
+        assert created is True
         mock_db.add.assert_called_once()
 
     @pytest.mark.asyncio
@@ -621,7 +625,7 @@ class TestContestedClaims:
         still guarded by the narrowed unique index, and that IntegrityError
         maps onto the same support-facing conflict."""
         es = _fake_event_source(publisher_id=99)
-        mock_db.scalar = AsyncMock(side_effect=[0, es, None])
+        mock_db.scalar = AsyncMock(side_effect=[0, es, None, None])
         mock_db.get.return_value = make_event()
         organizer = make_organizer(organizer_id=5)
         mock_db.commit = AsyncMock(
@@ -647,7 +651,7 @@ class TestContestedClaims:
         self, mock_db, make_organizer, make_event
     ):
         es = _fake_event_source(publisher_id=99)
-        mock_db.scalar = AsyncMock(side_effect=[0, es, None])
+        mock_db.scalar = AsyncMock(side_effect=[0, es, None, None])
         event = make_event()
         event.title_orig = "Jazz Night"
         mock_db.get.return_value = event
@@ -683,7 +687,7 @@ class TestContestedClaims:
                 "app.claims.lifecycle.send_claim_declined_email", new_callable=AsyncMock
             ) as decline_mock,
         ):
-            claim = await create_claim(mock_db, AsyncMock(), organizer, event_id=10)
+            claim, _created = await create_claim(mock_db, AsyncMock(), organizer, event_id=10)
 
         assert claim.status == CLAIM_STATUS_APPROVED
         assert loser.status == CLAIM_STATUS_REVOKED
@@ -706,7 +710,7 @@ class TestContestedClaims:
         self, mock_db, make_organizer, make_event
     ):
         es = _fake_event_source(publisher_id=99)
-        mock_db.scalar = AsyncMock(side_effect=[0, es, None])
+        mock_db.scalar = AsyncMock(side_effect=[0, es, None, None])
         mock_db.get.return_value = make_event()
         organizer = make_organizer(organizer_id=5)
 
@@ -723,10 +727,56 @@ class TestContestedClaims:
                 "app.claims.lifecycle.send_claim_declined_email", new_callable=AsyncMock
             ) as decline_mock,
         ):
-            claim = await create_claim(mock_db, AsyncMock(), organizer, event_id=10)
+            claim, _created = await create_claim(mock_db, AsyncMock(), organizer, event_id=10)
 
         assert claim.status == CLAIM_STATUS_APPROVED
         decline_mock.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_own_pending_claim_on_same_target_returns_existing_not_duplicate(
+        self, mock_db, make_organizer, make_event
+    ):
+        """(#448) An organizer re-claiming a target they already have a
+        pending claim on gets that existing claim back — created=False — and
+        no new row is inserted, instead of a confusing duplicate with its own
+        proof token that would later auto-decline itself on grant."""
+        es = _fake_event_source(publisher_id=99)
+        existing = _fake_claim(id=7, organizer_id=5, publisher_id=99, status=CLAIM_STATUS_PENDING)
+        mock_db.scalar = AsyncMock(side_effect=[0, es, None, existing])
+        mock_db.get.return_value = make_event()
+        organizer = make_organizer(organizer_id=5)
+
+        claim, created = await create_claim(mock_db, AsyncMock(), organizer, event_id=10)
+
+        assert claim is existing
+        assert created is False
+        mock_db.add.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_rival_organizer_can_still_claim_despite_own_pending_check(
+        self, mock_db, make_organizer, make_event
+    ):
+        """(#448) The own-pending-claim short-circuit is scoped to the
+        calling organizer — a rival organizer with no pending claim of their
+        own on the target still gets a normal new claim, same as before this
+        fix (mirrors test_second_pending_claim_on_same_target_succeeds)."""
+        es = _fake_event_source(publisher_id=99, source_slug=SOURCE_SLUG_KUMU)
+        mock_db.scalar = AsyncMock(side_effect=[0, es, MagicMock(id=99), None, None])
+        mock_db.get.return_value = make_event()
+        organizer = make_organizer(organizer_id=6)
+
+        with patch(
+            "app.claims.lifecycle.verify_institutional_publisher_claim",
+            new_callable=AsyncMock,
+            return_value=VerificationResult(
+                CLAIM_VERIFICATION_MECHANISM_DNS_TXT, CLAIM_VERIFICATION_OUTCOME_ADMIN_REVIEW
+            ),
+        ):
+            claim, created = await create_claim(mock_db, AsyncMock(), organizer, event_id=10)
+
+        assert claim.status == CLAIM_STATUS_PENDING
+        assert created is True
+        mock_db.add.assert_called_once()
 
 
 class TestRecheckClaim:

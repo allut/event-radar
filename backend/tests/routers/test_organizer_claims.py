@@ -51,18 +51,51 @@ class TestCreateOwnClaim:
         organizer = make_organizer(organizer_id=5)
         claim = _fake_claim(status=CLAIM_STATUS_APPROVED)
 
+        response = MagicMock()
         with patch(
-            "app.routers.organizer_claims.create_claim", new_callable=AsyncMock, return_value=claim
+            "app.routers.organizer_claims.create_claim",
+            new_callable=AsyncMock,
+            return_value=(claim, True),
         ):
             result = await create_own_claim(
                 CreateClaimBody(event_id=10),
                 make_request(method="POST", path="/organizer/claims"),
+                response=response,
                 current_organizer=organizer,
                 db=mock_db,
             )
 
         assert result["id"] == 1
         assert result["status"] == CLAIM_STATUS_APPROVED
+
+    @pytest.mark.asyncio
+    async def test_own_pending_returns_existing_claim_as_200(
+        self, mock_db, make_request, make_organizer
+    ):
+        """(#448) When create_claim reports created=False (the caller already
+        had a pending claim on the resolved target), the endpoint overrides
+        the 201 default to 200 — nothing new was created."""
+        from app.routers.organizer_claims import CreateClaimBody, create_own_claim
+
+        organizer = make_organizer(organizer_id=5)
+        claim = _fake_claim(status=CLAIM_STATUS_PENDING)
+
+        response = MagicMock()
+        with patch(
+            "app.routers.organizer_claims.create_claim",
+            new_callable=AsyncMock,
+            return_value=(claim, False),
+        ):
+            result = await create_own_claim(
+                CreateClaimBody(event_id=10),
+                make_request(method="POST", path="/organizer/claims"),
+                response=response,
+                current_organizer=organizer,
+                db=mock_db,
+            )
+
+        assert result["id"] == 1
+        assert response.status_code == http.HTTPStatus.OK
 
     @pytest.mark.asyncio
     async def test_daily_cap_maps_to_429(self, mock_db, make_request, make_organizer):
@@ -79,6 +112,7 @@ class TestCreateOwnClaim:
                 await create_own_claim(
                     CreateClaimBody(event_id=10),
                     make_request(method="POST", path="/organizer/claims"),
+                    response=MagicMock(),
                     current_organizer=organizer,
                     db=mock_db,
                 )
@@ -105,6 +139,7 @@ class TestCreateOwnClaim:
                 await create_own_claim(
                     CreateClaimBody(event_id=10),
                     make_request(method="POST", path="/organizer/claims"),
+                    response=MagicMock(),
                     current_organizer=organizer,
                     db=mock_db,
                 )
@@ -132,6 +167,7 @@ class TestCreateOwnClaim:
                 await create_own_claim(
                     CreateClaimBody(event_id=10),
                     make_request(method="POST", path="/organizer/claims"),
+                    response=MagicMock(),
                     current_organizer=organizer,
                     db=mock_db,
                 )
@@ -547,7 +583,9 @@ class TestVerifyClaimLink:
         mock_db.get.return_value = organizer
 
         with patch(
-            "app.routers.organizer_claims.create_claim", new_callable=AsyncMock, return_value=claim
+            "app.routers.organizer_claims.create_claim",
+            new_callable=AsyncMock,
+            return_value=(claim, True),
         ):
             result = await verify_claim_link(
                 make_request(method="POST", path="/organizer/claims/verify-link"),

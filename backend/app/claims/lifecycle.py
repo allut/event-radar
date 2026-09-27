@@ -348,11 +348,37 @@ async def approved_claim_exists(db: AsyncSession, target: ClaimTarget) -> bool:
     ) is not None
 
 
+async def _own_pending_claim_for_target(
+    db: AsyncSession, organizer_id: int, target: ClaimTarget
+) -> Claim | None:
+    """(#448) The caller's own still-pending claim on `target`, if any —
+    checked in create_claim before inserting a new one, so an organizer
+    re-claiming a target they already have a pending claim on gets that
+    existing claim back instead of a confusing duplicate (its own proof
+    token, its own daily-cap slot, and a spurious decline email for itself
+    once the winning claim auto-grants). Best-effort like the daily-cap
+    check above it: a plain SELECT with no row lock, and migration 0048's
+    unique index only constrains approved rows, not pending ones — two
+    concurrent requests (double-click, two tabs) can both see None here and
+    both insert. Closing that fully would need a new partial unique index;
+    out of scope for the single-click case this fixes."""
+    return await db.scalar(
+        select(Claim)
+        .where(
+            *_target_where(target),
+            Claim.organizer_id == organizer_id,
+            Claim.status == CLAIM_STATUS_PENDING,
+        )
+        .limit(1)
+    )
+
+
 async def auto_decline_other_pending_claims(
     db: AsyncSession,
     client: httpx.AsyncClient,
     target: ClaimTarget,
     winning_claim_id: int,
+    winning_organizer_id: int,
 ) -> None:
     """(#431) Proof preempts assertion: once a claim on `target` is granted —
     either the organizer-facing auto-grant path or an admin's manual grant
@@ -364,7 +390,15 @@ async def auto_decline_other_pending_claims(
     not the winning claim's event — since a Publisher target's freshest
     traced-back listing can differ from whichever specific event the winner
     happened to claim through. Not module-private: also called from
-    admin.py's manual grant endpoint."""
+    admin.py's manual grant endpoint.
+
+    Excludes `winning_organizer_id`'s own other pending rows (#448) — those
+    should no longer exist since create_claim now returns an organizer's
+    existing pending claim on a target instead of inserting a sibling, but
+    this stays a defensive filter against any duplicate created before that
+    fix shipped, so a winner's own historical duplicate isn't declined and
+    doesn't trigger a "your claim was declined" email for a claim they just
+    won."""
     # Local import: app.claims.pinning imports representative_event_source
     # from this module, so a module-level import here would deadlock the
     # two modules' load order (see cancel_claim, same reason).
@@ -378,6 +412,7 @@ async def auto_decline_other_pending_claims(
                 *_target_where(target),
                 Claim.status == CLAIM_STATUS_PENDING,
                 Claim.id != winning_claim_id,
+                Claim.organizer_id != winning_organizer_id,
             )
         )
     ).all()
@@ -423,7 +458,7 @@ async def create_claim(
     organizer: Organizer,
     event_id: int,
     justification: str | None = None,
-) -> Claim:
+) -> tuple[Claim, bool]:
     """Create a Publisher or Series claim for `event_id`, auto-detecting
     which kind applies from that event's resolved EventSource, then invoking
     #412's verification engine to decide auto-grant vs. admin-review routing.
@@ -434,6 +469,11 @@ async def create_claim(
     best-effort like ORGANIZER_DAILY_SUBMISSION_CAP: the count-then-insert
     has no row lock, so concurrent requests could exceed the cap by a small
     margin.
+
+    Returns (claim, created) — (#448) an organizer who already has a pending
+    claim on the resolved target gets that existing claim back with
+    created=False instead of a duplicate row; callers map that onto a 200
+    instead of a 201.
     """
     if await _claims_created_today(db, organizer.id) >= ORGANIZER_DAILY_CLAIM_CAP:
         raise ClaimError(429, ERROR_DAILY_CLAIM_LIMIT)
@@ -477,6 +517,10 @@ async def create_claim(
         # contest/override flow for an already-granted claim, support-facing
         # message. Only the pending-vs-pending case below is new.
         raise ClaimError(409, ERROR_CLAIM_TARGET_ALREADY_APPROVED)
+
+    existing_own_pending = await _own_pending_claim_for_target(db, organizer.id, target)
+    if existing_own_pending is not None:
+        return existing_own_pending, False
 
     justification_clean = justification.strip() if justification else None
     if target.kind == CLAIM_KIND_SERIES and not justification_clean:
@@ -535,8 +579,8 @@ async def create_claim(
                 exc_info=True,
                 extra={"event": LOG_EVENT_EMAIL_SEND_FAILED},
             )
-        await auto_decline_other_pending_claims(db, client, target, claim.id)
-    return claim
+        await auto_decline_other_pending_claims(db, client, target, claim.id, organizer.id)
+    return claim, True
 
 
 async def own_claim_or_404(db: AsyncSession, claim_id: int, organizer_id: int) -> Claim:
@@ -652,7 +696,9 @@ async def recheck_claim(
                 extra={"event": LOG_EVENT_EMAIL_SEND_FAILED},
             )
         target = ClaimTarget(claim.kind, claim.publisher_id, claim.event_series_key)
-        await auto_decline_other_pending_claims(db, client, target, claim.id)
+        await auto_decline_other_pending_claims(
+            db, client, target, claim.id, claim.organizer_id
+        )
     return claim
 
 

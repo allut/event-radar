@@ -208,16 +208,23 @@ async def _get_own_claim_or_tombstone(
 async def create_own_claim(
     body: CreateClaimBody,
     request: Request,
+    response: Response,
     current_organizer: Organizer = Depends(get_current_organizer),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     async with httpx.AsyncClient(timeout=HTTP_TIMEOUT_SECONDS) as client:
         try:
-            claim = await create_claim(
+            claim, created = await create_claim(
                 db, client, current_organizer, body.event_id, body.justification
             )
         except ClaimError as exc:
             raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+    if not created:
+        # (#448) Re-claiming your own already-pending target returns that
+        # existing claim rather than a new row — 200, not 201, since nothing
+        # was created. The frontend navigates to the returned claim's pending
+        # page either way.
+        response.status_code = status.HTTP_200_OK
     return _serialize(claim)
 
 
@@ -381,7 +388,7 @@ async def verify_claim_link(
 
     async with httpx.AsyncClient(timeout=HTTP_TIMEOUT_SECONDS) as client:
         try:
-            claim = await create_claim(db, client, organizer, event_id)
+            claim, _created = await create_claim(db, client, organizer, event_id)
         except ClaimError as exc:
             if exc.detail == ERROR_CLAIM_JUSTIFICATION_REQUIRED:
                 # (#428 review finding) This listing resolves to a Series

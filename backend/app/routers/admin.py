@@ -904,7 +904,9 @@ async def admin_grant_claim(claim_id: int, body: _ResolutionBody, request: Reque
                         extra={"event": LOG_EVENT_EMAIL_SEND_FAILED},
                     )
             async with httpx.AsyncClient(timeout=HTTP_TIMEOUT_SECONDS) as client:
-                await auto_decline_other_pending_claims(db, client, target, claim.id)
+                await auto_decline_other_pending_claims(
+                    db, client, target, claim.id, claim.organizer_id
+                )
             return result
 
     return await run_admin_job("Grant claim", _run())
