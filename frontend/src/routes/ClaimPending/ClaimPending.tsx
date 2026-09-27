@@ -15,6 +15,7 @@ import {
   CLAIM_SELF_SERVICE_VERIFICATION_MECHANISMS,
   CLAIM_STATUS_APPROVED,
   CLAIM_STATUS_CANCELLED,
+  CLAIM_STATUS_DECLINED,
   CLAIM_STATUS_EXPIRED,
   CLAIM_STATUS_PENDING,
   CLAIM_STATUS_REVOKED,
@@ -135,6 +136,10 @@ export default function ClaimPending() {
         ? CLAIM_EXPIRY_DAYS
         : CLAIM_ADMIN_REVIEW_EXPIRY_DAYS;
     body = ti('claim_expired_body', locale, { days: String(expiredDays) });
+  } else if (claim.status === CLAIM_STATUS_DECLINED) {
+    eyebrow = t('claim_pending_review_eyebrow', locale);
+    title = t('claim_declined_title', locale);
+    body = t('claim_declined_body', locale);
   } else if (claim.status === CLAIM_STATUS_REVOKED) {
     eyebrow = t('claim_pending_review_eyebrow', locale);
     title = t('claim_revoked_title', locale);

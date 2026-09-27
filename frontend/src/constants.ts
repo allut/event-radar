@@ -150,13 +150,20 @@ export const CLAIM_STATUS_PENDING = 'pending';
 export const CLAIM_STATUS_APPROVED = 'approved';
 export const CLAIM_STATUS_CANCELLED = 'cancelled';
 export const CLAIM_STATUS_EXPIRED = 'expired';
+// A real admin revoke of a granted claim (row deleted server-side) — the
+// backend only ever reports this for the AdminAction-built tombstone.
 export const CLAIM_STATUS_REVOKED = 'revoked';
+// A declined pending claim, admin or auto (#447) — the backend still stores
+// this as "revoked" internally, but never reports that literal for a row
+// that still exists, only this one.
+export const CLAIM_STATUS_DECLINED = 'declined';
 export type ClaimStatus =
   | typeof CLAIM_STATUS_PENDING
   | typeof CLAIM_STATUS_APPROVED
   | typeof CLAIM_STATUS_CANCELLED
   | typeof CLAIM_STATUS_EXPIRED
-  | typeof CLAIM_STATUS_REVOKED;
+  | typeof CLAIM_STATUS_REVOKED
+  | typeof CLAIM_STATUS_DECLINED;
 
 // ─── Auth / magic link ───────────────────────────────────────────────────────
 export const AUTH_REDIRECT_DELAY_MS = 600;

@@ -87,7 +87,7 @@
   background: var(--accent-subtle);
 }
 
-.claimStatus_revoked,
+.claimStatus_declined,
 .claimStatus_expired,
 .claimStatus_cancelled {
   color: var(--danger);

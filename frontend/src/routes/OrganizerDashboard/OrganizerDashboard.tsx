@@ -36,7 +36,7 @@ interface OrganizerEventsResponse {
 interface OwnClaim {
   id: number;
   kind: 'publisher' | 'series';
-  status: 'pending' | 'approved' | 'revoked' | 'cancelled' | 'expired';
+  status: 'pending' | 'approved' | 'declined' | 'cancelled' | 'expired';
   verification_mechanism: string | null;
   dormant: boolean;
   publisher_name: string | null;

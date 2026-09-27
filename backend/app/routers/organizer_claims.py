@@ -45,6 +45,7 @@ from app.constants import (
     CLAIM_SEARCH_QUERY_MIN_LENGTH,
     CLAIM_SEARCH_RESULT_LIMIT,
     CLAIM_STATUS_APPROVED,
+    CLAIM_STATUS_DECLINED,
     CLAIM_STATUS_PENDING,
     CLAIM_STATUS_REVOKED,
     CLAIM_SUGGESTIONS_LIMIT,
@@ -116,6 +117,12 @@ class ClaimLinkVerifyBody(BaseModel):
     token: str
 
 
+def _api_status(status_value: str) -> str:
+    """A still-existing row's CLAIM_STATUS_REVOKED always means declined, not
+    revoked — see CLAIM_STATUS_DECLINED's docstring in constants.py (#447)."""
+    return CLAIM_STATUS_DECLINED if status_value == CLAIM_STATUS_REVOKED else status_value
+
+
 def _serialize(claim: Claim) -> dict:
     """#415's pending screen picks its variant off `verification_mechanism`
     and never has to know CLAIM_DNS_TXT_RECORD_LABEL itself — the DNS
@@ -129,7 +136,7 @@ def _serialize(claim: Claim) -> dict:
         "kind": claim.kind,
         "publisher_id": claim.publisher_id,
         "event_series_key": claim.event_series_key,
-        "status": claim.status,
+        "status": _api_status(claim.status),
         "dormant": claim.dormant,
         "verification_mechanism": claim.verification_mechanism,
         "verification_domain": claim.verification_domain,
@@ -582,7 +589,7 @@ def _serialize_own_claim_summary(
     return {
         "id": claim.id,
         "kind": claim.kind,
-        "status": claim.status,
+        "status": _api_status(claim.status),
         "verification_mechanism": claim.verification_mechanism,
         "dormant": claim.dormant,
         "publisher_name": claim.publisher.name if claim.publisher is not None else None,

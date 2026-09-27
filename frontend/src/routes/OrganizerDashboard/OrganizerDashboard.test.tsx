@@ -118,7 +118,7 @@ describe('OrganizerDashboard', () => {
         {
           id: 2,
           kind: 'series',
-          status: 'revoked',
+          status: 'declined',
           verification_mechanism: null,
           dormant: false,
           publisher_name: null,
@@ -138,7 +138,7 @@ describe('OrganizerDashboard', () => {
       'href',
       expect.stringContaining('/organizer/claims/1/edit'),
     );
-    expect(screen.getByText('Revoked')).toBeInTheDocument();
+    expect(screen.getByText('Declined')).toBeInTheDocument();
     expect(screen.getAllByRole('link', { name: 'View status' })[0]).toHaveAttribute(
       'href',
       expect.stringContaining('/organizer/claims/2/pending'),

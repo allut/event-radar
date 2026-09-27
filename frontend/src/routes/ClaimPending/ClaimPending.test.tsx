@@ -242,4 +242,34 @@ describe('ClaimPending (#415)', () => {
     expect(mockPost).toHaveBeenCalledWith('/organizer/claims/7/cancel');
     await waitFor(() => expect(screen.getByText('Claim cancelled')).toBeInTheDocument());
   });
+
+  it('shows declined copy, not revoked copy, for a declined claim (#447)', async () => {
+    mockGet.mockResolvedValueOnce({
+      id: 12,
+      status: 'declined',
+      verification_mechanism: 'admin_review',
+      dns_record_name: null,
+      dns_record_value: 'er-verify-000',
+      can_recheck: false,
+    });
+    renderPending();
+
+    await waitFor(() => expect(screen.getByText('Claim declined')).toBeInTheDocument());
+    expect(screen.queryByText('Claim revoked')).not.toBeInTheDocument();
+  });
+
+  it('shows revoked copy for an admin-revoked tombstone claim (#446)', async () => {
+    mockGet.mockResolvedValueOnce({
+      id: 13,
+      status: 'revoked',
+      verification_mechanism: null,
+      dns_record_name: null,
+      dns_record_value: '',
+      can_recheck: false,
+    });
+    renderPending();
+
+    await waitFor(() => expect(screen.getByText('Claim revoked')).toBeInTheDocument());
+    expect(screen.queryByText('Claim declined')).not.toBeInTheDocument();
+  });
 });

@@ -301,6 +301,33 @@ class TestGetClaim:
         assert exc_info.value.status_code == http.HTTPStatus.NOT_FOUND
 
     @pytest.mark.asyncio
+    async def test_reports_declined_not_revoked_for_a_declined_row(
+        self, mock_db, make_request, make_organizer
+    ):
+        """(#447) A still-existing row's stored CLAIM_STATUS_REVOKED always
+        means admin_decline_claim/auto_decline_other_pending_claims declined
+        a *pending* claim — a real admin revoke of a *granted* claim deletes
+        the row outright (see the tombstone test below), so the API
+        translates the stored value to CLAIM_STATUS_DECLINED here."""
+        from app.constants import CLAIM_STATUS_DECLINED, CLAIM_STATUS_REVOKED
+        from app.routers.organizer_claims import get_claim
+
+        organizer = make_organizer(organizer_id=5)
+        claim = _fake_claim(status=CLAIM_STATUS_REVOKED)
+
+        with patch(
+            "app.routers.organizer_claims.get_own_claim", new_callable=AsyncMock, return_value=claim
+        ):
+            result = await get_claim(
+                1,
+                make_request(method="GET", path="/organizer/claims/1"),
+                current_organizer=organizer,
+                db=mock_db,
+            )
+
+        assert result["status"] == CLAIM_STATUS_DECLINED
+
+    @pytest.mark.asyncio
     async def test_revoked_tombstone_when_admin_action_matches_organizer(
         self, mock_db, make_request, make_organizer
     ):
@@ -405,6 +432,37 @@ class TestListOwnClaims:
                 "resolved_at": None,
             }
         ]
+
+    @pytest.mark.asyncio
+    async def test_reports_declined_not_revoked_for_a_declined_claim(
+        self, mock_db, make_request, make_organizer
+    ):
+        """(#447) list_own_claims only ever lists rows that still exist — a
+        real admin revoke deletes its row — so a stored CLAIM_STATUS_REVOKED
+        here is always a decline and must be reported as such."""
+        from app.constants import CLAIM_STATUS_DECLINED, CLAIM_STATUS_REVOKED
+        from app.routers.organizer_claims import list_own_claims
+
+        organizer = make_organizer(organizer_id=5)
+        claim = _fake_claim(status=CLAIM_STATUS_REVOKED)
+        claim.publisher = None
+
+        scalars_result = MagicMock()
+        scalars_result.all.return_value = [claim]
+        mock_db.execute.return_value.scalars.return_value = scalars_result
+
+        with patch(
+            "app.routers.organizer_claims.bulk_resolve_publisher_events",
+            new_callable=AsyncMock,
+            return_value={},
+        ):
+            result = await list_own_claims(
+                make_request(method="GET", path="/organizer/claims"),
+                current_organizer=organizer,
+                db=mock_db,
+            )
+
+        assert result["claims"][0]["status"] == CLAIM_STATUS_DECLINED
 
     @pytest.mark.asyncio
     async def test_series_claim_uses_representative_event_scan(

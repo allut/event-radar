@@ -470,6 +470,15 @@ CLAIM_STATUS_APPROVED = "approved"
 CLAIM_STATUS_REVOKED = "revoked"
 CLAIM_STATUS_CANCELLED = "cancelled"
 CLAIM_STATUS_EXPIRED = "expired"
+# API-facing only (#447) — never stored. A DB row's CLAIM_STATUS_REVOKED
+# always means admin_decline_claim/auto_decline_other_pending_claims flipped
+# a *pending* claim, since a real admin revoke of a *granted* claim
+# (admin_revoke_claim) deletes the row outright rather than leaving it with
+# this status. organizer_claims.py's serializers translate the stored value
+# to this one for any row that still exists; the one case that legitimately
+# reports CLAIM_STATUS_REVOKED is the tombstone built from the deleted
+# claim's AdminAction audit row.
+CLAIM_STATUS_DECLINED = "declined"
 VALID_CLAIM_STATUSES = frozenset(
     {
         CLAIM_STATUS_PENDING,
