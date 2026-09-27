@@ -84,8 +84,12 @@ export default function ClaimEventEdit() {
 
         {form.isLocked && (
           <div className={styles.locked}>
-            <h2 className={styles.lockedTitle}>{t('claim_edit_locked_title', locale)}</h2>
-            <p className={styles.lockedBody}>{t('claim_edit_locked_body', locale)}</p>
+            <h2 className={styles.lockedTitle}>
+              {t(form.isDormant ? 'claim_edit_dormant_title' : 'claim_edit_locked_title', locale)}
+            </h2>
+            <p className={styles.lockedBody}>
+              {t(form.isDormant ? 'claim_edit_dormant_body' : 'claim_edit_locked_body', locale)}
+            </p>
           </div>
         )}
 

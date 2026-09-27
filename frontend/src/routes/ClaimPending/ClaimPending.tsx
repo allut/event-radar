@@ -35,6 +35,7 @@ interface ClaimResponse {
   id: number;
   kind: 'publisher' | 'series';
   status: ClaimStatus;
+  dormant: boolean;
   verification_mechanism: ClaimVerificationMechanism | null;
   dns_record_name: string | null;
   dns_record_value: string;
@@ -169,6 +170,10 @@ export default function ClaimPending() {
           <h1 className={styles.heading}>{title}</h1>
           <p className={styles.body}>{body}</p>
 
+          {claim.status === CLAIM_STATUS_APPROVED && claim.dormant && (
+            <p className={styles.dormantNote}>{t('claim_pending_dormant_note', locale)}</p>
+          )}
+
           {isPending && mechanism === CLAIM_VERIFICATION_MECHANISM_FIENTA_TOKEN && (
             <div className={styles.field}>
               <span className={styles.fieldLabel}>{t('claim_pending_field_code', locale)}</span>
@@ -224,6 +229,7 @@ export default function ClaimPending() {
                 type="button"
                 className={styles.primaryBtn}
                 onClick={() => navigate(ROUTES.organizerClaimEdit(claim.id))}
+                disabled={claim.dormant}
               >
                 {t('claim_edit_open_cta', locale)}
               </button>

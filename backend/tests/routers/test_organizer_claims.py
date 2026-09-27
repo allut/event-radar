@@ -31,6 +31,7 @@ def _fake_claim(**overrides) -> MagicMock:
     c.publisher_id = 99
     c.event_series_key = None
     c.status = CLAIM_STATUS_PENDING
+    c.dormant = False
     c.verification_mechanism = CLAIM_VERIFICATION_MECHANISM_FIENTA_TOKEN
     c.verification_domain = None
     c.proof_token = "er-verify-abc"
@@ -231,6 +232,28 @@ class TestGetClaim:
         assert result["dns_record_name"] == "_eventradar-verify.kumu.ekm.ee"
         assert result["dns_record_value"] == "er-verify-abc"
         assert result["can_recheck"] is True
+
+    @pytest.mark.asyncio
+    async def test_exposes_dormant_flag(self, mock_db, make_request, make_organizer):
+        """#444: the frontend needs `dormant` on the claim itself (not just
+        the 409 from the editor) to explain an approved-but-dormant claim on
+        ClaimPending."""
+        from app.routers.organizer_claims import get_claim
+
+        organizer = make_organizer(organizer_id=5)
+        claim = _fake_claim(status=CLAIM_STATUS_APPROVED, dormant=True)
+
+        with patch(
+            "app.routers.organizer_claims.get_own_claim", new_callable=AsyncMock, return_value=claim
+        ):
+            result = await get_claim(
+                1,
+                make_request(method="GET", path="/organizer/claims/1"),
+                current_organizer=organizer,
+                db=mock_db,
+            )
+
+        assert result["dormant"] is True
 
     @pytest.mark.asyncio
     async def test_no_dns_instructions_for_admin_review_mechanism(

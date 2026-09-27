@@ -126,6 +126,7 @@ def _serialize(claim: Claim) -> dict:
         "publisher_id": claim.publisher_id,
         "event_series_key": claim.event_series_key,
         "status": claim.status,
+        "dormant": claim.dormant,
         "verification_mechanism": claim.verification_mechanism,
         "verification_domain": claim.verification_domain,
         "dns_record_name": dns_record_name,

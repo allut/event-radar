@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { organizerApi, ApiError } from '../api/client';
-import { API, QUERY_KEYS, LOCALE_EN, LOCALE_ET, LOCALE_RU } from '../constants';
+import { API, CLAIM_ERROR_CODE_DORMANT, QUERY_KEYS, LOCALE_EN, LOCALE_ET, LOCALE_RU } from '../constants';
 import { t } from '../i18n';
 import { apiErrorMessage, hasHtmlContent, toIsoOrUndefined, toLocalInput } from '../utils';
 
@@ -92,6 +92,7 @@ export interface UseClaimEventEditResult {
   isLoading: boolean;
   loadError: string;
   isLocked: boolean;
+  isDormant: boolean;
   data: ClaimEventData | undefined;
   fields: FormFields;
   setField: <K extends keyof FormFields>(key: K, touchKey: TouchKey, value: FormFields[K]) => void;
@@ -222,11 +223,14 @@ export function useClaimEventEdit(
   });
 
   const isLocked = query.isError && query.error instanceof ApiError && query.error.status === 409;
+  const isDormant =
+    isLocked && query.error instanceof ApiError && query.error.code === CLAIM_ERROR_CODE_DORMANT;
 
   return {
     isLoading: query.isLoading,
     loadError: query.isError && !isLocked ? apiErrorMessage(query.error, t('generic_error', locale)) : '',
     isLocked,
+    isDormant,
     data: query.data,
     fields,
     setField,

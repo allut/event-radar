@@ -15,6 +15,8 @@ from pydantic import ValidationError
 from app.claims.lifecycle import ClaimError
 from app.claims.pinning import FreshPrice
 from app.constants import (
+    CLAIM_ERROR_CODE_DORMANT,
+    CLAIM_ERROR_CODE_NOT_GRANTED,
     CLAIM_KIND_PUBLISHER,
     CLAIM_STATUS_APPROVED,
     CLAIM_STATUS_PENDING,
@@ -86,7 +88,10 @@ class TestGetClaimEvent:
                     db=mock_db,
                 )
         assert exc.value.status_code == http.HTTPStatus.CONFLICT
-        assert exc.value.detail == ERROR_CLAIM_NOT_GRANTED
+        assert exc.value.detail == {
+            "message": ERROR_CLAIM_NOT_GRANTED,
+            "code": CLAIM_ERROR_CODE_NOT_GRANTED,
+        }
 
     @pytest.mark.asyncio
     async def test_locked_while_dormant(self, mock_db, make_request, make_organizer):
@@ -110,7 +115,10 @@ class TestGetClaimEvent:
                     db=mock_db,
                 )
         assert exc.value.status_code == http.HTTPStatus.CONFLICT
-        assert exc.value.detail == ERROR_CLAIM_DORMANT
+        assert exc.value.detail == {
+            "message": ERROR_CLAIM_DORMANT,
+            "code": CLAIM_ERROR_CODE_DORMANT,
+        }
 
     @pytest.mark.asyncio
     async def test_claim_not_found_propagates_404(self, mock_db, make_request, make_organizer):
@@ -252,7 +260,10 @@ class TestUpdateClaimEvent:
                     db=mock_db,
                 )
         assert exc.value.status_code == http.HTTPStatus.CONFLICT
-        assert exc.value.detail == ERROR_CLAIM_NOT_GRANTED
+        assert exc.value.detail == {
+            "message": ERROR_CLAIM_NOT_GRANTED,
+            "code": CLAIM_ERROR_CODE_NOT_GRANTED,
+        }
         mocks["publish_pending"].assert_not_called()
 
     @pytest.mark.asyncio
@@ -280,7 +291,10 @@ class TestUpdateClaimEvent:
                     db=mock_db,
                 )
         assert exc.value.status_code == http.HTTPStatus.CONFLICT
-        assert exc.value.detail == ERROR_CLAIM_DORMANT
+        assert exc.value.detail == {
+            "message": ERROR_CLAIM_DORMANT,
+            "code": CLAIM_ERROR_CODE_DORMANT,
+        }
         mocks["publish_pending"].assert_not_called()
 
     @pytest.mark.asyncio

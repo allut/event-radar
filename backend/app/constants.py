@@ -2086,6 +2086,10 @@ ERROR_CLAIM_DORMANT = (
     "This claim is dormant — a duplicate claimed event now takes precedence, "
     "so editing stays locked until that's resolved."
 )
+# Machine-readable companions to the two errors above (#444) — the frontend
+# tells them apart off `code`, not by matching the (English-only) `message`.
+CLAIM_ERROR_CODE_NOT_GRANTED = "claim_not_granted"
+CLAIM_ERROR_CODE_DORMANT = "claim_dormant"
 ERROR_DAILY_CLAIM_EDIT_LIMIT = "Daily claim-edit limit reached. Try again tomorrow."
 ERROR_CLAIM_EVENT_NOT_FOUND = "No event could be resolved for this claim."
 ERROR_CLAIM_EDIT_URL_DOMAIN = "URL must stay on the domain this claim was verified against."

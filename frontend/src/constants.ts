@@ -140,6 +140,12 @@ export const CLAIM_JUSTIFICATION_REQUIRED_ERROR =
   'A justification is required for a series claim (no specific promoter' +
   ' could be identified for this listing).';
 
+// Mirrors backend CLAIM_ERROR_CODE_NOT_GRANTED/CLAIM_ERROR_CODE_DORMANT
+// (app/constants.py) — the two reasons the claim-editing surface's GET/PATCH
+// can 409, told apart via ApiError.code rather than the English message (#444).
+export const CLAIM_ERROR_CODE_NOT_GRANTED = 'claim_not_granted';
+export const CLAIM_ERROR_CODE_DORMANT = 'claim_dormant';
+
 export const CLAIM_STATUS_PENDING = 'pending';
 export const CLAIM_STATUS_APPROVED = 'approved';
 export const CLAIM_STATUS_CANCELLED = 'cancelled';

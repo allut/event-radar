@@ -5,7 +5,15 @@ import { clearOrganizerSignedInHint, isOrganizerLoggingOut } from '../lib/organi
 import { clearAdminSignedInHint, isAdminLoggingOut } from '../lib/adminAuth';
 
 export class ApiError extends Error {
-  constructor(public readonly status: number, message: string) {
+  constructor(
+    public readonly status: number,
+    message: string,
+    /** Machine-readable companion to `message`, when the backend sends one
+     * (`detail: { message, code }` instead of a plain string) — lets a
+     * caller branch on the failure reason without matching English text
+     * (#444). Undefined for every endpoint that still sends a plain string. */
+    public readonly code?: string,
+  ) {
     super(message);
     this.name = 'ApiError';
   }
@@ -70,8 +78,14 @@ async function request<T>(path: string, init: RequestOptions = {}): Promise<T> {
   }
 
   if (!res.ok) {
-    const body = await res.json().catch(() => ({})) as { detail?: string };
-    throw new ApiError(res.status, body.detail ?? `HTTP ${res.status}`);
+    const body = await res.json().catch(() => ({})) as {
+      detail?: string | { message?: string; code?: string };
+    };
+    const { detail } = body;
+    if (typeof detail === 'object' && detail !== null) {
+      throw new ApiError(res.status, detail.message ?? `HTTP ${res.status}`, detail.code);
+    }
+    throw new ApiError(res.status, detail ?? `HTTP ${res.status}`);
   }
 
   if (res.status === StatusCodes.NO_CONTENT) return undefined as T;

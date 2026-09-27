@@ -62,6 +62,23 @@ describe('ClaimEventEdit (#416)', () => {
     expect(screen.queryByLabelText('Title')).not.toBeInTheDocument();
   });
 
+  it('shows the dormant-specific lock copy when the claim lost a dedup collision (#444)', async () => {
+    mockGet.mockRejectedValueOnce(
+      new ApiError(
+        409,
+        "This claim is dormant — a duplicate claimed event now takes precedence, so editing stays locked until that's resolved.",
+        'claim_dormant',
+      ),
+    );
+    renderEdit();
+
+    await waitFor(() =>
+      expect(screen.getByText('Editing paused — duplicate takes precedence')).toBeInTheDocument(),
+    );
+    expect(screen.queryByText('Not yet editable')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Title')).not.toBeInTheDocument();
+  });
+
   it('loads and saves against the event_id from the URL (#437)', async () => {
     mockGet.mockResolvedValueOnce(baseEvent({ id: 7 }));
     mockPatch.mockResolvedValueOnce(baseEvent({ id: 7, title: 'New title' }));

@@ -117,6 +117,27 @@ describe('ClaimPending (#415)', () => {
     expect(screen.queryByRole('button', { name: 'Cancel this claim' })).not.toBeInTheDocument();
   });
 
+  it('notes dormancy and disables Edit event when an approved claim is dormant (#444)', async () => {
+    mockGet.mockResolvedValueOnce({
+      id: 11,
+      status: 'approved',
+      dormant: true,
+      verification_mechanism: 'fienta_token',
+      dns_record_name: null,
+      dns_record_value: 'er-verify-000',
+      can_recheck: false,
+    });
+    renderPending();
+
+    await waitFor(() => expect(screen.getByText("You're verified")).toBeInTheDocument());
+    expect(
+      screen.getByText(
+        'A duplicate claimed listing currently takes precedence over this one, so editing is paused. It resumes automatically once that\'s resolved.',
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Edit event' })).toBeDisabled();
+  });
+
   it('check now re-runs verification and reflects a granted outcome', async () => {
     mockGet.mockResolvedValueOnce({
       id: 7,

@@ -85,6 +85,11 @@ describe('api.get', () => {
     await expect(api.get('/fail')).rejects.toMatchObject({ message: `HTTP ${StatusCodes.INTERNAL_SERVER_ERROR}` });
   });
 
+  it('throws ApiError with message + code when detail is a structured object', async () => {
+    mockFetch(StatusCodes.CONFLICT, { detail: { message: 'Dormant', code: 'claim_dormant' } }, false);
+    await expect(api.get('/locked')).rejects.toMatchObject({ message: 'Dormant', code: 'claim_dormant' });
+  });
+
   it('on 401: calls clearSignedInHint, redirects to /login, throws ApiError', async () => {
     mockFetch(StatusCodes.UNAUTHORIZED, {}, false);
     await expect(api.get('/protected')).rejects.toThrow(ApiError);

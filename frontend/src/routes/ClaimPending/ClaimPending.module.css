@@ -104,6 +104,14 @@
   margin-bottom: var(--space-3);
 }
 
+.dormantNote {
+  composes: alert from '../../components/shared/Alert.module.css';
+  color: var(--text-soft);
+  background: var(--accent-subtle);
+  border-left-color: var(--accent);
+  margin-bottom: var(--space-3);
+}
+
 .actions {
   display: flex;
   align-items: center;
