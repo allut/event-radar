@@ -11,6 +11,7 @@ from app.claims.pinning import (
     FreshPrice,
     apply_pins,
     claim_event_for_id,
+    clear_claim_pins,
     fetch_fresh_price,
     organizer_covered_event_count,
     pin_key,
@@ -226,6 +227,72 @@ class TestRepresentativeEventForClaim:
 
         result = await representative_event_for_claim(mock_db, claim)
         assert result is None
+
+
+class TestClearClaimPins:
+    """#442: revoking a claim must clear pinned_fields on every event the
+    claim covers, not just representative_event_for_claim()'s pick."""
+
+    @pytest.mark.asyncio
+    async def test_publisher_claim_clears_every_covered_event(self, mock_db):
+        claim = MagicMock(kind=CLAIM_KIND_PUBLISHER, publisher_id=7)
+        scalars_result = MagicMock()
+        scalars_result.all.return_value = [42, 43, 44]
+        mock_db.scalars.return_value = scalars_result
+
+        event_ids = await clear_claim_pins(mock_db, claim)
+
+        assert event_ids == [42, 43, 44]
+        mock_db.execute.assert_awaited_once()
+        stmt = mock_db.execute.await_args.args[0]
+        assert stmt.is_dml
+        assert "events" in str(stmt).lower()
+
+    @pytest.mark.asyncio
+    async def test_publisher_claim_with_nothing_pinned_skips_update(self, mock_db):
+        claim = MagicMock(kind=CLAIM_KIND_PUBLISHER, publisher_id=7)
+        scalars_result = MagicMock()
+        scalars_result.all.return_value = []
+        mock_db.scalars.return_value = scalars_result
+
+        event_ids = await clear_claim_pins(mock_db, claim)
+
+        assert event_ids == []
+        mock_db.execute.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_series_claim_clears_only_matching_key_events(self, mock_db, make_event):
+        from app.routers.utils import event_series_key, serialize_event_series_key
+
+        matching = make_event(event_id=1, title="Balti Jaama Turg", venue_name="Kultuurikatel")
+        other = make_event(event_id=2, title="Other Event", venue_name="Elsewhere")
+        key = serialize_event_series_key(
+            event_series_key("Balti Jaama Turg", "Kultuurikatel")
+        )
+        claim = MagicMock(kind=CLAIM_KIND_SERIES, event_series_key=key)
+
+        scalars_result = MagicMock()
+        scalars_result.all.return_value = [matching, other]
+        mock_db.scalars.return_value = scalars_result
+
+        event_ids = await clear_claim_pins(mock_db, claim)
+
+        assert event_ids == [1]
+        mock_db.execute.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_series_claim_no_match_skips_update(self, mock_db, make_event):
+        other = make_event(event_id=2, title="Other Event", venue_name="Elsewhere")
+        claim = MagicMock(kind=CLAIM_KIND_SERIES, event_series_key="nope\x1fnope")
+
+        scalars_result = MagicMock()
+        scalars_result.all.return_value = [other]
+        mock_db.scalars.return_value = scalars_result
+
+        event_ids = await clear_claim_pins(mock_db, claim)
+
+        assert event_ids == []
+        mock_db.execute.assert_not_awaited()
 
 
 class TestClaimEventForId:

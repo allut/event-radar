@@ -98,7 +98,7 @@ from app.constants import (
     VALID_LOCALES,
 )
 from app.claims.lifecycle import approved_claim_exists, auto_decline_other_pending_claims
-from app.claims.pinning import representative_event_for_claim
+from app.claims.pinning import clear_claim_pins, representative_event_for_claim
 from app.claims.target_resolution import ClaimTarget
 from app.db import AsyncSessionLocal
 from app.email.claim_resolution import send_claim_declined_email, send_claim_granted_email
@@ -960,8 +960,9 @@ async def admin_decline_claim(claim_id: int, body: _ResolutionBody, request: Req
 async def admin_revoke_claim(claim_id: int, body: _ResolutionBody, request: Request) -> dict:
     """Revoke an already-granted claim (report escalation or discretion) —
     deletes the row outright (unlike decline, which just flips status) and
-    reverts the event's pinned fields to source authority immediately so the
-    next ingestion/refetch pass can overwrite them again."""
+    reverts pinned fields on every event this claim covers to source
+    authority immediately (#442), not just the representative one, so the
+    next ingestion/refetch pass can overwrite them all again."""
     note = _validated_resolution_note(body)
 
     async def _run() -> dict:
@@ -973,8 +974,7 @@ async def admin_revoke_claim(claim_id: int, body: _ResolutionBody, request: Requ
                     detail=ERROR_CLAIM_NOT_APPROVED,
                 )
             event = await representative_event_for_claim(db, claim)
-            if event is not None and event.pinned_fields:
-                event.pinned_fields = []
+            await clear_claim_pins(db, claim)
             await db.delete(claim)
             result = {
                 "id": claim_id,

@@ -573,9 +573,13 @@ async def test_decline_already_resolved_claim_conflicts(admin_app, make_db_ctx, 
 
 @pytest.mark.asyncio
 async def test_revoke_claim_deletes_row_and_clears_pins(admin_app, make_db_ctx, mock_db, caplog):
+    """clear_claim_pins() (#442) — not just the representative event's own
+    pinned_fields attribute — is the thing that must run on revoke; its
+    own bulk-coverage behavior is covered by tests/claims/test_pinning.py."""
     app = admin_app
     claim = _make_claim(claim_id=1, status=CLAIM_STATUS_APPROVED, kind=CLAIM_KIND_PUBLISHER)
     event = _make_event(event_id=42, pinned_fields=["title", "price_min"])
+    clear_pins_mock = AsyncMock(return_value=[42, 43])
 
     db = mock_db
     db.get = AsyncMock(return_value=claim)
@@ -585,6 +589,7 @@ async def test_revoke_claim_deletes_row_and_clears_pins(admin_app, make_db_ctx, 
         patch("app.routers.admin.settings") as mock_settings,
         patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
         patch("app.routers.admin.representative_event_for_claim", new=AsyncMock(return_value=event)),
+        patch("app.routers.admin.clear_claim_pins", new=clear_pins_mock),
         caplog.at_level("INFO"),
     ):
         _admin_settings(mock_settings)
@@ -596,7 +601,7 @@ async def test_revoke_claim_deletes_row_and_clears_pins(admin_app, make_db_ctx, 
             )
 
     assert resp.status_code == http.HTTPStatus.OK
-    assert event.pinned_fields == []
+    clear_pins_mock.assert_awaited_once_with(db, claim)
     db.delete.assert_awaited_once_with(claim)
     assert resp.json() == {
         "id": 1,

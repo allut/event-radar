@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 
 import httpx
 from bs4 import BeautifulSoup
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.constants import (
@@ -95,6 +95,52 @@ async def representative_event_for_claim(db: AsyncSession, claim: Claim) -> Even
         if key == claim.event_series_key:
             return event
     return None
+
+
+async def clear_claim_pins(db: AsyncSession, claim: Claim) -> list[int]:
+    """Bulk-clear pinned_fields on every event `claim` covers (#442) — not
+    just the one representative_event_for_claim() picks. Publisher coverage
+    reuses publisher_claim_event_ids(); a Series claim has no FK to
+    bulk-filter on (Claim carries only a normalized title/venue key), so its
+    candidates are the (in practice tiny) set of events that currently
+    carry any pin at all, matched against claim.event_series_key — same
+    scope representative_event_for_claim() resolves against, so a
+    Publisher event whose EventSource has since been re-linked to a
+    different publisher_id is likewise outside what either function can
+    still see (pre-existing limitation, not new here). Either kind ends in
+    one bulk UPDATE, never a per-row write. Returns the cleared event ids
+    for the caller's result/log."""
+    if claim.kind == CLAIM_KIND_PUBLISHER:
+        covered_ids = publisher_claim_event_ids(claim.publisher_id)
+        event_ids = list(
+            (
+                await db.scalars(
+                    select(Event.id).where(
+                        Event.id.in_(covered_ids),
+                        func.jsonb_array_length(Event.pinned_fields) > 0,
+                    )
+                )
+            ).all()
+        )
+    else:
+        pinned_events = (
+            await db.scalars(
+                select_events_with_classification().where(
+                    func.jsonb_array_length(Event.pinned_fields) > 0
+                )
+            )
+        ).all()
+        event_ids = [
+            event.id
+            for event in pinned_events
+            if serialize_event_series_key(
+                event_series_key(event.title_orig, resolve_venue_name(event))
+            )
+            == claim.event_series_key
+        ]
+    if event_ids:
+        await db.execute(update(Event).where(Event.id.in_(event_ids)).values(pinned_fields=[]))
+    return event_ids
 
 
 def pin_key(field: str, locale: str | None = None) -> str:
