@@ -272,4 +272,23 @@ describe('ClaimPending (#415)', () => {
     await waitFor(() => expect(screen.getByText('Claim revoked')).toBeInTheDocument());
     expect(screen.queryByText('Claim declined')).not.toBeInTheDocument();
   });
+
+  it.each(['cancelled', 'expired', 'declined', 'revoked'] as const)(
+    'shows no pending pill and no Admin review eyebrow for a terminal %s claim (#449)',
+    async (status) => {
+      mockGet.mockResolvedValueOnce({
+        id: 14,
+        status,
+        verification_mechanism: 'admin_review',
+        dns_record_name: null,
+        dns_record_value: 'er-verify-000',
+        can_recheck: false,
+      });
+      renderPending();
+
+      await waitFor(() => expect(screen.getByText('Claim closed')).toBeInTheDocument());
+      expect(screen.queryByText('Claim pending review')).not.toBeInTheDocument();
+      expect(screen.queryByText('Admin review')).not.toBeInTheDocument();
+    },
+  );
 });

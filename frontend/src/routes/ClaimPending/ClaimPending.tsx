@@ -19,6 +19,7 @@ import {
   CLAIM_STATUS_EXPIRED,
   CLAIM_STATUS_PENDING,
   CLAIM_STATUS_REVOKED,
+  CLAIM_TERMINAL_STATUSES,
   CLAIM_VERIFICATION_MECHANISM_FIENTA_TOKEN,
   QUERY_KEYS,
   ROUTES,
@@ -125,11 +126,11 @@ export default function ClaimPending() {
     title = t('claim_pending_approved_title', locale);
     body = t('claim_pending_approved_body', locale);
   } else if (claim.status === CLAIM_STATUS_CANCELLED) {
-    eyebrow = t('claim_pending_review_eyebrow', locale);
+    eyebrow = t('claim_pending_closed_eyebrow', locale);
     title = t('claim_cancelled_title', locale);
     body = t('claim_cancelled_body', locale);
   } else if (claim.status === CLAIM_STATUS_EXPIRED) {
-    eyebrow = t('claim_pending_review_eyebrow', locale);
+    eyebrow = t('claim_pending_closed_eyebrow', locale);
     title = t('claim_expired_title', locale);
     const expiredDays =
       mechanism && CLAIM_SELF_SERVICE_VERIFICATION_MECHANISMS.has(mechanism)
@@ -137,11 +138,11 @@ export default function ClaimPending() {
         : CLAIM_ADMIN_REVIEW_EXPIRY_DAYS;
     body = ti('claim_expired_body', locale, { days: String(expiredDays) });
   } else if (claim.status === CLAIM_STATUS_DECLINED) {
-    eyebrow = t('claim_pending_review_eyebrow', locale);
+    eyebrow = t('claim_pending_closed_eyebrow', locale);
     title = t('claim_declined_title', locale);
     body = t('claim_declined_body', locale);
   } else if (claim.status === CLAIM_STATUS_REVOKED) {
-    eyebrow = t('claim_pending_review_eyebrow', locale);
+    eyebrow = t('claim_pending_closed_eyebrow', locale);
     title = t('claim_revoked_title', locale);
     body = t('claim_revoked_body', locale);
   } else if (mechanism === CLAIM_VERIFICATION_MECHANISM_FIENTA_TOKEN) {
@@ -158,8 +159,8 @@ export default function ClaimPending() {
     body = t('claim_pending_review_body', locale);
   }
 
-  const pillLabel =
-    claim.status === CLAIM_STATUS_APPROVED ? t('claim_pill_claimed', locale) : t('claim_pill_pending', locale);
+  const isTerminal = CLAIM_TERMINAL_STATUSES.has(claim.status);
+  const pillLabel = claim.status === CLAIM_STATUS_APPROVED ? t('claim_pill_claimed', locale) : t('claim_pill_pending', locale);
   const pillVariant = claim.status === CLAIM_STATUS_APPROVED ? styles.pillSuccess : '';
   const isPending = claim.status === CLAIM_STATUS_PENDING;
 
@@ -170,7 +171,7 @@ export default function ClaimPending() {
 
       <main className={styles.main}>
         <div className={styles.card}>
-          <span className={`${styles.pill} ${pillVariant}`}>{pillLabel}</span>
+          {!isTerminal && <span className={`${styles.pill} ${pillVariant}`}>{pillLabel}</span>}
           <p className={styles.eyebrow}>{eyebrow}</p>
           <h1 className={styles.heading}>{title}</h1>
           <p className={styles.body}>{body}</p>

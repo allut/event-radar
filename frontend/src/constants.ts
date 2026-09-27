@@ -165,6 +165,15 @@ export type ClaimStatus =
   | typeof CLAIM_STATUS_REVOKED
   | typeof CLAIM_STATUS_DECLINED;
 
+// Closed, no further action possible — never involved an admin for cancelled/expired,
+// so ClaimPending's terminal screens must not show the pending pill or "Admin review" eyebrow (#449).
+export const CLAIM_TERMINAL_STATUSES: ReadonlySet<ClaimStatus> = new Set([
+  CLAIM_STATUS_CANCELLED,
+  CLAIM_STATUS_EXPIRED,
+  CLAIM_STATUS_REVOKED,
+  CLAIM_STATUS_DECLINED,
+]);
+
 // ─── Auth / magic link ───────────────────────────────────────────────────────
 export const AUTH_REDIRECT_DELAY_MS = 600;
 // Upper bound on the post-logout 401-redirect suppression window (lib/auth.ts

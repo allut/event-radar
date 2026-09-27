@@ -69,6 +69,7 @@
     "claim_pending_field_record_name": "Record name",
     "claim_pending_field_record_value": "Record value",
     "claim_pending_review_eyebrow": "Admin review",
+    "claim_pending_closed_eyebrow": "Claim closed",
     "claim_pending_review_title": "Your claim is being reviewed",
     "claim_pending_review_body": "An Event Radar admin will check your claim and email you the outcome. There's nothing more for you to do right now.",
     "claim_pending_review_hint": "Admin-review claims expire after {days} days if no admin has resolved them — come back any time to check the status.",

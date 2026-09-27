@@ -69,6 +69,7 @@
     "claim_pending_field_record_name": "Имя записи",
     "claim_pending_field_record_value": "Значение записи",
     "claim_pending_review_eyebrow": "Проверка администратором",
+    "claim_pending_closed_eyebrow": "Заявка закрыта",
     "claim_pending_review_title": "Ваша заявка рассматривается",
     "claim_pending_review_body": "Администратор Event Radar проверит вашу заявку и сообщит результат по электронной почте. Сейчас вам ничего делать не нужно.",
     "claim_pending_review_hint": "Заявки на ручной проверке истекают через {days} дней, если админ их не рассмотрит — вернитесь в любое время, чтобы проверить статус.",

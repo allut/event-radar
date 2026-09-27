@@ -69,6 +69,7 @@
     "claim_pending_field_record_name": "Kirje nimi",
     "claim_pending_field_record_value": "Kirje väärtus",
     "claim_pending_review_eyebrow": "Administraatori ülevaatus",
+    "claim_pending_closed_eyebrow": "Taotlus suletud",
     "claim_pending_review_title": "Sinu nõuet vaadatakse üle",
     "claim_pending_review_body": "Event Radari administraator kontrollib sinu nõuet ja saadab tulemuse e-kirjaga. Praegu ei pea sa midagi tegema.",
     "claim_pending_review_hint": "Administraatori ülevaatuse all olevad nõuded aeguvad {days} päeva pärast, kui admin pole neid lahendanud — tule kontrollima igal ajal.",
