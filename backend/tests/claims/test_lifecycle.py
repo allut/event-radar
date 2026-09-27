@@ -23,6 +23,7 @@ from app.claims.verification import VerificationResult
 from app.constants import (
     CLAIM_ADMIN_REVIEW_EXPIRY_DAYS,
     CLAIM_DISCOVERY_STATUS_CLAIMED,
+    CLAIM_DISCOVERY_STATUS_NOT_CLAIMABLE,
     CLAIM_DISCOVERY_STATUS_PENDING,
     CLAIM_DISCOVERY_STATUS_UNCLAIMED,
     CLAIM_EXPIRY_DAYS,
@@ -37,6 +38,7 @@ from app.constants import (
     CLAIM_VERIFICATION_MECHANISM_FIENTA_TOKEN,
     CLAIM_VERIFICATION_OUTCOME_ADMIN_REVIEW,
     CLAIM_VERIFICATION_OUTCOME_AUTO_GRANT,
+    ERROR_CLAIM_NOT_CLAIMABLE,
     ERROR_CLAIM_OWN_SUBMISSION,
     ERROR_CLAIM_TARGET_ALREADY_APPROVED,
     ERROR_EVENT_NOT_FOUND,
@@ -201,6 +203,24 @@ class TestCreateClaim:
 
         assert exc.value.status_code == 422
         assert exc.value.detail == ERROR_CLAIM_OWN_SUBMISSION
+
+    @pytest.mark.asyncio
+    async def test_third_party_direct_submission_rejected_generic_422(
+        self, mock_db, make_organizer, make_event
+    ):
+        # (#445) A caller who did NOT submit the event gets the generic
+        # not-claimable message, not the "your own submission" one — that
+        # message is only true for the submitter and would otherwise leak
+        # that some organizer submitted it.
+        mock_db.scalar.return_value = 0
+        mock_db.get.return_value = make_event(submitted_by_organizer_id=5)
+        organizer = make_organizer(organizer_id=6)
+
+        with pytest.raises(ClaimError) as exc:
+            await create_claim(mock_db, AsyncMock(), organizer, event_id=10)
+
+        assert exc.value.status_code == 422
+        assert exc.value.detail == ERROR_CLAIM_NOT_CLAIMABLE
 
     @pytest.mark.asyncio
     async def test_ended_event_still_claimable(self, mock_db, make_organizer, make_event):
@@ -791,19 +811,39 @@ class TestRecheckClaim:
 
 
 class TestClaimStatusFromClaim:
-    def test_none_is_unclaimed(self):
-        assert claim_status_from_claim(None) == CLAIM_DISCOVERY_STATUS_UNCLAIMED
-
-    def test_approved_is_claimed(self):
+    def test_none_is_unclaimed(self, make_event):
         assert (
-            claim_status_from_claim(_fake_claim(status=CLAIM_STATUS_APPROVED))
+            claim_status_from_claim(None, make_event())
+            == CLAIM_DISCOVERY_STATUS_UNCLAIMED
+        )
+
+    def test_approved_is_claimed(self, make_event):
+        assert (
+            claim_status_from_claim(
+                _fake_claim(status=CLAIM_STATUS_APPROVED), make_event()
+            )
             == CLAIM_DISCOVERY_STATUS_CLAIMED
         )
 
-    def test_pending_is_pending(self):
+    def test_pending_is_pending(self, make_event):
         assert (
-            claim_status_from_claim(_fake_claim(status=CLAIM_STATUS_PENDING))
+            claim_status_from_claim(
+                _fake_claim(status=CLAIM_STATUS_PENDING), make_event()
+            )
             == CLAIM_DISCOVERY_STATUS_PENDING
+        )
+
+    def test_direct_submission_is_not_claimable_even_with_claim(self, make_event):
+        # (#445) submitted_by_organizer_id wins regardless of `claim` — a
+        # direct submission can never resolve a real Claim in practice (no
+        # EventSource), but the status must reflect not-claimable either way.
+        event = make_event()
+        event.submitted_by_organizer_id = 7
+        assert (
+            claim_status_from_claim(
+                _fake_claim(status=CLAIM_STATUS_APPROVED), event
+            )
+            == CLAIM_DISCOVERY_STATUS_NOT_CLAIMABLE
         )
 
 

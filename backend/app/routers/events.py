@@ -89,7 +89,13 @@ async def get_event(
     # (feed/explore/saved) shouldn't each pay for a per-event
     # EventSource+Claim lookup they never render, and must never surface the
     # credit either (ranking-neutrality boundary, #419).
-    claim = await resolve_claim_for_event(db, event)
-    serialized["claim_status"] = claim_status_from_claim(claim)
+    # A direct submission never resolves an EventSource (#445), so skip the
+    # lookup entirely instead of paying for a query whose result is discarded.
+    claim = (
+        None
+        if event.submitted_by_organizer_id is not None
+        else await resolve_claim_for_event(db, event)
+    )
+    serialized["claim_status"] = claim_status_from_claim(claim, event)
     serialized["listed_by"] = await claiming_organizer_name(claim)
     return serialized

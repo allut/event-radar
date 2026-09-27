@@ -28,6 +28,7 @@ from app.constants import (
     CLAIM_ADMIN_REVIEW_EXPIRY_DAYS,
     CLAIM_AUTOMATED_VERIFICATION_MECHANISMS,
     CLAIM_DISCOVERY_STATUS_CLAIMED,
+    CLAIM_DISCOVERY_STATUS_NOT_CLAIMABLE,
     CLAIM_DISCOVERY_STATUS_PENDING,
     CLAIM_DISCOVERY_STATUS_UNCLAIMED,
     CLAIM_EMAIL_SEND_CONCURRENCY,
@@ -232,11 +233,15 @@ async def bulk_dormant_pinned_event_ids(db: AsyncSession, events: list[Event]) -
     return dormant_event_ids
 
 
-def claim_status_from_claim(claim: Claim | None) -> str:
-    """(#414) unclaimed/pending/claimed for `claim`'s public page CTA — an
-    event whose resolve_claim_for_event() came back None (never ingested,
-    i.e. an organizer's own direct submission, or no active claim on its
-    Publisher/Series target) is always unclaimed."""
+def claim_status_from_claim(claim: Claim | None, event: Event) -> str:
+    """(#414, narrowed by #445) unclaimed/pending/claimed/not_claimable for
+    `claim`'s public page CTA. A direct organizer submission
+    (`submitted_by_organizer_id` set) has no ingested EventSource to ever
+    claim against, so it's not_claimable regardless of `claim` — distinct
+    from unclaimed, which resolve_claim_for_event() also returns None for
+    when the event is claimable but nobody has yet."""
+    if event.submitted_by_organizer_id is not None:
+        return CLAIM_DISCOVERY_STATUS_NOT_CLAIMABLE
     if claim is None:
         return CLAIM_DISCOVERY_STATUS_UNCLAIMED
     return (
@@ -449,9 +454,14 @@ async def create_claim(
 
     if event.submitted_by_organizer_id is not None:
         # Explicit guard (#429) — a direct organizer submission has no
-        # ingested EventSource to claim against; without this check that
-        # would surface as the unrelated ERROR_CLAIM_NOT_CLAIMABLE below.
-        raise ClaimError(422, ERROR_CLAIM_OWN_SUBMISSION)
+        # ingested EventSource to claim against. The "your own" message
+        # (#445) is only true for the submitter itself; any other caller
+        # gets the same generic not-claimable message as the EventSource-less
+        # branch below, so the response can't be used to fingerprint who
+        # submitted the event.
+        if event.submitted_by_organizer_id == organizer.id:
+            raise ClaimError(422, ERROR_CLAIM_OWN_SUBMISSION)
+        raise ClaimError(422, ERROR_CLAIM_NOT_CLAIMABLE)
 
     es = await representative_event_source(db, event_id=event_id)
     if es is None or es.source is None:

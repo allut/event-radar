@@ -8,7 +8,7 @@ import { useOrganizerAuth } from '../../hooks/useOrganizerAuth';
 import MagicLinkForm from '../MagicLinkForm';
 import styles from './ClaimStrip.module.css';
 
-export type EventClaimStatus = 'unclaimed' | 'pending' | 'claimed';
+export type EventClaimStatus = 'unclaimed' | 'pending' | 'claimed' | 'not_claimable';
 
 interface ClaimPillProps {
   status: 'pending' | 'claimed';

@@ -327,6 +327,14 @@ describe('EventDetail claim discovery (#414)', () => {
     expect(screen.queryByText(/^Listed by/)).not.toBeInTheDocument();
   });
 
+  it('shows no claim CTA or pill for a not-claimable direct submission (#445)', async () => {
+    mockGet.mockResolvedValueOnce({ ...eventData, claim_status: 'not_claimable' });
+    renderWithProviders(<EventDetail />, { route: '/en/events/1', pathPattern: '/:locale/events/:id' });
+    await waitFor(() => expect(screen.getByText('Test Concert')).toBeInTheDocument());
+    expect(screen.queryByText('Is this your event?')).not.toBeInTheDocument();
+    expect(screen.queryByText(/pending review|verified/i)).not.toBeInTheDocument();
+  });
+
   it('a signed-out visitor gets the email-capture form, not a direct claim', async () => {
     mockGet.mockResolvedValueOnce(eventData);
     renderWithProviders(<EventDetail />, { route: '/en/events/1', pathPattern: '/:locale/events/:id' });

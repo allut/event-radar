@@ -554,11 +554,15 @@ CLAIM_EMAIL_SEND_CONCURRENCY: int = 8
 CLAIM_DISCOVERY_STATUS_UNCLAIMED = "unclaimed"
 CLAIM_DISCOVERY_STATUS_PENDING = "pending"
 CLAIM_DISCOVERY_STATUS_CLAIMED = "claimed"
+# (#445) A direct organizer submission has no ingested EventSource, so it can
+# never be claimed — distinct from "unclaimed" (claimable, nobody has yet).
+CLAIM_DISCOVERY_STATUS_NOT_CLAIMABLE = "not_claimable"
 VALID_CLAIM_DISCOVERY_STATUSES = frozenset(
     {
         CLAIM_DISCOVERY_STATUS_UNCLAIMED,
         CLAIM_DISCOVERY_STATUS_PENDING,
         CLAIM_DISCOVERY_STATUS_CLAIMED,
+        CLAIM_DISCOVERY_STATUS_NOT_CLAIMABLE,
     }
 )
 

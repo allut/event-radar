@@ -411,9 +411,8 @@ class TestGetEvent:
 
     @pytest.mark.asyncio
     async def test_claim_status_unclaimed_when_never_ingested(self, mock_db, make_event, make_request):
-        """No resolvable EventSource (an organizer's own direct submission,
-        never scraped) -> always unclaimed, per claim_status_from_claim's
-        docstring (#414)."""
+        """No resolvable EventSource, but not a direct submission either
+        (e.g. not yet matched) -> unclaimed, per claim_status_from_claim."""
         from app.routers.events import get_event
 
         event = make_event(42)
@@ -422,6 +421,21 @@ class TestGetEvent:
         result = await get_event(event_id=42, request=make_request(), db=mock_db)
 
         assert result["claim_status"] == "unclaimed"
+
+    @pytest.mark.asyncio
+    async def test_claim_status_not_claimable_for_direct_submission(
+        self, mock_db, make_event, make_request
+    ):
+        """(#445) submitted_by_organizer_id set -> not_claimable, so the
+        public page never offers a CTA nobody can ever complete."""
+        from app.routers.events import get_event
+
+        event = make_event(42, submitted_by_organizer_id=9)
+        mock_db.scalar.side_effect = [event, None]
+
+        result = await get_event(event_id=42, request=make_request(), db=mock_db)
+
+        assert result["claim_status"] == "not_claimable"
 
     @pytest.mark.asyncio
     async def test_claim_status_pending(self, mock_db, make_event, make_request):
