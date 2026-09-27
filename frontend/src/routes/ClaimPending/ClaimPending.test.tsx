@@ -143,6 +143,59 @@ describe('ClaimPending (#415)', () => {
     await waitFor(() => expect(screen.getByText("You're verified")).toBeInTheDocument());
   });
 
+  it('states the 30-day admin-review window on the pending-review hint (#443)', async () => {
+    mockGet.mockResolvedValueOnce({
+      id: 9,
+      status: 'pending',
+      verification_mechanism: 'admin_review',
+      dns_record_name: null,
+      dns_record_value: 'er-verify-000',
+      can_recheck: false,
+    });
+    renderPending();
+
+    await waitFor(() => expect(screen.getByText('Your claim is being reviewed')).toBeInTheDocument());
+    expect(
+      screen.getByText(
+        'Admin-review claims expire after 30 days if no admin has resolved them — come back any time to check the status.',
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it('shows the 30-day window on an expired admin-review claim, not the 7-day one (#443)', async () => {
+    mockGet.mockResolvedValueOnce({
+      id: 9,
+      status: 'expired',
+      verification_mechanism: 'admin_review',
+      dns_record_name: null,
+      dns_record_value: 'er-verify-000',
+      can_recheck: false,
+    });
+    renderPending();
+
+    await waitFor(() => expect(screen.getByText('Claim expired')).toBeInTheDocument());
+    expect(
+      screen.getByText('This claim expired after 30 days without verification. You can start a new claim from your dashboard.'),
+    ).toBeInTheDocument();
+  });
+
+  it('shows the 7-day window on an expired automated-mechanism claim (#443)', async () => {
+    mockGet.mockResolvedValueOnce({
+      id: 7,
+      status: 'expired',
+      verification_mechanism: 'fienta_token',
+      dns_record_name: null,
+      dns_record_value: 'er-verify-abc123',
+      can_recheck: false,
+    });
+    renderPending();
+
+    await waitFor(() => expect(screen.getByText('Claim expired')).toBeInTheDocument());
+    expect(
+      screen.getByText('This claim expired after 7 days without verification. You can start a new claim from your dashboard.'),
+    ).toBeInTheDocument();
+  });
+
   it('self-cancel confirms then cancels the pending claim', async () => {
     mockGet.mockResolvedValueOnce({
       id: 7,

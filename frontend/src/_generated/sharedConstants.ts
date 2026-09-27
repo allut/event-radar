@@ -31,3 +31,6 @@ export const THEME_PREFERENCES = ['light', 'dark'] as const;
 export const BROWSE_PAGE_SIZE = 24;
 
 export const ORGANIZER_IMAGE_ALLOWED_MIME: readonly string[] = ['image/jpeg', 'image/png', 'image/webp'];
+
+export const CLAIM_EXPIRY_DAYS = 7;
+export const CLAIM_ADMIN_REVIEW_EXPIRY_DAYS = 30;

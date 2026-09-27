@@ -6,10 +6,12 @@ import { useOrganizerLogout } from '../../hooks/useOrganizerLogout';
 import { useLocalLocale } from '../../hooks/useLocalLocale';
 import { useLocaleNavigate } from '../../hooks/useLocaleNavigate';
 import { useStaticSeoMeta } from '../../hooks/useStaticSeoMeta';
-import { t } from '../../i18n';
+import { t, ti } from '../../i18n';
 import {
   API,
+  CLAIM_ADMIN_REVIEW_EXPIRY_DAYS,
   CLAIM_DNS_VERIFICATION_MECHANISMS,
+  CLAIM_EXPIRY_DAYS,
   CLAIM_SELF_SERVICE_VERIFICATION_MECHANISMS,
   CLAIM_STATUS_APPROVED,
   CLAIM_STATUS_CANCELLED,
@@ -127,7 +129,11 @@ export default function ClaimPending() {
   } else if (claim.status === CLAIM_STATUS_EXPIRED) {
     eyebrow = t('claim_pending_review_eyebrow', locale);
     title = t('claim_expired_title', locale);
-    body = t('claim_expired_body', locale);
+    const expiredDays =
+      mechanism && CLAIM_SELF_SERVICE_VERIFICATION_MECHANISMS.has(mechanism)
+        ? CLAIM_EXPIRY_DAYS
+        : CLAIM_ADMIN_REVIEW_EXPIRY_DAYS;
+    body = ti('claim_expired_body', locale, { days: String(expiredDays) });
   } else if (claim.status === CLAIM_STATUS_REVOKED) {
     eyebrow = t('claim_pending_review_eyebrow', locale);
     title = t('claim_revoked_title', locale);
@@ -256,13 +262,17 @@ export default function ClaimPending() {
           {isPending && mechanism && CLAIM_SELF_SERVICE_VERIFICATION_MECHANISMS.has(mechanism) && (
             <>
               <hr className={styles.hairline} />
-              <p className={styles.hint}>{t('claim_pending_automated_hint', locale)}</p>
+              <p className={styles.hint}>
+                {ti('claim_pending_automated_hint', locale, { days: String(CLAIM_EXPIRY_DAYS) })}
+              </p>
             </>
           )}
           {isPending && mechanism && !CLAIM_SELF_SERVICE_VERIFICATION_MECHANISMS.has(mechanism) && (
             <>
               <hr className={styles.hairline} />
-              <p className={styles.hint}>{t('claim_pending_review_hint', locale)}</p>
+              <p className={styles.hint}>
+                {ti('claim_pending_review_hint', locale, { days: String(CLAIM_ADMIN_REVIEW_EXPIRY_DAYS) })}
+              </p>
             </>
           )}
         </div>

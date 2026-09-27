@@ -6,6 +6,8 @@ from zoneinfo import ZoneInfo
 from app._generated.shared_constants import (
     APP_VERSION,
     BROWSE_PAGE_SIZE,
+    CLAIM_ADMIN_REVIEW_EXPIRY_DAYS,
+    CLAIM_EXPIRY_DAYS,
     DEFAULT_CURRENCY,
     DEFAULT_USER_CITY,
     DEFAULT_USER_LOCALE,
@@ -28,6 +30,8 @@ from app._generated.shared_constants import (
 __all__ = [
     "APP_VERSION",
     "BROWSE_PAGE_SIZE",
+    "CLAIM_ADMIN_REVIEW_EXPIRY_DAYS",
+    "CLAIM_EXPIRY_DAYS",
     "DEFAULT_CURRENCY",
     "DEFAULT_USER_CITY",
     "DEFAULT_USER_LOCALE",
@@ -528,20 +532,15 @@ CLAIM_VERIFICATION_OUTCOME_ADMIN_REVIEW = "admin_review"
 VALID_CLAIM_VERIFICATION_OUTCOMES = frozenset(
     {CLAIM_VERIFICATION_OUTCOME_AUTO_GRANT, CLAIM_VERIFICATION_OUTCOME_ADMIN_REVIEW}
 )
-# Inactivity window before an unverified automated-mechanism claim expires
-# (#413) — resets on every POST /organizer/claims/{id}/recheck.
-CLAIM_EXPIRY_DAYS = 7
-
-# Inactivity window before a pending claim with no self-service recheck path
-# (admin_review, and piletilevi_mailbox — see the
-# CLAIM_AUTOMATED_VERIFICATION_MECHANISMS comment above) expires unresolved
-# (#430, slice 1 of #425) — longer than CLAIM_EXPIRY_DAYS so a genuine admin
-# turnaround keeps real room, while still bounding how long an abandoned or
-# squatting claim can lock a Publisher/Series target. Never reset by a
-# recheck (there is none for these mechanisms) — measured from
-# Claim.last_checked_at, which for these rows only ever holds its
-# creation-time value.
-CLAIM_ADMIN_REVIEW_EXPIRY_DAYS = 30
+# CLAIM_EXPIRY_DAYS (inactivity window before an unverified automated-mechanism
+# claim expires, #413, resets on every POST /organizer/claims/{id}/recheck)
+# and CLAIM_ADMIN_REVIEW_EXPIRY_DAYS (the longer window for a pending claim
+# with no self-service recheck path — admin_review, and piletilevi_mailbox,
+# see the CLAIM_AUTOMATED_VERIFICATION_MECHANISMS comment above — #430, slice
+# 1 of #425; never reset, measured from Claim.last_checked_at's creation-time
+# value) both come from shared/app-config.json (#443) so the frontend's
+# claim-pending copy can interpolate the same figures instead of duplicating
+# them.
 
 # Bounded concurrency for expire_stale_claims' expiry-notification fan-out
 # (#421) — same rationale as REPORT_EMAIL_SEND_CONCURRENCY (Resend free-tier

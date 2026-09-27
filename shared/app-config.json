@@ -27,6 +27,8 @@
   ],
   "themes": ["light", "dark"],
   "browse_page_size": 24,
+  "claim_expiry_days": 7,
+  "claim_admin_review_expiry_days": 30,
   "safe_url_schemes": ["http", "https"],
   "image_upload_allowed_mime": ["image/jpeg", "image/png", "image/webp"],
   "html_sanitize": {

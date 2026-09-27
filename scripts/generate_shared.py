@@ -269,6 +269,8 @@ def write_backend_shared_constants(cfg: dict, version: str) -> str:
         f"HTML_SANITIZE_ALLOWED_ATTRS: dict[str, set[str]] = {allowed_attrs}",
         f"BROWSE_PAGE_SIZE: int = {cfg['browse_page_size']}",
         f"IMAGE_UPLOAD_ALLOWED_MIME: frozenset[str] = {image_upload_mime}",
+        f"CLAIM_EXPIRY_DAYS: int = {cfg['claim_expiry_days']}",
+        f"CLAIM_ADMIN_REVIEW_EXPIRY_DAYS: int = {cfg['claim_admin_review_expiry_days']}",
         "",
     ]
     return "\n".join(parts)
@@ -335,6 +337,9 @@ def write_frontend_shared_constants(cfg: dict, version: str) -> str:
         "",
         # Mirrors backend IMAGE_UPLOAD_ALLOWED_MIME — see shared/app-config.json.
         f"export const ORGANIZER_IMAGE_ALLOWED_MIME: readonly string[] = {_ts_str_list(cfg['image_upload_allowed_mime'])};",
+        "",
+        f"export const CLAIM_EXPIRY_DAYS = {cfg['claim_expiry_days']};",
+        f"export const CLAIM_ADMIN_REVIEW_EXPIRY_DAYS = {cfg['claim_admin_review_expiry_days']};",
         "",
     ]
     return "\n".join(parts)
