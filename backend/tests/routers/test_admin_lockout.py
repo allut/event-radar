@@ -12,13 +12,14 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.constants import ADMIN_AUTH_MAX_FAILURES
+from tests.routers.conftest import patch_admin_settings
 
 
 @pytest.mark.asyncio
 async def test_lockout_after_max_consecutive_failures(admin_app):
     app = admin_app
 
-    with patch("app.routers.admin.settings") as mock_settings:
+    with patch_admin_settings() as mock_settings:
         mock_settings.ADMIN_PASSWORD = "s3cret"
         mock_settings.ADMIN_USERNAME = "realadmin"
         mock_settings.APP_ENV = "production"
@@ -49,12 +50,12 @@ async def test_admin_auth_failures_dict_is_bounded(admin_app):
     with no prior eviction — sustained scanning traffic from many distinct
     clients would grow it forever. Bounded LRU (ADMIN_AUTH_FAILURES_MAX_ENTRIES)
     caps it, mirroring browse.py's _score_cache."""
-    from app.routers import admin as admin_module
+    from app.auth import admin_lockout
 
     app = admin_app
 
-    with patch("app.routers.admin.settings") as mock_settings, patch(
-        "app.routers.admin.ADMIN_AUTH_FAILURES_MAX_ENTRIES", 3
+    with patch_admin_settings() as mock_settings, patch(
+        "app.auth.admin_lockout.ADMIN_AUTH_FAILURES_MAX_ENTRIES", 3
     ):
         mock_settings.ADMIN_PASSWORD = "s3cret"
         mock_settings.ADMIN_USERNAME = "realadmin"
@@ -70,7 +71,7 @@ async def test_admin_auth_failures_dict_is_bounded(admin_app):
                     headers={"X-Forwarded-For": f"10.0.0.{i}"},
                 )
 
-    assert len(admin_module._admin_auth_failures) <= 3
+    assert len(admin_lockout._admin_auth_failures) <= 3
 
 
 @pytest.mark.asyncio
@@ -80,12 +81,12 @@ async def test_eviction_does_not_lift_an_active_lockout(admin_app):
     still-active lockout. The victim's locked-until entry must survive being
     the oldest in the dict as long as other, already-expired entries exist
     to evict instead."""
-    from app.routers import admin as admin_module
+    from app.auth import admin_lockout
 
     app = admin_app
 
-    with patch("app.routers.admin.settings") as mock_settings, patch(
-        "app.routers.admin.ADMIN_AUTH_FAILURES_MAX_ENTRIES", 1
+    with patch_admin_settings() as mock_settings, patch(
+        "app.auth.admin_lockout.ADMIN_AUTH_FAILURES_MAX_ENTRIES", 1
     ):
         mock_settings.ADMIN_PASSWORD = "s3cret"
         mock_settings.ADMIN_USERNAME = "realadmin"
@@ -102,7 +103,7 @@ async def test_eviction_does_not_lift_an_active_lockout(admin_app):
                     auth=("realadmin", "wrong"),
                     headers={"X-Forwarded-For": "10.0.0.1"},
                 )
-            assert admin_module._admin_auth_failures["10.0.0.1"][1] > 0.0
+            assert admin_lockout._admin_auth_failures["10.0.0.1"][1] > 0.0
 
             # Attacker: fail from a second, expired (never-locked) client —
             # pushes the dict over the max-entries cap of 2.
@@ -113,8 +114,8 @@ async def test_eviction_does_not_lift_an_active_lockout(admin_app):
             )
 
     # The victim's active lockout must not have been evicted to make room.
-    assert "10.0.0.1" in admin_module._admin_auth_failures
-    assert admin_module._admin_auth_failures["10.0.0.1"][1] > 0.0
+    assert "10.0.0.1" in admin_lockout._admin_auth_failures
+    assert admin_lockout._admin_auth_failures["10.0.0.1"][1] > 0.0
 
 
 @pytest.mark.asyncio
@@ -129,7 +130,7 @@ async def test_rate_limit_bucket_shared_across_different_admin_routes(admin_app)
     app = admin_app
 
     with (
-        patch("app.routers.admin.settings") as mock_settings,
+        patch_admin_settings() as mock_settings,
         patch(
             "app.routers.admin.publish_pending_job",
             new_callable=AsyncMock,
@@ -167,7 +168,7 @@ async def test_successful_auth_resets_failure_counter(admin_app, make_db_ctx, mo
     db.scalar = AsyncMock(side_effect=[100, 60, 8, 5])
 
     with (
-        patch("app.routers.admin.settings") as mock_settings,
+        patch_admin_settings() as mock_settings,
         patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
     ):
         mock_settings.ADMIN_PASSWORD = "s3cret"

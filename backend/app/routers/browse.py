@@ -56,7 +56,7 @@ from app.ranking.score import (
     score_event,
 )
 from app.rate_limit import limiter
-from app.routers.auth import get_optional_user
+from app.auth.dependencies import get_optional_user
 from app.routers.utils import (
     canonical_event_filter,
     escape_ilike_pattern,

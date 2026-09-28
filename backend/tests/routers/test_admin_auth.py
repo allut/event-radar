@@ -12,6 +12,7 @@ from httpx import ASGITransport, AsyncClient
 
 import app.auth.totp as totp_module
 from app.constants import ADMIN_AUTH_MAX_FAILURES
+from tests.routers.conftest import patch_admin_settings
 
 
 @pytest.fixture(autouse=True)
@@ -49,8 +50,8 @@ async def test_login_succeeds_with_correct_credentials_and_totp():
     secret = pyotp.random_base32()
     app = _build_app()
 
-    with patch("app.routers.admin_auth.settings") as mock_settings, patch(
-        "app.routers.admin.settings", mock_settings
+    with patch_admin_settings() as mock_settings, patch(
+        "app.routers.admin_auth.settings", mock_settings
     ):
         _patch_settings(mock_settings, totp_secret=secret)
 
@@ -80,8 +81,8 @@ async def test_login_rejects_wrong_totp_code():
     secret = pyotp.random_base32()
     app = _build_app()
 
-    with patch("app.routers.admin_auth.settings") as mock_settings, patch(
-        "app.routers.admin.settings", mock_settings
+    with patch_admin_settings() as mock_settings, patch(
+        "app.routers.admin_auth.settings", mock_settings
     ):
         _patch_settings(mock_settings, totp_secret=secret)
 
@@ -105,8 +106,8 @@ async def test_login_rejects_wrong_password():
     secret = pyotp.random_base32()
     app = _build_app()
 
-    with patch("app.routers.admin_auth.settings") as mock_settings, patch(
-        "app.routers.admin.settings", mock_settings
+    with patch_admin_settings() as mock_settings, patch(
+        "app.routers.admin_auth.settings", mock_settings
     ):
         _patch_settings(mock_settings, totp_secret=secret)
 
@@ -130,8 +131,8 @@ async def test_login_and_logout_and_me_roundtrip():
     secret = pyotp.random_base32()
     app = _build_app()
 
-    with patch("app.routers.admin_auth.settings") as mock_settings, patch(
-        "app.routers.admin.settings", mock_settings
+    with patch_admin_settings() as mock_settings, patch(
+        "app.routers.admin_auth.settings", mock_settings
     ):
         _patch_settings(mock_settings, totp_secret=secret)
 
@@ -186,7 +187,7 @@ async def test_logout_is_idempotent_with_no_session_cookie():
 @pytest.mark.asyncio
 async def test_me_without_session_cookie_is_401():
     app = _build_app()
-    with patch("app.routers.admin.settings") as mock_settings:
+    with patch_admin_settings() as mock_settings:
         _patch_settings(mock_settings, totp_secret=None)
 
         async with AsyncClient(
@@ -205,8 +206,8 @@ async def test_admin_session_cookie_satisfies_require_admin():
     secret = pyotp.random_base32()
     app = _build_app()
 
-    with patch("app.routers.admin_auth.settings") as mock_settings, patch(
-        "app.routers.admin.settings", mock_settings
+    with patch_admin_settings() as mock_settings, patch(
+        "app.routers.admin_auth.settings", mock_settings
     ), patch(
         "app.routers.admin.publish_pending_job",
         new_callable=AsyncMock,
@@ -241,7 +242,7 @@ async def test_correct_basic_credentials_alone_do_not_satisfy_a_mutating_route()
     require get_current_admin (session-cookie only, no Basic fallback)."""
     app = _build_app()
 
-    with patch("app.routers.admin.settings") as mock_settings:
+    with patch_admin_settings() as mock_settings:
         mock_settings.ADMIN_PASSWORD = "s3cret"
         mock_settings.ADMIN_USERNAME = "realadmin"
         mock_settings.APP_ENV = "production"
@@ -268,8 +269,8 @@ async def test_failed_form_login_shares_lockout_counter_with_basic_auth():
     secret = pyotp.random_base32()
     app = _build_app()
 
-    with patch("app.routers.admin_auth.settings") as mock_settings, patch(
-        "app.routers.admin.settings", mock_settings
+    with patch_admin_settings() as mock_settings, patch(
+        "app.routers.admin_auth.settings", mock_settings
     ):
         _patch_settings(mock_settings, totp_secret=secret)
 
@@ -300,8 +301,8 @@ async def test_successful_form_login_clears_prior_basic_auth_failures():
     secret = pyotp.random_base32()
     app = _build_app()
 
-    with patch("app.routers.admin_auth.settings") as mock_settings, patch(
-        "app.routers.admin.settings", mock_settings
+    with patch_admin_settings() as mock_settings, patch(
+        "app.routers.admin_auth.settings", mock_settings
     ):
         _patch_settings(mock_settings, totp_secret=secret)
 
@@ -323,6 +324,6 @@ async def test_successful_form_login_clears_prior_basic_auth_failures():
             )
 
     assert login_resp.status_code == http.HTTPStatus.OK
-    from app.routers import admin as admin_module
+    from app.auth import admin_lockout
 
-    assert len(admin_module._admin_auth_failures) == 0
+    assert len(admin_lockout._admin_auth_failures) == 0

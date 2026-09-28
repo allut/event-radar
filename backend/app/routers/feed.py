@@ -10,7 +10,7 @@ from app.constants import RATE_LIMIT_BROWSE, TALLINN_TZ
 from app.db import get_db
 from app.models.models import DailyFeed, Event, User
 from app.rate_limit import limiter
-from app.routers.auth import get_current_user
+from app.auth.dependencies import get_current_user
 from app.routers.utils import (
     load_user_reported_events,
     load_user_signals,

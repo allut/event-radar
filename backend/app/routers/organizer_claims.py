@@ -79,7 +79,7 @@ from app.constants import (
 from app.db import get_db
 from app.models.models import AdminAction, Claim, Event, EventSource, Organizer, OrganizerMagicLink
 from app.rate_limit import limiter
-from app.routers.organizer_auth import get_current_organizer
+from app.auth.dependencies import get_current_organizer
 from app.routers.utils import (
     bulk_resolve_publisher_events,
     claim_dns_record_name,

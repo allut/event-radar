@@ -15,7 +15,7 @@ from app.constants import (
     EVENT_CANCELLATION_REASON_REPORT_TAKEDOWN,
     EVENT_STATUS_CANCELLED,
 )
-from tests.routers.conftest import execute_rows, scalars_returning
+from tests.routers.conftest import execute_rows, patch_admin_settings, scalars_returning
 
 
 # ---------------------------------------------------------------------------
@@ -31,7 +31,7 @@ async def test_list_reports_empty_page(admin_app, make_db_ctx, mock_db):
     db.execute = AsyncMock(return_value=execute_rows([]))
 
     with (
-        patch("app.routers.admin.settings") as mock_settings,
+        patch_admin_settings() as mock_settings,
         patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
     ):
         mock_settings.ADMIN_PASSWORD = ""
@@ -83,7 +83,7 @@ async def test_list_reports_groups_one_row_per_event(
     )
 
     with (
-        patch("app.routers.admin.settings") as mock_settings,
+        patch_admin_settings() as mock_settings,
         patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
     ):
         mock_settings.ADMIN_PASSWORD = ""
@@ -133,7 +133,7 @@ async def test_list_reports_venue_prefers_joined_venue_when_linked(
     )
 
     with (
-        patch("app.routers.admin.settings") as mock_settings,
+        patch_admin_settings() as mock_settings,
         patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
     ):
         mock_settings.ADMIN_PASSWORD = ""
@@ -156,7 +156,7 @@ async def test_list_reports_invalid_reason_rejected(admin_app, make_db_ctx, mock
     db = mock_db
 
     with (
-        patch("app.routers.admin.settings") as mock_settings,
+        patch_admin_settings() as mock_settings,
         patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
     ):
         mock_settings.ADMIN_PASSWORD = ""
@@ -186,7 +186,7 @@ async def test_list_reports_excludes_cancelled(admin_app, make_db_ctx, mock_db):
     db.execute = AsyncMock(side_effect=_capture_execute)
 
     with (
-        patch("app.routers.admin.settings") as mock_settings,
+        patch_admin_settings() as mock_settings,
         patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
     ):
         mock_settings.ADMIN_PASSWORD = ""
@@ -224,7 +224,7 @@ async def test_resolve_reports_closes_open_reports_no_event_mutation(
     db.scalars = AsyncMock(return_value=scalars_returning([reporter]))
 
     with (
-        patch("app.routers.admin.settings") as mock_settings,
+        patch_admin_settings() as mock_settings,
         patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
         patch(
             "app.routers.utils.send_report_outcome_email", new=AsyncMock()
@@ -274,7 +274,7 @@ async def test_resolve_reports_requires_nonblank_note(admin_app, make_db_ctx, mo
     db.get = AsyncMock(return_value=event)
 
     with (
-        patch("app.routers.admin.settings") as mock_settings,
+        patch_admin_settings() as mock_settings,
         patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
     ):
         mock_settings.ADMIN_PASSWORD = ""
@@ -299,7 +299,7 @@ async def test_resolve_reports_event_not_found(admin_app, make_db_ctx, mock_db):
     db.get = AsyncMock(return_value=None)
 
     with (
-        patch("app.routers.admin.settings") as mock_settings,
+        patch_admin_settings() as mock_settings,
         patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
     ):
         mock_settings.ADMIN_PASSWORD = ""
@@ -339,7 +339,7 @@ async def test_takedown_cancels_event_and_resolves_reports(
     db.scalars = AsyncMock(return_value=scalars_returning([reporter]))
 
     with (
-        patch("app.routers.admin.settings") as mock_settings,
+        patch_admin_settings() as mock_settings,
         patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
         patch("app.routers.utils.send_report_outcome_email", new=AsyncMock()),
         caplog.at_level("INFO"),

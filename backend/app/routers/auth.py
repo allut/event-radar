@@ -13,6 +13,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.auth.dependencies import get_current_user
 from app.auth.email import send_magic_link
 from app.auth.google_oauth import (
     GoogleIdentity,
@@ -32,7 +33,6 @@ from app.auth.tokens import (
     magic_ttl_seconds,
     verify_magic_token,
     verify_oauth_state_token,
-    verify_session_token,
 )
 from app.config import settings
 from app.constants import (
@@ -44,9 +44,6 @@ from app.constants import (
     ERROR_MAGIC_LINK_CONSUMED,
     ERROR_MAGIC_LINK_EXPIRED,
     ERROR_MAGIC_LINK_INVALID,
-    ERROR_MISSING_SESSION_COOKIE,
-    ERROR_SESSION_INVALID,
-    ERROR_SESSION_REVOKED,
     ERROR_USER_NOT_FOUND,
     GOOGLE_CALLBACK_PUBLIC_PATH,
     GOOGLE_SIGNIN_OUTCOME_AUTO_LINKED,
@@ -110,60 +107,6 @@ def _detect_locale(accept_language: str) -> str:
         if lang in VALID_LOCALES:
             return lang
     return DEFAULT_USER_LOCALE
-
-
-# ---------------------------------------------------------------------------
-# Shared auth dependency
-# ---------------------------------------------------------------------------
-
-
-async def get_current_user(
-    session: str | None = Cookie(default=None, alias=SESSION_COOKIE_NAME),
-    db: AsyncSession = Depends(get_db),
-) -> User:
-    if not session:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=ERROR_MISSING_SESSION_COOKIE,
-        )
-    try:
-        user_id, token_version = verify_session_token(session)
-    except (SignatureExpired, BadSignature):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=ERROR_SESSION_INVALID,
-        )
-    user = await db.get(User, user_id)
-    if user is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=ERROR_USER_NOT_FOUND,
-        )
-    if token_version != user.session_token_version:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=ERROR_SESSION_REVOKED,
-        )
-    return user
-
-
-async def get_optional_user(
-    session: str | None = Cookie(default=None, alias=SESSION_COOKIE_NAME),
-    db: AsyncSession = Depends(get_db),
-) -> User | None:
-    """Like get_current_user, but returns None instead of raising 401 when
-    there's no session, the token is expired/invalid, or it's been revoked —
-    for endpoints open to anonymous callers (GET /explore, #234)."""
-    if not session:
-        return None
-    try:
-        user_id, token_version = verify_session_token(session)
-    except (SignatureExpired, BadSignature):
-        return None
-    user = await db.get(User, user_id)
-    if user is None or token_version != user.session_token_version:
-        return None
-    return user
 
 
 async def _get_or_create_user(

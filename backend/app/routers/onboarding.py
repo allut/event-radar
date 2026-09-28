@@ -26,7 +26,7 @@ from app.db import get_db
 from app.models.models import Persona, User, UserPersona
 from app.ranking.score import build_daily_feed_for_user
 from app.rate_limit import limiter
-from app.routers.auth import get_current_user
+from app.auth.dependencies import get_current_user
 from app.routers.utils import invalidate_user_scores
 
 log = logging.getLogger(__name__)

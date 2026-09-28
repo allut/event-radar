@@ -29,7 +29,7 @@ from app.db import get_db
 from app.ingestion.pricing import normalize_currency
 from app.models.models import Organizer, Venue
 from app.rate_limit import limiter
-from app.routers.organizer_auth import get_current_organizer
+from app.auth.dependencies import get_current_organizer
 from app.routers.utils import own_venue_or_404, validate_price_ordering
 
 router = APIRouter(prefix="/organizer/venues", tags=["organizer-venues"])

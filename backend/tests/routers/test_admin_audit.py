@@ -18,7 +18,7 @@ from app.constants import (
     APP_ENV_DEVELOPMENT,
 )
 from app.models.models import AdminAction
-from tests.routers.conftest import scalars_returning
+from tests.routers.conftest import patch_admin_settings, scalars_returning
 
 
 def _admin_action_calls(db) -> list[AdminAction]:
@@ -45,7 +45,7 @@ async def test_retract_writes_one_admin_action_row(admin_app, make_db_ctx, mock_
     db.execute = AsyncMock(return_value=MagicMock(scalars=lambda: scalars_returning([])))
 
     with (
-        patch("app.routers.admin.settings") as mock_settings,
+        patch_admin_settings() as mock_settings,
         patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
     ):
         mock_settings.ADMIN_PASSWORD = ""
@@ -79,7 +79,7 @@ async def test_retract_writes_no_admin_action_row_when_not_found(
     db.get = AsyncMock(return_value=event)
 
     with (
-        patch("app.routers.admin.settings") as mock_settings,
+        patch_admin_settings() as mock_settings,
         patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
     ):
         mock_settings.ADMIN_PASSWORD = ""
@@ -128,7 +128,7 @@ async def test_approve_writes_one_admin_action_row(
     db.get = AsyncMock(side_effect=_get)
 
     with (
-        patch("app.routers.admin.settings") as mock_settings,
+        patch_admin_settings() as mock_settings,
         patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
         patch("app.routers.admin.publish_pending", new_callable=AsyncMock),
     ):
@@ -163,7 +163,7 @@ async def test_approve_writes_no_admin_action_row_when_not_found(
     db.get = AsyncMock(return_value=event)
 
     with (
-        patch("app.routers.admin.settings") as mock_settings,
+        patch_admin_settings() as mock_settings,
         patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
     ):
         mock_settings.ADMIN_PASSWORD = ""
@@ -204,7 +204,7 @@ async def test_resolve_reports_writes_one_admin_action_row(
     db.scalars = AsyncMock(return_value=scalars_returning([reporter]))
 
     with (
-        patch("app.routers.admin.settings") as mock_settings,
+        patch_admin_settings() as mock_settings,
         patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
         patch("app.routers.utils.send_report_outcome_email", new=AsyncMock()),
     ):
@@ -236,7 +236,7 @@ async def test_resolve_reports_writes_no_admin_action_row_when_not_found(
     db.get = AsyncMock(return_value=None)
 
     with (
-        patch("app.routers.admin.settings") as mock_settings,
+        patch_admin_settings() as mock_settings,
         patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
     ):
         mock_settings.ADMIN_PASSWORD = ""
@@ -277,7 +277,7 @@ async def test_takedown_writes_one_admin_action_row(
     db.scalars = AsyncMock(return_value=scalars_returning([reporter]))
 
     with (
-        patch("app.routers.admin.settings") as mock_settings,
+        patch_admin_settings() as mock_settings,
         patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
         patch("app.routers.utils.send_report_outcome_email", new=AsyncMock()),
     ):
@@ -309,7 +309,7 @@ async def test_takedown_writes_no_admin_action_row_when_not_found(
     db.get = AsyncMock(return_value=None)
 
     with (
-        patch("app.routers.admin.settings") as mock_settings,
+        patch_admin_settings() as mock_settings,
         patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
     ):
         mock_settings.ADMIN_PASSWORD = ""
@@ -362,7 +362,7 @@ async def test_approve_logs_nothing_when_commit_fails(
     db.commit = AsyncMock(side_effect=RuntimeError("relation does not exist"))
 
     with (
-        patch("app.routers.admin.settings") as mock_settings,
+        patch_admin_settings() as mock_settings,
         patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
         patch("app.routers.admin.publish_pending", new_callable=AsyncMock),
         caplog.at_level("INFO"),

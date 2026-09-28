@@ -11,7 +11,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.constants import APP_ENV_DEVELOPMENT
-from tests.routers.conftest import ndjson_lines
+from tests.routers.conftest import ndjson_lines, patch_admin_settings
 
 
 # ---------------------------------------------------------------------------
@@ -26,7 +26,7 @@ async def test_sync_organizers_calls_job_and_returns_result(admin_app, make_db_c
     expected = {"added": [], "stale": []}
 
     with (
-        patch("app.routers.admin.settings") as mock_settings,
+        patch_admin_settings() as mock_settings,
         patch("app.routers.admin.AsyncSessionLocal", return_value=db_ctx),
         patch(
             "app.routers.admin.sync_fienta_organizers",
@@ -56,7 +56,7 @@ async def test_sync_organizers_returns_500_on_job_error(admin_app, make_db_ctx, 
     db_ctx = make_db_ctx(mock_db)
 
     with (
-        patch("app.routers.admin.settings") as mock_settings,
+        patch_admin_settings() as mock_settings,
         patch("app.routers.admin.AsyncSessionLocal", return_value=db_ctx),
         patch(
             "app.routers.admin.sync_fienta_organizers",
@@ -93,7 +93,7 @@ async def test_cleanup_defaults_to_dry_run_and_does_not_commit(admin_app, make_d
     expected = {"auth_magic_links": 3, "llm_calls": 10}
 
     with (
-        patch("app.routers.admin.settings") as mock_settings,
+        patch_admin_settings() as mock_settings,
         patch("app.routers.utils.AsyncSessionLocal", return_value=db_ctx),
         patch(
             "app.routers.admin.cleanup_stale_data",
@@ -123,7 +123,7 @@ async def test_cleanup_dry_run_false_actually_deletes_and_commits(admin_app, mak
     db_ctx = make_db_ctx(mock_db)
 
     with (
-        patch("app.routers.admin.settings") as mock_settings,
+        patch_admin_settings() as mock_settings,
         patch("app.routers.utils.AsyncSessionLocal", return_value=db_ctx),
         patch(
             "app.routers.admin.cleanup_stale_data",
@@ -150,7 +150,7 @@ async def test_cleanup_returns_500_on_job_error(admin_app, make_db_ctx, mock_db)
     db_ctx = make_db_ctx(mock_db)
 
     with (
-        patch("app.routers.admin.settings") as mock_settings,
+        patch_admin_settings() as mock_settings,
         patch("app.routers.utils.AsyncSessionLocal", return_value=db_ctx),
         patch(
             "app.routers.admin.cleanup_stale_data",
@@ -184,7 +184,7 @@ async def test_build_feeds_calls_job_and_returns_result(admin_app, make_db_ctx, 
     expected = {"built": 3, "empty": 0, "total_users": 3, "candidate_events": 12}
 
     with (
-        patch("app.routers.admin.settings") as mock_settings,
+        patch_admin_settings() as mock_settings,
         patch("app.routers.admin.AsyncSessionLocal", return_value=db_ctx),
         patch(
             "app.routers.admin.build_daily_feeds",
@@ -213,7 +213,7 @@ async def test_build_feeds_returns_500_on_job_error(admin_app, make_db_ctx, mock
     db_ctx = make_db_ctx(mock_db)
 
     with (
-        patch("app.routers.admin.settings") as mock_settings,
+        patch_admin_settings() as mock_settings,
         patch("app.routers.admin.AsyncSessionLocal", return_value=db_ctx),
         patch(
             "app.routers.admin.build_daily_feeds",
@@ -246,7 +246,7 @@ async def test_publish_calls_job_and_returns_result(admin_app):
     expected = {"published": 3}
 
     with (
-        patch("app.routers.admin.settings") as mock_settings,
+        patch_admin_settings() as mock_settings,
         patch(
             "app.routers.admin.publish_pending_job",
             new_callable=AsyncMock,
@@ -273,7 +273,7 @@ async def test_publish_returns_500_on_job_error(admin_app):
     app = admin_app
 
     with (
-        patch("app.routers.admin.settings") as mock_settings,
+        patch_admin_settings() as mock_settings,
         patch(
             "app.routers.admin.publish_pending_job",
             new_callable=AsyncMock,
@@ -305,7 +305,7 @@ async def test_geocode_calls_job_and_returns_result(admin_app):
     expected = {"geocoded": 4}
 
     with (
-        patch("app.routers.admin.settings") as mock_settings,
+        patch_admin_settings() as mock_settings,
         patch(
             "app.routers.admin.geocode_pending_job",
             new_callable=AsyncMock,
@@ -332,7 +332,7 @@ async def test_geocode_returns_500_on_job_error(admin_app):
     app = admin_app
 
     with (
-        patch("app.routers.admin.settings") as mock_settings,
+        patch_admin_settings() as mock_settings,
         patch(
             "app.routers.admin.geocode_pending_job",
             new_callable=AsyncMock,
@@ -365,7 +365,7 @@ async def test_send_digests_defaults_to_dry_run(admin_app, make_db_ctx, mock_db)
     expected = {"sent": 2, "skipped": 0, "errored": 0, "total_opted_in": 2, "dry_run": True}
 
     with (
-        patch("app.routers.admin.settings") as mock_settings,
+        patch_admin_settings() as mock_settings,
         patch("app.routers.admin.AsyncSessionLocal", return_value=db_ctx),
         patch(
             "app.routers.admin.send_daily_digests",
@@ -393,7 +393,7 @@ async def test_send_digests_passes_dry_run_false(admin_app, make_db_ctx, mock_db
     expected = {"sent": 2, "skipped": 0, "errored": 0, "total_opted_in": 2, "dry_run": False}
 
     with (
-        patch("app.routers.admin.settings") as mock_settings,
+        patch_admin_settings() as mock_settings,
         patch("app.routers.admin.AsyncSessionLocal", return_value=db_ctx),
         patch(
             "app.routers.admin.send_daily_digests",
@@ -422,7 +422,7 @@ async def test_send_digests_returns_500_on_job_error(admin_app, make_db_ctx, moc
     db_ctx = make_db_ctx(mock_db)
 
     with (
-        patch("app.routers.admin.settings") as mock_settings,
+        patch_admin_settings() as mock_settings,
         patch("app.routers.admin.AsyncSessionLocal", return_value=db_ctx),
         patch(
             "app.routers.admin.send_daily_digests",
@@ -492,7 +492,7 @@ async def test_pipeline_run_calls_all_seven_stages_in_order(admin_app, make_db_c
     db_ctx = make_db_ctx(mock_db)
     mocks = _all_job_mocks()
     with (
-        patch("app.routers.admin.settings") as mock_settings,
+        patch_admin_settings() as mock_settings,
         patch("app.routers.admin.AsyncSessionLocal", return_value=db_ctx),
         patch("app.routers.admin.sync_fienta_organizers", mocks["app.routers.admin.sync_fienta_organizers"]),
         patch("app.routers.admin.ingest_all_enabled", mocks["app.routers.admin.ingest_all_enabled"]),
@@ -534,7 +534,7 @@ async def test_pipeline_run_defaults_to_dry_run_for_digests(admin_app, make_db_c
     mocks = _all_job_mocks()
 
     with (
-        patch("app.routers.admin.settings") as mock_settings,
+        patch_admin_settings() as mock_settings,
         patch("app.routers.admin.AsyncSessionLocal", return_value=db_ctx),
         patch("app.routers.admin.sync_fienta_organizers", mocks["app.routers.admin.sync_fienta_organizers"]),
         patch("app.routers.admin.ingest_all_enabled", mocks["app.routers.admin.ingest_all_enabled"]),
@@ -564,7 +564,7 @@ async def test_pipeline_run_passes_dry_run_false_to_digests(admin_app, make_db_c
     mocks = _all_job_mocks()
 
     with (
-        patch("app.routers.admin.settings") as mock_settings,
+        patch_admin_settings() as mock_settings,
         patch("app.routers.admin.AsyncSessionLocal", return_value=db_ctx),
         patch("app.routers.admin.sync_fienta_organizers", mocks["app.routers.admin.sync_fienta_organizers"]),
         patch("app.routers.admin.ingest_all_enabled", mocks["app.routers.admin.ingest_all_enabled"]),
@@ -598,7 +598,7 @@ async def test_pipeline_run_stops_on_ingest_failure(admin_app, make_db_ctx, mock
     mock_dedup = AsyncMock()
 
     with (
-        patch("app.routers.admin.settings") as mock_settings,
+        patch_admin_settings() as mock_settings,
         patch("app.routers.admin.AsyncSessionLocal", return_value=db_ctx),
         patch(
             "app.routers.admin.sync_fienta_organizers",
@@ -637,7 +637,7 @@ async def test_pipeline_run_stops_on_sync_failure(admin_app, make_db_ctx, mock_d
     mock_ingest = AsyncMock()
 
     with (
-        patch("app.routers.admin.settings") as mock_settings,
+        patch_admin_settings() as mock_settings,
         patch("app.routers.admin.AsyncSessionLocal", return_value=db_ctx),
         patch(
             "app.routers.admin.sync_fienta_organizers",

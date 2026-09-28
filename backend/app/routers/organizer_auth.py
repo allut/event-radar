@@ -18,6 +18,7 @@ from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.auth.dependencies import get_current_organizer
 from app.auth.email import send_magic_link
 from app.auth.google_oauth import (
     GoogleIdentity,
@@ -37,7 +38,6 @@ from app.auth.tokens import (
     organizer_magic_ttl_seconds,
     verify_oauth_state_token,
     verify_organizer_magic_token,
-    verify_organizer_session_token,
 )
 from app.config import settings
 from app.constants import (
@@ -49,10 +49,7 @@ from app.constants import (
     ERROR_MAGIC_LINK_CONSUMED,
     ERROR_MAGIC_LINK_EXPIRED,
     ERROR_MAGIC_LINK_INVALID,
-    ERROR_MISSING_SESSION_COOKIE,
     ERROR_ORGANIZER_NOT_FOUND,
-    ERROR_SESSION_INVALID,
-    ERROR_SESSION_REVOKED,
     GOOGLE_SIGNIN_OUTCOME_AUTO_LINKED,
     GOOGLE_SIGNIN_OUTCOME_CONFIRMATION_SENT,
     GOOGLE_SIGNIN_OUTCOME_EXISTING_LOGIN,
@@ -108,38 +105,6 @@ log = logging.getLogger(__name__)
 # the cookie to Path=/api/organizer, so a future organizer route added
 # outside that prefix would silently never receive it and 401 on every call.
 router = APIRouter(prefix="/organizer/auth", tags=["organizer-auth"])
-
-
-async def get_current_organizer(
-    organizer_session: str | None = Cookie(
-        default=None, alias=ORGANIZER_SESSION_COOKIE_NAME
-    ),
-    db: AsyncSession = Depends(get_db),
-) -> Organizer:
-    if not organizer_session:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=ERROR_MISSING_SESSION_COOKIE,
-        )
-    try:
-        organizer_id, token_version = verify_organizer_session_token(organizer_session)
-    except (SignatureExpired, BadSignature):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=ERROR_SESSION_INVALID,
-        )
-    organizer = await db.get(Organizer, organizer_id)
-    if organizer is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=ERROR_ORGANIZER_NOT_FOUND,
-        )
-    if token_version != organizer.session_token_version:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=ERROR_SESSION_REVOKED,
-        )
-    return organizer
 
 
 @router.post("/request-link", status_code=status.HTTP_200_OK)

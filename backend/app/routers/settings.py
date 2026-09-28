@@ -23,7 +23,7 @@ from app.config import settings
 from app.db import get_db
 from app.models.models import Persona, User, UserIdentity, UserPersona
 from app.rate_limit import limiter
-from app.routers.auth import get_current_user
+from app.auth.dependencies import get_current_user
 from app.routers.utils import (
     compute_preferred_taxonomy,
     is_identity_linked,

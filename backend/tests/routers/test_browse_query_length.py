@@ -10,7 +10,7 @@ from httpx import ASGITransport, AsyncClient
 
 from app.constants import BROWSE_QUERY_MAX_LEN
 from app.db import get_db
-from app.routers.auth import get_current_user
+from app.auth.dependencies import get_current_user
 
 
 def _build_app() -> FastAPI:

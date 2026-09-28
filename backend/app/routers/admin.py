@@ -2,9 +2,6 @@
 
 import asyncio
 import logging
-import secrets
-import time
-from collections import OrderedDict
 from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from datetime import datetime, timezone
 
@@ -12,14 +9,20 @@ import httpx
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
-from itsdangerous import BadSignature, SignatureExpired
 from pydantic import BaseModel, Field
 from sqlalchemy import and_, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.auth.tokens import verify_admin_session_token
+from app.auth.admin_lockout import (
+    admin_credentials_ok,
+    admin_username_disabled,
+    check_admin_lockout,
+    clear_admin_auth_failure,
+    record_admin_auth_failure,
+)
+from app.auth.dependencies import get_current_admin, valid_admin_session
 from app.cleanup import cleanup_stale_data
 from app.config import settings
 from app.constants import (
@@ -48,9 +51,6 @@ from app.constants import (
     ADMIN_ACTION_SEND_DIGESTS,
     ADMIN_ACTION_SYNC_ORGANIZERS,
     ADMIN_ACTION_TAKEDOWN_REPORTED_EVENT,
-    ADMIN_AUTH_FAILURES_MAX_ENTRIES,
-    ADMIN_AUTH_LOCKOUT_SECONDS,
-    ADMIN_AUTH_MAX_FAILURES,
     ADMIN_CLAIMS_QUEUE_MAX_PAGE_SIZE,
     ADMIN_CLAIMS_QUEUE_PAGE_SIZE,
     ADMIN_DEDUP_GROUPS_MAX_PAGE_SIZE,
@@ -59,8 +59,6 @@ from app.constants import (
     ADMIN_REVIEW_QUEUE_MAX_PAGE_SIZE,
     ADMIN_REVIEW_QUEUE_PAGE_SIZE,
     ADMIN_SESSION_COOKIE_NAME,
-    ADMIN_USERNAME_DEFAULT,
-    APP_ENV_DEVELOPMENT,
     CLAIM_KIND_PUBLISHER,
     CLAIM_STATUS_APPROVED,
     CLAIM_STATUS_PENDING,
@@ -68,14 +66,11 @@ from app.constants import (
     DEFAULT_USER_LOCALE,
     ERROR_ADMIN_DISABLED,
     ERROR_ADMIN_INCORRECT_CREDENTIALS,
-    ERROR_ADMIN_LOCKOUT,
     ERROR_CLAIM_ALREADY_RESOLVED,
     ERROR_CLAIM_NOT_APPROVED,
     ERROR_CLAIM_NOT_FOUND,
     ERROR_CLAIM_QUEUE_INVALID_STATUS,
     ERROR_CLAIM_TARGET_ALREADY_APPROVED,
-    ERROR_MISSING_SESSION_COOKIE,
-    ERROR_SESSION_INVALID,
     ERROR_SUBMISSION_NOT_FOUND,
     ERROR_UNKNOWN_SOURCE,
     ADMIN_REPORTS_QUEUE_MAX_PAGE_SIZE,
@@ -86,7 +81,6 @@ from app.constants import (
     EVENT_CANCELLATION_REASON_REPORT_TAKEDOWN,
     EVENT_STATUS_CANCELLED,
     HTTP_TIMEOUT_SECONDS,
-    LOG_EVENT_AUTH_FAILED,
     LOG_EVENT_EMAIL_SEND_FAILED,
     PAGINATION_MAX_OFFSET,
     PAGINATION_MIN_LIMIT,
@@ -160,161 +154,6 @@ router = APIRouter(prefix="/admin")
 # to check the cookie — see _require_admin below.
 _security = HTTPBasic(auto_error=False)
 
-# (client_key -> (consecutive_failure_count, locked_until_monotonic)). In-memory,
-# single-process — see ADMIN_AUTH_MAX_FAILURES in constants.py for the trade-off.
-# Bounded LRU (ADMIN_AUTH_FAILURES_MAX_ENTRIES) — mirrors browse.py's _score_cache
-# pattern — so sustained scanning/brute-force traffic can't grow this unboundedly.
-_admin_auth_failures: OrderedDict[str, tuple[int, float]] = OrderedDict()
-
-
-def _evict_one_admin_auth_failure(now: float) -> None:
-    """Evict the oldest entry whose lockout has already expired (or was never
-    locked), falling back to the oldest entry overall only if every entry is
-    currently under an active lockout. A blind oldest-first eviction would let
-    a high-cardinality distributed brute-force (>ADMIN_AUTH_FAILURES_MAX_ENTRIES
-    distinct client_keys) evict — and thereby prematurely lift — another
-    client's still-active lockout, undermining the lockout this dict exists
-    to enforce."""
-    for key, (_count, locked_until) in _admin_auth_failures.items():
-        if locked_until <= now:
-            del _admin_auth_failures[key]
-            return
-    _admin_auth_failures.popitem(last=False)
-
-
-def check_admin_lockout(key: str) -> float:
-    """Raise 429 if `key` is currently locked out; otherwise return
-    time.monotonic() for the caller to reuse (avoids a second clock read).
-    Shared by _require_admin (Basic auth) and routers/admin_auth.py's form
-    login — ticket #154 requires both auth surfaces to share one lockout
-    counter rather than each getting its own damper.
-
-    Opportunistically drops `key`'s entry once its lockout has expired
-    (locked_until > 0.0 and now >= locked_until) — otherwise nothing ever
-    removes an expired entry, so once the LRU (ADMIN_AUTH_FAILURES_MAX_ENTRIES)
-    saturates it stays saturated and every subsequent failure pays the
-    eviction scan. A never-locked entry (locked_until == 0.0, still under
-    ADMIN_AUTH_MAX_FAILURES) is left alone — dropping it would reset the
-    consecutive-failure count this dict exists to track."""
-    now = time.monotonic()
-    _count, locked_until = _admin_auth_failures.get(key, (0, 0.0))
-    if now < locked_until:
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail=ERROR_ADMIN_LOCKOUT,
-        )
-    if locked_until > 0.0:
-        _admin_auth_failures.pop(key, None)
-    return now
-
-
-def record_admin_auth_failure(key: str, now: float, username: str) -> None:
-    """Bump the consecutive-failure count for `key`, locking it out once
-    ADMIN_AUTH_MAX_FAILURES is reached. Shared with routers/admin_auth.py —
-    see check_admin_lockout."""
-    count, _locked = _admin_auth_failures.get(key, (0, 0.0))
-    failures = count + 1
-    locked_until = (
-        now + ADMIN_AUTH_LOCKOUT_SECONDS
-        if failures >= ADMIN_AUTH_MAX_FAILURES
-        else 0.0
-    )
-    _admin_auth_failures[key] = (failures, locked_until)
-    _admin_auth_failures.move_to_end(key)
-    while len(_admin_auth_failures) > ADMIN_AUTH_FAILURES_MAX_ENTRIES:
-        _evict_one_admin_auth_failure(now)
-    log.warning(
-        "admin auth failed: username=%r failures=%d",
-        username,
-        failures,
-        extra={"event": LOG_EVENT_AUTH_FAILED},
-    )
-
-
-def clear_admin_auth_failure(key: str) -> None:
-    """Reset `key`'s failure count on a successful login. Shared with
-    routers/admin_auth.py — see check_admin_lockout."""
-    _admin_auth_failures.pop(key, None)
-
-
-def admin_username_disabled() -> bool:
-    """True when ADMIN_USERNAME was never overridden from its well-known
-    default outside development — fail closed like the password check,
-    since a well-known username halves the credential pair an attacker
-    needs to brute-force. Shared with routers/admin_auth.py."""
-    return (
-        settings.ADMIN_USERNAME == ADMIN_USERNAME_DEFAULT
-        and settings.APP_ENV != APP_ENV_DEVELOPMENT
-    )
-
-
-def admin_credentials_ok(username: str, password: str) -> bool:
-    """Constant-time check of a username/password attempt against the
-    configured ADMIN_USERNAME/ADMIN_PASSWORD. Shared with
-    routers/admin_auth.py — caller is responsible for the
-    require_configured_secret/admin_username_disabled gates around this."""
-    username_ok = secrets.compare_digest(
-        username.encode(), settings.ADMIN_USERNAME.encode()
-    )
-    password_ok = secrets.compare_digest(
-        password.encode(), settings.ADMIN_PASSWORD.encode()
-    )
-    return username_ok and password_ok
-
-
-def _valid_admin_session(admin_session: str) -> bool:
-    try:
-        verify_admin_session_token(admin_session)
-        return True
-    except (SignatureExpired, BadSignature):
-        return False
-
-
-def get_current_admin(
-    admin_session: str | None = Cookie(default=None, alias=ADMIN_SESSION_COOKIE_NAME),
-) -> None:
-    """Session-only dependency — no HTTP Basic fallback. Every *mutating*
-    /admin/* route uses this instead of _require_admin (H-1 in the OWASP
-    audit): _require_admin's Basic branch checks only ADMIN_USERNAME/
-    ADMIN_PASSWORD and never touches TOTP, so it made the admin console's
-    second factor bypassable on every route that accepted it. Only the three
-    non-PII read-only routes (/admin/counts, /admin/stats,
-    /admin/dedup/groups) keep _require_admin so curl/scripts can still read
-    them with just the password (OWASP audit F3) — every other GET, including /admin/reports,
-    /admin/events/{id}, and /admin/submissions, discloses reporter/organizer
-    PII and requires this TOTP-backed session instead. Defined here (not
-    admin_auth.py, which imports
-    admin_credentials_ok etc. from this module) to avoid a circular import;
-    admin_auth.py imports this function from here instead.
-
-    A missing cookie still goes through the same require_configured_secret
-    dev fail-open every other secret-gated surface uses (ADMIN_PASSWORD
-    unset + APP_ENV=development + ALLOW_INSECURE_DEV=true) — this is
-    orthogonal to H-1: that bug was Basic credentials alone satisfying a
-    *configured* password without TOTP, not the pre-existing "admin auth is
-    off entirely" dev/test convenience this shares with _require_admin."""
-    if admin_session is None:
-        if not require_configured_secret(
-            settings.ADMIN_PASSWORD,
-            feature=FEATURE_ADMIN_ENDPOINTS,
-            setting_name=SETTING_NAME_ADMIN_PASSWORD,
-            app_env=settings.APP_ENV,
-            allow_insecure_dev=settings.ALLOW_INSECURE_DEV,
-        ):
-            return
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=ERROR_MISSING_SESSION_COOKIE,
-        )
-    try:
-        verify_admin_session_token(admin_session)
-    except (SignatureExpired, BadSignature):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=ERROR_SESSION_INVALID,
-        )
-
-
 def _require_admin(
     request: Request,
     credentials: HTTPBasicCredentials | None = Depends(_security),
@@ -330,7 +169,7 @@ def _require_admin(
     stale browser cookie doesn't lock a curl caller out of the same request
     path. Every other route uses get_current_admin instead (session-only, no
     Basic) — see its docstring."""
-    if admin_session is not None and _valid_admin_session(admin_session):
+    if admin_session is not None and valid_admin_session(admin_session):
         return
 
     if credentials is None:

@@ -35,7 +35,7 @@ from app.constants import (
 from app.db import get_db
 from app.models.models import Event, User, UserEventFeedback
 from app.rate_limit import limiter
-from app.routers.auth import get_current_user
+from app.auth.dependencies import get_current_user
 from app.routers.utils import (
     invalidate_user_scores,
     load_user_reported_events,

@@ -228,7 +228,7 @@ class TestVerifyOrganizerMagicLink:
 class TestGetCurrentOrganizer:
     @pytest.mark.asyncio
     async def test_valid_session_cookie_returns_organizer(self, mock_db, make_organizer):
-        from app.routers.organizer_auth import get_current_organizer
+        from app.auth.dependencies import get_current_organizer
 
         organizer = make_organizer(organizer_id=7)
         mock_db.get.return_value = organizer
@@ -240,7 +240,7 @@ class TestGetCurrentOrganizer:
     @pytest.mark.asyncio
     async def test_missing_cookie_raises_401(self, mock_db):
         from fastapi import HTTPException
-        from app.routers.organizer_auth import get_current_organizer
+        from app.auth.dependencies import get_current_organizer
 
         with pytest.raises(HTTPException) as exc_info:
             await get_current_organizer(organizer_session=None, db=mock_db)
@@ -251,7 +251,7 @@ class TestGetCurrentOrganizer:
         """A consumer session token must not authenticate as an organizer —
         distinct salts make verify_organizer_session_token raise BadSignature."""
         from fastapi import HTTPException
-        from app.routers.organizer_auth import get_current_organizer
+        from app.auth.dependencies import get_current_organizer
 
         user_token = generate_session_token(7, 1)
         with pytest.raises(HTTPException) as exc_info:
@@ -261,7 +261,7 @@ class TestGetCurrentOrganizer:
     @pytest.mark.asyncio
     async def test_revoked_session_raises_401(self, mock_db, make_organizer):
         from fastapi import HTTPException
-        from app.routers.organizer_auth import get_current_organizer
+        from app.auth.dependencies import get_current_organizer
 
         organizer = make_organizer(organizer_id=7, session_token_version=2)
         mock_db.get.return_value = organizer

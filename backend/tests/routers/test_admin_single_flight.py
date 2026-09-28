@@ -14,6 +14,7 @@ from httpx import ASGITransport, AsyncClient
 
 from app.constants import APP_ENV_DEVELOPMENT
 from app.routers.utils import _RUNNING_ADMIN_JOBS
+from tests.routers.conftest import patch_admin_settings
 
 
 def _blocked_job(event: asyncio.Event, result: dict):
@@ -40,7 +41,7 @@ async def test_second_concurrent_classify_call_gets_409(admin_app):
     job = _blocked_job(block, {"classified": 1})
 
     with (
-        patch("app.routers.admin.settings") as mock_settings,
+        patch_admin_settings() as mock_settings,
         patch("app.routers.admin.classify_pending_drain_now", job),
     ):
         mock_settings.ADMIN_PASSWORD = ""
@@ -69,7 +70,7 @@ async def test_second_concurrent_full_ingest_call_gets_409(admin_app):
     job = _blocked_job(block, [])
 
     with (
-        patch("app.routers.admin.settings") as mock_settings,
+        patch_admin_settings() as mock_settings,
         patch("app.routers.admin.ingest_all_enabled", job),
     ):
         mock_settings.ADMIN_PASSWORD = ""
@@ -99,7 +100,7 @@ async def test_second_concurrent_cleanup_call_gets_409(admin_app, make_db_ctx, m
     job = _blocked_job(block, {})
 
     with (
-        patch("app.routers.admin.settings") as mock_settings,
+        patch_admin_settings() as mock_settings,
         patch("app.routers.utils.AsyncSessionLocal", return_value=db_ctx),
         patch("app.routers.admin.cleanup_stale_data", job),
     ):
@@ -130,7 +131,7 @@ async def test_second_concurrent_send_digests_call_gets_409(admin_app, make_db_c
     job = _blocked_job(block, {"sent": 0, "skipped": 0, "errored": 0, "total_opted_in": 0, "dry_run": True})
 
     with (
-        patch("app.routers.admin.settings") as mock_settings,
+        patch_admin_settings() as mock_settings,
         patch("app.routers.utils.AsyncSessionLocal", return_value=db_ctx),
         patch("app.routers.admin.send_daily_digests", job),
     ):
@@ -164,7 +165,7 @@ async def test_second_concurrent_pipeline_run_call_gets_409(admin_app, make_db_c
     job = _blocked_job(block, {"added": [], "stale": []})
 
     with (
-        patch("app.routers.admin.settings") as mock_settings,
+        patch_admin_settings() as mock_settings,
         patch("app.routers.utils.AsyncSessionLocal", return_value=db_ctx),
         patch("app.routers.admin.sync_fienta_organizers", job),
         patch("app.routers.admin.ingest_all_enabled", AsyncMock(return_value=[])),
@@ -205,7 +206,7 @@ async def test_standalone_classify_blocked_while_pipeline_run_is_mid_classify_st
     classify_job = _blocked_job(block, {"classified": 1})
 
     with (
-        patch("app.routers.admin.settings") as mock_settings,
+        patch_admin_settings() as mock_settings,
         patch("app.routers.utils.AsyncSessionLocal", return_value=db_ctx),
         patch("app.routers.admin.sync_fienta_organizers", AsyncMock(return_value={"added": [], "stale": []})),
         patch("app.routers.admin.ingest_all_enabled", AsyncMock(return_value=[])),
@@ -241,7 +242,7 @@ async def test_lock_released_after_completion_allows_a_later_call(admin_app):
     app = admin_app
 
     with (
-        patch("app.routers.admin.settings") as mock_settings,
+        patch_admin_settings() as mock_settings,
         patch(
             "app.routers.admin.classify_pending_drain_now",
             new_callable=AsyncMock,

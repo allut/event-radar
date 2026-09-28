@@ -8,7 +8,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.constants import APP_ENV_DEVELOPMENT, ERROR_EVENT_NOT_FOUND
-from tests.routers.conftest import execute_rows, scalars_returning
+from tests.routers.conftest import execute_rows, patch_admin_settings, scalars_returning
 
 
 def _fill_event_detail_fields(e: MagicMock) -> MagicMock:
@@ -31,7 +31,7 @@ def _fill_event_detail_fields(e: MagicMock) -> MagicMock:
 
 async def _get(db: AsyncMock, app, make_db_ctx, event_id: int = 42):
     with (
-        patch("app.routers.admin.settings") as mock_settings,
+        patch_admin_settings() as mock_settings,
         patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
     ):
         mock_settings.ADMIN_PASSWORD = ""

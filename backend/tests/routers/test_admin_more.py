@@ -17,7 +17,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.constants import ADMIN_USERNAME_DEFAULT, APP_ENV_DEVELOPMENT
-from tests.routers.conftest import ndjson_lines, scalars_returning
+from tests.routers.conftest import ndjson_lines, patch_admin_settings, scalars_returning
 
 
 # ---------------------------------------------------------------------------
@@ -28,7 +28,7 @@ from tests.routers.conftest import ndjson_lines, scalars_returning
 @pytest.mark.asyncio
 async def test_default_username_in_production_returns_503(admin_app):
     app = admin_app
-    with patch("app.routers.admin.settings") as mock_settings:
+    with patch_admin_settings() as mock_settings:
         mock_settings.ADMIN_PASSWORD = "s3cret"
         mock_settings.ADMIN_USERNAME = ADMIN_USERNAME_DEFAULT
         mock_settings.APP_ENV = "production"
@@ -46,7 +46,7 @@ async def test_default_username_in_production_returns_503(admin_app):
 @pytest.mark.asyncio
 async def test_wrong_credentials_returns_401(admin_app):
     app = admin_app
-    with patch("app.routers.admin.settings") as mock_settings:
+    with patch_admin_settings() as mock_settings:
         mock_settings.ADMIN_PASSWORD = "s3cret"
         mock_settings.ADMIN_USERNAME = "realadmin"
         mock_settings.APP_ENV = "production"
@@ -68,7 +68,7 @@ async def test_wrong_credentials_returns_401(admin_app):
 async def test_ingest_all_returns_results(admin_app):
     app = admin_app
     with (
-        patch("app.routers.admin.settings") as mock_settings,
+        patch_admin_settings() as mock_settings,
         patch(
             "app.routers.admin.ingest_all_enabled",
             new_callable=AsyncMock,
@@ -95,7 +95,7 @@ async def test_ingest_all_returns_results(admin_app):
 async def test_ingest_source_unknown_slug_404(admin_app):
     app = admin_app
     with (
-        patch("app.routers.admin.settings") as mock_settings,
+        patch_admin_settings() as mock_settings,
         patch("app.routers.admin.ADAPTER_REGISTRY", {}),
     ):
         mock_settings.ADMIN_PASSWORD = ""
@@ -113,7 +113,7 @@ async def test_ingest_source_unknown_slug_404(admin_app):
 async def test_ingest_source_value_error_400(admin_app):
     app = admin_app
     with (
-        patch("app.routers.admin.settings") as mock_settings,
+        patch_admin_settings() as mock_settings,
         patch("app.routers.admin.ADAPTER_REGISTRY", {"fienta": MagicMock()}),
         patch(
             "app.routers.admin.ingest_source",
@@ -139,7 +139,7 @@ async def test_ingest_source_value_error_400(admin_app):
 async def test_ingest_source_success(admin_app):
     app = admin_app
     with (
-        patch("app.routers.admin.settings") as mock_settings,
+        patch_admin_settings() as mock_settings,
         patch("app.routers.admin.ADAPTER_REGISTRY", {"fienta": MagicMock()}),
         patch(
             "app.routers.admin.ingest_source",
@@ -177,7 +177,7 @@ async def test_ingest_source_success(admin_app):
 async def test_simple_job_triggers(path, target, admin_app):
     app = admin_app
     with (
-        patch("app.routers.admin.settings") as mock_settings,
+        patch_admin_settings() as mock_settings,
         patch(target, new_callable=AsyncMock, return_value={"done": 1}) as mock_job,
     ):
         mock_settings.ADMIN_PASSWORD = ""
@@ -210,7 +210,7 @@ async def test_dedup_groups_rejects_basic_auth_alone(admin_app):
     alone are no longer sufficient, even though they used to be (this route
     was one of the three _require_admin Basic-eligible GETs)."""
     app = admin_app
-    with patch("app.routers.admin.settings") as mock_settings:
+    with patch_admin_settings() as mock_settings:
         mock_settings.ADMIN_PASSWORD = "s3cret"
         mock_settings.ADMIN_USERNAME = "admin"
         mock_settings.APP_ENV = "production"
@@ -231,7 +231,7 @@ async def test_dedup_groups_empty_page(admin_app, make_db_ctx, mock_db):
     db.scalars = AsyncMock(return_value=scalars_returning([]))
 
     with (
-        patch("app.routers.admin.settings") as mock_settings,
+        patch_admin_settings() as mock_settings,
         patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
     ):
         mock_settings.ADMIN_PASSWORD = ""
@@ -274,7 +274,7 @@ async def test_dedup_groups_populated_page(admin_app, make_db_ctx, mock_db):
     )
 
     with (
-        patch("app.routers.admin.settings") as mock_settings,
+        patch_admin_settings() as mock_settings,
         patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
     ):
         mock_settings.ADMIN_PASSWORD = ""
@@ -323,7 +323,7 @@ async def test_dedup_groups_prefers_joined_venue_when_linked(
     )
 
     with (
-        patch("app.routers.admin.settings") as mock_settings,
+        patch_admin_settings() as mock_settings,
         patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
     ):
         mock_settings.ADMIN_PASSWORD = ""
@@ -354,7 +354,7 @@ async def test_stats_returns_counts(admin_app, make_db_ctx, mock_db):
     db.scalar = AsyncMock(side_effect=[100, 60, 8, 5])
 
     with (
-        patch("app.routers.admin.settings") as mock_settings,
+        patch_admin_settings() as mock_settings,
         patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
     ):
         mock_settings.ADMIN_PASSWORD = ""

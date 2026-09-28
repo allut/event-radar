@@ -7,7 +7,7 @@ existing ADMIN_USERNAME/ADMIN_PASSWORD env vars app/routers/admin.py already
 checks via HTTP Basic — this endpoint adds a required TOTP step and issues a
 session cookie so the admin console frontend can authenticate without ever
 holding the Basic credential in JS. Login/logout failures share the same
-lockout counter as Basic auth (app/routers/admin.py::check_admin_lockout) —
+lockout counter as Basic auth (app/auth/admin_lockout.py::check_admin_lockout) —
 one damper for both auth surfaces on this credential pair.
 """
 
@@ -16,6 +16,14 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel
 
+from app.auth.admin_lockout import (
+    admin_credentials_ok,
+    admin_username_disabled,
+    check_admin_lockout,
+    clear_admin_auth_failure,
+    record_admin_auth_failure,
+)
+from app.auth.dependencies import get_current_admin
 from app.auth.tokens import generate_admin_session_token
 from app.auth.totp import check_totp_code, record_totp_step
 from app.config import settings
@@ -34,14 +42,6 @@ from app.constants import (
     SETTING_NAME_ADMIN_PASSWORD,
 )
 from app.rate_limit import client_key, limiter
-from app.routers.admin import (
-    admin_credentials_ok,
-    admin_username_disabled,
-    check_admin_lockout,
-    clear_admin_auth_failure,
-    get_current_admin,
-    record_admin_auth_failure,
-)
 from app.routers.utils import clear_session_cookie, require_configured_secret, set_session_cookie
 
 log = logging.getLogger(__name__)

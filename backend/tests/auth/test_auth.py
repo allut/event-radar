@@ -351,7 +351,7 @@ class TestVerifyMagicLink:
 class TestGetCurrentUser:
     @pytest.mark.asyncio
     async def test_valid_session_cookie_returns_user(self, mock_db):
-        from app.routers.auth import get_current_user
+        from app.auth.dependencies import get_current_user
 
         user = MagicMock()
         user.id = 7
@@ -365,7 +365,7 @@ class TestGetCurrentUser:
     @pytest.mark.asyncio
     async def test_missing_cookie_raises_401(self, mock_db):
         from fastapi import HTTPException
-        from app.routers.auth import get_current_user
+        from app.auth.dependencies import get_current_user
 
         with pytest.raises(HTTPException) as exc_info:
             await get_current_user(session=None, db=mock_db)
@@ -374,7 +374,7 @@ class TestGetCurrentUser:
     @pytest.mark.asyncio
     async def test_invalid_token_raises_401(self, mock_db):
         from fastapi import HTTPException
-        from app.routers.auth import get_current_user
+        from app.auth.dependencies import get_current_user
 
         with pytest.raises(HTTPException) as exc_info:
             await get_current_user(session="garbage", db=mock_db)
@@ -386,7 +386,7 @@ class TestGetCurrentUser:
         user hit "log out everywhere") must be rejected even though its
         signature and TTL are still valid."""
         from fastapi import HTTPException
-        from app.routers.auth import get_current_user
+        from app.auth.dependencies import get_current_user
 
         user = MagicMock()
         user.id = 7
@@ -404,7 +404,7 @@ class TestGetOptionalUser:
 
     @pytest.mark.asyncio
     async def test_valid_session_cookie_returns_user(self, mock_db):
-        from app.routers.auth import get_optional_user
+        from app.auth.dependencies import get_optional_user
 
         user = MagicMock()
         user.id = 7
@@ -418,21 +418,21 @@ class TestGetOptionalUser:
 
     @pytest.mark.asyncio
     async def test_missing_cookie_returns_none(self, mock_db):
-        from app.routers.auth import get_optional_user
+        from app.auth.dependencies import get_optional_user
 
         result = await get_optional_user(session=None, db=mock_db)
         assert result is None
 
     @pytest.mark.asyncio
     async def test_invalid_token_returns_none(self, mock_db):
-        from app.routers.auth import get_optional_user
+        from app.auth.dependencies import get_optional_user
 
         result = await get_optional_user(session="garbage", db=mock_db)
         assert result is None
 
     @pytest.mark.asyncio
     async def test_revoked_session_returns_none(self, mock_db):
-        from app.routers.auth import get_optional_user
+        from app.auth.dependencies import get_optional_user
 
         user = MagicMock()
         user.id = 7
@@ -445,7 +445,7 @@ class TestGetOptionalUser:
 
     @pytest.mark.asyncio
     async def test_unknown_user_returns_none(self, mock_db):
-        from app.routers.auth import get_optional_user
+        from app.auth.dependencies import get_optional_user
 
         mock_db.get.return_value = None
         session_token = generate_session_token(7, 1)

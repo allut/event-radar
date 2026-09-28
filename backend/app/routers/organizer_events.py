@@ -91,7 +91,7 @@ from app.models.models import (
 )
 from app.publish import publish_pending
 from app.rate_limit import limiter
-from app.routers.organizer_auth import get_current_organizer
+from app.auth.dependencies import get_current_organizer
 from app.routers.utils import (
     apply_organizer_category,
     cancel_event_and_resolve_reports,

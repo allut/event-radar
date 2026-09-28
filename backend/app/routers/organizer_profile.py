@@ -28,7 +28,7 @@ from app.constants import (
 from app.db import get_db
 from app.models.models import Organizer, OrganizerIdentity
 from app.rate_limit import limiter
-from app.routers.organizer_auth import get_current_organizer
+from app.auth.dependencies import get_current_organizer
 from app.routers.utils import (
     is_identity_linked,
     set_session_cookie,

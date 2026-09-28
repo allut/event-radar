@@ -23,7 +23,7 @@ from app.constants import (
     CLAIM_VERIFICATION_MECHANISM_PILETILEVI_MAILBOX,
     ERROR_CLAIM_TARGET_ALREADY_APPROVED,
 )
-from tests.routers.conftest import scalars_returning
+from tests.routers.conftest import patch_admin_settings, scalars_returning
 
 
 def _make_claim(
@@ -96,7 +96,7 @@ async def test_list_claims_defaults_to_pending(admin_app, make_db_ctx, mock_db):
     db.scalars = AsyncMock(return_value=scalars_returning([]))
 
     with (
-        patch("app.routers.admin.settings") as mock_settings,
+        patch_admin_settings() as mock_settings,
         patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
     ):
         _admin_settings(mock_settings)
@@ -113,7 +113,7 @@ async def test_list_claims_defaults_to_pending(admin_app, make_db_ctx, mock_db):
 async def test_list_claims_rejects_invalid_status(admin_app, make_db_ctx, mock_db):
     app = admin_app
     with (
-        patch("app.routers.admin.settings") as mock_settings,
+        patch_admin_settings() as mock_settings,
         patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(mock_db)),
     ):
         _admin_settings(mock_settings)
@@ -154,7 +154,7 @@ async def test_list_pending_claims_shows_dns_evidence_and_resolves_publisher_eve
     )
 
     with (
-        patch("app.routers.admin.settings") as mock_settings,
+        patch_admin_settings() as mock_settings,
         patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
     ):
         _admin_settings(mock_settings)
@@ -190,7 +190,7 @@ async def test_list_pending_claims_series_has_no_publisher_or_event(
     db.scalars = AsyncMock(return_value=scalars_returning([claim]))
 
     with (
-        patch("app.routers.admin.settings") as mock_settings,
+        patch_admin_settings() as mock_settings,
         patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
     ):
         _admin_settings(mock_settings)
@@ -233,7 +233,7 @@ async def test_list_pending_claims_shows_mailbox_mismatch_evidence(
     )
 
     with (
-        patch("app.routers.admin.settings") as mock_settings,
+        patch_admin_settings() as mock_settings,
         patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
     ):
         _admin_settings(mock_settings)
@@ -264,7 +264,7 @@ async def test_grant_claim_approves_pending_claim(admin_app, make_db_ctx, mock_d
     db.scalar = AsyncMock(return_value=None)
 
     with (
-        patch("app.routers.admin.settings") as mock_settings,
+        patch_admin_settings() as mock_settings,
         patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
         caplog.at_level("INFO"),
     ):
@@ -296,7 +296,7 @@ async def test_grant_already_resolved_claim_conflicts(admin_app, make_db_ctx, mo
     db.get = AsyncMock(return_value=claim)
 
     with (
-        patch("app.routers.admin.settings") as mock_settings,
+        patch_admin_settings() as mock_settings,
         patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
     ):
         _admin_settings(mock_settings)
@@ -317,7 +317,7 @@ async def test_grant_missing_claim_404s(admin_app, make_db_ctx, mock_db):
     db.get = AsyncMock(return_value=None)
 
     with (
-        patch("app.routers.admin.settings") as mock_settings,
+        patch_admin_settings() as mock_settings,
         patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
     ):
         _admin_settings(mock_settings)
@@ -347,7 +347,7 @@ async def test_grant_claim_sends_granted_email(admin_app, make_db_ctx, mock_db):
     send_mock = AsyncMock()
 
     with (
-        patch("app.routers.admin.settings") as mock_settings,
+        patch_admin_settings() as mock_settings,
         patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
         patch("app.routers.admin.representative_event_for_claim", new=AsyncMock(return_value=event)),
         patch("app.routers.admin.send_claim_granted_email", new=send_mock),
@@ -370,7 +370,7 @@ async def test_grant_claim_sends_granted_email(admin_app, make_db_ctx, mock_db):
 async def test_grant_requires_nonblank_note(admin_app, make_db_ctx, mock_db):
     app = admin_app
     with (
-        patch("app.routers.admin.settings") as mock_settings,
+        patch_admin_settings() as mock_settings,
         patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(mock_db)),
     ):
         _admin_settings(mock_settings)
@@ -399,7 +399,7 @@ async def test_grant_claim_conflicts_when_target_already_approved(admin_app, mak
     db.scalar = AsyncMock(return_value=1)  # an approved claim already exists on this target
 
     with (
-        patch("app.routers.admin.settings") as mock_settings,
+        patch_admin_settings() as mock_settings,
         patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
     ):
         _admin_settings(mock_settings)
@@ -438,7 +438,7 @@ async def test_grant_claim_auto_declines_other_pending_claims_on_target(admin_ap
     db.scalars.return_value = MagicMock(all=MagicMock(return_value=[loser]))
 
     with (
-        patch("app.routers.admin.settings") as mock_settings,
+        patch_admin_settings() as mock_settings,
         patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
         patch(
             "app.routers.admin.representative_event_for_claim",
@@ -487,7 +487,7 @@ async def test_decline_claim_revokes_status_without_deleting_row(admin_app, make
     db.delete = AsyncMock()
 
     with (
-        patch("app.routers.admin.settings") as mock_settings,
+        patch_admin_settings() as mock_settings,
         patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
         caplog.at_level("INFO"),
     ):
@@ -524,7 +524,7 @@ async def test_decline_claim_sends_declined_email(admin_app, make_db_ctx, mock_d
     granted_mock = AsyncMock()
 
     with (
-        patch("app.routers.admin.settings") as mock_settings,
+        patch_admin_settings() as mock_settings,
         patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
         patch("app.routers.admin.representative_event_for_claim", new=AsyncMock(return_value=event)),
         patch("app.routers.admin.send_claim_declined_email", new=declined_mock),
@@ -554,7 +554,7 @@ async def test_decline_already_resolved_claim_conflicts(admin_app, make_db_ctx, 
     db.get = AsyncMock(return_value=claim)
 
     with (
-        patch("app.routers.admin.settings") as mock_settings,
+        patch_admin_settings() as mock_settings,
         patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
     ):
         _admin_settings(mock_settings)
@@ -588,7 +588,7 @@ async def test_revoke_claim_deletes_row_and_clears_pins(admin_app, make_db_ctx, 
     db.delete = AsyncMock()
 
     with (
-        patch("app.routers.admin.settings") as mock_settings,
+        patch_admin_settings() as mock_settings,
         patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
         patch("app.routers.admin.representative_event_for_claim", new=AsyncMock(return_value=event)),
         patch("app.routers.admin.clear_claim_pins", new=clear_pins_mock),
@@ -633,7 +633,7 @@ async def test_revoke_claim_sends_no_resolution_email(admin_app, make_db_ctx, mo
     granted_mock = AsyncMock()
 
     with (
-        patch("app.routers.admin.settings") as mock_settings,
+        patch_admin_settings() as mock_settings,
         patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
         patch("app.routers.admin.representative_event_for_claim", new=AsyncMock(return_value=event)),
         patch("app.routers.admin.send_claim_declined_email", new=declined_mock),
@@ -661,7 +661,7 @@ async def test_revoke_pending_claim_conflicts(admin_app, make_db_ctx, mock_db):
     db.get = AsyncMock(return_value=claim)
 
     with (
-        patch("app.routers.admin.settings") as mock_settings,
+        patch_admin_settings() as mock_settings,
         patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
     ):
         _admin_settings(mock_settings)
@@ -688,7 +688,7 @@ async def test_revoke_claim_with_no_resolvable_event_still_deletes(admin_app, ma
     db.delete = AsyncMock()
 
     with (
-        patch("app.routers.admin.settings") as mock_settings,
+        patch_admin_settings() as mock_settings,
         patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
         patch("app.routers.admin.representative_event_for_claim", new=AsyncMock(return_value=None)),
     ):

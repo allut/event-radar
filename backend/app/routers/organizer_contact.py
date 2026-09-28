@@ -19,7 +19,7 @@ from app.constants import (
 from app.email.contact import send_contact_message
 from app.models.models import Organizer
 from app.rate_limit import limiter
-from app.routers.organizer_auth import get_current_organizer
+from app.auth.dependencies import get_current_organizer
 from app.routers.utils import mask_email
 
 log = logging.getLogger(__name__)

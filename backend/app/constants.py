@@ -75,7 +75,7 @@ TALLINN_TZ = ZoneInfo(TALLINN_TZ_NAME)
 APP_ENV_DEVELOPMENT = "development"
 
 # require_configured_secret() call-site literals for the ADMIN_PASSWORD gate —
-# duplicated across get_current_admin/_require_admin (routers/admin.py) and
+# duplicated across get_current_admin (auth/dependencies.py)/_require_admin (routers/admin.py) and
 # admin_login (routers/admin_auth.py); named so all three stay in sync.
 SETTING_NAME_ADMIN_PASSWORD = "ADMIN_PASSWORD"
 FEATURE_ADMIN_ENDPOINTS = "Admin endpoints"
