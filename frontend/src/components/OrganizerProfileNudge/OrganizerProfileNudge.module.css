@@ -49,7 +49,7 @@
   line-height: var(--leading-none);
   cursor: pointer;
   padding: var(--space-0-3);
-  border-radius: var(--radius);
+  border-radius: 0;
 }
 
 .dismissBtn:hover {

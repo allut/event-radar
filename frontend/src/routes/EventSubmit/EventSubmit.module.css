@@ -24,7 +24,7 @@
   padding: var(--space-4);
   background: var(--bg-raised);
   border: var(--border-w-hair) solid var(--border);
-  border-radius: 0;
+  border-radius: var(--radius);
 }
 
 .contentHead {

@@ -163,9 +163,9 @@
 
 /* .input/.pop/.miniInput/.saveBtn already square unconditionally via their
  * composed shared bases (#212) — only these locally radiused controls
- * still need squaring here. */
+ * still need squaring here. .miniForm is a panel holding controls, not a
+ * control, so it keeps --radius. */
 .option,
-.oneOffOption,
-.miniForm {
+.oneOffOption {
   border-radius: 0;
 }

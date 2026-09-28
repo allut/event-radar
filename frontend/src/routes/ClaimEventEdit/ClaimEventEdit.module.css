@@ -228,6 +228,7 @@
   text-align: center;
   padding: var(--space-7) var(--space-5);
   border: var(--border-w-hair) solid var(--border);
+  border-radius: var(--radius);
 }
 
 .lockedTitle {
