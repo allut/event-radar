@@ -125,6 +125,18 @@ describe('ClaimEventEdit (#416)', () => {
     expect(body).toEqual({ title: 'New title' });
   });
 
+  it('blocks save with a localized message when the Estonian title is blanked, without sending a request (#452)', async () => {
+    mockGet.mockResolvedValueOnce(baseEvent());
+    renderEdit();
+
+    const titleInput = await screen.findByDisplayValue('Sügisõhtu jazziklubis');
+    await userEvent.clear(titleInput);
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent("Title (Estonian) can't be blank.");
+    expect(mockPatch).not.toHaveBeenCalled();
+  });
+
   it('unpin fires its own request without touching the field value', async () => {
     mockGet.mockResolvedValueOnce(baseEvent());
     mockPatch.mockResolvedValueOnce(baseEvent({ pinned_fields: [] }));

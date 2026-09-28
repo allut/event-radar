@@ -175,6 +175,34 @@ export function useClaimEventEdit(
     unpinMutation.mutate(fieldLocale ? `${field}:${fieldLocale}` : field);
   };
 
+  // Mirrors the backend's own checks (organizer_claim_edits.py's
+  // `_non_blank_title`/`ends_at must not be before starts_at`/
+  // `validate_price_ordering`) so the common failures never round-trip
+  // through a FastAPI 422 at all — those are the real guard, this is only a
+  // faster, localized first pass (#452). Scoped to `touched` exactly like
+  // the backend's own model only sees keys actually present in the PATCH
+  // body — otherwise a pre-existing inconsistency in an untouched field
+  // (stale data, a source refetch racing the claim) would block a save that
+  // never sends that field and that the backend itself would accept.
+  const [clientError, setClientError] = useState('');
+  function clientValidationError(): string {
+    if (touched.has('title') && !fields.title.trim()) return t('claim_edit_error_blank_title', locale);
+    if (
+      touched.has('starts_at') && touched.has('ends_at')
+      && fields.startsAt && fields.endsAt && fields.endsAt < fields.startsAt
+    ) {
+      return t('claim_edit_error_end_before_start', locale);
+    }
+    if (
+      touched.has('price_min') && touched.has('price_max')
+      && fields.priceMin && fields.priceMax
+      && Number(fields.priceMin) > Number(fields.priceMax)
+    ) {
+      return t('claim_edit_error_price_order', locale);
+    }
+    return '';
+  }
+
   const saveMutation = useMutation({
     mutationFn: () => {
       const body: Record<string, unknown> = {};
@@ -240,9 +268,14 @@ export function useClaimEventEdit(
     unpinning: unpinningKey,
     pendingCategory,
     setPendingCategory,
-    save: () => saveMutation.mutate(),
+    save: () => {
+      const err = clientValidationError();
+      setClientError(err);
+      if (err) return;
+      saveMutation.mutate();
+    },
     isSaving: saveMutation.isPending,
-    saveError: saveMutation.isError ? apiErrorMessage(saveMutation.error, t('generic_error', locale)) : '',
+    saveError: clientError || (saveMutation.isError ? apiErrorMessage(saveMutation.error, t('generic_error', locale)) : ''),
     savedStatus,
     acceptNewPrice: () => acceptPriceMutation.mutate(),
     isAcceptingPrice: acceptPriceMutation.isPending,

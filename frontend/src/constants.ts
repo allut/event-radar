@@ -146,6 +146,11 @@ export const CLAIM_JUSTIFICATION_REQUIRED_ERROR =
 export const CLAIM_ERROR_CODE_NOT_GRANTED = 'claim_not_granted';
 export const CLAIM_ERROR_CODE_DORMANT = 'claim_dormant';
 
+// Frontend-only marker (no backend counterpart) client.ts assigns to
+// ApiError.code for a FastAPI 422 list `detail` — lets a caller tell "the
+// backend rejected a field" apart from every other error shape (#452).
+export const VALIDATION_ERROR_CODE = 'validation_error';
+
 export const CLAIM_STATUS_PENDING = 'pending';
 export const CLAIM_STATUS_APPROVED = 'approved';
 export const CLAIM_STATUS_CANCELLED = 'cancelled';
