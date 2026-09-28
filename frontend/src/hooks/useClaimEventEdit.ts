@@ -196,6 +196,7 @@ export function useClaimEventEdit(
       if (eventId !== undefined) body.event_id = eventId;
       return organizerApi.patch<ClaimEventData>(API.organizerClaimEvent(claimId), body);
     },
+    onMutate: () => setSavedStatus(null),
     onSuccess: (next) => {
       applyResponse(next);
       setFields(fieldsFromData(next));

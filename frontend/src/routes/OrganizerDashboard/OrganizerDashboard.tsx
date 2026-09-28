@@ -105,10 +105,10 @@ export default function OrganizerDashboard() {
               <h2 className={styles.claimsTitle}>{t('dashboard_claims_title', locale)}</h2>
               <p className={styles.claimsSub}>{t('dashboard_claims_sub', locale)}</p>
             </header>
-            <ul className={styles.list}>
+            <ul className={styles.claimsList}>
               {claims.map((claim) => (
-                <li key={claim.id} className={styles.row}>
-                  <div className={styles.rowMain}>
+                <li key={claim.id} className={styles.claimRow}>
+                  <div className={styles.claimRowMain}>
                     <span className={styles.rowTitle}>
                       {claim.event_title ?? claim.publisher_name ?? t(`dashboard_claims_kind_${claim.kind}`, locale)}
                     </span>
@@ -116,12 +116,12 @@ export default function OrganizerDashboard() {
                       {t(`dashboard_claims_kind_${claim.kind}`, locale)}
                     </span>
                   </div>
-                  <div className={styles.rowBadges}>
+                  <div className={styles.claimRowBadges}>
                     <span className={`${styles.claimStatusBadge} ${styles[`claimStatus_${claim.status}`] ?? ''}`}>
                       {t(`dashboard_claims_status_${claim.status}`, locale)}
                     </span>
                   </div>
-                  <div className={styles.rowActions}>
+                  <div className={styles.claimRowActions}>
                     {claim.status === 'approved' && !claim.dormant ? (
                       <>
                         <Link to={localePath(ROUTES.organizerClaimEdit(claim.id))} className={styles.editBtn}>

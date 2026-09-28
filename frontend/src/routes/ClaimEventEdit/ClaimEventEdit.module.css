@@ -211,8 +211,12 @@
   border-left-color: var(--success);
 }
 
-.spinner {
-  composes: spinner from '../../components/shared/Spinner.module.css';
+.overlay {
+  composes: overlay from '../../components/shared/Spinner.module.css';
+}
+
+.overlaySpinner {
+  composes: ring ringOnPage sizeLg from '../../components/shared/Spinner.module.css';
 }
 
 .locked {

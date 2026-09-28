@@ -80,7 +80,15 @@ export default function ClaimEventEdit() {
         <h1 className={styles.title}>{t('claim_edit_title', locale)}</h1>
         <p className={styles.intro}>{t('claim_edit_intro', locale)}</p>
 
-        {form.isLoading && <span className={styles.spinner} aria-label={t('loading', locale)} />}
+        {(form.isLoading || form.isSaving) && (
+          <div
+            className={styles.overlay}
+            role="status"
+            aria-label={form.isSaving ? t('claim_edit_saving', locale) : t('loading', locale)}
+          >
+            <span className={styles.overlaySpinner} />
+          </div>
+        )}
 
         {form.isLocked && (
           <div className={styles.locked}>
@@ -338,9 +346,7 @@ export default function ClaimEventEdit() {
                 onClick={form.save}
                 disabled={form.isSaving}
               >
-                {form.isSaving
-                  ? <span className={styles.spinner} aria-label={t('claim_edit_saving', locale)} />
-                  : t('claim_edit_save', locale)}
+                {t('claim_edit_save', locale)}
               </button>
             </div>
           </>

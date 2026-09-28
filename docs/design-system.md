@@ -110,7 +110,7 @@ When adding a token: if it encodes a color that reads differently on a near-whit
 | `AdminQueue.module.css` | Admin queue row/detail typography, resolved panel |
 | `Calendar.module.css` | Calendar grid chrome (`.calHead`, `.calNavBtn`, `.calMonthLabel`, `.calWeekdays`, `.calGrid`, `.calDay`) shared by `DatePicker` and `DateRangeMenu` |
 | `Settings.module.css` | Settings-page shell (`.settingsMain`, section/toggle-row/repick-button chrome) shared by `Settings` and `OrganizerSettings` |
-| `Alert`, `Chip`, `Link`, `Media`, `Spinner`, `StatusCircle`, `Visually`, `DesktopGate` | Inline alert, chip pill, accent link, image backdrop, spinner rings, status circles, sr-only/offscreen utilities, the admin desktop-only gate |
+| `Alert`, `Chip`, `Link`, `Media`, `Spinner`, `StatusCircle`, `Visually`, `DesktopGate` | Inline alert, chip pill, accent link, image backdrop, spinner rings + full-page overlay scrim, status circles, sr-only/offscreen utilities, the admin desktop-only gate |
 
 Add a new shared pattern here rather than growing a second copy. New variants follow base-class + modifier (`.card` / `.cardAccentTop`) — **never restyle a base class in place** to suit one consumer.
 

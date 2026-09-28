@@ -199,6 +199,28 @@ describe('ClaimEventEdit (#416)', () => {
     expect(status).toHaveTextContent(/didn't pass our publish checks/);
   });
 
+  it('a failed save after a prior success hides the stale success status (#7)', async () => {
+    mockGet.mockResolvedValueOnce(baseEvent());
+    mockPatch.mockResolvedValueOnce(baseEvent({ title: 'New title' }));
+    renderEdit();
+
+    const titleInput = await screen.findByDisplayValue('Sügisõhtu jazziklubis');
+    await userEvent.clear(titleInput);
+    await userEvent.type(titleInput, 'New title');
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent(/live on/i));
+
+    mockPatch.mockRejectedValueOnce(new Error('network down'));
+    const urlInput = screen.getByDisplayValue('https://fienta.com/e/sugisohtu');
+    await userEvent.clear(urlInput);
+    await userEvent.type(urlInput, 'https://fienta.com/e/broken');
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    await waitFor(() => expect(mockPatch).toHaveBeenCalledTimes(2));
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
+
   it('mounts a RichTextEditor toolbar for Description on every locale, not a textarea', async () => {
     mockGet.mockResolvedValueOnce(baseEvent());
     renderEdit();

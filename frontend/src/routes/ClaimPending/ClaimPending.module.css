@@ -128,6 +128,11 @@
 .secondaryBtn {
   composes: btnOutline from '../../components/shared/Button.module.css';
   padding: var(--space-0-8125) var(--space-5);
+  height: var(--control-height-lg);
+  font-size: var(--fs-base);
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .cancelBtn {
