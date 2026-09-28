@@ -15,7 +15,7 @@ export default function AdminLogin() {
       <div className={styles.card}>
         <header className={styles.header}>
           <span className={styles.radar} aria-hidden>{BRAND_GLYPH}</span>
-          <span className={styles.brand}>What&rsquo;s on Radar</span>
+          <span className={styles.brand}>Event Radar</span>
         </header>
         <p className={styles.tag}>Admin Console</p>
 
