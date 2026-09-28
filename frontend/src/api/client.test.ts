@@ -81,6 +81,14 @@ describe('api.get', () => {
     await expect(api.get('/missing')).rejects.toMatchObject({ message: 'Not found' });
   });
 
+  it('throws a distinguishable ApiError when fetch itself rejects — offline, or a request blocked before it leaves the browser (#453)', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
+    await expect(api.get('/organizer/claims/1/events/7')).rejects.toMatchObject({
+      code: 'network_error',
+      message: "Couldn't reach Event Radar — a browser extension may be blocking this request.",
+    });
+  });
+
   it('throws ApiError with HTTP status fallback when no detail', async () => {
     mockFetch(StatusCodes.INTERNAL_SERVER_ERROR, {}, false);
     await expect(api.get('/fail')).rejects.toMatchObject({ message: `HTTP ${StatusCodes.INTERNAL_SERVER_ERROR}` });

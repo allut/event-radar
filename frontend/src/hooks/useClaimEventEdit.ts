@@ -110,10 +110,12 @@ export interface UseClaimEventEditResult {
 }
 
 /** Load + save state for the claim-editing surface (#416) — GET/PATCH
- * /organizer/claims/{claimId}/event. A field only pins when its key is
- * actually included in the PATCH body, so `touched` tracks exactly which
- * fields this session has edited since the last load/save; untouched
- * fields are never sent, however their current value looks. */
+ * /organizer/claims/{claimId}/event, or the path-based
+ * /organizer/claims/{claimId}/events/{eventId} variant (#453) when targeting
+ * one specific covered event. A field only pins when its key is actually
+ * included in the PATCH body, so `touched` tracks exactly which fields this
+ * session has edited since the last load/save; untouched fields are never
+ * sent, however their current value looks. */
 export function useClaimEventEdit(
   claimId: number,
   locale: string,
@@ -162,9 +164,8 @@ export function useClaimEventEdit(
 
   const unpinMutation = useMutation({
     mutationFn: (key: string) =>
-      organizerApi.patch<ClaimEventData>(API.organizerClaimEvent(claimId), {
+      organizerApi.patch<ClaimEventData>(API.organizerClaimEvent(claimId, eventId), {
         unpin: [key],
-        ...(eventId !== undefined && { event_id: eventId }),
       }),
     onMutate: (key) => setUnpinningKey(key),
     onSuccess: applyResponse,
@@ -221,8 +222,7 @@ export function useClaimEventEdit(
       if (touched.has('currency')) body.currency = fields.currency || null;
       if (touched.has('has_free_tier')) body.has_free_tier = fields.hasFreeTier;
       if (pendingCategory) body.category = pendingCategory;
-      if (eventId !== undefined) body.event_id = eventId;
-      return organizerApi.patch<ClaimEventData>(API.organizerClaimEvent(claimId), body);
+      return organizerApi.patch<ClaimEventData>(API.organizerClaimEvent(claimId, eventId), body);
     },
     onMutate: () => setSavedStatus(null),
     onSuccess: (next) => {
@@ -235,9 +235,8 @@ export function useClaimEventEdit(
 
   const acceptPriceMutation = useMutation({
     mutationFn: () =>
-      organizerApi.patch<ClaimEventData>(API.organizerClaimEvent(claimId), {
+      organizerApi.patch<ClaimEventData>(API.organizerClaimEvent(claimId, eventId), {
         accept_new_price: true,
-        ...(eventId !== undefined && { event_id: eventId }),
       }),
     onSuccess: (next) => {
       applyResponse(next);

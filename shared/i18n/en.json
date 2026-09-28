@@ -9,6 +9,7 @@
     "saved": "Saved.",
     "save_failed": "Save failed.",
     "generic_error": "Something went wrong. Please try again.",
+    "network_error": "Couldn't reach Event Radar — a browser extension may be blocking this request.",
     "validation_error_generic": "Please check the highlighted fields.",
     "tagline": "Your daily five events in Tallinn.",
     "email_label": "Email address",

@@ -1,5 +1,5 @@
 import { StatusCodes } from 'http-status-codes';
-import { API, API_BASE, ROUTES, VALIDATION_ERROR_CODE } from '../constants';
+import { API, API_BASE, NETWORK_ERROR_CODE, ROUTES, VALIDATION_ERROR_CODE } from '../constants';
 import { clearSignedInHint, isLoggingOut, getLocale } from '../lib/auth';
 import { clearOrganizerSignedInHint, isOrganizerLoggingOut } from '../lib/organizerAuth';
 import { clearAdminSignedInHint, isAdminLoggingOut } from '../lib/adminAuth';
@@ -78,7 +78,18 @@ async function request<T>(path: string, init: RequestOptions = {}): Promise<T> {
     ...(fetchInit.headers as Record<string, string> | undefined ?? {}),
   };
 
-  const res = await fetch(`${API_BASE}${path}`, { ...fetchInit, headers, credentials: 'include' });
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}${path}`, { ...fetchInit, headers, credentials: 'include' });
+  } catch {
+    // fetch() itself rejects (a TypeError, per spec) when the request never
+    // leaves the browser at all — offline, DNS failure, or (the case #453
+    // was filed for) an ad/tracker blocker silently killing a request whose
+    // URL shape looks like an analytics beacon. Distinguishable from every
+    // other failure via NETWORK_ERROR_CODE so a form can show a message that
+    // actually points at the real cause instead of the generic fallback.
+    throw new ApiError(0, t('network_error', getLocale()), NETWORK_ERROR_CODE);
+  }
 
   if (res.status === StatusCodes.UNAUTHORIZED && !NO_SESSION_REDIRECT_ON_401.has(path)) {
     handleSessionExpiry401({ organizer, admin });

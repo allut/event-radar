@@ -95,8 +95,12 @@ def _localized(et: str | None, en: str | None, ru: str | None) -> dict[str, str]
 
 
 class PatchClaimEventBody(BaseModel):
-    # Targets one specific event covered by a Publisher claim (#437); omitted,
-    # or on a Series claim, falls back to the single representative event.
+    # Deploy-skew safety net only (#453) — the current frontend always
+    # targets a specific covered event via the path
+    # (PATCH /{claim_id}/events/{event_id}), never this field. Honored only
+    # by the no-id route as a fallback for a browser tab still running a
+    # pre-#453 cached bundle; the path-based route always uses its own path
+    # parameter and ignores this field entirely.
     event_id: int | None = None
     title: str | None = Field(None, max_length=ORGANIZER_TITLE_MAX_LEN)
     title_en: str | None = Field(None, max_length=ORGANIZER_TITLE_MAX_LEN)
@@ -200,14 +204,8 @@ def _serialize_claim_event(event: Event, mismatch: dict | None) -> dict:
     return payload
 
 
-@router.get("/{claim_id}/event")
-@limiter.limit(RATE_LIMIT_SUBMIT)
-async def get_claim_event(
-    claim_id: int,
-    request: Request,
-    event_id: int | None = None,
-    current_organizer: Organizer = Depends(get_current_organizer),
-    db: AsyncSession = Depends(get_db),
+async def _load_claim_event(
+    claim_id: int, event_id: int | None, current_organizer: Organizer, db: AsyncSession
 ) -> dict:
     """The claim-editing surface's load: current field values, which are
     pinned, and any price-mismatch diff (recomputed fresh on every load —
@@ -219,6 +217,44 @@ async def get_claim_event(
     async with httpx.AsyncClient(timeout=HTTP_TIMEOUT_SECONDS) as client:
         fresh = await fetch_fresh_price(client, event)
     return _serialize_claim_event(event, price_mismatch(event, fresh))
+
+
+@router.get("/{claim_id}/event")
+@limiter.shared_limit(RATE_LIMIT_SUBMIT, scope="claim_event_get")
+async def get_claim_event(
+    claim_id: int,
+    request: Request,
+    event_id: int | None = None,
+    current_organizer: Organizer = Depends(get_current_organizer),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """No-id load: the single representative event (or Series-claim match).
+    A specific covered event is loaded via GET /{claim_id}/events/{event_id}
+    instead (#453) — a query-string id here (`...?event_id=...`) reads as an
+    analytics-beacon URL shape and gets silently dropped by ad/tracker
+    blockers (ERR_BLOCKED_BY_CLIENT), so the current frontend never sends
+    this query param. It's still accepted and honored here as a deploy-skew
+    safety net: a browser tab still running a pre-#453 cached bundle after a
+    Cloudflare Pages deploy would otherwise have its `event_id` silently
+    dropped, falling back to the representative event and applying an edit
+    to the wrong one with no error at all — worse than the request simply
+    failing. shared_limit keeps this and the path-based route (below) on one
+    bucket, matching the single route this used to be."""
+    return await _load_claim_event(claim_id, event_id, current_organizer, db)
+
+
+@router.get("/{claim_id}/events/{event_id}")
+@limiter.shared_limit(RATE_LIMIT_SUBMIT, scope="claim_event_get")
+async def get_claim_event_by_id(
+    claim_id: int,
+    event_id: int,
+    request: Request,
+    current_organizer: Organizer = Depends(get_current_organizer),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Path-based load of one specific event covered by a Publisher claim
+    (#437, moved off the query string by #453) — see _load_claim_event."""
+    return await _load_claim_event(claim_id, event_id, current_organizer, db)
 
 
 async def _claims_edited_today(db: AsyncSession, organizer_id: int) -> int:
@@ -236,21 +272,21 @@ async def _claims_edited_today(db: AsyncSession, organizer_id: int) -> int:
     )
 
 
-@router.patch("/{claim_id}/event")
-@limiter.limit(RATE_LIMIT_SUBMIT)
-async def update_claim_event(
+async def _save_claim_event(
     claim_id: int,
+    event_id: int | None,
     body: PatchClaimEventBody,
-    request: Request,
-    current_organizer: Organizer = Depends(get_current_organizer),
-    db: AsyncSession = Depends(get_db),
+    current_organizer: Organizer,
+    db: AsyncSession,
 ) -> dict:
     """Save a claim edit: per-field pin/unpin, prepend-only categories, a
     url capped to the claim's verified domain, and price fields kept
     co-authoritative with no pin/unpin toggle. Resets status to 'classified'
     and synchronously re-runs the publish gate in the same request — a
     passing edit flips straight back to 'published'; a failing one is left
-    at 'classified' with no retry job (#416)."""
+    at 'classified' with no retry job (#416). event_id targets one specific
+    event covered by a Publisher claim (#437); None falls back to the single
+    representative event, same as the GET load."""
     claim = await _own_granted_claim_or_404(db, claim_id, current_organizer.id)
 
     covered = await organizer_covered_event_count(db, current_organizer.id)
@@ -268,7 +304,7 @@ async def update_claim_event(
     db.add(ClaimEditAttempt(organizer_id=current_organizer.id))
     await db.commit()
 
-    event = await _claim_event_or_404(db, claim, body.event_id)
+    event = await _claim_event_or_404(db, claim, event_id)
     if event.status == EVENT_STATUS_CANCELLED:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=ERROR_EVENT_CANCELLED)
 
@@ -395,12 +431,49 @@ async def update_claim_event(
         event.is_non_event = True
 
     event.status = EVENT_STATUS_CLASSIFIED
-    event_id = event.id
-    await publish_pending(db, event_ids=[event_id], diagnostics=False)
-    final_status = await db.scalar(select(Event.status).where(Event.id == event_id))
+    saved_event_id = event.id
+    await publish_pending(db, event_ids=[saved_event_id], diagnostics=False)
+    final_status = await db.scalar(select(Event.status).where(Event.id == saved_event_id))
     await db.commit()
 
-    reloaded = await db.scalar(select_events_with_classification().where(Event.id == event_id))
+    reloaded = await db.scalar(
+        select_events_with_classification().where(Event.id == saved_event_id)
+    )
     assert reloaded is not None  # just-updated row, guaranteed present
     mismatch = price_mismatch(reloaded, fresh)
     return {**_serialize_claim_event(reloaded, mismatch), "status": final_status}
+
+
+@router.patch("/{claim_id}/event")
+@limiter.shared_limit(RATE_LIMIT_SUBMIT, scope="claim_event_patch")
+async def update_claim_event(
+    claim_id: int,
+    body: PatchClaimEventBody,
+    request: Request,
+    current_organizer: Organizer = Depends(get_current_organizer),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """No-id save: targets the single representative event (or Series-claim
+    match) — see _save_claim_event. A specific covered event is saved via
+    PATCH /{claim_id}/events/{event_id} instead (#453). Falls back to
+    body.event_id (deploy-skew safety net — see PatchClaimEventBody) when
+    present, rather than silently misapplying the edit to the representative
+    event instead of the one a stale client meant. shared_limit keeps this
+    and the path-based route (below) on one bucket, matching the single
+    route this used to be."""
+    return await _save_claim_event(claim_id, body.event_id, body, current_organizer, db)
+
+
+@router.patch("/{claim_id}/events/{event_id}")
+@limiter.shared_limit(RATE_LIMIT_SUBMIT, scope="claim_event_patch")
+async def update_claim_event_by_id(
+    claim_id: int,
+    event_id: int,
+    body: PatchClaimEventBody,
+    request: Request,
+    current_organizer: Organizer = Depends(get_current_organizer),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Path-based save of one specific event covered by a Publisher claim
+    (#437, moved off the query string by #453) — see _save_claim_event."""
+    return await _save_claim_event(claim_id, event_id, body, current_organizer, db)

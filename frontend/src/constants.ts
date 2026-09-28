@@ -151,6 +151,14 @@ export const CLAIM_ERROR_CODE_DORMANT = 'claim_dormant';
 // backend rejected a field" apart from every other error shape (#452).
 export const VALIDATION_ERROR_CODE = 'validation_error';
 
+// Frontend-only marker (no backend counterpart), mirroring
+// VALIDATION_ERROR_CODE above — client.ts assigns this to ApiError.code when
+// `fetch` itself rejects (network error, or the request never left the
+// browser at all — e.g. blocked by an ad/tracker blocker, #453) rather than
+// the server returning any response. Lets a caller show a distinguishable
+// "couldn't reach Event Radar" message instead of the generic fallback.
+export const NETWORK_ERROR_CODE = 'network_error';
+
 export const CLAIM_STATUS_PENDING = 'pending';
 export const CLAIM_STATUS_APPROVED = 'approved';
 export const CLAIM_STATUS_CANCELLED = 'cancelled';
@@ -1031,8 +1039,13 @@ export const API = {
   organizerClaimLinkVerify: '/organizer/claims/verify-link',
   organizerClaimSearch: '/organizer/claims/search',
   organizerClaimSuggestions: '/organizer/claims/suggestions',
+  // Path-based, not a query string (#453) — `...?event_id=...` reads as an
+  // analytics-beacon URL shape and gets silently dropped by ad/tracker
+  // blockers (ERR_BLOCKED_BY_CLIENT).
   organizerClaimEvent: (id: number | string, eventId?: number) =>
-    `/organizer/claims/${id}/event${eventId !== undefined ? `?event_id=${eventId}` : ''}`,
+    eventId !== undefined
+      ? `/organizer/claims/${id}/events/${eventId}`
+      : `/organizer/claims/${id}/event`,
   organizerClaimEvents: (id: number | string) => `/organizer/claims/${id}/events`,
   organizerClaimForEvent: (eventId: number | string) => `/organizer/claims/for-event/${eventId}`,
   reports: '/reports',

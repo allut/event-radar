@@ -186,9 +186,40 @@ class TestGetClaimEvent:
     async def test_event_id_for_covered_event_succeeds(
         self, mock_db, make_request, make_organizer, make_event
     ):
-        """#437: an explicit event_id covered by the claim loads that event
+        """#437/#453: an explicit event_id covered by the claim, loaded via
+        the path-based GET /{claim_id}/events/{event_id}, resolves that event
         (never the always-returns-something claim_event_for_id mock, wired
-        here to prove the id actually reaches the collaborator)."""
+        here to prove the id actually reaches the collaborator) — not the
+        query-string shape ad/tracker blockers silently drop."""
+        from app.routers.organizer_claim_edits import get_claim_event_by_id
+
+        organizer = make_organizer(organizer_id=5)
+        event = make_event(event_id=42)
+        event.pinned_fields = []
+        event.title_localized = None
+        event.description_localized = None
+        stack, mocks = _patched(claim_event_for_id=AsyncMock(return_value=event))
+        with stack:
+            result = await get_claim_event_by_id(
+                1,
+                42,
+                make_request(method="GET", path="/organizer/claims/1/events/42"),
+                current_organizer=organizer,
+                db=mock_db,
+            )
+        mocks["claim_event_for_id"].assert_awaited_once()
+        assert mocks["claim_event_for_id"].await_args.args[-1] == 42
+        assert result["id"] == 42
+
+    @pytest.mark.asyncio
+    async def test_legacy_query_param_event_id_still_targets_the_right_event(
+        self, mock_db, make_request, make_organizer, make_event
+    ):
+        """#453 deploy-skew safety net: a browser tab still running a
+        pre-#453 cached bundle sends the id via the query string on the
+        no-id route rather than the new path-based one. It must still land
+        on the intended event, not silently fall back to the representative
+        event with no error at all."""
         from app.routers.organizer_claim_edits import get_claim_event
 
         organizer = make_organizer(organizer_id=5)
@@ -216,16 +247,16 @@ class TestGetClaimEvent:
         """An event outside the claim's scope 404s — matching the router's
         existing not-found convention rather than leaking whether the event
         exists at all."""
-        from app.routers.organizer_claim_edits import get_claim_event
+        from app.routers.organizer_claim_edits import get_claim_event_by_id
 
         organizer = make_organizer(organizer_id=5)
         stack, mocks = _patched(claim_event_for_id=AsyncMock(return_value=None))
         with stack:
             with pytest.raises(HTTPException) as exc:
-                await get_claim_event(
+                await get_claim_event_by_id(
                     1,
-                    make_request(method="GET", path="/organizer/claims/1/event"),
-                    event_id=999,
+                    999,
+                    make_request(method="GET", path="/organizer/claims/1/events/999"),
                     current_organizer=organizer,
                     db=mock_db,
                 )
@@ -578,11 +609,14 @@ class TestUpdateClaimEvent:
         assert "url" in event.pinned_fields
 
     @pytest.mark.asyncio
-    async def test_event_id_for_covered_event_saves_and_pins(
+    async def test_legacy_body_event_id_still_targets_the_right_event(
         self, mock_db, make_request, make_organizer, make_event
     ):
-        """#437: editing a specific covered event via event_id keeps the
-        existing pinned-field behavior unchanged."""
+        """#453 deploy-skew safety net: a browser tab still running a
+        pre-#453 cached bundle sends the id in the PATCH body on the no-id
+        route rather than the new path-based one. It must still land on the
+        intended event, not silently misapply the edit to the representative
+        event with no error at all."""
         from app.routers.organizer_claim_edits import PatchClaimEventBody, update_claim_event
 
         organizer = make_organizer(organizer_id=5)
@@ -604,20 +638,55 @@ class TestUpdateClaimEvent:
         assert "title:et" in event.pinned_fields
 
     @pytest.mark.asyncio
+    async def test_event_id_for_covered_event_saves_and_pins(
+        self, mock_db, make_request, make_organizer, make_event
+    ):
+        """#437/#453: editing a specific covered event via the path-based
+        PATCH /{claim_id}/events/{event_id} keeps the existing pinned-field
+        behavior unchanged."""
+        from app.routers.organizer_claim_edits import (
+            PatchClaimEventBody,
+            update_claim_event_by_id,
+        )
+
+        organizer = make_organizer(organizer_id=5)
+        event = make_event(event_id=42)
+        event.pinned_fields = []
+        self._mock_db_for_save(mock_db)
+        stack, mocks = _patched(claim_event_for_id=AsyncMock(return_value=event))
+        with stack:
+            await update_claim_event_by_id(
+                1,
+                42,
+                PatchClaimEventBody(title="New title"),
+                make_request(method="PATCH", path="/organizer/claims/1/events/42"),
+                current_organizer=organizer,
+                db=mock_db,
+            )
+        mocks["claim_event_for_id"].assert_awaited_once()
+        assert mocks["claim_event_for_id"].await_args.args[-1] == 42
+        assert event.title_orig == "New title"
+        assert "title:et" in event.pinned_fields
+
+    @pytest.mark.asyncio
     async def test_event_id_not_covered_by_claim_is_404(
         self, mock_db, make_request, make_organizer
     ):
-        from app.routers.organizer_claim_edits import PatchClaimEventBody, update_claim_event
+        from app.routers.organizer_claim_edits import (
+            PatchClaimEventBody,
+            update_claim_event_by_id,
+        )
 
         organizer = make_organizer(organizer_id=5)
         stack, mocks = _patched(claim_event_for_id=AsyncMock(return_value=None))
         mock_db.scalar.side_effect = [0]
         with stack:
             with pytest.raises(HTTPException) as exc:
-                await update_claim_event(
+                await update_claim_event_by_id(
                     1,
-                    PatchClaimEventBody(event_id=999, title="New title"),
-                    make_request(method="PATCH", path="/organizer/claims/1/event"),
+                    999,
+                    PatchClaimEventBody(title="New title"),
+                    make_request(method="PATCH", path="/organizer/claims/1/events/999"),
                     current_organizer=organizer,
                     db=mock_db,
                 )

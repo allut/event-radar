@@ -9,6 +9,7 @@
     "saved": "Salvestatud.",
     "save_failed": "Salvestamine ebaõnnestus.",
     "generic_error": "Midagi läks valesti. Palun proovi uuesti.",
+    "network_error": "Event Radarini ei õnnestunud jõuda — päringu võib blokeerida mõni brauserilaiendus.",
     "validation_error_generic": "Palun kontrolli esiletõstetud välju.",
     "tagline": "Sinu 5 igapäevast sündmust Tallinnas.",
     "email_label": "E-posti aadress",
