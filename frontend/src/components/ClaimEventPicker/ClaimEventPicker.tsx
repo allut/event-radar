@@ -4,7 +4,7 @@ import { organizerApi } from '../../api/client';
 import { API, EXPLORE_SEARCH_DEBOUNCE_MS, QUERY_KEYS, ROUTES } from '../../constants';
 import { t, ti } from '../../i18n';
 import { useLocaleNavigate } from '../../hooks/useLocaleNavigate';
-import { apiErrorMessage, formatEventTime, isClaimJustificationRequiredError, withQueryParam } from '../../utils';
+import { apiErrorMessage, formatEventTime, isClaimJustificationRequiredError, withLocaleQuery, withQueryParam } from '../../utils';
 import styles from './ClaimEventPicker.module.css';
 
 interface ClaimCandidate {
@@ -61,16 +61,19 @@ export default function ClaimEventPicker({ locale }: ClaimEventPickerProps) {
   }, [open]);
 
   const { data: suggestionsData } = useQuery({
-    queryKey: [QUERY_KEYS.organizerClaimSuggestions],
-    queryFn: () => organizerApi.get<ClaimCandidatesResponse>(API.organizerClaimSuggestions),
+    queryKey: [QUERY_KEYS.organizerClaimSuggestions, locale],
+    queryFn: () =>
+      organizerApi.get<ClaimCandidatesResponse>(
+        withLocaleQuery(API.organizerClaimSuggestions, locale),
+      ),
   });
   const suggestions = suggestionsData?.events ?? [];
 
   const { data: searchData } = useQuery({
-    queryKey: [QUERY_KEYS.organizerClaimSearch, debouncedQuery],
+    queryKey: [QUERY_KEYS.organizerClaimSearch, debouncedQuery, locale],
     queryFn: () =>
       organizerApi.get<ClaimCandidatesResponse>(
-        withQueryParam(API.organizerClaimSearch, 'q', debouncedQuery),
+        withLocaleQuery(withQueryParam(API.organizerClaimSearch, 'q', debouncedQuery), locale),
       ),
     enabled: debouncedQuery.length >= 2,
   });

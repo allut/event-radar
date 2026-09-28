@@ -507,6 +507,7 @@ class TestListOwnClaims:
         event = MagicMock()
         event.id = 42
         event.title_orig = "Jazzkaar Festival Night"
+        event.title_localized = None
 
         with patch(
             "app.routers.organizer_claims.bulk_resolve_publisher_events",
@@ -517,6 +518,7 @@ class TestListOwnClaims:
                 make_request(method="GET", path="/organizer/claims"),
                 current_organizer=organizer,
                 db=mock_db,
+                locale=None,
             )
 
         assert result["claims"] == [
@@ -561,6 +563,7 @@ class TestListOwnClaims:
                 make_request(method="GET", path="/organizer/claims"),
                 current_organizer=organizer,
                 db=mock_db,
+                locale=None,
             )
 
         assert result["claims"][0]["status"] == CLAIM_STATUS_DECLINED
@@ -582,6 +585,7 @@ class TestListOwnClaims:
         event = MagicMock()
         event.id = 7
         event.title_orig = "Winter Market"
+        event.title_localized = None
 
         with patch(
             "app.routers.organizer_claims.bulk_resolve_publisher_events",
@@ -596,11 +600,48 @@ class TestListOwnClaims:
                 make_request(method="GET", path="/organizer/claims"),
                 current_organizer=organizer,
                 db=mock_db,
+                locale=None,
             )
 
         assert result["claims"][0]["event_id"] == 7
         assert result["claims"][0]["event_title"] == "Winter Market"
         assert result["claims"][0]["publisher_name"] is None
+
+    @pytest.mark.asyncio
+    async def test_locale_query_param_wins_over_stored_organizer_locale(
+        self, mock_db, make_request, make_organizer
+    ):
+        """(#454) A ?locale= param must localize event_title even when it
+        disagrees with the organizer's stored (DB) locale — the UI-language
+        switch never writes that column, so falling back to it is the bug."""
+        from app.routers.organizer_claims import list_own_claims
+
+        organizer = make_organizer(organizer_id=5, locale="en")
+        claim = _fake_claim(status=CLAIM_STATUS_APPROVED)
+        claim.publisher = None
+
+        scalars_result = MagicMock()
+        scalars_result.all.return_value = [claim]
+        mock_db.execute.return_value.scalars.return_value = scalars_result
+
+        event = MagicMock()
+        event.id = 42
+        event.title_orig = "Jazzkaar Festival Night"
+        event.title_localized = {"ru": "Ночь Джазкаар", "en": "Jazzkaar Festival Night"}
+
+        with patch(
+            "app.routers.organizer_claims.bulk_resolve_publisher_events",
+            new_callable=AsyncMock,
+            return_value={99: event},
+        ):
+            result = await list_own_claims(
+                make_request(method="GET", path="/organizer/claims"),
+                locale="ru",
+                current_organizer=organizer,
+                db=mock_db,
+            )
+
+        assert result["claims"][0]["event_title"] == "Ночь Джазкаар"
 
 
 class TestRequestClaimLink:
@@ -722,6 +763,7 @@ class TestSearchClaimableEvents(object):
                 q="a",
                 current_organizer=make_organizer(),
                 db=mock_db,
+                locale=None,
             )
         assert exc.value.status_code == http.HTTPStatus.UNPROCESSABLE_ENTITY
 
@@ -748,6 +790,7 @@ class TestSearchClaimableEvents(object):
             q="jazz",
             current_organizer=make_organizer(),
             db=mock_db,
+            locale=None,
         )
 
         assert [e["id"] for e in result["events"]] == [2]
@@ -775,6 +818,7 @@ class TestSearchClaimableEvents(object):
             q="jazz",
             current_organizer=make_organizer(),
             db=mock_db,
+            locale=None,
         )
 
         assert [e["id"] for e in result["events"]] == [1]
@@ -799,9 +843,38 @@ class TestSearchClaimableEvents(object):
             q="jazz",
             current_organizer=make_organizer(),
             db=mock_db,
+            locale=None,
         )
 
         assert result["events"] == []
+
+    @pytest.mark.asyncio
+    async def test_locale_param_localizes_result_titles(
+        self, mock_db, make_event, make_request, make_organizer
+    ):
+        """(#454) locale=ru must localize a candidate's title regardless of
+        the organizer's stored locale."""
+        from app.routers.organizer_claims import search_claimable_events
+
+        event = make_event(event_id=1, title="Jazz Night")
+        event.title_localized = {"ru": "Джазовая ночь"}
+        event.sources = [_make_source(event_id=1, publisher_id=99)]
+
+        candidates_result = MagicMock()
+        candidates_result.scalars.return_value.all.return_value = [event]
+        claim_keys_result = MagicMock()
+        claim_keys_result.all.return_value = []
+        mock_db.execute.side_effect = [candidates_result, claim_keys_result]
+
+        result = await search_claimable_events(
+            make_request(method="GET", path="/organizer/claims/search"),
+            q="jazz",
+            locale="ru",
+            current_organizer=make_organizer(organizer_id=5, locale="en"),
+            db=mock_db,
+        )
+
+        assert result["events"][0]["title"] == "Джазовая ночь"
 
 
 class TestSuggestedClaimableEvents:
@@ -816,6 +889,7 @@ class TestSuggestedClaimableEvents:
             make_request(method="GET", path="/organizer/claims/suggestions"),
             current_organizer=organizer,
             db=mock_db,
+            locale=None,
         )
 
         assert result["events"] == []
@@ -846,9 +920,41 @@ class TestSuggestedClaimableEvents:
             make_request(method="GET", path="/organizer/claims/suggestions"),
             current_organizer=organizer,
             db=mock_db,
+            locale=None,
         )
 
         assert [e["id"] for e in result["events"]] == [1]
+
+    @pytest.mark.asyncio
+    async def test_locale_param_localizes_result_titles(
+        self, mock_db, make_event, make_request, make_organizer
+    ):
+        """(#454) locale=ru must localize a suggestion's title regardless of
+        the organizer's stored locale."""
+        from app.routers.organizer_claims import suggested_claimable_events
+
+        organizer = make_organizer(organizer_id=5, locale="en")
+        organizer.email = "team@example-promoter.ee"
+
+        matching = make_event(event_id=1, title="Their show")
+        matching.title_localized = {"ru": "Их шоу"}
+        matching.url = "https://tickets.example-promoter.ee/event/1"
+        matching.sources = [_make_source(event_id=1, publisher_id=1)]
+
+        candidates_result = MagicMock()
+        candidates_result.scalars.return_value.all.return_value = [matching]
+        claim_keys_result = MagicMock()
+        claim_keys_result.all.return_value = []
+        mock_db.execute.side_effect = [candidates_result, claim_keys_result]
+
+        result = await suggested_claimable_events(
+            make_request(method="GET", path="/organizer/claims/suggestions"),
+            locale="ru",
+            current_organizer=organizer,
+            db=mock_db,
+        )
+
+        assert result["events"][0]["title"] == "Их шоу"
 
 
 class TestListClaimEvents:
@@ -883,6 +989,7 @@ class TestListClaimEvents:
                 offset=0,
                 current_organizer=organizer,
                 db=mock_db,
+                locale=None,
             )
 
         assert result["total"] == 2
@@ -891,6 +998,41 @@ class TestListClaimEvents:
         assert result["has_more"] is False
         assert [e["id"] for e in result["events"]] == [1, 2]
         assert result["events"][0]["status"] == "published"
+
+    @pytest.mark.asyncio
+    async def test_locale_param_localizes_event_titles(
+        self, mock_db, make_event, make_request, make_organizer
+    ):
+        """(#454) locale=ru must localize each covered event's title
+        regardless of the organizer's stored locale."""
+        from app.routers.organizer_claims import list_claim_events
+
+        organizer = make_organizer(organizer_id=5, locale="en")
+        claim = _fake_claim(status=CLAIM_STATUS_APPROVED, publisher_id=99)
+        event = make_event(event_id=1, title="Jazz Night")
+        event.title_localized = {"ru": "Джазовая ночь"}
+
+        scalars_result = MagicMock()
+        scalars_result.all.return_value = [event]
+        mock_db.scalars.return_value = scalars_result
+        mock_db.scalar.return_value = 1
+
+        with patch(
+            "app.routers.organizer_claims.own_claim_or_404",
+            new_callable=AsyncMock,
+            return_value=claim,
+        ):
+            result = await list_claim_events(
+                1,
+                make_request(method="GET", path="/organizer/claims/1/events"),
+                limit=20,
+                offset=0,
+                locale="ru",
+                current_organizer=organizer,
+                db=mock_db,
+            )
+
+        assert result["events"][0]["title"] == "Джазовая ночь"
 
     @pytest.mark.asyncio
     async def test_has_more_true_across_page_boundary(
@@ -920,6 +1062,7 @@ class TestListClaimEvents:
                 offset=0,
                 current_organizer=organizer,
                 db=mock_db,
+                locale=None,
             )
 
         assert result["has_more"] is True
@@ -950,6 +1093,7 @@ class TestListClaimEvents:
                 offset=2,
                 current_organizer=organizer,
                 db=mock_db,
+                locale=None,
             )
 
         assert result["total"] is None
@@ -982,6 +1126,7 @@ class TestListClaimEvents:
                     offset=0,
                     current_organizer=organizer,
                     db=mock_db,
+                    locale=None,
                 )
 
         assert exc.value.status_code == http.HTTPStatus.NOT_FOUND
@@ -1011,6 +1156,7 @@ class TestListClaimEvents:
                     offset=0,
                     current_organizer=organizer,
                     db=mock_db,
+                    locale=None,
                 )
 
         assert exc.value.status_code == http.HTTPStatus.NOT_FOUND
@@ -1040,6 +1186,7 @@ class TestListClaimEvents:
                     offset=0,
                     current_organizer=organizer,
                     db=mock_db,
+                    locale=None,
                 )
 
         assert exc.value.status_code == http.HTTPStatus.NOT_FOUND
@@ -1066,6 +1213,7 @@ class TestListClaimEvents:
                     offset=0,
                     current_organizer=organizer,
                     db=mock_db,
+                    locale=None,
                 )
 
         assert exc.value.status_code == http.HTTPStatus.NOT_FOUND

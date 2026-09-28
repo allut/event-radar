@@ -450,6 +450,41 @@ class TestCreateClaim:
         assert "http_client" in kwargs
 
     @pytest.mark.asyncio
+    async def test_auto_grant_email_uses_organizers_stored_locale_title(
+        self, mock_db, make_organizer, make_event
+    ):
+        """(#454) Claim emails have no request-scoped UI locale to work
+        from (sweeps/admin actions), so they deliberately keep using the
+        organizer's stored locale — but must localize the title rather than
+        always sending title_orig."""
+        es = _fake_event_source(publisher_id=99)
+        mock_db.scalar = AsyncMock(side_effect=[0, es, None, None])
+        event = make_event()
+        event.title_orig = "Jazz Night"
+        event.title_localized = {"ru": "Джазовая ночь"}
+        mock_db.get.return_value = event
+        organizer = make_organizer(organizer_id=5, locale="ru")
+
+        with (
+            patch(
+                "app.claims.lifecycle.verify_fienta_publisher_claim",
+                new_callable=AsyncMock,
+                return_value=VerificationResult(
+                    CLAIM_VERIFICATION_MECHANISM_FIENTA_TOKEN,
+                    CLAIM_VERIFICATION_OUTCOME_AUTO_GRANT,
+                ),
+            ),
+            patch(
+                "app.claims.lifecycle.send_claim_granted_email", new_callable=AsyncMock
+            ) as send_mock,
+        ):
+            await create_claim(mock_db, AsyncMock(), organizer, event_id=10)
+
+        send_mock.assert_awaited_once()
+        args, _kwargs = send_mock.call_args
+        assert args == (organizer.email, "Джазовая ночь", "", "ru")
+
+    @pytest.mark.asyncio
     async def test_piletilevi_auto_grant_reuses_target_resolutions_event_fetch(
         self, mock_db, make_organizer, make_event
     ):

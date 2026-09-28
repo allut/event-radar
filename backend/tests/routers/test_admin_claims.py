@@ -73,6 +73,7 @@ def _make_event(*, event_id: int = 42, pinned_fields: list[str] | None = None) -
     event = MagicMock()
     event.id = event_id
     event.title_orig = "Test Event"
+    event.title_localized = None
     event.pinned_fields = pinned_fields if pinned_fields is not None else []
     return event
 

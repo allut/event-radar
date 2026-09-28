@@ -1211,7 +1211,12 @@ class TestListOwnEvents:
         mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=[event]))
 
         result = await list_own_events(
-            make_request(path="/organizer/events"), 20, 0, organizer, mock_db
+            make_request(path="/organizer/events"),
+            limit=20,
+            offset=0,
+            locale=None,
+            current_organizer=organizer,
+            db=mock_db,
         )
 
         assert result["events"][0]["status"] == EVENT_STATUS_CLASSIFIED
@@ -1232,10 +1237,42 @@ class TestListOwnEvents:
         mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=[event]))
 
         result = await list_own_events(
-            make_request(path="/organizer/events"), 20, 0, organizer, mock_db
+            make_request(path="/organizer/events"),
+            limit=20,
+            offset=0,
+            locale=None,
+            current_organizer=organizer,
+            db=mock_db,
         )
 
         assert result["events"][0]["venue_id"] == 7
+
+    @pytest.mark.asyncio
+    async def test_locale_param_wins_over_stored_organizer_locale(
+        self, mock_db, make_request, make_organizer
+    ):
+        """(#454) A ?locale= param must localize the title even when it
+        disagrees with the organizer's stored (DB) locale — the UI-language
+        switch never writes that column, so falling back to it is the bug."""
+        from app.routers.organizer_events import list_own_events
+
+        organizer = make_organizer(organizer_id=5, locale="en")
+        event = _fake_event(
+            submitted_by_organizer_id=5,
+            title_localized={"ru": "Ночь Джазкаар", "en": "Jazzkaar Festival Night"},
+        )
+        mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=[event]))
+
+        result = await list_own_events(
+            make_request(path="/organizer/events"),
+            limit=20,
+            offset=0,
+            locale="ru",
+            current_organizer=organizer,
+            db=mock_db,
+        )
+
+        assert result["events"][0]["title"] == "Ночь Джазкаар"
 
 
 class TestDeleteOwnEvent:

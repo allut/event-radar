@@ -17,7 +17,7 @@ import {
   ROUTES,
   UI_STATE,
 } from '../../constants';
-import { formatEventTime, nextOffsetParam, titleWithBrand } from '../../utils';
+import { formatEventTime, nextOffsetParam, titleWithBrand, withLocaleQuery } from '../../utils';
 import styles from './ClaimEvents.module.css';
 
 interface ClaimListEvent {
@@ -54,10 +54,13 @@ export default function ClaimEvents() {
 
   const { data, isLoading, isError, fetchNextPage, hasNextPage, isFetchingNextPage } =
     useInfiniteQuery({
-      queryKey: [QUERY_KEYS.organizerClaimEvents, claimId],
+      queryKey: [QUERY_KEYS.organizerClaimEvents, claimId, locale],
       queryFn: ({ pageParam }) =>
         organizerApi.get<ClaimEventsResponse>(
-          `${API.organizerClaimEvents(claimId)}?${PAGE_PARAM.limit}=${CLAIM_EVENTS_PAGE_SIZE}&${PAGE_PARAM.offset}=${pageParam}`,
+          withLocaleQuery(
+            `${API.organizerClaimEvents(claimId)}?${PAGE_PARAM.limit}=${CLAIM_EVENTS_PAGE_SIZE}&${PAGE_PARAM.offset}=${pageParam}`,
+            locale,
+          ),
         ),
       initialPageParam: 0,
       getNextPageParam: (lastPage) => nextOffsetParam(lastPage, lastPage.events.length),

@@ -50,6 +50,14 @@ describe('ClaimEvents (#436)', () => {
     expect(mockGet).toHaveBeenCalledWith(expect.stringContaining('/organizer/claims/7/events'));
   });
 
+  it('sends locale= on the request so a language switch refetches (#454)', async () => {
+    mockGet.mockResolvedValueOnce(page());
+    renderList();
+
+    await waitFor(() => expect(mockGet).toHaveBeenCalled());
+    expect(mockGet).toHaveBeenCalledWith(expect.stringMatching(/[?&]locale=/));
+  });
+
   it('links each row to the editor with its own event_id (#437)', async () => {
     mockGet.mockResolvedValueOnce(page());
     renderList();

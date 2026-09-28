@@ -44,6 +44,18 @@ describe('ClaimEventPicker', () => {
     expect(screen.getByText('Suggested for you')).toBeInTheDocument();
   });
 
+  it('sends locale= on both the suggestions and search requests (#454)', async () => {
+    mockClaimGet({ events: [candidate] }, { events: [candidate] });
+    renderPicker();
+
+    await waitFor(() => expect(screen.getByText('Jazz Night')).toBeInTheDocument());
+    await userEvent.type(screen.getByRole('combobox'), 'jazz');
+    await waitFor(() =>
+      expect(mockGet).toHaveBeenCalledWith(expect.stringMatching(/\/search.*[?&]locale=en/)),
+    );
+    expect(mockGet).toHaveBeenCalledWith(expect.stringMatching(/\/suggestions.*[?&]locale=en/));
+  });
+
   it('hides the suggestions section when there are none', async () => {
     mockClaimGet({ events: [] });
     renderPicker();

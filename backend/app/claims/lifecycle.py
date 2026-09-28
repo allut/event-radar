@@ -71,6 +71,7 @@ from app.models.models import Claim, Event, EventSource, Organizer
 from app.routers.utils import (
     bulk_resolve_publisher_events,
     event_series_key,
+    resolve_title,
     resolve_venue_name,
     serialize_event_series_key,
 )
@@ -472,7 +473,7 @@ async def auto_decline_other_pending_claims(
                 event = await representative_event_for_claim(db, claim)
                 await send_claim_declined_email(
                     organizer.email,
-                    event.title_orig if event else None,
+                    resolve_title(event, organizer.locale) if event else None,
                     "",
                     organizer.locale,
                     http_client=client,
@@ -623,7 +624,11 @@ async def create_claim(
     if auto_granted:
         try:
             await send_claim_granted_email(
-                organizer.email, event.title_orig, "", organizer.locale, http_client=client
+                organizer.email,
+                resolve_title(event, organizer.locale),
+                "",
+                organizer.locale,
+                http_client=client,
             )
         except Exception:
             log.error(
@@ -677,7 +682,9 @@ async def cancel_claim(db: AsyncSession, organizer: Organizer, claim_id: int) ->
     try:
         event = await representative_event_for_claim(db, claim)
         await send_claim_self_cancelled_email(
-            organizer.email, event.title_orig if event else None, organizer.locale
+            organizer.email,
+            resolve_title(event, organizer.locale) if event else None,
+            organizer.locale,
         )
     except Exception:
         log.error(
@@ -738,7 +745,10 @@ async def recheck_claim(
     if auto_granted:
         try:
             await send_claim_granted_email(
-                organizer.email, event.title_orig if event else None, "", organizer.locale,
+                organizer.email,
+                resolve_title(event, organizer.locale) if event else None,
+                "",
+                organizer.locale,
                 http_client=client,
             )
         except Exception:
@@ -818,7 +828,7 @@ async def _send_claim_expiry_emails(db: AsyncSession, expired: list[Claim]) -> N
             try:
                 await send_claim_expired_email(
                     organizer.email,
-                    event.title_orig if event else None,
+                    resolve_title(event, organizer.locale) if event else None,
                     organizer.locale,
                     http_client=http_client,
                     days=days,

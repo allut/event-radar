@@ -5,7 +5,7 @@ import { useOrganizerLogout } from '../../hooks/useOrganizerLogout';
 import { useLocalLocale } from '../../hooks/useLocalLocale';
 import { useLocalePath } from '../../hooks/useLocalePath';
 import { t } from '../../i18n';
-import { apiErrorMessage, formatEventTime, withQueryParam } from '../../utils';
+import { apiErrorMessage, formatEventTime, withLocaleQuery, withQueryParam } from '../../utils';
 import OrganizerTopBar from '../../components/OrganizerTopBar';
 import OrganizerProfileNudge from '../../components/OrganizerProfileNudge';
 import ClaimEventPicker from '../../components/ClaimEventPicker';
@@ -62,7 +62,10 @@ export default function OrganizerDashboard() {
     queryKey: [QUERY_KEYS.organizerEvents, locale],
     queryFn: () =>
       organizerApi.get<OrganizerEventsResponse>(
-        withQueryParam(API.organizerEvents, PAGE_PARAM.limit, String(ORGANIZER_EVENTS_PAGE_SIZE)),
+        withLocaleQuery(
+          withQueryParam(API.organizerEvents, PAGE_PARAM.limit, String(ORGANIZER_EVENTS_PAGE_SIZE)),
+          locale,
+        ),
       ),
   });
 
@@ -85,8 +88,8 @@ export default function OrganizerDashboard() {
   const events = data?.events ?? [];
 
   const { data: claimsData } = useQuery({
-    queryKey: [QUERY_KEYS.organizerClaims],
-    queryFn: () => organizerApi.get<OwnClaimsResponse>(API.organizerClaims),
+    queryKey: [QUERY_KEYS.organizerClaims, locale],
+    queryFn: () => organizerApi.get<OwnClaimsResponse>(withLocaleQuery(API.organizerClaims, locale)),
   });
   const claims = claimsData?.claims ?? [];
 

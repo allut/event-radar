@@ -892,7 +892,7 @@ async def admin_grant_claim(claim_id: int, body: _ResolutionBody, request: Reque
                 try:
                     await send_claim_granted_email(
                         organizer.email,
-                        event.title_orig if event else None,
+                        resolve_title(event, organizer.locale) if event else None,
                         note,
                         organizer.locale,
                     )
@@ -941,7 +941,7 @@ async def admin_decline_claim(claim_id: int, body: _ResolutionBody, request: Req
                 try:
                     await send_claim_declined_email(
                         organizer.email,
-                        event.title_orig if event else None,
+                        resolve_title(event, organizer.locale) if event else None,
                         note,
                         organizer.locale,
                     )

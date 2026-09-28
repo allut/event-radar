@@ -12,7 +12,7 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from itsdangerous import BadSignature, SignatureExpired
 from pydantic import BaseModel, EmailStr, Field
-from sqlalchemy import func, select, update
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -90,6 +90,8 @@ from app.routers.utils import (
     public_event_filter,
     publisher_claim_event_ids,
     recent_unused_link_exists,
+    resolve_locale_param,
+    resolve_title,
     resolve_venue_name,
     select_events_with_classification,
     serialize_event,
@@ -441,10 +443,10 @@ async def verify_claim_link(
 # ---------------------------------------------------------------------------
 
 
-def _serialize_claim_candidate(event: Event) -> dict:
+def _serialize_claim_candidate(event: Event, locale: str) -> dict:
     return {
         "id": event.id,
-        "title": event.title_orig,
+        "title": resolve_title(event, locale),
         "venue_name": resolve_venue_name(event),
         "starts_at": event.starts_at.isoformat(),
         "image_url": event.image_url,
@@ -486,6 +488,7 @@ def _is_already_claimed(
 async def search_claimable_events(
     request: Request,
     q: str = Query(..., min_length=1),
+    locale: str | None = Query(None),
     current_organizer: Organizer = Depends(get_current_organizer),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
@@ -499,6 +502,7 @@ async def search_claimable_events(
             detail=ERROR_CLAIM_SEARCH_QUERY_TOO_SHORT,
         )
 
+    effective_locale = resolve_locale_param(locale, current_organizer.locale)
     now = datetime.now(timezone.utc)
     pattern = escape_ilike_pattern(query)
     candidates = (
@@ -509,7 +513,12 @@ async def search_claimable_events(
                 .where(
                     public_event_filter(),
                     event_not_ended_filter(now),
-                    Event.title_orig.ilike(pattern, escape="\\"),
+                    or_(
+                        Event.title_orig.ilike(pattern, escape="\\"),
+                        Event.title_localized[effective_locale].astext.ilike(
+                            pattern, escape="\\"
+                        ),
+                    ),
                 )
                 .order_by(Event.starts_at)
                 .limit(CLAIM_SEARCH_RESULT_LIMIT * CLAIM_SEARCH_CANDIDATE_MULTIPLIER)
@@ -527,7 +536,7 @@ async def search_claimable_events(
         es = min(event.sources, key=lambda s: s.id)
         if _is_already_claimed(event, es, publisher_ids, series_keys):
             continue
-        results.append(_serialize_claim_candidate(event))
+        results.append(_serialize_claim_candidate(event, effective_locale))
         if len(results) >= CLAIM_SEARCH_RESULT_LIMIT:
             break
     return {"events": results}
@@ -537,6 +546,7 @@ async def search_claimable_events(
 @limiter.limit(RATE_LIMIT_BROWSE)
 async def suggested_claimable_events(
     request: Request,
+    locale: str | None = Query(None),
     current_organizer: Organizer = Depends(get_current_organizer),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
@@ -551,6 +561,7 @@ async def suggested_claimable_events(
     if domain in FREE_EMAIL_PROVIDER_DOMAINS:
         return {"events": []}
 
+    effective_locale = resolve_locale_param(locale, current_organizer.locale)
     now = datetime.now(timezone.utc)
     pattern = escape_ilike_pattern(domain)
     candidates = (
@@ -586,14 +597,14 @@ async def suggested_claimable_events(
         es = min(event.sources, key=lambda s: s.id)
         if _is_already_claimed(event, es, publisher_ids, series_keys):
             continue
-        results.append(_serialize_claim_candidate(event))
+        results.append(_serialize_claim_candidate(event, effective_locale))
         if len(results) >= CLAIM_SUGGESTIONS_LIMIT:
             break
     return {"events": results}
 
 
 def _serialize_own_claim_summary(
-    claim: Claim, event: Event | None
+    claim: Claim, event: Event | None, locale: str
 ) -> dict:
     return {
         "id": claim.id,
@@ -603,7 +614,7 @@ def _serialize_own_claim_summary(
         "dormant": claim.dormant,
         "publisher_name": claim.publisher.name if claim.publisher is not None else None,
         "event_id": event.id if event is not None else None,
-        "event_title": event.title_orig if event is not None else None,
+        "event_title": resolve_title(event, locale) if event is not None else None,
         "created_at": claim.created_at,
         "resolved_at": claim.resolved_at,
     }
@@ -613,6 +624,7 @@ def _serialize_own_claim_summary(
 @limiter.limit(RATE_LIMIT_BROWSE)
 async def list_own_claims(
     request: Request,
+    locale: str | None = Query(None),
     current_organizer: Organizer = Depends(get_current_organizer),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
@@ -636,6 +648,7 @@ async def list_own_claims(
         .all()
     )
 
+    effective_locale = resolve_locale_param(locale, current_organizer.locale)
     publisher_ids = {c.publisher_id for c in claims if c.publisher_id is not None}
     events_by_publisher = await bulk_resolve_publisher_events(db, publisher_ids)
 
@@ -649,7 +662,7 @@ async def list_own_claims(
             )
         else:
             event = await representative_event_for_claim(db, claim)
-        results.append(_serialize_own_claim_summary(claim, event))
+        results.append(_serialize_own_claim_summary(claim, event, effective_locale))
     return {"claims": results}
 
 
@@ -731,6 +744,7 @@ async def list_claim_events(
     offset: int = Query(
         PAGINATION_MIN_OFFSET, ge=PAGINATION_MIN_OFFSET, le=PAGINATION_MAX_OFFSET
     ),
+    locale: str | None = Query(None),
     current_organizer: Organizer = Depends(get_current_organizer),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
@@ -741,6 +755,7 @@ async def list_claim_events(
     limit/offset/has_more/total shape as the admin queues (routers/admin.py),
     sized down for organizer-portal use via CLAIM_EVENTS_PAGE_SIZE."""
     claim = await _own_publisher_claim_or_404(db, claim_id, current_organizer.id)
+    effective_locale = resolve_locale_param(locale, current_organizer.locale)
 
     matching_event_ids = publisher_claim_event_ids(claim.publisher_id)
 
@@ -770,7 +785,7 @@ async def list_claim_events(
         "offset": offset,
         "has_more": has_more,
         "events": [
-            {**serialize_event(e, locale=current_organizer.locale), "status": e.status}
+            {**serialize_event(e, locale=effective_locale), "status": e.status}
             for e in events
         ],
     }

@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { organizerApi } from '../api/client';
 import { API, QUERY_KEYS, ORGANIZER_EVENTS_PAGE_SIZE, DEFAULT_CURRENCY, ORGANIZER_IMAGE_ALLOWED_MIME, ROUTES, LOCALE_EN, LOCALE_ET, LOCALE_RU, PAGE_PARAM } from '../constants';
 import { t } from '../i18n';
-import { apiErrorMessage, hasHtmlContent, toIsoOrUndefined, toLocalInput } from '../utils';
+import { apiErrorMessage, hasHtmlContent, toIsoOrUndefined, toLocalInput, withLocaleQuery } from '../utils';
 import { useLocaleNavigate } from './useLocaleNavigate';
 import type { SavedVenue, VenuePickerValue } from '../components/VenuePicker';
 
@@ -191,7 +191,7 @@ export function useOrganizerEventForm(locale: string, eventId?: number): UseOrga
     queryKey: [QUERY_KEYS.organizerEvents, locale],
     queryFn: () =>
       organizerApi.get<OrganizerEventsResponse>(
-        `${API.organizerEvents}?${PAGE_PARAM.limit}=${ORGANIZER_EVENTS_PAGE_SIZE}`,
+        withLocaleQuery(`${API.organizerEvents}?${PAGE_PARAM.limit}=${ORGANIZER_EVENTS_PAGE_SIZE}`, locale),
       ),
     enabled: isEditMode,
   });

@@ -16,7 +16,7 @@ from urllib.parse import urlsplit
 from uuid import uuid4
 
 import httpx
-from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile, status
 from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -96,6 +96,7 @@ from app.routers.utils import (
     apply_organizer_category,
     cancel_event_and_resolve_reports,
     own_venue_or_404,
+    resolve_locale_param,
     select_events_with_classification,
     send_report_resolution_emails,
     serialize_event,
@@ -598,12 +599,14 @@ async def list_own_events(
     request: Request,
     limit: int = BROWSE_PAGE_SIZE,
     offset: int = 0,
+    locale: str | None = Query(None),
     current_organizer: Organizer = Depends(get_current_organizer),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     """List the organizer's own submitted events, most recent first."""
     limit = max(PAGINATION_MIN_LIMIT, min(limit, BROWSE_MAX_PAGE_SIZE))
     offset = max(PAGINATION_MIN_OFFSET, min(offset, PAGINATION_MAX_OFFSET))
+    effective_locale = resolve_locale_param(locale, current_organizer.locale)
 
     stmt = (
         select_events_with_classification()
@@ -619,7 +622,7 @@ async def list_own_events(
     return {
         "events": [
             {
-                **serialize_event(e, locale=current_organizer.locale),
+                **serialize_event(e, locale=effective_locale),
                 "status": e.status,
                 "needs_review": e.needs_review,
                 "venue_id": e.venue_id,

@@ -152,6 +152,22 @@ describe('useOrganizerEventForm — venue picker submit resolution (#178)', () =
     const [, body] = mockPatch.mock.calls[0];
     expect(body).toMatchObject({ venue_id: null });
   });
+
+  it('sends locale= on the edit-mode prefill list request (#454)', async () => {
+    mockGet.mockResolvedValueOnce({
+      events: [{
+        id: 9, title: 'Existing Event', description: null, important_info: null,
+        starts_at: '2026-08-01T18:00:00Z', ends_at: null,
+        venue_name: null, venue_address: null, venue_id: 7,
+        url: null, image_url: null, price_min: null, price_max: null, categories: [],
+      }],
+      limit: 24, offset: 0,
+    });
+    renderHook(() => useOrganizerEventForm('ru', 9), { wrapper: makeWrapper() });
+
+    await waitFor(() => expect(mockGet).toHaveBeenCalled());
+    expect(mockGet).toHaveBeenCalledWith(expect.stringMatching(/\/organizer\/events\?.*[?&]locale=ru/));
+  });
 });
 
 describe('useOrganizerEventForm — edit-mode prefill', () => {

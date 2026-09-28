@@ -46,7 +46,7 @@ function mockOrganizerGet(
   mockGet.mockImplementation((path: string) => {
     if (path.includes('/organizer/profile')) return Promise.resolve(profileResponse);
     if (path.includes('/organizer/claims/suggestions')) return Promise.resolve(claimSuggestionsResponse);
-    if (path === '/organizer/claims') return Promise.resolve(ownClaimsResponse);
+    if (path.startsWith('/organizer/claims?')) return Promise.resolve(ownClaimsResponse);
     return Promise.resolve(eventsResponse);
   });
 }
@@ -63,6 +63,15 @@ describe('OrganizerDashboard', () => {
     await waitFor(() => expect(screen.getByText('Jazz Night')).toBeInTheDocument());
     expect(screen.getByText('Art Show')).toBeInTheDocument();
     expect(mockGet).toHaveBeenCalledWith(expect.stringContaining('/organizer/events?limit='));
+  });
+
+  it('sends locale= on the events and own-claims requests (#454)', async () => {
+    mockOrganizerGet(sampleEvents, undefined, undefined, { claims: [] });
+    renderWithProviders(<OrganizerDashboard />);
+    await waitFor(() => expect(screen.getByText('Jazz Night')).toBeInTheDocument());
+
+    expect(mockGet).toHaveBeenCalledWith(expect.stringMatching(/\/organizer\/events\?.*[?&]locale=en/));
+    expect(mockGet).toHaveBeenCalledWith(expect.stringMatching(/^\/organizer\/claims\?locale=en/));
   });
 
   it('shows an empty state when there are no events', async () => {
