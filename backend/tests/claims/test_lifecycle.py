@@ -16,6 +16,7 @@ from app.claims.lifecycle import (
     claiming_organizer_name,
     create_claim,
     expire_stale_claims,
+    own_claim_for_event,
     recheck_claim,
     resolve_claim_for_event,
 )
@@ -957,6 +958,53 @@ class TestResolveClaimForEvent:
         mock_db.scalar = AsyncMock(side_effect=[_fake_event_source(publisher_id=99), claim])
 
         assert await resolve_claim_for_event(mock_db, make_event()) is claim
+
+
+class TestOwnClaimForEvent:
+    """(#451) Caller-scoped counterpart to resolve_claim_for_event — must
+    return the claim only when the *caller* is its organizer, never a rival
+    claimant's pending claim."""
+
+    @pytest.mark.asyncio
+    async def test_no_event_source_returns_none(self, mock_db, make_event, make_organizer):
+        mock_db.scalar = AsyncMock(return_value=None)
+
+        result = await own_claim_for_event(mock_db, make_organizer(organizer_id=5), make_event())
+
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_no_active_claim_returns_none(self, mock_db, make_event, make_organizer):
+        es = _fake_event_source(publisher_id=99)
+        mock_db.scalar = AsyncMock(side_effect=[es, None])
+
+        result = await own_claim_for_event(mock_db, make_organizer(organizer_id=5), make_event())
+
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_other_organizers_pending_claim_returns_none(
+        self, mock_db, make_event, make_organizer
+    ):
+        """The whole point of #451: a rival claimant's pending claim on the
+        same target must never come back for a different caller."""
+        es = _fake_event_source(publisher_id=99)
+        claim = _fake_claim(organizer_id=5, status=CLAIM_STATUS_PENDING)
+        mock_db.scalar = AsyncMock(side_effect=[es, claim])
+
+        result = await own_claim_for_event(mock_db, make_organizer(organizer_id=6), make_event())
+
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_own_pending_claim_returned(self, mock_db, make_event, make_organizer):
+        es = _fake_event_source(publisher_id=99)
+        claim = _fake_claim(organizer_id=5, status=CLAIM_STATUS_PENDING)
+        mock_db.scalar = AsyncMock(side_effect=[es, claim])
+
+        result = await own_claim_for_event(mock_db, make_organizer(organizer_id=5), make_event())
+
+        assert result is claim
 
 
 class TestClaimingOrganizerName:

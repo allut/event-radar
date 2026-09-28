@@ -17,7 +17,16 @@ interface ClaimPillProps {
 
 /** Sits beside the event date/time — the public page's read-only marker once
  * an event is no longer claimable via this CTA (#414: "cross-surface
- * retirement" once a claim is pending or granted). */
+ * retirement" once a claim is pending or granted). `status="claimed"` is
+ * public (backs "Organizer-verified" for any viewer). `status="pending"` is
+ * claimant-only (#451): GET /events/{id}'s `claim_status` never carries
+ * "pending" — it collapses into "unclaimed" for every caller, organizer or
+ * not, so a rival claimant or a browser that merely once saw an organizer
+ * sign-in can't read it off the public payload. The caller's own EventDetail
+ * decides whether to render this with `status="pending"` only after a
+ * separate organizer-scoped call (GET /organizer/claims/for-event/{id})
+ * confirms the *caller* holds the pending claim, not just that one exists on
+ * the target. */
 export function ClaimPill({ status, locale }: ClaimPillProps) {
   return (
     <span className={styles.pill}>

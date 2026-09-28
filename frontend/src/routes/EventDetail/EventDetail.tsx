@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { api } from '../../api/client';
+import { api, organizerApi } from '../../api/client';
 import { t, ti } from '../../i18n';
 import { buildMapsUrl, categoryGradient, cx, formatEventDateTime, formatEventShortDate, formatHourMinute, formatPrice, safeUrl, sanitizeHtml, shareEvent, titleWithBrand, trackExternalClick, truncateForMeta, withLocaleQuery } from '../../utils';
 import { useAuth } from '../../hooks/useAuth';
@@ -48,6 +48,16 @@ export default function EventDetail() {
     queryFn: () => api.get<EventDetailData>(withLocaleQuery(API.event(id ?? ''), locale)),
     enabled: Boolean(id),
     retry: false,
+  });
+
+  // (#451) GET /events/{id} never reveals a pending claim — the pending pill
+  // is claimant-only, so an organizer-authed page asks this separate,
+  // organizer-scoped endpoint for its *own* active claim on the event
+  // instead of trusting anything public claim_status says about "pending".
+  const { data: ownClaim } = useQuery({
+    queryKey: [QUERY_KEYS.organizerClaimForEvent, data?.id],
+    queryFn: () => organizerApi.get<{ claim: { status: string } | null }>(API.organizerClaimForEvent(data?.id ?? '')),
+    enabled: Boolean(data?.id) && organizerAuthed,
   });
 
   const { reportOpen, reported, openReportModal, closeReportModal, handleReportSubmitted } = useEventReport(data?.reported ?? false);
@@ -182,9 +192,14 @@ export default function EventDetail() {
                 {ti('ends_at', locale, { time: formatHourMinute(data.ends_at, locale) })}
               </span>
             )}
-            {(data.claim_status === 'claimed' ||
-              (data.claim_status === 'pending' && organizerAuthed)) && (
-              <ClaimPill status={data.claim_status} locale={locale} />
+            {data.claim_status === 'claimed' && (
+              <ClaimPill status="claimed" locale={locale} />
+            )}
+            {/* (#451) Claimant-only: the public claim_status never carries
+                "pending" — only the caller's own claim, fetched via the
+                organizer-scoped for-event lookup, can show this. */}
+            {data.claim_status !== 'claimed' && ownClaim?.claim?.status === 'pending' && (
+              <ClaimPill status="pending" locale={locale} />
             )}
           </div>
 

@@ -239,6 +239,71 @@ class TestRecheckOwnClaim:
         assert result["status"] == CLAIM_STATUS_APPROVED
 
 
+class TestGetClaimForEvent:
+    """(#451) GET /organizer/claims/for-event/{event_id} — the caller's own
+    pending/approved claim on the event's target, or null. Backs the public
+    page's claimant-only pending pill without ever exposing a rival
+    claimant's pending state."""
+
+    @pytest.mark.asyncio
+    async def test_404_when_event_not_found(self, mock_db, make_request, make_organizer):
+        from app.routers.organizer_claims import get_claim_for_event
+
+        mock_db.scalar = AsyncMock(return_value=None)
+
+        with pytest.raises(HTTPException) as exc_info:
+            await get_claim_for_event(
+                999,
+                make_request(method="GET", path="/organizer/claims/for-event/999"),
+                current_organizer=make_organizer(organizer_id=5),
+                db=mock_db,
+            )
+        assert exc_info.value.status_code == http.HTTPStatus.NOT_FOUND
+        assert exc_info.value.detail == ERROR_EVENT_NOT_FOUND
+
+    @pytest.mark.asyncio
+    async def test_null_claim_when_no_own_active_claim(self, mock_db, make_request, make_organizer, make_event):
+        from app.routers.organizer_claims import get_claim_for_event
+
+        mock_db.scalar = AsyncMock(return_value=make_event())
+
+        with patch(
+            "app.routers.organizer_claims.own_claim_for_event",
+            new_callable=AsyncMock,
+            return_value=None,
+        ):
+            result = await get_claim_for_event(
+                42,
+                make_request(method="GET", path="/organizer/claims/for-event/42"),
+                current_organizer=make_organizer(organizer_id=5),
+                db=mock_db,
+            )
+
+        assert result == {"claim": None}
+
+    @pytest.mark.asyncio
+    async def test_returns_serialized_own_claim(self, mock_db, make_request, make_organizer, make_event):
+        from app.routers.organizer_claims import get_claim_for_event
+
+        mock_db.scalar = AsyncMock(return_value=make_event())
+        claim = _fake_claim(status=CLAIM_STATUS_PENDING)
+
+        with patch(
+            "app.routers.organizer_claims.own_claim_for_event",
+            new_callable=AsyncMock,
+            return_value=claim,
+        ):
+            result = await get_claim_for_event(
+                42,
+                make_request(method="GET", path="/organizer/claims/for-event/42"),
+                current_organizer=make_organizer(organizer_id=5),
+                db=mock_db,
+            )
+
+        assert result["claim"]["id"] == claim.id
+        assert result["claim"]["status"] == CLAIM_STATUS_PENDING
+
+
 class TestGetClaim:
     """#415's pending screen fetch — GET /organizer/claims/{claim_id}."""
 

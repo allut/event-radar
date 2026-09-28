@@ -554,6 +554,7 @@ export const QUERY_KEYS = {
   organizerClaim: 'organizerClaim',
   organizerClaimEvent: 'organizerClaimEvent',
   organizerClaimEvents: 'organizerClaimEvents',
+  organizerClaimForEvent: 'organizerClaimForEvent',
   adminCounts: 'adminCounts',
   adminReports: 'adminReports',
   adminSubmissions: 'adminSubmissions',
@@ -1028,6 +1029,7 @@ export const API = {
   organizerClaimEvent: (id: number | string, eventId?: number) =>
     `/organizer/claims/${id}/event${eventId !== undefined ? `?event_id=${eventId}` : ''}`,
   organizerClaimEvents: (id: number | string) => `/organizer/claims/${id}/events`,
+  organizerClaimForEvent: (eventId: number | string) => `/organizer/claims/for-event/${eventId}`,
   reports: '/reports',
   adminAuthLogin: '/admin/auth/login',
   adminAuthLogout: '/admin/auth/logout',

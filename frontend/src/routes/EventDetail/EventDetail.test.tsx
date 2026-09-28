@@ -278,10 +278,12 @@ describe('EventDetail', () => {
 
 describe('EventDetail claim discovery (#414)', () => {
   const mockOrganizerPost = vi.mocked(organizerApi.post);
+  const mockOrganizerGet = vi.mocked(organizerApi.get);
 
   afterEach(() => {
     localStorage.removeItem(ORGANIZER_SIGNED_IN_HINT_KEY);
     mockOrganizerPost.mockReset();
+    mockOrganizerGet.mockReset();
   });
 
   it('shows the claim panel for an unclaimed event, no pill', async () => {
@@ -291,20 +293,38 @@ describe('EventDetail claim discovery (#414)', () => {
     expect(screen.queryByText(/pending review|verified/i)).not.toBeInTheDocument();
   });
 
-  it('hides the pending pill from a non-organizer viewer, but still shows the claim panel (#441)', async () => {
-    mockGet.mockResolvedValueOnce({ ...eventData, claim_status: 'pending' });
+  it('hides the pending pill from a non-organizer viewer, but still shows the claim panel (#441, #451)', async () => {
+    // (#451) The public payload never actually carries "pending" any more
+    // (the backend collapses it into "unclaimed") — this asserts the
+    // frontend's own defense-in-depth: a non-organizer viewer never even
+    // queries the organizer-scoped for-event lookup that could reveal it.
+    mockGet.mockResolvedValueOnce({ ...eventData, claim_status: 'unclaimed' });
     renderWithProviders(<EventDetail />, { route: '/en/events/1', pathPattern: '/:locale/events/:id' });
     await waitFor(() => expect(screen.getByText('Test Concert')).toBeInTheDocument());
     expect(screen.queryByText('Claim pending review')).not.toBeInTheDocument();
     expect(screen.getByText('Is this your event?')).toBeInTheDocument();
+    expect(mockOrganizerGet).not.toHaveBeenCalled();
   });
 
-  it('shows the pending pill and the claim panel to a signed-in organizer (#441 rival claim)', async () => {
+  it('shows the pending pill and the claim panel to the owning organizer (#451)', async () => {
     localStorage.setItem(ORGANIZER_SIGNED_IN_HINT_KEY, '1');
-    mockGet.mockResolvedValueOnce({ ...eventData, claim_status: 'pending' });
+    mockGet.mockResolvedValueOnce({ ...eventData, claim_status: 'unclaimed' });
+    mockOrganizerGet.mockResolvedValueOnce({ claim: { status: 'pending' } });
     renderWithProviders(<EventDetail />, { route: '/en/events/1', pathPattern: '/:locale/events/:id' });
     await waitFor(() => expect(screen.getByText('Claim pending review')).toBeInTheDocument());
     expect(screen.getByText('Is this your event?')).toBeInTheDocument();
+  });
+
+  it('hides the pending pill from a rival organizer even when signed in (#451)', async () => {
+    // The bug this closes: any signed-in organizer used to see a rival's
+    // pending pill. Now the for-event lookup returns null for a caller who
+    // isn't the claimant, so no pill renders.
+    localStorage.setItem(ORGANIZER_SIGNED_IN_HINT_KEY, '1');
+    mockGet.mockResolvedValueOnce({ ...eventData, claim_status: 'unclaimed' });
+    mockOrganizerGet.mockResolvedValueOnce({ claim: null });
+    renderWithProviders(<EventDetail />, { route: '/en/events/1', pathPattern: '/:locale/events/:id' });
+    await waitFor(() => expect(screen.getByText('Is this your event?')).toBeInTheDocument());
+    expect(screen.queryByText('Claim pending review')).not.toBeInTheDocument();
   });
 
   it('shows a pill and no panel once a claim is granted', async () => {

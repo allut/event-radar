@@ -29,6 +29,7 @@ from app.claims.lifecycle import (
     cancel_claim,
     create_claim,
     get_own_claim,
+    own_claim_for_event,
     own_claim_or_404,
     recheck_claim,
     resolve_claim_target,
@@ -53,6 +54,7 @@ from app.constants import (
     ERROR_CLAIM_EVENTS_NOT_PUBLISHER,
     ERROR_CLAIM_JUSTIFICATION_REQUIRED,
     ERROR_CLAIM_SEARCH_QUERY_TOO_SHORT,
+    ERROR_EVENT_NOT_FOUND,
     ERROR_MAGIC_LINK_CONSUMED,
     ERROR_MAGIC_LINK_EXPIRED,
     ERROR_MAGIC_LINK_INVALID,
@@ -651,9 +653,35 @@ async def list_own_claims(
     return {"claims": results}
 
 
-# Registered after the literal /search and /suggestions paths above —
-# Starlette matches path routes in registration order and {claim_id} has no
-# int converter in the path itself, so it must not shadow those two literals.
+@router.get("/for-event/{event_id}")
+@limiter.limit(RATE_LIMIT_BROWSE)
+async def get_claim_for_event(
+    event_id: int,
+    request: Request,
+    current_organizer: Organizer = Depends(get_current_organizer),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """(#451) The caller's own active claim on `event_id`'s target, or
+    null — backs the public event page's claimant-only pending pill.
+    GET /events/{id} can't make this distinction itself (the organizer
+    session cookie, Path=/api/organizer, never reaches it), so an
+    organizer-authed page makes this separate, organizer-scoped call
+    instead. Same published/canonical bar as the public page
+    (public_event_filter) so id-probing can't distinguish a draft/cancelled
+    event from a nonexistent one."""
+    event = await db.scalar(select(Event).where(Event.id == event_id, public_event_filter()))
+    if event is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=ERROR_EVENT_NOT_FOUND
+        )
+    claim = await own_claim_for_event(db, current_organizer, event)
+    return {"claim": _serialize(claim) if claim is not None else None}
+
+
+# Registered after the literal /search, /suggestions and /for-event paths
+# above — Starlette matches path routes in registration order and
+# {claim_id} has no int converter in the path itself, so it must not shadow
+# those literals.
 @router.get("/{claim_id}")
 @limiter.limit(RATE_LIMIT_BROWSE)
 async def get_claim(

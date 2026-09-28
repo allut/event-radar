@@ -438,7 +438,11 @@ class TestGetEvent:
         assert result["claim_status"] == "not_claimable"
 
     @pytest.mark.asyncio
-    async def test_claim_status_pending(self, mock_db, make_event, make_request):
+    async def test_claim_status_pending_collapsed_to_unclaimed(self, mock_db, make_event, make_request):
+        """(#451) The public, unauthenticated payload never reveals a
+        pending claim — only "unclaimed"/"claimed"/"not_claimable" leave
+        this endpoint. The claimant-only pending signal is served by
+        GET /organizer/claims/for-event/{event_id} instead."""
         from app.routers.events import get_event
 
         event = make_event(42)
@@ -448,7 +452,7 @@ class TestGetEvent:
 
         result = await get_event(event_id=42, request=make_request(), db=mock_db)
 
-        assert result["claim_status"] == "pending"
+        assert result["claim_status"] == "unclaimed"
 
     @pytest.mark.asyncio
     async def test_claim_status_claimed(self, mock_db, make_event, make_request, make_organizer):

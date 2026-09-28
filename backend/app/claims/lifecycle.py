@@ -167,6 +167,22 @@ async def resolve_claim_for_event(db: AsyncSession, event: Event) -> Claim | Non
     return await active_claim_for_target(db, target)
 
 
+async def own_claim_for_event(
+    db: AsyncSession, organizer: Organizer, event: Event
+) -> Claim | None:
+    """(#451) Caller-scoped counterpart to resolve_claim_for_event — the
+    organizer-authed public-page pending pill needs to know whether the
+    *caller* is the claimant, not merely that some pending claim exists on
+    the target, and the organizer session cookie (Path=/api/organizer)
+    never reaches GET /events/{id} to make that distinction there. Delegates
+    to resolve_claim_for_event for the same cheap, HTTP-free target
+    resolution (not resolve_claim_target_live) instead of repeating it."""
+    claim = await resolve_claim_for_event(db, event)
+    if claim is None or claim.organizer_id != organizer.id:
+        return None
+    return claim
+
+
 async def bulk_dormant_pinned_event_ids(db: AsyncSession, events: list[Event]) -> set[int]:
     """Ids of `events` whose pins should be treated as not applying right
     now — pinned_fields is set AND the covering claim is dormant (#422).
@@ -239,7 +255,13 @@ def claim_status_from_claim(claim: Claim | None, event: Event) -> str:
     (`submitted_by_organizer_id` set) has no ingested EventSource to ever
     claim against, so it's not_claimable regardless of `claim` — distinct
     from unclaimed, which resolve_claim_for_event() also returns None for
-    when the event is claimable but nobody has yet."""
+    when the event is claimable but nobody has yet.
+
+    A `pending` result is caller-blind — it says nothing about whether the
+    caller is the claimant — so routers/events.py (#451) collapses it into
+    `unclaimed` before this reaches the public, unauthenticated payload.
+    Callers needing the claimant-only distinction use own_claim_for_event()
+    instead."""
     if event.submitted_by_organizer_id is not None:
         return CLAIM_DISCOVERY_STATUS_NOT_CLAIMABLE
     if claim is None:

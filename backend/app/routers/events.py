@@ -11,6 +11,8 @@ from app.claims.lifecycle import (
     resolve_claim_for_event,
 )
 from app.constants import (
+    CLAIM_DISCOVERY_STATUS_PENDING,
+    CLAIM_DISCOVERY_STATUS_UNCLAIMED,
     DEFAULT_USER_LOCALE,
     ERROR_EVENT_NOT_FOUND,
     RATE_LIMIT_EVENTS_DETAIL,
@@ -96,6 +98,17 @@ async def get_event(
         if event.submitted_by_organizer_id is not None
         else await resolve_claim_for_event(db, event)
     )
-    serialized["claim_status"] = claim_status_from_claim(claim, event)
+    # (#451) A pending claim is collapsed into "unclaimed" for this public,
+    # unauthenticated payload — the organizer session cookie
+    # (Path=/api/organizer) never reaches this endpoint, so there is no way
+    # here to tell the claimant apart from a stranger or a rival claimant.
+    # The claimant-only pending pill is served by GET
+    # /organizer/claims/for-event/{event_id} instead (organizer_claims.py).
+    claim_status = claim_status_from_claim(claim, event)
+    serialized["claim_status"] = (
+        CLAIM_DISCOVERY_STATUS_UNCLAIMED
+        if claim_status == CLAIM_DISCOVERY_STATUS_PENDING
+        else claim_status
+    )
     serialized["listed_by"] = await claiming_organizer_name(claim)
     return serialized
