@@ -373,6 +373,20 @@ async def _own_pending_claim_for_target(
     )
 
 
+async def _organizer_has_pending_claim(db: AsyncSession, organizer_id: int) -> bool:
+    """(#450) Cheap existence check backing create_claim's early cap exit —
+    an organizer at the daily cap with zero pending claims anywhere can never
+    hit the own-pending short-circuit, so it's safe (and cheaper, skipping
+    resolve_claim_target_live's live HTTP call) to reject them up front."""
+    return (
+        await db.scalar(
+            select(Claim.id)
+            .where(Claim.organizer_id == organizer_id, Claim.status == CLAIM_STATUS_PENDING)
+            .limit(1)
+        )
+    ) is not None
+
+
 async def auto_decline_other_pending_claims(
     db: AsyncSession,
     client: httpx.AsyncClient,
@@ -474,8 +488,17 @@ async def create_claim(
     claim on the resolved target gets that existing claim back with
     created=False instead of a duplicate row; callers map that onto a 200
     instead of a 201.
+
+    (#450) The cap check runs in two places: a cheap early exit here rejects
+    a capped organizer with no pending claims at all (the common case) before
+    any work happens, and the real gate sits just before the Claim(...)
+    insert below, after the own-pending short-circuit — so a capped
+    organizer re-claiming a target they already have pending still gets that
+    existing claim back (nothing is inserted, so nothing should count
+    against the cap) instead of a 429.
     """
-    if await _claims_created_today(db, organizer.id) >= ORGANIZER_DAILY_CLAIM_CAP:
+    at_cap = await _claims_created_today(db, organizer.id) >= ORGANIZER_DAILY_CLAIM_CAP
+    if at_cap and not await _organizer_has_pending_claim(db, organizer.id):
         raise ClaimError(429, ERROR_DAILY_CLAIM_LIMIT)
 
     event = await db.get(Event, event_id)
@@ -521,6 +544,14 @@ async def create_claim(
     existing_own_pending = await _own_pending_claim_for_target(db, organizer.id, target)
     if existing_own_pending is not None:
         return existing_own_pending, False
+
+    if at_cap:
+        # Re-checked here (not just the early exit above) because a capped
+        # organizer who does have pending claims elsewhere reaches this
+        # point without having been rejected yet — this is the real gate for
+        # that case, running only now that we know a row is actually about
+        # to be inserted.
+        raise ClaimError(429, ERROR_DAILY_CLAIM_LIMIT)
 
     justification_clean = justification.strip() if justification else None
     if target.kind == CLAIM_KIND_SERIES and not justification_clean:

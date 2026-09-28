@@ -91,14 +91,61 @@ def _fake_claim(**overrides) -> MagicMock:
 
 class TestCreateClaim:
     @pytest.mark.asyncio
-    async def test_daily_cap_blocks_before_any_insert(self, mock_db, make_organizer):
-        mock_db.scalar.return_value = ORGANIZER_DAILY_CLAIM_CAP
+    async def test_daily_cap_blocks_before_any_insert_no_pending_claims(
+        self, mock_db, make_organizer
+    ):
+        """(#450) A capped organizer with no pending claims at all is
+        rejected by the cheap early exit, before any event lookup."""
+        mock_db.scalar = AsyncMock(side_effect=[ORGANIZER_DAILY_CLAIM_CAP, None])
         organizer = make_organizer(organizer_id=5)
 
         with pytest.raises(ClaimError) as exc:
             await create_claim(mock_db, AsyncMock(), organizer, event_id=10)
 
         assert exc.value.status_code == 429
+        mock_db.get.assert_not_called()
+        mock_db.add.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_daily_cap_blocks_new_target_despite_other_pending_claim(
+        self, mock_db, make_organizer, make_event
+    ):
+        """(#450) A capped organizer who does have a pending claim (on some
+        other target) skips the early exit, reaches target resolution, but
+        is still rejected with 429 right before the insert since this
+        target isn't their own-pending one."""
+        es = _fake_event_source(publisher_id=99)
+        mock_db.scalar = AsyncMock(
+            side_effect=[ORGANIZER_DAILY_CLAIM_CAP, 1, es, None, None]
+        )
+        mock_db.get.return_value = make_event()
+        organizer = make_organizer(organizer_id=5)
+
+        with pytest.raises(ClaimError) as exc:
+            await create_claim(mock_db, AsyncMock(), organizer, event_id=10)
+
+        assert exc.value.status_code == 429
+        mock_db.add.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_daily_cap_still_allows_reclaim_of_own_pending_target(
+        self, mock_db, make_organizer, make_event
+    ):
+        """(#450) The bug this fixes: a capped organizer re-claiming a
+        target they already have pending gets that existing claim back
+        (nothing inserted, so the cap never applies) instead of a 429."""
+        es = _fake_event_source(publisher_id=99)
+        existing = _fake_claim(organizer_id=5, status=CLAIM_STATUS_PENDING)
+        mock_db.scalar = AsyncMock(
+            side_effect=[ORGANIZER_DAILY_CLAIM_CAP, 1, es, None, existing]
+        )
+        mock_db.get.return_value = make_event()
+        organizer = make_organizer(organizer_id=5)
+
+        claim, created = await create_claim(mock_db, AsyncMock(), organizer, event_id=10)
+
+        assert claim is existing
+        assert created is False
         mock_db.add.assert_not_called()
 
     @pytest.mark.asyncio
