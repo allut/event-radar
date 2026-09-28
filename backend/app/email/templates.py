@@ -122,6 +122,11 @@ EVENT_TICKETS_ROW = (
     "</td></tr>"
 )
 
+CONTACT_HTML_BODY = (
+    "<p><strong>From:</strong> {name} ({email})</p><p>{message}</p>"
+)
+CONTACT_TEXT_BODY = "From: {name} ({email})\n\n{message}"
+
 REPORT_NOTIFY_EVENT_LINE = (
     "<p><strong>Event:</strong> {title} (<a href='{href}'>{href}</a>)</p>"
 )

@@ -59,10 +59,8 @@ from app.constants import (
     VALID_REPORT_REASONS,
 )
 from app.db import AsyncSessionLocal
-from app.email.report_reporter import (
-    report_outcome_http_client,
-    send_report_outcome_email,
-)
+from app.email.report_reporter import send_report_outcome_email
+from app.email.resend import resend_http_client
 from app.models.models import (
     AdminAction,
     Event,
@@ -1073,7 +1071,7 @@ async def send_report_resolution_emails(
     # been committed.
     # One shared client for the whole fan-out (Big-O audit #5, item 2.7),
     # mirroring digest.py's Big-O audit M7 fix.
-    async with report_outcome_http_client() as http_client:
+    async with resend_http_client() as http_client:
         await asyncio.gather(
             *(_send_one(report, http_client) for report in reports),
             return_exceptions=True,

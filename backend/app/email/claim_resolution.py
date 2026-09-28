@@ -10,21 +10,15 @@ from decline and the spec only calls for an email on grant/decline/expiry.
 from __future__ import annotations
 
 import html as html_lib
-import logging
 
 import httpx
 
 from app.config import settings
 from app.constants import (
-    AUTHORIZATION_HEADER,
-    BEARER_PREFIX,
     CLAIM_EXPIRY_DAYS,
-    LOG_EVENT_EMAIL_SEND_FAILED,
     ORGANIZER_DASHBOARD_PATH,
-    RESEND_ERROR_SNIPPET_LEN,
-    RESEND_SEND_URL,
-    RESEND_TIMEOUT_SECONDS,
 )
+from app.email.resend import send_resend_email
 from app.email.styles import get_email_styles
 from app.email.templates import (
     CLAIM_RESOLUTION_BODY,
@@ -33,8 +27,7 @@ from app.email.templates import (
     EMAIL_FOOTER_BRAND,
 )
 from app.i18n import t, ti
-
-log = logging.getLogger(__name__)
+from app.routers.utils import mask_email
 
 
 def _target_label(event_title: str | None, locale: str) -> str:
@@ -138,38 +131,18 @@ async def _send(
     http_client: httpx.AsyncClient | None,
     log_label: str,
 ) -> None:
-    if not settings.RESEND_API_KEY:
-        log.warning(
-            "RESEND_API_KEY not set — %s email NOT sent (to=%s)", log_label, to_email
-        )
-        return
-
-    payload = {
-        "from": settings.RESEND_FROM_ADDRESS,
-        "to": [to_email],
-        "reply_to": settings.CONTACT_TO_ADDRESS,
-        "subject": subject,
-        "html": html_body,
-        "text": text_body,
-    }
-    headers = {AUTHORIZATION_HEADER: f"{BEARER_PREFIX}{settings.RESEND_API_KEY}"}
-    if http_client is not None:
-        resp = await http_client.post(RESEND_SEND_URL, headers=headers, json=payload)
-    else:
-        async with httpx.AsyncClient(timeout=RESEND_TIMEOUT_SECONDS) as client:
-            resp = await client.post(RESEND_SEND_URL, headers=headers, json=payload)
-
-    if resp.status_code not in (httpx.codes.OK, httpx.codes.CREATED):
-        log.error(
-            "Resend API error sending %s email (to=%s): %s %s",
-            log_label,
-            to_email,
-            resp.status_code,
-            resp.text[:RESEND_ERROR_SNIPPET_LEN],
-            extra={"event": LOG_EVENT_EMAIL_SEND_FAILED},
-        )
-    else:
-        log.info("%s email sent (to=%s)", log_label, to_email)
+    await send_resend_email(
+        {
+            "to": [to_email],
+            "reply_to": settings.CONTACT_TO_ADDRESS,
+            "subject": subject,
+            "html": html_body,
+            "text": text_body,
+        },
+        http_client=http_client,
+        log_label=f"{log_label} email",
+        log_ref=f"to={mask_email(to_email)}",
+    )
 
 
 async def send_claim_granted_email(

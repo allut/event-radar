@@ -7,13 +7,14 @@ from unittest.mock import MagicMock
 import httpx
 import pytest
 
+from app.email import resend
 from app.email import report_reporter
 
 
 @pytest.mark.asyncio
 async def test_no_api_key_logs_and_skips_send(patch_client, monkeypatch, make_event):
     monkeypatch.setattr(report_reporter.settings, "RESEND_API_KEY", "")
-    post = patch_client(report_reporter, MagicMock(status_code=200))
+    post = patch_client(resend, MagicMock(status_code=200))
 
     await report_reporter.send_report_outcome_email(
         "reporter@example.com", make_event(10), "Looked into it.", "en"
@@ -34,7 +35,7 @@ async def test_success_posts_expected_content(patch_client, monkeypatch, make_ev
     monkeypatch.setattr(report_reporter.settings, "FRONTEND_URL", "https://radar.ee")
 
     resp = MagicMock(status_code=httpx.codes.OK, text="ok")
-    post = patch_client(report_reporter, resp)
+    post = patch_client(resend, resp)
 
     event = make_event(42, title="Rave <night>")
     await report_reporter.send_report_outcome_email(
@@ -66,7 +67,7 @@ async def test_blank_note_uses_fallback(patch_client, monkeypatch, make_event):
     monkeypatch.setattr(report_reporter.settings, "RESEND_API_KEY", "re_key")
     monkeypatch.setattr(report_reporter.settings, "FRONTEND_URL", "https://radar.ee")
     resp = MagicMock(status_code=httpx.codes.OK, text="ok")
-    post = patch_client(report_reporter, resp)
+    post = patch_client(resend, resp)
 
     await report_reporter.send_report_outcome_email(
         "reporter@example.com", make_event(10), "   ", "en"
@@ -106,7 +107,7 @@ async def test_non_2xx_logs_error(patch_client, monkeypatch, caplog, make_event)
 
     monkeypatch.setattr(report_reporter.settings, "RESEND_API_KEY", "re_key")
     resp = MagicMock(status_code=422, text="bad payload")
-    patch_client(report_reporter, resp)
+    patch_client(resend, resp)
 
     with caplog.at_level(logging.ERROR):
         await report_reporter.send_report_outcome_email(

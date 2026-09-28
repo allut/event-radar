@@ -7,13 +7,14 @@ from unittest.mock import MagicMock
 import httpx
 import pytest
 
+from app.email import resend
 from app.email import claim_resolution
 
 
 @pytest.mark.asyncio
 async def test_no_api_key_logs_and_skips_send(patch_client, monkeypatch):
     monkeypatch.setattr(claim_resolution.settings, "RESEND_API_KEY", "")
-    post = patch_client(claim_resolution, MagicMock(status_code=200))
+    post = patch_client(resend, MagicMock(status_code=200))
 
     await claim_resolution.send_claim_granted_email(
         "organizer@example.com", "Jazz Night", "note", "en"
@@ -30,7 +31,7 @@ async def test_granted_email_posts_expected_content(patch_client, monkeypatch):
     monkeypatch.setattr(claim_resolution.settings, "FRONTEND_URL", "https://radar.ee")
 
     resp = MagicMock(status_code=httpx.codes.OK, text="ok")
-    post = patch_client(claim_resolution, resp)
+    post = patch_client(resend, resp)
 
     await claim_resolution.send_claim_granted_email(
         "organizer@example.com", "Rave <night>", "Verified manually.", "en"
@@ -59,7 +60,7 @@ async def test_granted_blank_note_uses_fallback(patch_client, monkeypatch):
     monkeypatch.setattr(claim_resolution.settings, "RESEND_API_KEY", "re_key")
     monkeypatch.setattr(claim_resolution.settings, "FRONTEND_URL", "https://radar.ee")
     resp = MagicMock(status_code=httpx.codes.OK, text="ok")
-    post = patch_client(claim_resolution, resp)
+    post = patch_client(resend, resp)
 
     await claim_resolution.send_claim_granted_email(
         "organizer@example.com", "Jazz Night", "   ", "en"
@@ -74,7 +75,7 @@ async def test_declined_email_uses_admin_note_and_own_subject(patch_client, monk
     monkeypatch.setattr(claim_resolution.settings, "RESEND_API_KEY", "re_key")
     monkeypatch.setattr(claim_resolution.settings, "FRONTEND_URL", "https://radar.ee")
     resp = MagicMock(status_code=httpx.codes.OK, text="ok")
-    post = patch_client(claim_resolution, resp)
+    post = patch_client(resend, resp)
 
     await claim_resolution.send_claim_declined_email(
         "organizer@example.com", "Jazz Night", "Domain mismatch.", "en"
@@ -90,7 +91,7 @@ async def test_expired_email_includes_expiry_window(patch_client, monkeypatch):
     monkeypatch.setattr(claim_resolution.settings, "RESEND_API_KEY", "re_key")
     monkeypatch.setattr(claim_resolution.settings, "FRONTEND_URL", "https://radar.ee")
     resp = MagicMock(status_code=httpx.codes.OK, text="ok")
-    post = patch_client(claim_resolution, resp)
+    post = patch_client(resend, resp)
 
     await claim_resolution.send_claim_expired_email("organizer@example.com", "Jazz Night", "en")
 
@@ -104,7 +105,7 @@ async def test_self_cancelled_email_own_subject(patch_client, monkeypatch):
     monkeypatch.setattr(claim_resolution.settings, "RESEND_API_KEY", "re_key")
     monkeypatch.setattr(claim_resolution.settings, "FRONTEND_URL", "https://radar.ee")
     resp = MagicMock(status_code=httpx.codes.OK, text="ok")
-    post = patch_client(claim_resolution, resp)
+    post = patch_client(resend, resp)
 
     await claim_resolution.send_claim_self_cancelled_email(
         "organizer@example.com", "Jazz Night", "en"
@@ -143,7 +144,7 @@ async def test_non_2xx_logs_error(patch_client, monkeypatch, caplog):
 
     monkeypatch.setattr(claim_resolution.settings, "RESEND_API_KEY", "re_key")
     resp = MagicMock(status_code=422, text="bad payload")
-    patch_client(claim_resolution, resp)
+    patch_client(resend, resp)
 
     with caplog.at_level(logging.ERROR):
         await claim_resolution.send_claim_granted_email(

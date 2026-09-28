@@ -5,21 +5,14 @@ Falls back to log-only when RESEND_API_KEY is unset (dev / CI).
 
 import logging
 
-import httpx
-
 from app.config import settings
 from app.constants import (
     APP_ENV_DEVELOPMENT,
     AUTH_VERIFY_PATH,
-    AUTHORIZATION_HEADER,
-    BEARER_PREFIX,
     DEFAULT_USER_LOCALE,
-    LOG_EVENT_EMAIL_SEND_FAILED,
-    RESEND_ERROR_SNIPPET_LEN,
-    RESEND_SEND_URL,
-    RESEND_TIMEOUT_SECONDS,
 )
 from app.email.magic_link import build_magic_link_html, build_magic_link_text
+from app.email.resend import send_resend_email
 from app.i18n import t
 from app.routers.utils import mask_email
 
@@ -57,32 +50,14 @@ async def send_magic_link(
     )
     text = build_magic_link_text(verify_url, settings.MAGIC_LINK_TTL_MINUTES, locale)
 
-    # Not routed through the shared retrying http_post: this call is awaited
-    # synchronously inside the rate-limited, user-facing POST /auth/request-link
-    # endpoint — a 5-attempt exponential backoff on a Resend hiccup would stall
-    # that request up to ~150s instead of failing fast (errors are already
-    # swallowed by the caller, which always returns 200 regardless).
-    async with httpx.AsyncClient(timeout=RESEND_TIMEOUT_SECONDS) as client:
-        resp = await client.post(
-            RESEND_SEND_URL,
-            headers={AUTHORIZATION_HEADER: f"{BEARER_PREFIX}{settings.RESEND_API_KEY}"},
-            json={
-                "from": settings.RESEND_FROM_ADDRESS,
-                "reply_to": settings.CONTACT_TO_ADDRESS,
-                "to": [to_email],
-                "subject": subject,
-                "html": html,
-                "text": text,
-            },
-        )
-
-    if resp.status_code not in (httpx.codes.OK, httpx.codes.CREATED):
-        log.error(
-            "Resend API error sending to %s: %s %s",
-            mask_email(to_email),
-            resp.status_code,
-            resp.text[:RESEND_ERROR_SNIPPET_LEN],
-            extra={"event": LOG_EVENT_EMAIL_SEND_FAILED},
-        )
-    else:
-        log.info("Magic link sent to %s", mask_email(to_email))
+    await send_resend_email(
+        {
+            "reply_to": settings.CONTACT_TO_ADDRESS,
+            "to": [to_email],
+            "subject": subject,
+            "html": html,
+            "text": text,
+        },
+        log_label="magic link",
+        log_ref=mask_email(to_email),
+    )

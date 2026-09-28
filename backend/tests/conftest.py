@@ -88,7 +88,7 @@ def patch_client(monkeypatch):
     """Factory: patch `module`'s httpx.AsyncClient so `async with AsyncClient(...)
     as client` yields a mock whose `.post` is an AsyncMock returning `resp`.
     Returns that post mock. Shared by every outbound-HTTP email sender test
-    (auth magic link, contact, report notify/reporter) — each patches its own
+    (auth magic link, contact, report notify/reporter, claim resolution) — each patches the shared
     module's httpx binding, so the module is a required argument."""
     def _factory(module, resp):
         post = AsyncMock(return_value=resp)
