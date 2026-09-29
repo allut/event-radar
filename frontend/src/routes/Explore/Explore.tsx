@@ -56,7 +56,8 @@ import {
   cx,
   DEFAULT_EXPLORE_FILTERS,
   exploreFiltersToSearchParams,
-  nextOffsetParam,
+  FIRST_KEYSET_PAGE,
+  nextKeysetParam,
   parseExploreFilters,
   titleWithBrand,
   vibeOptions,
@@ -70,6 +71,7 @@ interface ExploreResponse {
   limit: number;
   offset: number;
   has_more: boolean;
+  next_cursor?: string | null;
 }
 
 interface CurrentUser {
@@ -199,10 +201,10 @@ export default function Explore() {
     queryKey: [QUERY_KEYS.explore, locale, filters],
     queryFn: ({ pageParam }) =>
       api.get<ExploreResponse>(
-        withLocaleQuery(`${API.explore}?${buildExploreApiQuery(filters, pageParam)}`, locale),
+        withLocaleQuery(`${API.explore}?${buildExploreApiQuery(filters, pageParam.offset, pageParam.cursor)}`, locale),
       ),
-    initialPageParam: 0,
-    getNextPageParam: (lastPage) => nextOffsetParam(lastPage, lastPage.events.length),
+    initialPageParam: FIRST_KEYSET_PAGE,
+    getNextPageParam: (lastPage) => nextKeysetParam(lastPage, lastPage.events.length),
     // A facet emptied down to zero chips means "match nothing" — skip the
     // request entirely rather than round-tripping to the backend, which
     // would treat an absent/full param as "all" and return unfiltered results.

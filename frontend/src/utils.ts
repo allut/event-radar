@@ -96,7 +96,7 @@ export function vibeOptions(locale: string): { value: string; label: string }[] 
 }
 
 /** useInfiniteQuery's getNextPageParam cursor for every offset-paginated
- * list (Explore, Saved Events, admin queues): the next offset when the page
+ * list (admin queues, claim events; Explore/Saved use nextKeysetParam): the next offset when the page
  * says there's more, else undefined to stop paging. `itemCount` is the
  * caller's page-array length (`events.length`/`groups.length` — the key
  * differs per response shape, so it's passed rather than read off `page`). */
@@ -105,6 +105,25 @@ export function nextOffsetParam(
   itemCount: number,
 ): number | undefined {
   return page.has_more ? page.offset + itemCount : undefined;
+}
+
+/** A useInfiniteQuery page param for lists the backend keyset-paginates
+ * (Explore's date sort, Saved Events): `cursor` is the server's opaque
+ * `next_cursor` and wins when present; `offset` is the fallback for the
+ * sorts that stay on OFFSET (relevance/price/quality). */
+export interface KeysetPageParam {
+  offset: number;
+  cursor?: string;
+}
+
+export const FIRST_KEYSET_PAGE: KeysetPageParam = { offset: 0 };
+
+export function nextKeysetParam(
+  page: { has_more: boolean; offset: number; next_cursor?: string | null },
+  itemCount: number,
+): KeysetPageParam | undefined {
+  if (!page.has_more) return undefined;
+  return { offset: page.offset + itemCount, cursor: page.next_cursor ?? undefined };
 }
 
 /** True for any organizer-portal route, with or without a `/:locale` prefix
@@ -806,7 +825,11 @@ export function exploreFiltersToSearchParams(filters: ExploreFilters): URLSearch
 }
 
 /** Build the GET /explore query string for a given filter set + page offset. */
-export function buildExploreApiQuery(filters: ExploreFilters, offset: number): string {
+export function buildExploreApiQuery(
+  filters: ExploreFilters,
+  offset: number,
+  cursor?: string,
+): string {
   const params = new URLSearchParams();
   if (filters.q) params.set(EXPLORE_PARAM.q, filters.q);
   if (filters.category.length && !isFullSet(filters.category, CATEGORIES)) {
@@ -828,6 +851,7 @@ export function buildExploreApiQuery(filters: ExploreFilters, offset: number): s
   params.set(EXPLORE_PARAM.sort, filters.sort);
   params.set(EXPLORE_PARAM.limit, String(BROWSE_PAGE_SIZE));
   params.set(EXPLORE_PARAM.offset, String(offset));
+  if (cursor) params.set(EXPLORE_PARAM.cursor, cursor);
   return params.toString();
 }
 

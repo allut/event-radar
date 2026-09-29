@@ -13,7 +13,7 @@ let a ticket click silently overwrite a user's bookmark.
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel
-from sqlalchemy import delete, func, select, text
+from sqlalchemy import delete, func, literal, select, text, tuple_
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -23,6 +23,7 @@ from app.constants import (
     ERROR_EVENT_NOT_FOUND,
     ERROR_INVALID_PREFERENCE_SIGNAL,
     ERROR_INVALID_SIGNAL,
+    PAGINATION_CURSOR_MAX_LEN,
     PAGINATION_MAX_OFFSET,
     PAGINATION_MIN_LIMIT,
     PAGINATION_MIN_OFFSET,
@@ -37,6 +38,8 @@ from app.models.models import Event, User, UserEventFeedback
 from app.rate_limit import limiter
 from app.auth.dependencies import get_current_user
 from app.routers.utils import (
+    decode_page_cursor,
+    encode_page_cursor,
     invalidate_user_scores,
     load_user_reported_events,
     resolve_locale_param,
@@ -163,6 +166,7 @@ async def list_feedback_events(
     offset: int = Query(
         PAGINATION_MIN_OFFSET, ge=PAGINATION_MIN_OFFSET, le=PAGINATION_MAX_OFFSET
     ),
+    cursor: str | None = Query(None, max_length=PAGINATION_CURSOR_MAX_LEN),
     locale: str | None = Query(None),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -173,6 +177,10 @@ async def list_feedback_events(
     Restricted to PREFERENCE_SIGNALS (not the full VALID_SIGNALS): view/
     click_external can have multiple rows per (user, event), which would
     otherwise return the same event more than once.
+
+    Keyset-paginated on ``(created_at, feedback id)``: ``cursor`` (the previous
+    page's opaque ``next_cursor``) replaces ``offset``, so page N costs the
+    same as page 1 and a signal added mid-scroll can't shift rows between pages.
     """
     if signal not in PREFERENCE_SIGNALS:
         raise HTTPException(
@@ -184,8 +192,9 @@ async def list_feedback_events(
 
     # See browse.py's _browse_sql_path for the rationale: total only on the
     # first page, has_more via a limit+1 sentinel row instead of total.
+    after = decode_page_cursor(cursor) if cursor else None
     total: int | None = None
-    if offset == 0:
+    if offset == 0 and after is None:
         total = (
             await db.scalar(
                 select(func.count(UserEventFeedback.id))
@@ -199,24 +208,35 @@ async def list_feedback_events(
             )
         ) or 0
 
+    page_conds = [
+        UserEventFeedback.user_id == current_user.id,
+        UserEventFeedback.signal == signal,
+        public_event_filter(),
+    ]
+    if after is not None:
+        after_ts, after_id = after
+        page_conds.append(
+            tuple_(UserEventFeedback.created_at, UserEventFeedback.id)
+            < tuple_(literal(after_ts), literal(after_id))
+        )
+        offset = 0
     page_stmt = (
         select_events_with_classification()
+        .add_columns(UserEventFeedback.created_at, UserEventFeedback.id)
         .join(
             UserEventFeedback,
             UserEventFeedback.event_id == Event.id,
         )
-        .where(
-            UserEventFeedback.user_id == current_user.id,
-            UserEventFeedback.signal == signal,
-            public_event_filter(),
-        )
-        .order_by(UserEventFeedback.created_at.desc())
+        .where(*page_conds)
+        .order_by(UserEventFeedback.created_at.desc(), UserEventFeedback.id.desc())
         .limit(limit + 1)
         .offset(offset)
     )
-    events = list((await db.scalars(page_stmt)).all())
-    has_more = len(events) > limit
-    events = events[:limit]
+    rows = (await db.execute(page_stmt)).all()
+    has_more = len(rows) > limit
+    rows = rows[:limit]
+    events = [row[0] for row in rows]
+    next_cursor = encode_page_cursor(rows[-1][1], rows[-1][2]) if has_more else None
 
     feedback_by_event = {e.id: signal for e in events}
     reported = await load_user_reported_events(
@@ -238,4 +258,5 @@ async def list_feedback_events(
         "limit": limit,
         "offset": offset,
         "has_more": has_more,
+        "next_cursor": next_cursor,
     }

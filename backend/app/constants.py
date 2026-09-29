@@ -1225,6 +1225,10 @@ PAGINATION_MIN_OFFSET: int = 0
 # more depth than any legitimate session reaches while still bounding the
 # LIMIT/OFFSET seq-scan-and-discard cost an authenticated caller can force.
 PAGINATION_MAX_OFFSET: int = 5_000
+# Opaque keyset cursor (`GET /explore` date sort, `GET /feedback/events`) —
+# base64url of `[iso_timestamp, row_id]`, so ~60 chars in practice; the cap
+# only bounds what an attacker can make the decoder chew on.
+PAGINATION_CURSOR_MAX_LEN: int = 200
 # Candidate cap for the Python-scored path (Path B: for_you=True OR sort=relevance —
 # so also date/price/quality sort *under* for_you=True, not just relevance). Sorted
 # soonest-first before capping, so the cap policy is a deliberate soonest-bias, not
@@ -2034,6 +2038,7 @@ ERROR_UNKNOWN_SOURCE = "Unknown source: {slug!r}"
 
 # routers/browse.py, routers/feedback.py
 ERROR_INVALID_SORT = "sort must be one of {sorts}"
+ERROR_INVALID_CURSOR = "cursor is malformed"
 ERROR_INVALID_SIGNAL = "Invalid signal. Must be one of: {signals}"
 ERROR_INVALID_PREFERENCE_SIGNAL = "signal must be one of: {signals}"
 

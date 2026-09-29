@@ -869,6 +869,7 @@ export const EXPLORE_PARAM = {
   dateTo: 'date_to',
   limit: 'limit',
   offset: 'offset',
+  cursor: 'cursor',
 } as const;
 
 // Pagination query-param names shared by every paginated list fetch
@@ -877,6 +878,7 @@ export const EXPLORE_PARAM = {
 export const PAGE_PARAM = {
   limit: 'limit',
   offset: 'offset',
+  cursor: 'cursor',
 } as const;
 // Feedback-signal filter query-param name for the Saved Events feed
 // (values are the Signal union: 'bookmark' | 'like' | 'dislike').
