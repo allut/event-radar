@@ -25,7 +25,7 @@ from app.models.models import (
     RawEvent,
     Source,
 )
-from app.routers.utils import event_ended_filter, event_not_ended_filter
+from app.events.queries import event_ended_filter, event_not_ended_filter
 
 
 async def _stamp_missing_fienta_publishers(db: AsyncSession) -> int:

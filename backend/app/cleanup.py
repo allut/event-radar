@@ -31,7 +31,7 @@ from app.models.models import (
     User,
     UserEventScore,
 )
-from app.routers.utils import event_ended_filter
+from app.events.queries import event_ended_filter
 
 
 async def _count_or_delete(

@@ -218,7 +218,10 @@ class HtmlListingAdapter(SourceAdapter):
                         resp = await http_post(client, req.url, data=req.data)
                     else:
                         resp = await http_get(client, req.url)
-                except (httpx.HTTPStatusError, httpx.RequestError) as exc:
+                except (httpx.HTTPStatusError, httpx.RequestError, ValueError) as exc:
+                    # ValueError: host_guard_hook's SSRF guard (a redirect
+                    # hop off the allowed host) — a per-page failure, not a
+                    # bug, same as the httpx cases.
                     log.warning(
                         "%s listing fetch failed url=%s: %s",
                         self.source.slug,
@@ -311,7 +314,10 @@ class HtmlListingAdapter(SourceAdapter):
         async with semaphore:
             try:
                 detail_resp = await http_get(client, detail_url)
-            except (httpx.HTTPStatusError, httpx.RequestError) as exc:
+            except (httpx.HTTPStatusError, httpx.RequestError, ValueError) as exc:
+                # ValueError: host_guard_hook's SSRF guard — one card whose
+                # URL redirects off-host must degrade that card to
+                # listing-only, not fail the whole source run.
                 log.warning(
                     "%s detail fetch failed url=%s: %s",
                     self.source.slug,

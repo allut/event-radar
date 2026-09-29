@@ -8,13 +8,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app._generated.i18n_data import PERSONAS as _PERSONAS_DATA
 from app.config import settings
 from app.constants import (
-    PUBLISHER_NAME_ESTONIA_CONCERT_HALL,
-    PUBLISHER_NAME_KUMU,
     PUBLISHER_STATUS_ACTIVE,
+    SINGLE_INSTITUTION_SOURCES,
     SOURCE_KIND_API,
-    SOURCE_SLUG_ESTONIA_CONCERT_HALL,
     SOURCE_SLUG_FIENTA,
-    SOURCE_SLUG_KUMU,
     VALID_CATEGORIES,
     VALID_TIMES,
     VALID_VIBES,
@@ -94,21 +91,9 @@ async def seed_sources(db: AsyncSession) -> None:
             await _upsert_simple(db, _simple_source_def(sdef), existing)
 
 
-# KUMU/Estonia Concert Hall are each a single institution — one constant
-# Publisher row per source (external_id NULL), matched at ingest time by the
-# same (source_id, external_id) lookup Fienta's per-organizer rows use
-# (#409/#411). Piletilevi is deliberately absent — its Publisher resolution
-# is promoter-id-keyed, not source-constant (see CONTEXT.md's Event Claiming
-# glossary).
-_SINGLE_INSTITUTION_PUBLISHERS = {
-    SOURCE_SLUG_KUMU: PUBLISHER_NAME_KUMU,
-    SOURCE_SLUG_ESTONIA_CONCERT_HALL: PUBLISHER_NAME_ESTONIA_CONCERT_HALL,
-}
-
-
 async def seed_publishers(db: AsyncSession) -> None:
     """Idempotently insert the KUMU/Estonia Concert Hall constant Publisher rows."""
-    slugs = list(_SINGLE_INSTITUTION_PUBLISHERS)
+    slugs = list(SINGLE_INSTITUTION_SOURCES)
     sources_by_slug = {
         source.slug: source
         for source in (
@@ -129,7 +114,8 @@ async def seed_publishers(db: AsyncSession) -> None:
             )
         ).all()
     }
-    for slug, name in _SINGLE_INSTITUTION_PUBLISHERS.items():
+    for slug, institution in SINGLE_INSTITUTION_SOURCES.items():
+        name = institution.publisher_name
         source = sources_by_slug.get(slug)
         if source is None or source.id in existing_source_ids:
             continue

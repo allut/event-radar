@@ -101,7 +101,7 @@ async def test_second_concurrent_cleanup_call_gets_409(admin_app, make_db_ctx, m
 
     with (
         patch_admin_settings() as mock_settings,
-        patch("app.routers.utils.AsyncSessionLocal", return_value=db_ctx),
+        patch("app.db.AsyncSessionLocal", return_value=db_ctx),
         patch("app.routers.admin.cleanup_stale_data", job),
     ):
         mock_settings.ADMIN_PASSWORD = ""
@@ -132,7 +132,7 @@ async def test_second_concurrent_send_digests_call_gets_409(admin_app, make_db_c
 
     with (
         patch_admin_settings() as mock_settings,
-        patch("app.routers.utils.AsyncSessionLocal", return_value=db_ctx),
+        patch("app.db.AsyncSessionLocal", return_value=db_ctx),
         patch("app.routers.admin.send_daily_digests", job),
     ):
         mock_settings.ADMIN_PASSWORD = ""
@@ -166,7 +166,7 @@ async def test_second_concurrent_pipeline_run_call_gets_409(admin_app, make_db_c
 
     with (
         patch_admin_settings() as mock_settings,
-        patch("app.routers.utils.AsyncSessionLocal", return_value=db_ctx),
+        patch("app.db.AsyncSessionLocal", return_value=db_ctx),
         patch("app.routers.admin.sync_fienta_organizers", job),
         patch("app.routers.admin.ingest_all_enabled", AsyncMock(return_value=[])),
         patch("app.routers.admin.dedup_pass_drain_now", AsyncMock(return_value={"merged": 0})),
@@ -207,7 +207,7 @@ async def test_standalone_classify_blocked_while_pipeline_run_is_mid_classify_st
 
     with (
         patch_admin_settings() as mock_settings,
-        patch("app.routers.utils.AsyncSessionLocal", return_value=db_ctx),
+        patch("app.db.AsyncSessionLocal", return_value=db_ctx),
         patch("app.routers.admin.sync_fienta_organizers", AsyncMock(return_value={"added": [], "stale": []})),
         patch("app.routers.admin.ingest_all_enabled", AsyncMock(return_value=[])),
         patch("app.routers.admin.dedup_pass_drain_now", AsyncMock(return_value={"merged": 0})),

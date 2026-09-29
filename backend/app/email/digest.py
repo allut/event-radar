@@ -18,12 +18,15 @@ from app.config import settings
 from app.constants import (
     AUTHORIZATION_HEADER,
     BEARER_PREFIX,
+    DIGEST_CATEGORY_FALLBACK,
     DIGEST_MAX_WHY_GO_BULLETS,
     DIGEST_RESULT_SENT,
     DIGEST_RESULT_SKIPPED,
     DIGEST_SEND_CONCURRENCY,
     FEED_BUILD_USER_BATCH_SIZE,
     HEADER_LIST_UNSUBSCRIBE,
+    HEADER_LIST_UNSUBSCRIBE_POST,
+    LIST_UNSUBSCRIBE_ONE_CLICK,
     LOCALE_ET,
     LOCALE_RU,
     LOG_EVENT_EMAIL_SEND_FAILED,
@@ -52,13 +55,13 @@ from app.i18n import day_name, month_name, t, ti
 from app.ingestion.http_client import http_post
 from app.models.models import DailyFeed, Event, User
 from app.routers.utils import (
-    mask_email,
-    public_event_filter,
     resolve_title,
-    resolve_venue_name,
     resolve_why_go,
     select_events_with_classification,
 )
+from app.events.venue import resolve_venue_name
+from app.auth.utils import mask_email
+from app.events.queries import public_event_filter
 
 log = logging.getLogger(__name__)
 
@@ -126,7 +129,7 @@ def _build_event_block(
             s_img=s.s_img,
         )
     else:
-        category = (cl.categories[0] if cl and cl.categories else "event").replace("_", " ")
+        category = (cl.categories[0] if cl and cl.categories else DIGEST_CATEGORY_FALLBACK).replace("_", " ")
         image_html = EVENT_IMAGE_BAND.format(
             event_href=event_href,
             s_band=s.s_band,
@@ -288,7 +291,7 @@ async def send_digest_email(
                     "html": html,
                     "headers": {
                         HEADER_LIST_UNSUBSCRIBE: f"<{header_url}>",
-                        "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+                        HEADER_LIST_UNSUBSCRIBE_POST: LIST_UNSUBSCRIBE_ONE_CLICK,
                     },
                 },
             )

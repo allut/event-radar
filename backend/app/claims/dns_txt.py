@@ -8,10 +8,13 @@ content SSRF surface; the ALLOWED_SOURCE_HOSTS allowlist doesn't apply here.
 
 import httpx
 
-from app.constants import CLAIM_DNS_DOH_URL, CLAIM_DNS_TXT_RECORD_LABEL, DNS_RECORD_TYPE_TXT
+from app.constants import (
+    CLAIM_DNS_DOH_ACCEPT_HEADER,
+    CLAIM_DNS_DOH_URL,
+    CLAIM_DNS_TXT_RECORD_LABEL,
+    DNS_RECORD_TYPE_TXT,
+)
 from app.ingestion.http_client import http_get
-
-_DOH_ACCEPT_HEADER = {"Accept": "application/dns-json"}
 
 
 async def verify_dns_txt_token(client: httpx.AsyncClient, domain: str, token: str) -> bool:
@@ -24,7 +27,7 @@ async def verify_dns_txt_token(client: httpx.AsyncClient, domain: str, token: st
             "name": f"{CLAIM_DNS_TXT_RECORD_LABEL}.{domain}",
             "type": DNS_RECORD_TYPE_TXT,
         },
-        headers=_DOH_ACCEPT_HEADER,
+        headers=CLAIM_DNS_DOH_ACCEPT_HEADER,
     )
     data = response.json()
     answers = data.get("Answer") or []

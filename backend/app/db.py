@@ -1,5 +1,5 @@
 import logging
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from pathlib import Path
 
 from alembic.config import Config
@@ -76,3 +76,23 @@ async def assert_schema_at_head() -> None:
         log.error(message, extra=log_extra)
         raise RuntimeError(message)
     log.warning(message, extra=log_extra)
+
+
+async def run_in_session(
+    func: Callable[[AsyncSession], Awaitable[dict]], *, commit: bool
+) -> dict:
+    """Run a session-scoped job: open a session, run ``func(db)``, commit when
+    asked, roll back and re-raise on failure.
+
+    Shared by every scheduler/admin entry point that needs its own session
+    (app/main.py's scheduled jobs and app/routers/admin.py's manual triggers).
+    """
+    async with AsyncSessionLocal() as db:
+        try:
+            result = await func(db)
+            if commit:
+                await db.commit()
+            return result
+        except Exception:
+            await db.rollback()
+            raise

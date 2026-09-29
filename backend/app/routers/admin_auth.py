@@ -35,14 +35,18 @@ from app.constants import (
     DETAIL_SIGNED_OUT,
     ERROR_ADMIN_DISABLED,
     ERROR_ADMIN_INCORRECT_CREDENTIALS,
+    FEATURE_ADMIN_LOGIN,
+    FEATURE_ADMIN_TOTP,
     LOG_EVENT_ADMIN_ACTION,
     RATE_LIMIT_ADMIN_LOGIN,
     RATE_LIMIT_BROWSE,
     RATE_LIMIT_LOGOUT,
     SETTING_NAME_ADMIN_PASSWORD,
+    SETTING_NAME_ADMIN_TOTP_SECRET,
 )
 from app.rate_limit import client_key, limiter
-from app.routers.utils import clear_session_cookie, require_configured_secret, set_session_cookie
+from app.routers.utils import clear_session_cookie, set_session_cookie
+from app.auth.utils import require_configured_secret
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/admin/auth", tags=["admin-auth"])
@@ -67,7 +71,7 @@ async def admin_login(body: AdminLoginBody, request: Request, response: Response
     password = settings.ADMIN_PASSWORD
     password_configured = require_configured_secret(
         password,
-        feature="Admin login",
+        feature=FEATURE_ADMIN_LOGIN,
         setting_name=SETTING_NAME_ADMIN_PASSWORD,
         app_env=settings.APP_ENV,
         allow_insecure_dev=settings.ALLOW_INSECURE_DEV,
@@ -81,8 +85,8 @@ async def admin_login(body: AdminLoginBody, request: Request, response: Response
         totp_secret = settings.ADMIN_TOTP_SECRET
         totp_configured = require_configured_secret(
             totp_secret,
-            feature="Admin TOTP",
-            setting_name="ADMIN_TOTP_SECRET",
+            feature=FEATURE_ADMIN_TOTP,
+            setting_name=SETTING_NAME_ADMIN_TOTP_SECRET,
             app_env=settings.APP_ENV,
             allow_insecure_dev=settings.ALLOW_INSECURE_DEV,
         )

@@ -1216,3 +1216,17 @@ class TestStripFeeAmounts:
         assert result is not None
         assert "2 EUR" not in result
         assert "30 EUR" in result
+
+
+class TestHostMatchesDomain:
+    def test_exact_and_subdomain_match(self):
+        from app.ingestion.http_client import host_matches_domain
+
+        assert host_matches_domain("gmail.com", "gmail.com")
+        assert host_matches_domain("mail.gmail.com", "gmail.com")
+
+    def test_lookalike_suffix_does_not_match(self):
+        from app.ingestion.http_client import host_matches_domain
+
+        assert not host_matches_domain("notgmail.com", "gmail.com")
+        assert not host_matches_domain("gmail.com.evil.test", "gmail.com")

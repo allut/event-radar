@@ -282,7 +282,7 @@ class TestGetEvent:
         event = make_event(42)
         mock_db.scalar.return_value = event
 
-        result = await get_event(event_id=42, request=make_request(), db=mock_db)
+        result = await get_event(event_id=42, request=make_request(), db=mock_db, current_user=None)
 
         assert result["id"] == 42
         assert result["title"] == "Test Event"
@@ -297,7 +297,7 @@ class TestGetEvent:
         mock_db.scalar.return_value = None
 
         with pytest.raises(HTTPException) as exc_info:
-            await get_event(event_id=999, request=make_request(), db=mock_db)
+            await get_event(event_id=999, request=make_request(), db=mock_db, current_user=None)
         assert exc_info.value.status_code == http.HTTPStatus.NOT_FOUND
 
     @pytest.mark.asyncio
@@ -308,36 +308,23 @@ class TestGetEvent:
         event.classification = None
         mock_db.scalar.return_value = event
 
-        result = await get_event(event_id=1, request=make_request(), db=mock_db)
+        result = await get_event(event_id=1, request=make_request(), db=mock_db, current_user=None)
 
         assert result["categories"] == []
         assert result["quality_score"] is None
 
     @pytest.mark.asyncio
-    async def test_revoked_token_treated_as_anonymous(self, mock_db, make_event, make_request, make_user):
-        """A token whose version no longer matches user.session_token_version
-        (post logout-all) must not resolve the user — no locale/signal leak."""
+    async def test_anonymous_caller_gets_no_signals(self, mock_db, make_event, make_request):
+        """No resolved user (signed out, or get_optional_user rejected an
+        expired/revoked token) -> no locale/signal hydration."""
         from app.routers.events import get_event
-        from app.auth.tokens import generate_session_token
 
-        event = make_event(42)
-        mock_db.scalar.return_value = event
-
-        user = make_user(user_id=7, locale="ru")
-        user.session_token_version = 2
-        mock_db.get.return_value = user
-
-        stale_token = generate_session_token(7, 1)  # minted at version 1, user now at 2
+        mock_db.scalar.return_value = make_event(42)
 
         result = await get_event(
-            event_id=42,
-            request=make_request(),
-            db=mock_db,
-            session=stale_token,
+            event_id=42, request=make_request(), db=mock_db, current_user=None
         )
 
-        # Revoked token must not resolve signals for this user — no leak of
-        # my_signal (like/dislike/bookmark) after logout-all.
         assert result["my_signal"] is None
         mock_db.execute.assert_not_awaited()
 
@@ -349,7 +336,7 @@ class TestGetEvent:
         mock_db.scalar.return_value = None
 
         with pytest.raises(HTTPException):
-            await get_event(event_id=42, request=make_request(), db=mock_db)
+            await get_event(event_id=42, request=make_request(), db=mock_db, current_user=None)
 
         stmt = mock_db.scalar.call_args.args[0]
         compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
@@ -364,7 +351,6 @@ class TestGetEvent:
         """?locale=et must win even for an authenticated caller whose
         persisted locale is EN — same fix as GET /feed."""
         from app.routers.events import get_event
-        from app.auth.tokens import generate_session_token
 
         event = make_event(42, why_go_localized={"et": ["ET bullet"], "en": ["EN bullet"]})
         mock_db.scalar.return_value = event
@@ -372,14 +358,13 @@ class TestGetEvent:
         user = make_user(user_id=7, locale="en")
         user.session_token_version = 1
         mock_db.get.return_value = user
-        token = generate_session_token(7, 1)
 
         result = await get_event(
             event_id=42,
             request=make_request(),
             locale_query="et",
             db=mock_db,
-            session=token,
+            current_user=user,
         )
 
         assert result["why_go"] == ["ET bullet"]
@@ -389,7 +374,6 @@ class TestGetEvent:
         self, mock_db, make_event, make_request, make_user
     ):
         from app.routers.events import get_event
-        from app.auth.tokens import generate_session_token
 
         event = make_event(42, why_go_localized={"et": ["ET bullet"], "en": ["EN bullet"]})
         mock_db.scalar.return_value = event
@@ -397,14 +381,13 @@ class TestGetEvent:
         user = make_user(user_id=7, locale="en")
         user.session_token_version = 1
         mock_db.get.return_value = user
-        token = generate_session_token(7, 1)
 
         result = await get_event(
             event_id=42,
             request=make_request(),
             locale_query=None,
             db=mock_db,
-            session=token,
+            current_user=user,
         )
 
         assert result["why_go"] == ["EN bullet"]
@@ -418,7 +401,7 @@ class TestGetEvent:
         event = make_event(42)
         mock_db.scalar.side_effect = [event, None]
 
-        result = await get_event(event_id=42, request=make_request(), db=mock_db)
+        result = await get_event(event_id=42, request=make_request(), db=mock_db, current_user=None)
 
         assert result["claim_status"] == "unclaimed"
 
@@ -433,7 +416,7 @@ class TestGetEvent:
         event = make_event(42, submitted_by_organizer_id=9)
         mock_db.scalar.side_effect = [event, None]
 
-        result = await get_event(event_id=42, request=make_request(), db=mock_db)
+        result = await get_event(event_id=42, request=make_request(), db=mock_db, current_user=None)
 
         assert result["claim_status"] == "not_claimable"
 
@@ -450,7 +433,7 @@ class TestGetEvent:
         claim = MagicMock(status="pending")
         mock_db.scalar.side_effect = [event, es, claim]
 
-        result = await get_event(event_id=42, request=make_request(), db=mock_db)
+        result = await get_event(event_id=42, request=make_request(), db=mock_db, current_user=None)
 
         assert result["claim_status"] == "unclaimed"
 
@@ -463,7 +446,7 @@ class TestGetEvent:
         claim = MagicMock(status="approved", organizer=make_organizer(organizer_id=5))
         mock_db.scalar.side_effect = [event, es, claim]
 
-        result = await get_event(event_id=42, request=make_request(), db=mock_db)
+        result = await get_event(event_id=42, request=make_request(), db=mock_db, current_user=None)
 
         assert result["claim_status"] == "claimed"
 
@@ -474,7 +457,7 @@ class TestGetEvent:
         event = make_event(42)
         mock_db.scalar.side_effect = [event, None]
 
-        result = await get_event(event_id=42, request=make_request(), db=mock_db)
+        result = await get_event(event_id=42, request=make_request(), db=mock_db, current_user=None)
 
         assert result["listed_by"] is None
 
@@ -491,7 +474,7 @@ class TestGetEvent:
         )
         mock_db.scalar.side_effect = [event, es, claim]
 
-        result = await get_event(event_id=42, request=make_request(), db=mock_db)
+        result = await get_event(event_id=42, request=make_request(), db=mock_db, current_user=None)
 
         assert result["listed_by"] is None
 
@@ -506,7 +489,7 @@ class TestGetEvent:
         claim = MagicMock(status="approved", organizer=make_organizer(organizer_id=5))
         mock_db.scalar.side_effect = [event, es, claim]
 
-        result = await get_event(event_id=42, request=make_request(), db=mock_db)
+        result = await get_event(event_id=42, request=make_request(), db=mock_db, current_user=None)
 
         assert result["listed_by"] is None
 
@@ -523,6 +506,6 @@ class TestGetEvent:
         )
         mock_db.scalar.side_effect = [event, es, claim]
 
-        result = await get_event(event_id=42, request=make_request(), db=mock_db)
+        result = await get_event(event_id=42, request=make_request(), db=mock_db, current_user=None)
 
         assert result["listed_by"] == "Tallinn Jazz Club"

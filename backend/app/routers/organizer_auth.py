@@ -93,11 +93,11 @@ from app.routers.utils import (
     clear_oauth_state_cookie,
     clear_session_cookie,
     get_or_create_organizer,
-    mask_email,
     recent_unused_link_exists,
     set_oauth_state_cookie,
     set_session_cookie,
 )
+from app.auth.utils import mask_email
 
 log = logging.getLogger(__name__)
 # Every organizer endpoint must live under this /organizer/* prefix (or the
@@ -549,7 +549,7 @@ async def organizer_google_callback(
     except (httpx.HTTPError, GoogleTokenExchangeError):
         log.warning(
             "organizer google sign-in: token exchange failed",
-            extra={"event": LOG_EVENT_GOOGLE_SIGNIN_DEGRADED, "track": "organizer"},
+            extra={"event": LOG_EVENT_GOOGLE_SIGNIN_DEGRADED, "track": AUTH_TRACK_ORGANIZER},
         )
         return _error_redirect(OAUTH_ERROR_TOKEN_EXCHANGE_FAILED)
 
@@ -560,7 +560,7 @@ async def organizer_google_callback(
         # rejected caller.
         log.warning(
             "organizer google sign-in: JWKS fetch failed",
-            extra={"event": LOG_EVENT_GOOGLE_SIGNIN_DEGRADED, "track": "organizer"},
+            extra={"event": LOG_EVENT_GOOGLE_SIGNIN_DEGRADED, "track": AUTH_TRACK_ORGANIZER},
         )
         return _error_redirect(OAUTH_ERROR_TOKEN_EXCHANGE_FAILED)
     except jwt.PyJWTError:
@@ -574,7 +574,7 @@ async def organizer_google_callback(
     log.info(
         "organizer google sign-in: outcome=%s",
         outcome,
-        extra={"event": LOG_EVENT_GOOGLE_SIGNIN, "track": "organizer", "outcome": outcome},
+        extra={"event": LOG_EVENT_GOOGLE_SIGNIN, "track": AUTH_TRACK_ORGANIZER, "outcome": outcome},
     )
 
     if organizer is None:

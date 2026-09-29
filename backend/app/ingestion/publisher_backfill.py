@@ -24,6 +24,7 @@ from app.constants import (
     EVENT_STATUS_PUBLISHED,
     FIENTA_MIN_REQUEST_INTERVAL_SECONDS,
     HTTP_TIMEOUT_SECONDS,
+    PUBLISHER_BACKFILL_SOURCE_SLUGS,
     SOURCE_SLUG_ESTONIA_CONCERT_HALL,
     SOURCE_SLUG_FIENTA,
     SOURCE_SLUG_KUMU,
@@ -33,16 +34,9 @@ from app.ingestion.adapter import load_publisher_lookup
 from app.ingestion.http_client import AsyncRateLimiter
 from app.ingestion.sources.fienta import FientaAdapter
 from app.models.models import Event, EventSource, Source
-from app.routers.utils import event_not_ended_filter
+from app.events.queries import event_not_ended_filter
 
 log = logging.getLogger(__name__)
-
-_BACKFILL_SOURCE_SLUGS = (
-    SOURCE_SLUG_FIENTA,
-    SOURCE_SLUG_KUMU,
-    SOURCE_SLUG_ESTONIA_CONCERT_HALL,
-)
-
 
 def _claimable_event_filter(now: datetime):
     return (
@@ -169,7 +163,7 @@ async def backfill_publisher_ids(db: AsyncSession) -> dict[str, int]:
         s.slug: s
         for s in (
             await db.scalars(
-                select(Source).where(Source.slug.in_(_BACKFILL_SOURCE_SLUGS))
+                select(Source).where(Source.slug.in_(PUBLISHER_BACKFILL_SOURCE_SLUGS))
             )
         ).all()
     }

@@ -24,20 +24,9 @@ from app.constants import (
     CLAIM_VERIFICATION_MECHANISM_PILETILEVI_PROMOTER,
     CLAIM_VERIFICATION_OUTCOME_ADMIN_REVIEW,
     CLAIM_VERIFICATION_OUTCOME_AUTO_GRANT,
-    ESTONIA_CONCERT_HALL_VERIFICATION_DOMAIN,
-    KUMU_VERIFICATION_DOMAIN,
-    SOURCE_SLUG_ESTONIA_CONCERT_HALL,
-    SOURCE_SLUG_KUMU,
+    SINGLE_INSTITUTION_SOURCES,
 )
-from app.routers.utils import normalize_email
-
-# KUMU and Estonia Concert Hall are each a single institution with one
-# hardcoded verification domain — see CONTEXT.md's Publisher glossary entry.
-INSTITUTIONAL_VERIFICATION_DOMAINS: dict[str, str] = {
-    SOURCE_SLUG_KUMU: KUMU_VERIFICATION_DOMAIN,
-    SOURCE_SLUG_ESTONIA_CONCERT_HALL: ESTONIA_CONCERT_HALL_VERIFICATION_DOMAIN,
-}
-
+from app.auth.utils import normalize_email
 
 @dataclass(frozen=True)
 class VerificationResult:
@@ -78,7 +67,7 @@ async def verify_institutional_publisher_claim(
     client: httpx.AsyncClient, source_slug: str, token: str
 ) -> VerificationResult:
     """KUMU/Estonia Concert Hall: DNS-TXT against the hardcoded institutional domain."""
-    domain = INSTITUTIONAL_VERIFICATION_DOMAINS[source_slug]
+    domain = SINGLE_INSTITUTION_SOURCES[source_slug].verification_domain
     verified = await verify_dns_txt_token(client, domain, token)
     return VerificationResult(
         CLAIM_VERIFICATION_MECHANISM_DNS_TXT, _outcome_for(verified), domain=domain

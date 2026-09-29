@@ -15,7 +15,7 @@ from app.constants import (
 )
 from app.email.contact import send_contact_message
 from app.rate_limit import limiter
-from app.routers.utils import mask_email
+from app.auth.utils import mask_email
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/contact", tags=["contact"])

@@ -19,11 +19,12 @@ from collections.abc import Iterable, Mapping
 from datetime import date, datetime, timedelta
 
 from rapidfuzz.fuzz import token_set_ratio
-from sqlalchemy import func, or_, select, update
+from sqlalchemy import Integer, cast, column, func, or_, select, update, values
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased, load_only
 
 from app.constants import (
+    DEDUP_BULK_UPDATE_CHUNK_SIZE,
     CLAIM_STATUS_APPROVED,
     DEDUP_CANDIDATE_PAIR_MAX,
     DEDUP_CANDIDATE_PAIR_WARN_THRESHOLD,
@@ -42,7 +43,11 @@ from app.constants import (
     VENUE_RATIO_THRESHOLD,
 )
 from app.models.models import Claim, Event, EventSource, Venue
-from app.routers.utils import event_series_key, normalized_title, serialize_event_series_key
+from app.events.queries import (
+    event_series_key,
+    normalized_title,
+    serialize_event_series_key,
+)
 
 log = logging.getLogger(__name__)
 
@@ -749,9 +754,11 @@ async def clear_stale_dedup_groups(db: AsyncSession, cutoff: datetime) -> None:
 async def bulk_assign_dedup_groups(
     db: AsyncSession, events: list[Event], assignments: Mapping[int, int | None]
 ) -> int:
-    """Write ``assignments`` onto ``events``, grouping changed rows by target
-    group id and issuing one bulk ``UPDATE ... WHERE id IN (...)`` per group
-    instead of one UPDATE per changed row at flush (Big-O audit #5, item 2.8).
+    """Write ``assignments`` onto ``events`` with one bulk
+    ``UPDATE ... FROM (VALUES (id, group_id), ...)`` per
+    ``DEDUP_BULK_UPDATE_CHUNK_SIZE`` changed rows — the query count follows
+    the number of changed rows, not the number of distinct groups (Big-O
+    audit #5, item 2.8; chunked to stay under the driver's bind-parameter cap).
 
     Also updates each changed event's in-memory ``dedup_group_id`` directly —
     deliberately *not* going through the ORM's dirty-tracking (no later flush
@@ -759,23 +766,28 @@ async def bulk_assign_dedup_groups(
     wrote), so this sets the attribute via ``__dict__`` rather than normal
     attribute assignment. Returns the number of events whose group id changed.
     """
-    by_new_gid: dict[int | None, list[Event]] = {}
+    changed: list[tuple[Event, int | None]] = []
     for event in events:
         new_gid = assignments.get(event.id)
         if event.dedup_group_id != new_gid:
-            by_new_gid.setdefault(new_gid, []).append(event)
+            changed.append((event, new_gid))
 
-    for new_gid, changed_events in by_new_gid.items():
+    for start in range(0, len(changed), DEDUP_BULK_UPDATE_CHUNK_SIZE):
+        chunk = changed[start : start + DEDUP_BULK_UPDATE_CHUNK_SIZE]
+        new_groups = values(
+            column("id", Integer), column("group_id", Integer), name="new_groups"
+        ).data([(event.id, new_gid) for event, new_gid in chunk])
         await db.execute(
             update(Event)
-            .where(Event.id.in_([e.id for e in changed_events]))
-            .values(dedup_group_id=new_gid),
+            .where(Event.id == new_groups.c.id)
+            # cast: an all-NULL chunk would otherwise type the VALUES column as text.
+            .values(dedup_group_id=cast(new_groups.c.group_id, Integer)),
             execution_options={"synchronize_session": False},
         )
-        for event in changed_events:
+        for event, new_gid in chunk:
             event.__dict__["dedup_group_id"] = new_gid
 
-    return sum(len(changed) for changed in by_new_gid.values())
+    return len(changed)
 
 
 async def run_dedup_pass(db: AsyncSession) -> dict:

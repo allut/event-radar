@@ -569,7 +569,7 @@ class TestListOwnClaims:
         assert result["claims"][0]["status"] == CLAIM_STATUS_DECLINED
 
     @pytest.mark.asyncio
-    async def test_series_claim_uses_representative_event_scan(
+    async def test_series_claim_uses_bulk_series_scan(
         self, mock_db, make_request, make_organizer
     ):
         from app.routers.organizer_claims import list_own_claims
@@ -592,10 +592,10 @@ class TestListOwnClaims:
             new_callable=AsyncMock,
             return_value={},
         ), patch(
-            "app.routers.organizer_claims.representative_event_for_claim",
+            "app.routers.organizer_claims.bulk_resolve_series_events",
             new_callable=AsyncMock,
-            return_value=event,
-        ):
+            return_value={"k": event},
+        ) as bulk_series:
             result = await list_own_claims(
                 make_request(method="GET", path="/organizer/claims"),
                 current_organizer=organizer,
@@ -603,6 +603,7 @@ class TestListOwnClaims:
                 locale=None,
             )
 
+        bulk_series.assert_awaited_once_with(mock_db, {"k"})
         assert result["claims"][0]["event_id"] == 7
         assert result["claims"][0]["event_title"] == "Winter Market"
         assert result["claims"][0]["publisher_name"] is None

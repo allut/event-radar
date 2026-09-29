@@ -34,7 +34,8 @@ from app.claims.lifecycle import (
     recheck_claim,
     resolve_claim_target,
 )
-from app.claims.pinning import representative_event_for_claim
+from app.claims.pinning import bulk_resolve_series_events
+from app.ingestion.http_client import host_matches_domain
 from app.constants import (
     ADMIN_ACTION_REVOKE_CLAIM,
     CLAIM_AUTOMATED_VERIFICATION_MECHANISMS,
@@ -66,14 +67,15 @@ from app.constants import (
     ORGANIZER_SESSION_COOKIE_NAME,
     ORGANIZER_SESSION_COOKIE_PATH,
     ORGANIZER_SESSION_TTL_DAYS,
+    PAGINATION_MAX_OFFSET,
     PAGINATION_MIN_LIMIT,
     PAGINATION_MIN_OFFSET,
-    PAGINATION_MAX_OFFSET,
     RATE_LIMIT_AUTH_REQUEST_LINK,
     RATE_LIMIT_AUTH_VERIFY,
     RATE_LIMIT_BROWSE,
     RATE_LIMIT_CLAIM,
     SECONDS_PER_DAY,
+    TALLINN_TZ,
     VALID_LOCALES,
 )
 from app.db import get_db
@@ -84,19 +86,18 @@ from app.routers.utils import (
     bulk_resolve_publisher_events,
     claim_dns_record_name,
     escape_ilike_pattern,
-    event_not_ended_filter,
     get_or_create_organizer,
-    mask_email,
-    public_event_filter,
     publisher_claim_event_ids,
     recent_unused_link_exists,
     resolve_locale_param,
     resolve_title,
-    resolve_venue_name,
     select_events_with_classification,
     serialize_event,
     set_session_cookie,
 )
+from app.events.venue import resolve_venue_name
+from app.events.queries import event_not_ended_filter, public_event_filter
+from app.auth.utils import mask_email
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/organizer/claims", tags=["organizer-claims"])
@@ -503,7 +504,7 @@ async def search_claimable_events(
         )
 
     effective_locale = resolve_locale_param(locale, current_organizer.locale)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(TALLINN_TZ)
     pattern = escape_ilike_pattern(query)
     candidates = (
         (
@@ -562,7 +563,7 @@ async def suggested_claimable_events(
         return {"events": []}
 
     effective_locale = resolve_locale_param(locale, current_organizer.locale)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(TALLINN_TZ)
     pattern = escape_ilike_pattern(domain)
     candidates = (
         (
@@ -592,7 +593,7 @@ async def suggested_claimable_events(
         # this is the precise check — "notgmail.com" contains "gmail.com" as
         # a substring but isn't the same host.
         host = urlparse(event.url).hostname or ""
-        if host != domain and not host.endswith(f".{domain}"):
+        if not host_matches_domain(host, domain):
             continue
         es = min(event.sources, key=lambda s: s.id)
         if _is_already_claimed(event, es, publisher_ids, series_keys):
@@ -632,8 +633,8 @@ async def list_own_claims(
     ever made (any status), newest first — the daily-cap-bounded per-organizer
     row count (ORGANIZER_DAILY_CLAIM_CAP) keeps this small enough that a
     bulk-then-scan mix (Publisher claims bulk-resolved in two fixed queries;
-    the rare Series claim resolved with its own bounded scan,
-    representative_event_for_claim) doesn't need admin_list_claims'
+    Series claims resolved by one shared bounded scan,
+    bulk_resolve_series_events) doesn't need admin_list_claims'
     series-skips-to-null tradeoff."""
     claims = (
         (
@@ -651,6 +652,12 @@ async def list_own_claims(
     effective_locale = resolve_locale_param(locale, current_organizer.locale)
     publisher_ids = {c.publisher_id for c in claims if c.publisher_id is not None}
     events_by_publisher = await bulk_resolve_publisher_events(db, publisher_ids)
+    series_keys = {
+        c.event_series_key
+        for c in claims
+        if c.kind != CLAIM_KIND_PUBLISHER and c.event_series_key is not None
+    }
+    events_by_series_key = await bulk_resolve_series_events(db, series_keys)
 
     results = []
     for claim in claims:
@@ -661,7 +668,11 @@ async def list_own_claims(
                 else None
             )
         else:
-            event = await representative_event_for_claim(db, claim)
+            event = (
+                events_by_series_key.get(claim.event_series_key)
+                if claim.event_series_key is not None
+                else None
+            )
         results.append(_serialize_own_claim_summary(claim, event, effective_locale))
     return {"claims": results}
 

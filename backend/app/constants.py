@@ -1,6 +1,6 @@
 import http
 import logging
-from typing import Any, Literal
+from typing import Any, Literal, NamedTuple
 from zoneinfo import ZoneInfo
 
 from app._generated.shared_constants import (
@@ -2119,3 +2119,80 @@ ERROR_IMAGE_UPLOAD_FAILED = "Image upload failed; please try again."
 ERROR_ADMIN_JOB_FAILED = "{name} failed; see server logs"
 ERROR_ADMIN_JOB_ALREADY_RUNNING = "{name} is already running; try again once it finishes."
 ERROR_FEATURE_DISABLED = "{feature} disabled: {setting_name} not configured"
+
+
+# ---------------------------------------------------------------------------
+# Single-institution sources (KUMU, Estonia Concert Hall) — one Publisher and
+# one hardcoded DNS-TXT verification domain per source; see CONTEXT.md's
+# Publisher glossary entry. Piletilevi is deliberately absent: its Publisher
+# resolution is promoter-id-keyed, not source-constant.
+# ---------------------------------------------------------------------------
+class SingleInstitution(NamedTuple):
+    publisher_name: str
+    verification_domain: str
+
+
+SINGLE_INSTITUTION_SOURCES: dict[str, SingleInstitution] = {
+    SOURCE_SLUG_KUMU: SingleInstitution(PUBLISHER_NAME_KUMU, KUMU_VERIFICATION_DOMAIN),
+    SOURCE_SLUG_ESTONIA_CONCERT_HALL: SingleInstitution(
+        PUBLISHER_NAME_ESTONIA_CONCERT_HALL, ESTONIA_CONCERT_HALL_VERIFICATION_DOMAIN
+    ),
+}
+# Sources whose events the publisher_id backfill can stamp (Fienta's per-organizer
+# Publishers plus the single-institution ones above).
+PUBLISHER_BACKFILL_SOURCE_SLUGS: tuple[str, ...] = (
+    SOURCE_SLUG_FIENTA,
+    *SINGLE_INSTITUTION_SOURCES,
+)
+
+CLAIM_DNS_VERIFICATION_MECHANISMS = frozenset(
+    {CLAIM_VERIFICATION_MECHANISM_DNS_TXT, CLAIM_VERIFICATION_MECHANISM_PILETILEVI_PROMOTER}
+)
+CLAIM_DNS_DOH_ACCEPT_HEADER = {"Accept": "application/dns-json"}
+
+# Piletilevi promoter JSON-LD resolution (claims/piletilevi_promoter.py).
+PILETILEVI_PROMOTER_URL_MARKER = "/promoters/"
+MAILTO_PREFIX = "mailto:"
+JSONLD_ID_KEY = "@id"
+JSONLD_TYPE_KEY = "@type"
+
+# Feature/setting labels for require_configured_secret's 503 detail.
+FEATURE_ADMIN_LOGIN = "Admin login"
+FEATURE_ADMIN_TOTP = "Admin TOTP"
+FEATURE_INBOUND_WEBHOOK = "Webhook"
+SETTING_NAME_ADMIN_TOTP_SECRET = "ADMIN_TOTP_SECRET"
+SETTING_NAME_RESEND_WEBHOOK_SECRET = "RESEND_WEBHOOK_SECRET"
+
+# Inbound-mail webhook response bodies (routers/webhooks.py).
+WEBHOOK_STATUS_ACCEPTED = "accepted"
+WEBHOOK_STATUS_REJECTED = "rejected"
+WEBHOOK_STATUS_SKIPPED = "skipped"
+WEBHOOK_REASON_REPLAY = "replay"
+WEBHOOK_REASON_INVALID_JSON = "invalid json"
+WEBHOOK_REASON_SENDER_NOT_ALLOWLISTED = "sender not allowlisted"
+
+# Scheduler job labels whose runtime string is load-bearing: the "hourly
+# ingest" value is matched verbatim by an Axiom monitor (docs/observability.md
+# #3b), so these keep their historical spelling rather than reusing JOB_ID_*.
+JOB_LABEL_HOURLY_INGEST = "hourly ingest"
+JOB_LABEL_DEDUP_PASS = "dedup pass"
+JOB_LABEL_ORGANIZER_SYNC = "organizer sync"
+JOB_LABEL_DEDUP_DRAIN = "dedup"
+SCHEDULER_DAY_OF_WEEK_SUNDAY = "sun"
+
+HEADER_LIST_UNSUBSCRIBE_POST = "List-Unsubscribe-Post"
+LIST_UNSUBSCRIBE_ONE_CLICK = "List-Unsubscribe=One-Click"
+DIGEST_CATEGORY_FALLBACK = "event"
+
+URL_SCHEME_HTTPS = "https"
+HOST_WWW_PREFIX = "www."
+
+# Estonia Concert Hall's Piletilevi session JWT: header.payload.signature, with
+# payload base64url-encoded unpadded (padded to a multiple of 4 to decode).
+JWT_SEGMENT_COUNT = 3
+JWT_PAYLOAD_INDEX = 1
+BASE64_PAD_MULTIPLE = 4
+
+# Rows per bulk UPDATE ... FROM (VALUES ...) in dedup/rules.py::bulk_assign_dedup_groups
+# — 2 bind params per row, well under asyncpg's 32767-parameter cap.
+DEDUP_BULK_UPDATE_CHUNK_SIZE = 5000

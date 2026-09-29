@@ -878,3 +878,27 @@ class TestClassifyEventMalformedParse:
 
         assert ok is False
         assert event.status == EVENT_STATUS_DRAFT
+
+
+class TestClassifyPromptVenueResolution:
+    def test_venue_linked_event_uses_linked_venue_name(self, make_event, make_venue):
+        """A venue-linked event leaves venue_name NULL (#176) — the prompt must
+        carry the linked Venue's name, not the fallback."""
+        from app.constants import LLM_CLASSIFY_VENUE_FALLBACK
+        from app.llm.classifier import _build_classify_prompt
+
+        venue = make_venue(name="Saved Hall")
+        event = make_event(venue_name=None, venue_id=3, venue=venue)
+
+        prompt = _build_classify_prompt(event, price_context="")
+
+        assert "Saved Hall" in prompt
+        assert LLM_CLASSIFY_VENUE_FALLBACK not in prompt
+
+    def test_unlinked_event_without_venue_name_uses_fallback(self, make_event):
+        from app.constants import LLM_CLASSIFY_VENUE_FALLBACK
+        from app.llm.classifier import _build_classify_prompt
+
+        event = make_event(venue_name=None)
+
+        assert LLM_CLASSIFY_VENUE_FALLBACK in _build_classify_prompt(event, price_context="")

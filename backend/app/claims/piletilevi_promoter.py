@@ -27,14 +27,22 @@ from urllib.parse import urljoin, urlsplit
 import httpx
 from bs4 import BeautifulSoup
 
-from app.constants import FREE_EMAIL_PROVIDER_DOMAINS, HTML_PARSER
-from app.ingestion.http_client import http_get
+from app.constants import (
+    FREE_EMAIL_PROVIDER_DOMAINS,
+    HTML_PARSER,
+    JSONLD_ID_KEY,
+    JSONLD_TYPE_KEY,
+    MAILTO_PREFIX,
+    PILETILEVI_PROMOTER_URL_MARKER,
+)
+from app.ingestion.http_client import host_matches_domain, http_get
 from app.ingestion.jsonld import parse_jsonld_graph_items
-from app.ingestion.selectors import PILETILEVI_HOST, PILETILEVI_PROMOTER_CONTACT_SELECTOR
-from app.routers.utils import normalize_email
-
-_PROMOTER_URL_MARKER = "/promoters/"
-_MAILTO_PREFIX = "mailto:"
+from app.ingestion.selectors import (
+    JSONLD_EVENT_TYPE,
+    PILETILEVI_HOST,
+    PILETILEVI_PROMOTER_CONTACT_SELECTOR,
+)
+from app.auth.utils import normalize_email
 
 
 @dataclass(frozen=True)
@@ -50,9 +58,7 @@ class PromoterIdentity:
 
 def _is_piletilevi_host(url: str) -> bool:
     hostname = urlsplit(url).hostname
-    return hostname is not None and (
-        hostname == PILETILEVI_HOST or hostname.endswith(f".{PILETILEVI_HOST}")
-    )
+    return hostname is not None and host_matches_domain(hostname, PILETILEVI_HOST)
 
 
 def _resolve_organizer_node(
@@ -64,12 +70,12 @@ def _resolve_organizer_node(
     input — resolves off Piletilevi's own host (SSRF guard; callers that
     fetch this URL server-side rely on this check)."""
     items = parse_jsonld_graph_items(BeautifulSoup(html, HTML_PARSER))
-    by_id = {item["@id"]: item for item in items if "@id" in item}
+    by_id = {item[JSONLD_ID_KEY]: item for item in items if JSONLD_ID_KEY in item}
 
     organizer_ref: str | None = None
     for item in items:
-        if item.get("@type") == "Event" and isinstance(item.get("organizer"), dict):
-            organizer_ref = item["organizer"].get("@id")
+        if item.get(JSONLD_TYPE_KEY) == JSONLD_EVENT_TYPE and isinstance(item.get("organizer"), dict):
+            organizer_ref = item["organizer"].get(JSONLD_ID_KEY)
             break
     if not organizer_ref:
         return None
@@ -78,7 +84,7 @@ def _resolve_organizer_node(
     if not organizer_node:
         return None
     url = organizer_node.get("url")
-    if not url or _PROMOTER_URL_MARKER not in str(url):
+    if not url or PILETILEVI_PROMOTER_URL_MARKER not in str(url):
         return None
     resolved = urljoin(event_page_url, str(url))
     if not _is_piletilevi_host(resolved):
@@ -118,9 +124,9 @@ def extract_contact_email(promoter_html: str) -> str | None:
     if not link:
         return None
     href = str(link.get("href", ""))
-    if not href.startswith(_MAILTO_PREFIX):
+    if not href.startswith(MAILTO_PREFIX):
         return None
-    email = normalize_email(href[len(_MAILTO_PREFIX) :].split("?", 1)[0])
+    email = normalize_email(href[len(MAILTO_PREFIX) :].split("?", 1)[0])
     if "@" not in email:
         return None
     return email

@@ -23,6 +23,7 @@ from app.constants import (
     CLAIM_VERIFICATION_MECHANISM_PILETILEVI_MAILBOX,
     ERROR_CLAIM_TARGET_ALREADY_APPROVED,
 )
+from tests.conftest import build_event
 from tests.routers.conftest import patch_admin_settings, scalars_returning
 
 
@@ -70,12 +71,10 @@ def _make_claim(
 
 
 def _make_event(*, event_id: int = 42, pinned_fields: list[str] | None = None) -> MagicMock:
-    event = MagicMock()
-    event.id = event_id
-    event.title_orig = "Test Event"
-    event.title_localized = None
-    event.pinned_fields = pinned_fields if pinned_fields is not None else []
-    return event
+    return build_event(
+        event_id=event_id,
+        pinned_fields=pinned_fields if pinned_fields is not None else [],
+    )
 
 
 def _admin_settings(mock_settings):

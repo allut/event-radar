@@ -5,6 +5,7 @@ CONTEXT.md's Event Claiming glossary and docs/organizer-portal.md.
 
 import asyncio
 import logging
+from http import HTTPStatus
 from datetime import datetime, timedelta, timezone
 
 import httpx
@@ -68,13 +69,9 @@ from app.email.claim_resolution import (
 )
 from app.ingestion.http_client import http_get
 from app.models.models import Claim, Event, EventSource, Organizer
-from app.routers.utils import (
-    bulk_resolve_publisher_events,
-    event_series_key,
-    resolve_title,
-    resolve_venue_name,
-    serialize_event_series_key,
-)
+from app.routers.utils import bulk_resolve_publisher_events, resolve_title
+from app.events.venue import resolve_venue_name
+from app.events.queries import event_series_key, serialize_event_series_key
 
 log = logging.getLogger(__name__)
 
@@ -456,7 +453,7 @@ async def auto_decline_other_pending_claims(
     if not others:
         return
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(TALLINN_TZ)
     for other in others:
         other.status = CLAIM_STATUS_REVOKED
         other.resolved_at = now
@@ -522,7 +519,7 @@ async def create_claim(
     """
     at_cap = await _claims_created_today(db, organizer.id) >= ORGANIZER_DAILY_CLAIM_CAP
     if at_cap and not await _organizer_has_pending_claim(db, organizer.id):
-        raise ClaimError(429, ERROR_DAILY_CLAIM_LIMIT)
+        raise ClaimError(HTTPStatus.TOO_MANY_REQUESTS, ERROR_DAILY_CLAIM_LIMIT)
 
     event = await db.get(Event, event_id)
     if (
@@ -536,7 +533,7 @@ async def create_claim(
         # public_event_filter()/canonical_event_filter() (utils.py) — a
         # draft, cancelled, or non-canonical-duplicate event is rejected the
         # same way a nonexistent one is, so id probing can't distinguish them.
-        raise ClaimError(404, ERROR_EVENT_NOT_FOUND)
+        raise ClaimError(HTTPStatus.NOT_FOUND, ERROR_EVENT_NOT_FOUND)
 
     if event.submitted_by_organizer_id is not None:
         # Explicit guard (#429) — a direct organizer submission has no
@@ -546,23 +543,23 @@ async def create_claim(
         # branch below, so the response can't be used to fingerprint who
         # submitted the event.
         if event.submitted_by_organizer_id == organizer.id:
-            raise ClaimError(422, ERROR_CLAIM_OWN_SUBMISSION)
-        raise ClaimError(422, ERROR_CLAIM_NOT_CLAIMABLE)
+            raise ClaimError(HTTPStatus.UNPROCESSABLE_ENTITY, ERROR_CLAIM_OWN_SUBMISSION)
+        raise ClaimError(HTTPStatus.UNPROCESSABLE_ENTITY, ERROR_CLAIM_NOT_CLAIMABLE)
 
     es = await representative_event_source(db, event_id=event_id)
     if es is None or es.source is None:
-        raise ClaimError(422, ERROR_CLAIM_NOT_CLAIMABLE)
+        raise ClaimError(HTTPStatus.UNPROCESSABLE_ENTITY, ERROR_CLAIM_NOT_CLAIMABLE)
 
     try:
         target = await resolve_claim_target_live(db, client, event, es)
     except ClaimTargetError:
-        raise ClaimError(422, ERROR_CLAIM_NOT_CLAIMABLE) from None
+        raise ClaimError(HTTPStatus.UNPROCESSABLE_ENTITY, ERROR_CLAIM_NOT_CLAIMABLE) from None
 
     if await approved_claim_exists(db, target):
         # (#431) Unchanged from pre-0048 behavior for the approved case — no
         # contest/override flow for an already-granted claim, support-facing
         # message. Only the pending-vs-pending case below is new.
-        raise ClaimError(409, ERROR_CLAIM_TARGET_ALREADY_APPROVED)
+        raise ClaimError(HTTPStatus.CONFLICT, ERROR_CLAIM_TARGET_ALREADY_APPROVED)
 
     existing_own_pending = await _own_pending_claim_for_target(db, organizer.id, target)
     if existing_own_pending is not None:
@@ -574,11 +571,11 @@ async def create_claim(
         # point without having been rejected yet — this is the real gate for
         # that case, running only now that we know a row is actually about
         # to be inserted.
-        raise ClaimError(429, ERROR_DAILY_CLAIM_LIMIT)
+        raise ClaimError(HTTPStatus.TOO_MANY_REQUESTS, ERROR_DAILY_CLAIM_LIMIT)
 
     justification_clean = justification.strip() if justification else None
     if target.kind == CLAIM_KIND_SERIES and not justification_clean:
-        raise ClaimError(422, ERROR_CLAIM_JUSTIFICATION_REQUIRED)
+        raise ClaimError(HTTPStatus.UNPROCESSABLE_ENTITY, ERROR_CLAIM_JUSTIFICATION_REQUIRED)
 
     claim = Claim(
         organizer_id=organizer.id,
@@ -613,14 +610,14 @@ async def create_claim(
     auto_granted = result.outcome == CLAIM_VERIFICATION_OUTCOME_AUTO_GRANT
     if auto_granted:
         claim.status = CLAIM_STATUS_APPROVED
-        claim.resolved_at = datetime.now(timezone.utc)
+        claim.resolved_at = datetime.now(TALLINN_TZ)
     try:
         await db.commit()
     except IntegrityError:
         # (#431) Race: another claim on the same target was approved between
         # the pre-insert check above and this claim's own auto-grant landing.
         await db.rollback()
-        raise ClaimError(409, ERROR_CLAIM_TARGET_ALREADY_APPROVED) from None
+        raise ClaimError(HTTPStatus.CONFLICT, ERROR_CLAIM_TARGET_ALREADY_APPROVED) from None
     if auto_granted:
         try:
             await send_claim_granted_email(
@@ -649,14 +646,14 @@ async def own_claim_or_404(db: AsyncSession, claim_id: int, organizer_id: int) -
         select(Claim).where(Claim.id == claim_id, Claim.organizer_id == organizer_id)
     )
     if claim is None:
-        raise ClaimError(404, ERROR_CLAIM_NOT_FOUND)
+        raise ClaimError(HTTPStatus.NOT_FOUND, ERROR_CLAIM_NOT_FOUND)
     return claim
 
 
 async def _own_pending_claim_or_404(db: AsyncSession, claim_id: int, organizer_id: int) -> Claim:
     claim = await own_claim_or_404(db, claim_id, organizer_id)
     if claim.status != CLAIM_STATUS_PENDING:
-        raise ClaimError(409, ERROR_CLAIM_NOT_PENDING)
+        raise ClaimError(HTTPStatus.CONFLICT, ERROR_CLAIM_NOT_PENDING)
     return claim
 
 
@@ -671,7 +668,7 @@ async def cancel_claim(db: AsyncSession, organizer: Organizer, claim_id: int) ->
     cleanup is needed."""
     claim = await _own_pending_claim_or_404(db, claim_id, organizer.id)
     claim.status = CLAIM_STATUS_CANCELLED
-    claim.resolved_at = datetime.now(timezone.utc)
+    claim.resolved_at = datetime.now(TALLINN_TZ)
     await db.commit()
 
     # Local import: app.claims.pinning imports representative_event_source
@@ -712,11 +709,11 @@ async def recheck_claim(
     """
     claim = await _own_pending_claim_or_404(db, claim_id, organizer.id)
     if claim.verification_mechanism not in CLAIM_AUTOMATED_VERIFICATION_MECHANISMS:
-        raise ClaimError(409, ERROR_CLAIM_NOT_PENDING)
+        raise ClaimError(HTTPStatus.CONFLICT, ERROR_CLAIM_NOT_PENDING)
 
     es = await representative_event_source(db, publisher_id=claim.publisher_id)
     if es is None or es.source is None:
-        raise ClaimError(422, ERROR_CLAIM_NOT_CLAIMABLE)
+        raise ClaimError(HTTPStatus.UNPROCESSABLE_ENTITY, ERROR_CLAIM_NOT_CLAIMABLE)
     event = await db.get(Event, es.event_id)
 
     result = await _run_verification(
@@ -730,7 +727,7 @@ async def recheck_claim(
     claim.verification_mechanism = result.mechanism
     claim.verification_domain = result.domain
     claim.verification_contact = result.contact
-    claim.last_checked_at = datetime.now(timezone.utc)
+    claim.last_checked_at = datetime.now(TALLINN_TZ)
     auto_granted = result.outcome == CLAIM_VERIFICATION_OUTCOME_AUTO_GRANT
     if auto_granted:
         claim.status = CLAIM_STATUS_APPROVED
@@ -741,7 +738,7 @@ async def recheck_claim(
         # (#431) Another claim on the same Publisher was approved since this
         # one was created — same race as create_claim's commit guard.
         await db.rollback()
-        raise ClaimError(409, ERROR_CLAIM_TARGET_ALREADY_APPROVED) from None
+        raise ClaimError(HTTPStatus.CONFLICT, ERROR_CLAIM_TARGET_ALREADY_APPROVED) from None
     if auto_granted:
         try:
             await send_claim_granted_email(
@@ -860,6 +857,8 @@ async def expire_stale_claims(db: AsyncSession) -> dict:
     internally (mirrors build_daily_feeds) so the expiry emails below
     reflect only durably expired rows — app/main.py wires this job with
     commit=False."""
+    # UTC on purpose: TTL arithmetic (see CLAUDE.md Conventions) — a Tallinn-aware
+    # `now - timedelta(days=N)` would shift by an hour across a DST change.
     now = datetime.now(timezone.utc)
     automated_cutoff = now - timedelta(days=CLAIM_EXPIRY_DAYS)
     admin_review_cutoff = now - timedelta(days=CLAIM_ADMIN_REVIEW_EXPIRY_DAYS)

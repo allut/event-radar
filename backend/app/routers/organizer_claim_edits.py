@@ -45,53 +45,35 @@ from app.constants import (
     LOCALE_RU,
     ORGANIZER_CURRENCY_MAX_LEN,
     ORGANIZER_DESCRIPTION_MAX_LEN,
-    ORGANIZER_HTML_SANITIZE_ALLOWED_ATTRS,
-    ORGANIZER_HTML_SANITIZE_ALLOWED_TAGS,
     ORGANIZER_TITLE_MAX_LEN,
     RATE_LIMIT_SUBMIT,
     SOURCE_SLUG_USER_SUBMISSION,
     TALLINN_TZ,
 )
 from app.db import get_db
-from app.ingestion.content_filters import is_explicit_text, is_non_event_text
-from app.ingestion.http_client import safe_external_url
+from app.ingestion.http_client import host_matches_domain, safe_external_url
 from app.ingestion.pricing import normalize_currency
-from app.ingestion.sanitize import sanitize_html
 from app.models.models import ClaimEditAttempt, Event, Organizer
 from app.publish import publish_pending
 from app.rate_limit import limiter
 from app.auth.dependencies import get_current_organizer
 from app.routers.utils import (
+    apply_moderation_flags,
     apply_organizer_category,
-    resolve_venue_name,
+    apply_price_edit,
+    merged_localized,
+    organizer_sanitize,
     select_events_with_classification,
     serialize_event,
     validate_category,
     validate_price_ordering,
+    validate_time_ordering,
     validate_tz_aware,
 )
+from app.events.venue import resolve_venue_name
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/organizer/claims", tags=["organizer-claims"])
-
-
-def _sanitize(text: str | None) -> str | None:
-    """Same narrower Tiptap-tracking allowlist organizer_events.py's
-    _organizer_sanitize uses at the organizer-submission boundary (#267) —
-    duplicated rather than imported since a leading underscore marks that
-    helper module-private (CLAUDE.md's Encapsulation rule)."""
-    return sanitize_html(
-        text, tags=ORGANIZER_HTML_SANITIZE_ALLOWED_TAGS, attrs=ORGANIZER_HTML_SANITIZE_ALLOWED_ATTRS
-    )
-
-
-def _localized(et: str | None, en: str | None, ru: str | None) -> dict[str, str] | None:
-    out = {
-        loc: val
-        for loc, val in ((LOCALE_ET, et), (LOCALE_EN, en), (LOCALE_RU, ru))
-        if val is not None and val.strip()
-    }
-    return out or None
 
 
 class PatchClaimEventBody(BaseModel):
@@ -149,12 +131,7 @@ class PatchClaimEventBody(BaseModel):
 
     @model_validator(mode="after")
     def _ordering(self) -> "PatchClaimEventBody":
-        if (
-            self.starts_at is not None
-            and self.ends_at is not None
-            and self.ends_at < self.starts_at
-        ):
-            raise ValueError("ends_at must not be before starts_at")
+        validate_time_ordering(self.starts_at, self.ends_at)
         validate_price_ordering(self.price_min, self.price_max)
         return self
 
@@ -322,28 +299,25 @@ async def _save_claim_event(
             to_pin.add(pin_key("title", LOCALE_EN))
         if "title_ru" in fields_set:
             to_pin.add(pin_key("title", LOCALE_RU))
-        event.title_localized = _localized(
-            event.title_orig,
-            body.title_en if "title_en" in fields_set else existing.get(LOCALE_EN),
-            body.title_ru if "title_ru" in fields_set else existing.get(LOCALE_RU),
+        event.title_localized = merged_localized(
+            existing, event.title_orig, body, fields_set, "title"
         )
     if fields_set & {"description", "description_en", "description_ru"}:
         existing = event.description_localized or {}
         if "description" in fields_set:
-            event.description_orig = _sanitize(body.description)
+            event.description_orig = organizer_sanitize(body.description)
             to_pin.add(pin_key("description", LOCALE_ET))
         if "description_en" in fields_set:
             to_pin.add(pin_key("description", LOCALE_EN))
         if "description_ru" in fields_set:
             to_pin.add(pin_key("description", LOCALE_RU))
-        event.description_localized = _localized(
+        event.description_localized = merged_localized(
+            existing,
             event.description_orig,
-            _sanitize(body.description_en)
-            if "description_en" in fields_set
-            else existing.get(LOCALE_EN),
-            _sanitize(body.description_ru)
-            if "description_ru" in fields_set
-            else existing.get(LOCALE_RU),
+            body,
+            fields_set,
+            "description",
+            sanitize=organizer_sanitize,
         )
 
     if "image_url" in fields_set:
@@ -371,10 +345,7 @@ async def _save_claim_event(
             if (
                 allowed_domain is None
                 or candidate_host is None
-                or not (
-                    candidate_host == allowed_domain
-                    or candidate_host.endswith(f".{allowed_domain}")
-                )
+                or not host_matches_domain(candidate_host, allowed_domain)
             ):
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST, detail=ERROR_CLAIM_EDIT_URL_DOMAIN
@@ -410,25 +381,14 @@ async def _save_claim_event(
             if fresh.has_free_tier:
                 event.has_free_tier = True
     elif fields_set & {"price_min", "price_max", "currency", "has_free_tier"}:
-        if "price_min" in fields_set:
-            event.price_min = body.price_min
-        if "price_max" in fields_set:
-            event.price_max = body.price_max
+        apply_price_edit(event, body, fields_set)
         if "has_free_tier" in fields_set and body.has_free_tier is not None:
             event.has_free_tier = body.has_free_tier
-        has_price = event.price_min is not None or event.price_max is not None
-        raw_currency = body.currency if "currency" in fields_set else event.currency
-        event.currency = normalize_currency(raw_currency, has_price)
 
     event.pinned_fields = apply_pins(list(pinned), pin=to_pin, unpin=to_unpin)
 
     moderated_venue_name = resolve_venue_name(event)
-    if not event.is_explicit and is_explicit_text(
-        event.title_orig, event.description_orig, moderated_venue_name
-    ):
-        event.is_explicit = True
-    if not event.is_non_event and is_non_event_text(event.title_orig, moderated_venue_name):
-        event.is_non_event = True
+    apply_moderation_flags(event, moderated_venue_name)
 
     event.status = EVENT_STATUS_CLASSIFIED
     saved_event_id = event.id

@@ -6,6 +6,8 @@ from unittest.mock import ANY, AsyncMock, MagicMock, patch
 import pytest
 from pydantic import ValidationError
 
+from tests.conftest import build_event
+
 from app.constants import (
     EVENT_STATUS_CANCELLED,
     EVENT_STATUS_CLASSIFIED,
@@ -19,25 +21,12 @@ from app.constants import (
 
 
 def _fake_event(**overrides):
-    e = MagicMock()
-    e.id = 10
-    e.slug = "test-event-20260601-abcd"
-    e.status = "draft"
-    e.submitted_by_organizer_id = None
-    e.needs_review = False
-    e.is_explicit = False
-    e.is_non_event = False
-    e.title_orig = "Test Event"
-    e.description_orig = "A test event"
-    e.important_info = None
-    e.venue_name = "Test Venue"
-    e.venue_id = None
-    e.title_localized = None
-    e.description_localized = None
-    e.important_info_localized = None
-    for k, v in overrides.items():
-        setattr(e, k, v)
-    return e
+    defaults = {
+        "status": "draft",
+        "slug": "test-event-20260601-abcd",
+        "needs_review": False,
+    }
+    return build_event(**(defaults | overrides))
 
 
 class TestCheckImageHost:

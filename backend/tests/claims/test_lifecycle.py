@@ -45,32 +45,11 @@ from app.constants import (
     ERROR_EVENT_NOT_FOUND,
     KUMU_VERIFICATION_DOMAIN,
     ORGANIZER_DAILY_CLAIM_CAP,
-    SOURCE_SLUG_FIENTA,
     SOURCE_SLUG_KUMU,
     SOURCE_SLUG_PILETILEVI,
 )
-from app.routers.utils import event_series_key, serialize_event_series_key
-
-
-def _fake_event_source(
-    *, publisher_id: int | None = None, external_id: str = "100", source_slug: str = SOURCE_SLUG_FIENTA
-) -> MagicMock:
-    es = MagicMock()
-    es.event_id = 10
-    es.external_id = external_id
-    es.publisher_id = publisher_id
-    source = MagicMock()
-    source.slug = source_slug
-    source.config = {}
-    es.source = source
-    if publisher_id is not None:
-        publisher = MagicMock()
-        publisher.id = publisher_id
-        publisher.external_id = "42"
-        es.publisher = publisher
-    else:
-        es.publisher = None
-    return es
+from app.events.queries import event_series_key, serialize_event_series_key
+from tests.claims.conftest import fake_event_source
 
 
 def _fake_claim(**overrides) -> MagicMock:
@@ -115,7 +94,7 @@ class TestCreateClaim:
         other target) skips the early exit, reaches target resolution, but
         is still rejected with 429 right before the insert since this
         target isn't their own-pending one."""
-        es = _fake_event_source(publisher_id=99)
+        es = fake_event_source(publisher_id=99)
         mock_db.scalar = AsyncMock(
             side_effect=[ORGANIZER_DAILY_CLAIM_CAP, 1, es, None, None]
         )
@@ -135,7 +114,7 @@ class TestCreateClaim:
         """(#450) The bug this fixes: a capped organizer re-claiming a
         target they already have pending gets that existing claim back
         (nothing inserted, so the cap never applies) instead of a 429."""
-        es = _fake_event_source(publisher_id=99)
+        es = fake_event_source(publisher_id=99)
         existing = _fake_claim(organizer_id=5, status=CLAIM_STATUS_PENDING)
         mock_db.scalar = AsyncMock(
             side_effect=[ORGANIZER_DAILY_CLAIM_CAP, 1, es, None, existing]
@@ -274,7 +253,7 @@ class TestCreateClaim:
     async def test_ended_event_still_claimable(self, mock_db, make_organizer, make_event):
         """An already-ended Publisher/Series target stays claimable — the
         claim covers future re-matched occurrences too (#429)."""
-        es = _fake_event_source(publisher_id=99)
+        es = fake_event_source(publisher_id=99)
         mock_db.scalar = AsyncMock(side_effect=[0, es, None, None])
         event = make_event(starts_at=datetime(2020, 1, 1, 18, 0, 0, tzinfo=timezone.utc))
         mock_db.get.return_value = event
@@ -294,7 +273,7 @@ class TestCreateClaim:
 
     @pytest.mark.asyncio
     async def test_fienta_publisher_claim_auto_grants(self, mock_db, make_organizer, make_event):
-        es = _fake_event_source(publisher_id=99)
+        es = fake_event_source(publisher_id=99)
         mock_db.scalar = AsyncMock(side_effect=[0, es, None, None])
         mock_db.get.return_value = make_event()
         organizer = make_organizer(organizer_id=5)
@@ -323,7 +302,7 @@ class TestCreateClaim:
         """#415's pending screen needs the domain a DNS-TXT check ran against
         to render its record-name instructions, so it's persisted on the
         Claim row rather than only living in the transient VerificationResult."""
-        es = _fake_event_source(publisher_id=99, source_slug=SOURCE_SLUG_KUMU)
+        es = fake_event_source(publisher_id=99, source_slug=SOURCE_SLUG_KUMU)
         institutional_publisher = MagicMock(id=99)
         mock_db.scalar = AsyncMock(side_effect=[0, es, institutional_publisher, None, None])
         mock_db.get.return_value = make_event()
@@ -351,7 +330,7 @@ class TestCreateClaim:
         a Series target (#427). #428: a Series claim always stays
         admin-review — there is no auto-grant path for it — but a non-blank
         justification lets it through creation at all."""
-        es = _fake_event_source(publisher_id=None, source_slug=SOURCE_SLUG_PILETILEVI)
+        es = fake_event_source(publisher_id=None, source_slug=SOURCE_SLUG_PILETILEVI)
         mock_db.scalar = AsyncMock(side_effect=[0, es, None, None])
         mock_db.get.return_value = make_event()
         organizer = make_organizer(organizer_id=5)
@@ -376,7 +355,7 @@ class TestCreateClaim:
     async def test_series_claim_without_justification_rejected(
         self, mock_db, make_organizer, make_event
     ):
-        es = _fake_event_source(publisher_id=None, source_slug=SOURCE_SLUG_PILETILEVI)
+        es = fake_event_source(publisher_id=None, source_slug=SOURCE_SLUG_PILETILEVI)
         mock_db.scalar = AsyncMock(side_effect=[0, es, None, None])
         mock_db.get.return_value = make_event()
         organizer = make_organizer(organizer_id=5)
@@ -400,7 +379,7 @@ class TestCreateClaim:
         of any kind must never auto-grant an unrelated Series claim — the
         Trusted-claimant fast-track is deleted, not gated off, so there is no
         code path left that could even consult the organizer's other claims."""
-        es = _fake_event_source(publisher_id=None, source_slug=SOURCE_SLUG_PILETILEVI)
+        es = fake_event_source(publisher_id=None, source_slug=SOURCE_SLUG_PILETILEVI)
         mock_db.scalar = AsyncMock(side_effect=[0, es, None, None])
         mock_db.get.return_value = make_event()
         organizer = make_organizer(organizer_id=5)
@@ -422,7 +401,7 @@ class TestCreateClaim:
         """#421: create_claim's inline auto-grant path notifies the claimant
         immediately — no admin note, so the email falls back to its default
         copy (empty string in, fallback_note used)."""
-        es = _fake_event_source(publisher_id=99)
+        es = fake_event_source(publisher_id=99)
         mock_db.scalar = AsyncMock(side_effect=[0, es, None, None])
         event = make_event()
         event.title_orig = "Jazz Night"
@@ -457,7 +436,7 @@ class TestCreateClaim:
         from (sweeps/admin actions), so they deliberately keep using the
         organizer's stored locale — but must localize the title rather than
         always sending title_orig."""
-        es = _fake_event_source(publisher_id=99)
+        es = fake_event_source(publisher_id=99)
         mock_db.scalar = AsyncMock(side_effect=[0, es, None, None])
         event = make_event()
         event.title_orig = "Jazz Night"
@@ -493,7 +472,7 @@ class TestCreateClaim:
         rather than fetching event.url a second time."""
         from app.claims.piletilevi_promoter import PromoterContact, PromoterIdentity
 
-        es = _fake_event_source(publisher_id=None, source_slug=SOURCE_SLUG_PILETILEVI)
+        es = fake_event_source(publisher_id=None, source_slug=SOURCE_SLUG_PILETILEVI)
         mock_db.scalar = AsyncMock(side_effect=[0, es, None, None])
         event = make_event()
         event.url = "https://www.piletilevi.ee/en/tickets/x/some-event"
@@ -544,7 +523,7 @@ class TestCreateClaim:
     async def test_pending_admin_review_sends_no_email(self, mock_db, make_organizer, make_event):
         """A claim that stays pending (routed to admin review) must not send
         the granted email — only an actual grant does."""
-        es = _fake_event_source(publisher_id=None, source_slug=SOURCE_SLUG_PILETILEVI)
+        es = fake_event_source(publisher_id=None, source_slug=SOURCE_SLUG_PILETILEVI)
         mock_db.scalar = AsyncMock(side_effect=[0, es, None, None])
         mock_db.get.return_value = make_event()
         organizer = make_organizer(organizer_id=5)
@@ -663,7 +642,7 @@ class TestContestedClaims:
         second claim attempt (only the narrower approved-only unique index
         still applies) — this one falls back to admin review, its own
         independent proof token already set on the Claim constructor."""
-        es = _fake_event_source(publisher_id=99, source_slug=SOURCE_SLUG_KUMU)
+        es = fake_event_source(publisher_id=99, source_slug=SOURCE_SLUG_KUMU)
         mock_db.scalar = AsyncMock(side_effect=[0, es, MagicMock(id=99), None, None])
         mock_db.get.return_value = make_event()
         organizer = make_organizer(organizer_id=5)
@@ -686,7 +665,7 @@ class TestContestedClaims:
     async def test_target_with_approved_claim_rejected_with_409(
         self, mock_db, make_organizer, make_event
     ):
-        es = _fake_event_source(publisher_id=99)
+        es = fake_event_source(publisher_id=99)
         mock_db.scalar = AsyncMock(side_effect=[0, es, MagicMock(id=1)])
         mock_db.get.return_value = make_event()
         organizer = make_organizer(organizer_id=5)
@@ -707,7 +686,7 @@ class TestContestedClaims:
         between that check and this claim's own commit. The commit itself is
         still guarded by the narrowed unique index, and that IntegrityError
         maps onto the same support-facing conflict."""
-        es = _fake_event_source(publisher_id=99)
+        es = fake_event_source(publisher_id=99)
         mock_db.scalar = AsyncMock(side_effect=[0, es, None, None])
         mock_db.get.return_value = make_event()
         organizer = make_organizer(organizer_id=5)
@@ -733,7 +712,7 @@ class TestContestedClaims:
     async def test_auto_grant_declines_other_pending_claims_and_notifies_them(
         self, mock_db, make_organizer, make_event
     ):
-        es = _fake_event_source(publisher_id=99)
+        es = fake_event_source(publisher_id=99)
         mock_db.scalar = AsyncMock(side_effect=[0, es, None, None])
         event = make_event()
         event.title_orig = "Jazz Night"
@@ -792,7 +771,7 @@ class TestContestedClaims:
     async def test_auto_grant_with_no_other_pending_claims_sends_no_decline_email(
         self, mock_db, make_organizer, make_event
     ):
-        es = _fake_event_source(publisher_id=99)
+        es = fake_event_source(publisher_id=99)
         mock_db.scalar = AsyncMock(side_effect=[0, es, None, None])
         mock_db.get.return_value = make_event()
         organizer = make_organizer(organizer_id=5)
@@ -823,7 +802,7 @@ class TestContestedClaims:
         pending claim on gets that existing claim back — created=False — and
         no new row is inserted, instead of a confusing duplicate with its own
         proof token that would later auto-decline itself on grant."""
-        es = _fake_event_source(publisher_id=99)
+        es = fake_event_source(publisher_id=99)
         existing = _fake_claim(id=7, organizer_id=5, publisher_id=99, status=CLAIM_STATUS_PENDING)
         mock_db.scalar = AsyncMock(side_effect=[0, es, None, existing])
         mock_db.get.return_value = make_event()
@@ -843,7 +822,7 @@ class TestContestedClaims:
         calling organizer — a rival organizer with no pending claim of their
         own on the target still gets a normal new claim, same as before this
         fix (mirrors test_second_pending_claim_on_same_target_succeeds)."""
-        es = _fake_event_source(publisher_id=99, source_slug=SOURCE_SLUG_KUMU)
+        es = fake_event_source(publisher_id=99, source_slug=SOURCE_SLUG_KUMU)
         mock_db.scalar = AsyncMock(side_effect=[0, es, MagicMock(id=99), None, None])
         mock_db.get.return_value = make_event()
         organizer = make_organizer(organizer_id=6)
@@ -884,7 +863,7 @@ class TestRecheckClaim:
             status=CLAIM_STATUS_PENDING,
             verification_mechanism=CLAIM_VERIFICATION_MECHANISM_FIENTA_TOKEN,
         )
-        es = _fake_event_source(publisher_id=99)
+        es = fake_event_source(publisher_id=99)
         stale_checked_at = claim.last_checked_at
         mock_db.scalar = AsyncMock(side_effect=[claim, es])
         mock_db.get.return_value = make_event()
@@ -914,7 +893,7 @@ class TestRecheckClaim:
             status=CLAIM_STATUS_PENDING,
             verification_mechanism=CLAIM_VERIFICATION_MECHANISM_FIENTA_TOKEN,
         )
-        es = _fake_event_source(publisher_id=99)
+        es = fake_event_source(publisher_id=99)
         mock_db.scalar = AsyncMock(side_effect=[claim, es])
         event = make_event()
         event.title_orig = "Jazz Night"
@@ -990,7 +969,7 @@ class TestResolveClaimForEvent:
     @pytest.mark.asyncio
     async def test_returns_active_claim_for_resolved_target(self, mock_db, make_event):
         claim = _fake_claim(status=CLAIM_STATUS_APPROVED)
-        mock_db.scalar = AsyncMock(side_effect=[_fake_event_source(publisher_id=99), claim])
+        mock_db.scalar = AsyncMock(side_effect=[fake_event_source(publisher_id=99), claim])
 
         assert await resolve_claim_for_event(mock_db, make_event()) is claim
 
@@ -1010,7 +989,7 @@ class TestOwnClaimForEvent:
 
     @pytest.mark.asyncio
     async def test_no_active_claim_returns_none(self, mock_db, make_event, make_organizer):
-        es = _fake_event_source(publisher_id=99)
+        es = fake_event_source(publisher_id=99)
         mock_db.scalar = AsyncMock(side_effect=[es, None])
 
         result = await own_claim_for_event(mock_db, make_organizer(organizer_id=5), make_event())
@@ -1023,7 +1002,7 @@ class TestOwnClaimForEvent:
     ):
         """The whole point of #451: a rival claimant's pending claim on the
         same target must never come back for a different caller."""
-        es = _fake_event_source(publisher_id=99)
+        es = fake_event_source(publisher_id=99)
         claim = _fake_claim(organizer_id=5, status=CLAIM_STATUS_PENDING)
         mock_db.scalar = AsyncMock(side_effect=[es, claim])
 
@@ -1033,7 +1012,7 @@ class TestOwnClaimForEvent:
 
     @pytest.mark.asyncio
     async def test_own_pending_claim_returned(self, mock_db, make_event, make_organizer):
-        es = _fake_event_source(publisher_id=99)
+        es = fake_event_source(publisher_id=99)
         claim = _fake_claim(organizer_id=5, status=CLAIM_STATUS_PENDING)
         mock_db.scalar = AsyncMock(side_effect=[es, claim])
 
@@ -1175,7 +1154,7 @@ class TestExpireStaleClaims:
         mock_db.execute.return_value = execute_result
 
         organizer = make_organizer(organizer_id=5)
-        es = _fake_event_source(publisher_id=99)
+        es = fake_event_source(publisher_id=99)
         es.event_id = 42
         event = make_event(event_id=42)
         event.title_orig = "Jazz Night"

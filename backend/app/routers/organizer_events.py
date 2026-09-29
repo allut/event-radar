@@ -49,16 +49,11 @@ from app.constants import (
     IMAGE_MAGIC_BYTES,
     IMAGE_UPLOAD_ALLOWED_MIME,
     IMAGE_UPLOAD_MAX_BYTES,
-    LOCALE_EN,
-    LOCALE_ET,
-    LOCALE_RU,
     MIME_IMAGE_WEBP,
     ORGANIZER_CURRENCY_MAX_LEN,
     ORGANIZER_DAILY_IMAGE_UPLOAD_CAP,
     ORGANIZER_DAILY_SUBMISSION_CAP,
     ORGANIZER_DESCRIPTION_MAX_LEN,
-    ORGANIZER_HTML_SANITIZE_ALLOWED_ATTRS,
-    ORGANIZER_HTML_SANITIZE_ALLOWED_TAGS,
     ORGANIZER_IMPORTANT_INFO_MAX_LEN,
     ORGANIZER_SUBMISSION_EXTERNAL_ID_PREFIX,
     ORGANIZER_TITLE_MAX_LEN,
@@ -80,7 +75,6 @@ from app.ingestion.adapter import NormalizedEvent, insert_normalized_event
 from app.ingestion.content_filters import is_explicit_text, is_non_event_text
 from app.ingestion.http_client import http_post, safe_external_url
 from app.ingestion.pricing import normalize_currency
-from app.ingestion.sanitize import sanitize_html
 from app.llm.classifier import classify_event
 from app.models.models import (
     Event,
@@ -93,8 +87,13 @@ from app.publish import publish_pending
 from app.rate_limit import limiter
 from app.auth.dependencies import get_current_organizer
 from app.routers.utils import (
+    apply_moderation_flags,
     apply_organizer_category,
+    apply_price_edit,
     cancel_event_and_resolve_reports,
+    localized_dict,
+    merged_localized,
+    organizer_sanitize,
     own_venue_or_404,
     resolve_locale_param,
     select_events_with_classification,
@@ -102,6 +101,7 @@ from app.routers.utils import (
     serialize_event,
     validate_category,
     validate_price_ordering,
+    validate_time_ordering,
     validate_tz_aware,
 )
 
@@ -153,8 +153,7 @@ class SubmitEventBody(BaseModel):
 
     @model_validator(mode="after")
     def _ordering(self) -> "SubmitEventBody":
-        if self.ends_at is not None and self.ends_at < self.starts_at:
-            raise ValueError("ends_at must not be before starts_at")
+        validate_time_ordering(self.starts_at, self.ends_at)
         validate_price_ordering(self.price_min, self.price_max)
         return self
 
@@ -203,37 +202,9 @@ class PatchEventBody(BaseModel):
         # be validated against the other without a DB round-trip, and this
         # model has no DB access; the create-time check (SubmitEventBody)
         # already guarantees ends_at >= starts_at at row creation.
-        if (
-            self.starts_at is not None
-            and self.ends_at is not None
-            and self.ends_at < self.starts_at
-        ):
-            raise ValueError("ends_at must not be before starts_at")
+        validate_time_ordering(self.starts_at, self.ends_at)
         validate_price_ordering(self.price_min, self.price_max)
         return self
-
-
-def _localized(
-    et: str | None, en: str | None, ru: str | None
-) -> dict[str, str] | None:
-    """Build a {locale: value} JSONB dict from locale-suffixed request fields,
-    dropping absent locales. et is required upstream (see title validation)."""
-    out = {
-        loc: val
-        for loc, val in ((LOCALE_ET, et), (LOCALE_EN, en), (LOCALE_RU, ru))
-        if val is not None and val.strip()
-    }
-    return out or None
-
-
-def _organizer_sanitize(text: str | None) -> str | None:
-    """sanitize_html at the organizer-submission boundary (#267) — the
-    narrower Tiptap-tracking allowlist, not the shared ingestion one."""
-    return sanitize_html(
-        text,
-        tags=ORGANIZER_HTML_SANITIZE_ALLOWED_TAGS,
-        attrs=ORGANIZER_HTML_SANITIZE_ALLOWED_ATTRS,
-    )
 
 
 async def _get_user_submission_source(db: AsyncSession) -> Source:
@@ -319,8 +290,8 @@ async def submit_event(
         venue = await own_venue_or_404(db, body.venue_id, current_organizer.id)
 
     has_price = body.price_min is not None or body.price_max is not None
-    description = _organizer_sanitize(body.description)
-    important_info = _organizer_sanitize(body.important_info)
+    description = organizer_sanitize(body.description)
+    important_info = organizer_sanitize(body.important_info)
     normalized = NormalizedEvent(
         external_id=f"{ORGANIZER_SUBMISSION_EXTERNAL_ID_PREFIX}{current_organizer.id}:{uuid4()}",
         title=body.title,
@@ -344,16 +315,16 @@ async def submit_event(
         price_min=body.price_min,
         price_max=body.price_max,
         currency=normalize_currency(body.currency, has_price),
-        title_localized=_localized(body.title, body.title_en, body.title_ru),
-        description_localized=_localized(
+        title_localized=localized_dict(body.title, body.title_en, body.title_ru),
+        description_localized=localized_dict(
             description,
-            _organizer_sanitize(body.description_en),
-            _organizer_sanitize(body.description_ru),
+            organizer_sanitize(body.description_en),
+            organizer_sanitize(body.description_ru),
         ),
-        important_info_localized=_localized(
+        important_info_localized=localized_dict(
             important_info,
-            _organizer_sanitize(body.important_info_en),
-            _organizer_sanitize(body.important_info_ru),
+            organizer_sanitize(body.important_info_en),
+            organizer_sanitize(body.important_info_ru),
         ),
     )
 
@@ -379,6 +350,10 @@ async def submit_event(
 
     event.submitted_by_organizer_id = current_organizer.id
     event.venue_id = body.venue_id
+    # Populate the relationship in-memory too: classify_event's prompt builder
+    # resolves the venue name via event.venue, and an unloaded async lazy load
+    # would raise MissingGreenlet.
+    event.venue = venue
     event.needs_review = True
     # Capture into plain values before publish_pending(): its bulk UPDATE
     # (WHERE Event.id IN (subquery)) can't use the ORM's "evaluate"
@@ -401,14 +376,7 @@ async def submit_event(
             event.is_explicit = True
         if not event.is_non_event and is_non_event_text(None, venue.name):
             event.is_non_event = True
-        # Feed the LLM classifier the real venue text in-memory only — the
-        # persisted column stays NULL per the write-time rule above.
-        event.venue_name = venue.name
-    try:
-        classify_ok = await classify_event(event, db)
-    finally:
-        if venue is not None:
-            event.venue_name = None
+    classify_ok = await classify_event(event, db)
     if not classify_ok:
         # LLM outage (every provider failed) — event stays draft, distinct
         # from the normal "not yet reviewed" case; classify_pending's 6h
@@ -496,54 +464,36 @@ async def update_own_event(
                 detail=ERROR_IMAGE_URL_SCHEME,
             )
         event.image_url = safe_image_url
-    if "price_min" in fields_set:
-        event.price_min = body.price_min
-    if "price_max" in fields_set:
-        event.price_max = body.price_max
     if fields_set & {"price_min", "price_max", "currency"}:
-        # Mirrors the submit path's normalize_currency(body.currency, has_price)
-        # (see submit_event above): coerces a raw currency value and fills the
-        # default only when the event now carries a price, so a price-only
-        # PATCH doesn't leave currency NULL and an un-coerced value never
-        # lands straight on the String(3) column.
-        has_price = event.price_min is not None or event.price_max is not None
-        raw_currency = body.currency if "currency" in fields_set else event.currency
-        event.currency = normalize_currency(raw_currency, has_price)
+        apply_price_edit(event, body, fields_set)
     if "category" in fields_set and body.category is not None:
         await apply_organizer_category(db, event.id, body.category)
     if "description" in fields_set:
-        event.description_orig = _organizer_sanitize(body.description)
+        event.description_orig = organizer_sanitize(body.description)
     if "important_info" in fields_set:
-        event.important_info = _organizer_sanitize(body.important_info)
+        event.important_info = organizer_sanitize(body.important_info)
 
     if fields_set & {"title", "title_en", "title_ru"}:
-        existing = event.title_localized or {}
-        event.title_localized = _localized(
-            event.title_orig,
-            body.title_en if "title_en" in fields_set else existing.get(LOCALE_EN),
-            body.title_ru if "title_ru" in fields_set else existing.get(LOCALE_RU),
+        event.title_localized = merged_localized(
+            event.title_localized, event.title_orig, body, fields_set, "title"
         )
     if fields_set & {"description", "description_en", "description_ru"}:
-        existing = event.description_localized or {}
-        event.description_localized = _localized(
+        event.description_localized = merged_localized(
+            event.description_localized,
             event.description_orig,
-            _organizer_sanitize(body.description_en)
-            if "description_en" in fields_set
-            else existing.get(LOCALE_EN),
-            _organizer_sanitize(body.description_ru)
-            if "description_ru" in fields_set
-            else existing.get(LOCALE_RU),
+            body,
+            fields_set,
+            "description",
+            sanitize=organizer_sanitize,
         )
     if fields_set & {"important_info", "important_info_en", "important_info_ru"}:
-        existing = event.important_info_localized or {}
-        event.important_info_localized = _localized(
+        event.important_info_localized = merged_localized(
+            event.important_info_localized,
             event.important_info,
-            _organizer_sanitize(body.important_info_en)
-            if "important_info_en" in fields_set
-            else existing.get(LOCALE_EN),
-            _organizer_sanitize(body.important_info_ru)
-            if "important_info_ru" in fields_set
-            else existing.get(LOCALE_RU),
+            body,
+            fields_set,
+            "important_info",
+            sanitize=organizer_sanitize,
         )
 
     event.needs_review = True
@@ -557,16 +507,10 @@ async def update_own_event(
         linked_venue = await db.get(Venue, event.venue_id)
     moderated_venue_name = linked_venue.name if linked_venue else event.venue_name
 
-    if not event.is_explicit and is_explicit_text(
-        event.title_orig, event.description_orig, moderated_venue_name, event.important_info
-    ):
-        event.is_explicit = True
-        if event.status == EVENT_STATUS_PUBLISHED:
-            event.status = EVENT_STATUS_CLASSIFIED
-    if not event.is_non_event and is_non_event_text(event.title_orig, moderated_venue_name):
-        event.is_non_event = True
-        if event.status == EVENT_STATUS_PUBLISHED:
-            event.status = EVENT_STATUS_CLASSIFIED
+    if apply_moderation_flags(
+        event, moderated_venue_name, event.important_info
+    ) and event.status == EVENT_STATUS_PUBLISHED:
+        event.status = EVENT_STATUS_CLASSIFIED
 
     await db.commit()
     return {"id": event.id, "slug": event.slug, "status": event.status}

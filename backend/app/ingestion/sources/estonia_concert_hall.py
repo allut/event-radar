@@ -12,8 +12,11 @@ import httpx
 from bs4 import BeautifulSoup
 
 from app.constants import (
+    BASE64_PAD_MULTIPLE,
     DEFAULT_CURRENCY,
     HTTP_METHOD_POST,
+    JWT_PAYLOAD_INDEX,
+    JWT_SEGMENT_COUNT,
     TALLINN_TZ,
 )
 from app.ingestion.http_client import http_post
@@ -83,10 +86,10 @@ def _jwt_claim(token: str, claim: str) -> str | None:
     opaque session value it carries.
     """
     parts = token.split(".")
-    if len(parts) != 3:
+    if len(parts) != JWT_SEGMENT_COUNT:
         return None
-    payload_b64 = parts[1]
-    padded = payload_b64 + "=" * (-len(payload_b64) % 4)
+    payload_b64 = parts[JWT_PAYLOAD_INDEX]
+    padded = payload_b64 + "=" * (-len(payload_b64) % BASE64_PAD_MULTIPLE)
     try:
         payload = json.loads(base64.urlsafe_b64decode(padded))
     except (ValueError, UnicodeDecodeError):
@@ -137,7 +140,8 @@ class EstoniaConcertHallAdapter(HtmlListingAdapter):
                 if isinstance(token, str)
                 else None
             )
-        except (httpx.HTTPStatusError, httpx.RequestError, ValueError):
+        except (httpx.HTTPStatusError, httpx.RequestError, ValueError) as exc:
+            log.warning("%s session-key fetch failed: %s", self.source.slug, exc)
             return None
 
     def listing_request(self, page: int) -> ListingRequest | None:
@@ -267,7 +271,8 @@ class EstoniaConcertHallAdapter(HtmlListingAdapter):
         try:
             resp = await http_post(client, url, data={"concert": pid})
             data = resp.json()
-        except (httpx.HTTPStatusError, httpx.RequestError, ValueError):
+        except (httpx.HTTPStatusError, httpx.RequestError, ValueError) as exc:
+            log.warning("%s price fetch failed concert=%s: %s", self.source.slug, pid, exc)
             return
         if not isinstance(data, dict):
             return

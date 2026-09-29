@@ -20,7 +20,7 @@ from app.email.contact import send_contact_message
 from app.models.models import Organizer
 from app.rate_limit import limiter
 from app.auth.dependencies import get_current_organizer
-from app.routers.utils import mask_email
+from app.auth.utils import mask_email
 
 log = logging.getLogger(__name__)
 # Must stay under /organizer/* — ORGANIZER_SESSION_COOKIE_PATH scopes the

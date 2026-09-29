@@ -6,27 +6,24 @@ import pytest
 from pydantic import ValidationError
 
 from app.constants import ORGANIZER_DAILY_VENUE_CREATION_CAP
+from tests.conftest import build_venue
 
 
 def _fake_venue(**overrides):
-    v = MagicMock()
-    v.id = 1
-    v.organizer_id = 5
-    v.name = "Test Venue"
-    v.name_en = None
-    v.name_ru = None
-    v.address = "Test Street 1"
-    v.lat = 59.437
-    v.lng = 24.7536
-    v.price_min = None
-    v.price_max = None
-    v.currency = None
-    v.geocode_attempted_at = "2026-05-13T06:00:00+00:00"
-    v.deleted_at = None
-    v.created_at = "2026-05-13T06:00:00+00:00"
-    for k, val in overrides.items():
-        setattr(v, k, val)
-    return v
+    defaults = {
+        "name": "Test Venue",
+        "address": "Test Street 1",
+        "lat": 59.437,
+        "lng": 24.7536,
+        "organizer_id": 5,
+        "price_min": None,
+        "price_max": None,
+        "currency": None,
+        "geocode_attempted_at": "2026-05-13T06:00:00+00:00",
+        "deleted_at": None,
+        "created_at": "2026-05-13T06:00:00+00:00",
+    }
+    return build_venue(**(defaults | overrides))
 
 
 class TestListOwnVenues:

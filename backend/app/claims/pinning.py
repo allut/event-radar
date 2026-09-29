@@ -5,7 +5,7 @@ recheck.
 """
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime
 
 import httpx
 from bs4 import BeautifulSoup
@@ -22,17 +22,20 @@ from app.constants import (
     ORGANIZER_CLAIM_EDIT_CAP_PER_EVENT,
     ORGANIZER_DAILY_CLAIM_EDIT_CAP,
     REFETCH_PRICE_TOLERANCE,
+    TALLINN_TZ,
 )
 from app.ingestion.http_client import http_get, normalized_hostname
 from app.ingestion.jsonld import offers_from_jsonld_items, parse_jsonld_event_items
 from app.ingestion.price_fallback import PRICE_FALLBACK_EXTRACTORS
 from app.models.models import Claim, Event, EventSource
 from app.routers.utils import (
+    publisher_claim_event_ids,
+    select_events_with_classification,
+)
+from app.events.venue import resolve_venue_name
+from app.events.queries import (
     event_not_ended_filter,
     event_series_key,
-    publisher_claim_event_ids,
-    resolve_venue_name,
-    select_events_with_classification,
     serialize_event_series_key,
 )
 
@@ -75,7 +78,23 @@ async def representative_event_for_claim(db: AsyncSession, claim: Claim) -> Even
             select_events_with_classification().where(Event.id == es.event_id)
         )
 
-    now = datetime.now(timezone.utc)
+    if claim.event_series_key is None:
+        return None
+    resolved = await bulk_resolve_series_events(db, {claim.event_series_key})
+    return resolved.get(claim.event_series_key)
+
+
+async def bulk_resolve_series_events(
+    db: AsyncSession, series_keys: set[str]
+) -> dict[str, Event]:
+    """Series-claim counterpart of ``bulk_resolve_publisher_events``: one
+    bounded scan (CLAIM_EDIT_SERIES_EVENT_SCAN_LIMIT) of not-yet-ended events
+    newest-starting-first, matched against every key in a single pass instead
+    of one scan per claim. The earliest-starting match wins per key, same as
+    the single-claim lookup. Keys with no match are absent from the result."""
+    if not series_keys:
+        return {}
+    now = datetime.now(TALLINN_TZ)
     candidates = (
         (
             await db.execute(
@@ -88,13 +107,16 @@ async def representative_event_for_claim(db: AsyncSession, claim: Claim) -> Even
         .scalars()
         .all()
     )
+    matched: dict[str, Event] = {}
     for event in candidates:
         key = serialize_event_series_key(
             event_series_key(event.title_orig, resolve_venue_name(event))
         )
-        if key == claim.event_series_key:
-            return event
-    return None
+        if key in series_keys and key not in matched:
+            matched[key] = event
+            if len(matched) == len(series_keys):
+                break
+    return matched
 
 
 async def clear_claim_pins(db: AsyncSession, claim: Claim) -> list[int]:

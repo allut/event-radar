@@ -29,7 +29,6 @@ from app.constants import (
     DAILY_5_COUNT,
     DAILY_5_LOOKAHEAD_DAYS,
     DAILY_5_MAX_PER_CATEGORY,
-    EVENT_STATUS_PUBLISHED,
     FEED_BUILD_USER_BATCH_SIZE,
     FEEDBACK_DECAY_BASE,
     FEEDBACK_INDIRECT_WEIGHT,
@@ -75,14 +74,16 @@ from app.models.models import (
     UserPersona,
 )
 from app.routers.utils import (
-    canonical_event_filter,
     collapse_series_duplicates,
+    persona_weight_tuple,
+    select_events_with_classification,
+)
+from app.events.venue import resolve_venue_coords, resolve_venue_name
+from app.events.queries import (
+    canonical_event_filter,
+    public_event_filter,
     event_not_ended_filter,
     event_series_key,
-    persona_weight_tuple,
-    resolve_venue_coords,
-    resolve_venue_name,
-    select_events_with_classification,
 )
 
 # ---------------------------------------------------------------------------
@@ -756,9 +757,7 @@ async def _load_candidate_events(
         (
             await db.scalars(
                 select_events_with_classification().where(
-                    Event.status == EVENT_STATUS_PUBLISHED,
-                    Event.is_explicit.is_(False),
-                    Event.is_non_event.is_(False),
+                    public_event_filter(),
                     event_not_ended_filter(now),
                     Event.starts_at <= cutoff,
                     canonical_event_filter(),

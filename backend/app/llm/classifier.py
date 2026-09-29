@@ -16,7 +16,7 @@ from typing import Any, cast
 from sqlalchemy import ColumnElement, exists, select, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import aliased
+from sqlalchemy.orm import aliased, selectinload
 
 from app.constants import (
     CURRENCY_CODE_MAX_LEN,
@@ -63,8 +63,9 @@ import httpx
 from app.ingestion.sanitize import html_to_text
 from app.llm.router import content_hash, llm_http_client, llm_json_or_none
 from app.models.models import Event, EventClassification, LlmCall
-from app.routers.utils import (
-    alternation_pattern,
+from app.ingestion.patterns import alternation_pattern
+from app.events.venue import resolve_venue_name
+from app.events.queries import (
     canonical_event_filter,
     event_ended_filter,
     event_not_ended_filter,
@@ -98,7 +99,9 @@ def _build_classify_prompt(event: Event, price_context: str | None = None) -> st
         price_context = _price_context(event)
     return LLM_CLASSIFY_PROMPT_TEMPLATE.format(
         title=escape_prompt_delimiters(event.title_orig),
-        venue=escape_prompt_delimiters(event.venue_name or LLM_CLASSIFY_VENUE_FALLBACK),
+        venue=escape_prompt_delimiters(
+            resolve_venue_name(event) or LLM_CLASSIFY_VENUE_FALLBACK
+        ),
         description=escape_prompt_delimiters(desc or LLM_CLASSIFY_DESC_FALLBACK),
         important_info=escape_prompt_delimiters(
             important_info or LLM_CLASSIFY_IMPORTANT_INFO_FALLBACK
@@ -551,6 +554,7 @@ async def classify_pending(
     rows = (
         await db.scalars(
             select(Event)
+            .options(selectinload(Event.venue))
             .where(
                 Event.status == EVENT_STATUS_DRAFT,
                 canonical_event_filter(),

@@ -3,7 +3,7 @@
 import asyncio
 import logging
 from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
-from datetime import datetime, timezone
+from datetime import datetime
 
 import httpx
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Query, Request, status
@@ -125,27 +125,29 @@ from app.routers.utils import (
     bulk_resolve_publisher_events,
     acquire_admin_job_lock,
     cancel_event_and_resolve_reports,
-    canonical_event_filter,
     claim_dns_record_name,
     log_admin_action,
     ndjson_line,
     release_admin_job_lock,
-    require_configured_secret,
     resolve_description,
     resolve_important_info,
     resolve_open_reports,
     resolve_title,
-    resolve_venue_address,
-    resolve_venue_coords,
-    resolve_venue_name,
     run_admin_job,
-    run_in_session,
     select_events_with_classification,
     send_report_resolution_emails,
     serialize_event,
     stream_admin_job,
     validate_report_reason,
 )
+from app.events.venue import (
+    resolve_venue_address,
+    resolve_venue_coords,
+    resolve_venue_name,
+)
+from app.events.queries import canonical_event_filter
+from app.auth.utils import require_configured_secret
+from app.db import run_in_session
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/admin")
@@ -713,7 +715,7 @@ async def admin_grant_claim(claim_id: int, body: _ResolutionBody, request: Reque
                     detail=ERROR_CLAIM_TARGET_ALREADY_APPROVED,
                 )
             claim.status = CLAIM_STATUS_APPROVED
-            claim.resolved_at = datetime.now(timezone.utc)
+            claim.resolved_at = datetime.now(TALLINN_TZ)
             organizer = await db.get(Organizer, claim.organizer_id)
             event = await representative_event_for_claim(db, claim)
             result = {"id": claim.id, "status": claim.status, "note": note}
@@ -769,7 +771,7 @@ async def admin_decline_claim(claim_id: int, body: _ResolutionBody, request: Req
                     detail=ERROR_CLAIM_ALREADY_RESOLVED,
                 )
             claim.status = CLAIM_STATUS_REVOKED
-            claim.resolved_at = datetime.now(timezone.utc)
+            claim.resolved_at = datetime.now(TALLINN_TZ)
             organizer = await db.get(Organizer, claim.organizer_id)
             event = await representative_event_for_claim(db, claim)
             result = {"id": claim.id, "status": claim.status, "note": note}

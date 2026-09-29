@@ -1,7 +1,7 @@
 """Tests for app.dedup.rules — rule-based deduplication pre-filter."""
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from rapidfuzz.fuzz import token_set_ratio
@@ -25,7 +25,7 @@ from app.dedup.rules import (
     same_group,
     _venue_compatible,
 )
-from app.routers.utils import event_series_key, serialize_event_series_key
+from app.events.queries import event_series_key, serialize_event_series_key
 
 
 def _event(
@@ -860,3 +860,47 @@ class TestLoadClaimsForEvents:
         result = await load_claims_for_events(db, [event])
 
         assert result == {501: claim}
+
+
+class TestBulkAssignDedupGroups:
+    @pytest.mark.asyncio
+    async def test_changed_rows_share_one_values_update_and_memory_is_synced(
+        self, mock_db, make_event
+    ):
+        from app.dedup.rules import bulk_assign_dedup_groups
+
+        a, b, c = make_event(1), make_event(2), make_event(3)
+        a.dedup_group_id = None
+        b.dedup_group_id = None
+        c.dedup_group_id = 3  # unchanged
+
+        changed = await bulk_assign_dedup_groups(
+            mock_db, [a, b, c], {1: 1, 2: 1, 3: 3}
+        )
+
+        assert changed == 2
+        mock_db.execute.assert_awaited_once()  # one UPDATE, not one per group
+        assert a.dedup_group_id == 1 and b.dedup_group_id == 1
+
+    @pytest.mark.asyncio
+    async def test_no_changes_issue_no_update(self, mock_db, make_event):
+        from app.dedup.rules import bulk_assign_dedup_groups
+
+        a = make_event(1)
+        a.dedup_group_id = 1
+
+        assert await bulk_assign_dedup_groups(mock_db, [a], {1: 1}) == 0
+        mock_db.execute.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_chunks_at_configured_size(self, mock_db, make_event):
+        from app.dedup.rules import bulk_assign_dedup_groups
+
+        events = [make_event(i) for i in range(1, 6)]
+        for e in events:
+            e.dedup_group_id = None
+
+        with patch("app.dedup.rules.DEDUP_BULK_UPDATE_CHUNK_SIZE", 2):
+            await bulk_assign_dedup_groups(mock_db, events, {e.id: 1 for e in events})
+
+        assert mock_db.execute.await_count == 3  # 2 + 2 + 1

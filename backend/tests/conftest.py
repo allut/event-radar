@@ -5,6 +5,7 @@ os.environ.setdefault("SECRET_KEY", "test-secret-not-for-production-32chars")
 
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -126,104 +127,119 @@ def make_organizer():
     return _factory
 
 
+def build_event(
+    event_id: int = 10,
+    title: str = "Test Event",
+    starts_at: datetime | None = None,
+    venue_name: str | None = "Test Venue",
+    venue_address: str | None = "Test Street 1",
+    venue_id: int | None = None,
+    venue: MagicMock | None = None,
+    lat: float | None = TALLINN_CENTER_LAT,
+    lng: float | None = TALLINN_CENTER_LNG,
+    price_min: float | None = None,
+    status: str = "published",
+    description_orig: str = "A test event",
+    why_go: list[str] | None = None,
+    why_go_localized: dict | None = None,
+    image_url: str | None = None,
+    submitted_by_organizer_id: int | None = None,
+    **overrides: Any,
+) -> MagicMock:
+    """Plain-function form of the ``make_event`` fixture, importable by test
+    modules that build events outside a fixture. ``overrides`` are set as
+    attributes after construction."""
+    if starts_at is None:
+        starts_at = datetime(2026, 5, 15, 18, 0, 0, tzinfo=timezone.utc)
+    e = MagicMock()
+    e.id = event_id
+    e.slug = f"test-event-{event_id}"
+    e.title_orig = title
+    e.description_orig = description_orig
+    e.title_localized = None
+    e.description_localized = None
+    e.important_info_localized = None
+    e.important_info = None
+    e.starts_at = starts_at
+    e.ends_at = None
+    e.venue_name = venue_name
+    e.venue_address = venue_address
+    e.venue_id = venue_id
+    e.venue = venue
+    e.lat = lat
+    e.lng = lng
+    e.url = "https://example.com"
+    e.image_url = image_url
+    e.price_min = price_min
+    e.price_max = None
+    e.currency = DEFAULT_CURRENCY
+    e.price_hint = None
+    e.status = status
+    e.is_explicit = False
+    e.is_non_event = False
+    e.is_out_of_area = False
+    e.has_free_tier = False
+    e.dedup_group_id = None
+    e.submitted_by_organizer_id = submitted_by_organizer_id
+    e.created_at = MagicMock()
+    e.created_at.isoformat.return_value = "2026-05-13T06:00:00+00:00"
+
+    if why_go is not None or why_go_localized is not None:
+        cl = MagicMock()
+        cl.categories = ["music"]
+        cl.vibes = ["underground"]
+        cl.quality_score = 0.8
+        cl.why_go_bullets = why_go or []
+        cl.why_go_localized = why_go_localized
+        cl.language_detected = DEFAULT_USER_LOCALE
+        e.classification = cl
+    else:
+        cl = MagicMock()
+        cl.categories = ["music"]
+        cl.vibes = ["underground"]
+        cl.quality_score = 0.8
+        cl.why_go_bullets = ["Great DJs", "Intimate venue", "All night long"]
+        cl.why_go_localized = None
+        cl.language_detected = DEFAULT_USER_LOCALE
+        e.classification = cl
+    for key, value in overrides.items():
+        setattr(e, key, value)
+    return e
+
+
 @pytest.fixture
 def make_event():
-    def _factory(
-        event_id: int = 10,
-        title: str = "Test Event",
-        starts_at: datetime | None = None,
-        venue_name: str | None = "Test Venue",
-        venue_address: str | None = "Test Street 1",
-        venue_id: int | None = None,
-        venue: MagicMock | None = None,
-        lat: float | None = TALLINN_CENTER_LAT,
-        lng: float | None = TALLINN_CENTER_LNG,
-        price_min: float | None = None,
-        status: str = "published",
-        description_orig: str = "A test event",
-        why_go: list[str] | None = None,
-        why_go_localized: dict | None = None,
-        image_url: str | None = None,
-        submitted_by_organizer_id: int | None = None,
-    ) -> MagicMock:
-        if starts_at is None:
-            starts_at = datetime(2026, 5, 15, 18, 0, 0, tzinfo=timezone.utc)
-        e = MagicMock()
-        e.id = event_id
-        e.slug = f"test-event-{event_id}"
-        e.title_orig = title
-        e.description_orig = description_orig
-        e.title_localized = None
-        e.description_localized = None
-        e.important_info_localized = None
-        e.important_info = None
-        e.starts_at = starts_at
-        e.ends_at = None
-        e.venue_name = venue_name
-        e.venue_address = venue_address
-        e.venue_id = venue_id
-        e.venue = venue
-        e.lat = lat
-        e.lng = lng
-        e.url = "https://example.com"
-        e.image_url = image_url
-        e.price_min = price_min
-        e.price_max = None
-        e.currency = DEFAULT_CURRENCY
-        e.price_hint = None
-        e.status = status
-        e.is_explicit = False
-        e.is_non_event = False
-        e.is_out_of_area = False
-        e.has_free_tier = False
-        e.dedup_group_id = None
-        e.submitted_by_organizer_id = submitted_by_organizer_id
-        e.created_at = MagicMock()
-        e.created_at.isoformat.return_value = "2026-05-13T06:00:00+00:00"
+    return build_event
 
-        if why_go is not None or why_go_localized is not None:
-            cl = MagicMock()
-            cl.categories = ["music"]
-            cl.vibes = ["underground"]
-            cl.quality_score = 0.8
-            cl.why_go_bullets = why_go or []
-            cl.why_go_localized = why_go_localized
-            cl.language_detected = DEFAULT_USER_LOCALE
-            e.classification = cl
-        else:
-            cl = MagicMock()
-            cl.categories = ["music"]
-            cl.vibes = ["underground"]
-            cl.quality_score = 0.8
-            cl.why_go_bullets = ["Great DJs", "Intimate venue", "All night long"]
-            cl.why_go_localized = None
-            cl.language_detected = DEFAULT_USER_LOCALE
-            e.classification = cl
-        return e
-    return _factory
+
+def build_venue(
+    venue_id: int = 1,
+    name: str = "Saved Venue",
+    name_en: str | None = None,
+    name_ru: str | None = None,
+    address: str | None = "Saved Street 1",
+    lat: float | None = TALLINN_CENTER_LAT,
+    lng: float | None = TALLINN_CENTER_LNG,
+    **overrides: Any,
+) -> MagicMock:
+    """Plain-function form of the ``make_venue`` fixture. ``overrides`` are set
+    as attributes after construction."""
+    v = MagicMock()
+    v.id = venue_id
+    v.name = name
+    v.name_en = name_en
+    v.name_ru = name_ru
+    v.address = address
+    v.lat = lat
+    v.lng = lng
+    for key, value in overrides.items():
+        setattr(v, key, value)
+    return v
 
 
 @pytest.fixture
 def make_venue():
-    def _factory(
-        venue_id: int = 1,
-        name: str = "Saved Venue",
-        name_en: str | None = None,
-        name_ru: str | None = None,
-        address: str | None = "Saved Street 1",
-        lat: float | None = TALLINN_CENTER_LAT,
-        lng: float | None = TALLINN_CENTER_LNG,
-    ) -> MagicMock:
-        v = MagicMock()
-        v.id = venue_id
-        v.name = name
-        v.name_en = name_en
-        v.name_ru = name_ru
-        v.address = address
-        v.lat = lat
-        v.lng = lng
-        return v
-    return _factory
+    return build_venue
 
 
 @pytest.fixture

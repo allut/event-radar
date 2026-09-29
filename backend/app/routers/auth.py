@@ -88,13 +88,13 @@ from app.routers.utils import (
     build_oauth_error_redirect,
     clear_oauth_state_cookie,
     clear_session_cookie,
-    mask_email,
     recent_unused_link_exists,
     record_unverified_account_creation,
     serialize_user,
     set_oauth_state_cookie,
     set_session_cookie,
 )
+from app.auth.utils import mask_email
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -630,7 +630,7 @@ async def google_callback(
     except (httpx.HTTPError, GoogleTokenExchangeError):
         log.warning(
             "google sign-in: token exchange failed",
-            extra={"event": LOG_EVENT_GOOGLE_SIGNIN_DEGRADED, "track": "user"},
+            extra={"event": LOG_EVENT_GOOGLE_SIGNIN_DEGRADED, "track": AUTH_TRACK_USER},
         )
         return _error_redirect(OAUTH_ERROR_TOKEN_EXCHANGE_FAILED)
 
@@ -641,7 +641,7 @@ async def google_callback(
         # rejected caller.
         log.warning(
             "google sign-in: JWKS fetch failed",
-            extra={"event": LOG_EVENT_GOOGLE_SIGNIN_DEGRADED, "track": "user"},
+            extra={"event": LOG_EVENT_GOOGLE_SIGNIN_DEGRADED, "track": AUTH_TRACK_USER},
         )
         return _error_redirect(OAUTH_ERROR_TOKEN_EXCHANGE_FAILED)
     except jwt.PyJWTError:
@@ -655,7 +655,7 @@ async def google_callback(
     log.info(
         "google sign-in: outcome=%s",
         outcome,
-        extra={"event": LOG_EVENT_GOOGLE_SIGNIN, "track": "user", "outcome": outcome},
+        extra={"event": LOG_EVENT_GOOGLE_SIGNIN, "track": AUTH_TRACK_USER, "outcome": outcome},
     )
 
     if user is None:

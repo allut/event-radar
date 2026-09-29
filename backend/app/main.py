@@ -44,10 +44,10 @@ from app.constants import (
     HSTS_HEADER_NAME,
     HSTS_HEADER_VALUE,
     INGEST_INTERVAL_HOURS,
+    JOB_ID_BACKFILL_PUBLISHER_IDS,
     JOB_ID_BUILD_DAILY_FEEDS,
     JOB_ID_CLASSIFY_PENDING,
     JOB_ID_CLEANUP_STALE_DATA,
-    JOB_ID_BACKFILL_PUBLISHER_IDS,
     JOB_ID_DEDUP_PASS,
     JOB_ID_EXPIRE_STALE_CLAIMS,
     JOB_ID_GEOCODE_PENDING,
@@ -56,6 +56,9 @@ from app.constants import (
     JOB_ID_REFETCH_EVENT_DETAILS,
     JOB_ID_SEND_DAILY_DIGESTS,
     JOB_ID_SYNC_FIENTA_ORGANIZERS,
+    JOB_LABEL_DEDUP_PASS,
+    JOB_LABEL_HOURLY_INGEST,
+    JOB_LABEL_ORGANIZER_SYNC,
     LLM_PASS_INTERVAL_HOURS,
     LOG_EVENT_HOST_REJECTED,
     LOG_EVENT_JOB_RUN,
@@ -67,6 +70,7 @@ from app.constants import (
     ORGANIZER_SYNC_MINUTE,
     REFETCH_HOUR,
     REFETCH_MINUTE,
+    SCHEDULER_DAY_OF_WEEK_SUNDAY,
     SECURITY_HEADERS,
     TALLINN_TZ_NAME,
     TRUSTED_HOST_REJECT_BODY,
@@ -108,7 +112,7 @@ from app.routers.public import router as public_router
 from app.routers.reports import router as reports_router
 from app.routers.settings import router as settings_router
 from app.routers.unsubscribe import router as unsubscribe_router
-from app.routers.utils import run_in_session
+from app.db import run_in_session
 from app.routers.webhooks import router as webhooks_router
 from app.seeds import seed_personas, seed_publishers, seed_sources
 
@@ -176,13 +180,13 @@ def _in_session(
 
 
 _run_organizer_sync = _scheduled(
-    "organizer sync", _in_session(sync_fienta_organizers, commit=True)
+    JOB_LABEL_ORGANIZER_SYNC, _in_session(sync_fienta_organizers, commit=True)
 )
 _run_cleanup = _scheduled(
     JOB_ID_CLEANUP_STALE_DATA, _in_session(cleanup_stale_data, commit=True)
 )
-_run_ingest_all = _scheduled("hourly ingest", ingest_all_enabled)
-_run_dedup_pass = _scheduled("dedup pass", dedup_pass_drained)
+_run_ingest_all = _scheduled(JOB_LABEL_HOURLY_INGEST, ingest_all_enabled)
+_run_dedup_pass = _scheduled(JOB_LABEL_DEDUP_PASS, dedup_pass_drained)
 _run_classify_pending = _scheduled(JOB_ID_CLASSIFY_PENDING, classify_pending_drained)
 _run_publish_pending = _scheduled(JOB_ID_PUBLISH_PENDING, publish_pending_job)
 _run_geocode_pending = _scheduled(JOB_ID_GEOCODE_PENDING, geocode_pending_job)
@@ -212,7 +216,7 @@ def _register_scheduled_jobs(scheduler: AsyncIOScheduler) -> None:
     scheduler.add_job(
         _run_organizer_sync,
         trigger="cron",
-        day_of_week="sun",
+        day_of_week=SCHEDULER_DAY_OF_WEEK_SUNDAY,
         hour=ORGANIZER_SYNC_HOUR,
         minute=ORGANIZER_SYNC_MINUTE,
         id=JOB_ID_SYNC_FIENTA_ORGANIZERS,
@@ -223,7 +227,7 @@ def _register_scheduled_jobs(scheduler: AsyncIOScheduler) -> None:
     scheduler.add_job(
         _run_cleanup,
         trigger="cron",
-        day_of_week="sun",
+        day_of_week=SCHEDULER_DAY_OF_WEEK_SUNDAY,
         hour=CLEANUP_HOUR,
         minute=CLEANUP_MINUTE,
         id=JOB_ID_CLEANUP_STALE_DATA,

@@ -30,7 +30,8 @@ from app.email.report_notify import send_report_notification
 from app.models.models import Event, EventReport, User
 from app.rate_limit import limiter
 from app.auth.dependencies import get_current_user
-from app.routers.utils import public_event_filter, validate_report_reason
+from app.routers.utils import validate_report_reason
+from app.events.queries import public_event_filter
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/reports", tags=["reports"])

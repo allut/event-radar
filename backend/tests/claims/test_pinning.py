@@ -200,7 +200,7 @@ class TestRepresentativeEventForClaim:
 
     @pytest.mark.asyncio
     async def test_series_claim_scans_for_matching_key(self, mock_db, make_event):
-        from app.routers.utils import event_series_key, serialize_event_series_key
+        from app.events.queries import event_series_key, serialize_event_series_key
 
         matching = make_event(event_id=1, title="Balti Jaama Turg", venue_name="Kultuurikatel")
         other = make_event(event_id=2, title="Other Event", venue_name="Elsewhere")
@@ -262,7 +262,7 @@ class TestClearClaimPins:
 
     @pytest.mark.asyncio
     async def test_series_claim_clears_only_matching_key_events(self, mock_db, make_event):
-        from app.routers.utils import event_series_key, serialize_event_series_key
+        from app.events.queries import event_series_key, serialize_event_series_key
 
         matching = make_event(event_id=1, title="Balti Jaama Turg", venue_name="Kultuurikatel")
         other = make_event(event_id=2, title="Other Event", venue_name="Elsewhere")
@@ -459,3 +459,36 @@ class TestScaledClaimEditCap:
 
     def test_cap_never_exceeds_ceiling_for_very_large_claims(self):
         assert scaled_claim_edit_cap(10_000) == ORGANIZER_CLAIM_EDIT_CAP_CEILING
+
+
+class TestBulkResolveSeriesEvents:
+    @pytest.mark.asyncio
+    async def test_empty_keys_issue_no_query(self, mock_db):
+        from app.claims.pinning import bulk_resolve_series_events
+
+        assert await bulk_resolve_series_events(mock_db, set()) == {}
+        mock_db.execute.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_one_scan_resolves_every_key_earliest_match_wins(
+        self, mock_db, make_event
+    ):
+        from app.claims.pinning import bulk_resolve_series_events
+        from app.events.queries import event_series_key, serialize_event_series_key
+
+        first_a = make_event(1, title="Market A", venue_name="Hall")
+        later_a = make_event(2, title="Market A", venue_name="Hall")
+        only_b = make_event(3, title="Market B", venue_name="Hall")
+        other = make_event(4, title="Unclaimed", venue_name="Hall")
+        key_a = serialize_event_series_key(event_series_key("Market A", "Hall"))
+        key_b = serialize_event_series_key(event_series_key("Market B", "Hall"))
+        key_missing = serialize_event_series_key(event_series_key("Ghost", "Hall"))
+
+        scalars = MagicMock()
+        scalars.all.return_value = [first_a, later_a, only_b, other]
+        mock_db.execute.return_value.scalars.return_value = scalars
+
+        result = await bulk_resolve_series_events(mock_db, {key_a, key_b, key_missing})
+
+        assert result == {key_a: first_a, key_b: only_b}
+        mock_db.execute.assert_awaited_once()

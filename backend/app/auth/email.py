@@ -14,7 +14,7 @@ from app.constants import (
 from app.email.magic_link import build_magic_link_html, build_magic_link_text
 from app.email.resend import send_resend_email
 from app.i18n import t
-from app.routers.utils import mask_email
+from app.auth.utils import mask_email
 
 log = logging.getLogger(__name__)
 

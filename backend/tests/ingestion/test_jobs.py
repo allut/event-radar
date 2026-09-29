@@ -7,7 +7,7 @@ import pytest
 
 from app.constants import LLM_CLASSIFY_BATCH_SIZE
 from app.ingestion import jobs
-from app.routers import utils
+from app import db as app_db
 from tests.conftest import session_factory as _session_factory
 
 
@@ -161,9 +161,9 @@ async def test_ingest_all_enabled_records_per_source_error(mock_db, monkeypatch)
 @pytest.mark.asyncio
 async def test_run_db_job_commits_on_success(mock_db, monkeypatch):
     # _run_db_job delegates the actual session handling to the shared
-    # run_in_session() (app/routers/utils.py), which owns its own
+    # run_in_session() (app/db.py), which owns its own
     # AsyncSessionLocal import — patch that one, not jobs'.
-    monkeypatch.setattr(utils, "AsyncSessionLocal", _session_factory(mock_db))
+    monkeypatch.setattr(app_db, "AsyncSessionLocal", _session_factory(mock_db))
     func = AsyncMock(return_value={"ok": 1})
 
     result = await jobs._run_db_job("label", func)
@@ -176,7 +176,7 @@ async def test_run_db_job_commits_on_success(mock_db, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_run_db_job_rolls_back_and_reraises(mock_db, monkeypatch):
-    monkeypatch.setattr(utils, "AsyncSessionLocal", _session_factory(mock_db))
+    monkeypatch.setattr(app_db, "AsyncSessionLocal", _session_factory(mock_db))
     func = AsyncMock(side_effect=RuntimeError("nope"))
 
     with pytest.raises(RuntimeError, match="nope"):

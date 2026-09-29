@@ -417,6 +417,22 @@ class TestGetOptionalUser:
         assert result.id == 7
 
     @pytest.mark.asyncio
+    async def test_revoked_token_returns_none(self, mock_db):
+        """A token whose version no longer matches user.session_token_version
+        (post logout-all) must not resolve the user — no locale/signal leak."""
+        from app.auth.dependencies import get_optional_user
+
+        user = MagicMock()
+        user.id = 7
+        user.session_token_version = 2
+        mock_db.get.return_value = user
+
+        result = await get_optional_user(
+            session=generate_session_token(7, 1), db=mock_db
+        )
+        assert result is None
+
+    @pytest.mark.asyncio
     async def test_missing_cookie_returns_none(self, mock_db):
         from app.auth.dependencies import get_optional_user
 

@@ -83,3 +83,16 @@ class TestCheckTotpCode:
         assert _verify(secret, newer_code) is True
         # older_code's step (step_now - 1) is now <= last accepted step.
         assert _verify(secret, older_code) is False
+
+
+class TestMalformedSecretLogging:
+    def test_malformed_secret_is_logged_not_swallowed_silently(self, caplog):
+        """A bad ADMIN_TOTP_SECRET would otherwise fail every admin login with
+        nothing in the logs. Only the exception class is logged — the message
+        could echo the secret."""
+        with caplog.at_level("WARNING", logger="app.auth.totp"):
+            step = check_totp_code("not base32 !!!", "123456")
+
+        assert step is None
+        assert any("admin TOTP check raised" in r.getMessage() for r in caplog.records)
+        assert all("not base32" not in r.getMessage() for r in caplog.records)

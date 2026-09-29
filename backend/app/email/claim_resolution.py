@@ -27,7 +27,7 @@ from app.email.templates import (
     EMAIL_FOOTER_BRAND,
 )
 from app.i18n import t, ti
-from app.routers.utils import mask_email
+from app.auth.utils import mask_email
 
 
 def _target_label(event_title: str | None, locale: str) -> str:

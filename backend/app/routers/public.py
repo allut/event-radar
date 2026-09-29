@@ -30,15 +30,17 @@ from app.db import get_db
 from app.models.models import Event, EventClassification, Venue
 from app.rate_limit import limiter
 from app.routers.utils import (
-    canonical_event_filter,
     collapse_series_duplicates,
-    event_not_ended_filter,
-    public_event_filter,
     resolve_locale_param,
     resolve_title,
-    resolve_venue_name,
     select_events_with_classification,
     serialize_event,
+)
+from app.events.venue import resolve_venue_name
+from app.events.queries import (
+    canonical_event_filter,
+    event_not_ended_filter,
+    public_event_filter,
 )
 
 router = APIRouter(prefix="/public", tags=["public"])

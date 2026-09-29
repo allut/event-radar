@@ -58,16 +58,18 @@ from app.ranking.score import (
 from app.rate_limit import limiter
 from app.auth.dependencies import get_optional_user
 from app.routers.utils import (
-    canonical_event_filter,
     escape_ilike_pattern,
-    event_not_ended_filter,
     load_user_reported_events,
     load_user_signals,
     persona_weight_tuple,
-    public_event_filter,
     resolve_locale_param,
     select_events_with_classification,
     serialize_event,
+)
+from app.events.queries import (
+    canonical_event_filter,
+    event_not_ended_filter,
+    public_event_filter,
 )
 
 router = APIRouter(tags=["browse"])

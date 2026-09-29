@@ -34,7 +34,8 @@ from app.constants import (
 from app.ingestion.http_client import AsyncRateLimiter, http_get
 from app.ingestion.sources.fienta import FientaAdapter
 from app.models.models import Event, EventSource, Publisher, RawEvent, Source
-from app.routers.utils import event_series_key, resolve_venue_name, serialize_event_series_key
+from app.events.venue import resolve_venue_name
+from app.events.queries import event_series_key, serialize_event_series_key
 
 log = logging.getLogger(__name__)
 

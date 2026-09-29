@@ -25,6 +25,7 @@ from app.constants import (
     SOURCE_SLUG_PILETILEVI,
     SOURCE_SLUG_TELLISKIVI,
 )
+from tests.claims.conftest import fake_event_source
 
 
 def _fake_source(*, slug: str, config: dict | None = None, source_id: int = 1) -> MagicMock:
@@ -33,19 +34,6 @@ def _fake_source(*, slug: str, config: dict | None = None, source_id: int = 1) -
     source.slug = slug
     source.config = config or {}
     return source
-
-
-def _fake_event_source(
-    *, source: MagicMock, publisher_id: int | None = None, external_id: str = "100"
-) -> MagicMock:
-    es = MagicMock()
-    es.id = 7
-    es.event_id = 10
-    es.external_id = external_id
-    es.publisher_id = publisher_id
-    es.source = source
-    es.publisher = MagicMock(id=publisher_id) if publisher_id is not None else None
-    return es
 
 
 def _nested_cm(*, raises: Exception | None = None) -> MagicMock:
@@ -111,7 +99,7 @@ class TestFientaResolution:
     @pytest.mark.asyncio
     async def test_already_stamped_is_trusted_no_network(self, mock_db):
         source = _fake_source(slug=SOURCE_SLUG_FIENTA)
-        es = _fake_event_source(source=source, publisher_id=99)
+        es = fake_event_source(source=source, publisher_id=99)
         event = MagicMock()
 
         target = await resolve_claim_target_live(mock_db, AsyncMock(), event, es)
@@ -122,7 +110,7 @@ class TestFientaResolution:
     @pytest.mark.asyncio
     async def test_unstamped_resolves_via_raw_payload(self, mock_db):
         source = _fake_source(slug=SOURCE_SLUG_FIENTA)
-        es = _fake_event_source(source=source, publisher_id=None, external_id="200")
+        es = fake_event_source(source=source, publisher_id=None, external_id="200")
         event = MagicMock()
         raw = MagicMock(payload={"organizer_id": 42})
         mock_db.scalar = AsyncMock(return_value=raw)
@@ -150,7 +138,7 @@ class TestFientaResolution:
         source = _fake_source(
             slug=SOURCE_SLUG_FIENTA, config={"organizer_ids": [1, 2], "retired_organizer_ids": [3]}
         )
-        es = _fake_event_source(source=source, publisher_id=None, external_id="200")
+        es = fake_event_source(source=source, publisher_id=None, external_id="200")
         event = MagicMock()
         mock_db.scalar = AsyncMock(return_value=None)  # no raw_events row
         publisher = MagicMock(id=88)
@@ -183,7 +171,7 @@ class TestFientaResolution:
         """The claim always ends up a Fienta Publisher claim or is rejected
         outright — never silently downgraded to a Series claim."""
         source = _fake_source(slug=SOURCE_SLUG_FIENTA, config={"organizer_ids": []})
-        es = _fake_event_source(source=source, publisher_id=None, external_id="200")
+        es = fake_event_source(source=source, publisher_id=None, external_id="200")
         event = MagicMock()
         mock_db.scalar = AsyncMock(return_value=None)
 
@@ -196,7 +184,7 @@ class TestInstitutionalResolution:
     @pytest.mark.asyncio
     async def test_always_resolves_constant_publisher_even_if_unstamped(self, mock_db, slug):
         source = _fake_source(slug=slug)
-        es = _fake_event_source(source=source, publisher_id=None)
+        es = fake_event_source(source=source, publisher_id=None)
         event = MagicMock()
         publisher = MagicMock(id=55)
         mock_db.scalar = AsyncMock(return_value=publisher)
@@ -211,7 +199,7 @@ class TestInstitutionalResolution:
         """Independent of whether the row happens to be stamped — always
         re-resolves the source's one seeded constant Publisher."""
         source = _fake_source(slug=SOURCE_SLUG_KUMU)
-        es = _fake_event_source(source=source, publisher_id=999)
+        es = fake_event_source(source=source, publisher_id=999)
         event = MagicMock()
         publisher = MagicMock(id=55)
         mock_db.scalar = AsyncMock(return_value=publisher)
@@ -223,7 +211,7 @@ class TestInstitutionalResolution:
     @pytest.mark.asyncio
     async def test_no_seeded_publisher_rejected(self, mock_db):
         source = _fake_source(slug=SOURCE_SLUG_KUMU)
-        es = _fake_event_source(source=source, publisher_id=None)
+        es = fake_event_source(source=source, publisher_id=None)
         event = MagicMock()
         mock_db.scalar = AsyncMock(return_value=None)
 
@@ -235,7 +223,7 @@ class TestPiletileviResolution:
     @pytest.mark.asyncio
     async def test_already_stamped_is_trusted_no_network(self, mock_db):
         source = _fake_source(slug=SOURCE_SLUG_PILETILEVI)
-        es = _fake_event_source(source=source, publisher_id=33)
+        es = fake_event_source(source=source, publisher_id=33)
         event = MagicMock()
 
         with patch(
@@ -249,7 +237,7 @@ class TestPiletileviResolution:
     @pytest.mark.asyncio
     async def test_resolving_promoter_always_yields_publisher_target(self, mock_db):
         source = _fake_source(slug=SOURCE_SLUG_PILETILEVI)
-        es = _fake_event_source(source=source, publisher_id=None)
+        es = fake_event_source(source=source, publisher_id=None)
         event = MagicMock(url="https://www.piletilevi.ee/en/tickets/x/some-event")
         publisher = MagicMock(id=33)
         identity = PromoterIdentity(external_id="https://www.piletilevi.ee/en/promoters/1/x", name="X OÜ")
@@ -286,7 +274,7 @@ class TestPiletileviResolution:
         a Publisher target — only the DNS-TXT verification step (#412) cares
         about the domain, not target resolution."""
         source = _fake_source(slug=SOURCE_SLUG_PILETILEVI)
-        es = _fake_event_source(source=source, publisher_id=None)
+        es = fake_event_source(source=source, publisher_id=None)
         event = MagicMock(url="https://www.piletilevi.ee/en/tickets/x/some-event")
         publisher = MagicMock(id=34)
         identity = PromoterIdentity(external_id="https://www.piletilevi.ee/en/promoters/2/y", name=None)
@@ -318,7 +306,7 @@ class TestPiletileviResolution:
     @pytest.mark.asyncio
     async def test_no_url_yields_series_without_fetching(self, mock_db, make_event):
         source = _fake_source(slug=SOURCE_SLUG_PILETILEVI)
-        es = _fake_event_source(source=source, publisher_id=None)
+        es = fake_event_source(source=source, publisher_id=None)
         event = make_event()
         event.url = None
 
@@ -334,7 +322,7 @@ class TestPiletileviResolution:
     @pytest.mark.asyncio
     async def test_non_resolving_promoter_yields_series(self, mock_db, make_event):
         source = _fake_source(slug=SOURCE_SLUG_PILETILEVI)
-        es = _fake_event_source(source=source, publisher_id=None)
+        es = fake_event_source(source=source, publisher_id=None)
         event = make_event()
 
         with (
@@ -354,7 +342,7 @@ class TestPiletileviResolution:
     @pytest.mark.asyncio
     async def test_event_page_fetch_failure_yields_series(self, mock_db, make_event):
         source = _fake_source(slug=SOURCE_SLUG_PILETILEVI)
-        es = _fake_event_source(source=source, publisher_id=None)
+        es = fake_event_source(source=source, publisher_id=None)
         event = make_event()
 
         with patch(
@@ -371,7 +359,7 @@ class TestOtherSourceResolution:
     @pytest.mark.asyncio
     async def test_no_resolvable_publisher_rejected_not_downgraded(self, mock_db):
         source = _fake_source(slug=SOURCE_SLUG_TELLISKIVI)
-        es = _fake_event_source(source=source, publisher_id=None)
+        es = fake_event_source(source=source, publisher_id=None)
         event = MagicMock()
 
         with pytest.raises(ClaimTargetError):
