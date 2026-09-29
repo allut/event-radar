@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { cx, safeUrl, sanitizeHtml, formatPrice, categoryGradient, formatHourMinute, formatEventShortDate, makeActiveClassMap, trackExternalClick, datePresetRange, parseExploreFilters, exploreFiltersToSearchParams, buildExploreApiQuery, activeFacetCount, isFullSet, shouldFlipPopover, maskAnalyticsUrl, DEFAULT_EXPLORE_FILTERS, type ExploreFilters, monthGridDays, weekdayHeaders, splitDateTimeValue, joinDateTimeValue, parseTypedDate, formatPickerValue, formatMonthYearLabel, toDisplayDateTime, fromDisplayDateTime, buildMapsUrl, isValidLocale, stripLocalePrefix, localizedPath, localeFromPath, localizedTo, truncateForMeta, parseISODateLocal, formatDateRangeShort } from './utils';
+import { cx, safeUrl, sanitizeHtml, formatPrice, categoryGradient, formatHourMinute, formatEventShortDate, makeActiveClassMap, trackExternalClick, datePresetRange, parseExploreFilters, exploreFiltersToSearchParams, buildExploreApiQuery, activeFacetCount, isFullSet, shouldFlipPopover, maskAnalyticsUrl, DEFAULT_EXPLORE_FILTERS, type ExploreFilters, monthGridDays, weekdayHeaders, splitDateTimeValue, joinDateTimeValue, parseTypedDate, formatPickerValue, formatMonthYearLabel, toDisplayDateTime, fromDisplayDateTime, buildMapsUrl, isValidLocale, stripLocalePrefix, localizedPath, localeFromPath, localizedTo, truncateForMeta, parseISODateLocal, formatDateRangeShort, localeLabel, localizedFieldLabel, localizedTriplet, weekdayOffset } from './utils';
+import { t } from './i18n';
 import { FALLBACK_GRADIENT, CATEGORIES, GOOGLE_MAPS_SEARCH_URL } from './constants';
 
 vi.mock('./api/client', () => ({
@@ -754,5 +755,39 @@ describe('buildMapsUrl', () => {
 
   it('returns null when neither coordinates nor address are available', () => {
     expect(buildMapsUrl(null, null, null)).toBeNull();
+  });
+});
+
+describe('localeLabel', () => {
+  it('returns the configured label for a known code', () => {
+    expect(localeLabel('et')).toBe('ET');
+  });
+  it('falls back to the upper-cased code for an unknown one', () => {
+    expect(localeLabel('xx')).toBe('XX');
+  });
+});
+
+describe('localizedFieldLabel', () => {
+  it('suffixes the translated field name with the language label', () => {
+    expect(localizedFieldLabel('claim_edit_field_title', 'en', 'ru')).toBe(`${t('claim_edit_field_title', 'en')} (${localeLabel('ru')})`);
+  });
+});
+
+describe('localizedTriplet', () => {
+  it('reads et/en/ru slots from the record', () => {
+    expect(localizedTriplet({ et: 'a', en: 'b', ru: 'c' }, 'base')).toEqual(['a', 'b', 'c']);
+  });
+  it('falls back to base for ET and blanks for EN/RU', () => {
+    expect(localizedTriplet(null, 'base')).toEqual(['base', '', '']);
+    expect(localizedTriplet(undefined, undefined)).toEqual(['', '', '']);
+  });
+});
+
+describe('weekdayOffset', () => {
+  it('counts days since the week start', () => {
+    const wednesday = new Date(2024, 6, 3);
+    expect(weekdayOffset(wednesday, 1)).toBe(2);
+    expect(weekdayOffset(wednesday, 0)).toBe(3);
+    expect(weekdayOffset(new Date(2024, 6, 7), 1)).toBe(6);
   });
 });

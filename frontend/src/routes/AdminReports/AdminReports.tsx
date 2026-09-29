@@ -2,7 +2,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { adminApi } from '../../api/client';
-import { ADMIN_GENERIC_ERROR, ADMIN_QUEUE_DETAIL_LINK_LABEL, ADMIN_REPORTS_PARAM, ADMIN_REPORTS_QUEUE_PAGE_SIZE, API, LOCALE_EN, PAGE_PARAM, QUERY_KEYS, REPORT_REASONS_BY_VALUE, ROUTES, UI_STATE } from '../../constants';
+import { ADMIN_GENERIC_ERROR, ADMIN_RESOLUTION_MESSAGES, ADMIN_QUEUE_DETAIL_LINK_LABEL, ADMIN_REPORTS_PARAM, ADMIN_REPORTS_QUEUE_PAGE_SIZE, API, LOCALE_EN, PAGE_PARAM, QUERY_KEYS, REPORT_REASONS_BY_VALUE, ROUTES, UI_STATE } from '../../constants';
 import { t } from '../../i18n';
 import { apiErrorMessage, nextOffsetParam, relativeTimeFromNow } from '../../utils';
 import PageState from '../../components/PageState';
@@ -226,7 +226,7 @@ export default function AdminReports() {
 
                 {resolution ? (
                   <div className={styles.resolvedPanel}>
-                    ✓ {resolution.kind === 'taken_down' ? 'Event taken down.' : 'Resolved.'} Reporters notified.
+                    ✓ {ADMIN_RESOLUTION_MESSAGES[resolution.kind === 'taken_down' ? 'taken_down' : 'resolved']} Reporters notified.
                   </div>
                 ) : (
                   <AdminQueueActionPanel

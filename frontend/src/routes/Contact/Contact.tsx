@@ -73,7 +73,7 @@ export default function Contact() {
 
         {state === UI_STATE.success ? (
           <div className={styles.success} role="status">
-            <div className={styles.checkCircle}>✓</div>
+            <div className={styles.checkCircle} aria-hidden>✓</div>
             <p className={styles.successTitle}>{t('contact_success_title', locale)}</p>
             <p className={styles.successBody}>{t('contact_success_body', locale)}</p>
             <button className={styles.resend} onClick={reset}>

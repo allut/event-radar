@@ -1,6 +1,6 @@
 import DOMPurify from 'dompurify';
 import { api, ApiError } from './api/client';
-import { API, CATEGORY_GRADIENTS, CLAIM_JUSTIFICATION_REQUIRED_ERROR, FALLBACK_GRADIENT, EUR_SYMBOL, DEFAULT_CURRENCY, GOOGLE_MAPS_SEARCH_URL, type Signal, toLocaleCode, SAFE_URL_SCHEMES, SANITIZE_ALLOWED_TAGS, SANITIZE_ALLOWED_ATTR, SIGNAL_TO_CLASS, BROWSE_PAGE_SIZE, CATEGORIES, VIBES, type DatePreset, type SortOption, ANALYTICS_EVENT_PATH_RE, ANALYTICS_ORGANIZER_EDIT_PATH_RE, CALENDAR_WEEK_START, CALENDAR_WEEKS_SHOWN, CALENDAR_DAYS_PER_WEEK, CALENDAR_REFERENCE_MONDAY, MAX_HOUR, MAX_MINUTE, DATE_PRESET_DAYS, DATE_PRESET_DAYS_FALLBACK, DATE_PRESET_DEFAULT, DATE_PRESET_TODAY, DATE_PRESET_WEEKEND, EXPLORE_PARAM, EXPLORE_URL_FLAG_TRUE, EXPLORE_API_FLAG_TRUE, SORT_DEFAULT, TIME_FIELD_MAX_LENGTH, LOCALES, type LocaleCode, DEFAULT_LOCALE_CODE, MS_PER_HOUR, HOURS_PER_DAY } from './constants';
+import { API, ISO_DATE_RE, PICKER_VALUE_RE, SIGNAL_CLICK_EXTERNAL, CATEGORY_GRADIENTS, CLAIM_JUSTIFICATION_REQUIRED_ERROR, FALLBACK_GRADIENT, EUR_SYMBOL, DEFAULT_CURRENCY, GOOGLE_MAPS_SEARCH_URL, type Signal, toLocaleCode, SAFE_URL_SCHEMES, SANITIZE_ALLOWED_TAGS, SANITIZE_ALLOWED_ATTR, SIGNAL_TO_CLASS, BROWSE_PAGE_SIZE, CATEGORIES, VIBES, type DatePreset, type SortOption, ANALYTICS_EVENT_PATH_RE, ANALYTICS_ORGANIZER_EDIT_PATH_RE, CALENDAR_WEEK_START, CALENDAR_WEEKS_SHOWN, CALENDAR_DAYS_PER_WEEK, CALENDAR_REFERENCE_MONDAY, MAX_HOUR, MAX_MINUTE, DATE_PRESET_DAYS, DATE_PRESET_DAYS_FALLBACK, DATE_PRESET_DEFAULT, DATE_PRESET_TODAY, DATE_PRESET_WEEKEND, EXPLORE_PARAM, EXPLORE_URL_FLAG_TRUE, EXPLORE_API_FLAG_TRUE, SORT_DEFAULT, TIME_FIELD_MAX_LENGTH, LOCALES, LOCALES_BY_CODE, LOCALE_EN, LOCALE_ET, LOCALE_RU, type LocaleCode, DEFAULT_LOCALE_CODE, MS_PER_HOUR, HOURS_PER_DAY } from './constants';
 import { t, ti } from './i18n';
 import { stripLocalePrefix, localizedPath, localeFromPath, localizedTo } from './lib/urlLocale';
 
@@ -8,6 +8,38 @@ export { stripLocalePrefix, localizedPath, localeFromPath, localizedTo };
 
 export function cx(...classes: (string | false | null | undefined)[]): string {
   return classes.filter(Boolean).join(' ');
+}
+
+/** Display label for a locale/content-language code, falling back to the upper-cased code. */
+export function localeLabel(code: string): string {
+  return LOCALES_BY_CODE.get(code)?.label ?? code.toUpperCase();
+}
+
+/** "Field (LANG)" label for a translated form field. */
+export function localizedFieldLabel(key: string, locale: string, lang: string): string {
+  return ti('organizer_field_lang_suffix', locale, { field: t(key, locale), lang: localeLabel(lang) });
+}
+
+/** Title + description, one slot per content language — the shape shared by the
+ * organizer-submit and claim-edit form states. */
+export interface LocalizedTextFields {
+  title: string;
+  titleEn: string;
+  titleRu: string;
+  description: string;
+  descriptionEn: string;
+  descriptionRu: string;
+}
+
+/** Splits a `*_localized` record into its [et, en, ru] slots. The ET slot falls
+ * back to `base` (the display-locale-resolved field) for events that predate
+ * localized maps; EN/RU are blank when absent. */
+export function localizedTriplet(
+  record: Record<string, string> | null | undefined,
+  base: string | null | undefined,
+): [string, string, string] {
+  const loc = record ?? {};
+  return [loc[LOCALE_ET] ?? base ?? '', loc[LOCALE_EN] ?? '', loc[LOCALE_RU] ?? ''];
 }
 
 export function isValidLocale(code: string | undefined): code is LocaleCode {
@@ -167,7 +199,7 @@ export function formatHourMinute(iso: string, locale: string): string {
 }
 
 export function trackExternalClick(eventId: number): void {
-  api.post(API.feedback, { event_id: eventId, signal: 'click_external' }).catch(() => undefined);
+  api.post(API.feedback, { event_id: eventId, signal: SIGNAL_CLICK_EXTERNAL }).catch(() => undefined);
 }
 
 /** Copy text to the clipboard. Returns true on success, false if the
@@ -362,12 +394,18 @@ export interface CalendarCell {
   dataDate: string;
 }
 
+/** Days elapsed since the start of `d`'s week — 0 on the week's first day
+ * (`weekStart`), CALENDAR_DAYS_PER_WEEK - 1 on its last. */
+export function weekdayOffset(d: Date, weekStart: number): number {
+  return (d.getDay() - weekStart + CALENDAR_DAYS_PER_WEEK) % CALENDAR_DAYS_PER_WEEK;
+}
+
 /** Returns a fixed CALENDAR_WEEKS_SHOWN × CALENDAR_DAYS_PER_WEEK grid of days for
  * `month` (0-indexed) of `year`, starting on `weekStart` (0 = Sunday, 1 = Monday),
  * including leading/trailing days spilling in from adjacent months. */
 export function monthGridDays(year: number, month: number, weekStart: number): CalendarCell[] {
   const first = new Date(year, month, 1);
-  const startOffset = (first.getDay() - weekStart + CALENDAR_DAYS_PER_WEEK) % CALENDAR_DAYS_PER_WEEK;
+  const startOffset = weekdayOffset(first, weekStart);
   const gridStart = new Date(year, month, 1 - startOffset);
   const totalCells = CALENDAR_WEEKS_SHOWN * CALENDAR_DAYS_PER_WEEK;
   const cells: CalendarCell[] = [];
@@ -411,7 +449,6 @@ export interface PickerDateTime {
   minute: number;
 }
 
-const PICKER_VALUE_RE = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/;
 
 /** Splits the 'YYYY-MM-DDTHH:mm' wire value (the same format the native
  * datetime-local input this component replaces used) into components, or
@@ -704,7 +741,6 @@ function parseSlugList(raw: string, valid: readonly string[]): string[] {
   return result;
 }
 
-const ISO_DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
 
 /** Validates a `YYYY-MM-DD` string against both the wire format and the
  * calendar (rejects e.g. `2026-02-30`), returning it unchanged or null.

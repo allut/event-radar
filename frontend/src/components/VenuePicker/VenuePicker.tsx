@@ -2,12 +2,12 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { organizerApi } from '../../api/client';
 import {
-  API, LOCALE_EN, LOCALE_RU, LOCALES_BY_CODE,
+  API, LOCALE_EN, LOCALE_RU,
   ORGANIZER_VENUE_NAME_MAX_LEN, ORGANIZER_VENUE_ADDRESS_MAX_LEN, QUERY_KEYS,
   type ContentLang,
 } from '../../constants';
 import { t, ti } from '../../i18n';
-import { apiErrorMessage, cx } from '../../utils';
+import { apiErrorMessage, cx, localizedFieldLabel } from '../../utils';
 import styles from './VenuePicker.module.css';
 
 export interface SavedVenue {
@@ -46,14 +46,10 @@ interface VenuePickerProps {
   disabled?: boolean;
 }
 
-function langLabel(lang: ContentLang): string {
-  return LOCALES_BY_CODE.get(lang)?.label ?? lang.toUpperCase();
-}
-
 function fieldLabel(key: string, locale: string, contentLang: ContentLang): string {
   const base = t(key, locale);
   return contentLang === LOCALE_EN || contentLang === LOCALE_RU
-    ? ti('organizer_field_lang_suffix', locale, { field: base, lang: langLabel(contentLang) })
+    ? localizedFieldLabel(key, locale, contentLang)
     : base;
 }
 

@@ -31,7 +31,7 @@ export default function MagicLinkForm({ locale, requestPath, organizer = false, 
   if (state === UI_STATE.success) {
     return (
       <div className={cx(styles.success, successAnimated && styles.successAnimated)} role="status">
-        <div className={styles.checkCircle}>✓</div>
+        <div className={styles.checkCircle} aria-hidden>✓</div>
         <p className={styles.successMsg}>
           {t('check_inbox', locale)} <strong>{email}</strong>
         </p>

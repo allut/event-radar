@@ -178,6 +178,47 @@ export type ClaimStatus =
   | typeof CLAIM_STATUS_REVOKED
   | typeof CLAIM_STATUS_DECLINED;
 
+// Claim target kind — a Publisher or a Series (mirrors backend claim `kind`).
+export const CLAIM_KIND_PUBLISHER = 'publisher';
+export const CLAIM_KIND_SERIES = 'series';
+export type ClaimKind = typeof CLAIM_KIND_PUBLISHER | typeof CLAIM_KIND_SERIES;
+
+// Public `claim_status` an event reports (mirrors backend EVENT_CLAIM_STATUS_*).
+export const EVENT_CLAIM_STATUS_UNCLAIMED = 'unclaimed';
+export const EVENT_CLAIM_STATUS_PENDING = 'pending';
+export const EVENT_CLAIM_STATUS_CLAIMED = 'claimed';
+export const EVENT_CLAIM_STATUS_NOT_CLAIMABLE = 'not_claimable';
+export type EventClaimStatus =
+  | typeof EVENT_CLAIM_STATUS_UNCLAIMED
+  | typeof EVENT_CLAIM_STATUS_PENDING
+  | typeof EVENT_CLAIM_STATUS_CLAIMED
+  | typeof EVENT_CLAIM_STATUS_NOT_CLAIMABLE;
+
+// Admin claims queue: badge text per verification mechanism, and the resolution
+// tag shown for each admin action.
+export const ADMIN_CLAIM_MECHANISM_LABELS: Record<string, string> = {
+  [CLAIM_VERIFICATION_MECHANISM_FIENTA_TOKEN]: 'Fienta',
+  [CLAIM_VERIFICATION_MECHANISM_DNS_TXT]: 'DNS-TXT',
+  [CLAIM_VERIFICATION_MECHANISM_PILETILEVI_PROMOTER]: 'DNS-TXT',
+  [CLAIM_VERIFICATION_MECHANISM_PILETILEVI_MAILBOX]: 'Contact mailbox',
+  [CLAIM_VERIFICATION_MECHANISM_ADMIN_REVIEW]: 'Admin review',
+};
+// Success line shown after an admin resolves a report or submission — shared by
+// the queue rows and the event-detail action bar.
+export const ADMIN_RESOLUTION_MESSAGES = {
+  resolved: 'Resolved.',
+  taken_down: 'Event taken down.',
+  approved: 'Submission approved.',
+  retracted: 'Submission retracted.',
+} as const;
+export type AdminResolutionKind = keyof typeof ADMIN_RESOLUTION_MESSAGES;
+export type AdminClaimActionKind = 'granted' | 'declined' | 'revoked';
+export const ADMIN_CLAIM_ACTION_TAGS: Record<AdminClaimActionKind, string> = {
+  granted: 'Granted',
+  declined: 'Declined',
+  revoked: 'Revoked',
+};
+
 // Closed, no further action possible — never involved an admin for cancelled/expired,
 // so ClaimPending's terminal screens must not show the pending pill or "Admin review" eyebrow (#449).
 export const CLAIM_TERMINAL_STATUSES: ReadonlySet<ClaimStatus> = new Set([
@@ -216,6 +257,10 @@ export const DROPDOWN_DEFAULT_FOCUS_SELECTOR = 'button';
 
 // ─── Settings ────────────────────────────────────────────────────────────────
 export const SAVE_MSG_CLEAR_DELAY_MS = 2000;
+// How long a "Copied" button label stays before reverting.
+export const COPY_FEEDBACK_MS = 2000;
+// HTTP status the claim-editing surface reads structurally (not-granted / dormant).
+export const HTTP_STATUS_CONFLICT = 409;
 
 // ─── External links ──────────────────────────────────────────────────────────
 export const GOOGLE_MAPS_SEARCH_URL = 'https://www.google.com/maps/search/?api=1&query=';
@@ -241,9 +286,13 @@ export type LocaleCode = (typeof LOCALES)[number]['code'];
 export const LOCALES_BY_CODE: Map<string, (typeof LOCALES)[number]> = new Map(
   LOCALES.map((l) => [l.code, l]),
 );
+export const COPYRIGHT_YEAR = String(new Date().getFullYear());
+
 export const LOCALE_EN = 'en' as const;
 export const LOCALE_ET = 'et' as const;
 export const LOCALE_RU = 'ru' as const;
+/** Localized-text slots the claim-edit form renders, in display order. */
+export const CLAIM_EDIT_LOCALES = [LOCALE_ET, LOCALE_EN, LOCALE_RU] as const;
 
 export function toLocaleCode(locale: string): string {
   return _LOCALE_CODE_MAP[locale] ?? _DEFAULT_LOCALE_CODE;
@@ -512,11 +561,15 @@ export const REPORT_DETAIL_TEXTAREA_ROWS = 4;
 // ─── Events / feedback ───────────────────────────────────────────────────────
 export type Signal = 'like' | 'dislike' | 'bookmark';
 
-export const SIGNAL_CONFIG: Record<Signal, { icon: string; label: string }> = {
-  like:     { icon: '👍', label: 'Like' },
-  dislike:  { icon: '👎', label: 'Dislike' },
-  bookmark: { icon: '🔖', label: 'Bookmark' },
+export const SIGNAL_CONFIG: Record<Signal, { icon: string }> = {
+  like:     { icon: '👍' },
+  dislike:  { icon: '👎' },
+  bookmark: { icon: '🔖' },
 };
+
+// Backend-only feedback signal (shared/app-config.json `signals`) — sent when a
+// visitor follows an event's external ticket link.
+export const SIGNAL_CLICK_EXTERNAL = 'click_external';
 
 export const SIGNAL_TO_CLASS: Record<Signal, string> = {
   like: 'activeLike',
@@ -749,11 +802,25 @@ export const EXPLORE_AUDIENCE_FOR_YOU = 'foryou';
 // variant; the persistent upsell card's CTA reuses the for_you variant too
 // (same "personalize" framing), so only two variants exist for three triggers.
 export type SignInTrigger = 'save' | 'thumbs' | 'for_you';
+export const SIGN_IN_TRIGGER_FOR_YOU: SignInTrigger = 'for_you';
 export const SIGN_IN_TRIGGER_COPY: Record<SignInTrigger, { headingKey: string; bodyKey: string }> = {
   save: { headingKey: 'sign_in_modal_save_heading', bodyKey: 'sign_in_modal_save_body' },
   thumbs: { headingKey: 'sign_in_modal_save_heading', bodyKey: 'sign_in_modal_save_body' },
   for_you: { headingKey: 'sign_in_modal_foryou_heading', bodyKey: 'sign_in_modal_foryou_body' },
 };
+// What an anonymous visitor's blocked feedback click maps to: the
+// explore_upsell_click `action` param, and the SignInTrigger copy variant.
+export const SIGNAL_TO_UPSELL_ACTION: Record<Signal, string> = {
+  bookmark: 'save',
+  like: 'thumbs_up',
+  dislike: 'thumbs_down',
+};
+export const SIGNAL_TO_SIGNIN_TRIGGER: Record<Signal, SignInTrigger> = {
+  bookmark: 'save',
+  like: 'thumbs',
+  dislike: 'thumbs',
+};
+export const UPSELL_ACTION_FOR_YOU = 'for_you';
 // Index in the (0-based) results array after which the persistent upsell
 // card is inserted for anonymous visitors — tuned by eye against the
 // responsive auto-fill grid (Page.module.css's .cardGrid), which has no
@@ -831,6 +898,9 @@ export const PRICE_INPUT_STEP = '0.01';
 // SAFE_URL_SCHEMES's https:/mailto:-free defaults.
 export const MAILTO_SCHEME = 'mailto';
 export const CONTACT_MAILTO = `${MAILTO_SCHEME}:${CONTACT_EMAIL}`;
+// External regulator links the legal docs cite (identical in every locale).
+export const AKI_URL = 'https://www.aki.ee';
+export const ODR_URL = 'https://ec.europa.eu/consumers/odr';
 
 // ─── Routes ──────────────────────────────────────────────────────────────────
 // Every <Route> path, `navigate()` target and `<Link to>` in App.tsx / the
@@ -1019,6 +1089,7 @@ export const API = {
   feedback: '/feedback',
   feedbackEvent: (id: number) => `/feedback/${id}`,
   feedbackEvents: '/feedback/events',
+  explore: '/explore',
   publicShowcase: '/public/showcase',
   publicCounts: '/public/counts',
   emailUnsubscribe: '/email/unsubscribe',
@@ -1169,3 +1240,74 @@ export const SCHEMA_ORG_CONTEXT = 'https://schema.org';
 // GitHub API User-Agent for api/prerender-cadence.ts's githubRequest() call
 // (GitHub rejects requests with no User-Agent).
 export const PRERENDER_CADENCE_USER_AGENT = 'event-radar-prerender-cadence';
+
+// ─── Prerender (scripts/prerender.ts) ────────────────────────────────────────
+// These are 3x wider than local (90s/45s vs 30s/15s) — confirmed via local
+// repro (same Chromium binary, same real backend) that a page which renders
+// in ~3.6s locally could still consistently blow past the narrower value on
+// a shared/throttled build machine running single-process,
+// software-rendered (SwiftShader) Chromium. Left at the wider values
+// unconditionally rather than collapsed to the local-dev numbers: issue #373
+// asked for this collapse to be justified against a real Cloudflare Pages
+// production build log, and that log wasn't available when this landed.
+// Revisit with real numbers before narrowing.
+export const NAV_TIMEOUT_MS = 90_000;
+export const CONTENT_READY_TIMEOUT_MS = 45_000;
+// Targets run through a bounded pool of pages rather than one at a time —
+// with a growing published-event catalog (three locale variants each), a
+// fully sequential run risks blowing past Cloudflare Pages' build cap.
+// Bounded, not unbounded, mirroring
+// this repo's external-API fan-out convention (CLAUDE.md). Used by the
+// filesystem/`fetch()`-only validation pass below, which has no Chromium
+// involvement and so isn't subject to RENDER_POOL_CONCURRENCY's constraint.
+export const PRERENDER_CONCURRENCY = 6;
+// Concurrency for the actual Playwright render pool (the `browser.newPage()`
+// pool in main(), below).
+export const RENDER_POOL_CONCURRENCY = PRERENDER_CONCURRENCY;
+// GET /events/{id} is rate-limited server-side to RATE_LIMIT_EVENTS_DETAIL =
+// "120/minute" per IP (backend/app/constants.py) — every worker's build
+// machine shares one IP, so an unthrottled pool would eventually 429 as the
+// published-event catalog grows, which (via the canonical-link wait below)
+// surfaces as a spurious render "failure" and aborts the whole build.
+// Capped comfortably under the server limit, shared across all workers.
+export const EVENT_DETAIL_RATE_LIMIT_PER_MINUTE = 100;
+// Bounded pool for the change-detection fetch pass (issue #80) — real
+// GET requests against PRODUCTION_ORIGIN, one per event route, so this stays
+// bounded rather than unbounded, mirroring this repo's external-API fan-out
+// convention (CLAUDE.md). Separate from PRERENDER_CONCURRENCY/the rate gate
+// above since these are plain page fetches, not the rate-limited
+// GET /events/{id} endpoint.
+export const CHANGE_DETECTION_CONCURRENCY = 6;
+// JSON-LD field the change-detection marker (derived from Event.updated_at)
+// is embedded under (issue #80). Not a real schema.org property of Event,
+// but an extra key here doesn't violate the structural validation gate
+// (assertEventJsonLd only checks for required fields) and Google/consumers
+// ignore unrecognized properties.
+export const CHANGE_MARKER_JSONLD_FIELD = 'dateModified';
+// Hard wall-clock cap on the Playwright render pass only (issue #82) —
+// excludes tsc/vite build and the in-build validation gate below, both of
+// which run outside main()'s render-pool block. A round that hits this cap
+// stops handing out new routes; unreached routes keep serving whatever's
+// already live (copy-forward doubles as the "stale but real" fallback) or,
+// for a route that's never been rendered at all, the CSR shell that
+// `functions/[[path]].ts`'s SPA fallback serves instead. Overridable so the
+// stop-at-cap behavior is verifiable without a real 10-minute wait (e.g.
+// `PRERENDER_RENDER_BUDGET_MINUTES=0 npm run build`).
+export const DEFAULT_RENDER_BUDGET_MINUTES = 10;
+// Diagnostic ring buffer size per Playwright page, and the extra ms the request
+// rate gate waits past the window edge so the next slot is really free.
+export const PRERENDER_DIAGNOSTIC_MAX_EVENTS = 20;
+export const RATE_GATE_SLACK_MS = 10;
+
+// Max keys one S3/R2 list response returns — also the DeleteObjects batch cap.
+export const S3_MAX_KEYS_PER_PAGE = 1000;
+
+// ─── Parsing patterns / editor config ────────────────────────────────────────
+// datetime-local picker value, `YYYY-MM-DDTHH:mm`.
+export const PICKER_VALUE_RE = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/;
+// ISO calendar date, `YYYY-MM-DD`.
+export const ISO_DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
+// `_accented_` word marker inside an i18n string (Landing hero copy).
+export const ACCENT_MARKER_RE = /_(.+?)_/;
+// Heading levels the organizer rich-text editor offers (h1/h2 stay page chrome).
+export const RICH_TEXT_HEADING_LEVELS = [3, 4] as const;

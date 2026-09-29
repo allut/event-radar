@@ -6,18 +6,14 @@ import { useClaimEventEdit } from '../../hooks/useClaimEventEdit';
 import OrganizerTopBar from '../../components/OrganizerTopBar';
 import DatePicker from '../../components/DatePicker';
 import SelectField from '../../components/SelectField';
-import { t, ti } from '../../i18n';
-import { EVENT_STATUS, LOCALE_EN, LOCALE_ET, LOCALE_RU, LOCALES_BY_CODE } from '../../constants';
-import { categoryOptions, cx, currencySymbol, titleWithBrand } from '../../utils';
+import { t } from '../../i18n';
+import { CLAIM_EDIT_LOCALES, EVENT_STATUS, LOCALE_EN, LOCALE_ET } from '../../constants';
+import { categoryOptions, cx, currencySymbol, localizedFieldLabel, titleWithBrand } from '../../utils';
 import { useSeoMeta } from '../../hooks/useSeoMeta';
 import SeoTags from '../../components/SeoTags';
 import styles from './ClaimEventEdit.module.css';
 
 const RichTextEditor = lazy(() => import('../../components/RichTextEditor'));
-
-function langLabel(code: string): string {
-  return LOCALES_BY_CODE.get(code)?.label ?? code.toUpperCase();
-}
 
 interface PinTagProps {
   locale: string;
@@ -111,16 +107,13 @@ export default function ClaimEventEdit() {
               <div className={styles.sectionLabel}>{t('claim_edit_section_editable', locale)}</div>
               <div className={styles.fields}>
 
-                {([LOCALE_ET, LOCALE_EN, LOCALE_RU] as const).map((code) => (
+                {CLAIM_EDIT_LOCALES.map((code) => (
                   <div className={styles.fieldCol} key={`title_${code}`}>
                     <div className={styles.fieldHead}>
                       <label className={styles.label} htmlFor={`title_${code}`}>
                         {code === LOCALE_ET
                           ? t('claim_edit_field_title', locale)
-                          : ti('organizer_field_lang_suffix', locale, {
-                              field: t('claim_edit_field_title', locale),
-                              lang: langLabel(code),
-                            })}
+                          : localizedFieldLabel('claim_edit_field_title', locale, code)}
                       </label>
                       {renderPin('title', code)}
                     </div>
@@ -138,16 +131,13 @@ export default function ClaimEventEdit() {
                   </div>
                 ))}
 
-                {([LOCALE_ET, LOCALE_EN, LOCALE_RU] as const).map((code) => (
+                {CLAIM_EDIT_LOCALES.map((code) => (
                   <div className={styles.fieldCol} key={`description_${code}`}>
                     <div className={styles.fieldHead}>
                       <label className={styles.label} id={`description_${code}_label`}>
                         {code === LOCALE_ET
                           ? t('claim_edit_field_description', locale)
-                          : ti('organizer_field_lang_suffix', locale, {
-                              field: t('claim_edit_field_description', locale),
-                              lang: langLabel(code),
-                            })}
+                          : localizedFieldLabel('claim_edit_field_description', locale, code)}
                       </label>
                       {renderPin('description', code)}
                     </div>

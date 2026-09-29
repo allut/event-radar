@@ -23,9 +23,9 @@ import SeoTags from '../../components/SeoTags';
 import Toast from '../../components/Toast';
 import TopBar from '../../components/TopBar';
 import { useFeedback } from '../../hooks/useFeedback';
-import { API, EVENT_PRICE_TESTID, EXPLORE_PARAM, OG_FALLBACK_IMAGE_PATH, PRICE_DATA_ATTR, PRODUCTION_ORIGIN, QUERY_KEYS, ROUTES, SEO_DESCRIPTION_MAX_LENGTH, UI_STATE } from '../../constants';
+import { API, CLAIM_STATUS_PENDING, EVENT_CLAIM_STATUS_CLAIMED, EVENT_CLAIM_STATUS_NOT_CLAIMABLE, EVENT_PRICE_TESTID, EXPLORE_PARAM, OG_FALLBACK_IMAGE_PATH, PRICE_DATA_ATTR, PRODUCTION_ORIGIN, QUERY_KEYS, ROUTES, SEO_DESCRIPTION_MAX_LENGTH, UI_STATE, type ClaimStatus, type EventClaimStatus } from '../../constants';
 import styles from './EventDetail.module.css';
-import { ClaimPanel, ClaimPill, type EventClaimStatus } from '../../components/ClaimStrip';
+import { ClaimPanel, ClaimPill } from '../../components/ClaimStrip';
 
 interface EventDetailData extends EventData {
   language: string | null;
@@ -56,7 +56,7 @@ export default function EventDetail() {
   // instead of trusting anything public claim_status says about "pending".
   const { data: ownClaim } = useQuery({
     queryKey: [QUERY_KEYS.organizerClaimForEvent, data?.id],
-    queryFn: () => organizerApi.get<{ claim: { status: string } | null }>(API.organizerClaimForEvent(data?.id ?? '')),
+    queryFn: () => organizerApi.get<{ claim: { status: ClaimStatus } | null }>(API.organizerClaimForEvent(data?.id ?? '')),
     enabled: Boolean(data?.id) && organizerAuthed,
   });
 
@@ -192,13 +192,13 @@ export default function EventDetail() {
                 {ti('ends_at', locale, { time: formatHourMinute(data.ends_at, locale) })}
               </span>
             )}
-            {data.claim_status === 'claimed' && (
+            {data.claim_status === EVENT_CLAIM_STATUS_CLAIMED && (
               <ClaimPill status="claimed" locale={locale} />
             )}
             {/* (#451) Claimant-only: the public claim_status never carries
                 "pending" — only the caller's own claim, fetched via the
                 organizer-scoped for-event lookup, can show this. */}
-            {data.claim_status !== 'claimed' && ownClaim?.claim?.status === 'pending' && (
+            {data.claim_status !== EVENT_CLAIM_STATUS_CLAIMED && ownClaim?.claim?.status === CLAIM_STATUS_PENDING && (
               <ClaimPill status="pending" locale={locale} />
             )}
           </div>
@@ -307,8 +307,8 @@ export default function EventDetail() {
               a claim is actually approved. #445: a direct organizer
               submission has no ingested EventSource to ever claim, so the
               CTA never renders for it. */}
-          {data.claim_status !== 'claimed' &&
-            data.claim_status !== 'not_claimable' && (
+          {data.claim_status !== EVENT_CLAIM_STATUS_CLAIMED &&
+            data.claim_status !== EVENT_CLAIM_STATUS_NOT_CLAIMABLE && (
               <ClaimPanel eventId={data.id} locale={locale} />
             )}
         </div>

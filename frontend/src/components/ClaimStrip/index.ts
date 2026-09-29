@@ -1,1 +1,1 @@
-export { ClaimPanel, ClaimPill, type EventClaimStatus } from './ClaimStrip';
+export { ClaimPanel, ClaimPill } from './ClaimStrip';

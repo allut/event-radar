@@ -12,12 +12,12 @@ import FileField from '../../components/FileField';
 import VenuePicker from '../../components/VenuePicker';
 import { t, ti } from '../../i18n';
 import {
-  CONTENT_LANG_ORDER, DEFAULT_CURRENCY, LOCALE_EN, LOCALE_ET, LOCALE_RU, LOCALES_BY_CODE,
+  CONTENT_LANG_ORDER, DEFAULT_CURRENCY, LOCALE_EN, LOCALE_ET, LOCALE_RU,
   ORGANIZER_BASE_CONTENT_LANG, ORGANIZER_IMAGE_ACCEPT,
   PRICE_INPUT_MIN, PRICE_INPUT_STEP,
   type ContentLang, type ContentMarkerState,
 } from '../../constants';
-import { categoryOptions, currencySymbol, hasHtmlContent, titleWithBrand } from '../../utils';
+import { categoryOptions, currencySymbol, hasHtmlContent, localeLabel, localizedFieldLabel, titleWithBrand } from '../../utils';
 
 import { useSeoMeta } from '../../hooks/useSeoMeta';
 import SeoTags from '../../components/SeoTags';
@@ -98,8 +98,6 @@ export default function EventSubmit() {
     form.titleRu, form.setTitleRu, form.descriptionRu, form.setDescriptionRu, form.importantInfoRu, form.setImportantInfoRu,
   ]);
   const activeSlot = slots[contentLang];
-  const contentLangLabel = (code: ContentLang) =>
-    LOCALES_BY_CODE.get(code)?.label ?? code.toUpperCase();
   // Field-by-field against the ET base slot.
   const markerState = (code: ContentLang): ContentMarkerState => {
     const slot = slots[code];
@@ -116,18 +114,14 @@ export default function EventSubmit() {
     const state = markerState(code);
     return {
       value: code,
-      label: contentLangLabel(code),
+      label: localeLabel(code),
       marker: { state, stateLabel: t(`organizer_lang_state_${state}`, locale) },
     };
   });
   // Rebuilding this 14-option list (+14 t() lookups) only needs to happen when
   // the locale changes, not on every keystroke elsewhere in the form.
   const categoryOpts = useMemo(() => categoryOptions(locale), [locale]);
-  const langField = (key: string) =>
-    ti('organizer_field_lang_suffix', locale, {
-      field: t(key, locale),
-      lang: contentLangLabel(contentLang),
-    });
+  const langField = (key: string) => localizedFieldLabel(key, locale, contentLang);
 
   return (
     <div className={styles.page}>
@@ -153,7 +147,7 @@ export default function EventSubmit() {
               />
             </div>
             <p className={styles.contentHint}>
-              {ti('organizer_lang_hint', locale, { base: contentLangLabel(ORGANIZER_BASE_CONTENT_LANG) })}
+              {ti('organizer_lang_hint', locale, { base: localeLabel(ORGANIZER_BASE_CONTENT_LANG) })}
             </p>
 
             <label className={styles.label} htmlFor="content_title">

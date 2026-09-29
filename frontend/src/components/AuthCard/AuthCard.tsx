@@ -33,8 +33,8 @@ export default function AuthCard({ locale, kind, message, animated = true, actio
           aria-live={kind === 'pending' ? 'polite' : undefined}
         >
           {kind === 'pending' && <span className={styles.spinner} aria-label={message} />}
-          {kind === 'success' && <div className={styles.check}>✓</div>}
-          {kind === 'error' && <div className={styles.errorIcon}>✕</div>}
+          {kind === 'success' && <div className={styles.check} aria-hidden>✓</div>}
+          {kind === 'error' && <div className={styles.errorIcon} aria-hidden>✕</div>}
           <p className={styles.message}>{message}</p>
           {action}
         </div>

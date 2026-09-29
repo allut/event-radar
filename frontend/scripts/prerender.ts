@@ -60,6 +60,16 @@ import {
   SITEMAP_FILENAME,
   SITEMAP_PATH,
   SORT_DEFAULT,
+  CHANGE_DETECTION_CONCURRENCY,
+  CHANGE_MARKER_JSONLD_FIELD,
+  CONTENT_READY_TIMEOUT_MS,
+  DEFAULT_RENDER_BUDGET_MINUTES,
+  EVENT_DETAIL_RATE_LIMIT_PER_MINUTE,
+  NAV_TIMEOUT_MS,
+  PRERENDER_CONCURRENCY,
+  RENDER_POOL_CONCURRENCY,
+  PRERENDER_DIAGNOSTIC_MAX_EVENTS,
+  RATE_GATE_SLACK_MS,
 } from '../src/constants';
 import { localizedPath } from '../src/lib/urlLocale';
 import { githubRequest } from '../src/lib/githubRequest';
@@ -80,58 +90,6 @@ import { PRERENDER_BACKEND_TARGET } from '../vite.config';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DIST_DIR = path.resolve(__dirname, '../dist');
 const API_ORIGIN = PRERENDER_BACKEND_TARGET;
-// These are 3x wider than local (90s/45s vs 30s/15s) — confirmed via local
-// repro (same Chromium binary, same real backend) that a page which renders
-// in ~3.6s locally could still consistently blow past the narrower value on
-// a shared/throttled build machine running single-process,
-// software-rendered (SwiftShader) Chromium. Left at the wider values
-// unconditionally rather than collapsed to the local-dev numbers: issue #373
-// asked for this collapse to be justified against a real Cloudflare Pages
-// production build log, and that log wasn't available when this landed.
-// Revisit with real numbers before narrowing.
-const NAV_TIMEOUT_MS = 90_000;
-const CONTENT_READY_TIMEOUT_MS = 45_000;
-// Targets run through a bounded pool of pages rather than one at a time —
-// with a growing published-event catalog (three locale variants each), a
-// fully sequential run risks blowing past Cloudflare Pages' build cap.
-// Bounded, not unbounded, mirroring
-// this repo's external-API fan-out convention (CLAUDE.md). Used by the
-// filesystem/`fetch()`-only validation pass below, which has no Chromium
-// involvement and so isn't subject to RENDER_POOL_CONCURRENCY's constraint.
-const PRERENDER_CONCURRENCY = 6;
-// Concurrency for the actual Playwright render pool (the `browser.newPage()`
-// pool in main(), below).
-const RENDER_POOL_CONCURRENCY = PRERENDER_CONCURRENCY;
-// GET /events/{id} is rate-limited server-side to RATE_LIMIT_EVENTS_DETAIL =
-// "120/minute" per IP (backend/app/constants.py) — every worker's build
-// machine shares one IP, so an unthrottled pool would eventually 429 as the
-// published-event catalog grows, which (via the canonical-link wait below)
-// surfaces as a spurious render "failure" and aborts the whole build.
-// Capped comfortably under the server limit, shared across all workers.
-const EVENT_DETAIL_RATE_LIMIT_PER_MINUTE = 100;
-// Bounded pool for the change-detection fetch pass (issue #80) — real
-// GET requests against PRODUCTION_ORIGIN, one per event route, so this stays
-// bounded rather than unbounded, mirroring this repo's external-API fan-out
-// convention (CLAUDE.md). Separate from PRERENDER_CONCURRENCY/the rate gate
-// above since these are plain page fetches, not the rate-limited
-// GET /events/{id} endpoint.
-const CHANGE_DETECTION_CONCURRENCY = 6;
-// JSON-LD field the change-detection marker (derived from Event.updated_at)
-// is embedded under (issue #80). Not a real schema.org property of Event,
-// but an extra key here doesn't violate the structural validation gate
-// (assertEventJsonLd only checks for required fields) and Google/consumers
-// ignore unrecognized properties.
-const CHANGE_MARKER_JSONLD_FIELD = 'dateModified';
-// Hard wall-clock cap on the Playwright render pass only (issue #82) —
-// excludes tsc/vite build and the in-build validation gate below, both of
-// which run outside main()'s render-pool block. A round that hits this cap
-// stops handing out new routes; unreached routes keep serving whatever's
-// already live (copy-forward doubles as the "stale but real" fallback) or,
-// for a route that's never been rendered at all, the CSR shell that
-// `functions/[[path]].ts`'s SPA fallback serves instead. Overridable so the
-// stop-at-cap behavior is verifiable without a real 10-minute wait (e.g.
-// `PRERENDER_RENDER_BUDGET_MINUTES=0 npm run build`).
-const DEFAULT_RENDER_BUDGET_MINUTES = 10;
 const RENDER_BUDGET_MS = (() => {
   const raw = process.env.PRERENDER_RENDER_BUDGET_MINUTES;
   if (raw === undefined) return DEFAULT_RENDER_BUDGET_MINUTES * 60_000;
@@ -190,7 +148,7 @@ class RateGate {
         this.timestamps.push(now);
         return;
       }
-      const waitMs = this.windowMs - (now - this.timestamps[this.head]) + 10;
+      const waitMs = this.windowMs - (now - this.timestamps[this.head]) + RATE_GATE_SLACK_MS;
       await new Promise((resolve) => setTimeout(resolve, waitMs));
     }
   }
@@ -684,11 +642,10 @@ async function launchBrowser(): Promise<Browser> {
  * reuse one page across many targets), capped so a long-lived page's buffer
  * can't grow unbounded. */
 function attachPageDiagnostics(page: Page): () => string[] {
-  const MAX_EVENTS = 20;
   const events: string[] = [];
   const record = (line: string) => {
     events.push(line);
-    if (events.length > MAX_EVENTS) events.shift();
+    if (events.length > PRERENDER_DIAGNOSTIC_MAX_EVENTS) events.shift();
   };
   page.on('console', (msg) => record(`console.${msg.type()}: ${msg.text().slice(0, PRERENDER_DIAGNOSTIC_EVENT_MAX_LENGTH)}`));
   page.on('pageerror', (err) => record(`pageerror: ${String(err).slice(0, PRERENDER_DIAGNOSTIC_EVENT_MAX_LENGTH)}`));

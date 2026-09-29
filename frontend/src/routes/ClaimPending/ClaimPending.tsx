@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { organizerApi } from '../../api/client';
@@ -12,6 +12,8 @@ import {
   CLAIM_ADMIN_REVIEW_EXPIRY_DAYS,
   CLAIM_DNS_VERIFICATION_MECHANISMS,
   CLAIM_EXPIRY_DAYS,
+  COPY_FEEDBACK_MS,
+  CLAIM_KIND_PUBLISHER,
   CLAIM_SELF_SERVICE_VERIFICATION_MECHANISMS,
   CLAIM_STATUS_APPROVED,
   CLAIM_STATUS_CANCELLED,
@@ -24,6 +26,7 @@ import {
   QUERY_KEYS,
   ROUTES,
   UI_STATE,
+  type ClaimKind,
   type ClaimStatus,
   type ClaimVerificationMechanism,
 } from '../../constants';
@@ -35,7 +38,7 @@ import styles from './ClaimPending.module.css';
 
 interface ClaimResponse {
   id: number;
-  kind: 'publisher' | 'series';
+  kind: ClaimKind;
   status: ClaimStatus;
   dormant: boolean;
   verification_mechanism: ClaimVerificationMechanism | null;
@@ -59,6 +62,8 @@ export default function ClaimPending() {
   const queryClient = useQueryClient();
   const seoMeta = useStaticSeoMeta('organizer_claim_pending_title', locale);
   const [copiedField, setCopiedField] = useState<CopyField | null>(null);
+  const copyTimer = useRef<ReturnType<typeof setTimeout>>();
+  useEffect(() => () => clearTimeout(copyTimer.current), []);
   const [actionError, setActionError] = useState('');
 
   const queryKey = [QUERY_KEYS.organizerClaim, id];
@@ -89,7 +94,8 @@ export default function ClaimPending() {
   async function handleCopy(field: CopyField, value: string) {
     if (await copyToClipboard(value)) {
       setCopiedField(field);
-      setTimeout(() => setCopiedField(null), 2000);
+      clearTimeout(copyTimer.current);
+      copyTimer.current = setTimeout(() => setCopiedField(null), COPY_FEEDBACK_MS);
     }
   }
 
@@ -230,7 +236,7 @@ export default function ClaimPending() {
           {actionError && <p className={styles.error} role="alert">{actionError}</p>}
 
           <div className={styles.actions}>
-            {claim.status === 'approved' && (
+            {claim.status === CLAIM_STATUS_APPROVED && (
               <button
                 type="button"
                 className={styles.primaryBtn}
@@ -240,7 +246,7 @@ export default function ClaimPending() {
                 {t('claim_edit_open_cta', locale)}
               </button>
             )}
-            {claim.status === 'approved' && claim.kind === 'publisher' && (
+            {claim.status === CLAIM_STATUS_APPROVED && claim.kind === CLAIM_KIND_PUBLISHER && (
               <button
                 type="button"
                 className={styles.secondaryBtn}

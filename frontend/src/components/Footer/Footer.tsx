@@ -2,7 +2,7 @@ import { type ReactNode } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { t, ti } from '../../i18n';
 import { isOrganizerPortalPath, safeUrl } from '../../utils';
-import { BRAND_GLYPH, ROUTES, SOCIAL_LINKS, type SocialIcon } from '../../constants';
+import { BRAND_GLYPH, COPYRIGHT_YEAR, ROUTES, SOCIAL_LINKS, type SocialIcon } from '../../constants';
 import { useLocale } from '../../hooks/useLocale';
 import { useLocalePath } from '../../hooks/useLocalePath';
 import { useOrganizerAuth } from '../../hooks/useOrganizerAuth';
@@ -32,12 +32,10 @@ const SOCIAL_ICONS: Record<SocialIcon, ReactNode> = {
 
 // Hoisted — SOCIAL_LINKS is constant, so resolving/filtering it (3x new
 // URL() via safeUrl) never needs to happen more than once (Big-O audit #5,
-// item 3.7). Same for the copyright year — a page reload picks up a
-// year rollover regardless.
+// item 3.7).
 const SOCIAL_LINK_HREFS = SOCIAL_LINKS.map((s) => ({ icon: s.icon, href: safeUrl(s.url) })).filter(
   (s): s is { icon: SocialIcon; href: string } => s.href !== null,
 );
-const COPYRIGHT_YEAR = String(new Date().getFullYear());
 
 export default function Footer() {
   const locale = useLocale();
@@ -71,7 +69,7 @@ export default function Footer() {
           </Link>
         </nav>
 
-        <div className={styles.social} aria-label={t('footer_social', locale)}>
+        <div className={styles.social} role="group" aria-label={t('footer_social', locale)}>
           {SOCIAL_LINK_HREFS.map((s) => (
             <a
               key={s.icon}

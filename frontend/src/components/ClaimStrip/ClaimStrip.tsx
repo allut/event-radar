@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { organizerApi } from '../../api/client';
-import { API, ROUTES, UI_STATE } from '../../constants';
+import { API, EVENT_CLAIM_STATUS_CLAIMED, EVENT_CLAIM_STATUS_PENDING, ROUTES, UI_STATE } from '../../constants';
 import { t } from '../../i18n';
 import { apiErrorMessage, isClaimJustificationRequiredError } from '../../utils';
 import { useLocaleNavigate } from '../../hooks/useLocaleNavigate';
@@ -8,10 +8,8 @@ import { useOrganizerAuth } from '../../hooks/useOrganizerAuth';
 import MagicLinkForm from '../MagicLinkForm';
 import styles from './ClaimStrip.module.css';
 
-export type EventClaimStatus = 'unclaimed' | 'pending' | 'claimed' | 'not_claimable';
-
 interface ClaimPillProps {
-  status: 'pending' | 'claimed';
+  status: typeof EVENT_CLAIM_STATUS_PENDING | typeof EVENT_CLAIM_STATUS_CLAIMED;
   locale: string;
 }
 
@@ -30,7 +28,7 @@ interface ClaimPillProps {
 export function ClaimPill({ status, locale }: ClaimPillProps) {
   return (
     <span className={styles.pill}>
-      {t(status === 'claimed' ? 'claim_pill_claimed' : 'claim_pill_pending', locale)}
+      {t(status === EVENT_CLAIM_STATUS_CLAIMED ? 'claim_pill_claimed' : 'claim_pill_pending', locale)}
     </span>
   );
 }

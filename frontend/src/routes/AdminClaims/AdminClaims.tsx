@@ -6,11 +6,21 @@ import {
   ADMIN_CLAIMS_QUEUE_PAGE_SIZE,
   ADMIN_GENERIC_ERROR,
   ADMIN_QUEUE_DETAIL_LINK_LABEL,
+  ADMIN_CLAIM_ACTION_TAGS,
+  ADMIN_CLAIM_MECHANISM_LABELS,
   API,
+  CLAIM_DNS_VERIFICATION_MECHANISMS,
+  CLAIM_KIND_PUBLISHER,
+  CLAIM_KIND_SERIES,
+  CLAIM_STATUS_APPROVED,
+  CLAIM_STATUS_PENDING,
   PAGE_PARAM,
   QUERY_KEYS,
   ROUTES,
   UI_STATE,
+  type AdminClaimActionKind,
+  type ClaimKind,
+  type ClaimVerificationMechanism,
 } from '../../constants';
 import { apiErrorMessage, nextOffsetParam, relativeTimeFromNow } from '../../utils';
 import PageState from '../../components/PageState';
@@ -21,7 +31,7 @@ import AdminQueueActionPanel from '../../components/AdminQueueActionPanel';
 import queueStyles from '../../components/shared/AdminQueue.module.css';
 import styles from './AdminClaims.module.css';
 
-type ClaimTab = 'pending' | 'approved';
+type ClaimTab = typeof CLAIM_STATUS_PENDING | typeof CLAIM_STATUS_APPROVED;
 
 interface AdminClaimOrganizer {
   id: number;
@@ -36,7 +46,7 @@ interface AdminClaimPublisher {
 
 interface AdminClaim {
   id: number;
-  kind: 'publisher' | 'series';
+  kind: ClaimKind;
   status: string;
   organizer: AdminClaimOrganizer;
   publisher: AdminClaimPublisher | null;
@@ -68,25 +78,13 @@ interface AdminClaimActionResult {
   note: string;
 }
 
-type ActionKind = 'granted' | 'declined' | 'revoked';
-
-const MECHANISM_LABELS: Record<string, string> = {
-  fienta_token: 'Fienta',
-  dns_txt: 'DNS-TXT',
-  piletilevi_promoter: 'DNS-TXT',
-  piletilevi_mailbox: 'Contact mailbox',
-  admin_review: 'Admin review',
-};
-
-const DNS_MECHANISMS = new Set(['dns_txt', 'piletilevi_promoter']);
-
 function mechanismLabel(mechanism: string | null): string {
   if (!mechanism) return 'Unverified';
-  return MECHANISM_LABELS[mechanism] ?? mechanism;
+  return ADMIN_CLAIM_MECHANISM_LABELS[mechanism] ?? mechanism;
 }
 
 function targetLabel(item: AdminClaim): string {
-  if (item.kind === 'publisher') return item.publisher?.name ?? 'Unknown publisher';
+  if (item.kind === CLAIM_KIND_PUBLISHER) return item.publisher?.name ?? 'Unknown publisher';
   const [title, venue] = (item.event_series_key ?? '').split('\x1f');
   return venue ? `${title} @ ${venue}` : title || 'Series claim';
 }
@@ -113,12 +111,6 @@ function renderClaimRow(item: AdminClaim & { relativeCreated: string }) {
   );
 }
 
-const TAB_TAGS: Record<ActionKind, string> = {
-  granted: 'Granted',
-  declined: 'Declined',
-  revoked: 'Revoked',
-};
-
 // The claims moderation queue (#420) — a dedicated grant/decline/revoke
 // decision shape, separate from /admin/reports (resolve/take-down) and
 // /admin/submissions (approve/retract). Reuses AdminReports' split-view
@@ -127,11 +119,11 @@ const TAB_TAGS: Record<ActionKind, string> = {
 export default function AdminClaims() {
   const queryClient = useQueryClient();
   const { toast, showToast } = useToast();
-  const [activeTab, setActiveTab] = useState<ClaimTab>('pending');
+  const [activeTab, setActiveTab] = useState<ClaimTab>(CLAIM_STATUS_PENDING);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [note, setNote] = useState('');
   const [resolvedById, setResolvedById] = useState<
-    Record<number, { item: AdminClaim; kind: ActionKind }>
+    Record<number, { item: AdminClaim; kind: AdminClaimActionKind }>
   >({});
 
   const {
@@ -165,7 +157,7 @@ export default function AdminClaims() {
   const currentId = selectedId ?? items[0]?.id ?? null;
 
   const actionMutation = useMutation({
-    mutationFn: ({ item, kind, note }: { item: AdminClaim; kind: ActionKind; note: string }) => {
+    mutationFn: ({ item, kind, note }: { item: AdminClaim; kind: AdminClaimActionKind; note: string }) => {
       const path =
         kind === 'granted'
           ? API.adminClaimGrant(item.id)
@@ -184,7 +176,7 @@ export default function AdminClaims() {
     },
   });
 
-  function act(item: AdminClaim, kind: ActionKind) {
+  function act(item: AdminClaim, kind: AdminClaimActionKind) {
     if (!note.trim()) return;
     actionMutation.mutate({ item, kind, note: note.trim() });
   }
@@ -195,7 +187,7 @@ export default function AdminClaims() {
     setNote('');
   }, []);
   const resolvedTag = useCallback(
-    (item: AdminClaim) => TAB_TAGS[resolvedById[item.id]?.kind ?? 'granted'],
+    (item: AdminClaim) => ADMIN_CLAIM_ACTION_TAGS[resolvedById[item.id]?.kind ?? 'granted'],
     [resolvedById],
   );
   function switchTab(tab: ClaimTab) {
@@ -220,18 +212,18 @@ export default function AdminClaims() {
         <button
           type="button"
           role="tab"
-          aria-selected={activeTab === 'pending'}
-          className={activeTab === 'pending' ? queueStyles.queueTabActive : queueStyles.queueTab}
-          onClick={() => switchTab('pending')}
+          aria-selected={activeTab === CLAIM_STATUS_PENDING}
+          className={activeTab === CLAIM_STATUS_PENDING ? queueStyles.queueTabActive : queueStyles.queueTab}
+          onClick={() => switchTab(CLAIM_STATUS_PENDING)}
         >
           Pending review
         </button>
         <button
           type="button"
           role="tab"
-          aria-selected={activeTab === 'approved'}
-          className={activeTab === 'approved' ? queueStyles.queueTabActive : queueStyles.queueTab}
-          onClick={() => switchTab('approved')}
+          aria-selected={activeTab === CLAIM_STATUS_APPROVED}
+          className={activeTab === CLAIM_STATUS_APPROVED ? queueStyles.queueTabActive : queueStyles.queueTab}
+          onClick={() => switchTab(CLAIM_STATUS_APPROVED)}
         >
           Granted
         </button>
@@ -244,7 +236,7 @@ export default function AdminClaims() {
       ) : (
         <>
           <p className={styles.subtitle}>
-            {items.length} of {total} {activeTab === 'pending' ? 'pending' : 'granted'} claims shown
+            {items.length} of {total} {activeTab === CLAIM_STATUS_PENDING ? 'pending' : 'granted'} claims shown
           </p>
           <AdminQueueSplitView
             items={items}
@@ -253,7 +245,7 @@ export default function AdminClaims() {
             resolvedTag={resolvedTag}
             selectedId={currentId}
             onSelect={selectRow}
-            emptyLabel={activeTab === 'pending' ? 'No claims pending review.' : 'No granted claims.'}
+            emptyLabel={activeTab === CLAIM_STATUS_PENDING ? 'No claims pending review.' : 'No granted claims.'}
             renderRow={renderClaimRow}
             renderDetail={(item) => {
               const resolution = resolvedById[item.id];
@@ -261,7 +253,7 @@ export default function AdminClaims() {
                 <div>
                   <h2 className={styles.detailTitle}>{organizerLabel(item.organizer)}</h2>
                   <p className={styles.detailMeta}>
-                    {item.kind === 'publisher' ? 'Publisher' : 'Series'} claim on {targetLabel(item)} · claimant:{' '}
+                    {item.kind === CLAIM_KIND_PUBLISHER ? 'Publisher' : 'Series'} claim on {targetLabel(item)} · claimant:{' '}
                     {item.organizer.email}
                   </p>
                   {item.event_id !== null && (
@@ -279,7 +271,7 @@ export default function AdminClaims() {
                           <span className={styles.evidenceValue}>{item.proof_token}</span>
                         </div>
                       </>
-                    ) : item.verification_mechanism !== null && DNS_MECHANISMS.has(item.verification_mechanism) ? (
+                    ) : item.verification_mechanism !== null && CLAIM_DNS_VERIFICATION_MECHANISMS.has(item.verification_mechanism as ClaimVerificationMechanism) ? (
                       <>
                         <p className={styles.evidenceLabel}>DNS-TXT check</p>
                         <div className={styles.evidenceRow}>
@@ -325,7 +317,7 @@ export default function AdminClaims() {
                         </div>
                       </>
                     )}
-                    {item.kind === 'series' && item.justification && (
+                    {item.kind === CLAIM_KIND_SERIES && item.justification && (
                       <>
                         <p className={styles.evidenceLabelSpaced}>Claimant&apos;s justification</p>
                         <p className={styles.justificationBlock}>&ldquo;{item.justification}&rdquo;</p>
@@ -333,7 +325,7 @@ export default function AdminClaims() {
                     )}
                   </div>
 
-                  {item.status === 'approved' && (
+                  {item.status === CLAIM_STATUS_APPROVED && (
                     <div className={styles.warnCallout}>
                       <strong>Revoking</strong> deletes this claim and reverts the event&apos;s pinned fields to
                       source authority immediately.
@@ -341,8 +333,8 @@ export default function AdminClaims() {
                   )}
 
                   {resolution ? (
-                    <div className={styles.resolvedPanel}>✓ {TAB_TAGS[resolution.kind]}.</div>
-                  ) : item.status === 'pending' ? (
+                    <div className={styles.resolvedPanel}>✓ {ADMIN_CLAIM_ACTION_TAGS[resolution.kind]}.</div>
+                  ) : item.status === CLAIM_STATUS_PENDING ? (
                     <AdminQueueActionPanel
                       noteValue={note}
                       onNoteChange={setNote}

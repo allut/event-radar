@@ -37,7 +37,11 @@ import {
   ROUTES,
   SORT_DEFAULT,
   SORT_OPTIONS,
+  SIGNAL_TO_SIGNIN_TRIGGER,
+  SIGNAL_TO_UPSELL_ACTION,
+  SIGN_IN_TRIGGER_FOR_YOU,
   UI_STATE,
+  UPSELL_ACTION_FOR_YOU,
   type DatePreset,
   type ExploreFilterType,
   type Signal,
@@ -109,14 +113,13 @@ export default function Explore() {
   }, []);
 
   const handleFeedbackBlocked = useCallback((signal: Signal) => {
-    const action = signal === 'bookmark' ? 'save' : signal === 'like' ? 'thumbs_up' : 'thumbs_down';
-    trackEvent(ANALYTICS_EVENTS.exploreUpsellClick, { action });
-    requestSignIn(signal === 'bookmark' ? 'save' : 'thumbs');
+    trackEvent(ANALYTICS_EVENTS.exploreUpsellClick, { action: SIGNAL_TO_UPSELL_ACTION[signal] });
+    requestSignIn(SIGNAL_TO_SIGNIN_TRIGGER[signal]);
   }, [requestSignIn]);
 
   const handleUpsellCtaClick = useCallback(() => {
-    trackEvent(ANALYTICS_EVENTS.exploreUpsellClick, { action: 'for_you' });
-    requestSignIn('for_you');
+    trackEvent(ANALYTICS_EVENTS.exploreUpsellClick, { action: UPSELL_ACTION_FOR_YOU });
+    requestSignIn(SIGN_IN_TRIGGER_FOR_YOU);
   }, [requestSignIn]);
 
   const handleCardClick = useCallback((index: number) => {
@@ -165,8 +168,7 @@ export default function Explore() {
       commitFilters({ ...filters, q: searchInput });
     }, EXPLORE_SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(handle);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchInput, filters]);
+  }, [searchInput, filters, trackFilterChange, commitFilters]);
 
   // Gated on authed — an anonymous visitor must never call this. The `api`
   // client hard-redirects to /login on any 401, which would break the
@@ -195,7 +197,7 @@ export default function Explore() {
     queryKey: [QUERY_KEYS.explore, locale, filters],
     queryFn: ({ pageParam }) =>
       api.get<ExploreResponse>(
-        withLocaleQuery(`/explore?${buildExploreApiQuery(filters, pageParam)}`, locale),
+        withLocaleQuery(`${API.explore}?${buildExploreApiQuery(filters, pageParam)}`, locale),
       ),
     initialPageParam: 0,
     getNextPageParam: (lastPage) => nextOffsetParam(lastPage, lastPage.events.length),

@@ -6,7 +6,7 @@ import styles from './FeedbackButtonRow.module.css';
 const ACTIVE_CLASS = makeActiveClassMap(styles);
 // Hoisted like ACTIVE_CLASS above — avoids reallocating the entries array on every
 // render of every card's feedback row.
-const SIGNAL_ENTRIES = Object.entries(SIGNAL_CONFIG) as [Signal, { icon: string; label: string }][];
+const SIGNAL_ENTRIES = Object.entries(SIGNAL_CONFIG) as [Signal, { icon: string }][];
 
 interface FeedbackButtonRowProps {
   activeSignal: Signal | null;

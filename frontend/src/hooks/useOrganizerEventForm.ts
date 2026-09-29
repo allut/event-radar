@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { organizerApi } from '../api/client';
-import { API, QUERY_KEYS, ORGANIZER_EVENTS_PAGE_SIZE, DEFAULT_CURRENCY, ORGANIZER_IMAGE_ALLOWED_MIME, ROUTES, LOCALE_EN, LOCALE_ET, LOCALE_RU, PAGE_PARAM } from '../constants';
+import { API, QUERY_KEYS, ORGANIZER_EVENTS_PAGE_SIZE, DEFAULT_CURRENCY, ORGANIZER_IMAGE_ALLOWED_MIME, ROUTES, PAGE_PARAM } from '../constants';
 import { t } from '../i18n';
-import { apiErrorMessage, hasHtmlContent, toIsoOrUndefined, toLocalInput, withLocaleQuery } from '../utils';
+import { apiErrorMessage, hasHtmlContent, localizedTriplet, toIsoOrUndefined, toLocalInput, withLocaleQuery, type LocalizedTextFields } from '../utils';
 import { useLocaleNavigate } from './useLocaleNavigate';
 import type { SavedVenue, VenuePickerValue } from '../components/VenuePicker';
 
@@ -39,13 +39,7 @@ interface SubmitResult {
   status: string;
 }
 
-interface FormFields {
-  title: string;
-  titleEn: string;
-  titleRu: string;
-  description: string;
-  descriptionEn: string;
-  descriptionRu: string;
+interface FormFields extends LocalizedTextFields {
   importantInfo: string;
   importantInfoEn: string;
   importantInfoRu: string;
@@ -82,20 +76,14 @@ function fieldsFromExisting(existing: OrganizerEventFull): FormFields {
   // currently browsing in. Each ET slot falls back to its resolved field
   // (title/description/important_info) when the localized map has no `et`
   // entry, covering events submitted before localized maps existed.
-  const titleLoc = existing.title_localized ?? {};
-  const descLoc = existing.description_localized ?? {};
-  const infoLoc = existing.important_info_localized ?? {};
+  const [title, titleEn, titleRu] = localizedTriplet(existing.title_localized, existing.title);
+  const [description, descriptionEn, descriptionRu] = localizedTriplet(existing.description_localized, existing.description);
+  const [importantInfo, importantInfoEn, importantInfoRu] = localizedTriplet(existing.important_info_localized, existing.important_info);
   return {
     ...EMPTY_FIELDS,
-    title: titleLoc[LOCALE_ET] ?? existing.title,
-    titleEn: titleLoc[LOCALE_EN] ?? '',
-    titleRu: titleLoc[LOCALE_RU] ?? '',
-    description: descLoc[LOCALE_ET] ?? existing.description ?? '',
-    descriptionEn: descLoc[LOCALE_EN] ?? '',
-    descriptionRu: descLoc[LOCALE_RU] ?? '',
-    importantInfo: infoLoc[LOCALE_ET] ?? existing.important_info ?? '',
-    importantInfoEn: infoLoc[LOCALE_EN] ?? '',
-    importantInfoRu: infoLoc[LOCALE_RU] ?? '',
+    title, titleEn, titleRu,
+    description, descriptionEn, descriptionRu,
+    importantInfo, importantInfoEn, importantInfoRu,
     startsAt: toLocalInput(existing.starts_at),
     endsAt: toLocalInput(existing.ends_at),
     // Event has no localized venue_name_en/ru columns of its own (only the

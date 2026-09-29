@@ -28,12 +28,7 @@ import {
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3';
-
-/** Every object-list response page returns at most this many keys — also
- * the max a single DeleteObjectsCommand call accepts, so deleting page by
- * page (rather than accumulating every key first) never needs its own
- * separate batching. */
-const S3_MAX_KEYS_PER_PAGE = 1000;
+import { S3_MAX_KEYS_PER_PAGE } from '../constants';
 
 /** Builds a fresh R2 client from env vars, or `null` (logged) if any of the
  * three required credentials are unset — e.g. local dev builds that never

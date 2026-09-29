@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { organizerApi, ApiError } from '../api/client';
-import { API, CLAIM_ERROR_CODE_DORMANT, QUERY_KEYS, LOCALE_EN, LOCALE_ET, LOCALE_RU } from '../constants';
+import { API, CLAIM_ERROR_CODE_DORMANT, HTTP_STATUS_CONFLICT, QUERY_KEYS } from '../constants';
 import { t } from '../i18n';
-import { apiErrorMessage, hasHtmlContent, toIsoOrUndefined, toLocalInput } from '../utils';
+import { apiErrorMessage, hasHtmlContent, localizedTriplet, toIsoOrUndefined, toLocalInput, type LocalizedTextFields } from '../utils';
 
 export interface ClaimEventData {
   id: number;
@@ -31,13 +31,7 @@ export interface ClaimEventData {
   status: string;
 }
 
-interface FormFields {
-  title: string;
-  titleEn: string;
-  titleRu: string;
-  description: string;
-  descriptionEn: string;
-  descriptionRu: string;
+interface FormFields extends LocalizedTextFields {
   startsAt: string;
   endsAt: string;
   url: string;
@@ -57,15 +51,10 @@ const EMPTY_FIELDS: FormFields = {
 };
 
 function fieldsFromData(data: ClaimEventData): FormFields {
-  const titleLoc = data.title_localized ?? {};
-  const descLoc = data.description_localized ?? {};
+  const [title, titleEn, titleRu] = localizedTriplet(data.title_localized, data.title);
+  const [description, descriptionEn, descriptionRu] = localizedTriplet(data.description_localized, data.description);
   return {
-    title: titleLoc[LOCALE_ET] ?? data.title,
-    titleEn: titleLoc[LOCALE_EN] ?? '',
-    titleRu: titleLoc[LOCALE_RU] ?? '',
-    description: descLoc[LOCALE_ET] ?? data.description ?? '',
-    descriptionEn: descLoc[LOCALE_EN] ?? '',
-    descriptionRu: descLoc[LOCALE_RU] ?? '',
+    title, titleEn, titleRu, description, descriptionEn, descriptionRu,
     startsAt: toLocalInput(data.starts_at),
     endsAt: toLocalInput(data.ends_at),
     url: data.url ?? '',
@@ -250,7 +239,7 @@ export function useClaimEventEdit(
     },
   });
 
-  const isLocked = query.isError && query.error instanceof ApiError && query.error.status === 409;
+  const isLocked = query.isError && query.error instanceof ApiError && query.error.status === HTTP_STATUS_CONFLICT;
   const isDormant =
     isLocked && query.error instanceof ApiError && query.error.code === CLAIM_ERROR_CODE_DORMANT;
 
@@ -281,7 +270,4 @@ export function useClaimEventEdit(
   };
 }
 
-// Re-exported for the route to build per-locale field labels the same way
-// EventSubmit does (ti('organizer_field_lang_suffix', ...)).
-export const CLAIM_EDIT_LOCALES = [LOCALE_ET, LOCALE_EN, LOCALE_RU] as const;
 export type { FormFields as ClaimEventFormFields };

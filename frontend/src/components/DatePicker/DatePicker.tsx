@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboa
 import {
   cx, monthGridDays, weekdayHeaders, splitDateTimeValue, joinDateTimeValue,
   formatPickerValue, formatMonthYearLabel, parseTypedDate, toDisplayDateTime, fromDisplayDateTime,
-  clamp, startOfDay, isSameDay, addDays, addMonths, padIndex,
+  clamp, startOfDay, isSameDay, addDays, addMonths, padIndex, weekdayOffset,
 } from '../../utils';
 import { useDropdown } from '../../hooks/useDropdown';
 import {
@@ -38,13 +38,6 @@ function parseHourText(text: string): number {
 function parseMinuteText(text: string): number {
   const n = Number(text);
   return clamp(Number.isNaN(n) ? MIN_MINUTE : n, MIN_MINUTE, MAX_MINUTE);
-}
-
-/** Days elapsed since the start of `d`'s week — 0 on the week's first day
- * (CALENDAR_WEEK_START), CALENDAR_DAYS_PER_WEEK - 1 on its last. Backs the
- * Home/End grid keys. */
-function weekdayOffset(d: Date): number {
-  return (d.getDay() - CALENDAR_WEEK_START + CALENDAR_DAYS_PER_WEEK) % CALENDAR_DAYS_PER_WEEK;
 }
 
 const CalendarIcon = () => (
@@ -179,8 +172,8 @@ function PopoverBody({ id, value, onChange, min, locale, required, disabled, pop
       case 'ArrowDown': next = addDays(d, CALENDAR_DAYS_PER_WEEK); break;
       case 'PageUp': next = addMonths(d, -1); break;
       case 'PageDown': next = addMonths(d, 1); break;
-      case 'Home': next = addDays(d, -weekdayOffset(d)); break;
-      case 'End': next = addDays(d, CALENDAR_DAYS_PER_WEEK - 1 - weekdayOffset(d)); break;
+      case 'Home': next = addDays(d, -weekdayOffset(d, CALENDAR_WEEK_START)); break;
+      case 'End': next = addDays(d, CALENDAR_DAYS_PER_WEEK - 1 - weekdayOffset(d, CALENDAR_WEEK_START)); break;
       case 'Enter':
       case ' ':
         e.preventDefault();

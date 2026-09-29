@@ -14,7 +14,7 @@ import EmptyState from '../../components/EmptyState';
 import Toast from '../../components/Toast';
 import { useToast } from '../../hooks/useToast';
 import { useStaticSeoMeta } from '../../hooks/useStaticSeoMeta';
-import { API, QUERY_KEYS, ORGANIZER_EVENTS_PAGE_SIZE, ROUTES, UI_STATE, PAGE_PARAM } from '../../constants';
+import { API, CLAIM_KIND_PUBLISHER, CLAIM_STATUS_APPROVED, QUERY_KEYS, ORGANIZER_EVENTS_PAGE_SIZE, ROUTES, UI_STATE, PAGE_PARAM, type ClaimKind, type ClaimStatus } from '../../constants';
 import SeoTags from '../../components/SeoTags';
 import styles from './OrganizerDashboard.module.css';
 
@@ -35,8 +35,8 @@ interface OrganizerEventsResponse {
 
 interface OwnClaim {
   id: number;
-  kind: 'publisher' | 'series';
-  status: 'pending' | 'approved' | 'declined' | 'cancelled' | 'expired';
+  kind: ClaimKind;
+  status: ClaimStatus;
   verification_mechanism: string | null;
   dormant: boolean;
   publisher_name: string | null;
@@ -125,12 +125,12 @@ export default function OrganizerDashboard() {
                     </span>
                   </div>
                   <div className={styles.claimRowActions}>
-                    {claim.status === 'approved' && !claim.dormant ? (
+                    {claim.status === CLAIM_STATUS_APPROVED && !claim.dormant ? (
                       <>
                         <Link to={localePath(ROUTES.organizerClaimEdit(claim.id))} className={styles.editBtn}>
                           {t('claim_edit_open_cta', locale)}
                         </Link>
-                        {claim.kind === 'publisher' && (
+                        {claim.kind === CLAIM_KIND_PUBLISHER && (
                           <Link to={localePath(ROUTES.organizerClaimEvents(claim.id))} className={styles.secondaryBtn}>
                             {t('claim_events_view_cta', locale)}
                           </Link>
