@@ -1,5 +1,6 @@
 import http
 import logging
+from datetime import timedelta
 from typing import Any, Literal, NamedTuple
 from zoneinfo import ZoneInfo
 
@@ -2148,6 +2149,11 @@ PUBLISHER_BACKFILL_SOURCE_SLUGS: tuple[str, ...] = (
     SOURCE_SLUG_FIENTA,
     *SINGLE_INSTITUTION_SOURCES,
 )
+
+# A Fienta listing the live organizer re-query could not resolve waits this long
+# before the next attempt (stops a permanently unresolvable listing being
+# re-crawled every 6h run).
+PUBLISHER_RESOLVE_RETRY_COOLDOWN = timedelta(days=7)
 
 CLAIM_DNS_VERIFICATION_MECHANISMS = frozenset(
     {CLAIM_VERIFICATION_MECHANISM_DNS_TXT, CLAIM_VERIFICATION_MECHANISM_PILETILEVI_PROMOTER}

@@ -854,6 +854,12 @@ class EventSource(Base):
         ForeignKey("publishers.id", ondelete="SET NULL"), nullable=True
     )
 
+    # Last live organizer re-query that failed to resolve publisher_id; the
+    # backfill honours PUBLISHER_RESOLVE_RETRY_COOLDOWN against it.
+    publisher_resolve_attempted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
     event: Mapped["Event"] = relationship(back_populates="sources")
     source: Mapped["Source"] = relationship(back_populates="event_sources")
     publisher: Mapped["Publisher | None"] = relationship()

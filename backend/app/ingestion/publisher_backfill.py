@@ -2,8 +2,8 @@
 events (#409/#411). Fienta resolves in two steps: one bulk SQL read of each
 listing's freshest `raw_events.payload->>'organizer_id'` stamp (a row that
 predates the stamp simply has none), then a live organizer re-query only for
-what is still unresolved. Piletilevi is out of scope: its Publisher resolves live,
-at claim time, from the event page's promoter identity
+what is still unresolved and past its retry cooldown. Piletilevi is out of
+scope: its Publisher resolves live, at claim time, from the event page's promoter identity
 (`app.claims.target_resolution`, #427) — never backfilled here.
 
 Batch-job discipline (CLAUDE.md's Code Quality Rules): bulk-load, no N+1,
@@ -25,6 +25,7 @@ from app.constants import (
     FIENTA_MIN_REQUEST_INTERVAL_SECONDS,
     HTTP_TIMEOUT_SECONDS,
     PUBLISHER_BACKFILL_SOURCE_SLUGS,
+    PUBLISHER_RESOLVE_RETRY_COOLDOWN,
     SOURCE_SLUG_ESTONIA_CONCERT_HALL,
     SOURCE_SLUG_FIENTA,
     SOURCE_SLUG_KUMU,
@@ -112,7 +113,16 @@ async def _backfill_fienta(db: AsyncSession, source: Source, now: datetime) -> i
             continue
         event_source.publisher_id = publisher_id
         updated += 1
-    if not unresolved:
+    # Rows the live crawl already failed on wait out the cooldown; the crawl
+    # itself is skipped when nothing is due.
+    cooldown_cutoff = now - PUBLISHER_RESOLVE_RETRY_COOLDOWN
+    due = [
+        es
+        for es in unresolved
+        if es.publisher_resolve_attempted_at is None
+        or es.publisher_resolve_attempted_at <= cooldown_cutoff
+    ]
+    if not due:
         await db.flush()
         return updated
 
@@ -132,6 +142,7 @@ async def _backfill_fienta(db: AsyncSession, source: Source, now: datetime) -> i
     adapter = FientaAdapter(source)
     live_organizer_by_external_id: dict[str, int] = {}
     limiter = AsyncRateLimiter(FIENTA_MIN_REQUEST_INTERVAL_SECONDS)
+    crawl_complete = True
     async with httpx.AsyncClient(timeout=HTTP_TIMEOUT_SECONDS) as client:
         for org_id in organizer_ids:
             try:
@@ -140,23 +151,29 @@ async def _backfill_fienta(db: AsyncSession, source: Source, now: datetime) -> i
                 log.warning(
                     "publisher_backfill: fienta organizer=%s failed: %s", org_id, exc
                 )
+                crawl_complete = False
                 continue
             for item in items:
                 external_id = str(item.get("id", ""))
                 if external_id:
                     live_organizer_by_external_id[external_id] = org_id
 
-    for event_source in unresolved:
+    for event_source in due:
         matched_org_id = live_organizer_by_external_id.get(
             event_source.external_id or ""
         )
-        if matched_org_id is None:
-            continue
-        publisher_id = publisher_lookup.get(str(matched_org_id))
-        if publisher_id is None:
-            continue
-        event_source.publisher_id = publisher_id
-        updated += 1
+        publisher_id = (
+            publisher_lookup.get(str(matched_org_id))
+            if matched_org_id is not None
+            else None
+        )
+        if publisher_id is not None:
+            event_source.publisher_id = publisher_id
+            updated += 1
+        elif crawl_complete:
+            # Only a full crawl proves the listing unresolvable — a failed
+            # organizer fetch must not start a cooldown.
+            event_source.publisher_resolve_attempted_at = now
     await db.flush()
     return updated
 
