@@ -131,40 +131,23 @@ class TestFientaResolution:
         assert es.publisher is publisher
 
     @pytest.mark.asyncio
-    async def test_unstamped_falls_back_to_live_requery(self, mock_db):
-        """No raw_events row (or it predates the organizer_id stamp fix) —
-        reuses FientaAdapter.fetch_organizer rather than reimplementing the
-        fetch/paginate loop."""
+    async def test_unresolved_never_crawls_live(self, mock_db):
+        """No raw_events stamp → rejected; the request path never calls
+        FientaAdapter.fetch_organizer (the backfill job stamps it later)."""
         source = _fake_source(
             slug=SOURCE_SLUG_FIENTA, config={"organizer_ids": [1, 2], "retired_organizer_ids": [3]}
         )
         es = fake_event_source(source=source, publisher_id=None, external_id="200")
-        event = MagicMock()
         mock_db.scalar = AsyncMock(return_value=None)  # no raw_events row
-        publisher = MagicMock(id=88)
 
-        async def fake_fetch_organizer(client, base_url, org_id, limiter):
-            if org_id == 2:
-                return [{"id": "200"}]
-            return [{"id": "999"}]
+        with patch(
+            "app.ingestion.sources.fienta.FientaAdapter.fetch_organizer",
+            new_callable=AsyncMock,
+        ) as fetch:
+            with pytest.raises(ClaimTargetError):
+                await resolve_claim_target_live(mock_db, AsyncMock(), MagicMock(), es)
 
-        with (
-            patch(
-                "app.claims.target_resolution.FientaAdapter.fetch_organizer",
-                side_effect=fake_fetch_organizer,
-            ),
-            patch(
-                "app.claims.target_resolution._get_or_create_publisher",
-                new_callable=AsyncMock,
-                return_value=publisher,
-            ) as get_or_create,
-        ):
-            target = await resolve_claim_target_live(mock_db, AsyncMock(), event, es)
-
-        get_or_create.assert_awaited_once_with(
-            mock_db, source_id=source.id, external_id="2", name="2"
-        )
-        assert target == ClaimTarget(CLAIM_KIND_PUBLISHER, 88, None)
+        fetch.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_unresolvable_rejected_never_series(self, mock_db):

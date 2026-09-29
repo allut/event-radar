@@ -2,6 +2,7 @@ import json
 import logging
 import logging.handlers
 import re
+import time
 
 import httpx
 import pytest
@@ -278,6 +279,9 @@ def test_http_log_ship_handler_emit_posts_json_with_bearer(monkeypatch) -> None:
 
     handler = HttpLogShipHandler()
     handler.emit(_make_record("shipped"))
+    assert "url" not in captured  # buffered, not sent per record
+    handler.flush()
+    handler.close()
 
     assert captured["url"] == "https://logs.example.com/ingest"
     assert captured["headers"]["Authorization"] == "Bearer secret-token"
@@ -298,6 +302,67 @@ def test_http_log_ship_handler_swallows_network_errors(monkeypatch) -> None:
     handler = HttpLogShipHandler()
     # Should not raise — handleError() swallows it.
     handler.emit(_make_record("shipped"))
+    handler.flush()
+    handler.close()
+
+
+def _capture_posts(monkeypatch) -> list[list[dict]]:
+    monkeypatch.setattr(settings, "LOG_SHIP_URL", "https://logs.example.com/ingest")
+    monkeypatch.setattr(settings, "LOG_SHIP_TOKEN", "secret-token")
+    posts: list[list[dict]] = []
+
+    def fake_post(self, url, content=None, headers=None, **kwargs):
+        posts.append(json.loads(content))
+        return httpx.Response(200, request=httpx.Request("POST", url))
+
+    monkeypatch.setattr(httpx.Client, "post", fake_post)
+    return posts
+
+
+def test_http_log_ship_handler_batches_into_one_post(monkeypatch) -> None:
+    posts = _capture_posts(monkeypatch)
+    handler = HttpLogShipHandler()
+    for i in range(3):
+        handler.emit(_make_record(f"m{i}"))
+    handler.flush()
+    handler.close()
+
+    assert len(posts) == 1
+    assert [e["msg"] for e in posts[0]] == ["m0", "m1", "m2"]
+
+
+def test_http_log_ship_handler_flushes_full_batch_immediately(monkeypatch) -> None:
+    posts = _capture_posts(monkeypatch)
+    monkeypatch.setattr(logging_config, "LOG_SHIP_BATCH_SIZE", 2)
+    handler = HttpLogShipHandler()
+    handler.emit(_make_record("a"))
+    assert posts == []
+    handler.emit(_make_record("b"))
+    assert [e["msg"] for e in posts[0]] == ["a", "b"]
+    handler.close()
+    assert len(posts) == 1  # nothing left to flush
+
+
+def test_http_log_ship_handler_timer_flushes_partial_batch(monkeypatch) -> None:
+    posts = _capture_posts(monkeypatch)
+    monkeypatch.setattr(logging_config, "LOG_SHIP_FLUSH_INTERVAL_SECONDS", 0.05)
+    handler = HttpLogShipHandler()
+    handler.emit(_make_record("lonely"))
+    deadline = time.monotonic() + 2
+    while not posts and time.monotonic() < deadline:
+        time.sleep(0.01)
+    handler.close()
+
+    assert [e["msg"] for e in posts[0]] == ["lonely"]
+
+
+def test_http_log_ship_handler_close_flushes_remaining(monkeypatch) -> None:
+    posts = _capture_posts(monkeypatch)
+    handler = HttpLogShipHandler()
+    handler.emit(_make_record("last"))
+    handler.close()
+
+    assert [e["msg"] for e in posts[0]] == ["last"]
 
 
 def test_framework_loggers_propagate_after_configure(monkeypatch, tmp_path) -> None:

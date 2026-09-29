@@ -5,7 +5,8 @@ dispatch. Unlike the sync `resolve_claim_target()` in `app.claims.lifecycle`
 stamped `EventSource.publisher_id`), `resolve_claim_target_live()` is the one
 place a *new* claim's target gets decided, and does not trust an unstamped
 row alone: it re-resolves live per source, stamping the row on success so a
-later call for the same listing skips the network round trip. See
+later call for the same listing skips re-resolving. Fienta never crawls live
+here — see `_resolve_fienta_publisher`. See
 CONTEXT.md's Event Claiming glossary and docs/pipeline.md's Publisher
 mirroring section.
 """
@@ -19,11 +20,9 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.claims.piletilevi_promoter import resolve_promoter_identity
-from app.config import settings
 from app.constants import (
     CLAIM_KIND_PUBLISHER,
     CLAIM_KIND_SERIES,
-    FIENTA_MIN_REQUEST_INTERVAL_SECONDS,
     ORGANIZER_NAME_MAX_LEN,
     PUBLISHER_STATUS_ACTIVE,
     SOURCE_SLUG_ESTONIA_CONCERT_HALL,
@@ -31,8 +30,7 @@ from app.constants import (
     SOURCE_SLUG_KUMU,
     SOURCE_SLUG_PILETILEVI,
 )
-from app.ingestion.http_client import AsyncRateLimiter, http_get
-from app.ingestion.sources.fienta import FientaAdapter
+from app.ingestion.http_client import http_get
 from app.models.models import Event, EventSource, Publisher, RawEvent, Source
 from app.events.venue import resolve_venue_name
 from app.events.queries import event_series_key, serialize_event_series_key
@@ -126,52 +124,18 @@ async def _fienta_organizer_id_from_raw_payload(
         return None
 
 
-async def _fienta_organizer_id_from_live_requery(
-    client: httpx.AsyncClient, source: Source, external_id: str | None
-) -> int | None:
-    """Re-query every configured organizer's live listing (active and
-    retired — a retired organizer's already-ingested events stay claimable)
-    for `external_id`, reusing `FientaAdapter.fetch_organizer` rather than
-    reimplementing the fetch/paginate loop. Mirrors
-    `app.ingestion.publisher_backfill._backfill_fienta`'s live-requery
-    fallback."""
-    if not external_id:
-        return None
-    organizer_ids = [
-        int(x)
-        for x in (
-            list(source.config.get("organizer_ids", []))
-            + list(source.config.get("retired_organizer_ids", []))
-        )
-    ]
-    base_url: str = source.config.get("base_url", settings.FIENTA_BASE_URL)
-    adapter = FientaAdapter(source)
-    limiter = AsyncRateLimiter(FIENTA_MIN_REQUEST_INTERVAL_SECONDS)
-    for org_id in organizer_ids:
-        try:
-            items = await adapter.fetch_organizer(client, base_url, org_id, limiter)
-        except httpx.HTTPError as exc:
-            log.warning(
-                "claim target resolution: fienta organizer=%s failed: %s", org_id, exc
-            )
-            continue
-        for item in items:
-            if str(item.get("id", "")) == external_id:
-                return org_id
-    return None
-
-
 async def _resolve_fienta_publisher(
-    db: AsyncSession, client: httpx.AsyncClient, source: Source, es: EventSource
+    db: AsyncSession, source: Source, es: EventSource
 ) -> Publisher | None:
     if es.publisher_id is not None:
         return es.publisher
 
-    organizer_id = await _fienta_organizer_id_from_raw_payload(db, source.id, es.external_id)
-    if organizer_id is None:
-        organizer_id = await _fienta_organizer_id_from_live_requery(
-            client, source, es.external_id
-        )
+    # Never live-crawl Fienta in the request path: an unresolved listing is
+    # rejected as not-claimable until the 6-hourly `backfill_publisher_ids`
+    # job stamps it (raw_events first, then a bounded live re-query).
+    organizer_id = await _fienta_organizer_id_from_raw_payload(
+        db, source.id, es.external_id
+    )
     if organizer_id is None:
         return None
 
@@ -254,7 +218,7 @@ async def resolve_claim_target_live(
     slug = source.slug if source is not None else None
 
     if slug == SOURCE_SLUG_FIENTA:
-        publisher = await _resolve_fienta_publisher(db, client, source, es)
+        publisher = await _resolve_fienta_publisher(db, source, es)
         if publisher is None:
             raise ClaimTargetError(f"no resolvable Fienta publisher for event_source={es.id}")
         return ClaimTarget(CLAIM_KIND_PUBLISHER, publisher.id, None)

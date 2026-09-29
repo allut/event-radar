@@ -1783,6 +1783,8 @@ LOG_FILE_MAX_BYTES = 5 * 1024 * 1024  # 5 MB per file
 LOG_FILE_BACKUP_COUNT = 5  # ~25 MB total dev history
 LOG_SHIP_TIMEOUT_SECONDS = 5.0
 LOG_SHIP_QUEUE_MAXSIZE = 10_000  # bounded; drop-newest if shipping stalls
+LOG_SHIP_BATCH_SIZE = 100  # records per POST; a full buffer flushes immediately
+LOG_SHIP_FLUSH_INTERVAL_SECONDS = 2.0  # a partial buffer is flushed at least this often
 # Loggers configured by frameworks/libraries before configure_logging() runs —
 # stripped of their own handlers and re-pointed at the root logger so every
 # line (app, uvicorn, SQL echo) shares the same timestamped format.

@@ -1,8 +1,8 @@
-"""One-time backfill: publishers/event_sources.publisher_id for currently-
-claimable events (#409/#411). Live re-query only — never replays
-raw_events.payload history (Publisher rows didn't always exist, so a historic
-raw_events row's payload may predate the organizer_id stamp fix in
-sources/fienta.py). Piletilevi is out of scope: its Publisher resolves live,
+"""Backfill: publishers/event_sources.publisher_id for currently-claimable
+events (#409/#411). Fienta resolves in two steps: one bulk SQL read of each
+listing's freshest `raw_events.payload->>'organizer_id'` stamp (a row that
+predates the stamp simply has none), then a live organizer re-query only for
+what is still unresolved. Piletilevi is out of scope: its Publisher resolves live,
 at claim time, from the event page's promoter identity
 (`app.claims.target_resolution`, #427) — never backfilled here.
 
@@ -33,7 +33,7 @@ from app.constants import (
 from app.ingestion.adapter import load_publisher_lookup
 from app.ingestion.http_client import AsyncRateLimiter
 from app.ingestion.sources.fienta import FientaAdapter
-from app.models.models import Event, EventSource, Source
+from app.models.models import Event, EventSource, RawEvent, Source
 from app.events.queries import event_not_ended_filter
 
 log = logging.getLogger(__name__)
@@ -59,14 +59,62 @@ async def _claimable_event_sources(
     return list(rows)
 
 
+async def _raw_organizer_by_external_id(
+    db: AsyncSession, source_id: int, external_ids: list[str]
+) -> dict[str, int]:
+    """external_id -> organizer_id from each listing's freshest raw_events row
+    carrying an organizer_id stamp — one query regardless of listing count."""
+    organizer_expr = RawEvent.payload["organizer_id"].as_string()
+    rows = (
+        await db.execute(
+            select(RawEvent.external_id, organizer_expr)
+            .where(
+                RawEvent.source_id == source_id,
+                RawEvent.external_id.in_(external_ids),
+                organizer_expr.is_not(None),
+            )
+            .distinct(RawEvent.external_id)
+            .order_by(RawEvent.external_id, RawEvent.fetched_at.desc())
+        )
+    ).all()
+    resolved: dict[str, int] = {}
+    for external_id, organizer_id in rows:
+        try:
+            resolved[external_id] = int(organizer_id)
+        except (TypeError, ValueError):
+            continue
+    return resolved
+
+
 async def _backfill_fienta(db: AsyncSession, source: Source, now: datetime) -> int:
-    """Re-query each configured organizer's live listing once — reusing
-    FientaAdapter.fetch_organizer, which stamps organizer_id onto every
-    item — to build external_id -> organizer_id, then bulk-resolve claimable
-    event_sources rows against the already-mirrored publishers lookup."""
+    """Bulk-resolve claimable event_sources rows against the already-mirrored
+    publishers lookup — first from raw_events' organizer_id stamps, then, only
+    for rows still unresolved, by re-querying each configured organizer's live
+    listing once (FientaAdapter.fetch_organizer stamps organizer_id onto every
+    item) to build external_id -> organizer_id."""
     event_sources = await _claimable_event_sources(db, source.id, now)
     if not event_sources:
         return 0
+
+    publisher_lookup = await load_publisher_lookup(db, source.id)
+    organizer_by_external_id = await _raw_organizer_by_external_id(
+        db, source.id, [es.external_id for es in event_sources if es.external_id]
+    )
+    updated = 0
+    unresolved: list[EventSource] = []
+    for event_source in event_sources:
+        raw_org_id = organizer_by_external_id.get(event_source.external_id or "")
+        publisher_id = (
+            publisher_lookup.get(str(raw_org_id)) if raw_org_id is not None else None
+        )
+        if publisher_id is None:
+            unresolved.append(event_source)
+            continue
+        event_source.publisher_id = publisher_id
+        updated += 1
+    if not unresolved:
+        await db.flush()
+        return updated
 
     # Include retired organizers too: a claimable (published, not-yet-ended)
     # event can trace back to an organizer that has since gone fully stale
@@ -82,7 +130,7 @@ async def _backfill_fienta(db: AsyncSession, source: Source, now: datetime) -> i
     ]
     base_url: str = source.config.get("base_url", settings.FIENTA_BASE_URL)
     adapter = FientaAdapter(source)
-    organizer_by_external_id: dict[str, int] = {}
+    live_organizer_by_external_id: dict[str, int] = {}
     limiter = AsyncRateLimiter(FIENTA_MIN_REQUEST_INTERVAL_SECONDS)
     async with httpx.AsyncClient(timeout=HTTP_TIMEOUT_SECONDS) as client:
         for org_id in organizer_ids:
@@ -96,12 +144,12 @@ async def _backfill_fienta(db: AsyncSession, source: Source, now: datetime) -> i
             for item in items:
                 external_id = str(item.get("id", ""))
                 if external_id:
-                    organizer_by_external_id[external_id] = org_id
+                    live_organizer_by_external_id[external_id] = org_id
 
-    publisher_lookup = await load_publisher_lookup(db, source.id)
-    updated = 0
-    for event_source in event_sources:
-        matched_org_id = organizer_by_external_id.get(event_source.external_id or "")
+    for event_source in unresolved:
+        matched_org_id = live_organizer_by_external_id.get(
+            event_source.external_id or ""
+        )
         if matched_org_id is None:
             continue
         publisher_id = publisher_lookup.get(str(matched_org_id))

@@ -14,7 +14,10 @@ from app.constants import (
     SOURCE_SLUG_FIENTA,
     SOURCE_SLUG_KUMU,
 )
-from app.ingestion.publisher_backfill import backfill_publisher_ids
+from app.ingestion.publisher_backfill import (
+    _raw_organizer_by_external_id,
+    backfill_publisher_ids,
+)
 from app.models.models import EventSource, Source
 
 
@@ -46,13 +49,49 @@ class TestFientaBackfill:
         ]
         mock_db.execute.return_value.all.return_value = [("42", 7)]  # publisher lookup
 
-        with patch(
-            "app.ingestion.publisher_backfill.FientaAdapter.fetch_organizer",
-            new_callable=AsyncMock,
-            return_value=[{"id": "100", "organizer_id": 42}],
+        with (
+            patch(
+                "app.ingestion.publisher_backfill._raw_organizer_by_external_id",
+                new_callable=AsyncMock,
+                return_value={},
+            ),
+            patch(
+                "app.ingestion.publisher_backfill.FientaAdapter.fetch_organizer",
+                new_callable=AsyncMock,
+                return_value=[{"id": "100", "organizer_id": 42}],
+            ),
         ):
             result = await backfill_publisher_ids(mock_db)
 
+        assert result[SOURCE_SLUG_FIENTA] == 1
+        assert claimable.publisher_id == 7
+
+    @pytest.mark.asyncio
+    async def test_raw_events_stamp_resolves_without_live_requery(self, mock_db):
+        """A raw_events organizer_id stamp resolves the row in SQL; the live
+        organizer crawl never fires when nothing is left unresolved."""
+        fienta = _source(SOURCE_SLUG_FIENTA, id_=1, config={"organizer_ids": [42]})
+        claimable = EventSource(event_id=10, source_id=1, external_id="100", publisher_id=None)
+        mock_db.scalars.side_effect = [
+            MagicMock(all=MagicMock(return_value=[fienta])),
+            MagicMock(all=MagicMock(return_value=[claimable])),
+        ]
+        mock_db.execute.return_value.all.return_value = [("42", 7)]
+
+        with (
+            patch(
+                "app.ingestion.publisher_backfill._raw_organizer_by_external_id",
+                new_callable=AsyncMock,
+                return_value={"100": 42},
+            ),
+            patch(
+                "app.ingestion.publisher_backfill.FientaAdapter.fetch_organizer",
+                new_callable=AsyncMock,
+            ) as mock_fetch,
+        ):
+            result = await backfill_publisher_ids(mock_db)
+
+        mock_fetch.assert_not_awaited()
         assert result[SOURCE_SLUG_FIENTA] == 1
         assert claimable.publisher_id == 7
 
@@ -128,3 +167,12 @@ class TestConstantPublisherBackfill:
         assert result[SOURCE_SLUG_ESTONIA_CONCERT_HALL] == 0
         # Only the lookup SELECT fired — never an UPDATE with no publisher_id.
         assert mock_db.execute.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_raw_organizer_lookup_skips_non_integer_stamps(mock_db):
+    mock_db.execute.return_value.all.return_value = [("1", "42"), ("2", "junk")]
+
+    result = await _raw_organizer_by_external_id(mock_db, 1, ["1", "2"])
+
+    assert result == {"1": 42}
