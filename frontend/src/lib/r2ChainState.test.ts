@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockSend = vi.fn();
+const clientCtor = vi.fn();
 
 function makeCommandClass(name: string) {
   return class {
@@ -15,6 +16,9 @@ function makeCommandClass(name: string) {
 vi.mock('@aws-sdk/client-s3', () => ({
   S3Client: class {
     send = mockSend;
+    constructor() {
+      clientCtor();
+    }
   },
   GetObjectCommand: makeCommandClass('Get'),
   PutObjectCommand: makeCommandClass('Put'),
@@ -241,5 +245,29 @@ describe('deleteR2ObjectsByPrefix', () => {
     const result = await deleteR2ObjectsByPrefix('prerender-chain-state/foo/');
 
     expect(result).toBe(false);
+  });
+});
+
+describe('client memoization', () => {
+  beforeEach(() => {
+    process.env = { ...ORIGINAL_ENV };
+    mockSend.mockReset();
+    clientCtor.mockClear();
+  });
+  afterEach(() => {
+    process.env = { ...ORIGINAL_ENV };
+  });
+
+  it('reuses one S3Client across calls with unchanged credentials, rebuilds when they change', async () => {
+    setR2Env();
+    process.env.R2_ACCESS_KEY_ID = 'memo-key-a';
+    mockSend.mockResolvedValue({});
+    await putR2Object('k1', 'a', 'text/plain');
+    await putR2Object('k2', 'b', 'text/plain');
+    expect(clientCtor).toHaveBeenCalledTimes(1);
+
+    process.env.R2_ACCESS_KEY_ID = 'memo-key-b';
+    await putR2Object('k3', 'c', 'text/plain');
+    expect(clientCtor).toHaveBeenCalledTimes(2);
   });
 });

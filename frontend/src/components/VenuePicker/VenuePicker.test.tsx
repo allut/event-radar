@@ -1,10 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { act, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
+import { QueryClient } from '@tanstack/react-query';
 import { renderWithProviders } from '../../test/utils';
 import VenuePicker, { type VenuePickerValue } from './VenuePicker';
-import { LOCALE_EN, LOCALE_ET, type ContentLang } from '../../constants';
+import { LOCALE_EN, LOCALE_ET, QUERY_KEYS, type ContentLang } from '../../constants';
 
 vi.mock('../../api/client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../api/client')>()),
@@ -71,6 +72,27 @@ describe('VenuePicker', () => {
         address: 'Põhja pst 27a, Tallinn',
       }),
     );
+  });
+
+  it('keeps in-progress edits when a background refetch returns changed data for the same venue', async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    renderWithProviders(<Harness initial={{ mode: 'saved', venueId: 1 }} />, { queryClient });
+
+    await userEvent.click(await screen.findByRole('button', { name: /edit venue/i }));
+    const nameInput = screen.getByPlaceholderText('Venue name');
+    await userEvent.clear(nameInput);
+    await userEvent.type(nameInput, 'Half-typed');
+
+    // Changed row => new object identity (react-query's structural sharing
+    // would otherwise hand back the same reference for deep-equal data).
+    mockGet.mockResolvedValue(VENUES.map((v) => (v.id === 1 ? { ...v, address: 'Moved 1, Tallinn' } : v)));
+    await act(async () => {
+      await queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.organizerVenues] });
+      // Let the re-hydration effect's microtask (if any) run before asserting.
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+
+    expect(screen.getByPlaceholderText('Venue name')).toHaveValue('Half-typed');
   });
 
   it('edits the EN name/address on the active content-language tab, independent of the base fields', async () => {

@@ -42,6 +42,8 @@ import {
   CRAWLABLE_ICON_PATHS,
   EXPLORE_PARAM,
   JSONLD_SCRIPT_SELECTOR,
+  JSONLD_SCRIPT_TYPE,
+  LOCALE_ET,
   LOCALE_KEY,
   LOCALE_URL_PREFIX_CODES,
   LOCALES,
@@ -61,6 +63,7 @@ import {
   SITEMAP_PATH,
   SORT_DEFAULT,
   CHANGE_DETECTION_CONCURRENCY,
+  R2_PERSIST_CONCURRENCY,
   CHANGE_MARKER_JSONLD_FIELD,
   CONTENT_READY_TIMEOUT_MS,
   DEFAULT_RENDER_BUDGET_MINUTES,
@@ -435,14 +438,28 @@ export async function finalizeChainState(
 }
 
 /** Reads the change-detection marker back off a rendered snapshot's JSON-LD
- * (issue #80) — used both to read the currently-live production page during
- * change detection, and (via the same parseSnapshotHtml helper the in-build
- * validation gate uses) to keep the two readers in agreement. */
+ * (issue #80) — used to read the currently-live production page during
+ * change detection. A targeted scan of the first JSON-LD script body rather
+ * than a full DOM parse (Big-O audit M13): change detection runs once per
+ * target and would otherwise parse every page twice (here, then again in
+ * finalizeSnapshotHtml). Reads the same first script parseSnapshotHtml (the
+ * validation gate) does, so the two readers agree. */
+const JSONLD_SCRIPT_BODY_RE = new RegExp(
+  `<script[^>]*type=["']${JSONLD_SCRIPT_TYPE.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}["'][^>]*>([\\s\\S]*?)</script>`,
+  'i',
+);
+
 function extractChangeMarker(html: string): string | null {
-  const jsonLd = parseSnapshotHtml(html).jsonLd[0];
-  if (jsonLd && typeof jsonLd === 'object') {
-    const marker = (jsonLd as Record<string, unknown>)[CHANGE_MARKER_JSONLD_FIELD];
-    if (typeof marker === 'string') return marker;
+  const body = JSONLD_SCRIPT_BODY_RE.exec(html)?.[1];
+  if (body === undefined) return null;
+  try {
+    const jsonLd: unknown = JSON.parse(body);
+    if (jsonLd && typeof jsonLd === 'object') {
+      const marker = (jsonLd as Record<string, unknown>)[CHANGE_MARKER_JSONLD_FIELD];
+      if (typeof marker === 'string') return marker;
+    }
+  } catch {
+    // Malformed JSON-LD — no marker, exactly like parseSnapshotHtml's undefined entry.
   }
   return null;
 }
@@ -666,7 +683,7 @@ async function snapshotTarget(
     await eventDetailRateGate.acquire();
   }
   const url = `${previewOrigin}${localizedPath(target.bare, target.locale)}`;
-  await page.goto(url, { waitUntil: 'networkidle', timeout: NAV_TIMEOUT_MS });
+  await page.goto(url, { waitUntil: 'domcontentloaded', timeout: NAV_TIMEOUT_MS });
   const isExplore = target.bare === ROUTES.explore;
   // Landing and /events/:id are `indexable` (useSeoMeta) only once real
   // content has loaded, so waiting for the canonical link this hook emits is
@@ -731,6 +748,39 @@ async function mapPool<T, R>(
   return results;
 }
 
+/** Bounded fire-and-forget: `run(task)` starts `task` once fewer than
+ * `limit` are in flight and returns its promise (never rejects to the caller
+ * — failures resolve, since every caller here fails open). `drain()` awaits
+ * everything scheduled so far. */
+function createLimiter(limit: number): {
+  run: (task: () => Promise<void>) => void;
+  drain: () => Promise<void>;
+} {
+  let active = 0;
+  const waiting: (() => void)[] = [];
+  const all: Promise<void>[] = [];
+  async function execute(task: () => Promise<void>): Promise<void> {
+    if (active >= limit) await new Promise<void>((resolve) => waiting.push(resolve));
+    active++;
+    try {
+      await task();
+    } catch {
+      // Fail open — see doc comment.
+    } finally {
+      active--;
+      waiting.shift()?.();
+    }
+  }
+  return {
+    run: (task) => {
+      all.push(execute(task));
+    },
+    drain: async () => {
+      await Promise.allSettled(all);
+    },
+  };
+}
+
 async function runPool<T>(items: T[], concurrency: number, worker: (item: T) => Promise<void>): Promise<void> {
   await mapPool(items, concurrency, worker);
 }
@@ -791,7 +841,11 @@ export async function fetchLiveExploreCount(locale: string): Promise<number | un
   }
 }
 
-async function validateTarget(target: PrerenderTarget, renderedHtml?: string): Promise<string[]> {
+async function validateTarget(
+  target: PrerenderTarget,
+  renderedHtml: string | undefined,
+  checkStaleness: boolean,
+): Promise<string[]> {
   const html = renderedHtml ?? (await readFile(outputFilePath(target.bare, target.locale), 'utf-8'));
   const parsed = parseSnapshotHtml(html);
   const kind = target.bare === ROUTES.home ? 'website' : target.bare === ROUTES.explore ? 'list' : 'event';
@@ -805,7 +859,13 @@ async function validateTarget(target: PrerenderTarget, renderedHtml?: string): P
     liveItemCount,
   }).map((issue) => `structural: ${issue}`);
 
-  if (target.eventId !== undefined) {
+  // Live-API staleness comparison runs once per event (Big-O audit M15) —
+  // `checkStaleness` is set by main() for the default-locale sibling, or for
+  // one stand-in sibling when the default locale isn't being validated: all locale variants of an event render seconds apart
+  // from the same DB row, so a per-locale re-fetch tripled the API calls
+  // (and rate-gate budget) for near-zero extra signal. Structural checks
+  // above still run for every locale.
+  if (target.eventId !== undefined && checkStaleness) {
     await eventDetailRateGate.acquire();
     const url = `${API_ORIGIN}/events/${target.eventId}?locale=${encodeURIComponent(target.locale)}`;
     const res = await fetch(url);
@@ -922,6 +982,22 @@ async function commitRoundMarker(marker: RoundMarker): Promise<boolean> {
  * are byte-identical to what already passed this same gate earlier, so
  * re-validating them every round is pure waste that grows unboundedly as
  * the copied-forward set accumulates. */
+/** One target per event id that gets the live-API staleness comparison
+ * (Big-O audit M15): the default-locale sibling when it's being validated,
+ * else the event's first validated sibling — so an event is never left
+ * unchecked just because its default-locale render wasn't in this round. */
+export function selectStalenessTargets(validationTargets: PrerenderTarget[]): Set<PrerenderTarget> {
+  const chosen = new Map<number, PrerenderTarget>();
+  for (const target of validationTargets) {
+    if (target.eventId === undefined) continue;
+    const current = chosen.get(target.eventId);
+    if (current === undefined || (target.locale === LOCALE_ET && current.locale !== LOCALE_ET)) {
+      chosen.set(target.eventId, target);
+    }
+  }
+  return new Set(chosen.values());
+}
+
 export function selectValidationTargets(
   renderQueue: PrerenderTarget[],
   skippedTargets: PrerenderTarget[],
@@ -1064,6 +1140,11 @@ export async function main(): Promise<void> {
   // for why. Keyed by target so a successfully-rendered or -failed target
   // can drop its entry once the render loop has an answer for it either way.
   const staleFallbackHtml = new Map<PrerenderTarget, string>();
+  // R2 chain-state PUTs are fire-and-forget from the workers' point of view
+  // (Big-O audit M14): render/copy-forward workers never block on them, and
+  // `allSettled` after the pools drains them. persistChainStateTarget fails
+  // open, so a rejected entry can only mean a lost optimization.
+  const persistLimiter = createLimiter(R2_PERSIST_CONCURRENCY);
   // runPool, not a sequential for-of — each iteration's mkdir/writeFile/
   // persistChainStateTarget (an R2 network round trip) was the dominant
   // wall-clock cost of a copy-forward-heavy round, run one at a time for
@@ -1071,7 +1152,12 @@ export async function main(): Promise<void> {
   // copiedForward++ and staleFallbackHtml.set() are plain synchronous
   // statements with no await between read and write, so concurrent workers
   // touching them (distinct target keys) never race.
-  await runPool(classification, CHANGE_DETECTION_CONCURRENCY, async ({ target, unchanged, liveHtml }) => {
+  await runPool(classification, CHANGE_DETECTION_CONCURRENCY, async (entry) => {
+    const { target, unchanged, liveHtml } = entry;
+    // Drop the classification's own reference (Big-O audit M12): the HTML now
+    // lives only in the local (copy-forward) or in staleFallbackHtml (needs
+    // render), so it's collectable as soon as each branch is done with it.
+    entry.liveHtml = null;
     if (unchanged && liveHtml !== null) {
       const outPath = outputFilePath(target.bare, target.locale);
       await mkdir(path.dirname(outPath), { recursive: true });
@@ -1082,7 +1168,9 @@ export async function main(): Promise<void> {
       // already in the bucket under this exact key — re-PUTting identical
       // bytes would be a pure-waste duplicate write (issue #368).
       if (!resolvedFromManifest.has(target)) {
-        await persistChainStateTarget(sanitizedBurstId, round, target, finalized, chainStateIndex);
+        persistLimiter.run(() =>
+          persistChainStateTarget(sanitizedBurstId, round, target, finalized, chainStateIndex),
+        );
       }
     } else if (liveHtml !== null) {
       // Needs a fresh render, but a live page exists — held for now rather
@@ -1154,7 +1242,9 @@ export async function main(): Promise<void> {
               const finalizedHtml = await snapshotTarget(page, resolvedPreviewOrigin, target);
               newlyRendered++;
               renderedHtmlByTarget.set(target, finalizedHtml);
-              await persistChainStateTarget(sanitizedBurstId, round, target, finalizedHtml, chainStateIndex);
+              persistLimiter.run(() =>
+                persistChainStateTarget(sanitizedBurstId, round, target, finalizedHtml, chainStateIndex),
+              );
             } catch (error) {
               failures.push({ target, error, diagnostics: recentEvents() });
             } finally {
@@ -1223,6 +1313,8 @@ export async function main(): Promise<void> {
     staleFallbackWritten++;
   });
 
+  await persistLimiter.drain();
+
   console.log(
     `prerender: round summary — newly-rendered ${newlyRendered}, copied-forward ${copiedForward}, queue-remaining ${skippedTargets.length} (${staleFallbackWritten} of those still serving stale-but-real content)`,
   );
@@ -1244,8 +1336,11 @@ export async function main(): Promise<void> {
   // the copied-forward set accumulates.
   const validationTargets = selectValidationTargets(renderQueue, skippedTargets);
   const validationIssues: string[] = [];
+  const stalenessTargets = selectStalenessTargets(validationTargets);
   await runPool(validationTargets, PRERENDER_CONCURRENCY, async (target) => {
-    validationIssues.push(...(await validateTarget(target, renderedHtmlByTarget.get(target))));
+    validationIssues.push(
+      ...(await validateTarget(target, renderedHtmlByTarget.get(target), stalenessTargets.has(target))),
+    );
   });
   if (validationIssues.length > 0) {
     for (const issue of validationIssues) {

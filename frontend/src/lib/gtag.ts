@@ -12,7 +12,7 @@ declare global {
  * set by every WebDriver-controlled browser, including Playwright) rather than
  * a real visitor. GA4 must never load during a prerender snapshot render: it
  * would fire a fake pageview on every build and add live network activity that
- * `page.goto`'s `waitUntil: 'networkidle'` (frontend/scripts/prerender.ts) would
+ * the prerender's `page.goto` (frontend/scripts/prerender.ts) would
  * otherwise have to settle around. */
 export function isPrerenderRender(): boolean {
   return typeof navigator !== 'undefined' && navigator.webdriver === true;

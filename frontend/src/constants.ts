@@ -1281,6 +1281,9 @@ export const EVENT_DETAIL_RATE_LIMIT_PER_MINUTE = 100;
 // above since these are plain page fetches, not the rate-limited
 // GET /events/{id} endpoint.
 export const CHANGE_DETECTION_CONCURRENCY = 6;
+// Max in-flight R2 chain-state PUTs — deferred off the worker loops (Big-O
+// audit M14) but still bounded so a big round can't queue thousands of bodies.
+export const R2_PERSIST_CONCURRENCY = 16;
 // JSON-LD field the change-detection marker (derived from Event.updated_at)
 // is embedded under (issue #80). Not a real schema.org property of Event,
 // but an extra key here doesn't violate the structural validation gate

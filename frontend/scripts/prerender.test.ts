@@ -22,6 +22,7 @@ import {
   persistChainStateTarget,
   rewriteSnapshotAssetRefs,
   sanitizeBurstIdForR2,
+  selectStalenessTargets,
   selectValidationTargets,
   stripBakedThemeAttr,
 } from './prerender';
@@ -58,6 +59,27 @@ function makeMarker(overrides: Partial<RoundMarker> = {}): RoundMarker {
     ...overrides,
   };
 }
+
+describe('selectStalenessTargets', () => {
+  const ev = (id: number, locale: string): PrerenderTarget => ({ bare: `/events/${id}`, locale, eventId: id }) as PrerenderTarget;
+
+  it('picks the default-locale sibling per event when present', () => {
+    const en = ev(1, 'en');
+    const et = ev(1, 'et');
+    const ru = ev(1, 'ru');
+    expect([...selectStalenessTargets([en, et, ru])]).toEqual([et]);
+  });
+
+  it('falls back to the first validated sibling when the default locale is absent', () => {
+    const en = ev(2, 'en');
+    const ru = ev(2, 'ru');
+    expect([...selectStalenessTargets([en, ru])]).toEqual([en]);
+  });
+
+  it('skips targets with no event id', () => {
+    expect(selectStalenessTargets([makeTarget('/explore')]).size).toBe(0);
+  });
+});
 
 describe('selectValidationTargets', () => {
   it('validates exactly this round\'s newly-rendered routes, excluding copied-forward routes (issue #94)', () => {

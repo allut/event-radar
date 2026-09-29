@@ -109,18 +109,29 @@ export default function VenuePicker({ id, value, onChange, locale, contentLang, 
   // hydration when the edit form opens, not a value derivable from render,
   // so react-hooks/set-state-in-effect's synchronous-setState flag doesn't
   // apply once deferred.
+  //
+  // Keyed on the venue's id, not the `selected` object: a background refetch of
+  // the venues query hands back a new object identity for the same venue, and
+  // re-hydrating on that would clobber in-progress edits. The latest row is
+  // read through a ref so the effect still hydrates from current data.
+  const selectedRef = useRef(selected);
   useEffect(() => {
-    if (editOpen && selected) {
+    selectedRef.current = selected;
+  }, [selected]);
+  const hasSelected = selected !== undefined;
+  useEffect(() => {
+    const venue = selectedRef.current;
+    if (editOpen && hasSelected && venue) {
       void Promise.resolve().then(() => {
         setDraft({
-          name: selected.name,
-          nameEn: selected.name_en ?? '',
-          nameRu: selected.name_ru ?? '',
-          address: selected.address ?? '',
+          name: venue.name,
+          nameEn: venue.name_en ?? '',
+          nameRu: venue.name_ru ?? '',
+          address: venue.address ?? '',
         });
       });
     }
-  }, [editOpen, selected]);
+  }, [editOpen, selectedVenueId, hasSelected]);
 
   useEffect(() => {
     if (!open) return;

@@ -113,9 +113,22 @@ export function parseSitemapLastmod(sitemapXml: string): string | null {
 // rebuilt per call (Big-O audit #5, Tier 4).
 const EVENT_URL_RE = new RegExp(`^${PRODUCTION_ORIGIN.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/events/\\d+$`);
 
+const SITEMAP_LOC_RE = /<loc>([^<]+)<\/loc>/g;
+
 export function parseSitemapEventUrls(sitemapXml: string): string[] {
-  const locs = [...sitemapXml.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1]);
+  const locs = [...sitemapXml.matchAll(SITEMAP_LOC_RE)].map((m) => m[1]);
   return locs.filter((loc) => EVENT_URL_RE.test(loc));
+}
+
+/** First `/events/:id` URL in sitemap.xml, or `undefined` — the live audit
+ * only spot-checks one event page, so this stops scanning at the first hit
+ * instead of materializing every `<loc>` in a catalog-sized sitemap (Big-O
+ * audit). Lazy `matchAll` iteration makes the early return skip the rest. */
+export function parseFirstSitemapEventUrl(sitemapXml: string): string | undefined {
+  for (const match of sitemapXml.matchAll(SITEMAP_LOC_RE)) {
+    if (EVENT_URL_RE.test(match[1])) return match[1];
+  }
+  return undefined;
 }
 
 /** Every built-asset `<script src>` / `<link rel="stylesheet" href>` in
