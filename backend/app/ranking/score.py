@@ -774,6 +774,23 @@ async def _load_recent_series_by_user(
     return recent_series_by_user
 
 
+# Event columns the Daily 5 build reads off a candidate row: scoring
+# (starts_at, dedup_group_id, venue-resolved lat/lng), series collapse
+# (title_orig, venue_name/venue_id), and the pick (id). Adding a read of
+# another column downstream needs it listed here — a deferred column
+# raises MissingGreenlet on async access.
+_CANDIDATE_EVENT_COLUMNS = (
+    Event.id,
+    Event.starts_at,
+    Event.title_orig,
+    Event.venue_name,
+    Event.venue_id,
+    Event.lat,
+    Event.lng,
+    Event.dedup_group_id,
+)
+
+
 async def _load_candidate_events(
     db: AsyncSession, now: datetime
 ) -> tuple[list[Event], dict[int, tuple[str, str]], dict[int, _EventFactors]]:
@@ -787,7 +804,9 @@ async def _load_candidate_events(
     event_rows = list(
         (
             await db.scalars(
-                select_events_with_classification().where(
+                select_events_with_classification()
+                .options(load_only(*_CANDIDATE_EVENT_COLUMNS))
+                .where(
                     public_event_filter(),
                     event_not_ended_filter(now),
                     Event.starts_at <= cutoff,

@@ -717,6 +717,25 @@ class TestSelectWithBackfill:
         assert all("music" in e.classification.categories for e in picked)
 
 
+class TestLoadCandidateEventsColumns:
+    async def test_candidate_query_loads_only_audited_columns(self, mock_db):
+        from app.ranking.score import _load_candidate_events
+
+        mock_db.scalars.return_value = _scalar_result([])
+
+        await _load_candidate_events(mock_db, _now())
+
+        stmt = mock_db.scalars.call_args_list[0].args[0]
+        compiled = str(stmt.compile())
+        select_clause = compiled.split("FROM")[0]
+        for col in ("id", "starts_at", "title_orig", "venue_name", "venue_id",
+                    "lat", "lng", "dedup_group_id"):
+            assert f"events.{col}" in select_clause
+        # heavy text columns must stay deferred
+        assert "events.description" not in select_clause
+        assert "events.title_localized" not in select_clause
+
+
 class TestBuildDailyFeedsExplicitFilter:
     async def test_event_query_excludes_explicit_events(self, mock_db):
         from app.ranking.score import build_daily_feeds
