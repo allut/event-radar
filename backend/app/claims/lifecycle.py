@@ -419,10 +419,10 @@ async def auto_decline_other_pending_claims(
     (admin.py's admin_grant_claim) — every other still-pending claim on that
     same target auto-declines, mirroring admin_decline_claim's status
     transition and reusing its decline email, just with no admin note (falls
-    back to the email's generic decline copy). Each declined claim's own
-    representative_event_for_claim() resolves its own email's event title —
-    not the winning claim's event — since a Publisher target's freshest
-    traced-back listing can differ from whichever specific event the winner
+    back to the email's generic decline copy). The shared target's
+    representative_event_for_claim() (resolved once for all declined claims)
+    supplies the email's event title — not the winning claim's event — since
+    a Publisher target's freshest traced-back listing can differ from whichever specific event the winner
     happened to claim through. Not module-private: also called from
     admin.py's manual grant endpoint.
 
@@ -461,13 +461,28 @@ async def auto_decline_other_pending_claims(
 
     semaphore = asyncio.Semaphore(CLAIM_EMAIL_SEND_CONCURRENCY)
 
+    # Every claim in `others` shares `target`, so they all resolve to the same
+    # representative event — look it up once, sequentially. Doing it inside
+    # the gathered coroutines ran concurrent queries on one AsyncSession
+    # (SQLAlchemy raises), which the except below swallowed, silently
+    # dropping the decline emails (Big-O audit M5).
+    try:
+        event = await representative_event_for_claim(db, others[0])
+    except Exception:
+        log.error(
+            "Failed to resolve event for auto-decline claim-declined emails "
+            "(claim_id=%s)",
+            others[0].id,
+            exc_info=True,
+        )
+        event = None
+
     async def _send_one(claim: Claim) -> None:
         organizer = claim.organizer
         if organizer is None:
             return
         async with semaphore:
             try:
-                event = await representative_event_for_claim(db, claim)
                 await send_claim_declined_email(
                     organizer.email,
                     resolve_title(event, organizer.locale) if event else None,

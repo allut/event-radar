@@ -757,6 +757,21 @@ class TestLoadClaimsForEvents:
         assert result == {501: claim}
 
     @pytest.mark.asyncio
+    async def test_in_lists_are_chunked(self):
+        # Big-O audit M4: every IN list is split at SCORE_INSERT_CHUNK_SIZE so
+        # a large window can't exceed Postgres's bind-parameter cap.
+        events = [_event(i, f"Show {i}", _BASE) for i in range(1, 6)]
+        db = self._mock_db(publisher_rows=[], claims=[])
+
+        with patch("app.dedup.rules.SCORE_INSERT_CHUNK_SIZE", 2):
+            await load_claims_for_events(db, events)
+
+        # 5 events / chunk 2 -> 3 EventSource queries + 3 Venue-name queries.
+        assert db.execute.await_count == 6
+        # 5 distinct series keys / chunk 2 -> 3 Claim queries.
+        assert db.scalars.await_count == 3
+
+    @pytest.mark.asyncio
     async def test_kumu_ech_style_constant_publisher_matches_too(self):
         # KUMU/ECH Publishers carry no external_id (whole-source constant) —
         # matching is identical, just a different-sourced publisher_id.

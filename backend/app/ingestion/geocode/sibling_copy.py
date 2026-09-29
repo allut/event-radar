@@ -221,7 +221,12 @@ async def copy_venue_from_siblings(db: AsyncSession, now: datetime) -> int:
             .where(
                 Event.venue_name.is_not(None),
                 or_(Event.lat.is_(None), Event.venue_address.is_(None)),
+                # Upcoming only, soonest first: past events never publish, and
+                # an unbounded window let stale unfixable rows crowd out new
+                # ones (Big-O audit H3).
+                Event.starts_at >= now,
             )
+            .order_by(Event.starts_at, Event.id)
             .limit(GEOCODE_MAX_PER_RUN)
         )
     ).all()

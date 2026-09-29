@@ -10,6 +10,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.claims.lifecycle import (
     ClaimError,
+    auto_decline_other_pending_claims,
     bulk_dormant_pinned_event_ids,
     cancel_claim,
     claim_status_from_claim,
@@ -20,6 +21,7 @@ from app.claims.lifecycle import (
     recheck_claim,
     resolve_claim_for_event,
 )
+from app.claims.target_resolution import ClaimTarget
 from app.claims.verification import VerificationResult
 from app.constants import (
     CLAIM_ADMIN_REVIEW_EXPIRY_DAYS,
@@ -754,8 +756,8 @@ class TestContestedClaims:
         assert claim.status == CLAIM_STATUS_APPROVED
         assert loser.status == CLAIM_STATUS_REVOKED
         assert loser.resolved_at is not None
-        # Each declined claim resolves its own representative event, not the
-        # winning claim's — asserted by using a distinct title for it above.
+        # The declined claims' shared target resolves its own representative
+        # event, not the winning claim's — asserted by using a distinct title.
         representative_event_mock.assert_awaited_once_with(mock_db, loser)
         decline_mock.assert_awaited_once()
         args, kwargs = decline_mock.call_args
@@ -766,6 +768,46 @@ class TestContestedClaims:
             other_organizer.locale,
         )
         assert "http_client" in kwargs
+
+    @pytest.mark.asyncio
+    async def test_auto_decline_resolves_representative_event_once_for_many_losers(
+        self, mock_db, make_organizer, make_event
+    ):
+        """Big-O audit M5: every loser shares the target, so the event lookup
+        runs once, before the gather — not once per claim on the shared
+        AsyncSession — and every loser still gets its decline email."""
+        org_a = make_organizer(organizer_id=6)
+        org_b = make_organizer(organizer_id=7)
+        losers = [
+            _fake_claim(id=2, organizer_id=6, status=CLAIM_STATUS_PENDING, organizer=org_a),
+            _fake_claim(id=3, organizer_id=7, status=CLAIM_STATUS_PENDING, organizer=org_b),
+        ]
+        mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=losers))
+        event = make_event()
+        event.title_orig = "Shared Listing"
+
+        with (
+            patch(
+                "app.claims.pinning.representative_event_for_claim",
+                new_callable=AsyncMock,
+                return_value=event,
+            ) as representative_event_mock,
+            patch(
+                "app.claims.lifecycle.send_claim_declined_email", new_callable=AsyncMock
+            ) as decline_mock,
+        ):
+            await auto_decline_other_pending_claims(
+                mock_db,
+                AsyncMock(),
+                ClaimTarget(
+                    kind=CLAIM_KIND_PUBLISHER, publisher_id=99, event_series_key=None
+                ),
+                winning_claim_id=1,
+                winning_organizer_id=5,
+            )
+
+        assert representative_event_mock.await_count == 1
+        assert decline_mock.await_count == 2
 
     @pytest.mark.asyncio
     async def test_auto_grant_with_no_other_pending_claims_sends_no_decline_email(

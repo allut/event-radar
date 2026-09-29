@@ -428,28 +428,36 @@ async def load_claims_for_events(
     if not events:
         return {}
     event_ids = [e.id for e in events]
-    publisher_rows = (
-        await db.execute(
-            select(EventSource.event_id, EventSource.publisher_id).where(
-                EventSource.event_id.in_(event_ids),
-                EventSource.publisher_id.is_not(None),
+    # Every IN list below is chunked at SCORE_INSERT_CHUNK_SIZE: SQLAlchemy
+    # expands IN to one bind param per value, past Postgres's ~32k-param cap
+    # on a large window (Big-O audit M4; same rationale as
+    # load_description_lengths).
+    publisher_rows: list = []
+    for i in range(0, len(event_ids), SCORE_INSERT_CHUNK_SIZE):
+        publisher_rows += (
+            await db.execute(
+                select(EventSource.event_id, EventSource.publisher_id).where(
+                    EventSource.event_id.in_(event_ids[i : i + SCORE_INSERT_CHUNK_SIZE]),
+                    EventSource.publisher_id.is_not(None),
+                )
             )
-        )
-    ).all()
+        ).all()
     publisher_ids_by_event: dict[int, set[int]] = {}
     for eid, pid in publisher_rows:
         publisher_ids_by_event.setdefault(eid, set()).add(pid)
 
     no_publisher_ids = [e.id for e in events if e.id not in publisher_ids_by_event]
     resolved_venue_name_by_event: dict[int, str | None] = {}
-    if no_publisher_ids:
-        venue_rows = (
+    venue_rows: list = []
+    for i in range(0, len(no_publisher_ids), SCORE_INSERT_CHUNK_SIZE):
+        venue_rows += (
             await db.execute(
                 select(Event.id, Event.venue_name, Venue.name, Venue.name_en)
                 .outerjoin(Venue, Event.venue_id == Venue.id)
-                .where(Event.id.in_(no_publisher_ids))
+                .where(Event.id.in_(no_publisher_ids[i : i + SCORE_INSERT_CHUNK_SIZE]))
             )
         ).all()
+    if venue_rows:
         for eid, bare_venue_name, venue_name, venue_name_en in venue_rows:
             # Mirrors resolve_venue_name()'s DEFAULT_USER_LOCALE ("en") pick:
             # a linked Venue's name (en, falling back to its base name) wins
@@ -473,16 +481,31 @@ async def load_claims_for_events(
     if not all_publisher_ids and not all_series_keys:
         return {}
 
-    key_conditions = []
-    if all_publisher_ids:
-        key_conditions.append(Claim.publisher_id.in_(all_publisher_ids))
-    if all_series_keys:
-        key_conditions.append(Claim.event_series_key.in_(all_series_keys))
-    claims = (
-        await db.scalars(
-            select(Claim).where(Claim.status == CLAIM_STATUS_APPROVED, or_(*key_conditions))
-        )
-    ).all()
+    publisher_id_list = sorted(all_publisher_ids)
+    series_key_list = sorted(all_series_keys)
+    claims: list[Claim] = []
+    for i in range(0, len(publisher_id_list), SCORE_INSERT_CHUNK_SIZE):
+        claims += (
+            await db.scalars(
+                select(Claim).where(
+                    Claim.status == CLAIM_STATUS_APPROVED,
+                    Claim.publisher_id.in_(
+                        publisher_id_list[i : i + SCORE_INSERT_CHUNK_SIZE]
+                    ),
+                )
+            )
+        ).all()
+    for i in range(0, len(series_key_list), SCORE_INSERT_CHUNK_SIZE):
+        claims += (
+            await db.scalars(
+                select(Claim).where(
+                    Claim.status == CLAIM_STATUS_APPROVED,
+                    Claim.event_series_key.in_(
+                        series_key_list[i : i + SCORE_INSERT_CHUNK_SIZE]
+                    ),
+                )
+            )
+        ).all()
     claim_by_publisher = {c.publisher_id: c for c in claims if c.publisher_id is not None}
     claim_by_series = {c.event_series_key: c for c in claims if c.event_series_key is not None}
 
@@ -641,19 +664,22 @@ async def candidate_pair_ids_in_window(
                     a.starts_at == b.starts_at,
                 ),
             )
-            .order_by(a.id, b.id)
+            # Newest-first: when the cap truncates, the dropped tail is the
+            # oldest pairs (already seen by earlier passes), never the
+            # freshly ingested events (Big-O audit M3).
+            .order_by(a.id.desc(), b.id)
             .limit(DEDUP_CANDIDATE_PAIR_MAX)
         )
     ).all()
-    pairs = [(row[0], row[1]) for row in pair_rows]
+    pairs = sorted((row[0], row[1]) for row in pair_rows)
     if len(pairs) > DEDUP_CANDIDATE_PAIR_WARN_THRESHOLD:
         log.warning(
             "candidate_pair_ids_in_window: %d candidate pairs (warn threshold %d)%s "
             "— same-window listing density is high, dedup pass will take longer",
             len(pairs),
             DEDUP_CANDIDATE_PAIR_WARN_THRESHOLD,
-            " (TRUNCATED at cap — remaining pairs deterministically picked up "
-            "next pass as head clusters collapse)"
+            " (TRUNCATED at cap — oldest pairs dropped; newest-first ordering "
+            "keeps fresh events in every pass)"
             if len(pairs) >= DEDUP_CANDIDATE_PAIR_MAX
             else "",
         )

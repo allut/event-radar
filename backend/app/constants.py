@@ -670,9 +670,10 @@ DEDUP_UNFILTERED_FALLBACK_MAX_EVENTS = 500
 DEDUP_CANDIDATE_PAIR_WARN_THRESHOLD = 20000
 # Hard cap for the same query — worst case (many events sharing one starts_at)
 # is quadratic in same-window listing density with no LIMIT, materializing
-# every pair into Python. Deterministic ORDER BY means a truncated tail is
-# picked up on the next pass as the head clusters collapse. Kept above the
-# warn threshold so a warning always fires before truncation would.
+# every pair into Python. The query orders newest-first (a.id DESC), so a
+# truncated tail is the oldest pairs — earlier passes already saw them — and
+# freshly ingested events are never starved. Kept above the warn threshold so
+# a warning always fires before truncation would.
 DEDUP_CANDIDATE_PAIR_MAX = 50_000
 
 # Resend email delivery
