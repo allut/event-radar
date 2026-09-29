@@ -1,7 +1,6 @@
 """Tests for POST /feedback, DELETE /feedback/{event_id}, GET /feedback/events."""
 import http
 from datetime import datetime, timezone
-from unittest.mock import MagicMock
 
 import pytest
 
@@ -24,8 +23,8 @@ class TestRecordFeedback:
             db=mock_db,
         )
         assert result == {"ok": True}
-        # One execute() for the upsert, one for score invalidation.
-        assert mock_db.execute.call_count == 2
+        # Exactly one execute(): the upsert — no score-cache invalidation.
+        assert mock_db.execute.call_count == 1
         mock_db.commit.assert_called_once()
 
     @pytest.mark.asyncio
@@ -68,8 +67,7 @@ class TestRecordFeedback:
         mock_db.add.assert_called_once()
         added_row = mock_db.add.call_args.args[0]
         assert added_row.signal == "click_external"
-        # click_external isn't in SCORE_AFFECTING_SIGNALS (like/dislike only) —
-        # no score-cache invalidation, so execute() is never called at all.
+        # Appended via add(), so execute() is never called at all.
         assert mock_db.execute.call_count == 0
 
     @pytest.mark.asyncio
@@ -87,8 +85,7 @@ class TestRecordFeedback:
             db=mock_db,
         )
         mock_db.add.assert_called_once()
-        # view isn't in SCORE_AFFECTING_SIGNALS (like/dislike only) — no
-        # score-cache invalidation, so execute() is never called at all.
+        # Appended via add(), so execute() is never called at all.
         assert mock_db.execute.call_count == 0
 
     @pytest.mark.asyncio
@@ -141,60 +138,11 @@ class TestRecordFeedback:
             )
         assert exc_info.value.status_code == http.HTTPStatus.NOT_FOUND
 
-    @pytest.mark.asyncio
-    async def test_score_cache_invalidated(self, mock_db, make_user, make_event, make_request):
-        """Ensure a second execute() call issues the DELETE against user_event_scores."""
-        from app.routers.feedback import record_feedback, FeedbackBody
-
-        mock_db.scalar.return_value = make_event(5)
-        user = make_user(user_id=3)
-
-        await record_feedback(
-            body=FeedbackBody(event_id=5, signal="dislike"),
-            request=make_request(method="POST", path="/feedback"),
-            current_user=user,
-            db=mock_db,
-        )
-        invalidate_stmt = mock_db.execute.call_args_list[1].args[0]
-        compiled = str(invalidate_stmt.compile(compile_kwargs={"literal_binds": True}))
-        assert "DELETE FROM user_event_scores" in compiled
-
 
 class TestDeleteFeedback:
     @pytest.mark.asyncio
     async def test_delete_removes_signal(self, mock_db, make_user, make_request):
-        """A deleted like/dislike (a SCORE_AFFECTING_SIGNALS member) triggers
-        score-cache invalidation — the DELETE's RETURNING reports which
-        signal(s) were actually removed."""
         from app.routers.feedback import delete_feedback
-
-        user = make_user(user_id=3)
-        returning_result = MagicMock()
-        returning_result.scalars.return_value.all.return_value = ["like"]
-        mock_db.execute.return_value = returning_result
-
-        result = await delete_feedback(
-            event_id=10,
-            request=make_request(method="DELETE", path="/feedback/10"),
-            current_user=user,
-            db=mock_db,
-        )
-        assert result == {"ok": True}
-        # One execute() for the DELETE, one for score invalidation.
-        assert mock_db.execute.call_count == 2
-        mock_db.commit.assert_called_once()
-
-    @pytest.mark.asyncio
-    async def test_delete_bookmark_only_skips_invalidation(
-        self, mock_db, make_user, make_request
-    ):
-        """Deleting a bookmark (not in SCORE_AFFECTING_SIGNALS) must not wipe the
-        score cache — bookmark is never read by the scorer."""
-        from app.routers.feedback import delete_feedback
-
-        returning_result = MagicMock()
-        returning_result.scalars.return_value.all.return_value = ["bookmark"]
-        mock_db.execute.return_value = returning_result
 
         result = await delete_feedback(
             event_id=10,
@@ -203,8 +151,9 @@ class TestDeleteFeedback:
             db=mock_db,
         )
         assert result == {"ok": True}
-        # Only the DELETE — no second execute() for invalidation.
+        # One execute() for the DELETE — nothing else to invalidate.
         assert mock_db.execute.call_count == 1
+        mock_db.commit.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_delete_is_idempotent_no_404(self, mock_db, make_user, make_request):

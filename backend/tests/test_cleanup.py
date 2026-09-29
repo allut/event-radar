@@ -13,7 +13,6 @@ from app.constants import (
     RAW_EVENTS_RETENTION_DAYS,
     RAW_INBOUND_EMAILS_RETENTION_DAYS,
     UNVERIFIED_ACCOUNT_RETENTION_DAYS,
-    USER_EVENT_SCORES_RETENTION_DAYS,
 )
 
 _TABLE_KEYS = [
@@ -24,7 +23,6 @@ _TABLE_KEYS = [
     "ingestion_runs",
     "raw_inbound_emails",
     "daily_feeds",
-    "user_event_scores",
     "users_unverified",
     "organizers_unverified",
 ]
@@ -51,7 +49,7 @@ def _count_results(counts: list[int]) -> list[MagicMock]:
 
 @pytest.mark.asyncio
 async def test_cleanup_deletes_and_returns_rowcounts(mock_db):
-    mock_db.execute.side_effect = _delete_results([3, 9, 10, 20, 5, 1, 7, 15, 2, 1])
+    mock_db.execute.side_effect = _delete_results([3, 9, 10, 20, 5, 1, 7, 2, 1])
 
     summary = await cleanup_stale_data(mock_db)
 
@@ -63,7 +61,6 @@ async def test_cleanup_deletes_and_returns_rowcounts(mock_db):
         "ingestion_runs": 5,
         "raw_inbound_emails": 1,
         "daily_feeds": 7,
-        "user_event_scores": 15,
         "users_unverified": 2,
         "organizers_unverified": 1,
     }
@@ -84,7 +81,7 @@ async def test_cleanup_statements_are_deletes_when_not_dry_run(mock_db):
 
 @pytest.mark.asyncio
 async def test_cleanup_dry_run_counts_without_deleting(mock_db):
-    mock_db.execute.side_effect = _count_results([1, 9, 2, 3, 4, 5, 6, 7, 8, 9])
+    mock_db.execute.side_effect = _count_results([1, 9, 2, 3, 4, 5, 6, 8, 9])
 
     summary = await cleanup_stale_data(mock_db, dry_run=True)
 
@@ -96,7 +93,6 @@ async def test_cleanup_dry_run_counts_without_deleting(mock_db):
         "ingestion_runs": 4,
         "raw_inbound_emails": 5,
         "daily_feeds": 6,
-        "user_event_scores": 7,
         "users_unverified": 8,
         "organizers_unverified": 9,
     }
@@ -117,20 +113,6 @@ async def test_cleanup_never_touches_events_table(mock_db):
         stmt = call[0][0]
         compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
         assert "DELETE FROM events" not in compiled
-
-
-@pytest.mark.asyncio
-async def test_cleanup_user_event_scores_keyed_on_ended_events(mock_db):
-    mock_db.execute.side_effect = _delete_results([0] * _N)
-
-    await cleanup_stale_data(mock_db)
-
-    scores_stmt = mock_db.execute.call_args_list[7][0][0]
-    compiled = str(scores_stmt.compile(compile_kwargs={"literal_binds": True}))
-    assert "user_event_scores" in compiled
-    assert "event_id" in compiled
-    assert "events" in compiled
-    assert "ends_at" in compiled or "starts_at" in compiled
 
 
 @pytest.mark.asyncio
@@ -162,7 +144,7 @@ async def test_cleanup_uses_configured_retention_windows(mock_db):
     # guard against accidentally reusing one constant for every table).
     assert MAGIC_LINK_RETENTION_DAYS != LLM_CALLS_RETENTION_DAYS
     assert RAW_EVENTS_RETENTION_DAYS == INGESTION_RUNS_RETENTION_DAYS == RAW_INBOUND_EMAILS_RETENTION_DAYS
-    assert DAILY_FEEDS_RETENTION_DAYS == USER_EVENT_SCORES_RETENTION_DAYS
+    assert DAILY_FEEDS_RETENTION_DAYS > 0
     assert all(compiled_all)  # every statement compiled without error
 
 
@@ -174,7 +156,7 @@ async def test_cleanup_users_unverified_statement_targets_correct_table_and_filt
 
     await cleanup_stale_data(mock_db)
 
-    users_stmt = mock_db.execute.call_args_list[8][0][0]
+    users_stmt = mock_db.execute.call_args_list[7][0][0]
     compiled = str(users_stmt.compile(compile_kwargs={"literal_binds": True}))
     assert compiled.strip().startswith("DELETE FROM users")
     assert "email_verified" in compiled
@@ -192,7 +174,7 @@ async def test_cleanup_organizers_unverified_statement_targets_correct_table_and
 
     await cleanup_stale_data(mock_db)
 
-    organizers_stmt = mock_db.execute.call_args_list[9][0][0]
+    organizers_stmt = mock_db.execute.call_args_list[8][0][0]
     compiled = str(organizers_stmt.compile(compile_kwargs={"literal_binds": True}))
     assert compiled.strip().startswith("DELETE FROM organizers")
     assert "organizer_magic_links" in compiled
@@ -206,7 +188,7 @@ async def test_cleanup_unverified_account_retention_constant_is_wired(mock_db):
 
     await cleanup_stale_data(mock_db)
 
-    users_stmt = mock_db.execute.call_args_list[8][0][0]
+    users_stmt = mock_db.execute.call_args_list[7][0][0]
     compiled = str(users_stmt.compile(compile_kwargs={"literal_binds": True}))
     assert UNVERIFIED_ACCOUNT_RETENTION_DAYS > 0
     # cutoff appears as a literal timestamp bound (regression guard against the

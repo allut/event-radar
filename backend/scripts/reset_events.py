@@ -24,7 +24,6 @@ WIPE_TABLES = (
     "event_sources",
     "event_classifications",
     "user_event_feedback",
-    "user_event_scores",
     "daily_feeds",
     "ingestion_runs",
     "llm_calls",

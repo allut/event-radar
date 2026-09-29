@@ -710,7 +710,7 @@ FEED_BUILD_MINUTE = 0
 EXPIRE_STALE_CLAIMS_HOUR = 5
 EXPIRE_STALE_CLAIMS_MINUTE = 0
 # Users per page in build_daily_feeds (score.py) — bounds the per-page
-# personas_by_user/fb_by_user/score_cache dicts and the event_rows x users
+# personas_by_user/fb_by_user dicts and the event_rows x users
 # scoring loop in RAM regardless of total registered-user count.
 FEED_BUILD_USER_BATCH_SIZE = 500
 
@@ -830,8 +830,7 @@ ADMIN_AUTH_LOCKOUT_SECONDS = 300
 # _score_cache — an unbounded dict keyed by client_key() would grow forever
 # under sustained scanning/brute-force traffic.
 ADMIN_AUTH_FAILURES_MAX_ENTRIES = 4096
-# Authenticated feedback writes — generous cap; prevents cache-rebuild DoS
-# (every signal wipes all user_event_scores rows for that user).
+# Authenticated feedback writes — generous cap on a per-signal DB write.
 RATE_LIMIT_FEEDBACK = "60/minute"
 # POST /reports — content-moderation write, tighter than RATE_LIMIT_FEEDBACK
 # since it creates a row an admin must triage (see LOG_EVENT_REPORT_SUBMITTED).
@@ -1333,16 +1332,6 @@ SIGNAL_BOOKMARK = "bookmark"
 PREFERENCE_SIGNALS: frozenset[str] = frozenset(
     {SIGNAL_LIKE, SIGNAL_DISLIKE, SIGNAL_BOOKMARK}
 )
-# Signals that actually feed ranking/score.py's like/dislike-based scoring
-# (both ranking/score.py::_load_feedback_context-equivalent loads and
-# browse.py::_load_feedback_context filter on signal IN (like, dislike)).
-# bookmark is never read by the scorer and click_external/view are passive
-# analytics — invalidating the score cache on those wastes the entire cache
-# (every ticket click or bookmark otherwise wiped a user's cached scores,
-# forcing build_daily_feeds to recompute from scratch). Only these two signals
-# should trigger invalidate_user_scores; see feedback.py::record_feedback/
-# delete_feedback.
-SCORE_AFFECTING_SIGNALS: frozenset[str] = frozenset({SIGNAL_LIKE, SIGNAL_DISLIKE})
 # Guard: if shared/app-config.json signals ever diverge from these sentinels, fail fast.
 assert SIGNAL_LIKE in VALID_SIGNALS, f"{SIGNAL_LIKE!r} missing from VALID_SIGNALS in shared/app-config.json"
 assert SIGNAL_DISLIKE in VALID_SIGNALS, f"{SIGNAL_DISLIKE!r} missing from VALID_SIGNALS in shared/app-config.json"
@@ -1985,7 +1974,6 @@ HTML_SELF_CLOSING_BR_RE = r"<br\s*/>"
 # a description that carries neither form of Cloudflare's email obfuscation
 # (most descriptions have none).
 HTML_CF_EMAIL_MARKERS = ("__cf_email__", "email-protection")
-USER_EVENT_SCORES_RETENTION_DAYS = 30  # keyed on the underlying event's end date
 
 # APScheduler job ids (app/main.py::_register_scheduled_jobs) — also reasoned
 # about in docs/backend-ops.md and /admin/pipeline/run, so a typo in one of

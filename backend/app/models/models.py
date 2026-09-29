@@ -89,7 +89,6 @@ class User(Base):
     magic_links: Mapped[list["AuthMagicLink"]] = relationship(back_populates="user")
     user_personas: Mapped[list["UserPersona"]] = relationship(back_populates="user")
     feedback: Mapped[list["UserEventFeedback"]] = relationship(back_populates="user")
-    event_scores: Mapped[list["UserEventScore"]] = relationship(back_populates="user")
     daily_feeds: Mapped[list["DailyFeed"]] = relationship(back_populates="user")
 
 
@@ -814,7 +813,6 @@ class Event(Base):
         back_populates="event", uselist=False
     )
     feedback: Mapped[list["UserEventFeedback"]] = relationship(back_populates="event")
-    scores: Mapped[list["UserEventScore"]] = relationship(back_populates="event")
     reports: Mapped[list["EventReport"]] = relationship(back_populates="event")
     venue: Mapped["Venue | None"] = relationship()
 
@@ -998,33 +996,6 @@ class UserEventFeedback(Base):
 
     user: Mapped["User"] = relationship(back_populates="feedback")
     event: Mapped["Event"] = relationship(back_populates="feedback")
-
-
-class UserEventScore(Base):
-    __tablename__ = "user_event_scores"
-    __table_args__ = (
-        UniqueConstraint("user_id", "event_id"),
-        # cleanup.py's UserEventScore.event_id.in_(ended_event_ids) leads with
-        # event_id — the UniqueConstraint above only backs (user_id, event_id),
-        # leading with user_id, so this table (the largest by row count) was
-        # seq-scanned by that weekly cleanup query without this.
-        Index("ix_user_event_scores_event_id", "event_id"),
-    )
-
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
-    user_id: Mapped[int] = mapped_column(
-        ForeignKey("users.id", ondelete="CASCADE"), nullable=False
-    )
-    event_id: Mapped[int] = mapped_column(
-        ForeignKey("events.id", ondelete="CASCADE"), nullable=False
-    )
-    score: Mapped[float] = mapped_column(Float, nullable=False)
-    computed_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, server_default=func.now()
-    )
-
-    user: Mapped["User"] = relationship(back_populates="event_scores")
-    event: Mapped["Event"] = relationship(back_populates="scores")
 
 
 class DailyFeed(Base):

@@ -13,7 +13,7 @@ import httpx
 from fastapi import HTTPException, Response, status
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, EmailStr
-from sqlalchemy import ColumnElement, Select, delete, select, update
+from sqlalchemy import ColumnElement, Select, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import InstrumentedAttribute, selectinload
 
@@ -80,7 +80,6 @@ from app.models.models import (
     Persona,
     User,
     UserEventFeedback,
-    UserEventScore,
     UserIdentity,
     UserPersona,
     Venue,
@@ -377,17 +376,6 @@ def log_admin_action(
     if db is not None:
         db.add(AdminAction(action=action, target=str(target), result=result))
     return _emit
-
-
-async def invalidate_user_scores(db: AsyncSession, user_id: int) -> None:
-    """Delete ALL cached ranking scores for a user.
-
-    A change to the user's personas or feedback shifts the affinity /
-    indirect-feedback terms across every co-categorical event, so per-row
-    invalidation would leave neighbours stale. Callers must invalidate before
-    rebuilding the feed.
-    """
-    await db.execute(delete(UserEventScore).where(UserEventScore.user_id == user_id))
 
 
 def mask_db_url(url: str) -> str:

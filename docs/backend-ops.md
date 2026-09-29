@@ -67,7 +67,6 @@ Manual pipeline triggers: `POST /admin/dedup`, `POST /admin/classify`, `POST /ad
 | `ingestion_runs` | `INGESTION_RUNS_RETENTION_DAYS` (90) | |
 | `raw_inbound_emails` | `RAW_INBOUND_EMAILS_RETENTION_DAYS` (90) | |
 | `daily_feeds` | `DAILY_FEEDS_RETENTION_DAYS` (30) | |
-| `user_event_scores` | `USER_EVENT_SCORES_RETENTION_DAYS` (30) | keyed on the underlying event's end date via `event_not_ended_filter` (inverted, evaluated at the retention cutoff), not the score's own `computed_at` |
 | `users` (unverified only) | `UNVERIFIED_ACCOUNT_RETENTION_DAYS` (30) | only `email_verified = false` rows with no unused, unexpired magic link — a row `_get_or_create_user` inserts on an unauthenticated `POST /auth/request-link` before the address is proven reachable (see `docs/security.md`'s email verification gate for the full rationale) |
 | `organizers` (unverified only) | `UNVERIFIED_ACCOUNT_RETENTION_DAYS` (30) | only rows with no consumed magic link, no unused-unexpired magic link, and no submitted event — mirrors the `users` sweep for the organizer auth track, which has no `email_verified` column of its own |
 
@@ -88,7 +87,7 @@ Manual pipeline triggers: `POST /admin/dedup`, `POST /admin/classify`, `POST /ad
 
 `backend/scripts/` holds one-off operational scripts run manually from `backend/` with the venv active (they add `backend/` to `sys.path`, so `from app.*` resolves regardless of CWD). **Naming convention:** an `_`-prefixed filename means a throwaway, machine-local one-off — `.gitignore` excludes `backend/scripts/_*`, so those are never committed. Give a script a plain name only when it is meant to live in version control; otherwise prefix it with `_` (a truly local working copy may exist there without appearing in this list).
 
-- **`reset_events.py`** — wipes all event/pipeline data and resets IDs to 1. `TRUNCATE ... RESTART IDENTITY CASCADE` over `events`, `raw_events`, `event_sources`, `event_classifications`, `user_event_feedback`, `user_event_scores`, `daily_feeds`, `ingestion_runs`, `llm_calls`, `raw_inbound_emails`, then sets `sources.last_run_at`/`last_status` back to `NULL` so ingestion re-fetches from scratch. **`users`, `personas`, and `sources` rows are preserved** (only the sources' run state is cleared). Dry run by default (prints the masked `DATABASE_URL` + per-table BEFORE counts); pass `--yes` to truncate. Verifies all targets are zero AFTER and warns on any nonzero. The truncate cannot be undone — intended for resetting a dev/staging DB or clearing bad ingested data, not routine use.
+- **`reset_events.py`** — wipes all event/pipeline data and resets IDs to 1. `TRUNCATE ... RESTART IDENTITY CASCADE` over `events`, `raw_events`, `event_sources`, `event_classifications`, `user_event_feedback`, `daily_feeds`, `ingestion_runs`, `llm_calls`, `raw_inbound_emails`, then sets `sources.last_run_at`/`last_status` back to `NULL` so ingestion re-fetches from scratch. **`users`, `personas`, and `sources` rows are preserved** (only the sources' run state is cleared). Dry run by default (prints the masked `DATABASE_URL` + per-table BEFORE counts); pass `--yes` to truncate. Verifies all targets are zero AFTER and warns on any nonzero. The truncate cannot be undone — intended for resetting a dev/staging DB or clearing bad ingested data, not routine use.
 
 ```bash
 cd backend                              # venv active

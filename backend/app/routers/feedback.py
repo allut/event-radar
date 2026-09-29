@@ -30,7 +30,6 @@ from app.constants import (
     PREFERENCE_SIGNALS,
     PREFERENCE_SIGNALS_SQL_PREDICATE,
     RATE_LIMIT_FEEDBACK,
-    SCORE_AFFECTING_SIGNALS,
     VALID_SIGNALS,
 )
 from app.db import get_db
@@ -40,7 +39,6 @@ from app.auth.dependencies import get_current_user
 from app.routers.utils import (
     decode_page_cursor,
     encode_page_cursor,
-    invalidate_user_scores,
     load_user_reported_events,
     resolve_locale_param,
     select_events_with_classification,
@@ -114,12 +112,6 @@ async def record_feedback(
             )
         )
 
-    # Only like/dislike feed into ranking/score.py's scoring — a bookmark or a
-    # passive view/click_external signal never changes a score, so gating here
-    # keeps the cache warm across ticket clicks and bookmarks (see
-    # SCORE_AFFECTING_SIGNALS).
-    if body.signal in SCORE_AFFECTING_SIGNALS:
-        await invalidate_user_scores(db, current_user.id)
     await db.commit()
     return {"ok": True}
 
@@ -136,23 +128,15 @@ async def delete_feedback(
 
     Scoped to PREFERENCE_SIGNALS only — this must never delete the
     view/click_external analytics history for the event. Idempotent — no 404
-    if nothing matched. Invalidates cached scores only if the removed signal
-    was one that actually affects scoring (see SCORE_AFFECTING_SIGNALS) — the
-    deleted row's signal isn't known up front, so RETURNING reports it.
+    if nothing matched.
     """
-    deleted_signals = (
-        await db.execute(
-            delete(UserEventFeedback)
-            .where(
-                UserEventFeedback.user_id == current_user.id,
-                UserEventFeedback.event_id == event_id,
-                UserEventFeedback.signal.in_(PREFERENCE_SIGNALS),
-            )
-            .returning(UserEventFeedback.signal)
+    await db.execute(
+        delete(UserEventFeedback).where(
+            UserEventFeedback.user_id == current_user.id,
+            UserEventFeedback.event_id == event_id,
+            UserEventFeedback.signal.in_(PREFERENCE_SIGNALS),
         )
-    ).scalars().all()
-    if SCORE_AFFECTING_SIGNALS.intersection(deleted_signals):
-        await invalidate_user_scores(db, current_user.id)
+    )
     await db.commit()
     return {"ok": True}
 

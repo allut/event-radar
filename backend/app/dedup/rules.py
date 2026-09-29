@@ -742,7 +742,7 @@ async def load_description_lengths(
     Chunked at SCORE_INSERT_CHUNK_SIZE — the dedup window has no row-count
     LIMIT, and SQLAlchemy expands ``IN`` to one bind param per id, which would
     hit Postgres's per-statement parameter limit past ~32k events (Big-O
-    audit #5, item 1.1; same rationale as score.py's chunked score_cache load).
+    audit #5, item 1.1; same rationale as score.py's chunked shown-events load).
     """
     if not event_ids:
         return {}
