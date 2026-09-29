@@ -198,6 +198,18 @@ class TestTimeSlotsForEvent:
 
 
 class TestPersonaAffinity:
+    def test_cache_yields_identical_scores_and_is_reused(self):
+        # Big-O audit H4: the build-scoped memo must not change any score.
+        v1 = {"categories": {"music": 1.0, "theater": 0.5}, "vibes": {"chill": 0.5}}
+        v2 = {"categories": {"sports": 1.0}, "times": {"evening": 1.0}}
+        weights = [(0.7, v1), (0.3, v2)]
+        cache: dict = {}
+        for _ in range(2):
+            assert persona_affinity(
+                weights, ["music"], ["chill"], ["evening"], cache=cache
+            ) == persona_affinity(weights, ["music"], ["chill"], ["evening"])
+        assert len(cache) == 2  # one entry per (vector, tag-set), reused on repeat
+
     def test_no_personas_returns_half(self):
         assert persona_affinity([], ["music"], ["underground"]) == 0.5
 
@@ -961,11 +973,6 @@ class TestBuildDailyFeedsSeriesCooldown:
         df.user_id = 1
         df.event_ids = [150]
 
-        cached_row = MagicMock()
-        cached_row.user_id = 1
-        cached_row.event_id = 5
-        cached_row.score = 0.9
-
         mock_db.scalars.side_effect = [
             _scalar_result([1]),                     # user ids (all registered)
             _scalar_result([ev1, ev2, ev3, ev5]),   # candidate events
@@ -974,8 +981,12 @@ class TestBuildDailyFeedsSeriesCooldown:
             _scalar_result([_dislike_row(5)]),         # feedback: direct dislike of ev5
             _scalar_result([df]),                     # cooldown-window feeds
             _scalar_result([ev150]),                   # shown events resolved
-            _scalar_result([cached_row]),              # cached scores (ev5 cached)
         ]
+        # Cached scores load as column tuples via db.execute (Big-O audit M1);
+        # every later execute is the score/feed upserts.
+        cached_scores = MagicMock()
+        cached_scores.all.return_value = [(1, 5, 0.9)]  # ev5 cached
+        mock_db.execute.side_effect = [cached_scores] + [MagicMock()] * 10
 
         await build_daily_feeds(mock_db)
 
@@ -1006,13 +1017,12 @@ class TestBuildDailyFeedsSeriesCooldown:
             _scalar_result([]),
             _scalar_result([df]),
             _scalar_result([ev150]),
-            _scalar_result([]),
         ]
 
         await build_daily_feeds(mock_db)
 
-        # The score upsert executes before the daily-feed upsert — first call.
-        execute_stmt = mock_db.execute.call_args_list[0].args[0]
+        # Execute order: cached-score SELECT, score upsert, daily-feed upsert.
+        execute_stmt = mock_db.execute.call_args_list[1].args[0]
         compiled = str(execute_stmt.compile(compile_kwargs={"literal_binds": True}))
         assert "user_event_scores" in compiled
         assert "(1, 5," in compiled  # backfilled cooled event (user_id=1, event_id=5) was upserted
@@ -1171,9 +1181,9 @@ class TestBuildDailyFeedsBatching:
         ev2 = _feed_event(2, "Play", "Theater", ["theater"])
 
         # 5 registered users, batch size 2 → pages of [1,2], [3,4], [5].
-        # Each page: users, personas, feedback, cooldown-window feeds, cached
-        # scores (5 scalars calls/page, no shown-events query — cooldown
-        # windows are empty). all-user-ids + candidate-events precede all pages.
+        # Each page: users, personas, feedback, cooldown-window feeds (4 scalars
+        # calls/page — the cached-score load is a db.execute — and no
+        # shown-events query, since cooldown windows are empty). all-user-ids + candidate-events precede all pages.
         mock_db.scalars.side_effect = [
             _scalar_result([1, 2, 3, 4, 5]),  # user ids (all registered)
             _scalar_result([ev1, ev2]),  # candidate events (loaded once)
@@ -1181,14 +1191,11 @@ class TestBuildDailyFeedsBatching:
             _scalar_result([]),
             _scalar_result([]),
             _scalar_result([]),
-            _scalar_result([]),
             _scalar_result([_user(3), _user(4)]),
             _scalar_result([]),
             _scalar_result([]),
             _scalar_result([]),
-            _scalar_result([]),
             _scalar_result([_user(5)]),
-            _scalar_result([]),
             _scalar_result([]),
             _scalar_result([]),
             _scalar_result([]),

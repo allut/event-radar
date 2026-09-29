@@ -17,12 +17,13 @@ from datetime import date, datetime, timedelta
 from functools import cached_property
 from heapq import nlargest
 
-from sqlalchemy import select, true
+from sqlalchemy import or_, select, true
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import load_only, selectinload
 
 from app.constants import (
+    FEEDBACK_HISTORY_LOOKBACK_DAYS,
     DAILY5_SERIES_COOLDOWN_DAYS,
     DAILY_5_BACKFILL_MAX_PER_CATEGORY,
     DAILY_5_BACKFILL_TRUNCATION_MULTIPLIER,
@@ -300,22 +301,46 @@ def _affinity_for_vector(
     return (normalized + 1.0) / 2.0
 
 
+# (id(persona vector), categories, vibes, time_slots) -> _affinity_for_vector().
+# A vector's affinity depends only on the vector and the event's tags, and the
+# daily-feed build scores every user against every event with only a handful of
+# distinct persona vectors — so one build-scoped dict collapses the
+# U x E x P x |vec| work to (distinct vectors x distinct tag-sets) (Big-O
+# audit H4). Keyed on id(): the vectors are held alive by the build context.
+AffinityCache = dict[tuple[int, tuple[str, ...], tuple[str, ...], tuple[str, ...]], float]
+
+
 def persona_affinity(
     user_persona_weights: list[tuple[float, dict]],
     categories: list[str],
     vibes: list[str],
     time_slots: Sequence[str] = (),
+    cache: AffinityCache | None = None,
 ) -> float:
-    """Weighted blend of persona affinities → [0, 1]. Returns NEUTRAL_SCORE with no personas."""
+    """Weighted blend of persona affinities → [0, 1]. Returns NEUTRAL_SCORE with no personas.
+
+    ``cache`` is an optional build-scoped memo of per-vector affinities (see
+    ``AffinityCache``); omit it for one-off calls."""
     if not user_persona_weights:
         return NEUTRAL_SCORE
     total_weight = sum(w for w, _ in user_persona_weights)
     if total_weight == 0:
         return NEUTRAL_SCORE
-    weighted = sum(
-        w * _affinity_for_vector(vec, categories, vibes, time_slots)
-        for w, vec in user_persona_weights
-    )
+    if cache is None:
+        weighted = sum(
+            w * _affinity_for_vector(vec, categories, vibes, time_slots)
+            for w, vec in user_persona_weights
+        )
+        return weighted / total_weight
+    tags = (tuple(categories), tuple(vibes), tuple(time_slots))
+    weighted = 0.0
+    for w, vec in user_persona_weights:
+        key = (id(vec), *tags)
+        affinity = cache.get(key)
+        if affinity is None:
+            affinity = _affinity_for_vector(vec, categories, vibes, time_slots)
+            cache[key] = affinity
+        weighted += w * affinity
     return weighted / total_weight
 
 
@@ -448,6 +473,7 @@ def score_event(
     event: Event,
     now: datetime,
     precomputed: _EventFactors | None = None,
+    affinity_cache: AffinityCache | None = None,
 ) -> float | None:
     """
     Compute personalized score for one event. Returns None if hard-excluded.
@@ -477,7 +503,9 @@ def score_event(
         )
         lat, lng = resolve_venue_coords(event)
         locality = locality_bonus(lat, lng)
-    affinity = persona_affinity(user_persona_weights, categories, vibes, time_slots)
+    affinity = persona_affinity(
+        user_persona_weights, categories, vibes, time_slots, cache=affinity_cache
+    )
     fb_normalized = (fb + 1.0) / 2.0  # map [-1, 1] → [0, 1]
 
     return (
@@ -670,6 +698,9 @@ class _FeedBuildContext:
     fb_by_user: dict[int, list[UserEventFeedback]]
     recent_series_by_user: dict[int, set[tuple[str, str]]]
     score_cache: dict[tuple[int, int], float]
+    # Shared across the users of this page (one context per page) — see
+    # AffinityCache; must not outlive the context that holds the vectors.
+    affinity_cache: AffinityCache = field(default_factory=dict)
 
     @property
     def event_rows(self) -> list[Event]:
@@ -840,6 +871,16 @@ async def _load_feed_build_context(
             .where(
                 UserEventFeedback.user_id.in_(user_ids),
                 UserEventFeedback.signal.in_((SIGNAL_LIKE, SIGNAL_DISLIKE)),
+                # Likes older than the lookback are numerically negligible
+                # (0.9^days decay) — same bound as browse.py's
+                # _load_feedback_context. Dislikes are kept regardless: a
+                # dislike is a hard exclude, not a decayed weight (Big-O
+                # audit M2).
+                or_(
+                    UserEventFeedback.created_at
+                    >= now - timedelta(days=FEEDBACK_HISTORY_LOOKBACK_DAYS),
+                    UserEventFeedback.signal == SIGNAL_DISLIKE,
+                ),
             )
             .options(
                 selectinload(UserEventFeedback.event).selectinload(
@@ -864,16 +905,23 @@ async def _load_feed_build_context(
     event_ids = list(candidate_event_ids)
     for i in range(0, len(event_ids), SCORE_INSERT_CHUNK_SIZE):
         chunk = event_ids[i : i + SCORE_INSERT_CHUNK_SIZE]
+        # Column tuples, not ORM rows: this is U x chunk rows per page, and
+        # hydrating a UserEventScore object per row cost ~1M objects/page
+        # (Big-O audit M1).
         ues_rows = (
-            await db.scalars(
-                select(UserEventScore).where(
+            await db.execute(
+                select(
+                    UserEventScore.user_id,
+                    UserEventScore.event_id,
+                    UserEventScore.score,
+                ).where(
                     UserEventScore.user_id.in_(user_ids),
                     UserEventScore.event_id.in_(chunk),
                 )
             )
         ).all()
-        for ues_row in ues_rows:
-            score_cache[(ues_row.user_id, ues_row.event_id)] = ues_row.score
+        for ues_user_id, ues_event_id, ues_score in ues_rows:
+            score_cache[(ues_user_id, ues_event_id)] = ues_score
 
     return _FeedBuildContext(
         shared=shared,
@@ -922,6 +970,7 @@ def _score_user_candidates(
             event,
             now,
             precomputed=build_ctx.event_factors.get(event.id),
+            affinity_cache=build_ctx.affinity_cache,
         )
         if s is None:
             return None
