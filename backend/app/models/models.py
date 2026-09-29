@@ -6,6 +6,7 @@ from sqlalchemy import (
     Boolean,
     Date,
     DateTime,
+    FetchedValue,
     Float,
     ForeignKey,
     Index,
@@ -615,6 +616,8 @@ class Event(Base):
         # Created by migration 0002 but was missing here — a create_all-built
         # schema (tests) lacked it until this declaration was added back.
         Index("ix_events_status", "status"),
+        # Series-claim lookup by serialized key (M6, migration 0052).
+        Index("ix_events_series_key_starts_at", "series_key", "starts_at"),
         # Explore keyword search (`ILIKE '%q%'`) can't use a B-tree on a
         # leading wildcard; trigram GIN indexes accelerate it. Requires the
         # pg_trgm extension (enabled in migration 0020).
@@ -796,6 +799,14 @@ class Event(Base):
     # glossary and issue #410.
     pinned_fields: Mapped[list] = mapped_column(
         JSONB, nullable=False, server_default=text("'[]'::jsonb"), default=list
+    )
+
+    # serialize_event_series_key(event_series_key(title_orig, resolved venue
+    # name)), maintained by DB triggers (migration 0052) — never written by
+    # the app. NULL only on a row the trigger hasn't touched (create_all test
+    # schemas have no trigger).
+    series_key: Mapped[str | None] = mapped_column(
+        Text, nullable=True, server_default=FetchedValue()
     )
 
     sources: Mapped[list["EventSource"]] = relationship(back_populates="event")

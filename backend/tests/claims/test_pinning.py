@@ -199,30 +199,24 @@ class TestRepresentativeEventForClaim:
         assert result is None
 
     @pytest.mark.asyncio
-    async def test_series_claim_scans_for_matching_key(self, mock_db, make_event):
-        from app.events.queries import event_series_key, serialize_event_series_key
-
+    async def test_series_claim_looks_up_by_indexed_key(self, mock_db, make_event):
         matching = make_event(event_id=1, title="Balti Jaama Turg", venue_name="Kultuurikatel")
-        other = make_event(event_id=2, title="Other Event", venue_name="Elsewhere")
-        key = serialize_event_series_key(
-            event_series_key("Balti Jaama Turg", "Kultuurikatel")
-        )
-        claim = MagicMock(kind=CLAIM_KIND_SERIES, event_series_key=key)
+        matching.series_key = "balti jaama turg\x1fkultuurikatel"
+        claim = MagicMock(kind=CLAIM_KIND_SERIES, event_series_key=matching.series_key)
 
         execute_result = MagicMock()
-        execute_result.scalars.return_value.all.return_value = [matching, other]
+        execute_result.scalars.return_value.all.return_value = [matching]
         mock_db.execute.return_value = execute_result
 
         result = await representative_event_for_claim(mock_db, claim)
         assert result is matching
 
     @pytest.mark.asyncio
-    async def test_series_claim_no_match_returns_none(self, mock_db, make_event):
-        other = make_event(event_id=2, title="Other Event", venue_name="Elsewhere")
+    async def test_series_claim_no_match_returns_none(self, mock_db):
         claim = MagicMock(kind=CLAIM_KIND_SERIES, event_series_key="nope\x1fnope")
 
         execute_result = MagicMock()
-        execute_result.scalars.return_value.all.return_value = [other]
+        execute_result.scalars.return_value.all.return_value = []
         mock_db.execute.return_value = execute_result
 
         result = await representative_event_for_claim(mock_db, claim)
@@ -261,32 +255,24 @@ class TestClearClaimPins:
         mock_db.execute.assert_not_awaited()
 
     @pytest.mark.asyncio
-    async def test_series_claim_clears_only_matching_key_events(self, mock_db, make_event):
-        from app.events.queries import event_series_key, serialize_event_series_key
-
-        matching = make_event(event_id=1, title="Balti Jaama Turg", venue_name="Kultuurikatel")
-        other = make_event(event_id=2, title="Other Event", venue_name="Elsewhere")
-        key = serialize_event_series_key(
-            event_series_key("Balti Jaama Turg", "Kultuurikatel")
-        )
-        claim = MagicMock(kind=CLAIM_KIND_SERIES, event_series_key=key)
-
+    async def test_series_claim_clears_events_matching_indexed_key(self, mock_db):
+        claim = MagicMock(kind=CLAIM_KIND_SERIES, event_series_key="a\x1fb")
         scalars_result = MagicMock()
-        scalars_result.all.return_value = [matching, other]
+        scalars_result.all.return_value = [1, 5]
         mock_db.scalars.return_value = scalars_result
 
         event_ids = await clear_claim_pins(mock_db, claim)
 
-        assert event_ids == [1]
+        assert event_ids == [1, 5]
+        query = str(mock_db.scalars.await_args.args[0])
+        assert "events.series_key =" in query
         mock_db.execute.assert_awaited_once()
 
     @pytest.mark.asyncio
-    async def test_series_claim_no_match_skips_update(self, mock_db, make_event):
-        other = make_event(event_id=2, title="Other Event", venue_name="Elsewhere")
+    async def test_series_claim_no_match_skips_update(self, mock_db):
         claim = MagicMock(kind=CLAIM_KIND_SERIES, event_series_key="nope\x1fnope")
-
         scalars_result = MagicMock()
-        scalars_result.all.return_value = [other]
+        scalars_result.all.return_value = []
         mock_db.scalars.return_value = scalars_result
 
         event_ids = await clear_claim_pins(mock_db, claim)
@@ -470,25 +456,26 @@ class TestBulkResolveSeriesEvents:
         mock_db.execute.assert_not_awaited()
 
     @pytest.mark.asyncio
-    async def test_one_scan_resolves_every_key_earliest_match_wins(
+    async def test_one_indexed_query_resolves_every_key_earliest_match_wins(
         self, mock_db, make_event
     ):
         from app.claims.pinning import bulk_resolve_series_events
-        from app.events.queries import event_series_key, serialize_event_series_key
 
         first_a = make_event(1, title="Market A", venue_name="Hall")
         later_a = make_event(2, title="Market A", venue_name="Hall")
         only_b = make_event(3, title="Market B", venue_name="Hall")
-        other = make_event(4, title="Unclaimed", venue_name="Hall")
-        key_a = serialize_event_series_key(event_series_key("Market A", "Hall"))
-        key_b = serialize_event_series_key(event_series_key("Market B", "Hall"))
-        key_missing = serialize_event_series_key(event_series_key("Ghost", "Hall"))
+        first_a.series_key = later_a.series_key = "a\x1fhall"
+        only_b.series_key = "b\x1fhall"
 
         scalars = MagicMock()
-        scalars.all.return_value = [first_a, later_a, only_b, other]
+        scalars.all.return_value = [first_a, later_a, only_b]
         mock_db.execute.return_value.scalars.return_value = scalars
 
-        result = await bulk_resolve_series_events(mock_db, {key_a, key_b, key_missing})
+        result = await bulk_resolve_series_events(
+            mock_db, {"a\x1fhall", "b\x1fhall", "ghost\x1fhall"}
+        )
 
-        assert result == {key_a: first_a, key_b: only_b}
+        assert result == {"a\x1fhall": first_a, "b\x1fhall": only_b}
         mock_db.execute.assert_awaited_once()
+        query = str(mock_db.execute.await_args.args[0])
+        assert "events.series_key IN" in query

@@ -1052,12 +1052,6 @@ ORGANIZER_CLAIM_EDIT_CAP_CEILING = 100
 # in organizer_claim_edits.py (pin_key() calls) rather than as constants
 # here — see CONTEXT.md's Event Claiming glossary for the pinned/synced
 # rules (price fields and categories never participate).
-#
-# How many not-yet-ended events to scan (newest-starting first) when
-# resolving the representative event for a Series claim — there is no FK
-# from Claim to a specific event row for that kind (unlike a Publisher
-# claim's EventSource.publisher_id lookup), so this bounds the scan.
-CLAIM_EDIT_SERIES_EVENT_SCAN_LIMIT = 2000
 
 # Field length caps for SubmitEventBody/PatchEventBody (routers/organizer_events.py).
 # venue_name and currency mirror the Event column widths (models/models.py) so an

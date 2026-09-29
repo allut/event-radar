@@ -23,6 +23,9 @@ UNTRACKED = {
     "detail_refetched_at",
     "detail_refetch_count",
     "geocode_attempted_at",
+    # Trigger-derived from title_orig/venue columns (migration 0052); only
+    # changes when a tracked column does.
+    "series_key",
 }
 
 

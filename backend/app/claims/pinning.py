@@ -13,7 +13,6 @@ from sqlalchemy import false, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.constants import (
-    CLAIM_EDIT_SERIES_EVENT_SCAN_LIMIT,
     CLAIM_KIND_PUBLISHER,
     CLAIM_KIND_SERIES,
     CLAIM_STATUS_APPROVED,
@@ -32,11 +31,8 @@ from app.routers.utils import (
     publisher_claim_event_ids,
     select_events_with_classification,
 )
-from app.events.venue import resolve_venue_name
 from app.events.queries import (
     event_not_ended_filter,
-    event_series_key,
-    serialize_event_series_key,
 )
 
 from .lifecycle import representative_event_source
@@ -67,9 +63,8 @@ async def representative_event_for_claim(db: AsyncSession, claim: Claim) -> Even
     """The single Event row this claim's edits land on. A Publisher claim
     reuses the same "freshest traced-back listing" lookup recheck_claim
     already relies on. A Series claim has no FK to walk (Claim carries only
-    the normalized title/venue key), so it scans not-yet-ended events
-    newest-starting-first for a computed-key match, bounded by
-    CLAIM_EDIT_SERIES_EVENT_SCAN_LIMIT."""
+    the normalized title/venue key), so it looks up not-yet-ended events by
+    the indexed ``Event.series_key`` column."""
     if claim.kind == CLAIM_KIND_PUBLISHER:
         es = await representative_event_source(db, publisher_id=claim.publisher_id)
         if es is None:
@@ -88,8 +83,8 @@ async def bulk_resolve_series_events(
     db: AsyncSession, series_keys: set[str]
 ) -> dict[str, Event]:
     """Series-claim counterpart of ``bulk_resolve_publisher_events``: one
-    bounded scan (CLAIM_EDIT_SERIES_EVENT_SCAN_LIMIT) of not-yet-ended events
-    newest-starting-first, matched against every key in a single pass instead
+    indexed query (``events.series_key``, trigger-maintained — migration
+    0052) over the not-yet-ended events carrying any requested key, instead
     of one scan per claim. The earliest-starting match wins per key, same as
     the single-claim lookup. Keys with no match are absent from the result."""
     if not series_keys:
@@ -99,9 +94,8 @@ async def bulk_resolve_series_events(
         (
             await db.execute(
                 select_events_with_classification()
-                .where(event_not_ended_filter(now))
+                .where(Event.series_key.in_(series_keys), event_not_ended_filter(now))
                 .order_by(Event.starts_at)
-                .limit(CLAIM_EDIT_SERIES_EVENT_SCAN_LIMIT)
             )
         )
         .scalars()
@@ -109,13 +103,8 @@ async def bulk_resolve_series_events(
     )
     matched: dict[str, Event] = {}
     for event in candidates:
-        key = serialize_event_series_key(
-            event_series_key(event.title_orig, resolve_venue_name(event))
-        )
-        if key in series_keys and key not in matched:
-            matched[key] = event
-            if len(matched) == len(series_keys):
-                break
+        if event.series_key is not None:
+            matched.setdefault(event.series_key, event)
     return matched
 
 
@@ -124,9 +113,9 @@ async def clear_claim_pins(db: AsyncSession, claim: Claim) -> list[int]:
     just the one representative_event_for_claim() picks. Publisher coverage
     reuses publisher_claim_event_ids(); a Series claim has no FK to
     bulk-filter on (Claim carries only a normalized title/venue key), so its
-    candidates are the (in practice tiny) set of events that currently
-    carry any pin at all, matched against claim.event_series_key — same
-    scope representative_event_for_claim() resolves against, so a
+    candidates are the pinned events whose indexed ``Event.series_key``
+    equals claim.event_series_key — same key representative_event_for_claim()
+    resolves against, so a
     Publisher event whose EventSource has since been re-linked to a
     different publisher_id is likewise outside what either function can
     still see (pre-existing limitation, not new here). Either kind ends in
@@ -145,21 +134,16 @@ async def clear_claim_pins(db: AsyncSession, claim: Claim) -> list[int]:
             ).all()
         )
     else:
-        pinned_events = (
-            await db.scalars(
-                select_events_with_classification().where(
-                    func.jsonb_array_length(Event.pinned_fields) > 0
+        event_ids = list(
+            (
+                await db.scalars(
+                    select(Event.id).where(
+                        Event.series_key == claim.event_series_key,
+                        func.jsonb_array_length(Event.pinned_fields) > 0,
+                    )
                 )
-            )
-        ).all()
-        event_ids = [
-            event.id
-            for event in pinned_events
-            if serialize_event_series_key(
-                event_series_key(event.title_orig, resolve_venue_name(event))
-            )
-            == claim.event_series_key
-        ]
+            ).all()
+        )
     if event_ids:
         await db.execute(update(Event).where(Event.id.in_(event_ids)).values(pinned_fields=[]))
     return event_ids
