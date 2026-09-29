@@ -80,7 +80,6 @@
   width: 100%;
   text-align: left;
   padding: var(--space-2) var(--space-3);
-  border-radius: var(--radius-sm);
   border: var(--border-w-hair) solid transparent;
   background: transparent;
   color: var(--text-soft);
@@ -122,11 +121,4 @@
   height: var(--seg-blip-size);
   border-radius: var(--radius-full);
   background: var(--accent-light);
-}
-
-/* .pop (composed menuPop) already squares unconditionally at its
- * shared-base source (#212); .trigger's own square corners now come from
- * the composed fieldInput base — only .option still needs squaring here. */
-.option {
-  border-radius: 0;
 }

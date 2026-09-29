@@ -48,7 +48,7 @@
 
 .posterImg {
   position: absolute;
-  inset: -4%;
+  inset: var(--landing-poster-bleed);
   background:
     radial-gradient(60% 55% at 68% 26%, var(--poster-glow-warm), transparent 62%),
     radial-gradient(70% 60% at 22% 88%, var(--poster-glow-cool), transparent 66%),
@@ -61,7 +61,7 @@
   position: absolute;
   inset: 0;
   background: var(--grain);
-  opacity: 0.34;
+  opacity: var(--opacity-ghost);
   mix-blend-mode: overlay;
 }
 
@@ -152,7 +152,7 @@
   line-height: var(--leading-none);
   letter-spacing: var(--tracking-tighter);
   margin-top: var(--space-0-875);
-  max-width: 22ch;
+  max-width: var(--measure-tight);
   text-wrap: balance;
 }
 
@@ -166,7 +166,7 @@
 
 .cutline {
   margin-top: var(--space-6);
-  height: 1px;
+  height: var(--border-w-hair);
   background: linear-gradient(90deg, var(--accent), var(--accent-transparent) 72%);
 }
 
@@ -227,7 +227,7 @@
   margin: 0;
   font-size: var(--fs-sm);
   color: var(--text-muted);
-  max-width: 36ch;
+  max-width: var(--measure-snug);
 }
 
 /* ── Email capture ───────────────────────────────────────────────────── */
@@ -244,8 +244,8 @@
   display: flex;
   flex-wrap: wrap;
   flex: 1;
-  min-width: 280px;
-  max-width: 520px;
+  min-width: var(--landing-capture-min);
+  max-width: var(--landing-capture-max);
   border-bottom: var(--border-w-hair) solid var(--accent-muted);
 }
 
@@ -266,7 +266,7 @@
 
 .input:focus {
   outline: none;
-  box-shadow: 0 2px 0 var(--accent);
+  box-shadow: 0 var(--rule-w-accent) 0 var(--accent);
 }
 
 .submit {
@@ -486,7 +486,7 @@
 
 .plateBody {
   margin-top: var(--space-4);
-  max-width: 46ch;
+  max-width: var(--measure-prose);
   color: var(--text-soft);
   font-size: var(--fs-md);
   line-height: var(--leading-body);
@@ -494,7 +494,7 @@
 
 .hair {
   margin-top: var(--space-5);
-  height: 1px;
+  height: var(--border-w-hair);
   width: var(--hair-width);
   background: var(--accent-muted);
 }
@@ -527,7 +527,7 @@
 
 .flatHeader {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(260px, 0.7fr);
+  grid-template-columns: minmax(0, 1fr) minmax(var(--landing-aside-min), 0.7fr);
   gap: 0 var(--landing-flat-header-gap);
   align-items: end;
   padding-bottom: var(--space-6);
@@ -546,7 +546,7 @@
   line-height: var(--leading-display-tight);
   letter-spacing: var(--tracking-tighter);
   margin-top: var(--space-2);
-  max-width: 28ch; /* was 16ch — same over-narrow wrap issue as round-2's h1 fix */
+  max-width: var(--measure-compact); /* was 16ch — same over-narrow wrap issue as round-2's h1 fix */
   color: var(--text);
   text-wrap: balance;
 }

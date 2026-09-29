@@ -96,21 +96,22 @@ When adding a token: if it encodes a color that reads differently on a near-whit
 
 ## 7. The shared CSS layer
 
-`frontend/src/components/shared/` holds 18 pure-CSS modules plus one component folder, `GoogleSignInButton/` (`.tsx` + `GoogleGMark.tsx` + test) — the one exception to the CSS-only rule. Consume the CSS modules with CSS Modules `composes:`; **never copy-paste** their rules into a route or component stylesheet. Component CSS composes from `'../shared/X.module.css'`, route CSS from `'../../components/shared/X.module.css'`.
+`frontend/src/components/shared/` holds 19 pure-CSS modules plus one component folder, `GoogleSignInButton/` (`.tsx` + `GoogleGMark.tsx` + test) — the one exception to the CSS-only rule. Consume the CSS modules with CSS Modules `composes:`; **never copy-paste** their rules into a route or component stylesheet. Component CSS composes from `'../shared/X.module.css'`, route CSS from `'../../components/shared/X.module.css'`.
 
 | Module | Holds |
 |---|---|
-| `Page.module.css` | Page shells (`.page`, `.pageCentered`, `.pageMain`, `.pageTitle`, `.proseBody`), the Explore/SavedEvents grid shell (`.gridMain`, `.gridMasthead`, `.gridHeading`, `.cardGrid`), admin route-header chrome (`.adminEyebrow`, `.adminPageTitle`) |
+| `Page.module.css` | Page shells (`.page`, `.pageCentered`, `.pageMain`, `.pageMainNarrow`, `.pageTitle`, `.proseBody`), the Explore/SavedEvents grid shell (`.gridMain`, `.gridMasthead`, `.gridHeading`, `.cardGrid`), admin route-header chrome (`.adminEyebrow`, `.adminPageTitle`) |
 | `Card.module.css` | `.card`, `.cardAccentTop`, `.cardDangerTop`, `.cardPage`, plus the auth shell (`.authCard`, `.authHeader`, `.authRadar`, `.authBrand`) |
 | `Button.module.css` | `.btnPrimary`, `.btnOutline`, `.btnSubmit`, `.textButton`, `.iconAction`, `.successBlock` |
 | `Field.module.css` | `.fieldLabel`, `.fieldInput`, `.fieldWrap` (chrome-only outer box for composite controls) |
-| `Menu.module.css` | Popover/trigger chrome for `FacetMenu`, `SelectMenu`, `MobileMenu`, `DatePicker`, `SelectField` |
+| `Menu.module.css` | Popover/trigger chrome for `FacetMenu`, `SelectMenu`, `DateRangeMenu`, `MobileMenu`, `DatePicker`, `SelectField`, including the equal-width option list (`.menuValue`, `.menuOptionList`, `.menuOptionRow`, `.menuOptionActive`) |
 | `Bar.module.css` | Top-bar chrome shared by `TopBar` and `OrganizerTopBar` |
 | `Animations.module.css` | Keyframes + classes — see §8 |
 | `AdminQueue.module.css` | Admin queue row/detail typography, resolved panel |
-| `Calendar.module.css` | Calendar grid chrome (`.calHead`, `.calNavBtn`, `.calMonthLabel`, `.calWeekdays`, `.calGrid`, `.calDay`) shared by `DatePicker` and `DateRangeMenu` |
+| `Calendar.module.css` | Calendar grid chrome (`.calHead`, `.calNavBtn`, `.calMonthLabel`, `.calWeekdays`, `.calGrid`, `.calDay`, plus the day states `.calSpill`, `.calToday`, `.calSelected`) shared by `DatePicker` and `DateRangeMenu` |
 | `Settings.module.css` | Settings-page shell (`.settingsMain`, section/toggle-row/repick-button chrome) shared by `Settings` and `OrganizerSettings` |
-| `Alert`, `Chip`, `Link`, `Media`, `Spinner`, `StatusCircle`, `Visually`, `DesktopGate` | Inline alert, chip pill, accent link, image backdrop, spinner rings + full-page overlay scrim, status circles, sr-only/offscreen utilities, the admin desktop-only gate |
+| `Prose.module.css` | Typography for sanitized-HTML bodies (`.prose` — paragraph/list/strong/heading/blockquote rules every render surface agrees on), composed by `EventDetail`'s `.description` and `AdminEventDetail`'s `.proseHtml`. `RichTextEditor`'s editing surface keeps its own margin model and does not compose it |
+| `Alert` (`.alert`, `.alertAccent` for non-error callouts), `Chip`, `Link`, `Media`, `Spinner`, `StatusCircle`, `Visually`, `DesktopGate` | Inline alert, chip pill, accent link, image backdrop, spinner rings + full-page overlay scrim, status circles, sr-only/offscreen utilities, the admin desktop-only gate |
 
 Add a new shared pattern here rather than growing a second copy. New variants follow base-class + modifier (`.card` / `.cardAccentTop`) — **never restyle a base class in place** to suit one consumer.
 

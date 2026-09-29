@@ -26,7 +26,7 @@
 }
 
 .divider {
-  width: 1px;
+  width: var(--border-w-hair);
   align-self: stretch;
   background: var(--border-subtle);
   margin: 0 var(--space-0-45);
@@ -36,8 +36,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: var(--rte-btn-size);
+  height: var(--rte-btn-size);
   padding: 0;
   background: none;
   border: var(--border-w-hair) solid transparent;
@@ -47,8 +47,8 @@
 }
 
 .btn svg {
-  width: 16px;
-  height: 16px;
+  width: var(--rte-icon-size);
+  height: var(--rte-icon-size);
 }
 
 .btn:hover:not(:disabled) {

@@ -50,14 +50,14 @@
   font-family: var(--font-display);
   font-size: var(--heading-lg);
   font-weight: var(--fw-semibold);
-  line-height: 1.15;
+  line-height: var(--leading-display);
   color: var(--text);
   margin-bottom: var(--space-2);
 }
 
 .body {
   font-size: var(--fs-base);
-  line-height: 1.6;
+  line-height: var(--leading-body);
   color: var(--text-soft);
   margin-bottom: var(--space-4);
 }
@@ -156,5 +156,5 @@
 .hint {
   font-size: var(--fs-sm);
   color: var(--text-muted);
-  line-height: 1.5;
+  line-height: var(--leading-normal);
 }

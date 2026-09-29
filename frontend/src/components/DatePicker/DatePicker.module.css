@@ -48,7 +48,6 @@
   border-left: var(--border-w-hair) solid var(--border);
   background: transparent;
   color: var(--text-muted);
-  border-radius: 0 var(--radius) var(--radius) 0;
   transition: color var(--transition), background var(--transition);
 }
 
@@ -109,28 +108,15 @@
 }
 
 .spill {
-  color: var(--text-dim);
+  composes: calSpill from '../shared/Calendar.module.css';
 }
 
-.today::after {
-  content: '';
-  position: absolute;
-  bottom: var(--cal-today-dot-size);
-  width: var(--cal-today-dot-size);
-  height: var(--cal-today-dot-size);
-  border-radius: var(--radius-full);
-  background: var(--accent-light);
+.today {
+  composes: calToday from '../shared/Calendar.module.css';
 }
 
 .selected {
-  background: var(--accent-subtle);
-  border-color: var(--accent-border);
-  color: var(--accent-light);
-  font-weight: var(--fw-bold);
-}
-
-.selected::after {
-  display: none;
+  composes: calSelected from '../shared/Calendar.module.css';
 }
 
 .footer {
@@ -172,7 +158,6 @@
   height: var(--time-field-height);
   background: var(--bg-overlay-soft);
   border: var(--border-w-hair) solid var(--border);
-  border-radius: var(--radius-sm);
   color: var(--accent-light);
   font-family: inherit;
   font-size: var(--fs-xl);
@@ -246,15 +231,4 @@
     left: auto;
     right: 0;
   }
-}
-
-/* .field (composed fieldWrap), .pop (composed menuPop), .calNavBtn and
- * .calDay (composed from shared/Calendar.module.css) already square
- * unconditionally at their shared-base source (#212) — only these locally
- * radiused controls still need squaring here. Decorative radii (.today's
- * dot, .selected's own background) are untouched — not a control's
- * corners. */
-.calendarButton,
-.timeInput {
-  border-radius: 0;
 }

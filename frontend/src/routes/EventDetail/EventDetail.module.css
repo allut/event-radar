@@ -212,21 +212,9 @@
 /* ─── Full description ────────────────────────────────────────────────────── */
 
 .description {
+  composes: prose from '../../components/shared/Prose.module.css';
   font-size: var(--fs-base);
   color: var(--text-muted);
-  line-height: var(--leading-relaxed);
-  white-space: pre-wrap;
-}
-
-.description p + p {
-  margin-top: var(--space-2);
-}
-
-.description ul,
-.description ol {
-  padding-left: var(--space-4);
-  margin-top: var(--space-1);
-  margin-bottom: var(--space-1);
 }
 
 .description li {
@@ -242,12 +230,6 @@
   color: var(--accent-light);
 }
 
-.description strong,
-.description b {
-  font-weight: var(--fw-semibold);
-  color: var(--text);
-}
-
 .description em,
 .description i {
   font-style: italic;
@@ -256,23 +238,16 @@
 .description h3,
 .description h4 {
   font-size: var(--fs-md);
-  font-weight: var(--fw-semibold);
-  color: var(--text);
-  margin-top: var(--space-3);
   margin-bottom: var(--space-1);
 }
 
 .description blockquote {
-  border-left: var(--border-w-alert) solid var(--border);
-  padding-left: var(--space-2);
   color: var(--text-soft);
-  margin-top: var(--space-2);
-  margin-bottom: var(--space-2);
 }
 
 .description u {
-  text-decoration-thickness: 1px;
-  text-underline-offset: 2px;
+  text-decoration-thickness: var(--border-w-hair);
+  text-underline-offset: var(--underline-offset-tight);
 }
 
 /* ─── Category / vibe tags ────────────────────────────────────────────────── */

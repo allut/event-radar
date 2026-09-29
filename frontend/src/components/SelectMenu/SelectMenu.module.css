@@ -14,7 +14,6 @@
 
 .triggerInline {
   composes: triggerInline from '../shared/Menu.module.css';
-  border-radius: 0;
 }
 
 .label {
@@ -22,7 +21,7 @@
 }
 
 .value {
-  font-weight: var(--fw-semibold);
+  composes: menuValue from '../shared/Menu.module.css';
 }
 
 .chev {
@@ -30,25 +29,14 @@
 }
 
 .optionList {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
+  composes: menuOptionList from '../shared/Menu.module.css';
 }
 
 .option {
-  composes: menuOption from '../shared/Menu.module.css';
-  display: block;
-  width: 100%;
-  padding: var(--space-0-45) var(--space-0-875);
+  composes: menuOptionRow from '../shared/Menu.module.css';
 }
 
-/* See MobileMenu.module.css's .linkActive for why this repeats the trio
-   with a doubled selector instead of composing .activePill or relying on
-   source order (Rollup's per-file CSS block order isn't import-order). */
-.optionActive.optionActive,
-.optionActive.optionActive:hover {
-  background: var(--accent-subtle);
-  border: var(--border-w-hair) solid var(--accent-border);
-  color: var(--accent-light);
+.optionActive {
+  composes: menuOptionActive from '../shared/Menu.module.css';
 }
 

@@ -125,6 +125,34 @@
   color: var(--text-muted);
 }
 
+/* Equal-width option list shared by SelectMenu and DateRangeMenu's list mode. */
+.menuValue {
+  font-weight: var(--fw-semibold);
+}
+
+.menuOptionList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.menuOptionRow {
+  composes: menuOption;
+  display: block;
+  width: 100%;
+  padding: var(--space-0-45) var(--space-0-875);
+}
+
+/* See MobileMenu.module.css's .linkActive for why this repeats the trio
+   with a doubled selector instead of composing .activePill or relying on
+   source order (Rollup's per-file CSS block order isn't import-order). */
+.menuOptionActive.menuOptionActive,
+.menuOptionActive.menuOptionActive:hover {
+  background: var(--accent-subtle);
+  border: var(--border-w-hair) solid var(--accent-border);
+  color: var(--accent-light);
+}
+
 @media (max-width: 640px) {
   .menuLabel:empty {
     display: none;

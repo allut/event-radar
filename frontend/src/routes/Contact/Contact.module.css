@@ -1,17 +1,17 @@
 .page {
-  composes: page from '../../components/StaticPage/StaticPage.module.css';
+  composes: page from '../../components/shared/Page.module.css';
 }
 
 .main {
-  composes: main from '../../components/StaticPage/StaticPage.module.css';
+  composes: pageMainNarrow from '../../components/shared/Page.module.css';
 }
 
 .title {
-  composes: title from '../../components/StaticPage/StaticPage.module.css';
+  composes: pageTitle from '../../components/shared/Page.module.css';
 }
 
 .body {
-  composes: body from '../../components/StaticPage/StaticPage.module.css';
+  composes: proseBody from '../../components/shared/Page.module.css';
 }
 
 .organizerHint {

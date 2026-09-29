@@ -19,7 +19,7 @@
 }
 
 .emptyHair {
-  height: 1px;
+  height: var(--border-w-hair);
   width: var(--hair-width);
   background: var(--accent-muted);
   margin-bottom: var(--space-1);

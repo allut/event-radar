@@ -22,10 +22,10 @@
 
 .intro {
   margin-top: var(--space-2);
-  max-width: 56ch;
+  max-width: var(--measure-intro);
   color: var(--text-soft);
   font-size: var(--fs-sm);
-  line-height: 1.6;
+  line-height: var(--leading-body);
 }
 
 .section {
@@ -238,7 +238,7 @@
 }
 
 .lockedBody {
-  max-width: 44ch;
+  max-width: var(--measure-notice);
   color: var(--text-muted);
   font-size: var(--fs-sm);
 }

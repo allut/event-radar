@@ -3,7 +3,7 @@
 }
 
 .triggerInline {
-  composes: triggerInline from '../SelectMenu/SelectMenu.module.css';
+  composes: triggerInline from '../shared/Menu.module.css';
 }
 
 .label {
@@ -11,7 +11,7 @@
 }
 
 .value {
-  composes: value from '../SelectMenu/SelectMenu.module.css';
+  composes: menuValue from '../shared/Menu.module.css';
 }
 
 .chev {
@@ -35,15 +35,15 @@
 }
 
 .optionList {
-  composes: optionList from '../SelectMenu/SelectMenu.module.css';
+  composes: menuOptionList from '../shared/Menu.module.css';
 }
 
 .option {
-  composes: option from '../SelectMenu/SelectMenu.module.css';
+  composes: menuOptionRow from '../shared/Menu.module.css';
 }
 
 .optionActive {
-  composes: optionActive from '../SelectMenu/SelectMenu.module.css';
+  composes: menuOptionActive from '../shared/Menu.module.css';
 }
 
 .back {
@@ -113,15 +113,15 @@
 }
 
 .spill {
-  composes: spill from '../DatePicker/DatePicker.module.css';
+  composes: calSpill from '../shared/Calendar.module.css';
 }
 
 .today {
-  composes: today from '../DatePicker/DatePicker.module.css';
+  composes: calToday from '../shared/Calendar.module.css';
 }
 
 .rangeEndpoint {
-  composes: selected from '../DatePicker/DatePicker.module.css';
+  composes: calSelected from '../shared/Calendar.module.css';
 }
 
 .inRange {

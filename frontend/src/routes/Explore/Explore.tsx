@@ -369,8 +369,6 @@ export default function Explore() {
         <div className={styles.search}>
           <svg
             className={styles.searchIcon}
-            width="18"
-            height="18"
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"

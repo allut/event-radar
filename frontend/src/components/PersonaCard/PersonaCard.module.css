@@ -55,7 +55,7 @@
 
 .hair {
   margin: var(--space-2) auto var(--space-1);
-  height: 1px;
+  height: var(--border-w-hair);
   width: var(--hair-width);
   background: var(--accent-muted);
 }

@@ -30,7 +30,6 @@
   text-align: center;
   border: none;
   border-right: var(--border-w-hair) solid var(--border);
-  border-radius: var(--radius) 0 0 var(--radius);
   color: var(--text);
   cursor: pointer;
 }
@@ -82,7 +81,6 @@
   border-left: var(--border-w-hair) solid var(--border);
   background: transparent;
   color: var(--text-muted);
-  border-radius: 0 var(--radius) var(--radius) 0;
   transition: color var(--transition), background var(--transition);
 }
 
@@ -117,14 +115,6 @@
 
 .srOnly {
   composes: srOnly from '../shared/Visually.module.css';
-}
-
-/* .field (composed fieldWrap) already squares unconditionally at its
- * shared-base source (#212) — only these locally radiused controls still
- * need squaring here. */
-.pickButton,
-.removeButton {
-  border-radius: 0;
 }
 
 @media (max-width: 640px) {

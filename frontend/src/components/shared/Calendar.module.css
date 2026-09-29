@@ -99,3 +99,30 @@
   color: var(--text-dim);
   cursor: default;
 }
+
+/* Day-cell states, defined after .calDay so they win the equal-specificity
+   tie deterministically. .calSelected also hides .calToday's dot. */
+.calSpill {
+  color: var(--text-dim);
+}
+
+.calToday::after {
+  content: '';
+  position: absolute;
+  bottom: var(--cal-today-dot-size);
+  width: var(--cal-today-dot-size);
+  height: var(--cal-today-dot-size);
+  border-radius: var(--radius-full);
+  background: var(--accent-light);
+}
+
+.calSelected {
+  background: var(--accent-subtle);
+  border-color: var(--accent-border);
+  color: var(--accent-light);
+  font-weight: var(--fw-bold);
+}
+
+.calSelected::after {
+  display: none;
+}

@@ -116,6 +116,7 @@
   --tracking-wide:     0.04em;  /* form labels, price badges */
   --tracking-wider:    0.06em;  /* uppercase pill labels */
   --eyebrow-tracking:  0.12em;  /* uppercase section eyebrows */
+  --descender-pad:     0.14em;  /* hero-rise clip box bottom room */
   --tracking-loose:    0.2em;   /* Landing c1 prototype .lab label */
 
   /* Spacing scale */
@@ -193,7 +194,22 @@
   /* Grid/flex geometry */
   --card-grid-min: 280px;
   --underline-offset: 3px;
+  --underline-offset-tight: 2px; /* sanitized-HTML <u> in event descriptions */
   --measure-prose: 46ch;
+  --measure-tight: 22ch;   /* Landing narrow captions */
+  --measure-compact: 28ch; /* Landing sub-heads */
+  --measure-snug: 36ch;    /* Landing stat/aside copy */
+  --measure-notice: 44ch;  /* locked/dormant notice body */
+  --measure-intro: 56ch;   /* form intro paragraphs */
+  --search-icon-size: 18px; /* Explore search-field magnifier */
+  --rte-btn-size: 28px;    /* RichTextEditor toolbar button */
+  --rte-icon-size: 16px;   /* RichTextEditor toolbar glyph */
+  --landing-capture-min: 280px;
+  --landing-capture-max: 520px;
+  --landing-aside-min: 260px;
+  --landing-poster-bleed: -4%;
+  --opacity-ghost: 0.34;   /* Landing ghost layer */
+  --rule-w-accent: 2px;    /* accent underline rule */
   --offscreen-x: -9999px;
   --card-image-ratio-featured: 16 / 7;
 
@@ -325,6 +341,7 @@
   --leading-display: 1.15;
   --leading-display-tight: 1.02; /* Landing .flatTitle */
   --leading-body: 1.6;
+  --leading-normal: 1.5;
   --leading-tight: 1.2;
   --leading-snug: 1.4;
   --leading-relaxed: 1.7;
