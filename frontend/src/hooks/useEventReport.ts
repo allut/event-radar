@@ -1,9 +1,7 @@
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { QUERY_KEYS, ROUTES } from '../constants';
+import { QUERY_KEYS } from '../constants';
 import { patchCachedEvent } from '../utils';
-import { useAuth } from './useAuth';
-import { useLocaleNavigate } from './useLocaleNavigate';
 
 export interface UseEventReportResult {
   reportOpen: boolean;
@@ -17,20 +15,24 @@ export interface UseEventReportResult {
 }
 
 /** Shared Report-event flow behind EventDetail's and EventCard's overflow
- * menu (issue #128): gates the modal open on auth (redirecting signed-out
+ * menu (issue #128): takes `authed`/`onLoginRequired` from the caller (no
+ * per-card router/auth subscription, issue #455) and gates the modal open on auth (redirecting signed-out
  * clicks to /login, mirroring Share's no-auth-gate exception), and on a
  * successful submit flips the local "reported" state and invalidates every
  * read surface the `reported` field appears on. */
-export function useEventReport(baseReported: boolean, eventId?: number): UseEventReportResult {
-  const authed = useAuth();
-  const navigate = useLocaleNavigate();
+export function useEventReport(
+  baseReported: boolean,
+  eventId: number | undefined,
+  authed: boolean,
+  onLoginRequired: () => void,
+): UseEventReportResult {
   const queryClient = useQueryClient();
   const [reportOpen, setReportOpen] = useState(false);
   const [reportedOverride, setReportedOverride] = useState(false);
 
   function openReportModal() {
     if (!authed) {
-      navigate(ROUTES.login);
+      onLoginRequired();
       return;
     }
     setReportOpen(true);

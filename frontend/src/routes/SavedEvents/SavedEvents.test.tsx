@@ -9,6 +9,8 @@ vi.mock('../../lib/auth', () => ({
   getLocale: vi.fn(() => 'en'),
   getStoredLocale: vi.fn(() => 'en'),
   setLocale: vi.fn(),
+  isAuthenticated: vi.fn(() => true),
+  subscribeAuth: vi.fn(() => () => undefined),
   clearSignedInHint: vi.fn(),
   beginLogout: vi.fn(),
 }));

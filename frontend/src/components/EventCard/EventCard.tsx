@@ -5,7 +5,7 @@ import { t } from '../../i18n';
 import { cardAnimationDelayMs, categoryGradient, cx, formatEventTime, formatPrice, padIndex, safeUrl, shareEvent, trackExternalClick } from '../../utils';
 import { useEventReport } from '../../hooks/useEventReport';
 import { useFeedback } from '../../hooks/useFeedback';
-import { useLocalePath } from '../../hooks/useLocalePath';
+import type { EventCardNav } from '../../hooks/useEventCardNav';
 import { useToast } from '../../hooks/useToast';
 import EventOverflowMenu from '../EventOverflowMenu';
 import FeedbackButtonRow from '../FeedbackButtonRow';
@@ -43,6 +43,9 @@ interface EventCardProps {
   event: EventData;
   index: number;
   locale: string;
+  // Router/auth context resolved once by the parent list (useEventCardNav) so
+  // no card subscribes to the router or auth store itself (issue #455).
+  nav: EventCardNav;
   onFeedbackSent?: () => void;
   variant?: 'standard' | 'featured';
   // Presentational mode for anonymous surfaces (e.g. the public landing showcase):
@@ -69,7 +72,7 @@ interface EventCardProps {
   onCardClick?: (index: number) => void;
 }
 
-function EventCard({ event, index, locale, onFeedbackSent, variant = 'standard', readOnly = false, alignTitle = true, onFeedbackBlocked, onCardClick }: EventCardProps) {
+function EventCard({ event, index, locale, nav, onFeedbackSent, variant = 'standard', readOnly = false, alignTitle = true, onFeedbackBlocked, onCardClick }: EventCardProps) {
   const { activeSignal, pending, sendFeedback } = useFeedback(event.id, {
     initialSignal: event.my_signal,
     onChange: onFeedbackSent,
@@ -82,9 +85,9 @@ function EventCard({ event, index, locale, onFeedbackSent, variant = 'standard',
     }
     sendFeedback(signal);
   }
-  const localePath = useLocalePath();
+  const { localePath, authed, onLoginRequired } = nav;
   const { toast, showToast } = useToast();
-  const { reportOpen, reported, openReportModal, closeReportModal, handleReportSubmitted } = useEventReport(event.reported, event.id);
+  const { reportOpen, reported, openReportModal, closeReportModal, handleReportSubmitted } = useEventReport(event.reported, event.id, authed, onLoginRequired);
   const isFeatured = variant === 'featured';
 
   const price = formatPrice(event.price_min, event.price_max, event.currency, locale, event.has_free_tier);

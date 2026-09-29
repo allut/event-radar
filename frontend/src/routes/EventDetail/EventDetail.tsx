@@ -60,7 +60,7 @@ export default function EventDetail() {
     enabled: Boolean(data?.id) && organizerAuthed,
   });
 
-  const { reportOpen, reported, openReportModal, closeReportModal, handleReportSubmitted } = useEventReport(data?.reported ?? false, data?.id);
+  const { reportOpen, reported, openReportModal, closeReportModal, handleReportSubmitted } = useEventReport(data?.reported ?? false, data?.id, authed, () => navigate(ROUTES.login));
 
   const { activeSignal, pending, sendFeedback } = useFeedback(data?.id, {
     initialSignal: data?.my_signal ?? null,

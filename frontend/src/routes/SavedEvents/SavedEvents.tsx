@@ -6,6 +6,7 @@ import { nextOffsetParam, withLocaleQuery } from '../../utils';
 import { useLocaleMutation } from '../../hooks/useLocaleMutation';
 import { useLogout } from '../../hooks/useLogout';
 import { useStaticSeoMeta } from '../../hooks/useStaticSeoMeta';
+import { useEventCardNav } from '../../hooks/useEventCardNav';
 import EventCard, { type EventData } from '../../components/EventCard';
 import EmptyState from '../../components/EmptyState';
 import PageState from '../../components/PageState';
@@ -24,6 +25,7 @@ interface SavedEventsResponse {
 }
 
 export default function SavedEvents() {
+  const nav = useEventCardNav();
   const handleLogout = useLogout();
   const { locale, handleLocaleChange, isPending: localePending } = useLocaleMutation();
   const seoMeta = useStaticSeoMeta('seo_title_saved', locale);
@@ -97,6 +99,7 @@ export default function SavedEvents() {
                 event={event}
                 index={i}
                 locale={locale}
+                nav={nav}
                 variant="standard"
               />
             ))}

@@ -5,6 +5,7 @@ import { api } from '../../api/client';
 import { t } from '../../i18n';
 import { withLocaleQuery } from '../../utils';
 import { useAuth } from '../../hooks/useAuth';
+import { useEventCardNav } from '../../hooks/useEventCardNav';
 import { useLocaleMutation } from '../../hooks/useLocaleMutation';
 import { useLogout } from '../../hooks/useLogout';
 import { useSeoMeta } from '../../hooks/useSeoMeta';
@@ -78,6 +79,7 @@ interface CurrentUser {
 
 export default function Explore() {
   const authed = useAuth();
+  const nav = useEventCardNav();
   const handleLogout = useLogout();
   const [searchParams, setSearchParams] = useSearchParams();
   const filters = useMemo(() => parseExploreFilters(searchParams), [searchParams]);
@@ -484,6 +486,7 @@ export default function Explore() {
                   event={item.event}
                   index={item.index}
                   locale={locale}
+                  nav={nav}
                   variant="standard"
                   onFeedbackBlocked={authed ? undefined : handleFeedbackBlocked}
                   onCardClick={handleCardClick}
