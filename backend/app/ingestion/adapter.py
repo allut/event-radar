@@ -125,6 +125,7 @@ async def existing_external_ids(db: AsyncSession, source_id: int) -> set[str]:
         select(EventSource.external_id)
         .join(Event, Event.id == EventSource.event_id)
         .where(EventSource.source_id == source_id, Event.starts_at >= cutoff)
+        .distinct()
     )
     return {r for r in rows.all() if r is not None}
 
@@ -135,11 +136,15 @@ async def ingest_skip_ids(db: AsyncSession, source_id: int) -> set[str]:
     permanently-rejected event isn't re-fetched/re-saved every run."""
     stored = await existing_external_ids(db, source_id)
     cutoff = datetime.now(tz=TALLINN_TZ) - timedelta(days=INGEST_REJECT_RECHECK_DAYS)
+    # DISTINCT: every hourly run re-stores the same live listing as a fresh
+    # raw_events row, so the recheck window holds many rows per external_id.
     rows = await db.scalars(
-        select(RawEvent.external_id).where(
+        select(RawEvent.external_id)
+        .where(
             RawEvent.source_id == source_id,
             RawEvent.fetched_at >= cutoff,
         )
+        .distinct()
     )
     recent = {r for r in rows.all() if r is not None}
     return stored | recent

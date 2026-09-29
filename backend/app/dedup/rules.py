@@ -55,7 +55,10 @@ log = logging.getLogger(__name__)
 def _venue_compatible(a: str | None, b: str | None) -> bool:
     if a is None or b is None:
         return True
-    return token_set_ratio(a.lower(), b.lower()) >= VENUE_RATIO_THRESHOLD
+    return (
+        token_set_ratio(a.lower(), b.lower(), score_cutoff=VENUE_RATIO_THRESHOLD)
+        >= VENUE_RATIO_THRESHOLD
+    )
 
 
 def is_candidate_pair(
@@ -104,7 +107,14 @@ def is_candidate_pair(
         and _venue_compatible(a.venue_name, b.venue_name)
     ):
         return True
-    title_ratio = token_set_ratio(a.title_orig.lower(), b.title_orig.lower())
+    # score_cutoff: rapidfuzz short-circuits to 0 below the threshold, which
+    # is rejected right after anyway — same result, less work on the many
+    # non-matching pairs.
+    title_ratio = token_set_ratio(
+        a.title_orig.lower(),
+        b.title_orig.lower(),
+        score_cutoff=TITLE_RATIO_THRESHOLD,
+    )
     if title_ratio < TITLE_RATIO_THRESHOLD:
         return False
     if (

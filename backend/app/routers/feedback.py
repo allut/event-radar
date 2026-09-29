@@ -62,7 +62,7 @@ async def record_feedback(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    """Upsert a feedback signal for an event and invalidate cached scores."""
+    """Record a feedback signal for an event."""
     if body.signal not in VALID_SIGNALS:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
@@ -73,10 +73,10 @@ async def record_feedback(
     # db.get() would let an authenticated caller probe internal event-ID
     # existence (200 vs 404) and record signals against draft/hidden rows,
     # skewing personalization for events that were never publicly surfaced.
-    event = await db.scalar(
-        select(Event).where(Event.id == body.event_id, public_event_filter())
+    event_id = await db.scalar(
+        select(Event.id).where(Event.id == body.event_id, public_event_filter())
     )
-    if event is None:
+    if event_id is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail=ERROR_EVENT_NOT_FOUND
         )
