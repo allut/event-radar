@@ -25,6 +25,7 @@ from sqlalchemy.types import UserDefinedType
 from app.constants import (
     DEFAULT_USER_CITY,
     DEFAULT_USER_LOCALE,
+    EVENT_SEARCH_TEXT_SQL,
     EVENT_STATUS_DRAFT,
     CLAIM_STATUS_APPROVED,
     CLAIM_STATUS_PENDING,
@@ -622,6 +623,19 @@ class Event(Base):
             "title_orig",
             postgresql_using="gin",
             postgresql_ops={"title_orig": "gin_trgm_ops"},
+        ),
+        # Claim-discovery search (M9): one trigram index over the combined
+        # title haystack (constants.EVENT_SEARCH_TEXT_SQL) and one over url
+        # (suggestions' domain ILIKE). Migration 0051.
+        Index(
+            "ix_events_search_text_trgm",
+            text(f"({EVENT_SEARCH_TEXT_SQL}) gin_trgm_ops"),
+            postgresql_using="gin",
+        ),
+        Index(
+            "ix_events_url_trgm",
+            text("url gin_trgm_ops"),
+            postgresql_using="gin",
         ),
         Index(
             "ix_events_description_orig_trgm",

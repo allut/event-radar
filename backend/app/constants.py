@@ -585,6 +585,20 @@ CLAIM_SUGGESTIONS_LIMIT = 10
 CLAIM_SEARCH_CANDIDATE_MULTIPLIER = 3
 CLAIM_SEARCH_QUERY_MIN_LENGTH = 2
 
+# Claim-discovery title search haystack (M9): title_orig plus every locale's
+# localized title, so one pg_trgm GIN expression index
+# (ix_events_search_text_trgm) backs the ILIKE instead of an unindexed
+# JSONB-extract OR that forced a seq scan. Must match the index expression in
+# migration 0051 and the Event model textually — no bind params (the planner
+# can't match an index expression against a parameter). `||` and coalesce are
+# IMMUTABLE, unlike concat_ws.
+EVENT_SEARCH_TEXT_SQL = (
+    "coalesce(title_orig, '') || ' ' || "
+    "coalesce(title_localized ->> 'et', '') || ' ' || "
+    "coalesce(title_localized ->> 'en', '') || ' ' || "
+    "coalesce(title_localized ->> 'ru', '')"
+)
+
 # DNS-TXT domain-control check, resolved via DNS-over-HTTPS (no new
 # fetchable-content SSRF surface — this is a fixed, hardcoded resolver, never
 # a source-supplied URL). Shared by the KUMU/Estonia Concert Hall hardcoded

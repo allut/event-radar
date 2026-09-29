@@ -12,8 +12,10 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from itsdangerous import BadSignature, SignatureExpired
 from pydantic import BaseModel, EmailStr, Field
-from sqlalchemy import func, or_, select, update
+from sqlalchemy import func, literal_column, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import QueryableAttribute
+from sqlalchemy.sql.elements import ColumnElement
 from sqlalchemy.orm import selectinload
 
 from app.auth.email import send_magic_link
@@ -37,6 +39,7 @@ from app.claims.lifecycle import (
 from app.claims.pinning import bulk_resolve_series_events
 from app.ingestion.http_client import host_matches_domain
 from app.constants import (
+    EVENT_SEARCH_TEXT_SQL,
     ADMIN_ACTION_REVOKE_CLAIM,
     CLAIM_AUTOMATED_VERIFICATION_MECHANISMS,
     CLAIM_EVENTS_MAX_PAGE_SIZE,
@@ -445,6 +448,19 @@ async def verify_claim_link(
 # ---------------------------------------------------------------------------
 
 
+def claim_search_text() -> ColumnElement[str]:
+    """Title haystack the trigram GIN index ix_events_search_text_trgm covers
+    (M9). A literal column, not a SQLAlchemy expression: bound JSONB keys
+    would render as parameters and the planner couldn't match the index."""
+    return literal_column(EVENT_SEARCH_TEXT_SQL)
+
+
+def claim_url_text() -> QueryableAttribute[str | None]:
+    """events.url, backed by ix_events_url_trgm for the suggestions domain
+    ILIKE."""
+    return Event.url
+
+
 def _serialize_claim_candidate(event: Event, locale: str) -> dict:
     return {
         "id": event.id,
@@ -515,12 +531,7 @@ async def search_claimable_events(
                 .where(
                     public_event_filter(),
                     event_not_ended_filter(now),
-                    or_(
-                        Event.title_orig.ilike(pattern, escape="\\"),
-                        Event.title_localized[effective_locale].astext.ilike(
-                            pattern, escape="\\"
-                        ),
-                    ),
+                    claim_search_text().ilike(pattern, escape="\\"),
                 )
                 .order_by(Event.starts_at)
                 .limit(CLAIM_SEARCH_RESULT_LIMIT * CLAIM_SEARCH_CANDIDATE_MULTIPLIER)
@@ -575,7 +586,7 @@ async def suggested_claimable_events(
                     public_event_filter(),
                     event_not_ended_filter(now),
                     Event.url.isnot(None),
-                    Event.url.ilike(pattern, escape="\\"),
+                    claim_url_text().ilike(pattern, escape="\\"),
                 )
                 .order_by(Event.starts_at)
                 .limit(CLAIM_SUGGESTIONS_LIMIT * CLAIM_SEARCH_CANDIDATE_MULTIPLIER)
