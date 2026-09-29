@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useMemo } from 'react';
 import { useLocation, useParams, useSearchParams } from 'react-router-dom';
 import { useOrganizerLogout } from '../../hooks/useOrganizerLogout';
 import { useLocalLocale } from '../../hooks/useLocalLocale';
@@ -51,7 +51,7 @@ export default function ClaimEventEdit() {
     locale,
     path: pathname,
   });
-  const categoryOpts = categoryOptions(locale);
+  const categoryOpts = useMemo(() => categoryOptions(locale), [locale]);
 
   function renderPin(field: string, fieldLocale?: string) {
     const pinned = form.isPinned(field, fieldLocale);

@@ -47,6 +47,9 @@ export default function SavedEvents() {
       ),
     initialPageParam: 0,
     getNextPageParam: (lastPage) => nextOffsetParam(lastPage, lastPage.events.length),
+    // A focus-triggered refetch of an infinite query re-requests every loaded
+    // page sequentially (each re-scored server-side) — never worth it here.
+    refetchOnWindowFocus: false,
   });
 
   const events = useMemo(() => data?.pages.flatMap((page) => page.events) ?? [], [data]);

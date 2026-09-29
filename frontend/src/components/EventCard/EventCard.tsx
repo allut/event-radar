@@ -1,8 +1,8 @@
 import { memo } from 'react';
 import { Link } from 'react-router-dom';
-import { CARD_ANIMATION_DELAY_STEP_MS, ROUTES, UI_STATE, type Signal } from '../../constants';
+import { ROUTES, UI_STATE, type Signal } from '../../constants';
 import { t } from '../../i18n';
-import { categoryGradient, cx, formatEventTime, formatPrice, padIndex, safeUrl, shareEvent, trackExternalClick } from '../../utils';
+import { cardAnimationDelayMs, categoryGradient, cx, formatEventTime, formatPrice, padIndex, safeUrl, shareEvent, trackExternalClick } from '../../utils';
 import { useEventReport } from '../../hooks/useEventReport';
 import { useFeedback } from '../../hooks/useFeedback';
 import { useLocalePath } from '../../hooks/useLocalePath';
@@ -84,7 +84,7 @@ function EventCard({ event, index, locale, onFeedbackSent, variant = 'standard',
   }
   const localePath = useLocalePath();
   const { toast, showToast } = useToast();
-  const { reportOpen, reported, openReportModal, closeReportModal, handleReportSubmitted } = useEventReport(event.reported);
+  const { reportOpen, reported, openReportModal, closeReportModal, handleReportSubmitted } = useEventReport(event.reported, event.id);
   const isFeatured = variant === 'featured';
 
   const price = formatPrice(event.price_min, event.price_max, event.currency, locale, event.has_free_tier);
@@ -126,7 +126,7 @@ function EventCard({ event, index, locale, onFeedbackSent, variant = 'standard',
   return (
     <article
       className={cx(styles.card, isFeatured && styles.featured)}
-      style={{ animationDelay: `${index * CARD_ANIMATION_DELAY_STEP_MS}ms` }}
+      style={{ animationDelay: `${cardAnimationDelayMs(index)}ms` }}
     >
       <div className={styles.clickable}>
         <div className={cx(styles.imageWrap, isFeatured && styles.featuredImageWrap)}>

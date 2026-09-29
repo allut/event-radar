@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { cx, safeUrl, sanitizeHtml, formatPrice, categoryGradient, formatHourMinute, formatEventShortDate, makeActiveClassMap, trackExternalClick, datePresetRange, parseExploreFilters, exploreFiltersToSearchParams, buildExploreApiQuery, activeFacetCount, isFullSet, shouldFlipPopover, maskAnalyticsUrl, DEFAULT_EXPLORE_FILTERS, type ExploreFilters, monthGridDays, weekdayHeaders, splitDateTimeValue, joinDateTimeValue, parseTypedDate, formatPickerValue, formatMonthYearLabel, toDisplayDateTime, fromDisplayDateTime, buildMapsUrl, isValidLocale, stripLocalePrefix, localizedPath, localeFromPath, localizedTo, truncateForMeta, parseISODateLocal, formatDateRangeShort, localeLabel, localizedFieldLabel, localizedTriplet, weekdayOffset } from './utils';
+import { cx, safeUrl, sanitizeHtml, formatPrice, categoryGradient, formatHourMinute, formatEventShortDate, makeActiveClassMap, trackExternalClick, datePresetRange, parseExploreFilters, exploreFiltersToSearchParams, buildExploreApiQuery, activeFacetCount, isFullSet, shouldFlipPopover, maskAnalyticsUrl, DEFAULT_EXPLORE_FILTERS, type ExploreFilters, monthGridDays, weekdayHeaders, splitDateTimeValue, joinDateTimeValue, parseTypedDate, formatPickerValue, formatMonthYearLabel, toDisplayDateTime, fromDisplayDateTime, buildMapsUrl, isValidLocale, stripLocalePrefix, localizedPath, localeFromPath, localizedTo, truncateForMeta, cardAnimationDelayMs, parseISODateLocal, formatDateRangeShort, localeLabel, localizedFieldLabel, localizedTriplet, weekdayOffset } from './utils';
 import { t } from './i18n';
 import { FALLBACK_GRADIENT, CATEGORIES, GOOGLE_MAPS_SEARCH_URL } from './constants';
 
@@ -789,5 +789,18 @@ describe('weekdayOffset', () => {
     expect(weekdayOffset(wednesday, 1)).toBe(2);
     expect(weekdayOffset(wednesday, 0)).toBe(3);
     expect(weekdayOffset(new Date(2024, 6, 7), 1)).toBe(6);
+  });
+});
+
+describe('cardAnimationDelayMs', () => {
+  it('staggers within a page and plateaus after the cap', () => {
+    expect(cardAnimationDelayMs(0)).toBe(0);
+    expect(cardAnimationDelayMs(3)).toBe(240);
+    expect(cardAnimationDelayMs(23)).toBe(640);
+  });
+
+  it('restarts on every page so later cards are not held invisible', () => {
+    expect(cardAnimationDelayMs(24)).toBe(0);
+    expect(cardAnimationDelayMs(24 * 5 + 2)).toBe(160);
   });
 });

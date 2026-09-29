@@ -205,6 +205,9 @@ export default function Explore() {
     // request entirely rather than round-tripping to the backend, which
     // would treat an absent/full param as "all" and return unfiltered results.
     enabled: filters.category.length > 0 && filters.vibe.length > 0,
+    // A focus-triggered refetch of an infinite query re-requests every loaded
+    // page sequentially (each re-scored server-side) — never worth it here.
+    refetchOnWindowFocus: false,
   });
 
   const toggleFacet = useCallback(
@@ -340,10 +343,17 @@ export default function Explore() {
     path: ROUTES.explore,
     indexable: isSuccess,
   });
-  const jsonLd = useMemo(
-    () => (isSuccess ? buildExploreItemListJsonLd(visibleEvents, locale) : undefined),
-    [isSuccess, visibleEvents, locale],
-  );
+  // Crawlers only ever see the first page, so the ItemList is built from it
+  // alone — not rebuilt/stringified over every page on each load-more. The
+  // anonymous grid drops the last card for the upsell (see visibleEvents), which
+  // only touches page 1 while it is the sole loaded page.
+  const firstPage = data?.pages[0];
+  const multiplePages = (data?.pages.length ?? 0) > 1;
+  const jsonLd = useMemo(() => {
+    if (!isSuccess || !firstPage) return undefined;
+    const pageEvents = authed || multiplePages ? firstPage.events : firstPage.events.slice(0, Math.max(firstPage.events.length - 1, 0));
+    return buildExploreItemListJsonLd(pageEvents, locale);
+  }, [isSuccess, firstPage, authed, multiplePages, locale]);
 
   return (
     <div className={styles.page}>

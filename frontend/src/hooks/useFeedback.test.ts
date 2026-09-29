@@ -159,4 +159,46 @@ describe('useFeedback', () => {
     expect(result.current.activeSignal).toBeNull();
     expect(result.current.pending).toBe(false);
   });
+
+  it('patches my_signal into cached feed/explore/event payloads without a multi-page Explore refetch', async () => {
+    const { wrapper, queryClient } = makeQueryWrapper();
+    queryClient.setQueryData(['feed', 'et'], { events: [{ id: 1, my_signal: null }, { id: 2, my_signal: null }] });
+    queryClient.setQueryData(['explore', 'et', {}], {
+      pages: [{ events: [{ id: 2, my_signal: null }] }, { events: [{ id: 1, my_signal: null }] }],
+      pageParams: [0, 1],
+    });
+    queryClient.setQueryData(['event', '1', 'et'], { id: 1, my_signal: null });
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+    const { result } = renderHook(() => useFeedback(1), { wrapper });
+
+    await act(async () => {
+      await result.current.sendFeedback('like');
+    });
+
+    expect(queryClient.getQueryData(['feed', 'et'])).toEqual({
+      events: [{ id: 1, my_signal: 'like' }, { id: 2, my_signal: null }],
+    });
+    expect(queryClient.getQueryData<{ pages: { events: unknown[] }[] }>(['explore', 'et', {}])?.pages[1].events).toEqual([
+      { id: 1, my_signal: 'like' },
+    ]);
+    expect(queryClient.getQueryData(['event', '1', 'et'])).toEqual({ id: 1, my_signal: 'like' });
+    const byKey = Object.fromEntries(invalidateSpy.mock.calls.map((c) => [String(c[0]?.queryKey), c[0]?.refetchType]));
+    expect(byKey.saved).toBeUndefined();
+    expect(byKey.feed).toBeUndefined();
+    expect(byKey.explore).toBe('none');
+    expect(byKey.event).toBe('none');
+  });
+
+  it('refetches active Explore on a dislike, since the server hard-excludes the event', async () => {
+    const { wrapper, queryClient } = makeQueryWrapper();
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+    const { result } = renderHook(() => useFeedback(1), { wrapper });
+
+    await act(async () => {
+      await result.current.sendFeedback('dislike');
+    });
+
+    const explore = invalidateSpy.mock.calls.find((c) => c[0]?.queryKey?.[0] === 'explore');
+    expect(explore?.[0]?.refetchType).toBe('active');
+  });
 });

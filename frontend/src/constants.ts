@@ -242,6 +242,9 @@ export const PAGEVIEW_TRACK_DELAY_MS = 0;
 
 // ─── Animation ───────────────────────────────────────────────────────────────
 export const CARD_ANIMATION_DELAY_STEP_MS = 80;
+// Stagger stops growing after this many cards (and restarts every page) so a
+// later page's cards are never held invisible for seconds (Big-O audit H6).
+export const CARD_ANIMATION_MAX_STEPS = 8;
 
 // ─── Layout ──────────────────────────────────────────────────────────────────
 // Matches the `max-width: 640px` breakpoint used across component CSS modules.

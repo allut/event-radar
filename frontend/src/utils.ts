@@ -1,6 +1,7 @@
 import DOMPurify from 'dompurify';
+import { type InfiniteData, type QueryClient } from '@tanstack/react-query';
 import { api, ApiError } from './api/client';
-import { API, ISO_DATE_RE, PICKER_VALUE_RE, SIGNAL_CLICK_EXTERNAL, CATEGORY_GRADIENTS, CLAIM_JUSTIFICATION_REQUIRED_ERROR, FALLBACK_GRADIENT, EUR_SYMBOL, DEFAULT_CURRENCY, GOOGLE_MAPS_SEARCH_URL, type Signal, toLocaleCode, SAFE_URL_SCHEMES, SANITIZE_ALLOWED_TAGS, SANITIZE_ALLOWED_ATTR, SIGNAL_TO_CLASS, BROWSE_PAGE_SIZE, CATEGORIES, VIBES, type DatePreset, type SortOption, ANALYTICS_EVENT_PATH_RE, ANALYTICS_ORGANIZER_EDIT_PATH_RE, CALENDAR_WEEK_START, CALENDAR_WEEKS_SHOWN, CALENDAR_DAYS_PER_WEEK, CALENDAR_REFERENCE_MONDAY, MAX_HOUR, MAX_MINUTE, DATE_PRESET_DAYS, DATE_PRESET_DAYS_FALLBACK, DATE_PRESET_DEFAULT, DATE_PRESET_TODAY, DATE_PRESET_WEEKEND, EXPLORE_PARAM, EXPLORE_URL_FLAG_TRUE, EXPLORE_API_FLAG_TRUE, SORT_DEFAULT, TIME_FIELD_MAX_LENGTH, LOCALES, LOCALES_BY_CODE, LOCALE_EN, LOCALE_ET, LOCALE_RU, type LocaleCode, DEFAULT_LOCALE_CODE, MS_PER_HOUR, HOURS_PER_DAY } from './constants';
+import { API, QUERY_KEYS, CARD_ANIMATION_DELAY_STEP_MS, CARD_ANIMATION_MAX_STEPS, ISO_DATE_RE, PICKER_VALUE_RE, SIGNAL_CLICK_EXTERNAL, CATEGORY_GRADIENTS, CLAIM_JUSTIFICATION_REQUIRED_ERROR, FALLBACK_GRADIENT, EUR_SYMBOL, DEFAULT_CURRENCY, GOOGLE_MAPS_SEARCH_URL, type Signal, toLocaleCode, SAFE_URL_SCHEMES, SANITIZE_ALLOWED_TAGS, SANITIZE_ALLOWED_ATTR, SIGNAL_TO_CLASS, BROWSE_PAGE_SIZE, CATEGORIES, VIBES, type DatePreset, type SortOption, ANALYTICS_EVENT_PATH_RE, ANALYTICS_ORGANIZER_EDIT_PATH_RE, CALENDAR_WEEK_START, CALENDAR_WEEKS_SHOWN, CALENDAR_DAYS_PER_WEEK, CALENDAR_REFERENCE_MONDAY, MAX_HOUR, MAX_MINUTE, DATE_PRESET_DAYS, DATE_PRESET_DAYS_FALLBACK, DATE_PRESET_DEFAULT, DATE_PRESET_TODAY, DATE_PRESET_WEEKEND, EXPLORE_PARAM, EXPLORE_URL_FLAG_TRUE, EXPLORE_API_FLAG_TRUE, SORT_DEFAULT, TIME_FIELD_MAX_LENGTH, LOCALES, LOCALES_BY_CODE, LOCALE_EN, LOCALE_ET, LOCALE_RU, type LocaleCode, DEFAULT_LOCALE_CODE, MS_PER_HOUR, HOURS_PER_DAY } from './constants';
 import { t, ti } from './i18n';
 import { stripLocalePrefix, localizedPath, localeFromPath, localizedTo } from './lib/urlLocale';
 
@@ -606,8 +607,14 @@ export function padIndex(n: number): string {
  * point can never land inside a surrogate pair (e.g. an emoji). */
 export function truncateForMeta(text: string, maxLength: number): string {
   if (text.length <= maxLength) return text;
-  const codePoints = Array.from(text);
-  const cut = codePoints.slice(0, maxLength).join('');
+  // Walk code points only up to the cut, not the whole string.
+  let cut = '';
+  let count = 0;
+  for (const ch of text) {
+    if (count === maxLength) break;
+    cut += ch;
+    count += 1;
+  }
   const lastSpace = cut.lastIndexOf(' ');
   return `${(lastSpace > 0 ? cut.slice(0, lastSpace) : cut).trimEnd()}…`;
 }
@@ -844,4 +851,41 @@ export function relativeTimeFromNow(iso: string): string {
   if (hours < 1) return 'just now';
   if (hours < HOURS_PER_DAY) return `${hours}h ago`;
   return `${Math.round(hours / HOURS_PER_DAY)}d ago`;
+}
+
+interface CachedEventLike {
+  id: number;
+}
+interface CachedEventsPage {
+  events: CachedEventLike[];
+}
+
+function patchEventInPage<T extends CachedEventsPage>(page: T, eventId: number, patch: object): T {
+  if (!Array.isArray(page?.events) || !page.events.some((e) => e.id === eventId)) return page;
+  return { ...page, events: page.events.map((e) => (e.id === eventId ? { ...e, ...patch } : e)) };
+}
+
+/** Writes `patch` (e.g. `{ my_signal }`, `{ reported }`) onto one event's row in
+ * every cached Feed / Explore / event-detail payload, so a save/like/report is
+ * reflected everywhere without refetching every loaded page of every list
+ * (an infinite Explore query refetches all its pages sequentially). Saved-tab
+ * payloads are deliberately left alone: membership there changes with the
+ * signal, so callers invalidate them instead. */
+export function patchCachedEvent(queryClient: QueryClient, eventId: number, patch: object): void {
+  queryClient.setQueriesData<CachedEventsPage>({ queryKey: [QUERY_KEYS.feed] }, (old) =>
+    old ? patchEventInPage(old, eventId, patch) : old,
+  );
+  queryClient.setQueriesData<InfiniteData<CachedEventsPage>>({ queryKey: [QUERY_KEYS.explore] }, (old) =>
+    Array.isArray(old?.pages) ? { ...old, pages: old.pages.map((page) => patchEventInPage(page, eventId, patch)) } : old,
+  );
+  queryClient.setQueriesData<CachedEventLike>({ queryKey: [QUERY_KEYS.event] }, (old) =>
+    old && old.id === eventId ? { ...old, ...patch } : old,
+  );
+}
+
+/** `animation-delay` for the card at global list `index`: the stagger restarts
+ * on every page and plateaus after CARD_ANIMATION_MAX_STEPS cards, instead of
+ * growing linearly with the count of everything loaded so far. */
+export function cardAnimationDelayMs(index: number): number {
+  return Math.min(index % BROWSE_PAGE_SIZE, CARD_ANIMATION_MAX_STEPS) * CARD_ANIMATION_DELAY_STEP_MS;
 }

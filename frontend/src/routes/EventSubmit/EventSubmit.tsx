@@ -74,29 +74,27 @@ export default function EventSubmit() {
     path: pathname,
   });
 
-  // Re-trims all 9 text fields (multi-KB organizer prose) only when one of
-  // them actually changes, not on every unrelated keystroke (price, venue, etc).
-  const slots: Record<ContentLang, ContentSlot> = useMemo(() => ({
-    [LOCALE_ET]: makeSlot(
-      form.title, form.setTitle,
-      form.description, form.setDescription,
-      form.importantInfo, form.setImportantInfo,
-    ),
-    [LOCALE_EN]: makeSlot(
-      form.titleEn, form.setTitleEn,
-      form.descriptionEn, form.setDescriptionEn,
-      form.importantInfoEn, form.setImportantInfoEn,
-    ),
-    [LOCALE_RU]: makeSlot(
-      form.titleRu, form.setTitleRu,
-      form.descriptionRu, form.setDescriptionRu,
-      form.importantInfoRu, form.setImportantInfoRu,
-    ),
-  }), [
-    form.title, form.setTitle, form.description, form.setDescription, form.importantInfo, form.setImportantInfo,
-    form.titleEn, form.setTitleEn, form.descriptionEn, form.setDescriptionEn, form.importantInfoEn, form.setImportantInfoEn,
-    form.titleRu, form.setTitleRu, form.descriptionRu, form.setDescriptionRu, form.importantInfoRu, form.setImportantInfoRu,
-  ]);
+  // One memo per content slot: a keystroke in one language's fields re-runs
+  // hasHtmlContent (a DOMPurify pass) for that slot only, not all three.
+  const etSlot = useMemo(() => makeSlot(
+    form.title, form.setTitle,
+    form.description, form.setDescription,
+    form.importantInfo, form.setImportantInfo,
+  ), [form.title, form.setTitle, form.description, form.setDescription, form.importantInfo, form.setImportantInfo]);
+  const enSlot = useMemo(() => makeSlot(
+    form.titleEn, form.setTitleEn,
+    form.descriptionEn, form.setDescriptionEn,
+    form.importantInfoEn, form.setImportantInfoEn,
+  ), [form.titleEn, form.setTitleEn, form.descriptionEn, form.setDescriptionEn, form.importantInfoEn, form.setImportantInfoEn]);
+  const ruSlot = useMemo(() => makeSlot(
+    form.titleRu, form.setTitleRu,
+    form.descriptionRu, form.setDescriptionRu,
+    form.importantInfoRu, form.setImportantInfoRu,
+  ), [form.titleRu, form.setTitleRu, form.descriptionRu, form.setDescriptionRu, form.importantInfoRu, form.setImportantInfoRu]);
+  const slots: Record<ContentLang, ContentSlot> = useMemo(
+    () => ({ [LOCALE_ET]: etSlot, [LOCALE_EN]: enSlot, [LOCALE_RU]: ruSlot }),
+    [etSlot, enSlot, ruSlot],
+  );
   const activeSlot = slots[contentLang];
   // Field-by-field against the ET base slot.
   const markerState = (code: ContentLang): ContentMarkerState => {

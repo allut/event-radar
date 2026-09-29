@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { QUERY_KEYS, ROUTES } from '../constants';
+import { patchCachedEvent } from '../utils';
 import { useAuth } from './useAuth';
 import { useLocaleNavigate } from './useLocaleNavigate';
 
@@ -20,7 +21,7 @@ export interface UseEventReportResult {
  * clicks to /login, mirroring Share's no-auth-gate exception), and on a
  * successful submit flips the local "reported" state and invalidates every
  * read surface the `reported` field appears on. */
-export function useEventReport(baseReported: boolean): UseEventReportResult {
+export function useEventReport(baseReported: boolean, eventId?: number): UseEventReportResult {
   const authed = useAuth();
   const navigate = useLocaleNavigate();
   const queryClient = useQueryClient();
@@ -37,10 +38,12 @@ export function useEventReport(baseReported: boolean): UseEventReportResult {
 
   function handleReportSubmitted() {
     setReportedOverride(true);
-    queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.feed] });
-    queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.explore] });
-    queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.saved] });
-    queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.event] });
+    // Patch this event's `reported` flag in the cached payloads and only mark
+    // the families stale (see useFeedback) — no multi-page refetch per report.
+    if (eventId !== undefined) patchCachedEvent(queryClient, eventId, { reported: true });
+    for (const key of [QUERY_KEYS.feed, QUERY_KEYS.explore, QUERY_KEYS.saved, QUERY_KEYS.event]) {
+      queryClient.invalidateQueries({ queryKey: [key], refetchType: 'none' });
+    }
   }
 
   return {
