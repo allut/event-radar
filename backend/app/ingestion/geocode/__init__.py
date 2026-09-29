@@ -14,7 +14,7 @@ from datetime import datetime, timedelta
 from typing import cast
 
 import httpx
-from sqlalchemy import func, or_, select, update
+from sqlalchemy import false, func, or_, select, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -72,7 +72,7 @@ async def _self_heal_out_of_bbox_coords(db: AsyncSession) -> int:
     stmt = (
         update(Event)
         .where(
-            Event.is_out_of_area.is_(False),
+            Event.is_out_of_area == false(),
             Event.lat.is_not(None),
             Event.lng.is_not(None),
             or_(

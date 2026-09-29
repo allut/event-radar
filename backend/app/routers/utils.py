@@ -709,17 +709,19 @@ async def bulk_resolve_publisher_events(
     ordering — keep the two in sync if that tie-break ever changes."""
     if not publisher_ids:
         return {}
+    # DISTINCT ON walks ix_event_sources_publisher_id and keeps only the
+    # highest-id row per publisher — one row per id, not one per listing.
     es_rows = (
-        await db.scalars(
-            select(EventSource)
+        await db.execute(
+            select(EventSource.publisher_id, EventSource.event_id)
             .where(EventSource.publisher_id.in_(publisher_ids))
+            .distinct(EventSource.publisher_id)
             .order_by(EventSource.publisher_id, EventSource.id.desc())
         )
     ).all()
-    event_id_by_publisher: dict[int, int] = {}
-    for es in es_rows:
-        if es.publisher_id is not None:
-            event_id_by_publisher.setdefault(es.publisher_id, es.event_id)
+    event_id_by_publisher: dict[int, int] = {
+        pid: eid for pid, eid in es_rows if pid is not None
+    }
     if not event_id_by_publisher:
         return {}
     events = (

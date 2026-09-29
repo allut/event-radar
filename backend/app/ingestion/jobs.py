@@ -4,7 +4,7 @@ import asyncio
 import logging
 from collections.abc import Awaitable, Callable
 
-from sqlalchemy import select
+from sqlalchemy import select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.constants import (
@@ -78,7 +78,7 @@ async def ingest_source(slug: str) -> dict:
 async def ingest_all_enabled(kind: str | None = None) -> list[dict]:
     """Run ingestion for all enabled sources (optionally filtered by kind)."""
     async with AsyncSessionLocal() as db:
-        q = select(Source).where(Source.enabled.is_(True))
+        q = select(Source).where(Source.enabled == true())
         if kind:
             q = q.where(Source.kind == kind)
         sources = (await db.scalars(q)).all()

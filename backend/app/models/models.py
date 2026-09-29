@@ -277,7 +277,12 @@ class Venue(Base):
     column of the same name."""
 
     __tablename__ = "venues"
-    __table_args__ = (Index("ix_venues_organizer_id", "organizer_id"),)
+    # (organizer_id, created_at) serves both the per-organizer list and the
+    # daily-cap count in organizer_venues.py (Big-O audit L); supersedes the
+    # bare organizer_id index.
+    __table_args__ = (
+        Index("ix_venues_organizer_created", "organizer_id", "created_at"),
+    )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     organizer_id: Mapped[int] = mapped_column(
@@ -417,6 +422,17 @@ class Claim(Base):
     __table_args__ = (
         Index("ix_claims_organizer_id", "organizer_id"),
         Index("ix_claims_publisher_id", "publisher_id"),
+        # active_claim_for_target's Series arm (every public GET /events/{id})
+        # filters event_series_key + status IN (pending, approved); the
+        # approved-only unique index above can't serve the pending half.
+        Index(
+            "ix_claims_series_status",
+            "event_series_key",
+            "status",
+            postgresql_where=text("event_series_key IS NOT NULL"),
+        ),
+        # Admin claims list: status filter + ORDER BY created_at.
+        Index("ix_claims_status_created", "status", "created_at"),
         # Reject a duplicate/racing *approved* claim against the same
         # Publisher or Series at the DB layer (#431, slice 1 of #425) —
         # narrowed from pending-or-approved so multiple pending claims can
@@ -791,6 +807,16 @@ class EventSource(Base):
         # refetch.py::_select_candidates (organizer-submission exclusion) —
         # without it that lookup is a per-candidate sequential scan.
         Index("ix_event_sources_event_id", "event_id"),
+        # Publisher -> freshest listing lookups (claims/pinning.py,
+        # claims/lifecycle.py, routers/utils.py::bulk_resolve_publisher_events)
+        # filter publisher_id and take the highest id; INCLUDE(event_id)
+        # makes them index-only (Big-O audit H2).
+        Index(
+            "ix_event_sources_publisher_id",
+            "publisher_id",
+            "id",
+            postgresql_include=["event_id"],
+        ),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
@@ -1072,7 +1098,12 @@ class AdminAction(Base):
     happened" is the only fact the admin auth model asserts."""
 
     __tablename__ = "admin_actions"
-    __table_args__ = (Index("ix_admin_actions_created_at", "created_at"),)
+    __table_args__ = (
+        Index("ix_admin_actions_created_at", "created_at"),
+        # Revoked-claim tombstone lookup (organizer_claims.py) filters
+        # action + target and takes the newest row.
+        Index("ix_admin_actions_action_target", "action", "target", "created_at"),
+    )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     action: Mapped[str] = mapped_column(String(40), nullable=False)

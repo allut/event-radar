@@ -3,7 +3,7 @@
 from datetime import datetime, timedelta
 from typing import cast
 
-from sqlalchemy import and_, case, func, literal, or_, select, update
+from sqlalchemy import and_, case, false, func, literal, or_, select, true, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -138,7 +138,7 @@ async def publish_pending(
         EventClassification.quality_score >= PUBLISH_MIN_QUALITY_SCORE
     )
     unverified_organizer_ids = select(Organizer.id).where(
-        Organizer.verified.is_(False)
+        Organizer.verified == false()
     )
     # NULL-safe: a non-organizer event's submitted_by_organizer_id is NULL, and
     # "NULL NOT IN (...)" evaluates to SQL NULL (not TRUE) regardless of the
@@ -150,9 +150,9 @@ async def publish_pending(
     )
     update_conds = [
         Event.status == EVENT_STATUS_CLASSIFIED,
-        Event.is_explicit.is_(False),
-        Event.is_non_event.is_(False),
-        Event.is_out_of_area.is_(False),
+        Event.is_explicit == false(),
+        Event.is_non_event == false(),
+        Event.is_out_of_area == false(),
         event_not_ended_filter(now),
         func.trim(Event.title_orig) != "",
         Event.id.in_(qualifying_ids),
@@ -185,13 +185,13 @@ async def publish_pending(
                     else_=0,
                 )
             ).label("fail_quality"),
-            func.sum(case((Event.is_explicit.is_(True), 1), else_=0)).label(
+            func.sum(case((Event.is_explicit == true(), 1), else_=0)).label(
                 "fail_explicit"
             ),
-            func.sum(case((Event.is_non_event.is_(True), 1), else_=0)).label(
+            func.sum(case((Event.is_non_event == true(), 1), else_=0)).label(
                 "fail_non_event"
             ),
-            func.sum(case((Event.is_out_of_area.is_(True), 1), else_=0)).label(
+            func.sum(case((Event.is_out_of_area == true(), 1), else_=0)).label(
                 "fail_out_of_area"
             ),
             func.sum(case((event_ended_filter(now), 1), else_=0)).label(

@@ -201,6 +201,7 @@ async def _get_own_claim_or_tombstone(
                 AdminAction.target == str(claim_id),
             )
             .order_by(AdminAction.created_at.desc())
+            .limit(1)
         )
         if admin_action is None or admin_action.result.get("organizer_id") != organizer.id:
             raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc

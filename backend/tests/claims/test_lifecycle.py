@@ -1151,17 +1151,20 @@ class TestExpireStaleClaims:
         claim = MagicMock(id=1, organizer_id=5, kind=CLAIM_KIND_PUBLISHER, publisher_id=99)
         execute_result = MagicMock()
         execute_result.scalars.return_value = MagicMock(all=MagicMock(return_value=[claim]))
-        mock_db.execute.return_value = execute_result
+        # 2nd execute = bulk_resolve_publisher_events' DISTINCT ON rows.
+        mock_db.execute = AsyncMock(
+            side_effect=[
+                execute_result,
+                MagicMock(all=MagicMock(return_value=[(99, 42)])),
+            ]
+        )
 
         organizer = make_organizer(organizer_id=5)
-        es = fake_event_source(publisher_id=99)
-        es.event_id = 42
         event = make_event(event_id=42)
         event.title_orig = "Jazz Night"
         mock_db.scalars = AsyncMock(
             side_effect=[
                 MagicMock(all=MagicMock(return_value=[organizer])),
-                MagicMock(all=MagicMock(return_value=[es])),
                 MagicMock(all=MagicMock(return_value=[event])),
             ]
         )

@@ -17,7 +17,7 @@ from datetime import date, datetime, timedelta
 from functools import cached_property
 from heapq import nlargest
 
-from sqlalchemy import select
+from sqlalchemy import select, true
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import load_only, selectinload
@@ -779,7 +779,7 @@ async def _verified_user_ids(db: AsyncSession) -> list[int]:
     able to log into — no feed or digest is reachable for it, so skipping it here
     wastes no legitimate value and closes the unverified-signup digest-spam gap."""
     return list(
-        (await db.scalars(select(User.id).where(User.email_verified.is_(True)))).all()
+        (await db.scalars(select(User.id).where(User.email_verified == true()))).all()
     )
 
 

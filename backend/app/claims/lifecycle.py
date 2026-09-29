@@ -9,7 +9,7 @@ from http import HTTPStatus
 from datetime import datetime, timedelta, timezone
 
 import httpx
-from sqlalchemy import and_, func, or_, select, update
+from sqlalchemy import and_, func, or_, select, true, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -222,7 +222,7 @@ async def bulk_dormant_pinned_event_ids(db: AsyncSession, events: list[Event]) -
                 select(Claim.publisher_id).where(
                     Claim.publisher_id.in_(publisher_ids),
                     Claim.status.in_(CLAIM_ACTIVE_STATUSES),
-                    Claim.dormant.is_(True),
+                    Claim.dormant == true(),
                 )
             )
         ).all()
@@ -238,7 +238,7 @@ async def bulk_dormant_pinned_event_ids(db: AsyncSession, events: list[Event]) -
                 select(Claim.event_series_key).where(
                     Claim.event_series_key.in_(series_keys),
                     Claim.status.in_(CLAIM_ACTIVE_STATUSES),
-                    Claim.dormant.is_(True),
+                    Claim.dormant == true(),
                 )
             )
         ).all()

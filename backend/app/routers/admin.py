@@ -10,7 +10,7 @@ from fastapi import APIRouter, Cookie, Depends, HTTPException, Query, Request, s
 from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from pydantic import BaseModel, Field
-from sqlalchemy import and_, func, select
+from sqlalchemy import and_, func, select, true
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -426,7 +426,7 @@ async def admin_list_submissions(
     first.
     """
     async with AsyncSessionLocal() as db:
-        queue_filter = (Event.needs_review.is_(True), Event.status != EVENT_STATUS_CANCELLED)
+        queue_filter = (Event.needs_review == true(), Event.status != EVENT_STATUS_CANCELLED)
         # total only on the first page — see browse.py's _browse_sql_path.
         total: int | None = None
         if offset == 0:
@@ -881,7 +881,7 @@ async def admin_list_reports(
         if reason is not None:
             match_conditions.append(EventReport.reason == reason)
         if illegal_only:
-            match_conditions.append(EventReport.is_illegal_allegation.is_(True))
+            match_conditions.append(EventReport.is_illegal_allegation == true())
         matching_event_ids = (
             select(EventReport.event_id).where(*match_conditions).distinct()
         )
@@ -1534,7 +1534,7 @@ async def admin_counts(request: Request) -> dict:
         pending_submissions = (
             await db.scalar(
                 select(func.count(Event.id)).where(
-                    Event.needs_review.is_(True),
+                    Event.needs_review == true(),
                     Event.status != EVENT_STATUS_CANCELLED,
                 )
             )
@@ -1577,7 +1577,7 @@ async def admin_stats(request: Request) -> dict:
         sources_total = (await db.scalar(select(func.count(Source.id)))) or 0
         sources_enabled = (
             await db.scalar(
-                select(func.count(Source.id)).where(Source.enabled.is_(True))
+                select(func.count(Source.id)).where(Source.enabled == true())
             )
         ) or 0
 

@@ -10,7 +10,7 @@ from contextlib import nullcontext
 from datetime import date, datetime
 
 import httpx
-from sqlalchemy import select
+from sqlalchemy import select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.tokens import generate_unsubscribe_token
@@ -378,8 +378,8 @@ async def send_daily_digests(
         (
             await db.scalars(
                 select(User.id).where(
-                    User.email_digest_opt_in.is_(True),
-                    User.email_verified.is_(True),
+                    User.email_digest_opt_in == true(),
+                    User.email_verified == true(),
                 )
             )
         ).all()

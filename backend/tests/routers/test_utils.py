@@ -284,15 +284,14 @@ class TestBulkResolvePublisherEvents:
 
     @pytest.mark.asyncio
     async def test_freshest_event_source_wins_per_publisher(self, mock_db, make_event):
-        es_old = MagicMock(publisher_id=99, event_id=1)
-        es_new = MagicMock(publisher_id=99, event_id=2)
         event = make_event(event_id=2)
+        # DISTINCT ON (publisher_id) ORDER BY id DESC — one (publisher_id,
+        # event_id) row per publisher, the freshest listing's.
+        mock_db.execute = AsyncMock(
+            return_value=MagicMock(all=MagicMock(return_value=[(99, 2)]))
+        )
         mock_db.scalars = AsyncMock(
-            side_effect=[
-                # order_by(publisher_id, id.desc()) — freshest (id-desc) first.
-                MagicMock(all=MagicMock(return_value=[es_new, es_old])),
-                MagicMock(all=MagicMock(return_value=[event])),
-            ]
+            side_effect=[MagicMock(all=MagicMock(return_value=[event]))]
         )
 
         result = await bulk_resolve_publisher_events(mock_db, {99})
@@ -301,8 +300,8 @@ class TestBulkResolvePublisherEvents:
 
     @pytest.mark.asyncio
     async def test_no_matching_event_sources_returns_empty(self, mock_db):
-        mock_db.scalars = AsyncMock(
-            side_effect=[MagicMock(all=MagicMock(return_value=[]))]
+        mock_db.execute = AsyncMock(
+            return_value=MagicMock(all=MagicMock(return_value=[]))
         )
 
         result = await bulk_resolve_publisher_events(mock_db, {99})

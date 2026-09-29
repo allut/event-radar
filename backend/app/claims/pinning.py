@@ -9,7 +9,7 @@ from datetime import datetime
 
 import httpx
 from bs4 import BeautifulSoup
-from sqlalchemy import func, select, update
+from sqlalchemy import false, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.constants import (
@@ -198,7 +198,7 @@ async def organizer_covered_event_count(db: AsyncSession, organizer_id: int) -> 
             select(Claim.kind, Claim.publisher_id).where(
                 Claim.organizer_id == organizer_id,
                 Claim.status == CLAIM_STATUS_APPROVED,
-                Claim.dormant.is_(False),
+                Claim.dormant == false(),
             )
         )
     ).all()

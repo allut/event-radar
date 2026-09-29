@@ -24,7 +24,11 @@ from app.constants import (
     ERROR_CLAIM_TARGET_ALREADY_APPROVED,
 )
 from tests.conftest import build_event
-from tests.routers.conftest import patch_admin_settings, scalars_returning
+from tests.routers.conftest import (
+    execute_rows,
+    patch_admin_settings,
+    scalars_returning,
+)
 
 
 def _make_claim(
@@ -141,13 +145,13 @@ async def test_list_pending_claims_shows_dns_evidence_and_resolves_publisher_eve
 
     db = mock_db
     db.scalar = AsyncMock(return_value=1)
-    # Three `db.scalars()` calls in list order: the claims page itself, the
-    # bulk EventSource lookup (one row per distinct publisher_id), then the
-    # bulk Event lookup — the N+1 fix's two-fixed-query bulk-load pair.
+    # `db.scalars()` calls in list order: the claims page itself, then the
+    # bulk Event lookup; the bulk EventSource lookup is a DISTINCT ON
+    # `db.execute()` returning (publisher_id, event_id) rows.
+    db.execute = AsyncMock(return_value=execute_rows([(es.publisher_id, es.event_id)]))
     db.scalars = AsyncMock(
         side_effect=[
             scalars_returning([claim]),
-            scalars_returning([es]),
             scalars_returning([event]),
         ]
     )

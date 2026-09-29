@@ -4,7 +4,7 @@ claims and dedup — the one home for "which events count" definitions."""
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import ColumnElement, and_, func, or_
+from sqlalchemy import and_, ColumnElement, false, func, or_
 
 from app.constants import EVENT_STATUS_PUBLISHED
 from app.models.models import Event
@@ -32,8 +32,8 @@ def public_event_filter() -> ColumnElement[bool]:
     """
     return and_(
         Event.status == EVENT_STATUS_PUBLISHED,
-        Event.is_explicit.is_(False),
-        Event.is_non_event.is_(False),
+        Event.is_explicit == false(),
+        Event.is_non_event == false(),
     )
 
 

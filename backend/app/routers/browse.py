@@ -14,7 +14,7 @@ from datetime import date, datetime, timedelta
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from sqlalchemy import ColumnElement, and_, func, or_, select
+from sqlalchemy import and_, ColumnElement, func, or_, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import load_only, selectinload
 
@@ -89,7 +89,7 @@ def _parse_slug_list(raw: str | None, valid: frozenset[str]) -> list[str]:
 
 
 def _free_filter() -> ColumnElement[bool]:
-    return or_(Event.price_min == 0, Event.has_free_tier.is_(True))
+    return or_(Event.price_min == 0, Event.has_free_tier == true())
 
 
 def _keyword_filter(q: str) -> ColumnElement[bool]:

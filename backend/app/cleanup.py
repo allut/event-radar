@@ -3,7 +3,7 @@
 from datetime import datetime, timedelta
 from typing import cast
 
-from sqlalchemy import ColumnElement, and_, delete, exists, func, select
+from sqlalchemy import and_, ColumnElement, delete, exists, false, func, select
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -141,7 +141,7 @@ async def cleanup_stale_data(db: AsyncSession, *, dry_run: bool = False) -> dict
         db,
         User,
         and_(
-            User.email_verified.is_(False),
+            User.email_verified == false(),
             User.created_at < unverified_cutoff,
             no_pending_user_link,
         ),
