@@ -152,6 +152,20 @@ const SNAPSHOT_STYLESHEET_REL_RE = /\brel="stylesheet"/;
 const SNAPSHOT_HREF_RE = /\bhref="([^"]+)"/;
 const SNAPSHOT_SRC_RE = /\bsrc="([^"]+)"/;
 
+/** True only for a root-relative path under CRAWLABLE_ASSETS_PATH that still
+ * resolves to PRODUCTION_ORIGIN. A bare `includes('/assets/')` also accepted
+ * "@evil.example/assets/x.css", which glued onto the origin made the audit
+ * Worker fetch an attacker-chosen host (OWASP audit #1, knock-on). */
+function isSameSiteAssetPath(href: string): boolean {
+  if (!href.startsWith(CRAWLABLE_ASSETS_PATH)) return false;
+  try {
+    const resolved = new URL(href, PRODUCTION_ORIGIN);
+    return resolved.origin === PRODUCTION_ORIGIN && resolved.pathname.startsWith(CRAWLABLE_ASSETS_PATH);
+  } catch {
+    return false;
+  }
+}
+
 export function parseSnapshotAssetUrls(html: string): string[] {
   const urls = new Set<string>();
   // Regexes hoisted above, not re-literaled every matchAll iteration
@@ -160,7 +174,7 @@ export function parseSnapshotAssetUrls(html: string): string[] {
     if (tagName === 'link' && !SNAPSHOT_STYLESHEET_REL_RE.test(tag)) continue;
     const attrRe = tagName === 'link' ? SNAPSHOT_HREF_RE : SNAPSHOT_SRC_RE;
     const match = tag.match(attrRe);
-    if (match && match[1].includes(CRAWLABLE_ASSETS_PATH)) urls.add(match[1]);
+    if (match && isSameSiteAssetPath(match[1])) urls.add(match[1]);
   }
   return [...urls];
 }

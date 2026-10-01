@@ -67,7 +67,7 @@ from app.email.claim_resolution import (
     send_claim_granted_email,
     send_claim_self_cancelled_email,
 )
-from app.ingestion.http_client import http_get
+from app.ingestion.http_client import http_get_stored_url
 from app.models.models import Claim, Event, EventSource, Organizer
 from app.routers.utils import bulk_resolve_publisher_events, resolve_title
 from app.events.venue import resolve_venue_name
@@ -320,7 +320,17 @@ async def _run_verification(
             # falls back to fetching it here in either case.
             html = event_page_html
             if html is None:
-                response = await http_get(client, event.url)
+                try:
+                    response = await http_get_stored_url(client, event.url)
+                except ValueError:
+                    # SSRF guard refused the stored URL (not an allowlisted
+                    # https host) — same fallback as a failed fetch below.
+                    log.warning(
+                        "claim verification: event url not fetchable, falling "
+                        "back to admin review: source=%s",
+                        source_slug,
+                    )
+                    return series_claim_result()
                 html = response.text
             return await verify_piletilevi_claim(
                 client, html, event.url, token, organizer_email

@@ -23,7 +23,7 @@ from app.constants import (
     REFETCH_PRICE_TOLERANCE,
     TALLINN_TZ,
 )
-from app.ingestion.http_client import http_get, normalized_hostname
+from app.ingestion.http_client import http_get_stored_url, normalized_hostname
 from app.ingestion.jsonld import offers_from_jsonld_items, parse_jsonld_event_items
 from app.ingestion.price_fallback import PRICE_FALLBACK_EXTRACTORS
 from app.models.models import Claim, Event, EventSource
@@ -237,7 +237,7 @@ async def fetch_fresh_price(client: httpx.AsyncClient, event: Event) -> FreshPri
     if not event.url:
         return None
     try:
-        response = await http_get(client, event.url)
+        response = await http_get_stored_url(client, event.url)
     except (httpx.HTTPStatusError, httpx.RequestError, ValueError):
         return None
     soup = BeautifulSoup(response.text, HTML_PARSER)

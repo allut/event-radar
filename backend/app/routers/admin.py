@@ -1,4 +1,4 @@
-"""Admin endpoints — protected by HTTP Basic auth."""
+"""Admin endpoints — protected by the admin console session cookie."""
 
 import asyncio
 import logging
@@ -6,32 +6,21 @@ from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from datetime import datetime
 
 import httpx
-from fastapi import APIRouter, Cookie, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
-from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from pydantic import BaseModel, Field
 from sqlalchemy import and_, func, select, true
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.auth.admin_lockout import (
-    admin_credentials_ok,
-    admin_username_disabled,
-    check_admin_lockout,
-    clear_admin_auth_failure,
-    record_admin_auth_failure,
-)
-from app.auth.dependencies import get_current_admin, valid_admin_session
+from app.auth.dependencies import get_current_admin
 from app.cleanup import cleanup_stale_data
-from app.config import settings
 from app.constants import (
     ADMIN_ACTION_APPROVE_SUBMISSION,
     ADMIN_RESOLUTION_NOTE_MAX_CHARS,
-    FEATURE_ADMIN_ENDPOINTS,
     MIME_APPLICATION_NDJSON,
     SECURITY_HEADERS,
-    SETTING_NAME_ADMIN_PASSWORD,
     ADMIN_ACTION_BUILD_FEEDS,
     ADMIN_ACTION_CLEANUP,
     ADMIN_ACTION_CLASSIFY,
@@ -58,14 +47,11 @@ from app.constants import (
     ADMIN_EVENT_INSPECTOR_RAW_EVENTS_LIMIT,
     ADMIN_REVIEW_QUEUE_MAX_PAGE_SIZE,
     ADMIN_REVIEW_QUEUE_PAGE_SIZE,
-    ADMIN_SESSION_COOKIE_NAME,
     CLAIM_KIND_PUBLISHER,
     CLAIM_STATUS_APPROVED,
     CLAIM_STATUS_PENDING,
     CLAIM_STATUS_REVOKED,
     DEFAULT_USER_LOCALE,
-    ERROR_ADMIN_DISABLED,
-    ERROR_ADMIN_INCORRECT_CREDENTIALS,
     ERROR_CLAIM_ALREADY_RESOLVED,
     ERROR_CLAIM_NOT_APPROVED,
     ERROR_CLAIM_NOT_FOUND,
@@ -120,7 +106,7 @@ from app.models.models import (
 )
 from app.publish import publish_pending
 from app.ranking.score import build_daily_feeds
-from app.rate_limit import client_key, limiter
+from app.rate_limit import limiter
 from app.routers.utils import (
     bulk_resolve_publisher_events,
     acquire_admin_job_lock,
@@ -146,66 +132,10 @@ from app.events.venue import (
     resolve_venue_name,
 )
 from app.events.queries import canonical_event_filter
-from app.auth.utils import require_configured_secret
 from app.db import run_in_session
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/admin")
-# auto_error=False: a request carrying the admin session cookie instead of a
-# Basic header must not be auto-rejected before _require_admin gets a chance
-# to check the cookie — see _require_admin below.
-_security = HTTPBasic(auto_error=False)
-
-def _require_admin(
-    request: Request,
-    credentials: HTTPBasicCredentials | None = Depends(_security),
-    admin_session: str | None = Cookie(default=None, alias=ADMIN_SESSION_COOKIE_NAME),
-) -> None:
-    """Non-PII read-only surface — GET /admin/counts and /admin/stats only
-    (OWASP audit G-5: /admin/dedup/groups moved to get_current_admin, since
-    it discloses moderation-sensitive event content, not aggregate counts).
-    Accepts EITHER a valid admin console session cookie (issued by POST
-    /admin/auth/login) OR HTTP Basic (curl / existing integrations) — see
-    docs/backend-ops.md's Admin Endpoints section. An invalid/expired cookie
-    falls through to requiring Basic rather than rejecting outright, so a
-    stale browser cookie doesn't lock a curl caller out of the same request
-    path. Every other route uses get_current_admin instead (session-only, no
-    Basic) — see its docstring."""
-    if admin_session is not None and valid_admin_session(admin_session):
-        return
-
-    if credentials is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=ERROR_ADMIN_INCORRECT_CREDENTIALS,
-            headers={"WWW-Authenticate": "Basic"},
-        )
-
-    key = client_key(request)
-    now = check_admin_lockout(key)
-
-    password = settings.ADMIN_PASSWORD
-    if not require_configured_secret(
-        password,
-        feature=FEATURE_ADMIN_ENDPOINTS,
-        setting_name=SETTING_NAME_ADMIN_PASSWORD,
-        app_env=settings.APP_ENV,
-        allow_insecure_dev=settings.ALLOW_INSECURE_DEV,
-    ):
-        return
-    if admin_username_disabled():
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=ERROR_ADMIN_DISABLED,
-        )
-    if not admin_credentials_ok(credentials.username, credentials.password):
-        record_admin_auth_failure(key, now, credentials.username)
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=ERROR_ADMIN_INCORRECT_CREDENTIALS,
-            headers={"WWW-Authenticate": "Basic"},
-        )
-    clear_admin_auth_failure(key)
 
 
 def _ndjson_response(gen: AsyncIterator[bytes]) -> StreamingResponse:
@@ -1512,7 +1442,7 @@ async def admin_pipeline_run(
     return _ndjson_response(_stream_pipeline_run(dry_run))
 
 
-@router.get("/counts", dependencies=[Depends(_require_admin)])
+@router.get("/counts", dependencies=[Depends(get_current_admin)])
 @limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
 async def admin_counts(request: Request) -> dict:
     """Open-reports + pending-submissions + pending-claims counts for the
@@ -1552,7 +1482,7 @@ async def admin_counts(request: Request) -> dict:
     }
 
 
-@router.get("/stats", dependencies=[Depends(_require_admin)])
+@router.get("/stats", dependencies=[Depends(get_current_admin)])
 @limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
 async def admin_stats(request: Request) -> dict:
     """Aggregate counts used by checkpoint tests and manual monitoring."""

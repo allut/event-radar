@@ -1,14 +1,11 @@
 """Coverage for admin endpoints/branches not exercised by test_admin.py:
-_require_admin fail-closed, /ingest, /ingest/{slug}, /dedup, /dedup/groups,
+session-only auth on /stats, /ingest, /ingest/{slug}, /dedup, /dedup/groups,
 /classify, /refetch, /stats.
 
-_require_admin fail-closed tests below target a read-only (GET) route —
-mutating (POST) routes require the session-only get_current_admin (H-1 in
-the OWASP audit) and no longer accept Basic auth at all, so they can't
-exercise _require_admin's Basic-branch checks (admin_username_disabled,
-admin_credentials_ok). GET /admin/dedup/groups also moved to get_current_admin
-(OWASP audit G-5, since it discloses moderation-sensitive event content, not
-aggregate counts) — see test_dedup_groups_rejects_basic_auth_alone below."""
+Every /admin/* route — /stats and /counts included (OWASP audit #4) — requires
+the TOTP-backed session cookie; HTTP Basic is not accepted anywhere. GET
+/admin/dedup/groups moved off Basic earlier (OWASP audit G-5) — see
+test_dedup_groups_rejects_basic_auth_alone below."""
 
 import http
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -16,31 +13,48 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from app.constants import ADMIN_USERNAME_DEFAULT, APP_ENV_DEVELOPMENT
+from app.constants import APP_ENV_DEVELOPMENT
 from tests.routers.conftest import ndjson_lines, patch_admin_settings, scalars_returning
 
 
 # ---------------------------------------------------------------------------
-# _require_admin fail-closed branches
+# session-only auth on /stats
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_default_username_in_production_returns_503(admin_app):
+async def test_stats_rejects_correct_basic_credentials_alone(admin_app):
+    """OWASP audit #4: password-only access to /admin/stats is gone — correct
+    Basic credentials no longer reach TOTP-less read access (and so no longer
+    act as a password-guess oracle)."""
     app = admin_app
     with patch_admin_settings() as mock_settings:
         mock_settings.ADMIN_PASSWORD = "s3cret"
-        mock_settings.ADMIN_USERNAME = ADMIN_USERNAME_DEFAULT
+        mock_settings.ADMIN_USERNAME = "realadmin"
         mock_settings.APP_ENV = "production"
 
         async with AsyncClient(
             transport=ASGITransport(app=app), base_url="http://test"
         ) as client:
-            resp = await client.get(
-                "/admin/stats", auth=(ADMIN_USERNAME_DEFAULT, "s3cret")
-            )
+            resp = await client.get("/admin/stats", auth=("realadmin", "s3cret"))
 
-    assert resp.status_code == http.HTTPStatus.SERVICE_UNAVAILABLE
+    assert resp.status_code == http.HTTPStatus.UNAUTHORIZED
+
+
+@pytest.mark.asyncio
+async def test_counts_rejects_correct_basic_credentials_alone(admin_app):
+    app = admin_app
+    with patch_admin_settings() as mock_settings:
+        mock_settings.ADMIN_PASSWORD = "s3cret"
+        mock_settings.ADMIN_USERNAME = "realadmin"
+        mock_settings.APP_ENV = "production"
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            resp = await client.get("/admin/counts", auth=("realadmin", "s3cret"))
+
+    assert resp.status_code == http.HTTPStatus.UNAUTHORIZED
 
 
 @pytest.mark.asyncio

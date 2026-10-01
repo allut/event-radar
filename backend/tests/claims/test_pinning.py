@@ -108,11 +108,21 @@ class TestFetchFreshPrice:
         event = make_event()
         client = AsyncMock()
         with patch(
-            "app.claims.pinning.http_get",
+            "app.claims.pinning.http_get_stored_url",
             new_callable=AsyncMock,
             side_effect=httpx.RequestError("boom"),
         ):
             assert await fetch_fresh_price(client, event) is None
+
+    @pytest.mark.asyncio
+    async def test_ssrf_guard_refusal_returns_none(self, make_event):
+        event = make_event()
+        event.url = "https://127.0.0.1.attacker.example/e/1"
+        client = AsyncMock()
+        # Real guard, no http_get_stored_url patch: a non-allowlisted host is
+        # refused before any request is made.
+        assert await fetch_fresh_price(client, event) is None
+        client.get.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_no_offers_in_page_returns_none(self, make_event):
@@ -121,7 +131,7 @@ class TestFetchFreshPrice:
         response.text = "<html></html>"
         client = AsyncMock()
         with (
-            patch("app.claims.pinning.http_get", new_callable=AsyncMock, return_value=response),
+            patch("app.claims.pinning.http_get_stored_url", new_callable=AsyncMock, return_value=response),
             patch("app.claims.pinning.parse_jsonld_event_items", return_value=[]),
             patch(
                 "app.claims.pinning.offers_from_jsonld_items",
@@ -137,7 +147,7 @@ class TestFetchFreshPrice:
         response.text = "<html></html>"
         client = AsyncMock()
         with (
-            patch("app.claims.pinning.http_get", new_callable=AsyncMock, return_value=response),
+            patch("app.claims.pinning.http_get_stored_url", new_callable=AsyncMock, return_value=response),
             patch("app.claims.pinning.parse_jsonld_event_items", return_value=[{}]),
             patch(
                 "app.claims.pinning.offers_from_jsonld_items",
@@ -161,7 +171,7 @@ class TestFetchFreshPrice:
         )
         client = AsyncMock()
         with (
-            patch("app.claims.pinning.http_get", new_callable=AsyncMock, return_value=response),
+            patch("app.claims.pinning.http_get_stored_url", new_callable=AsyncMock, return_value=response),
             patch("app.claims.pinning.parse_jsonld_event_items", return_value=[]),
             patch(
                 "app.claims.pinning.offers_from_jsonld_items",

@@ -76,13 +76,13 @@ TALLINN_TZ = ZoneInfo(TALLINN_TZ_NAME)
 APP_ENV_DEVELOPMENT = "development"
 
 # require_configured_secret() call-site literals for the ADMIN_PASSWORD gate —
-# duplicated across get_current_admin (auth/dependencies.py)/_require_admin (routers/admin.py) and
-# admin_login (routers/admin_auth.py); named so all three stay in sync.
+# duplicated across get_current_admin (auth/dependencies.py) and
+# admin_login (routers/admin_auth.py); named so both stay in sync.
 SETTING_NAME_ADMIN_PASSWORD = "ADMIN_PASSWORD"
 FEATURE_ADMIN_ENDPOINTS = "Admin endpoints"
 
-# Default value of settings.ADMIN_USERNAME. In production, _require_admin fails
-# closed if this hasn't been overridden — a guessable, well-known Basic-auth
+# Default value of settings.ADMIN_USERNAME. In production, admin_login fails
+# closed if this hasn't been overridden — a guessable, well-known admin
 # username removes half of the credential pair an attacker needs to brute-force.
 ADMIN_USERNAME_DEFAULT = "admin"
 
@@ -200,7 +200,9 @@ ALLOWED_SOURCE_HOSTS: frozenset[str] = frozenset(
 # configured inbound address could otherwise inject arbitrary content into the
 # newsletter-extraction LLM prompt. Empty by default: no newsletter adapter is
 # registered yet (app/ingestion/registry.py), so extraction is a no-op regardless;
-# populate with trusted sender domains before wiring up the newsletter adapter.
+# populate with trusted sender domains before wiring up the newsletter adapter —
+# and only together with an SPF/DKIM/DMARC pass requirement in webhooks.py, since
+# the "from" header alone is forgeable (OWASP audit #8).
 NEWSLETTER_SENDER_ALLOWED_DOMAINS: frozenset[str] = frozenset()
 
 # SAFE_URL_SCHEMES, HTML_SANITIZE_ALLOWED_TAGS, HTML_SANITIZE_ALLOWED_ATTRS imported
@@ -953,12 +955,27 @@ OAUTH_STATE_COOKIE_NAME = "oauth_state"
 OAUTH_STATE_COOKIE_PATH = "/api/auth/google/callback"
 GOOGLE_CALLBACK_PUBLIC_PATH = "/api/auth/google/callback"
 OAUTH_STATE_COOKIE_SAMESITE: Literal["lax"] = "lax"
+# Google-link binding cookies (OWASP audit #3): set on the callback that sends a
+# confirmation magic link, carrying the pending Google `sub`, so the link only
+# attaches that identity when clicked in the browser that started the Google
+# sign-in. Unlike the state cookies these are SameSite=Strict session-style
+# cookies (set on a top-level response, read on the SPA's same-site POST to the
+# verify route), scoped to that one route. Own salt so a binding token never
+# verifies as a magic-link/session/state token.
+AUTH_GOOGLE_LINK_BINDING_SALT = "google-link-binding-v1"
+GOOGLE_LINK_BINDING_COOKIE_NAME = "google_link_binding"
+GOOGLE_LINK_BINDING_COOKIE_PATH = "/api/auth/verify"
+ORGANIZER_GOOGLE_LINK_BINDING_COOKIE_NAME = "organizer_google_link_binding"
+ORGANIZER_GOOGLE_LINK_BINDING_COOKIE_PATH = "/api/organizer/auth/verify"
 # Google sign-in outcomes (routers/organizer_auth.py / routers/auth.py
 # callbacks) — carried on LOG_EVENT_GOOGLE_SIGNIN's `outcome` field.
 GOOGLE_SIGNIN_OUTCOME_EXISTING_LOGIN = "existing_login"
 GOOGLE_SIGNIN_OUTCOME_NEW_ACCOUNT = "new_account"
 GOOGLE_SIGNIN_OUTCOME_AUTO_LINKED = "auto_linked"
 GOOGLE_SIGNIN_OUTCOME_CONFIRMATION_SENT = "confirmation_sent"
+# Google reported the address as unverified and it isn't an authoritative
+# domain — no confirmation link is sent (OWASP audit #3), nothing is created.
+GOOGLE_SIGNIN_OUTCOME_UNVERIFIED_EMAIL = "unverified_email"
 # Frontend redirect targets for the callback (no JSON response — this is a
 # top-level browser navigation back from Google).
 ORGANIZER_LOGIN_PATH = "/organizer/login"
@@ -1076,6 +1093,11 @@ IMAGE_UPLOAD_MAX_BYTES = 8 * 1024 * 1024  # 8 MiB
 CLOUDINARY_UPLOAD_URL_TEMPLATE = (
     "https://api.cloudinary.com/v1_1/{cloud_name}/image/upload"
 )
+# Path prefix every delivery URL of OUR Cloudinary account carries on
+# res.cloudinary.com — the host alone is shared by every Cloudinary account, so
+# organizer_events.py::_check_image_host also pins this account's cloud name
+# (OWASP audit #6).
+CLOUDINARY_DELIVERY_PATH_TEMPLATE = "/{cloud_name}/image/upload/"
 # Leading-byte signatures for the three formats IMAGE_UPLOAD_ALLOWED_MIME
 # allows. WebP needs its own check (organizer_events.py::_sniff_image_mime)
 # since RIFF is a generic container format — the fourCC at offset 8 is what
@@ -1102,6 +1124,8 @@ IMAGE_EXTENSION_BY_MIME: dict[str, str] = {
 # turning it into a tracking pixel that leaks each recipient's IP/open-time to
 # a third party the recipient never consented to. Scraped (non-organizer)
 # sources are unaffected — this only gates SOURCE_KIND_USER_SUBMISSION.
+# The host is necessary but not sufficient: _check_image_host also requires
+# CLOUDINARY_DELIVERY_PATH_TEMPLATE for the configured account.
 ALLOWED_IMAGE_HOSTS = frozenset({"res.cloudinary.com"})
 
 # Whole-request body ceiling (app.main.MaxBodySizeMiddleware) — above
@@ -1346,6 +1370,12 @@ assert PREFERENCE_SIGNALS <= VALID_SIGNALS, "PREFERENCE_SIGNALS must be a subset
 PREFERENCE_SIGNALS_SQL_PREDICATE = "signal IN ({})".format(
     ", ".join(f"'{s}'" for s in sorted(PREFERENCE_SIGNALS))
 )
+
+# Partial-index predicate for the passive analytics signals ("view"/
+# "click_external" — everything in VALID_SIGNALS outside PREFERENCE_SIGNALS):
+# migration 0055's one-row-per-(user, event, signal, UTC day) unique index
+# (OWASP audit #9). Derived from PREFERENCE_SIGNALS like the predicate above.
+PASSIVE_SIGNALS_SQL_PREDICATE = f"NOT ({PREFERENCE_SIGNALS_SQL_PREDICATE})"
 
 # Time-of-day / day-of-week slots derived from event.starts_at (Europe/Tallinn).
 # An event can match multiple slots simultaneously (e.g. Saturday evening → weekend + evening).

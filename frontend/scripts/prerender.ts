@@ -74,6 +74,7 @@ import {
   PRERENDER_DIAGNOSTIC_MAX_EVENTS,
   RATE_GATE_SLACK_MS,
 } from '../src/constants';
+import { serializeJsonLd } from '../src/lib/jsonLd';
 import { localizedPath } from '../src/lib/urlLocale';
 import { githubRequest } from '../src/lib/githubRequest';
 import { compareEventStaleness, parseSnapshotHtml, validateSnapshotStructure } from '../src/lib/seoValidation';
@@ -220,7 +221,7 @@ function embedChangeMarkerInPlace(document: Document, marker: string): void {
     try {
       const data = JSON.parse(script.textContent ?? '{}') as Record<string, unknown>;
       data[CHANGE_MARKER_JSONLD_FIELD] = marker;
-      script.textContent = JSON.stringify(data);
+      script.textContent = serializeJsonLd(data);
     } catch {
       // Malformed JSON-LD — leave untouched, validateTarget() catches it.
     }

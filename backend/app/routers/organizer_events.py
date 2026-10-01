@@ -12,7 +12,7 @@ import hashlib
 import logging
 import time
 from datetime import datetime
-from urllib.parse import urlsplit
+from urllib.parse import unquote, urlsplit
 from uuid import uuid4
 
 import httpx
@@ -24,6 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.constants import (
     ALLOWED_IMAGE_HOSTS,
+    CLOUDINARY_DELIVERY_PATH_TEMPLATE,
     BROWSE_MAX_PAGE_SIZE,
     BROWSE_PAGE_SIZE,
     CLOUDINARY_UPLOAD_URL_TEMPLATE,
@@ -222,11 +223,24 @@ async def _get_user_submission_source(db: AsyncSession) -> Source:
 
 
 def _check_image_host(image_url: str | None) -> None:
-    """Reject an organizer-submission image_url whose host isn't the signed
-    Cloudinary upload endpoint's delivery domain (see ALLOWED_IMAGE_HOSTS) —
-    otherwise an arbitrary https host becomes a tracking pixel once the
-    digest embeds it as an <img> (see app/email/digest.py)."""
-    if image_url and urlsplit(image_url).hostname not in ALLOWED_IMAGE_HOSTS:
+    """Reject an organizer-submission image_url that isn't one of OUR signed
+    Cloudinary uploads: the host must be the delivery domain (see
+    ALLOWED_IMAGE_HOSTS) AND the path must sit under this account's
+    ``/{cloud_name}/image/upload/`` — res.cloudinary.com serves every
+    Cloudinary account (and remote-fetches other sites), so the host alone
+    would still let an arbitrary third-party image become a tracking pixel
+    once the digest embeds it as an <img> (see app/email/digest.py)."""
+    if not image_url:
+        return
+    parts = urlsplit(image_url)
+    path = unquote(parts.path)
+    cloud_name = settings.CLOUDINARY_CLOUD_NAME
+    if (
+        parts.hostname not in ALLOWED_IMAGE_HOSTS
+        or not cloud_name
+        or not path.startswith(CLOUDINARY_DELIVERY_PATH_TEMPLATE.format(cloud_name=cloud_name))
+        or ".." in path.split("/")
+    ):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=ERROR_IMAGE_HOST_NOT_ALLOWED,

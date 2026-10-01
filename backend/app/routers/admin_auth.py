@@ -3,12 +3,10 @@
 A third auth track alongside app/routers/auth.py (consumer) and
 app/routers/organizer_auth.py (organizer): see docs/backend-ops.md's Admin
 Endpoints section and docs/security.md's Auth section. Credential is the
-existing ADMIN_USERNAME/ADMIN_PASSWORD env vars app/routers/admin.py already
-checks via HTTP Basic — this endpoint adds a required TOTP step and issues a
-session cookie so the admin console frontend can authenticate without ever
-holding the Basic credential in JS. Login/logout failures share the same
-lockout counter as Basic auth (app/auth/admin_lockout.py::check_admin_lockout) —
-one damper for both auth surfaces on this credential pair.
+ADMIN_USERNAME/ADMIN_PASSWORD env vars plus a required TOTP step; success
+issues a session cookie so the admin console frontend never holds the
+password in JS. This is the only admin credential surface (HTTP Basic was
+removed, OWASP audit #4); failures feed the app/auth/admin_lockout.py lockout.
 """
 
 import logging
@@ -62,8 +60,7 @@ class AdminLoginBody(BaseModel):
 @limiter.limit(RATE_LIMIT_ADMIN_LOGIN)
 async def admin_login(body: AdminLoginBody, request: Request, response: Response) -> dict:
     """Single-submit username + password + TOTP login. Sets the admin session
-    cookie on success. Shares its lockout counter with HTTP Basic
-    (admin.py::_require_admin) via the check_admin_lockout/
+    cookie on success. Guarded by the check_admin_lockout/
     record_admin_auth_failure/clear_admin_auth_failure helpers."""
     key = client_key(request)
     now = check_admin_lockout(key)
@@ -104,7 +101,7 @@ async def admin_login(body: AdminLoginBody, request: Request, response: Response
         if totp_step is not None:
             record_totp_step(totp_step)
     # else: password unset, dev fail-open (require_configured_secret already
-    # logged a warning) — mirrors _require_admin's own early return.
+    # logged a warning) — mirrors get_current_admin's dev fail-open.
 
     clear_admin_auth_failure(key)
     session_token = generate_admin_session_token()

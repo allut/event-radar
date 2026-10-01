@@ -29,6 +29,7 @@ from app.ingestion.http_client import (
     AsyncRateLimiter,
     _retry_wait,
     host_is_allowed,
+    http_get_stored_url,
     resolves_to_private_ip,
     retry_after_seconds,
     safe_fetchable_url,
@@ -152,6 +153,48 @@ class TestSafeFetchableUrl:
     @pytest.mark.asyncio
     async def test_none_url_returns_none(self):
         assert await safe_fetchable_url(None, "fienta") is None
+
+
+class TestHttpGetStoredUrl:
+    """OWASP audit #2: stored Event.url fetched on a request path."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "url",
+        [
+            "https://evil.example/e/1",
+            "https://169.254.169.254/latest/meta-data",
+            "http://fienta.com/e/1",
+            "https://fienta.com:8443/e/1",
+        ],
+    )
+    async def test_refuses_unsafe_url_without_fetching(self, url):
+        client = AsyncMock()
+        with patch("app.ingestion.http_client.http_get", new_callable=AsyncMock) as get:
+            with pytest.raises(ValueError, match="SSRF guard"):
+                await http_get_stored_url(client, url)
+        get.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_refuses_allowlisted_host_resolving_private(self):
+        client = AsyncMock()
+        with (
+            patch("socket.getaddrinfo", return_value=_addrinfo("10.0.0.5")),
+            patch("app.ingestion.http_client.http_get", new_callable=AsyncMock) as get,
+        ):
+            with pytest.raises(ValueError, match="SSRF guard"):
+                await http_get_stored_url(client, "https://fienta.com/e/1")
+        get.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_fetches_allowlisted_public_https_url(self):
+        client = AsyncMock()
+        with (
+            patch("socket.getaddrinfo", return_value=_addrinfo("93.184.216.34")),
+            patch("app.ingestion.http_client.http_get", new_callable=AsyncMock) as get,
+        ):
+            await http_get_stored_url(client, "https://fienta.com/e/1")
+        get.assert_awaited_once_with(client, "https://fienta.com/e/1")
 
 
 class TestIsExplicitText:

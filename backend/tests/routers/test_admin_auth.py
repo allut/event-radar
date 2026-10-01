@@ -1,6 +1,6 @@
 """Tests for the admin console auth track (routers/admin_auth.py) — login/
-logout/me, and its shared lockout counter with routers/admin.py's HTTP Basic
-_require_admin (issue #154)."""
+logout/me, and its consecutive-failure lockout (issue #154). /admin/* routes
+accept the session cookie only — HTTP Basic was removed (OWASP audit #4)."""
 
 import http
 from unittest.mock import AsyncMock, patch
@@ -11,7 +11,7 @@ from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
 import app.auth.totp as totp_module
-from app.constants import ADMIN_AUTH_MAX_FAILURES
+from app.constants import ADMIN_AUTH_MAX_FAILURES, ADMIN_USERNAME_DEFAULT
 from tests.routers.conftest import patch_admin_settings
 
 
@@ -198,11 +198,9 @@ async def test_me_without_session_cookie_is_401():
 
 
 @pytest.mark.asyncio
-async def test_admin_session_cookie_satisfies_require_admin():
+async def test_admin_session_cookie_satisfies_get_current_admin():
     """A session cookie from POST /admin/auth/login must let the console
-    reach the existing HTTP-Basic-protected /admin/* surface without ever
-    sending Basic credentials — the whole point of the shared _require_admin
-    accept-either change."""
+    reach the /admin/* surface without ever sending Basic credentials."""
     secret = pyotp.random_base32()
     app = _build_app()
 
@@ -238,8 +236,8 @@ async def test_admin_session_cookie_satisfies_require_admin():
 async def test_correct_basic_credentials_alone_do_not_satisfy_a_mutating_route():
     """H-1 regression: the admin console's TOTP second factor must not be
     bypassable on a mutating /admin/* route via HTTP Basic alone — Basic only
-    ever checks ADMIN_USERNAME/ADMIN_PASSWORD, never TOTP. Mutating routes
-    require get_current_admin (session-cookie only, no Basic fallback)."""
+    ever checks ADMIN_USERNAME/ADMIN_PASSWORD, never TOTP. Every route requires
+    get_current_admin (session-cookie only, no Basic fallback)."""
     app = _build_app()
 
     with patch_admin_settings() as mock_settings:
@@ -258,14 +256,9 @@ async def test_correct_basic_credentials_alone_do_not_satisfy_a_mutating_route()
 
 
 @pytest.mark.asyncio
-async def test_failed_form_login_shares_lockout_counter_with_basic_auth():
-    """L2 shared lockout: consecutive failures on the FORM login endpoint
-    must count toward the SAME lockout as HTTP Basic — after
-    ADMIN_AUTH_MAX_FAILURES failed form logins, a subsequent Basic attempt
-    with correct credentials must still be locked out (429), and vice versa.
-    Checked against a read-only (GET) route — mutating (POST) routes require
-    the session-only get_current_admin (H-1 in the OWASP audit) and no
-    longer accept Basic auth at all."""
+async def test_failed_form_logins_lock_out_the_client():
+    """After ADMIN_AUTH_MAX_FAILURES failed form logins, even a correct login
+    from the same client_key is locked out (429)."""
     secret = pyotp.random_base32()
     app = _build_app()
 
@@ -288,16 +281,45 @@ async def test_failed_form_login_shares_lockout_counter_with_basic_auth():
                 )
                 assert resp.status_code == http.HTTPStatus.UNAUTHORIZED
 
-            # Correct Basic credentials, but this client_key is now locked out.
-            basic_resp = await client.get(
-                "/admin/stats", auth=("realadmin", "s3cret")
+            good_resp = await client.post(
+                "/admin/auth/login",
+                json={
+                    "username": "realadmin",
+                    "password": "s3cret",
+                    "totp_code": pyotp.TOTP(secret).now(),
+                },
             )
 
-    assert basic_resp.status_code == http.HTTPStatus.TOO_MANY_REQUESTS
+    assert good_resp.status_code == http.HTTPStatus.TOO_MANY_REQUESTS
 
 
 @pytest.mark.asyncio
-async def test_successful_form_login_clears_prior_basic_auth_failures():
+async def test_login_with_default_username_in_production_returns_503():
+    app = _build_app()
+
+    with patch_admin_settings() as mock_settings, patch(
+        "app.routers.admin_auth.settings", mock_settings
+    ):
+        _patch_settings(mock_settings, totp_secret=pyotp.random_base32())
+        mock_settings.ADMIN_USERNAME = ADMIN_USERNAME_DEFAULT
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            resp = await client.post(
+                "/admin/auth/login",
+                json={
+                    "username": ADMIN_USERNAME_DEFAULT,
+                    "password": "s3cret",
+                    "totp_code": "000000",
+                },
+            )
+
+    assert resp.status_code == http.HTTPStatus.SERVICE_UNAVAILABLE
+
+
+@pytest.mark.asyncio
+async def test_successful_form_login_clears_prior_failures():
     secret = pyotp.random_base32()
     app = _build_app()
 
@@ -311,7 +333,12 @@ async def test_successful_form_login_clears_prior_basic_auth_failures():
         ) as client:
             for _ in range(ADMIN_AUTH_MAX_FAILURES - 1):
                 await client.post(
-                    "/admin/publish", auth=("realadmin", "wrong")
+                    "/admin/auth/login",
+                    json={
+                        "username": "realadmin",
+                        "password": "wrong",
+                        "totp_code": "000000",
+                    },
                 )
 
             login_resp = await client.post(

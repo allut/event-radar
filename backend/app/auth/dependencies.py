@@ -110,37 +110,24 @@ async def get_current_organizer(
     return organizer
 
 
-def valid_admin_session(admin_session: str) -> bool:
-    try:
-        verify_admin_session_token(admin_session)
-        return True
-    except (SignatureExpired, BadSignature):
-        return False
-
-
 def get_current_admin(
     admin_session: str | None = Cookie(default=None, alias=ADMIN_SESSION_COOKIE_NAME),
 ) -> None:
-    """Session-only dependency — no HTTP Basic fallback. Every *mutating*
-    /admin/* route uses this instead of _require_admin (H-1 in the OWASP
-    audit): _require_admin's Basic branch checks only ADMIN_USERNAME/
-    ADMIN_PASSWORD and never touches TOTP, so it made the admin console's
-    second factor bypassable on every route that accepted it. Only the two
-    non-PII read-only routes (/admin/counts, /admin/stats) keep
-    _require_admin so curl/scripts can still read them with just the
-    password (OWASP audit F3) — every other GET, including /admin/reports,
-    /admin/events/{id}, /admin/submissions, /admin/dedup/groups (OWASP audit
-    G-5) and /admin/claims, discloses reporter/organizer PII or moderation
-    content and requires this TOTP-backed session instead. Shared by
-    routers/admin.py and routers/admin_auth.py, so it lives here rather than
-    in either router.
+    """Session-only dependency — no HTTP Basic fallback, on any route. Every
+    /admin/* route uses this (H-1 in the OWASP audit: a Basic branch checks
+    only ADMIN_USERNAME/ADMIN_PASSWORD and never touches TOTP, so it made the
+    admin console's second factor bypassable; OWASP audit #4 removed the last
+    two Basic-eligible routes, /admin/counts and /admin/stats, since password-
+    only access doubled as a guess oracle the per-IP lockout can't slow when
+    spread across many IPs). Shared by routers/admin.py and
+    routers/admin_auth.py, so it lives here rather than in either router.
 
     A missing cookie still goes through the same require_configured_secret
     dev fail-open every other secret-gated surface uses (ADMIN_PASSWORD
     unset + APP_ENV=development + ALLOW_INSECURE_DEV=true) — this is
     orthogonal to H-1: that bug was Basic credentials alone satisfying a
     *configured* password without TOTP, not the pre-existing "admin auth is
-    off entirely" dev/test convenience this shares with _require_admin."""
+    off entirely" dev/test convenience."""
     if admin_session is None:
         if not require_configured_secret(
             settings.ADMIN_PASSWORD,

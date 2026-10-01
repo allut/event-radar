@@ -142,7 +142,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     const assetIssues = await Promise.all(
       parseSnapshotAssetUrls(eventHtml).map(async (assetUrl): Promise<string | null> => {
         try {
-          const assetRes = await fetch(`${PRODUCTION_ORIGIN}${assetUrl}`);
+          const assetRes = await fetch(new URL(assetUrl, PRODUCTION_ORIGIN));
           const assetContentType = assetRes.headers.get('content-type');
           const isCss = assetUrl.endsWith('.css');
           const expectedType = isCss ? 'text/css' : 'javascript';

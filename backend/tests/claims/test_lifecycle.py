@@ -338,7 +338,7 @@ class TestCreateClaim:
         organizer = make_organizer(organizer_id=5)
 
         with patch(
-            "app.claims.target_resolution.http_get",
+            "app.claims.target_resolution.http_get_stored_url",
             new_callable=AsyncMock,
             side_effect=httpx.HTTPError("boom"),
         ):
@@ -363,7 +363,7 @@ class TestCreateClaim:
         organizer = make_organizer(organizer_id=5)
 
         with patch(
-            "app.claims.target_resolution.http_get",
+            "app.claims.target_resolution.http_get_stored_url",
             new_callable=AsyncMock,
             side_effect=httpx.HTTPError("boom"),
         ):
@@ -387,7 +387,7 @@ class TestCreateClaim:
         organizer = make_organizer(organizer_id=5)
 
         with patch(
-            "app.claims.target_resolution.http_get",
+            "app.claims.target_resolution.http_get_stored_url",
             new_callable=AsyncMock,
             side_effect=httpx.HTTPError("boom"),
         ):
@@ -487,7 +487,7 @@ class TestCreateClaim:
 
         with (
             patch(
-                "app.claims.target_resolution.http_get",
+                "app.claims.target_resolution.http_get_stored_url",
                 new_callable=AsyncMock,
                 return_value=MagicMock(text="<html>event page</html>"),
             ) as target_http_get,
@@ -500,7 +500,7 @@ class TestCreateClaim:
                 new_callable=AsyncMock,
                 return_value=publisher,
             ),
-            patch("app.claims.lifecycle.http_get", new_callable=AsyncMock) as lifecycle_http_get,
+            patch("app.claims.lifecycle.http_get_stored_url", new_callable=AsyncMock) as lifecycle_http_get,
             patch(
                 "app.claims.verification.resolve_promoter_contact",
                 new_callable=AsyncMock,
@@ -532,7 +532,7 @@ class TestCreateClaim:
 
         with (
             patch(
-                "app.claims.target_resolution.http_get",
+                "app.claims.target_resolution.http_get_stored_url",
                 new_callable=AsyncMock,
                 side_effect=httpx.HTTPError("boom"),
             ),
@@ -545,6 +545,34 @@ class TestCreateClaim:
             )
 
         send_mock.assert_not_awaited()
+
+
+class TestRunVerificationSsrfGuard:
+    @pytest.mark.asyncio
+    async def test_unfetchable_event_url_falls_back_to_admin_review(self, make_event):
+        """OWASP audit #2: a stored event.url the SSRF guard refuses (not an
+        allowlisted https host) must route the claim to admin review — not
+        raise out of verification, and not be fetched."""
+        from app.claims.lifecycle import _run_verification
+        from app.claims.verification import series_claim_result
+        from app.constants import CLAIM_KIND_PUBLISHER
+
+        es = fake_event_source(publisher_id=33, source_slug=SOURCE_SLUG_PILETILEVI)
+        event = make_event()
+        event.url = "https://169.254.169.254/latest/meta-data"
+        client = AsyncMock()
+
+        result = await _run_verification(
+            client,
+            kind=CLAIM_KIND_PUBLISHER,
+            organizer_email="org@example.com",
+            es=es,
+            event=event,
+            token="tok",
+        )
+
+        assert result == series_claim_result()
+        client.get.assert_not_called()
 
 
 class TestGetOwnClaim:

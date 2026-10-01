@@ -133,6 +133,11 @@ def _sender_domain_allowed(from_addr: str) -> bool:
     The Svix signature only proves the request came from Resend, not who sent
     the underlying email — this is the layer that stops an arbitrary sender
     from injecting content into the newsletter-extraction LLM prompt.
+
+    Trusts the ``From`` header, which anyone can forge: before adding any
+    domain to NEWSLETTER_SENDER_ALLOWED_DOMAINS (empty today, so this path is
+    dormant), also require a passing SPF/DKIM/DMARC result for that domain
+    (OWASP audit #8).
     """
     _name, email = parseaddr(from_addr)
     domain = email.rpartition("@")[2].lower()

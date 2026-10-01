@@ -30,6 +30,7 @@ from app.constants import (
     EVENT_STATUS_DRAFT,
     CLAIM_STATUS_APPROVED,
     CLAIM_STATUS_PENDING,
+    PASSIVE_SIGNALS_SQL_PREDICATE,
     PREFERENCE_SIGNALS_SQL_PREDICATE,
     PUBLISHER_STATUS_ACTIVE,
 )
@@ -985,6 +986,19 @@ class UserEventFeedback(Base):
             "signal",
             "created_at",
             postgresql_where=text(PREFERENCE_SIGNALS_SQL_PREDICATE),
+        ),
+        # Passive analytics signals: at most one row per (user, event, signal,
+        # UTC day), so a client firing view/click_external at the rate limit
+        # can't grow the table without bound (OWASP audit #9). POST /feedback
+        # inserts with ON CONFLICT DO NOTHING against this index.
+        Index(
+            "uq_user_event_feedback_passive_signal_day",
+            "user_id",
+            "event_id",
+            "signal",
+            text("((created_at AT TIME ZONE 'UTC')::date)"),
+            unique=True,
+            postgresql_where=text(PASSIVE_SIGNALS_SQL_PREDICATE),
         ),
     )
 

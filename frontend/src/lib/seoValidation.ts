@@ -38,6 +38,9 @@ export interface ParsedSnapshot {
   /** Parsed contents of every <script type="application/ld+json">; `undefined`
    * entries mark a script whose body failed to JSON.parse. */
   jsonLd: (unknown | undefined)[];
+  /** Raw script bodies, for the injection check — the parsed value above has
+   * already had any \u003c escape decoded back to "<". */
+  jsonLdRaw: string[];
   /** Raw price fields off the event-detail price marker (see EventDetail.tsx),
    * present only when the page actually rendered a price. */
   price: EventPriceSnapshot | null;
@@ -66,7 +69,9 @@ export function parseSnapshotHtml(html: string): ParsedSnapshot {
   });
 
   const jsonLd: (unknown | undefined)[] = [];
+  const jsonLdRaw: string[] = [];
   document.querySelectorAll(JSONLD_SCRIPT_SELECTOR).forEach((el) => {
+    jsonLdRaw.push(el.textContent ?? '');
     try {
       jsonLd.push(JSON.parse(el.textContent ?? ''));
     } catch {
@@ -86,7 +91,7 @@ export function parseSnapshotHtml(html: string): ParsedSnapshot {
       }
     : null;
 
-  return { title, canonical, hreflangs, robots, iconHref, jsonLd, price };
+  return { title, canonical, hreflangs, robots, iconHref, jsonLd, jsonLdRaw, price };
 }
 
 function isNonEmptyString(value: unknown): value is string {
@@ -295,6 +300,14 @@ export function validateSnapshotStructure(
     issues.push('icon link is missing');
   } else if (parsed.iconHref.startsWith('data:')) {
     issues.push('icon link is a data: URI, not a crawlable URL — Google cannot fetch a site icon from it');
+  }
+
+  // A serialized JSON-LD body must carry no literal "<" (serializeJsonLd
+  // escapes every one) — catches a regression to plain JSON.stringify. A full
+  // "</script" breakout truncates the body at the first closing tag, so it
+  // surfaces as unparseable JSON-LD below instead (OWASP audit #1).
+  if (parsed.jsonLdRaw.some((raw) => raw.includes('<'))) {
+    issues.push('jsonLd: script body contains an unescaped "<" — possible markup injection');
   }
 
   if (parsed.jsonLd.length !== 1) {

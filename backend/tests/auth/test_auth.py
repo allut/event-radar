@@ -14,6 +14,7 @@ import pytest
 from itsdangerous import BadSignature
 
 from app.auth.tokens import (
+    generate_google_link_binding_token,
     generate_magic_token,
     generate_session_token,
     generate_unsubscribe_token,
@@ -280,14 +281,73 @@ class TestVerifyMagicLink:
         mock_db.add = MagicMock()
         mock_db.commit = AsyncMock()
 
-        await verify_magic_link(
-            make_request(), VerifyTokenBody(token=token), Response(), mock_db
-        )
+        with patch(
+            "app.routers.auth.send_identity_linked_notice", new_callable=AsyncMock
+        ) as mock_notice:
+            await verify_magic_link(
+                make_request(),
+                VerifyTokenBody(token=token),
+                Response(),
+                mock_db,
+                google_link_binding=generate_google_link_binding_token("sub-42", "user"),
+            )
 
         added_identity = mock_db.add.call_args.args[0]
         assert added_identity.user_id == 3
         assert added_identity.provider == "google"
         assert added_identity.provider_sub == "sub-42"
+        # OWASP audit #3: the account owner is told a Google sign-in was linked.
+        mock_notice.assert_awaited_once_with("user@example.com", "en")
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "binding",
+        [
+            None,
+            "garbage",
+            generate_google_link_binding_token("other-sub", "user"),
+            generate_google_link_binding_token("sub-42", "organizer"),
+        ],
+        ids=["no-cookie", "tampered", "other-sub", "other-track"],
+    )
+    async def test_pending_google_sub_without_matching_binding_signs_in_without_linking(
+        self, binding, mock_db, make_request
+    ):
+        """OWASP audit #3: a confirmation link opened outside the browser that
+        started the Google sign-in (no/foreign binding cookie) is a plain
+        sign-in — the session mints, but NO identity row is created and no
+        notice is sent."""
+        from fastapi import Response
+        from app.routers.auth import VerifyTokenBody, verify_magic_link
+
+        token, _, _ = generate_magic_token(3)
+        mock_db.execute = _mock_execute_returning_sequence(
+            [(3, "sub-42"), _UserRow(3, "user@example.com", "en", 1)]
+        )
+        mock_db.add = MagicMock()
+        mock_db.commit = AsyncMock()
+        response = Response()
+
+        with patch(
+            "app.routers.auth.send_identity_linked_notice", new_callable=AsyncMock
+        ) as mock_notice:
+            result = await verify_magic_link(
+                make_request(),
+                VerifyTokenBody(token=token),
+                response,
+                mock_db,
+                google_link_binding=binding,
+            )
+
+        assert result["user"]["id"] == 3
+        mock_db.add.assert_not_called()
+        mock_notice.assert_not_awaited()
+        set_cookies = response.headers.getlist("set-cookie")
+        assert any(c.startswith("session=") for c in set_cookies)
+        # The one-shot binding cookie is expired either way.
+        assert any(
+            c.startswith("google_link_binding=") and "Max-Age=0" in c for c in set_cookies
+        )
 
     @pytest.mark.asyncio
     async def test_pending_google_sub_integrity_error_does_not_fail_verify(
@@ -310,12 +370,20 @@ class TestVerifyMagicLink:
         )
         mock_db.rollback = AsyncMock()
 
-        result = await verify_magic_link(
-            make_request(), VerifyTokenBody(token=token), Response(), mock_db
-        )
+        with patch(
+            "app.routers.auth.send_identity_linked_notice", new_callable=AsyncMock
+        ) as mock_notice:
+            result = await verify_magic_link(
+                make_request(),
+                VerifyTokenBody(token=token),
+                Response(),
+                mock_db,
+                google_link_binding=generate_google_link_binding_token("sub-42", "user"),
+            )
 
         assert result["user"]["id"] == 3
         mock_db.rollback.assert_awaited_once()
+        mock_notice.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_used_or_expired_link_raises_400(self, mock_db, make_request):
@@ -720,3 +788,49 @@ class TestRequestLinkBodyLocale:
         # The email sends in the requested locale, but the stored user row
         # is never mutated by this unauthenticated endpoint.
         assert existing_user.locale == "en"
+
+
+class TestGoogleLinkBindingToken:
+    """OWASP audit #3 — the cookie that ties a confirmation link to the browser
+    that started the Google sign-in."""
+
+    def test_roundtrip_matches_same_sub_and_track(self):
+        from app.auth.tokens import (
+            generate_google_link_binding_token,
+            google_link_binding_matches,
+        )
+
+        token = generate_google_link_binding_token("sub-1", "user")
+        assert google_link_binding_matches(token, sub="sub-1", track="user")
+
+    def test_rejects_other_sub_other_track_garbage_and_missing(self):
+        from app.auth.tokens import (
+            generate_google_link_binding_token,
+            google_link_binding_matches,
+        )
+
+        token = generate_google_link_binding_token("sub-1", "user")
+        assert not google_link_binding_matches(token, sub="sub-2", track="user")
+        assert not google_link_binding_matches(token, sub="sub-1", track="organizer")
+        assert not google_link_binding_matches("garbage", sub="sub-1", track="user")
+        assert not google_link_binding_matches(None, sub="sub-1", track="user")
+        assert not google_link_binding_matches("", sub="sub-1", track="user")
+
+    def test_rejects_expired_token(self):
+        from app.auth.tokens import (
+            generate_google_link_binding_token,
+            google_link_binding_matches,
+        )
+
+        token = generate_google_link_binding_token("sub-1", "user")
+        # max_age=-1 → any token is already past its lifetime.
+        assert not google_link_binding_matches(
+            token, sub="sub-1", track="user", max_age=-1
+        )
+
+    def test_a_magic_link_token_is_not_a_binding_token(self):
+        """Own salt: a token minted for another purpose never verifies."""
+        from app.auth.tokens import google_link_binding_matches
+
+        magic, _, _ = generate_magic_token(3)
+        assert not google_link_binding_matches(magic, sub="sub-1", track="user")

@@ -1,7 +1,6 @@
-"""Admin auth lockout + credential checks shared by the Basic-auth surface
-(``routers/admin.py::_require_admin``) and the form login
-(``routers/admin_auth.py``) — ticket #154 requires both to share one
-consecutive-failure counter rather than each getting its own damper.
+"""Admin auth lockout + credential checks for the form login
+(``routers/admin_auth.py``) — the only place admin credentials are accepted
+since HTTP Basic was removed (OWASP audit #4).
 """
 
 import logging
@@ -49,9 +48,7 @@ def _evict_one_admin_auth_failure(now: float) -> None:
 def check_admin_lockout(key: str) -> float:
     """Raise 429 if `key` is currently locked out; otherwise return
     time.monotonic() for the caller to reuse (avoids a second clock read).
-    Shared by _require_admin (Basic auth) and routers/admin_auth.py's form
-    login — ticket #154 requires both auth surfaces to share one lockout
-    counter rather than each getting its own damper.
+    Used by routers/admin_auth.py's form login.
 
     Opportunistically drops `key`'s entry once its lockout has expired
     (locked_until > 0.0 and now >= locked_until) — otherwise nothing ever

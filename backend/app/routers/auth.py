@@ -14,7 +14,11 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import get_current_user
-from app.auth.email import send_magic_link
+from app.auth.email import (
+    send_google_link_confirmation,
+    send_identity_linked_notice,
+    send_magic_link,
+)
 from app.auth.google_oauth import (
     GoogleIdentity,
     GoogleTokenExchangeError,
@@ -26,9 +30,11 @@ from app.auth.google_oauth import (
     verify_google_id_token,
 )
 from app.auth.tokens import (
+    generate_google_link_binding_token,
     generate_magic_token,
     generate_oauth_state_token,
     generate_session_token,
+    google_link_binding_matches,
     hash_token,
     magic_ttl_seconds,
     verify_magic_token,
@@ -46,10 +52,13 @@ from app.constants import (
     ERROR_MAGIC_LINK_INVALID,
     ERROR_USER_NOT_FOUND,
     GOOGLE_CALLBACK_PUBLIC_PATH,
+    GOOGLE_LINK_BINDING_COOKIE_NAME,
+    GOOGLE_LINK_BINDING_COOKIE_PATH,
     GOOGLE_SIGNIN_OUTCOME_AUTO_LINKED,
     GOOGLE_SIGNIN_OUTCOME_CONFIRMATION_SENT,
     GOOGLE_SIGNIN_OUTCOME_EXISTING_LOGIN,
     GOOGLE_SIGNIN_OUTCOME_NEW_ACCOUNT,
+    GOOGLE_SIGNIN_OUTCOME_UNVERIFIED_EMAIL,
     HEADER_ACCEPT_LANGUAGE,
     HOME_PATH,
     IDENTITY_PROVIDER_GOOGLE,
@@ -182,6 +191,15 @@ async def request_magic_link(
     return {"detail": DETAIL_MAGIC_LINK_SENT}
 
 
+async def _notify_identity_linked(email: str, locale: str) -> None:
+    """Best-effort "Google sign-in was linked" notice (OWASP audit #3) — the
+    link already exists, so a send failure is logged, never surfaced."""
+    try:
+        await send_identity_linked_notice(email, locale)
+    except Exception:
+        log.exception("Failed to send identity-linked notice to %s", mask_email(email))
+
+
 @router.post("/verify")
 @limiter.limit(RATE_LIMIT_AUTH_VERIFY)
 async def verify_magic_link(
@@ -189,10 +207,19 @@ async def verify_magic_link(
     body: VerifyTokenBody,
     response: Response,
     db: AsyncSession = Depends(get_db),
+    google_link_binding: str | None = Cookie(
+        default=None, alias=GOOGLE_LINK_BINDING_COOKIE_NAME
+    ),
 ) -> dict:
     """Verify a magic-link token. Sets the session cookie on success; the
     token itself moves in the request body (was a query parameter) so it
-    stops landing in access logs."""
+    stops landing in access logs.
+
+    A Google-confirmation link (pending_google_sub set) only attaches that
+    identity when the request carries the google_link_binding cookie for the
+    same sub — i.e. it is opened in the browser that started the Google
+    sign-in (OWASP audit #3). Anywhere else it is a plain sign-in: the
+    address owner is signed in, no identity is linked."""
     token = body.token
     try:
         user_id = verify_magic_token(token)
@@ -271,25 +298,44 @@ async def verify_magic_link(
     if pending_google_sub is not None:
         # ADR 0002 — this magic link was sent to confirm a pending Google
         # identity link (non-authoritative address), not to start a session
-        # directly. Create the link now that control of the address is proven.
-        try:
-            db.add(
-                UserIdentity(
-                    user_id=user_row.id,
-                    provider=IDENTITY_PROVIDER_GOOGLE,
-                    provider_sub=pending_google_sub,
+        # directly. Create the link now that control of the address is proven
+        # — and only in the browser that started the Google sign-in (OWASP
+        # audit #3); elsewhere this is a plain sign-in.
+        if google_link_binding_matches(
+            google_link_binding, sub=pending_google_sub, track=AUTH_TRACK_USER
+        ):
+            try:
+                db.add(
+                    UserIdentity(
+                        user_id=user_row.id,
+                        provider=IDENTITY_PROVIDER_GOOGLE,
+                        provider_sub=pending_google_sub,
+                    )
                 )
-            )
-            await db.commit()
-            log.info(
-                "user identity linked via confirmation: user_id=%s",
+                await db.commit()
+                log.info(
+                    "user identity linked via confirmation: user_id=%s",
+                    user_row.id,
+                    extra={"event": LOG_EVENT_IDENTITY_LINKED, "provider": IDENTITY_PROVIDER_GOOGLE},
+                )
+                await _notify_identity_linked(user_row.email, user_row.locale)
+            except IntegrityError:
+                # Already linked by a concurrent request (or a stale/reused
+                # sub) — not this request's problem to surface; the session
+                # still mints.
+                await db.rollback()
+        else:
+            log.warning(
+                "google identity NOT linked: confirmation link opened without "
+                "the matching browser binding user_id=%s",
                 user_row.id,
-                extra={"event": LOG_EVENT_IDENTITY_LINKED, "provider": IDENTITY_PROVIDER_GOOGLE},
+                extra={"event": LOG_EVENT_AUTH_FAILED},
             )
-        except IntegrityError:
-            # Already linked by a concurrent request (or a stale/reused sub) —
-            # not this request's problem to surface; the session still mints.
-            await db.rollback()
+        clear_session_cookie(
+            response,
+            name=GOOGLE_LINK_BINDING_COOKIE_NAME,
+            path=GOOGLE_LINK_BINDING_COOKIE_PATH,
+        )
 
     session_token = generate_session_token(user_row.id, user_row.session_token_version)
     set_session_cookie(
@@ -481,7 +527,7 @@ async def _send_google_confirmation_link(db: AsyncSession, user: User, sub: str)
     await db.commit()
 
     try:
-        await send_magic_link(user.email, signed_token, user.locale)
+        await send_google_link_confirmation(user.email, signed_token, user.locale)
     except Exception:
         log.exception(
             "Failed to send Google-confirmation link to %s", mask_email(user.email)
@@ -569,6 +615,11 @@ async def _apply_google_linking_gate(
                 GOOGLE_SIGNIN_OUTCOME_NEW_ACCOUNT if is_new else GOOGLE_SIGNIN_OUTCOME_AUTO_LINKED
             ),
         )
+
+    # Google itself says it hasn't verified this address — nothing to confirm
+    # and no reason to email a third party (OWASP audit #3): no row, no link.
+    if not identity["email_verified"]:
+        return GOOGLE_SIGNIN_OUTCOME_UNVERIFIED_EMAIL, None
 
     # Non-authoritative address — Google's word on `email_verified` isn't
     # trusted enough to auto-link (ADR 0002). Prove control via a
@@ -658,11 +709,26 @@ async def google_callback(
         extra={"event": LOG_EVENT_GOOGLE_SIGNIN, "track": AUTH_TRACK_USER, "outcome": outcome},
     )
 
+    if outcome == GOOGLE_SIGNIN_OUTCOME_UNVERIFIED_EMAIL:
+        return _error_redirect(OAUTH_ERROR_VERIFICATION_FAILED)
+
     if user is None:
         response = RedirectResponse(
             f"{settings.FRONTEND_URL}{LOGIN_PATH}", status_code=status.HTTP_302_FOUND
         )
+        # Bind the confirmation link to this browser (OWASP audit #3): the
+        # emailed link only attaches this Google identity when opened where
+        # the Google sign-in was started.
+        set_session_cookie(
+            response,
+            name=GOOGLE_LINK_BINDING_COOKIE_NAME,
+            token=generate_google_link_binding_token(identity["sub"], AUTH_TRACK_USER),
+            path=GOOGLE_LINK_BINDING_COOKIE_PATH,
+            ttl_seconds=magic_ttl_seconds(),
+        )
     else:
+        if outcome == GOOGLE_SIGNIN_OUTCOME_AUTO_LINKED:
+            await _notify_identity_linked(user.email, user.locale)
         # A brand-new account has no personas yet — send it through onboarding
         # rather than straight to the (empty) feed; every other outcome lands
         # on the feed, mirroring the plain magic-link flow's AuthVerify.tsx.

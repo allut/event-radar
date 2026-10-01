@@ -48,13 +48,11 @@ def execute_rows(rows):
 @contextmanager
 def patch_admin_settings() -> Iterator[MagicMock]:
     """Patch `settings` with one shared MagicMock in every module the admin
-    auth path reads it from (the router, the lockout helpers, the session
-    dependency), so a test sets ADMIN_PASSWORD/APP_ENV/... once. Shared by
+    auth path reads it from (the lockout helpers, the session dependency), so a test sets ADMIN_PASSWORD/APP_ENV/... once. Shared by
     every admin-router test module."""
     mock_settings = MagicMock()
     with ExitStack() as stack:
         for target in (
-            "app.routers.admin.settings",
             "app.auth.admin_lockout.settings",
             "app.auth.dependencies.settings",
         ):

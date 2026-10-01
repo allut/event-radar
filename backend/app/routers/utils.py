@@ -29,6 +29,8 @@ from app.constants import (
     ERROR_INVALID_REPORT_REASON,
     ERROR_VENUE_NOT_FOUND,
     EVENT_STATUS_CANCELLED,
+    EVENT_STATUS_CLASSIFIED,
+    EVENT_STATUS_PUBLISHED,
     GOOGLE_SIGNIN_RESULT_QUERY_PARAM,
     IDENTITY_PROVIDER_GOOGLE,
     LOCALE_EN,
@@ -978,6 +980,33 @@ def apply_moderation_flags(
         event.is_non_event = True
         flagged = True
     return flagged
+
+
+async def remoderate_venue_linked_events(db: AsyncSession, venue: Venue) -> None:
+    """A saved venue's name/address is resolved onto every event linked to it
+    at read time (``resolve_venue_name()``), so renaming the venue changes the
+    text shown on already-published events without passing the submit path's
+    explicit/non-event checks (OWASP audit #5). Rescan every live linked event
+    against the venue's new names, pull a newly flagged published event back to
+    classified, and queue them all for post-hoc admin review like any other
+    organizer edit. One query regardless of how many events link the venue.
+    The caller commits."""
+    events = (
+        await db.scalars(
+            select(Event).where(
+                Event.venue_id == venue.id, Event.status != EVENT_STATUS_CANCELLED
+            )
+        )
+    ).all()
+    for event in events:
+        event.needs_review = True
+        if (
+            apply_moderation_flags(
+                event, venue.name, venue.name_en, venue.name_ru, event.important_info
+            )
+            and event.status == EVENT_STATUS_PUBLISHED
+        ):
+            event.status = EVENT_STATUS_CLASSIFIED
 
 
 def validate_report_reason(reason: str) -> None:

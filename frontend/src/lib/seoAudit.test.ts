@@ -140,6 +140,16 @@ describe('parseSnapshotAssetUrls', () => {
       '<script src="/assets/index-abc123.js"></script><script src="/assets/index-abc123.js"></script>';
     expect(parseSnapshotAssetUrls(html)).toEqual(['/assets/index-abc123.js']);
   });
+
+  it('rejects asset references that are not root-relative paths on our own origin', () => {
+    const html =
+      '<script src="@evil.example/assets/x.js"></script>' +
+      '<script src="https://evil.example/assets/x.js"></script>' +
+      '<script src="//evil.example/assets/x.js"></script>' +
+      '<script src="/assets/../evil.js"></script>' +
+      '<link rel="stylesheet" href="/other/assets/x.css">';
+    expect(parseSnapshotAssetUrls(html)).toEqual([]);
+  });
 });
 
 describe('evaluateLiveAudit', () => {

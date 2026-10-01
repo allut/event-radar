@@ -210,7 +210,7 @@ class TestPiletileviResolution:
         event = MagicMock()
 
         with patch(
-            "app.claims.target_resolution.http_get", new_callable=AsyncMock
+            "app.claims.target_resolution.http_get_stored_url", new_callable=AsyncMock
         ) as http_get_mock:
             target = await resolve_claim_target_live(mock_db, AsyncMock(), event, es)
 
@@ -227,7 +227,7 @@ class TestPiletileviResolution:
 
         with (
             patch(
-                "app.claims.target_resolution.http_get",
+                "app.claims.target_resolution.http_get_stored_url",
                 new_callable=AsyncMock,
                 return_value=MagicMock(text="<html></html>"),
             ),
@@ -264,7 +264,7 @@ class TestPiletileviResolution:
 
         with (
             patch(
-                "app.claims.target_resolution.http_get",
+                "app.claims.target_resolution.http_get_stored_url",
                 new_callable=AsyncMock,
                 return_value=MagicMock(text="<html></html>"),
             ),
@@ -294,7 +294,7 @@ class TestPiletileviResolution:
         event.url = None
 
         with patch(
-            "app.claims.target_resolution.http_get", new_callable=AsyncMock
+            "app.claims.target_resolution.http_get_stored_url", new_callable=AsyncMock
         ) as http_get_mock:
             target = await resolve_claim_target_live(mock_db, AsyncMock(), event, es)
 
@@ -310,7 +310,7 @@ class TestPiletileviResolution:
 
         with (
             patch(
-                "app.claims.target_resolution.http_get",
+                "app.claims.target_resolution.http_get_stored_url",
                 new_callable=AsyncMock,
                 return_value=MagicMock(text="<html></html>"),
             ),
@@ -329,7 +329,7 @@ class TestPiletileviResolution:
         event = make_event()
 
         with patch(
-            "app.claims.target_resolution.http_get",
+            "app.claims.target_resolution.http_get_stored_url",
             new_callable=AsyncMock,
             side_effect=httpx.HTTPError("boom"),
         ):

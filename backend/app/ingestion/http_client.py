@@ -211,6 +211,31 @@ async def http_get(
     return r
 
 
+async def http_get_stored_url(
+    client: httpx.AsyncClient,
+    url: str,
+    *,
+    source: str | None = None,
+) -> httpx.Response:
+    """http_get for a stored, untrusted Event.url that is fetched on a
+    request path (claim target resolution, claim verification, the claim-edit
+    price-mismatch check) rather than through a host-guarded ingest/refetch
+    client (OWASP audit #2). Refuses — with ValueError, like host_guard_hook —
+    anything but https on the default port to an ALLOWED_SOURCE_HOSTS host
+    that resolves to a public address. Callers catch ValueError next to
+    httpx.HTTPError. Redirects are not followed (the shared client leaves
+    httpx's follow_redirects off), so a 3xx raises via raise_for_status
+    rather than hopping to an unchecked host."""
+    parts = urlsplit(url)
+    if (
+        parts.scheme.lower() != URL_SCHEME_HTTPS
+        or parts.port not in (None, HTTPS_DEFAULT_PORT)
+        or await safe_fetchable_url(url, source) is None
+    ):
+        raise ValueError(f"event url not fetchable (SSRF guard): {url}")
+    return await http_get(client, url)
+
+
 @_http_retry
 async def http_post(
     client: httpx.AsyncClient,

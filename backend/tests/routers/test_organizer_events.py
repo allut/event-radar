@@ -39,10 +39,41 @@ class TestCheckImageHost:
 
         _check_image_host(None)  # must not raise
 
-    def test_cloudinary_host_accepted(self):
+    def test_own_cloudinary_account_accepted(self):
         from app.routers.organizer_events import _check_image_host
 
-        _check_image_host("https://res.cloudinary.com/demo/image/upload/x.png")
+        with patch("app.routers.organizer_events.settings") as mock_settings:
+            mock_settings.CLOUDINARY_CLOUD_NAME = "demo"
+            _check_image_host("https://res.cloudinary.com/demo/image/upload/x.png")
+
+    @pytest.mark.parametrize(
+        "url",
+        [
+            "https://res.cloudinary.com/other-account/image/upload/x.png",
+            "https://res.cloudinary.com/demo/image/fetch/https://evil.example/x.png",
+            "https://res.cloudinary.com/demo/image/upload/../../other/image/upload/x.png",
+            "https://res.cloudinary.com/demo/image/upload/%2e%2e/%2e%2e/other/x.png",
+            "https://res.cloudinary.com/demoevil/image/upload/x.png",
+        ],
+    )
+    def test_other_cloudinary_account_or_path_rejected(self, url):
+        from fastapi import HTTPException
+        from app.routers.organizer_events import _check_image_host
+
+        with patch("app.routers.organizer_events.settings") as mock_settings:
+            mock_settings.CLOUDINARY_CLOUD_NAME = "demo"
+            with pytest.raises(HTTPException) as exc_info:
+                _check_image_host(url)
+        assert exc_info.value.status_code == http.HTTPStatus.BAD_REQUEST
+
+    def test_unconfigured_cloud_name_fails_closed(self):
+        from fastapi import HTTPException
+        from app.routers.organizer_events import _check_image_host
+
+        with patch("app.routers.organizer_events.settings") as mock_settings:
+            mock_settings.CLOUDINARY_CLOUD_NAME = ""
+            with pytest.raises(HTTPException):
+                _check_image_host("https://res.cloudinary.com/demo/image/upload/x.png")
 
     def test_arbitrary_host_rejected(self):
         from fastapi import HTTPException

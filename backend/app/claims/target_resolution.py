@@ -30,7 +30,7 @@ from app.constants import (
     SOURCE_SLUG_KUMU,
     SOURCE_SLUG_PILETILEVI,
 )
-from app.ingestion.http_client import http_get
+from app.ingestion.http_client import http_get_stored_url
 from app.models.models import Event, EventSource, Publisher, RawEvent, Source
 from app.events.venue import resolve_venue_name
 from app.events.queries import event_series_key, serialize_event_series_key
@@ -183,10 +183,10 @@ async def _resolve_piletilevi_target(
     html: str | None = None
     if event.url:
         try:
-            response = await http_get(client, event.url)
+            response = await http_get_stored_url(client, event.url)
             html = response.text
             identity = resolve_promoter_identity(html, event.url)
-        except httpx.HTTPError as exc:
+        except (httpx.HTTPError, ValueError) as exc:
             log.warning("claim target resolution: piletilevi event fetch failed: %s", exc)
             identity = None
 

@@ -46,47 +46,35 @@ class TestRecordFeedback:
         assert "ON CONFLICT" in compiled.upper()
 
     @pytest.mark.asyncio
-    async def test_click_external_appends_not_upserts(
-        self, mock_db, make_user, make_event, make_request
+    @pytest.mark.parametrize("signal", ["click_external", "view"])
+    async def test_passive_signal_is_insert_do_nothing_not_upsert(
+        self, signal, mock_db, make_user, make_event, make_request
     ):
         """Regression: click_external/view must never share the upsert path with
         like/dislike/bookmark — otherwise a ticket-link click would silently
-        overwrite (destroy) an existing bookmark on the same event."""
+        overwrite (destroy) an existing bookmark on the same event. They are
+        inserted ON CONFLICT DO NOTHING so the one-row-per-day unique index
+        (migration 0055, OWASP audit #9) turns a repeat into a no-op."""
+        from sqlalchemy.dialects import postgresql
+
         from app.routers.feedback import record_feedback, FeedbackBody
 
         mock_db.scalar.return_value = make_event(10)
 
         await record_feedback(
-            body=FeedbackBody(event_id=10, signal="click_external"),
+            body=FeedbackBody(event_id=10, signal=signal),
             request=make_request(method="POST", path="/feedback"),
             current_user=make_user(),
             db=mock_db,
         )
-        # Analytics signal: appended via db.add(), never upserted via db.execute()
-        # against the preference-signal index.
-        mock_db.add.assert_called_once()
-        added_row = mock_db.add.call_args.args[0]
-        assert added_row.signal == "click_external"
-        # Appended via add(), so execute() is never called at all.
-        assert mock_db.execute.call_count == 0
-
-    @pytest.mark.asyncio
-    async def test_view_appends_not_upserts(
-        self, mock_db, make_user, make_event, make_request
-    ):
-        from app.routers.feedback import record_feedback, FeedbackBody
-
-        mock_db.scalar.return_value = make_event(10)
-
-        await record_feedback(
-            body=FeedbackBody(event_id=10, signal="view"),
-            request=make_request(method="POST", path="/feedback"),
-            current_user=make_user(),
-            db=mock_db,
-        )
-        mock_db.add.assert_called_once()
-        # Appended via add(), so execute() is never called at all.
-        assert mock_db.execute.call_count == 0
+        mock_db.add.assert_not_called()
+        assert mock_db.execute.call_count == 1
+        compiled = str(
+            mock_db.execute.call_args.args[0].compile(dialect=postgresql.dialect())
+        ).upper()
+        assert "ON CONFLICT DO NOTHING" in compiled
+        assert "DO UPDATE" not in compiled
+        mock_db.commit.assert_called_once()
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("signal", sorted(VALID_SIGNALS))

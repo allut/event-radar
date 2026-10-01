@@ -6,8 +6,9 @@ index (migration 0019) — POST upserts, DELETE removes it. "view"/
 "click_external" (the rest of VALID_SIGNALS) are passive analytics signals
 fired on every page view / ticket-link click (frontend's
 trackExternalClick()) and stay append-only/multi-row — they are NOT covered
-by that index, so POST always inserts a fresh row for them and DELETE/GET
-never touch them. Mixing the two under one upsert-by-(user,event) rule would
+by that index; a second partial unique index (migration 0055) caps them at
+one row per (user, event, signal, UTC day), so POST inserts them with ON
+CONFLICT DO NOTHING and DELETE/GET never touch them. Mixing the two under one upsert-by-(user,event) rule would
 let a ticket click silently overwrite a user's bookmark.
 """
 
@@ -102,14 +103,20 @@ async def record_feedback(
         )
         await db.execute(stmt)
     else:
-        # Passive analytics signal (view/click_external) — always append a
-        # fresh row, never upsert; not covered by the partial unique index.
-        db.add(
-            UserEventFeedback(
+        # Passive analytics signal (view/click_external) — append-only, but
+        # bounded to one row per (user, event, signal, UTC day) by the partial
+        # unique index (migration 0055, OWASP audit #9): a repeat within the
+        # day is a silent no-op, so spamming the endpoint can't grow the
+        # table. Target-less DO NOTHING — the day bucket is an expression
+        # index, which ON CONFLICT can't name via index_elements.
+        await db.execute(
+            pg_insert(UserEventFeedback)
+            .values(
                 user_id=current_user.id,
                 event_id=body.event_id,
                 signal=body.signal,
             )
+            .on_conflict_do_nothing()
         )
 
     await db.commit()

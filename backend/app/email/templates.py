@@ -60,6 +60,11 @@ MAGIC_LINK_BODY = """\
 </td></tr></table>
 <p class="e-muted" style="{s_muted_note}">{ignore_note}</p>"""
 
+# Account-security notice (no CTA) — identity_link.py's "Google sign-in linked".
+ACCOUNT_NOTICE_BODY = """\
+<p class="e-body-text" style="{s_body_text}">{intro}</p>
+<p class="e-muted" style="{s_muted_note}">{note}</p>"""
+
 EMAIL_FOOTER_BRAND = "Event Radar, Tallinn"
 
 REPORT_OUTCOME_HEADER = """\
