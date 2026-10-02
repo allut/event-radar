@@ -13,7 +13,7 @@ from app.constants import (
     NON_EVENT_VENUE_KEYWORDS,
 )
 from app.ingestion.sanitize import html_to_text
-from app.routers.utils import alternation_pattern
+from app.ingestion.patterns import alternation_pattern
 
 _EXPLICIT_KEYWORD_PATTERN = alternation_pattern(EXPLICIT_KEYWORDS)
 

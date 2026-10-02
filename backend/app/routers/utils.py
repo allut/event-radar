@@ -1,6 +1,7 @@
 """Shared serialization helpers for event routers."""
 
 import asyncio
+import base64
 import json
 import logging
 import re
@@ -11,36 +12,39 @@ from typing import Any
 import httpx
 from fastapi import HTTPException, Response, status
 from fastapi.responses import RedirectResponse
-from itsdangerous import BadSignature, SignatureExpired
 from pydantic import BaseModel, EmailStr
-from sqlalchemy import ColumnElement, Select, and_, delete, func, or_, select, update
+from sqlalchemy import ColumnElement, Select, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import InstrumentedAttribute, selectinload
 
-from app.auth.tokens import oauth_state_ttl_seconds, verify_session_token
+from app.auth.tokens import oauth_state_ttl_seconds
 from app.config import settings
 from app.constants import (
-    APP_ENV_DEVELOPMENT,
+    CLAIM_DNS_TXT_RECORD_LABEL,
+    CLAIM_DNS_VERIFICATION_MECHANISMS,
     DEFAULT_USER_LOCALE,
-    EMAIL_MASK_VISIBLE_CHARS,
     ERROR_ADMIN_JOB_ALREADY_RUNNING,
     ERROR_ADMIN_JOB_FAILED,
-    ERROR_FEATURE_DISABLED,
+    ERROR_INVALID_CURSOR,
     ERROR_INVALID_REPORT_REASON,
     ERROR_VENUE_NOT_FOUND,
     EVENT_STATUS_CANCELLED,
+    EVENT_STATUS_CLASSIFIED,
     EVENT_STATUS_PUBLISHED,
     GOOGLE_SIGNIN_RESULT_QUERY_PARAM,
     IDENTITY_PROVIDER_GOOGLE,
     LOCALE_EN,
+    LOCALE_ET,
     LOCALE_RU,
     LOG_EVENT_ADMIN_ACTION,
     LOG_EVENT_EMAIL_SEND_FAILED,
     LOG_EVENT_UNVERIFIED_ACCOUNT_BUDGET_EXCEEDED,
-    MASK_DB_URL_PASSWORD_RE,
     MAGIC_LINK_RESEND_COOLDOWN_SECONDS,
+    MASK_DB_URL_PASSWORD_RE,
     OAUTH_ERROR_QUERY_PARAM,
     OAUTH_STATE_COOKIE_SAMESITE,
+    ORGANIZER_HTML_SANITIZE_ALLOWED_ATTRS,
+    ORGANIZER_HTML_SANITIZE_ALLOWED_TAGS,
     PREFERENCE_SIGNALS,
     PREFERRED_TASTE_MIN_WEIGHT,
     REPORT_EMAIL_SEND_CONCURRENCY,
@@ -54,23 +58,30 @@ from app.constants import (
     VALID_CATEGORIES,
     VALID_LOCALES,
     VALID_REPORT_REASONS,
-    VALID_THEME_PREFERENCES,
 )
-from app.db import AsyncSessionLocal
-from app.email.report_reporter import (
-    report_outcome_http_client,
-    send_report_outcome_email,
+from app.auth.utils import mask_email
+from app.events.queries import event_series_key
+from app.events.venue import (
+    resolve_venue_address,
+    resolve_venue_coords,
+    resolve_venue_name,
 )
+from app.email.report_reporter import send_report_outcome_email
+from app.email.resend import resend_http_client
+from app.ingestion.content_filters import is_explicit_text, is_non_event_text
+from app.ingestion.pricing import normalize_currency
+from app.ingestion.sanitize import sanitize_html
 from app.models.models import (
     AdminAction,
     Event,
     EventClassification,
     EventReport,
+    EventSource,
+    Organizer,
     OrganizerIdentity,
     Persona,
     User,
     UserEventFeedback,
-    UserEventScore,
     UserIdentity,
     UserPersona,
     Venue,
@@ -89,7 +100,7 @@ class RequestLinkBody(BaseModel):
 
 class VerifyTokenBody(BaseModel):
     """Shared /verify request body — the magic-link token moves from a query
-    parameter to the body so it stops landing in server access logs (Vercel
+    parameter to the body so it stops landing in server access logs (Cloudflare
     edge, Render). Identical shape for both auth tracks, mirroring
     RequestLinkBody."""
 
@@ -187,26 +198,6 @@ def build_oauth_error_redirect(
     )
     clear_oauth_state_cookie(response, cookie_name=cookie_name, cookie_path=cookie_path)
     return response
-
-
-async def run_in_session(
-    func: Callable[[AsyncSession], Awaitable[dict]], *, commit: bool
-) -> dict:
-    """Run a session-scoped job: open a session, run ``func(db)``, commit when
-    asked, roll back and re-raise on failure.
-
-    Shared by every scheduler/admin entry point that needs its own session
-    (app/main.py's scheduled jobs and app/routers/admin.py's manual triggers).
-    """
-    async with AsyncSessionLocal() as db:
-        try:
-            result = await func(db)
-            if commit:
-                await db.commit()
-            return result
-        except Exception:
-            await db.rollback()
-            raise
 
 
 async def recent_unused_link_exists(
@@ -389,101 +380,10 @@ def log_admin_action(
     return _emit
 
 
-def require_configured_secret(
-    secret: str | None,
-    *,
-    feature: str,
-    setting_name: str,
-    app_env: str,
-    allow_insecure_dev: bool = False,
-) -> bool:
-    """Fail-closed gate shared by every secret-protected surface (admin auth,
-    inbound webhook).
-
-    Returns True when the secret is configured — the caller must then verify
-    it. When unset: 503 unless BOTH ``app_env == development`` AND
-    ``allow_insecure_dev`` are true, in which case a warning is logged and
-    False is returned (caller skips verification). Requiring the second,
-    explicit opt-in (settings.ALLOW_INSECURE_DEV) means a dev-shaped APP_ENV
-    alone — e.g. a misconfigured or never-overridden env var on a real
-    deployment — can never silently open the admin surface or the inbound
-    webhook. Callers pass their own module's ``settings`` values so tests
-    that patch the caller's settings keep working.
-    """
-    if secret:
-        return True
-    if not (app_env == APP_ENV_DEVELOPMENT and allow_insecure_dev):
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=ERROR_FEATURE_DISABLED.format(
-                feature=feature, setting_name=setting_name
-            ),
-        )
-    log.warning(
-        "%s not set; %s unprotected (development mode, ALLOW_INSECURE_DEV=true)",
-        setting_name,
-        feature,
-    )
-    return False
-
-
-async def invalidate_user_scores(db: AsyncSession, user_id: int) -> None:
-    """Delete ALL cached ranking scores for a user.
-
-    A change to the user's personas or feedback shifts the affinity /
-    indirect-feedback terms across every co-categorical event, so per-row
-    invalidation would leave neighbours stale. Callers must invalidate before
-    rebuilding the feed.
-    """
-    await db.execute(delete(UserEventScore).where(UserEventScore.user_id == user_id))
-
-
-def alternation_pattern(keywords: frozenset[str]) -> re.Pattern[str]:
-    """One word-boundary alternation regex for a keyword group.
-
-    A single-pass alternation is far cheaper than searching the text once per
-    keyword (K separately-compiled regexes over the same text, O(K*L)) — the
-    regex engine's alternation matching finds the same word-boundary hits in
-    one pass over the text.
-    """
-    return re.compile(
-        r"\b(?:" + "|".join(re.escape(kw) for kw in keywords) + r")\b",
-        re.IGNORECASE,
-    )
-
-
 def mask_db_url(url: str) -> str:
     """Redact the password in a DB URL for safe logging (``user:pass@host`` ->
     ``user:***@host``). Shared by the maintenance scripts in ``backend/scripts``."""
     return re.sub(MASK_DB_URL_PASSWORD_RE, ":***@", url)
-
-
-def normalized_title(title: str) -> str:
-    """Canonical title key: lowercase + collapse all internal whitespace.
-
-    Shared by dedup same-day bucketing (``apply_same_day_title_unions``) and the
-    feed-level series identity (``event_series_key``) so both agree on what
-    counts as "the same title".
-    """
-    return " ".join(title.lower().split())
-
-
-def event_series_key(title_orig: str, venue_name: str | None) -> tuple[str, str]:
-    """Identity of an ongoing series, independent of ``starts_at``.
-
-    Deliberately broader than the dedup same-day title bucket (which is per-day
-    and feeds dedup) and independent of ``dedup_group_id`` (multi-day series are
-    intentionally not dedup-grouped). Used by the Daily 5 builder to cool down a
-    series already surfaced within the recent cooldown window.
-
-    Both halves go through ``normalized_title`` (lowercase + collapse internal
-    whitespace) so the same series still matches across minor venue-string drift
-    between ingest/refetch passes. Match is exact on the normalized key — venue
-    respellings beyond whitespace/case (a parenthetical suffix, a translation)
-    are an accepted limitation, since the cooldown is a soft feed-diversity
-    filter, not a correctness gate.
-    """
-    return (normalized_title(title_orig), normalized_title(venue_name or ""))
 
 
 def collapse_series_duplicates(
@@ -541,73 +441,36 @@ def persona_weight_tuple(
     )
 
 
-def canonical_event_filter() -> ColumnElement[bool]:
-    """Event is dedup-canonical: ungrouped, or the representative of its group.
-
-    Shared by any query that must not surface a duplicate a second time —
-    ``classify_pending`` only classifies canonical drafts, ``admin_stats``
-    counts canonical events, and the Daily 5 candidate query excludes
-    non-canonical duplicates that were somehow already published (dedup
-    normally runs before classify/publish, so this is a defense-in-depth
-    backstop, not the primary suppression mechanism).
-    """
-    return or_(Event.dedup_group_id.is_(None), Event.dedup_group_id == Event.id)
+def encode_page_cursor(ts: datetime, row_id: int) -> str:
+    """Opaque keyset cursor for a `(timestamp, id)` sort key."""
+    raw = json.dumps([ts.isoformat(), row_id]).encode()
+    return base64.urlsafe_b64encode(raw).decode().rstrip("=")
 
 
-def public_event_filter() -> ColumnElement[bool]:
-    """Event is publicly visible: published, and neither explicit nor a non-event.
-
-    Shared by any endpoint that accepts a caller-supplied event_id and must not
-    leak the existence of a draft/hidden/explicit/non-event row via a 200-vs-404
-    timing or status-code oracle (e.g. GET /events/{id}, POST /feedback).
-    """
-    return and_(
-        Event.status == EVENT_STATUS_PUBLISHED,
-        Event.is_explicit.is_(False),
-        Event.is_non_event.is_(False),
-    )
-
-
-def event_not_ended_filter(now: datetime, entity: Any = Event) -> ColumnElement[bool]:
-    """Event is live (publishable / feed-eligible) until it ends.
-
-    Uses ``ends_at`` when present, else falls back to ``starts_at``. A past
-    ``starts_at`` with a future ``ends_at`` (multi-day runs, ongoing
-    exhibitions) stays live — only a genuinely-over event fails this.
-
-    Written as ``coalesce(ends_at, starts_at) >= now`` — exactly equivalent
-    to the OR form, but sargable against ``ix_events_live_until ON events
-    (coalesce(ends_at, starts_at))`` (migration ``0023``). The OR form
-    Postgres cannot match to that expression index, forcing a seq scan on
-    ``events`` (a table rows are never removed from — see ``cleanup.py``) at
-    every call site.
-
-    ``entity`` accepts ``Event`` (default) or an ``aliased(Event)`` so
-    self-join clauses reuse this definition instead of re-deriving it.
-    """
-    return func.coalesce(entity.ends_at, entity.starts_at) >= now
+def decode_page_cursor(cursor: str) -> tuple[datetime, int]:
+    """Inverse of `encode_page_cursor`; any malformed value is a 422."""
+    try:
+        padded = cursor + "=" * (-len(cursor) % 4)
+        ts_raw, row_id = json.loads(base64.urlsafe_b64decode(padded))
+        ts = datetime.fromisoformat(ts_raw)
+        if ts.tzinfo is None or isinstance(row_id, bool) or not isinstance(row_id, int):
+            raise ValueError(cursor)
+    except (ValueError, TypeError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=ERROR_INVALID_CURSOR,
+        ) from exc
+    return ts, row_id
 
 
-def event_ended_filter(now: datetime, entity: Any = Event) -> ColumnElement[bool]:
-    """Event has ended — the complement of ``event_not_ended_filter``.
-
-    Also written via ``coalesce`` (see ``event_not_ended_filter``) so it hits
-    the same index. Unlike the old OR form, ``coalesce(...) < now`` carries
-    no three-valued-logic trap: ``coalesce`` never evaluates to NULL here
-    (``starts_at`` is NOT NULL), so this is safe to use directly — no need to
-    build the negation of ``event_not_ended_filter`` by hand.
-    """
-    return func.coalesce(entity.ends_at, entity.starts_at) < now
-
-
-def mask_email(email: str) -> str:
-    """Mask an email for log output — keep the first few local-part characters and
-    the full domain so entries stay correlatable without persisting raw PII in
-    cleartext logs (e.g. 'aleksei.lutkov@gmail.com' -> 'al***@gmail.com')."""
-    local, sep, domain = email.partition("@")
-    if not sep:
-        return "***"
-    return f"{local[:EMAIL_MASK_VISIBLE_CHARS]}***@{domain}"
+def escape_ilike_pattern(q: str) -> str:
+    """Escape SQL LIKE wildcards in user-supplied search text, wrapped as a
+    ``%...%`` substring pattern — otherwise a literal ``%``/``_`` in the
+    search box would wildcard-match. Shared by browse.py's keyword search and
+    organizer_claims.py's claim-discovery search (#414); pass the result to
+    ``.ilike(pattern, escape="\\\\")``."""
+    escaped = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return f"%{escaped}%"
 
 
 async def is_identity_linked(
@@ -661,22 +524,10 @@ def serialize_user(user: User, **extras) -> dict:
         "id": user.id,
         "email": user.email,
         "locale": user.locale,
-        "theme_preference": user.theme_preference,
         "home_city": user.home_city,
         "created_at": user.created_at.isoformat(),
         **extras,
     }
-
-
-def parse_session_cookie_user(session: str | None) -> tuple[int, int] | None:
-    """(user_id, token_version) from the session cookie value, or None when
-    the cookie is absent or the token is expired/invalid."""
-    if not isinstance(session, str):
-        return None
-    try:
-        return verify_session_token(session)
-    except (SignatureExpired, BadSignature):
-        return None
 
 
 def select_events_with_classification() -> Select[tuple[Event]]:
@@ -685,6 +536,14 @@ def select_events_with_classification() -> Select[tuple[Event]]:
     return select(Event).options(
         selectinload(Event.classification), selectinload(Event.venue)
     )
+
+
+def publisher_claim_event_ids(publisher_id: int | None) -> Select[tuple[int]]:
+    """Event ids a Publisher claim covers (#436) — one EventSource.publisher_id
+    match, shared by organizer_claims.py::list_claim_events (the bulk list)
+    and claims/pinning.py::claim_event_for_id (the #437 per-event membership
+    check), so the two never drift on what "covered" means."""
+    return select(EventSource.event_id).where(EventSource.publisher_id == publisher_id)
 
 
 def resolve_locale_param(locale: str | None, fallback: str) -> str:
@@ -722,57 +581,25 @@ def resolve_important_info(event: Event, locale: str) -> str | None:
     return event.important_info
 
 
-def _linked_venue(event: Event) -> Venue | None:
-    """Return the joined Venue when the event is venue-linked, else None."""
-    return event.venue if event.venue_id is not None else None
+async def apply_organizer_category(db: AsyncSession, event_id: int, category: str) -> None:
+    """Prepend an organizer-chosen category onto an event's classification.
 
-
-def _pick_locale(locale: str, base: str | None, en: str | None, ru: str | None) -> str | None:
-    """Per-locale value with fallback to the base (Estonian) value."""
-    if locale == LOCALE_EN:
-        return en or base
-    if locale == LOCALE_RU:
-        return ru or base
-    return base
-
-
-def resolve_venue_name(event: Event, locale: str = DEFAULT_USER_LOCALE) -> str | None:
-    """Prefer the linked Venue's per-locale name over Event.venue_name.
-
-    venue_name/venue_address are left NULL at write time whenever venue_id
-    is set (#176) — the join is the sole venue source going forward. Falls
-    back to the legacy free-typed column when venue_id is None."""
-    venue = _linked_venue(event)
-    if venue is not None:
-        return _pick_locale(locale, venue.name, venue.name_en, venue.name_ru)
-    return event.venue_name
-
-
-def resolve_venue_address(event: Event) -> str | None:
-    """Prefer the linked Venue's address over Event.venue_address. Address
-    is not localized (street names don't translate) — see resolve_venue_name
-    for the venue_id/write-time-NULL rationale."""
-    venue = _linked_venue(event)
-    if venue is not None:
-        return venue.address
-    return event.venue_address
-
-
-def resolve_venue_coords(event: Event) -> tuple[float | None, float | None]:
-    """Prefer the linked Venue's own geocode over Event.lat/lng.
-
-    A venue-linked event's own lat/lng never gets backfilled by the
-    geocoding job (its partial index keys off venue_address IS NOT NULL,
-    which is NULL for a linked event) — the Venue's own geocode cooldown
-    (docs/data-model.md) is the only source of coordinates once linked.
-    Requires both lat AND lng to be present before preferring the venue's
-    pair — a half-geocoded venue (one of the two still NULL) falls back to
-    the event's own (possibly also-NULL, but never mismatched) pair rather
-    than surfacing a broken half-populated coordinate."""
-    venue = _linked_venue(event)
-    if venue is not None and venue.lat is not None and venue.lng is not None:
-        return venue.lat, venue.lng
-    return event.lat, event.lng
+    Categories are LLM-derived (Event.classification.categories, an array) —
+    there is no dedicated organizer-facing column. An explicit organizer pick
+    leads the list (any LLM-derived categories, if present, follow); if no
+    classification row exists yet (e.g. classify_event's LLM call failed), a
+    bare one is created so the pick isn't silently dropped. Shared by
+    organizer_events.py (own-submission edits) and organizer_claim_edits.py
+    (#416's prepend-only claim-edit categories rule) — identical prepend
+    semantics, so it lives here rather than being duplicated."""
+    classification = await db.scalar(
+        select(EventClassification).where(EventClassification.event_id == event_id)
+    )
+    if classification is None:
+        db.add(EventClassification(event_id=event_id, categories=[category]))
+        return
+    if category not in classification.categories:
+        classification.categories = [category, *classification.categories]
 
 
 def resolve_why_go(cl: EventClassification | None, locale: str) -> list[str]:
@@ -795,6 +622,10 @@ def serialize_event(
     feedback_by_event: dict[int, str] | None = None,
     reported_event_ids: set[int] | None = None,
 ) -> dict:
+    # Shared by every listing surface (feed/explore/saved) as well as the
+    # single-event page — never add claim_status/listed_by here. Both are
+    # public-event-page-only (ranking-neutrality boundary, #419) and are
+    # bolted onto this dict's return value solely in routers/events.py.
     cl = event.classification
     why_go = resolve_why_go(cl, locale)
     lat, lng = resolve_venue_coords(event)
@@ -880,6 +711,46 @@ async def load_user_reported_events(
     return {row.event_id for row in rows}
 
 
+async def bulk_resolve_publisher_events(
+    db: AsyncSession, publisher_ids: set[int]
+) -> dict[int, Event]:
+    """One representative Event per Publisher id in ``publisher_ids``,
+    bulk-loaded in two fixed queries regardless of how many ids are passed —
+    shared by admin.py::admin_list_claims and
+    app.claims.lifecycle._send_claim_expiry_emails (#421). "Freshest listing
+    wins" (highest EventSource.id per publisher_id) mirrors
+    app.claims.lifecycle.representative_event_source's own single-row
+    ordering — keep the two in sync if that tie-break ever changes."""
+    if not publisher_ids:
+        return {}
+    # DISTINCT ON walks ix_event_sources_publisher_id and keeps only the
+    # highest-id row per publisher — one row per id, not one per listing.
+    es_rows = (
+        await db.execute(
+            select(EventSource.publisher_id, EventSource.event_id)
+            .where(EventSource.publisher_id.in_(publisher_ids))
+            .distinct(EventSource.publisher_id)
+            .order_by(EventSource.publisher_id, EventSource.id.desc())
+        )
+    ).all()
+    event_id_by_publisher: dict[int, int] = {
+        pid: eid for pid, eid in es_rows if pid is not None
+    }
+    if not event_id_by_publisher:
+        return {}
+    events = (
+        await db.scalars(
+            select(Event).where(Event.id.in_(set(event_id_by_publisher.values())))
+        )
+    ).all()
+    events_by_id = {e.id: e for e in events}
+    return {
+        publisher_id: events_by_id[event_id]
+        for publisher_id, event_id in event_id_by_publisher.items()
+        if event_id in events_by_id
+    }
+
+
 async def resolve_open_reports(
     db: AsyncSession, event: Event, resolution_note: str
 ) -> list[EventReport]:
@@ -951,7 +822,6 @@ async def send_report_resolution_emails(
                     event,
                     resolution_note,
                     reporter.locale,
-                    reporter.theme_preference,
                     http_client=http_client,
                 )
             except Exception:
@@ -971,7 +841,7 @@ async def send_report_resolution_emails(
     # been committed.
     # One shared client for the whole fan-out (Big-O audit #5, item 2.7),
     # mirroring digest.py's Big-O audit M7 fix.
-    async with report_outcome_http_client() as http_client:
+    async with resend_http_client() as http_client:
         await asyncio.gather(
             *(_send_one(report, http_client) for report in reports),
             return_exceptions=True,
@@ -990,17 +860,6 @@ async def cancel_event_and_resolve_reports(
     event.status = EVENT_STATUS_CANCELLED
     event.cancellation_reason = cancellation_reason
     return await resolve_open_reports(db, event, resolution_note)
-
-
-def validate_theme_preference(v: str | None) -> str | None:
-    """Shared by settings.py's PatchSettingsBody and organizer_profile.py's
-    OrganizerProfilePatchBody — the consumer and organizer theme tracks are
-    independent, but this validation isn't track-specific."""
-    if v is not None and v not in VALID_THEME_PREFERENCES:
-        raise ValueError(
-            f"theme_preference must be one of {sorted(VALID_THEME_PREFERENCES)}"
-        )
-    return v
 
 
 def validate_tz_aware(v: datetime | None) -> datetime | None:
@@ -1027,6 +886,127 @@ def validate_price_ordering(
     ordering check."""
     if price_min is not None and price_max is not None and price_min > price_max:
         raise ValueError("price_min must not be greater than price_max")
+
+
+def validate_time_ordering(starts_at: datetime | None, ends_at: datetime | None) -> None:
+    """Shared by organizer_events.py's SubmitEventBody/PatchEventBody and
+    organizer_claim_edits.py's PatchClaimEventBody `ends_at < starts_at`
+    ordering check. Both-present only — a patch touching just one of the pair
+    can't be checked against the other without a DB round-trip."""
+    if starts_at is not None and ends_at is not None and ends_at < starts_at:
+        raise ValueError("ends_at must not be before starts_at")
+
+
+def organizer_sanitize(text: str | None) -> str | None:
+    """sanitize_html at the organizer-submission boundary (#267) — the
+    narrower Tiptap-tracking allowlist, not the shared ingestion one. Shared
+    by organizer_events.py and organizer_claim_edits.py."""
+    return sanitize_html(
+        text,
+        tags=ORGANIZER_HTML_SANITIZE_ALLOWED_TAGS,
+        attrs=ORGANIZER_HTML_SANITIZE_ALLOWED_ATTRS,
+    )
+
+
+def localized_dict(
+    et: str | None, en: str | None, ru: str | None
+) -> dict[str, str] | None:
+    """Build a {locale: value} JSONB dict from locale-suffixed request fields,
+    dropping absent locales. et is required upstream (see title validation)."""
+    out = {
+        loc: val
+        for loc, val in ((LOCALE_ET, et), (LOCALE_EN, en), (LOCALE_RU, ru))
+        if val is not None and val.strip()
+    }
+    return out or None
+
+
+def merged_localized(
+    existing: dict[str, str] | None,
+    orig: str | None,
+    body: BaseModel,
+    fields_set: set[str],
+    base: str,
+    *,
+    sanitize: Callable[[str | None], str | None] | None = None,
+) -> dict[str, str] | None:
+    """Rebuild a ``*_localized`` column for a PATCH: a locale present in
+    ``fields_set`` (``{base}_en`` / ``{base}_ru`` on ``body``) takes the
+    request value (optionally passed through ``sanitize``); an absent one
+    keeps its ``existing`` value. ``orig`` is the et/original text."""
+    existing = existing or {}
+    values = []
+    for loc in (LOCALE_EN, LOCALE_RU):
+        field = f"{base}_{loc}"
+        if field in fields_set:
+            value = getattr(body, field)
+            values.append(sanitize(value) if sanitize is not None else value)
+        else:
+            values.append(existing.get(loc))
+    return localized_dict(orig, *values)
+
+
+def apply_price_edit(event: Event, body: Any, fields_set: set[str]) -> None:
+    """Apply a PATCH's price_min/price_max/currency to ``event`` and
+    re-normalize ``currency``: coerces a raw value and fills the default only
+    when the event now carries a price, so a price-only PATCH doesn't leave
+    currency NULL and an un-coerced value never lands on the String(3)
+    column. Shared by organizer_events.py and organizer_claim_edits.py."""
+    if "price_min" in fields_set:
+        event.price_min = body.price_min
+    if "price_max" in fields_set:
+        event.price_max = body.price_max
+    has_price = event.price_min is not None or event.price_max is not None
+    raw_currency = body.currency if "currency" in fields_set else event.currency
+    event.currency = normalize_currency(raw_currency, has_price)
+
+
+def apply_moderation_flags(
+    event: Event, venue_name: str | None, *extra_explicit_texts: str | None
+) -> bool:
+    """Recheck an organizer-edited event against the explicit/non-event
+    keyword filters and set the flags. ``venue_name`` must be the resolved
+    venue name (never the raw column, NULL for a venue-linked event); extra
+    texts (e.g. ``important_info``) join the explicit scan. Returns True when
+    either flag was newly set, so the caller can pull a published event back
+    to classified."""
+    flagged = False
+    if not event.is_explicit and is_explicit_text(
+        event.title_orig, event.description_orig, venue_name, *extra_explicit_texts
+    ):
+        event.is_explicit = True
+        flagged = True
+    if not event.is_non_event and is_non_event_text(event.title_orig, venue_name):
+        event.is_non_event = True
+        flagged = True
+    return flagged
+
+
+async def remoderate_venue_linked_events(db: AsyncSession, venue: Venue) -> None:
+    """A saved venue's name/address is resolved onto every event linked to it
+    at read time (``resolve_venue_name()``), so renaming the venue changes the
+    text shown on already-published events without passing the submit path's
+    explicit/non-event checks (OWASP audit #5). Rescan every live linked event
+    against the venue's new names, pull a newly flagged published event back to
+    classified, and queue them all for post-hoc admin review like any other
+    organizer edit. One query regardless of how many events link the venue.
+    The caller commits."""
+    events = (
+        await db.scalars(
+            select(Event).where(
+                Event.venue_id == venue.id, Event.status != EVENT_STATUS_CANCELLED
+            )
+        )
+    ).all()
+    for event in events:
+        event.needs_review = True
+        if (
+            apply_moderation_flags(
+                event, venue.name, venue.name_en, venue.name_ru, event.important_info
+            )
+            and event.status == EVENT_STATUS_PUBLISHED
+        ):
+            event.status = EVENT_STATUS_CLASSIFIED
 
 
 def validate_report_reason(reason: str) -> None:
@@ -1064,6 +1044,27 @@ _unverified_account_creation_counts: dict[str, int] = {}
 _unverified_account_budget_alerted: set[str] = set()
 
 
+async def get_or_create_organizer(
+    db: AsyncSession, email: str, requested_locale: str | None
+) -> Organizer:
+    """Look up (or insert) the organizer for a magic-link request — shared by
+    organizer_auth.py's own sign-in link and organizer_claims.py's claim-
+    intent link (#413), which both need the identical unverified-row-creation
+    trade-off (mitigated by RATE_LIMIT_AUTH_REQUEST_LINK + recent_unused_link_exists).
+    Mirrors auth.py::_get_or_create_user."""
+    organizer = await db.scalar(select(Organizer).where(Organizer.email == email))
+    if organizer is None:
+        organizer = Organizer(email=email, locale=requested_locale or DEFAULT_USER_LOCALE)
+        db.add(organizer)
+        await db.flush()
+        log.info(
+            "organizer auth: new unverified organizer row created email=%s",
+            mask_email(email),
+        )
+        record_unverified_account_creation()
+    return organizer
+
+
 def record_unverified_account_creation() -> None:
     """Bump the global (not per-IP) daily count of new unverified User/
     Organizer rows created via the magic-link request endpoints
@@ -1078,7 +1079,7 @@ def record_unverified_account_creation() -> None:
     signal an operator can alert on ahead of Resend's own sender-reputation/
     quota controls tripping (OWASP audit F10).
     """
-    today = datetime.now(timezone.utc).date().isoformat()
+    today = datetime.now(TALLINN_TZ).date().isoformat()
     count = _unverified_account_creation_counts.get(today, 0) + 1
     _unverified_account_creation_counts[today] = count
     if (
@@ -1097,3 +1098,13 @@ def record_unverified_account_creation() -> None:
     for stale_day in [d for d in _unverified_account_creation_counts if d != today]:
         del _unverified_account_creation_counts[stale_day]
         _unverified_account_budget_alerted.discard(stale_day)
+
+
+def claim_dns_record_name(mechanism: str | None, domain: str | None) -> str | None:
+    """The TXT record name a DNS-TXT/Piletilevi-promoter claim's organizer is
+    told to add (#412/#413) — shared by the organizer-facing pending screen
+    (organizer_claims.py) and the admin claims queue (admin.py, #420) so the
+    two never disagree on the record name shown for the same claim."""
+    if mechanism in CLAIM_DNS_VERIFICATION_MECHANISMS and domain:
+        return f"{CLAIM_DNS_TXT_RECORD_LABEL}.{domain}"
+    return None

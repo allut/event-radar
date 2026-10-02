@@ -1,7 +1,5 @@
-import { CONTACT_EMAIL, CONTACT_MAILTO } from '../../constants';
+import { CONTACT_EMAIL, CONTACT_MAILTO, ODR_URL } from '../../constants';
 import type { LegalDoc } from './types';
-
-const ODR_URL = 'https://ec.europa.eu/consumers/odr';
 
 const doc: LegalDoc = {
   title: 'Условия использования',

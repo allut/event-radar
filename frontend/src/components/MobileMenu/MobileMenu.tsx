@@ -4,8 +4,8 @@ import { cx } from '../../utils';
 import { LOCALES, NAV_ITEMS, ROUTES, SIGNED_OUT_NAV_ITEMS, THEME_OPTIONS } from '../../constants';
 import { useDropdown } from '../../hooks/useDropdown';
 import { useLocalePath } from '../../hooks/useLocalePath';
-import { useThemePreference } from '../../hooks/useThemePreference';
-import { setThemePreference } from '../../lib/theme';
+import { useResolvedTheme } from '../../hooks/useResolvedTheme';
+import { setThemeOverride, type ResolvedTheme } from '../../lib/theme';
 import menuStyles from '../shared/Menu.module.css';
 import styles from './MobileMenu.module.css';
 
@@ -27,7 +27,7 @@ interface MobileMenuProps {
 export default function MobileMenu({ locale, onLocaleChange, onLogout, localeDisabled, showNav = true, authed = true, navItems, navAriaLabelKey = 'nav_daily5' }: MobileMenuProps) {
   const { open, setOpen, flip, rootRef, popRef, triggerRef, close } = useDropdown();
   const localePath = useLocalePath();
-  const themePreference = useThemePreference();
+  const resolvedTheme = useResolvedTheme();
   // Mirrors TopBar's signed-out nav filtering via the shared
   // SIGNED_OUT_NAV_ROUTES allowlist.
   const visibleNavItems = navItems ?? (authed ? NAV_ITEMS : SIGNED_OUT_NAV_ITEMS);
@@ -97,7 +97,7 @@ export default function MobileMenu({ locale, onLocaleChange, onLogout, localeDis
             <span className={styles.sectionLabel}>{t('section_theme', locale)}</span>
             <div className={styles.optionRow} role="group" aria-label={t('section_theme', locale)}>
               {THEME_OPTIONS.map(({ value, labelKey }) => {
-                const isActive = value === themePreference;
+                const isActive = value === resolvedTheme;
                 return (
                   <button
                     key={value}
@@ -105,7 +105,7 @@ export default function MobileMenu({ locale, onLocaleChange, onLogout, localeDis
                     className={cx(styles.option, isActive && styles.optionActive)}
                     aria-pressed={isActive}
                     onClick={() => {
-                      setThemePreference(value);
+                      setThemeOverride(value as ResolvedTheme);
                       close();
                     }}
                   >

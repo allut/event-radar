@@ -1,10 +1,11 @@
 """Tests for POST /feedback, DELETE /feedback/{event_id}, GET /feedback/events."""
 import http
-from unittest.mock import MagicMock
+from datetime import datetime, timezone
 
 import pytest
 
 from app.constants import VALID_SIGNALS
+from tests.routers.conftest import execute_rows
 
 
 class TestRecordFeedback:
@@ -22,8 +23,8 @@ class TestRecordFeedback:
             db=mock_db,
         )
         assert result == {"ok": True}
-        # One execute() for the upsert, one for score invalidation.
-        assert mock_db.execute.call_count == 2
+        # Exactly one execute(): the upsert — no score-cache invalidation.
+        assert mock_db.execute.call_count == 1
         mock_db.commit.assert_called_once()
 
     @pytest.mark.asyncio
@@ -45,49 +46,35 @@ class TestRecordFeedback:
         assert "ON CONFLICT" in compiled.upper()
 
     @pytest.mark.asyncio
-    async def test_click_external_appends_not_upserts(
-        self, mock_db, make_user, make_event, make_request
+    @pytest.mark.parametrize("signal", ["click_external", "view"])
+    async def test_passive_signal_is_insert_do_nothing_not_upsert(
+        self, signal, mock_db, make_user, make_event, make_request
     ):
         """Regression: click_external/view must never share the upsert path with
         like/dislike/bookmark — otherwise a ticket-link click would silently
-        overwrite (destroy) an existing bookmark on the same event."""
+        overwrite (destroy) an existing bookmark on the same event. They are
+        inserted ON CONFLICT DO NOTHING so the one-row-per-day unique index
+        (migration 0055, OWASP audit #9) turns a repeat into a no-op."""
+        from sqlalchemy.dialects import postgresql
+
         from app.routers.feedback import record_feedback, FeedbackBody
 
         mock_db.scalar.return_value = make_event(10)
 
         await record_feedback(
-            body=FeedbackBody(event_id=10, signal="click_external"),
+            body=FeedbackBody(event_id=10, signal=signal),
             request=make_request(method="POST", path="/feedback"),
             current_user=make_user(),
             db=mock_db,
         )
-        # Analytics signal: appended via db.add(), never upserted via db.execute()
-        # against the preference-signal index.
-        mock_db.add.assert_called_once()
-        added_row = mock_db.add.call_args.args[0]
-        assert added_row.signal == "click_external"
-        # click_external isn't in SCORE_AFFECTING_SIGNALS (like/dislike only) —
-        # no score-cache invalidation, so execute() is never called at all.
-        assert mock_db.execute.call_count == 0
-
-    @pytest.mark.asyncio
-    async def test_view_appends_not_upserts(
-        self, mock_db, make_user, make_event, make_request
-    ):
-        from app.routers.feedback import record_feedback, FeedbackBody
-
-        mock_db.scalar.return_value = make_event(10)
-
-        await record_feedback(
-            body=FeedbackBody(event_id=10, signal="view"),
-            request=make_request(method="POST", path="/feedback"),
-            current_user=make_user(),
-            db=mock_db,
-        )
-        mock_db.add.assert_called_once()
-        # view isn't in SCORE_AFFECTING_SIGNALS (like/dislike only) — no
-        # score-cache invalidation, so execute() is never called at all.
-        assert mock_db.execute.call_count == 0
+        mock_db.add.assert_not_called()
+        assert mock_db.execute.call_count == 1
+        compiled = str(
+            mock_db.execute.call_args.args[0].compile(dialect=postgresql.dialect())
+        ).upper()
+        assert "ON CONFLICT DO NOTHING" in compiled
+        assert "DO UPDATE" not in compiled
+        mock_db.commit.assert_called_once()
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("signal", sorted(VALID_SIGNALS))
@@ -139,60 +126,11 @@ class TestRecordFeedback:
             )
         assert exc_info.value.status_code == http.HTTPStatus.NOT_FOUND
 
-    @pytest.mark.asyncio
-    async def test_score_cache_invalidated(self, mock_db, make_user, make_event, make_request):
-        """Ensure a second execute() call issues the DELETE against user_event_scores."""
-        from app.routers.feedback import record_feedback, FeedbackBody
-
-        mock_db.scalar.return_value = make_event(5)
-        user = make_user(user_id=3)
-
-        await record_feedback(
-            body=FeedbackBody(event_id=5, signal="dislike"),
-            request=make_request(method="POST", path="/feedback"),
-            current_user=user,
-            db=mock_db,
-        )
-        invalidate_stmt = mock_db.execute.call_args_list[1].args[0]
-        compiled = str(invalidate_stmt.compile(compile_kwargs={"literal_binds": True}))
-        assert "DELETE FROM user_event_scores" in compiled
-
 
 class TestDeleteFeedback:
     @pytest.mark.asyncio
     async def test_delete_removes_signal(self, mock_db, make_user, make_request):
-        """A deleted like/dislike (a SCORE_AFFECTING_SIGNALS member) triggers
-        score-cache invalidation — the DELETE's RETURNING reports which
-        signal(s) were actually removed."""
         from app.routers.feedback import delete_feedback
-
-        user = make_user(user_id=3)
-        returning_result = MagicMock()
-        returning_result.scalars.return_value.all.return_value = ["like"]
-        mock_db.execute.return_value = returning_result
-
-        result = await delete_feedback(
-            event_id=10,
-            request=make_request(method="DELETE", path="/feedback/10"),
-            current_user=user,
-            db=mock_db,
-        )
-        assert result == {"ok": True}
-        # One execute() for the DELETE, one for score invalidation.
-        assert mock_db.execute.call_count == 2
-        mock_db.commit.assert_called_once()
-
-    @pytest.mark.asyncio
-    async def test_delete_bookmark_only_skips_invalidation(
-        self, mock_db, make_user, make_request
-    ):
-        """Deleting a bookmark (not in SCORE_AFFECTING_SIGNALS) must not wipe the
-        score cache — bookmark is never read by the scorer."""
-        from app.routers.feedback import delete_feedback
-
-        returning_result = MagicMock()
-        returning_result.scalars.return_value.all.return_value = ["bookmark"]
-        mock_db.execute.return_value = returning_result
 
         result = await delete_feedback(
             event_id=10,
@@ -201,8 +139,9 @@ class TestDeleteFeedback:
             db=mock_db,
         )
         assert result == {"ok": True}
-        # Only the DELETE — no second execute() for invalidation.
+        # One execute() for the DELETE — nothing else to invalidate.
         assert mock_db.execute.call_count == 1
+        mock_db.commit.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_delete_is_idempotent_no_404(self, mock_db, make_user, make_request):
@@ -234,20 +173,97 @@ class TestDeleteFeedback:
         assert "signal IN" in compiled
 
 
+TS = datetime(2026, 5, 1, 12, 0, tzinfo=timezone.utc)
+
+
+class TestListFeedbackEventsKeyset:
+    @pytest.mark.asyncio
+    async def test_has_more_emits_cursor_of_last_returned_row(
+        self, mock_db, make_user, make_event, make_request
+    ):
+        from app.routers.feedback import list_feedback_events
+        from app.routers.utils import decode_page_cursor
+
+        mock_db.scalar.return_value = 3
+        mock_db.execute.side_effect = [execute_rows([(make_event(1), TS, 30), (make_event(2), TS, 20), (make_event(3), TS, 10)]), execute_rows([])]
+
+        result = await list_feedback_events(
+            request=make_request(method="GET", path="/feedback/events"),
+            signal="bookmark",
+            limit=2,
+            offset=0,
+            cursor=None,
+            current_user=make_user(),
+            db=mock_db,
+        )
+
+        assert result["has_more"] is True
+        assert [e["id"] for e in result["events"]] == [1, 2]
+        assert decode_page_cursor(result["next_cursor"]) == (TS, 20)
+
+    @pytest.mark.asyncio
+    async def test_cursor_page_filters_keyset_skips_total(
+        self, mock_db, make_user, make_event, make_request
+    ):
+        from app.routers.feedback import list_feedback_events
+        from app.routers.utils import encode_page_cursor
+
+        mock_db.execute.side_effect = [execute_rows([(make_event(1), TS, 5)]), execute_rows([])]
+
+        result = await list_feedback_events(
+            request=make_request(method="GET", path="/feedback/events"),
+            signal="bookmark",
+            limit=2,
+            offset=40,
+            cursor=encode_page_cursor(TS, 20),
+            current_user=make_user(),
+            db=mock_db,
+        )
+
+        sql = str(
+            mock_db.execute.call_args_list[0].args[0].compile(
+                compile_kwargs={"literal_binds": True}
+            )
+        )
+        assert "(user_event_feedback.created_at, user_event_feedback.id) <" in sql
+        assert "user_event_feedback.created_at DESC, user_event_feedback.id DESC" in sql
+        mock_db.scalar.assert_not_called()
+        assert result["total"] is None
+        assert result["offset"] == 0
+        assert result["next_cursor"] is None
+
+    @pytest.mark.asyncio
+    async def test_malformed_cursor_422(self, mock_db, make_user, make_request):
+        from fastapi import HTTPException
+        from app.routers.feedback import list_feedback_events
+
+        with pytest.raises(HTTPException) as exc_info:
+            await list_feedback_events(
+                request=make_request(method="GET", path="/feedback/events"),
+                signal="bookmark",
+                limit=2,
+                offset=0,
+                cursor="garbage!!",
+                current_user=make_user(),
+                db=mock_db,
+            )
+        assert exc_info.value.status_code == http.HTTPStatus.UNPROCESSABLE_ENTITY
+
+
 class TestListFeedbackEvents:
     @pytest.mark.asyncio
     async def test_returns_events_with_signal(self, mock_db, make_user, make_event, make_request):
         from app.routers.feedback import list_feedback_events
 
         mock_db.scalar.return_value = 2
-        scalars_result = type("R", (), {"all": lambda self: [make_event(1), make_event(2)]})()
-        mock_db.scalars.return_value = scalars_result
+        mock_db.execute.side_effect = [execute_rows([(make_event(1), TS, 11), (make_event(2), TS, 10)]), execute_rows([])]
 
         result = await list_feedback_events(
             request=make_request(method="GET", path="/feedback/events"),
             signal="bookmark",
             limit=24,
             offset=0,
+            cursor=None,
             current_user=make_user(),
             db=mock_db,
         )
@@ -291,14 +307,14 @@ class TestListFeedbackEvents:
         from app.routers.feedback import list_feedback_events
 
         mock_db.scalar.return_value = 1
-        scalars_result = type("R", (), {"all": lambda self: [make_event(1)]})()
-        mock_db.scalars.return_value = scalars_result
+        mock_db.execute.side_effect = [execute_rows([(make_event(1), TS, 11)]), execute_rows([])]
 
         result = await list_feedback_events(
             request=make_request(method="GET", path="/feedback/events"),
             signal="like",
             limit=10,
             offset=0,
+            cursor=None,
             current_user=make_user(),
             db=mock_db,
         )

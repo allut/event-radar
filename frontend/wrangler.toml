@@ -3,28 +3,22 @@
 #
 # Static SPA build (issue #343) plus, as of issue #344, the two Pages
 # Functions under functions/api/ (seo-audit, prerender-cadence) — Cloudflare
-# auto-routes anything under functions/ by convention, with no opt-in step
-# (unlike Vercel's vercel.json rewrite exclusion, which is what currently
-# gates the still-live Vercel copies of this same logic). As of issue #346,
-# the build-time Playwright prerender pass (scripts/prerender.ts) also runs
-# here — the `npm run build` script's gate now checks `$CF_PAGES` (in
-# addition to `$VERCEL`), and unlike Vercel it does run `playwright install
-# chromium` first, since Cloudflare's build container has no
-# `@sparticuz/chromium`-style prebuilt binary and instead runs Playwright's
-# own bundled Chromium directly (the #340 spike confirmed `chromium.launch()`
-# succeeds in this container).
+# auto-routes anything under functions/ by convention, with no opt-in step.
+# As of issue #346, the build-time Playwright prerender pass
+# (scripts/prerender.ts) also runs here — the `npm run build` script's gate
+# checks `$CF_PAGES`, and runs `playwright install chromium` first, since
+# Cloudflare's build container runs Playwright's own bundled Chromium
+# directly (the #340 spike confirmed `chromium.launch()` succeeds in this
+# container).
 #
 # CF_PAGES_BRANCH and CF_PAGES_COMMIT_SHA (both auto-injected by Cloudflare
-# Pages) join VERCEL_GIT_COMMIT_REF and VERCEL_GIT_COMMIT_MESSAGE for the
-# prerender-chain machinery (prerender.ts's isPreviewBuild/commitRoundMarker,
-# resolveRoundStart's commit-message read) — Cloudflare exposes neither a
-# dedicated preview/production flag nor a commit-message env var, so
-# isPreviewBuild infers preview from CF_PAGES_BRANCH against the production
-# branch, and the commit message is looked up via the GitHub API against
-# CF_PAGES_COMMIT_SHA instead. The Vercel-env-var paths are additive, not
-# replaced: the Vercel deployment stays live in parallel as the migration's
-# rollback path (#341) until decommissioned, so its own chain/preview
-# handling must keep working unchanged in the meantime.
+# Pages) drive the prerender-chain machinery
+# (prerender.ts's isPreviewBuild/commitRoundMarker, resolveRoundStart's
+# commit-message read) — Cloudflare exposes neither a dedicated
+# preview/production flag nor a commit-message env var, so isPreviewBuild
+# infers preview from CF_PAGES_BRANCH against the production branch, and the
+# commit message is looked up via the GitHub API against CF_PAGES_COMMIT_SHA
+# instead.
 #
 # `nodejs_compat` is required: seoAuditAuth.ts's `isValidAuditToken` (used by
 # both Pages Functions) imports `timingSafeEqual` from `node:crypto`, which

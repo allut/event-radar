@@ -10,6 +10,7 @@ import {
 import { buildEventJsonLd, buildExploreItemListJsonLd, buildWebsiteJsonLd } from './structuredData';
 import { buildSeoMeta } from '../hooks/useSeoMeta';
 import { makeEvent } from '../test/utils';
+import { serializeJsonLd } from './jsonLd';
 import { PRODUCTION_ORIGIN } from '../constants';
 
 /** Mirrors components/SeoTags/SeoTags.tsx's rendering (title/meta/link/
@@ -27,7 +28,7 @@ function renderSnapshotHtml(
   const links = meta.links
     .map((link) => `<link rel="${link.rel}" href="${link.href}"${link.hrefLang ? ` hreflang="${link.hrefLang}"` : ''}>`)
     .join('\n');
-  return `<!doctype html><html lang="${meta.htmlLang}"><head><title>${meta.title}</title>${metaTags}${links}<link rel="icon" href="/favicon.svg"><script type="application/ld+json">${JSON.stringify(jsonLd).replace(/</g, '\\u003c')}</script></head><body>${extraBodyHtml}</body></html>`;
+  return `<!doctype html><html lang="${meta.htmlLang}"><head><title>${meta.title}</title>${metaTags}${links}<link rel="icon" href="/favicon.svg"><script type="application/ld+json">${serializeJsonLd(jsonLd)}</script></head><body>${extraBodyHtml}</body></html>`;
 }
 
 describe('parseSnapshotHtml', () => {
@@ -234,6 +235,33 @@ describe('validateSnapshotStructure', () => {
     const parsed = parseSnapshotHtml(html);
     const issues = validateSnapshotStructure(parsed, { kind: 'event', locale: 'et', originPrefix: PRODUCTION_ORIGIN });
     expect(issues.some((i) => i.startsWith('jsonLd:'))).toBe(true);
+  });
+
+  it('catches an unescaped "<" left in the JSON-LD body (OWASP audit #1)', () => {
+    const html = validEventHtml().replace(
+      /<script type="application\/ld\+json">.*?<\/script>/s,
+      '<script type="application/ld+json">{"@type":"Event","name":"<b>x</b>"}</script>',
+    );
+    const parsed = parseSnapshotHtml(html);
+    const issues = validateSnapshotStructure(parsed, { kind: 'event', locale: 'et', originPrefix: PRODUCTION_ORIGIN });
+    expect(issues.some((i) => i.includes('unescaped "<"'))).toBe(true);
+  });
+
+  it('flags a "</script" breakout: the truncated JSON-LD body no longer parses', () => {
+    const html = validEventHtml().replace(
+      /<script type="application\/ld\+json">.*?<\/script>/s,
+      '<script type="application/ld+json">{"@type":"Event","name":"</script><meta http-equiv="refresh" content="0"></script>',
+    );
+    const parsed = parseSnapshotHtml(html);
+    const issues = validateSnapshotStructure(parsed, { kind: 'event', locale: 'et', originPrefix: PRODUCTION_ORIGIN });
+    expect(issues.some((i) => i.startsWith('jsonLd:'))).toBe(true);
+  });
+
+  it('does not flag a properly escaped "<" in event text', () => {
+    const parsed = parseSnapshotHtml(validEventHtml());
+    parsed.jsonLdRaw = ['{"name":"a\\u003c/script"}'];
+    const issues = validateSnapshotStructure(parsed, { kind: 'event', locale: 'et', originPrefix: PRODUCTION_ORIGIN });
+    expect(issues.some((i) => i.includes('unescaped "<"'))).toBe(false);
   });
 });
 

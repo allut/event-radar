@@ -9,15 +9,15 @@ import {
   ADMIN_TRANSLATABLE_FIELD_COUNT,
   API,
   CONTENT_LANG_ORDER,
-  LOCALES_BY_CODE,
   QUERY_KEYS,
   ROUTES,
   UI_STATE,
   REPORT_STATUS,
+  ADMIN_RESOLUTION_MESSAGES,
   type ContentLang,
   type ContentMarkerState,
 } from '../../constants';
-import { apiErrorMessage, sanitizeHtml, formatAdminTimestamp, safeUrl } from '../../utils';
+import { apiErrorMessage, sanitizeHtml, formatAdminTimestamp, localeLabel, safeUrl } from '../../utils';
 import PageState from '../../components/PageState';
 import Toast from '../../components/Toast';
 import { useToast } from '../../hooks/useToast';
@@ -126,10 +126,10 @@ type ActionKind = 'resolved' | 'taken_down' | 'approved' | 'retracted';
 // mutationFn and onSuccess both key off this instead of separately
 // enumerating the same 4 kinds.
 const ACTION_CONFIG: Record<ActionKind, { path: (id: number) => string; message: string }> = {
-  resolved: { path: API.adminReportResolve, message: 'Resolved.' },
-  taken_down: { path: API.adminReportTakedown, message: 'Event taken down.' },
-  approved: { path: API.adminSubmissionApprove, message: 'Submission approved.' },
-  retracted: { path: API.adminSubmissionRetract, message: 'Submission retracted.' },
+  resolved: { path: API.adminReportResolve, message: ADMIN_RESOLUTION_MESSAGES.resolved },
+  taken_down: { path: API.adminReportTakedown, message: ADMIN_RESOLUTION_MESSAGES.taken_down },
+  approved: { path: API.adminSubmissionApprove, message: ADMIN_RESOLUTION_MESSAGES.approved },
+  retracted: { path: API.adminSubmissionRetract, message: ADMIN_RESOLUTION_MESSAGES.retracted },
 };
 
 type Tab = (typeof ADMIN_EVENT_DETAIL_TABS)[number];
@@ -180,7 +180,6 @@ export default function AdminEventDetail({ eventId }: { eventId: string }) {
   const langOptions = useMemo(() => {
     if (!data) return [];
     const { event } = data;
-    const localeLabel = (code: ContentLang) => LOCALES_BY_CODE.get(code)?.label ?? code.toUpperCase();
     const markerState = (code: ContentLang): ContentMarkerState => {
       if (code === CONTENT_LANG_ORDER[0]) return 'matched';
       const t = event.content_by_locale[code]?.translated;

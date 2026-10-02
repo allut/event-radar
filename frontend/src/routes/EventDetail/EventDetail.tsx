@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { api } from '../../api/client';
+import { api, organizerApi } from '../../api/client';
 import { t, ti } from '../../i18n';
 import { buildMapsUrl, categoryGradient, cx, formatEventDateTime, formatEventShortDate, formatHourMinute, formatPrice, safeUrl, sanitizeHtml, shareEvent, titleWithBrand, trackExternalClick, truncateForMeta, withLocaleQuery } from '../../utils';
 import { useAuth } from '../../hooks/useAuth';
@@ -10,6 +10,7 @@ import { useLocaleMutation } from '../../hooks/useLocaleMutation';
 import { useLocaleNavigate } from '../../hooks/useLocaleNavigate';
 import { useLocalePath } from '../../hooks/useLocalePath';
 import { useLogout } from '../../hooks/useLogout';
+import { useOrganizerAuth } from '../../hooks/useOrganizerAuth';
 import { useToast } from '../../hooks/useToast';
 import { useSeoMeta } from '../../hooks/useSeoMeta';
 import { buildEventJsonLd } from '../../lib/structuredData';
@@ -22,11 +23,14 @@ import SeoTags from '../../components/SeoTags';
 import Toast from '../../components/Toast';
 import TopBar from '../../components/TopBar';
 import { useFeedback } from '../../hooks/useFeedback';
-import { API, EVENT_PRICE_TESTID, EXPLORE_PARAM, OG_FALLBACK_IMAGE_PATH, PRICE_DATA_ATTR, PRODUCTION_ORIGIN, QUERY_KEYS, ROUTES, SEO_DESCRIPTION_MAX_LENGTH, UI_STATE } from '../../constants';
+import { API, CLAIM_STATUS_PENDING, EVENT_CLAIM_STATUS_CLAIMED, EVENT_CLAIM_STATUS_NOT_CLAIMABLE, EVENT_PRICE_TESTID, EXPLORE_PARAM, OG_FALLBACK_IMAGE_PATH, PRICE_DATA_ATTR, PRODUCTION_ORIGIN, QUERY_KEYS, ROUTES, SEO_DESCRIPTION_MAX_LENGTH, UI_STATE, type ClaimStatus, type EventClaimStatus } from '../../constants';
 import styles from './EventDetail.module.css';
+import { ClaimPanel, ClaimPill } from '../../components/ClaimStrip';
 
 interface EventDetailData extends EventData {
   language: string | null;
+  claim_status: EventClaimStatus;
+  listed_by: string | null;
 }
 
 export default function EventDetail() {
@@ -34,6 +38,7 @@ export default function EventDetail() {
   const navigate = useLocaleNavigate();
   const localePath = useLocalePath();
   const authed = useAuth();
+  const organizerAuthed = useOrganizerAuth();
   const { locale, handleLocaleChange, isPending: localePending } = useLocaleMutation({ publicRoute: true });
   const handleLogout = useLogout();
   const { toast, showToast } = useToast();
@@ -45,7 +50,17 @@ export default function EventDetail() {
     retry: false,
   });
 
-  const { reportOpen, reported, openReportModal, closeReportModal, handleReportSubmitted } = useEventReport(data?.reported ?? false);
+  // (#451) GET /events/{id} never reveals a pending claim — the pending pill
+  // is claimant-only, so an organizer-authed page asks this separate,
+  // organizer-scoped endpoint for its *own* active claim on the event
+  // instead of trusting anything public claim_status says about "pending".
+  const { data: ownClaim } = useQuery({
+    queryKey: [QUERY_KEYS.organizerClaimForEvent, data?.id],
+    queryFn: () => organizerApi.get<{ claim: { status: ClaimStatus } | null }>(API.organizerClaimForEvent(data?.id ?? '')),
+    enabled: Boolean(data?.id) && organizerAuthed,
+  });
+
+  const { reportOpen, reported, openReportModal, closeReportModal, handleReportSubmitted } = useEventReport(data?.reported ?? false, data?.id, authed, () => navigate(ROUTES.login));
 
   const { activeSignal, pending, sendFeedback } = useFeedback(data?.id, {
     initialSignal: data?.my_signal ?? null,
@@ -177,9 +192,22 @@ export default function EventDetail() {
                 {ti('ends_at', locale, { time: formatHourMinute(data.ends_at, locale) })}
               </span>
             )}
+            {data.claim_status === EVENT_CLAIM_STATUS_CLAIMED && (
+              <ClaimPill status="claimed" locale={locale} />
+            )}
+            {/* (#451) Claimant-only: the public claim_status never carries
+                "pending" — only the caller's own claim, fetched via the
+                organizer-scoped for-event lookup, can show this. */}
+            {data.claim_status !== EVENT_CLAIM_STATUS_CLAIMED && ownClaim?.claim?.status === CLAIM_STATUS_PENDING && (
+              <ClaimPill status="pending" locale={locale} />
+            )}
           </div>
 
           <h1 className={styles.title}>{data.title}</h1>
+
+          {data.listed_by && (
+            <p className={styles.listedBy}>{ti('listed_by', locale, { name: data.listed_by })}</p>
+          )}
 
           <div className={styles.actions}>
             {authed && (
@@ -274,6 +302,15 @@ export default function EventDetail() {
             </section>
           )}
 
+          {/* #441: a pending-only target is still claimable by a rival —
+              ADR 0004's "proof preempts assertion" only blocks the CTA once
+              a claim is actually approved. #445: a direct organizer
+              submission has no ingested EventSource to ever claim, so the
+              CTA never renders for it. */}
+          {data.claim_status !== EVENT_CLAIM_STATUS_CLAIMED &&
+            data.claim_status !== EVENT_CLAIM_STATUS_NOT_CLAIMABLE && (
+              <ClaimPanel eventId={data.id} locale={locale} />
+            )}
         </div>
       </main>
 

@@ -16,12 +16,14 @@ from app.constants import (
     HTTP_TIMEOUT_SECONDS,
     ORGANIZER_MIN_EVENTS_FOR_AUTO_ADD,
     ORGANIZER_NAME_MAX_LEN,
+    PUBLISHER_STATUS_ACTIVE,
+    PUBLISHER_STATUS_RETIRED,
     SOURCE_SLUG_FIENTA,
     STALE_ORGANIZER_RETIRE_DAYS,
     TALLINN_TZ,
 )
 from app.ingestion.http_client import AsyncRateLimiter, http_get
-from app.models.models import Source
+from app.models.models import Publisher, Source
 
 log = logging.getLogger(__name__)
 
@@ -175,6 +177,58 @@ def _retire_stale(
     return retired_now
 
 
+async def _sync_publishers(
+    db: AsyncSession,
+    source: Source,
+    current_ids: list[int],
+    current_names: dict[str, str],
+    retired_ids: set[int],
+) -> None:
+    """Mirror publishers from organizer_ids/organizer_names/retired_organizer_ids
+    (#409/#411) — a read mirror only, never the other way around; the JSONB
+    lists on Source.config stay the live ingestion filter (see module
+    docstring). One bulk SELECT plus in-memory upserts, independent of how
+    many organizers changed this run (Code Quality Rules' "Batch jobs").
+    """
+    all_oids = set(current_ids) | retired_ids
+    if not all_oids:
+        return
+    external_ids = [str(oid) for oid in all_oids]
+    existing_by_external_id = {
+        p.external_id: p
+        for p in (
+            await db.execute(
+                select(Publisher).where(
+                    Publisher.source_id == source.id,
+                    Publisher.external_id.in_(external_ids),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    }
+    for oid in all_oids:
+        external_id = str(oid)
+        name = current_names.get(external_id, external_id)[:ORGANIZER_NAME_MAX_LEN]
+        status = (
+            PUBLISHER_STATUS_RETIRED if oid in retired_ids else PUBLISHER_STATUS_ACTIVE
+        )
+        publisher = existing_by_external_id.get(external_id)
+        if publisher is None:
+            db.add(
+                Publisher(
+                    source_id=source.id,
+                    external_id=external_id,
+                    name=name,
+                    status=status,
+                )
+            )
+        else:
+            publisher.name = name
+            publisher.status = status
+    await db.flush()
+
+
 async def sync_fienta_organizers(db: AsyncSession) -> dict:
     """Check active organizers, discover new ones, retire long-dead ones, update Source.config.
 
@@ -242,6 +296,8 @@ async def sync_fienta_organizers(db: AsyncSession) -> dict:
         "retired_organizer_ids": sorted(retired_ids),
     }
     flag_modified(source, "config")
+
+    await _sync_publishers(db, source, current_ids, current_names, retired_ids)
 
     log.info(
         "organizer_sync: done — total=%d added=%d stale=%d retired=%d",

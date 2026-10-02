@@ -13,9 +13,11 @@ _KNOWN_JOB_IDS = {
     "classify_pending",
     "publish_pending",
     "geocode_pending",
+    "backfill_publisher_ids",
     "refetch_event_details",
     "build_daily_feeds",
     "send_daily_digests",
+    "expire_stale_claims",
 }
 
 

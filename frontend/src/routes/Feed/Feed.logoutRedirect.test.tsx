@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { QueryClient } from '@tanstack/react-query';
 import Feed from './Feed';
 import Landing from '../Landing';
 import { useAuth } from '../../hooks/useAuth';
@@ -64,14 +63,13 @@ function stubFetch() {
   }));
 }
 
-function renderHome(queryClient: QueryClient) {
-  // Home is one of the two public SEO routes (App.tsx's ROUTE_DEFS): its bare
+function renderHome() {
+  // Home is one of the three public SEO routes (App.tsx's ROUTE_DEFS): its bare
   // path always renders Estonian, so this test drives it through an explicit
   // `/en` locale prefix (mirroring App.tsx's `/:locale` route registration)
   // to keep asserting against English strings.
   return renderWithProviders(null, {
     route: '/en',
-    queryClient,
     routes: [
       { path: '/:locale', element: <Home /> },
       { path: '/', element: <Home /> },
@@ -84,9 +82,8 @@ describe('logout redirect from the Feed route (/)', () => {
   it('does not hard-redirect to /login when signing out while on the feed', async () => {
     localStorage.setItem(SIGNED_IN_HINT_KEY, '1');
     stubFetch();
-    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 
-    renderHome(queryClient);
+    renderHome();
 
     await waitFor(() => expect(screen.getByText('Event One')).toBeInTheDocument());
     await userEvent.click(screen.getByRole('button', { name: /sign out/i }));

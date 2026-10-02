@@ -6,6 +6,8 @@ from unittest.mock import ANY, AsyncMock, MagicMock, patch
 import pytest
 from pydantic import ValidationError
 
+from tests.conftest import build_event
+
 from app.constants import (
     EVENT_STATUS_CANCELLED,
     EVENT_STATUS_CLASSIFIED,
@@ -19,25 +21,12 @@ from app.constants import (
 
 
 def _fake_event(**overrides):
-    e = MagicMock()
-    e.id = 10
-    e.slug = "test-event-20260601-abcd"
-    e.status = "draft"
-    e.submitted_by_organizer_id = None
-    e.needs_review = False
-    e.is_explicit = False
-    e.is_non_event = False
-    e.title_orig = "Test Event"
-    e.description_orig = "A test event"
-    e.important_info = None
-    e.venue_name = "Test Venue"
-    e.venue_id = None
-    e.title_localized = None
-    e.description_localized = None
-    e.important_info_localized = None
-    for k, v in overrides.items():
-        setattr(e, k, v)
-    return e
+    defaults = {
+        "status": "draft",
+        "slug": "test-event-20260601-abcd",
+        "needs_review": False,
+    }
+    return build_event(**(defaults | overrides))
 
 
 class TestCheckImageHost:
@@ -50,10 +39,41 @@ class TestCheckImageHost:
 
         _check_image_host(None)  # must not raise
 
-    def test_cloudinary_host_accepted(self):
+    def test_own_cloudinary_account_accepted(self):
         from app.routers.organizer_events import _check_image_host
 
-        _check_image_host("https://res.cloudinary.com/demo/image/upload/x.png")
+        with patch("app.routers.organizer_events.settings") as mock_settings:
+            mock_settings.CLOUDINARY_CLOUD_NAME = "demo"
+            _check_image_host("https://res.cloudinary.com/demo/image/upload/x.png")
+
+    @pytest.mark.parametrize(
+        "url",
+        [
+            "https://res.cloudinary.com/other-account/image/upload/x.png",
+            "https://res.cloudinary.com/demo/image/fetch/https://evil.example/x.png",
+            "https://res.cloudinary.com/demo/image/upload/../../other/image/upload/x.png",
+            "https://res.cloudinary.com/demo/image/upload/%2e%2e/%2e%2e/other/x.png",
+            "https://res.cloudinary.com/demoevil/image/upload/x.png",
+        ],
+    )
+    def test_other_cloudinary_account_or_path_rejected(self, url):
+        from fastapi import HTTPException
+        from app.routers.organizer_events import _check_image_host
+
+        with patch("app.routers.organizer_events.settings") as mock_settings:
+            mock_settings.CLOUDINARY_CLOUD_NAME = "demo"
+            with pytest.raises(HTTPException) as exc_info:
+                _check_image_host(url)
+        assert exc_info.value.status_code == http.HTTPStatus.BAD_REQUEST
+
+    def test_unconfigured_cloud_name_fails_closed(self):
+        from fastapi import HTTPException
+        from app.routers.organizer_events import _check_image_host
+
+        with patch("app.routers.organizer_events.settings") as mock_settings:
+            mock_settings.CLOUDINARY_CLOUD_NAME = ""
+            with pytest.raises(HTTPException):
+                _check_image_host("https://res.cloudinary.com/demo/image/upload/x.png")
 
     def test_arbitrary_host_rejected(self):
         from fastapi import HTTPException
@@ -72,46 +92,6 @@ class TestCheckImageHost:
 
         with pytest.raises(HTTPException):
             _check_image_host("https://res.cloudinary.com.evil.com/x.png")
-
-
-class TestApplyOrganizerCategory:
-    @pytest.mark.asyncio
-    async def test_creates_classification_when_none_exists(self, mock_db):
-        from app.routers.organizer_events import _apply_organizer_category
-
-        mock_db.scalar.return_value = None
-        mock_db.add = MagicMock()
-
-        await _apply_organizer_category(mock_db, 10, "music")
-
-        mock_db.add.assert_called_once()
-        added = mock_db.add.call_args[0][0]
-        assert added.event_id == 10
-        assert added.categories == ["music"]
-
-    @pytest.mark.asyncio
-    async def test_prepends_to_existing_categories(self, mock_db):
-        from app.routers.organizer_events import _apply_organizer_category
-
-        classification = MagicMock()
-        classification.categories = ["theater"]
-        mock_db.scalar.return_value = classification
-
-        await _apply_organizer_category(mock_db, 10, "music")
-
-        assert classification.categories == ["music", "theater"]
-
-    @pytest.mark.asyncio
-    async def test_no_duplicate_when_already_present(self, mock_db):
-        from app.routers.organizer_events import _apply_organizer_category
-
-        classification = MagicMock()
-        classification.categories = ["music", "theater"]
-        mock_db.scalar.return_value = classification
-
-        await _apply_organizer_category(mock_db, 10, "music")
-
-        assert classification.categories == ["music", "theater"]
 
 
 class TestSubmitEvent:
@@ -263,7 +243,7 @@ class TestSubmitEvent:
                 "app.routers.organizer_events.publish_pending", new_callable=AsyncMock
             ),
             patch(
-                "app.routers.organizer_events._apply_organizer_category",
+                "app.routers.organizer_events.apply_organizer_category",
                 new_callable=AsyncMock,
             ) as mock_apply_category,
         ):
@@ -621,7 +601,7 @@ class TestUpdateOwnEvent:
         mock_db.commit = AsyncMock()
 
         with patch(
-            "app.routers.organizer_events._apply_organizer_category",
+            "app.routers.organizer_events.apply_organizer_category",
             new_callable=AsyncMock,
         ) as mock_apply_category:
             body = PatchEventBody(category=picked_category)
@@ -1251,7 +1231,12 @@ class TestListOwnEvents:
         mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=[event]))
 
         result = await list_own_events(
-            make_request(path="/organizer/events"), 20, 0, organizer, mock_db
+            make_request(path="/organizer/events"),
+            limit=20,
+            offset=0,
+            locale=None,
+            current_organizer=organizer,
+            db=mock_db,
         )
 
         assert result["events"][0]["status"] == EVENT_STATUS_CLASSIFIED
@@ -1272,10 +1257,42 @@ class TestListOwnEvents:
         mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=[event]))
 
         result = await list_own_events(
-            make_request(path="/organizer/events"), 20, 0, organizer, mock_db
+            make_request(path="/organizer/events"),
+            limit=20,
+            offset=0,
+            locale=None,
+            current_organizer=organizer,
+            db=mock_db,
         )
 
         assert result["events"][0]["venue_id"] == 7
+
+    @pytest.mark.asyncio
+    async def test_locale_param_wins_over_stored_organizer_locale(
+        self, mock_db, make_request, make_organizer
+    ):
+        """(#454) A ?locale= param must localize the title even when it
+        disagrees with the organizer's stored (DB) locale — the UI-language
+        switch never writes that column, so falling back to it is the bug."""
+        from app.routers.organizer_events import list_own_events
+
+        organizer = make_organizer(organizer_id=5, locale="en")
+        event = _fake_event(
+            submitted_by_organizer_id=5,
+            title_localized={"ru": "Ночь Джазкаар", "en": "Jazzkaar Festival Night"},
+        )
+        mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=[event]))
+
+        result = await list_own_events(
+            make_request(path="/organizer/events"),
+            limit=20,
+            offset=0,
+            locale="ru",
+            current_organizer=organizer,
+            db=mock_db,
+        )
+
+        assert result["events"][0]["title"] == "Ночь Джазкаар"
 
 
 class TestDeleteOwnEvent:
@@ -1334,7 +1351,6 @@ class TestDeleteOwnEvent:
             event,
             "auto-resolved: event cancelled",
             reporter.locale,
-            reporter.theme_preference,
             http_client=ANY,
         )
 

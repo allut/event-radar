@@ -193,13 +193,12 @@ class TestSetPersona:
         ]
 
     @pytest.mark.asyncio
-    async def test_persona_change_invalidates_score_cache_before_rebuild(
+    async def test_persona_replace_lands_before_rebuild(
         self, mock_db, make_user, make_request
     ):
-        """A persona re-pick must bust cached ranking scores before the feed
-        rebuild — otherwise the rebuild reuses scores computed under the old
-        personas (short-circuited by _score_or_reuse) and the feed reflects
-        stale taste."""
+        """The UserPersona replace-delete must land before the feed rebuild,
+        which reads the new personas (scores aren't cached, so nothing else
+        needs invalidating)."""
         from app.routers.onboarding import set_persona, PersonaBody
 
         culture_buff = _make_persona("culture_buff", 1)
@@ -232,12 +231,11 @@ class TestSetPersona:
             )
             await background_tasks()
 
-        # execute() #1 is the UserPersona replace-delete, #2 is the score-cache
-        # invalidation — both must land before build_daily_feed_for_user runs.
-        assert execute_count_at_build == [2]
-        invalidate_stmt = mock_db.execute.call_args_list[1].args[0]
-        compiled = str(invalidate_stmt.compile(compile_kwargs={"literal_binds": True}))
-        assert "DELETE FROM user_event_scores" in compiled
+        # The single execute() is the UserPersona replace-delete.
+        assert execute_count_at_build == [1]
+        delete_stmt = mock_db.execute.call_args_list[0].args[0]
+        compiled = str(delete_stmt.compile(compile_kwargs={"literal_binds": True}))
+        assert "DELETE FROM user_personas" in compiled
         assert f"user_id = {user.id}" in compiled
 
     @pytest.mark.asyncio

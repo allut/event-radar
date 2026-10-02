@@ -51,6 +51,28 @@ class TestGetFeed:
         assert result["built_at"] is not None
 
     @pytest.mark.asyncio
+    async def test_events_never_carry_listed_by_credit(
+        self, mock_db, make_user, make_event, make_request
+    ):
+        """The "Listed by X" credit is public-event-page-only (#419) — Daily 5
+        must never carry it, regardless of claim status."""
+        from app.routers.feed import get_feed
+
+        feed = MagicMock()
+        feed.event_ids = [10]
+        feed.built_at = datetime(2026, 5, 10, 6, 0, 0, tzinfo=timezone.utc)
+        mock_db.scalar.return_value = feed
+
+        scalars_result = MagicMock()
+        scalars_result.all.return_value = [make_event(10)]
+        mock_db.scalars.return_value = scalars_result
+
+        user = make_user()
+        result = await get_feed(request=make_request(), current_user=user, db=mock_db)
+
+        assert "listed_by" not in result["events"][0]
+
+    @pytest.mark.asyncio
     async def test_falls_back_to_prior_feed_when_none_today(
         self, mock_db, make_user, make_event, make_request
     ):
@@ -260,7 +282,7 @@ class TestGetEvent:
         event = make_event(42)
         mock_db.scalar.return_value = event
 
-        result = await get_event(event_id=42, request=make_request(), db=mock_db)
+        result = await get_event(event_id=42, request=make_request(), db=mock_db, current_user=None)
 
         assert result["id"] == 42
         assert result["title"] == "Test Event"
@@ -275,7 +297,7 @@ class TestGetEvent:
         mock_db.scalar.return_value = None
 
         with pytest.raises(HTTPException) as exc_info:
-            await get_event(event_id=999, request=make_request(), db=mock_db)
+            await get_event(event_id=999, request=make_request(), db=mock_db, current_user=None)
         assert exc_info.value.status_code == http.HTTPStatus.NOT_FOUND
 
     @pytest.mark.asyncio
@@ -286,36 +308,23 @@ class TestGetEvent:
         event.classification = None
         mock_db.scalar.return_value = event
 
-        result = await get_event(event_id=1, request=make_request(), db=mock_db)
+        result = await get_event(event_id=1, request=make_request(), db=mock_db, current_user=None)
 
         assert result["categories"] == []
         assert result["quality_score"] is None
 
     @pytest.mark.asyncio
-    async def test_revoked_token_treated_as_anonymous(self, mock_db, make_event, make_request, make_user):
-        """A token whose version no longer matches user.session_token_version
-        (post logout-all) must not resolve the user — no locale/signal leak."""
+    async def test_anonymous_caller_gets_no_signals(self, mock_db, make_event, make_request):
+        """No resolved user (signed out, or get_optional_user rejected an
+        expired/revoked token) -> no locale/signal hydration."""
         from app.routers.events import get_event
-        from app.auth.tokens import generate_session_token
 
-        event = make_event(42)
-        mock_db.scalar.return_value = event
-
-        user = make_user(user_id=7, locale="ru")
-        user.session_token_version = 2
-        mock_db.get.return_value = user
-
-        stale_token = generate_session_token(7, 1)  # minted at version 1, user now at 2
+        mock_db.scalar.return_value = make_event(42)
 
         result = await get_event(
-            event_id=42,
-            request=make_request(),
-            db=mock_db,
-            session=stale_token,
+            event_id=42, request=make_request(), db=mock_db, current_user=None
         )
 
-        # Revoked token must not resolve signals for this user — no leak of
-        # my_signal (like/dislike/bookmark) after logout-all.
         assert result["my_signal"] is None
         mock_db.execute.assert_not_awaited()
 
@@ -327,7 +336,7 @@ class TestGetEvent:
         mock_db.scalar.return_value = None
 
         with pytest.raises(HTTPException):
-            await get_event(event_id=42, request=make_request(), db=mock_db)
+            await get_event(event_id=42, request=make_request(), db=mock_db, current_user=None)
 
         stmt = mock_db.scalar.call_args.args[0]
         compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
@@ -342,7 +351,6 @@ class TestGetEvent:
         """?locale=et must win even for an authenticated caller whose
         persisted locale is EN — same fix as GET /feed."""
         from app.routers.events import get_event
-        from app.auth.tokens import generate_session_token
 
         event = make_event(42, why_go_localized={"et": ["ET bullet"], "en": ["EN bullet"]})
         mock_db.scalar.return_value = event
@@ -350,14 +358,13 @@ class TestGetEvent:
         user = make_user(user_id=7, locale="en")
         user.session_token_version = 1
         mock_db.get.return_value = user
-        token = generate_session_token(7, 1)
 
         result = await get_event(
             event_id=42,
             request=make_request(),
             locale_query="et",
             db=mock_db,
-            session=token,
+            current_user=user,
         )
 
         assert result["why_go"] == ["ET bullet"]
@@ -367,7 +374,6 @@ class TestGetEvent:
         self, mock_db, make_event, make_request, make_user
     ):
         from app.routers.events import get_event
-        from app.auth.tokens import generate_session_token
 
         event = make_event(42, why_go_localized={"et": ["ET bullet"], "en": ["EN bullet"]})
         mock_db.scalar.return_value = event
@@ -375,14 +381,131 @@ class TestGetEvent:
         user = make_user(user_id=7, locale="en")
         user.session_token_version = 1
         mock_db.get.return_value = user
-        token = generate_session_token(7, 1)
 
         result = await get_event(
             event_id=42,
             request=make_request(),
             locale_query=None,
             db=mock_db,
-            session=token,
+            current_user=user,
         )
 
         assert result["why_go"] == ["EN bullet"]
+
+    @pytest.mark.asyncio
+    async def test_claim_status_unclaimed_when_never_ingested(self, mock_db, make_event, make_request):
+        """No resolvable EventSource, but not a direct submission either
+        (e.g. not yet matched) -> unclaimed, per claim_status_from_claim."""
+        from app.routers.events import get_event
+
+        event = make_event(42)
+        mock_db.scalar.side_effect = [event, None]
+
+        result = await get_event(event_id=42, request=make_request(), db=mock_db, current_user=None)
+
+        assert result["claim_status"] == "unclaimed"
+
+    @pytest.mark.asyncio
+    async def test_claim_status_not_claimable_for_direct_submission(
+        self, mock_db, make_event, make_request
+    ):
+        """(#445) submitted_by_organizer_id set -> not_claimable, so the
+        public page never offers a CTA nobody can ever complete."""
+        from app.routers.events import get_event
+
+        event = make_event(42, submitted_by_organizer_id=9)
+        mock_db.scalar.side_effect = [event, None]
+
+        result = await get_event(event_id=42, request=make_request(), db=mock_db, current_user=None)
+
+        assert result["claim_status"] == "not_claimable"
+
+    @pytest.mark.asyncio
+    async def test_claim_status_pending_collapsed_to_unclaimed(self, mock_db, make_event, make_request):
+        """(#451) The public, unauthenticated payload never reveals a
+        pending claim — only "unclaimed"/"claimed"/"not_claimable" leave
+        this endpoint. The claimant-only pending signal is served by
+        GET /organizer/claims/for-event/{event_id} instead."""
+        from app.routers.events import get_event
+
+        event = make_event(42)
+        es = MagicMock(publisher_id=7, source=MagicMock())
+        claim = MagicMock(status="pending")
+        mock_db.scalar.side_effect = [event, es, claim]
+
+        result = await get_event(event_id=42, request=make_request(), db=mock_db, current_user=None)
+
+        assert result["claim_status"] == "unclaimed"
+
+    @pytest.mark.asyncio
+    async def test_claim_status_claimed(self, mock_db, make_event, make_request, make_organizer):
+        from app.routers.events import get_event
+
+        event = make_event(42)
+        es = MagicMock(publisher_id=7, source=MagicMock())
+        claim = MagicMock(status="approved", organizer=make_organizer(organizer_id=5))
+        mock_db.scalar.side_effect = [event, es, claim]
+
+        result = await get_event(event_id=42, request=make_request(), db=mock_db, current_user=None)
+
+        assert result["claim_status"] == "claimed"
+
+    @pytest.mark.asyncio
+    async def test_listed_by_absent_when_unclaimed(self, mock_db, make_event, make_request):
+        from app.routers.events import get_event
+
+        event = make_event(42)
+        mock_db.scalar.side_effect = [event, None]
+
+        result = await get_event(event_id=42, request=make_request(), db=mock_db, current_user=None)
+
+        assert result["listed_by"] is None
+
+    @pytest.mark.asyncio
+    async def test_listed_by_absent_when_pending(
+        self, mock_db, make_event, make_request, make_organizer
+    ):
+        from app.routers.events import get_event
+
+        event = make_event(42)
+        es = MagicMock(publisher_id=7, source=MagicMock())
+        claim = MagicMock(
+            status="pending", organizer=make_organizer(organizer_id=5, name="Tallinn Jazz Club")
+        )
+        mock_db.scalar.side_effect = [event, es, claim]
+
+        result = await get_event(event_id=42, request=make_request(), db=mock_db, current_user=None)
+
+        assert result["listed_by"] is None
+
+    @pytest.mark.asyncio
+    async def test_listed_by_absent_when_organizer_name_unset(
+        self, mock_db, make_event, make_request, make_organizer
+    ):
+        from app.routers.events import get_event
+
+        event = make_event(42)
+        es = MagicMock(publisher_id=7, source=MagicMock())
+        claim = MagicMock(status="approved", organizer=make_organizer(organizer_id=5))
+        mock_db.scalar.side_effect = [event, es, claim]
+
+        result = await get_event(event_id=42, request=make_request(), db=mock_db, current_user=None)
+
+        assert result["listed_by"] is None
+
+    @pytest.mark.asyncio
+    async def test_listed_by_present_when_claimed_with_organizer_name(
+        self, mock_db, make_event, make_request, make_organizer
+    ):
+        from app.routers.events import get_event
+
+        event = make_event(42)
+        es = MagicMock(publisher_id=7, source=MagicMock())
+        claim = MagicMock(
+            status="approved", organizer=make_organizer(organizer_id=5, name="Tallinn Jazz Club")
+        )
+        mock_db.scalar.side_effect = [event, es, claim]
+
+        result = await get_event(event_id=42, request=make_request(), db=mock_db, current_user=None)
+
+        assert result["listed_by"] == "Tallinn Jazz Club"

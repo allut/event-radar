@@ -1,5 +1,5 @@
 // .js extensions required: this module is also imported (transitively) by
-// api/seo-audit.ts, which Vercel runs as unbundled Node ESM.
+// functions/api/seo-audit.ts, which Cloudflare Pages runs as unbundled ESM.
 import { LOCALE_EN, LOCALE_ET, LOCALE_RU } from './constants.js';
 import { PERSONA_TRANSLATIONS, TRANSLATIONS } from './_generated/i18nData.js';
 import { PERSONAS_EN } from './_generated/i18nData.js';

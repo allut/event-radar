@@ -8,23 +8,19 @@
  * cadence-triggered build resumes the same fresh marker as the legitimate
  * chain continuation and both race `commitRoundMarker`'s branch push.
  *
- * Mirrors api/seo-audit.ts's shape: thin handler, shared-secret auth via the
- * same constant-time comparison (seoAuditAuth.ts's isValidAuditToken is
- * generic, not audit-specific, despite its name/module — reused as-is rather
- * than duplicated), and the same PagesFunction/Env shim
+ * Mirrors functions/api/seo-audit.ts's shape: thin handler, shared-secret
+ * auth via the same constant-time comparison (seoAuditAuth.ts's
+ * isValidAuditToken is generic, not audit-specific, despite its name/module —
+ * reused as-is rather than duplicated), and the same PagesFunction/Env shim
  * (functions/_shared/cloudflare.ts).
  *
- * Ported from the Vercel Serverless Function this used to be (issue #344):
- * only the platform boundary changed (Fetch API Request/Response instead of
- * the VercelRequest/VercelResponse shim, context.env instead of
- * process.env) — every imported helper is untouched.
+ * Fetch API Request/Response, context.env for config (issue #344).
  *
  * Routing note: file-based routing puts this at the exact path
  * `/api/prerender-cadence`. Cloudflare Pages matches an exact-path function
- * ahead of any catch-all sibling — so once #345 adds a catch-all
- * `/api/[[path]]` backend-proxy function alongside this one, no
- * negative-lookahead exclusion is needed the way vercel.json requires one
- * today. That catch-all doesn't exist yet as of this ticket (#344).
+ * ahead of any catch-all sibling — so the catch-all `/api/[[path]]`
+ * backend-proxy function (#345) never claims this path, no
+ * negative-lookahead exclusion needed.
  */
 import { StatusCodes } from 'http-status-codes';
 import {

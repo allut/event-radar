@@ -5,13 +5,14 @@ from unittest.mock import MagicMock
 import httpx
 import pytest
 
+from app.email import resend
 from app.email import contact
 
 
 @pytest.mark.asyncio
 async def test_no_api_key_logs_and_skips_send(patch_client, monkeypatch):
     monkeypatch.setattr(contact.settings, "RESEND_API_KEY", "")
-    post = patch_client(contact, MagicMock(status_code=200))
+    post = patch_client(resend, MagicMock(status_code=200))
 
     await contact.send_contact_message("Jane", "jane@example.com", "hello there")
 
@@ -25,7 +26,7 @@ async def test_success_posts_expected_payload(patch_client, monkeypatch):
     monkeypatch.setattr(contact.settings, "CONTACT_TO_ADDRESS", "owner@radar.ee")
 
     resp = MagicMock(status_code=httpx.codes.OK, text="ok")
-    post = patch_client(contact, resp)
+    post = patch_client(resend, resp)
 
     await contact.send_contact_message("Jane", "jane@example.com", "Hello <there>")
 
@@ -46,7 +47,7 @@ async def test_success_posts_expected_payload(patch_client, monkeypatch):
 async def test_multiline_name_collapsed_in_subject(patch_client, monkeypatch):
     monkeypatch.setattr(contact.settings, "RESEND_API_KEY", "re_key")
     resp = MagicMock(status_code=httpx.codes.OK, text="ok")
-    post = patch_client(contact, resp)
+    post = patch_client(resend, resp)
 
     await contact.send_contact_message("Jane\nSubject: hijacked", "jane@example.com", "hi")
 
@@ -60,7 +61,7 @@ async def test_non_2xx_logs_error(patch_client, monkeypatch, caplog):
 
     monkeypatch.setattr(contact.settings, "RESEND_API_KEY", "re_key")
     resp = MagicMock(status_code=422, text="bad payload")
-    patch_client(contact, resp)
+    patch_client(resend, resp)
 
     with caplog.at_level(logging.ERROR):
         await contact.send_contact_message("Jane", "jane@example.com", "hi")

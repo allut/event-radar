@@ -6,27 +6,24 @@ import pytest
 from pydantic import ValidationError
 
 from app.constants import ORGANIZER_DAILY_VENUE_CREATION_CAP
+from tests.conftest import build_venue
 
 
 def _fake_venue(**overrides):
-    v = MagicMock()
-    v.id = 1
-    v.organizer_id = 5
-    v.name = "Test Venue"
-    v.name_en = None
-    v.name_ru = None
-    v.address = "Test Street 1"
-    v.lat = 59.437
-    v.lng = 24.7536
-    v.price_min = None
-    v.price_max = None
-    v.currency = None
-    v.geocode_attempted_at = "2026-05-13T06:00:00+00:00"
-    v.deleted_at = None
-    v.created_at = "2026-05-13T06:00:00+00:00"
-    for k, val in overrides.items():
-        setattr(v, k, val)
-    return v
+    defaults = {
+        "name": "Test Venue",
+        "address": "Test Street 1",
+        "lat": 59.437,
+        "lng": 24.7536,
+        "organizer_id": 5,
+        "price_min": None,
+        "price_max": None,
+        "currency": None,
+        "geocode_attempted_at": "2026-05-13T06:00:00+00:00",
+        "deleted_at": None,
+        "created_at": "2026-05-13T06:00:00+00:00",
+    }
+    return build_venue(**(defaults | overrides))
 
 
 class TestListOwnVenues:
@@ -186,6 +183,98 @@ class TestUpdateOwnVenue:
         assert venue.name == "Renamed Venue"
         assert venue.lat == 59.437  # untouched
         assert venue.geocode_attempted_at == "2026-05-13T06:00:00+00:00"
+
+    @pytest.mark.asyncio
+    async def test_rename_rescans_linked_events_and_queues_review(
+        self, mock_db, make_request, make_organizer, make_event
+    ):
+        """OWASP audit #5: a renamed venue is resolved onto every linked
+        event at read time, so the rename must pass the same explicit-content
+        scan as the submit path and queue the events for admin review."""
+        from app.constants import EVENT_STATUS_CLASSIFIED, EVENT_STATUS_PUBLISHED
+        from app.routers.organizer_venues import VenuePatchBody, update_own_venue
+
+        organizer = make_organizer(organizer_id=5)
+        venue = _fake_venue()
+        mock_db.scalar.return_value = venue
+        clean = make_event(event_id=1, status=EVENT_STATUS_PUBLISHED)
+        flagged = make_event(event_id=2, status=EVENT_STATUS_PUBLISHED)
+        for ev in (clean, flagged):
+            ev.is_explicit = False
+            ev.is_non_event = False
+            ev.needs_review = False
+            ev.important_info = None
+            ev.title_orig = "Jazz night"
+            ev.description_orig = None
+        flagged.important_info = "striptease after party"
+        scalars_result = MagicMock()
+        scalars_result.all.return_value = [clean, flagged]
+        mock_db.scalars.return_value = scalars_result
+
+        await update_own_venue(
+            1,
+            VenuePatchBody(name="Renamed Venue"),
+            make_request(method="PATCH", path="/organizer/venues/1"),
+            organizer,
+            mock_db,
+        )
+
+        assert clean.needs_review is True
+        assert clean.status == EVENT_STATUS_PUBLISHED
+        assert flagged.needs_review is True
+        assert flagged.is_explicit is True
+        assert flagged.status == EVENT_STATUS_CLASSIFIED
+
+    @pytest.mark.asyncio
+    async def test_rename_to_explicit_name_pulls_published_event_back(
+        self, mock_db, make_request, make_organizer, make_event
+    ):
+        from app.constants import EVENT_STATUS_CLASSIFIED, EVENT_STATUS_PUBLISHED
+        from app.routers.organizer_venues import VenuePatchBody, update_own_venue
+
+        organizer = make_organizer(organizer_id=5)
+        venue = _fake_venue()
+        mock_db.scalar.return_value = venue
+        event = make_event(event_id=1, status=EVENT_STATUS_PUBLISHED)
+        event.is_explicit = False
+        event.is_non_event = False
+        event.important_info = None
+        event.title_orig = "Jazz night"
+        event.description_orig = None
+        scalars_result = MagicMock()
+        scalars_result.all.return_value = [event]
+        mock_db.scalars.return_value = scalars_result
+
+        await update_own_venue(
+            1,
+            VenuePatchBody(name="Striptease Club"),
+            make_request(method="PATCH", path="/organizer/venues/1"),
+            organizer,
+            mock_db,
+        )
+
+        assert event.is_explicit is True
+        assert event.status == EVENT_STATUS_CLASSIFIED
+
+    @pytest.mark.asyncio
+    async def test_non_name_edit_does_not_rescan_events(
+        self, mock_db, make_request, make_organizer
+    ):
+        from app.routers.organizer_venues import VenuePatchBody, update_own_venue
+
+        organizer = make_organizer(organizer_id=5)
+        venue = _fake_venue()
+        mock_db.scalar.return_value = venue
+
+        await update_own_venue(
+            1,
+            VenuePatchBody(name=venue.name, price_min=10),
+            make_request(method="PATCH", path="/organizer/venues/1"),
+            organizer,
+            mock_db,
+        )
+
+        mock_db.scalars.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_address_edit_clears_geocode_state(

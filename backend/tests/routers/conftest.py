@@ -1,5 +1,7 @@
 import json
-from unittest.mock import AsyncMock, MagicMock
+from collections.abc import Iterator
+from contextlib import ExitStack, contextmanager
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import FastAPI
@@ -43,6 +45,21 @@ def execute_rows(rows):
     return r
 
 
+@contextmanager
+def patch_admin_settings() -> Iterator[MagicMock]:
+    """Patch `settings` with one shared MagicMock in every module the admin
+    auth path reads it from (the lockout helpers, the session dependency), so a test sets ADMIN_PASSWORD/APP_ENV/... once. Shared by
+    every admin-router test module."""
+    mock_settings = MagicMock()
+    with ExitStack() as stack:
+        for target in (
+            "app.auth.admin_lockout.settings",
+            "app.auth.dependencies.settings",
+        ):
+            stack.enter_context(patch(target, mock_settings))
+        yield mock_settings
+
+
 @pytest.fixture
 def make_db_ctx():
     """Factory for a mock async-context-manager that yields the given db on
@@ -63,11 +80,11 @@ def _reset_admin_auth_failures():
     tests in this process; isolate each test from the others. Shared by
     every admin-auth-surface test module (Basic-auth lockout, admin console
     session login)."""
-    from app.routers import admin as admin_module
+    from app.auth import admin_lockout
 
-    admin_module._admin_auth_failures.clear()
+    admin_lockout._admin_auth_failures.clear()
     yield
-    admin_module._admin_auth_failures.clear()
+    admin_lockout._admin_auth_failures.clear()
 
 
 @pytest.fixture(autouse=True)

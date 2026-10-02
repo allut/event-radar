@@ -1,6 +1,7 @@
 import DOMPurify from 'dompurify';
+import { type InfiniteData, type QueryClient } from '@tanstack/react-query';
 import { api, ApiError } from './api/client';
-import { API, CATEGORY_GRADIENTS, FALLBACK_GRADIENT, EUR_SYMBOL, DEFAULT_CURRENCY, GOOGLE_MAPS_SEARCH_URL, type Signal, toLocaleCode, SAFE_URL_SCHEMES, SANITIZE_ALLOWED_TAGS, SANITIZE_ALLOWED_ATTR, SIGNAL_TO_CLASS, BROWSE_PAGE_SIZE, CATEGORIES, VIBES, type DatePreset, type SortOption, ANALYTICS_EVENT_PATH_RE, ANALYTICS_ORGANIZER_EDIT_PATH_RE, CALENDAR_WEEK_START, CALENDAR_WEEKS_SHOWN, CALENDAR_DAYS_PER_WEEK, CALENDAR_REFERENCE_MONDAY, MAX_HOUR, MAX_MINUTE, DATE_PRESET_DAYS, DATE_PRESET_DAYS_FALLBACK, DATE_PRESET_DEFAULT, DATE_PRESET_TODAY, DATE_PRESET_WEEKEND, EXPLORE_PARAM, EXPLORE_URL_FLAG_TRUE, EXPLORE_API_FLAG_TRUE, SORT_DEFAULT, TIME_FIELD_MAX_LENGTH, LOCALES, type LocaleCode, DEFAULT_LOCALE_CODE, MS_PER_HOUR, HOURS_PER_DAY } from './constants';
+import { API, QUERY_KEYS, CARD_ANIMATION_DELAY_STEP_MS, CARD_ANIMATION_MAX_STEPS, ISO_DATE_RE, PICKER_VALUE_RE, SIGNAL_CLICK_EXTERNAL, CATEGORY_GRADIENTS, CLAIM_JUSTIFICATION_REQUIRED_ERROR, FALLBACK_GRADIENT, EUR_SYMBOL, DEFAULT_CURRENCY, GOOGLE_MAPS_SEARCH_URL, type Signal, toLocaleCode, SAFE_URL_SCHEMES, SANITIZE_ALLOWED_TAGS, SANITIZE_ALLOWED_ATTR, SIGNAL_TO_CLASS, BROWSE_PAGE_SIZE, CATEGORIES, VIBES, type DatePreset, type SortOption, ANALYTICS_EVENT_PATH_RE, ANALYTICS_ORGANIZER_EDIT_PATH_RE, CALENDAR_WEEK_START, CALENDAR_WEEKS_SHOWN, CALENDAR_DAYS_PER_WEEK, CALENDAR_REFERENCE_MONDAY, MAX_HOUR, MAX_MINUTE, DATE_PRESET_DAYS, DATE_PRESET_DAYS_FALLBACK, DATE_PRESET_DEFAULT, DATE_PRESET_TODAY, DATE_PRESET_WEEKEND, EXPLORE_PARAM, EXPLORE_URL_FLAG_TRUE, EXPLORE_API_FLAG_TRUE, SORT_DEFAULT, TIME_FIELD_MAX_LENGTH, LOCALES, LOCALES_BY_CODE, LOCALE_EN, LOCALE_ET, LOCALE_RU, type LocaleCode, DEFAULT_LOCALE_CODE, MS_PER_HOUR, HOURS_PER_DAY } from './constants';
 import { t, ti } from './i18n';
 import { stripLocalePrefix, localizedPath, localeFromPath, localizedTo } from './lib/urlLocale';
 
@@ -8,6 +9,38 @@ export { stripLocalePrefix, localizedPath, localeFromPath, localizedTo };
 
 export function cx(...classes: (string | false | null | undefined)[]): string {
   return classes.filter(Boolean).join(' ');
+}
+
+/** Display label for a locale/content-language code, falling back to the upper-cased code. */
+export function localeLabel(code: string): string {
+  return LOCALES_BY_CODE.get(code)?.label ?? code.toUpperCase();
+}
+
+/** "Field (LANG)" label for a translated form field. */
+export function localizedFieldLabel(key: string, locale: string, lang: string): string {
+  return ti('organizer_field_lang_suffix', locale, { field: t(key, locale), lang: localeLabel(lang) });
+}
+
+/** Title + description, one slot per content language — the shape shared by the
+ * organizer-submit and claim-edit form states. */
+export interface LocalizedTextFields {
+  title: string;
+  titleEn: string;
+  titleRu: string;
+  description: string;
+  descriptionEn: string;
+  descriptionRu: string;
+}
+
+/** Splits a `*_localized` record into its [et, en, ru] slots. The ET slot falls
+ * back to `base` (the display-locale-resolved field) for events that predate
+ * localized maps; EN/RU are blank when absent. */
+export function localizedTriplet(
+  record: Record<string, string> | null | undefined,
+  base: string | null | undefined,
+): [string, string, string] {
+  const loc = record ?? {};
+  return [loc[LOCALE_ET] ?? base ?? '', loc[LOCALE_EN] ?? '', loc[LOCALE_RU] ?? ''];
 }
 
 export function isValidLocale(code: string | undefined): code is LocaleCode {
@@ -40,6 +73,15 @@ export function apiErrorMessage(err: unknown, fallback: string): string {
   return err instanceof ApiError ? err.message : fallback;
 }
 
+/** True when a claim-creation failure is specifically "needs a justification"
+ * (#428's Series-claim gate) — the one claim-creation error ClaimEventPicker/
+ * ClaimStrip react to structurally (reveal the reason field) rather than
+ * just display, so both share this check instead of duplicating the
+ * ApiError/message comparison. */
+export function isClaimJustificationRequiredError(err: unknown): boolean {
+  return err instanceof ApiError && err.message === CLAIM_JUSTIFICATION_REQUIRED_ERROR;
+}
+
 /** { value, label } options for every CATEGORIES slug, localized — callers
  * still wrap the call in their own useMemo(() => categoryOptions(locale),
  * [locale]) to avoid rebuilding the 14-option list (+14 t() lookups) on
@@ -54,7 +96,7 @@ export function vibeOptions(locale: string): { value: string; label: string }[] 
 }
 
 /** useInfiniteQuery's getNextPageParam cursor for every offset-paginated
- * list (Explore, Saved Events, admin queues): the next offset when the page
+ * list (admin queues, claim events; Explore/Saved use nextKeysetParam): the next offset when the page
  * says there's more, else undefined to stop paging. `itemCount` is the
  * caller's page-array length (`events.length`/`groups.length` — the key
  * differs per response shape, so it's passed rather than read off `page`). */
@@ -63,6 +105,25 @@ export function nextOffsetParam(
   itemCount: number,
 ): number | undefined {
   return page.has_more ? page.offset + itemCount : undefined;
+}
+
+/** A useInfiniteQuery page param for lists the backend keyset-paginates
+ * (Explore's date sort, Saved Events): `cursor` is the server's opaque
+ * `next_cursor` and wins when present; `offset` is the fallback for the
+ * sorts that stay on OFFSET (relevance/price/quality). */
+export interface KeysetPageParam {
+  offset: number;
+  cursor?: string;
+}
+
+export const FIRST_KEYSET_PAGE: KeysetPageParam = { offset: 0 };
+
+export function nextKeysetParam(
+  page: { has_more: boolean; offset: number; next_cursor?: string | null },
+  itemCount: number,
+): KeysetPageParam | undefined {
+  if (!page.has_more) return undefined;
+  return { offset: page.offset + itemCount, cursor: page.next_cursor ?? undefined };
 }
 
 /** True for any organizer-portal route, with or without a `/:locale` prefix
@@ -158,7 +219,7 @@ export function formatHourMinute(iso: string, locale: string): string {
 }
 
 export function trackExternalClick(eventId: number): void {
-  api.post(API.feedback, { event_id: eventId, signal: 'click_external' }).catch(() => undefined);
+  api.post(API.feedback, { event_id: eventId, signal: SIGNAL_CLICK_EXTERNAL }).catch(() => undefined);
 }
 
 /** Copy text to the clipboard. Returns true on success, false if the
@@ -353,12 +414,18 @@ export interface CalendarCell {
   dataDate: string;
 }
 
+/** Days elapsed since the start of `d`'s week — 0 on the week's first day
+ * (`weekStart`), CALENDAR_DAYS_PER_WEEK - 1 on its last. */
+export function weekdayOffset(d: Date, weekStart: number): number {
+  return (d.getDay() - weekStart + CALENDAR_DAYS_PER_WEEK) % CALENDAR_DAYS_PER_WEEK;
+}
+
 /** Returns a fixed CALENDAR_WEEKS_SHOWN × CALENDAR_DAYS_PER_WEEK grid of days for
  * `month` (0-indexed) of `year`, starting on `weekStart` (0 = Sunday, 1 = Monday),
  * including leading/trailing days spilling in from adjacent months. */
 export function monthGridDays(year: number, month: number, weekStart: number): CalendarCell[] {
   const first = new Date(year, month, 1);
-  const startOffset = (first.getDay() - weekStart + CALENDAR_DAYS_PER_WEEK) % CALENDAR_DAYS_PER_WEEK;
+  const startOffset = weekdayOffset(first, weekStart);
   const gridStart = new Date(year, month, 1 - startOffset);
   const totalCells = CALENDAR_WEEKS_SHOWN * CALENDAR_DAYS_PER_WEEK;
   const cells: CalendarCell[] = [];
@@ -402,7 +469,6 @@ export interface PickerDateTime {
   minute: number;
 }
 
-const PICKER_VALUE_RE = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/;
 
 /** Splits the 'YYYY-MM-DDTHH:mm' wire value (the same format the native
  * datetime-local input this component replaces used) into components, or
@@ -560,8 +626,14 @@ export function padIndex(n: number): string {
  * point can never land inside a surrogate pair (e.g. an emoji). */
 export function truncateForMeta(text: string, maxLength: number): string {
   if (text.length <= maxLength) return text;
-  const codePoints = Array.from(text);
-  const cut = codePoints.slice(0, maxLength).join('');
+  // Walk code points only up to the cut, not the whole string.
+  let cut = '';
+  let count = 0;
+  for (const ch of text) {
+    if (count === maxLength) break;
+    cut += ch;
+    count += 1;
+  }
   const lastSpace = cut.lastIndexOf(' ');
   return `${(lastSpace > 0 ? cut.slice(0, lastSpace) : cut).trimEnd()}…`;
 }
@@ -695,7 +767,6 @@ function parseSlugList(raw: string, valid: readonly string[]): string[] {
   return result;
 }
 
-const ISO_DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
 
 /** Validates a `YYYY-MM-DD` string against both the wire format and the
  * calendar (rejects e.g. `2026-02-30`), returning it unchanged or null.
@@ -754,7 +825,11 @@ export function exploreFiltersToSearchParams(filters: ExploreFilters): URLSearch
 }
 
 /** Build the GET /explore query string for a given filter set + page offset. */
-export function buildExploreApiQuery(filters: ExploreFilters, offset: number): string {
+export function buildExploreApiQuery(
+  filters: ExploreFilters,
+  offset: number,
+  cursor?: string,
+): string {
   const params = new URLSearchParams();
   if (filters.q) params.set(EXPLORE_PARAM.q, filters.q);
   if (filters.category.length && !isFullSet(filters.category, CATEGORIES)) {
@@ -776,6 +851,7 @@ export function buildExploreApiQuery(filters: ExploreFilters, offset: number): s
   params.set(EXPLORE_PARAM.sort, filters.sort);
   params.set(EXPLORE_PARAM.limit, String(BROWSE_PAGE_SIZE));
   params.set(EXPLORE_PARAM.offset, String(offset));
+  if (cursor) params.set(EXPLORE_PARAM.cursor, cursor);
   return params.toString();
 }
 
@@ -799,4 +875,41 @@ export function relativeTimeFromNow(iso: string): string {
   if (hours < 1) return 'just now';
   if (hours < HOURS_PER_DAY) return `${hours}h ago`;
   return `${Math.round(hours / HOURS_PER_DAY)}d ago`;
+}
+
+interface CachedEventLike {
+  id: number;
+}
+interface CachedEventsPage {
+  events: CachedEventLike[];
+}
+
+function patchEventInPage<T extends CachedEventsPage>(page: T, eventId: number, patch: object): T {
+  if (!Array.isArray(page?.events) || !page.events.some((e) => e.id === eventId)) return page;
+  return { ...page, events: page.events.map((e) => (e.id === eventId ? { ...e, ...patch } : e)) };
+}
+
+/** Writes `patch` (e.g. `{ my_signal }`, `{ reported }`) onto one event's row in
+ * every cached Feed / Explore / event-detail payload, so a save/like/report is
+ * reflected everywhere without refetching every loaded page of every list
+ * (an infinite Explore query refetches all its pages sequentially). Saved-tab
+ * payloads are deliberately left alone: membership there changes with the
+ * signal, so callers invalidate them instead. */
+export function patchCachedEvent(queryClient: QueryClient, eventId: number, patch: object): void {
+  queryClient.setQueriesData<CachedEventsPage>({ queryKey: [QUERY_KEYS.feed] }, (old) =>
+    old ? patchEventInPage(old, eventId, patch) : old,
+  );
+  queryClient.setQueriesData<InfiniteData<CachedEventsPage>>({ queryKey: [QUERY_KEYS.explore] }, (old) =>
+    Array.isArray(old?.pages) ? { ...old, pages: old.pages.map((page) => patchEventInPage(page, eventId, patch)) } : old,
+  );
+  queryClient.setQueriesData<CachedEventLike>({ queryKey: [QUERY_KEYS.event] }, (old) =>
+    old && old.id === eventId ? { ...old, ...patch } : old,
+  );
+}
+
+/** `animation-delay` for the card at global list `index`: the stagger restarts
+ * on every page and plateaus after CARD_ANIMATION_MAX_STEPS cards, instead of
+ * growing linearly with the count of everything loaded so far. */
+export function cardAnimationDelayMs(index: number): number {
+  return Math.min(index % BROWSE_PAGE_SIZE, CARD_ANIMATION_MAX_STEPS) * CARD_ANIMATION_DELAY_STEP_MS;
 }

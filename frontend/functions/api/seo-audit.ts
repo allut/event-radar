@@ -11,23 +11,19 @@
  * this file only wires auth, the two production fetches, and the GitHub
  * report/recover calls together.
  *
- * Ported from the Vercel Serverless Function this used to be (issue #344):
- * only the platform boundary changed (Fetch API Request/Response instead of
- * the VercelRequest/VercelResponse shim, context.env instead of
- * process.env) — every imported helper is untouched.
+ * Fetch API Request/Response, context.env for config (issue #344).
  *
  * Routing note: file-based routing puts this at the exact path
  * `/api/seo-audit`. Cloudflare Pages matches an exact-path function ahead of
- * any catch-all sibling — so once #345 adds a catch-all `/api/[[path]]`
- * backend-proxy function alongside this one, no negative-lookahead exclusion
- * is needed the way vercel.json requires one today. That catch-all doesn't
- * exist yet as of this ticket (#344).
+ * any catch-all sibling — so the catch-all `/api/[[path]]` backend-proxy
+ * function (#345) never claims this path, no negative-lookahead exclusion
+ * needed.
  */
 import { StatusCodes } from 'http-status-codes';
 import { FAVICON_ICO_PATH, LOCALES, PRODUCTION_ORIGIN, ROBOTS_TXT_PATH, ROUTES, SEO_AUDIT_TOKEN_HEADER, SITEMAP_PATH } from '../../src/constants.js';
 import type { LocaleCode } from '../../src/constants.js';
 import { localizedPath } from '../../src/lib/urlLocale.js';
-import { evaluateLiveAudit, parseSitemapEventUrls, parseSnapshotAssetUrls } from '../../src/lib/seoAudit.js';
+import { evaluateLiveAudit, parseFirstSitemapEventUrl, parseSnapshotAssetUrls } from '../../src/lib/seoAudit.js';
 import { reportAuditFailure, reportAuditRecovery } from '../../src/lib/seoAuditIssue.js';
 import { isValidAuditToken } from '../../src/lib/seoAuditAuth.js';
 import { jsonResponse } from '../_shared/cloudflare.js';
@@ -90,28 +86,28 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   // One live event page, if the catalog has any published yet — lets the
   // audit exercise validateSnapshotStructure's `kind: 'event'` path
   // (JSON-LD Event assertions), not just Landing's `kind: 'website'` path.
-  let eventHtml: string | undefined;
-  const [firstEventUrl] = parseSitemapEventUrls(sitemapXml);
-  if (firstEventUrl) {
+  // Best-effort: a non-ok or failed fetch isn't a hard failure of the whole
+  // audit run — freshness + Landing structure are still checked; a flaky
+  // single-event fetch shouldn't mask those.
+  async function fetchEventHtml(): Promise<string | undefined> {
+    const firstEventUrl = parseFirstSitemapEventUrl(sitemapXml);
+    if (!firstEventUrl) return undefined;
     try {
       const eventRes = await fetch(firstEventUrl);
-      if (eventRes.ok) {
-        eventHtml = await eventRes.text();
-      }
-      // A non-ok fetch here isn't treated as a hard failure of the whole
-      // audit run — freshness + Landing structure are still checked; a
-      // flaky single-event fetch shouldn't mask those.
+      return eventRes.ok ? await eventRes.text() : undefined;
     } catch {
-      // Same reasoning — best-effort only.
+      return undefined;
     }
   }
 
   // Explore's canonical URL, all 3 locales (issue #236) — best-effort, same
-  // as eventHtml above: a single locale's fetch failing doesn't fail the
-  // whole audit run.
+  // as the event fetch: a single locale's fetch failing doesn't fail the
+  // whole audit run. Runs concurrently with the event fetch above (they're
+  // independent), not after it.
   const exploreHtmlByLocale: Partial<Record<LocaleCode, string>> = {};
-  await Promise.all(
-    LOCALES.map(async ({ code }) => {
+  const [eventHtml] = await Promise.all([
+    fetchEventHtml(),
+    ...LOCALES.map(async ({ code }) => {
       try {
         const res = await fetch(`${PRODUCTION_ORIGIN}${localizedPath(ROUTES.explore, code)}`);
         if (res.ok) exploreHtmlByLocale[code] = await res.text();
@@ -119,7 +115,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
         // Best-effort only — see comment above.
       }
     }),
-  );
+  ]);
 
   const result = evaluateLiveAudit({ sitemapXml, landingHtml, robotsTxt, eventHtml, exploreHtmlByLocale });
 
@@ -140,21 +136,28 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   // can see. Best-effort, same as eventHtml's own fetch above — no event
   // snapshot yet means nothing to check here.
   if (eventHtml) {
-    for (const assetUrl of parseSnapshotAssetUrls(eventHtml)) {
-      const absoluteUrl = `${PRODUCTION_ORIGIN}${assetUrl}`;
-      try {
-        const assetRes = await fetch(absoluteUrl);
-        const assetContentType = assetRes.headers.get('content-type');
-        const isCss = assetUrl.endsWith('.css');
-        const expectedType = isCss ? 'text/css' : 'javascript';
-        if (!assetRes.ok || !assetContentType || !assetContentType.includes(expectedType)) {
-          result.issues.push(
-            `event snapshot asset ${assetUrl} content-type is "${assetContentType ?? 'missing'}" (status ${assetRes.status}), expected ${expectedType} — snapshot likely references a previous build's asset hash`,
-          );
-          result.ok = false;
+    // Concurrent — each asset check is an independent fetch. Every check
+    // returns its own issue (or null) so `result.issues` keeps the asset
+    // order of the snapshot rather than completion order.
+    const assetIssues = await Promise.all(
+      parseSnapshotAssetUrls(eventHtml).map(async (assetUrl): Promise<string | null> => {
+        try {
+          const assetRes = await fetch(new URL(assetUrl, PRODUCTION_ORIGIN));
+          const assetContentType = assetRes.headers.get('content-type');
+          const isCss = assetUrl.endsWith('.css');
+          const expectedType = isCss ? 'text/css' : 'javascript';
+          if (!assetRes.ok || !assetContentType || !assetContentType.includes(expectedType)) {
+            return `event snapshot asset ${assetUrl} content-type is "${assetContentType ?? 'missing'}" (status ${assetRes.status}), expected ${expectedType} — snapshot likely references a previous build's asset hash`;
+          }
+          return null;
+        } catch (error) {
+          return `event snapshot asset ${assetUrl} failed to fetch: ${String(error)}`;
         }
-      } catch (error) {
-        result.issues.push(`event snapshot asset ${assetUrl} failed to fetch: ${String(error)}`);
+      }),
+    );
+    for (const issue of assetIssues) {
+      if (issue !== null) {
+        result.issues.push(issue);
         result.ok = false;
       }
     }

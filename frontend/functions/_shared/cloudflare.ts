@@ -1,10 +1,9 @@
 /**
  * Minimal stand-in for `@cloudflare/workers-types`' `EventContext`/
  * `PagesFunction` types, shared by every function under `functions/`.
- * Mirrors the old `api/vercel.ts` shim this replaces: Cloudflare supplies
- * the real types at build/runtime, and pulling in the package locally would
- * buy nothing but these two type names. Only the members a handler in this
- * tree actually touches are modelled.
+ * Cloudflare supplies the real types at build/runtime, and pulling in the
+ * package locally would buy nothing but these two type names. Only the
+ * members a handler in this tree actually touches are modelled.
  */
 export interface EventContext<Env> {
   request: Request;

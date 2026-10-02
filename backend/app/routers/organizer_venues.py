@@ -29,8 +29,12 @@ from app.db import get_db
 from app.ingestion.pricing import normalize_currency
 from app.models.models import Organizer, Venue
 from app.rate_limit import limiter
-from app.routers.organizer_auth import get_current_organizer
-from app.routers.utils import own_venue_or_404, validate_price_ordering
+from app.auth.dependencies import get_current_organizer
+from app.routers.utils import (
+    own_venue_or_404,
+    remoderate_venue_linked_events,
+    validate_price_ordering,
+)
 
 router = APIRouter(prefix="/organizer/venues", tags=["organizer-venues"])
 
@@ -179,6 +183,7 @@ async def update_own_venue(
     venue = await own_venue_or_404(db, venue_id, current_organizer.id)
 
     fields_set = body.model_fields_set
+    names_before = (venue.name, venue.name_en, venue.name_ru)
     if "name" in fields_set and body.name is not None:
         venue.name = body.name
     if "name_en" in fields_set:
@@ -207,6 +212,9 @@ async def update_own_venue(
         has_price = venue.price_min is not None or venue.price_max is not None
         raw_currency = body.currency if "currency" in fields_set else venue.currency
         venue.currency = normalize_currency(raw_currency, has_price)
+
+    if (venue.name, venue.name_en, venue.name_ru) != names_before:
+        await remoderate_venue_linked_events(db, venue)
 
     await db.commit()
     await db.refresh(venue)

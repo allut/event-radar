@@ -1,4 +1,5 @@
 """Tests for email/digest.py — HTML builder and date formatter."""
+import re
 from datetime import date, datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -10,6 +11,7 @@ from app.email.digest import (
     build_digest_html,
     send_daily_digests,
 )
+from app.email.styles import _THEME_CLASS_RULES
 from app.i18n import TRANSLATIONS, t, ti
 
 
@@ -89,6 +91,17 @@ class TestBuildDigestHtml:
         assert "Great music" in html
         assert "Central venue" in html
 
+    def test_never_shows_listed_by_credit(self, make_event):
+        """The "Listed by X" credit is public-event-page-only (#419) — the
+        digest must never render it, even for a claimed event with an
+        organizer display name set."""
+        event = make_event(title="Jazz Night in Tallinn")
+        event.claim_status = "claimed"
+        event.listed_by = "Tallinn Jazz Club"
+        html = build_digest_html([event], date(2026, 5, 20), "en", "https://eventradar.ee")
+        assert "Tallinn Jazz Club" not in html
+        assert "Listed by" not in html
+
     def test_at_most_3_bullets(self, make_event):
         bullets = ["A", "B", "C", "D", "E"]
         events = [make_event(why_go=bullets)]
@@ -129,26 +142,19 @@ class TestBuildDigestHtml:
         html = build_digest_html([], date(2026, 5, 20), "en", "https://eventradar.ee")
         assert "No events today" in html
 
+    def test_no_events_placeholder_is_theme_styled(self):
+        html = build_digest_html([], date(2026, 5, 20), "en", "https://eventradar.ee")
+        assert re.search(r'class="e-body-text"[^>]*>No events today', html)
+
     def test_frontend_url_used_in_event_link(self, make_event):
         events = [make_event(event_id=42)]
         html = build_digest_html(events, date(2026, 5, 20), "en", "https://eventradar.ee")
         assert "https://eventradar.ee/events/42" in html
 
-    def test_dark_theme_preference_keeps_todays_colors(self):
-        html = build_digest_html(
-            [], date(2026, 5, 20), "en", "https://eventradar.ee", theme_preference="dark"
-        )
-        assert "#13161e" in html
-
-    def test_light_theme_preference_uses_light_colors(self):
-        html = build_digest_html(
-            [], date(2026, 5, 20), "en", "https://eventradar.ee", theme_preference="light"
-        )
-        assert "#fdfcfa" in html
-
-    def test_unset_theme_preference_defaults_to_light(self):
+    def test_light_base_client_adaptive(self):
         html = build_digest_html([], date(2026, 5, 20), "en", "https://eventradar.ee")
         assert "#fdfcfa" in html
+        assert 'content="light dark"' in html
 
     def test_unsubscribe_link_present(self):
         html = build_digest_html([], date(2026, 5, 20), "en", "https://eventradar.ee")
@@ -461,3 +467,32 @@ class TestSendDailyDigestsDryRun:
 
         assert "dry_run" in result
         assert result["dry_run"] is False
+
+
+class TestThemeClassHooksPresent:
+    """Drift guard: every _THEME_CLASS_RULES key must be wired into markup
+    somewhere across the email builders — catches a class added to the CSS
+    table but never hooked in, or renamed on one side only. No single
+    builder uses every hook (e-body-text/e-muted are magic-link/report-only,
+    e-card/e-band/... are digest-only), so this checks the union."""
+
+    def test_every_theme_class_rendered_across_builders(self, make_event):
+        from app.email.magic_link import build_magic_link_html
+        from app.email.report_reporter import build_report_outcome_html
+
+        events = [make_event(price_min=12.0, why_go=["Great show"])]
+        digest_html = build_digest_html(
+            events, date(2026, 5, 20), "en", "https://eventradar.ee"
+        )
+        magic_link_html = build_magic_link_html(
+            "https://example.com/verify?token=x", 15, "en"
+        )
+        report_html = build_report_outcome_html(
+            make_event(10, title="Concert"), "Fine.", "en"
+        )
+        combined = digest_html + magic_link_html + report_html
+
+        for cls in _THEME_CLASS_RULES:
+            assert re.search(
+                rf'class="[^"]*\b{re.escape(cls)}\b[^"]*"', combined
+            ), cls

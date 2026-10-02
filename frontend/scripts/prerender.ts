@@ -42,6 +42,8 @@ import {
   CRAWLABLE_ICON_PATHS,
   EXPLORE_PARAM,
   JSONLD_SCRIPT_SELECTOR,
+  JSONLD_SCRIPT_TYPE,
+  LOCALE_ET,
   LOCALE_KEY,
   LOCALE_URL_PREFIX_CODES,
   LOCALES,
@@ -60,7 +62,19 @@ import {
   SITEMAP_FILENAME,
   SITEMAP_PATH,
   SORT_DEFAULT,
+  CHANGE_DETECTION_CONCURRENCY,
+  R2_PERSIST_CONCURRENCY,
+  CHANGE_MARKER_JSONLD_FIELD,
+  CONTENT_READY_TIMEOUT_MS,
+  DEFAULT_RENDER_BUDGET_MINUTES,
+  EVENT_DETAIL_RATE_LIMIT_PER_MINUTE,
+  NAV_TIMEOUT_MS,
+  PRERENDER_CONCURRENCY,
+  RENDER_POOL_CONCURRENCY,
+  PRERENDER_DIAGNOSTIC_MAX_EVENTS,
+  RATE_GATE_SLACK_MS,
 } from '../src/constants';
+import { serializeJsonLd } from '../src/lib/jsonLd';
 import { localizedPath } from '../src/lib/urlLocale';
 import { githubRequest } from '../src/lib/githubRequest';
 import { compareEventStaleness, parseSnapshotHtml, validateSnapshotStructure } from '../src/lib/seoValidation';
@@ -80,80 +94,6 @@ import { PRERENDER_BACKEND_TARGET } from '../vite.config';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DIST_DIR = path.resolve(__dirname, '../dist');
 const API_ORIGIN = PRERENDER_BACKEND_TARGET;
-// Both timeouts are 3x wider on Vercel. Confirmed via local repro (same
-// @sparticuz/chromium binary, same real backend) that a page which renders
-// in ~3.6s off Vercel can still consistently blow past 15s on Vercel's
-// build machine — every attempted route timed out identically at both
-// concurrency 6 and concurrency 1 (RENDER_POOL_CONCURRENCY above), even the
-// static, no-data-dependency Landing route, which rules out contention or
-// backend latency as the sole cause and points at the shared/throttled
-// 2-core build machine simply running this single-process, software-
-// rendered (SwiftShader) Chromium slower across the board. Widening the
-// timeout costs throughput (fewer routes fit in the render budget per
-// round), which the render-budget/chaining mechanism (issues #82/#84)
-// already exists to absorb across rounds — a hard build failure from a
-// route that would have succeeded given a few more seconds is worse than a
-// slower round.
-const NAV_TIMEOUT_MS = process.env.VERCEL ? 90_000 : 30_000;
-const CONTENT_READY_TIMEOUT_MS = process.env.VERCEL ? 45_000 : 15_000;
-// Targets run through a bounded pool of pages rather than one at a time —
-// with a growing published-event catalog (three locale variants each), a
-// fully sequential run risks Vercel's Hobby-plan 45-minute build cap.
-// Bounded, not unbounded, mirroring
-// this repo's external-API fan-out convention (CLAUDE.md). Used by the
-// filesystem/`fetch()`-only validation pass below, which has no Chromium
-// involvement and so isn't subject to RENDER_POOL_CONCURRENCY's constraint.
-const PRERENDER_CONCURRENCY = 6;
-// Concurrency for the actual Playwright render pool (the `browser.newPage()`
-// pool in main(), below) — narrower than PRERENDER_CONCURRENCY on Vercel.
-// `@sparticuz/chromium`'s launch args always include `--single-process`
-// (required — Lambda's sandbox rejects the `prctl` calls a multi-process
-// Chromium needs), which forces every concurrently-open page through one OS
-// process/thread — multiple pages there compete for that one thread rather
-// than getting Chromium's normal per-page process isolation. (An earlier
-// version of this comment blamed that contention for routes failing in an
-// apparent simultaneous burst; that read the failure *logging* — which is
-// batched into one loop after the whole pool settles, not emitted live — as
-// the failures themselves happening at once. The real cause, confirmed by a
-// follow-up run at concurrency 1 that failed the exact same routes, is
-// CONTENT_READY_TIMEOUT_MS being too tight for Vercel's build machine
-// regardless of concurrency — see the timeout comment above.) Keeping this
-// at 1 on Vercel still avoids adding avoidable single-thread contention on
-// top of that base slowness; the render-budget/chaining mechanism (issues
-// #82/#84) covers the resulting lower single-round throughput across later
-// rounds. Off Vercel, Playwright's own bundled Chromium has no such
-// constraint, so this stays at PRERENDER_CONCURRENCY's original width.
-const RENDER_POOL_CONCURRENCY = process.env.VERCEL ? 1 : PRERENDER_CONCURRENCY;
-// GET /events/{id} is rate-limited server-side to RATE_LIMIT_EVENTS_DETAIL =
-// "120/minute" per IP (backend/app/constants.py) — every worker's build
-// machine shares one IP, so an unthrottled pool would eventually 429 as the
-// published-event catalog grows, which (via the canonical-link wait below)
-// surfaces as a spurious render "failure" and aborts the whole build.
-// Capped comfortably under the server limit, shared across all workers.
-const EVENT_DETAIL_RATE_LIMIT_PER_MINUTE = 100;
-// Bounded pool for the change-detection fetch pass (issue #80) — real
-// GET requests against PRODUCTION_ORIGIN, one per event route, so this stays
-// bounded rather than unbounded, mirroring this repo's external-API fan-out
-// convention (CLAUDE.md). Separate from PRERENDER_CONCURRENCY/the rate gate
-// above since these are plain page fetches, not the rate-limited
-// GET /events/{id} endpoint.
-const CHANGE_DETECTION_CONCURRENCY = 6;
-// JSON-LD field the change-detection marker (derived from Event.updated_at)
-// is embedded under (issue #80). Not a real schema.org property of Event,
-// but an extra key here doesn't violate the structural validation gate
-// (assertEventJsonLd only checks for required fields) and Google/consumers
-// ignore unrecognized properties.
-const CHANGE_MARKER_JSONLD_FIELD = 'dateModified';
-// Hard wall-clock cap on the Playwright render pass only (issue #82) —
-// excludes tsc/vite build and the in-build validation gate below, both of
-// which run outside main()'s render-pool block. A round that hits this cap
-// stops handing out new routes; unreached routes keep serving whatever's
-// already live (copy-forward doubles as the "stale but real" fallback) or,
-// for a route that's never been rendered at all, the CSR shell that
-// vercel.json's catch-all rewrite falls back to. Overridable so the
-// stop-at-cap behavior is verifiable without a real 10-minute wait (e.g.
-// `PRERENDER_RENDER_BUDGET_MINUTES=0 npm run build`).
-const DEFAULT_RENDER_BUDGET_MINUTES = 10;
 const RENDER_BUDGET_MS = (() => {
   const raw = process.env.PRERENDER_RENDER_BUDGET_MINUTES;
   if (raw === undefined) return DEFAULT_RENDER_BUDGET_MINUTES * 60_000;
@@ -212,7 +152,7 @@ class RateGate {
         this.timestamps.push(now);
         return;
       }
-      const waitMs = this.windowMs - (now - this.timestamps[this.head]) + 10;
+      const waitMs = this.windowMs - (now - this.timestamps[this.head]) + RATE_GATE_SLACK_MS;
       await new Promise((resolve) => setTimeout(resolve, waitMs));
     }
   }
@@ -281,7 +221,7 @@ function embedChangeMarkerInPlace(document: Document, marker: string): void {
     try {
       const data = JSON.parse(script.textContent ?? '{}') as Record<string, unknown>;
       data[CHANGE_MARKER_JSONLD_FIELD] = marker;
-      script.textContent = JSON.stringify(data);
+      script.textContent = serializeJsonLd(data);
     } catch {
       // Malformed JSON-LD — leave untouched, validateTarget() catches it.
     }
@@ -298,11 +238,11 @@ function embedChangeMarkerInPlace(document: Document, marker: string): void {
  * change, so those references go dead the moment the next build ships —
  * and because copy-forward has no staleness signal of its own (its whole
  * point is "nothing about this route changed"), the dead references would
- * otherwise persist silently across arbitrarily many future deploys. Vercel
- * doesn't 404 the request either: vercel.json's catch-all rewrite serves
- * `app-shell.html` (200, `text/html`) for any unmatched path, which a
- * browser then rejects as a stylesheet/module script under strict MIME
- * sniffing — no CSS, and React never mounts.
+ * otherwise persist silently across arbitrarily many future deploys.
+ * Cloudflare doesn't 404 the request either: `functions/[[path]].ts`'s SPA
+ * fallback serves `app-shell.html` (200, `text/html`) for any unmatched
+ * path, which a browser then rejects as a stylesheet/module script under
+ * strict MIME sniffing — no CSS, and React never mounts.
  *
  * `shellHtml` must be `dist/app-shell.html` — the pristine, never-prerendered
  * Vite output — not `dist/index.html`, which prerender itself overwrites
@@ -370,7 +310,7 @@ export function rewriteSnapshotAssetRefs(html: string, shellHtml: string): strin
 
 /** Strips a baked-in `data-theme` attribute off `html`'s `<html>` element,
  * leaving every other attribute (`lang`, `data-rh`, …) untouched. A snapshot
- * is captured in the build browser, which has no `theme_preference` in
+ * is captured in the build browser, which has no `theme_override` in
  * localStorage — the inline pre-paint script (index.html) resolves that to
  * whatever the build machine's OS `prefers-color-scheme` happens to be and
  * bakes it into `document.documentElement.dataset.theme` before
@@ -499,14 +439,28 @@ export async function finalizeChainState(
 }
 
 /** Reads the change-detection marker back off a rendered snapshot's JSON-LD
- * (issue #80) — used both to read the currently-live production page during
- * change detection, and (via the same parseSnapshotHtml helper the in-build
- * validation gate uses) to keep the two readers in agreement. */
+ * (issue #80) — used to read the currently-live production page during
+ * change detection. A targeted scan of the first JSON-LD script body rather
+ * than a full DOM parse (Big-O audit M13): change detection runs once per
+ * target and would otherwise parse every page twice (here, then again in
+ * finalizeSnapshotHtml). Reads the same first script parseSnapshotHtml (the
+ * validation gate) does, so the two readers agree. */
+const JSONLD_SCRIPT_BODY_RE = new RegExp(
+  `<script[^>]*type=["']${JSONLD_SCRIPT_TYPE.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}["'][^>]*>([\\s\\S]*?)</script>`,
+  'i',
+);
+
 function extractChangeMarker(html: string): string | null {
-  const jsonLd = parseSnapshotHtml(html).jsonLd[0];
-  if (jsonLd && typeof jsonLd === 'object') {
-    const marker = (jsonLd as Record<string, unknown>)[CHANGE_MARKER_JSONLD_FIELD];
-    if (typeof marker === 'string') return marker;
+  const body = JSONLD_SCRIPT_BODY_RE.exec(html)?.[1];
+  if (body === undefined) return null;
+  try {
+    const jsonLd: unknown = JSON.parse(body);
+    if (jsonLd && typeof jsonLd === 'object') {
+      const marker = (jsonLd as Record<string, unknown>)[CHANGE_MARKER_JSONLD_FIELD];
+      if (typeof marker === 'string') return marker;
+    }
+  } catch {
+    // Malformed JSON-LD — no marker, exactly like parseSnapshotHtml's undefined entry.
   }
   return null;
 }
@@ -523,8 +477,8 @@ export interface ChangeDetectionResult {
    * *does* need a fresh render but the render budget runs out before
    * reaching it — copying the last-known-good page forward beats leaving
    * the route with nothing this round. A route with no live page at all
-   * (null here) falls through to the CSR shell via vercel.json's catch-all
-   * rewrite instead. */
+   * (null here) falls through to the CSR shell via `functions/[[path]].ts`'s
+   * SPA fallback instead. */
   liveHtml: string | null;
 }
 
@@ -683,58 +637,33 @@ export function buildRobotsTxt(): string {
   return lines.join('\n') + '\n';
 }
 
-/** dist-relative output file for a locale-prefixed URL — mirrors how Vercel's
- * static file server resolves a directory path to its index.html. */
+/** dist-relative output file for a locale-prefixed URL — mirrors how a static
+ * file server resolves a directory path to its index.html. */
 function outputFilePath(bare: string, locale: string): string {
   const localized = localizedPath(bare, locale);
   const relDir = localized === '/' ? '' : localized;
   return path.join(DIST_DIR, relDir, 'index.html');
 }
 
-/**
- * On Vercel, launches `@sparticuz/chromium` explicitly rather than falling
- * through to Playwright-bundled Chromium (issue #87, reusing Wave 1's fix
- * from issue #72) — the build script's `[ -n "$VERCEL" ] || playwright
- * install chromium` step skips installing Playwright's own browser on
- * Vercel, so `chromium.launch()` alone would have nothing to launch there.
- * `@sparticuz/chromium`'s bundled binary is linked against a handful of
- * AL2023 shared libs (`libnspr4.so`/`libnss3.so`/`libnssutil3.so`) that
- * aren't present on the build image by default; `executablePath()` only
- * extracts them and points `LD_LIBRARY_PATH` at the extraction dir when its
- * own `isRunningInAmazonLinux2023` check sees `VERCEL` set — so `VERCEL`
- * must stay visible through this call, not hidden, or the launch fails with
- * `error while loading shared libraries: libnspr4.so: cannot open shared
- * object file`. Off Vercel (local/dev, any OS), Playwright's own bundled
- * Chromium is used unchanged — `@sparticuz/chromium`'s binary is Linux-only.
- */
 async function launchBrowser(): Promise<Browser> {
-  if (!process.env.VERCEL) {
-    return chromium.launch();
-  }
-  const { default: sparticuzChromium } = await import('@sparticuz/chromium');
-  return await chromium.launch({
-    args: sparticuzChromium.args,
-    executablePath: await sparticuzChromium.executablePath(),
-    headless: true,
-  });
+  return chromium.launch();
 }
 
 /** Rolling buffer of a page's recent console/pageerror/requestfailed
- * activity (issue #86 investigation) — three consecutive Vercel-only
- * `waitForSelector` timeout theories (single-process contention, then a
- * flat timeout bump) each failed to explain the next production run, always
- * on the exact same routes including the static, no-fetch Landing page.
+ * activity (issue #86 investigation) — three consecutive `waitForSelector`
+ * timeout theories (single-process contention, then a flat timeout bump)
+ * each failed to explain the next production run, always on the exact same
+ * routes including the static, no-fetch Landing page.
  * Rather than guess a fourth time, capture what the page itself was doing
  * when a render times out, so the next failure's log says what actually
  * happened instead of just that it didn't. Attached once per page (workers
  * reuse one page across many targets), capped so a long-lived page's buffer
  * can't grow unbounded. */
 function attachPageDiagnostics(page: Page): () => string[] {
-  const MAX_EVENTS = 20;
   const events: string[] = [];
   const record = (line: string) => {
     events.push(line);
-    if (events.length > MAX_EVENTS) events.shift();
+    if (events.length > PRERENDER_DIAGNOSTIC_MAX_EVENTS) events.shift();
   };
   page.on('console', (msg) => record(`console.${msg.type()}: ${msg.text().slice(0, PRERENDER_DIAGNOSTIC_EVENT_MAX_LENGTH)}`));
   page.on('pageerror', (err) => record(`pageerror: ${String(err).slice(0, PRERENDER_DIAGNOSTIC_EVENT_MAX_LENGTH)}`));
@@ -755,7 +684,7 @@ async function snapshotTarget(
     await eventDetailRateGate.acquire();
   }
   const url = `${previewOrigin}${localizedPath(target.bare, target.locale)}`;
-  await page.goto(url, { waitUntil: 'networkidle', timeout: NAV_TIMEOUT_MS });
+  await page.goto(url, { waitUntil: 'domcontentloaded', timeout: NAV_TIMEOUT_MS });
   const isExplore = target.bare === ROUTES.explore;
   // Landing and /events/:id are `indexable` (useSeoMeta) only once real
   // content has loaded, so waiting for the canonical link this hook emits is
@@ -820,6 +749,39 @@ async function mapPool<T, R>(
   return results;
 }
 
+/** Bounded fire-and-forget: `run(task)` starts `task` once fewer than
+ * `limit` are in flight and returns its promise (never rejects to the caller
+ * — failures resolve, since every caller here fails open). `drain()` awaits
+ * everything scheduled so far. */
+function createLimiter(limit: number): {
+  run: (task: () => Promise<void>) => void;
+  drain: () => Promise<void>;
+} {
+  let active = 0;
+  const waiting: (() => void)[] = [];
+  const all: Promise<void>[] = [];
+  async function execute(task: () => Promise<void>): Promise<void> {
+    if (active >= limit) await new Promise<void>((resolve) => waiting.push(resolve));
+    active++;
+    try {
+      await task();
+    } catch {
+      // Fail open — see doc comment.
+    } finally {
+      active--;
+      waiting.shift()?.();
+    }
+  }
+  return {
+    run: (task) => {
+      all.push(execute(task));
+    },
+    drain: async () => {
+      await Promise.allSettled(all);
+    },
+  };
+}
+
 async function runPool<T>(items: T[], concurrency: number, worker: (item: T) => Promise<void>): Promise<void> {
   await mapPool(items, concurrency, worker);
 }
@@ -841,8 +803,8 @@ async function runPool<T>(items: T[], concurrency: number, worker: (item: T) => 
  * doubles the build's GET /events/{id} volume; accepted for now since the
  * gate still runs sequentially after the snapshot pass under the same
  * rate-limited budget, bounded rather than unbounded — worth revisiting if
- * the published-event catalog grows enough to threaten the Vercel
- * Hobby-plan 45-minute build cap (see PRERENDER_CONCURRENCY above). Returns
+ * the published-event catalog grows enough to threaten Cloudflare Pages'
+ * build cap (see PRERENDER_CONCURRENCY above). Returns
  * one message per violation, prefixed with the target's path — never
  * throws for a validation failure itself. */
 /** Live count backing the /explore validator's >=3-items check (issue #236)
@@ -880,7 +842,11 @@ export async function fetchLiveExploreCount(locale: string): Promise<number | un
   }
 }
 
-async function validateTarget(target: PrerenderTarget, renderedHtml?: string): Promise<string[]> {
+async function validateTarget(
+  target: PrerenderTarget,
+  renderedHtml: string | undefined,
+  checkStaleness: boolean,
+): Promise<string[]> {
   const html = renderedHtml ?? (await readFile(outputFilePath(target.bare, target.locale), 'utf-8'));
   const parsed = parseSnapshotHtml(html);
   const kind = target.bare === ROUTES.home ? 'website' : target.bare === ROUTES.explore ? 'list' : 'event';
@@ -894,7 +860,13 @@ async function validateTarget(target: PrerenderTarget, renderedHtml?: string): P
     liveItemCount,
   }).map((issue) => `structural: ${issue}`);
 
-  if (target.eventId !== undefined) {
+  // Live-API staleness comparison runs once per event (Big-O audit M15) —
+  // `checkStaleness` is set by main() for the default-locale sibling, or for
+  // one stand-in sibling when the default locale isn't being validated: all locale variants of an event render seconds apart
+  // from the same DB row, so a per-locale re-fetch tripled the API calls
+  // (and rate-gate budget) for near-zero extra signal. Structural checks
+  // above still run for every locale.
+  if (target.eventId !== undefined && checkStaleness) {
     await eventDetailRateGate.acquire();
     const url = `${API_ORIGIN}/events/${target.eventId}?locale=${encodeURIComponent(target.locale)}`;
     const res = await fetch(url);
@@ -918,36 +890,31 @@ function chainGithubRequest(token: string, path: string, init?: RequestInit): Pr
 }
 
 /** Commits `marker` to the branch the Deploy Hook targets (issue #83;
- * extended to Cloudflare Pages under #346, alongside — not instead of — the
- * original Vercel path, since Vercel stays live in parallel as the
- * migration's rollback path — see isPreviewBuild's doc comment), advancing
- * the git ref so a later chained round (issue #84) can re-fire the hook
- * against a genuinely new version rather than colliding with the platform's
- * same-version-cancellation behavior. `CF_PAGES_BRANCH` is preferred over
- * `VERCEL_GIT_COMMIT_REF` when both happen to be set (never expected in
- * practice — a single build runs on one platform); once Vercel is
- * decommissioned (#341), the fallback can be dropped. Uses the GitHub Git
- * Data API — not a local `git push` — since the build environment's checkout
- * has no guaranteed push credentials; mirrors api/seo-audit.ts's plain-fetch
+ * extended to Cloudflare Pages under #346), advancing the git ref so a later
+ * chained round (issue #84) can re-fire the hook against a genuinely new
+ * version rather than colliding with the platform's same-version-
+ * cancellation behavior. Uses the GitHub Git Data API — not a local
+ * `git push` — since the build environment's checkout has no guaranteed
+ * push credentials; mirrors the removed api/seo-audit.ts's plain-fetch
  * GH_ISSUE_TOKEN pattern rather than adding an SDK dependency. The new
  * commit reuses the branch tip's tree unchanged (no file diff — only the
  * marker embedded in the message changes), so this is effectively an empty
  * commit. No-ops with a log line (not a build failure) when
- * GH_PRERENDER_CHAIN_TOKEN/branch aren't set, e.g. local/dev builds off
- * either platform — returns `false` in that case (as opposed to throwing,
- * its failure path) to distinguish "nothing was committed" from "the commit
- * succeeded". main() only calls this when shouldCommitRoundMarker(marker)
- * says the round is `continuing` (issue #101 — see that function's doc
- * comment for why a `done` round must never reach this call). The advanced
- * ref is this chain's sole continuation trigger (issue #89): the production
- * branch is git-connected on both platforms, so this push alone fires the
- * next round's build — no separate Deploy Hook call is needed or made. */
+ * GH_PRERENDER_CHAIN_TOKEN/branch aren't set, e.g. local/dev builds —
+ * returns `false` in that case (as opposed to throwing, its failure path) to
+ * distinguish "nothing was committed" from "the commit succeeded". main()
+ * only calls this when shouldCommitRoundMarker(marker) says the round is
+ * `continuing` (issue #101 — see that function's doc comment for why a
+ * `done` round must never reach this call). The advanced ref is this
+ * chain's sole continuation trigger (issue #89): the production branch is
+ * git-connected, so this push alone fires the next round's build — no
+ * separate Deploy Hook call is needed or made. */
 async function commitRoundMarker(marker: RoundMarker): Promise<boolean> {
   const token = process.env.GH_PRERENDER_CHAIN_TOKEN;
-  const branch = process.env.CF_PAGES_BRANCH ?? process.env.VERCEL_GIT_COMMIT_REF;
+  const branch = process.env.CF_PAGES_BRANCH;
   if (!token || !branch) {
     console.log(
-      'prerender: GH_PRERENDER_CHAIN_TOKEN/CF_PAGES_BRANCH/VERCEL_GIT_COMMIT_REF not set — skipping round-marker commit (not a Cloudflare Pages or Vercel build)',
+      'prerender: GH_PRERENDER_CHAIN_TOKEN/CF_PAGES_BRANCH not set — skipping round-marker commit (not a Cloudflare Pages build)',
     );
     return false;
   }
@@ -1007,15 +974,31 @@ async function commitRoundMarker(marker: RoundMarker): Promise<boolean> {
  * that also rendered nothing new). No-op for a `continuing` marker.
  *
  * Chaining to the next round (issue #84) no longer fires an explicit Deploy
- * Hook here — `commitRoundMarker`'s branch push already triggers Vercel's
- * git-connected auto-deploy, and firing a second hook against the same
- * commit produced two competing deployments (issue #89). */
+ * Hook here — `commitRoundMarker`'s branch push already triggers Cloudflare
+ * Pages' git-connected auto-deploy, and firing a second hook against the
+ * same commit produced two competing deployments (issue #89). */
 /** Scopes the in-build validation gate to this round's newly-rendered
  * routes only (issue #94) — `renderQueue` minus whatever the render budget
  * left in `skippedTargets`. Copied-forward routes (never in `renderQueue`)
  * are byte-identical to what already passed this same gate earlier, so
  * re-validating them every round is pure waste that grows unboundedly as
  * the copied-forward set accumulates. */
+/** One target per event id that gets the live-API staleness comparison
+ * (Big-O audit M15): the default-locale sibling when it's being validated,
+ * else the event's first validated sibling — so an event is never left
+ * unchecked just because its default-locale render wasn't in this round. */
+export function selectStalenessTargets(validationTargets: PrerenderTarget[]): Set<PrerenderTarget> {
+  const chosen = new Map<number, PrerenderTarget>();
+  for (const target of validationTargets) {
+    if (target.eventId === undefined) continue;
+    const current = chosen.get(target.eventId);
+    if (current === undefined || (target.locale === LOCALE_ET && current.locale !== LOCALE_ET)) {
+      chosen.set(target.eventId, target);
+    }
+  }
+  return new Set(chosen.values());
+}
+
 export function selectValidationTargets(
   renderQueue: PrerenderTarget[],
   skippedTargets: PrerenderTarget[],
@@ -1036,52 +1019,38 @@ export function logZeroProgressAbort(marker: RoundMarker): void {
 }
 
 /** True on a Preview build (issue #95; extended to Cloudflare Pages under
- * #346, alongside — not instead of — the original Vercel check). The old
- * Vercel deployment stays live in parallel as the migration's rollback path
- * (#341's cutover-sequencing decision) until it's confirmed healthy and
- * decommissioned, so its preview builds must keep skipping the expensive
- * prerender pass exactly as before: `VERCEL_ENV` is Vercel's own
- * build-time discriminator (`"production" | "preview" | "development"`).
- * Cloudflare Pages exposes no equivalent dedicated flag (confirmed against
- * Cloudflare's own build-config docs), only `CF_PAGES_BRANCH` (the branch
- * this build's checkout is on), so a Cloudflare build infers it the same way
- * Cloudflare's own guidance does: any branch other than the production
- * branch (`PRERENDER_CADENCE_GIT_BRANCH`, 'release' — the same branch
- * functions/api/prerender-cadence.ts already treats as production) is a
- * preview build. Preview URLs aren't crawled or linked externally on either
- * platform, and both platforms' own fallback routing already serves
+ * #346). Cloudflare Pages exposes no dedicated preview/production flag
+ * (confirmed against Cloudflare's own build-config docs), only
+ * `CF_PAGES_BRANCH` (the branch this build's checkout is on), so a build
+ * infers it the same way Cloudflare's own guidance does: any branch other
+ * than the production branch (`PRERENDER_CADENCE_GIT_BRANCH`, 'release' —
+ * the same branch functions/api/prerender-cadence.ts already treats as
+ * production) is a preview build. Preview URLs aren't crawled or linked
+ * externally, and Cloudflare's own fallback routing already serves
  * `app-shell.html` for any route with no snapshot, so skipping prerendering
  * doesn't affect preview functionality. Also sidesteps `commitRoundMarker`
  * committing a chain-state marker against a preview branch ref. Local/dev
- * runs (neither `VERCEL_ENV` nor `CF_PAGES` set) are unaffected. Once Vercel
- * is decommissioned (#341), the `VERCEL_ENV` check can be dropped. */
+ * runs (`CF_PAGES` not set) are unaffected. */
 export function isPreviewBuild(env: NodeJS.ProcessEnv = process.env): boolean {
-  if (env.VERCEL_ENV === 'preview') return true;
   return env.CF_PAGES === '1' && env.CF_PAGES_BRANCH !== PRERENDER_CADENCE_GIT_BRANCH;
 }
 
 /** Reads back this build's own commit message (issue #83; extended to
- * Cloudflare Pages under #346, alongside — not instead of — the original
- * Vercel path, since Vercel stays live in parallel as the migration's
- * rollback path — see isPreviewBuild's doc comment). Vercel exposes the tip
- * commit message directly via `VERCEL_GIT_COMMIT_MESSAGE`; Cloudflare Pages
- * exposes no commit-message env var at all (confirmed against Cloudflare's
- * build-config docs), only `CF_PAGES_COMMIT_SHA`, so a Cloudflare build
- * looks the message up via GitHub's Git Data API for that exact sha — not a
- * branch-tip lookup — so a commit landing on the production branch between
- * checkout and this call can never be mistaken for this build's own
- * chain-marker commit (see resolveRoundStart's doc comment in
- * prerenderChain.ts for why the marker must belong to *this* build). Reuses
- * GH_PRERENDER_CHAIN_TOKEN (already provisioned with read access for
- * commitRoundMarker) rather than a separate token. Returns `null` — not a
- * thrown error — when neither env var is set (local/dev, or a build off
- * either platform), or on any fetch/parse failure, so a GitHub hiccup starts
- * a fresh burst at round 1 instead of failing the whole build (mirrors
- * functions/api/prerender-cadence.ts's `fetchTipCommitMessage`, which fails
- * open the same way for the same reason). Once Vercel is decommissioned
- * (#341), the `VERCEL_GIT_COMMIT_MESSAGE` branch can be dropped. */
+ * Cloudflare Pages under #346). Cloudflare Pages exposes no commit-message
+ * env var at all (confirmed against Cloudflare's build-config docs), only
+ * `CF_PAGES_COMMIT_SHA`, so a build looks the message up via GitHub's Git
+ * Data API for that exact sha — not a branch-tip lookup — so a commit
+ * landing on the production branch between checkout and this call can never
+ * be mistaken for this build's own chain-marker commit (see
+ * resolveRoundStart's doc comment in prerenderChain.ts for why the marker
+ * must belong to *this* build). Reuses GH_PRERENDER_CHAIN_TOKEN (already
+ * provisioned with read access for commitRoundMarker) rather than a
+ * separate token. Returns `null` — not a thrown error — when either env var
+ * is unset (local/dev), or on any fetch/parse failure, so a GitHub hiccup
+ * starts a fresh burst at round 1 instead of failing the whole build
+ * (mirrors functions/api/prerender-cadence.ts's `fetchTipCommitMessage`,
+ * which fails open the same way for the same reason). */
 async function fetchBuildCommitMessage(env: NodeJS.ProcessEnv): Promise<string | null> {
-  if (env.VERCEL_GIT_COMMIT_MESSAGE) return env.VERCEL_GIT_COMMIT_MESSAGE;
   const token = env.GH_PRERENDER_CHAIN_TOKEN;
   const sha = env.CF_PAGES_COMMIT_SHA;
   if (!token || !sha) return null;
@@ -1172,6 +1141,11 @@ export async function main(): Promise<void> {
   // for why. Keyed by target so a successfully-rendered or -failed target
   // can drop its entry once the render loop has an answer for it either way.
   const staleFallbackHtml = new Map<PrerenderTarget, string>();
+  // R2 chain-state PUTs are fire-and-forget from the workers' point of view
+  // (Big-O audit M14): render/copy-forward workers never block on them, and
+  // `allSettled` after the pools drains them. persistChainStateTarget fails
+  // open, so a rejected entry can only mean a lost optimization.
+  const persistLimiter = createLimiter(R2_PERSIST_CONCURRENCY);
   // runPool, not a sequential for-of — each iteration's mkdir/writeFile/
   // persistChainStateTarget (an R2 network round trip) was the dominant
   // wall-clock cost of a copy-forward-heavy round, run one at a time for
@@ -1179,7 +1153,12 @@ export async function main(): Promise<void> {
   // copiedForward++ and staleFallbackHtml.set() are plain synchronous
   // statements with no await between read and write, so concurrent workers
   // touching them (distinct target keys) never race.
-  await runPool(classification, CHANGE_DETECTION_CONCURRENCY, async ({ target, unchanged, liveHtml }) => {
+  await runPool(classification, CHANGE_DETECTION_CONCURRENCY, async (entry) => {
+    const { target, unchanged, liveHtml } = entry;
+    // Drop the classification's own reference (Big-O audit M12): the HTML now
+    // lives only in the local (copy-forward) or in staleFallbackHtml (needs
+    // render), so it's collectable as soon as each branch is done with it.
+    entry.liveHtml = null;
     if (unchanged && liveHtml !== null) {
       const outPath = outputFilePath(target.bare, target.locale);
       await mkdir(path.dirname(outPath), { recursive: true });
@@ -1190,7 +1169,9 @@ export async function main(): Promise<void> {
       // already in the bucket under this exact key — re-PUTting identical
       // bytes would be a pure-waste duplicate write (issue #368).
       if (!resolvedFromManifest.has(target)) {
-        await persistChainStateTarget(sanitizedBurstId, round, target, finalized, chainStateIndex);
+        persistLimiter.run(() =>
+          persistChainStateTarget(sanitizedBurstId, round, target, finalized, chainStateIndex),
+        );
       }
     } else if (liveHtml !== null) {
       // Needs a fresh render, but a live page exists — held for now rather
@@ -1262,7 +1243,9 @@ export async function main(): Promise<void> {
               const finalizedHtml = await snapshotTarget(page, resolvedPreviewOrigin, target);
               newlyRendered++;
               renderedHtmlByTarget.set(target, finalizedHtml);
-              await persistChainStateTarget(sanitizedBurstId, round, target, finalizedHtml, chainStateIndex);
+              persistLimiter.run(() =>
+                persistChainStateTarget(sanitizedBurstId, round, target, finalizedHtml, chainStateIndex),
+              );
             } catch (error) {
               failures.push({ target, error, diagnostics: recentEvents() });
             } finally {
@@ -1316,8 +1299,9 @@ export async function main(): Promise<void> {
   // one existed (held in staleFallbackHtml above — see that block for why
   // this write is deferred to here instead of happening ahead of the render
   // pool). A route with no live page at all (never rendered before) has
-  // nothing on disk, which falls through to the CSR shell via vercel.json's
-  // catch-all rewrite rather than a build failure — see outputFilePath/vercel.json.
+  // nothing on disk, which falls through to the CSR shell via
+  // `functions/[[path]].ts`'s SPA fallback rather than a build failure —
+  // see outputFilePath above.
   let staleFallbackWritten = 0;
   // runPool, not a sequential for-of — same rationale as the copy-forward
   // loop above (Big-O audit #5, Tier 4).
@@ -1329,6 +1313,8 @@ export async function main(): Promise<void> {
     await writeFile(outPath, finalizeSnapshotHtml(liveHtml, shellHtml), 'utf-8');
     staleFallbackWritten++;
   });
+
+  await persistLimiter.drain();
 
   console.log(
     `prerender: round summary — newly-rendered ${newlyRendered}, copied-forward ${copiedForward}, queue-remaining ${skippedTargets.length} (${staleFallbackWritten} of those still serving stale-but-real content)`,
@@ -1351,8 +1337,11 @@ export async function main(): Promise<void> {
   // the copied-forward set accumulates.
   const validationTargets = selectValidationTargets(renderQueue, skippedTargets);
   const validationIssues: string[] = [];
+  const stalenessTargets = selectStalenessTargets(validationTargets);
   await runPool(validationTargets, PRERENDER_CONCURRENCY, async (target) => {
-    validationIssues.push(...(await validateTarget(target, renderedHtmlByTarget.get(target))));
+    validationIssues.push(
+      ...(await validateTarget(target, renderedHtmlByTarget.get(target), stalenessTargets.has(target))),
+    );
   });
   if (validationIssues.length > 0) {
     for (const issue of validationIssues) {
@@ -1365,7 +1354,7 @@ export async function main(): Promise<void> {
   console.log(`prerender: validated ${validationTargets.length} snapshot(s), no issues found`);
 
   // Round-state marker (issue #83): built from this round's actual outcome
-  // and committed to the Vercel-git-connected production branch, whose push
+  // and committed to the git-connected production branch, whose push
   // is what triggers any later round's build (issue #84/#89 — see the
   // comment below). `status` already accounts for the chain-depth cap and
   // zero-progress abort so the committed marker is truthful. A failure here
@@ -1384,11 +1373,11 @@ export async function main(): Promise<void> {
   );
   // Chaining (issue #84, fixed in #89, gated in #101): the branch push
   // inside commitRoundMarker is the chain's sole continuation trigger — the
-  // production branch is Vercel-git-connected, so advancing its ref alone
-  // triggers the next round's build. No separate Deploy Hook fire happens
-  // here. Only push when shouldCommitRoundMarker(marker) says a round is
-  // actually `continuing` — pushing a `done` marker has nothing left to
-  // resume, yet the push itself still triggers a fresh Vercel build (any
+  // production branch is git-connected to Cloudflare Pages, so advancing its
+  // ref alone triggers the next round's build. No separate Deploy Hook fire
+  // happens here. Only push when shouldCommitRoundMarker(marker) says a
+  // round is actually `continuing` — pushing a `done` marker has nothing
+  // left to resume, yet the push itself still triggers a fresh build (any
   // push does), which starts a brand-new burst that (home routes never
   // classify `unchanged` — see classifyTarget) reliably finishes `done`
   // again, forever. That self-sustaining loop is what shipped overnight

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   parseSitemapLastmod,
+  parseFirstSitemapEventUrl,
   parseSitemapEventUrls,
   parseSnapshotAssetUrls,
   evaluateLiveAudit,
@@ -92,6 +93,17 @@ describe('parseSitemapLastmod', () => {
   });
 });
 
+describe('parseFirstSitemapEventUrl', () => {
+  it('returns the first /events/:id url, skipping non-event entries', () => {
+    const sitemap = `<urlset><url><loc>${PRODUCTION_ORIGIN}/</loc></url><url><loc>${PRODUCTION_ORIGIN}/en/events/9</loc></url><url><loc>${PRODUCTION_ORIGIN}/events/7</loc></url><url><loc>${PRODUCTION_ORIGIN}/events/8</loc></url></urlset>`;
+    expect(parseFirstSitemapEventUrl(sitemap)).toBe(`${PRODUCTION_ORIGIN}/events/7`);
+  });
+
+  it('returns undefined when the sitemap lists no event urls', () => {
+    expect(parseFirstSitemapEventUrl(`<urlset><url><loc>${PRODUCTION_ORIGIN}/</loc></url></urlset>`)).toBeUndefined();
+  });
+});
+
 describe('parseSitemapEventUrls', () => {
   it('extracts only bare-Estonian /events/:id URLs, excluding locale-prefixed siblings and Landing', () => {
     const sitemap = sitemapWithLastmod('2026-08-13T04:00:00.000Z', [
@@ -127,6 +139,16 @@ describe('parseSnapshotAssetUrls', () => {
     const html =
       '<script src="/assets/index-abc123.js"></script><script src="/assets/index-abc123.js"></script>';
     expect(parseSnapshotAssetUrls(html)).toEqual(['/assets/index-abc123.js']);
+  });
+
+  it('rejects asset references that are not root-relative paths on our own origin', () => {
+    const html =
+      '<script src="@evil.example/assets/x.js"></script>' +
+      '<script src="https://evil.example/assets/x.js"></script>' +
+      '<script src="//evil.example/assets/x.js"></script>' +
+      '<script src="/assets/../evil.js"></script>' +
+      '<link rel="stylesheet" href="/other/assets/x.css">';
+    expect(parseSnapshotAssetUrls(html)).toEqual([]);
   });
 });
 

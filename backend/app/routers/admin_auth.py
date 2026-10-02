@@ -3,12 +3,10 @@
 A third auth track alongside app/routers/auth.py (consumer) and
 app/routers/organizer_auth.py (organizer): see docs/backend-ops.md's Admin
 Endpoints section and docs/security.md's Auth section. Credential is the
-existing ADMIN_USERNAME/ADMIN_PASSWORD env vars app/routers/admin.py already
-checks via HTTP Basic — this endpoint adds a required TOTP step and issues a
-session cookie so the admin console frontend can authenticate without ever
-holding the Basic credential in JS. Login/logout failures share the same
-lockout counter as Basic auth (app/routers/admin.py::check_admin_lockout) —
-one damper for both auth surfaces on this credential pair.
+ADMIN_USERNAME/ADMIN_PASSWORD env vars plus a required TOTP step; success
+issues a session cookie so the admin console frontend never holds the
+password in JS. This is the only admin credential surface (HTTP Basic was
+removed, OWASP audit #4); failures feed the app/auth/admin_lockout.py lockout.
 """
 
 import logging
@@ -16,6 +14,14 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel
 
+from app.auth.admin_lockout import (
+    admin_credentials_ok,
+    admin_username_disabled,
+    check_admin_lockout,
+    clear_admin_auth_failure,
+    record_admin_auth_failure,
+)
+from app.auth.dependencies import get_current_admin
 from app.auth.tokens import generate_admin_session_token
 from app.auth.totp import check_totp_code, record_totp_step
 from app.config import settings
@@ -27,22 +33,18 @@ from app.constants import (
     DETAIL_SIGNED_OUT,
     ERROR_ADMIN_DISABLED,
     ERROR_ADMIN_INCORRECT_CREDENTIALS,
+    FEATURE_ADMIN_LOGIN,
+    FEATURE_ADMIN_TOTP,
     LOG_EVENT_ADMIN_ACTION,
     RATE_LIMIT_ADMIN_LOGIN,
     RATE_LIMIT_BROWSE,
     RATE_LIMIT_LOGOUT,
     SETTING_NAME_ADMIN_PASSWORD,
+    SETTING_NAME_ADMIN_TOTP_SECRET,
 )
 from app.rate_limit import client_key, limiter
-from app.routers.admin import (
-    admin_credentials_ok,
-    admin_username_disabled,
-    check_admin_lockout,
-    clear_admin_auth_failure,
-    get_current_admin,
-    record_admin_auth_failure,
-)
-from app.routers.utils import clear_session_cookie, require_configured_secret, set_session_cookie
+from app.routers.utils import clear_session_cookie, set_session_cookie
+from app.auth.utils import require_configured_secret
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/admin/auth", tags=["admin-auth"])
@@ -58,8 +60,7 @@ class AdminLoginBody(BaseModel):
 @limiter.limit(RATE_LIMIT_ADMIN_LOGIN)
 async def admin_login(body: AdminLoginBody, request: Request, response: Response) -> dict:
     """Single-submit username + password + TOTP login. Sets the admin session
-    cookie on success. Shares its lockout counter with HTTP Basic
-    (admin.py::_require_admin) via the check_admin_lockout/
+    cookie on success. Guarded by the check_admin_lockout/
     record_admin_auth_failure/clear_admin_auth_failure helpers."""
     key = client_key(request)
     now = check_admin_lockout(key)
@@ -67,7 +68,7 @@ async def admin_login(body: AdminLoginBody, request: Request, response: Response
     password = settings.ADMIN_PASSWORD
     password_configured = require_configured_secret(
         password,
-        feature="Admin login",
+        feature=FEATURE_ADMIN_LOGIN,
         setting_name=SETTING_NAME_ADMIN_PASSWORD,
         app_env=settings.APP_ENV,
         allow_insecure_dev=settings.ALLOW_INSECURE_DEV,
@@ -81,8 +82,8 @@ async def admin_login(body: AdminLoginBody, request: Request, response: Response
         totp_secret = settings.ADMIN_TOTP_SECRET
         totp_configured = require_configured_secret(
             totp_secret,
-            feature="Admin TOTP",
-            setting_name="ADMIN_TOTP_SECRET",
+            feature=FEATURE_ADMIN_TOTP,
+            setting_name=SETTING_NAME_ADMIN_TOTP_SECRET,
             app_env=settings.APP_ENV,
             allow_insecure_dev=settings.ALLOW_INSECURE_DEV,
         )
@@ -100,7 +101,7 @@ async def admin_login(body: AdminLoginBody, request: Request, response: Response
         if totp_step is not None:
             record_totp_step(totp_step)
     # else: password unset, dev fail-open (require_configured_secret already
-    # logged a warning) — mirrors _require_admin's own early return.
+    # logged a warning) — mirrors get_current_admin's dev fail-open.
 
     clear_admin_auth_failure(key)
     session_token = generate_admin_session_token()

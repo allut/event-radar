@@ -5,11 +5,14 @@ this module only verifies a submitted 6-digit code against the configured secret
 """
 
 import hmac
+import logging
 import time
 
 import pyotp
 
 from app.constants import ADMIN_TOTP_VALID_WINDOW
+
+log = logging.getLogger(__name__)
 
 # Single-admin credential (no admins table — see auth/tokens.py's
 # generate_admin_session_token), so one process-wide "last accepted step"
@@ -48,7 +51,10 @@ def check_totp_code(secret: str, code: str) -> int | None:
                 continue  # already-accepted or older step — reject even if the code matches
             if hmac.compare_digest(totp.generate_otp(step), code):
                 return step
-    except Exception:
+    except Exception as exc:
+        # Class name only — the message could echo the malformed secret. A bad
+        # ADMIN_TOTP_SECRET would otherwise fail every admin login silently.
+        log.warning("admin TOTP check raised %s", type(exc).__name__)
         return None
     return None
 

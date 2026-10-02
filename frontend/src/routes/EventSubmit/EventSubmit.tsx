@@ -12,12 +12,12 @@ import FileField from '../../components/FileField';
 import VenuePicker from '../../components/VenuePicker';
 import { t, ti } from '../../i18n';
 import {
-  CONTENT_LANG_ORDER, DEFAULT_CURRENCY, LOCALE_EN, LOCALE_ET, LOCALE_RU, LOCALES_BY_CODE,
+  CONTENT_LANG_ORDER, DEFAULT_CURRENCY, LOCALE_EN, LOCALE_ET, LOCALE_RU,
   ORGANIZER_BASE_CONTENT_LANG, ORGANIZER_IMAGE_ACCEPT,
   PRICE_INPUT_MIN, PRICE_INPUT_STEP,
   type ContentLang, type ContentMarkerState,
 } from '../../constants';
-import { categoryOptions, currencySymbol, hasHtmlContent, titleWithBrand } from '../../utils';
+import { categoryOptions, currencySymbol, hasHtmlContent, localeLabel, localizedFieldLabel, titleWithBrand } from '../../utils';
 
 import { useSeoMeta } from '../../hooks/useSeoMeta';
 import SeoTags from '../../components/SeoTags';
@@ -74,32 +74,28 @@ export default function EventSubmit() {
     path: pathname,
   });
 
-  // Re-trims all 9 text fields (multi-KB organizer prose) only when one of
-  // them actually changes, not on every unrelated keystroke (price, venue, etc).
-  const slots: Record<ContentLang, ContentSlot> = useMemo(() => ({
-    [LOCALE_ET]: makeSlot(
-      form.title, form.setTitle,
-      form.description, form.setDescription,
-      form.importantInfo, form.setImportantInfo,
-    ),
-    [LOCALE_EN]: makeSlot(
-      form.titleEn, form.setTitleEn,
-      form.descriptionEn, form.setDescriptionEn,
-      form.importantInfoEn, form.setImportantInfoEn,
-    ),
-    [LOCALE_RU]: makeSlot(
-      form.titleRu, form.setTitleRu,
-      form.descriptionRu, form.setDescriptionRu,
-      form.importantInfoRu, form.setImportantInfoRu,
-    ),
-  }), [
-    form.title, form.setTitle, form.description, form.setDescription, form.importantInfo, form.setImportantInfo,
-    form.titleEn, form.setTitleEn, form.descriptionEn, form.setDescriptionEn, form.importantInfoEn, form.setImportantInfoEn,
-    form.titleRu, form.setTitleRu, form.descriptionRu, form.setDescriptionRu, form.importantInfoRu, form.setImportantInfoRu,
-  ]);
+  // One memo per content slot: a keystroke in one language's fields re-runs
+  // hasHtmlContent (a DOMPurify pass) for that slot only, not all three.
+  const etSlot = useMemo(() => makeSlot(
+    form.title, form.setTitle,
+    form.description, form.setDescription,
+    form.importantInfo, form.setImportantInfo,
+  ), [form.title, form.setTitle, form.description, form.setDescription, form.importantInfo, form.setImportantInfo]);
+  const enSlot = useMemo(() => makeSlot(
+    form.titleEn, form.setTitleEn,
+    form.descriptionEn, form.setDescriptionEn,
+    form.importantInfoEn, form.setImportantInfoEn,
+  ), [form.titleEn, form.setTitleEn, form.descriptionEn, form.setDescriptionEn, form.importantInfoEn, form.setImportantInfoEn]);
+  const ruSlot = useMemo(() => makeSlot(
+    form.titleRu, form.setTitleRu,
+    form.descriptionRu, form.setDescriptionRu,
+    form.importantInfoRu, form.setImportantInfoRu,
+  ), [form.titleRu, form.setTitleRu, form.descriptionRu, form.setDescriptionRu, form.importantInfoRu, form.setImportantInfoRu]);
+  const slots: Record<ContentLang, ContentSlot> = useMemo(
+    () => ({ [LOCALE_ET]: etSlot, [LOCALE_EN]: enSlot, [LOCALE_RU]: ruSlot }),
+    [etSlot, enSlot, ruSlot],
+  );
   const activeSlot = slots[contentLang];
-  const contentLangLabel = (code: ContentLang) =>
-    LOCALES_BY_CODE.get(code)?.label ?? code.toUpperCase();
   // Field-by-field against the ET base slot.
   const markerState = (code: ContentLang): ContentMarkerState => {
     const slot = slots[code];
@@ -116,18 +112,14 @@ export default function EventSubmit() {
     const state = markerState(code);
     return {
       value: code,
-      label: contentLangLabel(code),
+      label: localeLabel(code),
       marker: { state, stateLabel: t(`organizer_lang_state_${state}`, locale) },
     };
   });
   // Rebuilding this 14-option list (+14 t() lookups) only needs to happen when
   // the locale changes, not on every keystroke elsewhere in the form.
   const categoryOpts = useMemo(() => categoryOptions(locale), [locale]);
-  const langField = (key: string) =>
-    ti('organizer_field_lang_suffix', locale, {
-      field: t(key, locale),
-      lang: contentLangLabel(contentLang),
-    });
+  const langField = (key: string) => localizedFieldLabel(key, locale, contentLang);
 
   return (
     <div className={styles.page}>
@@ -153,7 +145,7 @@ export default function EventSubmit() {
               />
             </div>
             <p className={styles.contentHint}>
-              {ti('organizer_lang_hint', locale, { base: contentLangLabel(ORGANIZER_BASE_CONTENT_LANG) })}
+              {ti('organizer_lang_hint', locale, { base: localeLabel(ORGANIZER_BASE_CONTENT_LANG) })}
             </p>
 
             <label className={styles.label} htmlFor="content_title">

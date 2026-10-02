@@ -3,6 +3,7 @@ import json
 import logging
 import logging.handlers
 import queue
+import threading
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -25,6 +26,8 @@ from app.constants import (
     LOG_FRAMEWORK_LOGGER_NAMES,
     LOG_QUIET_LOGGER_NAMES,
     LOG_RECORD_RESERVED_ATTRS,
+    LOG_SHIP_BATCH_SIZE,
+    LOG_SHIP_FLUSH_INTERVAL_SECONDS,
     LOG_SHIP_QUEUE_MAXSIZE,
     LOG_SHIP_SUPPRESS_ACCESS_PATHS,
     LOG_SHIP_TIMEOUT_SECONDS,
@@ -65,36 +68,84 @@ class JsonLogFormatter(logging.Formatter):
 
 
 class HttpLogShipHandler(logging.Handler):
-    """POSTs each formatted record to settings.LOG_SHIP_URL as JSON.
+    """Batches formatted records and POSTs them to settings.LOG_SHIP_URL as one
+    JSON array.
 
-    Network failures are swallowed via handleError() — log shipping must never
-    crash the app. Only ever runs on the QueueListener's background thread, so it
-    never blocks the event loop or request path.
+    emit() only buffers; a buffer reaching LOG_SHIP_BATCH_SIZE flushes at once,
+    and a daemon timer thread flushes a partial buffer every
+    LOG_SHIP_FLUSH_INTERVAL_SECONDS so a quiet app still ships promptly.
+    close() flushes what is left. Network failures are swallowed via
+    handleError() and the failed batch is dropped — log shipping must never
+    crash the app. emit() runs on the QueueListener's background thread and the
+    timer is its own thread, so nothing here blocks the event loop or request
+    path; both paths take the handler lock only around the buffer swap, never
+    around the POST.
     """
 
     def __init__(self) -> None:
         super().__init__()
         self.setFormatter(JsonLogFormatter())
         self._client = httpx.Client(timeout=LOG_SHIP_TIMEOUT_SECONDS)
+        self._buffer: list[str] = []
+        self._last_record: logging.LogRecord | None = None
+        self._stop = threading.Event()
+        self._flusher = threading.Thread(
+            target=self._flush_periodically, name="log-ship-flush", daemon=True
+        )
+        self._flusher.start()
 
     def emit(self, record: logging.LogRecord) -> None:
         try:
             body = self.format(record)
+        except Exception:
+            self.handleError(record)
+            return
+        # handle() already holds self.lock (an RLock), so the append is
+        # race-free against the timer thread, which takes it in flush().
+        self._buffer.append(body)
+        self._last_record = record
+        if len(self._buffer) >= LOG_SHIP_BATCH_SIZE:
+            self._send(*self._take_buffer())
+
+    def flush(self) -> None:
+        self.acquire()
+        try:
+            batch, record = self._take_buffer()
+        finally:
+            self.release()
+        # POST outside the lock so a slow drain never stalls emit().
+        self._send(batch, record)
+
+    def _take_buffer(self) -> tuple[list[str], logging.LogRecord | None]:
+        batch, self._buffer = self._buffer, []
+        record, self._last_record = self._last_record, None
+        return batch, record
+
+    def _send(self, batch: list[str], record: logging.LogRecord | None) -> None:
+        if not batch:
+            return
+        try:
             self._client.post(
                 settings.LOG_SHIP_URL,
                 # Axiom's ingest endpoint expects a JSON array of events, not a
-                # bare object; wrapping one record keeps the handler a valid
-                # array-batch POST (also accepted by other JSON drains).
-                content=f"[{body}]",
+                # bare object; also accepted by other JSON drains.
+                content=f"[{','.join(batch)}]",
                 headers={
                     HEADER_CONTENT_TYPE: MIME_APPLICATION_JSON,
                     AUTHORIZATION_HEADER: f"{BEARER_PREFIX}{settings.LOG_SHIP_TOKEN}",
                 },
             )
         except Exception:
-            self.handleError(record)
+            if record is not None:
+                self.handleError(record)
+
+    def _flush_periodically(self) -> None:
+        while not self._stop.wait(LOG_SHIP_FLUSH_INTERVAL_SECONDS):
+            self.flush()
 
     def close(self) -> None:
+        self._stop.set()
+        self.flush()
         self._client.close()
         super().close()
 

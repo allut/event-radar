@@ -1,0 +1,42 @@
+/* Typography for sanitized-HTML bodies (event descriptions, admin previews).
+   Holds only what every render surface agrees on; a consumer adds its own
+   font size/colour/link style and heading size/spacing on top, and never
+   restates a property set here (equal-specificity descendant rules would tie
+   on Rollup's per-file block order). RichTextEditor's editing surface keeps
+   its own margin model and does not compose this. */
+
+.prose {
+  line-height: var(--leading-relaxed);
+  white-space: pre-wrap;
+}
+
+.prose p + p {
+  margin-top: var(--space-2);
+}
+
+.prose ul,
+.prose ol {
+  padding-left: var(--space-4);
+  margin-top: var(--space-1);
+  margin-bottom: var(--space-1);
+}
+
+.prose strong,
+.prose b {
+  font-weight: var(--fw-semibold);
+  color: var(--text);
+}
+
+.prose h3,
+.prose h4 {
+  font-weight: var(--fw-semibold);
+  color: var(--text);
+  margin-top: var(--space-3);
+}
+
+.prose blockquote {
+  border-left: var(--border-w-alert) solid var(--border);
+  padding-left: var(--space-2);
+  margin-top: var(--space-2);
+  margin-bottom: var(--space-2);
+}

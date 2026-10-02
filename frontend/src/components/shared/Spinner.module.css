@@ -39,3 +39,15 @@
   composes: ring ringOnPage sizeMd;
   display: block;
 }
+
+/* Full-page blocking overlay — fixed scrim behind a centred spinner, for a
+   surface loading/saving over its whole content rather than inline. */
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--overlay-scrim);
+}

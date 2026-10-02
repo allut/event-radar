@@ -26,8 +26,7 @@ from app.db import get_db
 from app.models.models import Persona, User, UserPersona
 from app.ranking.score import build_daily_feed_for_user
 from app.rate_limit import limiter
-from app.routers.auth import get_current_user
-from app.routers.utils import invalidate_user_scores
+from app.auth.dependencies import get_current_user
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/onboarding", tags=["onboarding"])
@@ -87,7 +86,6 @@ async def set_persona(
         )
         result.append({"slug": slug, "weight": weight})
 
-    await invalidate_user_scores(db, current_user.id)
     await db.commit()
 
     background_tasks.add_task(_build_initial_feed, current_user.id)

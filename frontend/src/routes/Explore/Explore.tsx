@@ -5,6 +5,7 @@ import { api } from '../../api/client';
 import { t } from '../../i18n';
 import { withLocaleQuery } from '../../utils';
 import { useAuth } from '../../hooks/useAuth';
+import { useEventCardNav } from '../../hooks/useEventCardNav';
 import { useLocaleMutation } from '../../hooks/useLocaleMutation';
 import { useLogout } from '../../hooks/useLogout';
 import { useSeoMeta } from '../../hooks/useSeoMeta';
@@ -37,7 +38,11 @@ import {
   ROUTES,
   SORT_DEFAULT,
   SORT_OPTIONS,
+  SIGNAL_TO_SIGNIN_TRIGGER,
+  SIGNAL_TO_UPSELL_ACTION,
+  SIGN_IN_TRIGGER_FOR_YOU,
   UI_STATE,
+  UPSELL_ACTION_FOR_YOU,
   type DatePreset,
   type ExploreFilterType,
   type Signal,
@@ -51,7 +56,8 @@ import {
   cx,
   DEFAULT_EXPLORE_FILTERS,
   exploreFiltersToSearchParams,
-  nextOffsetParam,
+  FIRST_KEYSET_PAGE,
+  nextKeysetParam,
   parseExploreFilters,
   titleWithBrand,
   vibeOptions,
@@ -65,6 +71,7 @@ interface ExploreResponse {
   limit: number;
   offset: number;
   has_more: boolean;
+  next_cursor?: string | null;
 }
 
 interface CurrentUser {
@@ -74,6 +81,7 @@ interface CurrentUser {
 
 export default function Explore() {
   const authed = useAuth();
+  const nav = useEventCardNav();
   const handleLogout = useLogout();
   const [searchParams, setSearchParams] = useSearchParams();
   const filters = useMemo(() => parseExploreFilters(searchParams), [searchParams]);
@@ -109,14 +117,13 @@ export default function Explore() {
   }, []);
 
   const handleFeedbackBlocked = useCallback((signal: Signal) => {
-    const action = signal === 'bookmark' ? 'save' : signal === 'like' ? 'thumbs_up' : 'thumbs_down';
-    trackEvent(ANALYTICS_EVENTS.exploreUpsellClick, { action });
-    requestSignIn(signal === 'bookmark' ? 'save' : 'thumbs');
+    trackEvent(ANALYTICS_EVENTS.exploreUpsellClick, { action: SIGNAL_TO_UPSELL_ACTION[signal] });
+    requestSignIn(SIGNAL_TO_SIGNIN_TRIGGER[signal]);
   }, [requestSignIn]);
 
   const handleUpsellCtaClick = useCallback(() => {
-    trackEvent(ANALYTICS_EVENTS.exploreUpsellClick, { action: 'for_you' });
-    requestSignIn('for_you');
+    trackEvent(ANALYTICS_EVENTS.exploreUpsellClick, { action: UPSELL_ACTION_FOR_YOU });
+    requestSignIn(SIGN_IN_TRIGGER_FOR_YOU);
   }, [requestSignIn]);
 
   const handleCardClick = useCallback((index: number) => {
@@ -165,8 +172,7 @@ export default function Explore() {
       commitFilters({ ...filters, q: searchInput });
     }, EXPLORE_SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(handle);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchInput, filters]);
+  }, [searchInput, filters, trackFilterChange, commitFilters]);
 
   // Gated on authed — an anonymous visitor must never call this. The `api`
   // client hard-redirects to /login on any 401, which would break the
@@ -195,14 +201,17 @@ export default function Explore() {
     queryKey: [QUERY_KEYS.explore, locale, filters],
     queryFn: ({ pageParam }) =>
       api.get<ExploreResponse>(
-        withLocaleQuery(`/explore?${buildExploreApiQuery(filters, pageParam)}`, locale),
+        withLocaleQuery(`${API.explore}?${buildExploreApiQuery(filters, pageParam.offset, pageParam.cursor)}`, locale),
       ),
-    initialPageParam: 0,
-    getNextPageParam: (lastPage) => nextOffsetParam(lastPage, lastPage.events.length),
+    initialPageParam: FIRST_KEYSET_PAGE,
+    getNextPageParam: (lastPage) => nextKeysetParam(lastPage, lastPage.events.length),
     // A facet emptied down to zero chips means "match nothing" — skip the
     // request entirely rather than round-tripping to the backend, which
     // would treat an absent/full param as "all" and return unfiltered results.
     enabled: filters.category.length > 0 && filters.vibe.length > 0,
+    // A focus-triggered refetch of an infinite query re-requests every loaded
+    // page sequentially (each re-scored server-side) — never worth it here.
+    refetchOnWindowFocus: false,
   });
 
   const toggleFacet = useCallback(
@@ -338,10 +347,17 @@ export default function Explore() {
     path: ROUTES.explore,
     indexable: isSuccess,
   });
-  const jsonLd = useMemo(
-    () => (isSuccess ? buildExploreItemListJsonLd(visibleEvents, locale) : undefined),
-    [isSuccess, visibleEvents, locale],
-  );
+  // Crawlers only ever see the first page, so the ItemList is built from it
+  // alone — not rebuilt/stringified over every page on each load-more. The
+  // anonymous grid drops the last card for the upsell (see visibleEvents), which
+  // only touches page 1 while it is the sole loaded page.
+  const firstPage = data?.pages[0];
+  const multiplePages = (data?.pages.length ?? 0) > 1;
+  const jsonLd = useMemo(() => {
+    if (!isSuccess || !firstPage) return undefined;
+    const pageEvents = authed || multiplePages ? firstPage.events : firstPage.events.slice(0, Math.max(firstPage.events.length - 1, 0));
+    return buildExploreItemListJsonLd(pageEvents, locale);
+  }, [isSuccess, firstPage, authed, multiplePages, locale]);
 
   return (
     <div className={styles.page}>
@@ -367,8 +383,6 @@ export default function Explore() {
         <div className={styles.search}>
           <svg
             className={styles.searchIcon}
-            width="18"
-            height="18"
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
@@ -474,6 +488,7 @@ export default function Explore() {
                   event={item.event}
                   index={item.index}
                   locale={locale}
+                  nav={nav}
                   variant="standard"
                   onFeedbackBlocked={authed ? undefined : handleFeedbackBlocked}
                   onCardClick={handleCardClick}

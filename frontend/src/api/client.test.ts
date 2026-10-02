@@ -5,6 +5,7 @@ import { ApiError, api, organizerApi } from './client';
 vi.mock('../lib/auth', () => ({
   clearSignedInHint: vi.fn(),
   isLoggingOut: vi.fn(() => false),
+  getLocale: vi.fn(() => 'en'),
 }));
 
 vi.mock('../lib/organizerAuth', () => ({
@@ -80,9 +81,34 @@ describe('api.get', () => {
     await expect(api.get('/missing')).rejects.toMatchObject({ message: 'Not found' });
   });
 
+  it('throws a distinguishable ApiError when fetch itself rejects — offline, or a request blocked before it leaves the browser (#453)', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
+    await expect(api.get('/organizer/claims/1/events/7')).rejects.toMatchObject({
+      code: 'network_error',
+      message: "Couldn't reach Event Radar — a browser extension may be blocking this request.",
+    });
+  });
+
   it('throws ApiError with HTTP status fallback when no detail', async () => {
     mockFetch(StatusCodes.INTERNAL_SERVER_ERROR, {}, false);
     await expect(api.get('/fail')).rejects.toMatchObject({ message: `HTTP ${StatusCodes.INTERNAL_SERVER_ERROR}` });
+  });
+
+  it('throws ApiError with message + code when detail is a structured object', async () => {
+    mockFetch(StatusCodes.CONFLICT, { detail: { message: 'Dormant', code: 'claim_dormant' } }, false);
+    await expect(api.get('/locked')).rejects.toMatchObject({ message: 'Dormant', code: 'claim_dormant' });
+  });
+
+  it('throws a localized generic ApiError (never "HTTP 422") when detail is a FastAPI validation list, keeping status and field names (#452)', async () => {
+    mockFetch(StatusCodes.UNPROCESSABLE_ENTITY, {
+      detail: [{ type: 'value_error', loc: ['body', 'title'], msg: 'Value error, title must not be blank' }],
+    }, false);
+    await expect(api.get('/validate')).rejects.toMatchObject({
+      status: StatusCodes.UNPROCESSABLE_ENTITY,
+      code: 'validation_error',
+      fields: ['title'],
+    });
+    await expect(api.get('/validate')).rejects.not.toMatchObject({ message: `HTTP ${StatusCodes.UNPROCESSABLE_ENTITY}` });
   });
 
   it('on 401: calls clearSignedInHint, redirects to /login, throws ApiError', async () => {

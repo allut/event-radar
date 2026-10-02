@@ -24,7 +24,7 @@ from app.constants import (
 from app.db import get_db
 from app.models.models import User
 from app.rate_limit import limiter
-from app.routers.utils import mask_email
+from app.auth.utils import mask_email
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/email", tags=["unsubscribe"])

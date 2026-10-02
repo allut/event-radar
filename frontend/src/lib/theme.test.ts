@@ -1,110 +1,114 @@
 import { describe, it, expect, vi } from 'vitest';
-import { resolveTheme, getThemePreference, setThemePreference, applyTheme, syncAccountTheme } from './theme';
+import { resolveTheme, getResolvedTheme, setThemeOverride, applyTheme } from './theme';
+
+// theme.ts registers its matchMedia('change') listener once, at module
+// import time — captured here, at this file's own module-eval time, before
+// the global afterEach's vi.clearAllMocks() (test/setup.ts) wipes the
+// recorded call off the mock.
+const registeredChangeHandler = (() => {
+  const results = vi.mocked(window.matchMedia).mock.results;
+  const addEventListenerMock = vi.mocked(results[0].value.addEventListener);
+  const call = addEventListenerMock.mock.calls.find(
+    (args: unknown[]) => args[0] === 'change',
+  );
+  if (!call) throw new Error('theme.ts never registered a matchMedia change listener');
+  return call[1] as () => void;
+})();
 
 describe('resolveTheme', () => {
-  it('account preference "light" wins regardless of localStorage/system', () => {
-    expect(resolveTheme('light', 'dark', true)).toBe('light');
+  it('a light override chosen under the current (light) device theme wins', () => {
+    expect(resolveTheme('light', 'light', false)).toBe('light');
   });
 
-  it('account preference "dark" wins regardless of localStorage/system', () => {
-    expect(resolveTheme('dark', 'light', false)).toBe('dark');
+  it('a dark override chosen under the current (dark) device theme wins', () => {
+    expect(resolveTheme('dark', 'dark', true)).toBe('dark');
   });
 
-  it('account unset + explicit localStorage "light" wins over system', () => {
-    expect(resolveTheme(null, 'light', true)).toBe('light');
+  it('an override chosen under a device theme that no longer matches expires — device wins', () => {
+    // Override "light" was chosen while the device was dark; device is now light.
+    expect(resolveTheme('light', 'dark', false)).toBe('light');
+    // Override "dark" was chosen while the device was light; device is now dark.
+    expect(resolveTheme('dark', 'light', true)).toBe('dark');
   });
 
-  it('account unset + explicit localStorage "dark" wins over system', () => {
-    expect(resolveTheme(null, 'dark', false)).toBe('dark');
-  });
-
-  it('account unset + localStorage "system" falls through to media query (dark)', () => {
-    expect(resolveTheme(null, 'system', true)).toBe('dark');
-  });
-
-  it('account unset + localStorage "system" falls through to media query (light)', () => {
-    expect(resolveTheme(null, 'system', false)).toBe('light');
-  });
-
-  it('account unset + localStorage unset (null) falls through to media query (dark)', () => {
+  it('no override falls through to the device theme (dark)', () => {
     expect(resolveTheme(null, null, true)).toBe('dark');
   });
 
-  it('account unset + localStorage unset (null) falls through to media query (light)', () => {
+  it('no override falls through to the device theme (light)', () => {
     expect(resolveTheme(null, null, false)).toBe('light');
   });
 
-  it('account unset + localStorage garbage value falls through to media query', () => {
-    expect(resolveTheme(null, 'blue', true)).toBe('dark');
+  it('a garbage override value falls through to the device theme', () => {
+    expect(resolveTheme('blue', 'light', false)).toBe('light');
+  });
+
+  it('an override with no recorded device (garbage/missing pairing) falls through', () => {
+    expect(resolveTheme('light', null, false)).toBe('light');
+    expect(resolveTheme('light', null, true)).toBe('dark');
   });
 });
 
-describe('getThemePreference', () => {
-  it('returns "system" when nothing stored', () => {
-    expect(getThemePreference()).toBe('system');
-  });
-
-  it('returns "light"/"dark" when stored', () => {
-    setThemePreference('dark');
-    expect(getThemePreference()).toBe('dark');
-    setThemePreference('light');
-    expect(getThemePreference()).toBe('light');
-  });
-
-  it('returns "system" when the stored value is invalid', () => {
-    localStorage.setItem('theme_preference', 'blue');
-    expect(getThemePreference()).toBe('system');
-  });
-});
-
-describe('setThemePreference / applyTheme', () => {
-  it('setThemePreference persists to localStorage and applies data-theme', () => {
-    setThemePreference('light');
-    expect(localStorage.getItem('theme_preference')).toBe('light');
+describe('getResolvedTheme / setThemeOverride / applyTheme', () => {
+  it('setThemeOverride persists the override plus the device it was chosen under, and applies data-theme', () => {
+    setThemeOverride('light');
+    expect(localStorage.getItem('theme_override')).toBe('light');
+    expect(localStorage.getItem('theme_override_device')).toBe('light');
     expect(document.documentElement.dataset.theme).toBe('light');
+    expect(getResolvedTheme()).toBe('light');
 
-    setThemePreference('dark');
-    expect(localStorage.getItem('theme_preference')).toBe('dark');
+    setThemeOverride('dark');
+    expect(localStorage.getItem('theme_override')).toBe('dark');
     expect(document.documentElement.dataset.theme).toBe('dark');
   });
 
-  it('applyTheme re-resolves from current localStorage/system state', () => {
-    setThemePreference('system');
+  it('applyTheme discards an override whose recorded device no longer matches (load-time mismatch)', () => {
+    setThemeOverride('dark');
+    // Device is mocked light; recording an override under a stale "dark" device
+    // simulates the device having flipped since the override was made.
+    localStorage.setItem('theme_override_device', 'dark');
     applyTheme();
-    // Default mocked matchMedia().matches is false → resolves "light".
+    expect(localStorage.getItem('theme_override')).toBeNull();
+    expect(localStorage.getItem('theme_override_device')).toBeNull();
     expect(document.documentElement.dataset.theme).toBe('light');
   });
-});
 
-describe('syncAccountTheme', () => {
-  it('mirrors an existing non-null account preference locally and does not patch', () => {
-    const patch = vi.fn(() => Promise.resolve());
-    setThemePreference('dark');
-    syncAccountTheme('light', patch);
-    expect(getThemePreference()).toBe('light');
-    expect(patch).not.toHaveBeenCalled();
+  it('applyTheme wipes the legacy tri-state key unconditionally', () => {
+    localStorage.setItem('theme_preference', 'dark');
+    applyTheme();
+    expect(localStorage.getItem('theme_preference')).toBeNull();
   });
 
-  it('seeds the account from an explicit local override when the account has none', () => {
-    const patch = vi.fn(() => Promise.resolve());
-    setThemePreference('dark');
-    syncAccountTheme(null, patch);
-    expect(patch).toHaveBeenCalledWith('dark');
-    // The local value is the source being seeded, not overwritten.
-    expect(getThemePreference()).toBe('dark');
+  it('an override matching the current device theme survives applyTheme', () => {
+    setThemeOverride('dark');
+    applyTheme();
+    expect(localStorage.getItem('theme_override')).toBe('dark');
+    expect(document.documentElement.dataset.theme).toBe('dark');
   });
 
-  it('does nothing when the account has none and local has no explicit override', () => {
-    const patch = vi.fn(() => Promise.resolve());
-    setThemePreference('system');
-    syncAccountTheme(null, patch);
-    expect(patch).not.toHaveBeenCalled();
-  });
+  it('a live device-theme flip discards an active override (matchMedia change path)', () => {
+    setThemeOverride('light'); // recorded under the mocked light device
+    expect(document.documentElement.dataset.theme).toBe('light');
 
-  it('a rejected patch is swallowed non-fatally', async () => {
-    const patch = vi.fn(() => Promise.reject(new Error('network')));
-    setThemePreference('light');
-    expect(() => syncAccountTheme(null, patch)).not.toThrow();
-    await Promise.resolve();
+    const original = vi.mocked(window.matchMedia).getMockImplementation();
+    // Flip the mocked device to dark, then fire the listener theme.ts
+    // registered at import time — mirrors a real matchMedia 'change' event.
+    vi.mocked(window.matchMedia).mockImplementation((query: string) => ({
+      matches: true,
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }));
+    try {
+      registeredChangeHandler();
+      expect(localStorage.getItem('theme_override')).toBeNull();
+      expect(document.documentElement.dataset.theme).toBe('dark');
+    } finally {
+      if (original) vi.mocked(window.matchMedia).mockImplementation(original);
+    }
   });
 });

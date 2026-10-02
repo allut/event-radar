@@ -24,7 +24,7 @@ pre-soft-launch made the migration free: no live sessions to strand.
   without closing the gap.
 - **Double-submit CSRF token** — rejected in favour of `SameSite=Strict` plus a
   server-side Origin check, which is ~15 lines and needs no client plumbing for
-  a same-origin SPA behind the Vercel `/api` rewrite.
+  a same-origin SPA behind the `/api` proxy.
 - **Dual-accepting `Authorization: Bearer` during a transition** — rejected.
   There is nothing to transition from, and it would leave two auth paths in
   every dependency permanently.

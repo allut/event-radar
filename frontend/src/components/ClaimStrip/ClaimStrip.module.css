@@ -1,0 +1,76 @@
+/* ─── Panel (unclaimed) ───────────────────────────────────────────────────── */
+
+.panel {
+  margin-bottom: var(--space-6);
+  padding: var(--space-5);
+  background: var(--bg-raised);
+  border: var(--border-w-hair) solid var(--border-subtle);
+  border-radius: var(--radius);
+}
+
+.heading {
+  font-family: var(--font-display);
+  font-size: var(--heading-md);
+  font-weight: var(--fw-semibold);
+  color: var(--text);
+  margin-bottom: var(--space-2);
+}
+
+.body {
+  font-size: var(--fs-base);
+  color: var(--text-muted);
+  line-height: var(--leading-relaxed);
+  margin-bottom: var(--space-3);
+}
+
+.error {
+  font-size: var(--fs-sm);
+  color: var(--danger);
+  margin-bottom: var(--space-3);
+}
+
+/* Justification prompt (#428) — replaces the CTA when a claim attempt
+ * resolves to a Series claim (no specific promoter). */
+.justifyInput {
+  composes: textareaField from '../shared/Field.module.css';
+  min-height: var(--textarea-height-sm);
+  width: 100%;
+  margin-bottom: var(--space-3);
+}
+
+.cta {
+  composes: btnPrimary from '../shared/Button.module.css';
+  display: inline-flex;
+  align-items: center;
+  padding: var(--space-0-625) var(--space-5);
+  font-size: var(--fs-sm);
+  cursor: pointer;
+}
+
+.cta:hover:not(:disabled) {
+  color: var(--on-accent);
+}
+
+/* ─── Pill (pending/claimed) — sits in the meta row, right of the date ──────
+   .meta already has flex-wrap: wrap + gap, so this wraps onto its own line
+   on mobile for free; margin-left: auto pushes it to the far right on wide
+   viewports. */
+
+.pill {
+  margin-left: auto;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  color: var(--accent);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  padding: var(--space-0-375) var(--space-0-875);
+  border: var(--border-w-hair) solid var(--border-subtle);
+  border-radius: 0;
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .pill {
+    margin-left: 0;
+  }
+}

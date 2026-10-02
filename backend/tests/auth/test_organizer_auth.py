@@ -228,7 +228,7 @@ class TestVerifyOrganizerMagicLink:
 class TestGetCurrentOrganizer:
     @pytest.mark.asyncio
     async def test_valid_session_cookie_returns_organizer(self, mock_db, make_organizer):
-        from app.routers.organizer_auth import get_current_organizer
+        from app.auth.dependencies import get_current_organizer
 
         organizer = make_organizer(organizer_id=7)
         mock_db.get.return_value = organizer
@@ -240,7 +240,7 @@ class TestGetCurrentOrganizer:
     @pytest.mark.asyncio
     async def test_missing_cookie_raises_401(self, mock_db):
         from fastapi import HTTPException
-        from app.routers.organizer_auth import get_current_organizer
+        from app.auth.dependencies import get_current_organizer
 
         with pytest.raises(HTTPException) as exc_info:
             await get_current_organizer(organizer_session=None, db=mock_db)
@@ -251,7 +251,7 @@ class TestGetCurrentOrganizer:
         """A consumer session token must not authenticate as an organizer —
         distinct salts make verify_organizer_session_token raise BadSignature."""
         from fastapi import HTTPException
-        from app.routers.organizer_auth import get_current_organizer
+        from app.auth.dependencies import get_current_organizer
 
         user_token = generate_session_token(7, 1)
         with pytest.raises(HTTPException) as exc_info:
@@ -261,7 +261,7 @@ class TestGetCurrentOrganizer:
     @pytest.mark.asyncio
     async def test_revoked_session_raises_401(self, mock_db, make_organizer):
         from fastapi import HTTPException
-        from app.routers.organizer_auth import get_current_organizer
+        from app.auth.dependencies import get_current_organizer
 
         organizer = make_organizer(organizer_id=7, session_token_version=2)
         mock_db.get.return_value = organizer
@@ -476,7 +476,7 @@ class TestApplyGoogleLinkingGate:
         mock_db.commit = AsyncMock()
 
         with patch(
-            "app.routers.organizer_auth.send_magic_link", new_callable=AsyncMock
+            "app.routers.organizer_auth.send_google_link_confirmation", new_callable=AsyncMock
         ) as mock_send:
             outcome, organizer = await _apply_google_linking_gate(
                 mock_db, GOOGLE_IDENTITY_NON_AUTHORITATIVE
@@ -505,7 +505,7 @@ class TestApplyGoogleLinkingGate:
         mock_db.commit = AsyncMock()
 
         with patch(
-            "app.routers.organizer_auth.send_magic_link", new_callable=AsyncMock
+            "app.routers.organizer_auth.send_google_link_confirmation", new_callable=AsyncMock
         ) as mock_send:
             outcome, organizer = await _apply_google_linking_gate(
                 mock_db, GOOGLE_IDENTITY_NON_AUTHORITATIVE
@@ -824,3 +824,206 @@ class TestGoogleSigninCallback:
         cookies = _set_cookie_headers(response)
         assert not any("organizer_session=" in c for c in cookies)
         assert any("organizer_oauth_state=" in c and "Max-Age=0" in c for c in cookies)
+
+
+GOOGLE_IDENTITY_UNVERIFIED = {
+    "sub": "sub-3",
+    "email": "person@yahoo.com",
+    "email_verified": False,
+    "hd": None,
+}
+
+
+def _organizer_row() -> MagicMock:
+    organizer = MagicMock()
+    organizer.id = 3
+    organizer.email = "org@example.com"
+    organizer.locale = "en"
+    organizer.session_token_version = 1
+    return organizer
+
+
+class TestGoogleLinkHardening:
+    """OWASP audit #3 — organizer track."""
+
+    @pytest.mark.asyncio
+    async def test_verify_links_identity_only_with_matching_binding(
+        self, mock_db, make_request
+    ):
+        from fastapi import Response
+        from app.auth.tokens import generate_google_link_binding_token
+        from app.routers.organizer_auth import VerifyTokenBody, verify_organizer_magic_link
+
+        token, _, _ = generate_organizer_magic_token(3)
+        mock_db.execute = mock_execute_returning((3, "sub-42"))
+        mock_db.get.return_value = _organizer_row()
+        mock_db.add = MagicMock()
+        mock_db.commit = AsyncMock()
+
+        with patch(
+            "app.routers.organizer_auth.send_identity_linked_notice",
+            new_callable=AsyncMock,
+        ) as mock_notice:
+            await verify_organizer_magic_link(
+                make_request(path="/organizer/auth/verify"),
+                VerifyTokenBody(token=token),
+                Response(),
+                mock_db,
+                organizer_google_link_binding=generate_google_link_binding_token(
+                    "sub-42", "organizer"
+                ),
+            )
+
+        added = mock_db.add.call_args.args[0]
+        assert added.organizer_id == 3
+        assert added.provider_sub == "sub-42"
+        mock_notice.assert_awaited_once_with("org@example.com", "en")
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "binding",
+        [None, "garbage", "wrong-sub", "wrong-track"],
+    )
+    async def test_verify_without_matching_binding_signs_in_without_linking(
+        self, binding, mock_db, make_request
+    ):
+        from fastapi import Response
+        from app.auth.tokens import generate_google_link_binding_token
+        from app.routers.organizer_auth import VerifyTokenBody, verify_organizer_magic_link
+
+        if binding == "wrong-sub":
+            binding = generate_google_link_binding_token("other-sub", "organizer")
+        elif binding == "wrong-track":
+            binding = generate_google_link_binding_token("sub-42", "user")
+
+        token, _, _ = generate_organizer_magic_token(3)
+        mock_db.execute = mock_execute_returning((3, "sub-42"))
+        mock_db.get.return_value = _organizer_row()
+        mock_db.add = MagicMock()
+        mock_db.commit = AsyncMock()
+        response = Response()
+
+        with patch(
+            "app.routers.organizer_auth.send_identity_linked_notice",
+            new_callable=AsyncMock,
+        ) as mock_notice:
+            result = await verify_organizer_magic_link(
+                make_request(path="/organizer/auth/verify"),
+                VerifyTokenBody(token=token),
+                response,
+                mock_db,
+                organizer_google_link_binding=binding,
+            )
+
+        assert result["organizer"]["id"] == 3
+        mock_db.add.assert_not_called()
+        mock_notice.assert_not_awaited()
+        set_cookies = response.headers.getlist("set-cookie")
+        assert any(c.startswith("organizer_session=") for c in set_cookies)
+
+    @pytest.mark.asyncio
+    async def test_gate_unverified_non_authoritative_sends_nothing(self, mock_db):
+        from app.routers.organizer_auth import _apply_google_linking_gate
+
+        mock_db.scalar = AsyncMock(side_effect=[None, None])
+        mock_db.add = MagicMock()
+        mock_db.commit = AsyncMock()
+
+        with patch(
+            "app.routers.organizer_auth.send_google_link_confirmation",
+            new_callable=AsyncMock,
+        ) as mock_send:
+            outcome, organizer = await _apply_google_linking_gate(
+                mock_db, GOOGLE_IDENTITY_UNVERIFIED
+            )
+
+        assert outcome == "unverified_email"
+        assert organizer is None
+        mock_send.assert_not_called()
+        mock_db.add.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_callback_confirmation_sets_binding_cookie_unverified_errors(
+        self, monkeypatch, make_request, mock_db
+    ):
+        from app.auth.tokens import google_link_binding_matches
+        from app.config import settings
+        from app.routers.organizer_auth import organizer_google_callback
+
+        monkeypatch.setattr(settings, "GOOGLE_SIGNIN_ORGANIZER_ENABLED", True)
+        monkeypatch.setattr(settings, "FRONTEND_URL", "https://app.example.com")
+        cookie = generate_oauth_state_token("s1", "v1", track="organizer")
+
+        async def _call(identity, gate_result):
+            with patch(
+                "app.routers.organizer_auth.exchange_code_for_id_token",
+                new=AsyncMock(return_value="raw.id.token"),
+            ), patch(
+                "app.routers.organizer_auth.verify_google_id_token",
+                return_value=identity,
+            ), patch(
+                "app.routers.organizer_auth._apply_google_linking_gate",
+                new=AsyncMock(return_value=gate_result),
+            ):
+                return await organizer_google_callback(
+                    make_request(path="/organizer/auth/google/callback"),
+                    code="c",
+                    state="s1",
+                    error=None,
+                    organizer_oauth_state=cookie,
+                    db=mock_db,
+                )
+
+        confirmation = await _call(
+            GOOGLE_IDENTITY_NON_AUTHORITATIVE, ("confirmation_sent", None)
+        )
+        binding = [
+            c
+            for c in _set_cookie_headers(confirmation)
+            if c.startswith("organizer_google_link_binding=")
+        ]
+        assert len(binding) == 1
+        assert "Path=/api/organizer/auth/verify" in binding[0]
+        assert "SameSite=strict" in binding[0]
+        value = binding[0].split("=", 1)[1].split(";", 1)[0]
+        assert google_link_binding_matches(value, sub="sub-2", track="organizer")
+        assert not google_link_binding_matches(value, sub="sub-2", track="user")
+
+        unverified = await _call(
+            GOOGLE_IDENTITY_UNVERIFIED, ("unverified_email", None)
+        )
+        assert "google_error=verification_failed" in unverified.headers["location"]
+
+    @pytest.mark.asyncio
+    async def test_callback_auto_link_sends_notice(
+        self, monkeypatch, make_request, mock_db
+    ):
+        from app.config import settings
+        from app.routers.organizer_auth import organizer_google_callback
+
+        monkeypatch.setattr(settings, "GOOGLE_SIGNIN_ORGANIZER_ENABLED", True)
+        monkeypatch.setattr(settings, "FRONTEND_URL", "https://app.example.com")
+        cookie = generate_oauth_state_token("s1", "v1", track="organizer")
+        with patch(
+            "app.routers.organizer_auth.exchange_code_for_id_token",
+            new=AsyncMock(return_value="raw.id.token"),
+        ), patch(
+            "app.routers.organizer_auth.verify_google_id_token",
+            return_value=GOOGLE_IDENTITY_AUTHORITATIVE,
+        ), patch(
+            "app.routers.organizer_auth._apply_google_linking_gate",
+            new=AsyncMock(return_value=("auto_linked", _organizer_row())),
+        ), patch(
+            "app.routers.organizer_auth.send_identity_linked_notice",
+            new_callable=AsyncMock,
+        ) as mock_notice:
+            await organizer_google_callback(
+                make_request(path="/organizer/auth/google/callback"),
+                code="c",
+                state="s1",
+                error=None,
+                organizer_oauth_state=cookie,
+                db=mock_db,
+            )
+
+        mock_notice.assert_awaited_once_with("org@example.com", "en")

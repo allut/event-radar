@@ -39,34 +39,18 @@
 }
 
 .tabStrip {
-  display: flex;
-  gap: var(--space-1);
-  border-bottom: var(--border-w-hair) solid var(--border);
-  margin-bottom: var(--space-4);
-  overflow-x: auto;
+  composes: queueTabStrip from '../../components/shared/AdminQueue.module.css';
 }
 
-.tab, .tabActive {
-  background: none;
-  border: none;
-  border-bottom: var(--border-w-ring) solid transparent;
-  color: var(--text-muted);
-  font-size: var(--fs-sm);
-  padding: var(--space-2) var(--space-3);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  white-space: nowrap;
+.tab {
+  composes: queueTab from '../../components/shared/AdminQueue.module.css';
 }
-.tabActive { color: var(--accent-light); border-bottom-color: var(--accent); }
+.tabActive {
+  composes: queueTabActive from '../../components/shared/AdminQueue.module.css';
+}
 
 .tabCount {
-  font-size: var(--fs-2xs);
-  background: var(--bg-raised);
-  border-radius: var(--radius-pill);
-  padding: 0 var(--space-1);
-  color: var(--text-soft);
+  composes: queueTabCount from '../../components/shared/AdminQueue.module.css';
 }
 
 .tabPanel { min-height: var(--admin-tab-panel-min-height); }
@@ -84,29 +68,17 @@
 .prose { font-size: var(--fs-base); color: var(--text-soft); max-width: var(--measure-prose); }
 
 .proseHtml {
+  composes: prose from '../../components/shared/Prose.module.css';
   font-size: var(--fs-base);
   color: var(--text-soft);
   max-width: var(--measure-prose);
-  line-height: var(--leading-relaxed);
-  white-space: pre-wrap;
 }
-.proseHtml p + p { margin-top: var(--space-2); }
-.proseHtml ul, .proseHtml ol { padding-left: var(--space-4); margin-top: var(--space-1); margin-bottom: var(--space-1); }
 .proseHtml li { margin-bottom: var(--space-0-375); }
 .proseHtml a { color: var(--accent-light); }
-.proseHtml strong { color: var(--text); font-weight: var(--fw-semibold); }
 .proseHtml h3, .proseHtml h4 {
   font-family: var(--font-system);
   font-size: var(--fs-sm);
-  font-weight: var(--fw-semibold);
-  color: var(--text);
-  margin-top: var(--space-3);
   margin-bottom: var(--space-0-375);
-}
-.proseHtml blockquote {
-  border-left: var(--border-w-alert) solid var(--border);
-  padding-left: var(--space-2);
-  margin: var(--space-2) 0;
 }
 
 .importantInfo {

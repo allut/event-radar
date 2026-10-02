@@ -6,14 +6,15 @@ index (migration 0019) — POST upserts, DELETE removes it. "view"/
 "click_external" (the rest of VALID_SIGNALS) are passive analytics signals
 fired on every page view / ticket-link click (frontend's
 trackExternalClick()) and stay append-only/multi-row — they are NOT covered
-by that index, so POST always inserts a fresh row for them and DELETE/GET
-never touch them. Mixing the two under one upsert-by-(user,event) rule would
+by that index; a second partial unique index (migration 0055) caps them at
+one row per (user, event, signal, UTC day), so POST inserts them with ON
+CONFLICT DO NOTHING and DELETE/GET never touch them. Mixing the two under one upsert-by-(user,event) rule would
 let a ticket click silently overwrite a user's bookmark.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel
-from sqlalchemy import delete, func, select, text
+from sqlalchemy import delete, func, literal, select, text, tuple_
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -23,27 +24,28 @@ from app.constants import (
     ERROR_EVENT_NOT_FOUND,
     ERROR_INVALID_PREFERENCE_SIGNAL,
     ERROR_INVALID_SIGNAL,
+    PAGINATION_CURSOR_MAX_LEN,
     PAGINATION_MAX_OFFSET,
     PAGINATION_MIN_LIMIT,
     PAGINATION_MIN_OFFSET,
     PREFERENCE_SIGNALS,
     PREFERENCE_SIGNALS_SQL_PREDICATE,
     RATE_LIMIT_FEEDBACK,
-    SCORE_AFFECTING_SIGNALS,
     VALID_SIGNALS,
 )
 from app.db import get_db
 from app.models.models import Event, User, UserEventFeedback
 from app.rate_limit import limiter
-from app.routers.auth import get_current_user
+from app.auth.dependencies import get_current_user
 from app.routers.utils import (
-    invalidate_user_scores,
+    decode_page_cursor,
+    encode_page_cursor,
     load_user_reported_events,
-    public_event_filter,
     resolve_locale_param,
     select_events_with_classification,
     serialize_event,
 )
+from app.events.queries import public_event_filter
 
 router = APIRouter(prefix="/feedback", tags=["feedback"])
 
@@ -61,7 +63,7 @@ async def record_feedback(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    """Upsert a feedback signal for an event and invalidate cached scores."""
+    """Record a feedback signal for an event."""
     if body.signal not in VALID_SIGNALS:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
@@ -72,10 +74,10 @@ async def record_feedback(
     # db.get() would let an authenticated caller probe internal event-ID
     # existence (200 vs 404) and record signals against draft/hidden rows,
     # skewing personalization for events that were never publicly surfaced.
-    event = await db.scalar(
-        select(Event).where(Event.id == body.event_id, public_event_filter())
+    event_id = await db.scalar(
+        select(Event.id).where(Event.id == body.event_id, public_event_filter())
     )
-    if event is None:
+    if event_id is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail=ERROR_EVENT_NOT_FOUND
         )
@@ -101,22 +103,22 @@ async def record_feedback(
         )
         await db.execute(stmt)
     else:
-        # Passive analytics signal (view/click_external) — always append a
-        # fresh row, never upsert; not covered by the partial unique index.
-        db.add(
-            UserEventFeedback(
+        # Passive analytics signal (view/click_external) — append-only, but
+        # bounded to one row per (user, event, signal, UTC day) by the partial
+        # unique index (migration 0055, OWASP audit #9): a repeat within the
+        # day is a silent no-op, so spamming the endpoint can't grow the
+        # table. Target-less DO NOTHING — the day bucket is an expression
+        # index, which ON CONFLICT can't name via index_elements.
+        await db.execute(
+            pg_insert(UserEventFeedback)
+            .values(
                 user_id=current_user.id,
                 event_id=body.event_id,
                 signal=body.signal,
             )
+            .on_conflict_do_nothing()
         )
 
-    # Only like/dislike feed into ranking/score.py's scoring — a bookmark or a
-    # passive view/click_external signal never changes a score, so gating here
-    # keeps the cache warm across ticket clicks and bookmarks (see
-    # SCORE_AFFECTING_SIGNALS).
-    if body.signal in SCORE_AFFECTING_SIGNALS:
-        await invalidate_user_scores(db, current_user.id)
     await db.commit()
     return {"ok": True}
 
@@ -133,23 +135,15 @@ async def delete_feedback(
 
     Scoped to PREFERENCE_SIGNALS only — this must never delete the
     view/click_external analytics history for the event. Idempotent — no 404
-    if nothing matched. Invalidates cached scores only if the removed signal
-    was one that actually affects scoring (see SCORE_AFFECTING_SIGNALS) — the
-    deleted row's signal isn't known up front, so RETURNING reports it.
+    if nothing matched.
     """
-    deleted_signals = (
-        await db.execute(
-            delete(UserEventFeedback)
-            .where(
-                UserEventFeedback.user_id == current_user.id,
-                UserEventFeedback.event_id == event_id,
-                UserEventFeedback.signal.in_(PREFERENCE_SIGNALS),
-            )
-            .returning(UserEventFeedback.signal)
+    await db.execute(
+        delete(UserEventFeedback).where(
+            UserEventFeedback.user_id == current_user.id,
+            UserEventFeedback.event_id == event_id,
+            UserEventFeedback.signal.in_(PREFERENCE_SIGNALS),
         )
-    ).scalars().all()
-    if SCORE_AFFECTING_SIGNALS.intersection(deleted_signals):
-        await invalidate_user_scores(db, current_user.id)
+    )
     await db.commit()
     return {"ok": True}
 
@@ -163,6 +157,7 @@ async def list_feedback_events(
     offset: int = Query(
         PAGINATION_MIN_OFFSET, ge=PAGINATION_MIN_OFFSET, le=PAGINATION_MAX_OFFSET
     ),
+    cursor: str | None = Query(None, max_length=PAGINATION_CURSOR_MAX_LEN),
     locale: str | None = Query(None),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -173,6 +168,10 @@ async def list_feedback_events(
     Restricted to PREFERENCE_SIGNALS (not the full VALID_SIGNALS): view/
     click_external can have multiple rows per (user, event), which would
     otherwise return the same event more than once.
+
+    Keyset-paginated on ``(created_at, feedback id)``: ``cursor`` (the previous
+    page's opaque ``next_cursor``) replaces ``offset``, so page N costs the
+    same as page 1 and a signal added mid-scroll can't shift rows between pages.
     """
     if signal not in PREFERENCE_SIGNALS:
         raise HTTPException(
@@ -184,8 +183,9 @@ async def list_feedback_events(
 
     # See browse.py's _browse_sql_path for the rationale: total only on the
     # first page, has_more via a limit+1 sentinel row instead of total.
+    after = decode_page_cursor(cursor) if cursor else None
     total: int | None = None
-    if offset == 0:
+    if offset == 0 and after is None:
         total = (
             await db.scalar(
                 select(func.count(UserEventFeedback.id))
@@ -199,24 +199,35 @@ async def list_feedback_events(
             )
         ) or 0
 
+    page_conds = [
+        UserEventFeedback.user_id == current_user.id,
+        UserEventFeedback.signal == signal,
+        public_event_filter(),
+    ]
+    if after is not None:
+        after_ts, after_id = after
+        page_conds.append(
+            tuple_(UserEventFeedback.created_at, UserEventFeedback.id)
+            < tuple_(literal(after_ts), literal(after_id))
+        )
+        offset = 0
     page_stmt = (
         select_events_with_classification()
+        .add_columns(UserEventFeedback.created_at, UserEventFeedback.id)
         .join(
             UserEventFeedback,
             UserEventFeedback.event_id == Event.id,
         )
-        .where(
-            UserEventFeedback.user_id == current_user.id,
-            UserEventFeedback.signal == signal,
-            public_event_filter(),
-        )
-        .order_by(UserEventFeedback.created_at.desc())
+        .where(*page_conds)
+        .order_by(UserEventFeedback.created_at.desc(), UserEventFeedback.id.desc())
         .limit(limit + 1)
         .offset(offset)
     )
-    events = list((await db.scalars(page_stmt)).all())
-    has_more = len(events) > limit
-    events = events[:limit]
+    rows = (await db.execute(page_stmt)).all()
+    has_more = len(rows) > limit
+    rows = rows[:limit]
+    events = [row[0] for row in rows]
+    next_cursor = encode_page_cursor(rows[-1][1], rows[-1][2]) if has_more else None
 
     feedback_by_event = {e.id: signal for e in events}
     reported = await load_user_reported_events(
@@ -238,4 +249,5 @@ async def list_feedback_events(
         "limit": limit,
         "offset": offset,
         "has_more": has_more,
+        "next_cursor": next_cursor,
     }

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { EditorContent, useEditor, useEditorState } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
+import { RICH_TEXT_HEADING_LEVELS } from '../../constants';
 import { t } from '../../i18n';
 import { safeUrl } from '../../utils';
 import { BoldIcon, ItalicIcon, UnderlineIcon, BulletListIcon, NumberedListIcon, LinkIcon, QuoteIcon } from './icons';
@@ -12,10 +13,7 @@ const MARKS = [
   { key: 'underline', Icon: UnderlineIcon, labelKey: 'organizer_rte_underline' },
 ] as const;
 
-const HEADINGS = [
-  { level: 3 as const, label: 'H3' },
-  { level: 4 as const, label: 'H4' },
-];
+const HEADINGS = RICH_TEXT_HEADING_LEVELS.map((level) => ({ level, label: `H${level}` }));
 
 const LISTS = [
   { key: 'bulletList', Icon: BulletListIcon, labelKey: 'organizer_rte_bullet_list' },
@@ -62,7 +60,7 @@ export default function RichTextEditor({
         code: false,
         codeBlock: false,
         horizontalRule: false,
-        heading: { levels: [3, 4] },
+        heading: { levels: [...RICH_TEXT_HEADING_LEVELS] },
       }),
     ],
     content: value,

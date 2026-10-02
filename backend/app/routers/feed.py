@@ -10,15 +10,15 @@ from app.constants import RATE_LIMIT_BROWSE, TALLINN_TZ
 from app.db import get_db
 from app.models.models import DailyFeed, Event, User
 from app.rate_limit import limiter
-from app.routers.auth import get_current_user
+from app.auth.dependencies import get_current_user
 from app.routers.utils import (
     load_user_reported_events,
     load_user_signals,
-    public_event_filter,
     resolve_locale_param,
     select_events_with_classification,
     serialize_event,
 )
+from app.events.queries import public_event_filter
 
 router = APIRouter(prefix="/feed", tags=["feed"])
 

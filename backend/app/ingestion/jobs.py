@@ -4,11 +4,18 @@ import asyncio
 import logging
 from collections.abc import Awaitable, Callable
 
-from sqlalchemy import select
+from sqlalchemy import select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.constants import (
     AGGREGATE_LAST_VALUE_FIELDS,
+    JOB_ID_BACKFILL_PUBLISHER_IDS,
+    JOB_ID_CLASSIFY_PENDING,
+    JOB_ID_GEOCODE_PENDING,
+    JOB_ID_PUBLISH_PENDING,
+    JOB_ID_REFETCH_EVENT_DETAILS,
+    JOB_LABEL_DEDUP_DRAIN,
+    JOB_LABEL_DEDUP_PASS,
     LLM_BACKLOG_MAX_DRAIN_PASSES,
     LLM_BACKLOG_RETRY_SECONDS,
     LLM_CLASSIFY_BATCH_SIZE,
@@ -18,7 +25,7 @@ from app.db import AsyncSessionLocal
 from app.dedup.llm_tiebreaker import run_dedup_pass_llm
 from app.ingestion.registry import ADAPTER_REGISTRY
 from app.models.models import Source
-from app.routers.utils import run_in_session
+from app.db import run_in_session
 
 log = logging.getLogger(__name__)
 
@@ -62,6 +69,7 @@ async def ingest_source(slug: str) -> dict:
             try:
                 await db.commit()
             except Exception:
+                log.exception("ingest source=%s: committing the run record failed", slug)
                 await db.rollback()
             log.exception("ingest source=%s failed", slug)
             raise
@@ -70,7 +78,7 @@ async def ingest_source(slug: str) -> dict:
 async def ingest_all_enabled(kind: str | None = None) -> list[dict]:
     """Run ingestion for all enabled sources (optionally filtered by kind)."""
     async with AsyncSessionLocal() as db:
-        q = select(Source).where(Source.enabled.is_(True))
+        q = select(Source).where(Source.enabled == true())
         if kind:
             q = q.where(Source.kind == kind)
         sources = (await db.scalars(q)).all()
@@ -125,35 +133,43 @@ async def dedup_pass(*, retry_seconds: int = LLM_BACKLOG_RETRY_SECONDS) -> dict:
     async def _run(db: AsyncSession) -> dict:
         return await run_dedup_pass_llm(db, retry_seconds=retry_seconds)
 
-    return await _run_db_job("dedup pass", _run)
+    return await _run_db_job(JOB_LABEL_DEDUP_PASS, _run)
 
 
 async def classify_pending_job() -> dict:
     """Classify canonical draft events via LLM (one batch per call)."""
     from app.llm.classifier import classify_pending
 
-    return await _run_db_job("classify_pending", classify_pending)
+    return await _run_db_job(JOB_ID_CLASSIFY_PENDING, classify_pending)
 
 
 async def publish_pending_job() -> dict:
     """Promote qualifying classified events to published (one bulk UPDATE per call)."""
     from app.publish import publish_pending
 
-    return await _run_db_job("publish_pending", publish_pending)
+    return await _run_db_job(JOB_ID_PUBLISH_PENDING, publish_pending)
 
 
 async def geocode_pending_job() -> dict:
     """Geocode events with a venue_address but no lat/lng (one batch per call)."""
     from app.ingestion.geocode import geocode_pending
 
-    return await _run_db_job("geocode_pending", geocode_pending)
+    return await _run_db_job(JOB_ID_GEOCODE_PENDING, geocode_pending)
+
+
+async def backfill_publisher_ids_job() -> dict:
+    """Stamp publisher_id onto claimable event_sources rows missing it
+    (one bounded batch pass per call; no-op once nothing is unstamped)."""
+    from app.ingestion.publisher_backfill import backfill_publisher_ids
+
+    return await _run_db_job(JOB_ID_BACKFILL_PUBLISHER_IDS, backfill_publisher_ids)
 
 
 async def refetch_event_details_job() -> dict:
     """Re-fetch detail pages for all future events and reconcile stored fields."""
     from app.ingestion.refetch import refetch_event_details
 
-    return await _run_db_job("refetch_event_details", refetch_event_details)
+    return await _run_db_job(JOB_ID_REFETCH_EVENT_DETAILS, refetch_event_details)
 
 
 def _dedup_has_backlog(summary: dict) -> bool:
@@ -238,13 +254,13 @@ async def _drain_backlog(
 
 async def dedup_pass_drained() -> dict:
     """dedup_pass, re-run on a short interval while pairs remain deferred."""
-    return await _drain_backlog(dedup_pass, _dedup_has_backlog, "dedup")
+    return await _drain_backlog(dedup_pass, _dedup_has_backlog, JOB_LABEL_DEDUP_DRAIN)
 
 
 async def classify_pending_drained() -> dict:
     """classify_pending, re-run while a full batch keeps making progress."""
     return await _drain_backlog(
-        classify_pending_job, _classify_has_backlog, "classify_pending"
+        classify_pending_job, _classify_has_backlog, JOB_ID_CLASSIFY_PENDING
     )
 
 
@@ -261,7 +277,7 @@ async def dedup_pass_drain_now() -> dict:
     return await _drain_backlog(
         lambda: dedup_pass(retry_seconds=0),
         _dedup_has_backlog,
-        "dedup",
+        JOB_LABEL_DEDUP_DRAIN,
         retry_seconds=0,
         aggregate=True,
     )
@@ -276,7 +292,7 @@ async def classify_pending_drain_now() -> dict:
     return await _drain_backlog(
         classify_pending_job,
         _classify_has_backlog,
-        "classify_pending",
+        JOB_ID_CLASSIFY_PENDING,
         retry_seconds=0,
         aggregate=True,
     )

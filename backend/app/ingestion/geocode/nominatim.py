@@ -20,7 +20,7 @@ from app.constants import (
 )
 from app.ingestion.adapter import coords_in_tallinn
 from app.ingestion.http_client import http_get
-from app.routers.utils import alternation_pattern
+from app.ingestion.patterns import alternation_pattern
 
 log = logging.getLogger(__name__)
 

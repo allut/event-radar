@@ -34,6 +34,8 @@ from app.constants import (
     DIGEST_SEND_HOUR,
     DIGEST_SEND_MINUTE,
     ERROR_CSRF_ORIGIN_MISMATCH,
+    EXPIRE_STALE_CLAIMS_HOUR,
+    EXPIRE_STALE_CLAIMS_MINUTE,
     FEED_BUILD_HOUR,
     FEED_BUILD_MINUTE,
     HEADER_HOST,
@@ -42,16 +44,21 @@ from app.constants import (
     HSTS_HEADER_NAME,
     HSTS_HEADER_VALUE,
     INGEST_INTERVAL_HOURS,
+    JOB_ID_BACKFILL_PUBLISHER_IDS,
     JOB_ID_BUILD_DAILY_FEEDS,
     JOB_ID_CLASSIFY_PENDING,
     JOB_ID_CLEANUP_STALE_DATA,
     JOB_ID_DEDUP_PASS,
+    JOB_ID_EXPIRE_STALE_CLAIMS,
     JOB_ID_GEOCODE_PENDING,
     JOB_ID_INGEST_ALL_SOURCES,
     JOB_ID_PUBLISH_PENDING,
     JOB_ID_REFETCH_EVENT_DETAILS,
     JOB_ID_SEND_DAILY_DIGESTS,
     JOB_ID_SYNC_FIENTA_ORGANIZERS,
+    JOB_LABEL_DEDUP_PASS,
+    JOB_LABEL_HOURLY_INGEST,
+    JOB_LABEL_ORGANIZER_SYNC,
     LLM_PASS_INTERVAL_HOURS,
     LOG_EVENT_HOST_REJECTED,
     LOG_EVENT_JOB_RUN,
@@ -63,14 +70,17 @@ from app.constants import (
     ORGANIZER_SYNC_MINUTE,
     REFETCH_HOUR,
     REFETCH_MINUTE,
+    SCHEDULER_DAY_OF_WEEK_SUNDAY,
     SECURITY_HEADERS,
     TALLINN_TZ_NAME,
     TRUSTED_HOST_REJECT_BODY,
 )
+from app.claims.lifecycle import expire_stale_claims
 from app.cleanup import cleanup_stale_data
 from app.db import AsyncSessionLocal, assert_schema_at_head, engine
 from app.email.digest import send_daily_digests
 from app.ingestion.jobs import (
+    backfill_publisher_ids_job,
     classify_pending_drained,
     dedup_pass_drained,
     geocode_pending_job,
@@ -92,6 +102,8 @@ from app.routers.feed import router as feed_router
 from app.routers.feedback import router as feedback_router
 from app.routers.onboarding import router as onboarding_router
 from app.routers.organizer_auth import router as organizer_auth_router
+from app.routers.organizer_claim_edits import router as organizer_claim_edits_router
+from app.routers.organizer_claims import router as organizer_claims_router
 from app.routers.organizer_contact import router as organizer_contact_router
 from app.routers.organizer_events import router as organizer_events_router
 from app.routers.organizer_profile import router as organizer_profile_router
@@ -100,9 +112,9 @@ from app.routers.public import router as public_router
 from app.routers.reports import router as reports_router
 from app.routers.settings import router as settings_router
 from app.routers.unsubscribe import router as unsubscribe_router
-from app.routers.utils import run_in_session
+from app.db import run_in_session
 from app.routers.webhooks import router as webhooks_router
-from app.seeds import seed_personas, seed_sources
+from app.seeds import seed_personas, seed_publishers, seed_sources
 
 # uvicorn configures its own logging during Config.load(), before importing this
 # module — calling configure_logging() here runs last and wins, so every logger
@@ -168,16 +180,19 @@ def _in_session(
 
 
 _run_organizer_sync = _scheduled(
-    "organizer sync", _in_session(sync_fienta_organizers, commit=True)
+    JOB_LABEL_ORGANIZER_SYNC, _in_session(sync_fienta_organizers, commit=True)
 )
 _run_cleanup = _scheduled(
     JOB_ID_CLEANUP_STALE_DATA, _in_session(cleanup_stale_data, commit=True)
 )
-_run_ingest_all = _scheduled("hourly ingest", ingest_all_enabled)
-_run_dedup_pass = _scheduled("dedup pass", dedup_pass_drained)
+_run_ingest_all = _scheduled(JOB_LABEL_HOURLY_INGEST, ingest_all_enabled)
+_run_dedup_pass = _scheduled(JOB_LABEL_DEDUP_PASS, dedup_pass_drained)
 _run_classify_pending = _scheduled(JOB_ID_CLASSIFY_PENDING, classify_pending_drained)
 _run_publish_pending = _scheduled(JOB_ID_PUBLISH_PENDING, publish_pending_job)
 _run_geocode_pending = _scheduled(JOB_ID_GEOCODE_PENDING, geocode_pending_job)
+_run_backfill_publisher_ids = _scheduled(
+    JOB_ID_BACKFILL_PUBLISHER_IDS, backfill_publisher_ids_job
+)
 _run_refetch_details = _scheduled(
     JOB_ID_REFETCH_EVENT_DETAILS, refetch_event_details_job
 )
@@ -188,6 +203,11 @@ _run_build_daily_feeds = _scheduled(
 _run_send_daily_digests = _scheduled(
     JOB_ID_SEND_DAILY_DIGESTS, _in_session(send_daily_digests, commit=False)
 )
+# expire_stale_claims commits internally (#421 — its expiry-notification
+# fan-out must only see durably expired rows, mirrors build_daily_feeds above).
+_run_expire_stale_claims = _scheduled(
+    JOB_ID_EXPIRE_STALE_CLAIMS, _in_session(expire_stale_claims, commit=False)
+)
 
 
 def _register_scheduled_jobs(scheduler: AsyncIOScheduler) -> None:
@@ -196,7 +216,7 @@ def _register_scheduled_jobs(scheduler: AsyncIOScheduler) -> None:
     scheduler.add_job(
         _run_organizer_sync,
         trigger="cron",
-        day_of_week="sun",
+        day_of_week=SCHEDULER_DAY_OF_WEEK_SUNDAY,
         hour=ORGANIZER_SYNC_HOUR,
         minute=ORGANIZER_SYNC_MINUTE,
         id=JOB_ID_SYNC_FIENTA_ORGANIZERS,
@@ -207,7 +227,7 @@ def _register_scheduled_jobs(scheduler: AsyncIOScheduler) -> None:
     scheduler.add_job(
         _run_cleanup,
         trigger="cron",
-        day_of_week="sun",
+        day_of_week=SCHEDULER_DAY_OF_WEEK_SUNDAY,
         hour=CLEANUP_HOUR,
         minute=CLEANUP_MINUTE,
         id=JOB_ID_CLEANUP_STALE_DATA,
@@ -252,6 +272,13 @@ def _register_scheduled_jobs(scheduler: AsyncIOScheduler) -> None:
         id=JOB_ID_GEOCODE_PENDING,
         replace_existing=True,
     )
+    scheduler.add_job(
+        _run_backfill_publisher_ids,
+        trigger="interval",
+        hours=LLM_PASS_INTERVAL_HOURS,
+        id=JOB_ID_BACKFILL_PUBLISHER_IDS,
+        replace_existing=True,
+    )
     # Daily 04:30 EET: re-fetch every future event's detail page and reconcile
     # venue/address/coords/price against the source (after hourly ingest, before
     # the 06:00 feed build). A coord NULLed here on an address change is repaired
@@ -280,6 +307,16 @@ def _register_scheduled_jobs(scheduler: AsyncIOScheduler) -> None:
         hour=DIGEST_SEND_HOUR,
         minute=DIGEST_SEND_MINUTE,
         id=JOB_ID_SEND_DAILY_DIGESTS,
+        replace_existing=True,
+    )
+    # Daily 05:00 EET: expire a pending automated-mechanism claim abandoned
+    # for CLAIM_EXPIRY_DAYS (#413) — between the 04:30 refetch and 06:00 feed build.
+    scheduler.add_job(
+        _run_expire_stale_claims,
+        trigger="cron",
+        hour=EXPIRE_STALE_CLAIMS_HOUR,
+        minute=EXPIRE_STALE_CLAIMS_MINUTE,
+        id=JOB_ID_EXPIRE_STALE_CLAIMS,
         replace_existing=True,
     )
 
@@ -551,6 +588,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     async with AsyncSessionLocal() as db:
         await seed_sources(db)
         await seed_personas(db)
+        await seed_publishers(db)
         await db.commit()
 
     scheduler = _start_scheduler()
@@ -593,8 +631,8 @@ app.add_middleware(
     allow_origins=settings.CORS_ORIGINS,
     # Auth is now a Set-Cookie session (see #26 / docs/adr/0001), but
     # allow_credentials stays False deliberately: the cookie is scoped to this
-    # API's own origin and only ever travels through the same-origin Vercel
-    # `/api` rewrite the SPA is served behind, never via a cross-origin
+    # API's own origin and only ever travels through the same-origin `/api`
+    # proxy the SPA is served behind, never via a cross-origin
     # browser fetch/XHR — so credentialed CORS would only widen the attack
     # surface for no functional gain, regardless of what CORS_ORIGINS lists.
     allow_credentials=False,
@@ -712,6 +750,8 @@ app.include_router(feed_router)
 app.include_router(feedback_router)
 app.include_router(onboarding_router)
 app.include_router(organizer_auth_router)
+app.include_router(organizer_claim_edits_router)
+app.include_router(organizer_claims_router)
 app.include_router(organizer_contact_router)
 app.include_router(organizer_events_router)
 app.include_router(organizer_profile_router)

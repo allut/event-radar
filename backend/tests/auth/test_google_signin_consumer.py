@@ -139,7 +139,7 @@ class TestApplyGoogleLinkingGate:
         mock_db.commit = AsyncMock()
 
         with patch(
-            "app.routers.auth.send_magic_link", new_callable=AsyncMock
+            "app.routers.auth.send_google_link_confirmation", new_callable=AsyncMock
         ) as mock_send:
             outcome, user = await _apply_google_linking_gate(
                 mock_db, GOOGLE_IDENTITY_NON_AUTHORITATIVE
@@ -168,7 +168,7 @@ class TestApplyGoogleLinkingGate:
         mock_db.commit = AsyncMock()
 
         with patch(
-            "app.routers.auth.send_magic_link", new_callable=AsyncMock
+            "app.routers.auth.send_google_link_confirmation", new_callable=AsyncMock
         ) as mock_send:
             outcome, user = await _apply_google_linking_gate(
                 mock_db, GOOGLE_IDENTITY_NON_AUTHORITATIVE
@@ -618,3 +618,188 @@ class TestGoogleSigninCallback:
         assert response.headers["location"] == "https://app.example.com/login"
         cookies = _set_cookie_headers(response)
         assert not any("session=" in c for c in cookies)
+
+
+GOOGLE_IDENTITY_UNVERIFIED = {
+    "sub": "sub-3",
+    "email": "person@yahoo.com",
+    "email_verified": False,
+    "hd": None,
+}
+
+
+class TestGoogleLinkHardening:
+    """OWASP audit #3 — consumer track."""
+
+    @pytest.mark.asyncio
+    async def test_gate_unverified_non_authoritative_sends_nothing(self, mock_db):
+        from app.routers.auth import _apply_google_linking_gate
+
+        mock_db.scalar = AsyncMock(side_effect=[None, None])
+        mock_db.add = MagicMock()
+        mock_db.commit = AsyncMock()
+
+        with patch(
+            "app.routers.auth.send_google_link_confirmation", new_callable=AsyncMock
+        ) as mock_send:
+            outcome, user = await _apply_google_linking_gate(
+                mock_db, GOOGLE_IDENTITY_UNVERIFIED
+            )
+
+        assert outcome == "unverified_email"
+        assert user is None
+        mock_send.assert_not_called()
+        mock_db.add.assert_not_called()
+        mock_db.commit.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_callback_unverified_redirects_with_error_and_no_cookie(
+        self, monkeypatch, make_request, mock_db
+    ):
+        from app.config import settings
+        from app.routers.auth import google_callback
+
+        monkeypatch.setattr(settings, "GOOGLE_SIGNIN_CONSUMER_ENABLED", True)
+        monkeypatch.setattr(settings, "FRONTEND_URL", "https://app.example.com")
+        cookie = generate_oauth_state_token("s1", "v1", track="user")
+        with patch(
+            "app.routers.auth.exchange_code_for_id_token",
+            new=AsyncMock(return_value="raw.id.token"),
+        ), patch(
+            "app.routers.auth.verify_google_id_token",
+            return_value=GOOGLE_IDENTITY_UNVERIFIED,
+        ), patch(
+            "app.routers.auth._apply_google_linking_gate",
+            new=AsyncMock(return_value=("unverified_email", None)),
+        ):
+            response = await google_callback(
+                make_request(path="/auth/google/callback"),
+                code="c",
+                state="s1",
+                error=None,
+                oauth_state=cookie,
+                db=mock_db,
+            )
+
+        assert "google_error=verification_failed" in response.headers["location"]
+        assert not any(
+            "google_link_binding=" in c and "Max-Age=0" not in c
+            for c in _set_cookie_headers(response)
+        )
+
+    @pytest.mark.asyncio
+    async def test_confirmation_sent_sets_binding_cookie_for_pending_sub(
+        self, monkeypatch, make_request, mock_db
+    ):
+        from app.auth.tokens import google_link_binding_matches
+        from app.config import settings
+        from app.routers.auth import google_callback
+
+        monkeypatch.setattr(settings, "GOOGLE_SIGNIN_CONSUMER_ENABLED", True)
+        monkeypatch.setattr(settings, "FRONTEND_URL", "https://app.example.com")
+        cookie = generate_oauth_state_token("s1", "v1", track="user")
+        with patch(
+            "app.routers.auth.exchange_code_for_id_token",
+            new=AsyncMock(return_value="raw.id.token"),
+        ), patch(
+            "app.routers.auth.verify_google_id_token",
+            return_value=GOOGLE_IDENTITY_NON_AUTHORITATIVE,
+        ), patch(
+            "app.routers.auth._apply_google_linking_gate",
+            new=AsyncMock(return_value=("confirmation_sent", None)),
+        ):
+            response = await google_callback(
+                make_request(path="/auth/google/callback"),
+                code="c",
+                state="s1",
+                error=None,
+                oauth_state=cookie,
+                db=mock_db,
+            )
+
+        binding_cookies = [
+            c for c in _set_cookie_headers(response) if c.startswith("google_link_binding=")
+        ]
+        assert len(binding_cookies) == 1
+        set_cookie = binding_cookies[0]
+        assert "HttpOnly" in set_cookie
+        assert "Secure" in set_cookie
+        assert "SameSite=strict" in set_cookie
+        assert "Path=/api/auth/verify" in set_cookie
+        value = set_cookie.split("google_link_binding=", 1)[1].split(";", 1)[0]
+        assert google_link_binding_matches(value, sub="sub-2", track="user")
+        assert not google_link_binding_matches(value, sub="sub-2", track="organizer")
+
+    @pytest.mark.asyncio
+    async def test_auto_link_sends_identity_linked_notice(
+        self, monkeypatch, make_request, mock_db, make_user
+    ):
+        from app.config import settings
+        from app.routers.auth import google_callback
+
+        monkeypatch.setattr(settings, "GOOGLE_SIGNIN_CONSUMER_ENABLED", True)
+        monkeypatch.setattr(settings, "FRONTEND_URL", "https://app.example.com")
+        cookie = generate_oauth_state_token("s1", "v1", track="user")
+        user = make_user(user_id=7)
+        user.email = "owner@gmail.com"
+        user.session_token_version = 1
+        user.locale = "et"
+        with patch(
+            "app.routers.auth.exchange_code_for_id_token",
+            new=AsyncMock(return_value="raw.id.token"),
+        ), patch(
+            "app.routers.auth.verify_google_id_token",
+            return_value=GOOGLE_IDENTITY_AUTHORITATIVE,
+        ), patch(
+            "app.routers.auth._apply_google_linking_gate",
+            new=AsyncMock(return_value=("auto_linked", user)),
+        ), patch(
+            "app.routers.auth.send_identity_linked_notice", new_callable=AsyncMock
+        ) as mock_notice:
+            await google_callback(
+                make_request(path="/auth/google/callback"),
+                code="c",
+                state="s1",
+                error=None,
+                oauth_state=cookie,
+                db=mock_db,
+            )
+
+        mock_notice.assert_awaited_once_with("owner@gmail.com", "et")
+
+    @pytest.mark.asyncio
+    async def test_notice_send_failure_does_not_break_sign_in(
+        self, monkeypatch, make_request, mock_db, make_user
+    ):
+        from app.config import settings
+        from app.routers.auth import google_callback
+
+        monkeypatch.setattr(settings, "GOOGLE_SIGNIN_CONSUMER_ENABLED", True)
+        monkeypatch.setattr(settings, "FRONTEND_URL", "https://app.example.com")
+        cookie = generate_oauth_state_token("s1", "v1", track="user")
+        user = make_user(user_id=7)
+        user.session_token_version = 1
+        with patch(
+            "app.routers.auth.exchange_code_for_id_token",
+            new=AsyncMock(return_value="raw.id.token"),
+        ), patch(
+            "app.routers.auth.verify_google_id_token",
+            return_value=GOOGLE_IDENTITY_AUTHORITATIVE,
+        ), patch(
+            "app.routers.auth._apply_google_linking_gate",
+            new=AsyncMock(return_value=("auto_linked", user)),
+        ), patch(
+            "app.routers.auth.send_identity_linked_notice",
+            new=AsyncMock(side_effect=RuntimeError("resend down")),
+        ):
+            response = await google_callback(
+                make_request(path="/auth/google/callback"),
+                code="c",
+                state="s1",
+                error=None,
+                oauth_state=cookie,
+                db=mock_db,
+            )
+
+        assert response.status_code == http.HTTPStatus.FOUND
+        assert any("session=" in c for c in _set_cookie_headers(response))

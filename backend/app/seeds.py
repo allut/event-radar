@@ -2,11 +2,14 @@ import logging
 from typing import Any
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app._generated.i18n_data import PERSONAS as _PERSONAS_DATA
 from app.config import settings
 from app.constants import (
+    PUBLISHER_STATUS_ACTIVE,
+    SINGLE_INSTITUTION_SOURCES,
     SOURCE_KIND_API,
     SOURCE_SLUG_FIENTA,
     VALID_CATEGORIES,
@@ -14,7 +17,7 @@ from app.constants import (
     VALID_VIBES,
 )
 from app.ingestion.registry import SOURCE_CATALOG, SourceDef
-from app.models.models import Persona, Source
+from app.models.models import Persona, Publisher, Source
 
 log = logging.getLogger(__name__)
 
@@ -86,6 +89,57 @@ async def seed_sources(db: AsyncSession) -> None:
             await _upsert_fienta(db, existing)
         else:
             await _upsert_simple(db, _simple_source_def(sdef), existing)
+
+
+async def seed_publishers(db: AsyncSession) -> None:
+    """Idempotently insert the KUMU/Estonia Concert Hall constant Publisher rows."""
+    slugs = list(SINGLE_INSTITUTION_SOURCES)
+    sources_by_slug = {
+        source.slug: source
+        for source in (
+            await db.scalars(select(Source).where(Source.slug.in_(slugs)))
+        ).all()
+    }
+    source_ids = [s.id for s in sources_by_slug.values()]
+    if not source_ids:
+        return
+    existing_source_ids = {
+        p.source_id
+        for p in (
+            await db.scalars(
+                select(Publisher).where(
+                    Publisher.source_id.in_(source_ids),
+                    Publisher.external_id.is_(None),
+                )
+            )
+        ).all()
+    }
+    for slug, institution in SINGLE_INSTITUTION_SOURCES.items():
+        name = institution.publisher_name
+        source = sources_by_slug.get(slug)
+        if source is None or source.id in existing_source_ids:
+            continue
+        try:
+            async with db.begin_nested():
+                db.add(
+                    Publisher(
+                        source_id=source.id,
+                        external_id=None,
+                        name=name,
+                        status=PUBLISHER_STATUS_ACTIVE,
+                    )
+                )
+                await db.flush()
+        except IntegrityError:
+            # ix_publishers_source_null_external (migration 0042): a
+            # concurrent startup (e.g. an overlapping rolling deploy) already
+            # inserted this source's constant row — not an error, just lost
+            # the race. The savepoint rolls back only this insert.
+            log.info(
+                "seed_publishers: constant Publisher for source=%s already "
+                "exists (race with a concurrent seed) — skipped",
+                slug,
+            )
 
 
 def _validate_affinity_vector(slug: str, vector: dict) -> None:

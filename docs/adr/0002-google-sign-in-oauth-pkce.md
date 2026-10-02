@@ -34,7 +34,7 @@ loaded; no rendered Google widget or iframe.**
 The button is a plain first-party link/form. Clicking it top-level-navigates
 the browser to `accounts.google.com/o/oauth2/v2/auth` with a PKCE
 `code_challenge` attached. Google redirects back to a first-party callback
-route on our own origin (through the Vercel `/api` rewrite). The authorization
+route on our own origin (through the `/api` proxy). The authorization
 code is exchanged for tokens entirely server-to-server (with a client
 secret), the ID token is verified, and only then is our normal session
 cookie minted — exactly like `POST /auth/verify` mints it today.
@@ -160,6 +160,7 @@ track), **confirmation magic link** (a magic link sent to prove control
   for a victim's third-party address, then absorb it with a Google account
   that merely *claims* that email). The exception was removed; an unverified
   row now only auto-links when the identity is also authoritative.
+- **Confirmation links are browser-bound, and every link is announced (OWASP audit #3).** A confirmation magic link only attaches its `pending_google_sub` when opened in the browser that started the Google sign-in (a short-lived `SameSite=Strict` cookie carrying that `sub`); elsewhere it is a plain sign-in that links nothing. The confirmation email is its own message naming the Google account being linked, an address Google reports as `email_verified: false` never reaches this path, and the account owner is emailed whenever an identity is linked to an existing account. Full detail in `docs/security.md`.
 - **Google becomes the second writer of `User.email_verified`**, on the
   authoritative path only. This retires the single-writer invariant
   `auth.py` currently asserts in comment form; the flag's meaning restates
@@ -226,7 +227,7 @@ only new rows ever get `email_verified` written from this path.
 - **`CORS_ORIGINS`: unchanged**, gains no third job — the code-for-token
   exchange is server-to-server (`httpx` from our backend to Google), never a
   browser CORS request.
-- **CSP (`frontend/vercel.json`): zero change.** The redirect to
+- **CSP (`frontend/public/_headers`): zero change.** The redirect to
   `accounts.google.com` and the return are both top-level navigations,
   ungoverned by `script-src`/`connect-src`/`frame-src`.
 - **Concurrent-login race** (two tabs, both starting Google sign-in): the

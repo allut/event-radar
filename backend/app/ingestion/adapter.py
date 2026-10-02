@@ -34,7 +34,7 @@ from app.constants import (
 from app.ingestion.content_filters import content_flags
 from app.ingestion.http_client import safe_external_url, safe_fetchable_url
 from app.ingestion.pricing import normalize_currency
-from app.models.models import Event, EventSource, IngestionRun, RawEvent, Source
+from app.models.models import Event, EventSource, IngestionRun, Publisher, RawEvent, Source
 
 log = logging.getLogger(__name__)
 
@@ -75,6 +75,11 @@ class NormalizedEvent:
     title_localized: dict[str, str] | None = None
     description_localized: dict[str, str] | None = None
     important_info_localized: dict[str, str] | None = None
+    # Key into this run's publisher lookup (Publisher.external_id) — resolved
+    # to EventSource.publisher_id by insert_normalized_event (#409/#411).
+    # None both means "no publisher" and matches a source's single constant
+    # Publisher row (external_id NULL) for a single-institution source.
+    publisher_external_id: str | None = None
 
     def __post_init__(self) -> None:
         # Coords without an address are orphan data here — the geocode/sibling-copy
@@ -120,6 +125,7 @@ async def existing_external_ids(db: AsyncSession, source_id: int) -> set[str]:
         select(EventSource.external_id)
         .join(Event, Event.id == EventSource.event_id)
         .where(EventSource.source_id == source_id, Event.starts_at >= cutoff)
+        .distinct()
     )
     return {r for r in rows.all() if r is not None}
 
@@ -130,14 +136,40 @@ async def ingest_skip_ids(db: AsyncSession, source_id: int) -> set[str]:
     permanently-rejected event isn't re-fetched/re-saved every run."""
     stored = await existing_external_ids(db, source_id)
     cutoff = datetime.now(tz=TALLINN_TZ) - timedelta(days=INGEST_REJECT_RECHECK_DAYS)
+    # DISTINCT: every hourly run re-stores the same live listing as a fresh
+    # raw_events row, so the recheck window holds many rows per external_id.
     rows = await db.scalars(
-        select(RawEvent.external_id).where(
+        select(RawEvent.external_id)
+        .where(
             RawEvent.source_id == source_id,
             RawEvent.fetched_at >= cutoff,
         )
+        .distinct()
     )
     recent = {r for r in rows.all() if r is not None}
     return stored | recent
+
+
+async def load_publisher_lookup(
+    db: AsyncSession, source_id: int
+) -> dict[str | None, int]:
+    """Bulk-load {Publisher.external_id: Publisher.id} for source_id.
+
+    One query per adapter run (Code Quality Rules' "Batch jobs" — fixed query
+    count independent of row count) so insert_normalized_event resolves
+    EventSource.publisher_id via an in-memory dict instead of a per-row
+    SELECT. The publishers table is mirrored ahead of ingest — by
+    organizer_sync.py for Fienta, by seed_publishers() for KUMU/Estonia
+    Concert Hall — so this is read-only here.
+    """
+    rows = (
+        await db.execute(
+            select(Publisher.external_id, Publisher.id).where(
+                Publisher.source_id == source_id
+            )
+        )
+    ).all()
+    return {external_id: publisher_id for external_id, publisher_id in rows}
 
 
 def coords_in_estonia(lat: float, lng: float) -> bool:
@@ -153,7 +185,10 @@ def coords_in_tallinn(lat: float, lng: float) -> bool:
 
 
 async def insert_normalized_event(
-    db: AsyncSession, source: Source, normalized: NormalizedEvent
+    db: AsyncSession,
+    source: Source,
+    normalized: NormalizedEvent,
+    publisher_id_by_external_id: dict[str | None, int] | None = None,
 ) -> Event | None:
     """Insert the Event + EventSource rows inside a savepoint.
 
@@ -161,7 +196,8 @@ async def insert_normalized_event(
     SourceAdapter._insert_event below) and the organizer direct-submission
     router (routers/organizer_events.py), which has no adapter/normalize()
     step of its own but still needs the same slug/SSRF-guard/content-flag/
-    collision-handling behavior.
+    collision-handling behavior — the latter never passes
+    publisher_id_by_external_id, so its EventSource.publisher_id stays NULL.
 
     Returns None on a slug collision (IntegrityError) — the savepoint rolls
     back just this event, not the whole batch. Callers that need description/
@@ -214,11 +250,15 @@ async def insert_normalized_event(
             )
             db.add(event)
             await db.flush()
+            publisher_id = (publisher_id_by_external_id or {}).get(
+                normalized.publisher_external_id
+            )
             db.add(
                 EventSource(
                     event_id=event.id,
                     source_id=source.id,
                     external_id=normalized.external_id,
+                    publisher_id=publisher_id,
                 )
             )
     except IntegrityError:
@@ -251,6 +291,9 @@ async def insert_normalized_event(
 class SourceAdapter(ABC):
     def __init__(self, source: Source) -> None:
         self.source = source
+        # Populated by run() before the crawl; stays {} for a caller that
+        # invokes _insert_event without run() (e.g. a direct-insert test).
+        self._publisher_lookup: dict[str | None, int] = {}
 
     @abstractmethod
     async def fetch_raw(self, known_ids: set[str]) -> list[dict[str, Any]]: ...
@@ -263,12 +306,24 @@ class SourceAdapter(ABC):
         v = raw.get("id", "")
         return str(v) if v else None
 
+    async def _presync_publishers(
+        self, db: AsyncSession, lookup: dict[str | None, int]
+    ) -> dict[str | None, int]:
+        """Hook run once, before the crawl, right after the initial publisher
+        lookup load. Default: no-op — most sources (KUMU/Estonia Concert Hall)
+        have their Publisher rows seeded at startup, so the lookup is never
+        empty at ingest time. FientaAdapter overrides this to close the race
+        where its weekly organizer sync hasn't run yet (#433)."""
+        return lookup
+
     async def _insert_event(
         self, db: AsyncSession, normalized: NormalizedEvent
     ) -> Event | None:
         """Insert via the shared insert_normalized_event() helper, bound to
         this adapter's source. Returns None on a slug collision."""
-        return await insert_normalized_event(db, self.source, normalized)
+        return await insert_normalized_event(
+            db, self.source, normalized, self._publisher_lookup
+        )
 
     async def _process_raw_item(
         self,
@@ -322,16 +377,21 @@ class SourceAdapter(ABC):
         the failure record (instead of rolling back the entire transaction).
         """
         known_ids = await ingest_skip_ids(db, self.source.id)
-        # Release the connection for the crawl below — fetch_raw is network I/O only
-        # (no db access), often taking minutes, which would otherwise hold a checked-out
-        # connection idle past Neon's auto-suspend window. Nothing has been written yet,
-        # so this is a no-op beyond ending the transaction and returning the connection
-        # to the pool. Must be commit(), not rollback(): Session.rollback() unconditionally
-        # expires every ORM object in the identity map regardless of expire_on_commit,
-        # which would make every later `self.source.*` read below (and in fetch_raw()
-        # overrides) trigger an implicit lazy-load — disallowed under AsyncSession outside
-        # the greenlet-spawn context (raises MissingGreenlet). commit() respects
-        # expire_on_commit=False (app/db.py), so self.source stays usable.
+        self._publisher_lookup = await load_publisher_lookup(db, self.source.id)
+        # Release the connection before the crawl below and before
+        # _presync_publishers' own network I/O just after (fetch_raw is network
+        # I/O only — no db access, often taking minutes; FientaAdapter's
+        # override can likewise run a full organizer-sync HTTP pass here on a
+        # fresh deploy, #433) — either would otherwise hold a checked-out
+        # connection idle past Neon's auto-suspend window. Nothing has been
+        # written yet, so this is a no-op beyond ending the transaction and
+        # returning the connection to the pool. Must be commit(), not
+        # rollback(): Session.rollback() unconditionally expires every ORM
+        # object in the identity map regardless of expire_on_commit, which
+        # would make every later `self.source.*` read below (and in fetch_raw()
+        # overrides) trigger an implicit lazy-load — disallowed under AsyncSession
+        # outside the greenlet-spawn context (raises MissingGreenlet). commit()
+        # respects expire_on_commit=False (app/db.py), so self.source stays usable.
         await db.commit()
 
         # Captured before the crawl: the IngestionRun row is now inserted after
@@ -342,6 +402,14 @@ class SourceAdapter(ABC):
         run = IngestionRun(source_id=self.source.id, started_at=started_at)
 
         try:
+            # Inside the try/except (not above, with the initial lookup load):
+            # a presync failure (e.g. Fienta's organizer-sync HTTP probe
+            # timing out) must still produce an IngestionRun.error record and
+            # flip source.last_status, exactly like a fetch_raw() failure —
+            # not escape unlogged before run even exists (#433 review finding).
+            self._publisher_lookup = await self._presync_publishers(
+                db, self._publisher_lookup
+            )
             raw_items = await self.fetch_raw(known_ids)
             db.add(run)
             await db.flush()

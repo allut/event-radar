@@ -22,6 +22,8 @@
   position: absolute;
   left: var(--space-4);
   top: 50%;
+  width: var(--search-icon-size);
+  height: var(--search-icon-size);
   transform: translateY(-50%);
   color: var(--text-muted);
   pointer-events: none;

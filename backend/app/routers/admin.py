@@ -1,40 +1,37 @@
-"""Admin endpoints — protected by HTTP Basic auth."""
+"""Admin endpoints — protected by the admin console session cookie."""
 
 import asyncio
 import logging
-import secrets
-import time
-from collections import OrderedDict
 from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from datetime import datetime
 
-from fastapi import APIRouter, Cookie, Depends, HTTPException, Query, Request, status
+import httpx
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
-from fastapi.security import HTTPBasic, HTTPBasicCredentials
-from itsdangerous import BadSignature, SignatureExpired
 from pydantic import BaseModel, Field
-from sqlalchemy import and_, func, select
+from sqlalchemy import and_, func, select, true
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.auth.tokens import verify_admin_session_token
+from app.auth.dependencies import get_current_admin
 from app.cleanup import cleanup_stale_data
-from app.config import settings
 from app.constants import (
     ADMIN_ACTION_APPROVE_SUBMISSION,
     ADMIN_RESOLUTION_NOTE_MAX_CHARS,
-    FEATURE_ADMIN_ENDPOINTS,
     MIME_APPLICATION_NDJSON,
     SECURITY_HEADERS,
-    SETTING_NAME_ADMIN_PASSWORD,
     ADMIN_ACTION_BUILD_FEEDS,
     ADMIN_ACTION_CLEANUP,
     ADMIN_ACTION_CLASSIFY,
+    ADMIN_ACTION_DECLINE_CLAIM,
     ADMIN_ACTION_DEDUP,
     ADMIN_ACTION_GEOCODE,
+    ADMIN_ACTION_GRANT_CLAIM,
     ADMIN_ACTION_INGEST,
     ADMIN_ACTION_INGEST_SOURCE,
     ADMIN_ACTION_PIPELINE_RUN,
+    ADMIN_ACTION_REVOKE_CLAIM,
     PIPELINE_RUN_OVERLAPPING_LOCK_KEYS,
     ADMIN_ACTION_PUBLISH,
     ADMIN_ACTION_REFETCH,
@@ -43,23 +40,23 @@ from app.constants import (
     ADMIN_ACTION_SEND_DIGESTS,
     ADMIN_ACTION_SYNC_ORGANIZERS,
     ADMIN_ACTION_TAKEDOWN_REPORTED_EVENT,
-    ADMIN_AUTH_FAILURES_MAX_ENTRIES,
-    ADMIN_AUTH_LOCKOUT_SECONDS,
-    ADMIN_AUTH_MAX_FAILURES,
+    ADMIN_CLAIMS_QUEUE_MAX_PAGE_SIZE,
+    ADMIN_CLAIMS_QUEUE_PAGE_SIZE,
     ADMIN_DEDUP_GROUPS_MAX_PAGE_SIZE,
     ADMIN_DEDUP_GROUPS_PAGE_SIZE,
     ADMIN_EVENT_INSPECTOR_RAW_EVENTS_LIMIT,
     ADMIN_REVIEW_QUEUE_MAX_PAGE_SIZE,
     ADMIN_REVIEW_QUEUE_PAGE_SIZE,
-    ADMIN_SESSION_COOKIE_NAME,
-    ADMIN_USERNAME_DEFAULT,
-    APP_ENV_DEVELOPMENT,
+    CLAIM_KIND_PUBLISHER,
+    CLAIM_STATUS_APPROVED,
+    CLAIM_STATUS_PENDING,
+    CLAIM_STATUS_REVOKED,
     DEFAULT_USER_LOCALE,
-    ERROR_ADMIN_DISABLED,
-    ERROR_ADMIN_INCORRECT_CREDENTIALS,
-    ERROR_ADMIN_LOCKOUT,
-    ERROR_MISSING_SESSION_COOKIE,
-    ERROR_SESSION_INVALID,
+    ERROR_CLAIM_ALREADY_RESOLVED,
+    ERROR_CLAIM_NOT_APPROVED,
+    ERROR_CLAIM_NOT_FOUND,
+    ERROR_CLAIM_QUEUE_INVALID_STATUS,
+    ERROR_CLAIM_TARGET_ALREADY_APPROVED,
     ERROR_SUBMISSION_NOT_FOUND,
     ERROR_UNKNOWN_SOURCE,
     ADMIN_REPORTS_QUEUE_MAX_PAGE_SIZE,
@@ -69,7 +66,8 @@ from app.constants import (
     EVENT_CANCELLATION_REASON_ADMIN_RETRACT,
     EVENT_CANCELLATION_REASON_REPORT_TAKEDOWN,
     EVENT_STATUS_CANCELLED,
-    LOG_EVENT_AUTH_FAILED,
+    HTTP_TIMEOUT_SECONDS,
+    LOG_EVENT_EMAIL_SEND_FAILED,
     PAGINATION_MAX_OFFSET,
     PAGINATION_MIN_LIMIT,
     PAGINATION_MIN_OFFSET,
@@ -79,7 +77,11 @@ from app.constants import (
     TALLINN_TZ,
     VALID_LOCALES,
 )
+from app.claims.lifecycle import approved_claim_exists, auto_decline_other_pending_claims
+from app.claims.pinning import clear_claim_pins, representative_event_for_claim
+from app.claims.target_resolution import ClaimTarget
 from app.db import AsyncSessionLocal
+from app.email.claim_resolution import send_claim_declined_email, send_claim_granted_email
 from app.email.digest import send_daily_digests
 from app.ingestion.jobs import (
     classify_pending_drain_now,
@@ -93,6 +95,7 @@ from app.ingestion.jobs import (
 from app.ingestion.organizer_sync import sync_fienta_organizers
 from app.ingestion.registry import ADAPTER_REGISTRY
 from app.models.models import (
+    Claim,
     DailyFeed,
     Event,
     EventReport,
@@ -103,243 +106,36 @@ from app.models.models import (
 )
 from app.publish import publish_pending
 from app.ranking.score import build_daily_feeds
-from app.rate_limit import client_key, limiter
+from app.rate_limit import limiter
 from app.routers.utils import (
+    bulk_resolve_publisher_events,
     acquire_admin_job_lock,
     cancel_event_and_resolve_reports,
-    canonical_event_filter,
+    claim_dns_record_name,
     log_admin_action,
     ndjson_line,
     release_admin_job_lock,
-    require_configured_secret,
     resolve_description,
     resolve_important_info,
     resolve_open_reports,
     resolve_title,
-    resolve_venue_address,
-    resolve_venue_coords,
-    resolve_venue_name,
     run_admin_job,
-    run_in_session,
     select_events_with_classification,
     send_report_resolution_emails,
     serialize_event,
     stream_admin_job,
     validate_report_reason,
 )
+from app.events.venue import (
+    resolve_venue_address,
+    resolve_venue_coords,
+    resolve_venue_name,
+)
+from app.events.queries import canonical_event_filter
+from app.db import run_in_session
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/admin")
-# auto_error=False: a request carrying the admin session cookie instead of a
-# Basic header must not be auto-rejected before _require_admin gets a chance
-# to check the cookie — see _require_admin below.
-_security = HTTPBasic(auto_error=False)
-
-# (client_key -> (consecutive_failure_count, locked_until_monotonic)). In-memory,
-# single-process — see ADMIN_AUTH_MAX_FAILURES in constants.py for the trade-off.
-# Bounded LRU (ADMIN_AUTH_FAILURES_MAX_ENTRIES) — mirrors browse.py's _score_cache
-# pattern — so sustained scanning/brute-force traffic can't grow this unboundedly.
-_admin_auth_failures: OrderedDict[str, tuple[int, float]] = OrderedDict()
-
-
-def _evict_one_admin_auth_failure(now: float) -> None:
-    """Evict the oldest entry whose lockout has already expired (or was never
-    locked), falling back to the oldest entry overall only if every entry is
-    currently under an active lockout. A blind oldest-first eviction would let
-    a high-cardinality distributed brute-force (>ADMIN_AUTH_FAILURES_MAX_ENTRIES
-    distinct client_keys) evict — and thereby prematurely lift — another
-    client's still-active lockout, undermining the lockout this dict exists
-    to enforce."""
-    for key, (_count, locked_until) in _admin_auth_failures.items():
-        if locked_until <= now:
-            del _admin_auth_failures[key]
-            return
-    _admin_auth_failures.popitem(last=False)
-
-
-def check_admin_lockout(key: str) -> float:
-    """Raise 429 if `key` is currently locked out; otherwise return
-    time.monotonic() for the caller to reuse (avoids a second clock read).
-    Shared by _require_admin (Basic auth) and routers/admin_auth.py's form
-    login — ticket #154 requires both auth surfaces to share one lockout
-    counter rather than each getting its own damper.
-
-    Opportunistically drops `key`'s entry once its lockout has expired
-    (locked_until > 0.0 and now >= locked_until) — otherwise nothing ever
-    removes an expired entry, so once the LRU (ADMIN_AUTH_FAILURES_MAX_ENTRIES)
-    saturates it stays saturated and every subsequent failure pays the
-    eviction scan. A never-locked entry (locked_until == 0.0, still under
-    ADMIN_AUTH_MAX_FAILURES) is left alone — dropping it would reset the
-    consecutive-failure count this dict exists to track."""
-    now = time.monotonic()
-    _count, locked_until = _admin_auth_failures.get(key, (0, 0.0))
-    if now < locked_until:
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail=ERROR_ADMIN_LOCKOUT,
-        )
-    if locked_until > 0.0:
-        _admin_auth_failures.pop(key, None)
-    return now
-
-
-def record_admin_auth_failure(key: str, now: float, username: str) -> None:
-    """Bump the consecutive-failure count for `key`, locking it out once
-    ADMIN_AUTH_MAX_FAILURES is reached. Shared with routers/admin_auth.py —
-    see check_admin_lockout."""
-    count, _locked = _admin_auth_failures.get(key, (0, 0.0))
-    failures = count + 1
-    locked_until = (
-        now + ADMIN_AUTH_LOCKOUT_SECONDS
-        if failures >= ADMIN_AUTH_MAX_FAILURES
-        else 0.0
-    )
-    _admin_auth_failures[key] = (failures, locked_until)
-    _admin_auth_failures.move_to_end(key)
-    while len(_admin_auth_failures) > ADMIN_AUTH_FAILURES_MAX_ENTRIES:
-        _evict_one_admin_auth_failure(now)
-    log.warning(
-        "admin auth failed: username=%r failures=%d",
-        username,
-        failures,
-        extra={"event": LOG_EVENT_AUTH_FAILED},
-    )
-
-
-def clear_admin_auth_failure(key: str) -> None:
-    """Reset `key`'s failure count on a successful login. Shared with
-    routers/admin_auth.py — see check_admin_lockout."""
-    _admin_auth_failures.pop(key, None)
-
-
-def admin_username_disabled() -> bool:
-    """True when ADMIN_USERNAME was never overridden from its well-known
-    default outside development — fail closed like the password check,
-    since a well-known username halves the credential pair an attacker
-    needs to brute-force. Shared with routers/admin_auth.py."""
-    return (
-        settings.ADMIN_USERNAME == ADMIN_USERNAME_DEFAULT
-        and settings.APP_ENV != APP_ENV_DEVELOPMENT
-    )
-
-
-def admin_credentials_ok(username: str, password: str) -> bool:
-    """Constant-time check of a username/password attempt against the
-    configured ADMIN_USERNAME/ADMIN_PASSWORD. Shared with
-    routers/admin_auth.py — caller is responsible for the
-    require_configured_secret/admin_username_disabled gates around this."""
-    username_ok = secrets.compare_digest(
-        username.encode(), settings.ADMIN_USERNAME.encode()
-    )
-    password_ok = secrets.compare_digest(
-        password.encode(), settings.ADMIN_PASSWORD.encode()
-    )
-    return username_ok and password_ok
-
-
-def _valid_admin_session(admin_session: str) -> bool:
-    try:
-        verify_admin_session_token(admin_session)
-        return True
-    except (SignatureExpired, BadSignature):
-        return False
-
-
-def get_current_admin(
-    admin_session: str | None = Cookie(default=None, alias=ADMIN_SESSION_COOKIE_NAME),
-) -> None:
-    """Session-only dependency — no HTTP Basic fallback. Every *mutating*
-    /admin/* route uses this instead of _require_admin (H-1 in the OWASP
-    audit): _require_admin's Basic branch checks only ADMIN_USERNAME/
-    ADMIN_PASSWORD and never touches TOTP, so it made the admin console's
-    second factor bypassable on every route that accepted it. Only the three
-    non-PII read-only routes (/admin/counts, /admin/stats,
-    /admin/dedup/groups) keep _require_admin so curl/scripts can still read
-    them with just the password (OWASP audit F3) — every other GET, including /admin/reports,
-    /admin/events/{id}, and /admin/submissions, discloses reporter/organizer
-    PII and requires this TOTP-backed session instead. Defined here (not
-    admin_auth.py, which imports
-    admin_credentials_ok etc. from this module) to avoid a circular import;
-    admin_auth.py imports this function from here instead.
-
-    A missing cookie still goes through the same require_configured_secret
-    dev fail-open every other secret-gated surface uses (ADMIN_PASSWORD
-    unset + APP_ENV=development + ALLOW_INSECURE_DEV=true) — this is
-    orthogonal to H-1: that bug was Basic credentials alone satisfying a
-    *configured* password without TOTP, not the pre-existing "admin auth is
-    off entirely" dev/test convenience this shares with _require_admin."""
-    if admin_session is None:
-        if not require_configured_secret(
-            settings.ADMIN_PASSWORD,
-            feature=FEATURE_ADMIN_ENDPOINTS,
-            setting_name=SETTING_NAME_ADMIN_PASSWORD,
-            app_env=settings.APP_ENV,
-            allow_insecure_dev=settings.ALLOW_INSECURE_DEV,
-        ):
-            return
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=ERROR_MISSING_SESSION_COOKIE,
-        )
-    try:
-        verify_admin_session_token(admin_session)
-    except (SignatureExpired, BadSignature):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=ERROR_SESSION_INVALID,
-        )
-
-
-def _require_admin(
-    request: Request,
-    credentials: HTTPBasicCredentials | None = Depends(_security),
-    admin_session: str | None = Cookie(default=None, alias=ADMIN_SESSION_COOKIE_NAME),
-) -> None:
-    """Non-PII read-only surface — GET /admin/counts and /admin/stats only
-    (OWASP audit G-5: /admin/dedup/groups moved to get_current_admin, since
-    it discloses moderation-sensitive event content, not aggregate counts).
-    Accepts EITHER a valid admin console session cookie (issued by POST
-    /admin/auth/login) OR HTTP Basic (curl / existing integrations) — see
-    docs/backend-ops.md's Admin Endpoints section. An invalid/expired cookie
-    falls through to requiring Basic rather than rejecting outright, so a
-    stale browser cookie doesn't lock a curl caller out of the same request
-    path. Every other route uses get_current_admin instead (session-only, no
-    Basic) — see its docstring."""
-    if admin_session is not None and _valid_admin_session(admin_session):
-        return
-
-    if credentials is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=ERROR_ADMIN_INCORRECT_CREDENTIALS,
-            headers={"WWW-Authenticate": "Basic"},
-        )
-
-    key = client_key(request)
-    now = check_admin_lockout(key)
-
-    password = settings.ADMIN_PASSWORD
-    if not require_configured_secret(
-        password,
-        feature=FEATURE_ADMIN_ENDPOINTS,
-        setting_name=SETTING_NAME_ADMIN_PASSWORD,
-        app_env=settings.APP_ENV,
-        allow_insecure_dev=settings.ALLOW_INSECURE_DEV,
-    ):
-        return
-    if admin_username_disabled():
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=ERROR_ADMIN_DISABLED,
-        )
-    if not admin_credentials_ok(credentials.username, credentials.password):
-        record_admin_auth_failure(key, now, credentials.username)
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=ERROR_ADMIN_INCORRECT_CREDENTIALS,
-            headers={"WWW-Authenticate": "Basic"},
-        )
-    clear_admin_auth_failure(key)
 
 
 def _ndjson_response(gen: AsyncIterator[bytes]) -> StreamingResponse:
@@ -560,7 +356,7 @@ async def admin_list_submissions(
     first.
     """
     async with AsyncSessionLocal() as db:
-        queue_filter = (Event.needs_review.is_(True), Event.status != EVENT_STATUS_CANCELLED)
+        queue_filter = (Event.needs_review == true(), Event.status != EVENT_STATUS_CANCELLED)
         # total only on the first page — see browse.py's _browse_sql_path.
         total: int | None = None
         if offset == 0:
@@ -680,6 +476,300 @@ async def admin_approve_submission(
     return await run_admin_job("Approve submission", _run())
 
 
+# ---------------------------------------------------------------------------
+# Claims queue (#420): grant/decline an admin-review-routed claim, revoke an
+# already-granted one. Distinct from /admin/submissions (organizer-trust
+# review) and /admin/reports (content moderation) — a claim's grant/decline/
+# revoke is its own decision shape. See CONTEXT.md's Event Claiming glossary
+# and app/claims/lifecycle.py for the organizer-facing create/cancel/recheck
+# endpoints this complements.
+# ---------------------------------------------------------------------------
+
+def _serialize_admin_claim(claim: Claim, event: Event | None) -> dict:
+    """Evidence shown varies by mechanism, all derived from columns already
+    on the row — no live re-verification: DNS-TXT/Piletilevi-promoter claims
+    get the expected TXT record (claim_dns_record_name — shared with the
+    organizer-facing pending screen's identical serializer), Fienta claims
+    get the round-trip token, a piletilevi_mailbox claim (#428) gets the
+    claimant's account email alongside the resolved contact
+    (verification_contact) so the admin can see the match/mismatch, and a
+    Series claim (always admin_review, and always carrying a justification —
+    #428) or any other Publisher claim that fell back to admin_review gets
+    claimant identity plus that justification text."""
+    dns_record_name = claim_dns_record_name(
+        claim.verification_mechanism, claim.verification_domain
+    )
+    return {
+        "id": claim.id,
+        "kind": claim.kind,
+        "status": claim.status,
+        "organizer": {
+            "id": claim.organizer.id,
+            "email": claim.organizer.email,
+            "name": claim.organizer.name,
+        },
+        "publisher": (
+            {"id": claim.publisher.id, "name": claim.publisher.name}
+            if claim.publisher is not None
+            else None
+        ),
+        "event_series_key": claim.event_series_key,
+        "verification_mechanism": claim.verification_mechanism,
+        "verification_domain": claim.verification_domain,
+        "verification_contact": claim.verification_contact,
+        "dns_record_name": dns_record_name,
+        "proof_token": claim.proof_token,
+        "justification": claim.justification,
+        "event_id": event.id if event is not None else None,
+        "event_title": event.title_orig if event is not None else None,
+        "created_at": claim.created_at.isoformat(),
+        "resolved_at": claim.resolved_at.isoformat() if claim.resolved_at else None,
+    }
+
+
+@router.get("/claims", dependencies=[Depends(get_current_admin)])
+@limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
+async def admin_list_claims(
+    request: Request,
+    status_filter: str = Query(CLAIM_STATUS_PENDING, alias="status"),
+    limit: int = Query(
+        ADMIN_CLAIMS_QUEUE_PAGE_SIZE,
+        ge=PAGINATION_MIN_LIMIT,
+        le=ADMIN_CLAIMS_QUEUE_MAX_PAGE_SIZE,
+    ),
+    offset: int = Query(
+        PAGINATION_MIN_OFFSET, ge=PAGINATION_MIN_OFFSET, le=PAGINATION_MAX_OFFSET
+    ),
+) -> dict:
+    """The Pending review / Granted tabs. Event evidence for the "Open full
+    details" link is only resolved for Publisher-kind claims, bulk-loaded in
+    two fixed queries regardless of page size (mirrors admin_list_reports'
+    own bulk `.in_()` pattern) — a Series claim's event is a bounded scan
+    (representative_event_for_claim), too expensive to run per row on a list
+    endpoint, so event_id/event_title stay null for those and the frontend
+    hides the link."""
+    if status_filter not in (CLAIM_STATUS_PENDING, CLAIM_STATUS_APPROVED):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=ERROR_CLAIM_QUEUE_INVALID_STATUS,
+        )
+
+    async with AsyncSessionLocal() as db:
+        queue_filter = (Claim.status == status_filter,)
+        total: int | None = None
+        if offset == 0:
+            total = (
+                await db.scalar(select(func.count(Claim.id)).where(*queue_filter))
+            ) or 0
+
+        order_col = Claim.created_at if status_filter == CLAIM_STATUS_PENDING else Claim.resolved_at
+        stmt = (
+            select(Claim)
+            .options(selectinload(Claim.organizer), selectinload(Claim.publisher))
+            .where(*queue_filter)
+            .order_by(order_col.desc())
+            .limit(limit + 1)
+            .offset(offset)
+        )
+        claims = list((await db.scalars(stmt)).all())
+        has_more = len(claims) > limit
+        claims = claims[:limit]
+
+        # Bulk-load the representative event per Publisher-kind claim in this
+        # page — two fixed queries total, never one per row (shared with the
+        # #421 expiry-notification sweep via bulk_resolve_publisher_events).
+        publisher_ids = {
+            claim.publisher_id
+            for claim in claims
+            if claim.kind == CLAIM_KIND_PUBLISHER and claim.publisher_id is not None
+        }
+        event_by_publisher = await bulk_resolve_publisher_events(db, publisher_ids)
+
+        rows = []
+        for claim in claims:
+            event = (
+                event_by_publisher.get(claim.publisher_id)
+                if claim.publisher_id is not None
+                else None
+            )
+            rows.append(_serialize_admin_claim(claim, event))
+
+    return {
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+        "has_more": has_more,
+        "claims": rows,
+    }
+
+
+async def _claim_or_404(db: AsyncSession, claim_id: int) -> Claim:
+    claim = await db.get(Claim, claim_id)
+    if claim is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=ERROR_CLAIM_NOT_FOUND)
+    return claim
+
+
+@router.post("/claims/{claim_id}/grant", dependencies=[Depends(get_current_admin)])
+@limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
+async def admin_grant_claim(claim_id: int, body: _ResolutionBody, request: Request) -> dict:
+    """Manually approve a pending claim — available for any pending claim
+    regardless of mechanism, letting an admin override an inconclusive or
+    failed automated check (e.g. a DNS-TXT lookup that hasn't propagated
+    yet) as well as decide a genuine admin_review (Series) claim.
+
+    Since #431 (multiple pending claims can coexist on the same target),
+    this must apply the same guard/preemption as the organizer-facing
+    auto-grant path (app.claims.lifecycle.create_claim/recheck_claim):
+    reject with the same support-facing conflict when the target already
+    has an *approved* claim (checked up front, and again via IntegrityError
+    on the narrowed migration-0048 unique index for the race where another
+    claim on this target was approved concurrently), and auto-decline every
+    other still-pending sibling claim on the same target once this grant
+    lands.
+    """
+    note = _validated_resolution_note(body)
+
+    async def _run() -> dict:
+        async with AsyncSessionLocal() as db:
+            claim = await _claim_or_404(db, claim_id)
+            if claim.status != CLAIM_STATUS_PENDING:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=ERROR_CLAIM_ALREADY_RESOLVED,
+                )
+            target = ClaimTarget(claim.kind, claim.publisher_id, claim.event_series_key)
+            if await approved_claim_exists(db, target):
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=ERROR_CLAIM_TARGET_ALREADY_APPROVED,
+                )
+            claim.status = CLAIM_STATUS_APPROVED
+            claim.resolved_at = datetime.now(TALLINN_TZ)
+            organizer = await db.get(Organizer, claim.organizer_id)
+            event = await representative_event_for_claim(db, claim)
+            result = {"id": claim.id, "status": claim.status, "note": note}
+            emit_admin_log = log_admin_action(db, ADMIN_ACTION_GRANT_CLAIM, claim_id, result)
+            try:
+                await db.commit()
+            except IntegrityError:
+                await db.rollback()
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=ERROR_CLAIM_TARGET_ALREADY_APPROVED,
+                ) from None
+            emit_admin_log()
+            if organizer is not None:
+                try:
+                    await send_claim_granted_email(
+                        organizer.email,
+                        resolve_title(event, organizer.locale) if event else None,
+                        note,
+                        organizer.locale,
+                    )
+                except Exception:
+                    log.error(
+                        "Failed to send claim-granted email (claim_id=%s)",
+                        claim_id,
+                        exc_info=True,
+                        extra={"event": LOG_EVENT_EMAIL_SEND_FAILED},
+                    )
+            async with httpx.AsyncClient(timeout=HTTP_TIMEOUT_SECONDS) as client:
+                await auto_decline_other_pending_claims(
+                    db, client, target, claim.id, claim.organizer_id
+                )
+            return result
+
+    return await run_admin_job("Grant claim", _run())
+
+
+@router.post("/claims/{claim_id}/decline", dependencies=[Depends(get_current_admin)])
+@limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
+async def admin_decline_claim(claim_id: int, body: _ResolutionBody, request: Request) -> dict:
+    """Decline a pending claim — frees its Publisher/Series key immediately
+    (CLAIM_ACTIVE_STATUSES excludes revoked, same as a self-cancel). Unlike
+    POST .../revoke this never touches Event.pinned_fields: a pending claim
+    was never granted, so nothing was ever pinned against it."""
+    note = _validated_resolution_note(body)
+
+    async def _run() -> dict:
+        async with AsyncSessionLocal() as db:
+            claim = await _claim_or_404(db, claim_id)
+            if claim.status != CLAIM_STATUS_PENDING:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=ERROR_CLAIM_ALREADY_RESOLVED,
+                )
+            claim.status = CLAIM_STATUS_REVOKED
+            claim.resolved_at = datetime.now(TALLINN_TZ)
+            organizer = await db.get(Organizer, claim.organizer_id)
+            event = await representative_event_for_claim(db, claim)
+            result = {"id": claim.id, "status": claim.status, "note": note}
+            emit_admin_log = log_admin_action(db, ADMIN_ACTION_DECLINE_CLAIM, claim_id, result)
+            await db.commit()
+            emit_admin_log()
+            if organizer is not None:
+                try:
+                    await send_claim_declined_email(
+                        organizer.email,
+                        resolve_title(event, organizer.locale) if event else None,
+                        note,
+                        organizer.locale,
+                    )
+                except Exception:
+                    log.error(
+                        "Failed to send claim-declined email (claim_id=%s)",
+                        claim_id,
+                        exc_info=True,
+                        extra={"event": LOG_EVENT_EMAIL_SEND_FAILED},
+                    )
+            return result
+
+    return await run_admin_job("Decline claim", _run())
+
+
+@router.post("/claims/{claim_id}/revoke", dependencies=[Depends(get_current_admin)])
+@limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
+async def admin_revoke_claim(claim_id: int, body: _ResolutionBody, request: Request) -> dict:
+    """Revoke an already-granted claim (report escalation or discretion) —
+    deletes the row outright (unlike decline, which just flips status) and
+    reverts pinned fields on every event this claim covers to source
+    authority immediately (#442), not just the representative one, so the
+    next ingestion/refetch pass can overwrite them all again."""
+    note = _validated_resolution_note(body)
+
+    async def _run() -> dict:
+        async with AsyncSessionLocal() as db:
+            claim = await _claim_or_404(db, claim_id)
+            if claim.status != CLAIM_STATUS_APPROVED:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=ERROR_CLAIM_NOT_APPROVED,
+                )
+            event = await representative_event_for_claim(db, claim)
+            organizer_id = claim.organizer_id
+            kind = claim.kind
+            await clear_claim_pins(db, claim)
+            await db.delete(claim)
+            result = {
+                "id": claim_id,
+                "event_id": event.id if event is not None else None,
+                "note": note,
+                # organizer_id/kind: not shown in the admin UI, only read back
+                # by organizer_claims.py's tombstone lookup (#446) — the row
+                # itself is gone, so this AdminAction entry is the only place
+                # left to confirm the caller actually owned the deleted claim.
+                "organizer_id": organizer_id,
+                "kind": kind,
+            }
+            emit_admin_log = log_admin_action(db, ADMIN_ACTION_REVOKE_CLAIM, claim_id, result)
+            await db.commit()
+            emit_admin_log()
+            return result
+
+    return await run_admin_job("Revoke claim", _run())
+
+
 @router.get("/reports", dependencies=[Depends(get_current_admin)])
 @limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
 async def admin_list_reports(
@@ -721,7 +811,7 @@ async def admin_list_reports(
         if reason is not None:
             match_conditions.append(EventReport.reason == reason)
         if illegal_only:
-            match_conditions.append(EventReport.is_illegal_allegation.is_(True))
+            match_conditions.append(EventReport.is_illegal_allegation == true())
         matching_event_ids = (
             select(EventReport.event_id).where(*match_conditions).distinct()
         )
@@ -1352,13 +1442,13 @@ async def admin_pipeline_run(
     return _ndjson_response(_stream_pipeline_run(dry_run))
 
 
-@router.get("/counts", dependencies=[Depends(_require_admin)])
+@router.get("/counts", dependencies=[Depends(get_current_admin)])
 @limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
 async def admin_counts(request: Request) -> dict:
-    """Open-reports + pending-submissions counts for the admin console landing
-    screen (issue #154). Mirrors the filters admin_list_reports/
-    admin_list_submissions use for their own totals, so the landing tiles
-    match what those (later-ticket) screens will show."""
+    """Open-reports + pending-submissions + pending-claims counts for the
+    admin console landing screen (issue #154, extended #420). Mirrors the
+    filters admin_list_reports/admin_list_submissions/admin_list_claims use
+    for their own totals, so the landing tiles match what those screens show."""
     async with AsyncSessionLocal() as db:
         open_reports = (
             await db.scalar(
@@ -1374,19 +1464,25 @@ async def admin_counts(request: Request) -> dict:
         pending_submissions = (
             await db.scalar(
                 select(func.count(Event.id)).where(
-                    Event.needs_review.is_(True),
+                    Event.needs_review == true(),
                     Event.status != EVENT_STATUS_CANCELLED,
                 )
+            )
+        ) or 0
+        pending_claims = (
+            await db.scalar(
+                select(func.count(Claim.id)).where(Claim.status == CLAIM_STATUS_PENDING)
             )
         ) or 0
 
     return {
         "open_reports": open_reports,
         "pending_submissions": pending_submissions,
+        "pending_claims": pending_claims,
     }
 
 
-@router.get("/stats", dependencies=[Depends(_require_admin)])
+@router.get("/stats", dependencies=[Depends(get_current_admin)])
 @limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
 async def admin_stats(request: Request) -> dict:
     """Aggregate counts used by checkpoint tests and manual monitoring."""
@@ -1411,7 +1507,7 @@ async def admin_stats(request: Request) -> dict:
         sources_total = (await db.scalar(select(func.count(Source.id)))) or 0
         sources_enabled = (
             await db.scalar(
-                select(func.count(Source.id)).where(Source.enabled.is_(True))
+                select(func.count(Source.id)).where(Source.enabled == true())
             )
         ) or 0
 

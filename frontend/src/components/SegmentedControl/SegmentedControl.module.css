@@ -65,7 +65,6 @@
   padding: var(--space-1);
   background: var(--bg-overlay-soft);
   border: var(--border-w-hair) solid var(--border);
-  border-radius: var(--radius-pill);
 }
 
 .indicator {
@@ -74,7 +73,6 @@
   bottom: var(--space-1);
   left: var(--space-1);
   width: calc((100% - 2 * var(--space-1)) / var(--seg-count));
-  border-radius: var(--radius-pill);
   background: linear-gradient(180deg, var(--accent-faint), var(--accent-subtle));
   border: var(--border-w-hair) solid var(--accent-border);
   transform: translateX(calc(var(--seg-index) * 100%));
@@ -91,7 +89,6 @@
   font-size: var(--fs-xs);
   letter-spacing: var(--tracking-wider);
   text-transform: uppercase;
-  border-radius: var(--radius-pill);
 }
 
 /* .segDial .segBtn's padding shorthand above would otherwise clobber
@@ -104,13 +101,4 @@
 
 @media (prefers-reduced-motion: reduce) {
   .indicator { transition: none; }
-}
-
-/* .segDial/.indicator/.segDial .segBtn are all defined earlier in this same
- * file, so a later same-selector rule squares them deterministically via
- * source order — no cross-file compose tie to guard against here. */
-.segDial,
-.indicator,
-.segDial .segBtn {
-  border-radius: 0;
 }

@@ -14,7 +14,7 @@ from datetime import date, datetime, timedelta
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from sqlalchemy import ColumnElement, and_, func, or_, select
+from sqlalchemy import and_, ColumnElement, func, literal, or_, select, true, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import load_only, selectinload
 
@@ -36,6 +36,7 @@ from app.constants import (
     DEFAULT_USER_LOCALE,
     ERROR_INVALID_SORT,
     FEEDBACK_HISTORY_LOOKBACK_DAYS,
+    PAGINATION_CURSOR_MAX_LEN,
     PAGINATION_MAX_OFFSET,
     PAGINATION_MIN_LIMIT,
     PAGINATION_MIN_OFFSET,
@@ -56,17 +57,22 @@ from app.ranking.score import (
     score_event,
 )
 from app.rate_limit import limiter
-from app.routers.auth import get_optional_user
+from app.auth.dependencies import get_optional_user
 from app.routers.utils import (
-    canonical_event_filter,
-    event_not_ended_filter,
+    decode_page_cursor,
+    encode_page_cursor,
+    escape_ilike_pattern,
     load_user_reported_events,
     load_user_signals,
     persona_weight_tuple,
-    public_event_filter,
     resolve_locale_param,
     select_events_with_classification,
     serialize_event,
+)
+from app.events.queries import (
+    canonical_event_filter,
+    event_not_ended_filter,
+    public_event_filter,
 )
 
 router = APIRouter(tags=["browse"])
@@ -86,14 +92,11 @@ def _parse_slug_list(raw: str | None, valid: frozenset[str]) -> list[str]:
 
 
 def _free_filter() -> ColumnElement[bool]:
-    return or_(Event.price_min == 0, Event.has_free_tier.is_(True))
+    return or_(Event.price_min == 0, Event.has_free_tier == true())
 
 
 def _keyword_filter(q: str) -> ColumnElement[bool]:
-    """Escape SQL LIKE wildcards in user input before building the pattern —
-    otherwise a literal '%' or '_' in the search box would wildcard-match."""
-    escaped = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-    pattern = f"%{escaped}%"
+    pattern = escape_ilike_pattern(q)
     return or_(
         Event.title_orig.ilike(pattern, escape="\\"),
         Event.description_orig.ilike(pattern, escape="\\"),
@@ -171,18 +174,38 @@ async def _browse_sql_path(
     offset: int,
     locale: str,
     user_id: int | None,
+    cursor: tuple[datetime, int] | None = None,
 ) -> dict:
     """Path A — pure SQL. Only reachable for for_you=False with sort in
     {date, price, quality}; relevance sort always needs Python scoring.
     ``user_id`` is None for an anonymous caller (#234) — no per-user signals
-    or reported-event state to hydrate."""
-    order_col: ColumnElement
-    if sort == BROWSE_SORT_DATE:
-        order_col = Event.starts_at.asc()
+    or reported-event state to hydrate.
+
+    The ``date`` sort is keyset-paginated on ``(starts_at, id)``: ``cursor``
+    (decoded from the opaque ``next_cursor`` of the previous page) replaces
+    ``offset`` so page N costs the same as page 1. ``price``/``quality`` sort
+    on a nullable column, so they stay on OFFSET (``cursor`` is ignored) —
+    with ``id`` as a tie-breaker so the order is at least total and stable.
+    """
+    keyset = sort == BROWSE_SORT_DATE
+    order_cols: list[ColumnElement]
+    if keyset:
+        order_cols = [Event.starts_at.asc(), Event.id.asc()]
     elif sort == BROWSE_SORT_PRICE:
-        order_col = Event.price_min.asc().nulls_last()
+        order_cols = [Event.price_min.asc().nulls_last(), Event.id.asc()]
     else:
-        order_col = EventClassification.quality_score.desc().nulls_last()
+        order_cols = [
+            EventClassification.quality_score.desc().nulls_last(),
+            Event.id.asc(),
+        ]
+    page_conds = list(conds)
+    by_cursor = keyset and cursor is not None
+    if keyset and cursor is not None:
+        cursor_ts, cursor_id = cursor
+        page_conds.append(
+            tuple_(Event.starts_at, Event.id) > tuple_(literal(cursor_ts), literal(cursor_id))
+        )
+        offset = 0
 
     # `total` is a full-set aggregate over every matching row — expensive to
     # re-run identically for page 2, 3, 4... of the same infinite scroll, so
@@ -190,7 +213,7 @@ async def _browse_sql_path(
     # subsequent pages via React Query. `has_more` no longer needs `total` at
     # all: fetch one extra row past `limit` and check whether it showed up.
     total: int | None = None
-    if offset == 0:
+    if offset == 0 and not by_cursor:
         total = (
             await db.scalar(
                 select(func.count(Event.id))
@@ -203,8 +226,8 @@ async def _browse_sql_path(
     page_stmt = (
         select_events_with_classification()
         .join(Event.classification)
-        .where(*conds)
-        .order_by(order_col)
+        .where(*page_conds)
+        .order_by(*order_cols)
         .limit(limit + 1)
         .offset(offset)
     )
@@ -225,6 +248,11 @@ async def _browse_sql_path(
         "limit": limit,
         "offset": offset,
         "has_more": has_more,
+        "next_cursor": (
+            encode_page_cursor(events[-1].starts_at, events[-1].id)
+            if keyset and has_more
+            else None
+        ),
     }
 
 
@@ -524,6 +552,7 @@ async def explore_events(
     offset: int = Query(
         PAGINATION_MIN_OFFSET, ge=PAGINATION_MIN_OFFSET, le=PAGINATION_MAX_OFFSET
     ),
+    cursor: str | None = Query(None, max_length=PAGINATION_CURSOR_MAX_LEN),
     locale: str | None = Query(None),
     current_user: User | None = Depends(get_optional_user),
     db: AsyncSession = Depends(get_db),
@@ -550,7 +579,14 @@ async def explore_events(
     if not for_you and sort in BROWSE_SQL_SORTS:
         user_id = current_user.id if current_user is not None else None
         return await _browse_sql_path(
-            db, conds, sort, limit, offset, effective_locale, user_id
+            db,
+            conds,
+            sort,
+            limit,
+            offset,
+            effective_locale,
+            user_id,
+            decode_page_cursor(cursor) if cursor else None,
         )
 
     cache_key = (

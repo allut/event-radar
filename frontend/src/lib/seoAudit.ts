@@ -1,5 +1,5 @@
 // .js extensions required: this module is also imported (transitively) by
-// api/seo-audit.ts, which Vercel runs as unbundled Node ESM.
+// functions/api/seo-audit.ts, which Cloudflare Pages runs as unbundled ESM.
 import {
   CRAWLABLE_ASSETS_PATH,
   CRAWLABLE_ICON_PATHS,
@@ -113,9 +113,22 @@ export function parseSitemapLastmod(sitemapXml: string): string | null {
 // rebuilt per call (Big-O audit #5, Tier 4).
 const EVENT_URL_RE = new RegExp(`^${PRODUCTION_ORIGIN.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/events/\\d+$`);
 
+const SITEMAP_LOC_RE = /<loc>([^<]+)<\/loc>/g;
+
 export function parseSitemapEventUrls(sitemapXml: string): string[] {
-  const locs = [...sitemapXml.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1]);
+  const locs = [...sitemapXml.matchAll(SITEMAP_LOC_RE)].map((m) => m[1]);
   return locs.filter((loc) => EVENT_URL_RE.test(loc));
+}
+
+/** First `/events/:id` URL in sitemap.xml, or `undefined` — the live audit
+ * only spot-checks one event page, so this stops scanning at the first hit
+ * instead of materializing every `<loc>` in a catalog-sized sitemap (Big-O
+ * audit). Lazy `matchAll` iteration makes the early return skip the rest. */
+export function parseFirstSitemapEventUrl(sitemapXml: string): string | undefined {
+  for (const match of sitemapXml.matchAll(SITEMAP_LOC_RE)) {
+    if (EVENT_URL_RE.test(match[1])) return match[1];
+  }
+  return undefined;
 }
 
 /** Every built-asset `<script src>` / `<link rel="stylesheet" href>` in
@@ -128,16 +141,30 @@ export function parseSitemapEventUrls(sitemapXml: string): string[] {
  * (a font preload, an `<img>`) can't produce a false-positive "wrong
  * content-type" finding from a check that was never meant to cover it.
  * Regex, not an HTML parser: this only needs to catch the exact tag shape
- * Vite/prerender.ts emits, and api/seo-audit.ts is already the pure/
- * network-free-logic-vs-fetching split this repo uses elsewhere
+ * Vite/prerender.ts emits, and functions/api/seo-audit.ts is already the
+ * pure/network-free-logic-vs-fetching split this repo uses elsewhere
  * (evaluateLiveAudit above). Used to catch the app-shell-fallthrough failure
  * mode a copied-forward snapshot can ship (issue #97): a stale asset
- * reference that 200s as `text/html` (Vercel's SPA catch-all) instead of
- * 404ing, which no structural/JSON-LD check here would ever notice. */
+ * reference that 200s as `text/html` (the SPA fallback's catch-all) instead
+ * of 404ing, which no structural/JSON-LD check here would ever notice. */
 const SNAPSHOT_TAG_RE = /<(script|link)\b[^>]*>/g;
 const SNAPSHOT_STYLESHEET_REL_RE = /\brel="stylesheet"/;
 const SNAPSHOT_HREF_RE = /\bhref="([^"]+)"/;
 const SNAPSHOT_SRC_RE = /\bsrc="([^"]+)"/;
+
+/** True only for a root-relative path under CRAWLABLE_ASSETS_PATH that still
+ * resolves to PRODUCTION_ORIGIN. A bare `includes('/assets/')` also accepted
+ * "@evil.example/assets/x.css", which glued onto the origin made the audit
+ * Worker fetch an attacker-chosen host (OWASP audit #1, knock-on). */
+function isSameSiteAssetPath(href: string): boolean {
+  if (!href.startsWith(CRAWLABLE_ASSETS_PATH)) return false;
+  try {
+    const resolved = new URL(href, PRODUCTION_ORIGIN);
+    return resolved.origin === PRODUCTION_ORIGIN && resolved.pathname.startsWith(CRAWLABLE_ASSETS_PATH);
+  } catch {
+    return false;
+  }
+}
 
 export function parseSnapshotAssetUrls(html: string): string[] {
   const urls = new Set<string>();
@@ -147,7 +174,7 @@ export function parseSnapshotAssetUrls(html: string): string[] {
     if (tagName === 'link' && !SNAPSHOT_STYLESHEET_REL_RE.test(tag)) continue;
     const attrRe = tagName === 'link' ? SNAPSHOT_HREF_RE : SNAPSHOT_SRC_RE;
     const match = tag.match(attrRe);
-    if (match && match[1].includes(CRAWLABLE_ASSETS_PATH)) urls.add(match[1]);
+    if (match && isSameSiteAssetPath(match[1])) urls.add(match[1]);
   }
   return [...urls];
 }

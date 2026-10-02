@@ -7,6 +7,7 @@ from urllib.parse import urlparse
 
 import httpx
 from bs4 import BeautifulSoup
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.constants import (
@@ -28,9 +29,11 @@ from app.ingestion.adapter import (
     NormalizedEvent,
     SourceAdapter,
     coords_in_estonia,
+    load_publisher_lookup,
     parse_dt,
 )
 from app.ingestion.http_client import AsyncRateLimiter, host_guard_hook, http_get
+from app.ingestion.organizer_sync import sync_fienta_organizers
 from app.ingestion.jsonld import (
     extract_jsonld_event_text,
     location_from_jsonld_items,
@@ -209,6 +212,11 @@ class FientaAdapter(SourceAdapter):
     (`meta.current_page` / `meta.last_page`) pagination automatically.
     Plain list responses (no pagination envelope) are also supported.
 
+    fetch_organizer() stamps every collected item with its requesting
+    organizer_id (#409/#411) — normalize() reads it into
+    NormalizedEvent.publisher_external_id, resolved against the source's
+    mirrored Publisher rows (organizer_sync.py) by insert_normalized_event.
+
     For each new event (not yet in event_sources), the adapter fetches the
     detail page concurrently and attaches parsed JSON-LD data under
     ``raw["_detail"]``. normalize() merges listing + detail per a fixed
@@ -222,7 +230,7 @@ class FientaAdapter(SourceAdapter):
     host — so a `request` event hook (`host_guard_hook`, `app/ingestion/http_client.py`)
     re-validates the host of *every* request the client sends, including each
     redirect hop, against base_host. This is the actual SSRF enforcement for
-    the redirect case; the pre-fetch checks in `_fetch_organizer`/`_fetch_detail`
+    the redirect case; the pre-fetch checks in `fetch_organizer`/`_fetch_detail`
     remain as defense-in-depth on the un-redirected URL.
 
     All listing and detail requests share one AsyncRateLimiter per fetch_raw()
@@ -230,6 +238,25 @@ class FientaAdapter(SourceAdapter):
     below Fienta's rate limit; a 429 also pushes the limiter's backoff out so
     remaining organizers/details pause together instead of piling on.
     """
+
+    async def _presync_publishers(
+        self, db: AsyncSession, lookup: dict[str | None, int]
+    ) -> dict[str | None, int]:
+        """Close the fresh-deploy race (#433): the weekly organizer sync
+        (organizer_sync.py) mirrors this source's Publisher rows, but hourly
+        ingest can run first. An empty lookup here means that mirror hasn't
+        run yet, so trigger it inline before any event is inserted this run
+        — every event this run resolves against a populated lookup instead of
+        landing permanently unstamped."""
+        if lookup:
+            return lookup
+        log.warning(
+            "fienta: publisher lookup empty for source=%s — syncing organizers "
+            "before ingest",
+            self.source.slug,
+        )
+        await sync_fienta_organizers(db)
+        return await load_publisher_lookup(db, self.source.id)
 
     async def fetch_raw(self, known_ids: set[str]) -> list[dict[str, Any]]:
         stale_ids: set[int] = set(self.source.config.get("stale_organizer_ids", []))
@@ -252,7 +279,7 @@ class FientaAdapter(SourceAdapter):
             for org_id in organizer_ids:
                 try:
                     all_events.extend(
-                        await self._fetch_organizer(client, base_url, org_id, limiter)
+                        await self.fetch_organizer(client, base_url, org_id, limiter)
                     )
                 except httpx.HTTPStatusError as exc:
                     log.warning(
@@ -313,7 +340,7 @@ class FientaAdapter(SourceAdapter):
 
         return new_items
 
-    async def _fetch_organizer(
+    async def fetch_organizer(
         self,
         client: httpx.AsyncClient,
         base_url: str,
@@ -339,10 +366,14 @@ class FientaAdapter(SourceAdapter):
             data = response.json()
 
             if isinstance(data, list):
+                for event in data:
+                    event["organizer_id"] = org_id
                 collected.extend(data)
                 break  # plain list — no pagination
 
             events = data.get("data", data.get("events", []))
+            for event in events:
+                event["organizer_id"] = org_id
             collected.extend(events)
 
             # link-based pagination: follow links.next (validated against base host)
@@ -519,8 +550,12 @@ class FientaAdapter(SourceAdapter):
         loc_titles = detail_localized.get("title") or {}
         loc_descs = detail_localized.get("description") or {}
 
+        organizer_id = raw.get("organizer_id")
+        publisher_external_id = str(organizer_id) if organizer_id is not None else None
+
         return NormalizedEvent(
             external_id=external_id,
+            publisher_external_id=publisher_external_id,
             title=str(title),
             description=sanitize_html(raw.get("description") or raw.get("body")),
             starts_at=starts_at,

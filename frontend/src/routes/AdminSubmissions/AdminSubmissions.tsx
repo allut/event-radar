@@ -2,7 +2,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { adminApi } from '../../api/client';
-import { ADMIN_GENERIC_ERROR, ADMIN_QUEUE_DETAIL_LINK_LABEL, ADMIN_REVIEW_QUEUE_PAGE_SIZE, API, PAGE_PARAM, QUERY_KEYS, ROUTES, UI_STATE } from '../../constants';
+import { ADMIN_GENERIC_ERROR, ADMIN_RESOLUTION_MESSAGES, ADMIN_QUEUE_DETAIL_LINK_LABEL, ADMIN_REVIEW_QUEUE_PAGE_SIZE, API, PAGE_PARAM, QUERY_KEYS, ROUTES, UI_STATE } from '../../constants';
 import { apiErrorMessage, nextOffsetParam, relativeTimeFromNow, safeUrl } from '../../utils';
 import PageState from '../../components/PageState';
 import Toast from '../../components/Toast';
@@ -206,7 +206,7 @@ export default function AdminSubmissions() {
                         : styles.resolvedPanel
                     }
                   >
-                    ✓ {resolution.kind === 'retracted' ? 'Submission retracted.' : 'Submission approved.'}
+                    ✓ {ADMIN_RESOLUTION_MESSAGES[resolution.kind === 'retracted' ? 'retracted' : 'approved']}
                   </div>
                 ) : (
                   <AdminQueueActionPanel

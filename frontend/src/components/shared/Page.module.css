@@ -21,6 +21,11 @@
   gap: var(--space-4);
 }
 
+.pageMainNarrow {
+  composes: pageMain;
+  max-width: var(--page-max-narrow);
+}
+
 .pageTitle {
   font-family: var(--font-display);
   font-size: var(--heading-xl);

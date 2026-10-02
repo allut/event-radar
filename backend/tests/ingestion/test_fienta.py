@@ -440,6 +440,27 @@ class TestNormalize:
         raw = {"id": "98", "name": "Mystery Venue", "starts_at": "2026-08-01T10:00:00+03:00"}
         assert _adapter().normalize(raw) is not None
 
+    # -------------------------------------------------------------------
+    # publisher_external_id (#411) — stamped by fetch_organizer, read here
+    # -------------------------------------------------------------------
+
+    def test_publisher_external_id_from_stamped_organizer_id(self):
+        raw = {
+            "id": "1",
+            "name": "Org Event",
+            "starts_at": "2026-08-01T10:00:00+03:00",
+            "organizer_id": 42,
+        }
+        result = _adapter().normalize(raw)
+        assert result is not None
+        assert result.publisher_external_id == "42"
+
+    def test_publisher_external_id_none_when_unstamped(self):
+        raw = {"id": "2", "name": "No Organizer", "starts_at": "2026-08-01T10:00:00+03:00"}
+        result = _adapter().normalize(raw)
+        assert result is not None
+        assert result.publisher_external_id is None
+
 
 # ---------------------------------------------------------------------------
 # fetch_raw() + pagination — async tests using httpx mock transport
@@ -460,10 +481,24 @@ class TestFetchRaw:
 
         adapter = _adapter(organizer_ids=[42])
         async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-            result = await adapter._fetch_organizer(client, settings.FIENTA_BASE_URL, 42)
+            result = await adapter.fetch_organizer(client, settings.FIENTA_BASE_URL, 42)
 
         assert len(result) == 2
         assert result[0]["id"] == "1"
+
+    @pytest.mark.asyncio
+    async def test_plain_list_response_stamps_organizer_id(self):
+        """#411: every collected item is stamped with the requesting organizer_id."""
+        events = [{"id": "1", "name": "A"}, {"id": "2", "name": "B"}]
+
+        async def handler(request):
+            return _mock_response(events)
+
+        adapter = _adapter(organizer_ids=[42])
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            result = await adapter.fetch_organizer(client, settings.FIENTA_BASE_URL, 42)
+
+        assert all(item["organizer_id"] == 42 for item in result)
 
     @pytest.mark.asyncio
     async def test_data_envelope_single_page(self):
@@ -475,7 +510,7 @@ class TestFetchRaw:
 
         adapter = _adapter(organizer_ids=[1])
         async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-            result = await adapter._fetch_organizer(client, settings.FIENTA_BASE_URL, 1)
+            result = await adapter.fetch_organizer(client, settings.FIENTA_BASE_URL, 1)
 
         assert len(result) == 1
 
@@ -493,9 +528,10 @@ class TestFetchRaw:
 
         adapter = _adapter(organizer_ids=[1])
         async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-            result = await adapter._fetch_organizer(client, settings.FIENTA_BASE_URL, 1)
+            result = await adapter.fetch_organizer(client, settings.FIENTA_BASE_URL, 1)
 
         assert [e["id"] for e in result] == ["1", "2"]
+        assert all(e["organizer_id"] == 1 for e in result)
 
     @pytest.mark.asyncio
     async def test_meta_pagination_missing_current_page_warns_and_continues(self, caplog):
@@ -512,7 +548,7 @@ class TestFetchRaw:
         adapter = _adapter(organizer_ids=[1])
         with caplog.at_level(logging.WARNING):
             async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-                result = await adapter._fetch_organizer(client, settings.FIENTA_BASE_URL, 1)
+                result = await adapter.fetch_organizer(client, settings.FIENTA_BASE_URL, 1)
 
         assert [e["id"] for e in result] == ["1", "2"]
         assert "current_page missing" in caplog.text
@@ -528,7 +564,7 @@ class TestFetchRaw:
         adapter = _adapter(organizer_ids=[1])
         with caplog.at_level(logging.WARNING):
             async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-                result = await adapter._fetch_organizer(client, settings.FIENTA_BASE_URL, 1)
+                result = await adapter.fetch_organizer(client, settings.FIENTA_BASE_URL, 1)
 
         assert [e["id"] for e in result] == ["1"]
         assert caplog.text == ""
@@ -551,7 +587,7 @@ class TestFetchRaw:
 
         adapter = _adapter(organizer_ids=[1])
         async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-            result = await adapter._fetch_organizer(client, base, 1)
+            result = await adapter.fetch_organizer(client, base, 1)
 
         assert [e["id"] for e in result] == ["A", "B"]
         assert call_count == 2
@@ -569,7 +605,7 @@ class TestFetchRaw:
 
         adapter = _adapter(organizer_ids=[1])
         async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-            result = await adapter._fetch_organizer(client, base, 1)
+            result = await adapter.fetch_organizer(client, base, 1)
 
         assert [e["id"] for e in result] == ["A"]
 
@@ -653,7 +689,7 @@ class TestFetchRaw:
 
         adapter = _adapter(organizer_ids=[1])
         async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-            await adapter._fetch_organizer(client, settings.FIENTA_BASE_URL, 1)
+            await adapter.fetch_organizer(client, settings.FIENTA_BASE_URL, 1)
 
         assert request_count == FIENTA_MAX_PAGES
 
@@ -674,7 +710,7 @@ class TestFetchRaw:
 
         adapter = _adapter(organizer_ids=[1])
         async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-            await adapter._fetch_organizer(client, base, 1)
+            await adapter.fetch_organizer(client, base, 1)
 
         assert request_count == FIENTA_MAX_PAGES
 
@@ -945,3 +981,88 @@ class TestFetchRawRateLimiting:
             await _adapter(organizer_ids=[1, 2]).fetch_raw({"1", "2"})
 
         assert mock_acquire.await_count == 2  # one listing request per organizer
+
+
+class TestFientaPresyncPublishers:
+    """#433: the fresh-deploy race between hourly ingest and the weekly
+    organizer sync — an empty publisher lookup at run() start must trigger
+    sync_fienta_organizers() before any event is inserted this run."""
+
+    @pytest.mark.asyncio
+    async def test_empty_lookup_triggers_sync_then_reloads_lookup(self, mock_db):
+        adapter = _adapter(organizer_ids=[42])
+
+        with patch(
+            "app.ingestion.sources.fienta.sync_fienta_organizers",
+            new_callable=AsyncMock,
+        ) as mock_sync, patch(
+            "app.ingestion.sources.fienta.load_publisher_lookup",
+            new_callable=AsyncMock,
+            return_value={"42": 7},
+        ) as mock_reload:
+            result = await adapter._presync_publishers(mock_db, {})
+
+        mock_sync.assert_awaited_once_with(mock_db)
+        mock_reload.assert_awaited_once_with(mock_db, adapter.source.id)
+        assert result == {"42": 7}
+
+    @pytest.mark.asyncio
+    async def test_populated_lookup_skips_sync(self, mock_db):
+        """A non-empty lookup means the mirror already ran — no need to
+        trigger another sync inline (that stays the weekly job's job)."""
+        adapter = _adapter(organizer_ids=[42])
+
+        with patch(
+            "app.ingestion.sources.fienta.sync_fienta_organizers",
+            new_callable=AsyncMock,
+        ) as mock_sync:
+            result = await adapter._presync_publishers(mock_db, {"42": 7})
+
+        mock_sync.assert_not_awaited()
+        assert result == {"42": 7}
+
+    @pytest.mark.asyncio
+    async def test_run_syncs_organizers_before_any_event_is_inserted(self, mock_db):
+        """Job-level: a fresh-deploy run() with an empty lookup must sync
+        organizers and reload the lookup before the crawl/insert phase, so
+        every event this run resolves against a populated lookup."""
+        adapter = _adapter(organizer_ids=[42])
+        adapter.fetch_raw = AsyncMock(return_value=[])
+
+        empty_lookup = MagicMock(all=MagicMock(return_value=[]))
+        populated_lookup = MagicMock(all=MagicMock(return_value=[("42", 7)]))
+        mock_db.execute.side_effect = [empty_lookup, populated_lookup]
+
+        with patch(
+            "app.ingestion.sources.fienta.sync_fienta_organizers",
+            new_callable=AsyncMock,
+        ) as mock_sync:
+            await adapter.run(mock_db)
+
+        mock_sync.assert_awaited_once_with(mock_db)
+        assert adapter._publisher_lookup == {"42": 7}
+
+    @pytest.mark.asyncio
+    async def test_presync_failure_is_recorded_as_run_error(self, mock_db):
+        """A presync failure (e.g. Fienta's organizer-sync HTTP probe timing
+        out) must land in IngestionRun.error and flip source.last_status,
+        exactly like a fetch_raw() failure — not escape unlogged before any
+        run row exists."""
+        source = _make_source(organizer_ids=[42])
+        adapter = FientaAdapter(source)
+        adapter.fetch_raw = AsyncMock()
+
+        mock_db.execute.return_value = MagicMock(all=MagicMock(return_value=[]))
+        with patch(
+            "app.ingestion.sources.fienta.sync_fienta_organizers",
+            new_callable=AsyncMock,
+            side_effect=httpx.ConnectTimeout("boom"),
+        ):
+            with pytest.raises(httpx.ConnectTimeout):
+                await adapter.run(mock_db)
+
+        adapter.fetch_raw.assert_not_awaited()
+        added_runs = [c.args[0] for c in mock_db.add.call_args_list]
+        assert len(added_runs) == 1
+        assert "boom" in added_runs[0].error
+        assert source.last_status == "error"

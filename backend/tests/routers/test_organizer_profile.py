@@ -22,7 +22,6 @@ class TestGetOwnProfile:
             "id": 5,
             "email": organizer.email,
             "locale": organizer.locale,
-            "theme_preference": None,
             "verified": True,
             "name": "Tallinn Live",
             "google_linked": False,
@@ -139,6 +138,33 @@ class TestUpdateOwnProfile:
 
         assert organizer.name == "Existing Name"
 
+    @pytest.mark.asyncio
+    async def test_stale_theme_preference_field_is_silently_ignored(
+        self, mock_db, make_request, make_organizer
+    ):
+        """A tab left open from before #378's deploy may still send the
+        retired theme_preference field — it must be a no-op, not a 422
+        (extra fields are ignored by default, no explicit-reject config)."""
+        from app.routers.organizer_profile import (
+            OrganizerProfilePatchBody,
+            update_own_profile,
+        )
+
+        organizer = make_organizer(organizer_id=5, name="Existing Name")
+        unlinked_result = MagicMock()
+        unlinked_result.scalars.return_value = MagicMock(first=MagicMock(return_value=None))
+        mock_db.execute = AsyncMock(return_value=unlinked_result)
+
+        result = await update_own_profile(
+            OrganizerProfilePatchBody(name="New Name", theme_preference="dark"),
+            make_request(method="PATCH", path="/organizer/profile"),
+            organizer,
+            mock_db,
+        )
+
+        assert organizer.name == "New Name"
+        assert "theme_preference" not in result
+
     def test_name_over_max_length_rejected(self):
         from pydantic import ValidationError
 
@@ -147,83 +173,6 @@ class TestUpdateOwnProfile:
 
         with pytest.raises(ValidationError):
             OrganizerProfilePatchBody(name="x" * (ORGANIZER_NAME_MAX_LEN + 1))
-
-    @pytest.mark.asyncio
-    async def test_sets_theme_preference(self, mock_db, make_request, make_organizer):
-        from app.routers.organizer_profile import (
-            OrganizerProfilePatchBody,
-            update_own_profile,
-        )
-
-        organizer = make_organizer(organizer_id=5, theme_preference=None)
-        linked_result = MagicMock()
-        linked_result.scalars.return_value = MagicMock(first=MagicMock(return_value=1))
-        mock_db.execute = AsyncMock(return_value=linked_result)
-
-        result = await update_own_profile(
-            OrganizerProfilePatchBody(theme_preference="dark"),
-            make_request(method="PATCH", path="/organizer/profile"),
-            organizer,
-            mock_db,
-        )
-
-        assert organizer.theme_preference == "dark"
-        assert result["theme_preference"] == "dark"
-        assert result["google_linked"] is True
-        mock_db.commit.assert_awaited_once()
-
-    @pytest.mark.asyncio
-    async def test_omitted_theme_preference_leaves_existing_untouched(
-        self, mock_db, make_request, make_organizer
-    ):
-        from app.routers.organizer_profile import (
-            OrganizerProfilePatchBody,
-            update_own_profile,
-        )
-
-        organizer = make_organizer(organizer_id=5, theme_preference="light")
-
-        await update_own_profile(
-            OrganizerProfilePatchBody(),
-            make_request(method="PATCH", path="/organizer/profile"),
-            organizer,
-            mock_db,
-        )
-
-        assert organizer.theme_preference == "light"
-
-    @pytest.mark.asyncio
-    async def test_explicit_null_theme_preference_clears_it(
-        self, mock_db, make_request, make_organizer
-    ):
-        """#257 — an explicit `theme_preference: null` clears the account
-        back to "no preference", distinct from omitting the field."""
-        from app.routers.organizer_profile import (
-            OrganizerProfilePatchBody,
-            update_own_profile,
-        )
-
-        organizer = make_organizer(organizer_id=5, theme_preference="dark")
-
-        result = await update_own_profile(
-            OrganizerProfilePatchBody(theme_preference=None),
-            make_request(method="PATCH", path="/organizer/profile"),
-            organizer,
-            mock_db,
-        )
-
-        assert organizer.theme_preference is None
-        assert result["theme_preference"] is None
-        mock_db.commit.assert_awaited_once()
-
-    def test_theme_preference_invalid_rejected(self):
-        from pydantic import ValidationError
-
-        from app.routers.organizer_profile import OrganizerProfilePatchBody
-
-        with pytest.raises(ValidationError):
-            OrganizerProfilePatchBody(theme_preference="blue")
-
 
 class TestUnlinkOwnIdentity:
     @pytest.mark.asyncio

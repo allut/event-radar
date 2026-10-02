@@ -1,13 +1,10 @@
 .nudge {
+  composes: alertAccent from '../shared/Alert.module.css';
   display: flex;
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
   gap: var(--space-3);
-  background: var(--accent-subtle);
-  border: var(--border-w-hair) solid var(--accent-border);
-  border-left: var(--border-w-alert) solid var(--accent);
-  border-radius: var(--radius);
   padding: var(--space-3) var(--space-4);
 }
 
@@ -49,7 +46,7 @@
   line-height: var(--leading-none);
   cursor: pointer;
   padding: var(--space-0-3);
-  border-radius: var(--radius);
+  border-radius: 0;
 }
 
 .dismissBtn:hover {

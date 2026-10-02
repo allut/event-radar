@@ -1,0 +1,244 @@
+.page {
+  composes: page from '../../components/shared/Page.module.css';
+}
+
+.main {
+  composes: pageMain from '../../components/shared/Page.module.css';
+  max-width: var(--page-max-narrow);
+}
+
+.eyebrow {
+  font-size: var(--fs-2xs);
+  font-weight: var(--fw-semibold);
+  color: var(--accent);
+  letter-spacing: var(--eyebrow-tracking);
+  text-transform: uppercase;
+}
+
+.title {
+  composes: pageTitle from '../../components/shared/Page.module.css';
+  margin-top: var(--space-1);
+}
+
+.intro {
+  margin-top: var(--space-2);
+  max-width: var(--measure-intro);
+  color: var(--text-soft);
+  font-size: var(--fs-sm);
+  line-height: var(--leading-body);
+}
+
+.section {
+  margin-top: var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.sectionLabel {
+  padding-bottom: var(--space-3);
+  border-bottom: var(--rule);
+  font-size: var(--fs-2xs);
+  font-weight: var(--fw-semibold);
+  color: var(--text-soft);
+  letter-spacing: var(--eyebrow-tracking);
+  text-transform: uppercase;
+}
+
+.fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding-top: var(--space-4);
+}
+
+.fieldRow {
+  display: flex;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.fieldRow > .fieldCol {
+  flex: 1 1 var(--flex-basis-sm);
+}
+
+.fieldCol {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.fieldHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.label {
+  composes: fieldLabel from '../../components/shared/Field.module.css';
+}
+
+.input {
+  composes: fieldInput from '../../components/shared/Field.module.css';
+  width: 100%;
+  font-family: inherit;
+}
+
+.editorFallback {
+  min-height: var(--textarea-height-sm);
+  border: var(--border-w-hair) solid var(--border);
+}
+
+.hint {
+  font-size: var(--fs-2xs);
+  color: var(--text-dim);
+}
+
+.pinTag {
+  font-size: var(--fs-2xs);
+  letter-spacing: var(--tracking-wide);
+  color: var(--accent-light);
+  border: var(--border-w-hair) solid var(--accent-border);
+  padding: var(--space-0-125) var(--space-2);
+  line-height: normal;
+}
+
+.syncTag {
+  font-size: var(--fs-2xs);
+  letter-spacing: var(--tracking-wide);
+  color: var(--text-muted);
+}
+
+.unpinBtn {
+  composes: textButton from '../../components/shared/Button.module.css';
+  font-size: var(--fs-2xs);
+}
+
+/* Doubled selector: see ClaimPending.module.css's .cancelBtn.cancelBtn for
+   the cross-file cascade-order rationale (same textButton base). */
+.unpinBtn.unpinBtn {
+  margin-top: 0;
+  padding: 0;
+  line-height: normal;
+}
+
+.chips {
+  composes: chips from '../../components/shared/Chip.module.css';
+  align-items: center;
+}
+
+.chip {
+  composes: chip from '../../components/shared/Chip.module.css';
+  border-radius: 0;
+  height: var(--space-1-75);
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+}
+
+.chipNew {
+  color: var(--accent-light);
+  border-color: var(--accent-border);
+}
+
+.mismatch {
+  composes: alert from '../../components/shared/Alert.module.css';
+  color: var(--text);
+  background: var(--accent-subtle);
+  border-left-color: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+.mismatchHeading {
+  font-weight: var(--fw-semibold);
+  color: var(--accent-light);
+  font-size: var(--fs-sm);
+}
+
+.mismatchBody {
+  color: var(--text-soft);
+  font-size: var(--fs-xs);
+}
+
+.mismatchAccept {
+  composes: btnPrimary from '../../components/shared/Button.module.css';
+  flex-shrink: 0;
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--fs-sm);
+}
+
+.saveBar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-4);
+  margin-top: var(--space-6);
+  padding-top: var(--space-4);
+  border-top: var(--rule);
+  flex-wrap: wrap;
+}
+
+.saveHint {
+  color: var(--text-dim);
+  font-size: var(--fs-2xs);
+  flex: 1 1 var(--flex-basis-sm);
+}
+
+.save {
+  composes: btnSubmit from '../../components/shared/Button.module.css';
+  padding: var(--space-0-8125) var(--space-5);
+}
+
+.error {
+  composes: alert from '../../components/shared/Alert.module.css';
+}
+
+.saveStatus {
+  composes: alert from '../../components/shared/Alert.module.css';
+  margin-top: var(--space-6);
+}
+
+/* Doubled selector: overriding alert's danger colors cross-file needs the
+   same cascade-order guard as the textButton overrides above. */
+.saveStatusSuccess.saveStatusSuccess {
+  color: var(--success);
+  background: var(--success-faint);
+  border-left-color: var(--success);
+}
+
+.overlay {
+  composes: overlay from '../../components/shared/Spinner.module.css';
+}
+
+.overlaySpinner {
+  composes: ring ringOnPage sizeLg from '../../components/shared/Spinner.module.css';
+}
+
+.locked {
+  margin-top: var(--space-7);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  text-align: center;
+  padding: var(--space-7) var(--space-5);
+  border: var(--border-w-hair) solid var(--border);
+  border-radius: var(--radius);
+}
+
+.lockedTitle {
+  font-family: var(--font-display);
+  font-size: var(--font-size-display-legal);
+  color: var(--text);
+}
+
+.lockedBody {
+  max-width: var(--measure-notice);
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}

@@ -1,9 +1,7 @@
 /**
- * Hand-run generator (not wired into `npm run build` — keeps Vercel build
- * cost unchanged) that rasterizes public/favicon.svg into every icon asset
- * Google/iOS/the web-app manifest need. Plain `chromium.launch()`: this never
- * runs on Vercel, so the `@sparticuz/chromium` branch in prerender.ts's
- * launchBrowser() doesn't apply here.
+ * Hand-run generator (not wired into `npm run build` — keeps build cost
+ * unchanged) that rasterizes public/favicon.svg into every icon asset
+ * Google/iOS/the web-app manifest need.
  *
  * Usage: npx tsx scripts/generate-icons.ts
  */

@@ -3,8 +3,7 @@
 }
 
 .main {
-  composes: pageMain from '../shared/Page.module.css';
-  max-width: var(--page-max-narrow);
+  composes: pageMainNarrow from '../shared/Page.module.css';
 }
 
 .title {

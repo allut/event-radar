@@ -1,11 +1,8 @@
 import { useCallback, useMemo } from 'react';
 import { t } from '../../i18n';
-import { THEME_OPTIONS, API } from '../../constants';
-import { useThemePreference } from '../../hooks/useThemePreference';
-import { setThemePreference, type ThemePreference } from '../../lib/theme';
-import { isAuthenticated } from '../../lib/auth';
-import { isAuthenticatedOrganizer } from '../../lib/organizerAuth';
-import { api, organizerApi } from '../../api/client';
+import { THEME_OPTIONS } from '../../constants';
+import { useResolvedTheme } from '../../hooks/useResolvedTheme';
+import { setThemeOverride, type ResolvedTheme } from '../../lib/theme';
 import SelectMenu from '../SelectMenu';
 
 interface ThemeSelectorProps {
@@ -15,35 +12,17 @@ interface ThemeSelectorProps {
 
 // Shared between consumer (TopBar) and organizer (OrganizerTopBar) surfaces
 // — the current value isn't threaded through props from a route-driven
-// parent; the component owns it via useThemePreference()/lib/theme.ts
+// parent; the component owns it via useResolvedTheme()/lib/theme.ts
 // directly, since theme has no URL dependency to stay in sync with.
 //
-// Once signed in, a change also persists to the account — consumer via
-// PATCH /users/me (#253), organizer via PATCH /organizer/profile (#254) —
-// same PATCH each track already uses for locale changes. The two tracks
-// never share state (see CONTEXT.md), so exactly one branch fires per
-// change; isAuthenticated() (consumer) takes precedence in the unlikely
-// case both hints are set in the same browser.
-// The account column only ever holds "light"/"dark"/NULL (see #247's
-// storage-shape decision) — "System" has no value of its own to send, so
-// picking it sends an explicit `null` to clear back to "no preference"
-// (#257), letting a prior Light/Dark account choice be durably undone.
+// The override is scoped to this browser only, never an account (ADR
+// 0003) — signing in on either track neither reads nor writes a theme, so
+// there's no PATCH branch here to keep in sync with an auth track.
 export default function ThemeSelector({ locale, ariaLabel }: ThemeSelectorProps) {
-  const preference = useThemePreference();
+  const resolved = useResolvedTheme();
 
   const handleChange = useCallback((next: string) => {
-    const pref = next as ThemePreference;
-    setThemePreference(pref);
-    const value = pref === 'system' ? null : pref;
-    if (isAuthenticated()) {
-      void api.patch(API.me, { theme_preference: value }).catch(() => {
-        // Non-fatal — the device already applied the choice locally regardless.
-      });
-    } else if (isAuthenticatedOrganizer()) {
-      void organizerApi.patch(API.organizerProfile, { theme_preference: value }).catch(() => {
-        // Non-fatal — the device already applied the choice locally regardless.
-      });
-    }
+    setThemeOverride(next as ResolvedTheme);
   }, []);
 
   // Stable per locale — rebuilding on every render defeats SelectMenu's
@@ -56,7 +35,7 @@ export default function ThemeSelector({ locale, ariaLabel }: ThemeSelectorProps)
   return (
     <SelectMenu
       label=""
-      value={preference}
+      value={resolved}
       options={options}
       onChange={handleChange}
       ariaLabel={ariaLabel}

@@ -1,10 +1,8 @@
 /**
- * Catch-all backend proxy (issue #345) — Cloudflare Pages Function
- * reproducing vercel.json's `/api/:path` rewrite now that Vercel is being
- * decommissioned (issue #341). Forwards every `/api/*` request to the
- * Render Frankfurt backend (BACKEND_ORIGIN, src/constants.ts) with the
- * `/api` prefix stripped, same as the old rewrite — the backend's own route
- * shape carries no `/api` prefix.
+ * Catch-all backend proxy (issue #345) — a Cloudflare Pages Function that
+ * forwards every `/api/*` request to the Render Frankfurt backend
+ * (BACKEND_ORIGIN, src/constants.ts) with the `/api` prefix stripped — the
+ * backend's own route shape carries no `/api` prefix.
  *
  * Same-origin proxying (rather than the SPA fetching Render directly) is
  * what lets the backend's httpOnly session cookie work as a first-party

@@ -22,6 +22,9 @@ PILETILEVI_DATE_SELECTOR = ".card__time"
 PILETILEVI_VENUE_SELECTOR = ".card__description"
 PILETILEVI_IMAGE_SELECTOR = "img.card__image"
 PILETILEVI_DETAIL_DESC_SELECTOR = ".event__description"
+# Promoter profile page's "Contacts and additional details" mailto — the only
+# mailto: link on that page (#412 claim verification, app/claims/).
+PILETILEVI_PROMOTER_CONTACT_SELECTOR = "a[href^='mailto:']"
 # No stable class on the "Important information" h2 (generic Tailwind
 # utilities) — only two h2s exist on the page, so anchoring on heading text
 # is unambiguous. ET uses "Hinnainfo"; EN uses "Important information"; RU

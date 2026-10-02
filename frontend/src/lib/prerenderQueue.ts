@@ -19,13 +19,18 @@ export interface QueueCandidate {
  * locale variants) keep their relative input order. */
 export function prioritizeRenderQueue<T extends QueueCandidate>(items: T[]): T[] {
   return [...items]
-    .map((item, index) => ({ item, index }))
+    // Date.parse once per item, not twice per comparison.
+    .map((item, index) => ({
+      item,
+      index,
+      ts: item.eventId === undefined ? 0 : Date.parse(item.updatedAt as string),
+    }))
     .sort((a, b) => {
       const aIsHome = a.item.eventId === undefined;
       const bIsHome = b.item.eventId === undefined;
       if (aIsHome !== bIsHome) return aIsHome ? -1 : 1;
       if (!aIsHome && !bIsHome) {
-        const diff = Date.parse(a.item.updatedAt as string) - Date.parse(b.item.updatedAt as string);
+        const diff = a.ts - b.ts;
         if (diff !== 0) return diff;
       }
       return a.index - b.index;

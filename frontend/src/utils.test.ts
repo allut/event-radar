@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { cx, safeUrl, sanitizeHtml, formatPrice, categoryGradient, formatHourMinute, formatEventShortDate, makeActiveClassMap, trackExternalClick, datePresetRange, parseExploreFilters, exploreFiltersToSearchParams, buildExploreApiQuery, activeFacetCount, isFullSet, shouldFlipPopover, maskAnalyticsUrl, DEFAULT_EXPLORE_FILTERS, type ExploreFilters, monthGridDays, weekdayHeaders, splitDateTimeValue, joinDateTimeValue, parseTypedDate, formatPickerValue, formatMonthYearLabel, toDisplayDateTime, fromDisplayDateTime, buildMapsUrl, isValidLocale, stripLocalePrefix, localizedPath, localeFromPath, localizedTo, truncateForMeta, parseISODateLocal, formatDateRangeShort } from './utils';
+import { cx, safeUrl, sanitizeHtml, formatPrice, categoryGradient, formatHourMinute, formatEventShortDate, makeActiveClassMap, trackExternalClick, datePresetRange, parseExploreFilters, exploreFiltersToSearchParams, buildExploreApiQuery, nextKeysetParam, activeFacetCount, isFullSet, shouldFlipPopover, maskAnalyticsUrl, DEFAULT_EXPLORE_FILTERS, type ExploreFilters, monthGridDays, weekdayHeaders, splitDateTimeValue, joinDateTimeValue, parseTypedDate, formatPickerValue, formatMonthYearLabel, toDisplayDateTime, fromDisplayDateTime, buildMapsUrl, isValidLocale, stripLocalePrefix, localizedPath, localeFromPath, localizedTo, truncateForMeta, cardAnimationDelayMs, parseISODateLocal, formatDateRangeShort, localeLabel, localizedFieldLabel, localizedTriplet, weekdayOffset } from './utils';
+import { t } from './i18n';
 import { FALLBACK_GRADIENT, CATEGORIES, GOOGLE_MAPS_SEARCH_URL } from './constants';
 
 vi.mock('./api/client', () => ({
@@ -754,5 +755,75 @@ describe('buildMapsUrl', () => {
 
   it('returns null when neither coordinates nor address are available', () => {
     expect(buildMapsUrl(null, null, null)).toBeNull();
+  });
+});
+
+describe('localeLabel', () => {
+  it('returns the configured label for a known code', () => {
+    expect(localeLabel('et')).toBe('ET');
+  });
+  it('falls back to the upper-cased code for an unknown one', () => {
+    expect(localeLabel('xx')).toBe('XX');
+  });
+});
+
+describe('localizedFieldLabel', () => {
+  it('suffixes the translated field name with the language label', () => {
+    expect(localizedFieldLabel('claim_edit_field_title', 'en', 'ru')).toBe(`${t('claim_edit_field_title', 'en')} (${localeLabel('ru')})`);
+  });
+});
+
+describe('localizedTriplet', () => {
+  it('reads et/en/ru slots from the record', () => {
+    expect(localizedTriplet({ et: 'a', en: 'b', ru: 'c' }, 'base')).toEqual(['a', 'b', 'c']);
+  });
+  it('falls back to base for ET and blanks for EN/RU', () => {
+    expect(localizedTriplet(null, 'base')).toEqual(['base', '', '']);
+    expect(localizedTriplet(undefined, undefined)).toEqual(['', '', '']);
+  });
+});
+
+describe('weekdayOffset', () => {
+  it('counts days since the week start', () => {
+    const wednesday = new Date(2024, 6, 3);
+    expect(weekdayOffset(wednesday, 1)).toBe(2);
+    expect(weekdayOffset(wednesday, 0)).toBe(3);
+    expect(weekdayOffset(new Date(2024, 6, 7), 1)).toBe(6);
+  });
+});
+
+describe('cardAnimationDelayMs', () => {
+  it('staggers within a page and plateaus after the cap', () => {
+    expect(cardAnimationDelayMs(0)).toBe(0);
+    expect(cardAnimationDelayMs(3)).toBe(240);
+    expect(cardAnimationDelayMs(23)).toBe(640);
+  });
+
+  it('restarts on every page so later cards are not held invisible', () => {
+    expect(cardAnimationDelayMs(24)).toBe(0);
+    expect(cardAnimationDelayMs(24 * 5 + 2)).toBe(160);
+  });
+});
+
+describe('buildExploreApiQuery cursor', () => {
+  it('sends cursor only when given', () => {
+    expect(new URLSearchParams(buildExploreApiQuery(DEFAULT_EXPLORE_FILTERS, 0)).has('cursor')).toBe(false);
+    const params = new URLSearchParams(buildExploreApiQuery(DEFAULT_EXPLORE_FILTERS, 24, 'abc'));
+    expect(params.get('cursor')).toBe('abc');
+  });
+});
+
+describe('nextKeysetParam', () => {
+  it('stops when there is no more', () => {
+    expect(nextKeysetParam({ has_more: false, offset: 0, next_cursor: 'x' }, 24)).toBeUndefined();
+  });
+
+  it('carries the server cursor when present', () => {
+    expect(nextKeysetParam({ has_more: true, offset: 0, next_cursor: 'x' }, 24)).toEqual({ offset: 24, cursor: 'x' });
+  });
+
+  it('falls back to offset arithmetic without a cursor', () => {
+    expect(nextKeysetParam({ has_more: true, offset: 24 }, 24)).toEqual({ offset: 48, cursor: undefined });
+    expect(nextKeysetParam({ has_more: true, offset: 24, next_cursor: null }, 24)).toEqual({ offset: 48, cursor: undefined });
   });
 });

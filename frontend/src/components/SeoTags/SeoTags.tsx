@@ -2,6 +2,7 @@ import { memo, useMemo } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { JSONLD_SCRIPT_TYPE } from '../../constants';
 import type { SeoMetaResult } from '../../hooks/useSeoMeta';
+import { serializeJsonLd } from '../../lib/jsonLd';
 
 /** Renders a useSeoMeta() result (plus an optional schema.org JSON-LD object,
  * built by src/lib/structuredData.ts's builder functions — issue #49) via
@@ -15,7 +16,7 @@ import type { SeoMetaResult } from '../../hooks/useSeoMeta';
  * full payload (Big-O audit H3). */
 function SeoTags({ meta, jsonLd }: { meta: SeoMetaResult; jsonLd?: object }) {
   const jsonLdScript = useMemo(
-    () => (jsonLd ? JSON.stringify(jsonLd).replace(/</g, '\\u003c') : undefined),
+    () => (jsonLd ? serializeJsonLd(jsonLd) : undefined),
     [jsonLd],
   );
   return (

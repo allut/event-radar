@@ -1,7 +1,5 @@
-import { CONTACT_EMAIL, CONTACT_MAILTO } from '../../constants';
+import { AKI_URL, CONTACT_EMAIL, CONTACT_MAILTO } from '../../constants';
 import type { LegalDoc } from './types';
-
-const AKI_URL = 'https://www.aki.ee';
 
 const doc: LegalDoc = {
   title: 'Privaatsuspoliitika',

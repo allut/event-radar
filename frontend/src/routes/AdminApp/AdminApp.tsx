@@ -8,6 +8,7 @@ import AdminLogin from '../AdminLogin';
 import AdminDashboard from '../AdminDashboard';
 import AdminReports from '../AdminReports';
 import AdminSubmissions from '../AdminSubmissions';
+import AdminClaims from '../AdminClaims';
 import AdminEventDetail from '../AdminEventDetail';
 import AdminPipeline from '../AdminPipeline';
 import AdminDedup from '../AdminDedup';
@@ -36,6 +37,7 @@ function screenFor(pathname: string): ReactNode | null {
   if (pathname === ROUTES.adminDashboard) return <AdminDashboard />;
   if (pathname === ROUTES.adminReports) return <AdminReports />;
   if (pathname === ROUTES.adminSubmissions) return <AdminSubmissions />;
+  if (pathname === ROUTES.adminClaims) return <AdminClaims />;
   if (pathname === ROUTES.adminPipeline) return <AdminPipeline />;
   if (pathname === ROUTES.adminDedup) return <AdminDedup />;
   if (

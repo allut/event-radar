@@ -12,6 +12,7 @@ from app.constants import (
     EVENT_STATUS_PUBLISHED,
     PUBLISH_DIAGNOSTICS_WINDOW_DAYS,
     PUBLISH_MIN_QUALITY_SCORE,
+    SOURCE_SLUG_FIENTA,
     TALLINN_REGION_BBOX,
     TALLINN_TZ,
 )
@@ -30,15 +31,20 @@ REJECT_ROW_ZERO = SimpleNamespace(
 )
 
 
-def _configure_execute(mock_db, rowcount: int, reject_row=REJECT_ROW_ZERO):
-    """Gate now issues two execute() calls: the bulk UPDATE, then a diagnostic
-    SELECT over the still-classified rows. side_effect gives each call its
-    own mocked result."""
+def _configure_execute(
+    mock_db, rowcount: int, reject_row=REJECT_ROW_ZERO, stamp_rowcount: int = 0
+):
+    """Gate now issues three execute() calls: the bulk UPDATE, a diagnostic
+    SELECT over the still-classified rows, then the Fienta publisher-stamp
+    safety-net UPDATE (#433). side_effect gives each call its own mocked
+    result."""
     update_result = MagicMock()
     update_result.rowcount = rowcount
     select_result = MagicMock()
     select_result.one.return_value = reject_row
-    mock_db.execute.side_effect = [update_result, select_result]
+    stamp_result = MagicMock()
+    stamp_result.rowcount = stamp_rowcount
+    mock_db.execute.side_effect = [update_result, select_result, stamp_result]
 
 
 @pytest.mark.asyncio
@@ -48,7 +54,7 @@ async def test_publish_pending_returns_rowcount_from_update(mock_db):
     result = await publish_pending(mock_db)
 
     assert result["published"] == 3
-    assert mock_db.execute.call_count == 2
+    assert mock_db.execute.call_count == 3
 
 
 @pytest.mark.asyncio
@@ -170,3 +176,43 @@ async def test_publish_pending_reject_breakdown_includes_unverified_organizer(mo
     select_stmt = mock_db.execute.call_args_list[1][0][0]
     compiled = str(select_stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "fail_unverified_organizer" in compiled
+
+
+class TestFientaPublisherStampSafetyNet:
+    """#433: publish_pending() must close the Fienta stamping race by
+    stamping EventSource.publisher_id for any published row still NULL,
+    resolved via the matching RawEvent's stamped organizer id -> Publisher.
+    """
+
+    @pytest.mark.asyncio
+    async def test_stamp_update_runs_after_diagnostics(self, mock_db):
+        _configure_execute(mock_db, rowcount=2, stamp_rowcount=1)
+
+        result = await publish_pending(mock_db)
+
+        assert result["published"] == 2
+        assert mock_db.execute.call_count == 3
+        stamp_stmt = mock_db.execute.call_args_list[2][0][0]
+        compiled = str(stamp_stmt.compile(compile_kwargs={"literal_binds": True}))
+        # Scoped to Fienta, only rows still missing a publisher.
+        assert f"'{SOURCE_SLUG_FIENTA}'" in compiled
+        assert "publisher_id IS NULL" in compiled
+        # Resolved via the matching raw_events row's stamped organizer id.
+        assert "raw_events" in compiled
+        assert "organizer_id" in compiled
+        assert "publishers" in compiled
+        # Only currently-published events are eligible.
+        assert f"events.status = '{EVENT_STATUS_PUBLISHED}'" in compiled
+
+    @pytest.mark.asyncio
+    async def test_stamp_update_still_runs_when_diagnostics_disabled(self, mock_db):
+        """The safety net must not be skippable via diagnostics=False — that
+        flag only controls the reject-breakdown SELECT."""
+        update_result = MagicMock(rowcount=1)
+        stamp_result = MagicMock(rowcount=0)
+        mock_db.execute.side_effect = [update_result, stamp_result]
+
+        result = await publish_pending(mock_db, diagnostics=False)
+
+        assert result == {"published": 1}
+        assert mock_db.execute.call_count == 2

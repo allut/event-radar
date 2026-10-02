@@ -18,7 +18,12 @@ from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.email import send_magic_link
+from app.auth.dependencies import get_current_organizer
+from app.auth.email import (
+    send_google_link_confirmation,
+    send_identity_linked_notice,
+    send_magic_link,
+)
 from app.auth.google_oauth import (
     GoogleIdentity,
     GoogleTokenExchangeError,
@@ -31,13 +36,14 @@ from app.auth.google_oauth import (
 )
 from app.auth.tokens import (
     generate_oauth_state_token,
+    generate_google_link_binding_token,
     generate_organizer_magic_token,
     generate_organizer_session_token,
+    google_link_binding_matches,
     hash_token,
     organizer_magic_ttl_seconds,
     verify_oauth_state_token,
     verify_organizer_magic_token,
-    verify_organizer_session_token,
 )
 from app.config import settings
 from app.constants import (
@@ -49,14 +55,12 @@ from app.constants import (
     ERROR_MAGIC_LINK_CONSUMED,
     ERROR_MAGIC_LINK_EXPIRED,
     ERROR_MAGIC_LINK_INVALID,
-    ERROR_MISSING_SESSION_COOKIE,
     ERROR_ORGANIZER_NOT_FOUND,
-    ERROR_SESSION_INVALID,
-    ERROR_SESSION_REVOKED,
     GOOGLE_SIGNIN_OUTCOME_AUTO_LINKED,
     GOOGLE_SIGNIN_OUTCOME_CONFIRMATION_SENT,
     GOOGLE_SIGNIN_OUTCOME_EXISTING_LOGIN,
     GOOGLE_SIGNIN_OUTCOME_NEW_ACCOUNT,
+    GOOGLE_SIGNIN_OUTCOME_UNVERIFIED_EMAIL,
     IDENTITY_PROVIDER_GOOGLE,
     LOG_EVENT_AUTH_FAILED,
     LOG_EVENT_GOOGLE_SIGNIN,
@@ -67,6 +71,8 @@ from app.constants import (
     OAUTH_ERROR_TOKEN_EXCHANGE_FAILED,
     OAUTH_ERROR_VERIFICATION_FAILED,
     ORGANIZER_AUTH_VERIFY_PATH,
+    ORGANIZER_GOOGLE_LINK_BINDING_COOKIE_NAME,
+    ORGANIZER_GOOGLE_LINK_BINDING_COOKIE_PATH,
     ORGANIZER_DASHBOARD_PATH,
     ORGANIZER_GOOGLE_CALLBACK_PUBLIC_PATH,
     ORGANIZER_LOGIN_PATH,
@@ -95,12 +101,12 @@ from app.routers.utils import (
     build_oauth_error_redirect,
     clear_oauth_state_cookie,
     clear_session_cookie,
-    mask_email,
+    get_or_create_organizer,
     recent_unused_link_exists,
-    record_unverified_account_creation,
     set_oauth_state_cookie,
     set_session_cookie,
 )
+from app.auth.utils import mask_email
 
 log = logging.getLogger(__name__)
 # Every organizer endpoint must live under this /organizer/* prefix (or the
@@ -108,57 +114,6 @@ log = logging.getLogger(__name__)
 # the cookie to Path=/api/organizer, so a future organizer route added
 # outside that prefix would silently never receive it and 401 on every call.
 router = APIRouter(prefix="/organizer/auth", tags=["organizer-auth"])
-
-
-async def get_current_organizer(
-    organizer_session: str | None = Cookie(
-        default=None, alias=ORGANIZER_SESSION_COOKIE_NAME
-    ),
-    db: AsyncSession = Depends(get_db),
-) -> Organizer:
-    if not organizer_session:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=ERROR_MISSING_SESSION_COOKIE,
-        )
-    try:
-        organizer_id, token_version = verify_organizer_session_token(organizer_session)
-    except (SignatureExpired, BadSignature):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=ERROR_SESSION_INVALID,
-        )
-    organizer = await db.get(Organizer, organizer_id)
-    if organizer is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=ERROR_ORGANIZER_NOT_FOUND,
-        )
-    if token_version != organizer.session_token_version:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=ERROR_SESSION_REVOKED,
-        )
-    return organizer
-
-
-async def _get_or_create_organizer(
-    db: AsyncSession, email: str, requested_locale: str | None
-) -> Organizer:
-    """Look up (or insert) the organizer for a magic-link request. Mirrors
-    auth.py::_get_or_create_user — same unverified-row-creation trade-off,
-    mitigated the same way (RATE_LIMIT_AUTH_REQUEST_LINK + cooldown)."""
-    organizer = await db.scalar(select(Organizer).where(Organizer.email == email))
-    if organizer is None:
-        organizer = Organizer(email=email, locale=requested_locale or DEFAULT_USER_LOCALE)
-        db.add(organizer)
-        await db.flush()
-        log.info(
-            "organizer auth: new unverified organizer row created email=%s",
-            mask_email(email),
-        )
-        record_unverified_account_creation()
-    return organizer
 
 
 @router.post("/request-link", status_code=status.HTTP_200_OK)
@@ -171,7 +126,7 @@ async def request_organizer_magic_link(
     """Request an organizer sign-in link. Always returns 200 (anti-enumeration)."""
     email = body.email.lower()
     requested_locale = body.locale if body.locale in VALID_LOCALES else None
-    organizer = await _get_or_create_organizer(db, email, requested_locale)
+    organizer = await get_or_create_organizer(db, email, requested_locale)
     email_locale = requested_locale or organizer.locale
 
     if await recent_unused_link_exists(
@@ -200,13 +155,21 @@ async def request_organizer_magic_link(
             signed_token,
             email_locale,
             verify_path=ORGANIZER_AUTH_VERIFY_PATH,
-            theme_preference=organizer.theme_preference,
         )
     except Exception:
         log.exception("Failed to send organizer magic link to %s", mask_email(email))
         # Do not surface email errors to caller — link is in DB, organizer can retry.
 
     return {"detail": DETAIL_MAGIC_LINK_SENT}
+
+
+async def _notify_identity_linked(email: str, locale: str) -> None:
+    """Best-effort "Google sign-in was linked" notice (OWASP audit #3) — the
+    link already exists, so a send failure is logged, never surfaced."""
+    try:
+        await send_identity_linked_notice(email, locale)
+    except Exception:
+        log.exception("Failed to send identity-linked notice to %s", mask_email(email))
 
 
 @router.post("/verify")
@@ -216,10 +179,15 @@ async def verify_organizer_magic_link(
     body: VerifyTokenBody,
     response: Response,
     db: AsyncSession = Depends(get_db),
+    organizer_google_link_binding: str | None = Cookie(
+        default=None, alias=ORGANIZER_GOOGLE_LINK_BINDING_COOKIE_NAME
+    ),
 ) -> dict:
     """Verify an organizer magic-link token. Sets the organizer session
     cookie on success; mirrors auth.py::verify_magic_link's body-token /
-    no-token-in-response shape."""
+    no-token-in-response shape, including the Google-link browser binding
+    (OWASP audit #3): a confirmation link only attaches its pending Google
+    identity when opened in the browser that started the Google sign-in."""
     token = body.token
     try:
         organizer_id = verify_organizer_magic_token(token)
@@ -283,25 +251,47 @@ async def verify_organizer_magic_link(
     if pending_google_sub is not None:
         # ADR 0002 — this magic link was sent to confirm a pending Google
         # identity link (non-authoritative address), not to start a session
-        # directly. Create the link now that control of the address is proven.
-        try:
-            db.add(
-                OrganizerIdentity(
-                    organizer_id=organizer.id,
-                    provider=IDENTITY_PROVIDER_GOOGLE,
-                    provider_sub=pending_google_sub,
+        # directly. Create the link now that control of the address is proven
+        # — and only in the browser that started the Google sign-in (OWASP
+        # audit #3); elsewhere this is a plain sign-in.
+        if google_link_binding_matches(
+            organizer_google_link_binding,
+            sub=pending_google_sub,
+            track=AUTH_TRACK_ORGANIZER,
+            max_age=organizer_magic_ttl_seconds(),
+        ):
+            try:
+                db.add(
+                    OrganizerIdentity(
+                        organizer_id=organizer.id,
+                        provider=IDENTITY_PROVIDER_GOOGLE,
+                        provider_sub=pending_google_sub,
+                    )
                 )
-            )
-            await db.commit()
-            log.info(
-                "organizer identity linked via confirmation: organizer_id=%s",
+                await db.commit()
+                log.info(
+                    "organizer identity linked via confirmation: organizer_id=%s",
+                    organizer.id,
+                    extra={"event": LOG_EVENT_IDENTITY_LINKED, "provider": IDENTITY_PROVIDER_GOOGLE},
+                )
+                await _notify_identity_linked(organizer.email, organizer.locale)
+            except IntegrityError:
+                # Already linked by a concurrent request (or a stale/reused
+                # sub) — not this request's problem to surface; the session
+                # still mints.
+                await db.rollback()
+        else:
+            log.warning(
+                "organizer google identity NOT linked: confirmation link opened "
+                "without the matching browser binding organizer_id=%s",
                 organizer.id,
-                extra={"event": LOG_EVENT_IDENTITY_LINKED, "provider": IDENTITY_PROVIDER_GOOGLE},
+                extra={"event": LOG_EVENT_AUTH_FAILED},
             )
-        except IntegrityError:
-            # Already linked by a concurrent request (or a stale/reused sub) —
-            # not this request's problem to surface; the session still mints.
-            await db.rollback()
+        clear_session_cookie(
+            response,
+            name=ORGANIZER_GOOGLE_LINK_BINDING_COOKIE_NAME,
+            path=ORGANIZER_GOOGLE_LINK_BINDING_COOKIE_PATH,
+        )
 
     session_token = generate_organizer_session_token(
         organizer.id, organizer.session_token_version
@@ -418,13 +408,13 @@ async def start_organizer_google_signin(request: Request) -> RedirectResponse:
 
 
 async def _get_or_create_organizer_for_google(db: AsyncSession, email: str) -> Organizer:
-    """Same unverified-row-creation shape as _get_or_create_organizer, split
+    """Same unverified-row-creation shape as get_or_create_organizer, split
     out so the Google linking-gate paths that need it don't have to carry a
     locale/cooldown-unrelated signature. Used only where a magic link is
     about to be sent (confirmation branch) — the metric this trips
     (record_unverified_account_creation) exists specifically to bound
     magic-link email volume, which is what's happening here too."""
-    return await _get_or_create_organizer(db, email, None)
+    return await get_or_create_organizer(db, email, None)
 
 
 async def _send_google_confirmation_link(
@@ -458,12 +448,11 @@ async def _send_google_confirmation_link(
     await db.commit()
 
     try:
-        await send_magic_link(
+        await send_google_link_confirmation(
             organizer.email,
             signed_token,
             organizer.locale,
             verify_path=ORGANIZER_AUTH_VERIFY_PATH,
-            theme_preference=organizer.theme_preference,
         )
     except Exception:
         log.exception(
@@ -541,6 +530,11 @@ async def _apply_google_linking_gate(
         )
         return outcome, organizer
 
+    # Google itself says it hasn't verified this address — nothing to confirm
+    # and no reason to email a third party (OWASP audit #3): no row, no link.
+    if not identity["email_verified"]:
+        return GOOGLE_SIGNIN_OUTCOME_UNVERIFIED_EMAIL, None
+
     # Non-authoritative address — Google's word on `email_verified` isn't
     # trusted enough to auto-link (ADR 0002). Prove control via a
     # confirmation magic link before any identity row is created.
@@ -605,7 +599,7 @@ async def organizer_google_callback(
     except (httpx.HTTPError, GoogleTokenExchangeError):
         log.warning(
             "organizer google sign-in: token exchange failed",
-            extra={"event": LOG_EVENT_GOOGLE_SIGNIN_DEGRADED, "track": "organizer"},
+            extra={"event": LOG_EVENT_GOOGLE_SIGNIN_DEGRADED, "track": AUTH_TRACK_ORGANIZER},
         )
         return _error_redirect(OAUTH_ERROR_TOKEN_EXCHANGE_FAILED)
 
@@ -616,7 +610,7 @@ async def organizer_google_callback(
         # rejected caller.
         log.warning(
             "organizer google sign-in: JWKS fetch failed",
-            extra={"event": LOG_EVENT_GOOGLE_SIGNIN_DEGRADED, "track": "organizer"},
+            extra={"event": LOG_EVENT_GOOGLE_SIGNIN_DEGRADED, "track": AUTH_TRACK_ORGANIZER},
         )
         return _error_redirect(OAUTH_ERROR_TOKEN_EXCHANGE_FAILED)
     except jwt.PyJWTError:
@@ -630,14 +624,29 @@ async def organizer_google_callback(
     log.info(
         "organizer google sign-in: outcome=%s",
         outcome,
-        extra={"event": LOG_EVENT_GOOGLE_SIGNIN, "track": "organizer", "outcome": outcome},
+        extra={"event": LOG_EVENT_GOOGLE_SIGNIN, "track": AUTH_TRACK_ORGANIZER, "outcome": outcome},
     )
+
+    if outcome == GOOGLE_SIGNIN_OUTCOME_UNVERIFIED_EMAIL:
+        return _error_redirect(OAUTH_ERROR_VERIFICATION_FAILED)
 
     if organizer is None:
         response = RedirectResponse(
             f"{settings.FRONTEND_URL}{ORGANIZER_LOGIN_PATH}", status_code=status.HTTP_302_FOUND
         )
+        # Bind the confirmation link to this browser (OWASP audit #3).
+        set_session_cookie(
+            response,
+            name=ORGANIZER_GOOGLE_LINK_BINDING_COOKIE_NAME,
+            token=generate_google_link_binding_token(
+                identity["sub"], AUTH_TRACK_ORGANIZER
+            ),
+            path=ORGANIZER_GOOGLE_LINK_BINDING_COOKIE_PATH,
+            ttl_seconds=organizer_magic_ttl_seconds(),
+        )
     else:
+        if outcome == GOOGLE_SIGNIN_OUTCOME_AUTO_LINKED:
+            await _notify_identity_linked(organizer.email, organizer.locale)
         session_token = generate_organizer_session_token(
             organizer.id, organizer.session_token_version
         )

@@ -22,21 +22,29 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.constants import (
+    FEATURE_INBOUND_WEBHOOK,
     LOG_EVENT_WEBHOOK_REJECTED,
     NEWSLETTER_SENDER_ALLOWED_DOMAINS,
     RATE_LIMIT_WEBHOOK_INBOUND_MAIL,
+    SETTING_NAME_RESEND_WEBHOOK_SECRET,
     SVIX_ID_HEADER,
     SVIX_SECRET_PREFIX,
     SVIX_SIGNATURE_HEADER,
     SVIX_TIMESTAMP_HEADER,
+    WEBHOOK_REASON_INVALID_JSON,
+    WEBHOOK_REASON_REPLAY,
+    WEBHOOK_REASON_SENDER_NOT_ALLOWLISTED,
     WEBHOOK_SEEN_IDS_MAX_ENTRIES,
+    WEBHOOK_STATUS_ACCEPTED,
+    WEBHOOK_STATUS_REJECTED,
+    WEBHOOK_STATUS_SKIPPED,
     WEBHOOK_TIMESTAMP_TOLERANCE_SECONDS,
 )
 from app.db import AsyncSessionLocal, get_db
 from app.llm.newsletter_extractor import extract_events_from_email
 from app.models.models import RawInboundEmail
 from app.rate_limit import limiter
-from app.routers.utils import require_configured_secret
+from app.auth.utils import require_configured_secret
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
@@ -125,6 +133,11 @@ def _sender_domain_allowed(from_addr: str) -> bool:
     The Svix signature only proves the request came from Resend, not who sent
     the underlying email — this is the layer that stops an arbitrary sender
     from injecting content into the newsletter-extraction LLM prompt.
+
+    Trusts the ``From`` header, which anyone can forge: before adding any
+    domain to NEWSLETTER_SENDER_ALLOWED_DOMAINS (empty today, so this path is
+    dormant), also require a passing SPF/DKIM/DMARC result for that domain
+    (OWASP audit #8).
     """
     _name, email = parseaddr(from_addr)
     domain = email.rpartition("@")[2].lower()
@@ -169,8 +182,8 @@ async def inbound_mail(
 
     secret_configured = require_configured_secret(
         settings.RESEND_WEBHOOK_SECRET,
-        feature="Webhook",
-        setting_name="RESEND_WEBHOOK_SECRET",
+        feature=FEATURE_INBOUND_WEBHOOK,
+        setting_name=SETTING_NAME_RESEND_WEBHOOK_SECRET,
         app_env=settings.APP_ENV,
         allow_insecure_dev=settings.ALLOW_INSECURE_DEV,
     )
@@ -180,7 +193,7 @@ async def inbound_mail(
             extra={"event": LOG_EVENT_WEBHOOK_REJECTED},
         )
         return JSONResponse(
-            {"status": "rejected"}, status_code=status.HTTP_401_UNAUTHORIZED
+            {"status": WEBHOOK_STATUS_REJECTED}, status_code=status.HTTP_401_UNAUTHORIZED
         )
 
     # OWASP audit G-6: a captured, validly-signed request replayed inside
@@ -197,7 +210,7 @@ async def inbound_mail(
             extra={"event": LOG_EVENT_WEBHOOK_REJECTED},
         )
         return JSONResponse(
-            {"status": "rejected", "reason": "replay"},
+            {"status": WEBHOOK_STATUS_REJECTED, "reason": WEBHOOK_REASON_REPLAY},
             status_code=status.HTTP_401_UNAUTHORIZED,
         )
 
@@ -209,7 +222,7 @@ async def inbound_mail(
             extra={"event": LOG_EVENT_WEBHOOK_REJECTED},
         )
         return JSONResponse(
-            {"status": "rejected", "reason": "invalid json"},
+            {"status": WEBHOOK_STATUS_REJECTED, "reason": WEBHOOK_REASON_INVALID_JSON},
             status_code=status.HTTP_400_BAD_REQUEST,
         )
 
@@ -223,7 +236,9 @@ async def inbound_mail(
     # isn't.
     if not _sender_domain_allowed(from_addr):
         log.warning("inbound-mail: sender domain not allowlisted, skipping")
-        return JSONResponse({"status": "skipped", "reason": "sender not allowlisted"})
+        return JSONResponse(
+            {"status": WEBHOOK_STATUS_SKIPPED, "reason": WEBHOOK_REASON_SENDER_NOT_ALLOWLISTED}
+        )
 
     to_raw = payload.get("to", "")
     to_addr = ", ".join(to_raw) if isinstance(to_raw, list) else str(to_raw)
@@ -246,4 +261,4 @@ async def inbound_mail(
     else:
         log.info("inbound-mail %d: no text body, skipping extraction", email_id)
 
-    return JSONResponse({"status": "accepted", "id": email_id})
+    return JSONResponse({"status": WEBHOOK_STATUS_ACCEPTED, "id": email_id})

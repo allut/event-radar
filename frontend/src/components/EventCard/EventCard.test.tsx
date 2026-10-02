@@ -1,7 +1,9 @@
 import { describe, it, expect, vi } from 'vitest';
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import EventCard from './EventCard';
+import type { ComponentProps } from 'react';
+import EventCardBase from './EventCard';
+import { useEventCardNav } from '../../hooks/useEventCardNav';
 import { renderWithProviders, makeEvent } from '../../test/utils';
 
 const mockNavigate = vi.fn();
@@ -37,6 +39,11 @@ vi.mock('../../utils', async (importOriginal) => {
 
 import { isAuthenticated } from '../../lib/auth';
 const mockIsAuthenticated = vi.mocked(isAuthenticated);
+
+// Stands in for the parent list, which resolves router/auth context once.
+function EventCard(props: Omit<ComponentProps<typeof EventCardBase>, 'nav'>) {
+  return <EventCardBase {...props} nav={useEventCardNav()} />;
+}
 
 describe('EventCard', () => {
   it('renders title as link to event detail', () => {

@@ -1,15 +1,26 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import App from './App';
 
+// Every request fails like an unreachable backend: the routes exercised here
+// render a (still guard/locale-correct) error or loading state, so assertions
+// stay focused on routing.
+vi.mock('./api/client', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./api/client')>();
+  const { NETWORK_ERROR_CODE } = await import('./constants');
+  const fail = () => Promise.reject(new actual.ApiError(0, 'network error', NETWORK_ERROR_CODE));
+  const failing = { get: fail, post: fail, patch: fail, delete: fail };
+  return { ...actual, api: failing, organizerApi: failing, adminApi: failing };
+});
+
 // Integration coverage for the app-wide locale-routing wrapper (issue #47):
 // bare-path behavior split by route class, redirect-on-preference for
 // "standard" routes, and Estonian fallback for an unrecognized `:locale`
-// segment. Network calls are left unmocked on purpose — every route
-// exercised here either fetches nothing while signed out (Contact) or
-// tolerates a failed fetch by rendering an (still locale-correct) error/
-// loading state (EventDetail), so the assertions stay focused on routing.
+// segment. The api module is mocked to reject — every route exercised here
+// either fetches nothing while signed out (Contact) or tolerates a failed
+// fetch by rendering an (still locale-correct) error/loading state
+// (EventDetail), so the assertions stay focused on routing.
 
 function setPath(path: string) {
   window.history.pushState(null, '', path);
@@ -35,7 +46,7 @@ describe('App locale-routing wrapper', () => {
     setPath('/events/1');
     render(<App />);
 
-    // The fetch is unmocked and fails in jsdom, but the error copy itself
+    // The (mocked) fetch fails, but the error copy itself
     // must still be Estonian — proof the bare path rendered in Estonian
     // rather than redirecting to /ru/events/1 first.
     await waitFor(() => expect(screen.getByText(/sündmust ei leitud/i)).toBeInTheDocument());

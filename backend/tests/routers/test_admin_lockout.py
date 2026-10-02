@@ -1,120 +1,125 @@
-"""Tests for L2: consecutive-failure lockout on /admin/* Basic auth
-(routers/admin.py::_require_admin), on top of the shared_limit rate bucket.
-
-Basic-auth-specific tests target a read-only (GET) route — mutating (POST)
-routes require the session-only get_current_admin (H-1 in the OWASP audit)
-and no longer accept Basic at all, so they can't exercise this lockout."""
+"""Tests for L2: consecutive-failure lockout on the admin console form login
+(routers/admin_auth.py), on top of the shared_limit rate bucket. HTTP Basic
+no longer exists on /admin/* (OWASP audit #4), so every failure here is a form
+login attempt."""
 
 import http
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
 from app.constants import ADMIN_AUTH_MAX_FAILURES
+from tests.routers.conftest import patch_admin_settings
+
+
+def _login_app() -> FastAPI:
+    from app.routers.admin_auth import router as admin_auth_router
+
+    app = FastAPI()
+    app.include_router(admin_auth_router)
+    return app
+
+
+_BAD_LOGIN = {"username": "realadmin", "password": "wrong", "totp_code": "000000"}
+
+
+def _configure(mock_settings) -> None:
+    mock_settings.ADMIN_PASSWORD = "s3cret"
+    mock_settings.ADMIN_USERNAME = "realadmin"
+    mock_settings.APP_ENV = "production"
+    mock_settings.ALLOW_INSECURE_DEV = False
+    mock_settings.ADMIN_TOTP_SECRET = "JBSWY3DPEHPK3PXP"
 
 
 @pytest.mark.asyncio
-async def test_lockout_after_max_consecutive_failures(admin_app):
-    app = admin_app
-
-    with patch("app.routers.admin.settings") as mock_settings:
-        mock_settings.ADMIN_PASSWORD = "s3cret"
-        mock_settings.ADMIN_USERNAME = "realadmin"
-        mock_settings.APP_ENV = "production"
+async def test_lockout_after_max_consecutive_failures():
+    with patch_admin_settings() as mock_settings, patch(
+        "app.routers.admin_auth.settings", mock_settings
+    ):
+        _configure(mock_settings)
 
         async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
+            transport=ASGITransport(app=_login_app()), base_url="http://test"
         ) as client:
             statuses = []
             for _ in range(ADMIN_AUTH_MAX_FAILURES):
-                resp = await client.get(
-                    "/admin/stats", auth=("realadmin", "wrong")
-                )
+                resp = await client.post("/admin/auth/login", json=_BAD_LOGIN)
                 statuses.append(resp.status_code)
 
             # One more failure past the threshold — must be locked out (429),
             # not just another 401.
-            locked_resp = await client.get(
-                "/admin/stats", auth=("realadmin", "wrong")
-            )
+            locked_resp = await client.post("/admin/auth/login", json=_BAD_LOGIN)
 
     assert statuses == [http.HTTPStatus.UNAUTHORIZED] * ADMIN_AUTH_MAX_FAILURES
     assert locked_resp.status_code == http.HTTPStatus.TOO_MANY_REQUESTS
 
 
 @pytest.mark.asyncio
-async def test_admin_auth_failures_dict_is_bounded(admin_app):
+async def test_admin_auth_failures_dict_is_bounded():
     """P2-11: _admin_auth_failures is an in-memory dict keyed by client_key()
     with no prior eviction — sustained scanning traffic from many distinct
     clients would grow it forever. Bounded LRU (ADMIN_AUTH_FAILURES_MAX_ENTRIES)
     caps it, mirroring browse.py's _score_cache."""
-    from app.routers import admin as admin_module
+    from app.auth import admin_lockout
 
-    app = admin_app
-
-    with patch("app.routers.admin.settings") as mock_settings, patch(
-        "app.routers.admin.ADMIN_AUTH_FAILURES_MAX_ENTRIES", 3
-    ):
-        mock_settings.ADMIN_PASSWORD = "s3cret"
-        mock_settings.ADMIN_USERNAME = "realadmin"
-        mock_settings.APP_ENV = "production"
+    with patch_admin_settings() as mock_settings, patch(
+        "app.routers.admin_auth.settings", mock_settings
+    ), patch("app.auth.admin_lockout.ADMIN_AUTH_FAILURES_MAX_ENTRIES", 3):
+        _configure(mock_settings)
 
         async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
+            transport=ASGITransport(app=_login_app()), base_url="http://test"
         ) as client:
             for i in range(6):
-                await client.get(
-                    "/admin/stats",
-                    auth=("realadmin", "wrong"),
+                await client.post(
+                    "/admin/auth/login",
+                    json=_BAD_LOGIN,
                     headers={"X-Forwarded-For": f"10.0.0.{i}"},
                 )
 
-    assert len(admin_module._admin_auth_failures) <= 3
+    assert 0 < len(admin_lockout._admin_auth_failures) <= 3
 
 
 @pytest.mark.asyncio
-async def test_eviction_does_not_lift_an_active_lockout(admin_app):
+async def test_eviction_does_not_lift_an_active_lockout():
     """A blind oldest-first eviction would let a high-cardinality distributed
     brute-force evict — and thereby prematurely lift — another client's
     still-active lockout. The victim's locked-until entry must survive being
     the oldest in the dict as long as other, already-expired entries exist
     to evict instead."""
-    from app.routers import admin as admin_module
+    from app.auth import admin_lockout
 
-    app = admin_app
-
-    with patch("app.routers.admin.settings") as mock_settings, patch(
-        "app.routers.admin.ADMIN_AUTH_FAILURES_MAX_ENTRIES", 1
-    ):
-        mock_settings.ADMIN_PASSWORD = "s3cret"
-        mock_settings.ADMIN_USERNAME = "realadmin"
-        mock_settings.APP_ENV = "production"
+    with patch_admin_settings() as mock_settings, patch(
+        "app.routers.admin_auth.settings", mock_settings
+    ), patch("app.auth.admin_lockout.ADMIN_AUTH_FAILURES_MAX_ENTRIES", 1):
+        _configure(mock_settings)
 
         async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
+            transport=ASGITransport(app=_login_app()), base_url="http://test"
         ) as client:
             # Victim: lock it out first, so it is both the oldest entry and
             # currently under an active lockout.
             for _ in range(ADMIN_AUTH_MAX_FAILURES):
-                await client.get(
-                    "/admin/stats",
-                    auth=("realadmin", "wrong"),
+                await client.post(
+                    "/admin/auth/login",
+                    json=_BAD_LOGIN,
                     headers={"X-Forwarded-For": "10.0.0.1"},
                 )
-            assert admin_module._admin_auth_failures["10.0.0.1"][1] > 0.0
+            assert admin_lockout._admin_auth_failures["10.0.0.1"][1] > 0.0
 
             # Attacker: fail from a second, expired (never-locked) client —
-            # pushes the dict over the max-entries cap of 2.
-            await client.get(
-                "/admin/stats",
-                auth=("realadmin", "wrong"),
+            # pushes the dict over the max-entries cap.
+            await client.post(
+                "/admin/auth/login",
+                json=_BAD_LOGIN,
                 headers={"X-Forwarded-For": "10.0.0.2"},
             )
 
     # The victim's active lockout must not have been evicted to make room.
-    assert "10.0.0.1" in admin_module._admin_auth_failures
-    assert admin_module._admin_auth_failures["10.0.0.1"][1] > 0.0
+    assert "10.0.0.1" in admin_lockout._admin_auth_failures
+    assert admin_lockout._admin_auth_failures["10.0.0.1"][1] > 0.0
 
 
 @pytest.mark.asyncio
@@ -129,7 +134,7 @@ async def test_rate_limit_bucket_shared_across_different_admin_routes(admin_app)
     app = admin_app
 
     with (
-        patch("app.routers.admin.settings") as mock_settings,
+        patch_admin_settings() as mock_settings,
         patch(
             "app.routers.admin.publish_pending_job",
             new_callable=AsyncMock,
@@ -157,38 +162,3 @@ async def test_rate_limit_bucket_shared_across_different_admin_routes(admin_app)
                 statuses.append(resp.status_code)
 
     assert http.HTTPStatus.TOO_MANY_REQUESTS in statuses
-
-
-@pytest.mark.asyncio
-async def test_successful_auth_resets_failure_counter(admin_app, make_db_ctx, mock_db):
-    app = admin_app
-    db = mock_db
-    # total, canonical, sources_total, sources_enabled
-    db.scalar = AsyncMock(side_effect=[100, 60, 8, 5])
-
-    with (
-        patch("app.routers.admin.settings") as mock_settings,
-        patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
-    ):
-        mock_settings.ADMIN_PASSWORD = "s3cret"
-        mock_settings.ADMIN_USERNAME = "realadmin"
-        mock_settings.APP_ENV = "production"
-
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as client:
-            for _ in range(ADMIN_AUTH_MAX_FAILURES - 1):
-                await client.get("/admin/stats", auth=("realadmin", "wrong"))
-
-            good_resp = await client.get(
-                "/admin/stats", auth=("realadmin", "s3cret")
-            )
-
-            # Counter reset by the successful auth — next failure alone must
-            # not trigger a lockout.
-            next_fail_resp = await client.get(
-                "/admin/stats", auth=("realadmin", "wrong")
-            )
-
-    assert good_resp.status_code == http.HTTPStatus.OK
-    assert next_fail_resp.status_code == http.HTTPStatus.UNAUTHORIZED

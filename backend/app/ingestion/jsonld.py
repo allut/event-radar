@@ -1,7 +1,7 @@
 """schema.org Event JSON-LD extraction from detail pages.
 
-Location, offers (price tiers), and name/description readers shared by the
-Fienta/Piletilevi adapters and the daily detail-refetch sync.
+Location, offers (price tiers), name/description, and organizer readers
+shared by the Fienta/Piletilevi adapters and the daily detail-refetch sync.
 """
 
 import json
@@ -42,6 +42,23 @@ def _jsonld_event_items(data: Any) -> list[dict[str, Any]]:
     if not isinstance(items, list):
         items = [items]
     return [item for item in items if isinstance(item, dict)]
+
+
+def parse_jsonld_graph_items(soup: BeautifulSoup) -> list[dict[str, Any]]:
+    """Every schema.org item across a page's JSON-LD script blocks, with no
+    ``@type`` filter — unlike ``parse_jsonld_event_items``, which keeps only
+    ``Event``-typed items. Needed by callers that resolve an ``@id`` reference
+    (e.g. Piletilevi's ``organizer`` field, app/claims/piletilevi_promoter.py)
+    against a sibling node of a different type in the same ``@graph``.
+    """
+    items: list[dict[str, Any]] = []
+    for script in soup.find_all("script", type=JSONLD_SCRIPT_TYPE):
+        try:
+            data = json.loads(script.string or "")
+        except (TypeError, ValueError):
+            continue
+        items.extend(_jsonld_event_items(data))
+    return items
 
 
 def parse_jsonld_event_items(soup: BeautifulSoup) -> list[dict[str, Any]]:
@@ -209,3 +226,42 @@ def extract_jsonld_event_text(soup: BeautifulSoup) -> tuple[str | None, str | No
     callers needing more than one field from the same page.
     """
     return text_from_jsonld_items(parse_jsonld_event_items(soup), soup)
+
+
+def organizer_from_jsonld_items(
+    items: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    """Return ``{"external_id", "name", "url"}`` from the first item's
+    ``organizer`` (schema.org ``Organization``/``Person``), or ``None`` when
+    no item carries one.
+
+    ``external_id`` is the organizer's schema.org ``@id`` (falls back to
+    ``url`` when ``@id`` is absent) — for Piletilevi this is the promoter's
+    profile URL, the key a Publisher resolves against (see CONTEXT.md's Event
+    Claiming glossary; resolution itself is a later ticket — this function
+    only extracts the raw field, #411).
+    """
+    for item in items:
+        organizer = item.get("organizer")
+        if not isinstance(organizer, dict):
+            continue
+        name_raw = organizer.get("name")
+        name = name_raw.strip() or None if isinstance(name_raw, str) else None
+        url_raw = organizer.get("url")
+        url = str(url_raw) if url_raw else None
+        id_raw = organizer.get("@id") or url_raw
+        external_id = str(id_raw) if id_raw else None
+        if name is None and external_id is None:
+            continue
+        return {"external_id": external_id, "name": name, "url": url}
+    return None
+
+
+def extract_jsonld_event_organizer(soup: BeautifulSoup) -> dict[str, Any] | None:
+    """Return the first schema.org ``Event``'s ``organizer`` field.
+
+    Convenience wrapper over ``parse_jsonld_event_items`` +
+    ``organizer_from_jsonld_items`` — see ``parse_jsonld_event_items``
+    docstring for callers needing more than one field from the same page.
+    """
+    return organizer_from_jsonld_items(parse_jsonld_event_items(soup))

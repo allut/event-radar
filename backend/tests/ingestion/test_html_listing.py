@@ -206,6 +206,44 @@ class TestBasePagination:
         assert [c["external_id"] for c in results] == ["a"]
 
     @pytest.mark.asyncio
+    async def test_ssrf_guard_valueerror_on_detail_degrades_that_card_only(self):
+        """host_guard_hook raises ValueError for an off-host redirect — one
+        such card must fall back to listing-only, not fail the source run."""
+        card_a = {"external_id": "a", "title": "A", "url": "https://example.test/a"}
+        card_b = {"external_id": "b", "title": "B", "url": "https://example.test/b"}
+        adapter = _StubAdapter(
+            _make_source(),
+            pages_cards=[[card_a, card_b]],
+            needs_detail=True,
+            max_pages=5,
+        )
+
+        with patch("app.ingestion.sources.html_base.http_get") as mock_get:
+            mock_get.side_effect = [
+                _mock_response("0"),  # listing page 1
+                ValueError("request host mismatch (SSRF guard)"),  # detail a
+                _mock_response("detail-b"),  # detail b
+            ]
+            results = await adapter.fetch_raw(_known_ids())
+
+        assert [c["external_id"] for c in results] == ["a", "b"]
+        assert "description" not in results[0]
+        assert results[1]["description"] == "detail-b"
+
+    @pytest.mark.asyncio
+    async def test_ssrf_guard_valueerror_on_listing_is_a_tolerated_page_error(self):
+        card_a = {"external_id": "a", "title": "A", "url": "https://example.test/a"}
+        adapter = _StubAdapter(
+            _make_source(), pages_cards=[[], [card_a]], max_pages=2
+        )
+
+        with patch("app.ingestion.sources.html_base.http_get") as mock_get:
+            mock_get.side_effect = [ValueError("SSRF guard"), _mock_response("1")]
+            results = await adapter.fetch_raw(_known_ids())
+
+        assert [c["external_id"] for c in results] == ["a"]
+
+    @pytest.mark.asyncio
     async def test_needs_detail_caps_and_fetches_detail_pages(self):
         card_a = {"external_id": "a", "title": "A", "url": "https://example.test/a"}
         card_b = {"external_id": "b", "title": "B", "url": "https://example.test/b"}

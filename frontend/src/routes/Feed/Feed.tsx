@@ -4,6 +4,7 @@ import { api } from '../../api/client';
 import { t, ti } from '../../i18n';
 import { useLocaleMutation } from '../../hooks/useLocaleMutation';
 import { useLocalePath } from '../../hooks/useLocalePath';
+import { useEventCardNav } from '../../hooks/useEventCardNav';
 import { useLogout } from '../../hooks/useLogout';
 import { useSeoMeta } from '../../hooks/useSeoMeta';
 import EventCard, { type EventData } from '../../components/EventCard';
@@ -25,6 +26,7 @@ interface FeedResponse {
 export default function Feed() {
   const { locale, handleLocaleChange, isPending: localePending } = useLocaleMutation({ publicRoute: true });
   const localePath = useLocalePath();
+  const nav = useEventCardNav();
   const handleLogout = useLogout();
   const seoMeta = useSeoMeta({ title: titleWithBrand(t('seo_title_feed', locale), locale), locale, path: ROUTES.home });
 
@@ -100,12 +102,12 @@ export default function Feed() {
         ) : (
           <ol className={styles.list} aria-label={t('daily_five', locale)}>
             <li key={events[0].id} className={styles.featuredItem}>
-              <EventCard event={events[0]} index={0} locale={locale} variant="featured" />
+              <EventCard event={events[0]} index={0} locale={locale} nav={nav} variant="featured" />
             </li>
             {events.slice(1).map((event, i) => (
               <li key={event.id} className={styles.standardItem}>
                 <span className={styles.indexNumeral} aria-hidden>{padIndex(i + 2)}</span>
-                <EventCard event={event} index={i + 1} locale={locale} alignTitle={false} />
+                <EventCard event={event} index={i + 1} locale={locale} nav={nav} alignTitle={false} />
               </li>
             ))}
           </ol>

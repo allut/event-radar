@@ -1,11 +1,26 @@
 import { StatusCodes } from 'http-status-codes';
-import { API, API_BASE, ROUTES } from '../constants';
-import { clearSignedInHint, isLoggingOut } from '../lib/auth';
+import { API, API_BASE, NETWORK_ERROR_CODE, ROUTES, VALIDATION_ERROR_CODE } from '../constants';
+import { clearSignedInHint, isLoggingOut, getLocale } from '../lib/auth';
 import { clearOrganizerSignedInHint, isOrganizerLoggingOut } from '../lib/organizerAuth';
 import { clearAdminSignedInHint, isAdminLoggingOut } from '../lib/adminAuth';
+import { t } from '../i18n';
 
 export class ApiError extends Error {
-  constructor(public readonly status: number, message: string) {
+  constructor(
+    public readonly status: number,
+    message: string,
+    /** Machine-readable companion to `message`, when the backend sends one
+     * (`detail: { message, code }` instead of a plain string) — lets a
+     * caller branch on the failure reason without matching English text
+     * (#444). Also set locally to VALIDATION_ERROR_CODE for a FastAPI 422
+     * list `detail` (#452), which the backend never labels with a code
+     * itself. Undefined for every endpoint that still sends a plain string. */
+    public readonly code?: string,
+    /** Field paths (`loc`, minus the leading "body") from a 422 list
+     * `detail`, empty for every other error shape — lets a form highlight
+     * the fields FastAPI rejected without parsing English `msg` text. */
+    public readonly fields?: string[],
+  ) {
     super(message);
     this.name = 'ApiError';
   }
@@ -63,15 +78,42 @@ async function request<T>(path: string, init: RequestOptions = {}): Promise<T> {
     ...(fetchInit.headers as Record<string, string> | undefined ?? {}),
   };
 
-  const res = await fetch(`${API_BASE}${path}`, { ...fetchInit, headers, credentials: 'include' });
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}${path}`, { ...fetchInit, headers, credentials: 'include' });
+  } catch {
+    // fetch() itself rejects (a TypeError, per spec) when the request never
+    // leaves the browser at all — offline, DNS failure, or (the case #453
+    // was filed for) an ad/tracker blocker silently killing a request whose
+    // URL shape looks like an analytics beacon. Distinguishable from every
+    // other failure via NETWORK_ERROR_CODE so a form can show a message that
+    // actually points at the real cause instead of the generic fallback.
+    throw new ApiError(0, t('network_error', getLocale()), NETWORK_ERROR_CODE);
+  }
 
   if (res.status === StatusCodes.UNAUTHORIZED && !NO_SESSION_REDIRECT_ON_401.has(path)) {
     handleSessionExpiry401({ organizer, admin });
   }
 
   if (!res.ok) {
-    const body = await res.json().catch(() => ({})) as { detail?: string };
-    throw new ApiError(res.status, body.detail ?? `HTTP ${res.status}`);
+    const body = await res.json().catch(() => ({})) as {
+      detail?: string | { message?: string; code?: string } | { msg?: string; loc?: (string | number)[] }[];
+    };
+    const { detail } = body;
+    // FastAPI's own validation-failure shape (e.g. a pydantic field_validator
+    // raising ValueError) — a list of error objects, never a `.message`, and
+    // its `msg` text is English-only and developer-worded ("Value error, …").
+    // Never surface that; show a localized generic instead (#452).
+    if (Array.isArray(detail)) {
+      const fields = [...new Set(
+        detail.map((item) => item.loc?.filter((p) => p !== 'body').join('.') ?? '').filter(Boolean),
+      )];
+      throw new ApiError(res.status, t('validation_error_generic', getLocale()), VALIDATION_ERROR_CODE, fields);
+    }
+    if (typeof detail === 'object' && detail !== null) {
+      throw new ApiError(res.status, detail.message ?? `HTTP ${res.status}`, detail.code);
+    }
+    throw new ApiError(res.status, detail ?? `HTTP ${res.status}`);
   }
 
   if (res.status === StatusCodes.NO_CONTENT) return undefined as T;

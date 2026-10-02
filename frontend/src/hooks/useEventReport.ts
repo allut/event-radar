@@ -1,8 +1,7 @@
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { QUERY_KEYS, ROUTES } from '../constants';
-import { useAuth } from './useAuth';
-import { useLocaleNavigate } from './useLocaleNavigate';
+import { QUERY_KEYS } from '../constants';
+import { patchCachedEvent } from '../utils';
 
 export interface UseEventReportResult {
   reportOpen: boolean;
@@ -16,20 +15,24 @@ export interface UseEventReportResult {
 }
 
 /** Shared Report-event flow behind EventDetail's and EventCard's overflow
- * menu (issue #128): gates the modal open on auth (redirecting signed-out
+ * menu (issue #128): takes `authed`/`onLoginRequired` from the caller (no
+ * per-card router/auth subscription, issue #455) and gates the modal open on auth (redirecting signed-out
  * clicks to /login, mirroring Share's no-auth-gate exception), and on a
  * successful submit flips the local "reported" state and invalidates every
  * read surface the `reported` field appears on. */
-export function useEventReport(baseReported: boolean): UseEventReportResult {
-  const authed = useAuth();
-  const navigate = useLocaleNavigate();
+export function useEventReport(
+  baseReported: boolean,
+  eventId: number | undefined,
+  authed: boolean,
+  onLoginRequired: () => void,
+): UseEventReportResult {
   const queryClient = useQueryClient();
   const [reportOpen, setReportOpen] = useState(false);
   const [reportedOverride, setReportedOverride] = useState(false);
 
   function openReportModal() {
     if (!authed) {
-      navigate(ROUTES.login);
+      onLoginRequired();
       return;
     }
     setReportOpen(true);
@@ -37,10 +40,12 @@ export function useEventReport(baseReported: boolean): UseEventReportResult {
 
   function handleReportSubmitted() {
     setReportedOverride(true);
-    queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.feed] });
-    queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.explore] });
-    queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.saved] });
-    queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.event] });
+    // Patch this event's `reported` flag in the cached payloads and only mark
+    // the families stale (see useFeedback) — no multi-page refetch per report.
+    if (eventId !== undefined) patchCachedEvent(queryClient, eventId, { reported: true });
+    for (const key of [QUERY_KEYS.feed, QUERY_KEYS.explore, QUERY_KEYS.saved, QUERY_KEYS.event]) {
+      queryClient.invalidateQueries({ queryKey: [key], refetchType: 'none' });
+    }
   }
 
   return {

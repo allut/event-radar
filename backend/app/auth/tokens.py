@@ -8,6 +8,7 @@ so a compromised DB row cannot be turned back into a valid token.
 """
 
 import hashlib
+import secrets
 from datetime import datetime, timedelta, timezone
 from typing import TypedDict
 
@@ -18,6 +19,7 @@ from app.constants import (
     ADMIN_SESSION_EPOCH_HASH_LEN,
     ADMIN_SESSION_TTL_SECONDS,
     AUTH_ADMIN_SESSION_SALT,
+    AUTH_GOOGLE_LINK_BINDING_SALT,
     AUTH_MAGIC_SALT,
     AUTH_OAUTH_STATE_SALT,
     AUTH_ORGANIZER_MAGIC_SALT,
@@ -130,6 +132,32 @@ def verify_organizer_session_token(token: str) -> tuple[int, int]:
     return int(payload["oid"]), int(payload.get("v", DEFAULT_SESSION_TOKEN_VERSION))
 
 
+def generate_organizer_claim_link_token(organizer_id: int, event_id: int) -> tuple[str, str, datetime]:
+    """Sign-in link that also carries claim intent (#413): the Publisher/
+    Series-claim key round-trips inside the token itself — never
+    sessionStorage or a query param — so it survives being opened on a
+    different device/session than the one that requested it. Same salt as
+    generate_organizer_magic_token (identical trust boundary: proof of
+    control over the organizer's email); verify_organizer_claim_link_token
+    is the only thing that reads the extra "eid" claim back out."""
+    token = _serializer().dumps(
+        {"oid": organizer_id, "eid": event_id}, salt=AUTH_ORGANIZER_MAGIC_SALT
+    )
+    token_hash = hashlib.sha256(token.encode()).hexdigest()
+    expires_at = datetime.now(timezone.utc) + timedelta(
+        seconds=organizer_magic_ttl_seconds()
+    )
+    return token, token_hash, expires_at
+
+
+def verify_organizer_claim_link_token(token: str) -> tuple[int, int]:
+    """Return (organizer_id, event_id). Raises SignatureExpired or BadSignature."""
+    payload = _serializer().loads(
+        token, salt=AUTH_ORGANIZER_MAGIC_SALT, max_age=organizer_magic_ttl_seconds()
+    )
+    return int(payload["oid"]), int(payload["eid"])
+
+
 def oauth_state_ttl_seconds() -> int:
     return OAUTH_STATE_TTL_MINUTES * SECONDS_PER_MINUTE
 
@@ -165,6 +193,44 @@ def verify_oauth_state_token(token: str, *, track: str) -> OAuthStatePayload:
         "code_verifier": str(payload["code_verifier"]),
         "track": str(payload["track"]),
     }
+
+
+def generate_google_link_binding_token(sub: str, track: str) -> str:
+    """Sign the pending Google ``sub`` for the google_link_binding /
+    organizer_google_link_binding cookie (OWASP audit #3). Set in the browser
+    that completed the Google sign-in whose confirmation magic link was just
+    emailed; the verify route only absorbs a link's ``pending_google_sub``
+    when this cookie carries the same sub. ``track`` ("organizer" or "user")
+    is checked at verify time, same cross-track guard as the OAuth state."""
+    return _serializer().dumps(
+        {"sub": sub, "track": track}, salt=AUTH_GOOGLE_LINK_BINDING_SALT
+    )
+
+
+def google_link_binding_matches(
+    token: str | None, *, sub: str, track: str, max_age: int | None = None
+) -> bool:
+    """True only when ``token`` is an unexpired, untampered binding cookie for
+    this track carrying exactly ``sub``. Any failure — missing cookie, bad
+    signature, expiry, other track, other sub — is False, never an exception:
+    the caller falls back to a plain sign-in with no identity link. ``max_age``
+    defaults to the consumer magic-link TTL; the organizer track passes its own."""
+    if not isinstance(token, str) or not token:
+        return False
+    try:
+        payload = _serializer().loads(
+            token,
+            salt=AUTH_GOOGLE_LINK_BINDING_SALT,
+            max_age=max_age if max_age is not None else magic_ttl_seconds(),
+        )
+    except BadSignature:
+        return False
+    return (
+        isinstance(payload, dict)
+        and payload.get("track") == track
+        and isinstance(payload.get("sub"), str)
+        and secrets.compare_digest(payload["sub"], sub)
+    )
 
 
 def _admin_session_epoch() -> str:

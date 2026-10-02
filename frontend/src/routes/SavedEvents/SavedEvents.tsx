@@ -2,10 +2,11 @@ import { useMemo, useState } from 'react';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { api } from '../../api/client';
 import { t } from '../../i18n';
-import { nextOffsetParam, withLocaleQuery } from '../../utils';
+import { FIRST_KEYSET_PAGE, nextKeysetParam, withLocaleQuery } from '../../utils';
 import { useLocaleMutation } from '../../hooks/useLocaleMutation';
 import { useLogout } from '../../hooks/useLogout';
 import { useStaticSeoMeta } from '../../hooks/useStaticSeoMeta';
+import { useEventCardNav } from '../../hooks/useEventCardNav';
 import EventCard, { type EventData } from '../../components/EventCard';
 import EmptyState from '../../components/EmptyState';
 import PageState from '../../components/PageState';
@@ -21,9 +22,11 @@ interface SavedEventsResponse {
   limit: number;
   offset: number;
   has_more: boolean;
+  next_cursor?: string | null;
 }
 
 export default function SavedEvents() {
+  const nav = useEventCardNav();
   const handleLogout = useLogout();
   const { locale, handleLocaleChange, isPending: localePending } = useLocaleMutation();
   const seoMeta = useStaticSeoMeta('seo_title_saved', locale);
@@ -41,12 +44,15 @@ export default function SavedEvents() {
     queryFn: ({ pageParam }) =>
       api.get<SavedEventsResponse>(
         withLocaleQuery(
-          `${API.feedbackEvents}?${SIGNAL_PARAM}=${signal}&${PAGE_PARAM.limit}=${SAVED_EVENTS_PAGE_SIZE}&${PAGE_PARAM.offset}=${pageParam}`,
+          `${API.feedbackEvents}?${SIGNAL_PARAM}=${signal}&${PAGE_PARAM.limit}=${SAVED_EVENTS_PAGE_SIZE}&${PAGE_PARAM.offset}=${pageParam.offset}${pageParam.cursor ? `&${PAGE_PARAM.cursor}=${pageParam.cursor}` : ''}`,
           locale,
         ),
       ),
-    initialPageParam: 0,
-    getNextPageParam: (lastPage) => nextOffsetParam(lastPage, lastPage.events.length),
+    initialPageParam: FIRST_KEYSET_PAGE,
+    getNextPageParam: (lastPage) => nextKeysetParam(lastPage, lastPage.events.length),
+    // A focus-triggered refetch of an infinite query re-requests every loaded
+    // page sequentially (each re-scored server-side) — never worth it here.
+    refetchOnWindowFocus: false,
   });
 
   const events = useMemo(() => data?.pages.flatMap((page) => page.events) ?? [], [data]);
@@ -94,6 +100,7 @@ export default function SavedEvents() {
                 event={event}
                 index={i}
                 locale={locale}
+                nav={nav}
                 variant="standard"
               />
             ))}

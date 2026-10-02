@@ -5,23 +5,22 @@ Falls back to log-only when RESEND_API_KEY is unset (dev / CI).
 
 import logging
 
-import httpx
-
 from app.config import settings
 from app.constants import (
     APP_ENV_DEVELOPMENT,
     AUTH_VERIFY_PATH,
-    AUTHORIZATION_HEADER,
-    BEARER_PREFIX,
     DEFAULT_USER_LOCALE,
-    LOG_EVENT_EMAIL_SEND_FAILED,
-    RESEND_ERROR_SNIPPET_LEN,
-    RESEND_SEND_URL,
-    RESEND_TIMEOUT_SECONDS,
+)
+from app.email.identity_link import (
+    build_google_link_confirmation_html,
+    build_google_link_confirmation_text,
+    build_identity_linked_html,
+    build_identity_linked_text,
 )
 from app.email.magic_link import build_magic_link_html, build_magic_link_text
+from app.email.resend import send_resend_email
 from app.i18n import t
-from app.routers.utils import mask_email
+from app.auth.utils import mask_email
 
 log = logging.getLogger(__name__)
 
@@ -31,7 +30,6 @@ async def send_magic_link(
     magic_token: str,
     locale: str = DEFAULT_USER_LOCALE,
     verify_path: str = AUTH_VERIFY_PATH,
-    theme_preference: str | None = None,
 ) -> None:
     """Send a magic-link sign-in email. ``verify_path`` lets the organizer auth
     flow (routers/organizer_auth.py) point the link at ``/organizer/verify``
@@ -54,36 +52,79 @@ async def send_magic_link(
 
     subject = t("email.magic_link.subject", locale)
     html = build_magic_link_html(
-        verify_url, settings.MAGIC_LINK_TTL_MINUTES, locale, theme_preference
+        verify_url, settings.MAGIC_LINK_TTL_MINUTES, locale
     )
     text = build_magic_link_text(verify_url, settings.MAGIC_LINK_TTL_MINUTES, locale)
 
-    # Not routed through the shared retrying http_post: this call is awaited
-    # synchronously inside the rate-limited, user-facing POST /auth/request-link
-    # endpoint — a 5-attempt exponential backoff on a Resend hiccup would stall
-    # that request up to ~150s instead of failing fast (errors are already
-    # swallowed by the caller, which always returns 200 regardless).
-    async with httpx.AsyncClient(timeout=RESEND_TIMEOUT_SECONDS) as client:
-        resp = await client.post(
-            RESEND_SEND_URL,
-            headers={AUTHORIZATION_HEADER: f"{BEARER_PREFIX}{settings.RESEND_API_KEY}"},
-            json={
-                "from": settings.RESEND_FROM_ADDRESS,
-                "reply_to": settings.CONTACT_TO_ADDRESS,
-                "to": [to_email],
-                "subject": subject,
-                "html": html,
-                "text": text,
-            },
-        )
+    await send_resend_email(
+        {
+            "reply_to": settings.CONTACT_TO_ADDRESS,
+            "to": [to_email],
+            "subject": subject,
+            "html": html,
+            "text": text,
+        },
+        log_label="magic link",
+        log_ref=mask_email(to_email),
+    )
 
-    if resp.status_code not in (httpx.codes.OK, httpx.codes.CREATED):
-        log.error(
-            "Resend API error sending to %s: %s %s",
+
+async def send_google_link_confirmation(
+    to_email: str,
+    magic_token: str,
+    locale: str = DEFAULT_USER_LOCALE,
+    verify_path: str = AUTH_VERIFY_PATH,
+) -> None:
+    """Send the Google-link confirmation email (ADR 0002's non-authoritative-
+    address gate, OWASP audit #3). Its own subject/wording — it says a Google
+    account is being linked to ``to_email`` — so it can't be mistaken for the
+    plain sign-in link; the link itself is the same verify URL shape."""
+    verify_url = f"{settings.FRONTEND_URL}{verify_path}?token={magic_token}"
+
+    if not settings.RESEND_API_KEY:
+        log.warning(
+            "RESEND_API_KEY not set — Google-link confirmation NOT sent to %s",
             mask_email(to_email),
-            resp.status_code,
-            resp.text[:RESEND_ERROR_SNIPPET_LEN],
-            extra={"event": LOG_EVENT_EMAIL_SEND_FAILED},
         )
-    else:
-        log.info("Magic link sent to %s", mask_email(to_email))
+        if settings.APP_ENV == APP_ENV_DEVELOPMENT:
+            log.debug("Dev-only Google-link confirmation URL: %s", verify_url)
+        return
+
+    ttl = settings.MAGIC_LINK_TTL_MINUTES
+    await send_resend_email(
+        {
+            "reply_to": settings.CONTACT_TO_ADDRESS,
+            "to": [to_email],
+            "subject": t("email.google_link.subject", locale),
+            "html": build_google_link_confirmation_html(verify_url, ttl, to_email, locale),
+            "text": build_google_link_confirmation_text(verify_url, ttl, to_email, locale),
+        },
+        log_label="Google-link confirmation",
+        log_ref=mask_email(to_email),
+    )
+
+
+async def send_identity_linked_notice(
+    to_email: str, locale: str = DEFAULT_USER_LOCALE
+) -> None:
+    """Tell the account owner a Google sign-in was just linked (OWASP audit
+    #3) — sent after every successful link so an unexpected one is visible.
+    Best-effort: callers swallow failures, the link already exists."""
+    if not settings.RESEND_API_KEY:
+        log.warning(
+            "RESEND_API_KEY not set — identity-linked notice NOT sent to %s",
+            mask_email(to_email),
+        )
+        return
+
+    await send_resend_email(
+        {
+            "reply_to": settings.CONTACT_TO_ADDRESS,
+            "to": [to_email],
+            "subject": t("email.identity_linked.subject", locale),
+            "html": build_identity_linked_html(to_email, locale),
+            "text": build_identity_linked_text(to_email, locale),
+        },
+        log_label="identity-linked notice",
+        log_ref=mask_email(to_email),
+    )

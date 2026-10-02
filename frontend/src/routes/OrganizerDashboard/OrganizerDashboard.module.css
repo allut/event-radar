@@ -37,6 +37,76 @@
   align-items: center;
 }
 
+.claimsSection {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.claimsHeader {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.claimsTitle {
+  font-family: var(--font-display);
+  font-size: var(--heading-md);
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--tracking-tighter);
+  color: var(--text);
+}
+
+.claimsSub {
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+
+.claimStatusBadge {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+  padding: var(--space-0-375) var(--space-0-6);
+  border-radius: 0;
+  border: var(--border-w-hair) solid var(--border);
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.claimStatus_approved {
+  color: var(--success);
+  border-color: var(--success-border);
+  background: var(--success-faint);
+}
+
+.claimStatus_pending {
+  color: var(--accent-light);
+  border-color: var(--accent-border);
+  background: var(--accent-subtle);
+}
+
+.claimStatus_declined,
+.claimStatus_expired,
+.claimStatus_cancelled {
+  color: var(--danger);
+  border-color: var(--danger-border);
+  background: var(--danger-faint);
+}
+
+.secondaryBtn {
+  composes: btnOutline from '../../components/shared/Button.module.css';
+  padding: var(--space-0-45) var(--space-0-875);
+  font-size: var(--fs-sm);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+}
+
 .list {
   display: flex;
   flex-direction: column;
@@ -157,4 +227,51 @@
 .deleteBtn:disabled {
   opacity: var(--opacity-disabled);
   cursor: not-allowed;
+}
+
+/* "Your claims" grid — subgrid rows so every badge/action column shares one
+   width track across the list, regardless of per-locale label length. Kept
+   separate from .list/.row (the events list above) rather than overriding
+   them, since those stay a plain flex-wrap layout. */
+.claimsList {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) max-content max-content;
+  row-gap: var(--space-2);
+}
+
+.claimRow {
+  composes: row;
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: subgrid;
+}
+
+.claimRowMain {
+  composes: rowMain;
+}
+
+.claimRowBadges {
+  composes: rowBadges;
+}
+
+.claimRowActions {
+  composes: rowActions;
+}
+
+.claimRowActions > * {
+  flex: 1 1 auto;
+  justify-content: center;
+}
+
+@media (max-width: 640px) {
+  .claimsList {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  .claimRow {
+    display: flex;
+    flex-wrap: wrap;
+  }
 }

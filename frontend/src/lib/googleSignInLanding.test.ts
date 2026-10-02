@@ -3,17 +3,6 @@ import { consumeGoogleSignInLanding } from './googleSignInLanding';
 import { isAuthenticated } from './auth';
 import { isAuthenticatedOrganizer } from './organizerAuth';
 
-vi.mock('../api/client', () => ({
-  api: {
-    get: vi.fn(() => Promise.resolve({ theme_preference: null })),
-    patch: vi.fn(() => Promise.resolve()),
-  },
-  organizerApi: {
-    get: vi.fn(() => Promise.resolve({ theme_preference: null })),
-    patch: vi.fn(() => Promise.resolve()),
-  },
-}));
-
 function setUrl(search: string, path = '/'): void {
   window.history.replaceState({}, '', `${path}${search}`);
 }

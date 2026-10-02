@@ -44,8 +44,8 @@
 .heroRise {
   display: block;
   overflow: hidden;
-  padding-bottom: 0.14em;
-  margin-bottom: -0.14em;
+  padding-bottom: var(--descender-pad);
+  margin-bottom: calc(-1 * var(--descender-pad));
 }
 .heroRise > span {
   display: block;
@@ -61,7 +61,7 @@
   transform-origin: left;
   /* backwards, not both — same reasoning as .heroRise > span above; the end
    * state (scaleX(1)) already matches the unanimated resting scale. */
-  animation: hairlineDraw var(--anim-hairline-draw) var(--easing-landing) 0.5s backwards;
+  animation: hairlineDraw var(--anim-hairline-draw) var(--easing-landing) var(--anim-rise-md) backwards;
 }
 
 .posterDrift {

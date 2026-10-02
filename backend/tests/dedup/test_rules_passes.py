@@ -101,6 +101,7 @@ async def test_run_dedup_pass_assigns_and_counts_updates(mock_db, monkeypatch):
         rules, "candidate_pair_ids_in_window", AsyncMock(return_value=[(1, 2)])
     )
     monkeypatch.setattr(rules, "clear_stale_dedup_groups", AsyncMock())
+    monkeypatch.setattr(rules, "load_claims_for_events", AsyncMock(return_value={}))
 
     result = await run_dedup_pass(mock_db)
 

@@ -73,3 +73,37 @@
   cursor: pointer;
 }
 .queueLoadMore:disabled { opacity: var(--opacity-disabled); cursor: not-allowed; }
+
+/* Top-level tab strip shared by AdminEventDetail's Overview/Classification/…
+ * switch and AdminClaims' Pending review/Granted switch (#420) — a plain
+ * hairline-underline tab, distinct from SegmentedControl's pill/dial look. */
+.queueTabStrip {
+  display: flex;
+  gap: var(--space-1);
+  border-bottom: var(--border-w-hair) solid var(--border);
+  margin-bottom: var(--space-4);
+  overflow-x: auto;
+}
+
+.queueTab, .queueTabActive {
+  background: none;
+  border: none;
+  border-bottom: var(--border-w-ring) solid transparent;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  padding: var(--space-2) var(--space-3);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  white-space: nowrap;
+}
+.queueTabActive { color: var(--accent-light); border-bottom-color: var(--accent); }
+
+.queueTabCount {
+  font-size: var(--fs-2xs);
+  background: var(--bg-raised);
+  border-radius: var(--radius-pill);
+  padding: 0 var(--space-1);
+  color: var(--text-soft);
+}

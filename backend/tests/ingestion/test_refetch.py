@@ -16,6 +16,7 @@ from app.constants import (
     TALLINN_CENTER_LNG,
     TALLINN_TZ,
 )
+from app.claims.pinning import pin_key
 from app.ingestion.locale_urls import locale_from_url_path
 from app.ingestion.refetch import (
     _is_empty_venue_name,
@@ -88,6 +89,7 @@ def _future_event(**overrides) -> MagicMock:
     e.title_localized = None
     e.description_localized = None
     e.important_info = None
+    e.pinned_fields = []
     e.venue_name = "Test Venue"
     e.venue_address = "Old Street 1, Tallinn"
     e.lat = TALLINN_CENTER_LAT
@@ -187,6 +189,33 @@ class TestPriceReconcile:
         await _run(mock_db, event, html)
         assert event.price_min == 17.0
         assert event.has_free_tier is True
+
+    @pytest.mark.asyncio
+    async def test_kumu_falls_back_to_selector_price_when_no_jsonld_offers(self, mock_db):
+        """KUMU pages (#424) carry no Event/offers JSON-LD at all — the
+        reconciliation must fall back to the selector-based price hint
+        instead of leaving price_min untouched forever."""
+        event = _future_event(
+            url="https://kumu.ekm.ee/en/syndmus/some-event/",
+            price_min=None, price_max=None,
+        )
+        html = (
+            "<html><body>"
+            '<div class="event-header__ticket-price">&euro;16</div>'
+            "</body></html>"
+        )
+        summary = await _run(mock_db, event, html)
+        assert event.price_min == 16.0
+        assert event.price_max == 16.0
+        assert summary["price_changed"] == 1
+
+    @pytest.mark.asyncio
+    async def test_non_kumu_host_with_no_offers_leaves_price_unchanged(self, mock_db):
+        event = _future_event(price_min=None, price_max=None)  # fienta.com host
+        html = "<html><body>no price selector here</body></html>"
+        summary = await _run(mock_db, event, html)
+        assert event.price_min is None
+        assert summary["price_changed"] == 0
 
 
 # --- address <-> coords coupling --------------------------------------------
@@ -639,6 +668,142 @@ class TestLocalizedTextBackfill:
         # localized_text_backfilled counter stays 0.
         assert summary["localized_text_backfilled"] == 0
         assert event.title_localized is None
+
+
+class TestPinnedFieldsRespected:
+    """#417: a claim-editing (#416) pin blocks the refetch pass's source-side
+    write to that field, per-locale, while every unpinned field/locale keeps
+    syncing normally. Price fields are never pinnable (co-authoritative) and
+    must never be gated here."""
+
+    def _locale_pages(self, en_title: str, et_title: str) -> tuple[str, str]:
+        en_html = _hreflang_html(
+            base_url="https://kumu.ekm.ee/en/syndmus/some-event/",
+            en_url="https://kumu.ekm.ee/en/syndmus/some-event/",
+            et_url="https://kumu.ekm.ee/et/syndmus/some-event/",
+            og_title=en_title,
+        )
+        et_html = _hreflang_html(
+            base_url="https://kumu.ekm.ee/et/syndmus/some-event/",
+            en_url="https://kumu.ekm.ee/en/syndmus/some-event/",
+            et_url="https://kumu.ekm.ee/et/syndmus/some-event/",
+            og_title=et_title,
+        )
+        return en_html, et_html
+
+    async def _run_locale_backfill(self, mock_db, event, en_html, et_html) -> dict:
+        mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=[event]))
+        pages = {
+            "https://kumu.ekm.ee/en/syndmus/some-event/": en_html,
+            "https://kumu.ekm.ee/et/syndmus/some-event/": et_html,
+        }
+
+        async def _fake_get(client, url):
+            r = _resp(pages[url])
+            r.url = httpx.URL(url)
+            return r
+
+        with (
+            patch("app.ingestion.refetch.http_get", new=_fake_get),
+            patch("app.ingestion.refetch.asyncio.sleep", new=AsyncMock()),
+        ):
+            return await refetch_event_details(mock_db)
+
+    @pytest.mark.asyncio
+    async def test_pinned_locale_survives_conflicting_source_data(self, mock_db):
+        event = _future_event(
+            url="https://kumu.ekm.ee/en/syndmus/some-event/",
+            title_localized={"et": "Organizer-corrected title"},
+            description_localized=None,
+            pinned_fields=[pin_key("title", "et")],
+        )
+        en_html, et_html = self._locale_pages("Fresh EN Title", "Fresh ET Title")
+        await self._run_locale_backfill(mock_db, event, en_html, et_html)
+
+        assert event.title_localized["et"] == "Organizer-corrected title"
+
+    @pytest.mark.asyncio
+    async def test_unpinned_locale_still_updates_normally(self, mock_db):
+        event = _future_event(
+            url="https://kumu.ekm.ee/en/syndmus/some-event/",
+            title_localized=None,
+            description_localized=None,
+            pinned_fields=[],
+        )
+        en_html, et_html = self._locale_pages("Fresh EN Title", "Fresh ET Title")
+        summary = await self._run_locale_backfill(mock_db, event, en_html, et_html)
+
+        assert summary["localized_text_backfilled"] == 1
+        assert event.title_localized["en"] == "Fresh EN Title"
+        assert event.title_localized["et"] == "Fresh ET Title"
+
+    @pytest.mark.asyncio
+    async def test_per_locale_pin_independence(self, mock_db):
+        """title:et pinned, title:en not — en still backfills, et does not."""
+        event = _future_event(
+            url="https://kumu.ekm.ee/en/syndmus/some-event/",
+            title_localized=None,
+            description_localized=None,
+            pinned_fields=[pin_key("title", "et")],
+        )
+        en_html, et_html = self._locale_pages("Fresh EN Title", "Fresh ET Title")
+        await self._run_locale_backfill(mock_db, event, en_html, et_html)
+
+        assert event.title_localized is not None
+        assert event.title_localized.get("en") == "Fresh EN Title"
+        assert "et" not in event.title_localized
+
+    @pytest.mark.asyncio
+    async def test_price_unaffected_by_pin_state(self, mock_db):
+        event = _future_event(
+            price_min=None,
+            pinned_fields=[pin_key("title", "et"), pin_key("url")],
+        )
+        summary = await _run(mock_db, event, _event_html(price=12.0))
+
+        assert summary["price_changed"] == 1
+        assert event.price_min == 12.0
+
+    @pytest.mark.asyncio
+    async def test_dormant_claim_pin_no_longer_applies(self, mock_db):
+        """#422: once the covering claim goes dormant, an intentional-clear
+        pin (title_localized carries no 'et' key, kept out of missing-locale
+        backfill only by the pin) stops blocking the source-side backfill —
+        treated as if never pinned."""
+        event = _future_event(
+            url="https://kumu.ekm.ee/en/syndmus/some-event/",
+            title_localized=None,
+            description_localized=None,
+            pinned_fields=[pin_key("title", "et")],
+        )
+        en_html, et_html = self._locale_pages("Fresh EN Title", "Fresh ET Title")
+        with patch(
+            "app.ingestion.refetch.bulk_dormant_pinned_event_ids",
+            new=AsyncMock(return_value={event.id}),
+        ):
+            await self._run_locale_backfill(mock_db, event, en_html, et_html)
+
+        assert event.title_localized["et"] == "Fresh ET Title"
+
+    @pytest.mark.asyncio
+    async def test_reactivated_claim_pin_applies_again(self, mock_db):
+        """A claim NOT in the dormant set (e.g. reactivated) keeps its pin —
+        the et locale stays out of the missing-locale backfill."""
+        event = _future_event(
+            url="https://kumu.ekm.ee/en/syndmus/some-event/",
+            title_localized=None,
+            description_localized=None,
+            pinned_fields=[pin_key("title", "et")],
+        )
+        en_html, et_html = self._locale_pages("Fresh EN Title", "Fresh ET Title")
+        with patch(
+            "app.ingestion.refetch.bulk_dormant_pinned_event_ids",
+            new=AsyncMock(return_value=set()),
+        ):
+            await self._run_locale_backfill(mock_db, event, en_html, et_html)
+
+        assert event.title_localized is not None
+        assert "et" not in event.title_localized
 
 
 # ---------------------------------------------------------------------------

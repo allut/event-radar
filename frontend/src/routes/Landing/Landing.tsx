@@ -2,7 +2,7 @@ import { Fragment, memo, useMemo, type CSSProperties } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../../api/client';
-import { ANALYTICS_EVENTS, API, CATEGORIES, EUR_SYMBOL, LANDING_BASE_FIG_COUNT, LANDING_PLATE_BODY_MAX_LENGTH, LANDING_SHOWCASE_PLATE_COUNT, LOCALES, MAGIC_LINK_EXPIRY_MINUTES, OG_FALLBACK_IMAGE_PATH, PRODUCTION_ORIGIN, QUERY_KEYS, ROUTES, STEP_KEYS, UI_STATE } from '../../constants';
+import { ACCENT_MARKER_RE, ANALYTICS_EVENTS, API, CATEGORIES, COPYRIGHT_YEAR, EUR_SYMBOL, LANDING_BASE_FIG_COUNT, LANDING_PLATE_BODY_MAX_LENGTH, LANDING_SHOWCASE_PLATE_COUNT, LOCALES, MAGIC_LINK_EXPIRY_MINUTES, OG_FALLBACK_IMAGE_PATH, PRODUCTION_ORIGIN, QUERY_KEYS, ROUTES, STEP_KEYS, UI_STATE } from '../../constants';
 import { t, ti } from '../../i18n';
 import { categoryGradient, cx, formatCount, formatEventTime, formatHeroDateline, formatHourMinute, formatPrice, padIndex, safeUrl, stripHtmlToText, truncateForMeta, withLocaleQuery } from '../../utils';
 import { useLocaleMutation } from '../../hooks/useLocaleMutation';
@@ -38,10 +38,8 @@ interface CountsResponse {
   tonight_events: TonightEvent[];
 }
 
-// Hoisted — both are constant across renders (Big-O audit #5, item 3.7): a
-// page reload picks up a year rollover regardless.
+// Hoisted — constant across renders (Big-O audit #5, item 3.7).
 const FOOTER_LOCALE_NAMES = LOCALES.map((l) => l.nativeName).join(' · ');
-const FOOTER_YEAR = new Date().getFullYear();
 
 /** Renders an i18n template containing a single `{count}` placeholder with
  * just the count bolded, e.g. "1,008+ events on the radar right now". */
@@ -49,8 +47,6 @@ function CountSegment({ template, count }: { template: string; count: string }) 
   const [before, after] = template.split('{count}');
   return <>{before}<b>{count}</b>{after ?? ''}</>;
 }
-
-const ACCENT_MARKER_RE = /_(.+?)_/;
 
 /** Renders an i18n string with an `_accented_` word wrapped in markup, e.g.
  * "…tasub kodust _välja_ minna." → "…tasub kodust <em>välja</em> minna."
@@ -86,7 +82,7 @@ function EmailCapture({ locale }: { locale: string }) {
   if (state === UI_STATE.success) {
     return (
       <div className={styles.success} role="status">
-        <div className={styles.checkCircle}>✓</div>
+        <div className={styles.checkCircle} aria-hidden>✓</div>
         <p className={styles.successMsg}>
           {t('check_inbox', locale)} <strong>{email}</strong>
         </p>
@@ -399,7 +395,7 @@ export default function Landing() {
             <span className={styles.trustItem}>{t('landing_trust_notracking', locale)}</span>
             <span className={styles.trustItem}>{t('landing_trust_free', locale)}</span>
             <span className={styles.footerLocales}>{FOOTER_LOCALE_NAMES}</span>
-            <span className={styles.footerYear}>{t('brand', locale)}, {FOOTER_YEAR}</span>
+            <span className={styles.footerYear}>{t('brand', locale)}, {COPYRIGHT_YEAR}</span>
           </footer>
         </div>
       </main>

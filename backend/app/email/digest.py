@@ -10,7 +10,7 @@ from contextlib import nullcontext
 from datetime import date, datetime
 
 import httpx
-from sqlalchemy import select
+from sqlalchemy import select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.tokens import generate_unsubscribe_token
@@ -18,12 +18,15 @@ from app.config import settings
 from app.constants import (
     AUTHORIZATION_HEADER,
     BEARER_PREFIX,
+    DIGEST_CATEGORY_FALLBACK,
     DIGEST_MAX_WHY_GO_BULLETS,
     DIGEST_RESULT_SENT,
     DIGEST_RESULT_SKIPPED,
     DIGEST_SEND_CONCURRENCY,
     FEED_BUILD_USER_BATCH_SIZE,
     HEADER_LIST_UNSUBSCRIBE,
+    HEADER_LIST_UNSUBSCRIBE_POST,
+    LIST_UNSUBSCRIBE_ONE_CLICK,
     LOCALE_ET,
     LOCALE_RU,
     LOG_EVENT_EMAIL_SEND_FAILED,
@@ -52,13 +55,13 @@ from app.i18n import day_name, month_name, t, ti
 from app.ingestion.http_client import http_post
 from app.models.models import DailyFeed, Event, User
 from app.routers.utils import (
-    mask_email,
-    public_event_filter,
     resolve_title,
-    resolve_venue_name,
     resolve_why_go,
     select_events_with_classification,
 )
+from app.events.venue import resolve_venue_name
+from app.auth.utils import mask_email
+from app.events.queries import public_event_filter
 
 log = logging.getLogger(__name__)
 
@@ -126,7 +129,7 @@ def _build_event_block(
             s_img=s.s_img,
         )
     else:
-        category = (cl.categories[0] if cl and cl.categories else "event").replace("_", " ")
+        category = (cl.categories[0] if cl and cl.categories else DIGEST_CATEGORY_FALLBACK).replace("_", " ")
         image_html = EVENT_IMAGE_BAND.format(
             event_href=event_href,
             s_band=s.s_band,
@@ -180,9 +183,8 @@ def build_digest_html(
     locale: str,
     frontend_url: str,
     unsubscribe_url: str | None = None,
-    theme_preference: str | None = None,
 ) -> str:
-    s = get_email_styles(theme_preference)
+    s = get_email_styles()
     date_str = _format_feed_date(feed_date, locale)
     subject_label = t("digest.subject_label", locale)
     if unsubscribe_url is None:
@@ -192,7 +194,9 @@ def build_digest_html(
     events_html = (
         "\n".join(event_blocks)
         if event_blocks
-        else DIGEST_EMPTY_STATE.format(text=t("digest.no_events", locale))
+        else DIGEST_EMPTY_STATE.format(
+            s_body_text=s.s_body_text, text=t("digest.no_events", locale)
+        )
     )
     settings_label = t("digest.unsubscribe", locale)
 
@@ -215,6 +219,7 @@ def build_digest_html(
 
     return EMAIL_DOCUMENT.format(
         css=s.css,
+        color_scheme=s.color_scheme,
         s_page=s.s_page,
         s_container=s.s_container,
         s_header_pad=s.s_header_pad,
@@ -246,7 +251,6 @@ async def send_digest_email(
     events: Sequence[Event],
     feed_date: date,
     user_id: int,
-    theme_preference: str | None = None,
     *,
     http_client: httpx.AsyncClient | None = None,
 ) -> None:
@@ -266,7 +270,6 @@ async def send_digest_email(
         locale,
         settings.FRONTEND_URL,
         unsubscribe_url,
-        theme_preference,
     )
     subject = ti(
         "digest.subject_template", locale, date=_format_feed_date(feed_date, locale)
@@ -288,7 +291,7 @@ async def send_digest_email(
                     "html": html,
                     "headers": {
                         HEADER_LIST_UNSUBSCRIBE: f"<{header_url}>",
-                        "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+                        HEADER_LIST_UNSUBSCRIBE_POST: LIST_UNSUBSCRIBE_ONE_CLICK,
                     },
                 },
             )
@@ -375,8 +378,8 @@ async def send_daily_digests(
         (
             await db.scalars(
                 select(User.id).where(
-                    User.email_digest_opt_in.is_(True),
-                    User.email_verified.is_(True),
+                    User.email_digest_opt_in == true(),
+                    User.email_verified == true(),
                 )
             )
         ).all()
@@ -414,7 +417,6 @@ async def send_daily_digests(
                     ordered_events,
                     today,
                     user.id,
-                    user.theme_preference,
                     http_client=http_client,
                 )
                 return DIGEST_RESULT_SENT

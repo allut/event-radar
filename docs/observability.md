@@ -30,18 +30,19 @@ Every shipped line is one JSON object (`JsonLogFormatter`):
 | `job_run` | scheduled job completed/failed (carries `job`, `status`, `duration_ms`) | `app/main.py::_scheduled` |
 | `rate_limit_block` | own per-IP 429 rejection (carries `path`) | `app/rate_limit.py` |
 | `llm_degraded` | LLM provider chain exhausted, or classify/dedup backlog deferred | `app/llm/router.py`, `app/ingestion/jobs.py` |
-| `auth_failed` | magic-link / admin-basic / internal-tick auth rejected | `app/routers/auth.py`, `admin.py`, `main.py` |
+| `auth_failed` | magic-link / admin-basic / claim-intent-link auth rejected | `app/routers/auth.py`, `organizer_auth.py`, `organizer_claims.py`, `admin.py` |
 | `webhook_rejected` | inbound-mail bad signature / bad body | `app/routers/webhooks.py` |
 | `report_submitted` | `POST /reports` succeeded | `app/routers/reports.py` |
-| `email_send_failed` | Resend magic-link or digest send failed | `app/auth/email.py`, `app/email/digest.py` |
-| `admin_action` | console-initiated admin action — audit trail; carries `action`, one of 17 `ADMIN_ACTION_*` values (`app/constants.py`) | `app/routers/admin_auth.py`, `app/routers/utils.py` |
+| `email_send_failed` | a Resend send failed (magic link, digest, contact, report notify/reporter, claim resolution) | `app/auth/email.py`, `app/email/{digest,contact,report_notify,report_reporter,claim_resolution}.py`, `app/claims/lifecycle.py`, `app/routers/admin.py`, `app/routers/utils.py` |
+| `admin_action` | console-initiated admin action — audit trail; carries `action`, one of 19 `ADMIN_ACTION_*` values (`app/constants.py`) | `app/routers/admin_auth.py`, `app/routers/utils.py` |
 | `contact_honeypot_block` | contact-form honeypot field tripped (bot signal) | `app/routers/contact.py` |
 | `host_rejected` | `HostCheckMiddleware` rejected a request's Host header — signals cache-poisoning/host-spoofing probes | `app/main.py` |
 | `unverified_account_budget_exceeded` | global daily new-unverified-account budget crossed (mail-bomb early warning, OWASP audit F10) | `app/routers/utils.py::record_unverified_account_creation` |
-| `google_signin` | organizer Google sign-in completed (carries `track`, `outcome` — one of `existing_login`/`new_account`/`auto_linked`/`confirmation_sent`) | `app/routers/organizer_auth.py::organizer_google_callback` |
-| `google_signin_degraded` | network/5xx failure talking to Google (token exchange or JWKS fetch) — upstream degradation, distinct from a rejected caller | `app/routers/organizer_auth.py::organizer_google_callback` |
-| `identity_linked` | a provider identity row was created (new account, auto-link, or confirmation-link absorption) | `app/routers/organizer_auth.py` |
-| `identity_unlinked` | `DELETE /organizer/profile/identities/{provider}` succeeded | `app/routers/organizer_profile.py::unlink_own_identity` |
+| `google_signin` | Google sign-in completed on either track (carries `track` — `user`/`organizer` — and `outcome`, e.g. `existing_login`/`new_account`/`auto_linked`/`confirmation_sent`) | `app/routers/auth.py`, `app/routers/organizer_auth.py` (the two Google callbacks) |
+| `google_signin_degraded` | network/5xx failure talking to Google (token exchange or JWKS fetch) — upstream degradation, distinct from a rejected caller | `app/routers/auth.py`, `app/routers/organizer_auth.py`, `app/auth/google_oauth.py` |
+| `identity_linked` | a provider identity row was created (new account, auto-link, or confirmation-link absorption) | `app/routers/auth.py`, `app/routers/organizer_auth.py` |
+| `identity_unlinked` | `DELETE /users/me/identities/{provider}` or `DELETE /organizer/profile/identities/{provider}` succeeded | `app/routers/settings.py`, `app/routers/organizer_profile.py::unlink_own_identity` |
+| `schema_drift` | boot-time alembic revision ≠ migration head (carries `db_revision`, `head_revision`) — raises in production, warns in development | `app/db.py::assert_schema_at_head` |
 
 ## Setup
 
@@ -72,7 +73,7 @@ thresholds after observing a few days of baseline volume.
 | 7 | Log-stream silence | Threshold (below) | `['event-radar'] \| summarize count()` over 30 min | count < 1 |
 | 8 | Job-duration anomaly *(optional)* | AnomalyDetection | `['event-radar'] \| where event == "job_run" \| summarize avg(duration_ms) by job, bin_auto(_time)` | auto-baselined drift |
 | 9 | Report abuse spike | Threshold | `['event-radar'] \| where event == "report_submitted" \| summarize count()` over 10 min | placeholder — tune after baseline volume observed |
-| 10 | Admin action audit ⭐ | Match | `['event-radar'] \| where event == "admin_action"` | any match — the audit trail (17 `ADMIN_ACTION_*` values) exists but had no monitor watching it (OWASP audit F11); this makes every console-initiated admin action visible, not alert-worthy on its own |
+| 10 | Admin action audit ⭐ | Match | `['event-radar'] \| where event == "admin_action"` | any match — the audit trail (19 `ADMIN_ACTION_*` values) exists but had no monitor watching it (OWASP audit F11); this makes every console-initiated admin action visible, not alert-worthy on its own |
 | 11 | Host-header probing | Threshold | `['event-radar'] \| where event == "host_rejected" \| summarize count()` over 15 min | count > 5 — signals cache-poisoning/host-spoofing probes (OWASP audit F11) |
 | 12 | Google sign-in degraded | Threshold | `['event-radar'] \| where event == "google_signin_degraded" \| summarize count()` over 15 min | count > 3 — sustained failures talking to Google (token exchange or JWKS fetch), not just an occasional blip |
 
@@ -82,9 +83,12 @@ failure modes. #1, #4, #5, #6, #9, #10, #11 are next. #8 is a nice-to-have.
 
 ### Why #3/#3b/#7 matter most
 
-Render's free tier sleeps after 15 min idle, which halts the embedded
-APScheduler. When that happens **nothing errors** — jobs simply never run, so an
-error-only monitor stays silent. #3/#3b detect the *absence* of a successful
+The embedded APScheduler lives inside the single web process. The backend now
+runs on Render's always-on Starter plan (the old free tier's 15-min idle sleep
+no longer applies — see `docs/backend-ops.md`), but a scheduler can still die
+quietly: a wedged event loop, a process restarted without the scheduler
+starting, or a job that hangs instead of failing. When that happens **nothing
+errors** — jobs simply never run, so an error-only monitor stays silent. #3/#3b detect the *absence* of a successful
 `job_run` in the window the job should have run; #7 detects the whole stream
 going quiet (app down **or** shipping broken).
 

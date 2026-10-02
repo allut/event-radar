@@ -28,18 +28,16 @@ import {
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3';
+import { S3_MAX_KEYS_PER_PAGE } from '../constants';
 
-/** Every object-list response page returns at most this many keys — also
- * the max a single DeleteObjectsCommand call accepts, so deleting page by
- * page (rather than accumulating every key first) never needs its own
- * separate batching. */
-const S3_MAX_KEYS_PER_PAGE = 1000;
+let cachedClient: { credsKey: string; client: S3Client } | null = null;
 
-/** Builds a fresh R2 client from env vars, or `null` (logged) if any of the
- * three required credentials are unset — e.g. local dev builds that never
- * populated `.env.local`'s R2_* vars, mirroring commitRoundMarker's
- * missing-token no-op. A fresh client per call is cheap (no persistent
- * connection to reuse) and keeps this module stateless. */
+/** Returns the R2 client for the current env vars, or `null` (logged) if any
+ * of the three required credentials are unset — e.g. local dev builds that
+ * never populated `.env.local`'s R2_* vars, mirroring commitRoundMarker's
+ * missing-token no-op. Memoized on the credential tuple so a round's
+ * thousands of get/put calls share one client (Big-O audit M14) while a
+ * changed env still yields a fresh one. */
 function buildClient(): S3Client | null {
   const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
   const accessKeyId = process.env.R2_ACCESS_KEY_ID;
@@ -50,11 +48,15 @@ function buildClient(): S3Client | null {
     );
     return null;
   }
-  return new S3Client({
+  const credsKey = `${accountId}\0${accessKeyId}\0${secretAccessKey}`;
+  if (cachedClient?.credsKey === credsKey) return cachedClient.client;
+  const client = new S3Client({
     region: 'auto',
     endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
     credentials: { accessKeyId, secretAccessKey },
   });
+  cachedClient = { credsKey, client };
+  return client;
 }
 
 /** Separate from buildClient's credential check since the bucket name is a

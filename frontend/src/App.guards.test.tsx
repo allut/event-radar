@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import App from './App';
 import { setSignedInHint } from './lib/auth';
@@ -6,14 +6,25 @@ import { setOrganizerSignedInHint } from './lib/organizerAuth';
 import { setAdminSignedInHint } from './lib/adminAuth';
 import { t } from './i18n';
 
+// Every request fails like an unreachable backend: the routes exercised here
+// render a (still guard/locale-correct) error or loading state, so assertions
+// stay focused on routing.
+vi.mock('./api/client', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./api/client')>();
+  const { NETWORK_ERROR_CODE } = await import('./constants');
+  const fail = () => Promise.reject(new actual.ApiError(0, 'network error', NETWORK_ERROR_CODE));
+  const failing = { get: fail, post: fail, patch: fail, delete: fail };
+  return { ...actual, api: failing, organizerApi: failing, adminApi: failing };
+});
+
 // Covers the two route guards in App.tsx that App.locale.test.tsx only
 // touches incidentally (one Protected-redirect case): the authenticated
 // pass-through branch of both Protected and OrganizerProtected, and
 // OrganizerProtected's own redirect, which had no coverage at all.
 //
-// Network is left unmocked, same rationale as App.locale.test.tsx: every
-// route exercised here renders a (still guard-correct) loading/error state
-// on a failed fetch, so assertions stay focused on the guard itself.
+// The api module is mocked to reject, same rationale as App.locale.test.tsx:
+// every route exercised here renders a (still guard-correct) loading/error
+// state on a failed fetch, so assertions stay focused on the guard itself.
 
 function setPath(path: string) {
   window.history.pushState(null, '', path);
@@ -39,8 +50,8 @@ describe('App route guards', () => {
 
     // Settings only mounts its TopBar once its /users/me fetch settles, so the
     // guard-passed signal here is that Settings itself mounted (its loading
-    // state), not the redirect target (Login) — the fetch is left unmocked
-    // and never settles inside a unit test's lifetime.
+    // state), not the redirect target (Login) — the mocked fetch rejects, but
+    // query retry/backoff keeps it loading inside a unit test's lifetime.
     await waitFor(() => expect(screen.getByLabelText(t('loading', 'et'))).toBeInTheDocument());
     expect(window.location.pathname).toBe('/settings');
   });

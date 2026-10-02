@@ -170,7 +170,7 @@ def _build_host_check_app() -> Starlette:
     )
     app.add_middleware(
         HostCheckMiddleware,
-        allowed_hosts=["event-radar-api.onrender.com"],
+        allowed_hosts=["event-radar-api-r7l6.onrender.com"],
         exempt_paths=HOST_CHECK_EXEMPT_PATHS,
     )
     return app
@@ -212,7 +212,7 @@ async def test_guarded_path_with_allowed_host_passes_through():
         resp = await client.post(
             "/echo",
             content=b"x",
-            headers={"Host": "event-radar-api.onrender.com"},
+            headers={"Host": "event-radar-api-r7l6.onrender.com"},
         )
     assert resp.status_code == 200
 
@@ -252,7 +252,7 @@ async def test_downstream_400_with_allowed_host_not_logged_as_host_rejected(capl
         with caplog.at_level("WARNING", logger="app.main"):
             resp = await client.get(
                 "/bad-request",
-                headers={"Host": "event-radar-api.onrender.com"},
+                headers={"Host": "event-radar-api-r7l6.onrender.com"},
             )
     assert resp.status_code == 400
     matching = [
@@ -283,29 +283,29 @@ def test_resolve_allowed_hosts_render_hostname_alone():
     """RENDER_EXTERNAL_HOSTNAME must resolve the allowlist even when
     BACKEND_URL is still a local/dev default."""
     with patch("app.main.settings") as mock_settings:
-        mock_settings.RENDER_EXTERNAL_HOSTNAME = "event-radar-api.onrender.com"
+        mock_settings.RENDER_EXTERNAL_HOSTNAME = "event-radar-api-r7l6.onrender.com"
         mock_settings.BACKEND_URL = "http://localhost:8000"
         with patch("app.main.log") as mock_log:
             result = _resolve_allowed_hosts()
-    assert result == ["event-radar-api.onrender.com"]
+    assert result == ["event-radar-api-r7l6.onrender.com"]
     mock_log.error.assert_not_called()
 
 
 def test_resolve_allowed_hosts_both_set_and_different():
     with patch("app.main.settings") as mock_settings:
         mock_settings.RENDER_EXTERNAL_HOSTNAME = "srv-abc123.onrender.com"
-        mock_settings.BACKEND_URL = "https://event-radar-api.onrender.com"
+        mock_settings.BACKEND_URL = "https://event-radar-api-r7l6.onrender.com"
         with patch("app.main.log") as mock_log:
             result = _resolve_allowed_hosts()
-    assert result == ["srv-abc123.onrender.com", "event-radar-api.onrender.com"]
+    assert result == ["srv-abc123.onrender.com", "event-radar-api-r7l6.onrender.com"]
     mock_log.error.assert_not_called()
 
 
 def test_resolve_allowed_hosts_both_set_and_equal_dedupes():
     with patch("app.main.settings") as mock_settings:
-        mock_settings.RENDER_EXTERNAL_HOSTNAME = "event-radar-api.onrender.com"
-        mock_settings.BACKEND_URL = "https://event-radar-api.onrender.com"
+        mock_settings.RENDER_EXTERNAL_HOSTNAME = "event-radar-api-r7l6.onrender.com"
+        mock_settings.BACKEND_URL = "https://event-radar-api-r7l6.onrender.com"
         with patch("app.main.log") as mock_log:
             result = _resolve_allowed_hosts()
-    assert result == ["event-radar-api.onrender.com"]
+    assert result == ["event-radar-api-r7l6.onrender.com"]
     mock_log.error.assert_not_called()

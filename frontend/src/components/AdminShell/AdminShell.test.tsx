@@ -10,7 +10,7 @@ describe('AdminShell', () => {
 
   it('renders the theme toggle next to Sign out in the foot area', () => {
     renderWithProviders(<AdminShell>content</AdminShell>);
-    expect(screen.getByRole('button', { name: 'System' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Light' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Sign out →' })).toBeInTheDocument();
   });
 });

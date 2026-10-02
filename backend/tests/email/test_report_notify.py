@@ -6,13 +6,14 @@ from unittest.mock import MagicMock
 import httpx
 import pytest
 
+from app.email import resend
 from app.email import report_notify
 
 
 @pytest.mark.asyncio
 async def test_no_api_key_logs_and_skips_send(patch_client, monkeypatch, make_event):
     monkeypatch.setattr(report_notify.settings, "RESEND_API_KEY", "")
-    post = patch_client(report_notify, MagicMock(status_code=200))
+    post = patch_client(resend, MagicMock(status_code=200))
 
     await report_notify.send_report_notification(
         make_event(10), "spam_or_scam", None, False, 1, "reporter@example.com"
@@ -30,7 +31,7 @@ async def test_success_posts_expected_content(patch_client, monkeypatch, make_ev
     monkeypatch.setattr(report_notify.settings, "BACKEND_URL", "https://api.radar.ee")
 
     resp = MagicMock(status_code=httpx.codes.OK, text="ok")
-    post = patch_client(report_notify, resp)
+    post = patch_client(resend, resp)
 
     event = make_event(42, title="Rave <night>")
     await report_notify.send_report_notification(
@@ -78,7 +79,7 @@ async def test_non_2xx_logs_error(patch_client, monkeypatch, caplog, make_event)
 
     monkeypatch.setattr(report_notify.settings, "RESEND_API_KEY", "re_key")
     resp = MagicMock(status_code=422, text="bad payload")
-    patch_client(report_notify, resp)
+    patch_client(resend, resp)
 
     with caplog.at_level(logging.ERROR):
         await report_notify.send_report_notification(

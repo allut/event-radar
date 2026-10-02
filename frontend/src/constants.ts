@@ -1,6 +1,6 @@
 // .js extensions required: this module is also imported (transitively) by
-// api/prerender-cadence.ts and api/seo-audit.ts, which Vercel runs as
-// unbundled Node ESM.
+// functions/api/prerender-cadence.ts and functions/api/seo-audit.ts, which
+// Cloudflare Pages runs as unbundled ESM.
 import { PERSONAS_EN, type PersonaData } from './_generated/i18nData.js';
 import {
   LOCALE_CODE_MAP as _LOCALE_CODE_MAP,
@@ -17,9 +17,11 @@ import {
   VIBES,
   BROWSE_PAGE_SIZE,
   ORGANIZER_IMAGE_ALLOWED_MIME,
+  CLAIM_EXPIRY_DAYS,
+  CLAIM_ADMIN_REVIEW_EXPIRY_DAYS,
 } from './_generated/sharedConstants.js';
 
-export { LOCALES, APP_VERSION, MAGIC_LINK_EXPIRY_MINUTES, PERSONA_MAX_SELECTABLE, DEFAULT_CURRENCY, SAFE_URL_SCHEMES, SANITIZE_ALLOWED_TAGS, SANITIZE_ALLOWED_ATTR, CATEGORIES, VIBES, BROWSE_PAGE_SIZE, ORGANIZER_IMAGE_ALLOWED_MIME };
+export { LOCALES, APP_VERSION, MAGIC_LINK_EXPIRY_MINUTES, PERSONA_MAX_SELECTABLE, DEFAULT_CURRENCY, SAFE_URL_SCHEMES, SANITIZE_ALLOWED_TAGS, SANITIZE_ALLOWED_ATTR, CATEGORIES, VIBES, BROWSE_PAGE_SIZE, ORGANIZER_IMAGE_ALLOWED_MIME, CLAIM_EXPIRY_DAYS, CLAIM_ADMIN_REVIEW_EXPIRY_DAYS };
 export const DEFAULT_LOCALE_CODE = _DEFAULT_LOCALE_CODE;
 export type { PersonaData };
 
@@ -47,10 +49,18 @@ export const LOCALE_KEY = 'locale';
 // two independent auth tracks (own account table, own token salts on the
 // backend) that must never be confused for one another. See lib/organizerAuth.ts.
 export const ORGANIZER_SIGNED_IN_HINT_KEY = 'organizer_session_token';
-// Tri-state theme override, shared across consumer/organizer/admin (one SPA
-// bundle, one light palette) — see lib/theme.ts's resolveTheme(). Holds
-// "system" | "light" | "dark"; "system"/unset falls through to matchMedia.
-export const THEME_PREFERENCE_KEY = 'theme_preference';
+// Legacy tri-state theme key ("system" | "light" | "dark") from the
+// permanent-preference model this app replaced (ADR 0003) — wiped on every
+// boot (lib/theme.ts) rather than reinterpreted, since its "system" value
+// has no equivalent under the new expiring-override semantics.
+export const LEGACY_THEME_PREFERENCE_KEY = 'theme_preference';
+// Device-theme-following override, shared across consumer/organizer/admin
+// (one SPA bundle, one light palette) — see lib/theme.ts's resolveTheme().
+// Holds "light" | "dark" only; paired with THEME_OVERRIDE_DEVICE_KEY, which
+// records the device theme the override was chosen under, so a later device
+// flip can be detected and the override discarded (ADR 0003).
+export const THEME_OVERRIDE_KEY = 'theme_override';
+export const THEME_OVERRIDE_DEVICE_KEY = 'theme_override_device';
 // Client-only dismissal flag for the profile nudge banner (#175) — no backend
 // field for this, so a stale/cleared browser just re-shows it once.
 export const ORGANIZER_PROFILE_NUDGE_DISMISSED_KEY = 'organizer_profile_nudge_dismissed';
@@ -91,6 +101,133 @@ export const ORGANIZER_NAME_MAX_LEN = 255;
 export const ORGANIZER_VENUE_NAME_MAX_LEN = 255;
 export const ORGANIZER_VENUE_ADDRESS_MAX_LEN = 500;
 
+// Mirrors backend CLAIM_VERIFICATION_MECHANISM_* / CLAIM_STATUS_* (app/constants.py)
+// — #415's ClaimPending screen switches its mechanism-specific copy off these.
+export const CLAIM_VERIFICATION_MECHANISM_FIENTA_TOKEN = 'fienta_token';
+export const CLAIM_VERIFICATION_MECHANISM_DNS_TXT = 'dns_txt';
+export const CLAIM_VERIFICATION_MECHANISM_PILETILEVI_PROMOTER = 'piletilevi_promoter';
+// (#428) Piletilevi's mailbox-match fallback tier — never self-service: the
+// organizer can't fix a mismatch from this screen (unlike DNS-TXT/Fienta),
+// so it's deliberately excluded from CLAIM_SELF_SERVICE_VERIFICATION_MECHANISMS
+// below and behaves like admin_review in #415's pending screen.
+export const CLAIM_VERIFICATION_MECHANISM_PILETILEVI_MAILBOX = 'piletilevi_mailbox';
+export const CLAIM_VERIFICATION_MECHANISM_ADMIN_REVIEW = 'admin_review';
+export type ClaimVerificationMechanism =
+  | typeof CLAIM_VERIFICATION_MECHANISM_FIENTA_TOKEN
+  | typeof CLAIM_VERIFICATION_MECHANISM_DNS_TXT
+  | typeof CLAIM_VERIFICATION_MECHANISM_PILETILEVI_PROMOTER
+  | typeof CLAIM_VERIFICATION_MECHANISM_PILETILEVI_MAILBOX
+  | typeof CLAIM_VERIFICATION_MECHANISM_ADMIN_REVIEW;
+export const CLAIM_DNS_VERIFICATION_MECHANISMS: ReadonlySet<ClaimVerificationMechanism> = new Set([
+  CLAIM_VERIFICATION_MECHANISM_DNS_TXT,
+  CLAIM_VERIFICATION_MECHANISM_PILETILEVI_PROMOTER,
+]);
+// The mechanisms with something an organizer can actually go do (add a DNS
+// record, place a code in their listing) — #415's pending screen shows the
+// "keep checking in background" hint only for these; every other mechanism
+// (admin_review, piletilevi_mailbox) gets the admin-review hint instead.
+export const CLAIM_SELF_SERVICE_VERIFICATION_MECHANISMS: ReadonlySet<ClaimVerificationMechanism> = new Set([
+  CLAIM_VERIFICATION_MECHANISM_FIENTA_TOKEN,
+  CLAIM_VERIFICATION_MECHANISM_DNS_TXT,
+  CLAIM_VERIFICATION_MECHANISM_PILETILEVI_PROMOTER,
+]);
+
+// Mirrors backend ERROR_CLAIM_JUSTIFICATION_REQUIRED (app/constants.py) — the
+// one claim-creation error the UI reacts to structurally (revealing the
+// justification field, #428) rather than just displaying; matched by exact
+// string since claim creation has no structured error-code contract.
+export const CLAIM_JUSTIFICATION_REQUIRED_ERROR =
+  'A justification is required for a series claim (no specific promoter' +
+  ' could be identified for this listing).';
+
+// Mirrors backend CLAIM_ERROR_CODE_NOT_GRANTED/CLAIM_ERROR_CODE_DORMANT
+// (app/constants.py) — the two reasons the claim-editing surface's GET/PATCH
+// can 409, told apart via ApiError.code rather than the English message (#444).
+export const CLAIM_ERROR_CODE_NOT_GRANTED = 'claim_not_granted';
+export const CLAIM_ERROR_CODE_DORMANT = 'claim_dormant';
+
+// Frontend-only marker (no backend counterpart) client.ts assigns to
+// ApiError.code for a FastAPI 422 list `detail` — lets a caller tell "the
+// backend rejected a field" apart from every other error shape (#452).
+export const VALIDATION_ERROR_CODE = 'validation_error';
+
+// Frontend-only marker (no backend counterpart), mirroring
+// VALIDATION_ERROR_CODE above — client.ts assigns this to ApiError.code when
+// `fetch` itself rejects (network error, or the request never left the
+// browser at all — e.g. blocked by an ad/tracker blocker, #453) rather than
+// the server returning any response. Lets a caller show a distinguishable
+// "couldn't reach Event Radar" message instead of the generic fallback.
+export const NETWORK_ERROR_CODE = 'network_error';
+
+export const CLAIM_STATUS_PENDING = 'pending';
+export const CLAIM_STATUS_APPROVED = 'approved';
+export const CLAIM_STATUS_CANCELLED = 'cancelled';
+export const CLAIM_STATUS_EXPIRED = 'expired';
+// A real admin revoke of a granted claim (row deleted server-side) — the
+// backend only ever reports this for the AdminAction-built tombstone.
+export const CLAIM_STATUS_REVOKED = 'revoked';
+// A declined pending claim, admin or auto (#447) — the backend still stores
+// this as "revoked" internally, but never reports that literal for a row
+// that still exists, only this one.
+export const CLAIM_STATUS_DECLINED = 'declined';
+export type ClaimStatus =
+  | typeof CLAIM_STATUS_PENDING
+  | typeof CLAIM_STATUS_APPROVED
+  | typeof CLAIM_STATUS_CANCELLED
+  | typeof CLAIM_STATUS_EXPIRED
+  | typeof CLAIM_STATUS_REVOKED
+  | typeof CLAIM_STATUS_DECLINED;
+
+// Claim target kind — a Publisher or a Series (mirrors backend claim `kind`).
+export const CLAIM_KIND_PUBLISHER = 'publisher';
+export const CLAIM_KIND_SERIES = 'series';
+export type ClaimKind = typeof CLAIM_KIND_PUBLISHER | typeof CLAIM_KIND_SERIES;
+
+// Public `claim_status` an event reports (mirrors backend EVENT_CLAIM_STATUS_*).
+export const EVENT_CLAIM_STATUS_UNCLAIMED = 'unclaimed';
+export const EVENT_CLAIM_STATUS_PENDING = 'pending';
+export const EVENT_CLAIM_STATUS_CLAIMED = 'claimed';
+export const EVENT_CLAIM_STATUS_NOT_CLAIMABLE = 'not_claimable';
+export type EventClaimStatus =
+  | typeof EVENT_CLAIM_STATUS_UNCLAIMED
+  | typeof EVENT_CLAIM_STATUS_PENDING
+  | typeof EVENT_CLAIM_STATUS_CLAIMED
+  | typeof EVENT_CLAIM_STATUS_NOT_CLAIMABLE;
+
+// Admin claims queue: badge text per verification mechanism, and the resolution
+// tag shown for each admin action.
+export const ADMIN_CLAIM_MECHANISM_LABELS: Record<string, string> = {
+  [CLAIM_VERIFICATION_MECHANISM_FIENTA_TOKEN]: 'Fienta',
+  [CLAIM_VERIFICATION_MECHANISM_DNS_TXT]: 'DNS-TXT',
+  [CLAIM_VERIFICATION_MECHANISM_PILETILEVI_PROMOTER]: 'DNS-TXT',
+  [CLAIM_VERIFICATION_MECHANISM_PILETILEVI_MAILBOX]: 'Contact mailbox',
+  [CLAIM_VERIFICATION_MECHANISM_ADMIN_REVIEW]: 'Admin review',
+};
+// Success line shown after an admin resolves a report or submission — shared by
+// the queue rows and the event-detail action bar.
+export const ADMIN_RESOLUTION_MESSAGES = {
+  resolved: 'Resolved.',
+  taken_down: 'Event taken down.',
+  approved: 'Submission approved.',
+  retracted: 'Submission retracted.',
+} as const;
+export type AdminResolutionKind = keyof typeof ADMIN_RESOLUTION_MESSAGES;
+export type AdminClaimActionKind = 'granted' | 'declined' | 'revoked';
+export const ADMIN_CLAIM_ACTION_TAGS: Record<AdminClaimActionKind, string> = {
+  granted: 'Granted',
+  declined: 'Declined',
+  revoked: 'Revoked',
+};
+
+// Closed, no further action possible — never involved an admin for cancelled/expired,
+// so ClaimPending's terminal screens must not show the pending pill or "Admin review" eyebrow (#449).
+export const CLAIM_TERMINAL_STATUSES: ReadonlySet<ClaimStatus> = new Set([
+  CLAIM_STATUS_CANCELLED,
+  CLAIM_STATUS_EXPIRED,
+  CLAIM_STATUS_REVOKED,
+  CLAIM_STATUS_DECLINED,
+]);
+
 // ─── Auth / magic link ───────────────────────────────────────────────────────
 export const AUTH_REDIRECT_DELAY_MS = 600;
 // Upper bound on the post-logout 401-redirect suppression window (lib/auth.ts
@@ -105,6 +242,9 @@ export const PAGEVIEW_TRACK_DELAY_MS = 0;
 
 // ─── Animation ───────────────────────────────────────────────────────────────
 export const CARD_ANIMATION_DELAY_STEP_MS = 80;
+// Stagger stops growing after this many cards (and restarts every page) so a
+// later page's cards are never held invisible for seconds (Big-O audit H6).
+export const CARD_ANIMATION_MAX_STEPS = 8;
 
 // ─── Layout ──────────────────────────────────────────────────────────────────
 // Matches the `max-width: 640px` breakpoint used across component CSS modules.
@@ -120,6 +260,10 @@ export const DROPDOWN_DEFAULT_FOCUS_SELECTOR = 'button';
 
 // ─── Settings ────────────────────────────────────────────────────────────────
 export const SAVE_MSG_CLEAR_DELAY_MS = 2000;
+// How long a "Copied" button label stays before reverting.
+export const COPY_FEEDBACK_MS = 2000;
+// HTTP status the claim-editing surface reads structurally (not-granted / dormant).
+export const HTTP_STATUS_CONFLICT = 409;
 
 // ─── External links ──────────────────────────────────────────────────────────
 export const GOOGLE_MAPS_SEARCH_URL = 'https://www.google.com/maps/search/?api=1&query=';
@@ -145,9 +289,13 @@ export type LocaleCode = (typeof LOCALES)[number]['code'];
 export const LOCALES_BY_CODE: Map<string, (typeof LOCALES)[number]> = new Map(
   LOCALES.map((l) => [l.code, l]),
 );
+export const COPYRIGHT_YEAR = String(new Date().getFullYear());
+
 export const LOCALE_EN = 'en' as const;
 export const LOCALE_ET = 'et' as const;
 export const LOCALE_RU = 'ru' as const;
+/** Localized-text slots the claim-edit form renders, in display order. */
+export const CLAIM_EDIT_LOCALES = [LOCALE_ET, LOCALE_EN, LOCALE_RU] as const;
 
 export function toLocaleCode(locale: string): string {
   return _LOCALE_CODE_MAP[locale] ?? _DEFAULT_LOCALE_CODE;
@@ -292,15 +440,15 @@ export const GITHUB_API_BASE_URL = 'https://api.github.com';
 export const GITHUB_API_VERSION = '2022-11-28';
 // Shared-secret header cron-job.org sends on its seo-audit ping, mirroring
 // the backend's /internal/tick pattern (docs/backend-ops.md). Distinct from
-// PRERENDER_CADENCE_TOKEN_HEADER and the backend's own X-Internal-Token: the
-// vercel.json rewrite excludes both of this function's path variants by
-// exact-anchored negative lookahead, so any variant that doesn't match exactly
-// gets proxied to Render carrying this header — a shared name with the
+// PRERENDER_CADENCE_TOKEN_HEADER and the backend's own X-Internal-Token: if
+// both Cloudflare Pages Functions ever shared one header name, a future
+// refactor that merged their handlers could forward this header's value to
+// the backend under a name it wasn't meant for — a shared name with the
 // backend's header would leak SEO_AUDIT_TOKEN into that proxied request.
 export const SEO_AUDIT_TOKEN_HEADER = 'x-seo-audit-token';
 
 // ─── Prerender chaining (issue #79/#81) ────────────────────────────────────
-// Round-state marker embedded in the git commit message (VERCEL_GIT_COMMIT_MESSAGE
+// Round-state marker embedded in the git commit message (the commit message
 // has a 2048-byte cap) a chained round reads back on the next round/cron tick —
 // see src/lib/prerenderChain.ts.
 export const CHAIN_MARKER_PREFIX = 'prerender-chain:';
@@ -343,18 +491,18 @@ export const CHAIN_STATE_PREFIX = 'prerender-chain-state/';
 // documents the intended value for whoever configures it.
 export const CHAIN_STATE_LIFECYCLE_DAYS = 3;
 // Repo the round-state marker is committed to (issue #83) via the GitHub Git
-// Data API — the branch the Vercel Deploy Hook targets lives here. Same repo
-// as SEO_AUDIT_GITHUB_REPO (both point at this codebase); kept as a separate
-// constant since the two features are unrelated and may diverge.
+// Data API — the branch the Cloudflare Pages Deploy Hook targets lives here.
+// Same repo as SEO_AUDIT_GITHUB_REPO (both point at this codebase); kept as a
+// separate constant since the two features are unrelated and may diverge.
 export const PRERENDER_CHAIN_GITHUB_REPO = 'allut/event-radar';
-// Production/Vercel-git-connected branch the round-state marker is pushed to
-// and the cadence gate (issue #92, api/prerender-cadence.ts) reads its tip
-// commit from.
+// Production, git-connected branch the round-state marker is pushed to and
+// the cadence gate (issue #92, functions/api/prerender-cadence.ts) reads its
+// tip commit from.
 export const PRERENDER_CADENCE_GIT_BRANCH = 'release';
 // Shared-secret header cron-job.org sends on its prerender-cadence ping
 // (issue #92). Distinct name from SEO_AUDIT_TOKEN_HEADER and the backend's own
 // X-Internal-Token — see that constant's comment for why a shared name is a
-// cross-service secret-disclosure risk via the vercel.json rewrite exclusion.
+// cross-service secret-disclosure risk.
 export const PRERENDER_CADENCE_TOKEN_HEADER = 'x-prerender-cadence-token';
 
 // ─── Analytics ───────────────────────────────────────────────────────────────
@@ -371,7 +519,7 @@ export const ANALYTICS_EVENT_PATH_RE = new RegExp(`^${_LOCALE_PREFIX_RE_SRC}/eve
 export const ANALYTICS_ORGANIZER_EDIT_PATH_RE = new RegExp(`^${_LOCALE_PREFIX_RE_SRC}/organizer/events/\\d+/edit$`);
 
 // GA4 loader src — googletagmanager.com only, matching the CSP script-src
-// widened for it (frontend/vercel.json, see docs/security.md).
+// widened for it (frontend/public/_headers, see docs/security.md).
 export const GTAG_SCRIPT_SRC = 'https://www.googletagmanager.com/gtag/js';
 
 // GA4 custom event names for the public-Explore + sign-in-upsell flow (issue
@@ -416,11 +564,15 @@ export const REPORT_DETAIL_TEXTAREA_ROWS = 4;
 // ─── Events / feedback ───────────────────────────────────────────────────────
 export type Signal = 'like' | 'dislike' | 'bookmark';
 
-export const SIGNAL_CONFIG: Record<Signal, { icon: string; label: string }> = {
-  like:     { icon: '👍', label: 'Like' },
-  dislike:  { icon: '👎', label: 'Dislike' },
-  bookmark: { icon: '🔖', label: 'Bookmark' },
+export const SIGNAL_CONFIG: Record<Signal, { icon: string }> = {
+  like:     { icon: '👍' },
+  dislike:  { icon: '👎' },
+  bookmark: { icon: '🔖' },
 };
+
+// Backend-only feedback signal (shared/app-config.json `signals`) — sent when a
+// visitor follows an event's external ticket link.
+export const SIGNAL_CLICK_EXTERNAL = 'click_external';
 
 export const SIGNAL_TO_CLASS: Record<Signal, string> = {
   like: 'activeLike',
@@ -465,9 +617,17 @@ export const QUERY_KEYS = {
   organizerEvents: 'organizerEvents',
   organizerProfile: 'organizerProfile',
   organizerVenues: 'organizerVenues',
+  organizerClaimSuggestions: 'organizerClaimSuggestions',
+  organizerClaimSearch: 'organizerClaimSearch',
+  organizerClaims: 'organizerClaims',
+  organizerClaim: 'organizerClaim',
+  organizerClaimEvent: 'organizerClaimEvent',
+  organizerClaimEvents: 'organizerClaimEvents',
+  organizerClaimForEvent: 'organizerClaimForEvent',
   adminCounts: 'adminCounts',
   adminReports: 'adminReports',
   adminSubmissions: 'adminSubmissions',
+  adminClaims: 'adminClaims',
   adminDedupGroups: 'adminDedupGroups',
   adminEventDetail: 'adminEventDetail',
 } as const;
@@ -547,6 +707,11 @@ export const ADMIN_DEDUP_GROUPS_PAGE_SIZE = 50;
 // ADMIN_REPORTS_QUEUE_PAGE_SIZE / ADMIN_REVIEW_QUEUE_PAGE_SIZE) ────────────
 export const ADMIN_REPORTS_QUEUE_PAGE_SIZE = 50;
 export const ADMIN_REVIEW_QUEUE_PAGE_SIZE = 50;
+export const ADMIN_CLAIMS_QUEUE_PAGE_SIZE = 50;
+
+// ─── Organizer: Publisher-claim event list (mirrors backend's
+// CLAIM_EVENTS_PAGE_SIZE, issue #436) ──────────────────────────────────────
+export const CLAIM_EVENTS_PAGE_SIZE = 20;
 
 // ─── Organizer submission ────────────────────────────────────────────────────
 // ORGANIZER_IMAGE_ALLOWED_MIME (re-exported above) is sourced from
@@ -640,11 +805,25 @@ export const EXPLORE_AUDIENCE_FOR_YOU = 'foryou';
 // variant; the persistent upsell card's CTA reuses the for_you variant too
 // (same "personalize" framing), so only two variants exist for three triggers.
 export type SignInTrigger = 'save' | 'thumbs' | 'for_you';
+export const SIGN_IN_TRIGGER_FOR_YOU: SignInTrigger = 'for_you';
 export const SIGN_IN_TRIGGER_COPY: Record<SignInTrigger, { headingKey: string; bodyKey: string }> = {
   save: { headingKey: 'sign_in_modal_save_heading', bodyKey: 'sign_in_modal_save_body' },
   thumbs: { headingKey: 'sign_in_modal_save_heading', bodyKey: 'sign_in_modal_save_body' },
   for_you: { headingKey: 'sign_in_modal_foryou_heading', bodyKey: 'sign_in_modal_foryou_body' },
 };
+// What an anonymous visitor's blocked feedback click maps to: the
+// explore_upsell_click `action` param, and the SignInTrigger copy variant.
+export const SIGNAL_TO_UPSELL_ACTION: Record<Signal, string> = {
+  bookmark: 'save',
+  like: 'thumbs_up',
+  dislike: 'thumbs_down',
+};
+export const SIGNAL_TO_SIGNIN_TRIGGER: Record<Signal, SignInTrigger> = {
+  bookmark: 'save',
+  like: 'thumbs',
+  dislike: 'thumbs',
+};
+export const UPSELL_ACTION_FOR_YOU = 'for_you';
 // Index in the (0-based) results array after which the persistent upsell
 // card is inserted for anonymous visitors — tuned by eye against the
 // responsive auto-fill grid (Page.module.css's .cardGrid), which has no
@@ -690,6 +869,7 @@ export const EXPLORE_PARAM = {
   dateTo: 'date_to',
   limit: 'limit',
   offset: 'offset',
+  cursor: 'cursor',
 } as const;
 
 // Pagination query-param names shared by every paginated list fetch
@@ -698,6 +878,7 @@ export const EXPLORE_PARAM = {
 export const PAGE_PARAM = {
   limit: 'limit',
   offset: 'offset',
+  cursor: 'cursor',
 } as const;
 // Feedback-signal filter query-param name for the Saved Events feed
 // (values are the Signal union: 'bookmark' | 'like' | 'dislike').
@@ -722,6 +903,9 @@ export const PRICE_INPUT_STEP = '0.01';
 // SAFE_URL_SCHEMES's https:/mailto:-free defaults.
 export const MAILTO_SCHEME = 'mailto';
 export const CONTACT_MAILTO = `${MAILTO_SCHEME}:${CONTACT_EMAIL}`;
+// External regulator links the legal docs cite (identical in every locale).
+export const AKI_URL = 'https://www.aki.ee';
+export const ODR_URL = 'https://ec.europa.eu/consumers/odr';
 
 // ─── Routes ──────────────────────────────────────────────────────────────────
 // Every <Route> path, `navigate()` target and `<Link to>` in App.tsx / the
@@ -745,7 +929,14 @@ export const ROUTES = {
   contact: '/contact',
   organizerLogin: '/organizer/login',
   organizerVerify: '/organizer/verify',
+  organizerClaimVerify: '/organizer/claims/verify',
   organizerDashboard: '/organizer/dashboard',
+  organizerClaimPending: (id: number | string) => `/organizer/claims/${id}/pending`,
+  organizerClaimPendingPattern: '/organizer/claims/:id/pending',
+  organizerClaimEdit: (id: number | string) => `/organizer/claims/${id}/edit`,
+  organizerClaimEditPattern: '/organizer/claims/:id/edit',
+  organizerClaimEvents: (id: number | string) => `/organizer/claims/${id}/events`,
+  organizerClaimEventsPattern: '/organizer/claims/:id/events',
   organizerSubmit: '/organizer/submit',
   organizerSettings: '/organizer/settings',
   organizerContact: '/organizer/contact',
@@ -761,6 +952,7 @@ export const ROUTES = {
   adminDashboard: '/admin',
   adminReports: '/admin/reports',
   adminSubmissions: '/admin/submissions',
+  adminClaims: '/admin/claims',
   adminEventDetail: (id: number | string) => `/admin/events/${id}`,
   adminEventDetailPattern: '/admin/events/:id',
   // Path-prefix form of adminEventDetail, for AdminApp's manual pathname
@@ -770,15 +962,15 @@ export const ROUTES = {
   adminDedup: '/admin/dedup',
 } as const;
 
-// The admin console's persistent nav — the 5 clickable screens of the
-// ticket's 7 (the other 2, /admin/login and /admin/events/:id, are reached
-// by URL/click-through, not nav links). Always lists all 5, even before
-// later tickets build the still-stubbed ones (issue #154). No i18n: the
-// console is an internal operator tool, not user-facing product surface.
+// The admin console's persistent nav — the clickable screens (issue #154,
+// Claims added #420); /admin/login and /admin/events/:id are reached by
+// URL/click-through, not nav links. No i18n: the console is an internal
+// operator tool, not user-facing product surface.
 export const ADMIN_NAV_ITEMS = [
   { route: ROUTES.adminDashboard, label: 'Dashboard' },
   { route: ROUTES.adminReports, label: 'Reports' },
   { route: ROUTES.adminSubmissions, label: 'Submissions' },
+  { route: ROUTES.adminClaims, label: 'Claims' },
   { route: ROUTES.adminPipeline, label: 'Pipeline' },
   { route: ROUTES.adminDedup, label: 'Dedup groups' },
 ] as const;
@@ -809,8 +1001,9 @@ export const ADMIN_GENERIC_ERROR = 'Something went wrong. Try again.';
 // AdminShell's foot-area theme toggle (issue #255) — same {value, label}
 // shape as THEME_OPTIONS below, but plain-English labels: same no-i18n
 // exemption as ADMIN_NAV_ITEMS, since the admin console has no locale.
+// Two options only (ADR 0003) — device-following is the default state, not
+// a picker entry.
 export const ADMIN_THEME_OPTIONS = [
-  { value: 'system', label: 'System' },
   { value: 'light', label: 'Light' },
   { value: 'dark', label: 'Dark' },
 ] as const;
@@ -853,25 +1046,24 @@ export const ORGANIZER_NAV_ITEMS = [
   { route: ROUTES.organizerContact, labelKey: 'organizer_contact_nav' },
 ] as const;
 
-// The three theme options rendered by both ThemeSelector (desktop) and
+// The two theme options rendered by both ThemeSelector (desktop) and
 // MobileMenu (mobile), kept in one place so they can't drift out of sync —
-// mirrors NAV_ITEMS' {value, labelKey} pattern above.
+// mirrors NAV_ITEMS' {value, labelKey} pattern above. No "System" entry
+// (ADR 0003) — device-following is the default state a viewer falls back to
+// once their override expires, not something offered as a third choice.
 export const THEME_OPTIONS = [
-  { value: 'system', labelKey: 'theme_system' },
   { value: 'light', labelKey: 'theme_light' },
   { value: 'dark', labelKey: 'theme_dark' },
 ] as const;
 
-// Prefix every backend request is proxied under (see vercel.json's rewrite
-// rule and functions/api/[[path]].ts's catch-all proxy, both keyed on this
-// same string) — api/client.ts's fetch wrapper and NDJSON stream path both
-// prepend it.
+// Prefix every backend request is proxied under (see
+// functions/api/[[path]].ts's catch-all proxy, keyed on this same string) —
+// api/client.ts's fetch wrapper and NDJSON stream path both prepend it.
 export const API_BASE = '/api';
 
-// Render Frankfurt backend origin (issue #342) the `/api/*` proxy forwards
-// to — functions/api/[[path]].ts's Cloudflare Pages Function equivalent of
-// vercel.json's `/api/:path` rewrite destination. Not the same value as
-// vite.config.ts's PRERENDER_BACKEND_TARGET (a Node-only build-time constant
+// Render Frankfurt backend origin (issue #342) the `/api/*` proxy
+// (functions/api/[[path]].ts, a Cloudflare Pages Function) forwards to. Not
+// the same value as vite.config.ts's PRERENDER_BACKEND_TARGET (a Node-only build-time constant
 // scripts/prerender.ts and the dev proxy use — that file can't import from
 // here, and a real dry run needs to override it independently via
 // PRERENDER_API_ORIGIN), but both currently point at the same backend.
@@ -902,6 +1094,7 @@ export const API = {
   feedback: '/feedback',
   feedbackEvent: (id: number) => `/feedback/${id}`,
   feedbackEvents: '/feedback/events',
+  explore: '/explore',
   publicShowcase: '/public/showcase',
   publicCounts: '/public/counts',
   emailUnsubscribe: '/email/unsubscribe',
@@ -914,6 +1107,23 @@ export const API = {
   organizerContact: '/organizer/contact',
   organizerVenues: '/organizer/venues',
   organizerVenue: (id: number | string) => `/organizer/venues/${id}`,
+  organizerClaims: '/organizer/claims',
+  organizerClaim: (id: number | string) => `/organizer/claims/${id}`,
+  organizerClaimCancel: (id: number | string) => `/organizer/claims/${id}/cancel`,
+  organizerClaimRecheck: (id: number | string) => `/organizer/claims/${id}/recheck`,
+  organizerClaimLinkRequest: '/organizer/claims/request-link',
+  organizerClaimLinkVerify: '/organizer/claims/verify-link',
+  organizerClaimSearch: '/organizer/claims/search',
+  organizerClaimSuggestions: '/organizer/claims/suggestions',
+  // Path-based, not a query string (#453) — `...?event_id=...` reads as an
+  // analytics-beacon URL shape and gets silently dropped by ad/tracker
+  // blockers (ERR_BLOCKED_BY_CLIENT).
+  organizerClaimEvent: (id: number | string, eventId?: number) =>
+    eventId !== undefined
+      ? `/organizer/claims/${id}/events/${eventId}`
+      : `/organizer/claims/${id}/event`,
+  organizerClaimEvents: (id: number | string) => `/organizer/claims/${id}/events`,
+  organizerClaimForEvent: (eventId: number | string) => `/organizer/claims/for-event/${eventId}`,
   reports: '/reports',
   adminAuthLogin: '/admin/auth/login',
   adminAuthLogout: '/admin/auth/logout',
@@ -926,6 +1136,10 @@ export const API = {
   adminDedupGroups: '/admin/dedup/groups',
   adminSubmissionApprove: (id: number) => `/admin/submissions/${id}/approve`,
   adminSubmissionRetract: (id: number) => `/admin/submissions/${id}/retract`,
+  adminClaims: '/admin/claims',
+  adminClaimGrant: (id: number) => `/admin/claims/${id}/grant`,
+  adminClaimDecline: (id: number) => `/admin/claims/${id}/decline`,
+  adminClaimRevoke: (id: number) => `/admin/claims/${id}/revoke`,
   adminEventDetail: (id: number | string) => `/admin/events/${id}`,
   adminIngestAll: '/admin/ingest',
   adminIngestSource: (slug: string) => `/admin/ingest/${slug}`,
@@ -1031,3 +1245,77 @@ export const SCHEMA_ORG_CONTEXT = 'https://schema.org';
 // GitHub API User-Agent for api/prerender-cadence.ts's githubRequest() call
 // (GitHub rejects requests with no User-Agent).
 export const PRERENDER_CADENCE_USER_AGENT = 'event-radar-prerender-cadence';
+
+// ─── Prerender (scripts/prerender.ts) ────────────────────────────────────────
+// These are 3x wider than local (90s/45s vs 30s/15s) — confirmed via local
+// repro (same Chromium binary, same real backend) that a page which renders
+// in ~3.6s locally could still consistently blow past the narrower value on
+// a shared/throttled build machine running single-process,
+// software-rendered (SwiftShader) Chromium. Left at the wider values
+// unconditionally rather than collapsed to the local-dev numbers: issue #373
+// asked for this collapse to be justified against a real Cloudflare Pages
+// production build log, and that log wasn't available when this landed.
+// Revisit with real numbers before narrowing.
+export const NAV_TIMEOUT_MS = 90_000;
+export const CONTENT_READY_TIMEOUT_MS = 45_000;
+// Targets run through a bounded pool of pages rather than one at a time —
+// with a growing published-event catalog (three locale variants each), a
+// fully sequential run risks blowing past Cloudflare Pages' build cap.
+// Bounded, not unbounded, mirroring
+// this repo's external-API fan-out convention (CLAUDE.md). Used by the
+// filesystem/`fetch()`-only validation pass below, which has no Chromium
+// involvement and so isn't subject to RENDER_POOL_CONCURRENCY's constraint.
+export const PRERENDER_CONCURRENCY = 6;
+// Concurrency for the actual Playwright render pool (the `browser.newPage()`
+// pool in main(), below).
+export const RENDER_POOL_CONCURRENCY = PRERENDER_CONCURRENCY;
+// GET /events/{id} is rate-limited server-side to RATE_LIMIT_EVENTS_DETAIL =
+// "120/minute" per IP (backend/app/constants.py) — every worker's build
+// machine shares one IP, so an unthrottled pool would eventually 429 as the
+// published-event catalog grows, which (via the canonical-link wait below)
+// surfaces as a spurious render "failure" and aborts the whole build.
+// Capped comfortably under the server limit, shared across all workers.
+export const EVENT_DETAIL_RATE_LIMIT_PER_MINUTE = 100;
+// Bounded pool for the change-detection fetch pass (issue #80) — real
+// GET requests against PRODUCTION_ORIGIN, one per event route, so this stays
+// bounded rather than unbounded, mirroring this repo's external-API fan-out
+// convention (CLAUDE.md). Separate from PRERENDER_CONCURRENCY/the rate gate
+// above since these are plain page fetches, not the rate-limited
+// GET /events/{id} endpoint.
+export const CHANGE_DETECTION_CONCURRENCY = 6;
+// Max in-flight R2 chain-state PUTs — deferred off the worker loops (Big-O
+// audit M14) but still bounded so a big round can't queue thousands of bodies.
+export const R2_PERSIST_CONCURRENCY = 16;
+// JSON-LD field the change-detection marker (derived from Event.updated_at)
+// is embedded under (issue #80). Not a real schema.org property of Event,
+// but an extra key here doesn't violate the structural validation gate
+// (assertEventJsonLd only checks for required fields) and Google/consumers
+// ignore unrecognized properties.
+export const CHANGE_MARKER_JSONLD_FIELD = 'dateModified';
+// Hard wall-clock cap on the Playwright render pass only (issue #82) —
+// excludes tsc/vite build and the in-build validation gate below, both of
+// which run outside main()'s render-pool block. A round that hits this cap
+// stops handing out new routes; unreached routes keep serving whatever's
+// already live (copy-forward doubles as the "stale but real" fallback) or,
+// for a route that's never been rendered at all, the CSR shell that
+// `functions/[[path]].ts`'s SPA fallback serves instead. Overridable so the
+// stop-at-cap behavior is verifiable without a real 10-minute wait (e.g.
+// `PRERENDER_RENDER_BUDGET_MINUTES=0 npm run build`).
+export const DEFAULT_RENDER_BUDGET_MINUTES = 10;
+// Diagnostic ring buffer size per Playwright page, and the extra ms the request
+// rate gate waits past the window edge so the next slot is really free.
+export const PRERENDER_DIAGNOSTIC_MAX_EVENTS = 20;
+export const RATE_GATE_SLACK_MS = 10;
+
+// Max keys one S3/R2 list response returns — also the DeleteObjects batch cap.
+export const S3_MAX_KEYS_PER_PAGE = 1000;
+
+// ─── Parsing patterns / editor config ────────────────────────────────────────
+// datetime-local picker value, `YYYY-MM-DDTHH:mm`.
+export const PICKER_VALUE_RE = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/;
+// ISO calendar date, `YYYY-MM-DD`.
+export const ISO_DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
+// `_accented_` word marker inside an i18n string (Landing hero copy).
+export const ACCENT_MARKER_RE = /_(.+?)_/;
+// Heading levels the organizer rich-text editor offers (h1/h2 stay page chrome).
+export const RICH_TEXT_HEADING_LEVELS = [3, 4] as const;

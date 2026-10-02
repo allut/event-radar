@@ -2,12 +2,12 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { organizerApi } from '../../api/client';
 import {
-  API, LOCALE_EN, LOCALE_RU, LOCALES_BY_CODE,
+  API, LOCALE_EN, LOCALE_RU,
   ORGANIZER_VENUE_NAME_MAX_LEN, ORGANIZER_VENUE_ADDRESS_MAX_LEN, QUERY_KEYS,
   type ContentLang,
 } from '../../constants';
 import { t, ti } from '../../i18n';
-import { apiErrorMessage, cx } from '../../utils';
+import { apiErrorMessage, cx, localizedFieldLabel } from '../../utils';
 import styles from './VenuePicker.module.css';
 
 export interface SavedVenue {
@@ -46,14 +46,10 @@ interface VenuePickerProps {
   disabled?: boolean;
 }
 
-function langLabel(lang: ContentLang): string {
-  return LOCALES_BY_CODE.get(lang)?.label ?? lang.toUpperCase();
-}
-
 function fieldLabel(key: string, locale: string, contentLang: ContentLang): string {
   const base = t(key, locale);
   return contentLang === LOCALE_EN || contentLang === LOCALE_RU
-    ? ti('organizer_field_lang_suffix', locale, { field: base, lang: langLabel(contentLang) })
+    ? localizedFieldLabel(key, locale, contentLang)
     : base;
 }
 
@@ -113,18 +109,29 @@ export default function VenuePicker({ id, value, onChange, locale, contentLang, 
   // hydration when the edit form opens, not a value derivable from render,
   // so react-hooks/set-state-in-effect's synchronous-setState flag doesn't
   // apply once deferred.
+  //
+  // Keyed on the venue's id, not the `selected` object: a background refetch of
+  // the venues query hands back a new object identity for the same venue, and
+  // re-hydrating on that would clobber in-progress edits. The latest row is
+  // read through a ref so the effect still hydrates from current data.
+  const selectedRef = useRef(selected);
   useEffect(() => {
-    if (editOpen && selected) {
+    selectedRef.current = selected;
+  }, [selected]);
+  const hasSelected = selected !== undefined;
+  useEffect(() => {
+    const venue = selectedRef.current;
+    if (editOpen && hasSelected && venue) {
       void Promise.resolve().then(() => {
         setDraft({
-          name: selected.name,
-          nameEn: selected.name_en ?? '',
-          nameRu: selected.name_ru ?? '',
-          address: selected.address ?? '',
+          name: venue.name,
+          nameEn: venue.name_en ?? '',
+          nameRu: venue.name_ru ?? '',
+          address: venue.address ?? '',
         });
       });
     }
-  }, [editOpen, selected]);
+  }, [editOpen, selectedVenueId, hasSelected]);
 
   useEffect(() => {
     if (!open) return;

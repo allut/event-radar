@@ -6,3 +6,12 @@
   font-size: var(--fs-sm);
   padding: var(--space-2) var(--space-3);
 }
+
+/* Accent (non-error) callout chrome: tint, hairline frame, heavier left rule.
+   Layout and padding stay with the consumer. */
+.alertAccent {
+  background: var(--accent-subtle);
+  border: var(--border-w-hair) solid var(--accent-border);
+  border-left: var(--border-w-alert) solid var(--accent);
+  border-radius: var(--radius);
+}

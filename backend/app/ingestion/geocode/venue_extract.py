@@ -2,13 +2,16 @@
 
 import asyncio
 import logging
+import re
+from datetime import datetime
 
 import httpx
-from sqlalchemy import select
+from sqlalchemy import ColumnElement, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.constants import (
     GEOCODE_MAX_PER_RUN,
+    TALLINN_TZ,
     LLM_BATCH_FANOUT_CONCURRENCY,
     LLM_DEDUP_HASH_QUERY_CHUNK_SIZE,
     LLM_TASK_VENUE_EXTRACT,
@@ -27,7 +30,7 @@ from app.llm.router import (
     llm_json,
 )
 from app.models.models import Event, LlmCall
-from app.routers.utils import alternation_pattern
+from app.ingestion.patterns import alternation_pattern
 
 log = logging.getLogger(__name__)
 
@@ -50,6 +53,25 @@ def is_suspect_venue_name(name: str) -> bool:
     if len(name) > VENUE_NAME_SUSPECT_MAX_LEN:
         return True
     return False
+
+
+_SQL_DIRECTION_KEYWORD_RE = (
+    r"\y(?:" + "|".join(re.escape(kw) for kw in VENUE_NAME_DIRECTION_KEYWORDS) + r")\y"
+)
+
+
+def suspect_venue_name_sql() -> ColumnElement[bool]:
+    """SQL twin of ``is_suspect_venue_name`` (digit / comma / direction keyword /
+    over-length). Pushed into the candidate query so the LIMIT window is filled
+    with rows the pass can actually act on — filtering in Python after a
+    ``LIMIT`` starved the pass once clean-named rows outnumbered the window
+    (Big-O audit H3). The Python check still runs afterwards as the authority."""
+    return or_(
+        Event.venue_name.op("~")(r"[0-9]"),
+        Event.venue_name.contains(","),
+        Event.venue_name.op("~*")(_SQL_DIRECTION_KEYWORD_RE),
+        func.length(Event.venue_name) > VENUE_NAME_SUSPECT_MAX_LEN,
+    )
 
 
 async def _prefetch_venue_extract_cache(
@@ -104,7 +126,13 @@ async def extract_address_from_venue_name(db: AsyncSession) -> int:
     candidates = (
         await db.scalars(
             select(Event)
-            .where(Event.venue_name.is_not(None), Event.venue_address.is_(None))
+            .where(
+                Event.venue_name.is_not(None),
+                Event.venue_address.is_(None),
+                Event.starts_at >= datetime.now(TALLINN_TZ),
+                suspect_venue_name_sql(),
+            )
+            .order_by(Event.starts_at, Event.id)
             .limit(GEOCODE_MAX_PER_RUN)
         )
     ).all()

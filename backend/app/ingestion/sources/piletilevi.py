@@ -215,7 +215,8 @@ class PiletileviAdapter(HtmlListingAdapter):
                 headers={"accept": "application/json"},
             )
             return True
-        except (httpx.HTTPStatusError, httpx.RequestError):
+        except (httpx.HTTPStatusError, httpx.RequestError) as exc:
+            log.warning("%s login-express failed: %s", self.source.slug, exc)
             return None
 
     def listing_url_for_page(self, page: int) -> str | None:
@@ -304,7 +305,8 @@ class PiletileviAdapter(HtmlListingAdapter):
                 params={"language": PILETILEVI_PRICES_LANGUAGE},
             )
             price_data = resp.json()
-        except (httpx.HTTPStatusError, httpx.RequestError, ValueError):
+        except (httpx.HTTPStatusError, httpx.RequestError, ValueError) as exc:
+            log.warning("%s price fetch failed code=%s: %s", self.source.slug, match.group(1), exc)
             return
         if not isinstance(price_data, dict):
             return

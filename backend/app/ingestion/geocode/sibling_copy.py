@@ -6,7 +6,7 @@ from collections import Counter
 from datetime import datetime, timedelta
 
 from rapidfuzz.fuzz import ratio as fuzz_ratio
-from sqlalchemy import or_, select
+from sqlalchemy import false, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.constants import (
@@ -78,7 +78,7 @@ async def _load_donor_rows_by_canon(
                 Event.venue_address.is_not(None),
                 Event.lat.is_not(None),
                 Event.lng.is_not(None),
-                Event.is_out_of_area.is_(False),
+                Event.is_out_of_area == false(),
                 Event.starts_at >= cutoff,
             )
             .distinct()
@@ -221,7 +221,12 @@ async def copy_venue_from_siblings(db: AsyncSession, now: datetime) -> int:
             .where(
                 Event.venue_name.is_not(None),
                 or_(Event.lat.is_(None), Event.venue_address.is_(None)),
+                # Upcoming only, soonest first: past events never publish, and
+                # an unbounded window let stale unfixable rows crowd out new
+                # ones (Big-O audit H3).
+                Event.starts_at >= now,
             )
+            .order_by(Event.starts_at, Event.id)
             .limit(GEOCODE_MAX_PER_RUN)
         )
     ).all()

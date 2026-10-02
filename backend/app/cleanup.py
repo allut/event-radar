@@ -3,7 +3,7 @@
 from datetime import datetime, timedelta
 from typing import cast
 
-from sqlalchemy import ColumnElement, and_, delete, exists, func, select
+from sqlalchemy import and_, ColumnElement, delete, exists, false, func, select
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,7 +16,6 @@ from app.constants import (
     RAW_INBOUND_EMAILS_RETENTION_DAYS,
     TALLINN_TZ,
     UNVERIFIED_ACCOUNT_RETENTION_DAYS,
-    USER_EVENT_SCORES_RETENTION_DAYS,
 )
 from app.models.models import (
     AuthMagicLink,
@@ -29,9 +28,7 @@ from app.models.models import (
     RawEvent,
     RawInboundEmail,
     User,
-    UserEventScore,
 )
-from app.routers.utils import event_ended_filter
 
 
 async def _count_or_delete(
@@ -109,19 +106,6 @@ async def cleanup_stale_data(db: AsyncSession, *, dry_run: bool = False) -> dict
         dry_run=dry_run,
     )
 
-    # Scores for events that ended more than USER_EVENT_SCORES_RETENTION_DAYS
-    # ago — reuses event_ended_filter (NULL-safe complement of
-    # event_not_ended_filter, evaluated at the retention cutoff) so "ended" is
-    # defined identically to the publish gate and feed builder.
-    scores_cutoff = now - timedelta(days=USER_EVENT_SCORES_RETENTION_DAYS)
-    ended_event_ids = select(Event.id).where(event_ended_filter(scores_cutoff))
-    summary["user_event_scores"] = await _count_or_delete(
-        db,
-        UserEventScore,
-        UserEventScore.event_id.in_(ended_event_ids),
-        dry_run=dry_run,
-    )
-
     # Unverified accounts (_get_or_create_user / _get_or_create_organizer
     # insert a row on an unauthenticated request-link POST, before the
     # address is proven reachable — CLAUDE.md Auth → Email verification
@@ -141,7 +125,7 @@ async def cleanup_stale_data(db: AsyncSession, *, dry_run: bool = False) -> dict
         db,
         User,
         and_(
-            User.email_verified.is_(False),
+            User.email_verified == false(),
             User.created_at < unverified_cutoff,
             no_pending_user_link,
         ),

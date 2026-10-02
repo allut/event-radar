@@ -5,13 +5,14 @@ from unittest.mock import MagicMock
 import httpx
 import pytest
 
+from app.email import resend
 from app.auth import email
 
 
 @pytest.mark.asyncio
 async def test_no_api_key_logs_and_skips_send(patch_client, monkeypatch, caplog):
     monkeypatch.setattr(email.settings, "RESEND_API_KEY", "")
-    post = patch_client(email, MagicMock(status_code=200))
+    post = patch_client(resend, MagicMock(status_code=200))
 
     await email.send_magic_link("user@example.com", "tok123")
 
@@ -28,7 +29,7 @@ async def test_success_posts_expected_payload(patch_client, monkeypatch):
     monkeypatch.setattr(email.settings, "FRONTEND_URL", "https://app.radar.ee")
 
     resp = MagicMock(status_code=httpx.codes.OK, text="ok")
-    post = patch_client(email, resp)
+    post = patch_client(resend, resp)
 
     await email.send_magic_link("user@example.com", "tok123", locale="en")
 
@@ -51,7 +52,7 @@ async def test_non_2xx_logs_error(patch_client, monkeypatch, caplog):
 
     monkeypatch.setattr(email.settings, "RESEND_API_KEY", "re_key")
     resp = MagicMock(status_code=422, text="bad payload")
-    patch_client(email, resp)
+    patch_client(resend, resp)
 
     with caplog.at_level(logging.ERROR):
         await email.send_magic_link("user@example.com", "tok123")

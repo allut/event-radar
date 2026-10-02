@@ -14,9 +14,11 @@ EMAIL_DOCUMENT = """\
 <!DOCTYPE html>
 <html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="{color_scheme}">
+<meta name="supported-color-schemes" content="{color_scheme}">
 <style>{css}</style></head>
-<body style="{s_page}">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="{s_page}">
+<body class="e-page" style="{s_page}">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="e-page" style="{s_page}">
 <tr><td align="center">
 <table role="presentation" class="container" width="600" cellpadding="0" cellspacing="0" border="0" style="{s_container}">
 <tr><td class="pad" style="{s_header_pad}">
@@ -25,7 +27,7 @@ EMAIL_DOCUMENT = """\
 <tr><td class="pad" style="{s_content_pad}">
 {content_html}
 </td></tr>
-<tr><td class="pad" style="{s_footer}">
+<tr><td class="pad e-footer" style="{s_footer}">
 {footer_html}
 </td></tr>
 </table>
@@ -35,46 +37,62 @@ EMAIL_DOCUMENT = """\
 
 DIGEST_HEADER = """\
 <p style="{s_eyebrow}">EVENT RADAR</p>
-<h1 style="{s_h1}">{subject_label}</h1>
-<p style="{s_date}">{date_str}</p>
+<h1 class="e-h1" style="{s_h1}">{subject_label}</h1>
+<p class="e-date" style="{s_date}">{date_str}</p>
 <table role="presentation" align="center" cellpadding="0" cellspacing="0" border="0" style="{s_feed_btn_wrap}"><tr><td>
 <a href="{feed_url}" class="cta-btn" style="{s_feed_btn}">{open_feed_label}</a>
 </td></tr></table>"""
 
 DIGEST_FOOTER = """\
-<a href="{unsubscribe_url}" style="{s_footer_link}">{settings_label}</a>
+<a href="{unsubscribe_url}" class="e-footer-link" style="{s_footer_link}">{settings_label}</a>
 &nbsp;·&nbsp; Event Radar, Tallinn"""
 
-DIGEST_EMPTY_STATE = "<p>{text}</p>"
+DIGEST_EMPTY_STATE = '<p class="e-body-text" style="{s_body_text}">{text}</p>'
 
 MAGIC_LINK_HEADER = """\
 <p style="{s_eyebrow}">EVENT RADAR</p>
-<h1 style="{s_h1}">{heading}</h1>"""
+<h1 class="e-h1" style="{s_h1}">{heading}</h1>"""
 
 MAGIC_LINK_BODY = """\
-<p style="{s_body_text}">{intro}</p>
+<p class="e-body-text" style="{s_body_text}">{intro}</p>
 <table role="presentation" align="center" cellpadding="0" cellspacing="0" border="0" style="{s_feed_btn_wrap}"><tr><td>
 <a href="{verify_url}" class="cta-btn" style="{s_feed_btn}">{cta_label}</a>
 </td></tr></table>
-<p style="{s_muted_note}">{ignore_note}</p>"""
+<p class="e-muted" style="{s_muted_note}">{ignore_note}</p>"""
+
+# Account-security notice (no CTA) — identity_link.py's "Google sign-in linked".
+ACCOUNT_NOTICE_BODY = """\
+<p class="e-body-text" style="{s_body_text}">{intro}</p>
+<p class="e-muted" style="{s_muted_note}">{note}</p>"""
 
 EMAIL_FOOTER_BRAND = "Event Radar, Tallinn"
 
 REPORT_OUTCOME_HEADER = """\
 <p style="{s_eyebrow}">EVENT RADAR</p>
-<h1 style="{s_h1}">{heading}</h1>"""
+<h1 class="e-h1" style="{s_h1}">{heading}</h1>"""
 
 REPORT_OUTCOME_BODY = """\
-<p style="{s_body_text}">{intro}</p>
-<p style="{s_body_text}">{note}</p>
+<p class="e-body-text" style="{s_body_text}">{intro}</p>
+<p class="e-body-text" style="{s_body_text}">{note}</p>
 <table role="presentation" align="center" cellpadding="0" cellspacing="0" border="0" style="{s_feed_btn_wrap}"><tr><td>
 <a href="{event_url}" class="cta-btn" style="{s_feed_btn}">{cta_label}</a>
+</td></tr></table>"""
+
+CLAIM_RESOLUTION_HEADER = """\
+<p style="{s_eyebrow}">EVENT RADAR</p>
+<h1 class="e-h1" style="{s_h1}">{heading}</h1>"""
+
+CLAIM_RESOLUTION_BODY = """\
+<p class="e-body-text" style="{s_body_text}">{intro}</p>
+<p class="e-body-text" style="{s_body_text}">{note}</p>
+<table role="presentation" align="center" cellpadding="0" cellspacing="0" border="0" style="{s_feed_btn_wrap}"><tr><td>
+<a href="{dashboard_url}" class="cta-btn" style="{s_feed_btn}">{cta_label}</a>
 </td></tr></table>"""
 
 EVENT_BLOCK = (
     '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="{s_card_wrap}">'
     "<tr><td>"
-    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="{s_card}">'
+    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="e-card" style="{s_card}">'
     "<tr><td>{image_html}</td></tr>"
     '<tr><td style="{s_body}">'
     '<p style="{s_meta}"><span style="{s_time}">{time_str}</span>{venue_html}{price_html}</p>'
@@ -93,21 +111,26 @@ EVENT_IMAGE = (
 
 EVENT_IMAGE_BAND = (
     '<a href="{event_href}" style="text-decoration:none;"><table role="presentation" width="100%" '
-    'cellpadding="0" cellspacing="0" border="0" style="{s_band}"><tr><td align="center">'
+    'cellpadding="0" cellspacing="0" border="0" class="e-band" style="{s_band}"><tr><td align="center">'
     '<p style="{s_band_diamond}">&#9670;</p>'
-    '<p style="{s_band_category}">{category}</p>'
+    '<p class="e-band-cat" style="{s_band_category}">{category}</p>'
     "</td></tr></table></a>"
 )
 
-EVENT_VENUE = ' <span style="{s_venue}">&middot; {venue}</span>'
-EVENT_PRICE_PILL = '<span style="{s_price_pill}">{price}</span>'
-EVENT_TITLE_LINK = '<a href="{href}" class="event-title-link" style="{s_title_link}">{title}</a>'
-EVENT_BULLET = '<p style="{s_bullet_row}"><span style="{s_diamond}">&#9670;</span>{text}</p>'
+EVENT_VENUE = ' <span class="e-venue" style="{s_venue}">&middot; {venue}</span>'
+EVENT_PRICE_PILL = '<span class="e-price" style="{s_price_pill}">{price}</span>'
+EVENT_TITLE_LINK = '<a href="{href}" class="event-title-link e-title" style="{s_title_link}">{title}</a>'
+EVENT_BULLET = '<p class="e-bullet" style="{s_bullet_row}"><span style="{s_diamond}">&#9670;</span>{text}</p>'
 EVENT_TICKETS_ROW = (
-    '<tr><td style="{s_footer_row}">'
+    '<tr><td class="e-ticket-row" style="{s_footer_row}">'
     '<a href="{href}" class="tickets-link" style="{s_tickets_link}">{label}</a>'
     "</td></tr>"
 )
+
+CONTACT_HTML_BODY = (
+    "<p><strong>From:</strong> {name} ({email})</p><p>{message}</p>"
+)
+CONTACT_TEXT_BODY = "From: {name} ({email})\n\n{message}"
 
 REPORT_NOTIFY_EVENT_LINE = (
     "<p><strong>Event:</strong> {title} (<a href='{href}'>{href}</a>)</p>"

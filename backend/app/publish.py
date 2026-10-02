@@ -3,7 +3,7 @@
 from datetime import datetime, timedelta
 from typing import cast
 
-from sqlalchemy import and_, case, func, literal, or_, select, update
+from sqlalchemy import and_, case, false, func, literal, or_, select, true, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,11 +12,67 @@ from app.constants import (
     EVENT_STATUS_PUBLISHED,
     PUBLISH_DIAGNOSTICS_WINDOW_DAYS,
     PUBLISH_MIN_QUALITY_SCORE,
+    SOURCE_SLUG_FIENTA,
     TALLINN_REGION_BBOX,
     TALLINN_TZ,
 )
-from app.models.models import Event, EventClassification, Organizer
-from app.routers.utils import event_ended_filter, event_not_ended_filter
+from app.models.models import (
+    Event,
+    EventClassification,
+    EventSource,
+    Organizer,
+    Publisher,
+    RawEvent,
+    Source,
+)
+from app.events.queries import event_ended_filter, event_not_ended_filter
+
+
+async def _stamp_missing_fienta_publishers(db: AsyncSession) -> int:
+    """Safety net for #433's stamping race: stamp EventSource.publisher_id
+    for any published Fienta row still NULL, resolving it the same way
+    ingestion does — the organizer id stamped on the matching RawEvent
+    payload (see sources/fienta.py's fetch_organizer) mapped through
+    Publisher.external_id. Catches events that were draft/classified while
+    the publisher lookup was still empty (see adapter.py's
+    ``_presync_publishers`` hook, which closes the race for new events going
+    forward). Single bulk UPDATE, no N+1; a no-op once nothing is missing.
+    """
+    fienta_source_id = (
+        select(Source.id).where(Source.slug == SOURCE_SLUG_FIENTA).scalar_subquery()
+    )
+    organizer_external_id = (
+        select(RawEvent.payload["organizer_id"].astext)
+        .where(
+            RawEvent.source_id == EventSource.source_id,
+            RawEvent.external_id == EventSource.external_id,
+            RawEvent.payload["organizer_id"].isnot(None),
+        )
+        .order_by(RawEvent.fetched_at.desc())
+        .limit(1)
+        .scalar_subquery()
+    )
+    publisher_id = (
+        select(Publisher.id)
+        .where(
+            Publisher.source_id == EventSource.source_id,
+            Publisher.external_id == organizer_external_id,
+        )
+        .scalar_subquery()
+    )
+    stmt = (
+        update(EventSource)
+        .where(
+            EventSource.publisher_id.is_(None),
+            EventSource.source_id == fienta_source_id,
+            EventSource.event_id.in_(
+                select(Event.id).where(Event.status == EVENT_STATUS_PUBLISHED)
+            ),
+        )
+        .values(publisher_id=publisher_id)
+    )
+    result = await db.execute(stmt)
+    return cast(CursorResult, result).rowcount or 0
 
 
 async def publish_pending(
@@ -82,7 +138,7 @@ async def publish_pending(
         EventClassification.quality_score >= PUBLISH_MIN_QUALITY_SCORE
     )
     unverified_organizer_ids = select(Organizer.id).where(
-        Organizer.verified.is_(False)
+        Organizer.verified == false()
     )
     # NULL-safe: a non-organizer event's submitted_by_organizer_id is NULL, and
     # "NULL NOT IN (...)" evaluates to SQL NULL (not TRUE) regardless of the
@@ -94,9 +150,9 @@ async def publish_pending(
     )
     update_conds = [
         Event.status == EVENT_STATUS_CLASSIFIED,
-        Event.is_explicit.is_(False),
-        Event.is_non_event.is_(False),
-        Event.is_out_of_area.is_(False),
+        Event.is_explicit == false(),
+        Event.is_non_event == false(),
+        Event.is_out_of_area == false(),
         event_not_ended_filter(now),
         func.trim(Event.title_orig) != "",
         Event.id.in_(qualifying_ids),
@@ -110,6 +166,7 @@ async def publish_pending(
     summary: dict = {"published": cast(CursorResult, result).rowcount}
 
     if not diagnostics:
+        await _stamp_missing_fienta_publishers(db)
         return summary
 
     reject_stmt = (
@@ -128,13 +185,13 @@ async def publish_pending(
                     else_=0,
                 )
             ).label("fail_quality"),
-            func.sum(case((Event.is_explicit.is_(True), 1), else_=0)).label(
+            func.sum(case((Event.is_explicit == true(), 1), else_=0)).label(
                 "fail_explicit"
             ),
-            func.sum(case((Event.is_non_event.is_(True), 1), else_=0)).label(
+            func.sum(case((Event.is_non_event == true(), 1), else_=0)).label(
                 "fail_non_event"
             ),
-            func.sum(case((Event.is_out_of_area.is_(True), 1), else_=0)).label(
+            func.sum(case((Event.is_out_of_area == true(), 1), else_=0)).label(
                 "fail_out_of_area"
             ),
             func.sum(case((event_ended_filter(now), 1), else_=0)).label(
@@ -179,4 +236,5 @@ async def publish_pending(
             "fail_coords_bbox": reject_row.fail_coords_bbox or 0,
         }
     )
+    await _stamp_missing_fienta_publishers(db)
     return summary

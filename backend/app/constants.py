@@ -1,11 +1,14 @@
 import http
 import logging
-from typing import Any, Literal
+from datetime import timedelta
+from typing import Any, Literal, NamedTuple
 from zoneinfo import ZoneInfo
 
 from app._generated.shared_constants import (
     APP_VERSION,
     BROWSE_PAGE_SIZE,
+    CLAIM_ADMIN_REVIEW_EXPIRY_DAYS,
+    CLAIM_EXPIRY_DAYS,
     DEFAULT_CURRENCY,
     DEFAULT_USER_CITY,
     DEFAULT_USER_LOCALE,
@@ -22,13 +25,14 @@ from app._generated.shared_constants import (
     VALID_CATEGORIES,
     VALID_LOCALES,
     VALID_SIGNALS,
-    VALID_THEME_PREFERENCES,
     VALID_VIBES,
 )
 
 __all__ = [
     "APP_VERSION",
     "BROWSE_PAGE_SIZE",
+    "CLAIM_ADMIN_REVIEW_EXPIRY_DAYS",
+    "CLAIM_EXPIRY_DAYS",
     "DEFAULT_CURRENCY",
     "DEFAULT_USER_CITY",
     "DEFAULT_USER_LOCALE",
@@ -44,7 +48,6 @@ __all__ = [
     "VALID_CATEGORIES",
     "VALID_LOCALES",
     "VALID_SIGNALS",
-    "VALID_THEME_PREFERENCES",
     "VALID_VIBES",
 ]
 
@@ -73,13 +76,13 @@ TALLINN_TZ = ZoneInfo(TALLINN_TZ_NAME)
 APP_ENV_DEVELOPMENT = "development"
 
 # require_configured_secret() call-site literals for the ADMIN_PASSWORD gate —
-# duplicated across get_current_admin/_require_admin (routers/admin.py) and
-# admin_login (routers/admin_auth.py); named so all three stay in sync.
+# duplicated across get_current_admin (auth/dependencies.py) and
+# admin_login (routers/admin_auth.py); named so both stay in sync.
 SETTING_NAME_ADMIN_PASSWORD = "ADMIN_PASSWORD"
 FEATURE_ADMIN_ENDPOINTS = "Admin endpoints"
 
-# Default value of settings.ADMIN_USERNAME. In production, _require_admin fails
-# closed if this hasn't been overridden — a guessable, well-known Basic-auth
+# Default value of settings.ADMIN_USERNAME. In production, admin_login fails
+# closed if this hasn't been overridden — a guessable, well-known admin
 # username removes half of the credential pair an attacker needs to brute-force.
 ADMIN_USERNAME_DEFAULT = "admin"
 
@@ -197,7 +200,9 @@ ALLOWED_SOURCE_HOSTS: frozenset[str] = frozenset(
 # configured inbound address could otherwise inject arbitrary content into the
 # newsletter-extraction LLM prompt. Empty by default: no newsletter adapter is
 # registered yet (app/ingestion/registry.py), so extraction is a no-op regardless;
-# populate with trusted sender domains before wiring up the newsletter adapter.
+# populate with trusted sender domains before wiring up the newsletter adapter —
+# and only together with an SPF/DKIM/DMARC pass requirement in webhooks.py, since
+# the "from" header alone is forgeable (OWASP audit #8).
 NEWSLETTER_SENDER_ALLOWED_DOMAINS: frozenset[str] = frozenset()
 
 # SAFE_URL_SCHEMES, HTML_SANITIZE_ALLOWED_TAGS, HTML_SANITIZE_ALLOWED_ATTRS imported
@@ -447,6 +452,186 @@ REPORT_STATUS_RESOLVED = "resolved"
 VALID_REPORT_STATUSES = frozenset({REPORT_STATUS_OPEN, REPORT_STATUS_RESOLVED})
 REPORT_DETAIL_MAX_CHARS = 500
 
+# Event claiming (#409/#410/#411) — see CONTEXT.md's Event Claiming glossary.
+PUBLISHER_STATUS_ACTIVE = "active"
+PUBLISHER_STATUS_RETIRED = "retired"
+VALID_PUBLISHER_STATUSES = frozenset(
+    {PUBLISHER_STATUS_ACTIVE, PUBLISHER_STATUS_RETIRED}
+)
+# KUMU/Estonia Concert Hall are each a single institution — one Publisher row
+# per source (external_id NULL), named here rather than seeds.py per the
+# "backend constants" rule.
+PUBLISHER_NAME_KUMU = "Kumu Art Museum"
+PUBLISHER_NAME_ESTONIA_CONCERT_HALL = "Estonia Concert Hall"
+
+CLAIM_KIND_PUBLISHER = "publisher"
+CLAIM_KIND_SERIES = "series"
+VALID_CLAIM_KINDS = frozenset({CLAIM_KIND_PUBLISHER, CLAIM_KIND_SERIES})
+
+CLAIM_STATUS_PENDING = "pending"
+CLAIM_STATUS_APPROVED = "approved"
+CLAIM_STATUS_REVOKED = "revoked"
+CLAIM_STATUS_CANCELLED = "cancelled"
+CLAIM_STATUS_EXPIRED = "expired"
+# API-facing only (#447) — never stored. A DB row's CLAIM_STATUS_REVOKED
+# always means admin_decline_claim/auto_decline_other_pending_claims flipped
+# a *pending* claim, since a real admin revoke of a *granted* claim
+# (admin_revoke_claim) deletes the row outright rather than leaving it with
+# this status. organizer_claims.py's serializers translate the stored value
+# to this one for any row that still exists; the one case that legitimately
+# reports CLAIM_STATUS_REVOKED is the tombstone built from the deleted
+# claim's AdminAction audit row.
+CLAIM_STATUS_DECLINED = "declined"
+VALID_CLAIM_STATUSES = frozenset(
+    {
+        CLAIM_STATUS_PENDING,
+        CLAIM_STATUS_APPROVED,
+        CLAIM_STATUS_REVOKED,
+        CLAIM_STATUS_CANCELLED,
+        CLAIM_STATUS_EXPIRED,
+    }
+)
+# A Publisher/Series key is free to claim again only once every prior claim
+# against it has left this set (#413) — backs the partial unique indexes in
+# migration 0043 that reject a duplicate/racing claim at insert time.
+CLAIM_ACTIVE_STATUSES = frozenset({CLAIM_STATUS_PENDING, CLAIM_STATUS_APPROVED})
+
+# Claim-proof verification mechanisms (#412) — app/claims/. Standalone
+# verification engine, not yet wired into a claim lifecycle (#413).
+CLAIM_TOKEN_BYTE_LENGTH = 16  # secrets.token_hex(16) -> 32 lowercase hex chars
+CLAIM_TOKEN_PREFIX = "er-verify-"
+
+CLAIM_VERIFICATION_MECHANISM_FIENTA_TOKEN = "fienta_token"
+CLAIM_VERIFICATION_MECHANISM_DNS_TXT = "dns_txt"
+CLAIM_VERIFICATION_MECHANISM_PILETILEVI_PROMOTER = "piletilevi_promoter"
+# (#428) The Piletilevi Publisher fallback tier — a resolved promoter with
+# only a plain contact mailbox (no domain-provable channel): auto-grants on
+# an exact claimant-account-email match, else admin review with both emails
+# shown as evidence (Claim.verification_contact carries the resolved one).
+CLAIM_VERIFICATION_MECHANISM_PILETILEVI_MAILBOX = "piletilevi_mailbox"
+CLAIM_VERIFICATION_MECHANISM_ADMIN_REVIEW = "admin_review"
+VALID_CLAIM_VERIFICATION_MECHANISMS = frozenset(
+    {
+        CLAIM_VERIFICATION_MECHANISM_FIENTA_TOKEN,
+        CLAIM_VERIFICATION_MECHANISM_DNS_TXT,
+        CLAIM_VERIFICATION_MECHANISM_PILETILEVI_PROMOTER,
+        CLAIM_VERIFICATION_MECHANISM_PILETILEVI_MAILBOX,
+        CLAIM_VERIFICATION_MECHANISM_ADMIN_REVIEW,
+    }
+)
+# The mechanisms an organizer can self-service re-trigger (POST
+# /organizer/claims/{id}/recheck) and whose pending claim expires after
+# CLAIM_EXPIRY_DAYS of inactivity (#413) — admin_review carries no proof an
+# organizer controls, so it has no recheck button and instead expires on the
+# longer CLAIM_ADMIN_REVIEW_EXPIRY_DAYS window (#430; see
+# app/claims/lifecycle.py::expire_stale_claims). piletilevi_mailbox is
+# deliberately excluded here too (#428 review finding): unlike DNS-TXT (add a
+# record) or Fienta (place a code), there is nothing an organizer can act on
+# to fix a mismatch — the promoter's published contact and the organizer's
+# own account email are both outside their control from this screen — so a
+# mismatched/no-contact mailbox claim behaves exactly like admin_review: no
+# recheck button, and the same longer expiry window.
+CLAIM_AUTOMATED_VERIFICATION_MECHANISMS = frozenset(
+    {
+        CLAIM_VERIFICATION_MECHANISM_FIENTA_TOKEN,
+        CLAIM_VERIFICATION_MECHANISM_DNS_TXT,
+        CLAIM_VERIFICATION_MECHANISM_PILETILEVI_PROMOTER,
+    }
+)
+
+CLAIM_VERIFICATION_OUTCOME_AUTO_GRANT = "auto_grant"
+CLAIM_VERIFICATION_OUTCOME_ADMIN_REVIEW = "admin_review"
+VALID_CLAIM_VERIFICATION_OUTCOMES = frozenset(
+    {CLAIM_VERIFICATION_OUTCOME_AUTO_GRANT, CLAIM_VERIFICATION_OUTCOME_ADMIN_REVIEW}
+)
+# CLAIM_EXPIRY_DAYS (inactivity window before an unverified automated-mechanism
+# claim expires, #413, resets on every POST /organizer/claims/{id}/recheck)
+# and CLAIM_ADMIN_REVIEW_EXPIRY_DAYS (the longer window for a pending claim
+# with no self-service recheck path — admin_review, and piletilevi_mailbox,
+# see the CLAIM_AUTOMATED_VERIFICATION_MECHANISMS comment above — #430, slice
+# 1 of #425; never reset, measured from Claim.last_checked_at's creation-time
+# value) both come from shared/app-config.json (#443) so the frontend's
+# claim-pending copy can interpolate the same figures instead of duplicating
+# them.
+
+# Bounded concurrency for expire_stale_claims' expiry-notification fan-out
+# (#421) — same rationale as REPORT_EMAIL_SEND_CONCURRENCY (Resend free-tier
+# rate; a large sweep shouldn't serialize dozens of Resend round trips).
+CLAIM_EMAIL_SEND_CONCURRENCY: int = 8
+
+# Claim-discovery status (#414) — computed on read from an event's
+# representative EventSource + any active Claim on its target key, never
+# persisted. Feeds the public event page's "is this your event?" CTA and the
+# search/suggestions surfaces' exclusion filter.
+CLAIM_DISCOVERY_STATUS_UNCLAIMED = "unclaimed"
+CLAIM_DISCOVERY_STATUS_PENDING = "pending"
+CLAIM_DISCOVERY_STATUS_CLAIMED = "claimed"
+# (#445) A direct organizer submission has no ingested EventSource, so it can
+# never be claimed — distinct from "unclaimed" (claimable, nobody has yet).
+CLAIM_DISCOVERY_STATUS_NOT_CLAIMABLE = "not_claimable"
+VALID_CLAIM_DISCOVERY_STATUSES = frozenset(
+    {
+        CLAIM_DISCOVERY_STATUS_UNCLAIMED,
+        CLAIM_DISCOVERY_STATUS_PENDING,
+        CLAIM_DISCOVERY_STATUS_CLAIMED,
+        CLAIM_DISCOVERY_STATUS_NOT_CLAIMABLE,
+    }
+)
+
+# GET /organizer/claims/search and .../suggestions (#414) result caps —
+# small, human-browsable lists, not paginated collections. Candidates are
+# over-fetched by this multiplier before the in-Python already-claimed
+# filter, since that filter can't be pushed into the query (a Series claim's
+# key is a normalized title+venue tuple, not a column).
+CLAIM_SEARCH_RESULT_LIMIT = 20
+CLAIM_SUGGESTIONS_LIMIT = 10
+CLAIM_SEARCH_CANDIDATE_MULTIPLIER = 3
+CLAIM_SEARCH_QUERY_MIN_LENGTH = 2
+
+# Claim-discovery title search haystack (M9): title_orig plus every locale's
+# localized title, so one pg_trgm GIN expression index
+# (ix_events_search_text_trgm) backs the ILIKE instead of an unindexed
+# JSONB-extract OR that forced a seq scan. Must match the index expression in
+# migration 0051 and the Event model textually — no bind params (the planner
+# can't match an index expression against a parameter). `||` and coalesce are
+# IMMUTABLE, unlike concat_ws.
+EVENT_SEARCH_TEXT_SQL = (
+    "coalesce(title_orig, '') || ' ' || "
+    "coalesce(title_localized ->> 'et', '') || ' ' || "
+    "coalesce(title_localized ->> 'en', '') || ' ' || "
+    "coalesce(title_localized ->> 'ru', '')"
+)
+
+# DNS-TXT domain-control check, resolved via DNS-over-HTTPS (no new
+# fetchable-content SSRF surface — this is a fixed, hardcoded resolver, never
+# a source-supplied URL). Shared by the KUMU/Estonia Concert Hall hardcoded
+# domains and a resolved Piletilevi promoter's contact domain.
+CLAIM_DNS_TXT_RECORD_LABEL = "_eventradar-verify"
+CLAIM_DNS_DOH_URL = "https://cloudflare-dns.com/dns-query"
+DNS_RECORD_TYPE_TXT = "TXT"
+
+KUMU_VERIFICATION_DOMAIN = "kumu.ekm.ee"
+ESTONIA_CONCERT_HALL_VERIFICATION_DOMAIN = "concert.ee"
+
+# Free/shared-mailbox email providers excluded when resolving a Piletilevi
+# promoter's contact email to a domain-control target — a promoter can't
+# prove DNS control of a provider they don't own.
+FREE_EMAIL_PROVIDER_DOMAINS = frozenset(
+    {
+        "gmail.com",
+        "mail.ee",
+        "hot.ee",
+        "hotmail.com",
+        "outlook.com",
+        "yahoo.com",
+        "live.com",
+        "icloud.com",
+        "mail.ru",
+        "yandex.ru",
+        "inbox.lv",
+    }
+)
+
 # Admin-authenticated but persisted to a Text column and emailed verbatim to
 # every reporter (see app/email/report_reporter.py) — bounded so validation
 # rejects an oversized note before it's stored/mailed rather than only being
@@ -502,9 +687,10 @@ DEDUP_UNFILTERED_FALLBACK_MAX_EVENTS = 500
 DEDUP_CANDIDATE_PAIR_WARN_THRESHOLD = 20000
 # Hard cap for the same query — worst case (many events sharing one starts_at)
 # is quadratic in same-window listing density with no LIMIT, materializing
-# every pair into Python. Deterministic ORDER BY means a truncated tail is
-# picked up on the next pass as the head clusters collapse. Kept above the
-# warn threshold so a warning always fires before truncation would.
+# every pair into Python. The query orders newest-first (a.id DESC), so a
+# truncated tail is the oldest pairs — earlier passes already saw them — and
+# freshly ingested events are never starved. Kept above the warn threshold so
+# a warning always fires before truncation would.
 DEDUP_CANDIDATE_PAIR_MAX = 50_000
 
 # Resend email delivery
@@ -522,8 +708,12 @@ REFETCH_HOUR = 4  # daily 04:30 Europe/Tallinn, before the 06:00 feed build
 REFETCH_MINUTE = 30
 FEED_BUILD_HOUR = 6  # daily 06:00 Europe/Tallinn
 FEED_BUILD_MINUTE = 0
+# Daily 05:00 Europe/Tallinn, between the 04:30 refetch and the 06:00 feed
+# build — cheap DB-only sweep (#413), off-peak like every other cron entry.
+EXPIRE_STALE_CLAIMS_HOUR = 5
+EXPIRE_STALE_CLAIMS_MINUTE = 0
 # Users per page in build_daily_feeds (score.py) — bounds the per-page
-# personas_by_user/fb_by_user/score_cache dicts and the event_rows x users
+# personas_by_user/fb_by_user dicts and the event_rows x users
 # scoring loop in RAM regardless of total registered-user count.
 FEED_BUILD_USER_BATCH_SIZE = 500
 
@@ -567,6 +757,11 @@ RATE_LIMIT_SUBMIT = "10/minute"
 # modeled on RATE_LIMIT_CONTACT: session-gated, but each hit still sends an
 # email, so keep the same tight per-IP cap.
 RATE_LIMIT_ORGANIZER_CONTACT = "3/minute"
+# Organizer event-claiming endpoints (routers/organizer_claims.py) — modeled
+# on RATE_LIMIT_SUBMIT: a claim create/recheck hit runs live verification
+# I/O (Fienta/DNS-TXT/Piletilevi fetch), so keep it tight per-IP; the
+# DB-backed ORGANIZER_DAILY_CLAIM_CAP is the per-organizer ceiling.
+RATE_LIMIT_CLAIM = "10/minute"
 
 # Resend inbound-mail webhook signature verification (Svix scheme; see
 # https://resend.com/docs/dashboard/webhooks/verify-webhooks-requests and
@@ -638,8 +833,7 @@ ADMIN_AUTH_LOCKOUT_SECONDS = 300
 # _score_cache — an unbounded dict keyed by client_key() would grow forever
 # under sustained scanning/brute-force traffic.
 ADMIN_AUTH_FAILURES_MAX_ENTRIES = 4096
-# Authenticated feedback writes — generous cap; prevents cache-rebuild DoS
-# (every signal wipes all user_event_scores rows for that user).
+# Authenticated feedback writes — generous cap on a per-signal DB write.
 RATE_LIMIT_FEEDBACK = "60/minute"
 # POST /reports — content-moderation write, tighter than RATE_LIMIT_FEEDBACK
 # since it creates a row an admin must triage (see LOG_EVENT_REPORT_SUBMITTED).
@@ -689,7 +883,7 @@ AUTH_MAGIC_SALT = "magic-link-v1"
 AUTH_SESSION_SALT = "session-v1"
 # Session-cookie transport (issue #26 / docs/adr/0001). Path scoping is what
 # keeps the higher-value organizer credential off ordinary consumer requests —
-# both paths sit under the Vercel `/api` rewrite that makes the SPA same-origin
+# both paths sit under the `/api` proxy that makes the SPA same-origin
 # with this API, so a browser only ever attaches SESSION_COOKIE_NAME under
 # /api and ORGANIZER_SESSION_COOKIE_NAME under /api/organizer.
 SESSION_COOKIE_NAME = "session"
@@ -761,12 +955,27 @@ OAUTH_STATE_COOKIE_NAME = "oauth_state"
 OAUTH_STATE_COOKIE_PATH = "/api/auth/google/callback"
 GOOGLE_CALLBACK_PUBLIC_PATH = "/api/auth/google/callback"
 OAUTH_STATE_COOKIE_SAMESITE: Literal["lax"] = "lax"
+# Google-link binding cookies (OWASP audit #3): set on the callback that sends a
+# confirmation magic link, carrying the pending Google `sub`, so the link only
+# attaches that identity when clicked in the browser that started the Google
+# sign-in. Unlike the state cookies these are SameSite=Strict session-style
+# cookies (set on a top-level response, read on the SPA's same-site POST to the
+# verify route), scoped to that one route. Own salt so a binding token never
+# verifies as a magic-link/session/state token.
+AUTH_GOOGLE_LINK_BINDING_SALT = "google-link-binding-v1"
+GOOGLE_LINK_BINDING_COOKIE_NAME = "google_link_binding"
+GOOGLE_LINK_BINDING_COOKIE_PATH = "/api/auth/verify"
+ORGANIZER_GOOGLE_LINK_BINDING_COOKIE_NAME = "organizer_google_link_binding"
+ORGANIZER_GOOGLE_LINK_BINDING_COOKIE_PATH = "/api/organizer/auth/verify"
 # Google sign-in outcomes (routers/organizer_auth.py / routers/auth.py
 # callbacks) — carried on LOG_EVENT_GOOGLE_SIGNIN's `outcome` field.
 GOOGLE_SIGNIN_OUTCOME_EXISTING_LOGIN = "existing_login"
 GOOGLE_SIGNIN_OUTCOME_NEW_ACCOUNT = "new_account"
 GOOGLE_SIGNIN_OUTCOME_AUTO_LINKED = "auto_linked"
 GOOGLE_SIGNIN_OUTCOME_CONFIRMATION_SENT = "confirmation_sent"
+# Google reported the address as unverified and it isn't an authoritative
+# domain — no confirmation link is sent (OWASP audit #3), nothing is created.
+GOOGLE_SIGNIN_OUTCOME_UNVERIFIED_EMAIL = "unverified_email"
 # Frontend redirect targets for the callback (no JSON response — this is a
 # top-level browser navigation back from Google).
 ORGANIZER_LOGIN_PATH = "/organizer/login"
@@ -831,6 +1040,35 @@ ORGANIZER_DAILY_IMAGE_UPLOAD_CAP = 20
 # are created independently of a submission, so neither existing cap bounds
 # them (routers/organizer_venues.py).
 ORGANIZER_DAILY_VENUE_CREATION_CAP = 20
+# Same count-then-act soft ceiling, but for POST /organizer/claims — counts
+# every claim-creation attempt (not just auto-granted ones), computed from
+# Tallinn calendar-day start like ORGANIZER_DAILY_SUBMISSION_CAP (#413).
+ORGANIZER_DAILY_CLAIM_CAP = 5
+# Per-organizer BASE ceiling on pinned-field edits to already-claimed events,
+# scoped across every event the organizer holds a claim on (not per-event) —
+# counts edit attempts, not successful saves. Declared here ahead of the
+# pinned-edit endpoint itself (a later #409 slice), which is the one that
+# will enforce it. This is the effective cap for an organizer whose claim(s)
+# cover a single event — scaled up by ORGANIZER_CLAIM_EDIT_CAP_PER_EVENT for
+# every additional covered event, bounded by ORGANIZER_CLAIM_EDIT_CAP_CEILING
+# (#438 — see claims/pinning.py::scaled_claim_edit_cap).
+ORGANIZER_DAILY_CLAIM_EDIT_CAP = 20
+# How many extra edits/day a covered event beyond the first adds to the
+# organizer's daily claim-edit cap (#438) — e.g. a 61-event Estonia Concert
+# Hall Publisher claim gets meaningfully more headroom than a single-event
+# claim without the cap tracking claim size 1:1 (which would make a large
+# institutional claim effectively unbounded).
+ORGANIZER_CLAIM_EDIT_CAP_PER_EVENT = 2
+# Upper ceiling on the scaled daily claim-edit cap (#438) — however many
+# events an organizer's claim(s) cover, the cap never exceeds this, so it
+# remains a genuine bounded limit rather than effectively unbounded for a
+# very large institutional Publisher claim.
+ORGANIZER_CLAIM_EDIT_CAP_CEILING = 100
+
+# Claim-editing surface (#416). Field-name pinning vocabulary lives directly
+# in organizer_claim_edits.py (pin_key() calls) rather than as constants
+# here — see CONTEXT.md's Event Claiming glossary for the pinned/synced
+# rules (price fields and categories never participate).
 
 # Field length caps for SubmitEventBody/PatchEventBody (routers/organizer_events.py).
 # venue_name and currency mirror the Event column widths (models/models.py) so an
@@ -855,6 +1093,11 @@ IMAGE_UPLOAD_MAX_BYTES = 8 * 1024 * 1024  # 8 MiB
 CLOUDINARY_UPLOAD_URL_TEMPLATE = (
     "https://api.cloudinary.com/v1_1/{cloud_name}/image/upload"
 )
+# Path prefix every delivery URL of OUR Cloudinary account carries on
+# res.cloudinary.com — the host alone is shared by every Cloudinary account, so
+# organizer_events.py::_check_image_host also pins this account's cloud name
+# (OWASP audit #6).
+CLOUDINARY_DELIVERY_PATH_TEMPLATE = "/{cloud_name}/image/upload/"
 # Leading-byte signatures for the three formats IMAGE_UPLOAD_ALLOWED_MIME
 # allows. WebP needs its own check (organizer_events.py::_sniff_image_mime)
 # since RIFF is a generic container format — the fourCC at offset 8 is what
@@ -881,6 +1124,8 @@ IMAGE_EXTENSION_BY_MIME: dict[str, str] = {
 # turning it into a tracking pixel that leaks each recipient's IP/open-time to
 # a third party the recipient never consented to. Scraped (non-organizer)
 # sources are unaffected — this only gates SOURCE_KIND_USER_SUBMISSION.
+# The host is necessary but not sufficient: _check_image_host also requires
+# CLOUDINARY_DELIVERY_PATH_TEMPLATE for the configured account.
 ALLOWED_IMAGE_HOSTS = frozenset({"res.cloudinary.com"})
 
 # Whole-request body ceiling (app.main.MaxBodySizeMiddleware) — above
@@ -901,20 +1146,22 @@ LOCALE_ET = "et"
 LOCALE_EN = "en"
 LOCALE_RU = "ru"
 
-# VALID_THEME_PREFERENCES imported from app._generated.shared_constants
-# (shared/app-config.json → generate_shared.py) — server-side theme_preference
-# column values (users/organizers). The tri-state UI value "system" is never
-# sent to or stored on this column; only "light"/"dark"/NULL are valid here.
-
-# The one theme_preference value that keeps an email's dark styling unchanged —
-# every other value (including None/"system") selects the light style set.
-# See app/email/styles.py::get_email_styles.
-THEME_PREFERENCE_DARK = "dark"
-
 # Admin review-queue pagination (routers/admin.py GET /admin/submissions) — mirrors
 # ADMIN_DEDUP_GROUPS_PAGE_SIZE's sizing rationale (small default page, generous cap).
 ADMIN_REVIEW_QUEUE_PAGE_SIZE: int = 50
 ADMIN_REVIEW_QUEUE_MAX_PAGE_SIZE: int = 500
+
+# Admin claims-queue pagination (routers/admin.py GET /admin/claims, issue #420) —
+# same sizing rationale as ADMIN_REVIEW_QUEUE_PAGE_SIZE.
+ADMIN_CLAIMS_QUEUE_PAGE_SIZE: int = 50
+ADMIN_CLAIMS_QUEUE_MAX_PAGE_SIZE: int = 500
+
+# Publisher-claim event-list pagination (routers/organizer_claims.py GET
+# /organizer/claims/{claim_id}/events, issue #436) — smaller default/cap than
+# the admin queues above since this is one organizer's own claimed events,
+# not an operator-wide queue.
+CLAIM_EVENTS_PAGE_SIZE: int = 20
+CLAIM_EVENTS_MAX_PAGE_SIZE: int = 100
 
 # Per-email magic-link resend cooldown (routers/auth.py::_recent_unused_link_exists) —
 # prevents Resend quota exhaustion from rapid repeat requests for the same address.
@@ -1002,6 +1249,10 @@ PAGINATION_MIN_OFFSET: int = 0
 # more depth than any legitimate session reaches while still bounding the
 # LIMIT/OFFSET seq-scan-and-discard cost an authenticated caller can force.
 PAGINATION_MAX_OFFSET: int = 5_000
+# Opaque keyset cursor (`GET /explore` date sort, `GET /feedback/events`) —
+# base64url of `[iso_timestamp, row_id]`, so ~60 chars in practice; the cap
+# only bounds what an attacker can make the decoder chew on.
+PAGINATION_CURSOR_MAX_LEN: int = 200
 # Candidate cap for the Python-scored path (Path B: for_you=True OR sort=relevance —
 # so also date/price/quality sort *under* for_you=True, not just relevance). Sorted
 # soonest-first before capping, so the cap policy is a deliberate soonest-bias, not
@@ -1106,16 +1357,6 @@ SIGNAL_BOOKMARK = "bookmark"
 PREFERENCE_SIGNALS: frozenset[str] = frozenset(
     {SIGNAL_LIKE, SIGNAL_DISLIKE, SIGNAL_BOOKMARK}
 )
-# Signals that actually feed ranking/score.py's like/dislike-based scoring
-# (both ranking/score.py::_load_feedback_context-equivalent loads and
-# browse.py::_load_feedback_context filter on signal IN (like, dislike)).
-# bookmark is never read by the scorer and click_external/view are passive
-# analytics — invalidating the score cache on those wastes the entire cache
-# (every ticket click or bookmark otherwise wiped a user's cached scores,
-# forcing build_daily_feeds to recompute from scratch). Only these two signals
-# should trigger invalidate_user_scores; see feedback.py::record_feedback/
-# delete_feedback.
-SCORE_AFFECTING_SIGNALS: frozenset[str] = frozenset({SIGNAL_LIKE, SIGNAL_DISLIKE})
 # Guard: if shared/app-config.json signals ever diverge from these sentinels, fail fast.
 assert SIGNAL_LIKE in VALID_SIGNALS, f"{SIGNAL_LIKE!r} missing from VALID_SIGNALS in shared/app-config.json"
 assert SIGNAL_DISLIKE in VALID_SIGNALS, f"{SIGNAL_DISLIKE!r} missing from VALID_SIGNALS in shared/app-config.json"
@@ -1129,6 +1370,12 @@ assert PREFERENCE_SIGNALS <= VALID_SIGNALS, "PREFERENCE_SIGNALS must be a subset
 PREFERENCE_SIGNALS_SQL_PREDICATE = "signal IN ({})".format(
     ", ".join(f"'{s}'" for s in sorted(PREFERENCE_SIGNALS))
 )
+
+# Partial-index predicate for the passive analytics signals ("view"/
+# "click_external" — everything in VALID_SIGNALS outside PREFERENCE_SIGNALS):
+# migration 0055's one-row-per-(user, event, signal, UTC day) unique index
+# (OWASP audit #9). Derived from PREFERENCE_SIGNALS like the predicate above.
+PASSIVE_SIGNALS_SQL_PREDICATE = f"NOT ({PREFERENCE_SIGNALS_SQL_PREDICATE})"
 
 # Time-of-day / day-of-week slots derived from event.starts_at (Europe/Tallinn).
 # An event can match multiple slots simultaneously (e.g. Saturday evening → weekend + evening).
@@ -1537,7 +1784,7 @@ CURRENCY_AMOUNT_RE = (
 # CORS — restricted to the methods/headers the SPA actually sends (see
 # frontend/src/api/client.ts and routers/*.py route decorators). allow_credentials
 # stays False regardless (see main.py's CORSMiddleware call site) — the session
-# cookie only ever travels same-origin through the Vercel `/api` rewrite, never
+# cookie only ever travels same-origin through the `/api` proxy, never
 # via a credentialed cross-origin request.
 CORS_ALLOWED_METHODS: list[str] = ["GET", "POST", "PATCH", "DELETE"]
 CORS_ALLOWED_HEADERS: list[str] = ["Authorization", "Content-Type"]
@@ -1568,6 +1815,8 @@ LOG_FILE_MAX_BYTES = 5 * 1024 * 1024  # 5 MB per file
 LOG_FILE_BACKUP_COUNT = 5  # ~25 MB total dev history
 LOG_SHIP_TIMEOUT_SECONDS = 5.0
 LOG_SHIP_QUEUE_MAXSIZE = 10_000  # bounded; drop-newest if shipping stalls
+LOG_SHIP_BATCH_SIZE = 100  # records per POST; a full buffer flushes immediately
+LOG_SHIP_FLUSH_INTERVAL_SECONDS = 2.0  # a partial buffer is flushed at least this often
 # Loggers configured by frameworks/libraries before configure_logging() runs —
 # stripped of their own handlers and re-pointed at the root logger so every
 # line (app, uvicorn, SQL echo) shares the same timestamped format.
@@ -1639,6 +1888,10 @@ ADMIN_ACTION_RESOLVE_REPORTS = "resolve_reports"
 ADMIN_ACTION_TAKEDOWN_REPORTED_EVENT = "takedown_reported_event"
 ADMIN_ACTION_APPROVE_SUBMISSION = "approve_submission"
 ADMIN_ACTION_RETRACT_SUBMISSION = "retract_submission"
+# `action` field values for /admin/claims (issue #420).
+ADMIN_ACTION_GRANT_CLAIM = "grant_claim"
+ADMIN_ACTION_DECLINE_CLAIM = "decline_claim"
+ADMIN_ACTION_REVOKE_CLAIM = "revoke_claim"
 # `action` field values for the /admin/pipeline job triggers (issue #159).
 ADMIN_ACTION_INGEST = "ingest"
 ADMIN_ACTION_INGEST_SOURCE = "ingest_source"
@@ -1718,6 +1971,12 @@ HTTP_METHOD_POST = "POST"
 # verify_path parameter, and organizer_auth.py's override of it.
 AUTH_VERIFY_PATH = "/auth/verify"
 ORGANIZER_AUTH_VERIFY_PATH = "/organizer/verify"
+# Claim-link magic links (#415) land on a distinct frontend route from a plain
+# organizer sign-in link, so the frontend knows to POST
+# /organizer/claims/verify-link (which also creates the claim) instead of
+# /organizer/auth/verify — the two token types share a signing salt
+# (generate_organizer_claim_link_token) but carry different claims.
+ORGANIZER_CLAIM_VERIFY_PATH = "/organizer/claims/verify"
 
 # app/routers/utils.py::mask_db_url — redacts the password in a DB URL
 # ("user:pass@host" -> "user:***@host") for safe logging.
@@ -1746,7 +2005,6 @@ HTML_SELF_CLOSING_BR_RE = r"<br\s*/>"
 # a description that carries neither form of Cloudflare's email obfuscation
 # (most descriptions have none).
 HTML_CF_EMAIL_MARKERS = ("__cf_email__", "email-protection")
-USER_EVENT_SCORES_RETENTION_DAYS = 30  # keyed on the underlying event's end date
 
 # APScheduler job ids (app/main.py::_register_scheduled_jobs) — also reasoned
 # about in docs/backend-ops.md and /admin/pipeline/run, so a typo in one of
@@ -1759,9 +2017,11 @@ JOB_ID_DEDUP_PASS = "dedup_pass"
 JOB_ID_CLASSIFY_PENDING = "classify_pending"
 JOB_ID_PUBLISH_PENDING = "publish_pending"
 JOB_ID_GEOCODE_PENDING = "geocode_pending"
+JOB_ID_BACKFILL_PUBLISHER_IDS = "backfill_publisher_ids"
 JOB_ID_REFETCH_EVENT_DETAILS = "refetch_event_details"
 JOB_ID_BUILD_DAILY_FEEDS = "build_daily_feeds"
 JOB_ID_SEND_DAILY_DIGESTS = "send_daily_digests"
+JOB_ID_EXPIRE_STALE_CLAIMS = "expire_stale_claims"
 
 # HTTP error `detail` strings (app/routers/*). English-only server strings,
 # not i18n keys (contrast shared/i18n/*.json, the user-facing string source
@@ -1797,6 +2057,7 @@ ERROR_UNKNOWN_SOURCE = "Unknown source: {slug!r}"
 
 # routers/browse.py, routers/feedback.py
 ERROR_INVALID_SORT = "sort must be one of {sorts}"
+ERROR_INVALID_CURSOR = "cursor is malformed"
 ERROR_INVALID_SIGNAL = "Invalid signal. Must be one of: {signals}"
 ERROR_INVALID_PREFERENCE_SIGNAL = "signal must be one of: {signals}"
 
@@ -1835,6 +2096,51 @@ ERROR_DAILY_VENUE_CREATION_LIMIT = (
     "Daily venue creation limit reached. Try again tomorrow."
 )
 ERROR_VENUE_NOT_FOUND = "Venue not found."
+ERROR_CLAIM_NOT_FOUND = "Claim not found."
+ERROR_CLAIM_NOT_CLAIMABLE = "This event has no publisher or series that can be claimed."
+ERROR_CLAIM_EVENTS_NOT_PUBLISHER = (
+    "Only an approved Publisher claim has an event list."
+)
+# (#429) Explicit guard — a direct organizer submission has no ingested
+# EventSource to claim against; keeps the claim mechanism (ingested events)
+# and the submission-trust track (Organizer.verified) separate.
+ERROR_CLAIM_OWN_SUBMISSION = "You cannot claim your own directly submitted event."
+# (#431, slice 1 of #425) — a target already holding an *approved* claim
+# still rejects a new one outright (no contest/override flow); a target
+# holding only pending claims no longer does — see create_claim.
+ERROR_CLAIM_TARGET_ALREADY_APPROVED = (
+    "This publisher or series has already been claimed and verified."
+    " Contact support if you believe this is a mistake."
+)
+ERROR_CLAIM_NOT_PENDING = "Only a pending claim can be cancelled or rechecked."
+ERROR_CLAIM_ALREADY_RESOLVED = (
+    "This claim has already been decided — only a pending claim can be"
+    " granted or declined."
+)
+ERROR_CLAIM_NOT_APPROVED = "Only a granted claim can be revoked."
+ERROR_CLAIM_QUEUE_INVALID_STATUS = "status must be 'pending' or 'approved'."
+# (#428) Series claims never auto-grant — a non-blank justification is the
+# only thing an organizer supplies at creation time, surfaced to the admin
+# reviewing the claim.
+ERROR_CLAIM_JUSTIFICATION_REQUIRED = (
+    "A justification is required for a series claim (no specific promoter"
+    " could be identified for this listing)."
+)
+CLAIM_JUSTIFICATION_MAX_CHARS = 2000
+ERROR_DAILY_CLAIM_LIMIT = "Daily claim limit reached. Try again tomorrow."
+ERROR_CLAIM_SEARCH_QUERY_TOO_SHORT = "Search query is too short."
+ERROR_CLAIM_NOT_GRANTED = "This claim is not yet granted — editing stays locked until then."
+ERROR_CLAIM_DORMANT = (
+    "This claim is dormant — a duplicate claimed event now takes precedence, "
+    "so editing stays locked until that's resolved."
+)
+# Machine-readable companions to the two errors above (#444) — the frontend
+# tells them apart off `code`, not by matching the (English-only) `message`.
+CLAIM_ERROR_CODE_NOT_GRANTED = "claim_not_granted"
+CLAIM_ERROR_CODE_DORMANT = "claim_dormant"
+ERROR_DAILY_CLAIM_EDIT_LIMIT = "Daily claim-edit limit reached. Try again tomorrow."
+ERROR_CLAIM_EVENT_NOT_FOUND = "No event could be resolved for this claim."
+ERROR_CLAIM_EDIT_URL_DOMAIN = "URL must stay on the domain this claim was verified against."
 ERROR_EVENT_CREATE_FAILED = "Could not create event; please try again."
 ERROR_EVENT_URL_SCHEME = "Event URL is not allowed (unsupported scheme)."
 ERROR_IMAGE_URL_SCHEME = "Image URL is not allowed (unsupported scheme)."
@@ -1848,3 +2154,85 @@ ERROR_IMAGE_UPLOAD_FAILED = "Image upload failed; please try again."
 ERROR_ADMIN_JOB_FAILED = "{name} failed; see server logs"
 ERROR_ADMIN_JOB_ALREADY_RUNNING = "{name} is already running; try again once it finishes."
 ERROR_FEATURE_DISABLED = "{feature} disabled: {setting_name} not configured"
+
+
+# ---------------------------------------------------------------------------
+# Single-institution sources (KUMU, Estonia Concert Hall) — one Publisher and
+# one hardcoded DNS-TXT verification domain per source; see CONTEXT.md's
+# Publisher glossary entry. Piletilevi is deliberately absent: its Publisher
+# resolution is promoter-id-keyed, not source-constant.
+# ---------------------------------------------------------------------------
+class SingleInstitution(NamedTuple):
+    publisher_name: str
+    verification_domain: str
+
+
+SINGLE_INSTITUTION_SOURCES: dict[str, SingleInstitution] = {
+    SOURCE_SLUG_KUMU: SingleInstitution(PUBLISHER_NAME_KUMU, KUMU_VERIFICATION_DOMAIN),
+    SOURCE_SLUG_ESTONIA_CONCERT_HALL: SingleInstitution(
+        PUBLISHER_NAME_ESTONIA_CONCERT_HALL, ESTONIA_CONCERT_HALL_VERIFICATION_DOMAIN
+    ),
+}
+# Sources whose events the publisher_id backfill can stamp (Fienta's per-organizer
+# Publishers plus the single-institution ones above).
+PUBLISHER_BACKFILL_SOURCE_SLUGS: tuple[str, ...] = (
+    SOURCE_SLUG_FIENTA,
+    *SINGLE_INSTITUTION_SOURCES,
+)
+
+# A Fienta listing the live organizer re-query could not resolve waits this long
+# before the next attempt (stops a permanently unresolvable listing being
+# re-crawled every 6h run).
+PUBLISHER_RESOLVE_RETRY_COOLDOWN = timedelta(days=7)
+
+CLAIM_DNS_VERIFICATION_MECHANISMS = frozenset(
+    {CLAIM_VERIFICATION_MECHANISM_DNS_TXT, CLAIM_VERIFICATION_MECHANISM_PILETILEVI_PROMOTER}
+)
+CLAIM_DNS_DOH_ACCEPT_HEADER = {"Accept": "application/dns-json"}
+
+# Piletilevi promoter JSON-LD resolution (claims/piletilevi_promoter.py).
+PILETILEVI_PROMOTER_URL_MARKER = "/promoters/"
+MAILTO_PREFIX = "mailto:"
+JSONLD_ID_KEY = "@id"
+JSONLD_TYPE_KEY = "@type"
+
+# Feature/setting labels for require_configured_secret's 503 detail.
+FEATURE_ADMIN_LOGIN = "Admin login"
+FEATURE_ADMIN_TOTP = "Admin TOTP"
+FEATURE_INBOUND_WEBHOOK = "Webhook"
+SETTING_NAME_ADMIN_TOTP_SECRET = "ADMIN_TOTP_SECRET"
+SETTING_NAME_RESEND_WEBHOOK_SECRET = "RESEND_WEBHOOK_SECRET"
+
+# Inbound-mail webhook response bodies (routers/webhooks.py).
+WEBHOOK_STATUS_ACCEPTED = "accepted"
+WEBHOOK_STATUS_REJECTED = "rejected"
+WEBHOOK_STATUS_SKIPPED = "skipped"
+WEBHOOK_REASON_REPLAY = "replay"
+WEBHOOK_REASON_INVALID_JSON = "invalid json"
+WEBHOOK_REASON_SENDER_NOT_ALLOWLISTED = "sender not allowlisted"
+
+# Scheduler job labels whose runtime string is load-bearing: the "hourly
+# ingest" value is matched verbatim by an Axiom monitor (docs/observability.md
+# #3b), so these keep their historical spelling rather than reusing JOB_ID_*.
+JOB_LABEL_HOURLY_INGEST = "hourly ingest"
+JOB_LABEL_DEDUP_PASS = "dedup pass"
+JOB_LABEL_ORGANIZER_SYNC = "organizer sync"
+JOB_LABEL_DEDUP_DRAIN = "dedup"
+SCHEDULER_DAY_OF_WEEK_SUNDAY = "sun"
+
+HEADER_LIST_UNSUBSCRIBE_POST = "List-Unsubscribe-Post"
+LIST_UNSUBSCRIBE_ONE_CLICK = "List-Unsubscribe=One-Click"
+DIGEST_CATEGORY_FALLBACK = "event"
+
+URL_SCHEME_HTTPS = "https"
+HOST_WWW_PREFIX = "www."
+
+# Estonia Concert Hall's Piletilevi session JWT: header.payload.signature, with
+# payload base64url-encoded unpadded (padded to a multiple of 4 to decode).
+JWT_SEGMENT_COUNT = 3
+JWT_PAYLOAD_INDEX = 1
+BASE64_PAD_MULTIPLE = 4
+
+# Rows per bulk UPDATE ... FROM (VALUES ...) in dedup/rules.py::bulk_assign_dedup_groups
+# — 2 bind params per row, well under asyncpg's 32767-parameter cap.
+DEDUP_BULK_UPDATE_CHUNK_SIZE = 5000

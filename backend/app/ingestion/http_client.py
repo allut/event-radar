@@ -32,15 +32,17 @@ from app.constants import (
     ALLOWED_SOURCE_HOSTS,
     DNS_RESOLVE_CACHE_TTL_SECONDS,
     HEADER_RETRY_AFTER,
+    HOST_WWW_PREFIX,
     HTTPS_DEFAULT_PORT,
-    HTTP_RETRY_AFTER_MAX_SECONDS,
     HTTP_RETRYABLE_STATUS_CODES,
+    HTTP_RETRY_AFTER_MAX_SECONDS,
     HTTP_RETRY_JITTER_MAX,
     HTTP_RETRY_MAX_ATTEMPTS,
     HTTP_RETRY_WAIT_MAX,
     HTTP_RETRY_WAIT_MIN,
     HTTP_RETRY_WAIT_MULTIPLIER,
     SAFE_URL_SCHEMES,
+    URL_SCHEME_HTTPS,
 )
 
 log = logging.getLogger(__name__)
@@ -174,7 +176,7 @@ def host_guard_hook(
         # anything else is a permanent guard failure, same as a host mismatch.
         if (
             parts.hostname not in hosts
-            or parts.scheme != "https"
+            or parts.scheme != URL_SCHEME_HTTPS
             or parts.port not in (None, HTTPS_DEFAULT_PORT)
         ):
             # ValueError, not httpx.RequestError: a host mismatch is a
@@ -207,6 +209,31 @@ async def http_get(
     r = await client.get(url, params=params, headers=headers)
     r.raise_for_status()
     return r
+
+
+async def http_get_stored_url(
+    client: httpx.AsyncClient,
+    url: str,
+    *,
+    source: str | None = None,
+) -> httpx.Response:
+    """http_get for a stored, untrusted Event.url that is fetched on a
+    request path (claim target resolution, claim verification, the claim-edit
+    price-mismatch check) rather than through a host-guarded ingest/refetch
+    client (OWASP audit #2). Refuses — with ValueError, like host_guard_hook —
+    anything but https on the default port to an ALLOWED_SOURCE_HOSTS host
+    that resolves to a public address. Callers catch ValueError next to
+    httpx.HTTPError. Redirects are not followed (the shared client leaves
+    httpx's follow_redirects off), so a 3xx raises via raise_for_status
+    rather than hopping to an unchecked host."""
+    parts = urlsplit(url)
+    if (
+        parts.scheme.lower() != URL_SCHEME_HTTPS
+        or parts.port not in (None, HTTPS_DEFAULT_PORT)
+        or await safe_fetchable_url(url, source) is None
+    ):
+        raise ValueError(f"event url not fetchable (SSRF guard): {url}")
+    return await http_get(client, url)
 
 
 @_http_retry
@@ -249,15 +276,30 @@ def safe_external_url(url: str | None, source: str | None = None) -> str | None:
     return url
 
 
+def normalized_hostname(url: str | None) -> str:
+    """URL hostname, lowercased with any leading "www." stripped, or "" if none.
+
+    Shared by refetch.py/pinning.py's per-host dispatch (locale-text and
+    price-fallback extractors) so both bare and www variants of a source host
+    match the same lookup key.
+    """
+    hostname = urlsplit(url or "").hostname or ""
+    return hostname.removeprefix(HOST_WWW_PREFIX)
+
+
+def host_matches_domain(hostname: str, domain: str) -> bool:
+    """True when ``hostname`` is ``domain`` itself or a subdomain of it.
+    The dot-anchored suffix rules out lookalikes ("notgmail.com" vs
+    "gmail.com"). Case-sensitive — callers lowercase first when needed."""
+    return hostname == domain or hostname.endswith(f".{domain}")
+
+
 def host_is_allowed(hostname: str | None) -> bool:
     """True when hostname is (or is a subdomain of) an ALLOWED_SOURCE_HOSTS entry."""
     if not hostname:
         return False
     hostname = hostname.lower()
-    return any(
-        hostname == allowed or hostname.endswith(f".{allowed}")
-        for allowed in ALLOWED_SOURCE_HOSTS
-    )
+    return any(host_matches_domain(hostname, allowed) for allowed in ALLOWED_SOURCE_HOSTS)
 
 
 # host -> (verdict, expires_at monotonic time). A source's event batch shares

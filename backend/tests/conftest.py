@@ -5,6 +5,7 @@ os.environ.setdefault("SECRET_KEY", "test-secret-not-for-production-32chars")
 
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -24,7 +25,12 @@ def mock_db():
     db = AsyncMock()
     db.get = AsyncMock()
     db.scalar = AsyncMock()
-    db.scalars = AsyncMock()
+    # Default no-op result for `(await db.scalars(...)).all()` — same
+    # plain-list rationale as _execute_result below. Tests that care about
+    # hydrated rows override this return value.
+    _scalars_result = MagicMock()
+    _scalars_result.all.return_value = []
+    db.scalars = AsyncMock(return_value=_scalars_result)
     db.execute = AsyncMock()
     # Default no-op result for load_user_signals()'s `(await db.execute(...)).all()` —
     # an explicit MagicMock (not the auto-AsyncMock child unittest.mock would give an
@@ -52,7 +58,6 @@ def make_user():
         locale: str = DEFAULT_USER_LOCALE,
         opt_in: bool = True,
         email_verified: bool = True,
-        theme_preference: str | None = None,
     ) -> MagicMock:
         u = MagicMock()
         u.id = user_id
@@ -61,7 +66,6 @@ def make_user():
         u.home_city = DEFAULT_USER_CITY
         u.email_digest_opt_in = opt_in
         u.email_verified = email_verified
-        u.theme_preference = theme_preference
         u.created_at = MagicMock()
         u.created_at.isoformat.return_value = "2026-05-13T06:00:00+00:00"
         return u
@@ -85,7 +89,7 @@ def patch_client(monkeypatch):
     """Factory: patch `module`'s httpx.AsyncClient so `async with AsyncClient(...)
     as client` yields a mock whose `.post` is an AsyncMock returning `resp`.
     Returns that post mock. Shared by every outbound-HTTP email sender test
-    (auth magic link, contact, report notify/reporter) — each patches its own
+    (auth magic link, contact, report notify/reporter, claim resolution) — each patches the shared
     module's httpx binding, so the module is a required argument."""
     def _factory(module, resp):
         post = AsyncMock(return_value=resp)
@@ -109,7 +113,6 @@ def make_organizer():
         session_token_version: int = 1,
         verified: bool = False,
         name: str | None = None,
-        theme_preference: str | None = None,
     ) -> MagicMock:
         o = MagicMock()
         o.id = organizer_id
@@ -118,109 +121,125 @@ def make_organizer():
         o.session_token_version = session_token_version
         o.verified = verified
         o.name = name
-        o.theme_preference = theme_preference
         o.created_at = MagicMock()
         o.created_at.isoformat.return_value = "2026-05-13T06:00:00+00:00"
         return o
     return _factory
 
 
+def build_event(
+    event_id: int = 10,
+    title: str = "Test Event",
+    starts_at: datetime | None = None,
+    venue_name: str | None = "Test Venue",
+    venue_address: str | None = "Test Street 1",
+    venue_id: int | None = None,
+    venue: MagicMock | None = None,
+    lat: float | None = TALLINN_CENTER_LAT,
+    lng: float | None = TALLINN_CENTER_LNG,
+    price_min: float | None = None,
+    status: str = "published",
+    description_orig: str = "A test event",
+    why_go: list[str] | None = None,
+    why_go_localized: dict | None = None,
+    image_url: str | None = None,
+    submitted_by_organizer_id: int | None = None,
+    **overrides: Any,
+) -> MagicMock:
+    """Plain-function form of the ``make_event`` fixture, importable by test
+    modules that build events outside a fixture. ``overrides`` are set as
+    attributes after construction."""
+    if starts_at is None:
+        starts_at = datetime(2026, 5, 15, 18, 0, 0, tzinfo=timezone.utc)
+    e = MagicMock()
+    e.id = event_id
+    e.slug = f"test-event-{event_id}"
+    e.title_orig = title
+    e.description_orig = description_orig
+    e.title_localized = None
+    e.description_localized = None
+    e.important_info_localized = None
+    e.important_info = None
+    e.starts_at = starts_at
+    e.ends_at = None
+    e.venue_name = venue_name
+    e.venue_address = venue_address
+    e.venue_id = venue_id
+    e.venue = venue
+    e.lat = lat
+    e.lng = lng
+    e.url = "https://example.com"
+    e.image_url = image_url
+    e.price_min = price_min
+    e.price_max = None
+    e.currency = DEFAULT_CURRENCY
+    e.price_hint = None
+    e.status = status
+    e.is_explicit = False
+    e.is_non_event = False
+    e.is_out_of_area = False
+    e.has_free_tier = False
+    e.dedup_group_id = None
+    e.submitted_by_organizer_id = submitted_by_organizer_id
+    e.created_at = MagicMock()
+    e.created_at.isoformat.return_value = "2026-05-13T06:00:00+00:00"
+
+    if why_go is not None or why_go_localized is not None:
+        cl = MagicMock()
+        cl.categories = ["music"]
+        cl.vibes = ["underground"]
+        cl.quality_score = 0.8
+        cl.why_go_bullets = why_go or []
+        cl.why_go_localized = why_go_localized
+        cl.language_detected = DEFAULT_USER_LOCALE
+        e.classification = cl
+    else:
+        cl = MagicMock()
+        cl.categories = ["music"]
+        cl.vibes = ["underground"]
+        cl.quality_score = 0.8
+        cl.why_go_bullets = ["Great DJs", "Intimate venue", "All night long"]
+        cl.why_go_localized = None
+        cl.language_detected = DEFAULT_USER_LOCALE
+        e.classification = cl
+    for key, value in overrides.items():
+        setattr(e, key, value)
+    return e
+
+
 @pytest.fixture
 def make_event():
-    def _factory(
-        event_id: int = 10,
-        title: str = "Test Event",
-        starts_at: datetime | None = None,
-        venue_name: str | None = "Test Venue",
-        venue_address: str | None = "Test Street 1",
-        venue_id: int | None = None,
-        venue: MagicMock | None = None,
-        lat: float | None = TALLINN_CENTER_LAT,
-        lng: float | None = TALLINN_CENTER_LNG,
-        price_min: float | None = None,
-        status: str = "published",
-        description_orig: str = "A test event",
-        why_go: list[str] | None = None,
-        why_go_localized: dict | None = None,
-        image_url: str | None = None,
-    ) -> MagicMock:
-        if starts_at is None:
-            starts_at = datetime(2026, 5, 15, 18, 0, 0, tzinfo=timezone.utc)
-        e = MagicMock()
-        e.id = event_id
-        e.slug = f"test-event-{event_id}"
-        e.title_orig = title
-        e.description_orig = description_orig
-        e.title_localized = None
-        e.description_localized = None
-        e.important_info_localized = None
-        e.important_info = None
-        e.starts_at = starts_at
-        e.ends_at = None
-        e.venue_name = venue_name
-        e.venue_address = venue_address
-        e.venue_id = venue_id
-        e.venue = venue
-        e.lat = lat
-        e.lng = lng
-        e.url = "https://example.com"
-        e.image_url = image_url
-        e.price_min = price_min
-        e.price_max = None
-        e.currency = DEFAULT_CURRENCY
-        e.price_hint = None
-        e.status = status
-        e.is_explicit = False
-        e.is_non_event = False
-        e.is_out_of_area = False
-        e.has_free_tier = False
-        e.dedup_group_id = None
-        e.created_at = MagicMock()
-        e.created_at.isoformat.return_value = "2026-05-13T06:00:00+00:00"
+    return build_event
 
-        if why_go is not None or why_go_localized is not None:
-            cl = MagicMock()
-            cl.categories = ["music"]
-            cl.vibes = ["underground"]
-            cl.quality_score = 0.8
-            cl.why_go_bullets = why_go or []
-            cl.why_go_localized = why_go_localized
-            cl.language_detected = DEFAULT_USER_LOCALE
-            e.classification = cl
-        else:
-            cl = MagicMock()
-            cl.categories = ["music"]
-            cl.vibes = ["underground"]
-            cl.quality_score = 0.8
-            cl.why_go_bullets = ["Great DJs", "Intimate venue", "All night long"]
-            cl.why_go_localized = None
-            cl.language_detected = DEFAULT_USER_LOCALE
-            e.classification = cl
-        return e
-    return _factory
+
+def build_venue(
+    venue_id: int = 1,
+    name: str = "Saved Venue",
+    name_en: str | None = None,
+    name_ru: str | None = None,
+    address: str | None = "Saved Street 1",
+    lat: float | None = TALLINN_CENTER_LAT,
+    lng: float | None = TALLINN_CENTER_LNG,
+    **overrides: Any,
+) -> MagicMock:
+    """Plain-function form of the ``make_venue`` fixture. ``overrides`` are set
+    as attributes after construction."""
+    v = MagicMock()
+    v.id = venue_id
+    v.name = name
+    v.name_en = name_en
+    v.name_ru = name_ru
+    v.address = address
+    v.lat = lat
+    v.lng = lng
+    for key, value in overrides.items():
+        setattr(v, key, value)
+    return v
 
 
 @pytest.fixture
 def make_venue():
-    def _factory(
-        venue_id: int = 1,
-        name: str = "Saved Venue",
-        name_en: str | None = None,
-        name_ru: str | None = None,
-        address: str | None = "Saved Street 1",
-        lat: float | None = TALLINN_CENTER_LAT,
-        lng: float | None = TALLINN_CENTER_LNG,
-    ) -> MagicMock:
-        v = MagicMock()
-        v.id = venue_id
-        v.name = name
-        v.name_en = name_en
-        v.name_ru = name_ru
-        v.address = address
-        v.lat = lat
-        v.lng = lng
-        return v
-    return _factory
+    return build_venue
 
 
 @pytest.fixture

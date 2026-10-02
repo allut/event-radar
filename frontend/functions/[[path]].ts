@@ -1,7 +1,6 @@
 /**
- * SPA-fallback catch-all (issue #345) — Cloudflare Pages Function
- * reproducing vercel.json's `/((?!api/|assets/|_vercel/).*)` → app-shell.html
- * rewrite now that Vercel is being decommissioned (issue #341).
+ * SPA-fallback catch-all (issue #345) — a Cloudflare Pages Function that
+ * serves `app-shell.html` for any route with no matching file in `dist/`.
  *
  * Cloudflare Pages is *documented* to serve a matching static asset before
  * invoking any Function, which would make this only ever run for a path
@@ -21,7 +20,7 @@
  * Cloudflare also prefers a more specific Function route over this
  * root-level catch-all, so `/api/*` requests are claimed by
  * `functions/api/[[path]].ts` (or its exact-path siblings) before they ever
- * reach here — no negative-lookahead exclusion needed, unlike vercel.json.
+ * reach here — no negative-lookahead exclusion needed.
  *
  * Deliberately serves `app-shell.html`, not `index.html`, once a route is
  * confirmed to have no real asset: the build copies the pristine,

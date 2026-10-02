@@ -17,19 +17,19 @@ from datetime import date, datetime, timedelta
 from functools import cached_property
 from heapq import nlargest
 
-from sqlalchemy import select
+from sqlalchemy import or_, select, true
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import load_only, selectinload
 
 from app.constants import (
+    FEEDBACK_HISTORY_LOOKBACK_DAYS,
     DAILY5_SERIES_COOLDOWN_DAYS,
     DAILY_5_BACKFILL_MAX_PER_CATEGORY,
     DAILY_5_BACKFILL_TRUNCATION_MULTIPLIER,
     DAILY_5_COUNT,
     DAILY_5_LOOKAHEAD_DAYS,
     DAILY_5_MAX_PER_CATEGORY,
-    EVENT_STATUS_PUBLISHED,
     FEED_BUILD_USER_BATCH_SIZE,
     FEEDBACK_DECAY_BASE,
     FEEDBACK_INDIRECT_WEIGHT,
@@ -71,18 +71,19 @@ from app.models.models import (
     EventClassification,
     User,
     UserEventFeedback,
-    UserEventScore,
     UserPersona,
 )
 from app.routers.utils import (
-    canonical_event_filter,
     collapse_series_duplicates,
+    persona_weight_tuple,
+    select_events_with_classification,
+)
+from app.events.venue import resolve_venue_coords, resolve_venue_name
+from app.events.queries import (
+    canonical_event_filter,
+    public_event_filter,
     event_not_ended_filter,
     event_series_key,
-    persona_weight_tuple,
-    resolve_venue_coords,
-    resolve_venue_name,
-    select_events_with_classification,
 )
 
 # ---------------------------------------------------------------------------
@@ -299,22 +300,46 @@ def _affinity_for_vector(
     return (normalized + 1.0) / 2.0
 
 
+# (id(persona vector), categories, vibes, time_slots) -> _affinity_for_vector().
+# A vector's affinity depends only on the vector and the event's tags, and the
+# daily-feed build scores every user against every event with only a handful of
+# distinct persona vectors — so one build-scoped dict collapses the
+# U x E x P x |vec| work to (distinct vectors x distinct tag-sets) (Big-O
+# audit H4). Keyed on id(): the vectors are held alive by the build context.
+AffinityCache = dict[tuple[int, tuple[str, ...], tuple[str, ...], tuple[str, ...]], float]
+
+
 def persona_affinity(
     user_persona_weights: list[tuple[float, dict]],
     categories: list[str],
     vibes: list[str],
     time_slots: Sequence[str] = (),
+    cache: AffinityCache | None = None,
 ) -> float:
-    """Weighted blend of persona affinities → [0, 1]. Returns NEUTRAL_SCORE with no personas."""
+    """Weighted blend of persona affinities → [0, 1]. Returns NEUTRAL_SCORE with no personas.
+
+    ``cache`` is an optional build-scoped memo of per-vector affinities (see
+    ``AffinityCache``); omit it for one-off calls."""
     if not user_persona_weights:
         return NEUTRAL_SCORE
     total_weight = sum(w for w, _ in user_persona_weights)
     if total_weight == 0:
         return NEUTRAL_SCORE
-    weighted = sum(
-        w * _affinity_for_vector(vec, categories, vibes, time_slots)
-        for w, vec in user_persona_weights
-    )
+    if cache is None:
+        weighted = sum(
+            w * _affinity_for_vector(vec, categories, vibes, time_slots)
+            for w, vec in user_persona_weights
+        )
+        return weighted / total_weight
+    tags = (tuple(categories), tuple(vibes), tuple(time_slots))
+    weighted = 0.0
+    for w, vec in user_persona_weights:
+        key = (id(vec), *tags)
+        affinity = cache.get(key)
+        if affinity is None:
+            affinity = _affinity_for_vector(vec, categories, vibes, time_slots)
+            cache[key] = affinity
+        weighted += w * affinity
     return weighted / total_weight
 
 
@@ -447,6 +472,7 @@ def score_event(
     event: Event,
     now: datetime,
     precomputed: _EventFactors | None = None,
+    affinity_cache: AffinityCache | None = None,
 ) -> float | None:
     """
     Compute personalized score for one event. Returns None if hard-excluded.
@@ -476,7 +502,9 @@ def score_event(
         )
         lat, lng = resolve_venue_coords(event)
         locality = locality_bonus(lat, lng)
-    affinity = persona_affinity(user_persona_weights, categories, vibes, time_slots)
+    affinity = persona_affinity(
+        user_persona_weights, categories, vibes, time_slots, cache=affinity_cache
+    )
     fb_normalized = (fb + 1.0) / 2.0  # map [-1, 1] → [0, 1]
 
     return (
@@ -668,7 +696,9 @@ class _FeedBuildContext:
     personas_by_user: dict[int, list[tuple[float, dict]]]
     fb_by_user: dict[int, list[UserEventFeedback]]
     recent_series_by_user: dict[int, set[tuple[str, str]]]
-    score_cache: dict[tuple[int, int], float]
+    # Shared across the users of this page (one context per page) — see
+    # AffinityCache; must not outlive the context that holds the vectors.
+    affinity_cache: AffinityCache = field(default_factory=dict)
 
     @property
     def event_rows(self) -> list[Event]:
@@ -742,6 +772,23 @@ async def _load_recent_series_by_user(
     return recent_series_by_user
 
 
+# Event columns the Daily 5 build reads off a candidate row: scoring
+# (starts_at, dedup_group_id, venue-resolved lat/lng), series collapse
+# (title_orig, venue_name/venue_id), and the pick (id). Adding a read of
+# another column downstream needs it listed here — a deferred column
+# raises MissingGreenlet on async access.
+_CANDIDATE_EVENT_COLUMNS = (
+    Event.id,
+    Event.starts_at,
+    Event.title_orig,
+    Event.venue_name,
+    Event.venue_id,
+    Event.lat,
+    Event.lng,
+    Event.dedup_group_id,
+)
+
+
 async def _load_candidate_events(
     db: AsyncSession, now: datetime
 ) -> tuple[list[Event], dict[int, tuple[str, str]], dict[int, _EventFactors]]:
@@ -755,10 +802,10 @@ async def _load_candidate_events(
     event_rows = list(
         (
             await db.scalars(
-                select_events_with_classification().where(
-                    Event.status == EVENT_STATUS_PUBLISHED,
-                    Event.is_explicit.is_(False),
-                    Event.is_non_event.is_(False),
+                select_events_with_classification()
+                .options(load_only(*_CANDIDATE_EVENT_COLUMNS))
+                .where(
+                    public_event_filter(),
                     event_not_ended_filter(now),
                     Event.starts_at <= cutoff,
                     canonical_event_filter(),
@@ -780,7 +827,7 @@ async def _verified_user_ids(db: AsyncSession) -> list[int]:
     able to log into — no feed or digest is reachable for it, so skipping it here
     wastes no legitimate value and closes the unverified-signup digest-spam gap."""
     return list(
-        (await db.scalars(select(User.id).where(User.email_verified.is_(True)))).all()
+        (await db.scalars(select(User.id).where(User.email_verified == true()))).all()
     )
 
 
@@ -811,7 +858,6 @@ async def _load_feed_build_context(
             event_factors=event_factors,
         )
     event_rows = shared.event_rows
-    candidate_event_ids = [e.id for e in event_rows]
 
     users_query = select(User)
     if only_user_ids is not None:
@@ -841,6 +887,16 @@ async def _load_feed_build_context(
             .where(
                 UserEventFeedback.user_id.in_(user_ids),
                 UserEventFeedback.signal.in_((SIGNAL_LIKE, SIGNAL_DISLIKE)),
+                # Likes older than the lookback are numerically negligible
+                # (0.9^days decay) — same bound as browse.py's
+                # _load_feedback_context. Dislikes are kept regardless: a
+                # dislike is a hard exclude, not a decayed weight (Big-O
+                # audit M2).
+                or_(
+                    UserEventFeedback.created_at
+                    >= now - timedelta(days=FEEDBACK_HISTORY_LOOKBACK_DAYS),
+                    UserEventFeedback.signal == SIGNAL_DISLIKE,
+                ),
             )
             .options(
                 selectinload(UserEventFeedback.event).selectinload(
@@ -854,35 +910,12 @@ async def _load_feed_build_context(
 
     recent_series_by_user = await _load_recent_series_by_user(db, user_ids, today)
 
-    # Cached scores: the feedback router DELETEs the (user, event) row on
-    # signal change, so an existing row reflects the most recent signal.
-    # Chunked on event_id — user_ids is already bounded (≤500), but the 14-day
-    # candidate pool has no such ceiling, and SQLAlchemy expands each `IN` to
-    # one bind parameter per element. Past ~32k candidates this would hit
-    # Postgres's per-statement parameter limit, the same one
-    # SCORE_INSERT_CHUNK_SIZE exists to respect on the write side.
-    score_cache: dict[tuple[int, int], float] = {}
-    event_ids = list(candidate_event_ids)
-    for i in range(0, len(event_ids), SCORE_INSERT_CHUNK_SIZE):
-        chunk = event_ids[i : i + SCORE_INSERT_CHUNK_SIZE]
-        ues_rows = (
-            await db.scalars(
-                select(UserEventScore).where(
-                    UserEventScore.user_id.in_(user_ids),
-                    UserEventScore.event_id.in_(chunk),
-                )
-            )
-        ).all()
-        for ues_row in ues_rows:
-            score_cache[(ues_row.user_id, ues_row.event_id)] = ues_row.score
-
     return _FeedBuildContext(
         shared=shared,
         users=users,
         personas_by_user=personas_by_user,
         fb_by_user=fb_by_user,
         recent_series_by_user=recent_series_by_user,
-        score_cache=score_cache,
     )
 
 
@@ -890,79 +923,41 @@ def _score_user_candidates(
     user: User,
     build_ctx: _FeedBuildContext,
     fb_ctx: FeedbackContext,
-    new_score_rows: list[dict],
     now: datetime,
-) -> tuple[list[tuple[float, Event]], list[tuple[float, Event]], int]:
+) -> tuple[list[tuple[float, Event]], list[tuple[float, Event]]]:
     """Score every candidate for one user, splitting series-cooled events into
-    the backfill-only pool. Appends freshly computed scores to new_score_rows.
-    Returns (scored, cooled_scored, scores_reused)."""
+    the backfill-only pool. Returns (scored, cooled_scored)."""
     user_persona_weights = build_ctx.personas_by_user.get(user.id, [])
     recent_series = build_ctx.recent_series_by_user.get(user.id, set())
-    scores_reused = 0
-
-    def _score_or_reuse(event: Event) -> float | None:
-        """Cache lookup with a dislike re-check, else fresh score_event + cache write.
-        Returns None when hard-excluded (dedup-group dislike, or cached-and-disliked)."""
-        nonlocal scores_reused
-        cached = build_ctx.score_cache.get((user.id, event.id))
-        if cached is not None:
-            # Re-check dislike independently of cache freshness: covers both
-            # direct event dislikes and dedup_group dislikes so the cache path
-            # stays correct under any future invalidation tightening.
-            if event.id in fb_ctx.disliked_event_ids or (
-                event.dedup_group_id is not None
-                and event.dedup_group_id in fb_ctx.disliked_groups
-            ):
-                return None
-            scores_reused += 1
-            return cached
-
+    scored: list[tuple[float, Event]] = []
+    cooled_scored: list[tuple[float, Event]] = []
+    for event in build_ctx.event_rows:
+        # A dislike is a hard exclude (direct or via its dedup group) — not
+        # just the -1 feedback term score_event would fold in for an
+        # ungrouped event.
+        if event.id in fb_ctx.disliked_event_ids or (
+            event.dedup_group_id is not None
+            and event.dedup_group_id in fb_ctx.disliked_groups
+        ):
+            continue
         s = score_event(
             user_persona_weights,
             fb_ctx,
             event,
             now,
             precomputed=build_ctx.event_factors.get(event.id),
+            affinity_cache=build_ctx.affinity_cache,
         )
-        if s is None:
-            return None
-        new_score_rows.append(
-            {"user_id": user.id, "event_id": event.id, "score": s, "computed_at": now}
-        )
-        return s
-
-    scored: list[tuple[float, Event]] = []
-    cooled_scored: list[tuple[float, Event]] = []
-    for event in build_ctx.event_rows:
-        s = _score_or_reuse(event)
         if s is None:
             continue
         # Series cooldown: a candidate whose recurring series this user was
         # already shown within the window goes to the backfill-only pool —
-        # still scored and cached, only consumed if the fresh pool can't reach n.
+        # still scored, only consumed if the fresh pool can't reach n.
         if build_ctx.candidate_series_key[event.id] in recent_series:
             cooled_scored.append((s, event))
         else:
             scored.append((s, event))
-    return scored, cooled_scored, scores_reused
-
-
-async def _persist_new_scores(db: AsyncSession, new_score_rows: list[dict]) -> None:
-    """Bulk upsert newly computed (user_id, event_id) scores.
-
-    Chunked at SCORE_INSERT_CHUNK_SIZE rows/statement — new_score_rows
-    accumulates one row per (user x cache-missing candidate event) across the
-    whole build_daily_feeds run, and a single unchunked statement can exceed
-    the Postgres wire protocol's ~32767 bind-parameter cap (4 params/row) once
-    the score cache is mostly cold (see SCORE_INSERT_CHUNK_SIZE)."""
-    for i in range(0, len(new_score_rows), SCORE_INSERT_CHUNK_SIZE):
-        chunk = new_score_rows[i : i + SCORE_INSERT_CHUNK_SIZE]
-        stmt = pg_insert(UserEventScore).values(chunk)
-        stmt = stmt.on_conflict_do_update(
-            index_elements=["user_id", "event_id"],
-            set_={"score": stmt.excluded.score, "computed_at": stmt.excluded.computed_at},
-        )
-        await db.execute(stmt)
+    return scored, cooled_scored
 
 
 async def _persist_daily_feeds(db: AsyncSession, daily_feed_rows: list[dict]) -> None:
@@ -975,10 +970,8 @@ async def _persist_daily_feeds(db: AsyncSession, daily_feed_rows: list[dict]) ->
     raising a unique-violation on the `(user_id, feed_date)` constraint that
     would roll back the whole batch's single commit.
 
-    Chunked at SCORE_INSERT_CHUNK_SIZE rows/statement for the same
-    bind-parameter-limit reason as _persist_new_scores — this table has fewer
-    params/row (3 vs 4) so it survives longer, but the chunking is kept
-    uniform across both callers rather than only guarding the tighter one."""
+    Chunked at SCORE_INSERT_CHUNK_SIZE rows/statement so a large user page
+    can't exceed the Postgres wire protocol's ~32767 bind-parameter cap."""
     for i in range(0, len(daily_feed_rows), SCORE_INSERT_CHUNK_SIZE):
         chunk = daily_feed_rows[i : i + SCORE_INSERT_CHUNK_SIZE]
         stmt = pg_insert(DailyFeed).values(chunk)
@@ -995,18 +988,15 @@ async def _persist_daily_feeds(db: AsyncSession, daily_feed_rows: list[dict]) ->
 def _build_one_user_feed(
     user: User,
     build_ctx: _FeedBuildContext,
-    new_score_rows: list[dict],
     now: datetime,
-) -> tuple[list[int], int]:
+) -> list[int]:
     """Score and select one user's Daily 5 candidates.
 
-    Returns (event_ids, scores_reused). Persisting the resulting DailyFeed
+    Returns the chosen event ids. Persisting the resulting DailyFeed
     row is the caller's job (see `_persist_daily_feeds`) so callers can batch
     every user's row into a single upsert statement."""
     fb_ctx = FeedbackContext.from_orm_rows(list(build_ctx.fb_by_user.get(user.id, [])))
-    scored, cooled_scored, reused = _score_user_candidates(
-        user, build_ctx, fb_ctx, new_score_rows, now
-    )
+    scored, cooled_scored = _score_user_candidates(user, build_ctx, fb_ctx, now)
 
     top_events = _select_with_backfill(
         scored,
@@ -1015,7 +1005,7 @@ def _build_one_user_feed(
         max_per_category=DAILY_5_MAX_PER_CATEGORY,
         backfill_max_per_category=DAILY_5_BACKFILL_MAX_PER_CATEGORY,
     )
-    return [e.id for e in top_events], reused
+    return [e.id for e in top_events]
 
 
 async def build_daily_feeds(db: AsyncSession) -> dict:
@@ -1026,13 +1016,13 @@ async def build_daily_feeds(db: AsyncSession) -> dict:
     Pages the full user loop at FEED_BUILD_USER_BATCH_SIZE so memory is
     bounded by a batch size instead of total registered users — candidate
     events + series keys are loaded once (_SharedFeedContext) and reused
-    across every page; only personas/feedback/score-cache are reloaded
+    across every page; only personas/feedback are reloaded
     per page. Filtered to verified users only (see _verified_user_ids); no
     persona-based pre-filtering beyond that — a user with zero personas can
     still get a non-empty feed and is opted into the digest by default.
-    Caches per-(user, event) scores in `user_event_scores`. The feedback
-    router invalidates cache rows on signal change so reused scores reflect
-    the latest signal-state. Returns summary dict for logging.
+    Scores are recomputed every build (no per-(user, event) score cache —
+    the per-event factors are precomputed once and the affinity memo makes a
+    user x event pass cheap). Returns summary dict for logging.
     """
     now = datetime.now(TALLINN_TZ)
     today = now.date()
@@ -1044,8 +1034,6 @@ async def build_daily_feeds(db: AsyncSession) -> dict:
             "empty": 0,
             "total_users": 0,
             "candidate_events": 0,
-            "scores_written": 0,
-            "scores_reused": 0,
         }
 
     event_rows, candidate_series_key, event_factors = await _load_candidate_events(db, now)
@@ -1055,7 +1043,7 @@ async def build_daily_feeds(db: AsyncSession) -> dict:
         event_factors=event_factors,
     )
 
-    built = empty = scores_reused = scores_written = total_users = 0
+    built = empty = total_users = 0
 
     for i in range(0, len(user_ids), FEED_BUILD_USER_BATCH_SIZE):
         page_ids = user_ids[i : i + FEED_BUILD_USER_BATCH_SIZE]
@@ -1064,11 +1052,9 @@ async def build_daily_feeds(db: AsyncSession) -> dict:
         )
         if build_ctx is None:
             continue
-        new_score_rows: list[dict] = []
         daily_feed_rows: list[dict] = []
         for user in build_ctx.users:
-            event_ids, reused = _build_one_user_feed(user, build_ctx, new_score_rows, now)
-            scores_reused += reused
+            event_ids = _build_one_user_feed(user, build_ctx, now)
             daily_feed_rows.append(
                 {
                     "user_id": user.id,
@@ -1081,19 +1067,15 @@ async def build_daily_feeds(db: AsyncSession) -> dict:
                 built += 1
             else:
                 empty += 1
-        await _persist_new_scores(db, new_score_rows)
         await _persist_daily_feeds(db, daily_feed_rows)
         await db.commit()
         total_users += len(build_ctx.users)
-        scores_written += len(new_score_rows)
 
     return {
         "built": built,
         "empty": empty,
         "total_users": total_users,
         "candidate_events": len(event_rows),
-        "scores_written": scores_written,
-        "scores_reused": scores_reused,
     }
 
 
@@ -1102,7 +1084,7 @@ async def build_daily_feed_for_user(db: AsyncSession, user_id: int) -> dict:
 
     Called synchronously at onboarding completion so a new user sees a
     populated feed immediately instead of waiting for the 06:00 job. Reuses
-    the same candidate loading, scoring, series-cooldown, and score-caching
+    the same candidate loading, scoring, series-cooldown, and scoring
     logic as `build_daily_feeds` — no duplicated ranking logic. The upsert in
     `_persist_daily_feeds` means this can safely race the scheduled job for
     the same user without either write failing."""
@@ -1113,11 +1095,9 @@ async def build_daily_feed_for_user(db: AsyncSession, user_id: int) -> dict:
     if build_ctx is None:
         return {"built": 0, "empty": 0, "total_users": 0, "candidate_events": 0}
 
-    new_score_rows: list[dict] = []
     user = build_ctx.users[0]
-    event_ids, reused = _build_one_user_feed(user, build_ctx, new_score_rows, now)
+    event_ids = _build_one_user_feed(user, build_ctx, now)
 
-    await _persist_new_scores(db, new_score_rows)
     await _persist_daily_feeds(
         db, [{"user_id": user.id, "feed_date": today, "event_ids": event_ids, "built_at": now}]
     )
@@ -1127,6 +1107,4 @@ async def build_daily_feed_for_user(db: AsyncSession, user_id: int) -> dict:
         "empty": 0 if event_ids else 1,
         "total_users": 1,
         "candidate_events": len(build_ctx.event_rows),
-        "scores_written": len(new_score_rows),
-        "scores_reused": reused,
     }

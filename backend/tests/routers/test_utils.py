@@ -2,32 +2,74 @@
 import asyncio
 import json
 from datetime import datetime, timezone
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import HTTPException
 
 from app.constants import APP_ENV_DEVELOPMENT
 from app.routers.utils import (
+    apply_organizer_category,
+    bulk_resolve_publisher_events,
     collapse_series_duplicates,
     compute_preferred_taxonomy,
-    event_ended_filter,
-    event_not_ended_filter,
-    event_series_key,
     load_user_reported_events,
-    mask_email,
-    normalized_title,
     recent_unused_link_exists,
-    require_configured_secret,
     resolve_locale_param,
     resolve_open_reports,
-    resolve_venue_address,
-    resolve_venue_coords,
-    resolve_venue_name,
     send_report_resolution_emails,
     serialize_event,
     stream_admin_job,
 )
+from app.events.venue import (
+    resolve_venue_address,
+    resolve_venue_coords,
+    resolve_venue_name,
+)
+from app.events.queries import (
+    event_ended_filter,
+    event_not_ended_filter,
+    event_series_key,
+    normalized_title,
+)
+from app.auth.utils import mask_email, require_configured_secret
+
+
+class TestApplyOrganizerCategory:
+    """Shared by organizer_events.py (own-submission edits) and
+    organizer_claim_edits.py (#416's prepend-only claim-edit categories)."""
+
+    @pytest.mark.asyncio
+    async def test_creates_classification_when_none_exists(self, mock_db):
+        mock_db.scalar.return_value = None
+        mock_db.add = MagicMock()
+
+        await apply_organizer_category(mock_db, 10, "music")
+
+        mock_db.add.assert_called_once()
+        added = mock_db.add.call_args[0][0]
+        assert added.event_id == 10
+        assert added.categories == ["music"]
+
+    @pytest.mark.asyncio
+    async def test_prepends_to_existing_categories(self, mock_db):
+        classification = MagicMock()
+        classification.categories = ["theater"]
+        mock_db.scalar.return_value = classification
+
+        await apply_organizer_category(mock_db, 10, "music")
+
+        assert classification.categories == ["music", "theater"]
+
+    @pytest.mark.asyncio
+    async def test_no_duplicate_when_already_present(self, mock_db):
+        classification = MagicMock()
+        classification.categories = ["music", "theater"]
+        mock_db.scalar.return_value = classification
+
+        await apply_organizer_category(mock_db, 10, "music")
+
+        assert classification.categories == ["music", "theater"]
 
 
 class TestRequireConfiguredSecret:
@@ -225,6 +267,46 @@ class TestLoadUserReportedEvents:
 
         result = await load_user_reported_events(mock_db, user_id=1, event_ids=[10, 20])
         assert result == {10}
+
+
+class TestBulkResolvePublisherEvents:
+    """Shared by admin.py::admin_list_claims and
+    app.claims.lifecycle._send_claim_expiry_emails (#421) — two fixed
+    queries regardless of how many publisher_ids are passed, freshest
+    EventSource (highest id) wins per publisher."""
+
+    @pytest.mark.asyncio
+    async def test_empty_input_short_circuits_with_no_queries(self, mock_db):
+        result = await bulk_resolve_publisher_events(mock_db, set())
+
+        assert result == {}
+        mock_db.scalars.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_freshest_event_source_wins_per_publisher(self, mock_db, make_event):
+        event = make_event(event_id=2)
+        # DISTINCT ON (publisher_id) ORDER BY id DESC — one (publisher_id,
+        # event_id) row per publisher, the freshest listing's.
+        mock_db.execute = AsyncMock(
+            return_value=MagicMock(all=MagicMock(return_value=[(99, 2)]))
+        )
+        mock_db.scalars = AsyncMock(
+            side_effect=[MagicMock(all=MagicMock(return_value=[event]))]
+        )
+
+        result = await bulk_resolve_publisher_events(mock_db, {99})
+
+        assert result == {99: event}
+
+    @pytest.mark.asyncio
+    async def test_no_matching_event_sources_returns_empty(self, mock_db):
+        mock_db.execute = AsyncMock(
+            return_value=MagicMock(all=MagicMock(return_value=[]))
+        )
+
+        result = await bulk_resolve_publisher_events(mock_db, {99})
+
+        assert result == {}
 
 
 class TestResolveOpenReports:
@@ -551,3 +633,139 @@ class TestRecentUnusedLinkExists:
         compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
         where_clause = compiled.split("WHERE", 1)[1]
         assert "pending_google_sub" not in where_clause
+
+
+class TestOrganizerSharedHelpers:
+    def test_validate_time_ordering(self):
+        from app.routers.utils import validate_time_ordering
+
+        early = datetime(2026, 6, 1, 18, tzinfo=timezone.utc)
+        late = datetime(2026, 6, 1, 20, tzinfo=timezone.utc)
+        validate_time_ordering(early, late)
+        validate_time_ordering(early, None)
+        validate_time_ordering(None, early)
+        with pytest.raises(ValueError, match="ends_at must not be before starts_at"):
+            validate_time_ordering(late, early)
+
+    def test_localized_dict_drops_blank_and_absent_locales(self):
+        from app.routers.utils import localized_dict
+
+        assert localized_dict("et", "en", None) == {"et": "et", "en": "en"}
+        assert localized_dict("et", "  ", "") == {"et": "et"}
+        assert localized_dict(None, None, None) is None
+
+    def test_merged_localized_keeps_existing_and_overrides_set_fields(self):
+        from types import SimpleNamespace
+
+        from app.routers.utils import merged_localized
+
+        body = SimpleNamespace(title_en="New EN", title_ru=None)
+        existing = {"et": "old", "en": "Old EN", "ru": "Old RU"}
+
+        # only en is in fields_set: ru keeps its existing value
+        assert merged_localized(existing, "Uus", body, {"title_en"}, "title") == {
+            "et": "Uus",
+            "en": "New EN",
+            "ru": "Old RU",
+        }
+        # ru explicitly cleared (None in fields_set) drops the locale
+        assert merged_localized(existing, "Uus", body, {"title_ru"}, "title") == {
+            "et": "Uus",
+            "en": "Old EN",
+        }
+
+    def test_merged_localized_applies_sanitizer_to_request_values_only(self):
+        from types import SimpleNamespace
+
+        from app.routers.utils import merged_localized
+
+        body = SimpleNamespace(description_en="<b>x</b>", description_ru=None)
+        result = merged_localized(
+            {"ru": "<i>kept</i>"},
+            "et",
+            body,
+            {"description_en"},
+            "description",
+            sanitize=str.upper,
+        )
+        assert result == {"et": "et", "en": "<B>X</B>", "ru": "<i>kept</i>"}
+
+    def test_apply_price_edit_fills_default_currency_for_price_only_patch(self, make_event):
+        from types import SimpleNamespace
+
+        from app.constants import DEFAULT_CURRENCY
+        from app.routers.utils import apply_price_edit
+
+        event = make_event(price_min=None)
+        event.price_max = None
+        event.currency = None
+        body = SimpleNamespace(price_min=5.0, price_max=None, currency=None)
+
+        apply_price_edit(event, body, {"price_min"})
+
+        assert event.price_min == 5.0
+        assert event.currency == DEFAULT_CURRENCY
+
+    def test_apply_price_edit_zero_price_still_counts_as_priced(self, make_event):
+        """Numeric-truthiness rule: a free (0) price is a price."""
+        from types import SimpleNamespace
+
+        from app.constants import DEFAULT_CURRENCY
+        from app.routers.utils import apply_price_edit
+
+        event = make_event(price_min=None)
+        event.price_max = None
+        event.currency = None
+        body = SimpleNamespace(price_min=0.0, price_max=None, currency=None)
+
+        apply_price_edit(event, body, {"price_min"})
+
+        assert event.currency == DEFAULT_CURRENCY
+
+    def test_apply_moderation_flags_sets_flags_and_reports_change(self, make_event):
+        from app.routers.utils import apply_moderation_flags
+
+        event = make_event(title="Nice concert")
+        event.is_explicit = False
+        event.is_non_event = False
+        with patch("app.routers.utils.is_explicit_text", return_value=True), patch(
+            "app.routers.utils.is_non_event_text", return_value=False
+        ):
+            assert apply_moderation_flags(event, "Hall", "extra") is True
+
+        assert event.is_explicit is True
+        assert event.is_non_event is False
+
+    def test_apply_moderation_flags_clean_event_returns_false(self, make_event):
+        from app.routers.utils import apply_moderation_flags
+
+        event = make_event(title="Nice concert")
+        event.is_explicit = False
+        event.is_non_event = False
+        assert apply_moderation_flags(event, "Hall") is False
+        assert event.is_explicit is False
+
+
+class TestPageCursor:
+    def test_round_trip(self):
+        from app.routers.utils import decode_page_cursor, encode_page_cursor
+
+        ts = datetime(2026, 5, 1, 12, 30, tzinfo=timezone.utc)
+        assert decode_page_cursor(encode_page_cursor(ts, 42)) == (ts, 42)
+
+    @pytest.mark.parametrize(
+        "bad",
+        [
+            "not-base64!!",
+            "e30",  # {}
+            "WzEsMl0",  # [1, 2] — ts not a string
+            "WyIyMDI2LTA1LTAxVDEyOjAwOjAwIiwgMV0",  # naive ts
+            "WyIyMDI2LTA1LTAxVDEyOjAwOjAwKzAwOjAwIiwgdHJ1ZV0",  # bool id
+        ],
+    )
+    def test_malformed_cursor_raises_422(self, bad):
+        from app.routers.utils import decode_page_cursor
+
+        with pytest.raises(HTTPException) as exc_info:
+            decode_page_cursor(bad)
+        assert exc_info.value.status_code == 422

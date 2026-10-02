@@ -18,9 +18,8 @@ def build_magic_link_html(
     verify_url: str,
     ttl_minutes: int,
     locale: str,
-    theme_preference: str | None = None,
 ) -> str:
-    s = get_email_styles(theme_preference)
+    s = get_email_styles()
     safe_verify_url = html_lib.escape(verify_url, quote=True)
 
     header_html = MAGIC_LINK_HEADER.format(
@@ -41,6 +40,7 @@ def build_magic_link_html(
 
     return EMAIL_DOCUMENT.format(
         css=s.css,
+        color_scheme=s.color_scheme,
         s_page=s.s_page,
         s_container=s.s_container,
         s_header_pad=s.s_header_pad,

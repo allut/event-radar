@@ -1,5 +1,6 @@
 // .js extension required: this module is also imported (transitively) by
-// api/prerender-cadence.ts, which Vercel runs as unbundled Node ESM.
+// functions/api/prerender-cadence.ts, which Cloudflare Pages runs as
+// unbundled ESM.
 import {
   CHAIN_MARKER_PREFIX,
   CHAIN_MAX_ROUNDS,
@@ -10,10 +11,11 @@ import {
 
 /** Round-state carrier for the time-boxed incremental prerender pipeline
  * (issue #79) — standalone pure functions only (no I/O), so the chaining
- * state machine is unit-testable without a real Playwright browser or Vercel
- * deploy. Wired into scripts/prerender.ts's `main()` (issue #83: reads
- * VERCEL_GIT_COMMIT_MESSAGE at build start, builds/commits the round marker
- * at the end); firing the Deploy Hook itself is a later ticket (issue #84).
+ * state machine is unit-testable without a real Playwright browser or
+ * Cloudflare Pages build. Wired into scripts/prerender.ts's `main()` (issue
+ * #83: reads the tip commit's message at build start, builds/commits the
+ * round marker at the end); firing the Deploy Hook itself is a later ticket
+ * (issue #84).
  * Mirrors this repo's existing
  * fetchPublishedEventIds/buildTargets/buildSitemapXml-style decomposition. */
 
@@ -38,7 +40,7 @@ export interface RoundMarker {
  * otherwise human-readable commit message — parseRoundMarker only needs to
  * find this line, not the whole message. JSON, not a hand-rolled format:
  * the field set is small and fixed, so JSON.stringify's overhead is
- * negligible against the 2048-byte VERCEL_GIT_COMMIT_MESSAGE cap even at
+ * negligible against the commit message's 2048-byte cap even at
  * thousands-of-routes progress counts. */
 export function serializeRoundMarker(marker: RoundMarker): string {
   const payload = {
@@ -65,9 +67,9 @@ function isIsoTimestamp(value: unknown): value is string {
   return typeof value === 'string' && !Number.isNaN(Date.parse(value));
 }
 
-/** Parses a marker back out of `commitMessage` (typically the raw
- * VERCEL_GIT_COMMIT_MESSAGE value, which may carry other human-readable text
- * around the marker line). Never throws — malformed JSON, a missing marker
+/** Parses a marker back out of `commitMessage` (the tip commit's raw message,
+ * which may carry other human-readable text around the marker line). Never
+ * throws — malformed JSON, a missing marker
  * line, or a structurally invalid payload (wrong types, negative counts, an
  * unrecognized status) all fall back to `null`, which callers treat as "no
  * active chain" (see isMarkerStale's staleness fallback and
@@ -165,8 +167,8 @@ export interface RoundStartDecision {
  * the same commit), a build that reads a fresh `continuing` marker at its
  * tip commit is exactly the legitimate continuation that marker was
  * committed for — there's no other build left in the picture to collide
- * with, and no way to tell them apart from VERCEL_GIT_COMMIT_MESSAGE alone
- * anyway. So this always resumes at `round + 1` via resolveRoundContext
+ * with, and no way to tell them apart from the commit message alone anyway.
+ * So this always resumes at `round + 1` via resolveRoundContext
  * rather than skipping (issue #90).
  *
  * A stale (>CHAIN_STALENESS_TIMEOUT_MINUTES) `continuing` marker is still
@@ -183,7 +185,7 @@ export function resolveRoundStart(commitMessage: string | null | undefined, now:
 }
 
 /** Determines which burst/round a build belongs to (issue #83), from the
- * marker (if any) parsed out of this build's VERCEL_GIT_COMMIT_MESSAGE.
+ * marker (if any) parsed out of this build's tip commit message.
  * Only a `continuing` marker resumes the same burst at `round + 1` — a
  * missing/unparseable marker (parseRoundMarker already returned `null`) or
  * one with `status: done` both start a fresh burst at round 1, per the
@@ -212,7 +214,7 @@ export function resolveRoundContext(
  * push is the chain's *only* continuation trigger (docs/backend-ops.md), so
  * it must fire exactly when there is a next round to trigger — i.e. only for
  * a `continuing` marker. A `done` marker has nothing left to resume; pushing
- * it anyway still triggers a new Vercel build (any push to the git-connected
+ * it anyway still triggers a new build (any push to the git-connected
  * production branch does), and that build starts a *fresh* burst at round 1
  * (`resolveRoundContext` treats `done` as "no active chain") rather than
  * stopping — home routes never classify as `unchanged` (see

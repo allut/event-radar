@@ -198,6 +198,18 @@ class TestTimeSlotsForEvent:
 
 
 class TestPersonaAffinity:
+    def test_cache_yields_identical_scores_and_is_reused(self):
+        # Big-O audit H4: the build-scoped memo must not change any score.
+        v1 = {"categories": {"music": 1.0, "theater": 0.5}, "vibes": {"chill": 0.5}}
+        v2 = {"categories": {"sports": 1.0}, "times": {"evening": 1.0}}
+        weights = [(0.7, v1), (0.3, v2)]
+        cache: dict = {}
+        for _ in range(2):
+            assert persona_affinity(
+                weights, ["music"], ["chill"], ["evening"], cache=cache
+            ) == persona_affinity(weights, ["music"], ["chill"], ["evening"])
+        assert len(cache) == 2  # one entry per (vector, tag-set), reused on repeat
+
     def test_no_personas_returns_half(self):
         assert persona_affinity([], ["music"], ["underground"]) == 0.5
 
@@ -478,6 +490,35 @@ class TestScoreEvent:
         assert score_match > score_miss
 
 
+class TestClaimStatusRankingNeutrality:
+    """Regression (#419): claim status must contribute nothing to the ranking
+    formula. Neither score_event nor anonymous_score_event reads claim/
+    organizer state at all, so two otherwise-identical events — one claimed,
+    one not — must score identically."""
+
+    def test_score_event_ignores_claim_status(self):
+        now = _now()
+        unclaimed = _event(event_id=1)
+        claimed = _event(event_id=2)
+        claimed.claim_status = "claimed"
+        claimed.listed_by = "Tallinn Jazz Club"
+        v = {"categories": {"music": 1.0}, "vibes": {"underground": 1.0}}
+        ctx = _ctx()
+
+        assert score_event([(1.0, v)], ctx, unclaimed, now) == score_event(
+            [(1.0, v)], ctx, claimed, now
+        )
+
+    def test_anonymous_score_event_ignores_claim_status(self):
+        now = _now()
+        unclaimed = _event(event_id=1)
+        claimed = _event(event_id=2)
+        claimed.claim_status = "claimed"
+        claimed.listed_by = "Tallinn Jazz Club"
+
+        assert anonymous_score_event(unclaimed, now) == anonymous_score_event(claimed, now)
+
+
 class TestAnonymousScoreEvent:
     """Locked formula for anonymous /explore callers (#234): 0.45*NEUTRAL_SCORE
     + 0.25*recency + 0.125*quality + 0.0625*locality — feedback_signal dropped
@@ -676,6 +717,25 @@ class TestSelectWithBackfill:
         assert all("music" in e.classification.categories for e in picked)
 
 
+class TestLoadCandidateEventsColumns:
+    async def test_candidate_query_loads_only_audited_columns(self, mock_db):
+        from app.ranking.score import _load_candidate_events
+
+        mock_db.scalars.return_value = _scalar_result([])
+
+        await _load_candidate_events(mock_db, _now())
+
+        stmt = mock_db.scalars.call_args_list[0].args[0]
+        compiled = str(stmt.compile())
+        select_clause = compiled.split("FROM")[0]
+        for col in ("id", "starts_at", "title_orig", "venue_name", "venue_id",
+                    "lat", "lng", "dedup_group_id"):
+            assert f"events.{col}" in select_clause
+        # heavy text columns must stay deferred
+        assert "events.description" not in select_clause
+        assert "events.title_localized" not in select_clause
+
+
 class TestBuildDailyFeedsExplicitFilter:
     async def test_event_query_excludes_explicit_events(self, mock_db):
         from app.ranking.score import build_daily_feeds
@@ -789,7 +849,6 @@ class TestBuildDailyFeedsSeriesCooldown:
             _scalar_result([]),                # feedback
             _scalar_result([df]),              # cooldown-window feeds
             _scalar_result([ev150]),           # shown events resolved
-            _scalar_result([]),                # cached scores
         ]
 
         await build_daily_feeds(mock_db)
@@ -813,7 +872,6 @@ class TestBuildDailyFeedsSeriesCooldown:
             _scalar_result([]),        # personas
             _scalar_result([]),        # feedback
             _scalar_result([]),        # cooldown-window feeds (empty → no shown-events query)
-            _scalar_result([]),        # cached scores
         ]
 
         await build_daily_feeds(mock_db)
@@ -848,7 +906,6 @@ class TestBuildDailyFeedsSeriesCooldown:
             _scalar_result([]),                      # feedback
             _scalar_result([df]),                    # cooldown-window feeds (user 2)
             _scalar_result([ev150]),                 # shown events resolved
-            _scalar_result([]),                      # cached scores
         ]
 
         await build_daily_feeds(mock_db)
@@ -874,7 +931,6 @@ class TestBuildDailyFeedsSeriesCooldown:
             _scalar_result([]),        # personas
             _scalar_result([]),        # feedback
             _scalar_result([]),        # cooldown-window feeds
-            _scalar_result([]),        # cached scores
         ]
 
         await build_daily_feeds(mock_db)
@@ -908,7 +964,6 @@ class TestBuildDailyFeedsSeriesCooldown:
             _scalar_result([]),                          # feedback
             _scalar_result([df]),                        # cooldown-window feeds
             _scalar_result([ev150]),                      # shown events resolved
-            _scalar_result([]),                          # cached scores
         ]
 
         await build_daily_feeds(mock_db)
@@ -919,8 +974,8 @@ class TestBuildDailyFeedsSeriesCooldown:
 
     async def test_disliked_cooled_event_not_backfilled(self, mock_db):
         # Same shortfall as above, but the cooled candidate is directly
-        # disliked and was previously cached — the cache+dislike guard must
-        # exclude it from the backfill pool entirely (no fabrication).
+        # disliked — scoring must exclude it from the backfill pool entirely
+        # (no fabrication).
         from app.ranking.score import build_daily_feeds
 
         ev1 = _feed_event(1, "Concert", "Hall", ["music"])
@@ -931,11 +986,6 @@ class TestBuildDailyFeedsSeriesCooldown:
         df = MagicMock()
         df.user_id = 1
         df.event_ids = [150]
-
-        cached_row = MagicMock()
-        cached_row.user_id = 1
-        cached_row.event_id = 5
-        cached_row.score = 0.9
 
         mock_db.scalars.side_effect = [
             _scalar_result([1]),                     # user ids (all registered)
@@ -945,48 +995,12 @@ class TestBuildDailyFeedsSeriesCooldown:
             _scalar_result([_dislike_row(5)]),         # feedback: direct dislike of ev5
             _scalar_result([df]),                     # cooldown-window feeds
             _scalar_result([ev150]),                   # shown events resolved
-            _scalar_result([cached_row]),              # cached scores (ev5 cached)
         ]
-
         await build_daily_feeds(mock_db)
 
         upsert_stmt = mock_db.execute.call_args.args[0]
         compiled = str(upsert_stmt.compile(compile_kwargs={"literal_binds": True}))
         assert "ARRAY[1, 2, 3]" in compiled  # ev5 excluded, feed stays short — no fabrication
-
-    async def test_backfilled_cooled_event_persisted_to_score_cache(self, mock_db):
-        # The cooled event that gets backfilled in must still be written to
-        # user_event_scores like any other freshly-scored candidate.
-        from app.ranking.score import build_daily_feeds
-
-        ev1 = _feed_event(1, "Concert", "Hall", ["music"])
-        ev2 = _feed_event(2, "Play", "Theater", ["theater"])
-        ev3 = _feed_event(3, "Film", "Cinema", ["cinema"])
-        ev4 = _feed_event(4, "Match", "Stadium", ["sports"])
-        ev5 = _feed_event(5, "Workshop", "Studio", ["workshops"])
-        ev150 = _feed_event(150, "Workshop", "Studio", ["workshops"])
-        df = MagicMock()
-        df.user_id = 1
-        df.event_ids = [150]
-
-        mock_db.scalars.side_effect = [
-            _scalar_result([1]),
-            _scalar_result([ev1, ev2, ev3, ev4, ev5]),
-            _scalar_result([_user(1)]),
-            _scalar_result([]),
-            _scalar_result([]),
-            _scalar_result([df]),
-            _scalar_result([ev150]),
-            _scalar_result([]),
-        ]
-
-        await build_daily_feeds(mock_db)
-
-        # The score upsert executes before the daily-feed upsert — first call.
-        execute_stmt = mock_db.execute.call_args_list[0].args[0]
-        compiled = str(execute_stmt.compile(compile_kwargs={"literal_binds": True}))
-        assert "user_event_scores" in compiled
-        assert "(1, 5," in compiled  # backfilled cooled event (user_id=1, event_id=5) was upserted
 
 
 class TestCollapseSeriesDuplicates:
@@ -1059,7 +1073,6 @@ class TestBuildDailyFeedsSeriesDuplicateCollapse:
             _scalar_result([]),                  # personas
             _scalar_result([]),                  # feedback
             _scalar_result([]),                  # cooldown-window feeds
-            _scalar_result([]),                  # cached scores
         ]
 
         result = await build_daily_feeds(mock_db)
@@ -1089,7 +1102,6 @@ class TestBuildDailyFeedForUser:
             _scalar_result([]),  # personas
             _scalar_result([]),  # feedback
             _scalar_result([]),  # cooldown-window feeds
-            _scalar_result([]),  # cached scores
         ]
 
         result = await build_daily_feed_for_user(mock_db, 7)
@@ -1142,9 +1154,9 @@ class TestBuildDailyFeedsBatching:
         ev2 = _feed_event(2, "Play", "Theater", ["theater"])
 
         # 5 registered users, batch size 2 → pages of [1,2], [3,4], [5].
-        # Each page: users, personas, feedback, cooldown-window feeds, cached
-        # scores (5 scalars calls/page, no shown-events query — cooldown
-        # windows are empty). all-user-ids + candidate-events precede all pages.
+        # Each page: users, personas, feedback, cooldown-window feeds (4 scalars
+        # calls/page — the cached-score load is a db.execute — and no
+        # shown-events query, since cooldown windows are empty). all-user-ids + candidate-events precede all pages.
         mock_db.scalars.side_effect = [
             _scalar_result([1, 2, 3, 4, 5]),  # user ids (all registered)
             _scalar_result([ev1, ev2]),  # candidate events (loaded once)
@@ -1152,14 +1164,11 @@ class TestBuildDailyFeedsBatching:
             _scalar_result([]),
             _scalar_result([]),
             _scalar_result([]),
-            _scalar_result([]),
             _scalar_result([_user(3), _user(4)]),
             _scalar_result([]),
             _scalar_result([]),
             _scalar_result([]),
-            _scalar_result([]),
             _scalar_result([_user(5)]),
-            _scalar_result([]),
             _scalar_result([]),
             _scalar_result([]),
             _scalar_result([]),
@@ -1180,15 +1189,11 @@ class TestBuildDailyFeedsBatching:
         assert len(event_query_calls) == 1
 
         # Hand-computed single-pass expectation: 5 users, each scored against
-        # the same 2 candidates with no feedback/cooldown/cache — every user
-        # gets a 2-event feed (built), no empties, 10 fresh score writes,
-        # zero reuse (score_cache is empty on every page — paging by user_id
-        # cannot change which scores are cache hits/misses for a given user).
+        # the same 2 candidates with no feedback/cooldown — every user
+        # gets a 2-event feed (built), no empties.
         assert result == {
             "built": 5,
             "empty": 0,
             "total_users": 5,
             "candidate_events": 2,
-            "scores_written": 10,
-            "scores_reused": 0,
         }
