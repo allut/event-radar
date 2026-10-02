@@ -153,15 +153,24 @@ async def active_claim_for_target(db: AsyncSession, target: ClaimTarget) -> Clai
     )
 
 
+async def _claim_target_for_event(db: AsyncSession, event: Event) -> ClaimTarget | None:
+    """Cheap, HTTP-free claim target for `event`, or None when it has no
+    representative EventSource — the one place resolve_claim_for_event and
+    own_claim_for_event resolve it."""
+    es = await representative_event_source(db, event_id=event.id)
+    if es is None or es.source is None:
+        return None
+    return resolve_claim_target(event, es)
+
+
 async def resolve_claim_for_event(db: AsyncSession, event: Event) -> Claim | None:
     """Active pending/approved Claim covering `event`, if any — shared by the
     public event page's claim_status (via claim_status_from_claim) and its
     "Listed by X" organizer-name lookup (#419) so the page pays for one
     EventSource/Claim round trip, not two."""
-    es = await representative_event_source(db, event_id=event.id)
-    if es is None or es.source is None:
+    target = await _claim_target_for_event(db, event)
+    if target is None:
         return None
-    target = resolve_claim_target(event, es)
     return await active_claim_for_target(db, target)
 
 
@@ -172,13 +181,26 @@ async def own_claim_for_event(
     organizer-authed public-page pending pill needs to know whether the
     *caller* is the claimant, not merely that some pending claim exists on
     the target, and the organizer session cookie (Path=/api/organizer)
-    never reaches GET /events/{id} to make that distinction there. Delegates
-    to resolve_claim_for_event for the same cheap, HTTP-free target
-    resolution (not resolve_claim_target_live) instead of repeating it."""
-    claim = await resolve_claim_for_event(db, event)
-    if claim is None or claim.organizer_id != organizer.id:
+    never reaches GET /events/{id} to make that distinction there. Looks the
+    caller's own active claim up on the target directly rather than
+    filtering active_claim_for_target's single newest claim afterwards:
+    since #431 a target can carry several coexisting pending claims, so a
+    rival's newer pending claim would otherwise hide the caller's (#456).
+    A caller can hold at most one active claim per target, so the lookup is
+    deterministic."""
+    target = await _claim_target_for_event(db, event)
+    if target is None:
         return None
-    return claim
+    return await db.scalar(
+        select(Claim)
+        .where(
+            *_target_where(target),
+            Claim.organizer_id == organizer.id,
+            Claim.status.in_(CLAIM_ACTIVE_STATUSES),
+        )
+        .order_by(Claim.id.desc())
+        .limit(1)
+    )
 
 
 async def bulk_dormant_pinned_event_ids(db: AsyncSession, events: list[Event]) -> set[int]:

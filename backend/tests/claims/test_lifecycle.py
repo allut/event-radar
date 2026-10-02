@@ -1058,23 +1058,10 @@ class TestOwnClaimForEvent:
         assert result is None
 
     @pytest.mark.asyncio
-    async def test_no_active_claim_returns_none(self, mock_db, make_event, make_organizer):
+    async def test_no_own_claim_returns_none(self, mock_db, make_event, make_organizer):
+        """Non-claimants (including when rivals hold claims) get None."""
         es = fake_event_source(publisher_id=99)
         mock_db.scalar = AsyncMock(side_effect=[es, None])
-
-        result = await own_claim_for_event(mock_db, make_organizer(organizer_id=5), make_event())
-
-        assert result is None
-
-    @pytest.mark.asyncio
-    async def test_other_organizers_pending_claim_returns_none(
-        self, mock_db, make_event, make_organizer
-    ):
-        """The whole point of #451: a rival claimant's pending claim on the
-        same target must never come back for a different caller."""
-        es = fake_event_source(publisher_id=99)
-        claim = _fake_claim(organizer_id=5, status=CLAIM_STATUS_PENDING)
-        mock_db.scalar = AsyncMock(side_effect=[es, claim])
 
         result = await own_claim_for_event(mock_db, make_organizer(organizer_id=6), make_event())
 
@@ -1089,6 +1076,22 @@ class TestOwnClaimForEvent:
         result = await own_claim_for_event(mock_db, make_organizer(organizer_id=5), make_event())
 
         assert result is claim
+
+    @pytest.mark.asyncio
+    async def test_query_scopes_to_caller_not_newest_claim(
+        self, mock_db, make_event, make_organizer
+    ):
+        """#456: the lookup must filter on the caller's organizer_id in SQL,
+        so an older own pending claim isn't hidden by a rival's newer one."""
+        es = fake_event_source(publisher_id=99)
+        mock_db.scalar = AsyncMock(side_effect=[es, None])
+
+        await own_claim_for_event(mock_db, make_organizer(organizer_id=5), make_event())
+
+        stmt = mock_db.scalar.await_args_list[1].args[0]
+        sql = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+        assert "claims.organizer_id = 5" in sql
+        assert "claims.publisher_id = 99" in sql
 
 
 class TestClaimingOrganizerName:
