@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { parseHTML } from 'linkedom';
 import { deleteR2ObjectsByPrefix, getR2Object, putR2Object } from '../src/lib/r2ChainState';
 
 vi.mock('../src/lib/r2ChainState', () => ({
@@ -11,6 +12,7 @@ import {
   buildRobotsTxt,
   chainStateContentKey,
   chainStateIndexKey,
+  contentReadySelector,
   fetchLiveExploreCount,
   fetchResolvedTarget,
   finalizeChainState,
@@ -32,6 +34,7 @@ import {
   BROWSE_PAGE_SIZE,
   CHAIN_STATE_PREFIX,
   CRAWLABLE_ICON_PATHS,
+  PRERENDER_READY_SELECTOR,
   PRODUCTION_ORIGIN,
   SITEMAP_PATH,
 } from '../src/constants';
@@ -39,6 +42,33 @@ import {
 function makeTarget(bare: string): PrerenderTarget {
   return { bare, locale: 'en' };
 }
+
+describe('contentReadySelector', () => {
+  const landingSnapshot = `<html><head><link rel="canonical" href="${PRODUCTION_ORIGIN}/"></head><body></body></html>`;
+
+  it('waits on the exact event canonical', () => {
+    const sel = contentReadySelector({ bare: '/events/4107', locale: 'et', eventId: 4107 });
+    expect(sel).toContain(`${PRODUCTION_ORIGIN}/events/4107`);
+    const sel2 = contentReadySelector({ bare: '/events/4024', locale: 'ru', eventId: 4024 });
+    expect(sel2).toContain(`${PRODUCTION_ORIGIN}/ru/events/4024`);
+  });
+
+  it('uses the locale-specific canonical for home', () => {
+    expect(contentReadySelector({ bare: '/', locale: 'en' })).toContain(`${PRODUCTION_ORIGIN}/en"`);
+    expect(contentReadySelector({ bare: '/', locale: 'et' })).toContain(`${PRODUCTION_ORIGIN}/"`);
+  });
+
+  it('uses PRERENDER_READY_SELECTOR for /explore', () => {
+    expect(contentReadySelector({ bare: '/explore', locale: 'et' })).toBe(PRERENDER_READY_SELECTOR);
+  });
+
+  it('does not match the prerendered Landing snapshot for event or non-et home routes', () => {
+    const { document } = parseHTML(landingSnapshot);
+    expect(document.querySelector(contentReadySelector({ bare: '/events/4107', locale: 'et', eventId: 4107 }))).toBeNull();
+    expect(document.querySelector(contentReadySelector({ bare: '/', locale: 'en' }))).toBeNull();
+    expect(document.querySelector(contentReadySelector({ bare: '/', locale: 'et' }))).not.toBeNull();
+  });
+});
 
 /** Unit tests (issue #89) for the zero-progress diagnostic log —
  * `logZeroProgressAbort` is the sole survivor of what used to be

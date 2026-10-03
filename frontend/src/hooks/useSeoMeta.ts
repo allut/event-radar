@@ -8,6 +8,7 @@ import {
   SEO_HREFLANG_CODES,
   SEO_XDEFAULT_CODE,
 } from '../constants';
+import { canonicalUrlFor } from '../lib/urlLocale';
 import { localizedPath, stripLocalePrefix } from '../utils';
 
 export interface SeoMetaTag {
@@ -57,7 +58,7 @@ export function buildSeoMeta(input: SeoMetaInput): SeoMetaResult {
   const links: SeoMetaLink[] = [];
 
   if (indexable) {
-    const canonicalUrl = `${PRODUCTION_ORIGIN}${localizedPath(bare, locale)}`;
+    const canonicalUrl = canonicalUrlFor(bare, locale);
     links.push({ rel: CANONICAL_REL, href: canonicalUrl });
 
     for (const code of SEO_HREFLANG_CODES) {

@@ -261,6 +261,10 @@ export interface StructuralValidationOptions {
   locale: string;
   /** PRODUCTION_ORIGIN — canonical/hreflang hrefs must be absolute URLs on it. */
   originPrefix: string;
+  /** The exact canonical URL this route must carry. Optional: when set, a
+   * canonical that merely starts with `originPrefix` but names another page
+   * (e.g. Landing's, captured at an event URL) is flagged. */
+  expectedCanonical?: string;
   /** `kind: 'list'` only — see assertListJsonLd's doc comment. */
   liveItemCount?: number;
 }
@@ -271,7 +275,7 @@ export interface StructuralValidationOptions {
  * supposed to emit for an indexable route. */
 export function validateSnapshotStructure(
   parsed: ParsedSnapshot,
-  { kind, locale, originPrefix, liveItemCount }: StructuralValidationOptions,
+  { kind, locale, originPrefix, expectedCanonical, liveItemCount }: StructuralValidationOptions,
 ): string[] {
   const issues: string[] = [];
   const shellDefaultTitle = t('brand', locale);
@@ -286,6 +290,8 @@ export function validateSnapshotStructure(
     issues.push('canonical link is missing');
   } else if (!parsed.canonical.startsWith(originPrefix)) {
     issues.push(`canonical link "${parsed.canonical}" does not point at ${originPrefix}`);
+  } else if (expectedCanonical !== undefined && parsed.canonical !== expectedCanonical) {
+    issues.push(`canonical link "${parsed.canonical}" does not match expected "${expectedCanonical}"`);
   }
 
   for (const code of SEO_HREFLANG_CODES) {
