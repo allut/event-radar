@@ -1,6 +1,20 @@
 import { describe, it, expect } from 'vitest';
 import { buildSeoMeta } from './useSeoMeta';
+import { canonicalUrlFor } from '../lib/urlLocale';
 import { PRODUCTION_ORIGIN } from '../constants';
+
+describe('canonicalUrlFor', () => {
+  it('matches the canonical link buildSeoMeta emits', () => {
+    for (const [path, locale, bare] of [
+      ['/', 'et', '/'],
+      ['/en', 'en', '/'],
+      ['/ru/events/24', 'ru', '/events/24'],
+    ]) {
+      const meta = buildSeoMeta({ title: 't', locale, path, indexable: true });
+      expect(meta.links).toContainEqual({ rel: 'canonical', href: canonicalUrlFor(bare, locale) });
+    }
+  });
+});
 
 describe('buildSeoMeta', () => {
   it('defaults to noindex with no OG/canonical/hreflang for a non-indexable route', () => {

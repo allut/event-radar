@@ -75,7 +75,7 @@ import {
   RATE_GATE_SLACK_MS,
 } from '../src/constants';
 import { serializeJsonLd } from '../src/lib/jsonLd';
-import { localizedPath } from '../src/lib/urlLocale';
+import { canonicalUrlFor, localizedPath } from '../src/lib/urlLocale';
 import { githubRequest } from '../src/lib/githubRequest';
 import { compareEventStaleness, parseSnapshotHtml, validateSnapshotStructure } from '../src/lib/seoValidation';
 import { createBudgetedCursor, prioritizeRenderQueue } from '../src/lib/prerenderQueue';
@@ -673,6 +673,13 @@ function attachPageDiagnostics(page: Page): () => string[] {
   return () => [...events];
 }
 
+/** Selector `snapshotTarget` waits on before capturing — see the comment
+ * there for why the canonical must be route-specific. */
+export function contentReadySelector(target: PrerenderTarget): string {
+  if (target.bare === ROUTES.explore) return PRERENDER_READY_SELECTOR;
+  return `${CANONICAL_LINK_SELECTOR}[href="${canonicalUrlFor(target.bare, target.locale)}"]`;
+}
+
 async function snapshotTarget(
   page: Page,
   previewOrigin: string,
@@ -688,18 +695,24 @@ async function snapshotTarget(
   const isExplore = target.bare === ROUTES.explore;
   // Landing and /events/:id are `indexable` (useSeoMeta) only once real
   // content has loaded, so waiting for the canonical link this hook emits is
-  // a reliable "real content is in the DOM" signal for both. /explore is
-  // different (issue #236): readiness must be decoupled from indexability —
-  // a query that resolves to an error is real, settled content that must
-  // still get snapshotted (so the error marker check below can fail the
-  // build loudly) rather than left to time out here, but useSeoMeta's
-  // `indexable` is never true on error. So /explore waits on its own
-  // PRERENDER_READY_SELECTOR (Explore.tsx sets it on isSuccess/isError, never
-  // isLoading) instead of the canonical-link selector.
+  // a reliable "real content is in the DOM" signal for both — but only if the
+  // wait is for *this route's* canonical (`contentReadySelector`), never any
+  // canonical. Mid-round `dist/index.html` is the prerendered et Landing
+  // snapshot, which `vite preview` serves as its SPA fallback for every route
+  // with no file on disk yet, so every later navigation boots from a page that
+  // already carries Landing's canonical; a bare `link[rel=canonical]` wait
+  // resolves instantly on it and captures the loading state (or Landing
+  // itself). /explore is different (issue #236): readiness must be decoupled
+  // from indexability — a query that resolves to an error is real, settled
+  // content that must still get snapshotted (so the error marker check below
+  // can fail the build loudly) rather than left to time out here, but
+  // useSeoMeta's `indexable` is never true on error. So /explore waits on its
+  // own PRERENDER_READY_SELECTOR (Explore.tsx sets it on isSuccess/isError,
+  // never isLoading); Landing never renders that attribute.
   // `state: 'attached'`, not the default 'visible' — neither marker has a
   // CSS box, so the default visibility check would time out even once
   // rendered.
-  await page.waitForSelector(isExplore ? PRERENDER_READY_SELECTOR : CANONICAL_LINK_SELECTOR, {
+  await page.waitForSelector(contentReadySelector(target), {
     state: 'attached',
     timeout: CONTENT_READY_TIMEOUT_MS,
   });
@@ -857,6 +870,7 @@ async function validateTarget(
     kind,
     locale: target.locale,
     originPrefix: PRODUCTION_ORIGIN,
+    expectedCanonical: canonicalUrlFor(target.bare, target.locale),
     liveItemCount,
   }).map((issue) => `structural: ${issue}`);
 

@@ -190,6 +190,34 @@ describe('validateSnapshotStructure', () => {
     expect(issues).toEqual([]);
   });
 
+  it('flags a canonical that does not equal expectedCanonical (wrong-page capture)', () => {
+    const parsed = parseSnapshotHtml(validEventHtml());
+    const issues = validateSnapshotStructure(parsed, {
+      kind: 'event',
+      locale: 'et',
+      originPrefix: PRODUCTION_ORIGIN,
+      expectedCanonical: `${PRODUCTION_ORIGIN}/events/2`,
+    });
+    expect(issues.some((i) => i.includes('does not match expected'))).toBe(true);
+  });
+
+  it('passes when the canonical equals expectedCanonical', () => {
+    const parsed = parseSnapshotHtml(validEventHtml());
+    const issues = validateSnapshotStructure(parsed, {
+      kind: 'event',
+      locale: 'et',
+      originPrefix: PRODUCTION_ORIGIN,
+      expectedCanonical: `${PRODUCTION_ORIGIN}/events/1`,
+    });
+    expect(issues).toEqual([]);
+  });
+
+  it('ignores canonical identity when expectedCanonical is omitted', () => {
+    const parsed = parseSnapshotHtml(validEventHtml());
+    const issues = validateSnapshotStructure(parsed, { kind: 'event', locale: 'et', originPrefix: PRODUCTION_ORIGIN });
+    expect(issues.some((i) => i.includes('does not match expected'))).toBe(false);
+  });
+
   it('catches a default/missing title', () => {
     const parsed = parseSnapshotHtml('<html><head><title>Event Radar</title></head><body></body></html>');
     const issues = validateSnapshotStructure(parsed, { kind: 'event', locale: 'et', originPrefix: PRODUCTION_ORIGIN });

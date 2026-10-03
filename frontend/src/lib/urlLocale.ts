@@ -1,4 +1,4 @@
-import { LOCALE_URL_PREFIX_CODES } from '../constants';
+import { LOCALE_URL_PREFIX_CODES, PRODUCTION_ORIGIN } from '../constants';
 
 /** Strips a leading `/en` or `/ru` locale-prefix segment from a pathname
  * (Estonian is bare, so there's nothing to strip for it), returning the bare
@@ -44,4 +44,12 @@ export function localizedTo(to: string, locale: string): string {
   const pathname = queryIdx === -1 ? withoutHash : withoutHash.slice(0, queryIdx);
   const query = queryIdx === -1 ? '' : withoutHash.slice(queryIdx);
   return `${localizedPath(pathname, locale)}${query}${hash}`;
+}
+
+/** The one formula for a route's canonical URL — shared by `buildSeoMeta`, the
+ * prerender readiness selector and the structural validator so the three
+ * can't drift apart. `bare` is a locale-free path (`stripLocalePrefix`). Lives here, not in
+ * useSeoMeta.ts, so plain-Node build tooling can import it (no DOM deps). */
+export function canonicalUrlFor(bare: string, locale: string): string {
+  return `${PRODUCTION_ORIGIN}${localizedPath(bare, locale)}`;
 }
