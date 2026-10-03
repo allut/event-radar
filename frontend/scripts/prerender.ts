@@ -1366,6 +1366,10 @@ export async function main(): Promise<void> {
     );
   }
   console.log(`prerender: validated ${validationTargets.length} snapshot(s), no issues found`);
+  // maxRSS is KiB on Linux; node process only (Chromium children not counted).
+  console.log(
+    `prerender: peak RSS ${Math.round(process.resourceUsage().maxRSS / 1024)} MiB (node process)`,
+  );
 
   // Round-state marker (issue #83): built from this round's actual outcome
   // and committed to the git-connected production branch, whose push
