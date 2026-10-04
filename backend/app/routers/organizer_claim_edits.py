@@ -7,6 +7,7 @@ docs/organizer-portal.md.
 
 import logging
 from datetime import datetime
+from typing import Any
 from urllib.parse import urlparse
 
 import httpx
@@ -45,6 +46,7 @@ from app.constants import (
     LOCALE_RU,
     ORGANIZER_CURRENCY_MAX_LEN,
     ORGANIZER_DESCRIPTION_MAX_LEN,
+    ORGANIZER_MAX_CATEGORIES,
     ORGANIZER_TITLE_MAX_LEN,
     RATE_LIMIT_SUBMIT,
     SOURCE_SLUG_USER_SUBMISSION,
@@ -59,13 +61,14 @@ from app.rate_limit import limiter
 from app.auth.dependencies import get_current_organizer
 from app.routers.utils import (
     apply_moderation_flags,
-    apply_organizer_category,
     apply_price_edit,
+    fold_legacy_category,
     merged_localized,
     organizer_sanitize,
+    prepend_organizer_categories,
     select_events_with_classification,
     serialize_event,
-    validate_category,
+    validate_categories,
     validate_price_ordering,
     validate_time_ordering,
     validate_tz_aware,
@@ -94,7 +97,7 @@ class PatchClaimEventBody(BaseModel):
     starts_at: datetime | None = None
     ends_at: datetime | None = None
     url: str | None = None
-    category: str | None = None
+    categories: list[str] | None = None
     price_min: float | None = Field(None, ge=0)
     price_max: float | None = Field(None, ge=0)
     currency: str | None = Field(None, max_length=ORGANIZER_CURRENCY_MAX_LEN)
@@ -112,10 +115,15 @@ class PatchClaimEventBody(BaseModel):
     def _tz_aware(cls, v: datetime | None) -> datetime | None:
         return validate_tz_aware(v)
 
-    @field_validator("category")
+    @model_validator(mode="before")
     @classmethod
-    def _valid_category(cls, v: str | None) -> str | None:
-        return validate_category(v)
+    def _fold_legacy_category(cls, data: Any) -> Any:
+        return fold_legacy_category(data)
+
+    @field_validator("categories")
+    @classmethod
+    def _valid_categories(cls, v: list[str] | None) -> list[str] | None:
+        return validate_categories(v)
 
     @field_validator("title")
     @classmethod
@@ -360,8 +368,10 @@ async def _save_claim_event(
             event.url = None
         to_pin.add(pin_key("url"))
 
-    if "category" in fields_set and body.category is not None:
-        await apply_organizer_category(db, event.id, body.category)
+    if "categories" in fields_set and body.categories:
+        await prepend_organizer_categories(
+            db, event.id, body.categories, max_total=ORGANIZER_MAX_CATEGORIES
+        )
 
     # Price fields: co-authoritative, never pinned (#416 — CONTEXT.md's Event
     # Claiming glossary). accept_new_price adopts a freshly recomputed ingest

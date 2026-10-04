@@ -47,6 +47,8 @@ from app.constants import (
     ORGANIZER_HTML_SANITIZE_ALLOWED_TAGS,
     PREFERENCE_SIGNALS,
     PREFERRED_TASTE_MIN_WEIGHT,
+    ERROR_CLAIM_EDIT_CATEGORIES_CAP,
+    ORGANIZER_MAX_CATEGORIES,
     REPORT_EMAIL_SEND_CONCURRENCY,
     REPORT_STATUS_OPEN,
     REPORT_STATUS_RESOLVED,
@@ -581,25 +583,57 @@ def resolve_important_info(event: Event, locale: str) -> str | None:
     return event.important_info
 
 
-async def apply_organizer_category(db: AsyncSession, event_id: int, category: str) -> None:
-    """Prepend an organizer-chosen category onto an event's classification.
+async def replace_organizer_categories(
+    db: AsyncSession, event_id: int, categories: list[str]
+) -> None:
+    """Set an event's classification categories to exactly the organizer's picks.
 
-    Categories are LLM-derived (Event.classification.categories, an array) —
-    there is no dedicated organizer-facing column. An explicit organizer pick
-    leads the list (any LLM-derived categories, if present, follow); if no
-    classification row exists yet (e.g. classify_event's LLM call failed), a
-    bare one is created so the pick isn't silently dropped. Shared by
-    organizer_events.py (own-submission edits) and organizer_claim_edits.py
-    (#416's prepend-only claim-edit categories rule) — identical prepend
-    semantics, so it lives here rather than being duplicated."""
+    Used for an organizer's own submissions (create + edit): their set is
+    authoritative, so LLM-derived categories are dropped rather than merged —
+    keeping them would inflate persona affinity, which sums weights over every
+    category (`_affinity_for_vector`). If no classification row exists yet
+    (e.g. classify_event's LLM call failed), a bare one is created so the pick
+    isn't silently dropped."""
     classification = await db.scalar(
         select(EventClassification).where(EventClassification.event_id == event_id)
     )
     if classification is None:
-        db.add(EventClassification(event_id=event_id, categories=[category]))
+        db.add(EventClassification(event_id=event_id, categories=categories))
         return
-    if category not in classification.categories:
-        classification.categories = [category, *classification.categories]
+    classification.categories = categories
+
+
+async def prepend_organizer_categories(
+    db: AsyncSession,
+    event_id: int,
+    categories: list[str],
+    max_total: int | None = None,
+) -> None:
+    """Prepend organizer-chosen categories onto an event's classification.
+
+    Used by claim edits (#416's prepend-only rule): the claimed event's
+    existing categories are never removed. The picks lead the list in the
+    order given (those already present are skipped), existing categories
+    follow; a bare classification row is created if none exists yet.
+
+    `max_total` caps the resulting list: if adding the genuinely new picks
+    would exceed it, 422 and nothing is changed. Existing categories are
+    never trimmed, so an event already over the cap simply can't gain more."""
+    classification = await db.scalar(
+        select(EventClassification).where(EventClassification.event_id == event_id)
+    )
+    existing = classification.categories if classification is not None else []
+    new = [c for c in categories if c not in existing]
+    if max_total is not None and new and len(existing) + len(new) > max_total:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=ERROR_CLAIM_EDIT_CATEGORIES_CAP,
+        )
+    if classification is None:
+        db.add(EventClassification(event_id=event_id, categories=categories))
+        return
+    if new:
+        classification.categories = [*new, *existing]
 
 
 def resolve_why_go(cl: EventClassification | None, locale: str) -> list[str]:
@@ -870,12 +904,33 @@ def validate_tz_aware(v: datetime | None) -> datetime | None:
     return v
 
 
-def validate_category(v: str | None) -> str | None:
-    """Shared by organizer_events.py's SubmitEventBody/PatchEventBody
-    category validators."""
-    if v is not None and v not in VALID_CATEGORIES:
-        raise ValueError(f"invalid category: {v!r}")
-    return v
+def validate_categories(v: list[str] | None) -> list[str] | None:
+    """Shared by organizer_events.py's SubmitEventBody/PatchEventBody and
+    organizer_claim_edits.py's ClaimEditBody `categories` validators. Dedupes
+    (order kept) before applying the ORGANIZER_MAX_CATEGORIES cap."""
+    if v is None:
+        return None
+    for c in v:
+        if c not in VALID_CATEGORIES:
+            raise ValueError(f"invalid category: {c!r}")
+    deduped = list(dict.fromkeys(v))
+    if len(deduped) > ORGANIZER_MAX_CATEGORIES:
+        raise ValueError(f"at most {ORGANIZER_MAX_CATEGORIES} categories")
+    return deduped
+
+
+def fold_legacy_category(data: Any) -> Any:
+    """`mode="before"` model-validator body: fold the deprecated single
+    `category` key into `categories`. Frontend (Cloudflare) and backend
+    (Render) deploy separately, so an old frontend may still send `category`;
+    without this it would be silently dropped as an unknown field. An explicit
+    `categories` wins. Remove in a follow-up once no old frontend is live."""
+    if isinstance(data, dict) and "category" in data:
+        data = dict(data)
+        legacy = data.pop("category")
+        if "categories" not in data and legacy is not None:
+            data["categories"] = [legacy]
+    return data
 
 
 def validate_price_ordering(

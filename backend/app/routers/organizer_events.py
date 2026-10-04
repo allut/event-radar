@@ -12,6 +12,7 @@ import hashlib
 import logging
 import time
 from datetime import datetime
+from typing import Any
 from urllib.parse import unquote, urlsplit
 from uuid import uuid4
 
@@ -89,18 +90,19 @@ from app.rate_limit import limiter
 from app.auth.dependencies import get_current_organizer
 from app.routers.utils import (
     apply_moderation_flags,
-    apply_organizer_category,
     apply_price_edit,
     cancel_event_and_resolve_reports,
+    fold_legacy_category,
     localized_dict,
     merged_localized,
     organizer_sanitize,
     own_venue_or_404,
+    replace_organizer_categories,
     resolve_locale_param,
     select_events_with_classification,
     send_report_resolution_emails,
     serialize_event,
-    validate_category,
+    validate_categories,
     validate_price_ordering,
     validate_time_ordering,
     validate_tz_aware,
@@ -140,17 +142,22 @@ class SubmitEventBody(BaseModel):
     price_min: float | None = Field(None, ge=0)
     price_max: float | None = Field(None, ge=0)
     currency: str | None = Field(None, max_length=ORGANIZER_CURRENCY_MAX_LEN)
-    category: str | None = None
+    categories: list[str] | None = None
 
     @field_validator("starts_at", "ends_at")
     @classmethod
     def _tz_aware(cls, v: datetime | None) -> datetime | None:
         return validate_tz_aware(v)
 
-    @field_validator("category")
+    @model_validator(mode="before")
     @classmethod
-    def _valid_category(cls, v: str | None) -> str | None:
-        return validate_category(v)
+    def _fold_legacy_category(cls, data: Any) -> Any:
+        return fold_legacy_category(data)
+
+    @field_validator("categories")
+    @classmethod
+    def _valid_categories(cls, v: list[str] | None) -> list[str] | None:
+        return validate_categories(v)
 
     @model_validator(mode="after")
     def _ordering(self) -> "SubmitEventBody":
@@ -185,17 +192,22 @@ class PatchEventBody(BaseModel):
     price_min: float | None = Field(None, ge=0)
     price_max: float | None = Field(None, ge=0)
     currency: str | None = Field(None, max_length=ORGANIZER_CURRENCY_MAX_LEN)
-    category: str | None = None
+    categories: list[str] | None = None
 
     @field_validator("starts_at", "ends_at")
     @classmethod
     def _tz_aware(cls, v: datetime | None) -> datetime | None:
         return validate_tz_aware(v)
 
-    @field_validator("category")
+    @model_validator(mode="before")
     @classmethod
-    def _valid_category(cls, v: str | None) -> str | None:
-        return validate_category(v)
+    def _fold_legacy_category(cls, data: Any) -> Any:
+        return fold_legacy_category(data)
+
+    @field_validator("categories")
+    @classmethod
+    def _valid_categories(cls, v: list[str] | None) -> list[str] | None:
+        return validate_categories(v)
 
     @model_validator(mode="after")
     def _ordering(self) -> "PatchEventBody":
@@ -396,8 +408,8 @@ async def submit_event(
         # from the normal "not yet reviewed" case; classify_pending's 6h
         # backlog drain will retry it, but this is worth surfacing in ops.
         log.warning("organizer submission event_id=%d classify failed", event.id)
-    if body.category:
-        await apply_organizer_category(db, event_id, body.category)
+    if body.categories:
+        await replace_organizer_categories(db, event_id, body.categories)
     # Single known event, verified status unchanged by this call — scope the
     # UPDATE to it and skip the reject-breakdown diagnostic (unused here, and
     # its cost grows with all-time reject history — see publish_pending()).
@@ -480,8 +492,10 @@ async def update_own_event(
         event.image_url = safe_image_url
     if fields_set & {"price_min", "price_max", "currency"}:
         apply_price_edit(event, body, fields_set)
-    if "category" in fields_set and body.category is not None:
-        await apply_organizer_category(db, event.id, body.category)
+    # Empty list is a no-op: the LLM set a replace overwrote can't be restored,
+    # so an edit must never leave an event uncategorized.
+    if "categories" in fields_set and body.categories:
+        await replace_organizer_categories(db, event.id, body.categories)
     if "description" in fields_set:
         event.description_orig = organizer_sanitize(body.description)
     if "important_info" in fields_set:

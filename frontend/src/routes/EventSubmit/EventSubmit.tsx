@@ -7,13 +7,13 @@ import OrganizerTopBar from '../../components/OrganizerTopBar';
 import OrganizerProfileNudge from '../../components/OrganizerProfileNudge';
 import SegmentedControl from '../../components/SegmentedControl';
 import DatePicker from '../../components/DatePicker';
-import SelectField from '../../components/SelectField';
+import CategoryPicker from '../../components/CategoryPicker';
 import FileField from '../../components/FileField';
 import VenuePicker from '../../components/VenuePicker';
 import { t, ti } from '../../i18n';
 import {
   CONTENT_LANG_ORDER, DEFAULT_CURRENCY, LOCALE_EN, LOCALE_ET, LOCALE_RU,
-  ORGANIZER_BASE_CONTENT_LANG, ORGANIZER_IMAGE_ACCEPT,
+  ORGANIZER_BASE_CONTENT_LANG, ORGANIZER_IMAGE_ACCEPT, ORGANIZER_MAX_CATEGORIES,
   PRICE_INPUT_MIN, PRICE_INPUT_STEP,
   type ContentLang, type ContentMarkerState,
 } from '../../constants';
@@ -226,16 +226,23 @@ export default function EventSubmit() {
             disabled={form.isSubmitting}
           />
 
-          <label className={styles.label} htmlFor="category">{t('organizer_field_category', locale)}</label>
-          <SelectField
-            id="category"
-            value={form.category}
+          <span className={styles.label}>{t('organizer_field_categories', locale)}</span>
+          <CategoryPicker
             options={categoryOpts}
-            onChange={form.setCategory}
-            placeholder={t('organizer_category_none', locale)}
-            ariaLabel={t('organizer_field_category', locale)}
+            selected={form.categories}
+            max={ORGANIZER_MAX_CATEGORIES}
+            onToggle={form.toggleCategory}
+            ariaLabel={t('organizer_field_categories', locale)}
+            locale={locale}
             disabled={form.isSubmitting}
           />
+          <span className={styles.hint}>
+            {ti('organizer_categories_hint', locale, { max: String(ORGANIZER_MAX_CATEGORIES) })}{' '}
+            {ti('organizer_categories_count', locale, {
+              count: String(form.categories.length),
+              max: String(ORGANIZER_MAX_CATEGORIES),
+            })}
+          </span>
 
           <div className={styles.fieldRow}>
             <div className={styles.fieldCol}>

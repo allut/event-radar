@@ -16,6 +16,7 @@ from app._generated.shared_constants import (
     HTML_SANITIZE_ALLOWED_TAGS,
     IMAGE_UPLOAD_ALLOWED_MIME,
     MAGIC_LINK_TTL_MINUTES as _MAGIC_LINK_TTL_MINUTES_SHARED,
+    ORGANIZER_MAX_CATEGORIES,
     PERSONA_MAX_SELECTABLE,
     PERSONA_PRIMARY_WEIGHT,
     PERSONA_SECONDARY_WEIGHT,
@@ -39,6 +40,7 @@ __all__ = [
     "HTML_SANITIZE_ALLOWED_ATTRS",
     "HTML_SANITIZE_ALLOWED_TAGS",
     "IMAGE_UPLOAD_ALLOWED_MIME",
+    "ORGANIZER_MAX_CATEGORIES",
     "PERSONA_MAX_SELECTABLE",
     "PERSONA_PRIMARY_WEIGHT",
     "PERSONA_RANK_WEIGHTS",
@@ -2141,6 +2143,9 @@ CLAIM_ERROR_CODE_DORMANT = "claim_dormant"
 ERROR_DAILY_CLAIM_EDIT_LIMIT = "Daily claim-edit limit reached. Try again tomorrow."
 ERROR_CLAIM_EVENT_NOT_FOUND = "No event could be resolved for this claim."
 ERROR_CLAIM_EDIT_URL_DOMAIN = "URL must stay on the domain this claim was verified against."
+ERROR_CLAIM_EDIT_CATEGORIES_CAP = (
+    f"An event can have at most {ORGANIZER_MAX_CATEGORIES} categories in total."
+)
 ERROR_EVENT_CREATE_FAILED = "Could not create event; please try again."
 ERROR_EVENT_URL_SCHEME = "Event URL is not allowed (unsupported scheme)."
 ERROR_IMAGE_URL_SCHEME = "Image URL is not allowed (unsupported scheme)."

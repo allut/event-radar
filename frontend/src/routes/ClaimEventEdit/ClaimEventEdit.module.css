@@ -123,25 +123,6 @@
   line-height: normal;
 }
 
-.chips {
-  composes: chips from '../../components/shared/Chip.module.css';
-  align-items: center;
-}
-
-.chip {
-  composes: chip from '../../components/shared/Chip.module.css';
-  border-radius: 0;
-  height: var(--space-1-75);
-  box-sizing: border-box;
-  display: inline-flex;
-  align-items: center;
-}
-
-.chipNew {
-  color: var(--accent-light);
-  border-color: var(--accent-border);
-}
-
 .mismatch {
   composes: alert from '../../components/shared/Alert.module.css';
   color: var(--text);

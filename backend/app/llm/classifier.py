@@ -257,7 +257,13 @@ def _persist_classification(
 ) -> None:
     """Write the parsed classification to the existing row or insert a new one."""
     if existing is not None:
-        existing.categories = parsed["categories"]
+        # An organizer's own submission carries their authoritative category
+        # picks (written by replace_organizer_categories, possibly into a bare
+        # row when the inline classify failed). A later classify_pending retry
+        # must not clobber them with LLM categories; vibes/quality/etc. still
+        # refresh.
+        if not (event.submitted_by_organizer_id is not None and existing.categories):
+            existing.categories = parsed["categories"]
         existing.vibes = parsed["vibes"]
         existing.why_go_bullets = parsed["why_go_bullets"]
         existing.why_go_localized = parsed["why_go_localized"]

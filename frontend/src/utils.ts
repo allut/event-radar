@@ -90,6 +90,14 @@ export function categoryOptions(locale: string): { value: string; label: string 
   return CATEGORIES.map((slug) => ({ value: slug, label: t(`category_${slug}`, locale) }));
 }
 
+/** Toggle `value` in a capped pick list: removes it when present, appends it
+ * when absent and there is room, otherwise returns the list unchanged. Shared
+ * by the organizer submit form and the claim edit's category pickers. */
+export function toggleCapped(list: string[], value: string, max: number): string[] {
+  if (list.includes(value)) return list.filter((v) => v !== value);
+  return list.length < max ? [...list, value] : list;
+}
+
 /** Same shape as categoryOptions, for VIBES. */
 export function vibeOptions(locale: string): { value: string; label: string }[] {
   return VIBES.map((slug) => ({ value: slug, label: t(`vibe_${slug}`, locale) }));

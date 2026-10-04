@@ -68,6 +68,11 @@
   composes: fieldLabel from '../../components/shared/Field.module.css';
 }
 
+.hint {
+  font-size: var(--fs-2xs);
+  color: var(--text-muted);
+}
+
 .input {
   composes: fieldInput from '../../components/shared/Field.module.css';
   width: 100%;

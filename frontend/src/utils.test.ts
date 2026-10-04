@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { cx, safeUrl, sanitizeHtml, formatPrice, categoryGradient, formatHourMinute, formatEventShortDate, makeActiveClassMap, trackExternalClick, datePresetRange, parseExploreFilters, exploreFiltersToSearchParams, buildExploreApiQuery, nextKeysetParam, activeFacetCount, isFullSet, shouldFlipPopover, maskAnalyticsUrl, DEFAULT_EXPLORE_FILTERS, type ExploreFilters, monthGridDays, weekdayHeaders, splitDateTimeValue, joinDateTimeValue, parseTypedDate, formatPickerValue, formatMonthYearLabel, toDisplayDateTime, fromDisplayDateTime, buildMapsUrl, isValidLocale, stripLocalePrefix, localizedPath, localeFromPath, localizedTo, truncateForMeta, cardAnimationDelayMs, parseISODateLocal, formatDateRangeShort, localeLabel, localizedFieldLabel, localizedTriplet, weekdayOffset } from './utils';
+import { cx, safeUrl, sanitizeHtml, formatPrice, categoryGradient, formatHourMinute, formatEventShortDate, makeActiveClassMap, trackExternalClick, datePresetRange, parseExploreFilters, exploreFiltersToSearchParams, buildExploreApiQuery, nextKeysetParam, activeFacetCount, isFullSet, shouldFlipPopover, maskAnalyticsUrl, DEFAULT_EXPLORE_FILTERS, type ExploreFilters, monthGridDays, weekdayHeaders, splitDateTimeValue, joinDateTimeValue, parseTypedDate, formatPickerValue, formatMonthYearLabel, toDisplayDateTime, fromDisplayDateTime, buildMapsUrl, isValidLocale, stripLocalePrefix, localizedPath, localeFromPath, localizedTo, truncateForMeta, cardAnimationDelayMs, parseISODateLocal, formatDateRangeShort, localeLabel, localizedFieldLabel, localizedTriplet, weekdayOffset, toggleCapped } from './utils';
 import { t } from './i18n';
 import { FALLBACK_GRADIENT, CATEGORIES, GOOGLE_MAPS_SEARCH_URL } from './constants';
 
@@ -825,5 +825,25 @@ describe('nextKeysetParam', () => {
   it('falls back to offset arithmetic without a cursor', () => {
     expect(nextKeysetParam({ has_more: true, offset: 24 }, 24)).toEqual({ offset: 48, cursor: undefined });
     expect(nextKeysetParam({ has_more: true, offset: 24, next_cursor: null }, 24)).toEqual({ offset: 48, cursor: undefined });
+  });
+});
+
+describe('toggleCapped', () => {
+  it('appends a new value while there is room', () => {
+    expect(toggleCapped(['a'], 'b', 3)).toEqual(['a', 'b']);
+  });
+
+  it('removes a value that is already present', () => {
+    expect(toggleCapped(['a', 'b'], 'a', 3)).toEqual(['b']);
+  });
+
+  it('returns the list unchanged once the cap is reached', () => {
+    const list = ['a', 'b', 'c'];
+    expect(toggleCapped(list, 'd', 3)).toBe(list);
+  });
+
+  it('still removes at the cap, and adds nothing when the cap is zero', () => {
+    expect(toggleCapped(['a', 'b', 'c'], 'c', 3)).toEqual(['a', 'b']);
+    expect(toggleCapped([], 'a', 0)).toEqual([]);
   });
 });

@@ -902,3 +902,41 @@ class TestClassifyPromptVenueResolution:
         event = make_event(venue_name=None)
 
         assert LLM_CLASSIFY_VENUE_FALLBACK in _build_classify_prompt(event, price_context="")
+
+
+class TestClassifyEventOrganizerCategoriesKept:
+    """An organizer's own-submission categories are authoritative: a classify
+    retry (classify_pending) must refresh vibes/quality but not the categories."""
+
+    @pytest.mark.asyncio
+    async def test_organizer_submission_keeps_categories_on_reclassify(
+        self, mock_db, make_event
+    ):
+        event = make_event(submitted_by_organizer_id=5)
+        event.classification.categories = ["family", "workshops"]
+        raw = {**_BASE_RAW, "categories": ["music"], "vibes": ["casual"]}
+        with patch(
+            "app.llm.classifier.llm_json_or_none",
+            AsyncMock(return_value=(raw, "groq/openai/gpt-oss-120b")),
+        ):
+            ok = await classify_event(
+                event, mock_db, existing_classification=event.classification, prefetched=True
+            )
+
+        assert ok is True
+        assert event.classification.categories == ["family", "workshops"]
+        assert event.classification.vibes == ["casual"]
+
+    @pytest.mark.asyncio
+    async def test_ingested_event_categories_still_overwritten(self, mock_db, make_event):
+        event = make_event()
+        raw = {**_BASE_RAW, "categories": ["theater"]}
+        with patch(
+            "app.llm.classifier.llm_json_or_none",
+            AsyncMock(return_value=(raw, "groq/openai/gpt-oss-120b")),
+        ):
+            await classify_event(
+                event, mock_db, existing_classification=event.classification, prefetched=True
+            )
+
+        assert event.classification.categories == ["theater"]

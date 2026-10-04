@@ -211,17 +211,63 @@ class TestSubmitEvent:
             SubmitEventBody(
                 title="Kontsert",
                 starts_at="2026-06-01T18:00:00+03:00",
+                categories=["not-a-real-category"],
+            )
+
+    def test_more_than_cap_rejected(self):
+        from pydantic import ValidationError
+        from app.constants import ORGANIZER_MAX_CATEGORIES, VALID_CATEGORIES
+        from app.routers.organizer_events import SubmitEventBody
+
+        with pytest.raises(ValidationError):
+            SubmitEventBody(
+                title="Kontsert",
+                starts_at="2026-06-01T18:00:00+03:00",
+                categories=sorted(VALID_CATEGORIES)[: ORGANIZER_MAX_CATEGORIES + 1],
+            )
+
+    def test_duplicate_categories_deduped(self):
+        from app.routers.organizer_events import SubmitEventBody
+
+        body = SubmitEventBody(
+            title="Kontsert",
+            starts_at="2026-06-01T18:00:00+03:00",
+            categories=["music", "music", "family"],
+        )
+        assert body.categories == ["music", "family"]
+
+    def test_legacy_category_alias_folds_into_categories(self):
+        from app.routers.organizer_events import PatchEventBody, SubmitEventBody
+
+        body = SubmitEventBody(
+            title="Kontsert",
+            starts_at="2026-06-01T18:00:00+03:00",
+            category="music",
+        )
+        assert body.categories == ["music"]
+        patch_body = PatchEventBody(category="music")
+        assert patch_body.categories == ["music"]
+        assert "categories" in patch_body.model_fields_set
+
+    def test_legacy_invalid_category_rejected(self):
+        from pydantic import ValidationError
+        from app.routers.organizer_events import SubmitEventBody
+
+        with pytest.raises(ValidationError):
+            SubmitEventBody(
+                title="Kontsert",
+                starts_at="2026-06-01T18:00:00+03:00",
                 category="not-a-real-category",
             )
 
     @pytest.mark.asyncio
-    async def test_organizer_category_applied_after_classify(
+    async def test_organizer_categories_replace_after_classify(
         self, mock_db, make_request, make_organizer
     ):
         from app.constants import VALID_CATEGORIES
         from app.routers.organizer_events import SubmitEventBody, submit_event
 
-        picked_category = next(iter(VALID_CATEGORIES))
+        picked = sorted(VALID_CATEGORIES)[:2]
         organizer = make_organizer(organizer_id=5)
         fake_event = _fake_event()
         source = MagicMock(id=1, slug="user_submission")
@@ -243,14 +289,14 @@ class TestSubmitEvent:
                 "app.routers.organizer_events.publish_pending", new_callable=AsyncMock
             ),
             patch(
-                "app.routers.organizer_events.apply_organizer_category",
+                "app.routers.organizer_events.replace_organizer_categories",
                 new_callable=AsyncMock,
             ) as mock_apply_category,
         ):
             body = SubmitEventBody(
                 title="Kontsert",
                 starts_at="2026-06-01T18:00:00+03:00",
-                category=picked_category,
+                categories=picked,
             )
             await submit_event(
                 body,
@@ -259,7 +305,7 @@ class TestSubmitEvent:
                 mock_db,
             )
         mock_apply_category.assert_awaited_once_with(
-            mock_db, fake_event.id, picked_category
+            mock_db, fake_event.id, picked
         )
 
     @pytest.mark.asyncio
@@ -588,23 +634,23 @@ class TestUpdateOwnEvent:
         assert event.venue_name != "New Venue Hall"
 
     @pytest.mark.asyncio
-    async def test_category_edit_applies_via_helper(
+    async def test_categories_edit_replaces_via_helper(
         self, mock_db, make_request, make_organizer
     ):
         from app.constants import VALID_CATEGORIES
         from app.routers.organizer_events import PatchEventBody, update_own_event
 
-        picked_category = next(iter(VALID_CATEGORIES))
+        picked = sorted(VALID_CATEGORIES)[:2]
         organizer = make_organizer(organizer_id=5)
         event = _fake_event(submitted_by_organizer_id=5, status=EVENT_STATUS_PUBLISHED)
         mock_db.scalar.return_value = event
         mock_db.commit = AsyncMock()
 
         with patch(
-            "app.routers.organizer_events.apply_organizer_category",
+            "app.routers.organizer_events.replace_organizer_categories",
             new_callable=AsyncMock,
         ) as mock_apply_category:
-            body = PatchEventBody(category=picked_category)
+            body = PatchEventBody(categories=picked)
             await update_own_event(
                 10,
                 body,
@@ -612,7 +658,31 @@ class TestUpdateOwnEvent:
                 organizer,
                 mock_db,
             )
-        mock_apply_category.assert_awaited_once_with(mock_db, event.id, picked_category)
+        mock_apply_category.assert_awaited_once_with(mock_db, event.id, picked)
+
+    @pytest.mark.asyncio
+    async def test_empty_categories_edit_is_noop(
+        self, mock_db, make_request, make_organizer
+    ):
+        from app.routers.organizer_events import PatchEventBody, update_own_event
+
+        organizer = make_organizer(organizer_id=5)
+        event = _fake_event(submitted_by_organizer_id=5, status=EVENT_STATUS_PUBLISHED)
+        mock_db.scalar.return_value = event
+        mock_db.commit = AsyncMock()
+
+        with patch(
+            "app.routers.organizer_events.replace_organizer_categories",
+            new_callable=AsyncMock,
+        ) as mock_replace:
+            await update_own_event(
+                10,
+                PatchEventBody(categories=[]),
+                make_request(method="PATCH", path="/organizer/events/10"),
+                organizer,
+                mock_db,
+            )
+        mock_replace.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_sets_needs_review_on_clean_edit_keeps_published(
