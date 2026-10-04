@@ -7,6 +7,7 @@ import { renderWithProviders } from '../../test/utils';
 
 vi.mock('../../lib/auth', () => ({
   getLocale: vi.fn(() => 'en'),
+  getStoredLocale: vi.fn(() => 'en'),
   setLocale: vi.fn(),
 }));
 

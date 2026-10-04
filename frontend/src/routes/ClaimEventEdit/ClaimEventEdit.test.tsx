@@ -41,10 +41,10 @@ function baseEvent(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function renderEdit(route = '/organizer/claims/42/edit') {
+function renderEdit(route = '/en/organizer/claims/42/edit') {
   return renderWithProviders(<ClaimEventEdit />, {
     route,
-    pathPattern: '/organizer/claims/:id/edit',
+    pathPattern: '/:locale/organizer/claims/:id/edit',
   });
 }
 
@@ -82,7 +82,7 @@ describe('ClaimEventEdit (#416)', () => {
   it('loads and saves against the event_id from the URL, via the path-based API shape (#437, #453)', async () => {
     mockGet.mockResolvedValueOnce(baseEvent({ id: 7 }));
     mockPatch.mockResolvedValueOnce(baseEvent({ id: 7, title: 'New title' }));
-    renderEdit('/organizer/claims/42/edit?event_id=7');
+    renderEdit('/en/organizer/claims/42/edit?event_id=7');
 
     const titleInput = await screen.findByDisplayValue('Sügisõhtu jazziklubis');
     // The app route's own query param is unaffected (no network request, so

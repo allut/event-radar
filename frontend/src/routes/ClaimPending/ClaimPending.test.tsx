@@ -19,8 +19,8 @@ const mockPost = vi.mocked(organizerApi.post);
 
 function renderPending() {
   return renderWithProviders(<ClaimPending />, {
-    route: '/organizer/claims/7/pending',
-    pathPattern: '/organizer/claims/:id/pending',
+    route: '/en/organizer/claims/7/pending',
+    pathPattern: '/:locale/organizer/claims/:id/pending',
   });
 }
 

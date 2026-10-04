@@ -1,16 +1,27 @@
-import { useState } from 'react';
-import { getLocale, setLocale } from '../lib/auth';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import { LOCALE_ET } from '../constants';
+import { getStoredLocale, setLocale } from '../lib/auth';
+import { isValidLocale, localizedTo } from '../utils';
 
-/** Local locale state paired with the global setLocale side effect — the
- * locale-switcher routes (Onboarding, OrganizerDashboard, EventSubmit) all
- * mirror the same value into local state so their own tree re-renders
- * immediately on a switch, not just on the next subscribeLocale tick. */
+/** URL-backed locale for the organizer portal and Onboarding — routes that
+ * have no PATCH /users/me-style locale endpoint to mirror. The locale is
+ * derived from the `:locale` URL segment (else the stored preference, else
+ * Estonian — the same resolution as useLocaleMutation's non-public path), so
+ * the shown language can never disagree with the URL. Switching persists the
+ * choice and navigates to the equivalent path under the new prefix. */
 export function useLocalLocale(): [string, (code: string) => void] {
-  const [locale, setLocaleState] = useState(getLocale());
+  const { locale: urlLocale } = useParams<{ locale?: string }>();
+  const { pathname, search, hash } = useLocation();
+  const navigate = useNavigate();
+
+  const locale = isValidLocale(urlLocale) ? urlLocale : (getStoredLocale() ?? LOCALE_ET);
 
   function handleLocaleChange(code: string): void {
-    setLocaleState(code);
+    // Persist before navigating: BareLocaleGate (App.tsx) reads storage
+    // synchronously in the render the navigate below triggers — see
+    // useLocaleMutation. replace: true so Back skips locale variants.
     setLocale(code);
+    navigate(localizedTo(pathname + search + hash, code), { replace: true });
   }
 
   return [locale, handleLocaleChange];

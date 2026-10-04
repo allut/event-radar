@@ -68,11 +68,10 @@ describe('App route guards', () => {
     setPath('/organizer/dashboard');
     render(<App />);
 
-    // OrganizerDashboard's own local locale state defaults via getLocale()
-    // (LOCALE_EN), not BareLocaleGate's bare-path Estonian default —
-    // see useLocalLocale.
+    // Bare path with no stored preference: useLocalLocale resolves Estonian
+    // from the URL, matching BareLocaleGate.
     await waitFor(() =>
-      expect(screen.getByRole('navigation', { name: t('organizer_dashboard_title', 'en') })).toBeInTheDocument(),
+      expect(screen.getByRole('navigation', { name: t('organizer_dashboard_title', 'et') })).toBeInTheDocument(),
     );
     expect(window.location.pathname).toBe('/organizer/dashboard');
   });

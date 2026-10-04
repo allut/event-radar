@@ -3,10 +3,11 @@ import { StatusCodes } from 'http-status-codes';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import Onboarding from './Onboarding';
-import { renderWithProviders } from '../../test/utils';
+import { renderWithProviders, LocationProbe } from '../../test/utils';
 
 vi.mock('../../lib/auth', () => ({
   getLocale: vi.fn(() => 'en'),
+  getStoredLocale: vi.fn(() => 'en'),
   setLocale: vi.fn(),
 }));
 
@@ -107,11 +108,24 @@ describe('Onboarding', () => {
     expect(screen.queryByText('2')).not.toBeInTheDocument();
   });
 
-  it('locale change calls setLocale', async () => {
+  it('locale change calls setLocale and updates the URL', async () => {
     const { setLocale } = await import('../../lib/auth');
-    renderWithProviders(<Onboarding />);
+    const ui = (
+      <>
+        <Onboarding />
+        <LocationProbe />
+      </>
+    );
+    renderWithProviders(ui, {
+      route: '/onboarding',
+      routes: [
+        { path: '/onboarding', element: ui },
+        { path: '/:locale/onboarding', element: ui },
+      ],
+    });
     await userEvent.click(screen.getByRole('button', { name: 'EN' }));
     await userEvent.click(screen.getByRole('button', { name: 'RU' }));
     expect(setLocale).toHaveBeenCalledWith('ru');
+    expect(screen.getByTestId('location-probe')).toHaveTextContent('/ru/onboarding');
   });
 });

@@ -31,8 +31,8 @@ function page(overrides: Record<string, unknown> = {}) {
 
 function renderList() {
   return renderWithProviders(<ClaimEvents />, {
-    route: '/organizer/claims/7/events',
-    pathPattern: '/organizer/claims/:id/events',
+    route: '/en/organizer/claims/7/events',
+    pathPattern: '/:locale/organizer/claims/:id/events',
   });
 }
 
