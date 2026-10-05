@@ -99,6 +99,22 @@ describe('EventDetail', () => {
     await waitFor(() => expect(screen.getByText('Great music')).toBeInTheDocument());
   });
 
+  it('puts details and the claim panel ahead of why-go in the DOM, inside the rail (#478)', async () => {
+    mockGet.mockResolvedValueOnce(eventData);
+    renderWithProviders(<EventDetail />, { route: '/en/events/1', pathPattern: '/:locale/events/:id' });
+    const whyGo = await screen.findByText('Great music');
+    const venue = screen.getByText('Rock Hall');
+    const claim = screen.getByText('Is this your event?');
+    const title = screen.getByRole('heading', { level: 1, name: 'Test Concert' });
+    const follows = (a: Node, b: Node) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(follows(title, venue)).toBe(true);
+    expect(follows(venue, claim)).toBe(true);
+    expect(follows(claim, whyGo)).toBe(true);
+    // One copy of each block — the wide two-column layout never duplicates DOM.
+    expect(screen.getAllByText('Rock Hall')).toHaveLength(1);
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+  });
+
   it('renders sanitized description', async () => {
     mockGet.mockResolvedValueOnce(eventData);
     renderWithProviders(<EventDetail />, { route: '/en/events/1', pathPattern: '/:locale/events/:id' });

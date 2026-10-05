@@ -14,6 +14,15 @@
   composes: gridHeading from '../../components/shared/Page.module.css';
 }
 
+/* Filter chrome wrapper: a column below the wide band (its gap mirrors
+   Page.module.css .gridMain's, so the stack reads as before), one
+   hairline-ruled toolbar row inside it. */
+.toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
 .search {
   position: relative;
 }
@@ -115,6 +124,31 @@
   align-self: center;
   padding: var(--space-0-45) var(--space-4);
   font-size: var(--fs-sm);
+}
+
+/* Wide band (--bp-wide): search + switch + clusters on one row; flex-wrap
+   is the fallback when ET/RU labels outgrow it. */
+@media (min-width: 1280px) {
+  .toolbar {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-3);
+    padding-bottom: var(--space-4);
+    border-bottom: var(--rule);
+  }
+
+  .search {
+    flex: 0 1 var(--explore-search-max);
+  }
+
+  .menuRowTop {
+    justify-content: flex-start;
+  }
+
+  .menuRowBottom {
+    margin-left: auto;
+  }
 }
 
 @media (max-width: 640px) {

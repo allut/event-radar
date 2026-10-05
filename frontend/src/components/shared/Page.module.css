@@ -90,8 +90,15 @@
 
 .cardGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(var(--card-grid-min), 1fr));
+  grid-template-columns: repeat(var(--card-grid-cols), minmax(var(--card-grid-col-min), 1fr));
   gap: var(--space-4);
+}
+
+/* Wide band (--bp-wide): side padding matches the TopBar's wrap alignment. */
+@media (min-width: 1280px) {
+  .gridMain {
+    padding-inline: var(--space-6);
+  }
 }
 
 @media (max-width: 640px) {

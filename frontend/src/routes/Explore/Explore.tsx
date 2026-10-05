@@ -380,90 +380,92 @@ export default function Explore() {
           <h1 className={styles.heading}>{t('nav_explore', locale)}</h1>
         </header>
 
-        <div className={styles.search}>
-          <svg
-            className={styles.searchIcon}
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            aria-hidden
-          >
-            <circle cx="11" cy="11" r="7" />
-            <path d="M21 21l-4.3-4.3" />
-          </svg>
-          <input
-            type="search"
-            className={styles.searchInput}
-            placeholder={t('explore_search_placeholder', locale)}
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-            aria-label={t('explore_search_placeholder', locale)}
-          />
-        </div>
-
-        <div className={styles.menuRowTop}>
-          <div className={styles.switchBox}>
-            <SegmentedControl
-              options={forYouOptions}
-              value={filters.forYou ? EXPLORE_AUDIENCE_FOR_YOU : EXPLORE_AUDIENCE_ALL}
-              onChange={handleForYouChange}
-              ariaLabel={`${t('all_events', locale)} / ${t('for_you', locale)}`}
-            />
-          </div>
-
-          <div className={styles.cluster}>
-            <SelectMenu
-              variant="inline"
-              label={t('sort_by', locale)}
-              value={filters.sort}
-              options={sortOptions}
-              onChange={handleSortChange}
-              ariaLabel={t('sort_by', locale)}
-            />
-            <span className={styles.divider} aria-hidden />
-            <DateRangeMenu
-              label={t('date_prefix', locale)}
-              value={filters.datePreset}
-              customFrom={filters.customFrom}
-              customTo={filters.customTo}
-              onSelectPreset={setDatePreset}
-              onChangeCustomRange={setCustomRange}
-              locale={locale}
-              ariaLabel={t('filter_dates', locale)}
-            />
-          </div>
-        </div>
-
-        <div className={styles.menuRowBottom}>
-          <div className={styles.cluster}>
-            <FacetMenu
-              variant="inline"
-              label={t('filter_categories', locale)}
-              options={categoryOpts}
-              selected={filters.category}
-              onToggle={handleCategoryToggle}
-              ariaLabel={t('filter_categories', locale)}
-            />
-            <span className={styles.divider} aria-hidden />
-            <FacetMenu
-              variant="inline"
-              label={t('filter_vibes', locale)}
-              options={vibeOpts}
-              selected={filters.vibe}
-              onToggle={handleVibeToggle}
-              ariaLabel={t('filter_vibes', locale)}
-            />
-            <span className={styles.divider} aria-hidden />
-            <button
-              type="button"
-              className={cx(styles.freeBtn, filters.free && styles.freeBtnActive)}
-              aria-pressed={filters.free}
-              onClick={toggleFree}
+        <div className={styles.toolbar}>
+          <div className={styles.search}>
+            <svg
+              className={styles.searchIcon}
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              aria-hidden
             >
-              {t('free_only', locale)}
-            </button>
+              <circle cx="11" cy="11" r="7" />
+              <path d="M21 21l-4.3-4.3" />
+            </svg>
+            <input
+              type="search"
+              className={styles.searchInput}
+              placeholder={t('explore_search_placeholder', locale)}
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              aria-label={t('explore_search_placeholder', locale)}
+            />
+          </div>
+
+          <div className={styles.menuRowTop}>
+            <div className={styles.switchBox}>
+              <SegmentedControl
+                options={forYouOptions}
+                value={filters.forYou ? EXPLORE_AUDIENCE_FOR_YOU : EXPLORE_AUDIENCE_ALL}
+                onChange={handleForYouChange}
+                ariaLabel={`${t('all_events', locale)} / ${t('for_you', locale)}`}
+              />
+            </div>
+
+            <div className={styles.cluster}>
+              <SelectMenu
+                variant="inline"
+                label={t('sort_by', locale)}
+                value={filters.sort}
+                options={sortOptions}
+                onChange={handleSortChange}
+                ariaLabel={t('sort_by', locale)}
+              />
+              <span className={styles.divider} aria-hidden />
+              <DateRangeMenu
+                label={t('date_prefix', locale)}
+                value={filters.datePreset}
+                customFrom={filters.customFrom}
+                customTo={filters.customTo}
+                onSelectPreset={setDatePreset}
+                onChangeCustomRange={setCustomRange}
+                locale={locale}
+                ariaLabel={t('filter_dates', locale)}
+              />
+            </div>
+          </div>
+
+          <div className={styles.menuRowBottom}>
+            <div className={styles.cluster}>
+              <FacetMenu
+                variant="inline"
+                label={t('filter_categories', locale)}
+                options={categoryOpts}
+                selected={filters.category}
+                onToggle={handleCategoryToggle}
+                ariaLabel={t('filter_categories', locale)}
+              />
+              <span className={styles.divider} aria-hidden />
+              <FacetMenu
+                variant="inline"
+                label={t('filter_vibes', locale)}
+                options={vibeOpts}
+                selected={filters.vibe}
+                onToggle={handleVibeToggle}
+                ariaLabel={t('filter_vibes', locale)}
+              />
+              <span className={styles.divider} aria-hidden />
+              <button
+                type="button"
+                className={cx(styles.freeBtn, filters.free && styles.freeBtnActive)}
+                aria-pressed={filters.free}
+                onClick={toggleFree}
+              >
+                {t('free_only', locale)}
+              </button>
+            </div>
           </div>
         </div>
 

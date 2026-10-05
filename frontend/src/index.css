@@ -193,6 +193,12 @@
 
   /* Grid/flex geometry */
   --card-grid-min: 280px;
+  /* Page.module.css .cardGrid track count + track minimum. Auto-fill below
+     the wide band; fixed counts (4, then 6) inside it — see the wide-band
+     :root blocks at the end of this file. cardGridColumns.test.ts asserts
+     every fixed count divides the browse/saved page sizes. */
+  --card-grid-cols: auto-fill;
+  --card-grid-col-min: var(--card-grid-min);
   --underline-offset: 3px;
   --underline-offset-tight: 2px; /* sanitized-HTML <u> in event descriptions */
   --measure-prose: 46ch;
@@ -282,16 +288,25 @@
      so the 640px mobile breakpoint stays a literal in every @media rule
      (wayfinder #196/#200). */
   --bp-narrow: 640px;
-  /* Same documentation-only role as --bp-narrow, for the three @media
+  /* Same documentation-only role as --bp-narrow, for the max-width @media
      breakpoints that don't reuse it: DesktopGate.module.css's tablet
      cutoff, Landing.module.css's stat-row wrap, Onboarding.module.css's
-     persona-grid collapse. */
+     persona-grid collapse — plus the min-width wide-band pair below. */
   --bp-desktop-gate: 1024px;      /* shared/DesktopGate.module.css */
   --bp-landing-stats: 900px;      /* Landing.module.css */
   --bp-onboarding-narrow: 560px;  /* Onboarding.module.css */
+  /* Wide band (design-system §10): floor where page widths jump to the
+     1760px wrap and the card grid locks to 4 columns, and the step to 6. */
+  --bp-wide: 1280px;
+  --bp-wide-six: 1700px;
+  /* Side inset that aligns full-bleed chrome content (TopBar, Landing ticker)
+     to the --page-max-wide wrap. `100%` is substituted at the use site, so it
+     resolves against each consumer's own containing block. Wide band only. */
+  --wrap-inset: max(var(--space-6), calc((100% - var(--page-max-wide)) / 2 + var(--space-6)));
 
   /* Component max/min-widths */
   --card-max-narrow: 400px;       /* shared/Card.module.css .cardPage */
+  --explore-search-max: 480px;    /* Explore search field cap in the wide-band toolbar */
   --modal-max-width: 480px;       /* Modal panel */
   --card-max-auth: 360px;         /* AuthCard */
   --card-max-auth-inner: 280px;   /* AuthCard inner content */
@@ -422,6 +437,9 @@
   --hair-width: 64%; /* plate hairline width, c1.html's .hair */
   --plate-media-min-height: 300px;          /* B3 .plate min-height */
   --plate-media-min-height-compact: 210px;  /* B3 mobile */
+  --plate-media-aspect: 16 / 9;             /* wide-band plate media width = height × this */
+  --plate-media-width: calc(var(--plate-media-min-height) * var(--plate-media-aspect)); /* wide-band plate media column */
+  --plates-max-width: 1240px;               /* wide-band plate row cap (rows stagger to alternate wrap edges) */
   --plate-text-min: 260px;                  /* B3 text-column grid minimum */
   --plate-image-filter: saturate(0.85) contrast(1.04);
   --topbar-height-mobile: 68px; /* TopBar's rendered height at <=640px (nav hidden,
@@ -507,6 +525,26 @@
   --scrim-vertical: linear-gradient(0deg, rgba(253, 252, 250, 0.94) 6%, rgba(253, 252, 250, 0.55) 42%, rgba(253, 252, 250, 0.72));
   --poster-glow-cool: var(--poster-glow-cool-light);
   --poster-glow-warm: var(--poster-glow-warm-light);
+}
+
+/* Wide band (design-system §10, map #459) — pure reflow, no fluid tokens.
+   Literals mirror --bp-wide / --bp-wide-six (custom properties can't drive
+   @media). Theme-neutral, so the light block above needs no counterpart. */
+@media (min-width: 1280px) {
+  :root {
+    --page-max-wide: 1760px;
+    --page-max-medium: var(--page-max-wide);
+    --page-max-grid: var(--page-max-wide);
+    --plate-media-min-height: 400px;
+    --card-grid-cols: 4;
+    --card-grid-col-min: 0px;
+  }
+}
+
+@media (min-width: 1700px) {
+  :root {
+    --card-grid-cols: 6;
+  }
 }
 
 html {

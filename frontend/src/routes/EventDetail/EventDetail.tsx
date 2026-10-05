@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api, organizerApi } from '../../api/client';
@@ -6,6 +6,7 @@ import { t, ti } from '../../i18n';
 import { buildMapsUrl, categoryGradient, cx, formatEventDateTime, formatEventShortDate, formatHourMinute, formatPrice, safeUrl, sanitizeHtml, shareEvent, titleWithBrand, trackExternalClick, truncateForMeta, withLocaleQuery } from '../../utils';
 import { useAuth } from '../../hooks/useAuth';
 import { useEventReport } from '../../hooks/useEventReport';
+import { useFitsViewport } from '../../hooks/useFitsViewport';
 import { useLocaleMutation } from '../../hooks/useLocaleMutation';
 import { useLocaleNavigate } from '../../hooks/useLocaleNavigate';
 import { useLocalePath } from '../../hooks/useLocalePath';
@@ -42,6 +43,9 @@ export default function EventDetail() {
   const { locale, handleLocaleChange, isPending: localePending } = useLocaleMutation({ publicRoute: true });
   const handleLogout = useLogout();
   const { toast, showToast } = useToast();
+  // Wide-band rail (#478) sticks only while it fits the viewport.
+  const [railEl, setRailEl] = useState<HTMLDivElement | null>(null);
+  const railFits = useFitsViewport(railEl);
 
   const { data, isLoading, isError } = useQuery({
     queryKey: [QUERY_KEYS.event, id, locale],
@@ -145,100 +149,155 @@ export default function EventDetail() {
         localeDisabled={localePending}
       />
 
+      {/* #478: one copy of each block. .rail (hero → head → details/claim) and
+          .body (why-go → about → important info) are two columns in the wide
+          band; below it .rail is display: contents and `order` restores the
+          stacked sequence (details/claim last). */}
       <main className={styles.main}>
-        <div className={styles.hero}>
-          {imageSrc ? (
-            <div className={styles.heroFrame}>
-              <img src={imageSrc} alt="" aria-hidden className={styles.heroBackdrop} loading="lazy" />
-              <img src={imageSrc} alt={data.title} className={styles.heroImage} />
-            </div>
-          ) : (
-            <div
-              className={styles.heroPlaceholder}
-              style={{ background: categoryGradient(data.categories) }}
-              aria-hidden
-            />
-          )}
-          {price && (
-            // data-* attrs (PRICE_DATA_ATTR): read by the in-build SEO
-            // validation gate (src/lib/seoValidation.ts, issue #53) to check
-            // this snapshot's price against what the live API currently
-            // returns — price isn't part of the JSON-LD payload (issue #46
-            // defers AggregateOffer), so it needs its own marker.
-            <span
-              className={styles.price}
-              data-testid={EVENT_PRICE_TESTID}
-              {...{
-                [PRICE_DATA_ATTR.min]: data.price_min ?? '',
-                [PRICE_DATA_ATTR.max]: data.price_max ?? '',
-                [PRICE_DATA_ATTR.currency]: data.currency ?? '',
-                [PRICE_DATA_ATTR.hasFreeTier]: data.has_free_tier,
-              }}
-            >
-              {price}
-            </span>
-          )}
-        </div>
-
-        <div className={styles.content}>
-          {data.has_free_tier && (
-            <p className={styles.freeTierHint}>{t('price_free_options_hint', locale)}</p>
-          )}
-
-          <div className={styles.meta}>
-            <time className={styles.time}>{formatEventDateTime(data.starts_at, locale)}</time>
-            {data.ends_at && (
-              <span className={styles.ends}>
-                {ti('ends_at', locale, { time: formatHourMinute(data.ends_at, locale) })}
-              </span>
-            )}
-            {data.claim_status === EVENT_CLAIM_STATUS_CLAIMED && (
-              <ClaimPill status="claimed" locale={locale} />
-            )}
-            {/* (#451) Claimant-only: the public claim_status never carries
-                "pending" — only the caller's own claim, fetched via the
-                organizer-scoped for-event lookup, can show this. */}
-            {data.claim_status !== EVENT_CLAIM_STATUS_CLAIMED && ownClaim?.claim?.status === CLAIM_STATUS_PENDING && (
-              <ClaimPill status="pending" locale={locale} />
-            )}
-          </div>
-
-          <h1 className={styles.title}>{data.title}</h1>
-
-          {data.listed_by && (
-            <p className={styles.listedBy}>{ti('listed_by', locale, { name: data.listed_by })}</p>
-          )}
-
-          <div className={styles.actions}>
-            {authed && (
-              <FeedbackButtonRow
-                activeSignal={activeSignal}
-                pending={pending}
-                onPress={sendFeedback}
-                locale={locale}
-                variant="detail"
+        <div ref={setRailEl} className={cx(styles.rail, railFits && styles.railFits)}>
+          <div className={styles.hero}>
+            {imageSrc ? (
+              <div className={styles.heroFrame}>
+                <img src={imageSrc} alt="" aria-hidden className={styles.heroBackdrop} loading="lazy" />
+                <img src={imageSrc} alt={data.title} className={styles.heroImage} />
+              </div>
+            ) : (
+              <div
+                className={styles.heroPlaceholder}
+                style={{ background: categoryGradient(data.categories) }}
+                aria-hidden
               />
             )}
-            <EventOverflowMenu
-              locale={locale}
-              reported={reported}
-              onShare={handleShare}
-              onReport={openReportModal}
-              triggerClassName={styles.overflowTrigger}
-            />
-            {ticketUrl && (
-              <a
-                href={ticketUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className={styles.ticketsBtn}
-                onClick={handleTicketsClick}
+            {price && (
+              // data-* attrs (PRICE_DATA_ATTR): read by the in-build SEO
+              // validation gate (src/lib/seoValidation.ts, issue #53) to check
+              // this snapshot's price against what the live API currently
+              // returns — price isn't part of the JSON-LD payload (issue #46
+              // defers AggregateOffer), so it needs its own marker.
+              <span
+                className={styles.price}
+                data-testid={EVENT_PRICE_TESTID}
+                {...{
+                  [PRICE_DATA_ATTR.min]: data.price_min ?? '',
+                  [PRICE_DATA_ATTR.max]: data.price_max ?? '',
+                  [PRICE_DATA_ATTR.currency]: data.currency ?? '',
+                  [PRICE_DATA_ATTR.hasFreeTier]: data.has_free_tier,
+                }}
               >
-                {t('get_tickets', locale)}
-              </a>
+                {price}
+              </span>
             )}
           </div>
 
+          <div className={styles.railHead}>
+            {data.has_free_tier && (
+              <p className={styles.freeTierHint}>{t('price_free_options_hint', locale)}</p>
+            )}
+
+            <div className={styles.meta}>
+              <time className={styles.time}>{formatEventDateTime(data.starts_at, locale)}</time>
+              {data.ends_at && (
+                <span className={styles.ends}>
+                  {ti('ends_at', locale, { time: formatHourMinute(data.ends_at, locale) })}
+                </span>
+              )}
+              {data.claim_status === EVENT_CLAIM_STATUS_CLAIMED && (
+                <ClaimPill status="claimed" locale={locale} />
+              )}
+              {/* (#451) Claimant-only: the public claim_status never carries
+                  "pending" — only the caller's own claim, fetched via the
+                  organizer-scoped for-event lookup, can show this. */}
+              {data.claim_status !== EVENT_CLAIM_STATUS_CLAIMED && ownClaim?.claim?.status === CLAIM_STATUS_PENDING && (
+                <ClaimPill status="pending" locale={locale} />
+              )}
+            </div>
+
+            <h1 className={styles.title}>{data.title}</h1>
+
+            {data.listed_by && (
+              <p className={styles.listedBy}>{ti('listed_by', locale, { name: data.listed_by })}</p>
+            )}
+
+            <div className={styles.actions}>
+              {authed && (
+                <FeedbackButtonRow
+                  activeSignal={activeSignal}
+                  pending={pending}
+                  onPress={sendFeedback}
+                  locale={locale}
+                  variant="detail"
+                />
+              )}
+              <EventOverflowMenu
+                locale={locale}
+                reported={reported}
+                onShare={handleShare}
+                onReport={openReportModal}
+                triggerClassName={styles.overflowTrigger}
+              />
+              {ticketUrl && (
+                <a
+                  href={ticketUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={styles.ticketsBtn}
+                  onClick={handleTicketsClick}
+                >
+                  {t('get_tickets', locale)}
+                </a>
+              )}
+            </div>
+          </div>
+
+          <div className={styles.railFoot}>
+            {(data.venue_name || data.venue_address || data.categories.length > 0 || data.vibes.length > 0) && (
+              <section className={styles.section}>
+                <h2 className={styles.eyebrow}>{t('eyebrow_details', locale)}</h2>
+                <hr className={styles.rule} />
+                {(data.venue_name || data.venue_address) && (
+                  <div className={styles.venue}>
+                    {data.venue_name && <span className={styles.venueName}>{data.venue_name}</span>}
+                    {data.venue_address && (
+                      <span className={styles.venueAddress}>{data.venue_address}</span>
+                    )}
+                    {mapsUrl && (
+                      <a href={mapsUrl} target="_blank" rel="noopener noreferrer" className={styles.mapLink}>
+                        {t('view_on_map', locale)}
+                      </a>
+                    )}
+                  </div>
+                )}
+
+                {(data.categories.length > 0 || data.vibes.length > 0) && (
+                  <div className={styles.tags}>
+                    {data.categories.map(cat => (
+                      <Link key={cat} to={localePath(`${ROUTES.explore}?${EXPLORE_PARAM.category}=${cat}`)} className={styles.tag}>
+                        {t(`category_${cat}`, locale)}
+                      </Link>
+                    ))}
+                    {data.vibes.map(vibe => (
+                      <Link key={vibe} to={localePath(`${ROUTES.explore}?${EXPLORE_PARAM.vibe}=${vibe}`)} className={cx(styles.tag, styles.tagVibe)}>
+                        {t(`vibe_${vibe}`, locale)}
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </section>
+            )}
+
+            {/* #441: a pending-only target is still claimable by a rival —
+                ADR 0004's "proof preempts assertion" only blocks the CTA once
+                a claim is actually approved. #445: a direct organizer
+                submission has no ingested EventSource to ever claim, so the
+                CTA never renders for it. */}
+            {data.claim_status !== EVENT_CLAIM_STATUS_CLAIMED &&
+              data.claim_status !== EVENT_CLAIM_STATUS_NOT_CLAIMABLE && (
+                <ClaimPanel eventId={data.id} locale={locale} />
+              )}
+          </div>
+        </div>
+
+        <div className={styles.body}>
           {data.why_go.length > 0 && (
             <section className={styles.section}>
               <h2 className={styles.eyebrow}>{t('why_go', locale)}</h2>
@@ -266,51 +325,6 @@ export default function EventDetail() {
               <div className={styles.description} dangerouslySetInnerHTML={{ __html: sanitizedImportantInfo }} />
             </section>
           )}
-
-          {(data.venue_name || data.venue_address || data.categories.length > 0 || data.vibes.length > 0) && (
-            <section className={styles.section}>
-              <h2 className={styles.eyebrow}>{t('eyebrow_details', locale)}</h2>
-              <hr className={styles.rule} />
-              {(data.venue_name || data.venue_address) && (
-                <div className={styles.venue}>
-                  {data.venue_name && <span className={styles.venueName}>{data.venue_name}</span>}
-                  {data.venue_address && (
-                    <span className={styles.venueAddress}>{data.venue_address}</span>
-                  )}
-                  {mapsUrl && (
-                    <a href={mapsUrl} target="_blank" rel="noopener noreferrer" className={styles.mapLink}>
-                      {t('view_on_map', locale)}
-                    </a>
-                  )}
-                </div>
-              )}
-
-              {(data.categories.length > 0 || data.vibes.length > 0) && (
-                <div className={styles.tags}>
-                  {data.categories.map(cat => (
-                    <Link key={cat} to={localePath(`${ROUTES.explore}?${EXPLORE_PARAM.category}=${cat}`)} className={styles.tag}>
-                      {t(`category_${cat}`, locale)}
-                    </Link>
-                  ))}
-                  {data.vibes.map(vibe => (
-                    <Link key={vibe} to={localePath(`${ROUTES.explore}?${EXPLORE_PARAM.vibe}=${vibe}`)} className={cx(styles.tag, styles.tagVibe)}>
-                      {t(`vibe_${vibe}`, locale)}
-                    </Link>
-                  ))}
-                </div>
-              )}
-            </section>
-          )}
-
-          {/* #441: a pending-only target is still claimable by a rival —
-              ADR 0004's "proof preempts assertion" only blocks the CTA once
-              a claim is actually approved. #445: a direct organizer
-              submission has no ingested EventSource to ever claim, so the
-              CTA never renders for it. */}
-          {data.claim_status !== EVENT_CLAIM_STATUS_CLAIMED &&
-            data.claim_status !== EVENT_CLAIM_STATUS_NOT_CLAIMABLE && (
-              <ClaimPanel eventId={data.id} locale={locale} />
-            )}
         </div>
       </main>
 

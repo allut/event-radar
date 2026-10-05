@@ -753,6 +753,55 @@
   .organizerCta { justify-self: start; }
 }
 
+/* Wide band (--bp-wide): the hero keeps filling the viewport, so its small
+   type steps up the --fs scale to hold up at that size; Ticker label and
+   marquee window align to the wrap like the TopBar. */
+@media (min-width: 1280px) {
+  .heroCounter,
+  .dateline,
+  .capbarLabel {
+    font-size: var(--fs-sm);
+  }
+  .sub,
+  .capbarBrowse {
+    font-size: var(--fs-lg);
+  }
+  .fine {
+    font-size: var(--fs-base);
+  }
+  .input {
+    font-size: var(--fs-xl);
+  }
+  .submit {
+    font-size: var(--fs-sm);
+  }
+  .tkItem {
+    font-size: var(--fs-base);
+  }
+  /* Staggered plates: each row is capped at --plates-max-width and hugs the
+     wrap edge on its media side — .plate (media left) to the left edge,
+     .plateFlip (media right) to the right. The media panel is locked to its
+     height × --plate-media-aspect (16:9); the text column takes the rest. */
+  .plate {
+    max-width: var(--plates-max-width);
+    grid-template-columns: var(--plate-media-width) minmax(var(--plate-text-min), 1fr);
+  }
+  .plateFlip {
+    margin-left: auto;
+    grid-template-columns: minmax(var(--plate-text-min), 1fr) var(--plate-media-width);
+  }
+  .tkLabel {
+    font-size: var(--fs-xs);
+    padding-left: var(--wrap-inset);
+  }
+  /* Mirror of .tkLabel's inset: the marquee window stops at the wrap's right
+     edge behind a hairline, so items enter and leave at the same insets. */
+  .tkView {
+    margin-right: var(--wrap-inset);
+    border-right: var(--rule);
+  }
+}
+
 @media (max-width: 640px) {
   .hero,
   .heroGrid {

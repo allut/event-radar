@@ -20,6 +20,7 @@
 
 .hero {
   position: relative;
+  width: 100%;
   max-width: var(--page-max-narrow);
   margin: var(--space-5) auto 0;
   padding: 0 var(--space-5);
@@ -66,17 +67,43 @@
 
 /* ─── Content ─────────────────────────────────────────────────────────────── */
 
+/* #478: .rail = hero + .railHead + .railFoot (details, claim); .body =
+   why-go/about/important info. Below the wide band .rail is display:
+   contents and `order` drops .railFoot after .body, so the stacked
+   single-column sequence is unchanged; inside it they become two columns. */
 .main {
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: var(--space-8);
 }
 
-.content {
+.rail {
+  display: contents;
+}
+
+.railHead,
+.body,
+.railFoot {
   composes: rise from '../../components/shared/Animations.module.css';
   --rise-distance: var(--rise-distance-xs);
   --rise-duration: var(--anim-rise-sm);
+  width: 100%;
   max-width: var(--page-max-narrow);
   margin: 0 auto;
-  padding: var(--space-6) var(--space-5) var(--space-8);
+  padding: 0 var(--space-5);
+}
+
+.railHead {
+  padding-top: var(--space-6);
+}
+
+.body {
+  order: 1;
+}
+
+.railFoot {
+  order: 2;
 }
 
 .meta {
@@ -333,5 +360,44 @@
 
   .overflowTrigger {
     margin-left: auto;
+  }
+}
+
+/* Wide band (--bp-wide): rail beside body inside the --page-max-wide wrap.
+   .railFits (useFitsViewport) makes the whole rail sticky only while it fits
+   the viewport, so a tall rail never clips. */
+@media (min-width: 1280px) {
+  .main {
+    display: grid;
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+    column-gap: var(--space-7);
+    align-items: start;
+    width: 100%;
+    max-width: var(--page-max-wide);
+    margin: 0 auto;
+    padding: var(--space-5) var(--space-6) var(--space-8);
+  }
+
+  .rail {
+    display: flex;
+    flex-direction: column;
+    top: calc(var(--topbar-height) + var(--space-5));
+  }
+
+  .railFits {
+    position: sticky;
+  }
+
+  .hero,
+  .railHead,
+  .body,
+  .railFoot {
+    max-width: none;
+    margin: 0;
+    padding-inline: 0;
+  }
+
+  .price {
+    left: var(--space-3);
   }
 }
