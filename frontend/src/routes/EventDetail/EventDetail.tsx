@@ -234,6 +234,7 @@ export default function EventDetail() {
                 onShare={handleShare}
                 onReport={openReportModal}
                 triggerClassName={styles.overflowTrigger}
+                anchor="left"
               />
               {ticketUrl && (
                 <a

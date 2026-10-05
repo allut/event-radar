@@ -32,7 +32,7 @@ export interface UseDropdownResult {
  *   flip is applied. `'left'` (default) covers triggers that sit near the
  *   viewport's left/center, flipping to right-anchored if that would
  *   overflow the right edge. `'right'` covers triggers pinned to their
- *   container's right edge (EventOverflowMenu), flipping to left-anchored
+ *   container's right edge (EventCard's EventOverflowMenu), flipping to left-anchored
  *   if right-anchoring would overflow the left edge.
  */
 export function useDropdown(
