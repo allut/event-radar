@@ -148,6 +148,19 @@ Landing/C1 vocabulary, in the same file but Landing-exclusive: `heroRise` (maske
 - The browse grid is `Page.module.css`'s `.cardGrid` — `repeat(auto-fill, minmax(var(--card-grid-min), 1fr))`, collapsing to one column at 640px. Explore and SavedEvents both compose it; Feed deliberately does *not* (a lead `featured` card plus a list — five curated picks is a different problem from an unbounded browse list, and converging the two would flatten the curated-vs-browse distinction).
 - Admin geometry has its own tokens (`--admin-rail-width`, `--admin-queue-list-width`, `--admin-tile-min`, `--admin-trigger-min`, …) and its own desktop gate (`DesktopGate.module.css`).
 
+### Wide viewports (≥1280px)
+
+Locked via the wide-viewport map (#459). On a 3840×2160 monitor at ~150% scaling (2560×1440 CSS px) every surface used to sit in a narrow centre column. The fix is **pure reflow, no fluid tokens**: one continuous wide band, `min-width: 1280px` floor, growth ceiling **1920px** (content centres beyond it, no intermediate step). Mobile/tablet (≤1024px) is untouched; so is C1.
+
+- **Tokens.** `--page-max-medium`/`-grid`/`-wide` are redefined to **1760px** in a `≥1280px` `:root` block. Doc tokens `--bp-wide: 1280px` and `--bp-wide-six: 1700px` (literals still carry the `@media` rule). `--card-grid-cols` is `auto-fill` below 1280, **4** at ≥1280, **6** at ≥1700; a vitest guard asserts the page sizes divide the column counts (page size 24).
+- **Chrome.** `TopBar`/`OrganizerTopBar` content aligns to the 1760 wrap via `padding-inline: max()` on the shared `.bar` (background stays full-bleed). `Ticker` strip is full-bleed with its label aligned to the wrap. `Footer` unchanged.
+- **Landing.** Hero height is capped (~820px, tokenized, tuned on the real monitor) with the same left stack; the poster stays full-bleed; plates stay one-per-row with taller media (~440px); the proof section and organizer CTA widen to the 1760 wrap.
+- **EventDetail.** Two columns: a sticky `.rail` (date, title, actions, details, claim) beside `.body`. The details/claim blocks move before why-go in the DOM, with `display: contents` + `order` restoring block order at narrow widths. The rail sticks as a whole under a viewport-height guard at ≥1280. Content, JSON-LD and the prerender gate are unchanged (block *order* may change); keep the `event-price` marker in the moved details block.
+- **Explore / Saved / Feed.** Explore's filter chrome becomes a one-line toolbar aligned to the 1760 wrap, search capped (~480px), `flex-wrap` fallback for ET/RU. Saved follows the grid automatically. Feed widens modestly (`--page-max-feed` 760 → ~1080px, still one column, tuned on the monitor).
+- **Organizer / admin.** Organizer Dashboard and ClaimEvents widen to the 1760 wrap (card grid); forms, Settings and ClaimPending stay centred readable columns. Admin shell is unchanged; queue-list width and the AdminEventDetail cap widen via tokens. `--page-max-organizer` is shared with AdminEventDetail — split it before widening either.
+- **Images.** No `srcset`/`sizes`; sources hold up at wide sizes. Only marginal case is Fienta on the Landing plate/hero (its CDN accepts `width` ≤ 1920 if needed).
+- **Prerender / theming.** Prerender's 1280×720 default viewport is harmless (DOM-only). Light theme is token-driven (hairlines via `--rule`); verify the capped Landing hero edge in light.
+
 ## 11. Landing structure
 
 Section order, locked:
@@ -181,7 +194,8 @@ Section order, locked:
 | `--radius: 0` sitewide (containers too) | Rejected — controls only. |
 | Small inline SVGs (footer social marks, overflow-menu Share/Flag, search magnifier, kebab/chevron/calendar/remove) | Recorded as functional exceptions in §9 rather than removed; audit chose to document, not delete. No new icon ships without a §9 entry. |
 | Emoji as iconography | Removed from consumer/organizer surfaces; admin status glyphs stay. Exception: the `👍 👎 🔖` signal glyphs stay in `FeedbackButtonRow` and the Saved tabs (owner decision, 2026-09-29). |
-| Landing wide-screen hero side panel | Specced, never implemented, removed from scope. |
+| Landing wide-screen hero side panel | Specced, never implemented, removed from scope. Re-opened and superseded by the wide-viewport layout (§10): Landing takes a pure-reflow wide composition, no side panel. |
+| Wide viewports: scale / fluid type / fluid tokens | Prototyped against reflow; reflow won. No `vw`-driven page tokens, no root font-size scaling. Page width is fixed 1760px from 1280px, centred past 1920px. |
 | Third-party identity-provider brand marks (class exception) | The full-colour Google "G" mark is pictographic iconography, which §1/§9 forbid, and per Google's branding guidelines it may not be made monochrome, redrawn, or dropped. Recorded as a **class** exception — third-party identity-provider brand marks, mandated by that provider's published branding terms, rendered as a local inline SVG (never `<img>` — one fewer request, no `img-src` CSP surface, and the test asserts it), scoped to the sign-in surface only. The mark is the flat four-colour G (legacy icon-only asset), chosen over Google's current gradient "super G" on legibility grounds at the 20px render size. Does not reopen §9's general no-iconography rule elsewhere. The button itself ships `border-radius: 0` (composed from the shared `Button` module, unmodified) — Google's written guidelines state no minimum size and no corner radius, so this is a defensible reading against the prose, not a violation, even though it visibly departs from Google's own shipped assets. See `docs/adr/0002-google-sign-in-oauth-pkce.md`. |
 
 ## 13. Working checklist for a visual change
