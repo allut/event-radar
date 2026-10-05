@@ -194,8 +194,8 @@
   /* Grid/flex geometry */
   --card-grid-min: 280px;
   /* Page.module.css .cardGrid track count + track minimum. Auto-fill below
-     the wide band; fixed counts (4, then 6) inside it — see the wide-band
-     :root blocks at the end of this file. cardGridColumns.test.ts asserts
+     the wide band; a fixed count (6) inside it — see the wide-band
+     :root block at the end of this file. cardGridColumns.test.ts asserts
      every fixed count divides the browse/saved page sizes. */
   --card-grid-cols: auto-fill;
   --card-grid-col-min: var(--card-grid-min);
@@ -296,9 +296,9 @@
   --bp-landing-stats: 900px;      /* Landing.module.css */
   --bp-onboarding-narrow: 560px;  /* Onboarding.module.css */
   /* Wide band (design-system §10): floor where page widths jump to the
-     1760px wrap and the card grid locks to 4 columns, and the step to 6. */
-  --bp-wide: 1280px;
-  --bp-wide-six: 1700px;
+     1760px wrap and the card grid locks to 6 columns. Above a 1920px
+     laptop viewport (2880×1620 @150%), below a 2560px monitor. */
+  --bp-wide: 2000px;
   /* Side inset that aligns full-bleed chrome content (TopBar, Landing ticker)
      to the --page-max-wide wrap. `100%` is substituted at the use site, so it
      resolves against each consumer's own containing block. Wide band only. */
@@ -528,22 +528,16 @@
 }
 
 /* Wide band (design-system §10, map #459) — pure reflow, no fluid tokens.
-   Literals mirror --bp-wide / --bp-wide-six (custom properties can't drive
-   @media). Theme-neutral, so the light block above needs no counterpart. */
-@media (min-width: 1280px) {
+   Literal mirrors --bp-wide (custom properties can't drive @media).
+   Theme-neutral, so the light block above needs no counterpart. */
+@media (min-width: 2000px) {
   :root {
     --page-max-wide: 1760px;
     --page-max-medium: var(--page-max-wide);
     --page-max-grid: var(--page-max-wide);
     --plate-media-min-height: 400px;
-    --card-grid-cols: 4;
-    --card-grid-col-min: 0px;
-  }
-}
-
-@media (min-width: 1700px) {
-  :root {
     --card-grid-cols: 6;
+    --card-grid-col-min: 0px;
   }
 }
 

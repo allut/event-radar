@@ -115,7 +115,7 @@
 
 /* Wide band (--bp-wide): background/hairline stay full-bleed; content aligns
    to the --page-max-wide wrap (same --space-6 inset as the page). */
-@media (min-width: 1280px) {
+@media (min-width: 2000px) {
   .bar {
     padding-inline: var(--wrap-inset);
   }

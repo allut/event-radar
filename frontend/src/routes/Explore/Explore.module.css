@@ -128,7 +128,7 @@
 
 /* Wide band (--bp-wide): search + switch + clusters on one row; flex-wrap
    is the fallback when ET/RU labels outgrow it. */
-@media (min-width: 1280px) {
+@media (min-width: 2000px) {
   .toolbar {
     flex-direction: row;
     flex-wrap: wrap;

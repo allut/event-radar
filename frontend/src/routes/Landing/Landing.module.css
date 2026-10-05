@@ -756,7 +756,7 @@
 /* Wide band (--bp-wide): the hero keeps filling the viewport, so its small
    type steps up the --fs scale to hold up at that size; Ticker label and
    marquee window align to the wrap like the TopBar. */
-@media (min-width: 1280px) {
+@media (min-width: 2000px) {
   .heroCounter,
   .dateline,
   .capbarLabel {

@@ -366,7 +366,7 @@
 /* Wide band (--bp-wide): rail beside body inside the --page-max-wide wrap.
    .railFits (useFitsViewport) makes the whole rail sticky only while it fits
    the viewport, so a tall rail never clips. */
-@media (min-width: 1280px) {
+@media (min-width: 2000px) {
   .main {
     display: grid;
     grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);

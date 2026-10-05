@@ -95,7 +95,7 @@
 }
 
 /* Wide band (--bp-wide): side padding matches the TopBar's wrap alignment. */
-@media (min-width: 1280px) {
+@media (min-width: 2000px) {
   .gridMain {
     padding-inline: var(--space-6);
   }
