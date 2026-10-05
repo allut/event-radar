@@ -1,5 +1,5 @@
 # Python 3.12 to match CI (.github/workflows/tests.yml) and Render.
-# Node 20 arrives via the devcontainer "node" feature (see devcontainer.json).
+# Node 24 arrives via the devcontainer "node" feature (see devcontainer.json).
 FROM mcr.microsoft.com/devcontainers/python:1-3.12-bookworm
 
 # The base image ships /etc/apt/sources.list.d/yarn.list with a signing key that

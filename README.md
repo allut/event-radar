@@ -96,7 +96,7 @@ Geocoding runs as a separate backfill alongside this pipeline, filling in `lat`/
 
 ### Option 0 — VS Code Dev Container (recommended on Windows)
 
-One-click Python 3.12 + Node 20 + Postgres 16, matching CI exactly — no local venv, no Windows/Linux `node_modules` conflicts.
+One-click Python 3.12 + Node 24 + Postgres 16, matching CI exactly — no local venv, no Windows/Linux `node_modules` conflicts.
 
 Prerequisites: Docker Desktop (WSL2 backend) and the VS Code [Dev Containers](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers) extension.
 
@@ -197,7 +197,7 @@ Open http://localhost:5173 and sign in with a magic link. Without `RESEND_API_KE
 
 ```
 event-radar/
-├── .devcontainer/             # VS Code Dev Container (Python 3.12 + Node 20 + Postgres 16)
+├── .devcontainer/             # VS Code Dev Container (Python 3.12 + Node 24 + Postgres 16)
 ├── .vscode/tasks.json         # dev-server run/logs tasks (see Option 0 above)
 ├── CLAUDE.md                  # engineering conventions and codebase guidance
 ├── CONTEXT.md                 # domain glossary

@@ -41,7 +41,7 @@ pages_build_output_dir = "dist"
 [vars]
 CLOUDFLARE_ACCOUNT_ID = "d2ff5532ee1b0e671d2fb3c9570dbb77"
 R2_BUCKET_NAME = "event-radar-prerender-chain-state"
-NODE_VERSION = "20"
+NODE_VERSION = "24"
 # Non-secret build-time flags. Anything credential-shaped (deploy hook URLs,
 # API tokens) must NOT go here — this file is checked into git. Those stay
 # as encrypted Secrets via the Cloudflare Pages dashboard or

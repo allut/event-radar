@@ -1,5 +1,5 @@
 {
-  "name": "Event Radar (Python 3.12 + Node 20 + Postgres 16)",
+  "name": "Event Radar (Python 3.12 + Node 24 + Postgres 16)",
   "dockerComposeFile": ["../docker-compose.yml", "docker-compose.yml"],
   "service": "app",
   "workspaceFolder": "/workspaces/event-radar",
@@ -7,8 +7,9 @@
   "remoteUser": "vscode",
 
   "features": {
-    // 20.x matches CI and satisfies the Node 20.19+ floor of Vite 8 / Vitest 4.
-    "ghcr.io/devcontainers/features/node:1": { "version": "20" },
+    // 24.x matches CI and Cloudflare Pages (frontend/wrangler.toml NODE_VERSION),
+    // and clears the Node floor of Vite 8 / Vitest 4.
+    "ghcr.io/devcontainers/features/node:1": { "version": "24" },
     // CLI only -- `claude` in the terminal. The feature also contributes the
     // anthropic.claude-code VS Code extension, so it stays out of the list below.
     "ghcr.io/anthropics/devcontainer-features/claude-code:1.0": {},
