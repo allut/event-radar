@@ -4,6 +4,7 @@
 
 .main {
   composes: pageMain from '../shared/Page.module.css';
+  flex: 1 0 auto; /* lets the loading PageState centre in the leftover height */
   max-width: var(--page-max-legal);
 }
 
