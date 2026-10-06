@@ -928,6 +928,7 @@ export const ROUTES = {
   privacy: '/privacy',
   terms: '/terms',
   contact: '/contact',
+  faq: '/faq',
   organizerLogin: '/organizer/login',
   organizerVerify: '/organizer/verify',
   organizerClaimVerify: '/organizer/claims/verify',

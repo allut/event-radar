@@ -207,6 +207,8 @@
   --measure-snug: 36ch;    /* Landing stat/aside copy */
   --measure-notice: 44ch;  /* locked/dormant notice body */
   --measure-intro: 56ch;   /* form intro paragraphs */
+  --measure-lede: 60ch;    /* FAQ page lede */
+  --measure-answer: 64ch;  /* FAQ answer paragraphs/lists */
   --search-icon-size: 18px; /* Explore search-field magnifier */
   --rte-btn-size: 28px;    /* RichTextEditor toolbar button */
   --rte-icon-size: 16px;   /* RichTextEditor toolbar glyph */

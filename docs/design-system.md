@@ -62,7 +62,7 @@ Rules that bite:
 
 Bundled weights today: Manrope Variable (200–800 axis, one file), Cormorant Garamond 300/300-italic/400/400-italic/500/600.
 
-**Where display type is allowed:** page headings (`Page.module.css`'s `.pageTitle`/`.gridHeading`, Feed's date heading, EventDetail's `h1`, Settings' title), section eyebrows, `LegalPage`'s section headings, card/event titles (`EventCard`, `PersonaCard`'s `.name`), the auth brand lockup. **Never** on a control, a form field, a data value, a meta row, or anywhere inside `/admin/*`.
+**Where display type is allowed:** page headings (`Page.module.css`'s `.pageTitle`/`.gridHeading`, Feed's date heading, EventDetail's `h1`, Settings' title), section eyebrows, `LegalPage`'s section headings, the FAQ page's question rows (a `<summary>` whose text is the question heading) and closing heading, card/event titles (`EventCard`, `PersonaCard`'s `.name`), the auth brand lockup. **Never** on a control, a form field, a data value, a meta row, or anywhere inside `/admin/*`.
 
 **Display scale.** The C1 display sizes are `clamp()`-based tokens, not per-component inline clamps: `--font-size-display-hero`, `--font-size-display-plate`, `--font-size-display-section`, `--font-size-display-card`. `clamp()` here is load-bearing, not decorative — Estonian and Russian UI strings run ~1.6× the English (`landing_personas_title` is 52 ch ET / 51 ch RU vs ~32 EN; `landing_hero_h1` goes 42 ch EN → 60 ch ET). **Test every display heading against the Estonian and Russian strings, never the English one.** A fixed-px hero breaks; a button sized to an English label wraps in Russian. Real catalogue event titles run to 60+ characters and must be allowed two or three lines in any listing layout.
 

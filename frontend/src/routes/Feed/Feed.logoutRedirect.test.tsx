@@ -64,7 +64,7 @@ function stubFetch() {
 }
 
 function renderHome() {
-  // Home is one of the three public SEO routes (App.tsx's ROUTE_DEFS): its bare
+  // Home is one of the four public SEO routes (App.tsx's ROUTE_DEFS): its bare
   // path always renders Estonian, so this test drives it through an explicit
   // `/en` locale prefix (mirroring App.tsx's `/:locale` route registration)
   // to keep asserting against English strings.

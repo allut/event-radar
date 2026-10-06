@@ -23,6 +23,7 @@ import Unsubscribe from './routes/Unsubscribe';
 import Privacy from './routes/Privacy';
 import Terms from './routes/Terms';
 import Contact from './routes/Contact';
+import Faq from './routes/Faq';
 import OrganizerLogin from './routes/OrganizerLogin';
 import OrganizerVerify from './routes/OrganizerVerify';
 import OrganizerClaimVerify from './routes/OrganizerClaimVerify';
@@ -137,9 +138,9 @@ function localePrefixedPattern(path: string): string {
 interface RouteDef {
   path: string;
   element: React.ReactNode;
-  // Home, Explore and EventDetail are the three public SEO routes (issue
-  // #236 added Explore): their bare path always renders Estonian and never
-  // redirects (crawler/prerender stability), regardless of any stored
+  // Home, Explore, EventDetail and Faq are the four public SEO routes (issue
+  // #236 added Explore, #491 Faq): their bare path always renders Estonian and
+  // never redirects (crawler/prerender stability), regardless of any stored
   // locale preference.
   noRedirect?: boolean;
 }
@@ -157,6 +158,7 @@ const ROUTE_DEFS: RouteDef[] = [
   { path: ROUTES.privacy, element: <Privacy /> },
   { path: ROUTES.terms, element: <Terms /> },
   { path: ROUTES.contact, element: <Contact /> },
+  { path: ROUTES.faq, element: <Faq />, noRedirect: true },
   { path: ROUTES.organizerLogin, element: <OrganizerLogin /> },
   { path: ROUTES.organizerVerify, element: <OrganizerVerify /> },
   { path: ROUTES.organizerClaimVerify, element: <OrganizerClaimVerify /> },
