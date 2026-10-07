@@ -4,17 +4,23 @@ import Faq from './Faq';
 import { renderWithProviders } from '../../test/utils';
 import { t } from '../../i18n';
 import enDoc from '../../content/faq/faq.en';
+import etDoc from '../../content/faq/faq.et';
+import ruDoc from '../../content/faq/faq.ru';
 import type { SeoMetaResult } from '../../hooks/useSeoMeta';
 
 // Reconfigurable loaders (vi.hoisted so the vi.mock factory can reference them).
-const loaders = vi.hoisted(() => ({
-  en: vi.fn(() => Promise.resolve({ default: null as unknown })),
-  ru: vi.fn(() => Promise.resolve({ default: null as unknown })),
-}));
+// `loaders` holds the stable vi.fn()s; `mockedLoaderMap` is the FAQ_LOADERS the
+// route sees, re-synced from `loaders` before each test so one can drop a locale.
+const { loaders, mockedLoaderMap } = vi.hoisted(() => {
+  const fns = {
+    en: vi.fn(() => Promise.resolve({ default: null as unknown })),
+    et: vi.fn(() => Promise.resolve({ default: null as unknown })),
+    ru: vi.fn(() => Promise.resolve({ default: null as unknown })),
+  };
+  return { loaders: fns, mockedLoaderMap: { ...fns } as Partial<typeof fns> };
+});
 
-vi.mock('../../content/faq/loaders', () => ({
-  FAQ_LOADERS: { en: loaders.en, ru: loaders.ru },
-}));
+vi.mock('../../content/faq/loaders', () => ({ FAQ_LOADERS: mockedLoaderMap }));
 
 vi.mock('../../lib/auth', () => ({
   getLocale: vi.fn(() => 'en'),
@@ -56,7 +62,9 @@ function renderFaq(route: string) {
 
 beforeEach(() => {
   loaders.en.mockReset().mockResolvedValue({ default: enDoc });
-  loaders.ru.mockReset().mockRejectedValue(new Error('no ru chunk yet'));
+  loaders.et.mockReset().mockResolvedValue({ default: etDoc });
+  loaders.ru.mockReset().mockResolvedValue({ default: ruDoc });
+  Object.assign(mockedLoaderMap, loaders);
 });
 
 describe('Faq', () => {
@@ -99,21 +107,44 @@ describe('Faq', () => {
     );
   });
 
+  it('renders the Estonian doc on the bare /faq path', async () => {
+    renderFaq('/faq');
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: etDoc.title }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(etDoc.lede)).toBeInTheDocument();
+    expect(loaders.et).toHaveBeenCalled();
+    expect(loaders.en).not.toHaveBeenCalled();
+  });
+
+  it('renders the Russian doc on /ru/faq', async () => {
+    renderFaq('/ru/faq');
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: ruDoc.title }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(ruDoc.lede)).toBeInTheDocument();
+    expect(loaders.ru).toHaveBeenCalled();
+    expect(loaders.en).not.toHaveBeenCalled();
+  });
+
   it('keeps the locale prefix on internal links under /ru/faq', async () => {
     const { container } = renderFaq('/ru/faq');
-    await screen.findByRole('heading', { level: 1, name: enDoc.title });
+    await screen.findByRole('heading', { level: 1, name: ruDoc.title });
 
     const deleteAccount = container.querySelector('details#delete-account') as HTMLElement;
     expect(
-      within(deleteAccount).getByRole('link', { name: 'Privacy Policy', hidden: true }),
+      within(deleteAccount).getByRole('link', { name: 'Политике конфиденциальности', hidden: true }),
     ).toHaveAttribute('href', '/ru/privacy');
     expect(
       within(deleteAccount).getByRole('link', { name: 'contact@eventradar.ee', hidden: true }),
     ).toHaveAttribute('href', 'mailto:contact@eventradar.ee');
-    expect(screen.getByRole('link', { name: enDoc.contact.cta })).toHaveAttribute('href', '/ru/contact');
+    expect(screen.getByRole('link', { name: ruDoc.contact.cta })).toHaveAttribute('href', '/ru/contact');
   });
 
   it('falls back to the English doc when the active locale chunk fails', async () => {
+    loaders.ru.mockRejectedValue(new Error('chunk load failed'));
     renderFaq('/ru/faq');
 
     expect(
@@ -124,6 +155,7 @@ describe('Faq', () => {
   });
 
   it('shows the error state when the English fallback fails too', async () => {
+    loaders.ru.mockRejectedValue(new Error('chunk load failed'));
     loaders.en.mockRejectedValue(new Error('chunk load failed'));
     renderFaq('/ru/faq');
 
@@ -132,8 +164,9 @@ describe('Faq', () => {
   });
 
   it('tries English once when the locale has no chunk of its own, then errors', async () => {
+    delete mockedLoaderMap.et;
     loaders.en.mockRejectedValue(new Error('chunk load failed'));
-    renderFaq('/faq'); // bare path → Estonian, which has no loader yet
+    renderFaq('/faq'); // bare path → Estonian, with its loader dropped
 
     expect(await screen.findByText(t('generic_error', 'et'))).toBeInTheDocument();
     expect(loaders.en).toHaveBeenCalledTimes(1);
@@ -146,11 +179,11 @@ describe('Faq', () => {
     expect(seo).toHaveAttribute('data-robots', 'noindex');
     expect(seo).toHaveAttribute('data-canonical', '');
 
-    await screen.findByRole('heading', { level: 1, name: enDoc.title });
+    await screen.findByRole('heading', { level: 1, name: etDoc.title });
     expect(seo).toHaveAttribute('data-robots', 'index, follow');
     expect(seo).toHaveAttribute('data-canonical', 'https://eventradar.ee/faq');
     expect(seo).toHaveAttribute('data-hreflangs', 'et,en,ru,x-default');
     expect(seo).toHaveAttribute('data-xdefault', 'https://eventradar.ee/faq');
-    expect(seo.getAttribute('data-title')).toMatch(/^Frequently asked questions \| /);
+    expect(seo.getAttribute('data-title')).toMatch(/^Korduma kippuvad küsimused \| /);
   });
 });

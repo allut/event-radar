@@ -58,9 +58,8 @@ describe('App locale-routing wrapper', () => {
     setPath('/faq');
     render(<App />);
 
-    // Only the EN FaqDoc exists so far (ET falls back to it); the point here
-    // is the URL staying bare rather than bouncing to /ru/faq.
-    expect(await screen.findByRole('heading', { level: 1, name: 'Frequently asked questions' })).toBeInTheDocument();
+    // The bare path stays bare and renders Estonian, not the stored Russian.
+    expect(await screen.findByRole('heading', { level: 1, name: 'Korduma kippuvad küsimused' })).toBeInTheDocument();
     expect(window.location.pathname).toBe('/faq');
   });
 

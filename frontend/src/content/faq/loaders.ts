@@ -7,4 +7,6 @@ type FaqLoader = () => Promise<{ default: FaqDoc }>;
  * falls back to English (see the Faq route's loader effect). */
 export const FAQ_LOADERS: Record<string, FaqLoader> = {
   en: () => import('./faq.en'),
+  et: () => import('./faq.et'),
+  ru: () => import('./faq.ru'),
 };
