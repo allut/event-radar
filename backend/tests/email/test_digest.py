@@ -149,7 +149,18 @@ class TestBuildDigestHtml:
     def test_frontend_url_used_in_event_link(self, make_event):
         events = [make_event(event_id=42)]
         html = build_digest_html(events, date(2026, 5, 20), "en", "https://eventradar.ee")
-        assert "https://eventradar.ee/events/42" in html
+        assert "https://eventradar.ee/en/events/42" in html
+
+    @pytest.mark.parametrize(
+        ("locale", "prefix"), [("et", ""), ("en", "/en"), ("ru", "/ru")]
+    )
+    def test_links_carry_locale_prefix(self, make_event, locale, prefix):
+        # #499 — every frontend link opens the recipient's locale; ET is bare.
+        events = [make_event(event_id=42)]
+        html = build_digest_html(events, date(2026, 5, 20), locale, "https://eventradar.ee")
+        assert f'href="https://eventradar.ee{prefix}/events/42"' in html
+        assert f'href="https://eventradar.ee{prefix or "/"}"' in html
+        assert f'href="https://eventradar.ee{prefix}/settings"' in html
 
     def test_light_base_client_adaptive(self):
         html = build_digest_html([], date(2026, 5, 20), "en", "https://eventradar.ee")
@@ -158,7 +169,7 @@ class TestBuildDigestHtml:
 
     def test_unsubscribe_link_present(self):
         html = build_digest_html([], date(2026, 5, 20), "en", "https://eventradar.ee")
-        assert "https://eventradar.ee/settings" in html
+        assert "https://eventradar.ee/en/settings" in html
 
     def test_explicit_unsubscribe_url_overrides_default(self):
         html = build_digest_html(
@@ -166,7 +177,7 @@ class TestBuildDigestHtml:
             "https://eventradar.ee/unsubscribe?token=abc123",
         )
         assert "https://eventradar.ee/unsubscribe?token=abc123" in html
-        assert "https://eventradar.ee/settings" not in html
+        assert "https://eventradar.ee/en/settings" not in html
 
     def test_multiple_events_all_rendered(self, make_event):
         events = [make_event(event_id=i, title=f"Event {i}") for i in range(1, 6)]
@@ -235,7 +246,7 @@ class TestBuildDigestHtml:
 
     def test_feed_button_links_to_frontend_root(self, make_event):
         html = build_digest_html([make_event()], date(2026, 5, 20), "en", "https://eventradar.ee")
-        assert 'href="https://eventradar.ee"' in html
+        assert 'href="https://eventradar.ee/en"' in html
         assert "Open your feed" in html
 
     def test_tickets_link_present_when_event_url_set(self, make_event):

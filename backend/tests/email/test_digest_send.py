@@ -50,7 +50,7 @@ async def test_success_calls_http_post(monkeypatch, make_event):
     assert body["to"] == ["u@example.com"]
     assert body["subject"]
     assert body["html"]
-    assert "app.radar.ee/unsubscribe?token=" in body["html"]
+    assert "app.radar.ee/en/unsubscribe?token=" in body["html"]
     headers = body["headers"]
     assert headers["List-Unsubscribe"].startswith("<")
     assert "/email/unsubscribe?token=" in headers["List-Unsubscribe"]
@@ -70,3 +70,28 @@ async def test_http_error_raises_runtime_error(monkeypatch, make_event):
         await send_digest_email(
             "u@example.com", "en", [make_event()], date(2026, 7, 21), 1
         )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("locale", "prefix"), [("et", ""), ("en", "/en"), ("ru", "/ru")]
+)
+async def test_unsubscribe_link_carries_locale_prefix(
+    monkeypatch, make_event, locale, prefix
+):
+    # #499 — the in-body unsubscribe link opens the recipient's locale; the
+    # List-Unsubscribe header (backend one-click endpoint) stays unprefixed.
+    monkeypatch.setattr(digest.settings, "RESEND_API_KEY", "re_key")
+    monkeypatch.setattr(digest.settings, "FRONTEND_URL", "https://app.radar.ee")
+    monkeypatch.setattr(digest.settings, "BACKEND_URL", "https://api.radar.ee")
+    _patch_client(monkeypatch)
+    post = AsyncMock()
+    monkeypatch.setattr(digest, "http_post", post)
+
+    await send_digest_email("u@example.com", locale, [make_event()], date(2026, 7, 21), 7)
+
+    body = post.call_args.kwargs["json_body"]
+    assert f'href="https://app.radar.ee{prefix}/unsubscribe?token=' in body["html"]
+    assert body["headers"]["List-Unsubscribe"].startswith(
+        "<https://api.radar.ee/email/unsubscribe?token="
+    )

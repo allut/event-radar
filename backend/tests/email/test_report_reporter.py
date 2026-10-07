@@ -53,13 +53,13 @@ async def test_success_posts_expected_content(patch_client, monkeypatch, make_ev
     html_body = body["html"]
     assert "&lt;night&gt;" in html_body
     assert "Looked into it, event is fine." in html_body
-    assert "https://radar.ee/events/42" in html_body
+    assert "https://radar.ee/en/events/42" in html_body
     # no "automated means" disclosure
     assert "automated" not in html_body.lower()
 
     text_body = body["text"]
     assert "Looked into it, event is fine." in text_body
-    assert "https://radar.ee/events/42" in text_body
+    assert "https://radar.ee/en/events/42" in text_body
 
 
 @pytest.mark.asyncio
@@ -115,3 +115,17 @@ async def test_non_2xx_logs_error(patch_client, monkeypatch, caplog, make_event)
         )
 
     assert any("Resend API error" in r.getMessage() for r in caplog.records)
+
+
+@pytest.mark.parametrize(
+    ("locale", "prefix"), [("et", ""), ("en", "/en"), ("ru", "/ru")]
+)
+def test_event_link_carries_locale_prefix(monkeypatch, make_event, locale, prefix):
+    monkeypatch.setattr(report_reporter.settings, "FRONTEND_URL", "https://radar.ee")
+    event = make_event(42, title="Concert")
+
+    html = report_reporter.build_report_outcome_html(event, "Fine.", locale)
+    text = report_reporter.build_report_outcome_text(event, "Fine.", locale)
+
+    assert f'href="https://radar.ee{prefix}/events/42"' in html
+    assert text.endswith(f"https://radar.ee{prefix}/events/42")

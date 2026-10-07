@@ -986,8 +986,11 @@ LOGIN_PATH = "/login"
 HOME_PATH = "/"
 ONBOARDING_PATH = "/onboarding"
 # Frontend paths linked from transactional emails (app/email/report_notify.py,
-# report_reporter.py, digest.py) — built with settings.FRONTEND_URL as a prefix.
+# report_reporter.py, digest.py) — built with settings.FRONTEND_URL as a prefix,
+# plus the recipient's locale prefix (app/email/links.py) for the
+# user-facing ones.
 EVENTS_PATH = "/events"
+SETTINGS_PATH = "/settings"
 ADMIN_REPORTS_PATH = "/admin/reports"
 UNSUBSCRIBE_PATH = "/unsubscribe"
 # Callback success-redirect marker — the frontend's signed-in localStorage
@@ -1147,6 +1150,11 @@ ORGANIZER_SUBMISSION_EXTERNAL_ID_PREFIX = "org:"
 LOCALE_ET = "et"
 LOCALE_EN = "en"
 LOCALE_RU = "ru"
+# Locales whose frontend URLs carry a `/en`/`/ru` path prefix — Estonian is the
+# bare (unprefixed) URL locale. Backend mirror of the frontend's
+# LOCALE_URL_PREFIX_CODES (frontend/src/constants.ts); used by
+# app/email/links.py to point email links at the recipient's locale (#499).
+LOCALE_URL_PREFIX_CODES: frozenset[str] = frozenset(VALID_LOCALES) - {LOCALE_ET}
 
 # Admin review-queue pagination (routers/admin.py GET /admin/submissions) — mirrors
 # ADMIN_DEDUP_GROUPS_PAGE_SIZE's sizing rationale (small default page, generous cap).

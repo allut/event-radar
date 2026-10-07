@@ -69,7 +69,7 @@ async def test_send_google_link_confirmation_posts_own_subject_and_link(
     body = post.call_args.kwargs["json"]
     assert body["to"] == ["person@yahoo.com"]
     assert body["subject"] == "Confirm Google sign-in for Event Radar"
-    assert "https://app.radar.ee/organizer/verify?token=tok123" in body["text"]
+    assert "https://app.radar.ee/en/organizer/verify?token=tok123" in body["text"]
 
 
 @pytest.mark.asyncio

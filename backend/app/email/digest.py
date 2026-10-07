@@ -23,9 +23,11 @@ from app.constants import (
     DIGEST_RESULT_SENT,
     DIGEST_RESULT_SKIPPED,
     DIGEST_SEND_CONCURRENCY,
+    EVENTS_PATH,
     FEED_BUILD_USER_BATCH_SIZE,
     HEADER_LIST_UNSUBSCRIBE,
     HEADER_LIST_UNSUBSCRIBE_POST,
+    HOME_PATH,
     LIST_UNSUBSCRIBE_ONE_CLICK,
     LOCALE_ET,
     LOCALE_RU,
@@ -33,9 +35,11 @@ from app.constants import (
     RESEND_ERROR_SNIPPET_LEN,
     RESEND_SEND_URL,
     RESEND_TIMEOUT_SECONDS,
+    SETTINGS_PATH,
     TALLINN_TZ,
     UNSUBSCRIBE_PATH,
 )
+from app.email.links import frontend_url
 from app.email.styles import EmailStyles, get_email_styles
 from app.email.templates import (
     DIGEST_EMPTY_STATE,
@@ -101,13 +105,13 @@ def _format_price_pill(event: Event, locale: str) -> str:
 
 
 def _build_event_block(
-    event: Event, locale: str, frontend_url: str, s: EmailStyles
+    event: Event, locale: str, frontend_base: str, s: EmailStyles
 ) -> str:
     """Render one event card (time/venue/price, image or band, title, bullets)."""
     cl = event.classification
     bullets = resolve_why_go(cl, locale)[:DIGEST_MAX_WHY_GO_BULLETS]
     time_str = html_lib.escape(_format_event_time(event.starts_at, locale))
-    event_href = f"{frontend_url}/events/{event.id}"
+    event_href = frontend_url(f"{EVENTS_PATH}/{event.id}", locale, frontend_base)
 
     venue_str = html_lib.escape(resolve_venue_name(event, locale) or "")
     venue_html = (
@@ -181,16 +185,16 @@ def build_digest_html(
     events: Sequence[Event],
     feed_date: date,
     locale: str,
-    frontend_url: str,
+    frontend_base: str,
     unsubscribe_url: str | None = None,
 ) -> str:
     s = get_email_styles()
     date_str = _format_feed_date(feed_date, locale)
     subject_label = t("digest.subject_label", locale)
     if unsubscribe_url is None:
-        unsubscribe_url = f"{frontend_url}/settings"
+        unsubscribe_url = frontend_url(SETTINGS_PATH, locale, frontend_base)
 
-    event_blocks = [_build_event_block(e, locale, frontend_url, s) for e in events]
+    event_blocks = [_build_event_block(e, locale, frontend_base, s) for e in events]
     events_html = (
         "\n".join(event_blocks)
         if event_blocks
@@ -208,7 +212,7 @@ def build_digest_html(
         s_date=s.s_date,
         s_feed_btn_wrap=s.s_feed_btn_wrap,
         s_feed_btn=s.s_feed_btn,
-        feed_url=frontend_url,
+        feed_url=frontend_url(HOME_PATH, locale, frontend_base),
         open_feed_label=t("digest.open_feed", locale),
     )
     footer_html = DIGEST_FOOTER.format(
@@ -261,7 +265,7 @@ async def send_digest_email(
         return
 
     unsubscribe_token = generate_unsubscribe_token(user_id)
-    unsubscribe_url = f"{settings.FRONTEND_URL}{UNSUBSCRIBE_PATH}?token={unsubscribe_token}"
+    unsubscribe_url = f"{frontend_url(UNSUBSCRIBE_PATH, locale)}?token={unsubscribe_token}"
     header_url = f"{settings.BACKEND_URL}/email/unsubscribe?token={unsubscribe_token}"
 
     html = build_digest_html(

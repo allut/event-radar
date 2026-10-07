@@ -49,7 +49,7 @@ async def test_granted_email_posts_expected_content(patch_client, monkeypatch):
     html_body = body["html"]
     assert "&lt;night&gt;" in html_body
     assert "Verified manually." in html_body
-    assert "https://radar.ee/organizer/dashboard" in html_body
+    assert "https://radar.ee/en/organizer/dashboard" in html_body
 
     text_body = body["text"]
     assert "Verified manually." in text_body
@@ -152,3 +152,14 @@ async def test_non_2xx_logs_error(patch_client, monkeypatch, caplog):
         )
 
     assert any("Resend API error" in r.getMessage() for r in caplog.records)
+
+
+@pytest.mark.parametrize(
+    ("locale", "prefix"), [("et", ""), ("en", "/en"), ("ru", "/ru")]
+)
+def test_dashboard_link_carries_locale_prefix(monkeypatch, locale, prefix):
+    monkeypatch.setattr(claim_resolution.settings, "FRONTEND_URL", "https://radar.ee")
+
+    html = claim_resolution.build_claim_granted_html("Jazz Night", "note", locale)
+
+    assert f'href="https://radar.ee{prefix}/organizer/dashboard"' in html
