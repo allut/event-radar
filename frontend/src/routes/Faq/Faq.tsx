@@ -14,6 +14,7 @@ import {
   MAILTO_SCHEME,
   OG_FALLBACK_IMAGE_PATH,
   PRODUCTION_ORIGIN,
+  REDUCED_MOTION_QUERY,
   ROUTES,
   SAFE_URL_SCHEMES,
   UI_STATE,
@@ -58,6 +59,14 @@ function renderInline(content: FaqInline[], localePath: (to: string) => string):
   });
 }
 
+/** Whether `id` names one of the doc's sections or questions — the only
+ * anchors a deep link may act on (never an arbitrary element id on the page). */
+function isFaqAnchor(doc: FaqDoc, id: string): boolean {
+  return doc.sections.some(
+    (section) => section.id === id || section.items.some((item) => item.id === id),
+  );
+}
+
 function renderBlock(block: FaqBlock, localePath: (to: string) => string): React.ReactNode {
   if (block.kind === 'ul') {
     return (
@@ -85,7 +94,7 @@ export default function Faq() {
   const handleLogout = useLogout();
   const { locale, handleLocaleChange } = useLocaleMutation({ publicRoute: true });
   const localePath = useLocalePath();
-  const { pathname } = useLocation();
+  const { pathname, hash } = useLocation();
   // Keyed by locale so a stale-locale load renders as loading without a
   // synchronous setState(null) in the effect (react-hooks/set-state-in-effect).
   const [result, setResult] = useState<
@@ -122,6 +131,28 @@ export default function Faq() {
   const current = result?.key === locale ? result : null;
   const doc = current && 'doc' in current ? current.doc : null;
   const failed = current != null && 'error' in current;
+
+  // Deep link (#slug): once the doc has rendered, and on every in-app hash
+  // change, open the named question and scroll it (or a section) clear of the
+  // sticky TopBar via scroll-margin-top. The browser's own hash jump can't do
+  // it — createRoot replaced the prerendered DOM before the answers existed.
+  // `open` is set imperatively and never rendered by React, so the summary
+  // still toggles the item natively afterwards. Ids are ASCII slugs, so the
+  // raw hash compares directly (no decode, nothing to throw on).
+  useEffect(() => {
+    if (!doc) return;
+    const id = hash.slice(1);
+    if (!isFaqAnchor(doc, id)) return;
+    const target = document.getElementById(id);
+    if (!target) return;
+    if (target instanceof HTMLDetailsElement) target.open = true;
+    const behavior: ScrollBehavior = window.matchMedia(REDUCED_MOTION_QUERY).matches
+      ? 'auto'
+      : 'smooth';
+    // Next frame, so the just-opened answer has laid out before the scroll.
+    const frame = requestAnimationFrame(() => target.scrollIntoView({ behavior, block: 'start' }));
+    return () => cancelAnimationFrame(frame);
+  }, [doc, hash]);
 
   // noindex until the doc has loaded, so a prerender snapshot of the loading
   // or error state can never be indexed.

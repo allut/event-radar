@@ -1,5 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { screen, within } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { act, fireEvent, screen, within } from '@testing-library/react';
+import { useNavigate } from 'react-router-dom';
 import Faq from './Faq';
 import { renderWithProviders } from '../../test/utils';
 import { t } from '../../i18n';
@@ -7,6 +8,7 @@ import enDoc from '../../content/faq/faq.en';
 import etDoc from '../../content/faq/faq.et';
 import ruDoc from '../../content/faq/faq.ru';
 import type { SeoMetaResult } from '../../hooks/useSeoMeta';
+import { REDUCED_MOTION_QUERY } from '../../constants';
 
 // Reconfigurable loaders (vi.hoisted so the vi.mock factory can reference them).
 // `loaders` holds the stable vi.fn()s; `mockedLoaderMap` is the FAQ_LOADERS the
@@ -57,7 +59,43 @@ const FAQ_PATTERNS = { prefixed: '/:locale/faq', bare: '/faq' };
 
 function renderFaq(route: string) {
   const pathPattern = route.startsWith('/faq') ? FAQ_PATTERNS.bare : FAQ_PATTERNS.prefixed;
-  return renderWithProviders(<Faq />, { route, pathPattern });
+  return renderWithProviders(
+    <>
+      <Faq />
+      <HashNav />
+    </>,
+    { route, pathPattern },
+  );
+}
+
+/** Stands in for an in-app hash change (a jump-nav or "Link to this answer"
+ * click updates the router location via popstate in a real browser; jsdom's
+ * MemoryRouter doesn't see native fragment navigation). */
+function HashNav() {
+  const navigate = useNavigate();
+  return (
+    <>
+      <button type="button" onClick={() => navigate({ hash: 'claim-event' })}>
+        go:claim-event
+      </button>
+      <button type="button" onClick={() => navigate({ hash: 'organizers' })}>
+        go:organizers
+      </button>
+    </>
+  );
+}
+
+/** setup.ts's matchMedia stub, put back before each test (one test swaps it). */
+const defaultMatchMedia = window.matchMedia;
+/** jsdom's (absent) scrollIntoView, restored after each test's stub. */
+const defaultScrollIntoView = Element.prototype.scrollIntoView;
+
+/** jsdom has no scrollIntoView; capture which element was scrolled, and how. */
+const scrollIntoView = vi.fn();
+
+/** Flush the requestAnimationFrame the deep-link scroll is deferred to. */
+async function flushFrame() {
+  await act(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
 }
 
 beforeEach(() => {
@@ -65,6 +103,15 @@ beforeEach(() => {
   loaders.et.mockReset().mockResolvedValue({ default: etDoc });
   loaders.ru.mockReset().mockResolvedValue({ default: ruDoc });
   Object.assign(mockedLoaderMap, loaders);
+  scrollIntoView.mockReset();
+  window.matchMedia = defaultMatchMedia;
+  Element.prototype.scrollIntoView = function (this: Element, arg?: boolean | ScrollIntoViewOptions) {
+    scrollIntoView(this.id, arg);
+  };
+});
+
+afterEach(() => {
+  Element.prototype.scrollIntoView = defaultScrollIntoView;
 });
 
 describe('Faq', () => {
@@ -185,5 +232,81 @@ describe('Faq', () => {
     expect(seo).toHaveAttribute('data-hreflangs', 'et,en,ru,x-default');
     expect(seo).toHaveAttribute('data-xdefault', 'https://eventradar.ee/faq');
     expect(seo.getAttribute('data-title')).toMatch(/^Korduma kippuvad küsimused \| /);
+  });
+
+  describe('deep links', () => {
+    it('opens and scrolls to the item named by the hash on a cold load', async () => {
+      const { container } = renderFaq('/en/faq#is-it-free');
+      await screen.findByRole('heading', { level: 1, name: enDoc.title });
+      await flushFrame();
+
+      expect(container.querySelector('details#is-it-free')).toHaveAttribute('open');
+      expect(container.querySelectorAll('details[open]')).toHaveLength(1);
+      expect(scrollIntoView).toHaveBeenCalledWith('is-it-free', { behavior: 'smooth', block: 'start' });
+    });
+
+    it('scrolls with behavior auto under prefers-reduced-motion', async () => {
+      window.matchMedia = vi.fn(
+        (query: string) =>
+          ({
+            matches: query === REDUCED_MOTION_QUERY,
+            media: query,
+            addEventListener: vi.fn(),
+            removeEventListener: vi.fn(),
+          }) as unknown as MediaQueryList,
+      );
+      renderFaq('/en/faq#is-it-free');
+      await screen.findByRole('heading', { level: 1, name: enDoc.title });
+      await flushFrame();
+
+      expect(scrollIntoView).toHaveBeenCalledWith('is-it-free', { behavior: 'auto', block: 'start' });
+    });
+
+    it('scrolls to a section hash without opening anything', async () => {
+      const { container } = renderFaq('/en/faq#event-goers');
+      await screen.findByRole('heading', { level: 1, name: enDoc.title });
+      await flushFrame();
+
+      expect(scrollIntoView).toHaveBeenCalledWith('event-goers', { behavior: 'smooth', block: 'start' });
+      expect(container.querySelectorAll('details[open]')).toHaveLength(0);
+    });
+
+    it('ignores a hash that names no section or question', async () => {
+      const { container } = renderFaq('/en/faq#no-such-answer');
+      await screen.findByRole('heading', { level: 1, name: enDoc.title });
+      await flushFrame();
+      expect(scrollIntoView).not.toHaveBeenCalled();
+      expect(container.querySelectorAll('details[open]')).toHaveLength(0);
+    });
+
+    it('opens and scrolls on an in-app hash change', async () => {
+      const { container } = renderFaq('/en/faq');
+      await screen.findByRole('heading', { level: 1, name: enDoc.title });
+      await flushFrame();
+      expect(scrollIntoView).not.toHaveBeenCalled();
+
+      fireEvent.click(screen.getByRole('button', { name: 'go:claim-event' }));
+      await flushFrame();
+      expect(container.querySelector('details#claim-event')).toHaveAttribute('open');
+      expect(scrollIntoView).toHaveBeenLastCalledWith('claim-event', { behavior: 'smooth', block: 'start' });
+
+      fireEvent.click(screen.getByRole('button', { name: 'go:organizers' }));
+      await flushFrame();
+      expect(scrollIntoView).toHaveBeenLastCalledWith('organizers', { behavior: 'smooth', block: 'start' });
+    });
+
+    it('lets the summary close and reopen a deep-linked item', async () => {
+      const { container } = renderFaq('/en/faq#is-it-free');
+      await screen.findByRole('heading', { level: 1, name: enDoc.title });
+      await flushFrame();
+      const item = container.querySelector('details#is-it-free') as HTMLDetailsElement;
+      const summary = item.querySelector('summary') as HTMLElement;
+      expect(item.open).toBe(true);
+
+      fireEvent.click(summary);
+      expect(item.open).toBe(false);
+      fireEvent.click(summary);
+      expect(item.open).toBe(true);
+    });
   });
 });

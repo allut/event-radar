@@ -8,6 +8,14 @@
   max-width: var(--page-max-legal);
 }
 
+/* In-app #anchor clicks (jump-nav, "Link to this answer") are native fragment
+   jumps that land before the deep-link effect runs, so smooth them at the
+   document level while the FAQ is mounted. index.css's reduced-motion block
+   forces this back to auto (!important on every element, html included). */
+:global(html):has(.page) {
+  scroll-behavior: smooth;
+}
+
 /* ── Header: title, lede, section jump-nav ── */
 .header {
   display: flex;
