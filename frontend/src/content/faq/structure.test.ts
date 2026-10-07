@@ -3,6 +3,7 @@ import faqEn from './faq.en';
 import faqEt from './faq.et';
 import faqRu from './faq.ru';
 import type { FaqBlock, FaqDoc, FaqInline } from './types';
+import { FAQ_ORGANIZERS_HASH } from '../../constants';
 
 // Guards translation drift, as legal/structure.test.ts does: ET and RU must match
 // the canonical English on section ids/order, item ids/order, answer block count
@@ -54,4 +55,12 @@ describe('faq doc structure parity', () => {
       });
     });
   }
+});
+
+describe('faq deep-link targets', () => {
+  // OrganizerContact links to ROUTES.faq + FAQ_ORGANIZERS_HASH — renaming the
+  // section id in en (and so, by the parity checks above, in et/ru) must fail here.
+  it('en has a section whose id is FAQ_ORGANIZERS_HASH', () => {
+    expect(faqEn.sections.map((s) => s.id)).toContain(FAQ_ORGANIZERS_HASH.slice(1));
+  });
 });

@@ -20,9 +20,8 @@ interface TopBarProps {
 
 export default function TopBar({ locale, onLocaleChange, onLogout, localeDisabled, onBack, authed = true, showNav = true }: TopBarProps) {
   const localePath = useLocalePath();
-  // Signed-out chrome (issue #235): only the public routes in
-  // SIGNED_OUT_NAV_ROUTES stay visible — the rest are dead ends for an
-  // anonymous visitor.
+  // Signed-out chrome (issue #235): the explicit SIGNED_OUT_NAV_ITEMS list of
+  // public routes — the signed-in rest are dead ends for an anonymous visitor.
   const visibleNavItems = authed ? NAV_ITEMS : SIGNED_OUT_NAV_ITEMS;
   return (
     <header className={styles.topBar}>

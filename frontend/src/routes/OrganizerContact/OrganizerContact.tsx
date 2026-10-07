@@ -2,7 +2,9 @@ import { useOrganizerLogout } from '../../hooks/useOrganizerLogout';
 import { useLocalLocale } from '../../hooks/useLocalLocale';
 import { useOrganizerContactSubmit } from '../../hooks/useOrganizerContactSubmit';
 import { useStaticSeoMeta } from '../../hooks/useStaticSeoMeta';
-import { UI_STATE, CONTACT_TEXTAREA_ROWS } from '../../constants';
+import { Link } from 'react-router-dom';
+import { useLocalePath } from '../../hooks/useLocalePath';
+import { UI_STATE, CONTACT_TEXTAREA_ROWS, ROUTES, FAQ_ORGANIZERS_HASH } from '../../constants';
 import { t } from '../../i18n';
 import OrganizerTopBar from '../../components/OrganizerTopBar';
 import SeoTags from '../../components/SeoTags';
@@ -11,6 +13,7 @@ import styles from './OrganizerContact.module.css';
 export default function OrganizerContact() {
   const [locale, handleLocaleChange] = useLocalLocale();
   const handleLogout = useOrganizerLogout();
+  const localePath = useLocalePath();
   const seoMeta = useStaticSeoMeta('organizer_contact_title', locale);
   const { message, setMessage, state, errorMsg, submit, reset } = useOrganizerContactSubmit(locale);
 
@@ -22,6 +25,9 @@ export default function OrganizerContact() {
       <main className={styles.main}>
         <h1 className={styles.title}>{t('organizer_contact_title', locale)}</h1>
         <p className={styles.body}>{t('organizer_contact_intro', locale)}</p>
+        <p className={styles.hint}>
+          <Link to={localePath(`${ROUTES.faq}${FAQ_ORGANIZERS_HASH}`)}>{t('organizer_contact_faq_link', locale)}</Link>
+        </p>
 
         {state === UI_STATE.success ? (
           <div className={styles.success} role="status">

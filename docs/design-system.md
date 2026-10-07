@@ -100,7 +100,7 @@ When adding a token: if it encodes a color that reads differently on a near-whit
 
 | Module | Holds |
 |---|---|
-| `Page.module.css` | Page shells (`.page`, `.pageCentered`, `.pageMain`, `.pageMainNarrow`, `.pageTitle`, `.proseBody`), the Explore/SavedEvents grid shell (`.gridMain`, `.gridMasthead`, `.gridHeading`, `.cardGrid`), admin route-header chrome (`.adminEyebrow`, `.adminPageTitle`) |
+| `Page.module.css` | Page shells (`.page`, `.pageCentered`, `.pageMain`, `.pageMainNarrow`, `.pageTitle`, `.proseBody`, `.pageHint`), the Explore/SavedEvents grid shell (`.gridMain`, `.gridMasthead`, `.gridHeading`, `.cardGrid`), admin route-header chrome (`.adminEyebrow`, `.adminPageTitle`) |
 | `Card.module.css` | `.card`, `.cardAccentTop`, `.cardDangerTop`, `.cardPage`, plus the auth shell (`.authCard`, `.authHeader`, `.authRadar`, `.authBrand`) |
 | `Button.module.css` | `.btnPrimary`, `.btnOutline`, `.btnSubmit`, `.textButton`, `.iconAction`, `.successBlock` |
 | `Field.module.css` | `.fieldLabel`, `.fieldInput`, `.fieldWrap` (chrome-only outer box for composite controls) |

@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
-import { screen } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import { renderWithProviders } from '../../test/utils';
 import TopBar from './TopBar';
 
 describe('TopBar', () => {
-  it('shows a Sign in link to /login when signed out, no sign-out button, only Explore/Contact in nav, plus hamburger', () => {
+  it('shows a Sign in link to /login when signed out, no sign-out button, only Explore/FAQ/Contact in nav, plus hamburger', () => {
     renderWithProviders(
       <TopBar locale="en" onLocaleChange={vi.fn()} authed={false} />,
     );
@@ -19,6 +19,35 @@ describe('TopBar', () => {
     expect(screen.queryByRole('link', { name: 'Saved' })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Settings' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Menu' })).toBeInTheDocument();
+  });
+
+  it('shows Explore · FAQ · Contact, in that order, in the signed-out nav', () => {
+    renderWithProviders(
+      <TopBar locale="en" onLocaleChange={vi.fn()} authed={false} />,
+    );
+
+    const links = within(screen.getByRole('navigation')).getAllByRole('link');
+    expect(links.map((a) => a.textContent)).toEqual(['Explore', 'FAQ', 'Contact']);
+    expect(screen.getByRole('link', { name: 'FAQ' })).toHaveAttribute('href', '/faq');
+  });
+
+  it('keeps the locale prefix on the signed-out FAQ link', () => {
+    renderWithProviders(
+      <TopBar locale="ru" onLocaleChange={vi.fn()} authed={false} />,
+      { route: '/ru/explore' },
+    );
+
+    expect(screen.getByRole('link', { name: 'Вопросы и ответы' })).toHaveAttribute('href', '/ru/faq');
+  });
+
+  it('does not show FAQ in the signed-in nav', () => {
+    renderWithProviders(
+      <TopBar locale="en" onLocaleChange={vi.fn()} onLogout={vi.fn()} authed />,
+    );
+
+    const links = within(screen.getByRole('navigation')).getAllByRole('link');
+    expect(links.map((a) => a.textContent)).toEqual(['Daily 5', 'Explore', 'Saved', 'Settings', 'Contact']);
+    expect(screen.queryByRole('link', { name: 'FAQ' })).not.toBeInTheDocument();
   });
 
   it('shows Back immediately alongside Sign in when signed out with onBack', () => {

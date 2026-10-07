@@ -964,6 +964,10 @@ export const ROUTES = {
   adminDedup: '/admin/dedup',
 } as const;
 
+// The FAQ's Organizers section anchor (FaqSection.id 'organizers') —
+// OrganizerContact deep-links to it as ROUTES.faq + this hash.
+export const FAQ_ORGANIZERS_HASH = '#organizers';
+
 // The admin console's persistent nav — the clickable screens (issue #154,
 // Claims added #420); /admin/login and /admin/events/:id are reached by
 // URL/click-through, not nav links. No i18n: the console is an internal
@@ -1025,18 +1029,15 @@ export const NAV_ITEMS = [
   { route: ROUTES.contact, labelKey: 'nav_contact' },
 ] as const;
 
-// Routes from NAV_ITEMS that stay visible to a signed-out visitor — Explore
-// and Contact are public; Daily 5/Saved/Settings are dead ends for an
-// anonymous visitor (Saved has nothing in it, the others require auth).
-// Shared by TopBar and MobileMenu so their signed-out filtering can't diverge.
-export const SIGNED_OUT_NAV_ROUTES: readonly string[] = [ROUTES.explore, ROUTES.contact];
-
-// NAV_ITEMS filtered to SIGNED_OUT_NAV_ROUTES, computed once rather than on
-// every TopBar/MobileMenu render (Big-O audit #5, item 3.4) — both filter
-// the same constant data identically.
-export const SIGNED_OUT_NAV_ITEMS = NAV_ITEMS.filter((item) =>
-  SIGNED_OUT_NAV_ROUTES.includes(item.route),
-);
+// The signed-out primary nav — an explicit list rather than a filter over
+// NAV_ITEMS, since it carries FAQ, which the signed-in nav doesn't. Daily
+// 5/Saved/Settings are left out as dead ends for an anonymous visitor.
+// Shared by TopBar and MobileMenu so they can't drift out of sync.
+export const SIGNED_OUT_NAV_ITEMS = [
+  { route: ROUTES.explore, labelKey: 'nav_explore' },
+  { route: ROUTES.faq, labelKey: 'nav_faq' },
+  { route: ROUTES.contact, labelKey: 'nav_contact' },
+] as const;
 
 // Same {route, labelKey} shape as NAV_ITEMS, rendered by both OrganizerTopBar
 // (desktop) and its MobileMenu (mobile) — kept in one place so they can't

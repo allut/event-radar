@@ -42,6 +42,13 @@
   line-height: var(--leading-body);
 }
 
+/* A one-line pointer link under a page intro (Contact's FAQ and organizer
+   hints, OrganizerContact's FAQ hint). */
+.pageHint {
+  font-size: var(--fs-sm);
+  margin-top: var(--space-2);
+}
+
 /* Admin console route-header chrome (AdminDashboard, AdminDedup,
    AdminEventDetail, AdminPipeline, AdminReports, AdminSubmissions) — named
    distinctly from .pageEyebrow/.pageTitle above since those have different

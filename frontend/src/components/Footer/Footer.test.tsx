@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { act, screen } from '@testing-library/react';
+import { act, screen, within } from '@testing-library/react';
 import { renderWithProviders } from '../../test/utils';
 import { setLocale } from '../../lib/auth';
 import { setOrganizerSignedInHint } from '../../lib/organizerAuth';
@@ -42,6 +42,23 @@ describe('Footer', () => {
     ).toBeInTheDocument();
   });
 
+  it('places the FAQ link between Terms and Contact', () => {
+    renderWithProviders(<Footer />);
+
+    const links = within(screen.getByRole('navigation')).getAllByRole('link');
+    expect(links.map((a) => a.textContent)).toEqual(['Privacy', 'Terms', 'FAQ', 'Contact', 'For organizers']);
+    expect(screen.getByRole('link', { name: 'FAQ' })).toHaveAttribute('href', '/faq');
+  });
+
+  it('keeps the FAQ link on the public /faq from an organizer-portal page', () => {
+    localStorage.setItem(ORGANIZER_SIGNED_IN_HINT_KEY, '1');
+    renderWithProviders(<Footer />, { route: '/organizer/dashboard' });
+
+    const links = within(screen.getByRole('navigation')).getAllByRole('link');
+    expect(links.map((a) => a.textContent)).toEqual(['Privacy', 'Terms', 'FAQ', 'Contact', 'Organizer dashboard']);
+    expect(screen.getByRole('link', { name: 'FAQ' })).toHaveAttribute('href', '/faq');
+  });
+
   it('reflects the active locale reactively via the locale store', () => {
     localStorage.setItem(LOCALE_KEY, 'et');
     renderWithProviders(<Footer />);
@@ -73,6 +90,7 @@ describe('Footer', () => {
     expect(screen.getByRole('link', { name: 'Event Radar' })).toHaveAttribute('href', '/ru');
     expect(screen.getByRole('link', { name: 'Privacy' })).toHaveAttribute('href', '/ru/privacy');
     expect(screen.getByRole('link', { name: 'Terms' })).toHaveAttribute('href', '/ru/terms');
+    expect(screen.getByRole('link', { name: 'FAQ' })).toHaveAttribute('href', '/ru/faq');
     expect(screen.getByRole('link', { name: 'Contact' })).toHaveAttribute('href', '/ru/contact');
     expect(screen.getByRole('link', { name: 'For organizers' })).toHaveAttribute('href', '/ru/organizer/login');
   });

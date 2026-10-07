@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, screen } from '@testing-library/react';
+import { fireEvent, screen, within } from '@testing-library/react';
 import { renderWithProviders } from '../../test/utils';
 import { getResolvedTheme } from '../../lib/theme';
 import MobileMenu from './MobileMenu';
@@ -128,7 +128,42 @@ describe('MobileMenu', () => {
     expect(screen.queryByText('Explore')).not.toBeInTheDocument();
   });
 
-  it('shows a Sign in link, no sign-out, and only Explore/Contact in nav when signed out', () => {
+  it('shows Explore · FAQ · Contact, in that order, in the signed-out nav', () => {
+    renderWithProviders(
+      <MobileMenu locale="en" onLocaleChange={vi.fn()} authed={false} />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
+
+    const links = within(screen.getByRole('navigation')).getAllByRole('link');
+    expect(links.map((a) => a.textContent)).toEqual(['Explore', 'FAQ', 'Contact']);
+    expect(screen.getByRole('link', { name: 'FAQ' })).toHaveAttribute('href', '/faq');
+  });
+
+  it('keeps the locale prefix on the signed-out FAQ link', () => {
+    renderWithProviders(
+      <MobileMenu locale="ru" onLocaleChange={vi.fn()} authed={false} />,
+      { route: '/ru/explore' },
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Меню' }));
+
+    expect(screen.getByRole('link', { name: 'Вопросы и ответы' })).toHaveAttribute('href', '/ru/faq');
+  });
+
+  it('does not show FAQ in the signed-in nav', () => {
+    renderWithProviders(
+      <MobileMenu locale="en" onLocaleChange={vi.fn()} onLogout={vi.fn()} />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
+
+    const links = within(screen.getByRole('navigation')).getAllByRole('link');
+    expect(links.map((a) => a.textContent)).toEqual(['Daily 5', 'Explore', 'Saved', 'Settings', 'Contact']);
+    expect(screen.queryByText('FAQ')).not.toBeInTheDocument();
+  });
+
+  it('shows a Sign in link, no sign-out, and only Explore/FAQ/Contact in nav when signed out', () => {
     renderWithProviders(
       <MobileMenu locale="en" onLocaleChange={vi.fn()} authed={false} />,
     );

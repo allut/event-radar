@@ -65,7 +65,10 @@ export default function Contact() {
       <main className={styles.main}>
         <h1 className={styles.title}>{t('contact_title', locale)}</h1>
         <p className={styles.body}>{t('contact_intro', locale)}</p>
-        <p className={styles.organizerHint}>
+        <p className={styles.hint}>
+          <Link to={localePath(ROUTES.faq)}>{t('contact_faq_link', locale)}</Link>
+        </p>
+        <p className={styles.hint}>
           <Link to={localePath(isOrganizer ? ROUTES.organizerDashboard : ROUTES.organizerLogin)}>
             {t('organizer_entry_link', locale)}
           </Link>

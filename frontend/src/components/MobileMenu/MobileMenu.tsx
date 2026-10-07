@@ -28,8 +28,7 @@ export default function MobileMenu({ locale, onLocaleChange, onLogout, localeDis
   const { open, setOpen, flip, rootRef, popRef, triggerRef, close } = useDropdown();
   const localePath = useLocalePath();
   const resolvedTheme = useResolvedTheme();
-  // Mirrors TopBar's signed-out nav filtering via the shared
-  // SIGNED_OUT_NAV_ROUTES allowlist.
+  // Mirrors TopBar's signed-out nav via the shared SIGNED_OUT_NAV_ITEMS list.
   const visibleNavItems = navItems ?? (authed ? NAV_ITEMS : SIGNED_OUT_NAV_ITEMS);
 
   return (

@@ -14,9 +14,8 @@
   composes: proseBody from '../../components/shared/Page.module.css';
 }
 
-.organizerHint {
-  font-size: var(--fs-sm);
-  margin-top: var(--space-2);
+.hint {
+  composes: pageHint from '../../components/shared/Page.module.css';
 }
 
 .form {
