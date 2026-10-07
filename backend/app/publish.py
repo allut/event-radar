@@ -137,6 +137,7 @@ async def publish_pending(
     qualifying_ids = select(EventClassification.event_id).where(
         EventClassification.quality_score >= PUBLISH_MIN_QUALITY_SCORE
     )
+    # FAQ #first-event-not-live describes this behaviour — update the copy (all locales) if it changes
     unverified_organizer_ids = select(Organizer.id).where(
         Organizer.verified == false()
     )

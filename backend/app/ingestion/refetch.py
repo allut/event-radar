@@ -258,6 +258,7 @@ async def _backfill_localized_text(
     existing_descs: dict[str, str] = (
         dict(event.description_localized) if event.description_localized else {}
     )
+    # FAQ #claimed-edits describes this behaviour — update the copy (all locales) if it changes
     pinned = set() if event.id in dormant_event_ids else set(event.pinned_fields)
     missing_title_locales = {
         loc for loc in LOCALIZED_TEXT_FIENTA_LOCALES

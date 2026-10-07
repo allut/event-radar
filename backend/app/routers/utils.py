@@ -553,6 +553,7 @@ def resolve_locale_param(locale: str | None, fallback: str) -> str:
     return locale if locale in VALID_LOCALES else fallback
 
 
+# FAQ #languages describes this behaviour — update the copy (all locales) if it changes
 def resolve_title(event: Event, locale: str) -> str:
     """Return localized title with locale → en → title_orig fallback."""
     loc = event.title_localized
@@ -563,6 +564,7 @@ def resolve_title(event: Event, locale: str) -> str:
     return event.title_orig
 
 
+# FAQ #languages describes this behaviour — update the copy (all locales) if it changes
 def resolve_description(event: Event, locale: str) -> str | None:
     """Return localized description with locale → en → description_orig fallback."""
     loc = event.description_localized

@@ -373,6 +373,7 @@ async def _save_claim_event(
             db, event.id, body.categories, max_total=ORGANIZER_MAX_CATEGORIES
         )
 
+    # FAQ #claimed-edits describes this behaviour — update the copy (all locales) if it changes
     # Price fields: co-authoritative, never pinned (#416 — CONTEXT.md's Event
     # Claiming glossary). accept_new_price adopts a freshly recomputed ingest
     # price instead of whatever price_* the request body carried — the only

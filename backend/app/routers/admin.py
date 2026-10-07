@@ -459,6 +459,7 @@ async def admin_approve_submission(
             event.needs_review = False
             if event.submitted_by_organizer_id is not None:
                 organizer = await db.get(Organizer, event.submitted_by_organizer_id)
+                # FAQ #first-event-not-live describes this behaviour — update the copy (all locales) if it changes
                 if organizer is not None:
                     organizer.verified = True
             # organizer.verified flipping True can unlock this organizer's
