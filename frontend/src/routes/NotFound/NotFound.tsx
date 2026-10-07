@@ -1,15 +1,15 @@
 import { StatusCodes } from 'http-status-codes';
 import { Link } from 'react-router-dom';
-import { getLocale } from '../../lib/auth';
 import { t } from '../../i18n';
 import { ROUTES } from '../../constants';
 import { useLocalePath } from '../../hooks/useLocalePath';
+import { usePathLocale } from '../../hooks/usePathLocale';
 import { useStaticSeoMeta } from '../../hooks/useStaticSeoMeta';
 import SeoTags from '../../components/SeoTags';
 import styles from './NotFound.module.css';
 
 export default function NotFound() {
-  const locale = getLocale();
+  const locale = usePathLocale();
   const localePath = useLocalePath();
   const seoMeta = useStaticSeoMeta('not_found_title', locale);
   return (

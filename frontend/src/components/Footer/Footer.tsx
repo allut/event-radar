@@ -3,8 +3,8 @@ import { Link, useLocation } from 'react-router-dom';
 import { t, ti } from '../../i18n';
 import { isOrganizerPortalPath, safeUrl } from '../../utils';
 import { BRAND_GLYPH, COPYRIGHT_YEAR, ROUTES, SOCIAL_LINKS, type SocialIcon } from '../../constants';
-import { useLocale } from '../../hooks/useLocale';
 import { useLocalePath } from '../../hooks/useLocalePath';
+import { usePathLocale } from '../../hooks/usePathLocale';
 import { useOrganizerAuth } from '../../hooks/useOrganizerAuth';
 import styles from './Footer.module.css';
 
@@ -38,7 +38,10 @@ const SOCIAL_LINK_HREFS = SOCIAL_LINKS.map((s) => ({ icon: s.icon, href: safeUrl
 );
 
 export default function Footer() {
-  const locale = useLocale();
+  // The page's language, not the saved preference — the two disagree on a
+  // first visit to /ru/… or a bare path, and in every prerendered page
+  // (issue #497).
+  const locale = usePathLocale();
   const localePath = useLocalePath();
   const isOrganizer = useOrganizerAuth();
   const { pathname } = useLocation();

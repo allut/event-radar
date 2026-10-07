@@ -2,11 +2,11 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { organizerApi, ApiError } from '../../api/client';
 import { setOrganizerSignedInHint } from '../../lib/organizerAuth';
-import { getLocale } from '../../lib/auth';
 import { API, AUTH_REDIRECT_DELAY_MS, AUTH_TOKEN_PARAM, ROUTES, UI_STATE, VERIFY_STATE_TO_KIND, type VerifyState } from '../../constants';
 import { t } from '../../i18n';
 import { useLocaleNavigate } from '../../hooks/useLocaleNavigate';
 import { useLocalePath } from '../../hooks/useLocalePath';
+import { usePathLocale } from '../../hooks/usePathLocale';
 import { useStaticSeoMeta } from '../../hooks/useStaticSeoMeta';
 import AuthCard from '../../components/AuthCard';
 import SeoTags from '../../components/SeoTags';
@@ -25,7 +25,7 @@ interface ClaimLinkVerifyResponse {
  * device-mismatch requirement). Signs the organizer in AND creates the claim
  * in the same request, then lands pre-selected on #415's pending screen. */
 export default function OrganizerClaimVerify() {
-  const locale = getLocale();
+  const locale = usePathLocale();
   const seoMeta = useStaticSeoMeta('organizer_claim_pending_title', locale);
   const [searchParams] = useSearchParams();
   const navigate = useLocaleNavigate();

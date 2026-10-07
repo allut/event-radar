@@ -26,7 +26,7 @@ export interface SeoMetaLink {
 export interface SeoMetaInput {
   /** Document <title>. */
   title: string;
-  /** Resolved route locale — matches useRouteLocale()/App.tsx's locale wrapper. */
+  /** Resolved route locale — matches usePathLocale()/App.tsx's locale wrapper. */
   locale: string;
   /** Current pathname, bare or locale-prefixed (either is accepted — stripped internally). */
   path: string;

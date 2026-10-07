@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { setSignedInHint, clearSignedInHint, isAuthenticated, getLocale, getStoredLocale, setLocale, clearLocale, subscribeLocale, beginLogout, isLoggingOut } from './auth';
+import { setSignedInHint, clearSignedInHint, isAuthenticated, getLocale, getStoredLocale, setLocale, clearLocale, beginLogout, isLoggingOut } from './auth';
 import { LOCALE_EN } from '../constants';
 
 describe('signed-in hint storage', () => {
@@ -72,14 +72,5 @@ describe('clearLocale', () => {
     clearLocale();
     expect(localStorage.getItem('locale')).toBeNull();
     expect(getStoredLocale()).toBeNull();
-  });
-
-  it('notifies locale subscribers', () => {
-    setLocale('ru');
-    let notified = false;
-    const unsubscribe = subscribeLocale(() => { notified = true; });
-    clearLocale();
-    unsubscribe();
-    expect(notified).toBe(true);
   });
 });

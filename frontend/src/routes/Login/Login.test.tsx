@@ -1,3 +1,4 @@
+import { t } from '../../i18n';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { StatusCodes } from 'http-status-codes';
 import { screen, waitFor } from '@testing-library/react';
@@ -20,14 +21,14 @@ const mockPost = vi.mocked(api.post);
 
 describe('Login', () => {
   it('renders email input and submit button', () => {
-    renderWithProviders(<Login />);
+    renderWithProviders(<Login />, { route: '/en/login' });
     expect(screen.getByRole('textbox', { name: /email/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /send/i })).toBeInTheDocument();
   });
 
   it('submits email and shows success view', async () => {
     mockPost.mockResolvedValueOnce(undefined);
-    renderWithProviders(<Login />);
+    renderWithProviders(<Login />, { route: '/en/login' });
     await userEvent.type(screen.getByRole('textbox', { name: /email/i }), 'user@example.com');
     await userEvent.click(screen.getByRole('button', { name: /send/i }));
     await waitFor(() => expect(screen.getByRole('status')).toBeInTheDocument());
@@ -36,7 +37,7 @@ describe('Login', () => {
 
   it('calls api.post with correct path and lowercased email', async () => {
     mockPost.mockResolvedValueOnce(undefined);
-    renderWithProviders(<Login />);
+    renderWithProviders(<Login />, { route: '/en/login' });
     await userEvent.type(screen.getByRole('textbox', { name: /email/i }), 'User@Example.COM');
     await userEvent.click(screen.getByRole('button', { name: /send/i }));
     await waitFor(() => expect(mockPost).toHaveBeenCalledWith('/auth/request-link', { email: 'user@example.com', locale: 'en' }));
@@ -45,7 +46,7 @@ describe('Login', () => {
   it('shows error message on ApiError', async () => {
     const { ApiError: ApiErrorClass } = await import('../../api/client');
     mockPost.mockRejectedValueOnce(new ApiErrorClass(StatusCodes.BAD_REQUEST, 'Invalid email'));
-    renderWithProviders(<Login />);
+    renderWithProviders(<Login />, { route: '/en/login' });
     await userEvent.type(screen.getByRole('textbox', { name: /email/i }), 'bad@test.com');
     await userEvent.click(screen.getByRole('button', { name: /send/i }));
     await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
@@ -53,14 +54,14 @@ describe('Login', () => {
   });
 
   it('renders a Terms of Service link pointing to /terms', () => {
-    renderWithProviders(<Login />);
+    renderWithProviders(<Login />, { route: '/en/login' });
     const link = screen.getByRole('link', { name: /terms of service/i });
-    expect(link).toHaveAttribute('href', '/terms');
+    expect(link).toHaveAttribute('href', '/en/terms');
   });
 
   it('"use different" button resets to idle form', async () => {
     mockPost.mockResolvedValueOnce(undefined);
-    renderWithProviders(<Login />);
+    renderWithProviders(<Login />, { route: '/en/login' });
     await userEvent.type(screen.getByRole('textbox', { name: /email/i }), 'a@b.com');
     await userEvent.click(screen.getByRole('button', { name: /send/i }));
     await waitFor(() => screen.getByRole('status'));
@@ -69,13 +70,13 @@ describe('Login', () => {
   });
 
   it('renders an organizer entry link pointing to /organizer/login', () => {
-    renderWithProviders(<Login />);
+    renderWithProviders(<Login />, { route: '/en/login' });
     const link = screen.getByRole('link', { name: /organizing an event/i });
-    expect(link).toHaveAttribute('href', '/organizer/login');
+    expect(link).toHaveAttribute('href', '/en/organizer/login');
   });
 
   it('does not render the Google button when the flag is off', () => {
-    renderWithProviders(<Login />);
+    renderWithProviders(<Login />, { route: '/en/login' });
     expect(screen.queryByRole('link', { name: /sign in with google/i })).not.toBeInTheDocument();
   });
 });
@@ -90,7 +91,7 @@ describe('Login with Google sign-in enabled', () => {
   });
 
   it('renders the Google button pointing at the consumer start endpoint, email form collapsed', () => {
-    renderWithProviders(<Login />);
+    renderWithProviders(<Login />, { route: '/en/login' });
 
     const googleLink = screen.getByRole('link', { name: /sign in with google/i });
     expect(googleLink).toHaveAttribute('href', '/api/auth/google/start');
@@ -98,7 +99,7 @@ describe('Login with Google sign-in enabled', () => {
   });
 
   it('expands the magic-link form behind the "continue with email" toggle', async () => {
-    renderWithProviders(<Login />);
+    renderWithProviders(<Login />, { route: '/en/login' });
 
     await userEvent.click(screen.getByRole('button', { name: /continue with email instead/i }));
 
@@ -107,14 +108,28 @@ describe('Login with Google sign-in enabled', () => {
   });
 
   it('shows the cancelled banner for the access_denied error code', () => {
-    renderWithProviders(<Login />, { route: '/login?google_error=access_denied' });
+    renderWithProviders(<Login />, { route: '/en/login?google_error=access_denied' });
 
     expect(screen.getByRole('alert')).toHaveTextContent('Sign-in was cancelled.');
   });
 
   it('shows the generic failed banner for every other error code', () => {
-    renderWithProviders(<Login />, { route: '/login?google_error=state_invalid' });
+    renderWithProviders(<Login />, { route: '/en/login?google_error=state_invalid' });
 
     expect(screen.getByRole('alert')).toHaveTextContent(/something went wrong signing in with google/i);
+  });
+});
+
+describe('Login locale', () => {
+  // The page speaks the URL's language (like the Footer under it, #497) —
+  // never the saved preference, mocked to 'en' above.
+  it('renders in the URL prefix\'s language', () => {
+    renderWithProviders(<Login />, { route: '/ru/login' });
+    expect(screen.getAllByText(t('tagline', 'ru')).length).toBeGreaterThan(0);
+  });
+
+  it('renders Estonian on a bare path', () => {
+    renderWithProviders(<Login />, { route: '/login' });
+    expect(screen.getAllByText(t('tagline', 'et')).length).toBeGreaterThan(0);
   });
 });

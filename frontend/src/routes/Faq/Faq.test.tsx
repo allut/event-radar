@@ -32,7 +32,6 @@ vi.mock('../../lib/auth', () => ({
   beginLogout: vi.fn(),
   isAuthenticated: vi.fn(() => false),
   subscribeAuth: vi.fn(() => () => {}),
-  subscribeLocale: vi.fn(() => () => {}),
 }));
 
 vi.mock('../../components/TopBar', () => ({ default: () => null }));

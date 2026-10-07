@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { getLocale } from '../../lib/auth';
 import {
   API,
   API_BASE,
@@ -11,6 +10,7 @@ import {
 import { t } from '../../i18n';
 import { useGoogleSignInError } from '../../hooks/useGoogleSignInError';
 import { useLocalePath } from '../../hooks/useLocalePath';
+import { usePathLocale } from '../../hooks/usePathLocale';
 import { useOrganizerAuth } from '../../hooks/useOrganizerAuth';
 import { useStaticSeoMeta } from '../../hooks/useStaticSeoMeta';
 import MagicLinkForm from '../../components/MagicLinkForm';
@@ -20,7 +20,7 @@ import styles from './Login.module.css';
 
 export default function Login() {
   const googleSignInEnabled = isGoogleSignInConsumerEnabled();
-  const locale = getLocale();
+  const locale = usePathLocale();
   const isOrganizer = useOrganizerAuth();
   const localePath = useLocalePath();
   const seoMeta = useStaticSeoMeta('seo_title_login', locale);

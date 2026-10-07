@@ -5,7 +5,7 @@ import { api } from '../api/client';
 import { API, LOCALE_ET } from '../constants';
 import { getStoredLocale, setLocale, clearLocale, isAuthenticated } from '../lib/auth';
 import { localizedTo } from '../utils';
-import { useRouteLocale } from './useRouteLocale';
+import { usePathLocale } from './usePathLocale';
 
 export interface UseLocaleMutationResult {
   locale: string;
@@ -42,7 +42,7 @@ export function useLocaleMutation(
   callbacks?: UseLocaleMutationCallbacks,
 ): UseLocaleMutationResult {
   const { locale: urlLocale } = useParams<{ locale?: string }>();
-  const routeLocale = useRouteLocale();
+  const routeLocale = usePathLocale();
   const navigate = useNavigate();
   const location = useLocation();
 

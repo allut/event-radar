@@ -47,7 +47,6 @@ vi.mock('../../lib/auth', () => ({
   beginLogout: vi.fn(),
   isAuthenticated: vi.fn(() => false),
   subscribeAuth: vi.fn(() => () => {}),
-  subscribeLocale: vi.fn(() => () => {}),
 }));
 
 // Deterministic TopBar stub exposing a locale-switch trigger, so the test drives

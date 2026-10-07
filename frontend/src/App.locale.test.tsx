@@ -121,16 +121,16 @@ describe('App locale-routing wrapper', () => {
 
     await waitFor(() => expect(window.location.pathname).toBe('/contact'));
     expect(screen.getByRole('heading', { name: 'Kontakt' })).toBeInTheDocument();
+    // The globally mounted Footer follows the switch straight away (#497)
+    expect(screen.getByRole('link', { name: 'Privaatsus' })).toHaveAttribute('href', '/privacy');
   });
 
-  it('carries the locale prefix into Footer links on a prefixed route', async () => {
-    // Footer's own display locale comes from useLocale() (localStorage), not
-    // the URL — independent of the page's locale — so with no stored
-    // preference it renders its English strings even under a /ru/ route;
-    // only the href prefixing (from useLocalePath, URL-driven) is under test.
+  it('renders the Footer in the URL\'s locale on a prefixed route with no stored preference', async () => {
+    // Footer is mounted outside <Routes>; its labels and hrefs both follow
+    // the URL, never the saved preference (#497).
     setPath('/ru/contact');
     render(<App />);
 
-    await waitFor(() => expect(screen.getByRole('link', { name: 'Privacy' })).toHaveAttribute('href', '/ru/privacy'));
+    await waitFor(() => expect(screen.getByRole('link', { name: 'Конфиденциальность' })).toHaveAttribute('href', '/ru/privacy'));
   });
 });

@@ -2,11 +2,11 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { StatusCodes } from 'http-status-codes';
 import { api, ApiError } from '../../api/client';
-import { getLocale } from '../../lib/auth';
 import { t } from '../../i18n';
 import { API, AUTH_TOKEN_PARAM, ROUTES, UI_STATE, type UnsubscribeState } from '../../constants';
 import { withQueryParam } from '../../utils';
 import { useLocalePath } from '../../hooks/useLocalePath';
+import { usePathLocale } from '../../hooks/usePathLocale';
 import { useStaticSeoMeta } from '../../hooks/useStaticSeoMeta';
 import AuthCard, { type AuthCardKind } from '../../components/AuthCard';
 import SeoTags from '../../components/SeoTags';
@@ -20,7 +20,7 @@ const STATE_TO_KIND: Record<UnsubscribeState, AuthCardKind> = {
 };
 
 export default function Unsubscribe() {
-  const locale = getLocale();
+  const locale = usePathLocale();
   const localePath = useLocalePath();
   const seoMeta = useStaticSeoMeta('seo_title_unsubscribe', locale);
   const [searchParams] = useSearchParams();
