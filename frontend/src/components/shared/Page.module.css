@@ -38,11 +38,14 @@
   overflow-wrap: break-word;
 }
 
-/* Body copy shared by LegalPage and StaticPage. */
+/* Body copy shared by the legal, static, FAQ and contact pages.
+   overflow-wrap: long compounds ("Tehnilised/auditikirjed") outgrow a
+   320px column at a 24px default font (#498). */
 .proseBody {
   font-size: var(--fs-base);
   color: var(--text-soft);
   line-height: var(--leading-body);
+  overflow-wrap: break-word;
 }
 
 /* A one-line pointer link under a page intro (Contact's FAQ and organizer

@@ -111,6 +111,14 @@
   .actions {
     grid-column: 2;
   }
+
+  /* Shrinkable so the brand wraps onto two lines instead of running under
+     the mobile menu button — only reachable on a 320px phone with a 24px
+     default font (#498); everywhere else it fits on one line. */
+  .logoWrap {
+    flex-shrink: 1;
+    min-width: 0;
+  }
 }
 
 /* Wide band (--bp-wide): background/hairline stay full-bleed; content aligns

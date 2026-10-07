@@ -807,13 +807,34 @@
   .heroGrid {
     min-height: calc(100dvh - var(--topbar-height-mobile));
   }
+  /* Capture first (#498, design-system.md §4): heroTop/heroBot dissolve into
+     one heroMain flex column so the sub and the counter (as a ledger) can
+     follow the capture bar. */
+  .heroMain {
+    gap: 0;
+    padding: var(--landing-hero-pad-top) 0 var(--landing-hero-pad-bottom);
+  }
+  .heroTop,
+  .heroBot { display: contents; }
+  .dateline { margin-top: var(--space-6); }
+  .cutline { margin-top: var(--space-5); }
+  .sub { order: 1; }
+  .heroCounter {
+    order: 2;
+    gap: var(--space-1) 0;
+    margin-top: var(--space-6);
+    padding-top: var(--space-4);
+    border-top: var(--rule);
+  }
+  .heroCounterItem:not(:last-child)::after { content: '\00a0·\00a0'; }
+  .h1 { overflow-wrap: break-word; }
   .capbar { flex-direction: column; align-items: stretch; }
   .capbarDivider { display: none; }
-  .emailForm { width: 100%; }
-  .submit { padding-left: 0; }
+  .emailForm { width: 100%; min-width: 0; }
+  .input { flex-basis: var(--landing-capture-input-min); }
+  .submit { padding: var(--space-2) 0; }
   .ticker { display: none; }
-  .heroCounter { flex-direction: column; gap: var(--space-0-125); }
-  .heroCounterItem:not(:last-child)::after { content: ''; }
+  .figs { grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--landing-fig-min)), 1fr)); }
   .plates { margin-top: var(--space-5); }
   .footer { justify-content: center; text-align: center; }
 }

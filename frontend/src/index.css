@@ -214,6 +214,12 @@
   --rte-icon-size: 16px;   /* RichTextEditor toolbar glyph */
   --landing-capture-min: 280px;
   --landing-capture-max: 520px;
+  /* ≤640px only (#498), rem so both follow the browser default font size.
+     Capture input flex-basis: below it the submit wraps under the input. */
+  --landing-capture-input-min: 9rem;
+  /* Stat-figure track floor: the 45% caps it at two tracks; the rem floor
+     drops it to one on a 320px phone with a 24px default font. */
+  --landing-fig-min: max(8rem, 45%);
   --landing-aside-min: 260px;
   --landing-poster-bleed: -4%;
   --opacity-ghost: 0.34;   /* Landing ghost layer */
