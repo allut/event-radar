@@ -750,7 +750,7 @@
   }
   .plateText { padding: var(--space-5) 0; }
   .organizer { grid-template-columns: 1fr; row-gap: var(--space-5); }
-  .organizerCta { justify-self: start; }
+  .organizerCta { justify-self: start; white-space: normal; }
 }
 
 /* Wide band (--bp-wide): the hero keeps filling the viewport, so its small
@@ -807,7 +807,6 @@
   .heroGrid {
     min-height: calc(100dvh - var(--topbar-height-mobile));
   }
-  .h1 { font-size: var(--heading-xl); }
   .capbar { flex-direction: column; align-items: stretch; }
   .capbarDivider { display: none; }
   .emailForm { width: 100%; }

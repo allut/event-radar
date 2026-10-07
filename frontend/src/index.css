@@ -430,11 +430,13 @@
      --text/--text-soft are verified against --bg, a lighter ground than this. */
   --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
   --scrim-vertical: linear-gradient(0deg, rgba(15, 17, 25, 0.94) 6%, rgba(15, 17, 25, 0.55) 42%, rgba(15, 17, 25, 0.72));
-  --font-size-display-hero: clamp(40px, 7.2vw, 96px);
-  --font-size-display-plate: clamp(32px, 5vw, 64px); /* .figValue, the stat numerals */
-  --font-size-display-section: clamp(30px, 4.4vw, 56px);
-  --font-size-display-card: clamp(26px, 3.2vw, 38px); /* B3 split-panel showcase card title */
-  --font-size-display-mark: clamp(20px, 2.2vw, 27px); /* Landing .mark, brand wordmark */
+  /* Display scale (#465): rem bounds, max ÷ min ≤ 1.5 so every token reaches
+     2x by 300% browser zoom — see design-system.md §4 "Display scale". */
+  --font-size-display-hero: clamp(4rem, 7.2vw, 6rem);
+  --font-size-display-plate: clamp(2.75rem, 5vw, 4rem); /* .figValue, the stat numerals */
+  --font-size-display-section: clamp(2.375rem, 4.4vw, 3.5rem);
+  --font-size-display-card: clamp(1.625rem, 3.2vw, 2.375rem); /* B3 split-panel showcase card title */
+  --font-size-display-mark: clamp(1.25rem, 2.2vw, 1.6875rem); /* Landing .mark, brand wordmark */
   --font-size-display-legal: clamp(1.15rem, 1.8vw, 1.5rem); /* LegalPage .h2, sized down from --font-size-display-section */
   --hair-width: 64%; /* plate hairline width, c1.html's .hair */
   --plate-media-min-height: 300px;          /* B3 .plate min-height */
@@ -547,7 +549,8 @@ html {
   font-family: var(--font-body);
   background-color: var(--bg);
   color: var(--text);
-  font-size: 16px;
+  /* 100%, not 16px: rem follows the user's browser default font size (#465). */
+  font-size: 100%;
   line-height: var(--leading-body);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;

@@ -64,7 +64,14 @@ Bundled weights today: Manrope Variable (200–800 axis, one file), Cormorant Ga
 
 **Where display type is allowed:** page headings (`Page.module.css`'s `.pageTitle`/`.gridHeading`, Feed's date heading, EventDetail's `h1`, Settings' title), section eyebrows, `LegalPage`'s section headings, the FAQ page's question rows (a `<summary>` whose text is the question heading) and closing heading, card/event titles (`EventCard`, `PersonaCard`'s `.name`), the auth brand lockup. **Never** on a control, a form field, a data value, a meta row, or anywhere inside `/admin/*`.
 
-**Display scale.** The C1 display sizes are `clamp()`-based tokens, not per-component inline clamps: `--font-size-display-hero`, `--font-size-display-plate`, `--font-size-display-section`, `--font-size-display-card`. `clamp()` here is load-bearing, not decorative — Estonian and Russian UI strings run ~1.6× the English (`landing_personas_title` is 52 ch ET / 51 ch RU vs ~32 EN; `landing_hero_h1` goes 42 ch EN → 60 ch ET). **Test every display heading against the Estonian and Russian strings, never the English one.** A fixed-px hero breaks; a button sized to an English label wraps in Russian. Real catalogue event titles run to 60+ characters and must be allowed two or three lines in any listing layout.
+**Display scale.** The C1 display sizes are `clamp()`-based tokens, not per-component inline clamps: `--font-size-display-hero`, `--font-size-display-plate`, `--font-size-display-section`, `--font-size-display-card`, `--font-size-display-mark`, `--font-size-display-legal`. `clamp()` here is load-bearing, not decorative — Estonian and Russian UI strings run ~1.6× the English (`landing_personas_title` is 52 ch ET / 51 ch RU vs ~32 EN; `landing_hero_h1` goes 42 ch EN → 60 ch ET). **Test every display heading against the Estonian and Russian strings, never the English one.** A fixed-px hero breaks; a button sized to an English label wraps in Russian. Real catalogue event titles run to 60+ characters and must be allowed two or three lines in any listing layout.
+
+**Display tokens must grow under browser zoom (WCAG 1.4.4, #465).** Zoom shrinks the CSS viewport, so the `vw` term shrinks by as much as zoom enlarges it — inside the fluid range a display size doesn't grow at all, only once it hits its lower bound. Two rules, both drift-guarded by `frontend/src/displayTokens.test.ts`:
+
+- **Bounds in `rem`, `max ÷ min ≤ 1.5`.** At zoom *z* every token renders at least *z* × its min, so 1.5 guarantees 2× its 100% size by 300% zoom (Safari's cap) at every window width. The common "≤ 2.5" rule only promises 2× by 500%, which Safari never reaches. A rem *intercept* doesn't help — rem and px scale identically under zoom — the ratio is the lever. `rem` bounds also make the token follow the user's browser default font size (`html { font-size: 100% }`, not a px pin).
+- **Never resize a display-token selector inside `@media`.** A zoomed desktop window crosses the 640px breakpoint: the Landing hero's old `≤640 { font-size: --heading-xl }` override made it *shrink* to 0.74× at 200% on a 1280 window. Let the token's own clamp floor do the mobile sizing.
+
+The cost is a narrower range: the hero runs 64px on phones → 96px on desktop (it was 34 → 96), so the phone Landing hero is taller. Budget for that when adding a display token, and check the phone layout in ET and RU at 375px.
 
 ## 5. Color and theming
 
@@ -208,5 +215,6 @@ Section order, locked:
 3. If it's a color, decide whether it needs a `:root[data-theme="light"]` value.
 4. Test the layout against the **Estonian and Russian** strings, not English.
 5. Verify with imagery stripped, and under `prefers-reduced-motion: reduce`.
+   For display type, also zoom the browser to 300% and raise its default font size (§4, "Display tokens must grow under browser zoom").
 6. Verify visually before landing — a CSS retrofit that reads correct in the diff can still look wrong on screen. Ticket wording is not proof.
 7. Run `npm run lint` and `npm run type-check` (house rules; CI does not enforce them).

@@ -33,6 +33,9 @@
   line-height: var(--leading-display);
   letter-spacing: var(--tracking-tighter);
   color: var(--text);
+  /* A single long RU/ET word ("конфиденциальности") outgrows a phone column
+     once rem follows a larger browser default font size (#465). */
+  overflow-wrap: break-word;
 }
 
 /* Body copy shared by LegalPage and StaticPage. */
