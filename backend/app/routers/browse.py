@@ -14,7 +14,7 @@ from datetime import date, datetime, timedelta
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from sqlalchemy import and_, ColumnElement, func, literal, or_, select, true, tuple_
+from sqlalchemy import ColumnElement, func, literal, or_, select, true, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import load_only, selectinload
 
@@ -71,6 +71,7 @@ from app.routers.utils import (
 )
 from app.events.queries import (
     canonical_event_filter,
+    event_date_range_filter,
     event_not_ended_filter,
     public_event_filter,
 )
@@ -103,28 +104,6 @@ def _keyword_filter(q: str) -> ColumnElement[bool]:
     )
 
 
-def _date_range_filter(
-    date_from: date | None, date_to: date | None
-) -> ColumnElement[bool] | None:
-    """Overlap check, not starts_at-only: an ongoing exhibition that started
-    last month must still match a "Today" filter. Bounds are Tallinn-midnight
-    datetimes; date_to is exclusive (next-day midnight)."""
-    if date_from is None and date_to is None:
-        return None
-    conditions: list[ColumnElement[bool]] = []
-    if date_to is not None:
-        date_to_end = datetime.combine(
-            date_to + timedelta(days=1), datetime.min.time(), tzinfo=TALLINN_TZ
-        )
-        conditions.append(Event.starts_at < date_to_end)
-    if date_from is not None:
-        date_from_start = datetime.combine(
-            date_from, datetime.min.time(), tzinfo=TALLINN_TZ
-        )
-        conditions.append(func.coalesce(Event.ends_at, Event.starts_at) >= date_from_start)
-    return and_(*conditions)
-
-
 def _facet_conditions(
     categories: list[str],
     vibes: list[str],
@@ -147,7 +126,7 @@ def _facet_conditions(
         conds.append(_free_filter())
     if q:
         conds.append(_keyword_filter(q))
-    date_cond = _date_range_filter(date_from, date_to)
+    date_cond = event_date_range_filter(date_from, date_to)
     if date_cond is not None:
         conds.append(date_cond)
     return conds

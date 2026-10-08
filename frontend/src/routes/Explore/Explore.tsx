@@ -373,7 +373,7 @@ export default function Explore() {
         {...(isSuccess || isError ? { [PRERENDER_READY_ATTR]: 'true' } : {})}
         {...(isError ? { [PRERENDER_ERROR_ATTR]: 'true' } : {})}
       />
-      <TopBar locale={locale} onLocaleChange={handleLocaleChange} onLogout={handleLogout} authed={authed} localeDisabled={localePending} />
+      <TopBar locale={locale} onLocaleChange={handleLocaleChange} onLogout={handleLogout} authed={authed} localeDisabled={localePending} showSearch={false} />
 
       <main className={styles.main}>
         <header className={styles.masthead}>

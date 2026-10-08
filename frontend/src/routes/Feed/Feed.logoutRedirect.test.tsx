@@ -86,14 +86,15 @@ describe('logout redirect from the Feed route (/)', () => {
     renderHome();
 
     await waitFor(() => expect(screen.getByText('Event One')).toBeInTheDocument());
-    await userEvent.click(screen.getByRole('button', { name: /sign out/i }));
+    await userEvent.click(screen.getByRole('button', { name: 'Account' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: /sign out/i }));
 
     // The user must land on the marketing Landing page, not a stale/broken
     // Feed. useLogout now navigates through useLocaleNavigate, which
     // prefixes ROUTES.home against the current URL ("/en") rather than
     // bouncing to the bare (Estonian) path — so post-logout Landing stays
     // in English, with an "/en/login" sign-in link.
-    await waitFor(() => expect(screen.getByRole('link', { name: /sign in/i })).toHaveAttribute('href', '/en/login'));
+    await waitFor(() => expect(screen.getAllByRole('link', { name: /sign in/i })[0]).toHaveAttribute('href', '/en/login'));
     expect(screen.queryByText(/voo laadimine ebaõnnestus/i)).not.toBeInTheDocument();
 
     // Let any spurious refetch + its 401 handling resolve.

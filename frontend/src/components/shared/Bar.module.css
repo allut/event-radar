@@ -1,130 +1,541 @@
+/* Shared top-bar layer (direction A · Programme): TopBar, OrganizerTopBar and
+   the bar sub-components (BarLogo, BarNav, PulseChip, BarSearch, AccountMenu,
+   PrefsMenu) all compose from here. See docs/design-system.md §7.
+
+   Every bar and drawer link sets its own :hover colour explicitly: index.css's
+   global `a:hover { color: var(--accent-light) }` outranks single-class link
+   colours, and on touch screens :hover sticks after a tap (a hovered drawer item
+   would read as the current page). Scoping the global rule instead would change
+   every in-prose link site-wide for a bar-only problem. */
+
 .bar {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-sticky);
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
   gap: var(--space-4);
-  padding: var(--space-1-125) var(--space-6);
-  border-bottom: var(--border-w-hair) solid var(--border);
-  background: var(--bg-overlay);
+  height: var(--bar-h);
+  padding: 0 var(--space-6);
+  font-family: var(--font-body);
+  background-color: var(--bg-overlay);
   backdrop-filter: blur(var(--blur-overlay));
-  position: sticky;
-  top: 0;
-  z-index: var(--z-sticky);
+  border-bottom: var(--border-w-hair) solid var(--border);
+  transition:
+    height var(--bar-transition),
+    background-color var(--bar-transition),
+    border-color var(--bar-transition),
+    backdrop-filter var(--bar-transition);
+}
+
+.bar[data-condensed] {
+  height: var(--bar-h-condensed);
+}
+
+/* Landing, unscrolled: no fill, no hairline — the hero's scrim carries contrast.
+   An open phone drawer forces the solid bar back. */
+.bar[data-transparent]:not(:has([data-drawer-open])) {
+  background-color: transparent;
+  backdrop-filter: none;
+  border-bottom-color: transparent;
 }
 
 .barLeft {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
-  grid-column: 1;
+  gap: var(--space-1-125);
   min-width: 0;
+  grid-column: 1;
 }
 
-.logoWrap {
+/* Visible keyboard ring on every bar control, including over the transparent
+   Landing bar (gold ink reads on both themes and over the poster). */
+.logo:focus-visible,
+.navLink:focus-visible,
+.btn:focus-visible,
+.trigger:focus-visible,
+.cta:focus-visible,
+.iconBtn:focus-visible,
+.pulse:focus-visible,
+.seg button:focus-visible {
+  outline: var(--bar-rule-w) solid var(--accent-ink);
+  outline-offset: var(--bar-rule-w);
+}
+
+/* ── Logo ─────────────────────────────────────────────────────────────── */
+.logo {
   display: flex;
   align-items: center;
-  gap: var(--space-0-55);
+  gap: var(--space-0-625);
+  color: var(--text);
   text-decoration: none;
   flex-shrink: 0;
 }
 
-.logoWrap:hover .brand {
-  color: var(--text);
+.logo:hover {
+  color: var(--text); /* beat index.css's global a:hover gold */
 }
 
-.logoWrap:hover .radar {
-  color: var(--accent-light);
+/* DialMark reads --dial-size / --dial-color so the bar can condense and
+   recolour it without reaching into the component's own module. */
+.bar {
+  --dial-size: var(--bar-mark);
 }
 
-.radar {
-  composes: breathe from './Animations.module.css';
-  font-size: var(--fs-lg);
-  color: var(--accent);
+.bar[data-condensed] {
+  --dial-size: var(--bar-mark-condensed);
 }
 
-.brand {
+.logo:hover {
+  --dial-color: var(--accent-ink);
+}
+
+.word {
   font-family: var(--font-display);
-  font-size: var(--fs-brand-md);
-  font-weight: var(--fw-semibold);
+  font-size: var(--fs-bar-word);
+  font-weight: var(--fw-medium);
+  letter-spacing: 0.005em;
+  line-height: var(--leading-none);
+  white-space: nowrap;
+  transition: font-size var(--bar-transition);
+}
+
+.word em {
+  font-style: italic;
+  color: var(--accent-ink);
+}
+
+.bar[data-condensed] .word {
+  font-size: var(--fs-bar-word-condensed);
+}
+
+/* ── Pulse chip ───────────────────────────────────────────────────────── */
+.pulseSlot {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.pulse {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: 22px;
+  padding-left: var(--space-1-125);
+  border-left: var(--border-w-hair) solid var(--border);
+  font-size: var(--fs-bar-kicker);
+  font-weight: var(--fw-bold);
+  letter-spacing: var(--tracking-loose);
+  text-transform: uppercase;
+  color: var(--text-soft);
+  text-decoration: none;
+  white-space: nowrap;
+  animation: pulseIn var(--anim-base) var(--easing-landing) backwards;
+}
+
+.pulse::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.pulse b {
+  color: var(--accent-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.pulse:hover {
   color: var(--text);
 }
 
+@keyframes pulseIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* ── Nav ──────────────────────────────────────────────────────────────── */
 .nav {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-1);
+  align-self: stretch;
+  gap: var(--bar-nav-gap);
   grid-column: 2;
 }
 
 .navLink {
-  padding: var(--space-0-35) var(--space-0-875);
-  border-radius: 0;
+  position: relative;
+  display: flex;
+  align-items: center;
   font-size: var(--fs-sm);
   font-weight: var(--fw-semibold);
   letter-spacing: var(--tracking-normal);
   color: var(--text-muted);
   text-decoration: none;
-  transition: all var(--transition);
+  white-space: nowrap;
+  transition: color var(--transition);
 }
 
 .navLink:hover {
   color: var(--text);
 }
 
-/* See MobileMenu.module.css's .linkActive for why this repeats the trio
-   with a doubled selector instead of composing .activePill or relying on
-   source order (Rollup's per-file CSS block order isn't import-order). */
 .navLinkActive.navLinkActive {
-  background: var(--accent-subtle);
-  border: var(--border-w-hair) solid var(--accent-border);
-  color: var(--accent-light);
+  color: var(--text);
 }
 
+/* The gold rule sits ON the bar's bottom hairline. */
+.navLinkActive::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(-1 * var(--border-w-hair));
+  height: var(--bar-rule-w);
+  background: var(--accent);
+}
+
+/* ── Actions ──────────────────────────────────────────────────────────── */
 .actions {
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: var(--space-0-625);
-  flex-shrink: 0;
   grid-column: 3;
+  min-width: 0;
 }
 
-.authBtn {
-  composes: btnOutline from './Button.module.css';
-  padding: var(--space-0-45) var(--space-0-875);
+.anchor {
+  position: relative;
+  display: inline-flex;
+}
+
+.btn,
+.trigger,
+.cta,
+.iconBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-0-45);
+  height: var(--bar-control-h);
+  padding: 0 var(--space-0-875);
+  font: inherit;
   font-size: var(--fs-sm);
-  line-height: normal;
+  font-weight: var(--fw-semibold);
+  white-space: nowrap;
   text-decoration: none;
+  color: var(--text);
+  background: transparent;
+  border: var(--border-w-hair) solid var(--border);
+  border-radius: 0;
   cursor: pointer;
+  transition: border-color var(--transition), color var(--transition), background-color var(--transition);
+}
+
+.btn:hover,
+.trigger:hover,
+.iconBtn:hover {
+  color: var(--text); /* beat index.css's global a:hover gold */
+}
+
+.btn:hover,
+.trigger:hover,
+.iconBtn:hover,
+.trigger[aria-expanded='true'],
+.iconBtn[aria-expanded='true'] {
+  border-color: var(--accent-border);
+}
+
+.cta {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+  font-weight: var(--fw-bold);
+}
+
+.cta:hover {
+  color: var(--on-accent);
+  background: var(--accent-light);
+  border-color: var(--accent-light);
+}
+
+.iconBtn {
+  width: var(--bar-control-h);
+  padding: 0;
+  justify-content: center;
+}
+
+.glyph {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+.chev {
+  width: 8px;
+  height: 8px;
+  opacity: 0.6;
+}
+
+/* ── Search ───────────────────────────────────────────────────────────── */
+.search {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--text-muted);
+}
+
+.search input {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  font-size: var(--fs-sm);
+  color: var(--text);
+  background: transparent;
+  border: 0;
+  outline: none;
+}
+
+.search input::placeholder {
+  color: var(--text-muted);
+}
+
+.search input::-webkit-search-cancel-button {
+  display: none;
+}
+
+/* Underline-only field in the bar */
+.searchField {
+  width: var(--bar-search-w);
+  height: var(--bar-control-h);
+  padding: 0 var(--space-0-125);
+  border-bottom: var(--border-w-hair) solid var(--border);
+  transition: border-color var(--transition);
+}
+
+.searchField:focus-within {
+  border-bottom-color: var(--accent);
+}
+
+/* ── Popovers ─────────────────────────────────────────────────────────── */
+.pop {
+  position: absolute;
+  top: calc(100% + var(--space-2));
+  right: 0;
+  z-index: var(--z-toast);
+  width: max-content;
+  min-width: 230px;
+  max-width: min(340px, calc(100vw - 2 * var(--space-4)));
+  padding: var(--space-0-375) 0;
+  background: var(--bg-raised);
+  border: var(--border-w-hair) solid var(--border);
+  box-shadow: var(--shadow-card);
+  text-align: left;
+  animation: popIn var(--anim-fast) var(--easing-landing) backwards;
+}
+
+@keyframes popIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: none; }
+}
+
+.prefsPop {
+  min-width: 250px;
+}
+
+.searchPop {
+  width: 300px;
+  padding: 0 var(--space-3);
+}
+
+.searchPop .search {
+  height: 44px;
+}
+
+.popId {
+  padding: var(--space-0-625) var(--space-4) var(--space-3);
+  margin-bottom: var(--space-1);
+  font-size: var(--fs-2xs);
+  color: var(--text-muted);
+  border-bottom: var(--border-w-hair) solid var(--border-subtle);
+}
+
+.popId b {
+  display: block;
+  margin-top: var(--space-0-125);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.popId span {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.popItem {
+  display: block;
+  width: 100%;
+  padding: var(--space-0-55) var(--space-4);
+  font: inherit;
+  font-size: var(--fs-md);
+  text-align: left;
+  color: var(--text);
+  text-decoration: none;
+  background: none;
+  border: 0;
+  border-radius: 0;
+  cursor: pointer;
+}
+
+.popItem:hover,
+.popItem:focus-visible {
+  color: var(--text);
+  background: var(--accent-subtle);
+}
+
+.popRule {
+  margin: var(--space-1) 0;
+  border: 0;
+  border-top: var(--border-w-hair) solid var(--border-subtle);
+}
+
+.popLabel {
+  padding: var(--space-0-625) var(--space-4) var(--space-0-375);
+  font-size: var(--fs-3xs);
+  font-weight: var(--fw-bold);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.seg {
+  display: flex;
+  margin: 0 var(--space-4) var(--space-0-625);
+}
+
+.seg button {
+  flex: 1;
+  padding: var(--space-0-45) var(--space-0-625);
+  font: inherit;
+  font-size: var(--fs-xs);
+  color: var(--text-soft);
+  background: transparent;
+  border: var(--border-w-hair) solid var(--border);
+  border-radius: 0;
+  cursor: pointer;
+}
+
+.seg button + button {
+  margin-left: calc(-1 * var(--border-w-hair));
+}
+
+.seg button:hover {
+  color: var(--text);
+}
+
+.seg button[aria-pressed='true'] {
+  position: relative;
+  font-weight: var(--fw-bold);
+  color: var(--accent-ink);
+  background: var(--accent-subtle);
+  border-color: var(--accent-border);
+}
+
+/* ── Responsive visibility ────────────────────────────────────────────── */
+.phoneOnly {
+  display: none;
+}
+
+.narrowOnly {
+  display: none;
+}
+
+@media (max-width: 1279px) {
+  .wideOnly {
+    display: none;
+  }
+
+  .narrowOnly {
+    display: inline-flex;
+  }
 }
 
 @media (max-width: 640px) {
   .bar {
     grid-template-columns: 1fr auto;
+    gap: var(--space-0-625);
+    height: var(--bar-h-phone);
+    padding: 0 var(--space-4);
   }
 
-  .nav {
+  .bar[data-condensed] {
+    height: var(--bar-h-phone-condensed);
+  }
+
+  .bar[data-condensed] {
+    --dial-size: var(--bar-mark);
+  }
+
+  .nav,
+  .deskOnly,
+  .wideOnly,
+  .narrowOnly {
     display: none;
+  }
+
+  .phoneOnly {
+    display: inline-flex;
   }
 
   .actions {
     grid-column: 2;
   }
 
-  /* Shrinkable so the brand wraps onto two lines instead of running under
-     the mobile menu button — only reachable on a 320px phone with a 24px
-     default font (#498); everywhere else it fits on one line. */
-  .logoWrap {
+  .logo {
     flex-shrink: 1;
     min-width: 0;
   }
+
+  .logoMarkOnlyPhone .word {
+    display: none;
+  }
+
+  .btn,
+  .trigger,
+  .cta {
+    padding: 0 var(--space-3);
+  }
+
+  /* Anchor drops its positioning so the popover resolves against the
+     sticky bar itself and spans its full width. */
+  .anchor:has(.searchPop) {
+    position: static;
+  }
+
+  .searchPop {
+    top: 100%;
+    left: 0;
+    right: 0;
+    width: auto;
+    max-width: none;
+    border-left: 0;
+    border-right: 0;
+  }
 }
 
-/* Wide band (--bp-wide): background/hairline stay full-bleed; content aligns
-   to the --page-max-wide wrap (same --space-6 inset as the page). */
 @media (min-width: 2000px) {
   .bar {
     padding-inline: var(--wrap-inset);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bar,
+  .bar * {
+    transition: none !important;
+    animation: none !important;
   }
 }

@@ -50,7 +50,7 @@ vi.mock('../../lib/auth', () => ({
 }));
 
 // Deterministic TopBar stub exposing a locale-switch trigger, so the test drives
-// onLocaleChange without depending on LocaleSelector internals.
+// onLocaleChange without depending on bar internals.
 vi.mock('../TopBar', () => ({
   default: ({ onLocaleChange }: { onLocaleChange: (c: string) => void }) => (
     <button data-testid="switch-et" onClick={() => onLocaleChange('et')}>

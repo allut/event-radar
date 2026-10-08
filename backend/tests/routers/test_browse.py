@@ -64,12 +64,12 @@ class TestKeywordFilter:
 
 class TestDateRangeFilter:
     def test_both_none_returns_none(self):
-        from app.routers.browse import _date_range_filter
+        from app.events.queries import event_date_range_filter as _date_range_filter
 
         assert _date_range_filter(None, None) is None
 
     def test_date_to_only_is_exclusive_next_day(self):
-        from app.routers.browse import _date_range_filter
+        from app.events.queries import event_date_range_filter as _date_range_filter
         from app.constants import TALLINN_TZ
 
         cond = _date_range_filter(None, date(2026, 7, 20))
@@ -79,7 +79,7 @@ class TestDateRangeFilter:
         assert str(expected_bound.year) in compiled
 
     def test_date_from_only_uses_ends_at_coalesce(self):
-        from app.routers.browse import _date_range_filter
+        from app.events.queries import event_date_range_filter as _date_range_filter
 
         cond = _date_range_filter(date(2026, 7, 20), None)
         compiled = str(cond.compile(compile_kwargs={"literal_binds": True}))

@@ -20,15 +20,17 @@
 }
 
 /* ── Hero ────────────────────────────────────────────────────────────── */
-/* Wraps .hero + Ticker so the two together fill the viewport below the
-   topbar, revealing the events section on scroll. Mobile has no override
-   here — .hero's own mobile min-height rule + .ticker's mobile display:none
-   (see the max-width:640px block below) make .heroGroup size to .hero's
-   content height there, same as before this group wrapper existed. */
+/* Wraps .hero + Ticker so the two together fill the viewport, revealing the
+   events section on scroll. The hero runs up under the transparent bar
+   (margin-top pulls it up by the bar's height; .heroGrid pads back down).
+   Mobile only swaps the bar height: .hero's own mobile min-height rule +
+   .ticker's mobile display:none (see the max-width:640px block below) make
+   .heroGroup size to .hero's content height there. */
 .heroGroup {
   display: flex;
   flex-direction: column;
-  min-height: calc(100dvh - var(--topbar-height));
+  min-height: 100dvh;
+  margin-top: calc(-1 * var(--bar-h));
 }
 
 .hero {
@@ -74,6 +76,7 @@
 .frame {
   position: absolute;
   inset: var(--landing-poster-inset);
+  top: var(--bar-h); /* the gold frame starts below the bar */
   border: var(--border-w-hair) solid var(--poster-frame);
   pointer-events: none;
 }
@@ -83,7 +86,7 @@
   max-width: var(--page-max-wide);
   width: 100%;
   margin: 0 auto;
-  padding: 0 var(--space-6);
+  padding: var(--bar-h) var(--space-6) 0;
   display: flex;
   flex-direction: column;
   flex: 1;
@@ -803,9 +806,21 @@
 }
 
 @media (max-width: 640px) {
+  .heroGroup {
+    margin-top: calc(-1 * var(--bar-h-phone));
+  }
+
   .hero,
   .heroGrid {
-    min-height: calc(100dvh - var(--topbar-height-mobile));
+    min-height: 100dvh;
+  }
+
+  .heroGrid {
+    padding-top: var(--bar-h-phone);
+  }
+
+  .frame {
+    top: var(--bar-h-phone);
   }
   /* Capture first (#498, design-system.md §4): heroTop/heroBot dissolve into
      one heroMain flex column so the sub and the counter (as a ledger) can

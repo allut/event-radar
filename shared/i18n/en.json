@@ -496,7 +496,11 @@
     "auth.googleSignIn.confirmationSent": "Check your email to finish linking your account.",
     "settings.identities.googleLinked": "Google account linked",
     "settings.identities.googleNotLinked": "Google account not linked",
-    "settings.identities.unlinkGoogle": "Unlink Google"
+    "settings.identities.unlinkGoogle": "Unlink Google",
+    "account_menu": "Account",
+    "account_signed_in_as": "Signed in as",
+    "prefs_menu": "Language and theme",
+    "bar_pulse_today": "{count} on today"
   },
   "email": {
     "email.magic_link.subject": "Your Event Radar sign-in link",

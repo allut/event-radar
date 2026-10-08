@@ -1,8 +1,14 @@
 import { describe, expect, it, vi } from 'vitest';
+import userEvent from '@testing-library/user-event';
 import { fireEvent, screen, within } from '@testing-library/react';
 import { renderWithProviders } from '../../test/utils';
 import { getResolvedTheme } from '../../lib/theme';
 import MobileMenu from './MobileMenu';
+
+vi.mock('../../api/client', () => ({
+  api: { get: vi.fn().mockResolvedValue({ email: 'ada@example.com' }) },
+  organizerApi: { get: vi.fn() },
+}));
 
 describe('MobileMenu', () => {
   it('toggles the popover on trigger click', () => {
@@ -151,32 +157,80 @@ describe('MobileMenu', () => {
     expect(screen.getByRole('link', { name: 'Вопросы и ответы' })).toHaveAttribute('href', '/ru/faq');
   });
 
-  it('does not show FAQ in the signed-in nav', () => {
+  it('shows Daily 5 · Explore · Saved in the signed-in nav; Settings and Contact sit in the account block', () => {
     renderWithProviders(
-      <MobileMenu locale="en" onLocaleChange={vi.fn()} onLogout={vi.fn()} />,
+      <MobileMenu
+        locale="en"
+        onLocaleChange={vi.fn()}
+        onLogout={vi.fn()}
+        accountItems={[
+          { route: '/settings', labelKey: 'nav_settings' },
+          { route: '/contact', labelKey: 'nav_contact' },
+        ]}
+      />,
     );
 
     fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
 
     const links = within(screen.getByRole('navigation')).getAllByRole('link');
-    expect(links.map((a) => a.textContent)).toEqual(['Daily 5', 'Explore', 'Saved', 'Settings', 'Contact']);
+    expect(links.map((a) => a.textContent)).toEqual(['Daily 5', 'Explore', 'Saved']);
     expect(screen.queryByText('FAQ')).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Settings' })).toHaveAttribute('href', '/settings');
+    expect(screen.getByRole('link', { name: 'Contact' })).toHaveAttribute('href', '/contact');
   });
 
-  it('shows a Sign in link, no sign-out, and only Explore/FAQ/Contact in nav when signed out', () => {
-    renderWithProviders(
-      <MobileMenu locale="en" onLocaleChange={vi.fn()} authed={false} />,
-    );
+  it('fetches the identity when the drawer opens and shows it in the account block', async () => {
+    renderWithProviders(<MobileMenu locale="en" onLocaleChange={vi.fn()} onLogout={vi.fn()} />);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Menu' }));
+
+    expect(await screen.findByText('ada@example.com')).toBeInTheDocument();
+    expect(screen.getByText('Signed in as')).toBeInTheDocument();
+  });
+
+  it('signed out: no Sign in link (the bar shows it), no Sign out, only Explore/FAQ/Contact in nav', () => {
+    renderWithProviders(<MobileMenu locale="en" onLocaleChange={vi.fn()} authed={false} />);
 
     fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
 
-    const signIn = screen.getByRole('link', { name: 'Sign in' });
-    expect(signIn).toHaveAttribute('href', '/login');
+    expect(screen.queryByRole('link', { name: 'Sign in' })).not.toBeInTheDocument();
     expect(screen.queryByText('Sign out')).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Explore' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Contact' })).toHaveAttribute('href', '/contact');
     expect(screen.queryByText('Daily 5')).not.toBeInTheDocument();
     expect(screen.queryByText('Saved')).not.toBeInTheDocument();
     expect(screen.getByText('ET')).toBeInTheDocument();
+  });
+
+  it('focuses the first nav item on open, never the search field', async () => {
+    renderWithProviders(<MobileMenu locale="en" onLocaleChange={vi.fn()} onLogout={vi.fn()} showSearch />);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Menu' }));
+
+    expect(screen.getByRole('link', { name: 'Daily 5' })).toHaveFocus();
+    expect(screen.getByRole('searchbox')).not.toHaveFocus();
+  });
+
+  it('locks page scroll while open and releases it on close; Escape returns focus to the hamburger', async () => {
+    renderWithProviders(<MobileMenu locale="en" onLocaleChange={vi.fn()} onLogout={vi.fn()} />);
+    const hamburger = screen.getByRole('button', { name: 'Menu' });
+
+    await userEvent.click(hamburger);
+    expect(document.body.style.overflow).toBe('hidden');
+
+    await userEvent.keyboard('{Escape}');
+    expect(document.body.style.overflow).not.toBe('hidden');
+    expect(hamburger).toHaveFocus();
+  });
+
+  it('renders the search field only when showSearch is set', () => {
+    const { unmount } = renderWithProviders(<MobileMenu locale="en" onLocaleChange={vi.fn()} onLogout={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
+    expect(screen.queryByRole('searchbox')).not.toBeInTheDocument();
+    unmount();
+
+    renderWithProviders(<MobileMenu locale="en" onLocaleChange={vi.fn()} onLogout={vi.fn()} showSearch />);
+    fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
+    expect(screen.getByRole('searchbox')).toHaveAttribute('maxlength', '200');
   });
 });

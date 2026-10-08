@@ -452,12 +452,23 @@
   --plates-max-width: 1240px;               /* wide-band plate row cap (rows stagger to alternate wrap edges) */
   --plate-text-min: 260px;                  /* B3 text-column grid minimum */
   --plate-image-filter: saturate(0.85) contrast(1.04);
-  --topbar-height-mobile: 68px; /* TopBar's rendered height at <=640px (nav hidden,
-    logo + locale/auth actions row) -- no existing height token on .bar (intrinsic,
-    padding-driven); tune-by-eye like --space-7 above, confirm in live QA. */
-  --topbar-height: 72px; /* TopBar's rendered height above 640px (nav row present) --
-    same intrinsic/padding-driven situation as --topbar-height-mobile; tune-by-eye,
-    confirm in live QA. */
+  /* Top bar (direction A · Programme) -- docs/design-system.md §3. */
+  --accent-ink: #e8a838;              /* gold used as text; light value darkened for AA */
+  --bar-h: 72px;                      /* desktop bar, unscrolled */
+  --bar-h-condensed: 54px;            /* desktop bar, scrolled */
+  --bar-h-phone: 60px;
+  --bar-h-phone-condensed: 52px;
+  --bar-mark: 24px;                   /* Dial mark */
+  --bar-mark-condensed: 20px;
+  --bar-control-h: 36px;              /* square outline controls */
+  --bar-search-w: 212px;
+  --bar-nav-gap: 30px;
+  --bar-rule-w: 2px;                  /* active-item gold rule */
+  --fs-bar-word: 1.5rem;              /* Cormorant wordmark */
+  --fs-bar-word-condensed: 1.3rem;
+  --fs-bar-kicker: 0.656rem;          /* pulse chip spaced caps */
+  --fs-drawer-nav: 2.1rem;            /* phone drawer Cormorant nav */
+  --bar-transition: 280ms var(--easing-landing);
 }
 
 /* Light theme (wayfinder #247/#248) — literal inversion of the dark :root
@@ -468,6 +479,7 @@
    else (spacing, type scale, geometry, unlisted overlay/alpha tokens) is
    theme-neutral and inherited from :root. */
 :root[data-theme="light"] {
+  --accent-ink: #8f6316; /* gold as text: --accent-light fails AA on the light background */
   --bg: #fdfcfa;
   --bg-raised: #f5f6f9;
   --bg-card: #eef0f4;

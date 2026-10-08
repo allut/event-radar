@@ -98,7 +98,8 @@ describe('Contact', () => {
 
   it('does not fetch /users/me when signed out', () => {
     renderWithProviders(<Contact />);
-    expect(mockGet).not.toHaveBeenCalled();
+    // The bar's pulse chip may fetch public counts; the user endpoint must stay untouched.
+    expect(mockGet).not.toHaveBeenCalledWith(expect.stringContaining('/users/me'));
   });
 
   it('renders an organizer entry link pointing to /organizer/login', () => {

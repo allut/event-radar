@@ -501,6 +501,10 @@ export const TRANSLATIONS: Record<Locale, Record<string, string>> = {
     'settings.identities.googleLinked': 'Google\'i konto on seotud',
     'settings.identities.googleNotLinked': 'Google\'i konto ei ole seotud',
     'settings.identities.unlinkGoogle': 'Eemalda Google\'i seos',
+    'account_menu': 'Konto',
+    'account_signed_in_as': 'Sisse logitud',
+    'prefs_menu': 'Keel ja teema',
+    'bar_pulse_today': 'täna {count}',
   },
   en: {
     'brand': 'Event Radar',
@@ -1000,6 +1004,10 @@ export const TRANSLATIONS: Record<Locale, Record<string, string>> = {
     'settings.identities.googleLinked': 'Google account linked',
     'settings.identities.googleNotLinked': 'Google account not linked',
     'settings.identities.unlinkGoogle': 'Unlink Google',
+    'account_menu': 'Account',
+    'account_signed_in_as': 'Signed in as',
+    'prefs_menu': 'Language and theme',
+    'bar_pulse_today': '{count} on today',
   },
   ru: {
     'brand': 'Event Radar',
@@ -1499,6 +1507,10 @@ export const TRANSLATIONS: Record<Locale, Record<string, string>> = {
     'settings.identities.googleLinked': 'Аккаунт Google привязан',
     'settings.identities.googleNotLinked': 'Аккаунт Google не привязан',
     'settings.identities.unlinkGoogle': 'Отвязать Google',
+    'account_menu': 'Аккаунт',
+    'account_signed_in_as': 'Вы вошли как',
+    'prefs_menu': 'Язык и тема',
+    'bar_pulse_today': '{count} сегодня',
   },
 };
 

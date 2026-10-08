@@ -615,6 +615,7 @@ export const QUERY_KEYS = {
   settings: 'settings',
   showcase: 'showcase',
   counts: 'counts',
+  authMe: 'authMe',
   organizerEvents: 'organizerEvents',
   organizerProfile: 'organizerProfile',
   organizerVenues: 'organizerVenues',
@@ -792,8 +793,9 @@ export const STEP_KEYS = [
 ];
 
 // ─── Brand ───────────────────────────────────────────────────────────────────
-// Self-contained radar-mark glyph used across TopBar/OrganizerTopBar/Footer/
-// Landing/auth cards — no external asset, matches the app's same-origin CSP.
+// Plain-text radar glyph, kept for AdminShell only: the admin console's
+// sub-language gets no brand imagery. Everywhere else the brand mark is the
+// Dial (components/DialMark).
 export const BRAND_GLYPH = '◉';
 // ─── Explore ─────────────────────────────────────────────────────────────────
 export const EXPLORE_AUDIENCE_ALL = 'all';
@@ -872,6 +874,10 @@ export const EXPLORE_PARAM = {
   offset: 'offset',
   cursor: 'cursor',
 } as const;
+
+// Query string of the top bar pulse chip's link — the Explore preset whose
+// result set `today_count` (GET /public/counts) counts.
+export const EXPLORE_TODAY_SEARCH = `?${EXPLORE_PARAM.date}=${DATE_PRESET_TODAY}`;
 
 // Pagination query-param names shared by every paginated list fetch
 // (Saved Events, admin queues, organizer dashboard) — /explore routes its
@@ -1018,39 +1024,59 @@ export const ADMIN_THEME_OPTIONS = [
 // (see lib/adminAuth.ts) — a third, independent auth track's localStorage flag.
 export const ADMIN_SIGNED_IN_HINT_KEY = 'admin_session_token';
 
+export interface NavItem {
+  route: string;
+  labelKey: string;
+}
+
 // The signed-in primary nav — same {route, labelKey} pairs rendered by both
 // TopBar (desktop) and MobileMenu (mobile), kept in one place so they can't
-// drift out of sync.
-export const NAV_ITEMS = [
+// drift out of sync. Settings and Contact live in ACCOUNT_MENU_ITEMS.
+export const NAV_ITEMS: readonly NavItem[] = [
   { route: ROUTES.home, labelKey: 'nav_daily5' },
   { route: ROUTES.explore, labelKey: 'nav_explore' },
   { route: ROUTES.saved, labelKey: 'nav_saved' },
+];
+
+// Settings and Contact moved out of the bar into the account menu (and the
+// drawer's account block) — what makes the 1024px bar fit in ET/RU.
+export const ACCOUNT_MENU_ITEMS: readonly NavItem[] = [
   { route: ROUTES.settings, labelKey: 'nav_settings' },
   { route: ROUTES.contact, labelKey: 'nav_contact' },
-] as const;
+];
 
 // The signed-out primary nav — an explicit list rather than a filter over
 // NAV_ITEMS, since it carries FAQ, which the signed-in nav doesn't. Daily
 // 5/Saved/Settings are left out as dead ends for an anonymous visitor.
 // Shared by TopBar and MobileMenu so they can't drift out of sync.
-export const SIGNED_OUT_NAV_ITEMS = [
+export const SIGNED_OUT_NAV_ITEMS: readonly NavItem[] = [
   { route: ROUTES.explore, labelKey: 'nav_explore' },
   { route: ROUTES.faq, labelKey: 'nav_faq' },
   { route: ROUTES.contact, labelKey: 'nav_contact' },
-] as const;
+];
 
 // Same {route, labelKey} shape as NAV_ITEMS, rendered by both OrganizerTopBar
-// (desktop) and its MobileMenu (mobile) — kept in one place so they can't
-// drift out of sync.
-export const ORGANIZER_NAV_ITEMS = [
+// (desktop) and its MobileMenu (mobile). "New event" is the bar's gold CTA and
+// Settings/Contact live in ORGANIZER_ACCOUNT_MENU_ITEMS.
+export const ORGANIZER_NAV_ITEMS: readonly NavItem[] = [
   { route: ROUTES.organizerDashboard, labelKey: 'organizer_dashboard_title' },
-  { route: ROUTES.organizerSubmit, labelKey: 'organizer_new_event' },
+];
+
+export const ORGANIZER_ACCOUNT_MENU_ITEMS: readonly NavItem[] = [
   { route: ROUTES.organizerSettings, labelKey: 'organizer_settings_nav' },
   { route: ROUTES.organizerContact, labelKey: 'organizer_contact_nav' },
-] as const;
+];
 
-// The two theme options rendered by both ThemeSelector (desktop) and
-// MobileMenu (mobile), kept in one place so they can't drift out of sync —
+// ─── Top bar ─────────────────────────────────────────────────────────────────
+// Mirrors the backend's BROWSE_QUERY_MAX_LEN.
+export const SEARCH_MAX_LEN = 200;
+// Scroll hysteresis: the bar condenses past 24px and expands back only under
+// 4px, so its 18px height change can't oscillate around one threshold.
+export const BAR_CONDENSE_SCROLL_PX = 24;
+export const BAR_EXPAND_SCROLL_PX = 4;
+
+// The two theme options rendered by PrefsRows (the preferences menu and the
+// phone drawer), kept in one place so they can't drift out of sync —
 // mirrors NAV_ITEMS' {value, labelKey} pattern above. No "System" entry
 // (ADR 0003) — device-following is the default state a viewer falls back to
 // once their override expires, not something offered as a third choice.

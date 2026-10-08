@@ -90,9 +90,11 @@ describe('Feed', () => {
     renderWithProviders(<Feed />, { route: '/en', pathPattern: '/:locale' });
     await waitFor(() => expect(screen.getAllByTestId('event-card').length).toBe(2));
 
-    await userEvent.click(screen.getByRole('button', { name: 'EN' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Language and theme' }));
     await userEvent.click(screen.getByRole('button', { name: 'RU' }));
 
+    // The switch navigates to /ru, remounting the bar with its menu closed.
+    await userEvent.click(screen.getByRole('button', { name: 'Язык и тема' }));
     expect(screen.getByRole('button', { name: 'RU' })).toBeDisabled();
 
     resolvePatch();
@@ -117,8 +119,9 @@ describe('Feed', () => {
     mockGet.mockResolvedValueOnce(feedResponse);
     const { clearSignedInHint } = await import('../../lib/auth');
     renderWithProviders(<Feed />, { route: '/en', pathPattern: '/:locale' });
-    await waitFor(() => screen.getByRole('button', { name: /sign out/i }));
-    await userEvent.click(screen.getByRole('button', { name: /sign out/i }));
+    await waitFor(() => screen.getByRole('button', { name: 'Account' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Account' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: /sign out/i }));
     expect(clearSignedInHint).toHaveBeenCalled();
   });
 });

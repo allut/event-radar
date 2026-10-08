@@ -18,9 +18,8 @@
 }
 
 .radar {
-  composes: breathe from '../shared/Animations.module.css';
-  font-size: var(--heading-lg);
-  color: var(--accent);
+  --dial-size: var(--heading-lg);
+  display: inline-flex;
 }
 
 .brand {

@@ -61,13 +61,13 @@
 /* Every anchor target (#section, #item) clears the sticky TopBar. */
 .section,
 .item {
-  scroll-margin-top: calc(var(--topbar-height) + var(--space-4));
+  scroll-margin-top: calc(var(--bar-h-condensed) + var(--space-4));
 }
 
 @media (max-width: 640px) {
   .section,
   .item {
-    scroll-margin-top: calc(var(--topbar-height-mobile) + var(--space-5));
+    scroll-margin-top: calc(var(--bar-h-phone-condensed) + var(--space-5));
   }
 }
 

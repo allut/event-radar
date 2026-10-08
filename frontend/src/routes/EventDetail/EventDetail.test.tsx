@@ -274,10 +274,8 @@ describe('EventDetail', () => {
       mockGet.mockResolvedValueOnce(eventData);
       renderWithProviders(<EventDetail />, { route: '/en/events/1', pathPattern: '/:locale/events/:id' });
       await waitFor(() => expect(screen.getByText('Test Concert')).toBeInTheDocument());
-      const localeButton = screen.getByRole('button', { name: 'EN' });
-      await userEvent.click(localeButton);
-      const etOption = await screen.findByText('ET');
-      await userEvent.click(etOption);
+      await userEvent.click(screen.getByRole('button', { name: 'Language and theme' }));
+      await userEvent.click(await screen.findByRole('button', { name: 'ET' }));
       expect(api.patch).not.toHaveBeenCalled();
     });
 

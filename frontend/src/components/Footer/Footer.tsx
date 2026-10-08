@@ -2,10 +2,11 @@ import { type ReactNode } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { t, ti } from '../../i18n';
 import { isOrganizerPortalPath, safeUrl } from '../../utils';
-import { BRAND_GLYPH, COPYRIGHT_YEAR, ROUTES, SOCIAL_LINKS, type SocialIcon } from '../../constants';
+import { COPYRIGHT_YEAR, ROUTES, SOCIAL_LINKS, type SocialIcon } from '../../constants';
 import { useLocalePath } from '../../hooks/useLocalePath';
 import { usePathLocale } from '../../hooks/usePathLocale';
 import { useOrganizerAuth } from '../../hooks/useOrganizerAuth';
+import DialMark from '../DialMark';
 import styles from './Footer.module.css';
 
 // Self-contained brand glyphs — no external assets, so the footer works under
@@ -57,7 +58,7 @@ export default function Footer() {
       <div className={styles.inner}>
         <div className={styles.brandRow}>
           <Link to={localePath(ROUTES.home)} className={styles.brandLink}>
-            <span className={styles.radarMark} aria-hidden>{BRAND_GLYPH}</span>
+            <span className={styles.radarMark}><DialMark /></span>
             <span>{t('brand', locale)}</span>
           </Link>
           <span>{t('footer_location', locale)}</span>

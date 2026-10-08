@@ -1,12 +1,14 @@
-import { Link, NavLink } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { t } from '../../i18n';
-import { cx } from '../../utils';
-import { BRAND_GLYPH, ORGANIZER_NAV_ITEMS, ROUTES } from '../../constants';
+import { ORGANIZER_ACCOUNT_MENU_ITEMS, ORGANIZER_NAV_ITEMS, ROUTES } from '../../constants';
+import { useBarScrolled } from '../../hooks/useBarScrolled';
 import { useLocalePath } from '../../hooks/useLocalePath';
-import LocaleSelector from '../LocaleSelector';
-import ThemeSelector from '../ThemeSelector';
+import AccountMenu from '../AccountMenu';
+import BarLogo from '../BarLogo';
+import BarNav from '../BarNav';
 import MobileMenu from '../MobileMenu';
-import styles from './OrganizerTopBar.module.css';
+import PrefsMenu from '../PrefsMenu';
+import styles from '../shared/Bar.module.css';
 
 interface OrganizerTopBarProps {
   locale: string;
@@ -14,70 +16,47 @@ interface OrganizerTopBarProps {
   onLogout: () => void;
 }
 
-// Organizer-scoped sibling of components/TopBar — deliberately not reused
-// directly, since that component's nav/auth links are hardcoded to the
-// consumer track (/login, /explore, /saved, ...). Shares TopBar's MobileMenu
-// component (parameterized via navItems/navAriaLabelKey) for the mobile
-// hamburger.
+// Organizer-scoped sibling of components/TopBar — deliberately not merged with
+// it, since that component's nav/auth links are hardcoded to the consumer track
+// (/login, /explore, /saved, ...). No search and no pulse chip; "New event" is
+// the gold call-to-action, and Settings/Contact live in the account menu.
 export default function OrganizerTopBar({ locale, onLocaleChange, onLogout }: OrganizerTopBarProps) {
   const localePath = useLocalePath();
+  const scrolled = useBarScrolled();
+  const newEvent = (
+    <Link to={localePath(ROUTES.organizerSubmit)} className={styles.cta}>{t('organizer_new_event', locale)}</Link>
+  );
+
   return (
-    <header className={styles.topBar}>
-      <div className={styles.left}>
-        <Link to={localePath(ROUTES.home)} className={styles.logoWrap}>
-          <span className={styles.radar} aria-hidden>{BRAND_GLYPH}</span>
-          <span className={styles.brand}>{t('brand', locale)}</span>
-        </Link>
+    <header className={styles.bar} data-condensed={scrolled || undefined}>
+      <div className={styles.barLeft}>
+        {/* RU at 390px: wordmark + "Новое событие" + ☰ don't fit, so phones show the mark only. */}
+        <BarLogo locale={locale} markOnlyOnPhone />
       </div>
 
-      <nav className={styles.nav} aria-label={t('organizer_dashboard_title', locale)}>
-        <NavLink
-          to={localePath(ROUTES.organizerDashboard)}
-          className={({ isActive }) => cx(styles.navLink, isActive && styles.navLinkActive)}
-        >
-          {t('organizer_dashboard_title', locale)}
-        </NavLink>
-        <NavLink
-          to={localePath(ROUTES.organizerSubmit)}
-          className={({ isActive }) => cx(styles.navLink, isActive && styles.navLinkActive)}
-        >
-          {t('organizer_new_event', locale)}
-        </NavLink>
-        <NavLink
-          to={localePath(ROUTES.organizerSettings)}
-          className={({ isActive }) => cx(styles.navLink, isActive && styles.navLinkActive)}
-        >
-          {t('organizer_settings_nav', locale)}
-        </NavLink>
-        <NavLink
-          to={localePath(ROUTES.organizerContact)}
-          className={({ isActive }) => cx(styles.navLink, isActive && styles.navLinkActive)}
-        >
-          {t('organizer_contact_nav', locale)}
-        </NavLink>
-      </nav>
+      <BarNav items={ORGANIZER_NAV_ITEMS} locale={locale} ariaLabel={t('organizer_dashboard_title', locale)} />
 
       <div className={styles.actions}>
-        <button className={styles.authBtn} onClick={onLogout}>{t('sign_out', locale)}</button>
-        <div className={styles.localeWrap}>
-          <LocaleSelector
-            locale={locale}
-            onChange={onLocaleChange}
-            ariaLabel={t('section_language', locale)}
-          />
-        </div>
-        <div className={styles.themeWrap}>
-          <ThemeSelector locale={locale} ariaLabel={t('section_theme', locale)} />
-        </div>
-        <div className={styles.mobileMenuWrap}>
+        <span className={styles.deskOnly}>{newEvent}</span>
+        <span className={styles.deskOnly}>
+          <AccountMenu locale={locale} track="organizer" items={ORGANIZER_ACCOUNT_MENU_ITEMS} onLogout={onLogout} />
+        </span>
+        <span className={styles.deskOnly}>
+          <PrefsMenu locale={locale} onLocaleChange={onLocaleChange} />
+        </span>
+
+        <span className={styles.phoneOnly}>{newEvent}</span>
+        <span className={styles.phoneOnly}>
           <MobileMenu
             locale={locale}
             onLocaleChange={onLocaleChange}
             onLogout={onLogout}
             navItems={ORGANIZER_NAV_ITEMS}
+            accountItems={ORGANIZER_ACCOUNT_MENU_ITEMS}
             navAriaLabelKey="organizer_dashboard_title"
+            track="organizer"
           />
-        </div>
+        </span>
       </div>
     </header>
   );

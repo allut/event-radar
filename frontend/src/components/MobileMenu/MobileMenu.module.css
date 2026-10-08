@@ -1,98 +1,119 @@
-.mobileMenu {
-  position: relative;
+/* Phone drawer (direction A · Programme): a full-width sheet under the bar, nav in
+   large Cormorant with hairlines, the active item in gold italic. */
+
+/* Unpositioned on purpose: the drawer resolves against the sticky bar. */
+.root {
+  display: inline-flex;
 }
 
 .trigger {
-  composes: triggerBase from '../shared/Menu.module.css';
-  justify-content: center;
   font-size: var(--fs-lg);
-  transition: border-color var(--transition);
 }
 
-.pop {
-  composes: menuPop from '../shared/Menu.module.css';
-}
-
-.pop.pop {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  min-width: var(--mobile-menu-min);
-}
-
-.section {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-}
-
-.sectionLabel {
-  font-size: var(--fs-2xs);
-  font-weight: var(--fw-semibold);
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-snug);
-  color: var(--text-muted);
-}
-
-.divider {
+.drawer {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  height: calc(100dvh - var(--bar-h-phone-condensed));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: var(--space-2) var(--space-5) var(--space-7);
+  background: var(--bg);
   border-top: var(--border-w-hair) solid var(--border);
+  color: var(--text);
+  animation: drawerIn var(--anim-fast) var(--easing-landing) backwards;
+}
+
+@keyframes drawerIn {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: none; }
+}
+
+.search {
+  height: 44px;
+  margin-top: var(--space-5);
+  padding: 0 var(--space-3);
+  border: var(--border-w-hair) solid var(--border);
+}
+
+.search:focus-within {
+  border-color: var(--accent-border);
+}
+
+.search input {
+  font-size: var(--fs-base);
+}
+
+.nav {
+  display: flex;
+  flex-direction: column;
+  margin-top: var(--space-2);
 }
 
 .link {
-  padding: var(--space-0-45) var(--space-0-875);
-  border-radius: 0;
-  font-size: var(--fs-sm);
-  font-weight: var(--fw-semibold);
-  color: var(--text-muted);
+  display: block;
+  padding: var(--space-0-875) 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-drawer-nav);
+  font-weight: var(--fw-medium);
+  line-height: 1.1;
+  color: var(--text);
   text-decoration: none;
-  transition: all var(--transition);
+  border-bottom: var(--border-w-hair) solid var(--border-subtle);
 }
 
+/* Without this, index.css's global a:hover (0,1,1) outranks .link and turns
+   the hovered item gold, reading as "current page" — and on touch screens
+   that hover sticks after a tap. */
 .link:hover {
   color: var(--text);
 }
 
-/* Same trio as shared/Menu.module.css's .activePill, repeated locally with
-   a doubled selector. Neither composing .activePill cross-file nor plain
-   same-file source order is reliable here: Rollup emits each CSS-module
-   file's rules as its own contiguous block, and the block order across
-   files is chunk-graph-driven, not import order — .link (this file) can
-   land after .activePill's block in the final bundle, silently losing the
-   override. The doubled selector forces higher specificity instead, which
-   wins regardless of block order. (Don't reuse this doubling on a class
-   that's also a `composes:` target elsewhere — the bundler's minifier
-   collapses it back to a single class in that case.) */
 .linkActive.linkActive {
-  background: var(--accent-subtle);
-  border: var(--border-w-hair) solid var(--accent-border);
-  color: var(--accent-light);
+  color: var(--accent-ink);
+  font-style: italic;
 }
 
-/* Shared by the language and theme rows — both are a flush row of equal-width
-   pill buttons with the same active-state treatment. */
-.optionRow {
+.prefs {
+  margin: var(--space-5) calc(-1 * var(--space-4)) 0;
+}
+
+.account {
   display: flex;
-  gap: var(--space-1);
+  flex-direction: column;
+  align-items: stretch;
+  margin-top: var(--space-5);
+  padding-top: var(--space-4);
+  border-top: var(--border-w-hair) solid var(--border-subtle);
 }
 
-.option {
-  composes: menuOption from '../shared/Menu.module.css';
-  padding: var(--space-0-3) var(--space-0-625);
+.accountLink {
+  padding: var(--space-0-625) 0;
+  font-size: var(--fs-md);
+  color: var(--text);
+  text-decoration: none;
 }
 
-/* See .linkActive above for why this repeats the trio with a doubled
-   selector instead of composing .activePill or relying on source order. */
-.optionActive.optionActive,
-.optionActive.optionActive:hover {
-  background: var(--accent-subtle);
-  border: var(--border-w-hair) solid var(--accent-border);
-  color: var(--accent-light);
+/* Same global a:hover override as .link. */
+.accountLink:hover {
+  color: var(--text);
 }
 
-.signOut {
-  composes: btnOutline from '../shared/Button.module.css';
-  padding: var(--space-0-45) var(--space-0-875);
-  font-size: var(--fs-sm);
-  font-weight: var(--fw-semibold);
-  text-align: center;
+.account > button {
+  align-self: flex-start;
+  margin-top: var(--space-3);
+}
+
+.identity.identity {
+  padding: 0;
+  margin: 0;
+  border: 0;
+  min-width: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .drawer {
+    animation: none;
+  }
 }

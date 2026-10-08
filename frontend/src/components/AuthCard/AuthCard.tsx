@@ -1,7 +1,8 @@
 import type { ReactNode } from 'react';
 import { t } from '../../i18n';
 import { cx } from '../../utils';
-import { BRAND_GLYPH, type AuthCardKind } from '../../constants';
+import type { AuthCardKind } from '../../constants';
+import DialMark from '../DialMark';
 import styles from './AuthCard.module.css';
 
 export type { AuthCardKind };
@@ -24,7 +25,7 @@ export default function AuthCard({ locale, kind, message, animated = true, actio
   return (
     <div className={styles.page}>
       <div className={styles.card}>
-        <span className={styles.radar} aria-hidden>{BRAND_GLYPH}</span>
+        <span className={styles.radar}><DialMark /></span>
         <h1 className={styles.brand}>{t('brand', locale)}</h1>
 
         <div

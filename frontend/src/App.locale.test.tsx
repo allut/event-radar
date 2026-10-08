@@ -37,7 +37,7 @@ describe('App locale-routing wrapper', () => {
     setPath('/');
     render(<App />);
 
-    await waitFor(() => expect(screen.getByRole('link', { name: 'Logi sisse' })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getAllByRole('link', { name: 'Logi sisse' }).length).toBeGreaterThan(0));
     expect(window.location.pathname).toBe('/');
   });
 
@@ -116,7 +116,7 @@ describe('App locale-routing wrapper', () => {
     render(<App />);
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Контакты' })).toBeInTheDocument());
 
-    await userEvent.click(screen.getByRole('button', { name: 'RU' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Язык и тема' }));
     await userEvent.click(screen.getByRole('button', { name: 'ET' }));
 
     await waitFor(() => expect(window.location.pathname).toBe('/contact'));

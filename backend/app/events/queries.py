@@ -1,12 +1,12 @@
 """Event query predicates and series identity shared by the feed, publish gate,
 claims and dedup — the one home for "which events count" definitions."""
 
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import and_, ColumnElement, false, func, or_
 
-from app.constants import EVENT_STATUS_PUBLISHED
+from app.constants import EVENT_STATUS_PUBLISHED, TALLINN_TZ
 from app.models.models import Event
 
 
@@ -35,6 +35,31 @@ def public_event_filter() -> ColumnElement[bool]:
         Event.is_explicit == false(),
         Event.is_non_event == false(),
     )
+
+
+def event_date_range_filter(
+    date_from: date | None, date_to: date | None
+) -> ColumnElement[bool] | None:
+    """Overlap check, not starts_at-only: an ongoing exhibition that started
+    last month must still match a "Today" filter. Bounds are Tallinn-midnight
+    datetimes; date_to is exclusive (next-day midnight).
+
+    Shared by /explore's date facet and /public/counts' ``today_count`` so the
+    pulse chip's number always agrees with the page its link lands on."""
+    if date_from is None and date_to is None:
+        return None
+    conditions: list[ColumnElement[bool]] = []
+    if date_to is not None:
+        date_to_end = datetime.combine(
+            date_to + timedelta(days=1), datetime.min.time(), tzinfo=TALLINN_TZ
+        )
+        conditions.append(Event.starts_at < date_to_end)
+    if date_from is not None:
+        date_from_start = datetime.combine(
+            date_from, datetime.min.time(), tzinfo=TALLINN_TZ
+        )
+        conditions.append(func.coalesce(Event.ends_at, Event.starts_at) >= date_from_start)
+    return and_(*conditions)
 
 
 def event_not_ended_filter(now: datetime, entity: Any = Event) -> ColumnElement[bool]:

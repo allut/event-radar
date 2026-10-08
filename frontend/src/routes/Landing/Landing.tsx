@@ -34,6 +34,7 @@ interface CountsResponse {
   venue_count: number;
   furthest_date: string | null;
   cheapest_price: number | null;
+  today_count: number;
   tonight_is_fallback: boolean;
   tonight_events: TonightEvent[];
 }
@@ -254,7 +255,7 @@ export default function Landing() {
   return (
     <div className={styles.page}>
       <SeoTags meta={seoMeta} jsonLd={jsonLd} />
-      <TopBar locale={locale} onLocaleChange={handleLocaleChange} authed={false} localeDisabled={localePending} />
+      <TopBar locale={locale} onLocaleChange={handleLocaleChange} authed={false} localeDisabled={localePending} transparent showPulse={false} />
 
       <main>
         <div className={styles.heroGroup}>

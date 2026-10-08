@@ -496,7 +496,11 @@
     "auth.googleSignIn.confirmationSent": "Проверьте почту, чтобы завершить привязку аккаунта.",
     "settings.identities.googleLinked": "Аккаунт Google привязан",
     "settings.identities.googleNotLinked": "Аккаунт Google не привязан",
-    "settings.identities.unlinkGoogle": "Отвязать Google"
+    "settings.identities.unlinkGoogle": "Отвязать Google",
+    "account_menu": "Аккаунт",
+    "account_signed_in_as": "Вы вошли как",
+    "prefs_menu": "Язык и тема",
+    "bar_pulse_today": "{count} сегодня"
   },
   "email": {
     "email.magic_link.subject": "Ваша ссылка для входа в Event Radar",

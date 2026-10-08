@@ -496,7 +496,11 @@
     "auth.googleSignIn.confirmationSent": "Konto sidumise lõpetamiseks kontrolli oma e-posti.",
     "settings.identities.googleLinked": "Google'i konto on seotud",
     "settings.identities.googleNotLinked": "Google'i konto ei ole seotud",
-    "settings.identities.unlinkGoogle": "Eemalda Google'i seos"
+    "settings.identities.unlinkGoogle": "Eemalda Google'i seos",
+    "account_menu": "Konto",
+    "account_signed_in_as": "Sisse logitud",
+    "prefs_menu": "Keel ja teema",
+    "bar_pulse_today": "täna {count}"
   },
   "email": {
     "email.magic_link.subject": "Sinu Event Radar sisselogimislink",

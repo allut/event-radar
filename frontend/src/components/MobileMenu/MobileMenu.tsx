@@ -1,12 +1,14 @@
 import { Link, NavLink } from 'react-router-dom';
 import { t } from '../../i18n';
 import { cx } from '../../utils';
-import { LOCALES, NAV_ITEMS, ROUTES, SIGNED_OUT_NAV_ITEMS, THEME_OPTIONS } from '../../constants';
+import { NAV_ITEMS, ROUTES, SIGNED_OUT_NAV_ITEMS, type NavItem } from '../../constants';
 import { useDropdown } from '../../hooks/useDropdown';
 import { useLocalePath } from '../../hooks/useLocalePath';
-import { useResolvedTheme } from '../../hooks/useResolvedTheme';
-import { setThemeOverride, type ResolvedTheme } from '../../lib/theme';
-import menuStyles from '../shared/Menu.module.css';
+import { useScrollLock } from '../../hooks/useScrollLock';
+import { Identity, type AccountTrack } from '../AccountMenu';
+import { SearchField } from '../BarSearch';
+import { PrefsRows } from '../PrefsMenu';
+import barStyles from '../shared/Bar.module.css';
 import styles from './MobileMenu.module.css';
 
 interface MobileMenuProps {
@@ -16,125 +18,80 @@ interface MobileMenuProps {
   localeDisabled?: boolean;
   showNav?: boolean;
   authed?: boolean;
-  // Overrides the default consumer NAV_ITEMS — e.g. OrganizerTopBar passes
-  // ORGANIZER_NAV_ITEMS. Callers that pass this are always authed (no
-  // signed-out variant to filter), so the explore-only filtering below is
-  // skipped entirely.
-  navItems?: readonly { route: string; labelKey: string }[];
+  // Overrides the default consumer nav — e.g. OrganizerTopBar passes
+  // ORGANIZER_NAV_ITEMS.
+  navItems?: readonly NavItem[];
   navAriaLabelKey?: string;
+  // Settings / Contact: shown in the signed-in account block, not the nav.
+  accountItems?: readonly NavItem[];
+  track?: AccountTrack;
+  showSearch?: boolean;
 }
 
-export default function MobileMenu({ locale, onLocaleChange, onLogout, localeDisabled, showNav = true, authed = true, navItems, navAriaLabelKey = 'nav_daily5' }: MobileMenuProps) {
-  const { open, setOpen, flip, rootRef, popRef, triggerRef, close } = useDropdown();
+// The phone drawer: nav in large Cormorant, then search, language + theme, and
+// (signed in) the account block. Signed out, the bar's own "Logi sisse" is the
+// primary action, so it is not repeated here.
+export default function MobileMenu({
+  locale, onLocaleChange, onLogout, localeDisabled, showNav = true, authed = true,
+  navItems, navAriaLabelKey = 'nav_daily5', accountItems = [], track = 'consumer', showSearch = false,
+}: MobileMenuProps) {
+  // Opening focuses the first nav item, never the search field: that would pop
+  // the phone keyboard.
+  const { open, setOpen, rootRef, popRef, triggerRef, close } = useDropdown('nav a, button[aria-pressed]');
   const localePath = useLocalePath();
-  const resolvedTheme = useResolvedTheme();
-  // Mirrors TopBar's signed-out nav via the shared SIGNED_OUT_NAV_ITEMS list.
+  useScrollLock(open);
   const visibleNavItems = navItems ?? (authed ? NAV_ITEMS : SIGNED_OUT_NAV_ITEMS);
 
   return (
-    <div className={cx(menuStyles.menu, styles.mobileMenu)} ref={rootRef}>
+    <div className={styles.root} ref={rootRef} data-drawer-open={open || undefined}>
       <button
         ref={triggerRef}
         type="button"
-        className={styles.trigger}
+        className={cx(barStyles.iconBtn, styles.trigger)}
         aria-expanded={open}
         aria-haspopup="true"
         aria-label={t('menu', locale)}
         onClick={() => setOpen((v) => !v)}
       >
-        <span aria-hidden>☰</span>
+        <span aria-hidden>{open ? '✕' : '☰'}</span>
       </button>
       {open && (
-        <div className={styles.pop} ref={popRef} data-flip={flip || undefined}>
+        <div className={styles.drawer} ref={popRef}>
           {showNav && visibleNavItems.length > 0 && (
-            <>
-              <nav className={styles.section} aria-label={t(navAriaLabelKey, locale)}>
-                {visibleNavItems.map(({ route, labelKey }) => (
-                  <NavLink
-                    key={route}
-                    to={localePath(route)}
-                    end={route === ROUTES.home}
-                    className={({ isActive }) => cx(styles.link, isActive && styles.linkActive)}
-                    onClick={close}
-                  >
-                    {t(labelKey, locale)}
-                  </NavLink>
-                ))}
-              </nav>
-
-              <div className={styles.divider} />
-            </>
+            <nav className={styles.nav} aria-label={t(navAriaLabelKey, locale)}>
+              {visibleNavItems.map(({ route, labelKey }) => (
+                <NavLink
+                  key={route}
+                  to={localePath(route)}
+                  end={route === ROUTES.home}
+                  className={({ isActive }) => cx(styles.link, isActive && styles.linkActive)}
+                  onClick={close}
+                >
+                  {t(labelKey, locale)}
+                </NavLink>
+              ))}
+            </nav>
           )}
 
-          <div className={styles.section}>
-            <span className={styles.sectionLabel}>{t('section_language', locale)}</span>
-            <div className={styles.optionRow} role="group" aria-label={t('section_language', locale)}>
-              {LOCALES.map(({ code, label }) => {
-                const isActive = code === locale;
-                return (
-                  <button
-                    key={code}
-                    type="button"
-                    className={cx(styles.option, isActive && styles.optionActive)}
-                    aria-pressed={isActive}
-                    disabled={localeDisabled}
-                    onClick={() => {
-                      onLocaleChange(code);
-                      close();
-                    }}
-                  >
-                    {label}
-                  </button>
-                );
-              })}
-            </div>
+          {showSearch && <SearchField locale={locale} className={styles.search} onDone={close} />}
+
+          <div className={styles.prefs}>
+            <PrefsRows locale={locale} onLocaleChange={onLocaleChange} localeDisabled={localeDisabled} onPicked={close} />
           </div>
 
-          <div className={styles.divider} />
-
-          <div className={styles.section}>
-            <span className={styles.sectionLabel}>{t('section_theme', locale)}</span>
-            <div className={styles.optionRow} role="group" aria-label={t('section_theme', locale)}>
-              {THEME_OPTIONS.map(({ value, labelKey }) => {
-                const isActive = value === resolvedTheme;
-                return (
-                  <button
-                    key={value}
-                    type="button"
-                    className={cx(styles.option, isActive && styles.optionActive)}
-                    aria-pressed={isActive}
-                    onClick={() => {
-                      setThemeOverride(value as ResolvedTheme);
-                      close();
-                    }}
-                  >
-                    {t(labelKey, locale)}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className={styles.divider} />
-
-          <div className={styles.section}>
-            {authed ? (
-              <button
-                type="button"
-                className={styles.signOut}
-                onClick={() => {
-                  onLogout?.();
-                  close();
-                }}
-              >
+          {authed && (
+            <div className={styles.account}>
+              <Identity locale={locale} track={track} className={styles.identity} />
+              {accountItems.map(({ route, labelKey }) => (
+                <Link key={route} to={localePath(route)} className={styles.accountLink} onClick={close}>
+                  {t(labelKey, locale)}
+                </Link>
+              ))}
+              <button type="button" className={barStyles.btn} onClick={() => { close(); onLogout?.(); }}>
                 {t('sign_out', locale)}
               </button>
-            ) : (
-              <Link to={localePath(ROUTES.login)} className={styles.signOut} onClick={close}>
-                {t('sign_in', locale)}
-              </Link>
-            )}
-          </div>
+            </div>
+          )}
         </div>
       )}
     </div>

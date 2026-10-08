@@ -1,0 +1,40 @@
+.dial {
+  display: block;
+  flex-shrink: 0;
+  width: var(--dial-size, var(--bar-mark));
+  height: var(--dial-size, var(--bar-mark));
+  color: var(--dial-color, inherit);
+  transition: width var(--bar-transition), height var(--bar-transition), color var(--transition);
+}
+
+/* Fill-mode backwards: the resting state IS the finished state, so
+   prerendered/no-JS HTML shows the still mark. The dash lives only in the
+   keyframes — left on the resting ring it leaves a hairline gap at 12 o'clock. */
+.intro .hand {
+  transform-box: view-box;
+  transform-origin: 12px 12px;
+  animation: dialTurn 1.4s var(--easing-landing) backwards;
+}
+
+.intro .rim {
+  animation: rimDraw 0.9s var(--easing-landing) backwards;
+}
+
+@keyframes dialTurn {
+  from { transform: rotate(-360deg); }
+  to { transform: rotate(0deg); }
+}
+
+@keyframes rimDraw {
+  from { stroke-dasharray: 64.4 64.4; stroke-dashoffset: 64.4; }
+  to { stroke-dasharray: 64.4 64.4; stroke-dashoffset: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dial,
+  .intro .hand,
+  .intro .rim {
+    transition: none;
+    animation: none;
+  }
+}

@@ -381,7 +381,7 @@
   .rail {
     display: flex;
     flex-direction: column;
-    top: calc(var(--topbar-height) + var(--space-5));
+    top: calc(var(--bar-h-condensed) + var(--space-5));
   }
 
   .railFits {

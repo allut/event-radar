@@ -123,7 +123,7 @@ describe('Onboarding', () => {
         { path: '/:locale/onboarding', element: ui },
       ],
     });
-    await userEvent.click(screen.getByRole('button', { name: 'EN' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Language and theme' }));
     await userEvent.click(screen.getByRole('button', { name: 'RU' }));
     expect(setLocale).toHaveBeenCalledWith('ru');
     expect(screen.getByTestId('location-probe')).toHaveTextContent('/ru/onboarding');
