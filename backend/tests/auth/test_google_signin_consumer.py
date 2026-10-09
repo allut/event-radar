@@ -754,7 +754,7 @@ class TestGoogleLinkHardening:
             "app.routers.auth._apply_google_linking_gate",
             new=AsyncMock(return_value=("auto_linked", user)),
         ), patch(
-            "app.routers.auth.send_identity_linked_notice", new_callable=AsyncMock
+            "app.auth.email.send_identity_linked_notice", new_callable=AsyncMock
         ) as mock_notice:
             await google_callback(
                 make_request(path="/auth/google/callback"),
@@ -789,7 +789,7 @@ class TestGoogleLinkHardening:
             "app.routers.auth._apply_google_linking_gate",
             new=AsyncMock(return_value=("auto_linked", user)),
         ), patch(
-            "app.routers.auth.send_identity_linked_notice",
+            "app.auth.email.send_identity_linked_notice",
             new=AsyncMock(side_effect=RuntimeError("resend down")),
         ):
             response = await google_callback(

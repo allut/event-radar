@@ -66,13 +66,13 @@ from app.routers.utils import (
     merged_localized,
     organizer_sanitize,
     prepend_organizer_categories,
-    select_events_with_classification,
     serialize_event,
     validate_categories,
     validate_price_ordering,
     validate_time_ordering,
     validate_tz_aware,
 )
+from app.events.queries import select_events_with_classification
 from app.events.venue import resolve_venue_name
 
 log = logging.getLogger(__name__)

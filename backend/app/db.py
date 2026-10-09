@@ -1,4 +1,5 @@
 import logging
+import re
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from pathlib import Path
 
@@ -10,6 +11,7 @@ from sqlalchemy.orm import DeclarativeBase
 
 from app.config import settings
 from app.constants import (
+    MASK_DB_URL_PASSWORD_RE,
     ALEMBIC_DIR_NAME,
     APP_ENV_DEVELOPMENT,
     DB_POOL_RECYCLE_SECONDS,
@@ -96,3 +98,9 @@ async def run_in_session(
         except Exception:
             await db.rollback()
             raise
+
+
+def mask_db_url(url: str) -> str:
+    """Redact the password in a DB URL for safe logging (``user:pass@host`` ->
+    ``user:***@host``). Shared by the maintenance scripts in ``backend/scripts``."""
+    return re.sub(MASK_DB_URL_PASSWORD_RE, ":***@", url)

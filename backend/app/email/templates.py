@@ -141,6 +141,23 @@ CONTACT_HTML_BODY = (
     "<p><strong>From:</strong> {name} ({email})</p><p>{message}</p>"
 )
 CONTACT_TEXT_BODY = "From: {name} ({email})\n\n{message}"
+CONTACT_SUBJECT = "Contact form — {name}"
+EMAIL_LINE_BREAK = "<br>"
+
+REPORT_NOTIFY_SUBJECT = "New report — {title}"
+REPORT_NOTIFY_TEXT_BODY = (
+    "Event: {title} ({event_href})\n"
+    "Source: {source}\n"
+    "Reason(s): {reason}\n"
+    "Detail: {detail}\n"
+    "Report count: {count}\n"
+    "Illegal allegation: {is_illegal}\n"
+    "Reporter: {reporter_email}\n\n"
+    "Review in the admin console:\n{console_href}\n"
+)
+
+DIGEST_TIME_FORMAT = "%H:%M"
+DIGEST_PRICE_SEPARATOR = " · "
 
 REPORT_NOTIFY_EVENT_LINE = (
     "<p><strong>Event:</strong> {title} (<a href='{href}'>{href}</a>)</p>"

@@ -15,7 +15,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.claims.fienta_token import generate_claim_token
-from app.claims.target_resolution import ClaimTarget, ClaimTargetError, resolve_claim_target_live
+from app.claims.target_resolution import (
+    ClaimTarget,
+    ClaimTargetError,
+    bulk_resolve_publisher_events,
+    resolve_claim_target_live,
+)
 from app.claims.verification import (
     VerificationResult,
     series_claim_result,
@@ -69,7 +74,7 @@ from app.email.claim_resolution import (
 )
 from app.ingestion.http_client import http_get_stored_url
 from app.models.models import Claim, Event, EventSource, Organizer
-from app.routers.utils import bulk_resolve_publisher_events, resolve_title
+from app.events.localize import resolve_title
 from app.events.venue import resolve_venue_name
 from app.events.queries import event_series_key, serialize_event_series_key
 
@@ -577,7 +582,7 @@ async def create_claim(
         or not (event.dedup_group_id is None or event.dedup_group_id == event.id)
     ):
         # Same published+canonical (+ not explicit/non-event) bar as
-        # public_event_filter()/canonical_event_filter() (utils.py) — a
+        # public_event_filter()/canonical_event_filter() (events/queries.py) — a
         # draft, cancelled, or non-canonical-duplicate event is rejected the
         # same way a nonexistent one is, so id probing can't distinguish them.
         raise ClaimError(HTTPStatus.NOT_FOUND, ERROR_EVENT_NOT_FOUND)

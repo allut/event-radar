@@ -99,7 +99,6 @@ from app.routers.utils import (
     own_venue_or_404,
     replace_organizer_categories,
     resolve_locale_param,
-    select_events_with_classification,
     send_report_resolution_emails,
     serialize_event,
     validate_categories,
@@ -107,6 +106,7 @@ from app.routers.utils import (
     validate_time_ordering,
     validate_tz_aware,
 )
+from app.events.queries import select_events_with_classification
 
 log = logging.getLogger(__name__)
 # Stays under /organizer/* deliberately: ORGANIZER_SESSION_COOKIE_PATH (app/

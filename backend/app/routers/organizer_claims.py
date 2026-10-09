@@ -86,20 +86,25 @@ from app.models.models import AdminAction, Claim, Event, EventSource, Organizer,
 from app.rate_limit import limiter
 from app.auth.dependencies import get_current_organizer
 from app.routers.utils import (
-    bulk_resolve_publisher_events,
     claim_dns_record_name,
     escape_ilike_pattern,
     get_or_create_organizer,
-    publisher_claim_event_ids,
     recent_unused_link_exists,
     resolve_locale_param,
-    resolve_title,
-    select_events_with_classification,
     serialize_event,
     set_session_cookie,
 )
+from app.claims.target_resolution import (
+    bulk_resolve_publisher_events,
+    publisher_claim_event_ids,
+)
+from app.events.localize import resolve_title
+from app.events.queries import (
+    event_not_ended_filter,
+    public_event_filter,
+    select_events_with_classification,
+)
 from app.events.venue import resolve_venue_name
-from app.events.queries import event_not_ended_filter, public_event_filter
 from app.auth.utils import mask_email
 
 log = logging.getLogger(__name__)

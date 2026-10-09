@@ -79,8 +79,8 @@ from app.constants import (
 )
 from app.claims.lifecycle import approved_claim_exists, auto_decline_other_pending_claims
 from app.claims.pinning import clear_claim_pins, representative_event_for_claim
-from app.claims.target_resolution import ClaimTarget
-from app.db import AsyncSessionLocal
+from app.claims.target_resolution import ClaimTarget, bulk_resolve_publisher_events
+from app.db import AsyncSessionLocal, run_in_session
 from app.email.claim_resolution import send_claim_declined_email, send_claim_granted_email
 from app.email.digest import send_daily_digests
 from app.ingestion.jobs import (
@@ -108,31 +108,30 @@ from app.publish import publish_pending
 from app.ranking.score import build_daily_feeds
 from app.rate_limit import limiter
 from app.routers.utils import (
-    bulk_resolve_publisher_events,
     acquire_admin_job_lock,
     cancel_event_and_resolve_reports,
     claim_dns_record_name,
     log_admin_action,
     ndjson_line,
     release_admin_job_lock,
-    resolve_description,
-    resolve_important_info,
     resolve_open_reports,
-    resolve_title,
     run_admin_job,
-    select_events_with_classification,
     send_report_resolution_emails,
     serialize_event,
     stream_admin_job,
     validate_report_reason,
 )
+from app.events.localize import (
+    resolve_description,
+    resolve_important_info,
+    resolve_title,
+)
+from app.events.queries import canonical_event_filter, select_events_with_classification
 from app.events.venue import (
     resolve_venue_address,
     resolve_venue_coords,
     resolve_venue_name,
 )
-from app.events.queries import canonical_event_filter
-from app.db import run_in_session
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/admin")

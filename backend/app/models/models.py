@@ -28,11 +28,13 @@ from app.constants import (
     DEFAULT_USER_LOCALE,
     EVENT_SEARCH_TEXT_SQL,
     EVENT_STATUS_DRAFT,
+    EVENT_STATUS_PUBLISHED,
     CLAIM_STATUS_APPROVED,
     CLAIM_STATUS_PENDING,
     PASSIVE_SIGNALS_SQL_PREDICATE,
     PREFERENCE_SIGNALS_SQL_PREDICATE,
     PUBLISHER_STATUS_ACTIVE,
+    REPORT_STATUS_OPEN,
 )
 from app.db import Base
 
@@ -416,7 +418,7 @@ class Claim(Base):
     CONTEXT.md's Event Claiming glossary (Publisher claim / Series claim).
     Polymorphic over `kind`: a Publisher claim sets `publisher_id`, a Series
     claim sets `event_series_key` (the `event_series_key()` tuple from
-    `routers/utils.py`, serialized as `"<normalized_title>\\x1f<normalized_venue>"`)
+    `events/queries.py`, serialized as `"<normalized_title>\\x1f<normalized_venue>"`)
     and always requires `justification` (#428 — a Series claim never
     auto-grants, so this is the claimant's only input at creation time)."""
 
@@ -687,7 +689,7 @@ class Event(Base):
         # ORDER BY events.price_min ASC NULLS LAST (browse.py's price sort, Path A).
         Index("ix_events_price_min", "price_min"),
         Index("ix_events_venue_id", "venue_id"),
-        # public_event_filter() (utils.py) is applied on every public read path;
+        # public_event_filter() (events/queries.py) is applied on every public read path;
         # is_explicit/is_non_event had no index at all, so both were a heap
         # filter after status narrowed the scan. Partial on starts_at — the
         # dominant sort/range column on the public read paths that apply this
@@ -696,7 +698,8 @@ class Event(Base):
             "ix_events_public_starts_at",
             "starts_at",
             postgresql_where=text(
-                "status = 'published' AND NOT is_explicit AND NOT is_non_event"
+                f"status = '{EVENT_STATUS_PUBLISHED}'"
+                " AND NOT is_explicit AND NOT is_non_event"
             ),
         ),
         # browse.py's _free_filter() OR-arm (has_free_tier IS TRUE) — the other
@@ -832,7 +835,7 @@ class EventSource(Base):
         # without it that lookup is a per-candidate sequential scan.
         Index("ix_event_sources_event_id", "event_id"),
         # Publisher -> freshest listing lookups (claims/pinning.py,
-        # claims/lifecycle.py, routers/utils.py::bulk_resolve_publisher_events)
+        # claims/lifecycle.py, claims/target_resolution.py::bulk_resolve_publisher_events)
         # filter publisher_id and take the highest id; INCLUDE(event_id)
         # makes them index-only (Big-O audit H2).
         Index(
@@ -921,7 +924,7 @@ class EventReport(Base):
         Index(
             "ix_event_reports_open_event",
             "event_id",
-            postgresql_where=text("status = 'open'"),
+            postgresql_where=text(f"status = '{REPORT_STATUS_OPEN}'"),
         ),
         Index("ix_event_reports_event_created", "event_id", "created_at"),
     )
@@ -939,7 +942,10 @@ class EventReport(Base):
     )
     detail: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(
-        String(20), nullable=False, server_default=text("'open'"), default="open"
+        String(20),
+        nullable=False,
+        server_default=text(f"'{REPORT_STATUS_OPEN}'"),
+        default=REPORT_STATUS_OPEN,
     )
     resolution_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(

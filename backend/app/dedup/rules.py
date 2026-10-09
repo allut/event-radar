@@ -21,7 +21,7 @@ from datetime import date, datetime, timedelta
 from rapidfuzz.fuzz import token_set_ratio
 from sqlalchemy import Integer, cast, column, func, or_, select, update, values
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import aliased, load_only
+from sqlalchemy.orm import aliased, load_only, selectinload
 
 from app.constants import (
     DEDUP_BULK_UPDATE_CHUNK_SIZE,
@@ -34,13 +34,18 @@ from app.constants import (
     EVENT_STATUS_CANCELLED,
     EVENT_STATUS_CLASSIFIED,
     EVENT_STATUS_PUBLISHED,
-    SCORE_INSERT_CHUNK_SIZE,
+    SQL_IN_CHUNK_SIZE,
     SECONDS_PER_HOUR,
     TALLINN_TZ,
     TIME_WINDOW_HOURS,
     TITLE_RATIO_THRESHOLD,
     TITLE_RATIO_VENUE_BYPASS_THRESHOLD,
     VENUE_RATIO_THRESHOLD,
+)
+from app.events.venue import (
+    resolve_venue_address,
+    resolve_venue_coords,
+    resolve_venue_name_from_row,
 )
 from app.models.models import Claim, Event, EventSource, Venue
 from app.events.queries import (
@@ -290,8 +295,8 @@ def _event_quality_rank(
         desc_len = len(event.description_orig or "")
     return (
         event.price_min is not None,
-        event.venue_address is not None,
-        event.lat is not None and event.lng is not None,
+        resolve_venue_address(event) is not None,
+        None not in resolve_venue_coords(event),
         desc_len,
     )
 
@@ -438,16 +443,16 @@ async def load_claims_for_events(
     if not events:
         return {}
     event_ids = [e.id for e in events]
-    # Every IN list below is chunked at SCORE_INSERT_CHUNK_SIZE: SQLAlchemy
+    # Every IN list below is chunked at SQL_IN_CHUNK_SIZE: SQLAlchemy
     # expands IN to one bind param per value, past Postgres's ~32k-param cap
     # on a large window (Big-O audit M4; same rationale as
     # load_description_lengths).
     publisher_rows: list = []
-    for i in range(0, len(event_ids), SCORE_INSERT_CHUNK_SIZE):
+    for i in range(0, len(event_ids), SQL_IN_CHUNK_SIZE):
         publisher_rows += (
             await db.execute(
                 select(EventSource.event_id, EventSource.publisher_id).where(
-                    EventSource.event_id.in_(event_ids[i : i + SCORE_INSERT_CHUNK_SIZE]),
+                    EventSource.event_id.in_(event_ids[i : i + SQL_IN_CHUNK_SIZE]),
                     EventSource.publisher_id.is_not(None),
                 )
             )
@@ -459,23 +464,18 @@ async def load_claims_for_events(
     no_publisher_ids = [e.id for e in events if e.id not in publisher_ids_by_event]
     resolved_venue_name_by_event: dict[int, str | None] = {}
     venue_rows: list = []
-    for i in range(0, len(no_publisher_ids), SCORE_INSERT_CHUNK_SIZE):
+    for i in range(0, len(no_publisher_ids), SQL_IN_CHUNK_SIZE):
         venue_rows += (
             await db.execute(
                 select(Event.id, Event.venue_name, Venue.name, Venue.name_en)
                 .outerjoin(Venue, Event.venue_id == Venue.id)
-                .where(Event.id.in_(no_publisher_ids[i : i + SCORE_INSERT_CHUNK_SIZE]))
+                .where(Event.id.in_(no_publisher_ids[i : i + SQL_IN_CHUNK_SIZE]))
             )
         ).all()
     if venue_rows:
         for eid, bare_venue_name, venue_name, venue_name_en in venue_rows:
-            # Mirrors resolve_venue_name()'s DEFAULT_USER_LOCALE ("en") pick:
-            # a linked Venue's name (en, falling back to its base name) wins
-            # over the bare column, which is NULL whenever venue_id is set.
-            resolved_venue_name_by_event[eid] = (
-                (venue_name_en or venue_name)
-                if (venue_name is not None or venue_name_en is not None)
-                else bare_venue_name
+            resolved_venue_name_by_event[eid] = resolve_venue_name_from_row(
+                bare_venue_name, venue_name, venue_name_en
             )
 
     series_key_by_event: dict[int, str] = {
@@ -494,24 +494,24 @@ async def load_claims_for_events(
     publisher_id_list = sorted(all_publisher_ids)
     series_key_list = sorted(all_series_keys)
     claims: list[Claim] = []
-    for i in range(0, len(publisher_id_list), SCORE_INSERT_CHUNK_SIZE):
+    for i in range(0, len(publisher_id_list), SQL_IN_CHUNK_SIZE):
         claims += (
             await db.scalars(
                 select(Claim).where(
                     Claim.status == CLAIM_STATUS_APPROVED,
                     Claim.publisher_id.in_(
-                        publisher_id_list[i : i + SCORE_INSERT_CHUNK_SIZE]
+                        publisher_id_list[i : i + SQL_IN_CHUNK_SIZE]
                     ),
                 )
             )
         ).all()
-    for i in range(0, len(series_key_list), SCORE_INSERT_CHUNK_SIZE):
+    for i in range(0, len(series_key_list), SQL_IN_CHUNK_SIZE):
         claims += (
             await db.scalars(
                 select(Claim).where(
                     Claim.status == CLAIM_STATUS_APPROVED,
                     Claim.event_series_key.in_(
-                        series_key_list[i : i + SCORE_INSERT_CHUNK_SIZE]
+                        series_key_list[i : i + SQL_IN_CHUNK_SIZE]
                     ),
                 )
             )
@@ -728,13 +728,18 @@ async def load_dedup_candidate_events(
                 Event.starts_at,
                 Event.status,
                 Event.title_orig,
+                Event.venue_id,
                 Event.venue_name,
                 Event.venue_address,
                 Event.lat,
                 Event.lng,
                 Event.price_min,
                 Event.dedup_group_id,
-            )
+            ),
+            # Venue-linked events leave venue_name/venue_address/lat/lng NULL;
+            # the resolvers read the joined Venue, and a lazy load on an async
+            # session would raise MissingGreenlet.
+            selectinload(Event.venue),
         )
     )
     return list(rows.all())
@@ -749,7 +754,7 @@ async def load_description_lengths(
     ``_event_quality_rank`` tie-break without ``load_dedup_candidate_events``
     having to hydrate every in-window event's full description (Big-O audit M3).
 
-    Chunked at SCORE_INSERT_CHUNK_SIZE — the dedup window has no row-count
+    Chunked at SQL_IN_CHUNK_SIZE — the dedup window has no row-count
     LIMIT, and SQLAlchemy expands ``IN`` to one bind param per id, which would
     hit Postgres's per-statement parameter limit past ~32k events (Big-O
     audit #5, item 1.1; same rationale as score.py's chunked shown-events load).
@@ -757,8 +762,8 @@ async def load_description_lengths(
     if not event_ids:
         return {}
     lengths: dict[int, int] = {}
-    for i in range(0, len(event_ids), SCORE_INSERT_CHUNK_SIZE):
-        chunk = event_ids[i : i + SCORE_INSERT_CHUNK_SIZE]
+    for i in range(0, len(event_ids), SQL_IN_CHUNK_SIZE):
+        chunk = event_ids[i : i + SQL_IN_CHUNK_SIZE]
         rows = await db.execute(
             select(Event.id, func.length(Event.description_orig)).where(
                 Event.id.in_(chunk)

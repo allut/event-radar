@@ -32,6 +32,22 @@ def resolve_venue_name(event: Event, locale: str = DEFAULT_USER_LOCALE) -> str |
     return event.venue_name
 
 
+def resolve_venue_name_from_row(
+    bare_name: str | None,
+    venue_name: str | None,
+    venue_name_en: str | None,
+    venue_name_ru: str | None = None,
+    locale: str = DEFAULT_USER_LOCALE,
+) -> str | None:
+    """Tuple-row twin of ``resolve_venue_name`` for outer-joined
+    ``(Event.venue_name, Venue.name, Venue.name_en[, Venue.name_ru])``
+    projections. All Venue columns NULL means no linked venue (the outer join
+    missed), so the bare ``Event.venue_name`` column wins."""
+    if venue_name is None and venue_name_en is None and venue_name_ru is None:
+        return bare_name
+    return _pick_locale(locale, venue_name, venue_name_en, venue_name_ru)
+
+
 def resolve_venue_address(event: Event) -> str | None:
     """Prefer the linked Venue's address over Event.venue_address. Address
     is not localized (street names don't translate) — see resolve_venue_name

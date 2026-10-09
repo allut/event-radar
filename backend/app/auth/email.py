@@ -129,3 +129,14 @@ async def send_identity_linked_notice(
         log_label="identity-linked notice",
         log_ref=mask_email(to_email),
     )
+
+
+async def notify_identity_linked(email: str, locale: str) -> None:
+    """Best-effort "Google sign-in was linked" notice (OWASP audit #3) — the
+    link already exists, so a send failure is logged, never surfaced. Shared
+    by the consumer and organizer auth tracks."""
+    try:
+        await send_identity_linked_notice(email, locale)
+    except Exception:
+        log.exception("Failed to send identity-linked notice to %s", mask_email(email))
+

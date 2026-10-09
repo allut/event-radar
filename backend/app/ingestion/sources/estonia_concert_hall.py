@@ -12,6 +12,7 @@ import httpx
 from bs4 import BeautifulSoup
 
 from app.constants import (
+    HTTP_ACCEPT_JSON_HEADERS,
     BASE64_PAD_MULTIPLE,
     DEFAULT_CURRENCY,
     HTTP_METHOD_POST,
@@ -131,7 +132,7 @@ class EstoniaConcertHallAdapter(HtmlListingAdapter):
                     "centreId": int(ESTONIA_CONCERT_HALL_PILETILEVI_CENTER),
                     "shopProviderTag": ESTONIA_CONCERT_HALL_PILETILEVI_SHOP_PROVIDER,
                 },
-                headers={"accept": "application/json"},
+                headers=HTTP_ACCEPT_JSON_HEADERS,
             )
             data = resp.json()
             token = data.get("accessToken") if isinstance(data, dict) else None

@@ -22,6 +22,8 @@ from app.email.templates import (
     REPORT_NOTIFY_REPORTER_LINE,
     REPORT_NOTIFY_REVIEW_LINE,
     REPORT_NOTIFY_SOURCE_LINE,
+    REPORT_NOTIFY_SUBJECT,
+    REPORT_NOTIFY_TEXT_BODY,
 )
 from app.models.models import Event
 
@@ -43,7 +45,9 @@ async def send_report_notification(
     safe_reporter_email = html.escape(reporter_email)
     safe_source_url = html.escape(event.url) if event.url else None
 
-    subject = f"New report — {' '.join(event.title_orig.split())}"
+    subject = REPORT_NOTIFY_SUBJECT.format(
+        title=" ".join(event.title_orig.split())
+    )
 
     html_lines = [
         REPORT_NOTIFY_EVENT_LINE.format(title=safe_title, href=event_href),
@@ -61,15 +65,16 @@ async def send_report_notification(
     html_lines.append(REPORT_NOTIFY_REVIEW_LINE.format(href=console_href))
     html_body = "".join(html_lines)
 
-    text_body = (
-        f"Event: {event.title_orig} ({event_href})\n"
-        f"Source: {event.url or '-'}\n"
-        f"Reason(s): {reason}\n"
-        f"Detail: {detail or '-'}\n"
-        f"Report count: {report_count}\n"
-        f"Illegal allegation: {is_illegal_allegation}\n"
-        f"Reporter: {reporter_email}\n\n"
-        f"Review in the admin console:\n{console_href}\n"
+    text_body = REPORT_NOTIFY_TEXT_BODY.format(
+        title=event.title_orig,
+        event_href=event_href,
+        source=event.url or "-",
+        reason=reason,
+        detail=detail or "-",
+        count=report_count,
+        is_illegal=is_illegal_allegation,
+        reporter_email=reporter_email,
+        console_href=console_href,
     )
 
     await send_resend_email(

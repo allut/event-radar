@@ -383,7 +383,8 @@ LOCALIZED_TEXT_MAX_TITLE_CHARS = 500
 LOCALIZED_TEXT_MAX_DESC_CHARS = 5000
 
 ORGANIZER_MIN_EVENTS_FOR_AUTO_ADD = 3
-ORGANIZER_NAME_MAX_LEN = 200
+# Publisher.name (models/models.py) column width.
+PUBLISHER_NAME_MAX_LEN = 255
 FIENTA_ORGANIZER_SCAN_LIMIT = 1000
 FIENTA_ORGANIZER_CHECK_LIMIT = (
     5  # max events fetched when probing a single organizer for staleness
@@ -953,11 +954,12 @@ GOOGLE_AUTHORITATIVE_EMAIL_DOMAINS = frozenset({"gmail.com", "googlemail.com"})
 # each is only ever read on one route). SameSite=Lax, not Strict — see
 # docs/adr/0002 for why.
 ORGANIZER_OAUTH_STATE_COOKIE_NAME = "organizer_oauth_state"
-ORGANIZER_OAUTH_STATE_COOKIE_PATH = "/api/organizer/auth/google/callback"
 ORGANIZER_GOOGLE_CALLBACK_PUBLIC_PATH = "/api/organizer/auth/google/callback"
+# The state cookie is Path-scoped to the callback route, so the two must be equal.
+ORGANIZER_OAUTH_STATE_COOKIE_PATH = ORGANIZER_GOOGLE_CALLBACK_PUBLIC_PATH
 OAUTH_STATE_COOKIE_NAME = "oauth_state"
-OAUTH_STATE_COOKIE_PATH = "/api/auth/google/callback"
 GOOGLE_CALLBACK_PUBLIC_PATH = "/api/auth/google/callback"
+OAUTH_STATE_COOKIE_PATH = GOOGLE_CALLBACK_PUBLIC_PATH
 OAUTH_STATE_COOKIE_SAMESITE: Literal["lax"] = "lax"
 # Google-link binding cookies (OWASP audit #3): set on the callback that sends a
 # confirmation magic link, carrying the pending Google `sub`, so the link only
@@ -1239,6 +1241,9 @@ TIME_SLOTS_CACHE_MAXSIZE = 4096
 # under the limit at either table's column count and mirrors the chunking
 # already used for the LLM dedup hash IN-list (LLM_DEDUP_HASH_QUERY_CHUNK_SIZE).
 SCORE_INSERT_CHUNK_SIZE = 1000
+# Max values per ``IN (...)`` list: SQLAlchemy expands one bind param per value,
+# and Postgres caps a statement at ~32k params.
+SQL_IN_CHUNK_SIZE = 1000
 
 # GET /explore (app/routers/browse.py) — event discovery / search page.
 # BROWSE_PAGE_SIZE itself is cross-stack (shared/app-config.json), imported above.
@@ -1833,10 +1838,11 @@ LOG_SHIP_FLUSH_INTERVAL_SECONDS = 2.0  # a partial buffer is flushed at least th
 # stripped of their own handlers and re-pointed at the root logger so every
 # line (app, uvicorn, SQL echo) shares the same timestamped format.
 SQLALCHEMY_ENGINE_LOGGER_NAME = "sqlalchemy.engine"
+UVICORN_ACCESS_LOGGER = "uvicorn.access"
 LOG_FRAMEWORK_LOGGER_NAMES: tuple[str, ...] = (
     "uvicorn",
     "uvicorn.error",
-    "uvicorn.access",
+    UVICORN_ACCESS_LOGGER,
     SQLALCHEMY_ENGINE_LOGGER_NAME,
 )
 # HTTP client loggers pinned to WARNING: their per-request INFO/DEBUG lines are
@@ -1990,7 +1996,7 @@ ORGANIZER_AUTH_VERIFY_PATH = "/organizer/verify"
 # (generate_organizer_claim_link_token) but carry different claims.
 ORGANIZER_CLAIM_VERIFY_PATH = "/organizer/claims/verify"
 
-# app/routers/utils.py::mask_db_url — redacts the password in a DB URL
+# app/db.py::mask_db_url — redacts the password in a DB URL
 # ("user:pass@host" -> "user:***@host") for safe logging.
 MASK_DB_URL_PASSWORD_RE = r":[^@/]+@"
 
@@ -2251,3 +2257,12 @@ BASE64_PAD_MULTIPLE = 4
 # Rows per bulk UPDATE ... FROM (VALUES ...) in dedup/rules.py::bulk_assign_dedup_groups
 # — 2 bind params per row, well under asyncpg's 32767-parameter cap.
 DEDUP_BULK_UPDATE_CHUNK_SIZE = 5000
+
+# strftime formats
+DEDUP_PROMPT_DATE_FORMAT = "%Y-%m-%d %H:%M"
+SLUG_DATE_FORMAT = "%Y%m%d"
+# JSON endpoints scraped by the Piletilevi / Estonia Concert Hall adapters
+HTTP_ACCEPT_JSON_HEADERS = {"accept": "application/json"}
+# Postgres regex fragments for the suspect-venue-name SQL twin
+SQL_REGEX_DIGIT = r"[0-9]"
+SQL_REGEX_WORD_BOUNDARY = r"\y"

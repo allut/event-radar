@@ -54,6 +54,7 @@ from app.ranking.score import (
     FeedbackContext,
     anonymous_score_event,
     persona_affinity,
+    persona_weight_tuple,
     score_event,
 )
 from app.rate_limit import limiter
@@ -64,9 +65,7 @@ from app.routers.utils import (
     escape_ilike_pattern,
     load_user_reported_events,
     load_user_signals,
-    persona_weight_tuple,
     resolve_locale_param,
-    select_events_with_classification,
     serialize_event,
 )
 from app.events.queries import (
@@ -74,6 +73,7 @@ from app.events.queries import (
     event_date_range_filter,
     event_not_ended_filter,
     public_event_filter,
+    select_events_with_classification,
 )
 
 router = APIRouter(tags=["browse"])

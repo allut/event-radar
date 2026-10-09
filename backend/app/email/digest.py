@@ -46,6 +46,8 @@ from app.email.templates import (
     DIGEST_EMPTY_STATE,
     DIGEST_FOOTER,
     DIGEST_HEADER,
+    DIGEST_PRICE_SEPARATOR,
+    DIGEST_TIME_FORMAT,
     EMAIL_DOCUMENT,
     EVENT_BLOCK,
     EVENT_BULLET,
@@ -59,14 +61,10 @@ from app.email.templates import (
 from app.i18n import day_name, month_name, t, ti
 from app.ingestion.http_client import http_post
 from app.models.models import DailyFeed, Event, User
-from app.routers.utils import (
-    resolve_title,
-    resolve_why_go,
-    select_events_with_classification,
-)
+from app.events.localize import resolve_title, resolve_why_go
+from app.events.queries import public_event_filter, select_events_with_classification
 from app.events.venue import resolve_venue_name
 from app.auth.utils import mask_email
-from app.events.queries import public_event_filter
 
 log = logging.getLogger(__name__)
 
@@ -84,7 +82,12 @@ def _format_feed_date(d: date, locale: str) -> str:
 def _format_event_time(starts_at: datetime, locale: str) -> str:
     local = starts_at.astimezone(TALLINN_TZ)
     day_str = _format_feed_date(local.date(), locale)
-    return f"{day_str}, {local.strftime('%H:%M')}"
+    return f"{day_str}, {local.strftime(DIGEST_TIME_FORMAT)}"
+
+
+def _format_amount(value: float) -> str:
+    """Price amount without trailing zeros (``12.50`` -> ``12.5``, ``5.00`` -> ``5``)."""
+    return f"{value:.2f}".rstrip("0").rstrip(".")
 
 
 def _format_price_pill(event: Event, locale: str) -> str:
@@ -95,13 +98,18 @@ def _format_price_pill(event: Event, locale: str) -> str:
     price_max_val = float(event.price_max) if event.price_max is not None else None
     if price_val == 0:
         if price_max_val is not None and price_max_val > 0:
-            max_amount = f"{price_max_val:.2f}".rstrip("0").rstrip(".")
-            return ti("digest.price_free_with_paid", locale, amount=max_amount)
+            return ti(
+                "digest.price_free_with_paid",
+                locale,
+                amount=_format_amount(price_max_val),
+            )
         return t("digest.price_free", locale)
-    amount = f"{price_val:.2f}".rstrip("0").rstrip(".")
-    price_str = ti("digest.price_from", locale, amount=amount)
+    price_str = ti("digest.price_from", locale, amount=_format_amount(price_val))
     if event.has_free_tier:
-        price_str = f"{price_str} · {t('digest.price_free_options', locale)}"
+        price_str = (
+            f"{price_str}{DIGEST_PRICE_SEPARATOR}"
+            f"{t('digest.price_free_options', locale)}"
+        )
     return price_str
 
 

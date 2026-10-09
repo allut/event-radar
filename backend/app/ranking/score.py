@@ -71,20 +71,18 @@ from app.models.models import (
     EventClassification,
     User,
     UserEventFeedback,
+    Persona,
     UserPersona,
 )
-from app.routers.utils import (
+from app.events.queries import (
+    canonical_event_filter,
     collapse_series_duplicates,
-    persona_weight_tuple,
+    event_not_ended_filter,
+    event_series_key,
+    public_event_filter,
     select_events_with_classification,
 )
 from app.events.venue import resolve_venue_coords, resolve_venue_name
-from app.events.queries import (
-    canonical_event_filter,
-    public_event_filter,
-    event_not_ended_filter,
-    event_series_key,
-)
 
 # ---------------------------------------------------------------------------
 # Feedback context (precomputed for one user, reused across event scoring)
@@ -1108,3 +1106,22 @@ async def build_daily_feed_for_user(db: AsyncSession, user_id: int) -> dict:
         "total_users": 1,
         "candidate_events": len(build_ctx.event_rows),
     }
+
+
+def persona_weight_tuple(
+    user_persona: UserPersona, persona: Persona | None = None
+) -> tuple[float, dict]:
+    """(weight, affinity_vector) shape consumed by ``ranking/score.py::persona_affinity``.
+
+    Shared by the single-user load in browse.py and the bulk multi-user load in
+    ranking/score.py::build_daily_feeds, which query ``UserPersona`` differently
+    (single vs. ``user_id.in_(...)``) but must agree on this row->tuple mapping.
+    ``persona`` covers routers/settings.py's ``(UserPersona, Persona)``-tuple
+    join query, which loads the row directly rather than via the
+    ``UserPersona.persona`` relationship; omit it when that relationship is
+    already eager-loaded (browse.py/score.py both ``selectinload`` it).
+    """
+    return (
+        user_persona.weight,
+        (persona if persona is not None else user_persona.persona).affinity_vector,
+    )

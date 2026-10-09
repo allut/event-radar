@@ -16,7 +16,7 @@ import sqlalchemy as sa
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncConnection
 
-from app.routers.utils import mask_db_url
+from app.db import mask_db_url
 
 WIPE_TABLES = (
     "events",

@@ -4,7 +4,6 @@ import asyncio
 import base64
 import json
 import logging
-import re
 from collections.abc import AsyncIterator, Awaitable, Callable
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -13,9 +12,9 @@ import httpx
 from fastapi import HTTPException, Response, status
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, EmailStr
-from sqlalchemy import ColumnElement, Select, select, update
+from sqlalchemy import ColumnElement, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import InstrumentedAttribute, selectinload
+from sqlalchemy.orm import InstrumentedAttribute
 
 from app.auth.tokens import oauth_state_ttl_seconds
 from app.config import settings
@@ -40,7 +39,6 @@ from app.constants import (
     LOG_EVENT_EMAIL_SEND_FAILED,
     LOG_EVENT_UNVERIFIED_ACCOUNT_BUDGET_EXCEEDED,
     MAGIC_LINK_RESEND_COOLDOWN_SECONDS,
-    MASK_DB_URL_PASSWORD_RE,
     OAUTH_ERROR_QUERY_PARAM,
     OAUTH_STATE_COOKIE_SAMESITE,
     ORGANIZER_HTML_SANITIZE_ALLOWED_ATTRS,
@@ -62,7 +60,12 @@ from app.constants import (
     VALID_REPORT_REASONS,
 )
 from app.auth.utils import mask_email
-from app.events.queries import event_series_key
+from app.events.localize import (
+    resolve_description,
+    resolve_important_info,
+    resolve_title,
+    resolve_why_go,
+)
 from app.events.venue import (
     resolve_venue_address,
     resolve_venue_coords,
@@ -78,14 +81,11 @@ from app.models.models import (
     Event,
     EventClassification,
     EventReport,
-    EventSource,
     Organizer,
     OrganizerIdentity,
-    Persona,
     User,
     UserEventFeedback,
     UserIdentity,
-    UserPersona,
     Venue,
 )
 
@@ -382,65 +382,10 @@ def log_admin_action(
     return _emit
 
 
-def mask_db_url(url: str) -> str:
-    """Redact the password in a DB URL for safe logging (``user:pass@host`` ->
-    ``user:***@host``). Shared by the maintenance scripts in ``backend/scripts``."""
-    return re.sub(MASK_DB_URL_PASSWORD_RE, ":***@", url)
 
 
-def collapse_series_duplicates(
-    event_rows: list[Event],
-) -> tuple[list[Event], dict[int, tuple[str, str]]]:
-    """One representative per event_series_key — nearest (earliest) starts_at
-    wins; ties broken by event id, so the surviving instance is deterministic
-    across builds even when the underlying query has no ORDER BY.
-
-    A multi-date listing (e.g. a workshop running Tue/Thu/Sat) ingests as
-    several Event rows sharing a series key but distinct dedup_group_ids
-    (recurring series are intentionally not dedup-grouped at ingestion), so
-    without this more than one date-instance of the same series could score
-    well and both land in a single user's Daily 5 on the same day, or both
-    appear in the public showcase grid. Shared by the Daily 5 candidate loader
-    (``_load_candidate_events``) and the public showcase (``showcase``), each
-    running this once per build/request, upstream of any downstream ordering.
-
-    Returns the collapsed events plus their series keys (each key computed
-    exactly once here) so callers building `candidate_series_key` don't
-    recompute `event_series_key()` a second time over the same rows.
-    """
-    earliest_by_key: dict[tuple[str, str], Event] = {}
-    for event in event_rows:
-        key = event_series_key(event.title_orig, resolve_venue_name(event))
-        current = earliest_by_key.get(key)
-        if current is None or (event.starts_at, event.id) < (
-            current.starts_at,
-            current.id,
-        ):
-            earliest_by_key[key] = event
-    collapsed = list(earliest_by_key.values())
-    series_key_by_event_id = {
-        event.id: key for key, event in earliest_by_key.items()
-    }
-    return collapsed, series_key_by_event_id
 
 
-def persona_weight_tuple(
-    user_persona: UserPersona, persona: Persona | None = None
-) -> tuple[float, dict]:
-    """(weight, affinity_vector) shape consumed by ``ranking/score.py::persona_affinity``.
-
-    Shared by the single-user load in browse.py and the bulk multi-user load in
-    ranking/score.py::build_daily_feeds, which query ``UserPersona`` differently
-    (single vs. ``user_id.in_(...)``) but must agree on this row->tuple mapping.
-    ``persona`` covers routers/settings.py's ``(UserPersona, Persona)``-tuple
-    join query, which loads the row directly rather than via the
-    ``UserPersona.persona`` relationship; omit it when that relationship is
-    already eager-loaded (browse.py/score.py both ``selectinload`` it).
-    """
-    return (
-        user_persona.weight,
-        (persona if persona is not None else user_persona.persona).affinity_vector,
-    )
 
 
 def encode_page_cursor(ts: datetime, row_id: int) -> str:
@@ -532,20 +477,8 @@ def serialize_user(user: User, **extras) -> dict:
     }
 
 
-def select_events_with_classification() -> Select[tuple[Event]]:
-    """Base SELECT for Event with classification + linked Venue eager-loaded
-    (#177 — venue read-path resolution must not N+1). Callers add their own .where()."""
-    return select(Event).options(
-        selectinload(Event.classification), selectinload(Event.venue)
-    )
 
 
-def publisher_claim_event_ids(publisher_id: int | None) -> Select[tuple[int]]:
-    """Event ids a Publisher claim covers (#436) — one EventSource.publisher_id
-    match, shared by organizer_claims.py::list_claim_events (the bulk list)
-    and claims/pinning.py::claim_event_for_id (the #437 per-event membership
-    check), so the two never drift on what "covered" means."""
-    return select(EventSource.event_id).where(EventSource.publisher_id == publisher_id)
 
 
 def resolve_locale_param(locale: str | None, fallback: str) -> str:
@@ -553,36 +486,10 @@ def resolve_locale_param(locale: str | None, fallback: str) -> str:
     return locale if locale in VALID_LOCALES else fallback
 
 
-# FAQ #languages describes this behaviour — update the copy (all locales) if it changes
-def resolve_title(event: Event, locale: str) -> str:
-    """Return localized title with locale → en → title_orig fallback."""
-    loc = event.title_localized
-    if loc:
-        result = loc.get(locale) or loc.get(DEFAULT_USER_LOCALE)
-        if result:
-            return result
-    return event.title_orig
 
 
-# FAQ #languages describes this behaviour — update the copy (all locales) if it changes
-def resolve_description(event: Event, locale: str) -> str | None:
-    """Return localized description with locale → en → description_orig fallback."""
-    loc = event.description_localized
-    if loc:
-        result = loc.get(locale) or loc.get(DEFAULT_USER_LOCALE)
-        if result:
-            return result
-    return event.description_orig
 
 
-def resolve_important_info(event: Event, locale: str) -> str | None:
-    """Return localized important_info with locale → en → plain fallback."""
-    loc = event.important_info_localized
-    if loc:
-        result = loc.get(locale) or loc.get(DEFAULT_USER_LOCALE)
-        if result:
-            return result
-    return event.important_info
 
 
 async def replace_organizer_categories(
@@ -638,18 +545,6 @@ async def prepend_organizer_categories(
         classification.categories = [*new, *existing]
 
 
-def resolve_why_go(cl: EventClassification | None, locale: str) -> list[str]:
-    """Return localized why_go bullets for a classification, with locale → en → raw fallback."""
-    if cl is None:
-        return []
-    if cl.why_go_localized:
-        return (
-            cl.why_go_localized.get(locale)
-            or cl.why_go_localized.get(DEFAULT_USER_LOCALE)
-            or cl.why_go_bullets
-            or []
-        )
-    return cl.why_go_bullets or []
 
 
 def serialize_event(
@@ -747,44 +642,6 @@ async def load_user_reported_events(
     return {row.event_id for row in rows}
 
 
-async def bulk_resolve_publisher_events(
-    db: AsyncSession, publisher_ids: set[int]
-) -> dict[int, Event]:
-    """One representative Event per Publisher id in ``publisher_ids``,
-    bulk-loaded in two fixed queries regardless of how many ids are passed —
-    shared by admin.py::admin_list_claims and
-    app.claims.lifecycle._send_claim_expiry_emails (#421). "Freshest listing
-    wins" (highest EventSource.id per publisher_id) mirrors
-    app.claims.lifecycle.representative_event_source's own single-row
-    ordering — keep the two in sync if that tie-break ever changes."""
-    if not publisher_ids:
-        return {}
-    # DISTINCT ON walks ix_event_sources_publisher_id and keeps only the
-    # highest-id row per publisher — one row per id, not one per listing.
-    es_rows = (
-        await db.execute(
-            select(EventSource.publisher_id, EventSource.event_id)
-            .where(EventSource.publisher_id.in_(publisher_ids))
-            .distinct(EventSource.publisher_id)
-            .order_by(EventSource.publisher_id, EventSource.id.desc())
-        )
-    ).all()
-    event_id_by_publisher: dict[int, int] = {
-        pid: eid for pid, eid in es_rows if pid is not None
-    }
-    if not event_id_by_publisher:
-        return {}
-    events = (
-        await db.scalars(
-            select(Event).where(Event.id.in_(set(event_id_by_publisher.values())))
-        )
-    ).all()
-    events_by_id = {e.id: e for e in events}
-    return {
-        publisher_id: events_by_id[event_id]
-        for publisher_id, event_id in event_id_by_publisher.items()
-        if event_id in events_by_id
-    }
 
 
 async def resolve_open_reports(

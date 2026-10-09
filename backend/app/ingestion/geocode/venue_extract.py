@@ -2,7 +2,6 @@
 
 import asyncio
 import logging
-import re
 from datetime import datetime
 
 import httpx
@@ -10,6 +9,7 @@ from sqlalchemy import ColumnElement, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.constants import (
+    SQL_REGEX_DIGIT,
     GEOCODE_MAX_PER_RUN,
     TALLINN_TZ,
     LLM_BATCH_FANOUT_CONCURRENCY,
@@ -30,7 +30,7 @@ from app.llm.router import (
     llm_json,
 )
 from app.models.models import Event, LlmCall
-from app.ingestion.patterns import alternation_pattern
+from app.ingestion.patterns import alternation_pattern, sql_alternation_pattern
 
 log = logging.getLogger(__name__)
 
@@ -55,9 +55,7 @@ def is_suspect_venue_name(name: str) -> bool:
     return False
 
 
-_SQL_DIRECTION_KEYWORD_RE = (
-    r"\y(?:" + "|".join(re.escape(kw) for kw in VENUE_NAME_DIRECTION_KEYWORDS) + r")\y"
-)
+_SQL_DIRECTION_KEYWORD_RE = sql_alternation_pattern(VENUE_NAME_DIRECTION_KEYWORDS)
 
 
 def suspect_venue_name_sql() -> ColumnElement[bool]:
@@ -67,7 +65,7 @@ def suspect_venue_name_sql() -> ColumnElement[bool]:
     ``LIMIT`` starved the pass once clean-named rows outnumbered the window
     (Big-O audit H3). The Python check still runs afterwards as the authority."""
     return or_(
-        Event.venue_name.op("~")(r"[0-9]"),
+        Event.venue_name.op("~")(SQL_REGEX_DIGIT),
         Event.venue_name.contains(","),
         Event.venue_name.op("~*")(_SQL_DIRECTION_KEYWORD_RE),
         func.length(Event.venue_name) > VENUE_NAME_SUSPECT_MAX_LEN,

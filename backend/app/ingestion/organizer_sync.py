@@ -15,7 +15,7 @@ from app.constants import (
     FIENTA_ORGANIZER_SCAN_LIMIT,
     HTTP_TIMEOUT_SECONDS,
     ORGANIZER_MIN_EVENTS_FOR_AUTO_ADD,
-    ORGANIZER_NAME_MAX_LEN,
+    PUBLISHER_NAME_MAX_LEN,
     PUBLISHER_STATUS_ACTIVE,
     PUBLISHER_STATUS_RETIRED,
     SOURCE_SLUG_FIENTA,
@@ -113,7 +113,7 @@ async def _discover_new_organizers(
                 oid = int(raw_oid)
             except (ValueError, TypeError):
                 continue
-            name = str(event.get("organizer_name", ""))[:ORGANIZER_NAME_MAX_LEN]
+            name = str(event.get("organizer_name", ""))[:PUBLISHER_NAME_MAX_LEN]
             count, _ = org_counts.get(oid, (0, name))
             org_counts[oid] = (count + 1, name)
 
@@ -209,7 +209,7 @@ async def _sync_publishers(
     }
     for oid in all_oids:
         external_id = str(oid)
-        name = current_names.get(external_id, external_id)[:ORGANIZER_NAME_MAX_LEN]
+        name = current_names.get(external_id, external_id)[:PUBLISHER_NAME_MAX_LEN]
         status = (
             PUBLISHER_STATUS_RETIRED if oid in retired_ids else PUBLISHER_STATUS_ACTIVE
         )

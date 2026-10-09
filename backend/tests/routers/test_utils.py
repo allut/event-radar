@@ -9,8 +9,6 @@ from fastapi import HTTPException
 
 from app.constants import APP_ENV_DEVELOPMENT
 from app.routers.utils import (
-    bulk_resolve_publisher_events,
-    collapse_series_duplicates,
     compute_preferred_taxonomy,
     fold_legacy_category,
     load_user_reported_events,
@@ -24,16 +22,18 @@ from app.routers.utils import (
     stream_admin_job,
     validate_categories,
 )
-from app.events.venue import (
-    resolve_venue_address,
-    resolve_venue_coords,
-    resolve_venue_name,
-)
+from app.claims.target_resolution import bulk_resolve_publisher_events
 from app.events.queries import (
+    collapse_series_duplicates,
     event_ended_filter,
     event_not_ended_filter,
     event_series_key,
     normalized_title,
+)
+from app.events.venue import (
+    resolve_venue_address,
+    resolve_venue_coords,
+    resolve_venue_name,
 )
 from app.auth.utils import mask_email, require_configured_secret
 

@@ -20,8 +20,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import get_current_organizer
 from app.auth.email import (
+    notify_identity_linked,
     send_google_link_confirmation,
-    send_identity_linked_notice,
     send_magic_link,
 )
 from app.auth.google_oauth import (
@@ -163,15 +163,6 @@ async def request_organizer_magic_link(
     return {"detail": DETAIL_MAGIC_LINK_SENT}
 
 
-async def _notify_identity_linked(email: str, locale: str) -> None:
-    """Best-effort "Google sign-in was linked" notice (OWASP audit #3) — the
-    link already exists, so a send failure is logged, never surfaced."""
-    try:
-        await send_identity_linked_notice(email, locale)
-    except Exception:
-        log.exception("Failed to send identity-linked notice to %s", mask_email(email))
-
-
 @router.post("/verify")
 @limiter.limit(RATE_LIMIT_AUTH_VERIFY)
 async def verify_organizer_magic_link(
@@ -274,7 +265,7 @@ async def verify_organizer_magic_link(
                     organizer.id,
                     extra={"event": LOG_EVENT_IDENTITY_LINKED, "provider": IDENTITY_PROVIDER_GOOGLE},
                 )
-                await _notify_identity_linked(organizer.email, organizer.locale)
+                await notify_identity_linked(organizer.email, organizer.locale)
             except IntegrityError:
                 # Already linked by a concurrent request (or a stale/reused
                 # sub) — not this request's problem to surface; the session
@@ -646,7 +637,7 @@ async def organizer_google_callback(
         )
     else:
         if outcome == GOOGLE_SIGNIN_OUTCOME_AUTO_LINKED:
-            await _notify_identity_linked(organizer.email, organizer.locale)
+            await notify_identity_linked(organizer.email, organizer.locale)
         session_token = generate_organizer_session_token(
             organizer.id, organizer.session_token_version
         )

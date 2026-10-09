@@ -8,7 +8,7 @@ from typing import Any
 import httpx
 from bs4 import BeautifulSoup, NavigableString, Tag
 
-from app.constants import TALLINN_TZ
+from app.constants import HTTP_ACCEPT_JSON_HEADERS, TALLINN_TZ
 from app.ingestion.http_client import http_get, http_post
 from app.ingestion.jsonld import (
     location_from_jsonld_items,
@@ -212,7 +212,7 @@ class PiletileviAdapter(HtmlListingAdapter):
             await http_post(
                 client,
                 PILETILEVI_LOGIN_EXPRESS_URL,
-                headers={"accept": "application/json"},
+                headers=HTTP_ACCEPT_JSON_HEADERS,
             )
             return True
         except (httpx.HTTPStatusError, httpx.RequestError) as exc:

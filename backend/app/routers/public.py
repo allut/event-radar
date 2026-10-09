@@ -29,20 +29,17 @@ from app.constants import (
 from app.db import get_db
 from app.models.models import Event, EventClassification, Venue
 from app.rate_limit import limiter
-from app.routers.utils import (
-    collapse_series_duplicates,
-    resolve_locale_param,
-    resolve_title,
-    select_events_with_classification,
-    serialize_event,
-)
-from app.events.venue import resolve_venue_name
+from app.routers.utils import resolve_locale_param, serialize_event
 from app.events.queries import (
     canonical_event_filter,
+    collapse_series_duplicates,
     event_date_range_filter,
     event_not_ended_filter,
     public_event_filter,
+    select_events_with_classification,
 )
+from app.events.localize import resolve_title
+from app.events.venue import resolve_venue_name
 
 router = APIRouter(prefix="/public", tags=["public"])
 

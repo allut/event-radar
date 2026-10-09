@@ -27,13 +27,8 @@ from app.ingestion.http_client import http_get_stored_url, normalized_hostname
 from app.ingestion.jsonld import offers_from_jsonld_items, parse_jsonld_event_items
 from app.ingestion.price_fallback import PRICE_FALLBACK_EXTRACTORS
 from app.models.models import Claim, Event, EventSource
-from app.routers.utils import (
-    publisher_claim_event_ids,
-    select_events_with_classification,
-)
-from app.events.queries import (
-    event_not_ended_filter,
-)
+from app.claims.target_resolution import publisher_claim_event_ids
+from app.events.queries import event_not_ended_filter, select_events_with_classification
 
 from .lifecycle import representative_event_source
 

@@ -33,6 +33,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.constants import (
+    DEDUP_PROMPT_DATE_FORMAT,
     LLM_BACKLOG_MAX_DRAIN_PASSES,
     LLM_BACKLOG_RETRY_SECONDS,
     LLM_BATCH_FANOUT_CONCURRENCY,
@@ -44,6 +45,7 @@ from app.constants import (
     LLM_DEDUP_VENUE_MAX_LEN,
     LLM_TASK_DEDUP,
 )
+from app.events.venue import resolve_venue_name
 from app.llm.prompts import LLM_DEDUP_PROMPT_TEMPLATE, escape_prompt_delimiters
 from app.dedup.rules import (
     union,
@@ -88,9 +90,9 @@ def _event_fragment(
         return cached
     fragment: _EventFragment = (
         escape_prompt_delimiters(event.title_orig[:LLM_DEDUP_TITLE_MAX_LEN]),
-        event.starts_at.strftime("%Y-%m-%d %H:%M"),
+        event.starts_at.strftime(DEDUP_PROMPT_DATE_FORMAT),
         escape_prompt_delimiters(
-            (event.venue_name or LLM_CLASSIFY_VENUE_FALLBACK)[:LLM_DEDUP_VENUE_MAX_LEN]
+            (resolve_venue_name(event) or LLM_CLASSIFY_VENUE_FALLBACK)[:LLM_DEDUP_VENUE_MAX_LEN]
         ),
     )
     fragment_cache[event.id] = fragment
