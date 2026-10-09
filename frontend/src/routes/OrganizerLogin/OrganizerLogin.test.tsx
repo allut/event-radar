@@ -27,6 +27,12 @@ describe('OrganizerLogin', () => {
     vi.unstubAllEnvs();
   });
 
+  it('renders the Dial brand mark in the header', () => {
+    renderWithProviders(<OrganizerLogin />, { route: '/en/organizer/login' });
+    expect(screen.getByRole('banner').querySelector('svg')).not.toBeNull();
+    expect(screen.queryByText('◉')).not.toBeInTheDocument();
+  });
+
   it('renders email input and submit button', () => {
     renderWithProviders(<OrganizerLogin />, { route: '/en/organizer/login' });
     expect(screen.getByRole('textbox', { name: /email/i })).toBeInTheDocument();

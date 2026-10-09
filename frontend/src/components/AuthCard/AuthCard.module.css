@@ -18,8 +18,7 @@
 }
 
 .radar {
-  --dial-size: var(--heading-lg);
-  display: inline-flex;
+  composes: authDial from '../shared/Card.module.css';
 }
 
 .brand {

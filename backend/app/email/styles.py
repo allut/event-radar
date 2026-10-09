@@ -51,6 +51,7 @@ _LIGHT_PALETTE = {
 
 # Structural (non-color) styling — identical across themes.
 S_CONTAINER = "max-width:600px;width:100%;margin:0 auto;"
+S_BRAND_MARK = "display:block;margin:0 auto 12px auto;border:0;width:32px;height:32px;"
 S_HEADER_PAD = "padding:40px 24px 24px 24px;text-align:center;"
 S_FEED_BTN_WRAP = "padding:0 0 8px 0;"
 S_CONTENT_PAD = "padding:8px 24px 24px 24px;"
@@ -122,6 +123,7 @@ class EmailStyles:
     s_page: str
     s_container: str
     s_header_pad: str
+    s_brand_mark: str
     s_eyebrow: str
     s_h1: str
     s_date: str
@@ -163,6 +165,7 @@ def _build_styles(
         s_page=f"margin:0;padding:0;background-color:{p['bg']};",
         s_container=S_CONTAINER,
         s_header_pad=S_HEADER_PAD,
+        s_brand_mark=S_BRAND_MARK,
         s_eyebrow=(
             "font-family:Helvetica,Arial,sans-serif;font-size:12px;"
             f"letter-spacing:3px;text-transform:uppercase;color:{_ACCENT};margin:0 0 8px 0;"

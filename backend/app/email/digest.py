@@ -40,6 +40,7 @@ from app.constants import (
     UNSUBSCRIBE_PATH,
 )
 from app.email.links import frontend_url
+from app.email.brand import brand_mark_html
 from app.email.styles import EmailStyles, get_email_styles
 from app.email.templates import (
     DIGEST_EMPTY_STATE,
@@ -205,6 +206,7 @@ def build_digest_html(
     settings_label = t("digest.unsubscribe", locale)
 
     header_html = DIGEST_HEADER.format(
+        brand_mark_html=brand_mark_html(s, frontend_base),
         s_eyebrow=s.s_eyebrow,
         s_h1=s.s_h1,
         subject_label=subject_label,

@@ -109,3 +109,11 @@ async def test_send_identity_linked_notice_skips_without_api_key(
     await email.send_identity_linked_notice("owner@gmail.com")
 
     post.assert_not_awaited()
+
+
+def test_notice_headers_carry_brand_mark():
+    confirmation = build_google_link_confirmation_html(VERIFY_URL, 15, "a@b.com", "en")
+    notice = build_identity_linked_html("a@b.com", "en")
+
+    assert "/email-mark.png" in confirmation
+    assert "/email-mark.png" in notice

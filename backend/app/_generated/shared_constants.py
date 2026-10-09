@@ -27,3 +27,4 @@ IMAGE_UPLOAD_ALLOWED_MIME: frozenset[str] = frozenset({"image/jpeg", "image/png"
 ORGANIZER_MAX_CATEGORIES: int = 3
 CLAIM_EXPIRY_DAYS: int = 7
 CLAIM_ADMIN_REVIEW_EXPIRY_DAYS: int = 30
+EMAIL_BRAND_MARK_PATH: str = "/email-mark.png"

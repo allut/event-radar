@@ -35,3 +35,4 @@ export const ORGANIZER_IMAGE_ALLOWED_MIME: readonly string[] = ['image/jpeg', 'i
 export const ORGANIZER_MAX_CATEGORIES = 3;
 export const CLAIM_EXPIRY_DAYS = 7;
 export const CLAIM_ADMIN_REVIEW_EXPIRY_DAYS = 30;
+export const EMAIL_BRAND_MARK_PATH = '/email-mark.png';

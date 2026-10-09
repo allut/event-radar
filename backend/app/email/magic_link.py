@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import html as html_lib
 
+from app.email.brand import brand_mark_html
 from app.email.styles import get_email_styles
 from app.email.templates import (
     EMAIL_DOCUMENT,
@@ -23,6 +24,7 @@ def build_magic_link_html(
     safe_verify_url = html_lib.escape(verify_url, quote=True)
 
     header_html = MAGIC_LINK_HEADER.format(
+        brand_mark_html=brand_mark_html(s),
         s_eyebrow=s.s_eyebrow,
         s_h1=s.s_h1,
         heading=t("email.magic_link.heading", locale),

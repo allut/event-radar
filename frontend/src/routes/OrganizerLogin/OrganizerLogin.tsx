@@ -3,7 +3,6 @@ import { Link } from 'react-router-dom';
 import {
   API,
   API_BASE,
-  BRAND_GLYPH,
   isGoogleSignInOrganizerEnabled,
   ROUTES,
 } from '../../constants';
@@ -12,6 +11,7 @@ import { useGoogleSignInError } from '../../hooks/useGoogleSignInError';
 import { useLocalePath } from '../../hooks/useLocalePath';
 import { usePathLocale } from '../../hooks/usePathLocale';
 import { useStaticSeoMeta } from '../../hooks/useStaticSeoMeta';
+import DialMark from '../../components/DialMark';
 import MagicLinkForm from '../../components/MagicLinkForm';
 import GoogleSignInButton from '../../components/shared/GoogleSignInButton';
 import SeoTags from '../../components/SeoTags';
@@ -30,7 +30,7 @@ export default function OrganizerLogin() {
       <SeoTags meta={seoMeta} />
       <div className={styles.card}>
         <header className={styles.header}>
-          <span className={styles.radar} aria-hidden>{BRAND_GLYPH}</span>
+          <span className={styles.radar}><DialMark /></span>
           <h1 className={styles.brand}>{t('brand', locale)}</h1>
         </header>
 

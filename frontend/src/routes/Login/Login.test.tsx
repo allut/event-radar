@@ -20,6 +20,12 @@ import { api } from '../../api/client';
 const mockPost = vi.mocked(api.post);
 
 describe('Login', () => {
+  it('renders the Dial brand mark in the header', () => {
+    renderWithProviders(<Login />, { route: '/en/login' });
+    expect(screen.getByRole('banner').querySelector('svg')).not.toBeNull();
+    expect(screen.queryByText('◉')).not.toBeInTheDocument();
+  });
+
   it('renders email input and submit button', () => {
     renderWithProviders(<Login />, { route: '/en/login' });
     expect(screen.getByRole('textbox', { name: /email/i })).toBeInTheDocument();

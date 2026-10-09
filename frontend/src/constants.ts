@@ -20,9 +20,10 @@ import {
   ORGANIZER_MAX_CATEGORIES,
   CLAIM_EXPIRY_DAYS,
   CLAIM_ADMIN_REVIEW_EXPIRY_DAYS,
+  EMAIL_BRAND_MARK_PATH,
 } from './_generated/sharedConstants.js';
 
-export { LOCALES, APP_VERSION, MAGIC_LINK_EXPIRY_MINUTES, PERSONA_MAX_SELECTABLE, DEFAULT_CURRENCY, SAFE_URL_SCHEMES, SANITIZE_ALLOWED_TAGS, SANITIZE_ALLOWED_ATTR, CATEGORIES, VIBES, BROWSE_PAGE_SIZE, ORGANIZER_IMAGE_ALLOWED_MIME, ORGANIZER_MAX_CATEGORIES, CLAIM_EXPIRY_DAYS, CLAIM_ADMIN_REVIEW_EXPIRY_DAYS };
+export { LOCALES, APP_VERSION, MAGIC_LINK_EXPIRY_MINUTES, PERSONA_MAX_SELECTABLE, DEFAULT_CURRENCY, SAFE_URL_SCHEMES, SANITIZE_ALLOWED_TAGS, SANITIZE_ALLOWED_ATTR, CATEGORIES, VIBES, BROWSE_PAGE_SIZE, ORGANIZER_IMAGE_ALLOWED_MIME, ORGANIZER_MAX_CATEGORIES, CLAIM_EXPIRY_DAYS, CLAIM_ADMIN_REVIEW_EXPIRY_DAYS, EMAIL_BRAND_MARK_PATH };
 export const DEFAULT_LOCALE_CODE = _DEFAULT_LOCALE_CODE;
 export type { PersonaData };
 
@@ -330,6 +331,7 @@ export const FAVICON_ICO_PATH = '/favicon.ico';
 export const ICON_96_PATH = '/icon-96.png';
 export const ICON_192_PATH = '/icon-192.png';
 export const ICON_512_PATH = '/icon-512.png';
+export const ICON_MASKABLE_512_PATH = '/icon-maskable-512.png';
 export const APPLE_TOUCH_ICON_PATH = '/apple-touch-icon.png';
 export const CRAWLABLE_ICON_PATHS: string[] = [
   FAVICON_ICO_PATH,
@@ -337,6 +339,7 @@ export const CRAWLABLE_ICON_PATHS: string[] = [
   ICON_96_PATH,
   ICON_192_PATH,
   ICON_512_PATH,
+  ICON_MASKABLE_512_PATH,
   APPLE_TOUCH_ICON_PATH,
   '/site.webmanifest',
 ];
@@ -793,8 +796,8 @@ export const STEP_KEYS = [
 ];
 
 // ─── Brand ───────────────────────────────────────────────────────────────────
-// Plain-text radar glyph, kept for AdminShell only: the admin console's
-// sub-language gets no brand imagery. Everywhere else the brand mark is the
+// Plain-text radar glyph, kept for AdminShell and AdminLogin only: the admin
+// console's sub-language gets no brand imagery. Everywhere else the brand mark is the
 // Dial (components/DialMark).
 export const BRAND_GLYPH = '◉';
 // ─── Explore ─────────────────────────────────────────────────────────────────

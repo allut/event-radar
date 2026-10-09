@@ -35,7 +35,14 @@ EMAIL_DOCUMENT = """\
 </table>
 </body></html>"""
 
+# Dial brand mark above each header's eyebrow. alt="" so an image-blocking
+# client shows the EVENT RADAR eyebrow text alone, with no broken-image noise.
+EMAIL_BRAND_MARK = (
+    '<img src="{src}" width="32" height="32" alt="" style="{s_brand_mark}">'
+)
+
 DIGEST_HEADER = """\
+{brand_mark_html}
 <p style="{s_eyebrow}">EVENT RADAR</p>
 <h1 class="e-h1" style="{s_h1}">{subject_label}</h1>
 <p class="e-date" style="{s_date}">{date_str}</p>
@@ -50,6 +57,7 @@ DIGEST_FOOTER = """\
 DIGEST_EMPTY_STATE = '<p class="e-body-text" style="{s_body_text}">{text}</p>'
 
 MAGIC_LINK_HEADER = """\
+{brand_mark_html}
 <p style="{s_eyebrow}">EVENT RADAR</p>
 <h1 class="e-h1" style="{s_h1}">{heading}</h1>"""
 
@@ -68,6 +76,7 @@ ACCOUNT_NOTICE_BODY = """\
 EMAIL_FOOTER_BRAND = "Event Radar, Tallinn"
 
 REPORT_OUTCOME_HEADER = """\
+{brand_mark_html}
 <p style="{s_eyebrow}">EVENT RADAR</p>
 <h1 class="e-h1" style="{s_h1}">{heading}</h1>"""
 
@@ -79,6 +88,7 @@ REPORT_OUTCOME_BODY = """\
 </td></tr></table>"""
 
 CLAIM_RESOLUTION_HEADER = """\
+{brand_mark_html}
 <p style="{s_eyebrow}">EVENT RADAR</p>
 <h1 class="e-h1" style="{s_h1}">{heading}</h1>"""
 

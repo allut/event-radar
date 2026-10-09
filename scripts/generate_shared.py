@@ -272,6 +272,7 @@ def write_backend_shared_constants(cfg: dict, version: str) -> str:
         f"ORGANIZER_MAX_CATEGORIES: int = {cfg['organizer_max_categories']}",
         f"CLAIM_EXPIRY_DAYS: int = {cfg['claim_expiry_days']}",
         f"CLAIM_ADMIN_REVIEW_EXPIRY_DAYS: int = {cfg['claim_admin_review_expiry_days']}",
+        f"EMAIL_BRAND_MARK_PATH: str = {cfg['email_brand_mark_path']!r}".replace("'", '"'),
         "",
     ]
     return "\n".join(parts)
@@ -342,6 +343,7 @@ def write_frontend_shared_constants(cfg: dict, version: str) -> str:
         f"export const ORGANIZER_MAX_CATEGORIES = {cfg['organizer_max_categories']};",
         f"export const CLAIM_EXPIRY_DAYS = {cfg['claim_expiry_days']};",
         f"export const CLAIM_ADMIN_REVIEW_EXPIRY_DAYS = {cfg['claim_admin_review_expiry_days']};",
+        f"export const EMAIL_BRAND_MARK_PATH = '{cfg['email_brand_mark_path']}';",
         "",
     ]
     return "\n".join(parts)
