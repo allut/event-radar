@@ -1716,6 +1716,9 @@ VENUE_SIBLING_RATIO_THRESHOLD = 90
 # ~12 min/run, fine for a 04:30 cron.
 REFETCH_MAX_PER_RUN = 1000
 REFETCH_REQUEST_DELAY_SECONDS: float = 1.0
+# Source hosts refetched in parallel (each host stays sequential at the delay
+# above). Bounds the fan-out; there are only a handful of ingest hosts.
+REFETCH_HOST_CONCURRENCY = 4
 # Wall-clock backstop, independent of REFETCH_MAX_PER_RUN: an event that
 # triggers locale-variant fetches (fetch_locale_variants) pays its own
 # REFETCH_REQUEST_DELAY_SECONDS per variant, so REFETCH_MAX_PER_RUN events

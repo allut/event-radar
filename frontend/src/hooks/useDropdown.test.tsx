@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useDropdown } from './useDropdown';
@@ -57,5 +57,48 @@ describe('useDropdown', () => {
     fireEvent.click(screen.getByText('Trigger'));
     fireEvent.mouseDown(screen.getByText('Inside option'));
     expect(screen.getByText('Inside option')).toBeInTheDocument();
+  });
+});
+
+function MobileHarness() {
+  const { open, setOpen, rootRef, popRef, triggerRef } = useDropdown(undefined, '--pop-top');
+  return (
+    <div ref={rootRef}>
+      <button ref={triggerRef} onClick={() => setOpen((o) => !o)}>Trigger</button>
+      {open && (
+        <div ref={popRef} data-testid="pop">
+          <button>Inside option</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+describe('useDropdown — mobile top sync', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it('coalesces a burst of scroll events into one position sync per frame', () => {
+    vi.spyOn(window, 'matchMedia').mockImplementation(
+      (query: string) => ({ matches: true, media: query }) as MediaQueryList,
+    );
+    const frames: FrameRequestCallback[] = [];
+    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => frames.push(cb));
+    vi.stubGlobal('cancelAnimationFrame', () => {});
+
+    render(<MobileHarness />);
+    fireEvent.click(screen.getByText('Trigger'));
+    const pop = screen.getByTestId('pop');
+    const setProperty = vi.spyOn(pop.style, 'setProperty');
+    setProperty.mockClear();
+
+    for (let i = 0; i < 5; i++) fireEvent.scroll(window);
+    expect(frames).toHaveLength(1); // five scrolls, one scheduled frame
+    expect(setProperty).not.toHaveBeenCalled(); // no layout read until the frame
+
+    frames[0](0);
+    expect(setProperty).toHaveBeenCalledTimes(1);
   });
 });

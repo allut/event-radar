@@ -1,5 +1,6 @@
 """Tests for the daily detail-refetch sync (refetch_event_details + reconciliation)."""
 
+import asyncio
 from datetime import datetime, timedelta
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -462,9 +463,11 @@ class TestRunDeadline:
         with (
             patch("app.ingestion.refetch.http_get", new=AsyncMock(return_value=_resp(html))),
             patch("app.ingestion.refetch.asyncio.sleep", new=AsyncMock()),
+            # Patch the module's `time` name, not time.monotonic globally —
+            # the event loop (gather's tasks) reads the global clock too.
             patch(
-                "app.ingestion.refetch.time.monotonic",
-                side_effect=[0.0, 0.0, 0.0, 1.0, 9999.0],
+                "app.ingestion.refetch.time",
+                MagicMock(monotonic=MagicMock(side_effect=[0.0, 0.0, 0.0, 1.0, 9999.0])),
             ),
         ):
             summary = await refetch_event_details(mock_db)
@@ -480,6 +483,48 @@ class TestRunDeadline:
         summary = await _run(mock_db, event, "<html><body>no jsonld here</body></html>")
         assert "deadline_stopped" not in summary
         assert event.detail_refetched_at is not None
+
+
+class TestPerHostParallelism:
+    @pytest.mark.asyncio
+    async def test_hosts_run_concurrently_but_each_host_stays_sequential(self, mock_db):
+        """Two hosts proceed in parallel (the politeness delay is per host),
+        while one host's events are fetched strictly one after another."""
+        events = [
+            _future_event(id=1, url="https://fienta.com/e-1"),
+            _future_event(id=2, url="https://fienta.com/e-2"),
+            _future_event(id=3, url="https://kumu.ekm.ee/e-3"),
+        ]
+        mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=events))
+        in_flight: dict[str, int] = {}
+        peak: dict[str, int] = {}
+        hosts_active_together = 0
+        active_hosts: set[str] = set()
+
+        async def fake_get(client, url, **kwargs):
+            nonlocal hosts_active_together
+            host = url.split("/")[2]
+            in_flight[host] = in_flight.get(host, 0) + 1
+            peak[host] = max(peak.get(host, 0), in_flight[host])
+            active_hosts.add(host)
+            hosts_active_together = max(hosts_active_together, len(active_hosts))
+            await asyncio.sleep(0)  # yield so the other host's worker can run
+            in_flight[host] -= 1
+            if in_flight[host] == 0:
+                active_hosts.discard(host)
+            return _resp("<html><body>no jsonld here</body></html>")
+
+        real_sleep = asyncio.sleep
+        with (
+            patch("app.ingestion.refetch.http_get", new=fake_get),
+            patch("app.ingestion.refetch.asyncio.sleep", new=lambda *_a, **_k: real_sleep(0)),
+        ):
+            summary = await refetch_event_details(mock_db)
+
+        assert summary["no_data"] == 3
+        assert all(e.detail_refetched_at is not None for e in events)
+        assert peak["fienta.com"] == 1  # sequential within a host
+        assert hosts_active_together == 2  # parallel across hosts
 
 
 class TestSsrfHostGuard:

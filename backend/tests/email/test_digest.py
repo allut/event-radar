@@ -74,6 +74,55 @@ class TestFormatEventTime:
 # build_digest_html
 # ---------------------------------------------------------------------------
 
+class TestDigestRunScopedCaches:
+    def test_block_cache_renders_each_event_locale_once(self, make_event):
+        event = make_event()
+        cache: dict = {}
+        with patch(
+            "app.email.digest._build_event_block", return_value="<card/>"
+        ) as build:
+            for _ in range(3):
+                build_digest_html(
+                    [event], date(2026, 5, 20), "en", "https://eventradar.ee",
+                    block_cache=cache,
+                )
+            build_digest_html(
+                [event], date(2026, 5, 20), "et", "https://eventradar.ee",
+                block_cache=cache,
+            )
+        assert build.call_count == 2  # one per (event, locale)
+        assert set(cache) == {(event.id, "en"), (event.id, "et")}
+
+    @pytest.mark.asyncio
+    async def test_load_digest_data_skips_events_already_cached(
+        self, mock_db, make_event
+    ):
+        from app.email.digest import _load_digest_data
+
+        cached = make_event(event_id=1)
+        fresh = make_event(event_id=2)
+        feeds = MagicMock()
+        feeds.all.return_value = [
+            MagicMock(user_id=10, event_ids=[1, 2]),
+        ]
+        fresh_rows = MagicMock()
+        fresh_rows.all.return_value = [fresh]
+        mock_db.scalars.side_effect = [feeds, fresh_rows]
+        cache = {1: cached}
+
+        _, event_map = await _load_digest_data(
+            mock_db, date(2026, 5, 20), [10], cache
+        )
+
+        assert event_map == {1: cached, 2: fresh}
+        compiled = str(
+            mock_db.scalars.call_args_list[1].args[0].compile(
+                compile_kwargs={"literal_binds": True}
+            )
+        )
+        assert "events.id IN (2)" in compiled  # only the missing id is queried
+
+
 class TestBuildDigestHtml:
     def test_returns_html_string(self, make_event):
         events = [make_event()]

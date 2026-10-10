@@ -190,12 +190,19 @@ def _build_event_block(
     )
 
 
+# (event_id, locale) -> rendered card. A card is identical for every user who
+# shares a locale, so send_daily_digests keeps one of these for its whole run
+# instead of re-rendering each event once per recipient (Big-O audit #9).
+EventBlockCache = dict[tuple[int, str], str]
+
+
 def build_digest_html(
     events: Sequence[Event],
     feed_date: date,
     locale: str,
     frontend_base: str,
     unsubscribe_url: str | None = None,
+    block_cache: EventBlockCache | None = None,
 ) -> str:
     s = get_email_styles()
     date_str = _format_feed_date(feed_date, locale)
@@ -203,7 +210,16 @@ def build_digest_html(
     if unsubscribe_url is None:
         unsubscribe_url = frontend_url(SETTINGS_PATH, locale, frontend_base)
 
-    event_blocks = [_build_event_block(e, locale, frontend_base, s) for e in events]
+    event_blocks: list[str] = []
+    for e in events:
+        cache_key = (e.id, locale)
+        if block_cache is not None and cache_key in block_cache:
+            event_blocks.append(block_cache[cache_key])
+            continue
+        block = _build_event_block(e, locale, frontend_base, s)
+        if block_cache is not None:
+            block_cache[cache_key] = block
+        event_blocks.append(block)
     events_html = (
         "\n".join(event_blocks)
         if event_blocks
@@ -267,6 +283,7 @@ async def send_digest_email(
     user_id: int,
     *,
     http_client: httpx.AsyncClient | None = None,
+    block_cache: EventBlockCache | None = None,
 ) -> None:
     if not settings.RESEND_API_KEY:
         log.warning(
@@ -284,6 +301,7 @@ async def send_digest_email(
         locale,
         settings.FRONTEND_URL,
         unsubscribe_url,
+        block_cache,
     )
     subject = ti(
         "digest.subject_template", locale, date=_format_feed_date(feed_date, locale)
@@ -334,9 +352,16 @@ async def send_digest_email(
 
 
 async def _load_digest_data(
-    db: AsyncSession, today: date, user_ids: list[int]
+    db: AsyncSession,
+    today: date,
+    user_ids: list[int],
+    event_cache: dict[int, Event] | None = None,
 ) -> tuple[dict[int, list[int]], dict[int, Event] | None]:
     """Today's feeds per user + the events they reference, in two bulk queries.
+
+    ``event_cache`` is the run-scoped id -> Event memo: events an earlier page
+    already loaded are not re-queried (every user's feed draws on the same
+    small candidate pool, so later pages mostly hit it).
 
     event_map is None when no user has any feed events today (caller
     short-circuits to all-skipped).
@@ -357,15 +382,22 @@ async def _load_digest_data(
     if not all_event_ids:
         return feed_by_user, None
 
-    events = (
-        await db.scalars(
-            select_events_with_classification().where(
-                Event.id.in_(all_event_ids),
-                public_event_filter(),
+    if event_cache is None:
+        event_cache = {}
+    missing_ids = all_event_ids - event_cache.keys()
+    if missing_ids:
+        events = (
+            await db.scalars(
+                select_events_with_classification().where(
+                    Event.id.in_(missing_ids),
+                    public_event_filter(),
+                )
             )
-        )
-    ).all()
-    return feed_by_user, {e.id: e for e in events}
+        ).all()
+        event_cache.update({e.id: e for e in events})
+    return feed_by_user, {
+        eid: event_cache[eid] for eid in all_event_ids if eid in event_cache
+    }
 
 
 async def send_daily_digests(
@@ -410,6 +442,8 @@ async def send_daily_digests(
 
     semaphore = asyncio.Semaphore(DIGEST_SEND_CONCURRENCY)
     sent = errored = 0
+    block_cache: EventBlockCache = {}
+    event_cache: dict[int, Event] = {}
 
     async def _send_one(
         user: User,
@@ -432,6 +466,7 @@ async def send_daily_digests(
                     today,
                     user.id,
                     http_client=http_client,
+                    block_cache=block_cache,
                 )
                 return DIGEST_RESULT_SENT
             except Exception:
@@ -454,7 +489,9 @@ async def send_daily_digests(
             ).all()
             user_map: dict[int, User] = {u.id: u for u in page_users}
 
-            feed_by_user, event_map = await _load_digest_data(db, today, page_ids)
+            feed_by_user, event_map = await _load_digest_data(
+                db, today, page_ids, event_cache
+            )
             if event_map is None:
                 continue
 

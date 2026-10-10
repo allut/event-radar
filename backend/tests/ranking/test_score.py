@@ -736,6 +736,25 @@ class TestLoadCandidateEventsColumns:
         assert "events.title_localized" not in select_clause
 
 
+class TestRecentSeriesKeyCache:
+    async def test_events_resolved_by_an_earlier_page_are_not_requeried(self, mock_db):
+        from datetime import date
+        from unittest.mock import MagicMock
+
+        from app.ranking.score import _load_recent_series_by_user
+
+        key = ("jazz night", "kuku klubi")
+        feed_row = MagicMock(user_id=7, event_ids=[11])
+        mock_db.scalars.side_effect = [_scalar_result([feed_row])]
+
+        recent = await _load_recent_series_by_user(
+            mock_db, [7], date(2026, 6, 10), {11: key}
+        )
+
+        assert recent == {7: {key}}
+        assert mock_db.scalars.call_count == 1  # feeds only; no event re-query
+
+
 class TestBuildDailyFeedsExplicitFilter:
     async def test_event_query_excludes_explicit_events(self, mock_db):
         from app.ranking.score import build_daily_feeds

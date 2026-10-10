@@ -680,6 +680,14 @@ class _SharedFeedContext:
     event_rows: list[Event]
     candidate_series_key: dict[int, tuple[str, str]]
     event_factors: dict[int, _EventFactors]
+    # Run-scoped memos, so each 500-user page reuses what earlier pages already
+    # resolved (Big-O audit #8): series keys of recently-shown events,
+    # persona_id -> its canonical affinity vector (so the id()-keyed
+    # affinity_cache below hits across pages — the vectors are held alive here),
+    # and the affinity memo itself.
+    shown_series_key: dict[int, tuple[str, str]] = field(default_factory=dict)
+    persona_vectors: dict[int, dict] = field(default_factory=dict)
+    affinity_cache: AffinityCache = field(default_factory=dict)
 
 
 @dataclass
@@ -694,7 +702,7 @@ class _FeedBuildContext:
     personas_by_user: dict[int, list[tuple[float, dict]]]
     fb_by_user: dict[int, list[UserEventFeedback]]
     recent_series_by_user: dict[int, set[tuple[str, str]]]
-    # Shared across the users of this page (one context per page) — see
+    # Aliases _SharedFeedContext.affinity_cache (run-scoped) — see
     # AffinityCache; must not outlive the context that holds the vectors.
     affinity_cache: AffinityCache = field(default_factory=dict)
 
@@ -712,7 +720,10 @@ class _FeedBuildContext:
 
 
 async def _load_recent_series_by_user(
-    db: AsyncSession, user_ids: list[int], today: date
+    db: AsyncSession,
+    user_ids: list[int],
+    today: date,
+    key_cache: dict[int, tuple[str, str]] | None = None,
 ) -> dict[int, set[tuple[str, str]]]:
     """Series keys each user was shown within the cooldown window.
 
@@ -720,7 +731,13 @@ async def _load_recent_series_by_user(
     days — a multi-day series (one canonical event per day) would otherwise
     score well and be re-picked night after night. Feed-level filter,
     independent of dedup_group_id (series are intentionally not dedup-grouped).
+
+    ``key_cache`` (event_id -> series key) is the run-scoped memo from
+    ``_SharedFeedContext``: events a previous page already resolved are not
+    re-queried.
     """
+    if key_cache is None:
+        key_cache = {}
     recent_series_by_user: dict[int, set[tuple[str, str]]] = {}
     cooldown_start = today - timedelta(days=DAILY5_SERIES_COOLDOWN_DAYS)
     recent_feed_rows = (
@@ -742,7 +759,7 @@ async def _load_recent_series_by_user(
         # outside the current lookahead window, so resolve them directly rather
         # than from event_rows. Unchunked this hits Postgres's per-statement
         # bind-param limit past ~32k ids (Big-O audit #5, item 1.6).
-        shown_event_ids = list(shown_event_users.keys())
+        shown_event_ids = [eid for eid in shown_event_users if eid not in key_cache]
         shown_event_rows: list[Event] = []
         for i in range(0, len(shown_event_ids), SCORE_INSERT_CHUNK_SIZE):
             chunk = shown_event_ids[i : i + SCORE_INSERT_CHUNK_SIZE]
@@ -764,8 +781,14 @@ async def _load_recent_series_by_user(
                 ).all()
             )
         for shown_ev in shown_event_rows:
-            key = event_series_key(shown_ev.title_orig, resolve_venue_name(shown_ev))
-            for uid in shown_event_users[shown_ev.id]:
+            key_cache[shown_ev.id] = event_series_key(
+                shown_ev.title_orig, resolve_venue_name(shown_ev)
+            )
+        for eid, uids in shown_event_users.items():
+            key = key_cache.get(eid)
+            if key is None:
+                continue
+            for uid in uids:
                 recent_series_by_user.setdefault(uid, set()).add(key)
     return recent_series_by_user
 
@@ -874,9 +897,11 @@ async def _load_feed_build_context(
         )
     ).all()
     for up_row in up_rows:
-        personas_by_user.setdefault(up_row.user_id, []).append(
-            persona_weight_tuple(up_row)
-        )
+        weight, vec = persona_weight_tuple(up_row)
+        # Intern the vector per persona so every page (and user) shares one
+        # object — the affinity memo is keyed on id(vec).
+        vec = shared.persona_vectors.setdefault(up_row.persona_id, vec)
+        personas_by_user.setdefault(up_row.user_id, []).append((weight, vec))
 
     fb_by_user: dict[int, list[UserEventFeedback]] = {uid: [] for uid in user_ids}
     fb_rows = (
@@ -906,7 +931,9 @@ async def _load_feed_build_context(
     for fb_row in fb_rows:
         fb_by_user.setdefault(fb_row.user_id, []).append(fb_row)
 
-    recent_series_by_user = await _load_recent_series_by_user(db, user_ids, today)
+    recent_series_by_user = await _load_recent_series_by_user(
+        db, user_ids, today, shared.shown_series_key
+    )
 
     return _FeedBuildContext(
         shared=shared,
@@ -914,6 +941,7 @@ async def _load_feed_build_context(
         personas_by_user=personas_by_user,
         fb_by_user=fb_by_user,
         recent_series_by_user=recent_series_by_user,
+        affinity_cache=shared.affinity_cache,
     )
 
 

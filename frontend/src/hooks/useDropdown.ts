@@ -86,11 +86,23 @@ export function useDropdown(
     }
 
     syncTop();
-    window.addEventListener('scroll', syncTop, true);
-    window.addEventListener('resize', syncTop);
+    // rAF-coalesced and passive: an unthrottled scroll listener (capture, so it
+    // sees every scrolling ancestor) otherwise forces a layout read on every
+    // scroll event while a mobile popover is open.
+    let rafId: number | null = null;
+    function scheduleSync() {
+      if (rafId !== null) return;
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+        if (triggerRef.current && popRef.current) syncTop();
+      });
+    }
+    window.addEventListener('scroll', scheduleSync, { capture: true, passive: true });
+    window.addEventListener('resize', scheduleSync);
     return () => {
-      window.removeEventListener('scroll', syncTop, true);
-      window.removeEventListener('resize', syncTop);
+      if (rafId !== null) cancelAnimationFrame(rafId);
+      window.removeEventListener('scroll', scheduleSync, { capture: true });
+      window.removeEventListener('resize', scheduleSync);
     };
   }, [open, mobileTopVar]);
 

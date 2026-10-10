@@ -16,7 +16,7 @@ from sqlalchemy import func, literal_column, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import QueryableAttribute
 from sqlalchemy.sql.elements import ColumnElement
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import aliased, selectinload
 
 from app.auth.email import send_magic_link
 from app.auth.tokens import (
@@ -476,34 +476,54 @@ def _serialize_claim_candidate(event: Event, locale: str) -> dict:
     }
 
 
-async def _load_approved_claim_keys(db: AsyncSession) -> tuple[set[int], set[str]]:
-    """One query for every approved claim's target key — cheap (claims is a
-    small table) and lets search/suggestions filter a page of candidates in
-    Python instead of a per-candidate claim lookup, since a Series claim's
-    key (normalized title+venue) isn't a column either query could push a
-    WHERE clause against directly. Approved-only since #441/ADR 0004: a
-    pending-only target still has to surface as claimable so a rival
-    claimant can start proving ownership — only an approved claim actually
-    retires a target from discovery."""
+def _publisher_claimed_sql() -> ColumnElement[bool]:
+    """SQL twin of the Publisher branch of ``resolve_claim_target``: the
+    event's lowest-id source carries a ``publisher_id`` that an *approved*
+    claim holds. Pushed into the candidate query so the LIMIT window is filled
+    with claimable rows instead of being trimmed in Python afterwards (which
+    returned short pages once many candidates were already claimed). Approved
+    only since #441/ADR 0004: a pending-only target still has to surface as
+    claimable so a rival claimant can start proving ownership."""
+    # Aliased + explicitly correlated to the outer Event: un-aliased, SQLAlchemy
+    # correlates the inner EventSource to the EXISTS's own EventSource and the
+    # clause never references the candidate row.
+    first_source = aliased(EventSource)
+    first_source_id = (
+        select(func.min(first_source.id))
+        .where(first_source.event_id == Event.id)
+        .correlate(Event)
+        .scalar_subquery()
+    )
+    return (
+        select(literal_column("1"))
+        .select_from(EventSource)
+        .join(Claim, Claim.publisher_id == EventSource.publisher_id)
+        .where(EventSource.id == first_source_id, Claim.status == CLAIM_STATUS_APPROVED)
+        .exists()
+    )
+
+
+async def _load_approved_series_keys(db: AsyncSession) -> set[str]:
+    """Approved Series-claim keys. A Series key (normalized title+venue) is
+    resolved in Python by ``resolve_claim_target`` — it uses the resolved venue
+    name, which the trigger-maintained ``events.series_key`` column does not
+    (venue-linked events leave the raw venue columns NULL) — so only this small
+    key set is filtered in Python; Publisher claims are filtered in SQL
+    (``_publisher_claimed_sql``)."""
     rows = (
         await db.execute(
-            select(Claim.publisher_id, Claim.event_series_key).where(
-                Claim.status == CLAIM_STATUS_APPROVED
+            select(Claim.event_series_key).where(
+                Claim.status == CLAIM_STATUS_APPROVED,
+                Claim.event_series_key.is_not(None),
             )
         )
     ).all()
-    publisher_ids = {row.publisher_id for row in rows if row.publisher_id is not None}
-    series_keys = {row.event_series_key for row in rows if row.event_series_key is not None}
-    return publisher_ids, series_keys
+    return {row.event_series_key for row in rows if row.event_series_key is not None}
 
 
-def _is_already_claimed(
-    event: Event, es: EventSource, publisher_ids: set[int], series_keys: set[str]
-) -> bool:
+def _is_series_claimed(event: Event, es: EventSource, series_keys: set[str]) -> bool:
     target = resolve_claim_target(event, es)
-    if target.kind == CLAIM_KIND_PUBLISHER:
-        return target.publisher_id in publisher_ids
-    return target.event_series_key in series_keys
+    return target.kind != CLAIM_KIND_PUBLISHER and target.event_series_key in series_keys
 
 
 @router.get("/search")
@@ -537,6 +557,7 @@ async def search_claimable_events(
                     public_event_filter(),
                     event_not_ended_filter(now),
                     claim_search_text().ilike(pattern, escape="\\"),
+                    ~_publisher_claimed_sql(),
                 )
                 .order_by(Event.starts_at)
                 .limit(CLAIM_SEARCH_RESULT_LIMIT * CLAIM_SEARCH_CANDIDATE_MULTIPLIER)
@@ -546,13 +567,13 @@ async def search_claimable_events(
         .all()
     )
 
-    publisher_ids, series_keys = await _load_approved_claim_keys(db)
+    series_keys = await _load_approved_series_keys(db)
     results = []
     for event in candidates:
         if not event.sources:
             continue
         es = min(event.sources, key=lambda s: s.id)
-        if _is_already_claimed(event, es, publisher_ids, series_keys):
+        if _is_series_claimed(event, es, series_keys):
             continue
         results.append(_serialize_claim_candidate(event, effective_locale))
         if len(results) >= CLAIM_SEARCH_RESULT_LIMIT:
@@ -592,6 +613,7 @@ async def suggested_claimable_events(
                     event_not_ended_filter(now),
                     Event.url.isnot(None),
                     claim_url_text().ilike(pattern, escape="\\"),
+                    ~_publisher_claimed_sql(),
                 )
                 .order_by(Event.starts_at)
                 .limit(CLAIM_SUGGESTIONS_LIMIT * CLAIM_SEARCH_CANDIDATE_MULTIPLIER)
@@ -601,7 +623,7 @@ async def suggested_claimable_events(
         .all()
     )
 
-    publisher_ids, series_keys = await _load_approved_claim_keys(db)
+    series_keys = await _load_approved_series_keys(db)
     results = []
     for event in candidates:
         if not event.sources or not event.url:
@@ -613,7 +635,7 @@ async def suggested_claimable_events(
         if not host_matches_domain(host, domain):
             continue
         es = min(event.sources, key=lambda s: s.id)
-        if _is_already_claimed(event, es, publisher_ids, series_keys):
+        if _is_series_claimed(event, es, series_keys):
             continue
         results.append(_serialize_claim_candidate(event, effective_locale))
         if len(results) >= CLAIM_SUGGESTIONS_LIMIT:

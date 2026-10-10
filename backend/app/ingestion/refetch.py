@@ -51,6 +51,7 @@ from app.constants import (
     REFETCH_MIN_INTERVAL_DAYS,
     REFETCH_PLACEHOLDER_VENUE_NAMES,
     REFETCH_PRICE_TOLERANCE,
+    REFETCH_HOST_CONCURRENCY,
     REFETCH_REQUEST_DELAY_SECONDS,
     SOURCE_KIND_USER_SUBMISSION,
     TALLINN_TZ,
@@ -420,6 +421,39 @@ async def refetch_event_details(db: AsyncSession) -> dict:
 
     last_commit = time.monotonic()
     run_deadline = time.monotonic() + REFETCH_MAX_RUN_SECONDS
+    # The politeness delay protects each *source host*, not the whole run, so
+    # candidates are grouped by host: each host is walked sequentially at the
+    # REFETCH_REQUEST_DELAY_SECONDS pace while different hosts proceed in
+    # parallel (Big-O audit #14). Candidate order (oldest sync first) is kept
+    # within every host group.
+    by_host: dict[str, list[Event]] = {}
+    for event in candidates:
+        by_host.setdefault(normalized_hostname(event.url), []).append(event)
+    host_semaphore = asyncio.Semaphore(REFETCH_HOST_CONCURRENCY)
+    commit_lock = asyncio.Lock()
+
+    async def _refetch_host(client: httpx.AsyncClient, host_events: list[Event]) -> None:
+        nonlocal last_commit
+        async with host_semaphore:
+            for event in host_events:
+                if time.monotonic() >= run_deadline:
+                    # detail_refetched_at ordering (_select_candidates) means
+                    # the events left unprocessed here sort first next run.
+                    summary["deadline_stopped"] = True
+                    break
+                fetched = await _process_one(client, event, summary, now, dormant_event_ids)
+                if fetched:
+                    await asyncio.sleep(REFETCH_REQUEST_DELAY_SECONDS)
+                if time.monotonic() - last_commit >= REFETCH_COMMIT_INTERVAL_SECONDS:
+                    # One committer at a time: hosts share the AsyncSession.
+                    # Workers issue no queries on it (only attribute writes on
+                    # already-loaded rows, expire_on_commit=False), so a write
+                    # racing the flush is at worst picked up by the next
+                    # commit or re-reconciled by the next run.
+                    async with commit_lock:
+                        await db.commit()
+                        last_commit = time.monotonic()
+
     # Follow Fienta's locale 302-redirects with a host-pinning SSRF guard
     # (see _allowed_refetch_hosts for why the allowlist is intersected).
     async with httpx.AsyncClient(
@@ -427,18 +461,15 @@ async def refetch_event_details(db: AsyncSession) -> dict:
         follow_redirects=True,
         event_hooks={"request": [host_guard_hook(_allowed_refetch_hosts(candidates))]},
     ) as client:
-        for event in candidates:
-            if time.monotonic() >= run_deadline:
-                # detail_refetched_at ordering (_select_candidates) means the
-                # events left unprocessed here sort first next run.
-                summary["deadline_stopped"] = True
-                break
-            fetched = await _process_one(client, event, summary, now, dormant_event_ids)
-            if fetched:
-                await asyncio.sleep(REFETCH_REQUEST_DELAY_SECONDS)
-            if time.monotonic() - last_commit >= REFETCH_COMMIT_INTERVAL_SECONDS:
-                await db.commit()
-                last_commit = time.monotonic()
+        outcomes = await asyncio.gather(
+            *(_refetch_host(client, host_events) for host_events in by_host.values()),
+            return_exceptions=True,
+        )
+    failures = [o for o in outcomes if isinstance(o, BaseException)]
+    for failure in failures:
+        log.error("refetch host worker raised", exc_info=failure)
+    if failures:
+        raise failures[0]
 
     return summary
 
