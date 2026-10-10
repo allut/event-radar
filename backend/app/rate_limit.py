@@ -5,6 +5,7 @@ both app.main (middleware/exception-handler wiring) and routers (per-endpoint
 @limiter.limit decorators) can import it without a circular dependency.
 """
 
+import ipaddress
 import logging
 import secrets
 from typing import cast
@@ -22,6 +23,7 @@ from app.constants import (
     HEADER_X_EDGE_AUTH,
     HEADER_X_FORWARDED_FOR,
     LOG_EVENT_RATE_LIMIT_BLOCK,
+    RATE_LIMIT_IPV6_PREFIX_LEN,
 )
 
 log = logging.getLogger(__name__)
@@ -48,12 +50,30 @@ def client_key(request: Request) -> str:
     ):
         client_ip = request.headers.get(HEADER_X_CLIENT_IP, "").strip()
         if client_ip:
-            return client_ip
+            return _bucket_ip(client_ip)
 
     xff = request.headers.get(HEADER_X_FORWARDED_FOR, "")
     if xff:
-        return xff.rsplit(",", 1)[-1].strip()
-    return get_remote_address(request)
+        return _bucket_ip(xff.rsplit(",", 1)[-1].strip())
+    return _bucket_ip(get_remote_address(request))
+
+
+def _bucket_ip(raw: str) -> str:
+    """Collapse an IPv6 address to its /64 prefix. A single subscriber is
+    routinely handed a whole /64, so keying on the full address lets one client
+    rotate through 2**64 "distinct" IPs and dodge every limit and the admin
+    login lockout (OWASP audit L-10). IPv4-mapped IPv6 reverts to IPv4;
+    anything unparseable is returned unchanged."""
+    try:
+        ip = ipaddress.ip_address(raw)
+    except ValueError:
+        return raw
+    if isinstance(ip, ipaddress.IPv6Address):
+        if ip.ipv4_mapped is not None:
+            return str(ip.ipv4_mapped)
+        network = ipaddress.ip_network(f"{ip}/{RATE_LIMIT_IPV6_PREFIX_LEN}", strict=False)
+        return str(network.network_address) + f"/{RATE_LIMIT_IPV6_PREFIX_LEN}"
+    return str(ip)
 
 
 limiter = Limiter(key_func=client_key)

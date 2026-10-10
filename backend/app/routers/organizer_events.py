@@ -13,7 +13,6 @@ import logging
 import time
 from datetime import datetime
 from typing import Any
-from urllib.parse import unquote, urlsplit
 from uuid import uuid4
 
 import httpx
@@ -24,8 +23,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.constants import (
-    ALLOWED_IMAGE_HOSTS,
-    CLOUDINARY_DELIVERY_PATH_TEMPLATE,
     BROWSE_MAX_PAGE_SIZE,
     BROWSE_PAGE_SIZE,
     CLOUDINARY_UPLOAD_URL_TEMPLATE,
@@ -35,7 +32,6 @@ from app.constants import (
     ERROR_EVENT_CREATE_FAILED,
     ERROR_EVENT_NOT_FOUND,
     ERROR_EVENT_URL_SCHEME,
-    ERROR_IMAGE_HOST_NOT_ALLOWED,
     ERROR_IMAGE_TOO_LARGE,
     ERROR_IMAGE_UPLOAD_FAILED,
     ERROR_IMAGE_UPLOAD_NOT_CONFIGURED,
@@ -59,6 +55,7 @@ from app.constants import (
     ORGANIZER_IMPORTANT_INFO_MAX_LEN,
     ORGANIZER_SUBMISSION_EXTERNAL_ID_PREFIX,
     ORGANIZER_TITLE_MAX_LEN,
+    URL_MAX_LEN,
     ORGANIZER_VENUE_ADDRESS_MAX_LEN,
     ORGANIZER_VENUE_NAME_MAX_LEN,
     PAGINATION_MAX_OFFSET,
@@ -74,8 +71,8 @@ from app.constants import (
 )
 from app.db import get_db
 from app.ingestion.adapter import NormalizedEvent, insert_normalized_event
-from app.ingestion.content_filters import is_explicit_text, is_non_event_text
-from app.ingestion.http_client import http_post, safe_external_url
+from app.ingestion.content_filters import content_flags
+from app.ingestion.http_client import http_post, safe_render_url
 from app.ingestion.pricing import normalize_currency
 from app.llm.classifier import classify_event
 from app.models.models import (
@@ -92,6 +89,7 @@ from app.routers.utils import (
     apply_moderation_flags,
     apply_price_edit,
     cancel_event_and_resolve_reports,
+    check_image_host,
     fold_legacy_category,
     localized_dict,
     merged_localized,
@@ -137,8 +135,8 @@ class SubmitEventBody(BaseModel):
     venue_name: str | None = Field(None, max_length=ORGANIZER_VENUE_NAME_MAX_LEN)
     venue_address: str | None = Field(None, max_length=ORGANIZER_VENUE_ADDRESS_MAX_LEN)
     venue_id: int | None = None
-    url: str | None = None
-    image_url: str | None = None
+    url: str | None = Field(default=None, max_length=URL_MAX_LEN)
+    image_url: str | None = Field(default=None, max_length=URL_MAX_LEN)
     price_min: float | None = Field(None, ge=0)
     price_max: float | None = Field(None, ge=0)
     currency: str | None = Field(None, max_length=ORGANIZER_CURRENCY_MAX_LEN)
@@ -187,8 +185,8 @@ class PatchEventBody(BaseModel):
     venue_name: str | None = Field(None, max_length=ORGANIZER_VENUE_NAME_MAX_LEN)
     venue_address: str | None = Field(None, max_length=ORGANIZER_VENUE_ADDRESS_MAX_LEN)
     venue_id: int | None = None
-    url: str | None = None
-    image_url: str | None = None
+    url: str | None = Field(default=None, max_length=URL_MAX_LEN)
+    image_url: str | None = Field(default=None, max_length=URL_MAX_LEN)
     price_min: float | None = Field(None, ge=0)
     price_max: float | None = Field(None, ge=0)
     currency: str | None = Field(None, max_length=ORGANIZER_CURRENCY_MAX_LEN)
@@ -232,31 +230,6 @@ async def _get_user_submission_source(db: AsyncSession) -> Source:
             detail=ERROR_SUBMISSION_SOURCE_NOT_CONFIGURED,
         )
     return source
-
-
-def _check_image_host(image_url: str | None) -> None:
-    """Reject an organizer-submission image_url that isn't one of OUR signed
-    Cloudinary uploads: the host must be the delivery domain (see
-    ALLOWED_IMAGE_HOSTS) AND the path must sit under this account's
-    ``/{cloud_name}/image/upload/`` — res.cloudinary.com serves every
-    Cloudinary account (and remote-fetches other sites), so the host alone
-    would still let an arbitrary third-party image become a tracking pixel
-    once the digest embeds it as an <img> (see app/email/digest.py)."""
-    if not image_url:
-        return
-    parts = urlsplit(image_url)
-    path = unquote(parts.path)
-    cloud_name = settings.CLOUDINARY_CLOUD_NAME
-    if (
-        parts.hostname not in ALLOWED_IMAGE_HOSTS
-        or not cloud_name
-        or not path.startswith(CLOUDINARY_DELIVERY_PATH_TEMPLATE.format(cloud_name=cloud_name))
-        or ".." in path.split("/")
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=ERROR_IMAGE_HOST_NOT_ALLOWED,
-        )
 
 
 async def _own_event_or_404(
@@ -309,7 +282,13 @@ async def submit_event(
         )
 
     source = await _get_user_submission_source(db)
-    _check_image_host(body.image_url)
+    image_url = check_image_host(body.image_url)
+    url = safe_render_url(body.url)
+    if body.url and not url:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=ERROR_EVENT_URL_SCHEME,
+        )
 
     venue: Venue | None = None
     if body.venue_id is not None:
@@ -336,8 +315,8 @@ async def submit_event(
         # a user_submission source, not the host-pinned safe_fetchable_url —
         # this event.url is never fetched server-side (refetch.py excludes
         # organizer submissions), so it's render-only like image_url.
-        url=body.url,
-        image_url=body.image_url,
+        url=url,
+        image_url=image_url,
         price_min=body.price_min,
         price_max=body.price_max,
         currency=normalize_currency(body.currency, has_price),
@@ -398,9 +377,12 @@ async def submit_event(
         # prefilter therefore never scanned the venue's real text. Recheck it
         # here so a saved venue's name can't carry unmoderated explicit/
         # non-event content past the flags insert_normalized_event set.
-        if not event.is_explicit and is_explicit_text(venue.name):
+        venue_explicit, venue_non_event = content_flags(
+            None, None, venue.name, None, [venue.name_en, venue.name_ru]
+        )
+        if venue_explicit:
             event.is_explicit = True
-        if not event.is_non_event and is_non_event_text(None, venue.name):
+        if venue_non_event:
             event.is_non_event = True
     classify_ok = await classify_event(event, db)
     if not classify_ok:
@@ -474,7 +456,7 @@ async def update_own_event(
         # Same scheme-only guard insert_normalized_event applies at submit
         # time — this event.url is never fetched server-side (refetch.py
         # excludes organizer submissions), so it needs no host pin.
-        safe_url = safe_external_url(body.url, SOURCE_SLUG_USER_SUBMISSION)
+        safe_url = safe_render_url(body.url)
         if body.url and not safe_url:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -482,14 +464,7 @@ async def update_own_event(
             )
         event.url = safe_url
     if "image_url" in fields_set:
-        _check_image_host(body.image_url)
-        safe_image_url = safe_external_url(body.image_url, SOURCE_SLUG_USER_SUBMISSION)
-        if body.image_url and not safe_image_url:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=ERROR_IMAGE_URL_SCHEME,
-            )
-        event.image_url = safe_image_url
+        event.image_url = check_image_host(body.image_url)
     if fields_set & {"price_min", "price_max", "currency"}:
         apply_price_edit(event, body, fields_set)
     # Empty list is a no-op: the LLM set a replace overwrote can't be restored,
@@ -536,7 +511,10 @@ async def update_own_event(
     moderated_venue_name = linked_venue.name if linked_venue else event.venue_name
 
     if apply_moderation_flags(
-        event, moderated_venue_name, event.important_info
+        event,
+        moderated_venue_name,
+        linked_venue.name_en if linked_venue else None,
+        linked_venue.name_ru if linked_venue else None,
     ) and event.status == EVENT_STATUS_PUBLISHED:
         event.status = EVENT_STATUS_CLASSIFIED
 

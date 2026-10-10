@@ -16,7 +16,7 @@ from app.constants import (
     HTML_BLOCK_BOUNDARY_TAGS,
     HTML_BLOCK_TAGS_TO_BREAK,
     HTML_CF_EMAIL_MARKERS,
-    HTML_EDGE_BR_RE,
+    HTML_BR_TAG_RE,
     HTML_MULTI_BR_TEMPLATE_RE,
     HTML_PARSER,
     HTML_SANITIZE_ALLOWED_ATTRS,
@@ -29,7 +29,9 @@ from app.constants import (
 from app.ingestion.selectors import CFEMAIL_HREF_MARKER
 
 _MULTI_BR_RE = re.compile(HTML_MULTI_BR_TEMPLATE_RE % (HTML_SANITIZE_MAX_CONSECUTIVE_BR + 1))
-_EDGE_BR_RE = re.compile(HTML_EDGE_BR_RE)
+_BR_TAG_RE = re.compile(HTML_BR_TAG_RE)
+# ASCII-only: bare .strip() would also eat an intentional U+00A0 (see below).
+_ASCII_WS = " \t\n\r\f\v"
 _SELF_CLOSING_BR_PATTERN = re.compile(HTML_SELF_CLOSING_BR_RE)
 
 
@@ -124,6 +126,26 @@ def _at_block_edge(node: Any, inline_tags: frozenset[str], leading: bool) -> boo
         if not isinstance(parent, Tag) or parent.name not in inline_tags:
             return True
         element = parent
+
+
+def _strip_edge_brs(html: str) -> str:
+    """Strip leading/trailing <br> runs (and the whitespace around them).
+
+    Linear: each pass either consumes one whole tag or stops. Never use a
+    regex with nested ``\\s*`` quantifiers around a repeated group here — see
+    HTML_BR_TAG_RE."""
+    html = html.strip(_ASCII_WS)
+    while True:
+        m = _BR_TAG_RE.match(html)
+        if m is None:
+            break
+        html = html[m.end():].lstrip(_ASCII_WS)
+    while html.endswith(">"):
+        idx = html.rfind("<br")
+        if idx == -1 or _BR_TAG_RE.fullmatch(html, idx) is None:
+            break
+        html = html[:idx].rstrip(_ASCII_WS)
+    return html
 
 
 def _collapse_text_whitespace(html: str) -> str:
@@ -232,15 +254,15 @@ def sanitize_html(
     if not cleaned:
         return None
     cleaned = _MULTI_BR_RE.sub("<br>" * HTML_SANITIZE_MAX_CONSECUTIVE_BR, cleaned)
-    cleaned = _EDGE_BR_RE.sub("", cleaned)
+    cleaned = _strip_edge_brs(cleaned)
     if not cleaned:
         return None
     cleaned = _collapse_text_whitespace(cleaned)
     # Re-strip edge <br> runs — removing a trailing/leading empty block above
-    # can expose a bare <br> that the earlier _EDGE_BR_RE pass ran before it
+    # can expose a bare <br> that the earlier _strip_edge_brs pass ran before it
     # existed (e.g. "<p>Real content</p><br><p></p>" → removing the empty <p>
     # leaves a dangling trailing <br>).
-    cleaned = _EDGE_BR_RE.sub("", cleaned)
+    cleaned = _strip_edge_brs(cleaned)
     if not cleaned:
         return None
     # Strip ASCII whitespace only — bare .strip() also treats U+00A0 (nbsp) as

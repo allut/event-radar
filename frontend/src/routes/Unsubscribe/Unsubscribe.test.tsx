@@ -32,6 +32,14 @@ describe('Unsubscribe', () => {
     expect(screen.getByRole('status')).toBeInTheDocument();
   });
 
+  it('strips the reusable token from the address bar (L-9)', () => {
+    const replaceStateSpy = vi.spyOn(window.history, 'replaceState');
+    mockPost.mockReturnValue(new Promise(() => undefined));
+    renderWithProviders(<Unsubscribe />, { route: '/unsubscribe?token=abc123' });
+    expect(replaceStateSpy).toHaveBeenCalledWith({}, '', '/unsubscribe');
+    replaceStateSpy.mockRestore();
+  });
+
   it('fires the unsubscribe POST on mount', () => {
     mockPost.mockReturnValue(new Promise(() => undefined));
     renderWithProviders(<Unsubscribe />, { route: '/unsubscribe?token=abc123' });

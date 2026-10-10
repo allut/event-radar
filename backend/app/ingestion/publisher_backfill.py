@@ -14,6 +14,7 @@ bounded by configured organizer count, not by event/row count.
 import logging
 from datetime import datetime
 from typing import cast
+from urllib.parse import urlsplit
 
 import httpx
 from sqlalchemy import CursorResult, select, update
@@ -32,7 +33,7 @@ from app.constants import (
     TALLINN_TZ,
 )
 from app.ingestion.adapter import load_publisher_lookup
-from app.ingestion.http_client import AsyncRateLimiter
+from app.ingestion.http_client import AsyncRateLimiter, host_guard_hook
 from app.ingestion.sources.fienta import FientaAdapter
 from app.models.models import Event, EventSource, RawEvent, Source
 from app.events.queries import event_not_ended_filter
@@ -143,11 +144,15 @@ async def _backfill_fienta(db: AsyncSession, source: Source, now: datetime) -> i
     live_organizer_by_external_id: dict[str, int] = {}
     limiter = AsyncRateLimiter(FIENTA_MIN_REQUEST_INTERVAL_SECONDS)
     crawl_complete = True
-    async with httpx.AsyncClient(timeout=HTTP_TIMEOUT_SECONDS) as client:
+    async with httpx.AsyncClient(
+        timeout=HTTP_TIMEOUT_SECONDS,
+        event_hooks={"request": [host_guard_hook(urlsplit(base_url).hostname)]},
+    ) as client:
         for org_id in organizer_ids:
             try:
                 items = await adapter.fetch_organizer(client, base_url, org_id, limiter)
-            except httpx.HTTPError as exc:
+            except (httpx.HTTPError, ValueError) as exc:
+                # ValueError: host_guard_hook rejected a links.next hop.
                 log.warning(
                     "publisher_backfill: fienta organizer=%s failed: %s", org_id, exc
                 )

@@ -32,7 +32,7 @@ from app.constants import (
     TALLINN_REGION_BBOX,
     TALLINN_TZ,
 )
-from app.ingestion.content_filters import content_flags
+from app.ingestion.content_filters import content_flags, localized_text_values
 from app.ingestion.http_client import safe_external_url, safe_fetchable_url
 from app.ingestion.pricing import normalize_currency
 from app.models.models import Event, EventSource, IngestionRun, Publisher, RawEvent, Source
@@ -221,6 +221,11 @@ async def insert_normalized_event(
         normalized.description,
         normalized.venue_name,
         normalized.important_info,
+        localized_text_values(
+            normalized.title_localized,
+            normalized.description_localized,
+            normalized.important_info_localized,
+        ),
     )
     try:
         async with db.begin_nested():

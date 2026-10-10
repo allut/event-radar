@@ -5,6 +5,7 @@ shared by the Fienta/Piletilevi adapters and the daily detail-refetch sync.
 """
 
 import json
+import math
 from typing import Any
 
 from bs4 import BeautifulSoup
@@ -14,6 +15,7 @@ from app.constants import (
     LOCALIZED_TEXT_MAX_DESC_CHARS,
     LOCALIZED_TEXT_MAX_TITLE_CHARS,
 )
+from app.ingestion.pricing import parse_bounded_price
 from app.ingestion.selectors import (
     JSONLD_ADDRESS_FIELDS,
     JSONLD_EVENT_TYPE,
@@ -23,14 +25,19 @@ from app.ingestion.selectors import (
 
 def _coerce_float(value: Any) -> float | None:
     """Coerce a JSON-LD numeric field (number or numeric string) to float."""
+    if isinstance(value, bool):
+        return None
+    result: float | None = None
     if isinstance(value, int | float):
-        return float(value)
-    if isinstance(value, str):
+        result = float(value)
+    elif isinstance(value, str):
         try:
-            return float(value)
+            result = float(value)
         except ValueError:
             return None
-    return None
+    # "NaN"/"Infinity" parse as floats; they must never reach a Numeric column
+    # or a coordinate comparison (OWASP audit M-6).
+    return result if result is not None and math.isfinite(result) else None
 
 
 def _jsonld_event_items(data: Any) -> list[dict[str, Any]]:
@@ -155,7 +162,7 @@ def offers_from_jsonld_items(
         for offer in offers_raw:
             if not isinstance(offer, dict):
                 continue
-            price = _coerce_float(offer.get("price"))
+            price = parse_bounded_price(offer.get("price"))
             if price is None:
                 continue
             availability = str(offer.get("availability") or "")

@@ -24,7 +24,9 @@ export default function Unsubscribe() {
   const localePath = useLocalePath();
   const seoMeta = useStaticSeoMeta('seo_title_unsubscribe', locale);
   const [searchParams] = useSearchParams();
-  const token = searchParams.get(AUTH_TOKEN_PARAM);
+  // Captured once: the reusable 365-day token is stripped from the address bar
+  // below, so later renders must not depend on the live query string.
+  const [token] = useState(() => searchParams.get(AUTH_TOKEN_PARAM));
   const [state, setState] = useState<UnsubscribeState>(token ? UI_STATE.working : UI_STATE.error);
   const [errorMsg, setErrorMsg] = useState(token ? '' : t('unsubscribe.error', locale));
   const [resubscribePending, setResubscribePending] = useState(false);
@@ -34,6 +36,9 @@ export default function Unsubscribe() {
     if (!token) return;
     if (called.current) return;
     called.current = true;
+
+    // Keep the long-lived token out of browser history (OWASP audit L-9).
+    window.history.replaceState({}, '', localePath(ROUTES.unsubscribe));
 
     async function run(tok: string) {
       try {
@@ -49,7 +54,7 @@ export default function Unsubscribe() {
       }
     }
     void run(token);
-  }, [token, locale]);
+  }, [token, locale, localePath]);
 
   async function handleResubscribe() {
     if (!token || resubscribePending) return;

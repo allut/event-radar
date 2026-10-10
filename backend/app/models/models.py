@@ -182,6 +182,12 @@ class Organizer(Base):
     # Optional display name (#175) — no logo/contact-info fields, out of scope
     # per docs/organizer-portal.md's Organizer Profile section.
     name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Durable "has authenticated" signal (mirrors User.email_verified). The
+    # weekly cleanup prunes organizers where this is NULL; magic-link rows are
+    # themselves pruned, so they can't serve as that evidence.
+    email_verified_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     magic_links: Mapped[list["OrganizerMagicLink"]] = relationship(
         back_populates="organizer"

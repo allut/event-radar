@@ -728,3 +728,21 @@ class TestFetchDetailPrimaryLocaleHtml:
         # Non-primary locale (et): JSON-LD plain text
         et_desc = descs.get("et")
         assert et_desc == "Eesti tekst"
+
+
+class TestEdgeBrNoBacktracking:
+    """OWASP audit H-1: the edge-<br> pass was cubic on <br>+whitespace+<br>."""
+
+    def test_adversarial_input_is_fast(self):
+        import time
+
+        from app.constants import ORGANIZER_HTML_SANITIZE_ALLOWED_TAGS
+
+        payload = "a<br>" + " " * 14_000 + "<br>" + " " * 14_000 + "x"
+        start = time.perf_counter()
+        sanitize_html(payload, tags=ORGANIZER_HTML_SANITIZE_ALLOWED_TAGS)
+        assert time.perf_counter() - start < 0.5
+
+    def test_edge_brs_still_stripped_and_nbsp_kept(self):
+        assert sanitize_html("<br> <br/>hi<br>  <br> ") == "hi"
+        assert sanitize_html("<br>&nbsp;hi") == "\u00a0hi"

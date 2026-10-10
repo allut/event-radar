@@ -3,7 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api, organizerApi } from '../../api/client';
 import { t, ti } from '../../i18n';
-import { buildMapsUrl, categoryGradient, cx, formatEventDateTime, formatEventShortDate, formatHourMinute, formatPrice, safeUrl, sanitizeHtml, shareEvent, titleWithBrand, trackExternalClick, truncateForMeta, withLocaleQuery } from '../../utils';
+import { buildMapsUrl, categoryGradient, cx, formatEventDateTime, formatEventShortDate, formatHourMinute, formatPrice, numericRouteId, safeUrl, sanitizeHtml, shareEvent, titleWithBrand, trackExternalClick, truncateForMeta, withLocaleQuery } from '../../utils';
 import { useAuth } from '../../hooks/useAuth';
 import { useEventReport } from '../../hooks/useEventReport';
 import { useFitsViewport } from '../../hooks/useFitsViewport';
@@ -35,7 +35,8 @@ interface EventDetailData extends EventData {
 }
 
 export default function EventDetail() {
-  const { id } = useParams<{ id: string }>();
+  const { id: rawId } = useParams<{ id: string }>();
+  const id = numericRouteId(rawId);
   const navigate = useLocaleNavigate();
   const localePath = useLocalePath();
   const authed = useAuth();

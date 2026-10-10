@@ -106,7 +106,7 @@ from app.routers.utils import (
     set_oauth_state_cookie,
     set_session_cookie,
 )
-from app.auth.utils import mask_email
+from app.auth.utils import mark_organizer_verified, mask_email
 
 log = logging.getLogger(__name__)
 # Every organizer endpoint must live under this /organizer/* prefix (or the
@@ -283,6 +283,9 @@ async def verify_organizer_magic_link(
             name=ORGANIZER_GOOGLE_LINK_BINDING_COOKIE_NAME,
             path=ORGANIZER_GOOGLE_LINK_BINDING_COOKIE_PATH,
         )
+
+    if mark_organizer_verified(organizer):
+        await db.commit()
 
     session_token = generate_organizer_session_token(
         organizer.id, organizer.session_token_version
@@ -638,6 +641,8 @@ async def organizer_google_callback(
     else:
         if outcome == GOOGLE_SIGNIN_OUTCOME_AUTO_LINKED:
             await notify_identity_linked(organizer.email, organizer.locale)
+        if mark_organizer_verified(organizer):
+            await db.commit()
         session_token = generate_organizer_session_token(
             organizer.id, organizer.session_token_version
         )

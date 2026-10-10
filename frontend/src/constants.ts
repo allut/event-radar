@@ -95,6 +95,11 @@ export function isGoogleSignInOrganizerEnabled(): boolean {
 // Google-linked account (vs. magic-link-only).
 export const GOOGLE_IDENTITY_PROVIDER = 'google';
 // Magic-link verify token query param (AuthVerify/OrganizerVerify/Unsubscribe).
+// Route params that become API path segments must be plain integers — a decoded
+// `../..` or `x?y` would otherwise steer a cookie-bearing request at another
+// same-origin /api path (OWASP audit L-7).
+export const NUMERIC_ROUTE_ID_RE = /^\d+$/;
+
 export const AUTH_TOKEN_PARAM = 'token';
 // GoogleGMark's default render size (px) — the brand mark's own icon-only
 // SVG viewBox scale, not a design-system --fs-* token (docs/adr/0002).
@@ -1143,18 +1148,18 @@ export const API = {
   publicCounts: '/public/counts',
   emailUnsubscribe: '/email/unsubscribe',
   emailResubscribe: '/email/resubscribe',
-  event: (id: number | string) => `/events/${id}`,
+  event: (id: number | string) => `/events/${encodeURIComponent(String(id))}`,
   organizerEvents: '/organizer/events',
-  organizerEvent: (id: number | string) => `/organizer/events/${id}`,
+  organizerEvent: (id: number | string) => `/organizer/events/${encodeURIComponent(String(id))}`,
   organizerEventImage: '/organizer/events/image',
   organizerProfile: '/organizer/profile',
   organizerContact: '/organizer/contact',
   organizerVenues: '/organizer/venues',
-  organizerVenue: (id: number | string) => `/organizer/venues/${id}`,
+  organizerVenue: (id: number | string) => `/organizer/venues/${encodeURIComponent(String(id))}`,
   organizerClaims: '/organizer/claims',
-  organizerClaim: (id: number | string) => `/organizer/claims/${id}`,
-  organizerClaimCancel: (id: number | string) => `/organizer/claims/${id}/cancel`,
-  organizerClaimRecheck: (id: number | string) => `/organizer/claims/${id}/recheck`,
+  organizerClaim: (id: number | string) => `/organizer/claims/${encodeURIComponent(String(id))}`,
+  organizerClaimCancel: (id: number | string) => `/organizer/claims/${encodeURIComponent(String(id))}/cancel`,
+  organizerClaimRecheck: (id: number | string) => `/organizer/claims/${encodeURIComponent(String(id))}/recheck`,
   organizerClaimLinkRequest: '/organizer/claims/request-link',
   organizerClaimLinkVerify: '/organizer/claims/verify-link',
   organizerClaimSearch: '/organizer/claims/search',
@@ -1166,8 +1171,8 @@ export const API = {
     eventId !== undefined
       ? `/organizer/claims/${id}/events/${eventId}`
       : `/organizer/claims/${id}/event`,
-  organizerClaimEvents: (id: number | string) => `/organizer/claims/${id}/events`,
-  organizerClaimForEvent: (eventId: number | string) => `/organizer/claims/for-event/${eventId}`,
+  organizerClaimEvents: (id: number | string) => `/organizer/claims/${encodeURIComponent(String(id))}/events`,
+  organizerClaimForEvent: (eventId: number | string) => `/organizer/claims/for-event/${encodeURIComponent(String(eventId))}`,
   reports: '/reports',
   adminAuthLogin: '/admin/auth/login',
   adminAuthLogout: '/admin/auth/logout',
@@ -1184,7 +1189,7 @@ export const API = {
   adminClaimGrant: (id: number) => `/admin/claims/${id}/grant`,
   adminClaimDecline: (id: number) => `/admin/claims/${id}/decline`,
   adminClaimRevoke: (id: number) => `/admin/claims/${id}/revoke`,
-  adminEventDetail: (id: number | string) => `/admin/events/${id}`,
+  adminEventDetail: (id: number | string) => `/admin/events/${encodeURIComponent(String(id))}`,
   adminIngestAll: '/admin/ingest',
   adminIngestSource: (slug: string) => `/admin/ingest/${slug}`,
   adminDedupRun: '/admin/dedup',

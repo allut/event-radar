@@ -64,7 +64,13 @@ from app.dedup.rules import (
     run_dedup_pass,
     same_group,
 )
-from app.llm.router import content_hash, llm_available, llm_http_client, llm_json_or_none
+from app.llm.router import (
+    content_hash,
+    llm_available,
+    llm_http_client,
+    llm_json_or_none,
+    strict_bool,
+)
 from app.models.models import Event, LlmCall
 
 log = logging.getLogger(__name__)
@@ -138,9 +144,9 @@ def _verdict_confirms(result: dict) -> bool:
     Raises ``TypeError``/``ValueError`` if ``confidence`` is not numeric —
     callers decide how to treat a malformed response.
     """
-    same = result.get("same", False)
+    same = strict_bool(result.get("same"), False)
     confidence = float(result.get("confidence", 0.0))
-    return bool(same) and confidence >= LLM_DEDUP_CONFIDENCE_THRESHOLD
+    return same and confidence >= LLM_DEDUP_CONFIDENCE_THRESHOLD
 
 
 async def _llm_confirms_pair(

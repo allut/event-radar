@@ -10,6 +10,8 @@ Any LLM-returned value not in the taxonomy is silently dropped.
 
 import asyncio
 import logging
+import math
+import re
 from datetime import datetime
 from typing import Any, cast
 
@@ -40,7 +42,9 @@ from app.constants import (
     LLM_CLASSIFY_PRICE_HINT_FALLBACK,
     LLM_CLASSIFY_PRICE_MATCH_TOLERANCE,
     LLM_CLASSIFY_VENUE_FALLBACK,
+    LLM_CLASSIFY_WHY_GO_BULLET_MAX_CHARS,
     LLM_CLASSIFY_WHY_GO_MAX_BULLETS,
+    LLM_OUTPUT_URL_OR_EMAIL_RE,
     LLM_MAX_PROMPT_CHARS,
     LLM_TASK_CLASSIFY,
     ORGANIZER_SUBMISSION_QUALITY_SCORE_CEILING,
@@ -55,13 +59,20 @@ from app.ingestion.pricing import (
     eur_amounts_from_text,
     eur_price_bounds_from_text,
     normalize_currency,
+    parse_bounded_price,
     price_context_digest,
     strip_fee_amounts,
 )
 import httpx
 
+from app.ingestion.content_filters import is_explicit_text
 from app.ingestion.sanitize import html_to_text
-from app.llm.router import content_hash, llm_http_client, llm_json_or_none
+from app.llm.router import (
+    content_hash,
+    llm_http_client,
+    llm_json_or_none,
+    strict_bool,
+)
 from app.models.models import Event, EventClassification, LlmCall
 from app.ingestion.patterns import alternation_pattern
 from app.events.venue import resolve_venue_name
@@ -112,6 +123,30 @@ def _build_classify_prompt(event: Event, price_context: str | None = None) -> st
         or LLM_CLASSIFY_PRICE_CONTEXT_FALLBACK,
     )
 
+_LLM_URL_OR_EMAIL = re.compile(LLM_OUTPUT_URL_OR_EMAIL_RE)
+
+
+def _llm_flag(raw: dict[str, Any], key: str, default: bool, *, fail_safe: bool) -> bool:
+    """A missing/null key takes the documented default; a present-but-malformed
+    value (e.g. the string "maybe") takes the fail-safe side — quarantine on
+    explicit/non_event, drop on the rest (OWASP audit L-4)."""
+    value = raw.get(key)
+    return default if value is None else strict_bool(value, fail_safe)
+
+
+def _clean_bullets(items: list[Any]) -> list[str]:
+    """Scrub LLM why-go bullets before they reach users (OWASP audit L-5): cap
+    the length, strip URLs/email addresses (prompt-injected link/phishing text)
+    and drop any bullet the explicit-keyword filter flags."""
+    cleaned: list[str] = []
+    for item in items[:LLM_CLASSIFY_WHY_GO_MAX_BULLETS]:
+        bullet = _LLM_URL_OR_EMAIL.sub("", str(item)).strip()[
+            :LLM_CLASSIFY_WHY_GO_BULLET_MAX_CHARS
+        ]
+        if bullet and not is_explicit_text(bullet):
+            cleaned.append(bullet)
+    return cleaned
+
 
 def _parse_classification(raw: dict[str, Any]) -> dict[str, Any]:
     """Extract and validate LLM output. Unknown taxonomy values are dropped."""
@@ -130,45 +165,44 @@ def _parse_classification(raw: dict[str, Any]) -> dict[str, Any]:
     raw_why_go = raw.get("why_go", [])
     if isinstance(raw_why_go, dict):
         why_go_localized = {
-            loc: [
-                str(b)
-                for b in raw_why_go.get(loc, [])[:LLM_CLASSIFY_WHY_GO_MAX_BULLETS]
-            ]
+            loc: _clean_bullets(raw_why_go.get(loc, []))
             if isinstance(raw_why_go.get(loc, []), list)
             else []
             for loc in VALID_LOCALES
         }
         why_go_bullets = why_go_localized.get(DEFAULT_USER_LOCALE) or []
     elif isinstance(raw_why_go, list):
-        why_go_bullets = [str(b) for b in raw_why_go[:LLM_CLASSIFY_WHY_GO_MAX_BULLETS]]
+        why_go_bullets = _clean_bullets(raw_why_go)
         why_go_localized = None
     else:
         why_go_bullets = []
         why_go_localized = None
     quality = raw.get("quality")
     try:
-        quality = max(0.0, min(1.0, float(quality))) if quality is not None else None
+        quality = float(quality) if quality is not None else None
     except (TypeError, ValueError):
         quality = None
+    # max(0, min(1, nan)) is 1.0 — a NaN/Infinity quality would rank as maximum.
+    quality = max(0.0, min(1.0, quality)) if quality is not None and math.isfinite(quality) else None
     language = (
         str(raw.get("language", "")).strip()[:LLM_CLASSIFY_LANGUAGE_CODE_MAX_LEN]
         or None
     )
 
-    price_min = _parse_price(raw.get("price_min"))
-    price_max = _parse_price(raw.get("price_max"))
+    price_min = parse_bounded_price(raw.get("price_min"))
+    price_max = parse_bounded_price(raw.get("price_max"))
     has_price = price_min is not None or price_max is not None
     currency = normalize_currency(raw.get("currency"), has_price)
     if currency is not None and len(currency) > CURRENCY_CODE_MAX_LEN:
         currency = None
 
-    explicit = bool(raw.get("explicit", LLM_CLASSIFY_EXPLICIT_DEFAULT))
-    non_event = bool(raw.get("non_event", LLM_CLASSIFY_NON_EVENT_DEFAULT))
-    in_target_city = bool(
-        raw.get("in_target_city", LLM_CLASSIFY_IN_TARGET_CITY_DEFAULT)
+    explicit = _llm_flag(raw, "explicit", LLM_CLASSIFY_EXPLICIT_DEFAULT, fail_safe=True)
+    non_event = _llm_flag(raw, "non_event", LLM_CLASSIFY_NON_EVENT_DEFAULT, fail_safe=True)
+    in_target_city = _llm_flag(
+        raw, "in_target_city", LLM_CLASSIFY_IN_TARGET_CITY_DEFAULT, fail_safe=False
     )
-    has_free_tier = bool(
-        raw.get("has_free_tier", LLM_CLASSIFY_HAS_FREE_TIER_DEFAULT)
+    has_free_tier = _llm_flag(
+        raw, "has_free_tier", LLM_CLASSIFY_HAS_FREE_TIER_DEFAULT, fail_safe=False
     )
 
     return {
@@ -186,15 +220,6 @@ def _parse_classification(raw: dict[str, Any]) -> dict[str, Any]:
         "in_target_city": in_target_city,
         "has_free_tier": has_free_tier,
     }
-
-
-def _parse_price(value: Any) -> float | None:
-    """Parse an LLM-returned price field. Negative values are treated as unstated."""
-    try:
-        price = float(value) if value is not None else None
-    except (TypeError, ValueError):
-        return None
-    return price if price is not None and price >= 0 else None
 
 
 def _validate_llm_prices(

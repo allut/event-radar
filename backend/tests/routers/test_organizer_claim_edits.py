@@ -586,6 +586,42 @@ class TestUpdateClaimEvent:
         assert exc.value.detail == ERROR_CLAIM_EDIT_URL_DOMAIN
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "field,value",
+        [
+            ("url", "https://evil.example.com\\@fienta.ee/e/x"),
+            ("url", "https://u:p@fienta.ee/e/x"),
+            ("image_url", "https://evil.example.com\\@cdn.example/x.png"),
+        ],
+    )
+    async def test_parser_differential_url_rejected(
+        self, mock_db, make_request, make_organizer, make_event, field, value
+    ):
+        """OWASP audit M-1: urlparse reads the host after the backslash/userinfo,
+        a browser reads the host before it — such spellings are refused."""
+        from app.routers.organizer_claim_edits import PatchClaimEventBody, update_claim_event
+
+        organizer = make_organizer(organizer_id=5)
+        event = make_event()
+        event.pinned_fields = []
+        claim = _fake_claim(verification_domain="fienta.ee")
+        stack, _ = _patched(
+            own_claim_or_404=AsyncMock(return_value=claim),
+            claim_event_for_id=AsyncMock(return_value=event),
+        )
+        mock_db.scalar.side_effect = [0]
+        with stack:
+            with pytest.raises(HTTPException) as exc:
+                await update_claim_event(
+                    1,
+                    PatchClaimEventBody(**{field: value}),
+                    make_request(method="PATCH", path="/organizer/claims/1/event"),
+                    current_organizer=organizer,
+                    db=mock_db,
+                )
+        assert exc.value.status_code == http.HTTPStatus.BAD_REQUEST
+
+    @pytest.mark.asyncio
     async def test_url_on_verified_domain_accepted_and_pinned(
         self, mock_db, make_request, make_organizer, make_event
     ):

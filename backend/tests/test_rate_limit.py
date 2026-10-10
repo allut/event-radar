@@ -244,3 +244,17 @@ async def test_google_signin_callback_returns_429_after_burst(monkeypatch, mock_
 
     assert statuses[:burst] == [http.HTTPStatus.FOUND] * burst
     assert statuses[burst] == http.HTTPStatus.TOO_MANY_REQUESTS
+
+
+def test_client_key_buckets_ipv6_to_slash_64():
+    """OWASP audit L-10: rotating within one /64 must not mint new buckets."""
+    a = client_key(_request([(b"x-forwarded-for", b"2001:db8:1:2:aaaa::1")]))
+    b = client_key(_request([(b"x-forwarded-for", b"2001:db8:1:2:bbbb::9")]))
+    other = client_key(_request([(b"x-forwarded-for", b"2001:db8:1:3::1")]))
+    assert a == b == "2001:db8:1:2::/64"
+    assert other != a
+
+
+def test_client_key_ipv4_unchanged_and_mapped_ipv6_reverts():
+    assert client_key(_request([(b"x-forwarded-for", b"198.51.100.7")])) == "198.51.100.7"
+    assert client_key(_request([(b"x-forwarded-for", b"::ffff:198.51.100.7")])) == "198.51.100.7"

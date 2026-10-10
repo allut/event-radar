@@ -5,6 +5,7 @@ before any LLM call — see CLAUDE.md "Content Safety" and "Non-Event Filter".
 """
 
 import re
+from collections.abc import Iterable
 
 from app.constants import (
     CONTENT_FILTER_WHITESPACE_COLLAPSE_RE,
@@ -54,11 +55,20 @@ def is_non_event_text(title: str | None, venue_name: str | None) -> bool:
     return bool(_NON_EVENT_VENUE_PATTERN.search(venue_text))
 
 
+def localized_text_values(*maps: dict[str, str] | None) -> list[str]:
+    """Flatten ``*_localized`` locale->text maps into their text values so the
+    explicit filter can scan EN/RU content too — users in those locales (and
+    the digest) are served ``resolve_title()``-style localized text, which the
+    Estonian-only ``*_orig`` scan never saw (OWASP audit M-5)."""
+    return [text for m in maps if m for text in m.values() if isinstance(text, str) and text]
+
+
 def content_flags(
     title: str | None,
     description: str | None,
     venue_name: str | None,
     important_info: str | None,
+    extra_explicit_texts: Iterable[str | None] = (),
 ) -> tuple[bool, bool]:
     """(is_explicit, is_non_event) computed together, converting each distinct
     field's HTML to plain text exactly once.
@@ -74,8 +84,13 @@ def content_flags(
     venue_text = (html_to_text(venue_name) or "") if venue_name else ""
     important_info_text = (html_to_text(important_info) or "") if important_info else ""
 
+    extra_text = [
+        (html_to_text(t) or "") for t in extra_explicit_texts if t and isinstance(t, str)
+    ]
     explicit_input = " ".join(
-        t for t in (title_text, description_text, venue_text, important_info_text) if t
+        t
+        for t in (title_text, description_text, venue_text, important_info_text, *extra_text)
+        if t
     )
     explicit_input = re.sub(CONTENT_FILTER_WHITESPACE_COLLAPSE_RE, " ", explicit_input)
     is_explicit = bool(_EXPLICIT_KEYWORD_PATTERN.search(explicit_input))

@@ -77,7 +77,11 @@ from app.constants import (
     TALLINN_TZ,
     VALID_LOCALES,
 )
-from app.claims.lifecycle import approved_claim_exists, auto_decline_other_pending_claims
+from app.claims.lifecycle import (
+    approved_claim_exists,
+    auto_decline_other_pending_claims,
+    transition_pending_claim,
+)
 from app.claims.pinning import clear_claim_pins, representative_event_for_claim
 from app.claims.target_resolution import ClaimTarget, bulk_resolve_publisher_events
 from app.db import AsyncSessionLocal, run_in_session
@@ -644,13 +648,22 @@ async def admin_grant_claim(claim_id: int, body: _ResolutionBody, request: Reque
                     status_code=status.HTTP_409_CONFLICT,
                     detail=ERROR_CLAIM_TARGET_ALREADY_APPROVED,
                 )
-            claim.status = CLAIM_STATUS_APPROVED
-            claim.resolved_at = datetime.now(TALLINN_TZ)
-            organizer = await db.get(Organizer, claim.organizer_id)
-            event = await representative_event_for_claim(db, claim)
-            result = {"id": claim.id, "status": claim.status, "note": note}
-            emit_admin_log = log_admin_action(db, ADMIN_ACTION_GRANT_CLAIM, claim_id, result)
             try:
+                transitioned = await transition_pending_claim(
+                    db, claim, CLAIM_STATUS_APPROVED, datetime.now(TALLINN_TZ)
+                )
+                if not transitioned:
+                    await db.rollback()
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail=ERROR_CLAIM_ALREADY_RESOLVED,
+                    )
+                organizer = await db.get(Organizer, claim.organizer_id)
+                event = await representative_event_for_claim(db, claim)
+                result = {"id": claim.id, "status": claim.status, "note": note}
+                emit_admin_log = log_admin_action(
+                    db, ADMIN_ACTION_GRANT_CLAIM, claim_id, result
+                )
                 await db.commit()
             except IntegrityError:
                 await db.rollback()
@@ -700,8 +713,14 @@ async def admin_decline_claim(claim_id: int, body: _ResolutionBody, request: Req
                     status_code=status.HTTP_409_CONFLICT,
                     detail=ERROR_CLAIM_ALREADY_RESOLVED,
                 )
-            claim.status = CLAIM_STATUS_REVOKED
-            claim.resolved_at = datetime.now(TALLINN_TZ)
+            if not await transition_pending_claim(
+                db, claim, CLAIM_STATUS_REVOKED, datetime.now(TALLINN_TZ)
+            ):
+                await db.rollback()
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=ERROR_CLAIM_ALREADY_RESOLVED,
+                )
             organizer = await db.get(Organizer, claim.organizer_id)
             event = await representative_event_for_claim(db, claim)
             result = {"id": claim.id, "status": claim.status, "note": note}

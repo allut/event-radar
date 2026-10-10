@@ -63,7 +63,11 @@ from app.ingestion.selectors import (
     PILETILEVI_HOST,
     SUSPECT_LOCALE_TITLE_PREFIXES,
 )
-from app.ingestion.content_filters import content_flags
+from app.ingestion.content_filters import (
+    content_flags,
+    is_explicit_text,
+    localized_text_values,
+)
 from app.ingestion.http_client import (
     host_guard_hook,
     host_is_allowed,
@@ -85,6 +89,7 @@ from app.claims.lifecycle import bulk_dormant_pinned_event_ids
 from app.claims.pinning import pin_key
 from app.ingestion.price_fallback import PRICE_FALLBACK_EXTRACTORS
 from app.ingestion.sanitize import sanitize_html
+from app.ingestion.adapter import coords_in_estonia
 from app.ingestion.geocode import is_suspect_venue_name
 from app.ingestion.sources.estonia_concert_hall import (
     estonia_concert_hall_localized_text,
@@ -322,6 +327,15 @@ async def _backfill_localized_text(
         event.description_localized = existing_descs
     if loc_titles or loc_descs:
         summary["localized_text_backfilled"] += 1
+        # Backfilled EN/RU text reaches readers without ever passing the
+        # ingest-time filter (OWASP audit M-5) — scan just what was added.
+        if not event.is_explicit and is_explicit_text(
+            *localized_text_values(loc_titles, loc_descs)
+        ):
+            event.is_explicit = True
+            summary["flagged_explicit"] += 1
+            if event.status == EVENT_STATUS_PUBLISHED:
+                event.status = EVENT_STATUS_CLASSIFIED
 
 
 async def _process_one(
@@ -373,13 +387,23 @@ async def _process_one(
         _mark_synced(event, now)
         return True
 
+    detail_lat = location.get("lat") if location else None
+    detail_lng = location.get("lng") if location else None
+    if detail_lat is None or detail_lng is None or not coords_in_estonia(
+        detail_lat, detail_lng
+    ):
+        # Same Estonia-bbox gate the ingest path applies (fienta._merge_location):
+        # an off-country or non-finite detail coordinate must not overwrite a
+        # good stored one (OWASP audit M-6). NaN fails the comparisons too.
+        detail_lat = detail_lng = None
+
     changed = _reconcile(
         event,
         summary,
         detail_name=location.get("venue_name") if location else None,
         detail_address=location.get("venue_address") if location else None,
-        detail_lat=location.get("lat") if location else None,
-        detail_lng=location.get("lng") if location else None,
+        detail_lat=detail_lat,
+        detail_lng=detail_lng,
         price_min=price_min,
         price_max=price_max,
         currency=currency,
@@ -595,6 +619,11 @@ def _reconcile_venue_name(event: Event, summary: dict, detail_name: object) -> b
             event.description_orig,
             event.venue_name,
             event.important_info,
+            localized_text_values(
+                event.title_localized,
+                event.description_localized,
+                event.important_info_localized,
+            ),
         )
         if not event.is_explicit and newly_explicit:
             event.is_explicit = True

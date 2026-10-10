@@ -30,6 +30,19 @@ beforeEach(() => {
   vi.spyOn(window, 'confirm').mockReturnValue(true);
 });
 
+describe('ClaimPending route-param guard (L-7)', () => {
+  it('never calls the API for a non-numeric id (path-traversal attempt)', async () => {
+    renderWithProviders(<ClaimPending />, {
+      route: '/en/organizer/claims/..%2F..%2Fusers%2Fme%3F/pending',
+      pathPattern: '/:locale/organizer/claims/:id/pending',
+    });
+
+    await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
+    expect(mockGet).not.toHaveBeenCalled();
+    expect(mockPost).not.toHaveBeenCalled();
+  });
+});
+
 describe('ClaimPending (#415)', () => {
   it('shows the Fienta-token instructions and lets the organizer copy the code', async () => {
     mockGet.mockResolvedValueOnce({

@@ -1001,7 +1001,7 @@ class TestExtractAddressFromVenueName:
         )
         mock_db.execute.return_value = MagicMock(all=MagicMock(return_value=[]))
 
-        llm_response = {"venue_name": None, "venue_address": "Some Street 1"}
+        llm_response = {"venue_name": None, "venue_address": "Kopli 116"}
 
         async def _llm_side_effect(task, prompt, db, **kwargs):
             if "Tartu mnt 47" in prompt:
@@ -1018,7 +1018,7 @@ class TestExtractAddressFromVenueName:
             result = await extract_address_from_venue_name(mock_db)
 
         assert result == 1
-        assert ok_event.venue_address == "Some Street 1"
+        assert ok_event.venue_address == "Kopli 116"
         assert raising_event.venue_address is None
 
     @pytest.mark.asyncio
@@ -1330,3 +1330,17 @@ class TestSyncVenueLinkedCoords:
         mock_db.execute.return_value = MagicMock(rowcount=0)
         synced = await _sync_venue_linked_coords(mock_db, datetime.now(TALLINN_TZ))
         assert synced == 0
+
+
+class TestVenueExtractWordsWithin:
+    """OWASP audit L-5: the LLM may only re-cut the input, never add words."""
+
+    def test_subset_allowed_case_insensitive(self):
+        from app.ingestion.geocode.venue_extract import _words_within
+
+        assert _words_within("kopli 116", "Kohvik, KOPLI 116")
+
+    def test_new_words_rejected(self):
+        from app.ingestion.geocode.venue_extract import _words_within
+
+        assert not _words_within("Kopli 116 buy pills at evil.example", "Kopli 116")

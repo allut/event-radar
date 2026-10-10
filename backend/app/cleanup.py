@@ -23,8 +23,11 @@ from app.models.models import (
     Event,
     IngestionRun,
     LlmCall,
+    Claim,
     Organizer,
+    OrganizerIdentity,
     OrganizerMagicLink,
+    Venue,
     RawEvent,
     RawInboundEmail,
     User,
@@ -132,17 +135,10 @@ async def cleanup_stale_data(db: AsyncSession, *, dry_run: bool = False) -> dict
         dry_run=dry_run,
     )
 
-    # Organizer has no verified-login flag (unlike User.email_verified), so
-    # "never proven" is approximated the same way: no consumed magic link
-    # ever, and no event submitted (an organizer can only submit once
-    # authenticated, i.e. once a magic link WAS consumed — this second check
-    # is defense-in-depth against that invariant ever drifting).
-    no_used_organizer_link = ~exists(
-        select(OrganizerMagicLink.id).where(
-            OrganizerMagicLink.organizer_id == Organizer.id,
-            OrganizerMagicLink.used_at.is_not(None),
-        )
-    )
+    # Organizer "never proven" = email_verified_at IS NULL (stamped on every
+    # sign-in path; the magic-link rows are pruned above so they cannot be the
+    # evidence). Defense-in-depth: also spare anything carrying work or trust —
+    # a verified flag, a linked identity, a claim, a venue, or a submitted event.
     no_pending_organizer_link = ~exists(
         select(OrganizerMagicLink.id).where(
             OrganizerMagicLink.organizer_id == Organizer.id,
@@ -150,17 +146,21 @@ async def cleanup_stale_data(db: AsyncSession, *, dry_run: bool = False) -> dict
             OrganizerMagicLink.expires_at > now,
         )
     )
-    no_submitted_events = ~exists(
-        select(Event.id).where(Event.submitted_by_organizer_id == Organizer.id)
+    no_organizer_work = and_(
+        ~exists(select(Event.id).where(Event.submitted_by_organizer_id == Organizer.id)),
+        ~exists(select(OrganizerIdentity.id).where(OrganizerIdentity.organizer_id == Organizer.id)),
+        ~exists(select(Claim.id).where(Claim.organizer_id == Organizer.id)),
+        ~exists(select(Venue.id).where(Venue.organizer_id == Organizer.id)),
     )
     summary["organizers_unverified"] = await _count_or_delete(
         db,
         Organizer,
         and_(
             Organizer.created_at < unverified_cutoff,
-            no_used_organizer_link,
+            Organizer.email_verified_at.is_(None),
+            Organizer.verified == false(),
             no_pending_organizer_link,
-            no_submitted_events,
+            no_organizer_work,
         ),
         dry_run=dry_run,
     )

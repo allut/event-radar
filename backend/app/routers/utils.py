@@ -4,6 +4,7 @@ import asyncio
 import base64
 import json
 import logging
+from urllib.parse import unquote, urlsplit
 from collections.abc import AsyncIterator, Awaitable, Callable
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -19,6 +20,9 @@ from sqlalchemy.orm import InstrumentedAttribute
 from app.auth.tokens import oauth_state_ttl_seconds
 from app.config import settings
 from app.constants import (
+    ALLOWED_IMAGE_HOSTS,
+    CLOUDINARY_DELIVERY_PATH_TEMPLATE,
+    ERROR_IMAGE_HOST_NOT_ALLOWED,
     CLAIM_DNS_TXT_RECORD_LABEL,
     CLAIM_DNS_VERIFICATION_MECHANISMS,
     DEFAULT_USER_LOCALE,
@@ -74,7 +78,8 @@ from app.events.venue import (
 )
 from app.email.report_reporter import send_report_outcome_email
 from app.email.resend import resend_http_client
-from app.ingestion.content_filters import content_flags
+from app.ingestion.content_filters import content_flags, localized_text_values
+from app.ingestion.http_client import safe_render_url
 from app.ingestion.pricing import normalize_currency
 from app.ingestion.sanitize import sanitize_html
 from app.models.models import (
@@ -885,9 +890,19 @@ def apply_moderation_flags(
     texts (e.g. ``important_info``) join the explicit scan. Returns True when
     either flag was newly set, so the caller can pull a published event back
     to classified."""
-    extras = " ".join(t for t in extra_explicit_texts if t) or None
+    # Every user-visible text, not just the Estonian originals: EN/RU readers
+    # and the digest are served the *_localized values (OWASP audit M-5).
+    extras = [
+        *(t for t in extra_explicit_texts if t),
+        event.important_info,
+        *localized_text_values(
+            event.title_localized,
+            event.description_localized,
+            event.important_info_localized,
+        ),
+    ]
     is_explicit, is_non_event = content_flags(
-        event.title_orig, event.description_orig, venue_name, extras
+        event.title_orig, event.description_orig, venue_name, None, extras
     )
     flagged = False
     if is_explicit and not event.is_explicit:
@@ -1027,3 +1042,35 @@ def claim_dns_record_name(mechanism: str | None, domain: str | None) -> str | No
     if mechanism in CLAIM_DNS_VERIFICATION_MECHANISMS and domain:
         return f"{CLAIM_DNS_TXT_RECORD_LABEL}.{domain}"
     return None
+
+
+def check_image_host(image_url: str | None) -> str | None:
+    """Reject an organizer-submission image_url that isn't one of OUR signed
+    Cloudinary uploads and return its re-serialized form (None for empty).
+
+    The host must be the delivery domain (see ALLOWED_IMAGE_HOSTS) AND the
+    path must sit under this account's ``/{cloud_name}/image/upload/`` —
+    res.cloudinary.com serves every Cloudinary account (and remote-fetches
+    other sites), so the host alone would still let an arbitrary third-party
+    image become a tracking pixel once the digest embeds it as an <img> (see
+    app/email/digest.py). Parser-differential spellings (``\\``, userinfo,
+    ports) are refused up front by ``safe_render_url`` and the stored value is
+    its re-serialized form (OWASP audit M-1)."""
+    if not image_url:
+        return None
+    safe = safe_render_url(image_url)
+    cloud_name = settings.CLOUDINARY_CLOUD_NAME
+    if safe is not None:
+        parts = urlsplit(safe)
+        path = unquote(parts.path)
+        if (
+            parts.hostname in ALLOWED_IMAGE_HOSTS
+            and cloud_name
+            and path.startswith(CLOUDINARY_DELIVERY_PATH_TEMPLATE.format(cloud_name=cloud_name))
+            and ".." not in path.split("/")
+        ):
+            return safe
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail=ERROR_IMAGE_HOST_NOT_ALLOWED,
+    )

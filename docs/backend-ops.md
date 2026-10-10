@@ -68,7 +68,7 @@ Manual pipeline triggers: `POST /admin/dedup`, `POST /admin/classify`, `POST /ad
 | `raw_inbound_emails` | `RAW_INBOUND_EMAILS_RETENTION_DAYS` (90) | |
 | `daily_feeds` | `DAILY_FEEDS_RETENTION_DAYS` (30) | |
 | `users` (unverified only) | `UNVERIFIED_ACCOUNT_RETENTION_DAYS` (30) | only `email_verified = false` rows with no unused, unexpired magic link — a row `_get_or_create_user` inserts on an unauthenticated `POST /auth/request-link` before the address is proven reachable (see `docs/security.md`'s email verification gate for the full rationale) |
-| `organizers` (unverified only) | `UNVERIFIED_ACCOUNT_RETENTION_DAYS` (30) | only rows with no consumed magic link, no unused-unexpired magic link, and no submitted event — mirrors the `users` sweep for the organizer auth track, which has no `email_verified` column of its own |
+| `organizers` (unverified only) | `UNVERIFIED_ACCOUNT_RETENTION_DAYS` (30) | only rows with `email_verified_at IS NULL` (stamped on every sign-in path: magic link, claim link, Google), `verified = false`, no unused-unexpired magic link, and no submitted event, linked identity, claim or venue. Magic-link rows are pruned earlier in the same job, so they are never the evidence (OWASP audit H-2) |
 
 `POST /admin/cleanup` triggers this on demand — like every other destructive admin/maintenance tool in this codebase, it **defaults to dry-run** (`?dry_run=false` to actually delete).
 

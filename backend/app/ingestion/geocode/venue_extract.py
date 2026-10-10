@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import re
 from datetime import datetime, timedelta
 
 import httpx
@@ -71,6 +72,13 @@ def suspect_venue_name_sql() -> ColumnElement[bool]:
         Event.venue_name.op("~*")(_SQL_DIRECTION_KEYWORD_RE),
         func.length(Event.venue_name) > VENUE_NAME_SUSPECT_MAX_LEN,
     )
+
+
+def _words_within(output: str, source: str) -> bool:
+    """True when every alphanumeric word of ``output`` occurs in ``source``
+    (case-insensitive)."""
+    source_words = set(re.findall(r"\w+", source.casefold()))
+    return all(w in source_words for w in re.findall(r"\w+", output.casefold()))
 
 
 async def _prefetch_venue_extract_cache(
@@ -247,6 +255,14 @@ async def extract_address_from_venue_name(db: AsyncSession) -> int:
         # matched its full-named EN sibling). No address → leave the event
         # untouched, but start the retry cooldown so it stops requalifying
         # every run and starving newer candidates.
+        # The LLM may only re-cut the text it was given: every word of what it
+        # returns must already be in the input name, so a prompt-injected
+        # venue_name can never smuggle new, unmoderated content onto a
+        # published event (OWASP audit L-5).
+        if new_address is not None and not _words_within(new_address, name):
+            new_address = None
+        if new_name is not None and not _words_within(new_name, name):
+            new_name = None
         if new_address is None:
             for event in events:
                 event.venue_extract_attempted_at = now

@@ -1425,6 +1425,21 @@ TIME_MORNING_START = 6
 LLM_MAX_PROMPT_CHARS = 1200  # cap on event text passed to classification prompt
 IMPORTANT_INFO_MAX_CHARS = 1200  # cap on Piletilevi "important info" text in the prompt
 PRICE_CONTEXT_MAX_CHARS = 700  # cap on the price-lines digest passed to the prompt
+# Cap on each raw text scanned for price lines — bounds request-path work on a
+# 30k-char organizer description (OWASP audit M-4).
+PRICE_CONTEXT_INPUT_MAX_CHARS = 20_000
+# Upper bound (exclusive) for any scraped/LLM-derived price. events.price_* are
+# Numeric(10,2); an inf/1e12 from json.loads("Infinity") raised DataError at the
+# job's single commit and rolled back the whole batch (OWASP audit M-6).
+PRICE_MAX_VALUE = 10**7
+# Deprecated IPv6 site-local range; ipaddress.is_global still reports it global.
+SITE_LOCAL_IPV6_CIDR = "fec0::/10"
+# ISO-4217 codes accepted by normalize_currency — anything else is dropped (a
+# prompt-injected "XYZ" must not bypass the EUR literal-amount check).
+VALID_CURRENCY_CODES: frozenset[str] = frozenset(
+    "AED AUD BGN BRL CAD CHF CNY CZK DKK EUR GBP HKD HUF ILS INR ISK JPY KRW MXN "
+    "NOK NZD PLN RON RUB RSD SEK SGD THB TRY UAH USD ZAR BYN KZT GEL AMD AZN MDL MKD BAM".split()
+)
 LLM_MAX_TOKENS = 400  # max completion tokens per LLM call
 LLM_REASONING_MAX_TOKENS = 600  # ceiling (project hard cap); leaves room for reasoning + answer
 LLM_DEDUP_CONFIDENCE_THRESHOLD: float = (
@@ -1462,6 +1477,11 @@ AGGREGATE_LAST_VALUE_FIELDS = frozenset(
 )
 
 LLM_CLASSIFY_WHY_GO_MAX_BULLETS = 3
+# Per-bullet cap and scrub for LLM "why go" text that ships verbatim in the
+# digest (OWASP audit L-5): URLs/emails are stripped, an explicit bullet is
+# dropped.
+LLM_CLASSIFY_WHY_GO_BULLET_MAX_CHARS = 200
+LLM_OUTPUT_URL_OR_EMAIL_RE = r"(?:https?://|www\.)\S+|\S+@\S+\.\S+"
 LLM_CLASSIFY_LANGUAGE_CODE_MAX_LEN = 5
 CURRENCY_CODE_MAX_LEN = 3  # mirrors Event.currency String(3)
 LLM_CLASSIFY_VENUE_FALLBACK = "unknown"
@@ -1802,8 +1822,12 @@ FREE_TIER_KEYWORDS: frozenset[str] = frozenset({"free", "tasuta", "беспла�
 # being mistaken for the currency code. Used to deterministically widen the
 # classifier's [price_min, price_max] envelope against the literal amounts in a
 # multi-tier price_hint.
+# Digit runs are bounded (\d{1,7}) and the amount-first branch refuses to start
+# mid-run ((?<!\d)) — the unbounded form rescanned a long digit run from every
+# start position (quadratic; OWASP audit M-4).
 CURRENCY_AMOUNT_RE = (
-    r"(?:€|\bEUR\b)\s*(\d+(?:[.,]\d{1,2})?)|(\d+(?:[.,]\d{1,2})?)\s*(?:€|\bEUR\b)"
+    r"(?:€|\bEUR\b)\s*(\d{1,7}(?:[.,]\d{1,2})?)(?!\d)"
+    r"|(?<!\d)(\d{1,7}(?:[.,]\d{1,2})?)\s*(?:€|\bEUR\b)"
 )
 
 # CORS — restricted to the methods/headers the SPA actually sends (see
@@ -2020,8 +2044,10 @@ CONTENT_FILTER_WHITESPACE_COLLAPSE_RE = r"\s+"
 # _MULTI_BR_RE: collapses a run of more than HTML_SANITIZE_MAX_CONSECUTIVE_BR
 # <br> tags; %d is filled in with HTML_SANITIZE_MAX_CONSECUTIVE_BR + 1.
 HTML_MULTI_BR_TEMPLATE_RE = r"(?:<br\s*/?>\s*){%d,}"
-# _EDGE_BR_RE: strips leading/trailing <br> runs left after block-tag conversion.
-HTML_EDGE_BR_RE = r"^(?:\s*<br\s*/?>\s*)+|(?:\s*<br\s*/?>\s*)+$"
+# _BR_TAG_RE: one whole <br> tag. _strip_edge_brs peels leading/trailing runs
+# with it iteratively — a single alternation regex over the runs backtracked
+# cubically on "<br>" + long whitespace + "<br>" (OWASP audit H-1).
+HTML_BR_TAG_RE = r"<br\s*/?>"
 # _WHITESPACE_RUN_RE: collapses ASCII whitespace runs within text nodes
 # (deliberately excludes U+00A0/nbsp — see sanitize.py's docstring).
 HTML_WHITESPACE_RUN_RE = r"[ \t\n\r\f\v]+"
@@ -2113,6 +2139,24 @@ ERROR_PERSONA_UNKNOWN = "Unknown persona slug(s): {missing}"
 ERROR_SUBMISSION_SOURCE_NOT_CONFIGURED = (
     "Submission source not configured; contact support."
 )
+# URL render-safety (http_client.safe_render_url, OWASP audit M-1): characters
+# Python's urlsplit/httpx and the WHATWG URL parser disagree about ("\\" is a
+# path separator to browsers, a userinfo char to urlsplit), plus controls and
+# whitespace that parsers silently strip. Non-ASCII is rejected in the
+# authority only (unicode paths are legitimate; IDN hosts are not accepted).
+URL_RENDER_FORBIDDEN_RE = r"[\\\x00-\x20\x7f]"
+# Hard cap on organizer/claimant-supplied URLs (L-6) — also bounds every
+# /explore, /public/showcase and digest payload that carries them.
+URL_MAX_LEN = 2048
+# Request-body bounds (OWASP audit L-6).
+AUTH_TOKEN_MAX_LEN = 2048
+# Rate-limit bucket width for IPv6 clients (one subscriber is typically a /64).
+RATE_LIMIT_IPV6_PREFIX_LEN = 64
+CONTACT_HONEYPOT_MAX_LEN = 2048
+ORGANIZER_OWN_CLAIMS_LIST_LIMIT = 200
+# Claim-edit `unpin` list bounds (pin_key() shapes are short; OWASP audit L-6).
+CLAIM_UNPIN_MAX_ITEMS = 32
+CLAIM_UNPIN_KEY_MAX_LEN = 64
 ERROR_IMAGE_HOST_NOT_ALLOWED = (
     "Image URL must be uploaded via POST /organizer/events/image "
     "(res.cloudinary.com)."

@@ -41,6 +41,24 @@ def _content_hash(text: str) -> str:
     return hashlib.sha256(text.encode()).hexdigest()
 
 
+def strict_bool(value: Any, default: bool) -> bool:
+    """Parse an LLM boolean field. Only real booleans and the strings
+    "true"/"false" are understood; a missing key (None) takes ``default``, and
+    any other value ALSO takes ``default`` — ``bool("false")`` is True, so the
+    old ``bool(raw.get(...))`` turned a stringified "false" into a MERGE in the
+    dedup tiebreaker (OWASP audit L-4). Callers pass the fail-safe default for
+    their field (explicit/non_event -> True, same -> False)."""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        lowered = value.strip().lower()
+        if lowered == "true":
+            return True
+        if lowered == "false":
+            return False
+    return default
+
+
 def content_hash(text: str) -> str:
     """Public delegate for ``_content_hash`` — lets other modules derive the
     identical cache key ``llm_json`` stores in ``llm_calls.content_hash``."""

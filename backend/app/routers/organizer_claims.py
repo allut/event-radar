@@ -39,6 +39,9 @@ from app.claims.lifecycle import (
 from app.claims.pinning import bulk_resolve_series_events
 from app.ingestion.http_client import host_matches_domain
 from app.constants import (
+    AUTH_TOKEN_MAX_LEN,
+    BROWSE_QUERY_MAX_LEN,
+    ORGANIZER_OWN_CLAIMS_LIST_LIMIT,
     EVENT_SEARCH_TEXT_SQL,
     ADMIN_ACTION_REVOKE_CLAIM,
     CLAIM_AUTOMATED_VERIFICATION_MECHANISMS,
@@ -105,7 +108,7 @@ from app.events.queries import (
     select_events_with_classification,
 )
 from app.events.venue import resolve_venue_name
-from app.auth.utils import mask_email
+from app.auth.utils import mark_organizer_verified, mask_email
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/organizer/claims", tags=["organizer-claims"])
@@ -127,7 +130,7 @@ class ClaimLinkRequestBody(BaseModel):
 
 
 class ClaimLinkVerifyBody(BaseModel):
-    token: str
+    token: str = Field(max_length=AUTH_TOKEN_MAX_LEN)
 
 
 def _api_status(status_value: str) -> str:
@@ -389,6 +392,9 @@ async def verify_claim_link(
             status_code=status.HTTP_400_BAD_REQUEST, detail=ERROR_ORGANIZER_NOT_FOUND
         )
 
+    if mark_organizer_verified(organizer):
+        await db.commit()
+
     session_token = generate_organizer_session_token(
         organizer.id, organizer.session_token_version
     )
@@ -530,7 +536,7 @@ def _is_series_claimed(event: Event, es: EventSource, series_keys: set[str]) -> 
 @limiter.limit(RATE_LIMIT_BROWSE)
 async def search_claimable_events(
     request: Request,
-    q: str = Query(..., min_length=1),
+    q: str = Query(..., min_length=1, max_length=BROWSE_QUERY_MAX_LEN),
     locale: str | None = Query(None),
     current_organizer: Organizer = Depends(get_current_organizer),
     db: AsyncSession = Depends(get_db),
@@ -682,6 +688,7 @@ async def list_own_claims(
                 .options(selectinload(Claim.publisher))
                 .where(Claim.organizer_id == current_organizer.id)
                 .order_by(Claim.created_at.desc())
+                .limit(ORGANIZER_OWN_CLAIMS_LIST_LIMIT)
             )
         )
         .scalars()

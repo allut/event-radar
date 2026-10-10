@@ -9,13 +9,14 @@ from datetime import datetime
 
 import httpx
 from bs4 import BeautifulSoup
-from sqlalchemy import false, func, select, update
+from sqlalchemy import ColumnElement, and_, false, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.constants import (
     CLAIM_KIND_PUBLISHER,
     CLAIM_KIND_SERIES,
     CLAIM_STATUS_APPROVED,
+    EVENT_STATUS_CANCELLED,
     HTML_PARSER,
     ORGANIZER_CLAIM_EDIT_CAP_CEILING,
     ORGANIZER_CLAIM_EDIT_CAP_PER_EVENT,
@@ -28,7 +29,11 @@ from app.ingestion.jsonld import offers_from_jsonld_items, parse_jsonld_event_it
 from app.ingestion.price_fallback import PRICE_FALLBACK_EXTRACTORS
 from app.models.models import Claim, Event, EventSource
 from app.claims.target_resolution import publisher_claim_event_ids
-from app.events.queries import event_not_ended_filter, select_events_with_classification
+from app.events.queries import (
+    canonical_event_filter,
+    event_not_ended_filter,
+    select_events_with_classification,
+)
 
 from .lifecycle import representative_event_source
 
@@ -51,7 +56,25 @@ async def claim_event_for_id(
                 Event.id == event_id, Event.id.in_(matching_event_ids)
             )
         )
-    return await representative_event_for_claim(db, claim)
+    representative = await representative_event_for_claim(db, claim)
+    if event_id is not None and representative is not None and representative.id != event_id:
+        # Series claim: the path/body id must name the one resolved event —
+        # never silently edit a different row than the caller addressed.
+        return None
+    return representative
+
+
+def series_claim_event_filter() -> ColumnElement[bool]:
+    """Which events a Series claim may resolve to: ingested (never another
+    organizer's own submission), dedup-canonical and not cancelled. The
+    trigger-maintained ``series_key`` is only title+venue, so without this a
+    second organizer registering the same venue name and title could capture
+    — or be captured by — a Series claimant's editor (OWASP audit M-3)."""
+    return and_(
+        Event.submitted_by_organizer_id.is_(None),
+        canonical_event_filter(),
+        Event.status != EVENT_STATUS_CANCELLED,
+    )
 
 
 async def representative_event_for_claim(db: AsyncSession, claim: Claim) -> Event | None:
@@ -89,7 +112,11 @@ async def bulk_resolve_series_events(
         (
             await db.execute(
                 select_events_with_classification()
-                .where(Event.series_key.in_(series_keys), event_not_ended_filter(now))
+                .where(
+                    Event.series_key.in_(series_keys),
+                    event_not_ended_filter(now),
+                    series_claim_event_filter(),
+                )
                 .order_by(Event.starts_at)
             )
         )
@@ -134,6 +161,7 @@ async def clear_claim_pins(db: AsyncSession, claim: Claim) -> list[int]:
                 await db.scalars(
                     select(Event.id).where(
                         Event.series_key == claim.event_series_key,
+                        series_claim_event_filter(),
                         func.jsonb_array_length(Event.pinned_fields) > 0,
                     )
                 )

@@ -84,9 +84,15 @@ def record_admin_auth_failure(key: str, now: float, username: str) -> None:
     _admin_auth_failures.move_to_end(key)
     while len(_admin_auth_failures) > ADMIN_AUTH_FAILURES_MAX_ENTRIES:
         _evict_one_admin_auth_failure(now)
+    # Log only whether the attempted username matched — never the value: a
+    # password mistyped into the username field would otherwise be shipped
+    # verbatim to the third-party log sink (OWASP audit L-12).
+    username_ok = secrets.compare_digest(
+        username.encode(), settings.ADMIN_USERNAME.encode()
+    )
     log.warning(
-        "admin auth failed: username=%r failures=%d",
-        username,
+        "admin auth failed: username_ok=%s failures=%d",
+        username_ok,
         failures,
         extra={"event": LOG_EVENT_AUTH_FAILED},
     )

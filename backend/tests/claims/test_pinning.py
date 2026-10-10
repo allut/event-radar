@@ -276,6 +276,8 @@ class TestClearClaimPins:
         assert event_ids == [1, 5]
         query = str(mock_db.scalars.await_args.args[0])
         assert "events.series_key =" in query
+        # M-3: never clears another organizer's own submission.
+        assert "submitted_by_organizer_id IS NULL" in query
         mock_db.execute.assert_awaited_once()
 
     @pytest.mark.asyncio
@@ -309,9 +311,9 @@ class TestClaimEventForId:
         assert result is event
 
     @pytest.mark.asyncio
-    async def test_series_claim_ignores_event_id_uses_representative(self, mock_db, make_event):
-        """Series claims retain their existing single-event resolution — this
-        ticket only changes the Publisher-claim path."""
+    async def test_series_claim_event_id_must_match_representative(self, mock_db, make_event):
+        """OWASP audit M-3: a Series claim has one resolvable event; a path/body
+        id naming any other row resolves to None (404), never a silent swap."""
         claim = MagicMock(kind=CLAIM_KIND_SERIES, event_series_key="k")
         event = make_event(event_id=1)
         with patch(
@@ -319,9 +321,10 @@ class TestClaimEventForId:
             new_callable=AsyncMock,
             return_value=event,
         ) as mocked:
-            result = await claim_event_for_id(mock_db, claim, 999)
-        mocked.assert_awaited_once_with(mock_db, claim)
-        assert result is event
+            assert await claim_event_for_id(mock_db, claim, 999) is None
+            assert await claim_event_for_id(mock_db, claim, 1) is event
+            assert await claim_event_for_id(mock_db, claim, None) is event
+        assert mocked.await_count == 3
 
     @pytest.mark.asyncio
     async def test_publisher_claim_with_event_id_queries_membership(self, mock_db, make_event):
@@ -489,3 +492,44 @@ class TestBulkResolveSeriesEvents:
         mock_db.execute.assert_awaited_once()
         query = str(mock_db.execute.await_args.args[0])
         assert "events.series_key IN" in query
+        # M-3: cross-tenant guard.
+        assert "submitted_by_organizer_id IS NULL" in query
+        assert "events.status !=" in query
+
+
+class TestTransitionPendingClaim:
+    """OWASP audit L-11: the pending->X transition is a guarded UPDATE."""
+
+    @pytest.mark.asyncio
+    async def test_winner_gets_true_and_object_synced(self, mock_db):
+        from datetime import datetime, timezone
+
+        from app.claims.lifecycle import transition_pending_claim
+
+        claim = MagicMock(id=4, status="pending")
+        mock_db.execute.return_value = MagicMock(
+            scalar_one_or_none=MagicMock(return_value=4)
+        )
+        now = datetime.now(timezone.utc)
+        assert await transition_pending_claim(mock_db, claim, "approved", now) is True
+        assert claim.status == "approved" and claim.resolved_at == now
+        compiled = str(mock_db.execute.await_args.args[0])
+        assert "claims.status =" in compiled and "RETURNING" in compiled
+
+    @pytest.mark.asyncio
+    async def test_loser_gets_false_and_object_untouched(self, mock_db):
+        from datetime import datetime, timezone
+
+        from app.claims.lifecycle import transition_pending_claim
+
+        claim = MagicMock(id=4, status="pending")
+        mock_db.execute.return_value = MagicMock(
+            scalar_one_or_none=MagicMock(return_value=None)
+        )
+        assert (
+            await transition_pending_claim(
+                mock_db, claim, "revoked", datetime.now(timezone.utc)
+            )
+            is False
+        )
+        assert claim.status == "pending"

@@ -30,7 +30,7 @@ import {
   type ClaimStatus,
   type ClaimVerificationMechanism,
 } from '../../constants';
-import { apiErrorMessage, copyToClipboard } from '../../utils';
+import { apiErrorMessage, copyToClipboard, numericRouteId } from '../../utils';
 import OrganizerTopBar from '../../components/OrganizerTopBar';
 import PageState from '../../components/PageState';
 import SeoTags from '../../components/SeoTags';
@@ -55,7 +55,8 @@ type CopyField = 'code' | 'record_name' | 'record_value';
  * fresh from the server on every mount so a bookmarked/reopened link always
  * reflects the latest sweep/recheck outcome, not a stale navigation payload. */
 export default function ClaimPending() {
-  const { id } = useParams<{ id: string }>();
+  const { id: rawId } = useParams<{ id: string }>();
+  const id = numericRouteId(rawId);
   const [locale, handleLocaleChange] = useLocalLocale();
   const handleLogout = useOrganizerLogout();
   const navigate = useLocaleNavigate();

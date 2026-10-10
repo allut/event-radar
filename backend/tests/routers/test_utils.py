@@ -867,6 +867,20 @@ class TestOrganizerSharedHelpers:
         assert apply_moderation_flags(event, "Hall") is False
         assert event.is_explicit is False
 
+    def test_apply_moderation_flags_scans_localized_text(self, make_event):
+        """OWASP audit M-5: explicit text hidden only in EN/RU fields is caught."""
+        from app.routers.utils import apply_moderation_flags
+
+        event = make_event(title="Nice concert")
+        event.is_explicit = False
+        event.is_non_event = False
+        event.title_localized = {"en": "Nice concert", "ru": "xxx porn night"}
+        event.description_localized = None
+        event.important_info_localized = None
+        event.important_info = None
+        assert apply_moderation_flags(event, "Hall") is True
+        assert event.is_explicit is True
+
 
 class TestPageCursor:
     def test_round_trip(self):

@@ -5,7 +5,11 @@
 // resolve.
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { onRequest } from '../../../functions/api/[[path]]';
-import { BACKEND_ORIGIN } from '../../../src/constants';
+import {
+  BACKEND_ORIGIN,
+  PRERENDER_CADENCE_TOKEN_HEADER,
+  SEO_AUDIT_TOKEN_HEADER,
+} from '../../../src/constants';
 
 function makeContext(path: string, init: RequestInit = {}, env: Record<string, string> = {}) {
   return {
@@ -32,6 +36,24 @@ describe('/api/* backend proxy', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const forwarded = fetchMock.mock.calls[0][0] as Request;
     expect(forwarded.url).toBe(`${BACKEND_ORIGIN}/events/123`);
+  });
+
+  it('never forwards the shared-secret endpoint tokens to the backend', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response('ok', { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await onRequest(
+      makeContext('/api/seo-audit', {
+        headers: {
+          [SEO_AUDIT_TOKEN_HEADER]: 'secret-a',
+          [PRERENDER_CADENCE_TOKEN_HEADER]: 'secret-b',
+        },
+      }),
+    );
+
+    const forwarded = fetchMock.mock.calls[0][0] as Request;
+    expect(forwarded.headers.get(SEO_AUDIT_TOKEN_HEADER)).toBeNull();
+    expect(forwarded.headers.get(PRERENDER_CADENCE_TOKEN_HEADER)).toBeNull();
   });
 
   it('preserves the query string', async () => {

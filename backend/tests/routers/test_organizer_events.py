@@ -35,16 +35,16 @@ class TestCheckImageHost:
     an arbitrary-host tracking pixel."""
 
     def test_none_is_a_noop(self):
-        from app.routers.organizer_events import _check_image_host
+        from app.routers.utils import check_image_host
 
-        _check_image_host(None)  # must not raise
+        check_image_host(None)  # must not raise
 
     def test_own_cloudinary_account_accepted(self):
-        from app.routers.organizer_events import _check_image_host
+        from app.routers.utils import check_image_host
 
-        with patch("app.routers.organizer_events.settings") as mock_settings:
+        with patch("app.routers.utils.settings") as mock_settings:
             mock_settings.CLOUDINARY_CLOUD_NAME = "demo"
-            _check_image_host("https://res.cloudinary.com/demo/image/upload/x.png")
+            check_image_host("https://res.cloudinary.com/demo/image/upload/x.png")
 
     @pytest.mark.parametrize(
         "url",
@@ -58,29 +58,29 @@ class TestCheckImageHost:
     )
     def test_other_cloudinary_account_or_path_rejected(self, url):
         from fastapi import HTTPException
-        from app.routers.organizer_events import _check_image_host
+        from app.routers.utils import check_image_host
 
-        with patch("app.routers.organizer_events.settings") as mock_settings:
+        with patch("app.routers.utils.settings") as mock_settings:
             mock_settings.CLOUDINARY_CLOUD_NAME = "demo"
             with pytest.raises(HTTPException) as exc_info:
-                _check_image_host(url)
+                check_image_host(url)
         assert exc_info.value.status_code == http.HTTPStatus.BAD_REQUEST
 
     def test_unconfigured_cloud_name_fails_closed(self):
         from fastapi import HTTPException
-        from app.routers.organizer_events import _check_image_host
+        from app.routers.utils import check_image_host
 
-        with patch("app.routers.organizer_events.settings") as mock_settings:
+        with patch("app.routers.utils.settings") as mock_settings:
             mock_settings.CLOUDINARY_CLOUD_NAME = ""
             with pytest.raises(HTTPException):
-                _check_image_host("https://res.cloudinary.com/demo/image/upload/x.png")
+                check_image_host("https://res.cloudinary.com/demo/image/upload/x.png")
 
     def test_arbitrary_host_rejected(self):
         from fastapi import HTTPException
-        from app.routers.organizer_events import _check_image_host
+        from app.routers.utils import check_image_host
 
         with pytest.raises(HTTPException) as exc_info:
-            _check_image_host("https://evil.example.com/tracker.png")
+            check_image_host("https://evil.example.com/tracker.png")
         assert exc_info.value.status_code == http.HTTPStatus.BAD_REQUEST
 
     def test_lookalike_host_rejected(self):
@@ -88,10 +88,38 @@ class TestCheckImageHost:
         (e.g. a subdomain trick) must not slip through — hostname must match
         exactly, not via substring containment."""
         from fastapi import HTTPException
-        from app.routers.organizer_events import _check_image_host
+        from app.routers.utils import check_image_host
 
         with pytest.raises(HTTPException):
-            _check_image_host("https://res.cloudinary.com.evil.com/x.png")
+            check_image_host("https://res.cloudinary.com.evil.com/x.png")
+
+    @pytest.mark.parametrize(
+        "url",
+        [
+            "https://evil.com\\@res.cloudinary.com/demo/image/upload/x.png",
+            "https://evil.com%5C@res.cloudinary.com/demo/image/upload/x.png",
+            "https://u:p@res.cloudinary.com/demo/image/upload/x.png",
+            "https://res.cloudinary.com:8443/demo/image/upload/x.png",
+            "https://res.cloudinary.com/demo/image/upload/x y.png",
+        ],
+    )
+    def test_parser_differential_spellings_rejected(self, url):
+        """OWASP audit M-1: spellings Python and browsers read differently."""
+        from fastapi import HTTPException
+        from app.routers.utils import check_image_host
+
+        with patch("app.routers.utils.settings") as mock_settings:
+            mock_settings.CLOUDINARY_CLOUD_NAME = "demo"
+            with pytest.raises(HTTPException):
+                check_image_host(url)
+
+    def test_returns_reserialized_url(self):
+        from app.routers.utils import check_image_host
+
+        with patch("app.routers.utils.settings") as mock_settings:
+            mock_settings.CLOUDINARY_CLOUD_NAME = "demo"
+            url = "https://res.cloudinary.com/demo/image/upload/x.png"
+            assert check_image_host(url) == url
 
 
 class TestSubmitEvent:
@@ -806,7 +834,7 @@ class TestUpdateOwnEvent:
         self, mock_db, make_request, make_organizer
     ):
         """A PATCH-supplied url must still be scheme-checked via
-        safe_external_url() — not assigned straight from the request body."""
+        safe_render_url() — not assigned straight from the request body."""
         from fastapi import HTTPException
         from app.routers.organizer_events import PatchEventBody, update_own_event
 
@@ -816,7 +844,7 @@ class TestUpdateOwnEvent:
         mock_db.commit = AsyncMock()
 
         with patch(
-            "app.routers.organizer_events.safe_external_url",
+            "app.routers.organizer_events.safe_render_url",
             return_value=None,
         ) as mock_guard:
             body = PatchEventBody(url="javascript:alert(1)")
@@ -845,7 +873,7 @@ class TestUpdateOwnEvent:
         mock_db.commit = AsyncMock()
 
         with patch(
-            "app.routers.organizer_events.safe_external_url",
+            "app.routers.organizer_events.safe_render_url",
             return_value="https://mytheatre.ee/tickets/42",
         ):
             body = PatchEventBody(url="https://mytheatre.ee/tickets/42")
