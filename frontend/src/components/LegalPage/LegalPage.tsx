@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { t, ti } from '../../i18n';
-import { safeUrl, titleWithBrand } from '../../utils';
+import { inlineText, safeUrl, titleWithBrand } from '../../utils';
 import { useAuth } from '../../hooks/useAuth';
 import { useLogout } from '../../hooks/useLogout';
 import { useLocaleMutation } from '../../hooks/useLocaleMutation';
@@ -26,13 +26,6 @@ interface LegalPageProps {
 
 /** Fallback locale for legal chunks (matches t()'s fallback in i18n.ts). */
 const FALLBACK_LOCALE = LOCALE_EN;
-
-/** Flatten an inline run to plain text, for building stable React keys off the
- * authored content (the codebase keys lists on their content, not array index —
- * react/no-array-index-key is an error). */
-function inlineText(content: LegalInline[]): string {
-  return content.map((part) => (typeof part === 'string' ? part : part.text)).join('');
-}
 
 /** One inline run → text node or external link. Inline content is structured
  * data (never raw HTML), so no sanitization is needed for this first-party

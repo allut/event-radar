@@ -14,6 +14,7 @@
  * get forwarded to the backend as if they were public API calls. See the
  * "Routing note" comment in each of those files.
  */
+import { StatusCodes } from 'http-status-codes';
 import { API_BASE, BACKEND_ORIGIN } from '../../src/constants.js';
 import type { PagesFunction } from '../_shared/cloudflare.js';
 
@@ -48,7 +49,7 @@ export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
   // function today, but that's undocumented platform behavior, not a
   // guarantee this code should rely on. Assert the resolved origin instead.
   if (backendUrl.origin !== BACKEND_ORIGIN) {
-    return new Response(null, { status: 400 });
+    return new Response(null, { status: StatusCodes.BAD_REQUEST });
   }
 
   // OWASP audit G-1: strip any client-supplied X-Forwarded-For/X-Client-IP

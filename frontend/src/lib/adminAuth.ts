@@ -1,3 +1,4 @@
+import { storageGet, storageSet, storageRemove } from './storage';
 import { ADMIN_SIGNED_IN_HINT_KEY, LOGOUT_FLAG_TTL_MS } from '../constants';
 
 // Parallel session store to lib/auth.ts and lib/organizerAuth.ts — a third,
@@ -22,14 +23,14 @@ export function subscribeAdminAuth(cb: () => void): () => void {
 // isAuthenticatedAdmin() can answer synchronously at first paint.
 export function setAdminSignedInHint(): void {
   adminLoggingOut = false;
-  localStorage.setItem(ADMIN_SIGNED_IN_HINT_KEY, '1');
+  storageSet(ADMIN_SIGNED_IN_HINT_KEY, '1');
   emitAdminAuthChange();
 }
 export function clearAdminSignedInHint(): void {
-  localStorage.removeItem(ADMIN_SIGNED_IN_HINT_KEY);
+  storageRemove(ADMIN_SIGNED_IN_HINT_KEY);
   emitAdminAuthChange();
 }
-export function isAuthenticatedAdmin(): boolean { return localStorage.getItem(ADMIN_SIGNED_IN_HINT_KEY) !== null; }
+export function isAuthenticatedAdmin(): boolean { return storageGet(ADMIN_SIGNED_IN_HINT_KEY) !== null; }
 
 // Mirrors lib/auth.ts's loggingOut flag — see that file for the full
 // rationale (cache-clear race on a same-path logout must not trigger a

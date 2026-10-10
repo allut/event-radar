@@ -5,6 +5,7 @@ import { PERSONAS_EN, type PersonaData } from './_generated/i18nData.js';
 import {
   LOCALE_CODE_MAP as _LOCALE_CODE_MAP,
   DEFAULT_LOCALE_CODE as _DEFAULT_LOCALE_CODE,
+  TALLINN_TZ,
   LOCALES,
   APP_VERSION,
   MAGIC_LINK_EXPIRY_MINUTES,
@@ -25,6 +26,7 @@ import {
 
 export { LOCALES, APP_VERSION, MAGIC_LINK_EXPIRY_MINUTES, PERSONA_MAX_SELECTABLE, DEFAULT_CURRENCY, SAFE_URL_SCHEMES, SANITIZE_ALLOWED_TAGS, SANITIZE_ALLOWED_ATTR, CATEGORIES, VIBES, BROWSE_PAGE_SIZE, ORGANIZER_IMAGE_ALLOWED_MIME, ORGANIZER_MAX_CATEGORIES, CLAIM_EXPIRY_DAYS, CLAIM_ADMIN_REVIEW_EXPIRY_DAYS, EMAIL_BRAND_MARK_PATH };
 export const DEFAULT_LOCALE_CODE = _DEFAULT_LOCALE_CODE;
+export { TALLINN_TZ };
 export type { PersonaData };
 
 // Re-export PERSONAS under the original name so all import sites are unchanged.
@@ -681,6 +683,14 @@ export const ADMIN_NOTE_TEXTAREA_ROWS = 3;
 // ─── Explore ─────────────────────────────────────────────────────────────────
 // BROWSE_PAGE_SIZE itself is cross-stack (shared/app-config.json), imported above.
 export const EXPLORE_SEARCH_DEBOUNCE_MS = 400;
+// ClaimEventPicker's event search: minimum trimmed query length before the
+// search request fires, and its debounce (same cadence as Explore's search).
+// <meta name="theme-color"> values per resolved theme — mirror --bg in
+// index.css and the pre-paint script in index.html (the three must agree).
+export const THEME_COLOR_META_LIGHT = '#fdfcfa';
+export const THEME_COLOR_META_DARK = '#13161e';
+export const CLAIM_SEARCH_MIN_CHARS = 2;
+export const CLAIM_SEARCH_DEBOUNCE_MS = EXPLORE_SEARCH_DEBOUNCE_MS;
 
 export type SortOption = 'relevance' | 'date' | 'price' | 'quality';
 

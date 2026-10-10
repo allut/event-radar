@@ -105,7 +105,6 @@
   --fs-icon: 0.5rem;     /* decorative icon markers */
   --fs-lg: 1.1rem;      /* above fs-base: logos, status icons */
   --fs-xl: 1.4rem;      /* brand marks, circle icon labels */
-  --fs-brand-md: 1.25rem; /* Feed brand wordmark */
   --fs-status: 1.2rem;  /* check/error icons in bordered circles */
   --fs-btn-detail: 1.05rem; /* detail-view feedback button labels */
 
@@ -323,7 +322,6 @@
   --empty-state-max-sm: 340px;
   --onboarding-submit-max: 320px;
   --onboarding-submit-min: 160px; /* Onboarding .submit min-width */
-  --mobile-menu-min: 200px;       /* MobileMenu .pop min-width */
 
   /* Form controls */
   --control-height-lg: 48px;
@@ -384,7 +382,6 @@
   --anim-rise-xs: 0.35s;
   --anim-rise-sm: 0.4s;
   --anim-rise-md: 0.5s;
-  --anim-breathe-fast: 2.4s;
   --anim-breathe: 3s; /* Animations.module.css .breathe fallback duration */
   --anim-hero-rise: 1.15s;     /* Animations.module.css .heroRise > span */
   --anim-hairline-draw: 1.4s;  /* Animations.module.css .hairlineDraw */

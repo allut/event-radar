@@ -320,6 +320,7 @@ def write_frontend_shared_constants(cfg: dict, version: str) -> str:
         "",
         _ts_locale_code_map(cfg),
         f"export const DEFAULT_LOCALE_CODE = {_ts_str(cfg['default_locale_code'])};",
+        f"export const TALLINN_TZ = {_ts_str(cfg['timezone'])};",
         "",
         # URL schemes without trailing colon — matches URL.protocol.replace(/:$/, '').
         f"export const SAFE_URL_SCHEMES = {_ts_set(cfg['safe_url_schemes'])};",

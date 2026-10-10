@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { organizerApi } from '../../api/client';
-import { API, EXPLORE_SEARCH_DEBOUNCE_MS, QUERY_KEYS, ROUTES } from '../../constants';
+import { API, CLAIM_SEARCH_DEBOUNCE_MS, CLAIM_SEARCH_MIN_CHARS, QUERY_KEYS, ROUTES } from '../../constants';
 import { t, ti } from '../../i18n';
 import { useLocaleNavigate } from '../../hooks/useLocaleNavigate';
 import { apiErrorMessage, formatEventTime, isClaimJustificationRequiredError, withLocaleQuery, withQueryParam } from '../../utils';
@@ -47,7 +47,7 @@ export default function ClaimEventPicker({ locale }: ClaimEventPickerProps) {
   const [justification, setJustification] = useState('');
 
   useEffect(() => {
-    const handle = setTimeout(() => setDebouncedQuery(query.trim()), EXPLORE_SEARCH_DEBOUNCE_MS);
+    const handle = setTimeout(() => setDebouncedQuery(query.trim()), CLAIM_SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(handle);
   }, [query]);
 
@@ -75,7 +75,7 @@ export default function ClaimEventPicker({ locale }: ClaimEventPickerProps) {
       organizerApi.get<ClaimCandidatesResponse>(
         withLocaleQuery(withQueryParam(API.organizerClaimSearch, 'q', debouncedQuery), locale),
       ),
-    enabled: debouncedQuery.length >= 2,
+    enabled: debouncedQuery.length >= CLAIM_SEARCH_MIN_CHARS,
   });
   const searchResults = searchData?.events ?? [];
 
@@ -179,7 +179,7 @@ export default function ClaimEventPicker({ locale }: ClaimEventPickerProps) {
           aria-autocomplete="list"
           autoComplete="off"
         />
-        {open && debouncedQuery.length >= 2 && (
+        {open && debouncedQuery.length >= CLAIM_SEARCH_MIN_CHARS && (
           <ul className={styles.pop} role="listbox">
             {searchResults.length > 0
               ? searchResults.map(renderCandidate)

@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { organizerApi } from '../../api/client';
 import { useLocalePath } from '../../hooks/useLocalePath';
 import { t } from '../../i18n';
+import { storageGet, storageSet } from '../../lib/storage';
 import { API, ORGANIZER_PROFILE_NUDGE_DISMISSED_KEY, QUERY_KEYS, ROUTES } from '../../constants';
 import styles from './OrganizerProfileNudge.module.css';
 
@@ -16,11 +17,7 @@ interface OrganizerProfileResponse {
 }
 
 function isDismissed(): boolean {
-  try {
-    return localStorage.getItem(ORGANIZER_PROFILE_NUDGE_DISMISSED_KEY) !== null;
-  } catch {
-    return false;
-  }
+  return storageGet(ORGANIZER_PROFILE_NUDGE_DISMISSED_KEY) !== null;
 }
 
 // Nudges a first-time organizer (no display name set) toward /organizer/settings.
@@ -38,12 +35,8 @@ export default function OrganizerProfileNudge({ locale }: OrganizerProfileNudgeP
   if (dismissed || !data || data.name) return null;
 
   function handleDismiss() {
-    try {
-      localStorage.setItem(ORGANIZER_PROFILE_NUDGE_DISMISSED_KEY, '1');
-    } catch {
-      // localStorage unavailable (private mode, blocked storage) — dismissal
-      // just won't persist across reloads, not worth surfacing to the organizer.
-    }
+    // Blocked storage just means dismissal won't persist across reloads.
+    storageSet(ORGANIZER_PROFILE_NUDGE_DISMISSED_KEY, '1');
     setDismissed(true);
   }
 

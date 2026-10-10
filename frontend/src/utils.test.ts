@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { cx, safeUrl, sanitizeHtml, formatPrice, categoryGradient, formatHourMinute, formatEventShortDate, makeActiveClassMap, trackExternalClick, datePresetRange, parseExploreFilters, exploreFiltersToSearchParams, buildExploreApiQuery, nextKeysetParam, activeFacetCount, isFullSet, shouldFlipPopover, maskAnalyticsUrl, DEFAULT_EXPLORE_FILTERS, type ExploreFilters, monthGridDays, weekdayHeaders, splitDateTimeValue, joinDateTimeValue, parseTypedDate, formatPickerValue, formatMonthYearLabel, toDisplayDateTime, fromDisplayDateTime, buildMapsUrl, isValidLocale, stripLocalePrefix, localizedPath, localeFromPath, localizedTo, truncateForMeta, cardAnimationDelayMs, parseISODateLocal, formatDateRangeShort, localeLabel, localizedFieldLabel, localizedTriplet, weekdayOffset, toggleCapped } from './utils';
+import { cx, safeUrl, sanitizeHtml, formatPrice, categoryGradient, formatHourMinute, formatEventTime, tallinnToday, formatEventShortDate, makeActiveClassMap, trackExternalClick, datePresetRange, parseExploreFilters, exploreFiltersToSearchParams, buildExploreApiQuery, nextKeysetParam, activeFacetCount, isFullSet, shouldFlipPopover, maskAnalyticsUrl, DEFAULT_EXPLORE_FILTERS, type ExploreFilters, monthGridDays, weekdayHeaders, splitDateTimeValue, joinDateTimeValue, parseTypedDate, formatPickerValue, formatMonthYearLabel, toDisplayDateTime, fromDisplayDateTime, buildMapsUrl, isValidLocale, stripLocalePrefix, localizedPath, localeFromPath, localizedTo, truncateForMeta, cardAnimationDelayMs, parseISODateLocal, formatDateRangeShort, localeLabel, localizedFieldLabel, localizedTriplet, weekdayOffset, toggleCapped } from './utils';
 import { t } from './i18n';
 import { FALLBACK_GRADIENT, CATEGORIES, GOOGLE_MAPS_SEARCH_URL } from './constants';
 
@@ -845,5 +845,32 @@ describe('toggleCapped', () => {
   it('still removes at the cap, and adds nothing when the cap is zero', () => {
     expect(toggleCapped(['a', 'b', 'c'], 'c', 3)).toEqual(['a', 'b']);
     expect(toggleCapped([], 'a', 0)).toEqual([]);
+  });
+});
+
+describe('Europe/Tallinn pinning', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('formats event instants as Tallinn wall-clock time (winter, UTC+2)', () => {
+    expect(formatHourMinute('2026-01-15T17:00:00Z', 'en')).toBe('19:00');
+  });
+
+  it('formats event instants as Tallinn wall-clock time (summer, UTC+3)', () => {
+    expect(formatHourMinute('2026-07-15T17:00:00Z', 'en')).toBe('20:00');
+  });
+
+  it('rolls the date over when Tallinn is already on the next day', () => {
+    expect(formatEventTime('2026-07-15T22:30:00Z', 'en')).toContain('16 Jul');
+    expect(formatEventTime('2026-07-15T22:30:00Z', 'en')).toContain('01:30');
+  });
+
+  it('tallinnToday follows the Tallinn calendar day, not the host zone', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-15T22:30:00Z')); // 01:30 on 16 Jul in Tallinn
+    const today = tallinnToday();
+    expect([today.getFullYear(), today.getMonth(), today.getDate()]).toEqual([2026, 6, 16]);
+    expect(datePresetRange('today')).toEqual({ from: '2026-07-16', to: '2026-07-16' });
   });
 });

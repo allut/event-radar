@@ -74,7 +74,7 @@ import {
   PRERENDER_DIAGNOSTIC_MAX_EVENTS,
   RATE_GATE_SLACK_MS,
 } from '../src/constants';
-import type { LocaleCode } from '../src/constants';
+import { TALLINN_TZ, type LocaleCode } from '../src/constants';
 import { serializeJsonLd } from '../src/lib/jsonLd';
 import faqEn from '../src/content/faq/faq.en';
 import faqEt from '../src/content/faq/faq.et';
@@ -1278,7 +1278,7 @@ export async function main(): Promise<void> {
       const deadline = Date.now() + RENDER_BUDGET_MS;
       const cursor = createBudgetedCursor(renderQueue.length, deadline);
       async function worker(): Promise<void> {
-        const page = await browser.newPage();
+        const page = await browser.newPage({ timezoneId: TALLINN_TZ });
         const recentEvents = attachPageDiagnostics(page);
         try {
           for (;;) {

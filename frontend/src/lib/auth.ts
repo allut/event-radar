@@ -1,3 +1,4 @@
+import { storageGet, storageSet, storageRemove } from './storage';
 import { SIGNED_IN_HINT_KEY, LOCALES, LOCALE_EN, LOCALE_KEY, LOGOUT_FLAG_TTL_MS } from '../constants';
 
 // Auth-change subscriber store, so components can react to setSignedInHint()/
@@ -24,14 +25,14 @@ export function subscribeAuth(cb: () => void): () => void {
 // isAuthenticated() can answer synchronously at first paint.
 export function setSignedInHint(): void {
   loggingOut = false;
-  localStorage.setItem(SIGNED_IN_HINT_KEY, '1');
+  storageSet(SIGNED_IN_HINT_KEY, '1');
   emitAuthChange();
 }
 export function clearSignedInHint(): void {
-  localStorage.removeItem(SIGNED_IN_HINT_KEY);
+  storageRemove(SIGNED_IN_HINT_KEY);
   emitAuthChange();
 }
-export function isAuthenticated(): boolean { return localStorage.getItem(SIGNED_IN_HINT_KEY) !== null; }
+export function isAuthenticated(): boolean { return storageGet(SIGNED_IN_HINT_KEY) !== null; }
 
 // Set by an explicit logout action, before clearSignedInHint()/queryClient.clear()
 // run. A logout on a route that doesn't change path (e.g. Feed at "/") doesn't
@@ -50,7 +51,7 @@ export function beginLogout(): void {
 export function isLoggingOut(): boolean { return loggingOut; }
 
 export function getLocale(): string {
-  const stored = localStorage.getItem(LOCALE_KEY);
+  const stored = storageGet(LOCALE_KEY);
   return LOCALES.some((l) => l.code === stored) ? stored! : LOCALE_EN;
 }
 // Raw stored locale preference, or null if never explicitly set — unlike
@@ -59,16 +60,16 @@ export function getLocale(): string {
 // en", since only an explicit non-Estonian preference should redirect a bare
 // URL — a first-time visitor with no preference must land on Estonian.
 export function getStoredLocale(): string | null {
-  const stored = localStorage.getItem(LOCALE_KEY);
+  const stored = storageGet(LOCALE_KEY);
   return LOCALES.some((l) => l.code === stored) ? stored : null;
 }
 export function setLocale(l: string): void {
-  localStorage.setItem(LOCALE_KEY, l);
+  storageSet(LOCALE_KEY, l);
 }
 // Restores the "no explicit preference" state getStoredLocale()/BareLocaleGate
 // depend on — used to roll back an optimistic locale switch that was never
 // actually stored (e.g. a failed PATCH with no prior preference), since
 // writing 'et' there would fabricate a preference that was never made.
 export function clearLocale(): void {
-  localStorage.removeItem(LOCALE_KEY);
+  storageRemove(LOCALE_KEY);
 }

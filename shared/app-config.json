@@ -15,6 +15,7 @@
   ],
   "locale_code_map": { "et": "et-EE", "ru": "ru-RU" },
   "default_locale_code": "en-GB",
+  "timezone": "Europe/Tallinn",
   "signals": ["like", "dislike", "bookmark", "view", "click_external"],
   "categories": [
     "music", "theater", "exhibitions", "workshops", "sports",

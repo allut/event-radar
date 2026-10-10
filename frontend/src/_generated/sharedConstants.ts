@@ -18,6 +18,7 @@ export const LOCALES = [
 
 export const LOCALE_CODE_MAP: Record<string, string> = { 'et': 'et-EE', 'ru': 'ru-RU' };
 export const DEFAULT_LOCALE_CODE = 'en-GB';
+export const TALLINN_TZ = 'Europe/Tallinn';
 
 export const SAFE_URL_SCHEMES = new Set(['http', 'https']);
 export const SANITIZE_ALLOWED_TAGS = ['p', 'br', 'strong', 'b', 'em', 'i', 'u', 'ul', 'ol', 'li', 'a', 'h3', 'h4', 'blockquote', 'span'];

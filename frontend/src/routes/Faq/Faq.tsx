@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { t } from '../../i18n';
-import { safeUrl, titleWithBrand } from '../../utils';
+import { inlineText, safeUrl, titleWithBrand } from '../../utils';
 import { useAuth } from '../../hooks/useAuth';
 import { useLogout } from '../../hooks/useLogout';
 import { useLocaleMutation } from '../../hooks/useLocaleMutation';
@@ -30,12 +30,6 @@ const FAQ_LINK_SCHEMES = new Set([...SAFE_URL_SCHEMES, MAILTO_SCHEME]);
 
 /** Fallback locale for FAQ chunks (matches t()'s fallback in i18n.ts). */
 const FALLBACK_LOCALE = LOCALE_EN;
-
-/** Flatten an inline run to plain text, for stable React keys off the authored
- * content (react/no-array-index-key is an error). */
-function inlineText(content: FaqInline[]): string {
-  return content.map((part) => (typeof part === 'string' ? part : part.text)).join('');
-}
 
 /** One inline run → text node, router link (`to`, locale-prefixed) or external
  * link (`href`). Structured first-party data, never raw HTML. */
