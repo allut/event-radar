@@ -993,7 +993,7 @@ class TestUpdateOwnEvent:
 
 
 class TestUploadEventImage:
-    """POST /organizer/events/image — signed Cloudinary upload (Phase 2 §2.1)."""
+    """POST /organizer/events/image — signed Cloudinary upload."""
 
     # Real PNG magic bytes — upload_event_image sniffs the leading bytes
     # rather than trusting content_type (M-3 in the OWASP audit), so a fake

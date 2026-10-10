@@ -125,7 +125,7 @@ class UserIdentity(Base):
     """A linked external sign-in provider identity (ADR 0002) — e.g. Google's
     stable `sub`. Never shared with organizer_identities: the same Google
     account may hold both a User row and an Organizer row that never merge
-    (docs/security.md's track separation)."""
+    (docs/security.md "Auth", track separation)."""
 
     __tablename__ = "user_identities"
     __table_args__ = (
@@ -180,7 +180,7 @@ class Organizer(Base):
         Boolean, nullable=False, server_default="false"
     )
     # Optional display name (#175) — no logo/contact-info fields, out of scope
-    # per docs/organizer-portal.md's Organizer Profile section.
+    # per docs/organizer-portal.md "Organizer Settings".
     name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     # Durable "has authenticated" signal (mirrors User.email_verified). The
     # weekly cleanup prunes organizers where this is NULL; magic-link rows are
@@ -792,7 +792,7 @@ class Event(Base):
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
     # Organizer direct-submission fields (Phase 1). NULL for every
-    # scraper-ingested event. See CLAUDE.md Data Flow for the submit ->
+    # scraper-ingested event. See docs/organizer-portal.md for the submit ->
     # inline classify -> inline publish -> post-hoc review lifecycle.
     submitted_by_organizer_id: Mapped[int | None] = mapped_column(
         BigInteger,

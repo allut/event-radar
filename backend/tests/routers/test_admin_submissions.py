@@ -1,4 +1,4 @@
-"""Tests for the admin organizer-submission review queue (Phase 2 §2.2):
+"""Tests for the admin organizer-submission review queue:
 GET /admin/submissions, POST /admin/submissions/{id}/retract,
 POST /admin/submissions/{id}/approve."""
 

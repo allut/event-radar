@@ -1,7 +1,7 @@
 """Tests for the claim-intent magic-link token (#413) — app/auth/tokens.py's
 generate_organizer_claim_link_token / verify_organizer_claim_link_token.
 
-The "device round-trip" requirement (CLAUDE.md's acceptance criteria) means
+The "device round-trip" requirement means
 the claim intent lives entirely inside the signed token, not in any
 in-memory or session state — exactly what a fresh generate()/verify() pair
 across two unrelated calls, with nothing shared between them but the token

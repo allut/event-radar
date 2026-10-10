@@ -174,7 +174,7 @@ async def showcase(
 
 # Process-local TTL cache — single dict entry, keyed by locale, since the payload
 # is locale-sensitive (event titles/venue names). No new dependency: the app is
-# single-process/no-Redis (see CLAUDE.md Architecture), so a module-level dict is
+# single-process/no-Redis (see CLAUDE.md "Architecture"), so a module-level dict is
 # sufficient and matches the pattern of every other in-process cache here.
 _counts_cache: dict[str, tuple[float, dict]] = {}
 
@@ -199,8 +199,8 @@ def _tonight_stmt(now: datetime) -> Select[tuple[Event]]:
 
 
 def _tonight_fallback_stmt(now: datetime) -> Select[tuple[Event]]:
-    """A real empty-tonight is a valid, non-error state (docs/design-system.md,
-    Landing copy rules) — this widens to the next PUBLIC_COUNTS_FALLBACK_WINDOW_DAYS
+    """A real empty-tonight is a valid, non-error state (Landing copy,
+    docs/design-system.md §11) — this widens to the next PUBLIC_COUNTS_FALLBACK_WINDOW_DAYS
     days rather than rendering an empty ticker."""
     return (
         select_events_with_classification()

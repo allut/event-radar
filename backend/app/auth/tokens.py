@@ -2,7 +2,7 @@
 
 Magic-link token: URLSafeTimedSerializer signed payload {user_id}, 15-min TTL.
 Session token: same serializer with a different salt, SESSION_TTL_DAYS TTL
-(2 days as of shared/app-config.json — see CLAUDE.md Auth).
+(2 days as of shared/app-config.json — see docs/security.md "Auth").
 The magic-link token hash (SHA-256 hex) is stored in auth_magic_links.token_hash
 so a compromised DB row cannot be turned back into a valid token.
 """

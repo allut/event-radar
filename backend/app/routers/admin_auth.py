@@ -1,8 +1,8 @@
 """Admin console auth endpoints — password + TOTP login, own session cookie.
 
 A third auth track alongside app/routers/auth.py (consumer) and
-app/routers/organizer_auth.py (organizer): see docs/backend-ops.md's Admin
-Endpoints section and docs/security.md's Auth section. Credential is the
+app/routers/organizer_auth.py (organizer): see
+docs/backend-ops.md "Admin Endpoints" and docs/security.md "Auth". Credential is the
 ADMIN_USERNAME/ADMIN_PASSWORD env vars plus a required TOTP step; success
 issues a session cookie so the admin console frontend never holds the
 password in JS. This is the only admin credential surface (HTTP Basic was

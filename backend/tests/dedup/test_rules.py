@@ -579,7 +579,7 @@ class TestBuildClusterAssignments:
         # An organizer-submitted event (source=user_submission) dedup-merges with
         # a scraped copy of the same real-world event exactly like any other pair
         # — representative selection (status pin, then data-quality rank) has no
-        # source-awareness, per CLAUDE.md Phase 2 §2.3 ("no special-casing").
+        # source-awareness ("no special-casing").
         submitted = _event(1, "Show", _BASE, status="published")
         submitted.submitted_by_organizer_id = 7
         scraped = _event(

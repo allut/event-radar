@@ -158,7 +158,7 @@ async def test_publish_pending_statement_encodes_gate_criteria(mock_db):
     assert str(lat_min) in compiled
     assert str(lng_max) in compiled
     # Unverified-organizer gate: NULL-safe OR around a NOT IN over unverified
-    # organizer ids (M2 — see CLAUDE.md Organizer Event Submission).
+    # organizer ids (M2 — see docs/organizer-portal.md).
     assert "submitted_by_organizer_id" in compiled
     assert "organizers" in compiled
     assert "verified" in compiled

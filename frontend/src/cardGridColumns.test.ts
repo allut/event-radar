@@ -1,4 +1,4 @@
-// Drift guard (#475, design-system §10 "Wide viewports"): every fixed
+// Drift guard (#475, docs/design-system.md §10 "Wide viewports"): every fixed
 // --card-grid-cols count index.css assigns must divide the browse/saved page
 // sizes, so each page and each load-more ends on a full grid row.
 /// <reference types="node" />

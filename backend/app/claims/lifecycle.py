@@ -936,7 +936,7 @@ async def expire_stale_claims(db: AsyncSession) -> dict:
     internally (mirrors build_daily_feeds) so the expiry emails below
     reflect only durably expired rows — app/main.py wires this job with
     commit=False."""
-    # UTC on purpose: TTL arithmetic (see CLAUDE.md Conventions) — a Tallinn-aware
+    # UTC on purpose: TTL arithmetic (see CLAUDE.md "Conventions") — a Tallinn-aware
     # `now - timedelta(days=N)` would shift by an hour across a DST change.
     now = datetime.now(timezone.utc)
     automated_cutoff = now - timedelta(days=CLAIM_EXPIRY_DAYS)

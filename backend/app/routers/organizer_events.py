@@ -5,7 +5,8 @@ A submitted event is inserted on the adapter-less `user_submission` source
 then pushed inline through classify_event()+publish_pending() so it goes live
 within the request instead of waiting for the next scheduled pass. It is
 flagged needs_review so it still surfaces in the Phase-2 admin review queue
-after going live (auto-publish + retractable post-hoc review — see CLAUDE.md).
+after going live (auto-publish + retractable post-hoc review — see
+docs/organizer-portal.md).
 """
 
 import hashlib
@@ -530,8 +531,8 @@ async def delete_own_event(
     current_organizer: Organizer = Depends(get_current_organizer),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    """Soft-delete: cancel the event. Events are never hard-deleted (CLAUDE.md
-    Data Retention)."""
+    """Soft-delete: cancel the event. Events are never hard-deleted
+    (docs/backend-ops.md "Data Retention")."""
     event = await _own_event_or_404(db, event_id, current_organizer.id)
     resolved = await cancel_event_and_resolve_reports(
         db, event, EVENT_CANCELLATION_REASON_ORGANIZER_RETRACT, REPORT_AUTO_RESOLVE_NOTE

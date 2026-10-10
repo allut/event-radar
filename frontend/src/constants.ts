@@ -311,8 +311,9 @@ export function toLocaleCode(locale: string): string {
 }
 
 // Estonian is the bare (unprefixed) URL locale; every other locale gets an
-// `/en`/`/ru`-style path prefix — see docs/frontend.md's locale-routing
-// section (App.tsx's route wrapper, utils.ts's localizedPath/stripLocalePrefix).
+// `/en`/`/ru`-style path prefix — see locale-prefixed routing in
+// docs/frontend.md "Frontend Structure" (App.tsx's route wrapper, utils.ts's
+// localizedPath/stripLocalePrefix).
 export const LOCALE_URL_PREFIX_CODES: string[] = LOCALES
   .map((l) => l.code)
   .filter((code) => code !== LOCALE_ET);
@@ -442,7 +443,7 @@ export const APP_SHELL_FILENAME = 'app-shell.html';
 // app/constants.py) + a 2h buffer.
 export const SEO_AUDIT_STALE_THRESHOLD_HOURS = 8;
 // GitHub repo the live audit files/updates/closes its failure issue against
-// (CLAUDE.md's issue tracker) and the fixed label it searches/tags by.
+// (CLAUDE.md "Issue tracker") and the fixed label it searches/tags by.
 export const SEO_AUDIT_GITHUB_REPO = 'allut/event-radar';
 export const SEO_AUDIT_ISSUE_LABEL = 'seo-audit-failure';
 export const GITHUB_API_BASE_URL = 'https://api.github.com';
@@ -491,7 +492,7 @@ export const CHAIN_STALENESS_TIMEOUT_MINUTES = 30;
 // manifest lives — one burst's index + content objects sit at
 // `${CHAIN_STATE_PREFIX}${sanitizedBurstId}/...`. Parallel optimization
 // layer to the CHAIN_MARKER_PREFIX git-commit flow above, not a replacement
-// — see docs/frontend.md's prerender section.
+// — see docs/frontend.md "SEO: meta tags, structured data, prerendering".
 export const CHAIN_STATE_PREFIX = 'prerender-chain-state/';
 // R2 bucket lifecycle rule expiring everything under CHAIN_STATE_PREFIX
 // after this many days — a crash backstop, comfortably past

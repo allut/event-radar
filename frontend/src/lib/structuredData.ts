@@ -83,7 +83,8 @@ export function buildEventJsonLd(event: EventData): WithContext<SchemaEvent> {
  * item pointing at our own locale-matched detail page (never emitted by
  * buildEventJsonLd itself, and distinct from its `offers.url`, the external
  * ticket vendor link). `numberOfItems`/`itemListOrder` are deliberately
- * omitted — see docs/frontend.md's prerender section. */
+ * omitted — see
+ * docs/frontend.md "SEO: meta tags, structured data, prerendering". */
 export function buildExploreItemListJsonLd(events: EventData[], locale: string): WithContext<ItemList> {
   return {
     '@context': SCHEMA_ORG_CONTEXT,

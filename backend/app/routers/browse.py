@@ -253,7 +253,7 @@ async def _load_feedback_context(
     db: AsyncSession, user_id: int, now: datetime
 ) -> FeedbackContext:
     """Bounded to the last FEEDBACK_HISTORY_LOOKBACK_DAYS — user_event_feedback is
-    preserved indefinitely (see CLAUDE.md Data Retention), so an unbounded load
+    preserved indefinitely (see docs/backend-ops.md "Data Retention"), so an unbounded load
     here grows with the user's lifetime activity on every /explore request.
     FEEDBACK_DECAY_BASE's per-day decay makes older signals numerically
     negligible to score_event() anyway, so this drops no meaningfully-weighted

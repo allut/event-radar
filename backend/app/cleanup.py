@@ -111,10 +111,10 @@ async def cleanup_stale_data(db: AsyncSession, *, dry_run: bool = False) -> dict
 
     # Unverified accounts (_get_or_create_user / _get_or_create_organizer
     # insert a row on an unauthenticated request-link POST, before the
-    # address is proven reachable — CLAUDE.md Auth → Email verification
-    # gate). Prune rows old enough that any link issued for them has long
-    # expired (MAGIC_LINK_TTL_MINUTES / ORGANIZER_MAGIC_LINK_TTL_MINUTES are
-    # both well under a day), skipping any with an unused-and-still-valid
+    # address is proven reachable — docs/security.md "Auth", email
+    # verification gate). Prune rows old enough that any link issued for
+    # them has long expired (MAGIC_LINK_TTL_MINUTES /
+    # ORGANIZER_MAGIC_LINK_TTL_MINUTES are both well under a day), skipping any with an unused-and-still-valid
     # link so a slow click never races the sweep.
     unverified_cutoff = now - timedelta(days=UNVERIFIED_ACCOUNT_RETENTION_DAYS)
     no_pending_user_link = ~exists(

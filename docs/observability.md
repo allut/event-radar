@@ -4,7 +4,9 @@ What's in here: the Axiom logging/monitoring spec — log shipping, dashboards, 
 
 Version-controlled spec for the Axiom monitors that watch the production log
 stream. The backend ships prod logs to Axiom (`app/logging_config.py` →
-`HttpLogShipHandler`); this file defines what to alert on. Monitors are created
+`HttpLogShipHandler`); this file defines what to alert on.
+
+Monitors are created
 by hand in the Axiom UI — this doc is the source of truth for their queries,
 thresholds, and windows. Keep it in sync when you change a monitor.
 
@@ -87,7 +89,9 @@ The embedded APScheduler lives inside the single web process. The backend now
 runs on Render's always-on Starter plan (the old free tier's 15-min idle sleep
 no longer applies — see `docs/backend-ops.md`), but a scheduler can still die
 quietly: a wedged event loop, a process restarted without the scheduler
-starting, or a job that hangs instead of failing. When that happens **nothing
+starting, or a job that hangs instead of failing.
+
+When that happens **nothing
 errors** — jobs simply never run, so an error-only monitor stays silent. #3/#3b detect the *absence* of a successful
 `job_run` in the window the job should have run; #7 detects the whole stream
 going quiet (app down **or** shipping broken).
@@ -96,9 +100,10 @@ going quiet (app down **or** shipping broken).
 
 - **Axiom can't alert on its own silence.** #7 only fires if Axiom is still
   ingesting and evaluating. If Axiom ingest or the monitor engine is down,
-  nothing fires. An external uptime check (e.g. a second cron-job.org job that
-  alerts on a failed `GET /health`) would close this gap — not set up (declined
-  for now), documented here as the one uncovered case.
+  nothing fires.
+- **An external uptime check would close that gap.** For example, a second
+  cron-job.org job that alerts on a failed `GET /health`. It's not set up
+  (declined for now), so this is the one uncovered case.
 - **Free-tier limits.** Monitor count and evaluation frequency may be capped on
   the Axiom plan in use — use the priority order above if so.
 
@@ -108,10 +113,11 @@ going quiet (app down **or** shipping broken).
   `LOG_SHIP_URL` pointed at a [webhook.site](https://webhook.site) bin (+ any
   `LOG_SHIP_TOKEN`) and `ENABLE_SCHEDULER` on, then let a scheduled job fire
   (hourly ingest is the shortest wait). Confirm the shipped JSON carries
-  `event`, `job`, `status`, `duration_ms`. Only `_scheduled` jobs emit
-  `job_run` — an admin-console trigger (`POST /admin/build-feeds`) emits
-  `admin_action` instead. Hammer a rate-limited route
-  and confirm an `event="rate_limit_block"` line ships.
+  `event`, `job`, `status`, `duration_ms`.
+- **Only `_scheduled` jobs emit `job_run`.** An admin-console trigger
+  (`POST /admin/build-feeds`) emits `admin_action` instead.
+- **Rate-limit events:** hammer a rate-limited route and confirm an
+  `event="rate_limit_block"` line ships.
 - **Axiom:** confirm the new fields appear as columns on the dataset; run each
   monitor's APL as a query and check it returns the expected rows.
 - **Monitor #2:** create it + the email notifier, force one job error, confirm

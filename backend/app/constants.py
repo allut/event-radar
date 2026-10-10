@@ -702,7 +702,7 @@ DEDUP_CANDIDATE_PAIR_MAX = 50_000
 RESEND_SEND_URL = "https://api.resend.com/emails"
 RESEND_TIMEOUT_SECONDS: float = 10.0
 RESEND_ERROR_SNIPPET_LEN = 200
-# Scheduler cadence (see CLAUDE.md Architecture for the full cron schedule)
+# Scheduler cadence (see CLAUDE.md "Architecture" for the full cron schedule)
 ORGANIZER_SYNC_HOUR = 3  # weekly Sunday 03:00 Europe/Tallinn
 ORGANIZER_SYNC_MINUTE = 0
 CLEANUP_HOUR = 3  # weekly Sunday 03:30 Europe/Tallinn, after organizer sync
@@ -1301,7 +1301,7 @@ BROWSE_SCORE_CACHE_MAX_ENTRIES: int = 2048
 BROWSE_ANON_CACHE_SENTINEL: int = 0
 # How far back browse.py::_load_feedback_context looks for a user's like/dislike
 # history when scoring /explore (Path B). user_event_feedback is preserved
-# indefinitely by policy (see CLAUDE.md Data Retention), so an unbounded load
+# indefinitely by policy (see docs/backend-ops.md "Data Retention"), so an unbounded load
 # grows with the user's lifetime activity on every /explore request. The
 # FEEDBACK_DECAY_BASE (0.9) decay makes a signal this old numerically
 # negligible (0.9^90 ~= 0.0000265) to score_event() anyway, so the cutoff drops
@@ -1645,7 +1645,7 @@ GEOCODE_RETRY_INTERVAL_DAYS = 7
 # and, once GEOCODE_MAX_PER_RUN of them exist, starve newer candidates.
 VENUE_EXTRACT_RETRY_INTERVAL_DAYS = 7
 # How far back a donor event can be and still seed the geocode cache / sibling
-# copy pass. events rows are never deleted (see CLAUDE.md retention policy), so
+# copy pass. events rows are never deleted (see docs/backend-ops.md "Data Retention"), so
 # without this bound both donor queries would scan every event ever ingested,
 # growing without limit. Venue coordinates don't change, so this trades a small
 # amount of donor coverage (a venue whose only past event is older than this
@@ -2005,9 +2005,9 @@ INGESTION_RUNS_RETENTION_DAYS = 90
 RAW_INBOUND_EMAILS_RETENTION_DAYS = 90
 DAILY_FEEDS_RETENTION_DAYS = 30
 # Unverified users/organizers — a row inserted on an unauthenticated
-# POST .../request-link before the address is proven reachable (see CLAUDE.md
-# Auth → Email verification gate). Retained this long in case a slow/late
-# click on a still-valid link would otherwise orphan it, then pruned so an
+# POST .../request-link before the address is proven reachable (see
+# docs/security.md "Auth", email verification gate). Retained this long in
+# case a slow/late click on a still-valid link would otherwise orphan it, then pruned so an
 # address nobody ever proved they own isn't retained indefinitely.
 UNVERIFIED_ACCOUNT_RETENTION_DAYS = 30
 

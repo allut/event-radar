@@ -496,7 +496,7 @@ async def _apply_google_linking_gate(
         except IntegrityError:
             # A concurrent callback for the same Google account (double-click,
             # two tabs) won the identity-link race first — never surface a
-            # 500 here (docs/security.md's callback invariant). Roll back
+            # 500 here (docs/security.md "Auth", callback invariant). Roll back
             # (which also undoes this request's own uncommitted Organizer
             # insert, if any — the winning request's row is what persists)
             # and fall back to that winner's identity.
