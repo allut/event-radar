@@ -37,6 +37,12 @@
   color: var(--text);
 }
 
+.titleAdmin {
+  composes: title;
+  font-family: var(--font-system);
+  font-size: var(--fs-lg);
+}
+
 .closeBtn {
   composes: iconAction from '../shared/Button.module.css';
   color: var(--text-muted);

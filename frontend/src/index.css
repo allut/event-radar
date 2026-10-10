@@ -464,6 +464,19 @@
   --fs-bar-word: 1.5rem;              /* Cormorant wordmark */
   --fs-bar-word-condensed: 1.3rem;
   --fs-bar-kicker: 0.656rem;          /* pulse chip spaced caps */
+  --bar-pulse-h: 22px;                /* pulse chip height */
+  --bar-pulse-dot: 5px;               /* pulse chip dot */
+  --bar-glyph: 14px;                  /* control glyph */
+  --bar-chev: 8px;                    /* menu-trigger chevron */
+  --bar-pop-min: 230px;               /* menu popover min / max width */
+  --bar-pop-max: 340px;
+  --bar-prefs-pop-min: 250px;
+  --bar-search-pop-w: 300px;
+  --bar-drawer-search-h: 44px;        /* search field in popover + mobile drawer */
+  --bar-pop-rise: 4px;                /* popover slide-in distance */
+  --tracking-bar-word: 0.005em;       /* Cormorant wordmark */
+  --tracking-bar-label: 0.16em;       /* popover section labels */
+  --leading-drawer-nav: 1.1;          /* mobile drawer links */
   --fs-drawer-nav: 2.1rem;            /* phone drawer Cormorant nav */
   --bar-transition: 280ms var(--easing-landing);
 }

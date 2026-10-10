@@ -23,7 +23,7 @@ export default function ConfirmRunModal({ trigger, dryRunLines, onCancel, onConf
   const [step, setStep] = useState<1 | 2>(1);
 
   return (
-    <Modal open onClose={onCancel} title={step === 1 ? 'This is a real run' : `Confirm ${trigger.label.toLowerCase()}`} locale={LOCALE_EN}>
+    <Modal admin open onClose={onCancel} title={step === 1 ? 'This is a real run' : `Confirm ${trigger.label.toLowerCase()}`} locale={LOCALE_EN}>
       {step === 1 ? (
         <>
           <p className={styles.danger} role="alert">{trigger.dangerCopy}</p>
