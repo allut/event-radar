@@ -215,10 +215,8 @@ describe('EventSubmit (create)', () => {
 });
 
 describe('EventSubmit (edit)', () => {
-  it('prefills from the organizer\'s event list and submits a PATCH', async () => {
+  it('prefills from the organizer\'s single event and submits a PATCH', async () => {
     const eventsResponse = {
-      events: [
-        {
           id: 9,
           title: 'Existing Event',
           description: null,
@@ -233,11 +231,7 @@ describe('EventSubmit (edit)', () => {
           price_min: null,
           price_max: null,
           categories: [],
-        },
-      ],
-      limit: 24,
-      offset: 0,
-    };
+        };
     mockGet.mockImplementation((path: string) => {
       if (path.includes('/organizer/profile')) return Promise.resolve({ name: 'Test Organizer' });
       if (path.includes('/organizer/venues')) return Promise.resolve([]);
@@ -259,18 +253,12 @@ describe('EventSubmit (edit)', () => {
 
   function editEventsResponse(categories: string[]) {
     return {
-      events: [
-        {
           id: 9, title: 'Existing Event', description: null, important_info: null,
           starts_at: '2026-08-01T18:00:00Z', ends_at: null,
           venue_name: null, venue_address: null, venue_id: null,
           url: null, image_url: null, price_min: null, price_max: null,
           categories,
-        },
-      ],
-      limit: 24,
-      offset: 0,
-    };
+        };
   }
 
   function mountEdit(categories: string[]) {
@@ -328,8 +316,6 @@ describe('EventSubmit (edit)', () => {
 
   it('round-trips a formatted description into the editor and back out on save', async () => {
     const eventsResponse = {
-      events: [
-        {
           id: 10,
           title: 'Existing Event',
           description: '<p><strong>Bold</strong> description</p>',
@@ -344,11 +330,7 @@ describe('EventSubmit (edit)', () => {
           price_min: null,
           price_max: null,
           categories: [],
-        },
-      ],
-      limit: 24,
-      offset: 0,
-    };
+        };
     mockGet.mockImplementation((path: string) => {
       if (path.includes('/organizer/profile')) return Promise.resolve({ name: 'Test Organizer' });
       if (path.includes('/organizer/venues')) return Promise.resolve([]);

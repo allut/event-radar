@@ -1279,6 +1279,57 @@ class TestCloudinarySignature:
         assert signature == self._DOC_SHA256_DIGEST
 
 
+class TestGetOwnEvent:
+    @pytest.mark.asyncio
+    async def test_returns_list_row_shape(self, mock_db, make_request, make_organizer):
+        from app.routers.organizer_events import get_own_event
+
+        organizer = make_organizer(organizer_id=5)
+        event = _fake_event(
+            submitted_by_organizer_id=5,
+            status=EVENT_STATUS_CLASSIFIED,
+            needs_review=True,
+            venue_id=7,
+            title_localized={"et": "Pealkiri"},
+        )
+        mock_db.scalar.return_value = event
+
+        result = await get_own_event(
+            3,
+            make_request(path="/organizer/events/3"),
+            locale=None,
+            current_organizer=organizer,
+            db=mock_db,
+        )
+
+        assert result["status"] == EVENT_STATUS_CLASSIFIED
+        assert result["needs_review"] is True
+        assert result["venue_id"] == 7
+        assert result["title_localized"] == {"et": "Pealkiri"}
+        # Ownership is enforced in the query itself.
+        compiled = str(mock_db.scalar.call_args.args[0])
+        assert "submitted_by_organizer_id" in compiled
+
+    @pytest.mark.asyncio
+    async def test_unknown_or_foreign_event_404s(
+        self, mock_db, make_request, make_organizer
+    ):
+        from fastapi import HTTPException
+
+        from app.routers.organizer_events import get_own_event
+
+        mock_db.scalar.return_value = None
+        with pytest.raises(HTTPException) as exc:
+            await get_own_event(
+                3,
+                make_request(path="/organizer/events/3"),
+                locale=None,
+                current_organizer=make_organizer(organizer_id=5),
+                db=mock_db,
+            )
+        assert exc.value.status_code == 404
+
+
 class TestListOwnEvents:
     @pytest.mark.asyncio
     async def test_includes_status_and_needs_review(

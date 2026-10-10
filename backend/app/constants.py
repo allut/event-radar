@@ -1619,6 +1619,11 @@ GEOCODE_COMMIT_INTERVAL_SECONDS: float = 120.0
 # window, mirroring REFETCH_MIN_INTERVAL_DAYS's cooldown shape. A transient HTTP
 # failure does NOT start this cooldown — only a definitive no-match/bbox-reject does.
 GEOCODE_RETRY_INTERVAL_DAYS = 7
+# An event whose suspect venue_name the LLM resolved to "no address" is not
+# re-offered to the venue-extract pass until this window passes
+# (events.venue_extract_attempted_at). Without it such rows requalify every run
+# and, once GEOCODE_MAX_PER_RUN of them exist, starve newer candidates.
+VENUE_EXTRACT_RETRY_INTERVAL_DAYS = 7
 # How far back a donor event can be and still seed the geocode cache / sibling
 # copy pass. events rows are never deleted (see CLAUDE.md retention policy), so
 # without this bound both donor queries would scan every event ever ingested,

@@ -2,7 +2,7 @@
 
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import httpx
 from sqlalchemy import ColumnElement, func, or_, select
@@ -16,6 +16,7 @@ from app.constants import (
     LLM_DEDUP_HASH_QUERY_CHUNK_SIZE,
     LLM_TASK_VENUE_EXTRACT,
     VENUE_EXTRACT_MAX_FRESH_LLM_CALLS_PER_RUN,
+    VENUE_EXTRACT_RETRY_INTERVAL_DAYS,
     VENUE_NAME_DIRECTION_KEYWORDS,
     VENUE_NAME_MAX_LEN,
     VENUE_NAME_PROMPT_MAX_CHARS,
@@ -121,13 +122,19 @@ async def extract_address_from_venue_name(db: AsyncSession) -> int:
     if not llm_available():
         return 0
 
+    now = datetime.now(TALLINN_TZ)
+    due_before = now - timedelta(days=VENUE_EXTRACT_RETRY_INTERVAL_DAYS)
     candidates = (
         await db.scalars(
             select(Event)
             .where(
                 Event.venue_name.is_not(None),
                 Event.venue_address.is_(None),
-                Event.starts_at >= datetime.now(TALLINN_TZ),
+                Event.starts_at >= now,
+                or_(
+                    Event.venue_extract_attempted_at.is_(None),
+                    Event.venue_extract_attempted_at <= due_before,
+                ),
                 suspect_venue_name_sql(),
             )
             .order_by(Event.starts_at, Event.id)
@@ -237,8 +244,12 @@ async def extract_address_from_venue_name(db: AsyncSession) -> int:
         # Only rewrite venue_name when an address was actually mined. Shortening or
         # NULLing the name with no address payoff buys nothing and can break canonical
         # sibling matching (it stranded event 482: "Katharienthal Kohviku" no longer
-        # matched its full-named EN sibling). No address → leave the event untouched.
+        # matched its full-named EN sibling). No address → leave the event
+        # untouched, but start the retry cooldown so it stops requalifying
+        # every run and starving newer candidates.
         if new_address is None:
+            for event in events:
+                event.venue_extract_attempted_at = now
             continue
 
         for event in events:

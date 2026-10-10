@@ -736,6 +736,8 @@ export const CLAIM_EVENTS_PAGE_SIZE = 20;
 // spending a network round trip on it.
 export const ORGANIZER_IMAGE_ACCEPT = ORGANIZER_IMAGE_ALLOWED_MIME.join(',');
 export const ORGANIZER_EVENTS_PAGE_SIZE = 24;
+/** Segment nested under QUERY_KEYS.organizerEvents for the single-event (edit prefill) query. */
+export const ORGANIZER_EVENT_DETAIL_KEY = 'detail';
 
 // Organizer submission content-language tabs (EventSubmit.tsx). ET is always
 // the base/required slot regardless of the app's default_locale ('en') — the

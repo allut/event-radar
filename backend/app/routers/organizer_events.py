@@ -588,25 +588,54 @@ async def list_own_events(
         .offset(offset)
     )
     events = (await db.scalars(stmt)).all()
-    # serialize_event() is built for public read paths (published-only) and
-    # never includes status — an organizer's own dashboard needs to tell
-    # draft/classified/published/cancelled apart, so layer it on here.
     return {
-        "events": [
-            {
-                **serialize_event(e, locale=effective_locale),
-                "status": e.status,
-                "needs_review": e.needs_review,
-                "venue_id": e.venue_id,
-                "title_localized": e.title_localized,
-                "description_localized": e.description_localized,
-                "important_info_localized": e.important_info_localized,
-            }
-            for e in events
-        ],
+        "events": [_serialize_own_event(e, effective_locale) for e in events],
         "limit": limit,
         "offset": offset,
     }
+
+
+def _serialize_own_event(event: Event, locale: str) -> dict:
+    """serialize_event() is built for public read paths (published-only) and
+    never includes status — an organizer's own dashboard/edit form needs to
+    tell draft/classified/published/cancelled apart, so layer it on here.
+    Shared by the list and single-event reads so their shapes cannot drift."""
+    return {
+        **serialize_event(event, locale=locale),
+        "status": event.status,
+        "needs_review": event.needs_review,
+        "venue_id": event.venue_id,
+        "title_localized": event.title_localized,
+        "description_localized": event.description_localized,
+        "important_info_localized": event.important_info_localized,
+    }
+
+
+@router.get("/{event_id}")
+@limiter.limit(RATE_LIMIT_SUBMIT)
+async def get_own_event(
+    event_id: int,
+    request: Request,
+    locale: str | None = Query(None),
+    current_organizer: Organizer = Depends(get_current_organizer),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """One of the organizer's own submitted events, same shape as a
+    ``GET /organizer/events`` row. Feeds the edit form's prefill so any event —
+    not just the dashboard list's first page — can be edited. 404 (not 403) on
+    another organizer's event, matching PATCH/DELETE."""
+    effective_locale = resolve_locale_param(locale, current_organizer.locale)
+    event = await db.scalar(
+        select_events_with_classification().where(
+            Event.id == event_id,
+            Event.submitted_by_organizer_id == current_organizer.id,
+        )
+    )
+    if event is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=ERROR_EVENT_NOT_FOUND
+        )
+    return _serialize_own_event(event, effective_locale)
 
 
 def _cloudinary_signature(params: dict[str, str | int], api_secret: str) -> str:

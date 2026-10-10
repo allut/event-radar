@@ -950,6 +950,17 @@ class TestExtractAddressFromVenueName:
         assert result == 0
         assert event.venue_name == original
         assert event.venue_address is None
+        # Cooldown starts so the event stops requalifying every run.
+        assert event.venue_extract_attempted_at is not None
+
+    @pytest.mark.asyncio
+    async def test_candidate_query_honours_attempt_cooldown(self, mock_db):
+        mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=[]))
+        with patch("app.ingestion.geocode.venue_extract.llm_available", return_value=True):
+            await extract_address_from_venue_name(mock_db)
+        compiled = str(mock_db.scalars.call_args.args[0])
+        assert "venue_extract_attempted_at IS NULL" in compiled
+        assert "venue_extract_attempted_at <=" in compiled
 
     @pytest.mark.asyncio
     async def test_cached_decision_applied_without_fresh_call(self, mock_db):
