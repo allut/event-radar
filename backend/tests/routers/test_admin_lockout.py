@@ -162,3 +162,16 @@ async def test_rate_limit_bucket_shared_across_different_admin_routes(admin_app)
                 statuses.append(resp.status_code)
 
     assert http.HTTPStatus.TOO_MANY_REQUESTS in statuses
+
+
+def test_failure_log_never_contains_attempted_username(caplog):
+    """OWASP audit L-12: a password typed into the username field must not be logged."""
+    import time
+
+    from app.auth.admin_lockout import record_admin_auth_failure
+
+    with caplog.at_level("WARNING"):
+        record_admin_auth_failure("k-l12", time.monotonic(), "hunter2-secret")
+    text = " ".join(r.getMessage() for r in caplog.records)
+    assert "hunter2-secret" not in text
+    assert "username_ok=False" in text

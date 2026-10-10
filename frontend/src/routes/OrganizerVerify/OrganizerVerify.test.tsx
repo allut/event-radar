@@ -1,3 +1,4 @@
+import { t } from '../../i18n';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { StatusCodes } from 'http-status-codes';
 import { screen, waitFor } from '@testing-library/react';
@@ -58,5 +59,19 @@ describe('OrganizerVerify', () => {
 
     await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
     expect(screen.getByText('Link expired')).toBeInTheDocument();
+  });
+});
+
+describe('OrganizerVerify locale', () => {
+  // The page speaks the URL's language (like the Footer under it, #497) —
+  // never the saved preference, mocked to 'en' above.
+  it('renders in the URL prefix\'s language', () => {
+    renderWithProviders(<OrganizerVerify />, { route: '/ru/organizer/verify' });
+    expect(screen.getAllByText(t('no_token', 'ru')).length).toBeGreaterThan(0);
+  });
+
+  it('renders Estonian on a bare path', () => {
+    renderWithProviders(<OrganizerVerify />, { route: '/organizer/verify' });
+    expect(screen.getAllByText(t('no_token', 'et')).length).toBeGreaterThan(0);
   });
 });

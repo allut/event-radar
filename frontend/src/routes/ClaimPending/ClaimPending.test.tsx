@@ -19,8 +19,8 @@ const mockPost = vi.mocked(organizerApi.post);
 
 function renderPending() {
   return renderWithProviders(<ClaimPending />, {
-    route: '/organizer/claims/7/pending',
-    pathPattern: '/organizer/claims/:id/pending',
+    route: '/en/organizer/claims/7/pending',
+    pathPattern: '/:locale/organizer/claims/:id/pending',
   });
 }
 
@@ -28,6 +28,19 @@ beforeEach(() => {
   mockGet.mockReset();
   mockPost.mockReset();
   vi.spyOn(window, 'confirm').mockReturnValue(true);
+});
+
+describe('ClaimPending route-param guard (L-7)', () => {
+  it('never calls the API for a non-numeric id (path-traversal attempt)', async () => {
+    renderWithProviders(<ClaimPending />, {
+      route: '/en/organizer/claims/..%2F..%2Fusers%2Fme%3F/pending',
+      pathPattern: '/:locale/organizer/claims/:id/pending',
+    });
+
+    await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
+    expect(mockGet).not.toHaveBeenCalled();
+    expect(mockPost).not.toHaveBeenCalled();
+  });
 });
 
 describe('ClaimPending (#415)', () => {

@@ -7,6 +7,7 @@ import { renderWithProviders } from '../../test/utils';
 
 vi.mock('../../lib/auth', () => ({
   getLocale: vi.fn(() => 'en'),
+  getStoredLocale: vi.fn(() => 'en'),
   setLocale: vi.fn(),
 }));
 
@@ -27,6 +28,20 @@ beforeEach(() => {
 });
 
 describe('OrganizerContact', () => {
+  it('links to the organizers section of the FAQ', () => {
+    renderWithProviders(<OrganizerContact />);
+    expect(
+      screen.getByRole('link', { name: 'Questions about listing or claiming events? See the FAQ for organizers →' }),
+    ).toHaveAttribute('href', '/faq#organizers');
+  });
+
+  it('keeps the locale prefix on the FAQ link', () => {
+    renderWithProviders(<OrganizerContact />, { route: '/ru/organizer/contact' });
+    expect(
+      screen.getByRole('link', { name: 'Questions about listing or claiming events? See the FAQ for organizers →' }),
+    ).toHaveAttribute('href', '/ru/faq#organizers');
+  });
+
   it('renders a message field and submit button', () => {
     renderWithProviders(<OrganizerContact />);
     expect(screen.getByLabelText(/message/i)).toBeInTheDocument();

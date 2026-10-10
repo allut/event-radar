@@ -4,7 +4,7 @@
 // import drags in `node:sqlite` via undici, which the Workers bundler can't
 // resolve.
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
-import { onRequestPost } from '../../../functions/api/prerender-cadence';
+import { onRequest } from '../../../functions/api/prerender-cadence';
 import { PRERENDER_CADENCE_TOKEN_HEADER } from '../../../src/constants';
 import { buildRoundMarker, serializeRoundMarker } from '../../../src/lib/prerenderChain';
 
@@ -62,7 +62,7 @@ describe('prerender-cadence handler', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-08-15T12:10:00.000Z')); // marker is 10min old — fresh
 
-    await onRequestPost(makeContext({ [PRERENDER_CADENCE_TOKEN_HEADER]: 'shared-secret' }));
+    await onRequest(makeContext({ [PRERENDER_CADENCE_TOKEN_HEADER]: 'shared-secret' }));
 
     const [commitUrl, commitInit] = fetchMock.mock.calls[0];
     expect(String(commitUrl)).toContain('/commits/release');
@@ -85,7 +85,7 @@ describe('prerender-cadence handler', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-08-15T12:10:00.000Z')); // 10min old — fresh, within 30min window
 
-    const res = await onRequestPost(makeContext({ [PRERENDER_CADENCE_TOKEN_HEADER]: 'shared-secret' }));
+    const res = await onRequest(makeContext({ [PRERENDER_CADENCE_TOKEN_HEADER]: 'shared-secret' }));
 
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ skipped: true, reason: 'chain round in flight' });
@@ -107,7 +107,7 @@ describe('prerender-cadence handler', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    const res = await onRequestPost(makeContext({ [PRERENDER_CADENCE_TOKEN_HEADER]: 'shared-secret' }));
+    const res = await onRequest(makeContext({ [PRERENDER_CADENCE_TOKEN_HEADER]: 'shared-secret' }));
 
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ skipped: false, deployHookStatus: 200 });
@@ -119,7 +119,7 @@ describe('prerender-cadence handler', () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200, json: () => Promise.resolve({}) });
     vi.stubGlobal('fetch', fetchMock);
 
-    const res = await onRequestPost(
+    const res = await onRequest(
       makeContext({ [PRERENDER_CADENCE_TOKEN_HEADER]: 'shared-secret' }, 'POST', {
         ...BASE_ENV,
         GH_PRERENDER_CHAIN_TOKEN: undefined,
@@ -131,17 +131,17 @@ describe('prerender-cadence handler', () => {
   });
 
   it('rejects requests with an invalid token', async () => {
-    const res = await onRequestPost(makeContext({ [PRERENDER_CADENCE_TOKEN_HEADER]: 'wrong' }));
+    const res = await onRequest(makeContext({ [PRERENDER_CADENCE_TOKEN_HEADER]: 'wrong' }));
     expect(res.status).toBe(403);
   });
 
   it('rejects non-POST requests before checking the token', async () => {
-    const res = await onRequestPost(makeContext({ [PRERENDER_CADENCE_TOKEN_HEADER]: 'shared-secret' }, 'GET'));
+    const res = await onRequest(makeContext({ [PRERENDER_CADENCE_TOKEN_HEADER]: 'shared-secret' }, 'GET'));
     expect(res.status).toBe(405);
   });
 
   it('returns an opaque 403 (not 500) when the shared secret itself is unconfigured', async () => {
-    const res = await onRequestPost(
+    const res = await onRequest(
       makeContext({ [PRERENDER_CADENCE_TOKEN_HEADER]: 'anything' }, 'POST', {
         ...BASE_ENV,
         PRERENDER_CADENCE_TOKEN: undefined,

@@ -74,7 +74,7 @@
 }
 
 .codeBlock {
-  font-family: var(--font-mono, monospace);
+  font-family: var(--font-mono);
   font-size: var(--fs-sm);
   background: var(--bg-raised);
   border: var(--border-w-hair) solid var(--border);

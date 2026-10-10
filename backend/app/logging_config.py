@@ -13,6 +13,7 @@ import httpx
 
 from app.config import settings
 from app.constants import (
+    UVICORN_ACCESS_LOGGER,
     APP_ENV_DEVELOPMENT,
     AUTHORIZATION_HEADER,
     BEARER_PREFIX,
@@ -168,7 +169,7 @@ class _AccessPathStripFilter(logging.Filter):
 
     def filter(self, record: logging.LogRecord) -> bool:
         if (
-            record.name == "uvicorn.access"
+            record.name == UVICORN_ACCESS_LOGGER
             and isinstance(record.args, tuple)
             and len(record.args) > UVICORN_ACCESS_PATH_ARG_INDEX
         ):
@@ -198,7 +199,7 @@ class _AccessPathSuppressFilter(logging.Filter):
 
     def filter(self, record: logging.LogRecord) -> bool:
         if (
-            record.name == "uvicorn.access"
+            record.name == UVICORN_ACCESS_LOGGER
             and isinstance(record.args, tuple)
             and len(record.args) > UVICORN_ACCESS_STATUS_ARG_INDEX
         ):
@@ -292,7 +293,7 @@ def configure_logging() -> None:
         logger = logging.getLogger(name)
         logger.handlers.clear()
         logger.propagate = True
-        if name == "uvicorn.access":
+        if name == UVICORN_ACCESS_LOGGER:
             # Attached at the logger level (not a handler) so the mutation
             # runs before ANY handler formats the record — see
             # _AccessPathStripFilter's docstring (OWASP audit G-4).

@@ -2,18 +2,19 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { organizerApi, ApiError } from '../../api/client';
 import { setOrganizerSignedInHint } from '../../lib/organizerAuth';
-import { getLocale } from '../../lib/auth';
 import { API, AUTH_REDIRECT_DELAY_MS, AUTH_TOKEN_PARAM, ROUTES, UI_STATE, VERIFY_STATE_TO_KIND, type VerifyState } from '../../constants';
 import { t } from '../../i18n';
+import { useDelayedAction } from '../../hooks/useDelayedAction';
 import { useLocaleNavigate } from '../../hooks/useLocaleNavigate';
 import { useLocalePath } from '../../hooks/useLocalePath';
+import { usePathLocale } from '../../hooks/usePathLocale';
 import { useStaticSeoMeta } from '../../hooks/useStaticSeoMeta';
 import AuthCard from '../../components/AuthCard';
 import SeoTags from '../../components/SeoTags';
 import styles from './OrganizerVerify.module.css';
 
 export default function OrganizerVerify() {
-  const locale = getLocale();
+  const locale = usePathLocale();
   const seoMeta = useStaticSeoMeta('seo_title_organizer_verify', locale);
   const [searchParams] = useSearchParams();
   const navigate = useLocaleNavigate();
@@ -22,6 +23,7 @@ export default function OrganizerVerify() {
   const [state, setState] = useState<VerifyState>(token ? UI_STATE.verifying : UI_STATE.error);
   const [errorMsg, setErrorMsg] = useState(token ? '' : t('no_token', locale));
   const called = useRef(false);
+  const scheduleRedirect = useDelayedAction();
 
   useEffect(() => {
     if (!token) return;
@@ -37,7 +39,7 @@ export default function OrganizerVerify() {
         await organizerApi.post(API.organizerAuthVerify, { token: tok });
         setOrganizerSignedInHint();
         setState(UI_STATE.success);
-        setTimeout(() => navigate(ROUTES.organizerDashboard, { replace: true }), AUTH_REDIRECT_DELAY_MS);
+        scheduleRedirect(() => navigate(ROUTES.organizerDashboard, { replace: true }), AUTH_REDIRECT_DELAY_MS);
       } catch (err) {
         setState(UI_STATE.error);
         setErrorMsg(
@@ -48,7 +50,7 @@ export default function OrganizerVerify() {
       }
     }
     void verify(token);
-  }, [navigate, token, locale, localePath]);
+  }, [navigate, token, locale, localePath, scheduleRedirect]);
 
   const message =
     state === UI_STATE.verifying ? t('verifying', locale)

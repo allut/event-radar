@@ -15,7 +15,7 @@ import logging
 from dataclasses import dataclass
 
 import httpx
-from sqlalchemy import select
+from sqlalchemy import Select, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -23,7 +23,7 @@ from app.claims.piletilevi_promoter import resolve_promoter_identity
 from app.constants import (
     CLAIM_KIND_PUBLISHER,
     CLAIM_KIND_SERIES,
-    ORGANIZER_NAME_MAX_LEN,
+    PUBLISHER_NAME_MAX_LEN,
     PUBLISHER_STATUS_ACTIVE,
     SOURCE_SLUG_ESTONIA_CONCERT_HALL,
     SOURCE_SLUG_FIENTA,
@@ -78,7 +78,7 @@ async def _get_or_create_publisher(
     publisher = Publisher(
         source_id=source_id,
         external_id=external_id,
-        name=name[:ORGANIZER_NAME_MAX_LEN],
+        name=name[:PUBLISHER_NAME_MAX_LEN],
         status=PUBLISHER_STATUS_ACTIVE,
     )
     try:
@@ -233,3 +233,51 @@ async def resolve_claim_target_live(
         return await _resolve_piletilevi_target(db, client, source, event, es)
 
     raise ClaimTargetError(f"source={slug} has no resolvable claim target")
+
+
+def publisher_claim_event_ids(publisher_id: int | None) -> Select[tuple[int]]:
+    """Event ids a Publisher claim covers (#436) — one EventSource.publisher_id
+    match, shared by organizer_claims.py::list_claim_events (the bulk list)
+    and claims/pinning.py::claim_event_for_id (the #437 per-event membership
+    check), so the two never drift on what "covered" means."""
+    return select(EventSource.event_id).where(EventSource.publisher_id == publisher_id)
+
+
+async def bulk_resolve_publisher_events(
+    db: AsyncSession, publisher_ids: set[int]
+) -> dict[int, Event]:
+    """One representative Event per Publisher id in ``publisher_ids``,
+    bulk-loaded in two fixed queries regardless of how many ids are passed —
+    shared by admin.py::admin_list_claims and
+    app.claims.lifecycle._send_claim_expiry_emails (#421). "Freshest listing
+    wins" (highest EventSource.id per publisher_id) mirrors
+    app.claims.lifecycle.representative_event_source's own single-row
+    ordering — keep the two in sync if that tie-break ever changes."""
+    if not publisher_ids:
+        return {}
+    # DISTINCT ON walks ix_event_sources_publisher_id and keeps only the
+    # highest-id row per publisher — one row per id, not one per listing.
+    es_rows = (
+        await db.execute(
+            select(EventSource.publisher_id, EventSource.event_id)
+            .where(EventSource.publisher_id.in_(publisher_ids))
+            .distinct(EventSource.publisher_id)
+            .order_by(EventSource.publisher_id, EventSource.id.desc())
+        )
+    ).all()
+    event_id_by_publisher: dict[int, int] = {
+        pid: eid for pid, eid in es_rows if pid is not None
+    }
+    if not event_id_by_publisher:
+        return {}
+    events = (
+        await db.scalars(
+            select(Event).where(Event.id.in_(set(event_id_by_publisher.values())))
+        )
+    ).all()
+    events_by_id = {e.id: e for e in events}
+    return {
+        publisher_id: events_by_id[event_id]
+        for publisher_id, event_id in event_id_by_publisher.items()
+        if event_id in events_by_id
+    }

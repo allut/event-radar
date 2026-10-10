@@ -74,6 +74,55 @@ class TestFormatEventTime:
 # build_digest_html
 # ---------------------------------------------------------------------------
 
+class TestDigestRunScopedCaches:
+    def test_block_cache_renders_each_event_locale_once(self, make_event):
+        event = make_event()
+        cache: dict = {}
+        with patch(
+            "app.email.digest._build_event_block", return_value="<card/>"
+        ) as build:
+            for _ in range(3):
+                build_digest_html(
+                    [event], date(2026, 5, 20), "en", "https://eventradar.ee",
+                    block_cache=cache,
+                )
+            build_digest_html(
+                [event], date(2026, 5, 20), "et", "https://eventradar.ee",
+                block_cache=cache,
+            )
+        assert build.call_count == 2  # one per (event, locale)
+        assert set(cache) == {(event.id, "en"), (event.id, "et")}
+
+    @pytest.mark.asyncio
+    async def test_load_digest_data_skips_events_already_cached(
+        self, mock_db, make_event
+    ):
+        from app.email.digest import _load_digest_data
+
+        cached = make_event(event_id=1)
+        fresh = make_event(event_id=2)
+        feeds = MagicMock()
+        feeds.all.return_value = [
+            MagicMock(user_id=10, event_ids=[1, 2]),
+        ]
+        fresh_rows = MagicMock()
+        fresh_rows.all.return_value = [fresh]
+        mock_db.scalars.side_effect = [feeds, fresh_rows]
+        cache = {1: cached}
+
+        _, event_map = await _load_digest_data(
+            mock_db, date(2026, 5, 20), [10], cache
+        )
+
+        assert event_map == {1: cached, 2: fresh}
+        compiled = str(
+            mock_db.scalars.call_args_list[1].args[0].compile(
+                compile_kwargs={"literal_binds": True}
+            )
+        )
+        assert "events.id IN (2)" in compiled  # only the missing id is queried
+
+
 class TestBuildDigestHtml:
     def test_returns_html_string(self, make_event):
         events = [make_event()]
@@ -149,7 +198,18 @@ class TestBuildDigestHtml:
     def test_frontend_url_used_in_event_link(self, make_event):
         events = [make_event(event_id=42)]
         html = build_digest_html(events, date(2026, 5, 20), "en", "https://eventradar.ee")
-        assert "https://eventradar.ee/events/42" in html
+        assert "https://eventradar.ee/en/events/42" in html
+
+    @pytest.mark.parametrize(
+        ("locale", "prefix"), [("et", ""), ("en", "/en"), ("ru", "/ru")]
+    )
+    def test_links_carry_locale_prefix(self, make_event, locale, prefix):
+        # #499 — every frontend link opens the recipient's locale; ET is bare.
+        events = [make_event(event_id=42)]
+        html = build_digest_html(events, date(2026, 5, 20), locale, "https://eventradar.ee")
+        assert f'href="https://eventradar.ee{prefix}/events/42"' in html
+        assert f'href="https://eventradar.ee{prefix or "/"}"' in html
+        assert f'href="https://eventradar.ee{prefix}/settings"' in html
 
     def test_light_base_client_adaptive(self):
         html = build_digest_html([], date(2026, 5, 20), "en", "https://eventradar.ee")
@@ -158,7 +218,7 @@ class TestBuildDigestHtml:
 
     def test_unsubscribe_link_present(self):
         html = build_digest_html([], date(2026, 5, 20), "en", "https://eventradar.ee")
-        assert "https://eventradar.ee/settings" in html
+        assert "https://eventradar.ee/en/settings" in html
 
     def test_explicit_unsubscribe_url_overrides_default(self):
         html = build_digest_html(
@@ -166,7 +226,7 @@ class TestBuildDigestHtml:
             "https://eventradar.ee/unsubscribe?token=abc123",
         )
         assert "https://eventradar.ee/unsubscribe?token=abc123" in html
-        assert "https://eventradar.ee/settings" not in html
+        assert "https://eventradar.ee/en/settings" not in html
 
     def test_multiple_events_all_rendered(self, make_event):
         events = [make_event(event_id=i, title=f"Event {i}") for i in range(1, 6)]
@@ -231,11 +291,15 @@ class TestBuildDigestHtml:
         html = build_digest_html(events, date(2026, 5, 20), "en", "https://eventradar.ee")
         assert "&#9670;" in html
         assert "MUSIC" in html  # default classification category from make_event
-        assert "<img" not in html
+        assert html.count("<img") == 1  # only the header brand mark, no event image
+
+    def test_header_carries_brand_mark_on_given_base(self, make_event):
+        html = build_digest_html([make_event()], date(2026, 5, 20), "en", "https://eventradar.ee")
+        assert '<img src="https://eventradar.ee/email-mark.png"' in html
 
     def test_feed_button_links_to_frontend_root(self, make_event):
         html = build_digest_html([make_event()], date(2026, 5, 20), "en", "https://eventradar.ee")
-        assert 'href="https://eventradar.ee"' in html
+        assert 'href="https://eventradar.ee/en"' in html
         assert "Open your feed" in html
 
     def test_tickets_link_present_when_event_url_set(self, make_event):

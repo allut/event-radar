@@ -1,8 +1,11 @@
+import { storageGet, storageSet, storageRemove } from './storage';
 import {
   COLOR_SCHEME_DARK_QUERY,
   LEGACY_THEME_PREFERENCE_KEY,
   THEME_OVERRIDE_DEVICE_KEY,
   THEME_OVERRIDE_KEY,
+  THEME_COLOR_META_DARK,
+  THEME_COLOR_META_LIGHT,
 } from '../constants';
 import { THEME_PREFERENCES } from '../_generated/sharedConstants.js';
 
@@ -54,8 +57,8 @@ export function resolveTheme(
 
 export function getResolvedTheme(): ResolvedTheme {
   return resolveTheme(
-    localStorage.getItem(THEME_OVERRIDE_KEY),
-    localStorage.getItem(THEME_OVERRIDE_DEVICE_KEY),
+    storageGet(THEME_OVERRIDE_KEY),
+    storageGet(THEME_OVERRIDE_DEVICE_KEY),
     systemPrefersDark(),
   );
 }
@@ -75,7 +78,7 @@ function syncThemeColorMeta(theme: ResolvedTheme): void {
     meta.name = 'theme-color';
     document.head.appendChild(meta);
   }
-  meta.content = theme === 'light' ? '#fdfcfa' : '#13161e';
+  meta.content = theme === 'light' ? THEME_COLOR_META_LIGHT : THEME_COLOR_META_DARK;
 }
 
 // Discards an override whose recorded device theme no longer matches the
@@ -85,10 +88,10 @@ function syncThemeColorMeta(theme: ResolvedTheme): void {
 // device theme, so there's nothing to reinterpret — every existing visitor
 // starts again at device-following.
 function clearStaleOverride(): void {
-  localStorage.removeItem(LEGACY_THEME_PREFERENCE_KEY);
-  if (localStorage.getItem(THEME_OVERRIDE_DEVICE_KEY) !== currentDeviceTheme()) {
-    localStorage.removeItem(THEME_OVERRIDE_KEY);
-    localStorage.removeItem(THEME_OVERRIDE_DEVICE_KEY);
+  storageRemove(LEGACY_THEME_PREFERENCE_KEY);
+  if (storageGet(THEME_OVERRIDE_DEVICE_KEY) !== currentDeviceTheme()) {
+    storageRemove(THEME_OVERRIDE_KEY);
+    storageRemove(THEME_OVERRIDE_DEVICE_KEY);
   }
 }
 
@@ -105,8 +108,8 @@ export function applyTheme(): void {
 // account (ADR 0003). Records the device theme it was made under, so a
 // later flip expires it.
 export function setThemeOverride(value: ResolvedTheme): void {
-  localStorage.setItem(THEME_OVERRIDE_KEY, value);
-  localStorage.setItem(THEME_OVERRIDE_DEVICE_KEY, currentDeviceTheme());
+  storageSet(THEME_OVERRIDE_KEY, value);
+  storageSet(THEME_OVERRIDE_DEVICE_KEY, currentDeviceTheme());
   applyTheme();
   emitThemeChange();
 }

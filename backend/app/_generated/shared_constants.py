@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 
-APP_VERSION: str = "0.1.32"
+APP_VERSION: str = "0.1.33"
 MAGIC_LINK_TTL_MINUTES: int = 15
 SESSION_TTL_DAYS: int = 2
 PERSONA_PRIMARY_WEIGHT: float = 1.0
@@ -24,5 +24,7 @@ HTML_SANITIZE_ALLOWED_TAGS: frozenset[str] = frozenset({"a", "b", "blockquote", 
 HTML_SANITIZE_ALLOWED_ATTRS: dict[str, set[str]] = {"a": {"href", "title"}}
 BROWSE_PAGE_SIZE: int = 24
 IMAGE_UPLOAD_ALLOWED_MIME: frozenset[str] = frozenset({"image/jpeg", "image/png", "image/webp"})
+ORGANIZER_MAX_CATEGORIES: int = 3
 CLAIM_EXPIRY_DAYS: int = 7
 CLAIM_ADMIN_REVIEW_EXPIRY_DAYS: int = 30
+EMAIL_BRAND_MARK_PATH: str = "/email-mark.png"

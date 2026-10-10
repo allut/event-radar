@@ -9,67 +9,191 @@ from fastapi import HTTPException
 
 from app.constants import APP_ENV_DEVELOPMENT
 from app.routers.utils import (
-    apply_organizer_category,
-    bulk_resolve_publisher_events,
-    collapse_series_duplicates,
     compute_preferred_taxonomy,
+    fold_legacy_category,
     load_user_reported_events,
+    prepend_organizer_categories,
     recent_unused_link_exists,
+    replace_organizer_categories,
     resolve_locale_param,
     resolve_open_reports,
     send_report_resolution_emails,
     serialize_event,
     stream_admin_job,
+    validate_categories,
+)
+from app.claims.target_resolution import bulk_resolve_publisher_events
+from app.events.queries import (
+    collapse_series_duplicates,
+    event_ended_filter,
+    event_not_ended_filter,
+    event_series_key,
+    normalized_title,
 )
 from app.events.venue import (
     resolve_venue_address,
     resolve_venue_coords,
     resolve_venue_name,
 )
-from app.events.queries import (
-    event_ended_filter,
-    event_not_ended_filter,
-    event_series_key,
-    normalized_title,
-)
 from app.auth.utils import mask_email, require_configured_secret
 
 
-class TestApplyOrganizerCategory:
-    """Shared by organizer_events.py (own-submission edits) and
-    organizer_claim_edits.py (#416's prepend-only claim-edit categories)."""
+class TestPrependOrganizerCategories:
+    """Used by organizer_claim_edits.py (#416's prepend-only claim-edit categories)."""
 
     @pytest.mark.asyncio
     async def test_creates_classification_when_none_exists(self, mock_db):
         mock_db.scalar.return_value = None
         mock_db.add = MagicMock()
 
-        await apply_organizer_category(mock_db, 10, "music")
+        await prepend_organizer_categories(mock_db, 10, ["music", "family"])
 
         mock_db.add.assert_called_once()
         added = mock_db.add.call_args[0][0]
         assert added.event_id == 10
-        assert added.categories == ["music"]
+        assert added.categories == ["music", "family"]
 
     @pytest.mark.asyncio
-    async def test_prepends_to_existing_categories(self, mock_db):
+    async def test_prepends_several_in_order(self, mock_db):
         classification = MagicMock()
         classification.categories = ["theater"]
         mock_db.scalar.return_value = classification
 
-        await apply_organizer_category(mock_db, 10, "music")
+        await prepend_organizer_categories(mock_db, 10, ["music", "family"])
 
-        assert classification.categories == ["music", "theater"]
+        assert classification.categories == ["music", "family", "theater"]
 
     @pytest.mark.asyncio
-    async def test_no_duplicate_when_already_present(self, mock_db):
+    async def test_dedupes_against_existing(self, mock_db):
         classification = MagicMock()
         classification.categories = ["music", "theater"]
         mock_db.scalar.return_value = classification
 
-        await apply_organizer_category(mock_db, 10, "music")
+        await prepend_organizer_categories(mock_db, 10, ["family", "music"])
+
+        assert classification.categories == ["family", "music", "theater"]
+
+    @pytest.mark.asyncio
+    async def test_all_present_leaves_order_untouched(self, mock_db):
+        classification = MagicMock()
+        classification.categories = ["music", "theater"]
+        mock_db.scalar.return_value = classification
+
+        await prepend_organizer_categories(mock_db, 10, ["theater"])
 
         assert classification.categories == ["music", "theater"]
+
+
+class TestPrependOrganizerCategoriesCap:
+    @pytest.mark.asyncio
+    async def test_over_total_cap_rejected_and_untouched(self, mock_db):
+        classification = MagicMock()
+        classification.categories = ["music", "theater"]
+        mock_db.scalar.return_value = classification
+
+        with pytest.raises(HTTPException) as exc:
+            await prepend_organizer_categories(
+                mock_db, 10, ["family", "comedy"], max_total=3
+            )
+
+        assert exc.value.status_code == 422
+        assert classification.categories == ["music", "theater"]
+
+    @pytest.mark.asyncio
+    async def test_exactly_at_cap_allowed(self, mock_db):
+        classification = MagicMock()
+        classification.categories = ["music", "theater"]
+        mock_db.scalar.return_value = classification
+
+        await prepend_organizer_categories(mock_db, 10, ["family"], max_total=3)
+
+        assert classification.categories == ["family", "music", "theater"]
+
+    @pytest.mark.asyncio
+    async def test_already_present_picks_do_not_count(self, mock_db):
+        classification = MagicMock()
+        classification.categories = ["music", "theater", "family"]
+        mock_db.scalar.return_value = classification
+
+        await prepend_organizer_categories(mock_db, 10, ["music"], max_total=3)
+
+        assert classification.categories == ["music", "theater", "family"]
+
+    @pytest.mark.asyncio
+    async def test_event_over_cap_cannot_gain(self, mock_db):
+        classification = MagicMock()
+        classification.categories = ["a", "b", "c", "d"]
+        mock_db.scalar.return_value = classification
+
+        with pytest.raises(HTTPException):
+            await prepend_organizer_categories(mock_db, 10, ["music"], max_total=3)
+
+
+class TestReplaceOrganizerCategories:
+    """Used by organizer_events.py (own-submission create + edit)."""
+
+    @pytest.mark.asyncio
+    async def test_creates_classification_when_none_exists(self, mock_db):
+        mock_db.scalar.return_value = None
+        mock_db.add = MagicMock()
+
+        await replace_organizer_categories(mock_db, 10, ["music", "family"])
+
+        added = mock_db.add.call_args[0][0]
+        assert added.event_id == 10
+        assert added.categories == ["music", "family"]
+
+    @pytest.mark.asyncio
+    async def test_replaces_llm_set(self, mock_db):
+        classification = MagicMock()
+        classification.categories = ["theater", "comedy"]
+        mock_db.scalar.return_value = classification
+
+        await replace_organizer_categories(mock_db, 10, ["music", "family"])
+
+        assert classification.categories == ["music", "family"]
+
+
+class TestValidateCategories:
+    def test_none_passes_through(self):
+        assert validate_categories(None) is None
+
+    def test_dedupes_keeping_order(self):
+        assert validate_categories(["music", "family", "music"]) == ["music", "family"]
+
+    def test_invalid_slug_rejected(self):
+        with pytest.raises(ValueError, match="invalid category"):
+            validate_categories(["music", "nope"])
+
+    def test_over_cap_rejected(self):
+        with pytest.raises(ValueError, match="at most"):
+            validate_categories(["music", "family", "theater", "comedy"])
+
+    def test_duplicates_do_not_count_toward_cap(self):
+        assert validate_categories(["music", "music", "family", "theater"]) == [
+            "music",
+            "family",
+            "theater",
+        ]
+
+
+class TestFoldLegacyCategory:
+    def test_folds_into_categories(self):
+        assert fold_legacy_category({"title": "x", "category": "music"}) == {
+            "title": "x",
+            "categories": ["music"],
+        }
+
+    def test_explicit_categories_win(self):
+        assert fold_legacy_category({"category": "music", "categories": ["family"]}) == {
+            "categories": ["family"]
+        }
+
+    def test_null_legacy_dropped(self):
+        assert fold_legacy_category({"category": None}) == {}
+
+    def test_non_dict_untouched(self):
+        assert fold_legacy_category("x") == "x"
 
 
 class TestRequireConfiguredSecret:
@@ -728,9 +852,7 @@ class TestOrganizerSharedHelpers:
         event = make_event(title="Nice concert")
         event.is_explicit = False
         event.is_non_event = False
-        with patch("app.routers.utils.is_explicit_text", return_value=True), patch(
-            "app.routers.utils.is_non_event_text", return_value=False
-        ):
+        with patch("app.routers.utils.content_flags", return_value=(True, False)):
             assert apply_moderation_flags(event, "Hall", "extra") is True
 
         assert event.is_explicit is True
@@ -744,6 +866,20 @@ class TestOrganizerSharedHelpers:
         event.is_non_event = False
         assert apply_moderation_flags(event, "Hall") is False
         assert event.is_explicit is False
+
+    def test_apply_moderation_flags_scans_localized_text(self, make_event):
+        """OWASP audit M-5: explicit text hidden only in EN/RU fields is caught."""
+        from app.routers.utils import apply_moderation_flags
+
+        event = make_event(title="Nice concert")
+        event.is_explicit = False
+        event.is_non_event = False
+        event.title_localized = {"en": "Nice concert", "ru": "xxx porn night"}
+        event.description_localized = None
+        event.important_info_localized = None
+        event.important_info = None
+        assert apply_moderation_flags(event, "Hall") is True
+        assert event.is_explicit is True
 
 
 class TestPageCursor:

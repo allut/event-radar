@@ -35,7 +35,7 @@ from app.constants import (
     MAILTO_PREFIX,
     PILETILEVI_PROMOTER_URL_MARKER,
 )
-from app.ingestion.http_client import host_matches_domain, http_get
+from app.ingestion.http_client import host_matches_domain, http_get_stored_url
 from app.ingestion.jsonld import parse_jsonld_graph_items
 from app.ingestion.selectors import (
     JSONLD_EVENT_TYPE,
@@ -173,7 +173,13 @@ async def resolve_promoter_contact(
     promoter_url = resolve_promoter_url(event_page_html, event_page_url)
     if promoter_url is None:
         return None
-    response = await http_get(client, promoter_url)
+    try:
+        # Full SSRF guard (https/443, allowlisted host, public IP) — the
+        # promoter URL is page-derived, so hostname equality alone is not
+        # enough on a request path (OWASP audit L-3).
+        response = await http_get_stored_url(client, promoter_url)
+    except ValueError:
+        return None
     email = extract_contact_email(response.text)
     domain = _domain_if_provable(email) if email is not None else None
     return PromoterContact(domain=domain, email=email)

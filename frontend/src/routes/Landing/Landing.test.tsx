@@ -15,10 +15,6 @@ vi.mock('../../api/client', () => ({
   ApiError: class ApiError extends Error {},
 }));
 
-vi.mock('../../components/LocaleSelector', () => ({
-  default: () => <div data-testid="locale-selector" />,
-}));
-
 vi.mock('../../lib/gtag', () => ({
   trackEvent: vi.fn(),
 }));
@@ -167,7 +163,7 @@ describe('Landing', () => {
     const venueCount = screen.getByText('205', { selector: 'b' });
     expect(venueCount.parentElement?.textContent).toMatch(/205 venues/i);
     expect(screen.getAllByText('2', { selector: 'b' }).length).toBeGreaterThan(0);
-    expect(screen.getByText('Radar')).toBeInTheDocument();
+    expect(screen.getAllByText('Radar').length).toBeGreaterThan(0);
   });
 
   it('submits the email capture and shows the inbox confirmation', async () => {

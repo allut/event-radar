@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import ClaimEventEdit from './ClaimEventEdit';
 import { renderWithProviders } from '../../test/utils';
@@ -41,10 +41,10 @@ function baseEvent(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function renderEdit(route = '/organizer/claims/42/edit') {
+function renderEdit(route = '/en/organizer/claims/42/edit') {
   return renderWithProviders(<ClaimEventEdit />, {
     route,
-    pathPattern: '/organizer/claims/:id/edit',
+    pathPattern: '/:locale/organizer/claims/:id/edit',
   });
 }
 
@@ -82,7 +82,7 @@ describe('ClaimEventEdit (#416)', () => {
   it('loads and saves against the event_id from the URL, via the path-based API shape (#437, #453)', async () => {
     mockGet.mockResolvedValueOnce(baseEvent({ id: 7 }));
     mockPatch.mockResolvedValueOnce(baseEvent({ id: 7, title: 'New title' }));
-    renderEdit('/organizer/claims/42/edit?event_id=7');
+    renderEdit('/en/organizer/claims/42/edit?event_id=7');
 
     const titleInput = await screen.findByDisplayValue('Sügisõhtu jazziklubis');
     // The app route's own query param is unaffected (no network request, so
@@ -186,19 +186,49 @@ describe('ClaimEventEdit (#416)', () => {
     expect(body).toEqual({ title_en: 'New autumn evening' });
   });
 
-  it('picking a category sends it alongside any other touched fields on save', async () => {
+  it('picking categories sends them as a list alongside any other touched fields on save', async () => {
     mockGet.mockResolvedValueOnce(baseEvent());
-    mockPatch.mockResolvedValueOnce(baseEvent({ categories: ['family_friendly', 'music'] }));
+    mockPatch.mockResolvedValueOnce(baseEvent({ categories: ['family', 'music'] }));
     renderEdit();
 
     await screen.findByDisplayValue('Sügisõhtu jazziklubis');
-    await userEvent.click(screen.getByRole('button', { name: 'Categories' }));
-    await userEvent.click(await screen.findByRole('option', { name: /Family/i }));
+    const group = screen.getByRole('group', { name: 'Categories' });
+    await userEvent.click(within(group).getByRole('button', { name: 'Family' }));
     await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
 
     await waitFor(() => expect(mockPatch).toHaveBeenCalledTimes(1));
     const [, body] = mockPatch.mock.calls[0] as [string, Record<string, unknown>];
-    expect(body.category).toBeTruthy();
+    expect(body.categories).toEqual(['family']);
+  });
+
+  it('shows existing categories as locked tags that count toward the total cap of 3', async () => {
+    mockGet.mockResolvedValueOnce(baseEvent({ categories: ['music', 'workshops'] }));
+    renderEdit();
+
+    await screen.findByDisplayValue('Sügisõhtu jazziklubis');
+    const group = screen.getByRole('group', { name: 'Categories' });
+    // Existing categories are read-only: no Remove control.
+    expect(within(group).getByText(/Music/)).toBeInTheDocument();
+    expect(within(group).queryByRole('button', { name: 'Remove Music' })).not.toBeInTheDocument();
+
+    // One slot left: the first pick lands, the second is ignored.
+    await userEvent.click(within(group).getByRole('button', { name: 'Family' }));
+    await userEvent.click(within(group).getByRole('button', { name: 'Comedy' }));
+    expect(within(group).getByRole('button', { name: 'Remove Family' })).toBeInTheDocument();
+    expect(within(group).getByRole('button', { name: 'Comedy' })).toHaveAttribute('aria-disabled', 'true');
+  });
+
+  it('offers nothing to add when the event already has the maximum categories', async () => {
+    mockGet.mockResolvedValueOnce(baseEvent({ categories: ['music', 'workshops', 'family'] }));
+    renderEdit();
+
+    await screen.findByDisplayValue('Sügisõhtu jazziklubis');
+    expect(screen.getByText(/already has 3 categories/i)).toBeInTheDocument();
+    await userEvent.click(within(screen.getByRole('group', { name: 'Categories' })).getByRole('button', { name: 'Comedy' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    await waitFor(() => expect(mockPatch).toHaveBeenCalledTimes(1));
+    expect(mockPatch.mock.calls[0][1]).not.toHaveProperty('categories');
   });
 
   it('a failing edit surfaces the needs-fix message instead of success', async () => {

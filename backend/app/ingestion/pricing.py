@@ -4,6 +4,7 @@ Fienta price_from_string grammar, EUR-amount scanning, booking-fee stripping,
 and the price-context digest fed to the LLM classify prompt.
 """
 
+import math
 import re
 from typing import Any
 
@@ -14,8 +15,11 @@ from app.constants import (
     CURRENCY_CODE_MAX_LEN,
     DEFAULT_CURRENCY,
     HTML_PARSER,
+    VALID_CURRENCY_CODES,
+    PRICE_CONTEXT_INPUT_MAX_CHARS,
     PRICE_CONTEXT_MAX_CHARS,
     PRICE_FEE_CLAUSE_RE,
+    PRICE_MAX_VALUE,
     PRICE_FEE_KEYWORDS,
     PRICE_FROM_STRING_FREE_SUFFIX,
     PRICE_FROM_STRING_FREE_TOKEN,
@@ -34,11 +38,24 @@ def normalize_currency(raw: Any, has_price: bool) -> str | None:
     write instead of preventing it.
     """
     if raw:
-        code = str(raw)
-        if len(code) > CURRENCY_CODE_MAX_LEN:
+        code = str(raw).strip().upper()
+        if len(code) > CURRENCY_CODE_MAX_LEN or code not in VALID_CURRENCY_CODES:
             return None  # bad data — dropped, never defaulted, regardless of has_price
         return code
     return DEFAULT_CURRENCY if has_price else None
+
+
+def parse_bounded_price(value: Any) -> float | None:
+    """Coerce a scraped/LLM price to a float, or None when it is unstated,
+    negative, non-finite (``Infinity``/``NaN`` parse fine) or too large for the
+    Numeric(10,2) column — one poisoned row must not stall a whole batch."""
+    try:
+        price = float(value) if value is not None else None
+    except (TypeError, ValueError):
+        return None
+    if price is None or not math.isfinite(price) or not 0 <= price < PRICE_MAX_VALUE:
+        return None
+    return price
 
 
 def to_float(value: Any) -> float | None:
@@ -151,7 +168,9 @@ def price_context_digest(*texts: str | None) -> str:
             continue
         # Newline-separated (not html_to_text's space-joined) so each block/line
         # can be scanned and kept/dropped independently.
-        raw_plain = BeautifulSoup(text, HTML_PARSER).get_text(separator="\n", strip=True)
+        raw_plain = BeautifulSoup(
+            text[:PRICE_CONTEXT_INPUT_MAX_CHARS], HTML_PARSER
+        ).get_text(separator="\n", strip=True)
         plain = strip_fee_amounts(raw_plain) or ""
         for line in plain.splitlines():
             line = line.strip()

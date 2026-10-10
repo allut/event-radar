@@ -5,9 +5,9 @@ import { useLocalLocale } from '../../hooks/useLocalLocale';
 import { useClaimEventEdit } from '../../hooks/useClaimEventEdit';
 import OrganizerTopBar from '../../components/OrganizerTopBar';
 import DatePicker from '../../components/DatePicker';
-import SelectField from '../../components/SelectField';
-import { t } from '../../i18n';
-import { CLAIM_EDIT_LOCALES, EVENT_STATUS, LOCALE_EN, LOCALE_ET } from '../../constants';
+import CategoryPicker from '../../components/CategoryPicker';
+import { t, ti } from '../../i18n';
+import { CLAIM_EDIT_LOCALES, EVENT_STATUS, LOCALE_EN, LOCALE_ET, ORGANIZER_MAX_CATEGORIES } from '../../constants';
 import { categoryOptions, cx, currencySymbol, localizedFieldLabel, titleWithBrand } from '../../utils';
 import { useSeoMeta } from '../../hooks/useSeoMeta';
 import SeoTags from '../../components/SeoTags';
@@ -227,27 +227,20 @@ export default function ClaimEventEdit() {
             <div className={styles.section}>
               <div className={styles.sectionLabel}>{t('claim_edit_field_categories', locale)}</div>
               <div className={styles.fields}>
-                <div className={styles.chips}>
-                  {form.data.categories.map((slug) => (
-                    <span key={slug} className={styles.chip}>{t(`category_${slug}`, locale)}</span>
-                  ))}
-                  {form.pendingCategory && !form.data.categories.includes(form.pendingCategory) && (
-                    <span className={cx(styles.chip, styles.chipNew)}>
-                      {t(`category_${form.pendingCategory}`, locale)}
-                    </span>
-                  )}
-                </div>
-                <div className={styles.fieldCol}>
-                  <SelectField
-                    id="add_category"
-                    value={form.pendingCategory}
-                    options={categoryOpts}
-                    onChange={form.setPendingCategory}
-                    placeholder={t('claim_edit_category_add_placeholder', locale)}
-                    ariaLabel={t('claim_edit_field_categories', locale)}
-                  />
-                  <span className={styles.hint}>{t('claim_edit_categories_hint', locale)}</span>
-                </div>
+                <CategoryPicker
+                  options={categoryOpts}
+                  selected={[...form.data.categories, ...form.pendingCategories]}
+                  locked={form.data.categories}
+                  max={ORGANIZER_MAX_CATEGORIES}
+                  onToggle={form.togglePendingCategory}
+                  ariaLabel={t('claim_edit_field_categories', locale)}
+                  locale={locale}
+                />
+                <span className={styles.hint}>
+                  {form.data.categories.length >= ORGANIZER_MAX_CATEGORIES
+                    ? ti('claim_edit_categories_full', locale, { max: String(ORGANIZER_MAX_CATEGORIES) })
+                    : ti('claim_edit_categories_hint', locale, { max: String(ORGANIZER_MAX_CATEGORIES) })}
+                </span>
               </div>
             </div>
 

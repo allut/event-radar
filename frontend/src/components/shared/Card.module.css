@@ -26,6 +26,11 @@
   margin-bottom: var(--space-2);
 }
 
+.authDial {
+  --dial-size: var(--heading-lg);
+  display: inline-flex;
+}
+
 .authRadar {
   composes: breathe from './Animations.module.css';
   font-size: var(--fs-xl);

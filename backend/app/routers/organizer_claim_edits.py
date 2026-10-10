@@ -7,6 +7,7 @@ docs/organizer-portal.md.
 
 import logging
 from datetime import datetime
+from typing import Annotated, Any
 from urllib.parse import urlparse
 
 import httpx
@@ -26,6 +27,8 @@ from app.claims.pinning import (
     scaled_claim_edit_cap,
 )
 from app.constants import (
+    CLAIM_UNPIN_KEY_MAX_LEN,
+    CLAIM_UNPIN_MAX_ITEMS,
     CLAIM_ERROR_CODE_DORMANT,
     CLAIM_ERROR_CODE_NOT_GRANTED,
     CLAIM_STATUS_APPROVED,
@@ -45,13 +48,14 @@ from app.constants import (
     LOCALE_RU,
     ORGANIZER_CURRENCY_MAX_LEN,
     ORGANIZER_DESCRIPTION_MAX_LEN,
+    ORGANIZER_MAX_CATEGORIES,
     ORGANIZER_TITLE_MAX_LEN,
+    URL_MAX_LEN,
     RATE_LIMIT_SUBMIT,
-    SOURCE_SLUG_USER_SUBMISSION,
     TALLINN_TZ,
 )
 from app.db import get_db
-from app.ingestion.http_client import host_matches_domain, safe_external_url
+from app.ingestion.http_client import host_matches_domain, safe_render_url
 from app.ingestion.pricing import normalize_currency
 from app.models.models import ClaimEditAttempt, Event, Organizer
 from app.publish import publish_pending
@@ -59,17 +63,18 @@ from app.rate_limit import limiter
 from app.auth.dependencies import get_current_organizer
 from app.routers.utils import (
     apply_moderation_flags,
-    apply_organizer_category,
     apply_price_edit,
+    fold_legacy_category,
     merged_localized,
     organizer_sanitize,
-    select_events_with_classification,
+    prepend_organizer_categories,
     serialize_event,
-    validate_category,
+    validate_categories,
     validate_price_ordering,
     validate_time_ordering,
     validate_tz_aware,
 )
+from app.events.queries import select_events_with_classification
 from app.events.venue import resolve_venue_name
 
 log = logging.getLogger(__name__)
@@ -90,11 +95,11 @@ class PatchClaimEventBody(BaseModel):
     description: str | None = Field(None, max_length=ORGANIZER_DESCRIPTION_MAX_LEN)
     description_en: str | None = Field(None, max_length=ORGANIZER_DESCRIPTION_MAX_LEN)
     description_ru: str | None = Field(None, max_length=ORGANIZER_DESCRIPTION_MAX_LEN)
-    image_url: str | None = None
+    image_url: str | None = Field(default=None, max_length=URL_MAX_LEN)
     starts_at: datetime | None = None
     ends_at: datetime | None = None
-    url: str | None = None
-    category: str | None = None
+    url: str | None = Field(default=None, max_length=URL_MAX_LEN)
+    categories: list[str] | None = None
     price_min: float | None = Field(None, ge=0)
     price_max: float | None = Field(None, ge=0)
     currency: str | None = Field(None, max_length=ORGANIZER_CURRENCY_MAX_LEN)
@@ -105,17 +110,24 @@ class PatchClaimEventBody(BaseModel):
     # named here still ends up pinned (#416 acceptance: "an explicit un-pin
     # control hands a field back... without re-entering its original value",
     # which presumes the two are never sent together in practice).
-    unpin: list[str] = Field(default_factory=list)
+    unpin: list[Annotated[str, Field(max_length=CLAIM_UNPIN_KEY_MAX_LEN)]] = Field(
+        default_factory=list, max_length=CLAIM_UNPIN_MAX_ITEMS
+    )
 
     @field_validator("starts_at", "ends_at")
     @classmethod
     def _tz_aware(cls, v: datetime | None) -> datetime | None:
         return validate_tz_aware(v)
 
-    @field_validator("category")
+    @model_validator(mode="before")
     @classmethod
-    def _valid_category(cls, v: str | None) -> str | None:
-        return validate_category(v)
+    def _fold_legacy_category(cls, data: Any) -> Any:
+        return fold_legacy_category(data)
+
+    @field_validator("categories")
+    @classmethod
+    def _valid_categories(cls, v: list[str] | None) -> list[str] | None:
+        return validate_categories(v)
 
     @field_validator("title")
     @classmethod
@@ -321,7 +333,7 @@ async def _save_claim_event(
         )
 
     if "image_url" in fields_set:
-        safe_image_url = safe_external_url(body.image_url, SOURCE_SLUG_USER_SUBMISSION)
+        safe_image_url = safe_render_url(body.image_url)
         if body.image_url and not safe_image_url:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST, detail=ERROR_IMAGE_URL_SCHEME
@@ -341,7 +353,15 @@ async def _save_claim_event(
             urlparse(event.url).hostname if event.url else None
         )
         if body.url:
-            candidate_host = urlparse(body.url).hostname
+            # Validate + re-serialize FIRST, then pin the host of the stored
+            # form: urlparse and a browser disagree on "\\"/userinfo spellings
+            # (OWASP audit M-1), so the host we check must be the host we render.
+            safe_url = safe_render_url(body.url)
+            if not safe_url:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST, detail=ERROR_EVENT_URL_SCHEME
+                )
+            candidate_host = urlparse(safe_url).hostname
             if (
                 allowed_domain is None
                 or candidate_host is None
@@ -350,19 +370,17 @@ async def _save_claim_event(
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST, detail=ERROR_CLAIM_EDIT_URL_DOMAIN
                 )
-            safe_url = safe_external_url(body.url, SOURCE_SLUG_USER_SUBMISSION)
-            if not safe_url:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST, detail=ERROR_EVENT_URL_SCHEME
-                )
             event.url = safe_url
         else:
             event.url = None
         to_pin.add(pin_key("url"))
 
-    if "category" in fields_set and body.category is not None:
-        await apply_organizer_category(db, event.id, body.category)
+    if "categories" in fields_set and body.categories:
+        await prepend_organizer_categories(
+            db, event.id, body.categories, max_total=ORGANIZER_MAX_CATEGORIES
+        )
 
+    # FAQ #claimed-edits describes this behaviour — update the copy (all locales) if it changes
     # Price fields: co-authoritative, never pinned (#416 — CONTEXT.md's Event
     # Claiming glossary). accept_new_price adopts a freshly recomputed ingest
     # price instead of whatever price_* the request body carried — the only

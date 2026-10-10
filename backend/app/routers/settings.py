@@ -27,10 +27,10 @@ from app.auth.dependencies import get_current_user
 from app.routers.utils import (
     compute_preferred_taxonomy,
     is_identity_linked,
-    persona_weight_tuple,
     serialize_user,
     set_session_cookie,
 )
+from app.ranking.score import persona_weight_tuple
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/users/me", tags=["settings"])

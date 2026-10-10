@@ -14,7 +14,13 @@
  * get forwarded to the backend as if they were public API calls. See the
  * "Routing note" comment in each of those files.
  */
-import { API_BASE, BACKEND_ORIGIN } from '../../src/constants.js';
+import { StatusCodes } from 'http-status-codes';
+import {
+  API_BASE,
+  BACKEND_ORIGIN,
+  PRERENDER_CADENCE_TOKEN_HEADER,
+  SEO_AUDIT_TOKEN_HEADER,
+} from '../../src/constants.js';
 import type { PagesFunction } from '../_shared/cloudflare.js';
 
 // Stripped from the backend's response before it's re-emitted: `fetch()`
@@ -48,7 +54,7 @@ export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
   // function today, but that's undocumented platform behavior, not a
   // guarantee this code should rely on. Assert the resolved origin instead.
   if (backendUrl.origin !== BACKEND_ORIGIN) {
-    return new Response(null, { status: 400 });
+    return new Response(null, { status: StatusCodes.BAD_REQUEST });
   }
 
   // OWASP audit G-1: strip any client-supplied X-Forwarded-For/X-Client-IP
@@ -60,6 +66,10 @@ export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
   headers.delete('forwarded');
   headers.delete('x-client-ip');
   headers.delete('x-edge-auth');
+  // OWASP audit L-8: the two shared-secret endpoints are exact-path siblings, but
+  // never let their tokens ride a request that does reach this catch-all.
+  headers.delete(SEO_AUDIT_TOKEN_HEADER);
+  headers.delete(PRERENDER_CADENCE_TOKEN_HEADER);
   const clientIp = request.headers.get('cf-connecting-ip');
   if (clientIp && env.EDGE_SHARED_SECRET) {
     headers.set('x-client-ip', clientIp);

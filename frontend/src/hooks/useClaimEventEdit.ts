@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { organizerApi, ApiError } from '../api/client';
-import { API, CLAIM_ERROR_CODE_DORMANT, HTTP_STATUS_CONFLICT, QUERY_KEYS } from '../constants';
+import { API, CLAIM_ERROR_CODE_DORMANT, HTTP_STATUS_CONFLICT, ORGANIZER_MAX_CATEGORIES, QUERY_KEYS } from '../constants';
 import { t } from '../i18n';
-import { apiErrorMessage, hasHtmlContent, localizedTriplet, toIsoOrUndefined, toLocalInput, type LocalizedTextFields } from '../utils';
+import { apiErrorMessage, hasHtmlContent, localizedTriplet, toIsoOrUndefined, toLocalInput, toggleCapped, type LocalizedTextFields } from '../utils';
 
 export interface ClaimEventData {
   id: number;
@@ -88,8 +88,10 @@ export interface UseClaimEventEditResult {
   isPinned: (field: string, fieldLocale?: string) => boolean;
   unpin: (field: string, fieldLocale?: string) => void;
   unpinning: string | null;
-  pendingCategory: string;
-  setPendingCategory: (v: string) => void;
+  /** Categories to add on save. The event's total (existing + these) is
+   * capped at ORGANIZER_MAX_CATEGORIES, so a toggle is ignored once full. */
+  pendingCategories: string[];
+  togglePendingCategory: (slug: string) => void;
   save: () => void;
   isSaving: boolean;
   saveError: string;
@@ -113,7 +115,7 @@ export function useClaimEventEdit(
   const queryClient = useQueryClient();
   const [fields, setFields] = useState<FormFields>(EMPTY_FIELDS);
   const [touched, setTouched] = useState<Set<TouchKey>>(new Set());
-  const [pendingCategory, setPendingCategory] = useState('');
+  const [pendingCategories, setPendingCategories] = useState<string[]>([]);
   const [unpinningKey, setUnpinningKey] = useState<string | null>(null);
   const [savedStatus, setSavedStatus] = useState<string | null>(null);
   const loadedForRef = useRef<string | undefined>(undefined);
@@ -210,7 +212,7 @@ export function useClaimEventEdit(
       if (touched.has('price_max')) body.price_max = fields.priceMax ? Number(fields.priceMax) : null;
       if (touched.has('currency')) body.currency = fields.currency || null;
       if (touched.has('has_free_tier')) body.has_free_tier = fields.hasFreeTier;
-      if (pendingCategory) body.category = pendingCategory;
+      if (pendingCategories.length > 0) body.categories = pendingCategories;
       return organizerApi.patch<ClaimEventData>(API.organizerClaimEvent(claimId, eventId), body);
     },
     onMutate: () => setSavedStatus(null),
@@ -218,7 +220,7 @@ export function useClaimEventEdit(
       applyResponse(next);
       setFields(fieldsFromData(next));
       setTouched(new Set());
-      setPendingCategory('');
+      setPendingCategories([]);
     },
   });
 
@@ -254,8 +256,11 @@ export function useClaimEventEdit(
     isPinned,
     unpin,
     unpinning: unpinningKey,
-    pendingCategory,
-    setPendingCategory,
+    pendingCategories,
+    togglePendingCategory: (slug: string) => {
+      const room = Math.max(0, ORGANIZER_MAX_CATEGORIES - (query.data?.categories.length ?? 0));
+      setPendingCategories((prev) => toggleCapped(prev, slug, room));
+    },
     save: () => {
       const err = clientValidationError();
       setClientError(err);

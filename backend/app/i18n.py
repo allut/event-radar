@@ -17,7 +17,9 @@ from app._generated.shared_constants import DEFAULT_USER_LOCALE, VALID_LOCALES
 __all__ = ["TRANSLATIONS", "DAY_NAMES", "MONTH_NAMES", "t", "ti", "day_name", "month_name"]
 
 
-def _resolve_locale(locale: str) -> str:
+def resolve_locale(locale: str) -> str:
+    """``locale`` if supported, else ``DEFAULT_USER_LOCALE`` — the locale an
+    email is actually rendered in (also used by app/email/links.py)."""
     return locale if locale in VALID_LOCALES else DEFAULT_USER_LOCALE
 
 
@@ -27,7 +29,7 @@ def t(key: str, locale: str) -> str:
     Uses explicit ``is not None`` so an empty-string override (``""``) is honored
     instead of being treated as a miss.
     """
-    loc = _resolve_locale(locale)
+    loc = resolve_locale(locale)
     val = TRANSLATIONS[loc].get(key)
     if val is not None:
         return val
@@ -44,9 +46,9 @@ def ti(key: str, locale: str, **vars: object) -> str:
 
 def day_name(weekday: int, locale: str) -> str:
     """``weekday`` follows ``date.weekday()`` (0=Mon..6=Sun)."""
-    return DAY_NAMES[_resolve_locale(locale)][weekday]
+    return DAY_NAMES[resolve_locale(locale)][weekday]
 
 
 def month_name(month: int, locale: str) -> str:
     """``month`` is the 1-indexed calendar month (1=Jan..12=Dec)."""
-    return MONTH_NAMES[_resolve_locale(locale)][month]
+    return MONTH_NAMES[resolve_locale(locale)][month]

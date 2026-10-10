@@ -14,6 +14,10 @@
   composes: proseBody from '../../components/shared/Page.module.css';
 }
 
+.hint {
+  composes: pageHint from '../../components/shared/Page.module.css';
+}
+
 .form {
   composes: formStack from '../../components/shared/Field.module.css';
 }

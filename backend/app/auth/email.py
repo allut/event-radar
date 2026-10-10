@@ -17,6 +17,7 @@ from app.email.identity_link import (
     build_identity_linked_html,
     build_identity_linked_text,
 )
+from app.email.links import frontend_url
 from app.email.magic_link import build_magic_link_html, build_magic_link_text
 from app.email.resend import send_resend_email
 from app.i18n import t
@@ -35,7 +36,7 @@ async def send_magic_link(
     flow (routers/organizer_auth.py) point the link at ``/organizer/verify``
     instead of the consumer ``/auth/verify`` route — the email wording/HTML is
     otherwise identical for v1 (see app/email/magic_link.py)."""
-    verify_url = f"{settings.FRONTEND_URL}{verify_path}?token={magic_token}"
+    verify_url = f"{frontend_url(verify_path, locale)}?token={magic_token}"
 
     if not settings.RESEND_API_KEY:
         # Signed token is an auth credential — never log it at WARNING or above.
@@ -79,7 +80,7 @@ async def send_google_link_confirmation(
     address gate, OWASP audit #3). Its own subject/wording — it says a Google
     account is being linked to ``to_email`` — so it can't be mistaken for the
     plain sign-in link; the link itself is the same verify URL shape."""
-    verify_url = f"{settings.FRONTEND_URL}{verify_path}?token={magic_token}"
+    verify_url = f"{frontend_url(verify_path, locale)}?token={magic_token}"
 
     if not settings.RESEND_API_KEY:
         log.warning(
@@ -128,3 +129,14 @@ async def send_identity_linked_notice(
         log_label="identity-linked notice",
         log_ref=mask_email(to_email),
     )
+
+
+async def notify_identity_linked(email: str, locale: str) -> None:
+    """Best-effort "Google sign-in was linked" notice (OWASP audit #3) — the
+    link already exists, so a send failure is logged, never surfaced. Shared
+    by the consumer and organizer auth tracks."""
+    try:
+        await send_identity_linked_notice(email, locale)
+    except Exception:
+        log.exception("Failed to send identity-linked notice to %s", mask_email(email))
+

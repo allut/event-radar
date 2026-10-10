@@ -1,0 +1,205 @@
+.page {
+  composes: page from '../../components/shared/Page.module.css';
+}
+
+.main {
+  composes: pageMain from '../../components/shared/Page.module.css';
+  flex: 1 0 auto; /* lets the loading PageState centre in the leftover height */
+  max-width: var(--page-max-legal);
+}
+
+/* In-app #anchor clicks (jump-nav, "Link to this answer") are native fragment
+   jumps that land before the deep-link effect runs, so smooth them at the
+   document level while the FAQ is mounted. index.css's reduced-motion block
+   forces this back to auto (!important on every element, html included). */
+:global(html):has(.page) {
+  scroll-behavior: smooth;
+}
+
+/* ── Header: title, lede, section jump-nav ── */
+.header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.title {
+  composes: pageTitle from '../../components/shared/Page.module.css';
+}
+
+.lede {
+  font-size: var(--fs-md);
+  color: var(--text-soft);
+  line-height: var(--leading-body);
+  max-width: var(--measure-lede);
+}
+
+.jumpNav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-5);
+  padding-block: var(--space-3);
+  border-top: var(--rule);
+  border-bottom: var(--rule);
+}
+
+.jumpLink {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--eyebrow-tracking);
+  text-transform: uppercase;
+  color: var(--text-soft);
+  text-decoration: none;
+  transition: color var(--transition);
+}
+
+.jumpLink:hover {
+  color: var(--accent);
+}
+
+/* ── Sections: small-caps eyebrow over a hairline-separated question list ── */
+/* Every anchor target (#section, #item) clears the sticky TopBar. */
+.section,
+.item {
+  scroll-margin-top: calc(var(--bar-h-condensed) + var(--space-4));
+}
+
+@media (max-width: 640px) {
+  .section,
+  .item {
+    scroll-margin-top: calc(var(--bar-h-phone-condensed) + var(--space-5));
+  }
+}
+
+.section {
+  margin-top: var(--space-5);
+}
+
+.sectionTitle {
+  composes: sectionTitle from '../../components/shared/Settings.module.css';
+  margin-bottom: var(--space-3);
+}
+
+.items {
+  border-top: var(--rule);
+}
+
+.item {
+  border-bottom: var(--rule);
+}
+
+.question {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding-block: var(--space-4);
+  cursor: pointer;
+  list-style: none;
+  font-family: var(--font-display);
+  font-size: var(--heading-sm);
+  font-weight: var(--fw-semibold);
+  line-height: var(--leading-tight);
+  color: var(--text);
+  transition: color var(--transition);
+}
+
+.question::-webkit-details-marker {
+  display: none;
+}
+
+.question:hover,
+.item:target .question {
+  color: var(--accent-light);
+}
+
+.question:focus-visible {
+  outline: var(--border-w-hair) solid var(--accent);
+  outline-offset: var(--space-1);
+}
+
+/* Gold "+" — a functional open/closed mark like ✓ ✕ ☰, not an icon —
+   rotating 45° into "×" when the item is open. */
+.mark {
+  flex: none;
+  font-family: var(--font-body);
+  font-size: var(--fs-lg);
+  font-weight: var(--fw-light);
+  color: var(--accent);
+  transition: transform var(--transition);
+}
+
+.item[open] .mark {
+  transform: rotate(45deg);
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding-bottom: var(--space-5);
+}
+
+.answer {
+  composes: proseBody from '../../components/shared/Page.module.css';
+  max-width: var(--measure-answer);
+}
+
+.list {
+  composes: proseBody from '../../components/shared/Page.module.css';
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  max-width: var(--measure-answer);
+  padding-left: var(--space-5);
+  list-style: disc;
+}
+
+.link {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.answerLink {
+  align-self: flex-start;
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  text-decoration: underline;
+}
+
+/* ── Closing contact block ── */
+.contact {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-top: var(--space-6);
+  padding-top: var(--space-5);
+  border-top: var(--rule);
+}
+
+.contactHeading {
+  font-family: var(--font-display);
+  font-size: var(--heading-md);
+  font-weight: var(--fw-semibold);
+  line-height: var(--leading-display);
+  color: var(--text);
+}
+
+.contactCta {
+  composes: btnPrimary from '../../components/shared/Button.module.css';
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  margin-top: var(--space-2);
+  padding: var(--space-0-625) var(--space-5);
+  font-size: var(--fs-sm);
+  text-decoration: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .jumpLink,
+  .question,
+  .mark {
+    transition: none;
+  }
+}

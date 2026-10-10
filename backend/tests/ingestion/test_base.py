@@ -116,11 +116,20 @@ class TestResolvesToPrivateIp:
         with patch("socket.getaddrinfo", side_effect=socket.gaierror("no such host")):
             assert resolves_to_private_ip("nonexistent.invalid") is True
 
-    def test_any_public_address_among_many_is_allowed(self):
+    def test_any_private_address_among_many_is_rejected(self):
+        """OWASP audit L-2: httpx may connect to any answer, so one private
+        address in a mixed reply poisons the host."""
         with patch(
             "socket.getaddrinfo", return_value=_addrinfo("10.0.0.5", "93.184.216.34")
         ):
-            assert resolves_to_private_ip("mixed.example") is False
+            assert resolves_to_private_ip("mixed.example") is True
+
+    @pytest.mark.parametrize(
+        "ip", ["100.100.100.200", "fec0::1", "::ffff:127.0.0.1", "224.0.0.1"]
+    )
+    def test_cgnat_site_local_mapped_and_multicast_are_private(self, ip):
+        with patch("socket.getaddrinfo", return_value=_addrinfo(ip)):
+            assert resolves_to_private_ip("x.example") is True
 
 
 class TestSafeFetchableUrl:
@@ -1273,3 +1282,122 @@ class TestHostMatchesDomain:
 
         assert not host_matches_domain("notgmail.com", "gmail.com")
         assert not host_matches_domain("gmail.com.evil.test", "gmail.com")
+
+
+class TestCurrencyRegexBounded:
+    """OWASP audit M-4: digit runs must not be rescanned from every start."""
+
+    def test_long_digit_run_is_fast(self):
+        import time
+
+        from app.ingestion.pricing import eur_amounts_from_text, price_context_digest
+
+        payload = "9" * 30_000
+        start = time.perf_counter()
+        assert eur_amounts_from_text(payload) == []
+        price_context_digest(f"<p>{payload}</p>")
+        assert time.perf_counter() - start < 0.5
+
+    def test_normal_amounts_still_parse(self):
+        from app.ingestion.pricing import eur_amounts_from_text
+
+        assert eur_amounts_from_text("€16, 12,50 € and EUR 7 or 1.234 €") == [
+            16.0,
+            12.5,
+            7.0,
+            234.0,
+        ]
+
+
+class TestSafeRenderUrl:
+    @pytest.mark.parametrize(
+        "url",
+        [
+            "https://evil.com\\@fienta.com/x",
+            "https://evil.com%5C@fienta.com/x",
+            "https://user:pw@fienta.com/x",
+            "https://fienta.com:8443/x",
+            "https://fienta.com/a b",
+            "https://fienta.com/\x00",
+            "javascript:alert(1)",
+            "https:///nohost",
+            "",
+        ],
+    )
+    def test_rejects_ambiguous_or_unsafe(self, url):
+        from app.ingestion.http_client import safe_render_url
+
+        assert safe_render_url(url) is None
+
+    def test_accepts_and_preserves_normal_url(self):
+        from app.ingestion.http_client import safe_render_url
+
+        url = "https://fienta.com/e/a%5Cb?x=1#f"
+        assert safe_render_url(url) == url
+        assert safe_render_url(None) is None
+
+
+class TestBoundedNumbers:
+    """OWASP audit M-6: Infinity/NaN/huge numbers must never reach the DB."""
+
+    @pytest.mark.parametrize(
+        "value", [float("inf"), float("nan"), 1e12, 10**7, -1, "Infinity", "NaN", "x", None]
+    )
+    def test_parse_bounded_price_rejects(self, value):
+        from app.ingestion.pricing import parse_bounded_price
+
+        assert parse_bounded_price(value) is None
+
+    def test_parse_bounded_price_accepts(self):
+        from app.ingestion.pricing import parse_bounded_price
+
+        assert parse_bounded_price("12.5") == 12.5
+        assert parse_bounded_price(0) == 0.0
+
+    def test_normalize_currency_allowlist(self):
+        from app.ingestion.pricing import normalize_currency
+
+        assert normalize_currency("usd", True) == "USD"
+        assert normalize_currency("XYZ", True) is None
+        assert normalize_currency(None, True) == "EUR"
+
+    def test_jsonld_coerce_float_rejects_non_finite(self):
+        from app.ingestion.jsonld import _coerce_float
+
+        assert _coerce_float("NaN") is None
+        assert _coerce_float("Infinity") is None
+        assert _coerce_float("59.4") == 59.4
+
+
+class TestLocaleVariantGuardRejection:
+    """OWASP audit L-1: an SSRF-guard ValueError skips the locale, not the job."""
+
+    @pytest.mark.asyncio
+    async def test_guard_valueerror_skips_locale_without_raising(self):
+        from bs4 import BeautifulSoup
+
+        from app.ingestion.locale_urls import fetch_locale_variants
+
+        soup = BeautifulSoup(
+            '<html lang="et"><link rel="alternate" hreflang="en" '
+            'href="https://example.ee/en/e/1"></html>',
+            "html.parser",
+        )
+
+        async def _fetch(client, url):
+            raise ValueError("redirect to non-https blocked")
+
+        async def _wait():
+            return None
+
+        titles, descs, infos = await fetch_locale_variants(
+            None,
+            soup,
+            "https://example.ee/e/1",
+            frozenset({"et", "en"}),
+            lambda s, loc: ("t", "d", None),
+            fetch=_fetch,
+            wait=_wait,
+            source_label="test",
+        )
+        assert "en" not in titles

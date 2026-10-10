@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { organizerApi } from '../api/client';
-import { API, QUERY_KEYS, ORGANIZER_EVENTS_PAGE_SIZE, DEFAULT_CURRENCY, ORGANIZER_IMAGE_ALLOWED_MIME, ROUTES, PAGE_PARAM } from '../constants';
+import { API, QUERY_KEYS, ORGANIZER_EVENT_DETAIL_KEY, ORGANIZER_MAX_CATEGORIES, DEFAULT_CURRENCY, ORGANIZER_IMAGE_ALLOWED_MIME, ROUTES } from '../constants';
 import { t } from '../i18n';
-import { apiErrorMessage, hasHtmlContent, localizedTriplet, toIsoOrUndefined, toLocalInput, withLocaleQuery, type LocalizedTextFields } from '../utils';
+import { apiErrorMessage, hasHtmlContent, localizedTriplet, toIsoOrUndefined, toLocalInput, toggleCapped, withLocaleQuery, type LocalizedTextFields } from '../utils';
 import { useLocaleNavigate } from './useLocaleNavigate';
 import type { SavedVenue, VenuePickerValue } from '../components/VenuePicker';
 
@@ -27,12 +27,6 @@ interface OrganizerEventFull {
   important_info_localized?: Record<string, string> | null;
 }
 
-interface OrganizerEventsResponse {
-  events: OrganizerEventFull[];
-  limit: number;
-  offset: number;
-}
-
 interface SubmitResult {
   id: number;
   slug: string;
@@ -50,7 +44,7 @@ interface FormFields extends LocalizedTextFields {
   imageUrl: string;
   priceMin: string;
   priceMax: string;
-  category: string;
+  categories: string[];
 }
 
 const EMPTY_VENUE: VenuePickerValue = {
@@ -66,7 +60,7 @@ const EMPTY_FIELDS: FormFields = {
   venue: EMPTY_VENUE,
   url: '', imageUrl: '',
   priceMin: '', priceMax: '',
-  category: '',
+  categories: [],
 };
 
 function fieldsFromExisting(existing: OrganizerEventFull): FormFields {
@@ -100,8 +94,12 @@ function fieldsFromExisting(existing: OrganizerEventFull): FormFields {
     imageUrl: existing.image_url ?? '',
     priceMin: existing.price_min !== null ? String(existing.price_min) : '',
     priceMax: existing.price_max !== null ? String(existing.price_max) : '',
-    category: existing.categories[0] ?? '',
+    categories: existing.categories.slice(0, ORGANIZER_MAX_CATEGORIES),
   };
+}
+
+function sameSet(a: string[], b: string[]): boolean {
+  return a.length === b.length && a.every((v) => b.includes(v));
 }
 
 export interface UseOrganizerEventFormResult {
@@ -138,8 +136,8 @@ export interface UseOrganizerEventFormResult {
   setPriceMin: (v: string) => void;
   priceMax: string;
   setPriceMax: (v: string) => void;
-  category: string;
-  setCategory: (v: string) => void;
+  categories: string[];
+  toggleCategory: (slug: string) => void;
   uploadImage: (file: File) => void;
   imageUploading: boolean;
   imageError: string;
@@ -170,17 +168,13 @@ export function useOrganizerEventForm(locale: string, eventId?: number): UseOrga
     setFields((prev) => ({ ...prev, [key]: value }));
   }, []);
 
-  // Edit-mode prefill. There is no GET /organizer/events/{id} single-event
-  // endpoint — the dashboard's own list is the only read path, so prefill
-  // only finds the event within its first page (ORGANIZER_EVENTS_PAGE_SIZE).
-  // Accepted MVP trade-off: an organizer with more submissions than that
-  // retypes an edit beyond the first page from scratch.
-  const { data: listData } = useQuery({
-    queryKey: [QUERY_KEYS.organizerEvents, locale],
-    queryFn: () =>
-      organizerApi.get<OrganizerEventsResponse>(
-        withLocaleQuery(`${API.organizerEvents}?${PAGE_PARAM.limit}=${ORGANIZER_EVENTS_PAGE_SIZE}`, locale),
-      ),
+  // Edit-mode prefill: fetches the single event (GET /organizer/events/{id}),
+  // so any of the organizer's events can be edited, not just those on the
+  // dashboard list's first page. The detail key nests under organizerEvents so
+  // the existing invalidations (submit, delete, claim) refresh it too.
+  const { data: existing } = useQuery({
+    queryKey: [QUERY_KEYS.organizerEvents, ORGANIZER_EVENT_DETAIL_KEY, eventId, locale],
+    queryFn: () => organizerApi.get<OrganizerEventFull>(withLocaleQuery(API.organizerEvent(eventId as number), locale)),
     enabled: isEditMode,
   });
 
@@ -192,18 +186,20 @@ export function useOrganizerEventForm(locale: string, eventId?: number): UseOrga
   // plain boolean flag, re-triggers the prefill instead of leaving the
   // previous event's data on screen while pointed at a new id.
   const prefilledForRef = useRef<number | undefined>(undefined);
+  // The categories the form was prefilled with, so buildBody can tell whether
+  // the organizer actually changed them.
+  const prefilledCategoriesRef = useRef<string[]>([]);
   useEffect(() => {
-    if (!isEditMode || !listData || prefilledForRef.current === eventId) return;
-    const existing = listData.events.find((e) => e.id === eventId);
-    if (!existing) return;
+    if (!isEditMode || !existing || prefilledForRef.current === eventId) return;
     prefilledForRef.current = eventId;
+    prefilledCategoriesRef.current = existing.categories.slice(0, ORGANIZER_MAX_CATEGORIES);
     // Deferred to a microtask (mirrors LegalPage.tsx's async .then() setState) —
     // react-hooks/set-state-in-effect flags a *synchronous* setState call in an
     // effect body; this is a genuine one-time hydration from a query result,
     // not a derivable-from-render value, so deferring is the correct escape
     // hatch rather than restructuring away the effect.
     void Promise.resolve().then(() => setFields(fieldsFromExisting(existing)));
-  }, [eventId, isEditMode, listData]);
+  }, [eventId, isEditMode, existing]);
 
   const imageMutation = useMutation({
     mutationFn: (file: File) => {
@@ -292,7 +288,12 @@ export function useOrganizerEventForm(locale: string, eventId?: number): UseOrga
     if (f.priceMin.trim()) body.price_min = Number(f.priceMin);
     if (f.priceMax.trim()) body.price_max = Number(f.priceMax);
     if (f.priceMin.trim() || f.priceMax.trim()) body.currency = DEFAULT_CURRENCY;
-    if (f.category) body.category = f.category;
+    // Create: send any pick. Edit: only a changed, non-empty set — the PATCH
+    // replaces the event's categories, so an untouched prefill must not
+    // overwrite them (and an empty set is a server-side no-op anyway).
+    if (f.categories.length > 0 && (!isEditMode || !sameSet(f.categories, prefilledCategoriesRef.current))) {
+      body.categories = f.categories;
+    }
     return body;
   }
 
@@ -340,7 +341,11 @@ export function useOrganizerEventForm(locale: string, eventId?: number): UseOrga
       setUrl: (v: string) => setField('url', v),
       setPriceMin: (v: string) => setField('priceMin', v),
       setPriceMax: (v: string) => setField('priceMax', v),
-      setCategory: (v: string) => setField('category', v),
+      toggleCategory: (slug: string) =>
+        setFields((prev) => ({
+          ...prev,
+          categories: toggleCapped(prev.categories, slug, ORGANIZER_MAX_CATEGORIES),
+        })),
     }),
     [setField],
   );
@@ -364,7 +369,7 @@ export function useOrganizerEventForm(locale: string, eventId?: number): UseOrga
     clearImage: () => { setField('imageUrl', ''); imageMutation.reset(); },
     priceMin: fields.priceMin,
     priceMax: fields.priceMax,
-    category: fields.category,
+    categories: fields.categories,
     ...setters,
     uploadImage: imageMutation.mutate,
     imageUploading: imageMutation.isPending,

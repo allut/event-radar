@@ -257,7 +257,9 @@ export function assertWebsiteJsonLd(jsonLd: unknown): string[] {
 }
 
 export interface StructuralValidationOptions {
-  kind: 'event' | 'website' | 'list';
+  /** `'page'` is an indexable content page with no structured data (/faq):
+   * it must carry zero JSON-LD scripts. The other kinds carry exactly one. */
+  kind: 'event' | 'website' | 'list' | 'page';
   locale: string;
   /** PRODUCTION_ORIGIN — canonical/hreflang hrefs must be absolute URLs on it. */
   originPrefix: string;
@@ -316,7 +318,11 @@ export function validateSnapshotStructure(
     issues.push('jsonLd: script body contains an unescaped "<" — possible markup injection');
   }
 
-  if (parsed.jsonLd.length !== 1) {
+  if (kind === 'page') {
+    if (parsed.jsonLd.length !== 0) {
+      issues.push(`expected no JSON-LD script, found ${parsed.jsonLd.length}`);
+    }
+  } else if (parsed.jsonLd.length !== 1) {
     issues.push(`expected exactly one JSON-LD script, found ${parsed.jsonLd.length}`);
   } else {
     const jsonLdIssues =

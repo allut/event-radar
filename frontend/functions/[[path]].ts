@@ -37,6 +37,7 @@
  * the extensionless "pretty path" instead, matching what Cloudflare's docs
  * say ASSETS.fetch expects.
  */
+import { StatusCodes } from 'http-status-codes';
 import { APP_SHELL_FILENAME } from '../src/constants.js';
 import type { PagesFunction } from './_shared/cloudflare.js';
 
@@ -46,7 +47,7 @@ interface Env {
 
 export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
   if (request.method !== 'GET' && request.method !== 'HEAD') {
-    return new Response(null, { status: 405 });
+    return new Response(null, { status: StatusCodes.METHOD_NOT_ALLOWED });
   }
 
   // Try the real asset first (issue #354) — a prerendered route, a built
@@ -54,7 +55,7 @@ export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
   // the platform is documented to have already served it before this
   // Function ever ran. Only a genuine miss (404) falls through to the shell.
   const directResponse = await env.ASSETS.fetch(request);
-  if (directResponse.status !== 404) {
+  if (directResponse.status !== StatusCodes.NOT_FOUND) {
     return directResponse;
   }
 

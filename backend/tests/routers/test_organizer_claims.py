@@ -769,21 +769,56 @@ class TestSearchClaimableEvents(object):
         assert exc.value.status_code == http.HTTPStatus.UNPROCESSABLE_ENTITY
 
     @pytest.mark.asyncio
-    async def test_excludes_already_claimed_event(self, mock_db, make_event, make_request, make_organizer):
+    async def test_publisher_claimed_events_excluded_in_sql(self, mock_db, make_event, make_request, make_organizer):
         """An event whose Publisher already has an *approved* claim (#441/ADR
-        0004) is filtered out of search results — cross-surface retirement."""
+        0004) is excluded by the candidate query itself (NOT EXISTS), so the
+        LIMIT window is never spent on already-claimed rows."""
+        from app.routers.organizer_claims import search_claimable_events
+
+        candidates_result = MagicMock()
+        candidates_result.scalars.return_value.all.return_value = []
+        claim_keys_result = MagicMock()
+        claim_keys_result.all.return_value = []
+        mock_db.execute.side_effect = [candidates_result, claim_keys_result]
+
+        await search_claimable_events(
+            make_request(method="GET", path="/organizer/claims/search"),
+            q="jazz",
+            current_organizer=make_organizer(),
+            db=mock_db,
+            locale=None,
+        )
+
+        from sqlalchemy.dialects import postgresql
+
+        compiled = str(
+            mock_db.execute.call_args_list[0].args[0].compile(dialect=postgresql.dialect())
+        )
+        assert "NOT (EXISTS" in compiled
+        assert "claims.publisher_id = event_sources.publisher_id" in compiled
+        # The lowest-id-source subquery must be correlated to the outer event
+        # (an uncorrelated EXISTS would hide every event once any claim exists).
+        assert "event_sources_1.event_id = events.id" in compiled
+        assert "FROM events \nWHERE event_sources" not in compiled
+        assert "claims.status" in compiled
+
+    @pytest.mark.asyncio
+    async def test_excludes_series_claimed_event(self, mock_db, make_event, make_request, make_organizer):
+        """A publisher-less event whose Series key has an approved claim is
+        filtered in Python (the key uses the resolved venue name)."""
+        from app.claims.lifecycle import resolve_claim_target
         from app.routers.organizer_claims import search_claimable_events
 
         claimed_event = make_event(event_id=1, title="Jazz Night")
-        claimed_event.sources = [_make_source(event_id=1, publisher_id=99)]
+        claimed_event.sources = [_make_source(event_id=1, publisher_id=None)]
         open_event = make_event(event_id=2, title="Jazz Brunch")
-        open_event.sources = [_make_source(event_id=2, publisher_id=100)]
+        open_event.sources = [_make_source(event_id=2, publisher_id=None)]
+        key = resolve_claim_target(claimed_event, claimed_event.sources[0]).event_series_key
 
         candidates_result = MagicMock()
         candidates_result.scalars.return_value.all.return_value = [claimed_event, open_event]
         claim_keys_result = MagicMock()
-        claim_keys_row = MagicMock(publisher_id=99, event_series_key=None)
-        claim_keys_result.all.return_value = [claim_keys_row]
+        claim_keys_result.all.return_value = [MagicMock(event_series_key=key)]
         mock_db.execute.side_effect = [candidates_result, claim_keys_result]
 
         result = await search_claimable_events(

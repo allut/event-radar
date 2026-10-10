@@ -51,6 +51,7 @@ from app.constants import (
     REFETCH_MIN_INTERVAL_DAYS,
     REFETCH_PLACEHOLDER_VENUE_NAMES,
     REFETCH_PRICE_TOLERANCE,
+    REFETCH_HOST_CONCURRENCY,
     REFETCH_REQUEST_DELAY_SECONDS,
     SOURCE_KIND_USER_SUBMISSION,
     TALLINN_TZ,
@@ -62,7 +63,11 @@ from app.ingestion.selectors import (
     PILETILEVI_HOST,
     SUSPECT_LOCALE_TITLE_PREFIXES,
 )
-from app.ingestion.content_filters import content_flags
+from app.ingestion.content_filters import (
+    content_flags,
+    is_explicit_text,
+    localized_text_values,
+)
 from app.ingestion.http_client import (
     host_guard_hook,
     host_is_allowed,
@@ -84,6 +89,7 @@ from app.claims.lifecycle import bulk_dormant_pinned_event_ids
 from app.claims.pinning import pin_key
 from app.ingestion.price_fallback import PRICE_FALLBACK_EXTRACTORS
 from app.ingestion.sanitize import sanitize_html
+from app.ingestion.adapter import coords_in_estonia
 from app.ingestion.geocode import is_suspect_venue_name
 from app.ingestion.sources.estonia_concert_hall import (
     estonia_concert_hall_localized_text,
@@ -258,6 +264,7 @@ async def _backfill_localized_text(
     existing_descs: dict[str, str] = (
         dict(event.description_localized) if event.description_localized else {}
     )
+    # FAQ #claimed-edits describes this behaviour — update the copy (all locales) if it changes
     pinned = set() if event.id in dormant_event_ids else set(event.pinned_fields)
     missing_title_locales = {
         loc for loc in LOCALIZED_TEXT_FIENTA_LOCALES
@@ -320,6 +327,15 @@ async def _backfill_localized_text(
         event.description_localized = existing_descs
     if loc_titles or loc_descs:
         summary["localized_text_backfilled"] += 1
+        # Backfilled EN/RU text reaches readers without ever passing the
+        # ingest-time filter (OWASP audit M-5) — scan just what was added.
+        if not event.is_explicit and is_explicit_text(
+            *localized_text_values(loc_titles, loc_descs)
+        ):
+            event.is_explicit = True
+            summary["flagged_explicit"] += 1
+            if event.status == EVENT_STATUS_PUBLISHED:
+                event.status = EVENT_STATUS_CLASSIFIED
 
 
 async def _process_one(
@@ -371,13 +387,23 @@ async def _process_one(
         _mark_synced(event, now)
         return True
 
+    detail_lat = location.get("lat") if location else None
+    detail_lng = location.get("lng") if location else None
+    if detail_lat is None or detail_lng is None or not coords_in_estonia(
+        detail_lat, detail_lng
+    ):
+        # Same Estonia-bbox gate the ingest path applies (fienta._merge_location):
+        # an off-country or non-finite detail coordinate must not overwrite a
+        # good stored one (OWASP audit M-6). NaN fails the comparisons too.
+        detail_lat = detail_lng = None
+
     changed = _reconcile(
         event,
         summary,
         detail_name=location.get("venue_name") if location else None,
         detail_address=location.get("venue_address") if location else None,
-        detail_lat=location.get("lat") if location else None,
-        detail_lng=location.get("lng") if location else None,
+        detail_lat=detail_lat,
+        detail_lng=detail_lng,
         price_min=price_min,
         price_max=price_max,
         currency=currency,
@@ -419,6 +445,39 @@ async def refetch_event_details(db: AsyncSession) -> dict:
 
     last_commit = time.monotonic()
     run_deadline = time.monotonic() + REFETCH_MAX_RUN_SECONDS
+    # The politeness delay protects each *source host*, not the whole run, so
+    # candidates are grouped by host: each host is walked sequentially at the
+    # REFETCH_REQUEST_DELAY_SECONDS pace while different hosts proceed in
+    # parallel (Big-O audit #14). Candidate order (oldest sync first) is kept
+    # within every host group.
+    by_host: dict[str, list[Event]] = {}
+    for event in candidates:
+        by_host.setdefault(normalized_hostname(event.url), []).append(event)
+    host_semaphore = asyncio.Semaphore(REFETCH_HOST_CONCURRENCY)
+    commit_lock = asyncio.Lock()
+
+    async def _refetch_host(client: httpx.AsyncClient, host_events: list[Event]) -> None:
+        nonlocal last_commit
+        async with host_semaphore:
+            for event in host_events:
+                if time.monotonic() >= run_deadline:
+                    # detail_refetched_at ordering (_select_candidates) means
+                    # the events left unprocessed here sort first next run.
+                    summary["deadline_stopped"] = True
+                    break
+                fetched = await _process_one(client, event, summary, now, dormant_event_ids)
+                if fetched:
+                    await asyncio.sleep(REFETCH_REQUEST_DELAY_SECONDS)
+                if time.monotonic() - last_commit >= REFETCH_COMMIT_INTERVAL_SECONDS:
+                    # One committer at a time: hosts share the AsyncSession.
+                    # Workers issue no queries on it (only attribute writes on
+                    # already-loaded rows, expire_on_commit=False), so a write
+                    # racing the flush is at worst picked up by the next
+                    # commit or re-reconciled by the next run.
+                    async with commit_lock:
+                        await db.commit()
+                        last_commit = time.monotonic()
+
     # Follow Fienta's locale 302-redirects with a host-pinning SSRF guard
     # (see _allowed_refetch_hosts for why the allowlist is intersected).
     async with httpx.AsyncClient(
@@ -426,18 +485,15 @@ async def refetch_event_details(db: AsyncSession) -> dict:
         follow_redirects=True,
         event_hooks={"request": [host_guard_hook(_allowed_refetch_hosts(candidates))]},
     ) as client:
-        for event in candidates:
-            if time.monotonic() >= run_deadline:
-                # detail_refetched_at ordering (_select_candidates) means the
-                # events left unprocessed here sort first next run.
-                summary["deadline_stopped"] = True
-                break
-            fetched = await _process_one(client, event, summary, now, dormant_event_ids)
-            if fetched:
-                await asyncio.sleep(REFETCH_REQUEST_DELAY_SECONDS)
-            if time.monotonic() - last_commit >= REFETCH_COMMIT_INTERVAL_SECONDS:
-                await db.commit()
-                last_commit = time.monotonic()
+        outcomes = await asyncio.gather(
+            *(_refetch_host(client, host_events) for host_events in by_host.values()),
+            return_exceptions=True,
+        )
+    failures = [o for o in outcomes if isinstance(o, BaseException)]
+    for failure in failures:
+        log.error("refetch host worker raised", exc_info=failure)
+    if failures:
+        raise failures[0]
 
     return summary
 
@@ -563,6 +619,11 @@ def _reconcile_venue_name(event: Event, summary: dict, detail_name: object) -> b
             event.description_orig,
             event.venue_name,
             event.important_info,
+            localized_text_values(
+                event.title_localized,
+                event.description_localized,
+                event.important_info_localized,
+            ),
         )
         if not event.is_explicit and newly_explicit:
             event.is_explicit = True

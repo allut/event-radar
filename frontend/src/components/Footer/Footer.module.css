@@ -36,8 +36,8 @@
 }
 
 .radarMark {
-  color: var(--accent);
-  font-size: var(--fs-lg);
+  --dial-size: var(--fs-lg);
+  display: inline-flex;
 }
 
 .links {

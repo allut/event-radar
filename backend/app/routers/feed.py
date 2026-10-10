@@ -15,10 +15,9 @@ from app.routers.utils import (
     load_user_reported_events,
     load_user_signals,
     resolve_locale_param,
-    select_events_with_classification,
     serialize_event,
 )
-from app.events.queries import public_event_filter
+from app.events.queries import public_event_filter, select_events_with_classification
 
 router = APIRouter(prefix="/feed", tags=["feed"])
 

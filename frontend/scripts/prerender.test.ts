@@ -10,6 +10,8 @@ vi.mock('../src/lib/r2ChainState', () => ({
 
 import {
   buildRobotsTxt,
+  buildSitemapXml,
+  buildTargets,
   chainStateContentKey,
   chainStateIndexKey,
   contentReadySelector,
@@ -30,10 +32,14 @@ import {
 } from './prerender';
 import type { ChainStateIndex, PrerenderTarget, ResolvedTarget } from './prerender';
 import type { RoundMarker } from '../src/lib/prerenderChain';
+import faqEn from '../src/content/faq/faq.en';
+import faqEt from '../src/content/faq/faq.et';
+import faqRu from '../src/content/faq/faq.ru';
 import {
   BROWSE_PAGE_SIZE,
   CHAIN_STATE_PREFIX,
   CRAWLABLE_ICON_PATHS,
+  LOCALES,
   PRERENDER_READY_SELECTOR,
   PRODUCTION_ORIGIN,
   SITEMAP_PATH,
@@ -377,6 +383,9 @@ describe('buildRobotsTxt', () => {
       '/explore',
       '/en/explore',
       '/ru/explore',
+      '/faq',
+      '/en/faq',
+      '/ru/faq',
     ]) {
       expect(isAllowed(robotsTxt, path)).toBe(true);
     }
@@ -388,6 +397,14 @@ describe('buildRobotsTxt', () => {
     }
   });
 
+  it('allows the three FAQ routes without a $ anchor', () => {
+    const lines = robotsTxt.split('\n');
+    for (const line of ['Allow: /faq', 'Allow: /en/faq', 'Allow: /ru/faq']) {
+      expect(lines).toContain(line);
+    }
+    expect(isAllowed(robotsTxt, '/en/faq#is-it-free')).toBe(true);
+  });
+
   it('keeps an authenticated route blocked — proves the inverse-allowlist is intact', () => {
     expect(isAllowed(robotsTxt, '/settings')).toBe(false);
   });
@@ -397,6 +414,54 @@ describe('buildRobotsTxt', () => {
     expect(sitemapDirective).toBeDefined();
     const sitemapUrl = new URL(sitemapDirective!.replace('Sitemap:', '').trim());
     expect(isAllowed(robotsTxt, sitemapUrl.pathname)).toBe(true);
+  });
+});
+
+describe('buildTargets', () => {
+  it('puts the FAQ right after explore in every locale, before event targets', () => {
+    const targets = buildTargets([{ id: 7, updatedAt: '2026-10-01T00:00:00Z' }]);
+    for (const { code } of LOCALES) {
+      const bares = targets.filter((t) => t.locale === code).map((t) => t.bare);
+      expect(bares).toEqual(['/', '/explore', '/faq', '/events/7']);
+    }
+  });
+
+  it('keeps home as the very first target', () => {
+    expect(buildTargets([])[0].bare).toBe('/');
+  });
+
+  it('carries no event id or change marker on the FAQ target', () => {
+    const faq = buildTargets([]).find((t) => t.bare === '/faq')!;
+    expect(faq.eventId).toBeUndefined();
+    expect(faq.updatedAt).toBeUndefined();
+  });
+});
+
+describe('buildSitemapXml', () => {
+  const buildTimestamp = '2026-10-07T06:00:00.000Z';
+  const { document } = parseHTML(buildSitemapXml(buildTargets([]), buildTimestamp));
+  const urls = [...document.querySelectorAll('url')].map((url) => ({
+    loc: url.querySelector('loc')!.textContent,
+    lastmod: url.querySelector('lastmod')!.textContent,
+  }));
+
+  it("uses each locale's FaqDoc.lastUpdated as the FAQ <lastmod>, not the build time", () => {
+    expect(urls).toContainEqual({ loc: `${PRODUCTION_ORIGIN}/faq`, lastmod: faqEt.lastUpdated });
+    expect(urls).toContainEqual({ loc: `${PRODUCTION_ORIGIN}/en/faq`, lastmod: faqEn.lastUpdated });
+    expect(urls).toContainEqual({ loc: `${PRODUCTION_ORIGIN}/ru/faq`, lastmod: faqRu.lastUpdated });
+  });
+
+  it('lists each FAQ URL right after its locale explore URL', () => {
+    const locs = urls.map((u) => u.loc);
+    for (const prefix of ['', '/en', '/ru']) {
+      expect(locs.indexOf(`${PRODUCTION_ORIGIN}${prefix}/faq`)).toBe(
+        locs.indexOf(`${PRODUCTION_ORIGIN}${prefix}/explore`) + 1,
+      );
+    }
+  });
+
+  it('keeps the build timestamp on home, the first <lastmod>', () => {
+    expect(urls[0]).toEqual({ loc: `${PRODUCTION_ORIGIN}/`, lastmod: buildTimestamp });
   });
 });
 

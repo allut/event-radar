@@ -33,6 +33,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.constants import (
+    DEDUP_PROMPT_DATE_FORMAT,
     LLM_BACKLOG_MAX_DRAIN_PASSES,
     LLM_BACKLOG_RETRY_SECONDS,
     LLM_BATCH_FANOUT_CONCURRENCY,
@@ -44,6 +45,7 @@ from app.constants import (
     LLM_DEDUP_VENUE_MAX_LEN,
     LLM_TASK_DEDUP,
 )
+from app.events.venue import resolve_venue_name
 from app.llm.prompts import LLM_DEDUP_PROMPT_TEMPLATE, escape_prompt_delimiters
 from app.dedup.rules import (
     union,
@@ -62,7 +64,13 @@ from app.dedup.rules import (
     run_dedup_pass,
     same_group,
 )
-from app.llm.router import content_hash, llm_available, llm_http_client, llm_json_or_none
+from app.llm.router import (
+    content_hash,
+    llm_available,
+    llm_http_client,
+    llm_json_or_none,
+    strict_bool,
+)
 from app.models.models import Event, LlmCall
 
 log = logging.getLogger(__name__)
@@ -88,9 +96,9 @@ def _event_fragment(
         return cached
     fragment: _EventFragment = (
         escape_prompt_delimiters(event.title_orig[:LLM_DEDUP_TITLE_MAX_LEN]),
-        event.starts_at.strftime("%Y-%m-%d %H:%M"),
+        event.starts_at.strftime(DEDUP_PROMPT_DATE_FORMAT),
         escape_prompt_delimiters(
-            (event.venue_name or LLM_CLASSIFY_VENUE_FALLBACK)[:LLM_DEDUP_VENUE_MAX_LEN]
+            (resolve_venue_name(event) or LLM_CLASSIFY_VENUE_FALLBACK)[:LLM_DEDUP_VENUE_MAX_LEN]
         ),
     )
     fragment_cache[event.id] = fragment
@@ -136,9 +144,9 @@ def _verdict_confirms(result: dict) -> bool:
     Raises ``TypeError``/``ValueError`` if ``confidence`` is not numeric —
     callers decide how to treat a malformed response.
     """
-    same = result.get("same", False)
+    same = strict_bool(result.get("same"), False)
     confidence = float(result.get("confidence", 0.0))
-    return bool(same) and confidence >= LLM_DEDUP_CONFIDENCE_THRESHOLD
+    return same and confidence >= LLM_DEDUP_CONFIDENCE_THRESHOLD
 
 
 async def _llm_confirms_pair(

@@ -35,16 +35,16 @@ class TestCheckImageHost:
     an arbitrary-host tracking pixel."""
 
     def test_none_is_a_noop(self):
-        from app.routers.organizer_events import _check_image_host
+        from app.routers.utils import check_image_host
 
-        _check_image_host(None)  # must not raise
+        check_image_host(None)  # must not raise
 
     def test_own_cloudinary_account_accepted(self):
-        from app.routers.organizer_events import _check_image_host
+        from app.routers.utils import check_image_host
 
-        with patch("app.routers.organizer_events.settings") as mock_settings:
+        with patch("app.routers.utils.settings") as mock_settings:
             mock_settings.CLOUDINARY_CLOUD_NAME = "demo"
-            _check_image_host("https://res.cloudinary.com/demo/image/upload/x.png")
+            check_image_host("https://res.cloudinary.com/demo/image/upload/x.png")
 
     @pytest.mark.parametrize(
         "url",
@@ -58,29 +58,29 @@ class TestCheckImageHost:
     )
     def test_other_cloudinary_account_or_path_rejected(self, url):
         from fastapi import HTTPException
-        from app.routers.organizer_events import _check_image_host
+        from app.routers.utils import check_image_host
 
-        with patch("app.routers.organizer_events.settings") as mock_settings:
+        with patch("app.routers.utils.settings") as mock_settings:
             mock_settings.CLOUDINARY_CLOUD_NAME = "demo"
             with pytest.raises(HTTPException) as exc_info:
-                _check_image_host(url)
+                check_image_host(url)
         assert exc_info.value.status_code == http.HTTPStatus.BAD_REQUEST
 
     def test_unconfigured_cloud_name_fails_closed(self):
         from fastapi import HTTPException
-        from app.routers.organizer_events import _check_image_host
+        from app.routers.utils import check_image_host
 
-        with patch("app.routers.organizer_events.settings") as mock_settings:
+        with patch("app.routers.utils.settings") as mock_settings:
             mock_settings.CLOUDINARY_CLOUD_NAME = ""
             with pytest.raises(HTTPException):
-                _check_image_host("https://res.cloudinary.com/demo/image/upload/x.png")
+                check_image_host("https://res.cloudinary.com/demo/image/upload/x.png")
 
     def test_arbitrary_host_rejected(self):
         from fastapi import HTTPException
-        from app.routers.organizer_events import _check_image_host
+        from app.routers.utils import check_image_host
 
         with pytest.raises(HTTPException) as exc_info:
-            _check_image_host("https://evil.example.com/tracker.png")
+            check_image_host("https://evil.example.com/tracker.png")
         assert exc_info.value.status_code == http.HTTPStatus.BAD_REQUEST
 
     def test_lookalike_host_rejected(self):
@@ -88,10 +88,38 @@ class TestCheckImageHost:
         (e.g. a subdomain trick) must not slip through — hostname must match
         exactly, not via substring containment."""
         from fastapi import HTTPException
-        from app.routers.organizer_events import _check_image_host
+        from app.routers.utils import check_image_host
 
         with pytest.raises(HTTPException):
-            _check_image_host("https://res.cloudinary.com.evil.com/x.png")
+            check_image_host("https://res.cloudinary.com.evil.com/x.png")
+
+    @pytest.mark.parametrize(
+        "url",
+        [
+            "https://evil.com\\@res.cloudinary.com/demo/image/upload/x.png",
+            "https://evil.com%5C@res.cloudinary.com/demo/image/upload/x.png",
+            "https://u:p@res.cloudinary.com/demo/image/upload/x.png",
+            "https://res.cloudinary.com:8443/demo/image/upload/x.png",
+            "https://res.cloudinary.com/demo/image/upload/x y.png",
+        ],
+    )
+    def test_parser_differential_spellings_rejected(self, url):
+        """OWASP audit M-1: spellings Python and browsers read differently."""
+        from fastapi import HTTPException
+        from app.routers.utils import check_image_host
+
+        with patch("app.routers.utils.settings") as mock_settings:
+            mock_settings.CLOUDINARY_CLOUD_NAME = "demo"
+            with pytest.raises(HTTPException):
+                check_image_host(url)
+
+    def test_returns_reserialized_url(self):
+        from app.routers.utils import check_image_host
+
+        with patch("app.routers.utils.settings") as mock_settings:
+            mock_settings.CLOUDINARY_CLOUD_NAME = "demo"
+            url = "https://res.cloudinary.com/demo/image/upload/x.png"
+            assert check_image_host(url) == url
 
 
 class TestSubmitEvent:
@@ -211,17 +239,63 @@ class TestSubmitEvent:
             SubmitEventBody(
                 title="Kontsert",
                 starts_at="2026-06-01T18:00:00+03:00",
+                categories=["not-a-real-category"],
+            )
+
+    def test_more_than_cap_rejected(self):
+        from pydantic import ValidationError
+        from app.constants import ORGANIZER_MAX_CATEGORIES, VALID_CATEGORIES
+        from app.routers.organizer_events import SubmitEventBody
+
+        with pytest.raises(ValidationError):
+            SubmitEventBody(
+                title="Kontsert",
+                starts_at="2026-06-01T18:00:00+03:00",
+                categories=sorted(VALID_CATEGORIES)[: ORGANIZER_MAX_CATEGORIES + 1],
+            )
+
+    def test_duplicate_categories_deduped(self):
+        from app.routers.organizer_events import SubmitEventBody
+
+        body = SubmitEventBody(
+            title="Kontsert",
+            starts_at="2026-06-01T18:00:00+03:00",
+            categories=["music", "music", "family"],
+        )
+        assert body.categories == ["music", "family"]
+
+    def test_legacy_category_alias_folds_into_categories(self):
+        from app.routers.organizer_events import PatchEventBody, SubmitEventBody
+
+        body = SubmitEventBody(
+            title="Kontsert",
+            starts_at="2026-06-01T18:00:00+03:00",
+            category="music",
+        )
+        assert body.categories == ["music"]
+        patch_body = PatchEventBody(category="music")
+        assert patch_body.categories == ["music"]
+        assert "categories" in patch_body.model_fields_set
+
+    def test_legacy_invalid_category_rejected(self):
+        from pydantic import ValidationError
+        from app.routers.organizer_events import SubmitEventBody
+
+        with pytest.raises(ValidationError):
+            SubmitEventBody(
+                title="Kontsert",
+                starts_at="2026-06-01T18:00:00+03:00",
                 category="not-a-real-category",
             )
 
     @pytest.mark.asyncio
-    async def test_organizer_category_applied_after_classify(
+    async def test_organizer_categories_replace_after_classify(
         self, mock_db, make_request, make_organizer
     ):
         from app.constants import VALID_CATEGORIES
         from app.routers.organizer_events import SubmitEventBody, submit_event
 
-        picked_category = next(iter(VALID_CATEGORIES))
+        picked = sorted(VALID_CATEGORIES)[:2]
         organizer = make_organizer(organizer_id=5)
         fake_event = _fake_event()
         source = MagicMock(id=1, slug="user_submission")
@@ -243,14 +317,14 @@ class TestSubmitEvent:
                 "app.routers.organizer_events.publish_pending", new_callable=AsyncMock
             ),
             patch(
-                "app.routers.organizer_events.apply_organizer_category",
+                "app.routers.organizer_events.replace_organizer_categories",
                 new_callable=AsyncMock,
             ) as mock_apply_category,
         ):
             body = SubmitEventBody(
                 title="Kontsert",
                 starts_at="2026-06-01T18:00:00+03:00",
-                category=picked_category,
+                categories=picked,
             )
             await submit_event(
                 body,
@@ -259,7 +333,7 @@ class TestSubmitEvent:
                 mock_db,
             )
         mock_apply_category.assert_awaited_once_with(
-            mock_db, fake_event.id, picked_category
+            mock_db, fake_event.id, picked
         )
 
     @pytest.mark.asyncio
@@ -588,23 +662,23 @@ class TestUpdateOwnEvent:
         assert event.venue_name != "New Venue Hall"
 
     @pytest.mark.asyncio
-    async def test_category_edit_applies_via_helper(
+    async def test_categories_edit_replaces_via_helper(
         self, mock_db, make_request, make_organizer
     ):
         from app.constants import VALID_CATEGORIES
         from app.routers.organizer_events import PatchEventBody, update_own_event
 
-        picked_category = next(iter(VALID_CATEGORIES))
+        picked = sorted(VALID_CATEGORIES)[:2]
         organizer = make_organizer(organizer_id=5)
         event = _fake_event(submitted_by_organizer_id=5, status=EVENT_STATUS_PUBLISHED)
         mock_db.scalar.return_value = event
         mock_db.commit = AsyncMock()
 
         with patch(
-            "app.routers.organizer_events.apply_organizer_category",
+            "app.routers.organizer_events.replace_organizer_categories",
             new_callable=AsyncMock,
         ) as mock_apply_category:
-            body = PatchEventBody(category=picked_category)
+            body = PatchEventBody(categories=picked)
             await update_own_event(
                 10,
                 body,
@@ -612,7 +686,31 @@ class TestUpdateOwnEvent:
                 organizer,
                 mock_db,
             )
-        mock_apply_category.assert_awaited_once_with(mock_db, event.id, picked_category)
+        mock_apply_category.assert_awaited_once_with(mock_db, event.id, picked)
+
+    @pytest.mark.asyncio
+    async def test_empty_categories_edit_is_noop(
+        self, mock_db, make_request, make_organizer
+    ):
+        from app.routers.organizer_events import PatchEventBody, update_own_event
+
+        organizer = make_organizer(organizer_id=5)
+        event = _fake_event(submitted_by_organizer_id=5, status=EVENT_STATUS_PUBLISHED)
+        mock_db.scalar.return_value = event
+        mock_db.commit = AsyncMock()
+
+        with patch(
+            "app.routers.organizer_events.replace_organizer_categories",
+            new_callable=AsyncMock,
+        ) as mock_replace:
+            await update_own_event(
+                10,
+                PatchEventBody(categories=[]),
+                make_request(method="PATCH", path="/organizer/events/10"),
+                organizer,
+                mock_db,
+            )
+        mock_replace.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_sets_needs_review_on_clean_edit_keeps_published(
@@ -736,7 +834,7 @@ class TestUpdateOwnEvent:
         self, mock_db, make_request, make_organizer
     ):
         """A PATCH-supplied url must still be scheme-checked via
-        safe_external_url() — not assigned straight from the request body."""
+        safe_render_url() — not assigned straight from the request body."""
         from fastapi import HTTPException
         from app.routers.organizer_events import PatchEventBody, update_own_event
 
@@ -746,7 +844,7 @@ class TestUpdateOwnEvent:
         mock_db.commit = AsyncMock()
 
         with patch(
-            "app.routers.organizer_events.safe_external_url",
+            "app.routers.organizer_events.safe_render_url",
             return_value=None,
         ) as mock_guard:
             body = PatchEventBody(url="javascript:alert(1)")
@@ -775,7 +873,7 @@ class TestUpdateOwnEvent:
         mock_db.commit = AsyncMock()
 
         with patch(
-            "app.routers.organizer_events.safe_external_url",
+            "app.routers.organizer_events.safe_render_url",
             return_value="https://mytheatre.ee/tickets/42",
         ):
             body = PatchEventBody(url="https://mytheatre.ee/tickets/42")
@@ -1207,6 +1305,57 @@ class TestCloudinarySignature:
 
         signature = _cloudinary_signature(self._DOC_PARAMS, self._DOC_SECRET)
         assert signature == self._DOC_SHA256_DIGEST
+
+
+class TestGetOwnEvent:
+    @pytest.mark.asyncio
+    async def test_returns_list_row_shape(self, mock_db, make_request, make_organizer):
+        from app.routers.organizer_events import get_own_event
+
+        organizer = make_organizer(organizer_id=5)
+        event = _fake_event(
+            submitted_by_organizer_id=5,
+            status=EVENT_STATUS_CLASSIFIED,
+            needs_review=True,
+            venue_id=7,
+            title_localized={"et": "Pealkiri"},
+        )
+        mock_db.scalar.return_value = event
+
+        result = await get_own_event(
+            3,
+            make_request(path="/organizer/events/3"),
+            locale=None,
+            current_organizer=organizer,
+            db=mock_db,
+        )
+
+        assert result["status"] == EVENT_STATUS_CLASSIFIED
+        assert result["needs_review"] is True
+        assert result["venue_id"] == 7
+        assert result["title_localized"] == {"et": "Pealkiri"}
+        # Ownership is enforced in the query itself.
+        compiled = str(mock_db.scalar.call_args.args[0])
+        assert "submitted_by_organizer_id" in compiled
+
+    @pytest.mark.asyncio
+    async def test_unknown_or_foreign_event_404s(
+        self, mock_db, make_request, make_organizer
+    ):
+        from fastapi import HTTPException
+
+        from app.routers.organizer_events import get_own_event
+
+        mock_db.scalar.return_value = None
+        with pytest.raises(HTTPException) as exc:
+            await get_own_event(
+                3,
+                make_request(path="/organizer/events/3"),
+                locale=None,
+                current_organizer=make_organizer(organizer_id=5),
+                db=mock_db,
+            )
+        assert exc.value.status_code == 404
 
 
 class TestListOwnEvents:

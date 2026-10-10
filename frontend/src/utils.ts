@@ -1,7 +1,7 @@
 import DOMPurify from 'dompurify';
 import { type InfiniteData, type QueryClient } from '@tanstack/react-query';
 import { api, ApiError } from './api/client';
-import { API, QUERY_KEYS, CARD_ANIMATION_DELAY_STEP_MS, CARD_ANIMATION_MAX_STEPS, ISO_DATE_RE, PICKER_VALUE_RE, SIGNAL_CLICK_EXTERNAL, CATEGORY_GRADIENTS, CLAIM_JUSTIFICATION_REQUIRED_ERROR, FALLBACK_GRADIENT, EUR_SYMBOL, DEFAULT_CURRENCY, GOOGLE_MAPS_SEARCH_URL, type Signal, toLocaleCode, SAFE_URL_SCHEMES, SANITIZE_ALLOWED_TAGS, SANITIZE_ALLOWED_ATTR, SIGNAL_TO_CLASS, BROWSE_PAGE_SIZE, CATEGORIES, VIBES, type DatePreset, type SortOption, ANALYTICS_EVENT_PATH_RE, ANALYTICS_ORGANIZER_EDIT_PATH_RE, CALENDAR_WEEK_START, CALENDAR_WEEKS_SHOWN, CALENDAR_DAYS_PER_WEEK, CALENDAR_REFERENCE_MONDAY, MAX_HOUR, MAX_MINUTE, DATE_PRESET_DAYS, DATE_PRESET_DAYS_FALLBACK, DATE_PRESET_DEFAULT, DATE_PRESET_TODAY, DATE_PRESET_WEEKEND, EXPLORE_PARAM, EXPLORE_URL_FLAG_TRUE, EXPLORE_API_FLAG_TRUE, SORT_DEFAULT, TIME_FIELD_MAX_LENGTH, LOCALES, LOCALES_BY_CODE, LOCALE_EN, LOCALE_ET, LOCALE_RU, type LocaleCode, DEFAULT_LOCALE_CODE, MS_PER_HOUR, HOURS_PER_DAY } from './constants';
+import { API, NUMERIC_ROUTE_ID_RE, QUERY_KEYS, CARD_ANIMATION_DELAY_STEP_MS, CARD_ANIMATION_MAX_STEPS, ISO_DATE_RE, PICKER_VALUE_RE, SIGNAL_CLICK_EXTERNAL, CATEGORY_GRADIENTS, CLAIM_JUSTIFICATION_REQUIRED_ERROR, FALLBACK_GRADIENT, EUR_SYMBOL, DEFAULT_CURRENCY, GOOGLE_MAPS_SEARCH_URL, type Signal, toLocaleCode, SAFE_URL_SCHEMES, SANITIZE_ALLOWED_TAGS, SANITIZE_ALLOWED_ATTR, SIGNAL_TO_CLASS, BROWSE_PAGE_SIZE, CATEGORIES, VIBES, type DatePreset, type SortOption, ANALYTICS_EVENT_PATH_RE, ANALYTICS_ORGANIZER_EDIT_PATH_RE, CALENDAR_WEEK_START, CALENDAR_WEEKS_SHOWN, CALENDAR_DAYS_PER_WEEK, CALENDAR_REFERENCE_MONDAY, MAX_HOUR, MAX_MINUTE, DATE_PRESET_DAYS, DATE_PRESET_DAYS_FALLBACK, DATE_PRESET_DEFAULT, DATE_PRESET_TODAY, DATE_PRESET_WEEKEND, EXPLORE_PARAM, EXPLORE_URL_FLAG_TRUE, EXPLORE_API_FLAG_TRUE, SORT_DEFAULT, TIME_FIELD_MAX_LENGTH, LOCALES, LOCALES_BY_CODE, LOCALE_EN, LOCALE_ET, LOCALE_RU, type LocaleCode, DEFAULT_LOCALE_CODE, MS_PER_HOUR, HOURS_PER_DAY, TALLINN_TZ } from './constants';
 import { t, ti } from './i18n';
 import { stripLocalePrefix, localizedPath, localeFromPath, localizedTo } from './lib/urlLocale';
 
@@ -12,6 +12,12 @@ export function cx(...classes: (string | false | null | undefined)[]): string {
 }
 
 /** Display label for a locale/content-language code, falling back to the upper-cased code. */
+/** A route param safe to interpolate into an API path: plain digits only, else
+ * undefined (callers then leave their query disabled and render the error state). */
+export function numericRouteId(raw: string | undefined): string | undefined {
+  return raw !== undefined && NUMERIC_ROUTE_ID_RE.test(raw) ? raw : undefined;
+}
+
 export function localeLabel(code: string): string {
   return LOCALES_BY_CODE.get(code)?.label ?? code.toUpperCase();
 }
@@ -88,6 +94,14 @@ export function isClaimJustificationRequiredError(err: unknown): boolean {
  * every render. */
 export function categoryOptions(locale: string): { value: string; label: string }[] {
   return CATEGORIES.map((slug) => ({ value: slug, label: t(`category_${slug}`, locale) }));
+}
+
+/** Toggle `value` in a capped pick list: removes it when present, appends it
+ * when absent and there is room, otherwise returns the list unchanged. Shared
+ * by the organizer submit form and the claim edit's category pickers. */
+export function toggleCapped(list: string[], value: string, max: number): string[] {
+  if (list.includes(value)) return list.filter((v) => v !== value);
+  return list.length < max ? [...list, value] : list;
 }
 
 /** Same shape as categoryOptions, for VIBES. */
@@ -203,19 +217,25 @@ export function hasHtmlContent(html: string): boolean {
 // in a grid) calls these per card per render.
 const DTF_HOUR_MINUTE: Intl.DateTimeFormatOptions = { hour: '2-digit', minute: '2-digit', hour12: false };
 
+// Two flavours of every formatter: `tallinn` pins real instants (event ISO
+// timestamps, "now") to Europe/Tallinn so a viewer in any timezone — and the
+// prerender host — sees Tallinn wall-clock time; the default flavour formats
+// wall-clock Dates built from local components (pickers, parseISODateLocal),
+// which must NOT be shifted into another zone.
 const HOUR_MINUTE_FORMATTERS = new Map<string, Intl.DateTimeFormat>();
-function hourMinuteFormatter(locale: string): Intl.DateTimeFormat {
+function hourMinuteFormatter(locale: string, tallinn = false): Intl.DateTimeFormat {
   const localeCode = toLocaleCode(locale);
-  let fmt = HOUR_MINUTE_FORMATTERS.get(localeCode);
+  const key = tallinn ? `${localeCode}|tallinn` : localeCode;
+  let fmt = HOUR_MINUTE_FORMATTERS.get(key);
   if (!fmt) {
-    fmt = new Intl.DateTimeFormat(localeCode, DTF_HOUR_MINUTE);
-    HOUR_MINUTE_FORMATTERS.set(localeCode, fmt);
+    fmt = new Intl.DateTimeFormat(localeCode, tallinn ? { ...DTF_HOUR_MINUTE, timeZone: TALLINN_TZ } : DTF_HOUR_MINUTE);
+    HOUR_MINUTE_FORMATTERS.set(key, fmt);
   }
   return fmt;
 }
 
 export function formatHourMinute(iso: string, locale: string): string {
-  return hourMinuteFormatter(locale).format(new Date(iso));
+  return hourMinuteFormatter(locale, true).format(new Date(iso));
 }
 
 export function trackExternalClick(eventId: number): void {
@@ -313,11 +333,12 @@ function dateTimeFormatter(
   localeCode: string,
   shapeKey: string,
   options: Intl.DateTimeFormatOptions,
+  tallinn = false,
 ): Intl.DateTimeFormat {
-  const key = `${localeCode}|${shapeKey}`;
+  const key = tallinn ? `${localeCode}|${shapeKey}|tallinn` : `${localeCode}|${shapeKey}`;
   let fmt = DATE_TIME_FORMATTERS.get(key);
   if (!fmt) {
-    fmt = new Intl.DateTimeFormat(localeCode, options);
+    fmt = new Intl.DateTimeFormat(localeCode, tallinn ? { ...options, timeZone: TALLINN_TZ } : options);
     DATE_TIME_FORMATTERS.set(key, fmt);
   }
   return fmt;
@@ -340,24 +361,24 @@ const DTF_ADMIN_TIMESTAMP: Intl.DateTimeFormatOptions = { dateStyle: 'medium', t
  * in DEFAULT_LOCALE_CODE rather than taking a locale param. */
 export function formatAdminTimestamp(iso: string | null): string {
   if (!iso) return '—';
-  return dateTimeFormatter(DEFAULT_LOCALE_CODE, 'admin-timestamp', DTF_ADMIN_TIMESTAMP).format(new Date(iso));
+  return dateTimeFormatter(DEFAULT_LOCALE_CODE, 'admin-timestamp', DTF_ADMIN_TIMESTAMP, true).format(new Date(iso));
 }
 
 export function formatEventTime(iso: string, locale: string): string {
   const localeCode = toLocaleCode(locale);
   const date = new Date(iso);
-  const weekday = dateTimeFormatter(localeCode, 'weekday-short', DTF_WEEKDAY_SHORT).format(date);
-  const day = dateTimeFormatter(localeCode, 'day-month-short', DTF_DAY_MONTH_SHORT).format(date);
-  const time = hourMinuteFormatter(locale).format(date);
+  const weekday = dateTimeFormatter(localeCode, 'weekday-short', DTF_WEEKDAY_SHORT, true).format(date);
+  const day = dateTimeFormatter(localeCode, 'day-month-short', DTF_DAY_MONTH_SHORT, true).format(date);
+  const time = hourMinuteFormatter(locale, true).format(date);
   return `${weekday}, ${day} · ${time}`;
 }
 
 export function formatEventDateTime(iso: string, locale: string): string {
   const localeCode = toLocaleCode(locale);
   const date = new Date(iso);
-  const weekday = dateTimeFormatter(localeCode, 'weekday-long', DTF_WEEKDAY_LONG).format(date);
-  const day = dateTimeFormatter(localeCode, 'day-month-year-long', DTF_DAY_MONTH_YEAR_LONG).format(date);
-  const time = hourMinuteFormatter(locale).format(date);
+  const weekday = dateTimeFormatter(localeCode, 'weekday-long', DTF_WEEKDAY_LONG, true).format(date);
+  const day = dateTimeFormatter(localeCode, 'day-month-year-long', DTF_DAY_MONTH_YEAR_LONG, true).format(date);
+  const time = hourMinuteFormatter(locale, true).format(date);
   return `${weekday}, ${day} · ${time}`;
 }
 
@@ -365,7 +386,13 @@ export function formatEventDateTime(iso: string, locale: string): string {
  * venue-or-date fallback (useSeoMeta) when an event has no venue_name. */
 export function formatEventShortDate(iso: string, locale: string): string {
   const localeCode = toLocaleCode(locale);
-  return dateTimeFormatter(localeCode, 'day-month-short', DTF_DAY_MONTH_SHORT).format(new Date(iso));
+  return dateTimeFormatter(localeCode, 'day-month-short', DTF_DAY_MONTH_SHORT, true).format(new Date(iso));
+}
+
+/** Flatten an inline run (string or `{ text }` part) to plain text, for building
+ * stable React keys off authored content (react/no-array-index-key is an error). */
+export function inlineText(content: ReadonlyArray<string | { text: string }>): string {
+  return content.map((part) => (typeof part === 'string' ? part : part.text)).join('');
 }
 
 // ─── Date / number helpers ───────────────────────────────────────────────────
@@ -552,13 +579,13 @@ export function formatPickerValue(value: string, locale: string): string {
   return `${day}, ${time}`;
 }
 
-function formatLongDate(date: Date, locale: string): string {
+function formatLongDate(date: Date, locale: string, tallinn = false): string {
   const localeCode = toLocaleCode(locale);
-  return dateTimeFormatter(localeCode, 'long-date', DTF_LONG_DATE).format(date);
+  return dateTimeFormatter(localeCode, 'long-date', DTF_LONG_DATE, tallinn).format(date);
 }
 
 export function formatTodayDate(locale: string): string {
-  return formatLongDate(new Date(), locale);
+  return formatLongDate(new Date(), locale, true);
 }
 
 /** Landing-hero dateline: weekday-long + day/month-long, no year — the
@@ -566,8 +593,8 @@ export function formatTodayDate(locale: string): string {
 export function formatHeroDateline(locale: string): string {
   const localeCode = toLocaleCode(locale);
   const date = new Date();
-  const weekday = dateTimeFormatter(localeCode, 'weekday-long', DTF_WEEKDAY_LONG).format(date);
-  const dayMonth = dateTimeFormatter(localeCode, 'day-month-long', DTF_DAY_MONTH_LONG).format(date);
+  const weekday = dateTimeFormatter(localeCode, 'weekday-long', DTF_WEEKDAY_LONG, true).format(date);
+  const dayMonth = dateTimeFormatter(localeCode, 'day-month-long', DTF_DAY_MONTH_LONG, true).format(date);
   return `${weekday}, ${dayMonth}`;
 }
 
@@ -715,8 +742,21 @@ export function toDateStr(d: Date): string {
   return `${d.getFullYear()}-${padIndex(d.getMonth() + 1)}-${padIndex(d.getDate())}`;
 }
 
-/** Resolve a date preset against the browser's local clock (backend stays
- * stateless). Uses local date components, not toISOString(),
+const TALLINN_YMD_FORMATTER = new Intl.DateTimeFormat('en-US', {
+  timeZone: TALLINN_TZ, year: 'numeric', month: 'numeric', day: 'numeric',
+});
+
+/** The current Tallinn calendar day as a local-midnight Date — same shape as
+ * `startOfDay(new Date())` but anchored to Europe/Tallinn rather than the
+ * browser zone, so "today" presets and picker minimums agree with event times. */
+export function tallinnToday(): Date {
+  const parts = TALLINN_YMD_FORMATTER.formatToParts(new Date());
+  const pick = (type: string) => Number(parts.find((p) => p.type === type)?.value);
+  return new Date(pick('year'), pick('month') - 1, pick('day'));
+}
+
+/** Resolve a date preset against the current Tallinn day (backend stays
+ * stateless). Uses local date components of the Tallinn day, not toISOString(),
  * so the resolved day never shifts across a UTC boundary. */
 export function datePresetRange(preset: DatePreset): { from: string | null; to: string | null } {
   if (preset === DATE_PRESET_DEFAULT) return { from: null, to: null };
@@ -726,8 +766,7 @@ export function datePresetRange(preset: DatePreset): { from: string | null; to: 
   // to the DATE_PRESET_DAYS fallback below and get silently misread as a
   // 30-day window.
   if (preset === 'custom') return { from: null, to: null };
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const today = tallinnToday();
 
   if (preset === DATE_PRESET_TODAY) {
     const s = toDateStr(today);

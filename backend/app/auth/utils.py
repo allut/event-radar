@@ -2,6 +2,8 @@
 normalization/masking and the fail-closed secret gate."""
 
 import logging
+from datetime import datetime, timezone
+from typing import Protocol
 
 from fastapi import HTTPException, status
 
@@ -12,6 +14,22 @@ from app.constants import (
 )
 
 log = logging.getLogger(__name__)
+
+
+class _VerifiableOrganizer(Protocol):
+    email_verified_at: datetime | None
+
+
+def mark_organizer_verified(organizer: _VerifiableOrganizer) -> bool:
+    """Stamp ``email_verified_at`` the first time an organizer authenticates
+    (magic link, claim link, Google). Returns True when the caller must commit.
+    Without this durable signal the weekly cleanup cannot tell an
+    authenticated organizer from a never-proven one once their magic-link rows
+    are pruned."""
+    if organizer.email_verified_at is not None:
+        return False
+    organizer.email_verified_at = datetime.now(timezone.utc)
+    return True
 
 
 def mask_email(email: str) -> str:

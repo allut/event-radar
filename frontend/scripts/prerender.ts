@@ -74,7 +74,11 @@ import {
   PRERENDER_DIAGNOSTIC_MAX_EVENTS,
   RATE_GATE_SLACK_MS,
 } from '../src/constants';
+import { TALLINN_TZ, type LocaleCode } from '../src/constants';
 import { serializeJsonLd } from '../src/lib/jsonLd';
+import faqEn from '../src/content/faq/faq.en';
+import faqEt from '../src/content/faq/faq.et';
+import faqRu from '../src/content/faq/faq.ru';
 import { canonicalUrlFor, localizedPath } from '../src/lib/urlLocale';
 import { githubRequest } from '../src/lib/githubRequest';
 import { compareEventStaleness, parseSnapshotHtml, validateSnapshotStructure } from '../src/lib/seoValidation';
@@ -118,7 +122,19 @@ export interface PrerenderTarget {
    * against the currently-live production page's marker. Home routes carry
    * no Event to diff against, so they're always rendered fresh. */
   updatedAt?: string;
+  /** ISO date of a static page's content (the FAQ doc's `lastUpdated`). Feeds
+   * the sitemap <lastmod> only — never the change-detection marker above, so
+   * the target still renders fresh every round. */
+  lastmod?: string;
 }
+
+/** Static imports, not FAQ_LOADERS: the sitemap needs every locale's date at
+ * build time, and the dates only change when the copy does. */
+const FAQ_LAST_UPDATED: Record<LocaleCode, string> = {
+  en: faqEn.lastUpdated,
+  et: faqEt.lastUpdated,
+  ru: faqRu.lastUpdated,
+};
 
 /** Simple sliding-window rate gate — `acquire()` resolves immediately while
  * under budget, else waits until the oldest slot in the window expires. */
@@ -160,7 +176,7 @@ class RateGate {
 
 const eventDetailRateGate = new RateGate(EVENT_DETAIL_RATE_LIMIT_PER_MINUTE, 60_000);
 
-interface PrerenderCandidate {
+export interface PrerenderCandidate {
   id: number;
   /** ISO Event.updated_at — see PrerenderTarget.updatedAt (issue #80). */
   updatedAt: string;
@@ -183,7 +199,7 @@ async function fetchPrerenderCandidates(): Promise<PrerenderCandidate[]> {
     .map((e) => ({ id: e.id, updatedAt: e.updated_at }));
 }
 
-function buildTargets(candidates: PrerenderCandidate[]): PrerenderTarget[] {
+export function buildTargets(candidates: PrerenderCandidate[]): PrerenderTarget[] {
   const localeCodes = LOCALES.map((l) => l.code);
   const targets: PrerenderTarget[] = [];
   for (const locale of localeCodes) {
@@ -195,6 +211,8 @@ function buildTargets(candidates: PrerenderCandidate[]): PrerenderTarget[] {
     // classifyTarget's doc comment for why that alone makes it always
     // render fresh, no copy-forward.
     targets.push({ bare: ROUTES.explore, locale });
+    // Same no-eventId shape as explore, so it always renders fresh too.
+    targets.push({ bare: ROUTES.faq, locale, lastmod: FAQ_LAST_UPDATED[locale] });
     for (const candidate of candidates) {
       targets.push({
         bare: ROUTES.eventDetail(candidate.id),
@@ -594,8 +612,9 @@ function escapeXml(value: string): string {
  * `useSeoMeta`'s `buildSeoMeta` emits as `<link>` tags, so the sitemap and
  * the prerendered pages it lists never disagree about locale siblings.
  * `lastmod` is each event target's real `Event.updated_at` (issue #80) where
- * available, falling back to `buildTimestamp` for home (no backing Event). */
-function buildSitemapXml(targets: PrerenderTarget[], buildTimestamp: string): string {
+ * available, then a static page's own content date (`target.lastmod`, the
+ * FAQ), falling back to `buildTimestamp` for home/explore. */
+export function buildSitemapXml(targets: PrerenderTarget[], buildTimestamp: string): string {
   const urlEntries = targets
     .map((target) => {
       const loc = escapeXml(`${PRODUCTION_ORIGIN}${localizedPath(target.bare, target.locale)}`);
@@ -606,7 +625,7 @@ function buildSitemapXml(targets: PrerenderTarget[], buildTimestamp: string): st
             : `${PRODUCTION_ORIGIN}${localizedPath(target.bare, code)}`;
         return `    <xhtml:link rel="alternate" hreflang="${code}" href="${escapeXml(href)}"/>`;
       }).join('\n');
-      const lastmod = escapeXml(String(target.updatedAt ?? buildTimestamp));
+      const lastmod = escapeXml(String(target.updatedAt ?? target.lastmod ?? buildTimestamp));
       return `  <url>\n    <loc>${loc}</loc>\n    <lastmod>${lastmod}</lastmod>\n${alternates}\n  </url>`;
     })
     .join('\n');
@@ -627,9 +646,15 @@ export function buildRobotsTxt(): string {
   // Explore URL (`/explore?category=…`) must stay crawlable per the map's
   // canonical-alone crawl-control decision (issue #236): no Disallow on
   // query strings, no param-conditional noindex.
-  lines.push(`Allow: ${ROUTES.explore}`);
+  // /faq is not $-anchored either, same as /explore.
+  lines.push(`Allow: ${ROUTES.explore}`, `Allow: ${ROUTES.faq}`);
   for (const code of LOCALE_URL_PREFIX_CODES) {
-    lines.push(`Allow: /${code}$`, `Allow: /${code}/events/`, `Allow: /${code}${ROUTES.explore}`);
+    lines.push(
+      `Allow: /${code}$`,
+      `Allow: /${code}/events/`,
+      `Allow: /${code}${ROUTES.explore}`,
+      `Allow: /${code}${ROUTES.faq}`,
+    );
   }
   lines.push(`Allow: ${SITEMAP_PATH}`, `Allow: ${OG_FALLBACK_IMAGE_PATH}`, `Allow: ${CRAWLABLE_ASSETS_PATH}`);
   for (const iconPath of CRAWLABLE_ICON_PATHS) lines.push(`Allow: ${iconPath}`);
@@ -693,7 +718,7 @@ async function snapshotTarget(
   const url = `${previewOrigin}${localizedPath(target.bare, target.locale)}`;
   await page.goto(url, { waitUntil: 'domcontentloaded', timeout: NAV_TIMEOUT_MS });
   const isExplore = target.bare === ROUTES.explore;
-  // Landing and /events/:id are `indexable` (useSeoMeta) only once real
+  // Landing, /faq and /events/:id are `indexable` (useSeoMeta) only once real
   // content has loaded, so waiting for the canonical link this hook emits is
   // a reliable "real content is in the DOM" signal for both — but only if the
   // wait is for *this route's* canonical (`contentReadySelector`), never any
@@ -862,7 +887,14 @@ async function validateTarget(
 ): Promise<string[]> {
   const html = renderedHtml ?? (await readFile(outputFilePath(target.bare, target.locale), 'utf-8'));
   const parsed = parseSnapshotHtml(html);
-  const kind = target.bare === ROUTES.home ? 'website' : target.bare === ROUTES.explore ? 'list' : 'event';
+  const kind =
+    target.bare === ROUTES.home
+      ? 'website'
+      : target.bare === ROUTES.explore
+        ? 'list'
+        : target.bare === ROUTES.faq
+          ? 'page'
+          : 'event';
 
   const liveItemCount = kind === 'list' ? await fetchLiveExploreCount(target.locale) : undefined;
 
@@ -1246,7 +1278,7 @@ export async function main(): Promise<void> {
       const deadline = Date.now() + RENDER_BUDGET_MS;
       const cursor = createBudgetedCursor(renderQueue.length, deadline);
       async function worker(): Promise<void> {
-        const page = await browser.newPage();
+        const page = await browser.newPage({ timezoneId: TALLINN_TZ });
         const recentEvents = attachPageDiagnostics(page);
         try {
           for (;;) {
@@ -1366,6 +1398,10 @@ export async function main(): Promise<void> {
     );
   }
   console.log(`prerender: validated ${validationTargets.length} snapshot(s), no issues found`);
+  // maxRSS is KiB on Linux; node process only (Chromium children not counted).
+  console.log(
+    `prerender: peak RSS ${Math.round(process.resourceUsage().maxRSS / 1024)} MiB (node process)`,
+  );
 
   // Round-state marker (issue #83): built from this round's actual outcome
   // and committed to the git-connected production branch, whose push

@@ -12,10 +12,12 @@ from app._generated.shared_constants import (
     DEFAULT_CURRENCY,
     DEFAULT_USER_CITY,
     DEFAULT_USER_LOCALE,
+    EMAIL_BRAND_MARK_PATH,
     HTML_SANITIZE_ALLOWED_ATTRS,
     HTML_SANITIZE_ALLOWED_TAGS,
     IMAGE_UPLOAD_ALLOWED_MIME,
     MAGIC_LINK_TTL_MINUTES as _MAGIC_LINK_TTL_MINUTES_SHARED,
+    ORGANIZER_MAX_CATEGORIES,
     PERSONA_MAX_SELECTABLE,
     PERSONA_PRIMARY_WEIGHT,
     PERSONA_SECONDARY_WEIGHT,
@@ -36,9 +38,11 @@ __all__ = [
     "DEFAULT_CURRENCY",
     "DEFAULT_USER_CITY",
     "DEFAULT_USER_LOCALE",
+    "EMAIL_BRAND_MARK_PATH",
     "HTML_SANITIZE_ALLOWED_ATTRS",
     "HTML_SANITIZE_ALLOWED_TAGS",
     "IMAGE_UPLOAD_ALLOWED_MIME",
+    "ORGANIZER_MAX_CATEGORIES",
     "PERSONA_MAX_SELECTABLE",
     "PERSONA_PRIMARY_WEIGHT",
     "PERSONA_RANK_WEIGHTS",
@@ -379,7 +383,8 @@ LOCALIZED_TEXT_MAX_TITLE_CHARS = 500
 LOCALIZED_TEXT_MAX_DESC_CHARS = 5000
 
 ORGANIZER_MIN_EVENTS_FOR_AUTO_ADD = 3
-ORGANIZER_NAME_MAX_LEN = 200
+# Publisher.name (models/models.py) column width.
+PUBLISHER_NAME_MAX_LEN = 255
 FIENTA_ORGANIZER_SCAN_LIMIT = 1000
 FIENTA_ORGANIZER_CHECK_LIMIT = (
     5  # max events fetched when probing a single organizer for staleness
@@ -949,11 +954,12 @@ GOOGLE_AUTHORITATIVE_EMAIL_DOMAINS = frozenset({"gmail.com", "googlemail.com"})
 # each is only ever read on one route). SameSite=Lax, not Strict — see
 # docs/adr/0002 for why.
 ORGANIZER_OAUTH_STATE_COOKIE_NAME = "organizer_oauth_state"
-ORGANIZER_OAUTH_STATE_COOKIE_PATH = "/api/organizer/auth/google/callback"
 ORGANIZER_GOOGLE_CALLBACK_PUBLIC_PATH = "/api/organizer/auth/google/callback"
+# The state cookie is Path-scoped to the callback route, so the two must be equal.
+ORGANIZER_OAUTH_STATE_COOKIE_PATH = ORGANIZER_GOOGLE_CALLBACK_PUBLIC_PATH
 OAUTH_STATE_COOKIE_NAME = "oauth_state"
-OAUTH_STATE_COOKIE_PATH = "/api/auth/google/callback"
 GOOGLE_CALLBACK_PUBLIC_PATH = "/api/auth/google/callback"
+OAUTH_STATE_COOKIE_PATH = GOOGLE_CALLBACK_PUBLIC_PATH
 OAUTH_STATE_COOKIE_SAMESITE: Literal["lax"] = "lax"
 # Google-link binding cookies (OWASP audit #3): set on the callback that sends a
 # confirmation magic link, carrying the pending Google `sub`, so the link only
@@ -984,8 +990,11 @@ LOGIN_PATH = "/login"
 HOME_PATH = "/"
 ONBOARDING_PATH = "/onboarding"
 # Frontend paths linked from transactional emails (app/email/report_notify.py,
-# report_reporter.py, digest.py) — built with settings.FRONTEND_URL as a prefix.
+# report_reporter.py, digest.py) — built with settings.FRONTEND_URL as a prefix,
+# plus the recipient's locale prefix (app/email/links.py) for the
+# user-facing ones.
 EVENTS_PATH = "/events"
+SETTINGS_PATH = "/settings"
 ADMIN_REPORTS_PATH = "/admin/reports"
 UNSUBSCRIBE_PATH = "/unsubscribe"
 # Callback success-redirect marker — the frontend's signed-in localStorage
@@ -1145,6 +1154,11 @@ ORGANIZER_SUBMISSION_EXTERNAL_ID_PREFIX = "org:"
 LOCALE_ET = "et"
 LOCALE_EN = "en"
 LOCALE_RU = "ru"
+# Locales whose frontend URLs carry a `/en`/`/ru` path prefix — Estonian is the
+# bare (unprefixed) URL locale. Backend mirror of the frontend's
+# LOCALE_URL_PREFIX_CODES (frontend/src/constants.ts); used by
+# app/email/links.py to point email links at the recipient's locale (#499).
+LOCALE_URL_PREFIX_CODES: frozenset[str] = frozenset(VALID_LOCALES) - {LOCALE_ET}
 
 # Admin review-queue pagination (routers/admin.py GET /admin/submissions) — mirrors
 # ADMIN_DEDUP_GROUPS_PAGE_SIZE's sizing rationale (small default page, generous cap).
@@ -1227,6 +1241,9 @@ TIME_SLOTS_CACHE_MAXSIZE = 4096
 # under the limit at either table's column count and mirrors the chunking
 # already used for the LLM dedup hash IN-list (LLM_DEDUP_HASH_QUERY_CHUNK_SIZE).
 SCORE_INSERT_CHUNK_SIZE = 1000
+# Max values per ``IN (...)`` list: SQLAlchemy expands one bind param per value,
+# and Postgres caps a statement at ~32k params.
+SQL_IN_CHUNK_SIZE = 1000
 
 # GET /explore (app/routers/browse.py) — event discovery / search page.
 # BROWSE_PAGE_SIZE itself is cross-stack (shared/app-config.json), imported above.
@@ -1408,6 +1425,21 @@ TIME_MORNING_START = 6
 LLM_MAX_PROMPT_CHARS = 1200  # cap on event text passed to classification prompt
 IMPORTANT_INFO_MAX_CHARS = 1200  # cap on Piletilevi "important info" text in the prompt
 PRICE_CONTEXT_MAX_CHARS = 700  # cap on the price-lines digest passed to the prompt
+# Cap on each raw text scanned for price lines — bounds request-path work on a
+# 30k-char organizer description (OWASP audit M-4).
+PRICE_CONTEXT_INPUT_MAX_CHARS = 20_000
+# Upper bound (exclusive) for any scraped/LLM-derived price. events.price_* are
+# Numeric(10,2); an inf/1e12 from json.loads("Infinity") raised DataError at the
+# job's single commit and rolled back the whole batch (OWASP audit M-6).
+PRICE_MAX_VALUE = 10**7
+# Deprecated IPv6 site-local range; ipaddress.is_global still reports it global.
+SITE_LOCAL_IPV6_CIDR = "fec0::/10"
+# ISO-4217 codes accepted by normalize_currency — anything else is dropped (a
+# prompt-injected "XYZ" must not bypass the EUR literal-amount check).
+VALID_CURRENCY_CODES: frozenset[str] = frozenset(
+    "AED AUD BGN BRL CAD CHF CNY CZK DKK EUR GBP HKD HUF ILS INR ISK JPY KRW MXN "
+    "NOK NZD PLN RON RUB RSD SEK SGD THB TRY UAH USD ZAR BYN KZT GEL AMD AZN MDL MKD BAM".split()
+)
 LLM_MAX_TOKENS = 400  # max completion tokens per LLM call
 LLM_REASONING_MAX_TOKENS = 600  # ceiling (project hard cap); leaves room for reasoning + answer
 LLM_DEDUP_CONFIDENCE_THRESHOLD: float = (
@@ -1445,6 +1477,11 @@ AGGREGATE_LAST_VALUE_FIELDS = frozenset(
 )
 
 LLM_CLASSIFY_WHY_GO_MAX_BULLETS = 3
+# Per-bullet cap and scrub for LLM "why go" text that ships verbatim in the
+# digest (OWASP audit L-5): URLs/emails are stripped, an explicit bullet is
+# dropped.
+LLM_CLASSIFY_WHY_GO_BULLET_MAX_CHARS = 200
+LLM_OUTPUT_URL_OR_EMAIL_RE = r"(?:https?://|www\.)\S+|\S+@\S+\.\S+"
 LLM_CLASSIFY_LANGUAGE_CODE_MAX_LEN = 5
 CURRENCY_CODE_MAX_LEN = 3  # mirrors Event.currency String(3)
 LLM_CLASSIFY_VENUE_FALLBACK = "unknown"
@@ -1602,6 +1639,11 @@ GEOCODE_COMMIT_INTERVAL_SECONDS: float = 120.0
 # window, mirroring REFETCH_MIN_INTERVAL_DAYS's cooldown shape. A transient HTTP
 # failure does NOT start this cooldown — only a definitive no-match/bbox-reject does.
 GEOCODE_RETRY_INTERVAL_DAYS = 7
+# An event whose suspect venue_name the LLM resolved to "no address" is not
+# re-offered to the venue-extract pass until this window passes
+# (events.venue_extract_attempted_at). Without it such rows requalify every run
+# and, once GEOCODE_MAX_PER_RUN of them exist, starve newer candidates.
+VENUE_EXTRACT_RETRY_INTERVAL_DAYS = 7
 # How far back a donor event can be and still seed the geocode cache / sibling
 # copy pass. events rows are never deleted (see CLAUDE.md retention policy), so
 # without this bound both donor queries would scan every event ever ingested,
@@ -1694,6 +1736,9 @@ VENUE_SIBLING_RATIO_THRESHOLD = 90
 # ~12 min/run, fine for a 04:30 cron.
 REFETCH_MAX_PER_RUN = 1000
 REFETCH_REQUEST_DELAY_SECONDS: float = 1.0
+# Source hosts refetched in parallel (each host stays sequential at the delay
+# above). Bounds the fan-out; there are only a handful of ingest hosts.
+REFETCH_HOST_CONCURRENCY = 4
 # Wall-clock backstop, independent of REFETCH_MAX_PER_RUN: an event that
 # triggers locale-variant fetches (fetch_locale_variants) pays its own
 # REFETCH_REQUEST_DELAY_SECONDS per variant, so REFETCH_MAX_PER_RUN events
@@ -1777,8 +1822,12 @@ FREE_TIER_KEYWORDS: frozenset[str] = frozenset({"free", "tasuta", "беспла�
 # being mistaken for the currency code. Used to deterministically widen the
 # classifier's [price_min, price_max] envelope against the literal amounts in a
 # multi-tier price_hint.
+# Digit runs are bounded (\d{1,7}) and the amount-first branch refuses to start
+# mid-run ((?<!\d)) — the unbounded form rescanned a long digit run from every
+# start position (quadratic; OWASP audit M-4).
 CURRENCY_AMOUNT_RE = (
-    r"(?:€|\bEUR\b)\s*(\d+(?:[.,]\d{1,2})?)|(\d+(?:[.,]\d{1,2})?)\s*(?:€|\bEUR\b)"
+    r"(?:€|\bEUR\b)\s*(\d{1,7}(?:[.,]\d{1,2})?)(?!\d)"
+    r"|(?<!\d)(\d{1,7}(?:[.,]\d{1,2})?)\s*(?:€|\bEUR\b)"
 )
 
 # CORS — restricted to the methods/headers the SPA actually sends (see
@@ -1821,10 +1870,11 @@ LOG_SHIP_FLUSH_INTERVAL_SECONDS = 2.0  # a partial buffer is flushed at least th
 # stripped of their own handlers and re-pointed at the root logger so every
 # line (app, uvicorn, SQL echo) shares the same timestamped format.
 SQLALCHEMY_ENGINE_LOGGER_NAME = "sqlalchemy.engine"
+UVICORN_ACCESS_LOGGER = "uvicorn.access"
 LOG_FRAMEWORK_LOGGER_NAMES: tuple[str, ...] = (
     "uvicorn",
     "uvicorn.error",
-    "uvicorn.access",
+    UVICORN_ACCESS_LOGGER,
     SQLALCHEMY_ENGINE_LOGGER_NAME,
 )
 # HTTP client loggers pinned to WARNING: their per-request INFO/DEBUG lines are
@@ -1978,7 +2028,7 @@ ORGANIZER_AUTH_VERIFY_PATH = "/organizer/verify"
 # (generate_organizer_claim_link_token) but carry different claims.
 ORGANIZER_CLAIM_VERIFY_PATH = "/organizer/claims/verify"
 
-# app/routers/utils.py::mask_db_url — redacts the password in a DB URL
+# app/db.py::mask_db_url — redacts the password in a DB URL
 # ("user:pass@host" -> "user:***@host") for safe logging.
 MASK_DB_URL_PASSWORD_RE = r":[^@/]+@"
 
@@ -1994,8 +2044,10 @@ CONTENT_FILTER_WHITESPACE_COLLAPSE_RE = r"\s+"
 # _MULTI_BR_RE: collapses a run of more than HTML_SANITIZE_MAX_CONSECUTIVE_BR
 # <br> tags; %d is filled in with HTML_SANITIZE_MAX_CONSECUTIVE_BR + 1.
 HTML_MULTI_BR_TEMPLATE_RE = r"(?:<br\s*/?>\s*){%d,}"
-# _EDGE_BR_RE: strips leading/trailing <br> runs left after block-tag conversion.
-HTML_EDGE_BR_RE = r"^(?:\s*<br\s*/?>\s*)+|(?:\s*<br\s*/?>\s*)+$"
+# _BR_TAG_RE: one whole <br> tag. _strip_edge_brs peels leading/trailing runs
+# with it iteratively — a single alternation regex over the runs backtracked
+# cubically on "<br>" + long whitespace + "<br>" (OWASP audit H-1).
+HTML_BR_TAG_RE = r"<br\s*/?>"
 # _WHITESPACE_RUN_RE: collapses ASCII whitespace runs within text nodes
 # (deliberately excludes U+00A0/nbsp — see sanitize.py's docstring).
 HTML_WHITESPACE_RUN_RE = r"[ \t\n\r\f\v]+"
@@ -2087,6 +2139,24 @@ ERROR_PERSONA_UNKNOWN = "Unknown persona slug(s): {missing}"
 ERROR_SUBMISSION_SOURCE_NOT_CONFIGURED = (
     "Submission source not configured; contact support."
 )
+# URL render-safety (http_client.safe_render_url, OWASP audit M-1): characters
+# Python's urlsplit/httpx and the WHATWG URL parser disagree about ("\\" is a
+# path separator to browsers, a userinfo char to urlsplit), plus controls and
+# whitespace that parsers silently strip. Non-ASCII is rejected in the
+# authority only (unicode paths are legitimate; IDN hosts are not accepted).
+URL_RENDER_FORBIDDEN_RE = r"[\\\x00-\x20\x7f]"
+# Hard cap on organizer/claimant-supplied URLs (L-6) — also bounds every
+# /explore, /public/showcase and digest payload that carries them.
+URL_MAX_LEN = 2048
+# Request-body bounds (OWASP audit L-6).
+AUTH_TOKEN_MAX_LEN = 2048
+# Rate-limit bucket width for IPv6 clients (one subscriber is typically a /64).
+RATE_LIMIT_IPV6_PREFIX_LEN = 64
+CONTACT_HONEYPOT_MAX_LEN = 2048
+ORGANIZER_OWN_CLAIMS_LIST_LIMIT = 200
+# Claim-edit `unpin` list bounds (pin_key() shapes are short; OWASP audit L-6).
+CLAIM_UNPIN_MAX_ITEMS = 32
+CLAIM_UNPIN_KEY_MAX_LEN = 64
 ERROR_IMAGE_HOST_NOT_ALLOWED = (
     "Image URL must be uploaded via POST /organizer/events/image "
     "(res.cloudinary.com)."
@@ -2141,6 +2211,9 @@ CLAIM_ERROR_CODE_DORMANT = "claim_dormant"
 ERROR_DAILY_CLAIM_EDIT_LIMIT = "Daily claim-edit limit reached. Try again tomorrow."
 ERROR_CLAIM_EVENT_NOT_FOUND = "No event could be resolved for this claim."
 ERROR_CLAIM_EDIT_URL_DOMAIN = "URL must stay on the domain this claim was verified against."
+ERROR_CLAIM_EDIT_CATEGORIES_CAP = (
+    f"An event can have at most {ORGANIZER_MAX_CATEGORIES} categories in total."
+)
 ERROR_EVENT_CREATE_FAILED = "Could not create event; please try again."
 ERROR_EVENT_URL_SCHEME = "Event URL is not allowed (unsupported scheme)."
 ERROR_IMAGE_URL_SCHEME = "Image URL is not allowed (unsupported scheme)."
@@ -2236,3 +2309,12 @@ BASE64_PAD_MULTIPLE = 4
 # Rows per bulk UPDATE ... FROM (VALUES ...) in dedup/rules.py::bulk_assign_dedup_groups
 # — 2 bind params per row, well under asyncpg's 32767-parameter cap.
 DEDUP_BULK_UPDATE_CHUNK_SIZE = 5000
+
+# strftime formats
+DEDUP_PROMPT_DATE_FORMAT = "%Y-%m-%d %H:%M"
+SLUG_DATE_FORMAT = "%Y%m%d"
+# JSON endpoints scraped by the Piletilevi / Estonia Concert Hall adapters
+HTTP_ACCEPT_JSON_HEADERS = {"accept": "application/json"}
+# Postgres regex fragments for the suspect-venue-name SQL twin
+SQL_REGEX_DIGIT = r"[0-9]"
+SQL_REGEX_WORD_BOUNDARY = r"\y"

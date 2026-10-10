@@ -5,6 +5,7 @@ import { PERSONAS_EN, type PersonaData } from './_generated/i18nData.js';
 import {
   LOCALE_CODE_MAP as _LOCALE_CODE_MAP,
   DEFAULT_LOCALE_CODE as _DEFAULT_LOCALE_CODE,
+  TALLINN_TZ,
   LOCALES,
   APP_VERSION,
   MAGIC_LINK_EXPIRY_MINUTES,
@@ -17,12 +18,15 @@ import {
   VIBES,
   BROWSE_PAGE_SIZE,
   ORGANIZER_IMAGE_ALLOWED_MIME,
+  ORGANIZER_MAX_CATEGORIES,
   CLAIM_EXPIRY_DAYS,
   CLAIM_ADMIN_REVIEW_EXPIRY_DAYS,
+  EMAIL_BRAND_MARK_PATH,
 } from './_generated/sharedConstants.js';
 
-export { LOCALES, APP_VERSION, MAGIC_LINK_EXPIRY_MINUTES, PERSONA_MAX_SELECTABLE, DEFAULT_CURRENCY, SAFE_URL_SCHEMES, SANITIZE_ALLOWED_TAGS, SANITIZE_ALLOWED_ATTR, CATEGORIES, VIBES, BROWSE_PAGE_SIZE, ORGANIZER_IMAGE_ALLOWED_MIME, CLAIM_EXPIRY_DAYS, CLAIM_ADMIN_REVIEW_EXPIRY_DAYS };
+export { LOCALES, APP_VERSION, MAGIC_LINK_EXPIRY_MINUTES, PERSONA_MAX_SELECTABLE, DEFAULT_CURRENCY, SAFE_URL_SCHEMES, SANITIZE_ALLOWED_TAGS, SANITIZE_ALLOWED_ATTR, CATEGORIES, VIBES, BROWSE_PAGE_SIZE, ORGANIZER_IMAGE_ALLOWED_MIME, ORGANIZER_MAX_CATEGORIES, CLAIM_EXPIRY_DAYS, CLAIM_ADMIN_REVIEW_EXPIRY_DAYS, EMAIL_BRAND_MARK_PATH };
 export const DEFAULT_LOCALE_CODE = _DEFAULT_LOCALE_CODE;
+export { TALLINN_TZ };
 export type { PersonaData };
 
 // Re-export PERSONAS under the original name so all import sites are unchanged.
@@ -91,6 +95,11 @@ export function isGoogleSignInOrganizerEnabled(): boolean {
 // Google-linked account (vs. magic-link-only).
 export const GOOGLE_IDENTITY_PROVIDER = 'google';
 // Magic-link verify token query param (AuthVerify/OrganizerVerify/Unsubscribe).
+// Route params that become API path segments must be plain integers — a decoded
+// `../..` or `x?y` would otherwise steer a cookie-bearing request at another
+// same-origin /api path (OWASP audit L-7).
+export const NUMERIC_ROUTE_ID_RE = /^\d+$/;
+
 export const AUTH_TOKEN_PARAM = 'token';
 // GoogleGMark's default render size (px) — the brand mark's own icon-only
 // SVG viewBox scale, not a design-system --fs-* token (docs/adr/0002).
@@ -329,6 +338,7 @@ export const FAVICON_ICO_PATH = '/favicon.ico';
 export const ICON_96_PATH = '/icon-96.png';
 export const ICON_192_PATH = '/icon-192.png';
 export const ICON_512_PATH = '/icon-512.png';
+export const ICON_MASKABLE_512_PATH = '/icon-maskable-512.png';
 export const APPLE_TOUCH_ICON_PATH = '/apple-touch-icon.png';
 export const CRAWLABLE_ICON_PATHS: string[] = [
   FAVICON_ICO_PATH,
@@ -336,6 +346,7 @@ export const CRAWLABLE_ICON_PATHS: string[] = [
   ICON_96_PATH,
   ICON_192_PATH,
   ICON_512_PATH,
+  ICON_MASKABLE_512_PATH,
   APPLE_TOUCH_ICON_PATH,
   '/site.webmanifest',
 ];
@@ -614,6 +625,7 @@ export const QUERY_KEYS = {
   settings: 'settings',
   showcase: 'showcase',
   counts: 'counts',
+  authMe: 'authMe',
   organizerEvents: 'organizerEvents',
   organizerProfile: 'organizerProfile',
   organizerVenues: 'organizerVenues',
@@ -676,6 +688,14 @@ export const ADMIN_NOTE_TEXTAREA_ROWS = 3;
 // ─── Explore ─────────────────────────────────────────────────────────────────
 // BROWSE_PAGE_SIZE itself is cross-stack (shared/app-config.json), imported above.
 export const EXPLORE_SEARCH_DEBOUNCE_MS = 400;
+// ClaimEventPicker's event search: minimum trimmed query length before the
+// search request fires, and its debounce (same cadence as Explore's search).
+// <meta name="theme-color"> values per resolved theme — mirror --bg in
+// index.css and the pre-paint script in index.html (the three must agree).
+export const THEME_COLOR_META_LIGHT = '#fdfcfa';
+export const THEME_COLOR_META_DARK = '#13161e';
+export const CLAIM_SEARCH_MIN_CHARS = 2;
+export const CLAIM_SEARCH_DEBOUNCE_MS = EXPLORE_SEARCH_DEBOUNCE_MS;
 
 export type SortOption = 'relevance' | 'date' | 'price' | 'quality';
 
@@ -721,6 +741,8 @@ export const CLAIM_EVENTS_PAGE_SIZE = 20;
 // spending a network round trip on it.
 export const ORGANIZER_IMAGE_ACCEPT = ORGANIZER_IMAGE_ALLOWED_MIME.join(',');
 export const ORGANIZER_EVENTS_PAGE_SIZE = 24;
+/** Segment nested under QUERY_KEYS.organizerEvents for the single-event (edit prefill) query. */
+export const ORGANIZER_EVENT_DETAIL_KEY = 'detail';
 
 // Organizer submission content-language tabs (EventSubmit.tsx). ET is always
 // the base/required slot regardless of the app's default_locale ('en') — the
@@ -791,8 +813,9 @@ export const STEP_KEYS = [
 ];
 
 // ─── Brand ───────────────────────────────────────────────────────────────────
-// Self-contained radar-mark glyph used across TopBar/OrganizerTopBar/Footer/
-// Landing/auth cards — no external asset, matches the app's same-origin CSP.
+// Plain-text radar glyph, kept for AdminShell and AdminLogin only: the admin
+// console's sub-language gets no brand imagery. Everywhere else the brand mark is the
+// Dial (components/DialMark).
 export const BRAND_GLYPH = '◉';
 // ─── Explore ─────────────────────────────────────────────────────────────────
 export const EXPLORE_AUDIENCE_ALL = 'all';
@@ -872,6 +895,10 @@ export const EXPLORE_PARAM = {
   cursor: 'cursor',
 } as const;
 
+// Query string of the top bar pulse chip's link — the Explore preset whose
+// result set `today_count` (GET /public/counts) counts.
+export const EXPLORE_TODAY_SEARCH = `?${EXPLORE_PARAM.date}=${DATE_PRESET_TODAY}`;
+
 // Pagination query-param names shared by every paginated list fetch
 // (Saved Events, admin queues, organizer dashboard) — /explore routes its
 // own copies through EXPLORE_PARAM above.
@@ -927,6 +954,7 @@ export const ROUTES = {
   privacy: '/privacy',
   terms: '/terms',
   contact: '/contact',
+  faq: '/faq',
   organizerLogin: '/organizer/login',
   organizerVerify: '/organizer/verify',
   organizerClaimVerify: '/organizer/claims/verify',
@@ -961,6 +989,10 @@ export const ROUTES = {
   adminPipeline: '/admin/pipeline',
   adminDedup: '/admin/dedup',
 } as const;
+
+// The FAQ's Organizers section anchor (FaqSection.id 'organizers') —
+// OrganizerContact deep-links to it as ROUTES.faq + this hash.
+export const FAQ_ORGANIZERS_HASH = '#organizers';
 
 // The admin console's persistent nav — the clickable screens (issue #154,
 // Claims added #420); /admin/login and /admin/events/:id are reached by
@@ -1012,42 +1044,59 @@ export const ADMIN_THEME_OPTIONS = [
 // (see lib/adminAuth.ts) — a third, independent auth track's localStorage flag.
 export const ADMIN_SIGNED_IN_HINT_KEY = 'admin_session_token';
 
+export interface NavItem {
+  route: string;
+  labelKey: string;
+}
+
 // The signed-in primary nav — same {route, labelKey} pairs rendered by both
 // TopBar (desktop) and MobileMenu (mobile), kept in one place so they can't
-// drift out of sync.
-export const NAV_ITEMS = [
+// drift out of sync. Settings and Contact live in ACCOUNT_MENU_ITEMS.
+export const NAV_ITEMS: readonly NavItem[] = [
   { route: ROUTES.home, labelKey: 'nav_daily5' },
   { route: ROUTES.explore, labelKey: 'nav_explore' },
   { route: ROUTES.saved, labelKey: 'nav_saved' },
+];
+
+// Settings and Contact moved out of the bar into the account menu (and the
+// drawer's account block) — what makes the 1024px bar fit in ET/RU.
+export const ACCOUNT_MENU_ITEMS: readonly NavItem[] = [
   { route: ROUTES.settings, labelKey: 'nav_settings' },
   { route: ROUTES.contact, labelKey: 'nav_contact' },
-] as const;
+];
 
-// Routes from NAV_ITEMS that stay visible to a signed-out visitor — Explore
-// and Contact are public; Daily 5/Saved/Settings are dead ends for an
-// anonymous visitor (Saved has nothing in it, the others require auth).
-// Shared by TopBar and MobileMenu so their signed-out filtering can't diverge.
-export const SIGNED_OUT_NAV_ROUTES: readonly string[] = [ROUTES.explore, ROUTES.contact];
-
-// NAV_ITEMS filtered to SIGNED_OUT_NAV_ROUTES, computed once rather than on
-// every TopBar/MobileMenu render (Big-O audit #5, item 3.4) — both filter
-// the same constant data identically.
-export const SIGNED_OUT_NAV_ITEMS = NAV_ITEMS.filter((item) =>
-  SIGNED_OUT_NAV_ROUTES.includes(item.route),
-);
+// The signed-out primary nav — an explicit list rather than a filter over
+// NAV_ITEMS, since it carries FAQ, which the signed-in nav doesn't. Daily
+// 5/Saved/Settings are left out as dead ends for an anonymous visitor.
+// Shared by TopBar and MobileMenu so they can't drift out of sync.
+export const SIGNED_OUT_NAV_ITEMS: readonly NavItem[] = [
+  { route: ROUTES.explore, labelKey: 'nav_explore' },
+  { route: ROUTES.faq, labelKey: 'nav_faq' },
+  { route: ROUTES.contact, labelKey: 'nav_contact' },
+];
 
 // Same {route, labelKey} shape as NAV_ITEMS, rendered by both OrganizerTopBar
-// (desktop) and its MobileMenu (mobile) — kept in one place so they can't
-// drift out of sync.
-export const ORGANIZER_NAV_ITEMS = [
+// (desktop) and its MobileMenu (mobile). "New event" is the bar's gold CTA and
+// Settings/Contact live in ORGANIZER_ACCOUNT_MENU_ITEMS.
+export const ORGANIZER_NAV_ITEMS: readonly NavItem[] = [
   { route: ROUTES.organizerDashboard, labelKey: 'organizer_dashboard_title' },
-  { route: ROUTES.organizerSubmit, labelKey: 'organizer_new_event' },
+];
+
+export const ORGANIZER_ACCOUNT_MENU_ITEMS: readonly NavItem[] = [
   { route: ROUTES.organizerSettings, labelKey: 'organizer_settings_nav' },
   { route: ROUTES.organizerContact, labelKey: 'organizer_contact_nav' },
-] as const;
+];
 
-// The two theme options rendered by both ThemeSelector (desktop) and
-// MobileMenu (mobile), kept in one place so they can't drift out of sync —
+// ─── Top bar ─────────────────────────────────────────────────────────────────
+// Mirrors the backend's BROWSE_QUERY_MAX_LEN.
+export const SEARCH_MAX_LEN = 200;
+// Scroll hysteresis: the bar condenses past 24px and expands back only under
+// 4px, so its 18px height change can't oscillate around one threshold.
+export const BAR_CONDENSE_SCROLL_PX = 24;
+export const BAR_EXPAND_SCROLL_PX = 4;
+
+// The two theme options rendered by PrefsRows (the preferences menu and the
+// phone drawer), kept in one place so they can't drift out of sync —
 // mirrors NAV_ITEMS' {value, labelKey} pattern above. No "System" entry
 // (ADR 0003) — device-following is the default state a viewer falls back to
 // once their override expires, not something offered as a third choice.
@@ -1099,18 +1148,18 @@ export const API = {
   publicCounts: '/public/counts',
   emailUnsubscribe: '/email/unsubscribe',
   emailResubscribe: '/email/resubscribe',
-  event: (id: number | string) => `/events/${id}`,
+  event: (id: number | string) => `/events/${encodeURIComponent(String(id))}`,
   organizerEvents: '/organizer/events',
-  organizerEvent: (id: number | string) => `/organizer/events/${id}`,
+  organizerEvent: (id: number | string) => `/organizer/events/${encodeURIComponent(String(id))}`,
   organizerEventImage: '/organizer/events/image',
   organizerProfile: '/organizer/profile',
   organizerContact: '/organizer/contact',
   organizerVenues: '/organizer/venues',
-  organizerVenue: (id: number | string) => `/organizer/venues/${id}`,
+  organizerVenue: (id: number | string) => `/organizer/venues/${encodeURIComponent(String(id))}`,
   organizerClaims: '/organizer/claims',
-  organizerClaim: (id: number | string) => `/organizer/claims/${id}`,
-  organizerClaimCancel: (id: number | string) => `/organizer/claims/${id}/cancel`,
-  organizerClaimRecheck: (id: number | string) => `/organizer/claims/${id}/recheck`,
+  organizerClaim: (id: number | string) => `/organizer/claims/${encodeURIComponent(String(id))}`,
+  organizerClaimCancel: (id: number | string) => `/organizer/claims/${encodeURIComponent(String(id))}/cancel`,
+  organizerClaimRecheck: (id: number | string) => `/organizer/claims/${encodeURIComponent(String(id))}/recheck`,
   organizerClaimLinkRequest: '/organizer/claims/request-link',
   organizerClaimLinkVerify: '/organizer/claims/verify-link',
   organizerClaimSearch: '/organizer/claims/search',
@@ -1122,8 +1171,8 @@ export const API = {
     eventId !== undefined
       ? `/organizer/claims/${id}/events/${eventId}`
       : `/organizer/claims/${id}/event`,
-  organizerClaimEvents: (id: number | string) => `/organizer/claims/${id}/events`,
-  organizerClaimForEvent: (eventId: number | string) => `/organizer/claims/for-event/${eventId}`,
+  organizerClaimEvents: (id: number | string) => `/organizer/claims/${encodeURIComponent(String(id))}/events`,
+  organizerClaimForEvent: (eventId: number | string) => `/organizer/claims/for-event/${encodeURIComponent(String(eventId))}`,
   reports: '/reports',
   adminAuthLogin: '/admin/auth/login',
   adminAuthLogout: '/admin/auth/logout',
@@ -1140,7 +1189,7 @@ export const API = {
   adminClaimGrant: (id: number) => `/admin/claims/${id}/grant`,
   adminClaimDecline: (id: number) => `/admin/claims/${id}/decline`,
   adminClaimRevoke: (id: number) => `/admin/claims/${id}/revoke`,
-  adminEventDetail: (id: number | string) => `/admin/events/${id}`,
+  adminEventDetail: (id: number | string) => `/admin/events/${encodeURIComponent(String(id))}`,
   adminIngestAll: '/admin/ingest',
   adminIngestSource: (slug: string) => `/admin/ingest/${slug}`,
   adminDedupRun: '/admin/dedup',

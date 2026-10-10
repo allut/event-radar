@@ -269,8 +269,10 @@ def write_backend_shared_constants(cfg: dict, version: str) -> str:
         f"HTML_SANITIZE_ALLOWED_ATTRS: dict[str, set[str]] = {allowed_attrs}",
         f"BROWSE_PAGE_SIZE: int = {cfg['browse_page_size']}",
         f"IMAGE_UPLOAD_ALLOWED_MIME: frozenset[str] = {image_upload_mime}",
+        f"ORGANIZER_MAX_CATEGORIES: int = {cfg['organizer_max_categories']}",
         f"CLAIM_EXPIRY_DAYS: int = {cfg['claim_expiry_days']}",
         f"CLAIM_ADMIN_REVIEW_EXPIRY_DAYS: int = {cfg['claim_admin_review_expiry_days']}",
+        f"EMAIL_BRAND_MARK_PATH: str = {cfg['email_brand_mark_path']!r}".replace("'", '"'),
         "",
     ]
     return "\n".join(parts)
@@ -318,6 +320,7 @@ def write_frontend_shared_constants(cfg: dict, version: str) -> str:
         "",
         _ts_locale_code_map(cfg),
         f"export const DEFAULT_LOCALE_CODE = {_ts_str(cfg['default_locale_code'])};",
+        f"export const TALLINN_TZ = {_ts_str(cfg['timezone'])};",
         "",
         # URL schemes without trailing colon — matches URL.protocol.replace(/:$/, '').
         f"export const SAFE_URL_SCHEMES = {_ts_set(cfg['safe_url_schemes'])};",
@@ -338,8 +341,10 @@ def write_frontend_shared_constants(cfg: dict, version: str) -> str:
         # Mirrors backend IMAGE_UPLOAD_ALLOWED_MIME — see shared/app-config.json.
         f"export const ORGANIZER_IMAGE_ALLOWED_MIME: readonly string[] = {_ts_str_list(cfg['image_upload_allowed_mime'])};",
         "",
+        f"export const ORGANIZER_MAX_CATEGORIES = {cfg['organizer_max_categories']};",
         f"export const CLAIM_EXPIRY_DAYS = {cfg['claim_expiry_days']};",
         f"export const CLAIM_ADMIN_REVIEW_EXPIRY_DAYS = {cfg['claim_admin_review_expiry_days']};",
+        f"export const EMAIL_BRAND_MARK_PATH = '{cfg['email_brand_mark_path']}';",
         "",
     ]
     return "\n".join(parts)

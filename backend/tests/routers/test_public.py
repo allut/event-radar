@@ -23,6 +23,18 @@ def _agg_row(
 
 class TestShowcase:
     @pytest.mark.asyncio
+    async def test_one_query_warms_every_locale(self, mock_db, make_event, make_request):
+        from app.routers.public import showcase
+
+        mock_db.scalars.return_value = _scalars_result([make_event(1, title="One")])
+
+        await showcase(request=make_request(), locale="en", db=mock_db)
+        await showcase(request=make_request(), locale="ru", db=mock_db)
+        await showcase(request=make_request(), locale="et", db=mock_db)
+
+        assert mock_db.scalars.call_count == 1
+
+    @pytest.mark.asyncio
     async def test_returns_serialized_events(self, mock_db, make_event, make_request):
         from app.routers.public import showcase
 
@@ -222,7 +234,78 @@ class TestAggregatesStmtVenueCount:
         assert "JOIN venues" in sql or "LEFT OUTER JOIN venues" in sql
 
 
+class TestTodayCountStmt:
+    """#508: the pulse chip counts exactly what /explore?date=today lands on —
+    same filters plus the shared overlap predicate, so an ongoing exhibition
+    counts and an ended/duplicate/unpublished event does not."""
+
+    def _sql(self):
+        from app.routers.public import _today_count_stmt
+
+        now = datetime(2026, 7, 19, 12, 0, 0, tzinfo=timezone.utc)
+        return str(_today_count_stmt(now).compile(compile_kwargs={"literal_binds": True}))
+
+    def test_uses_overlap_predicate_so_ongoing_exhibitions_count(self):
+        sql = self._sql().lower()
+        assert "events.starts_at <" in sql
+        assert "coalesce(events.ends_at, events.starts_at) >=" in sql
+        # Not the aggregates' starts_at >= now bound, which drops ongoing runs.
+        assert "events.starts_at >=" not in sql
+
+    def test_excludes_ended_duplicates_and_unpublished(self):
+        sql = self._sql()
+        assert "events.status" in sql
+        assert "is_explicit" in sql
+        assert "is_non_event" in sql
+        assert "dedup_group_id" in sql
+        assert "coalesce(events.ends_at, events.starts_at) >=" in sql.lower()
+
+    def test_is_an_exact_count_not_capped(self):
+        sql = self._sql().lower()
+        assert "count(events.id)" in sql
+        assert "limit" not in sql
+
+
+class TestSharedDateRangeFilter:
+    def test_browse_and_public_share_the_queries_module_predicate(self):
+        import app.routers.browse as browse
+        import app.routers.public as public
+        from app.events.queries import event_date_range_filter
+
+        assert browse.event_date_range_filter is event_date_range_filter
+        assert public.event_date_range_filter is event_date_range_filter
+
+
 class TestCounts:
+    @pytest.mark.asyncio
+    async def test_today_count_in_payload_and_tonight_unchanged(self, mock_db, make_event, make_request):
+        import app.routers.public as public_module
+        from app.routers.public import counts
+
+        public_module._counts_cache.clear()
+        mock_db.execute.return_value.one.return_value = _agg_row()
+        mock_db.scalar.return_value = 37
+        mock_db.scalars.return_value = _scalars_result([make_event(1, title="Tonight Show")])
+
+        result = await counts(request=make_request(), locale="en", db=mock_db)
+
+        assert result["today_count"] == 37
+        assert result["tonight_is_fallback"] is False
+        assert [e["title"] for e in result["tonight_events"]] == ["Tonight Show"]
+
+    @pytest.mark.asyncio
+    async def test_today_count_is_exact_above_tonight_cap(self, mock_db, make_event, make_request):
+        import app.routers.public as public_module
+        from app.routers.public import counts
+
+        public_module._counts_cache.clear()
+        mock_db.execute.return_value.one.return_value = _agg_row()
+        mock_db.scalar.return_value = 57
+        mock_db.scalars.return_value = _scalars_result([make_event(1)])
+
+        result = await counts(request=make_request(), locale="en", db=mock_db)
+
+        assert result["today_count"] == 57
     @pytest.mark.asyncio
     async def test_returns_payload_shape(self, mock_db, make_event, make_request):
         import app.routers.public as public_module

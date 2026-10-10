@@ -8,7 +8,7 @@ base adapter, the Fienta adapter, and the daily detail refetch.
 
 import logging
 from collections.abc import Awaitable, Callable
-from urllib.parse import urljoin, urlsplit
+from urllib.parse import SplitResult, urljoin, urlsplit
 
 import httpx
 from bs4 import BeautifulSoup
@@ -51,7 +51,8 @@ async def fetch_locale_variants(
     imported here) so tests patching the caller module's ``http_get`` still
     intercept locale fetches.
     """
-    base_host = urlsplit(base_url).hostname
+    base_parts = urlsplit(base_url)
+    base_host = base_parts.hostname
     own_locale = (
         base_locale
         or locale_from_url_path(base_url, target_locales)
@@ -61,7 +62,7 @@ async def fetch_locale_variants(
     locale_urls = {
         locale: loc_url
         for locale, loc_url in locale_urls.items()
-        if urlsplit(loc_url).hostname == base_host
+        if _same_origin(urlsplit(loc_url), base_parts)
         and (wanted_locales is None or locale in wanted_locales)
     }
 
@@ -80,7 +81,19 @@ async def fetch_locale_variants(
         else:
             try:
                 await wait()
-                resp = await fetch(client, loc_url)
+                try:
+                    resp = await fetch(client, loc_url)
+                except ValueError as exc:
+                    # host_guard_hook rejected an off-host/non-https/non-443
+                    # redirect or a DNS-private host. One hostile hreflang link
+                    # must skip that locale, not abort the whole job daily
+                    # (OWASP audit L-1). Scoped to the fetch only — a
+                    # ValueError from extract() below is still a real bug.
+                    log.warning(
+                        "%s: locale fetch blocked by SSRF guard locale=%s url=%s: %s",
+                        source_label, locale, loc_url, exc,
+                    )
+                    continue
                 final = urlsplit(str(resp.url))
                 if final.hostname != base_host:
                     log.debug(
@@ -119,6 +132,18 @@ async def fetch_locale_variants(
     if unexpected_errors:
         raise unexpected_errors[0]
     return titles, descs, infos
+
+
+def _same_origin(candidate: SplitResult, base: SplitResult) -> bool:
+    """Host, scheme and port all match the page the variant was linked from."""
+    try:
+        return (
+            candidate.hostname == base.hostname
+            and candidate.scheme == base.scheme
+            and candidate.port == base.port
+        )
+    except ValueError:  # malformed port
+        return False
 
 
 def locale_from_url_path(url: str, locales: frozenset[str]) -> str | None:

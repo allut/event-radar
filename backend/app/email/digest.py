@@ -23,9 +23,11 @@ from app.constants import (
     DIGEST_RESULT_SENT,
     DIGEST_RESULT_SKIPPED,
     DIGEST_SEND_CONCURRENCY,
+    EVENTS_PATH,
     FEED_BUILD_USER_BATCH_SIZE,
     HEADER_LIST_UNSUBSCRIBE,
     HEADER_LIST_UNSUBSCRIBE_POST,
+    HOME_PATH,
     LIST_UNSUBSCRIBE_ONE_CLICK,
     LOCALE_ET,
     LOCALE_RU,
@@ -33,14 +35,19 @@ from app.constants import (
     RESEND_ERROR_SNIPPET_LEN,
     RESEND_SEND_URL,
     RESEND_TIMEOUT_SECONDS,
+    SETTINGS_PATH,
     TALLINN_TZ,
     UNSUBSCRIBE_PATH,
 )
+from app.email.links import frontend_url
+from app.email.brand import brand_mark_html
 from app.email.styles import EmailStyles, get_email_styles
 from app.email.templates import (
     DIGEST_EMPTY_STATE,
     DIGEST_FOOTER,
     DIGEST_HEADER,
+    DIGEST_PRICE_SEPARATOR,
+    DIGEST_TIME_FORMAT,
     EMAIL_DOCUMENT,
     EVENT_BLOCK,
     EVENT_BULLET,
@@ -54,14 +61,10 @@ from app.email.templates import (
 from app.i18n import day_name, month_name, t, ti
 from app.ingestion.http_client import http_post
 from app.models.models import DailyFeed, Event, User
-from app.routers.utils import (
-    resolve_title,
-    resolve_why_go,
-    select_events_with_classification,
-)
+from app.events.localize import resolve_title, resolve_why_go
+from app.events.queries import public_event_filter, select_events_with_classification
 from app.events.venue import resolve_venue_name
 from app.auth.utils import mask_email
-from app.events.queries import public_event_filter
 
 log = logging.getLogger(__name__)
 
@@ -79,7 +82,12 @@ def _format_feed_date(d: date, locale: str) -> str:
 def _format_event_time(starts_at: datetime, locale: str) -> str:
     local = starts_at.astimezone(TALLINN_TZ)
     day_str = _format_feed_date(local.date(), locale)
-    return f"{day_str}, {local.strftime('%H:%M')}"
+    return f"{day_str}, {local.strftime(DIGEST_TIME_FORMAT)}"
+
+
+def _format_amount(value: float) -> str:
+    """Price amount without trailing zeros (``12.50`` -> ``12.5``, ``5.00`` -> ``5``)."""
+    return f"{value:.2f}".rstrip("0").rstrip(".")
 
 
 def _format_price_pill(event: Event, locale: str) -> str:
@@ -90,24 +98,29 @@ def _format_price_pill(event: Event, locale: str) -> str:
     price_max_val = float(event.price_max) if event.price_max is not None else None
     if price_val == 0:
         if price_max_val is not None and price_max_val > 0:
-            max_amount = f"{price_max_val:.2f}".rstrip("0").rstrip(".")
-            return ti("digest.price_free_with_paid", locale, amount=max_amount)
+            return ti(
+                "digest.price_free_with_paid",
+                locale,
+                amount=_format_amount(price_max_val),
+            )
         return t("digest.price_free", locale)
-    amount = f"{price_val:.2f}".rstrip("0").rstrip(".")
-    price_str = ti("digest.price_from", locale, amount=amount)
+    price_str = ti("digest.price_from", locale, amount=_format_amount(price_val))
     if event.has_free_tier:
-        price_str = f"{price_str} · {t('digest.price_free_options', locale)}"
+        price_str = (
+            f"{price_str}{DIGEST_PRICE_SEPARATOR}"
+            f"{t('digest.price_free_options', locale)}"
+        )
     return price_str
 
 
 def _build_event_block(
-    event: Event, locale: str, frontend_url: str, s: EmailStyles
+    event: Event, locale: str, frontend_base: str, s: EmailStyles
 ) -> str:
     """Render one event card (time/venue/price, image or band, title, bullets)."""
     cl = event.classification
     bullets = resolve_why_go(cl, locale)[:DIGEST_MAX_WHY_GO_BULLETS]
     time_str = html_lib.escape(_format_event_time(event.starts_at, locale))
-    event_href = f"{frontend_url}/events/{event.id}"
+    event_href = frontend_url(f"{EVENTS_PATH}/{event.id}", locale, frontend_base)
 
     venue_str = html_lib.escape(resolve_venue_name(event, locale) or "")
     venue_html = (
@@ -177,20 +190,36 @@ def _build_event_block(
     )
 
 
+# (event_id, locale) -> rendered card. A card is identical for every user who
+# shares a locale, so send_daily_digests keeps one of these for its whole run
+# instead of re-rendering each event once per recipient (Big-O audit #9).
+EventBlockCache = dict[tuple[int, str], str]
+
+
 def build_digest_html(
     events: Sequence[Event],
     feed_date: date,
     locale: str,
-    frontend_url: str,
+    frontend_base: str,
     unsubscribe_url: str | None = None,
+    block_cache: EventBlockCache | None = None,
 ) -> str:
     s = get_email_styles()
     date_str = _format_feed_date(feed_date, locale)
     subject_label = t("digest.subject_label", locale)
     if unsubscribe_url is None:
-        unsubscribe_url = f"{frontend_url}/settings"
+        unsubscribe_url = frontend_url(SETTINGS_PATH, locale, frontend_base)
 
-    event_blocks = [_build_event_block(e, locale, frontend_url, s) for e in events]
+    event_blocks: list[str] = []
+    for e in events:
+        cache_key = (e.id, locale)
+        if block_cache is not None and cache_key in block_cache:
+            event_blocks.append(block_cache[cache_key])
+            continue
+        block = _build_event_block(e, locale, frontend_base, s)
+        if block_cache is not None:
+            block_cache[cache_key] = block
+        event_blocks.append(block)
     events_html = (
         "\n".join(event_blocks)
         if event_blocks
@@ -201,6 +230,7 @@ def build_digest_html(
     settings_label = t("digest.unsubscribe", locale)
 
     header_html = DIGEST_HEADER.format(
+        brand_mark_html=brand_mark_html(s, frontend_base),
         s_eyebrow=s.s_eyebrow,
         s_h1=s.s_h1,
         subject_label=subject_label,
@@ -208,7 +238,7 @@ def build_digest_html(
         s_date=s.s_date,
         s_feed_btn_wrap=s.s_feed_btn_wrap,
         s_feed_btn=s.s_feed_btn,
-        feed_url=frontend_url,
+        feed_url=frontend_url(HOME_PATH, locale, frontend_base),
         open_feed_label=t("digest.open_feed", locale),
     )
     footer_html = DIGEST_FOOTER.format(
@@ -253,6 +283,7 @@ async def send_digest_email(
     user_id: int,
     *,
     http_client: httpx.AsyncClient | None = None,
+    block_cache: EventBlockCache | None = None,
 ) -> None:
     if not settings.RESEND_API_KEY:
         log.warning(
@@ -261,7 +292,7 @@ async def send_digest_email(
         return
 
     unsubscribe_token = generate_unsubscribe_token(user_id)
-    unsubscribe_url = f"{settings.FRONTEND_URL}{UNSUBSCRIBE_PATH}?token={unsubscribe_token}"
+    unsubscribe_url = f"{frontend_url(UNSUBSCRIBE_PATH, locale)}?token={unsubscribe_token}"
     header_url = f"{settings.BACKEND_URL}/email/unsubscribe?token={unsubscribe_token}"
 
     html = build_digest_html(
@@ -270,6 +301,7 @@ async def send_digest_email(
         locale,
         settings.FRONTEND_URL,
         unsubscribe_url,
+        block_cache,
     )
     subject = ti(
         "digest.subject_template", locale, date=_format_feed_date(feed_date, locale)
@@ -320,9 +352,16 @@ async def send_digest_email(
 
 
 async def _load_digest_data(
-    db: AsyncSession, today: date, user_ids: list[int]
+    db: AsyncSession,
+    today: date,
+    user_ids: list[int],
+    event_cache: dict[int, Event] | None = None,
 ) -> tuple[dict[int, list[int]], dict[int, Event] | None]:
     """Today's feeds per user + the events they reference, in two bulk queries.
+
+    ``event_cache`` is the run-scoped id -> Event memo: events an earlier page
+    already loaded are not re-queried (every user's feed draws on the same
+    small candidate pool, so later pages mostly hit it).
 
     event_map is None when no user has any feed events today (caller
     short-circuits to all-skipped).
@@ -343,15 +382,22 @@ async def _load_digest_data(
     if not all_event_ids:
         return feed_by_user, None
 
-    events = (
-        await db.scalars(
-            select_events_with_classification().where(
-                Event.id.in_(all_event_ids),
-                public_event_filter(),
+    if event_cache is None:
+        event_cache = {}
+    missing_ids = all_event_ids - event_cache.keys()
+    if missing_ids:
+        events = (
+            await db.scalars(
+                select_events_with_classification().where(
+                    Event.id.in_(missing_ids),
+                    public_event_filter(),
+                )
             )
-        )
-    ).all()
-    return feed_by_user, {e.id: e for e in events}
+        ).all()
+        event_cache.update({e.id: e for e in events})
+    return feed_by_user, {
+        eid: event_cache[eid] for eid in all_event_ids if eid in event_cache
+    }
 
 
 async def send_daily_digests(
@@ -396,6 +442,8 @@ async def send_daily_digests(
 
     semaphore = asyncio.Semaphore(DIGEST_SEND_CONCURRENCY)
     sent = errored = 0
+    block_cache: EventBlockCache = {}
+    event_cache: dict[int, Event] = {}
 
     async def _send_one(
         user: User,
@@ -418,6 +466,7 @@ async def send_daily_digests(
                     today,
                     user.id,
                     http_client=http_client,
+                    block_cache=block_cache,
                 )
                 return DIGEST_RESULT_SENT
             except Exception:
@@ -440,7 +489,9 @@ async def send_daily_digests(
             ).all()
             user_map: dict[int, User] = {u.id: u for u in page_users}
 
-            feed_by_user, event_map = await _load_digest_data(db, today, page_ids)
+            feed_by_user, event_map = await _load_digest_data(
+                db, today, page_ids, event_cache
+            )
             if event_map is None:
                 continue
 

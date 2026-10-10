@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api, ApiError } from '../../api/client';
-import { setSignedInHint, getLocale } from '../../lib/auth';
+import { setSignedInHint } from '../../lib/auth';
 import { API, AUTH_REDIRECT_DELAY_MS, AUTH_TOKEN_PARAM, ROUTES, UI_STATE, VERIFY_STATE_TO_KIND, type VerifyState } from '../../constants';
 import { t } from '../../i18n';
+import { useDelayedAction } from '../../hooks/useDelayedAction';
 import { useLocaleNavigate } from '../../hooks/useLocaleNavigate';
 import { useLocalePath } from '../../hooks/useLocalePath';
+import { usePathLocale } from '../../hooks/usePathLocale';
 import { useStaticSeoMeta } from '../../hooks/useStaticSeoMeta';
 import AuthCard from '../../components/AuthCard';
 import SeoTags from '../../components/SeoTags';
@@ -16,7 +18,7 @@ interface MeResponse {
 }
 
 export default function AuthVerify() {
-  const locale = getLocale();
+  const locale = usePathLocale();
   const seoMeta = useStaticSeoMeta('seo_title_auth_verify', locale);
   const [searchParams] = useSearchParams();
   const navigate = useLocaleNavigate();
@@ -25,6 +27,7 @@ export default function AuthVerify() {
   const [state, setState] = useState<VerifyState>(token ? UI_STATE.verifying : UI_STATE.error);
   const [errorMsg, setErrorMsg] = useState(token ? '' : t('no_token', locale));
   const called = useRef(false);
+  const scheduleRedirect = useDelayedAction();
 
   useEffect(() => {
     if (!token) return;
@@ -49,7 +52,7 @@ export default function AuthVerify() {
         } catch {
           // /auth/me failure is non-fatal — fall back to /onboarding
         }
-        setTimeout(() => navigate(dest, { replace: true }), AUTH_REDIRECT_DELAY_MS);
+        scheduleRedirect(() => navigate(dest, { replace: true }), AUTH_REDIRECT_DELAY_MS);
       } catch (err) {
         setState(UI_STATE.error);
         setErrorMsg(
@@ -60,7 +63,7 @@ export default function AuthVerify() {
       }
     }
     void verify(token);
-  }, [navigate, token, locale, localePath]);
+  }, [navigate, token, locale, localePath, scheduleRedirect]);
 
   const message =
     state === UI_STATE.verifying ? t('verifying', locale)

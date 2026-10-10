@@ -11,7 +11,7 @@
 }
 
 .radar {
-  composes: authRadar from '../../components/shared/Card.module.css';
+  composes: authDial from '../../components/shared/Card.module.css';
 }
 
 .brand {

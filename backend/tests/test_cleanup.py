@@ -183,6 +183,25 @@ async def test_cleanup_organizers_unverified_statement_targets_correct_table_and
 
 
 @pytest.mark.asyncio
+async def test_cleanup_organizers_keyed_on_durable_verified_signal(mock_db):
+    """H-2: magic-link rows are pruned first, so the organizer sweep must not
+    depend on a used link; it keys on email_verified_at and spares anything
+    carrying identities, claims, venues or the verified flag."""
+    mock_db.execute.side_effect = _delete_results([0] * _N)
+
+    await cleanup_stale_data(mock_db)
+
+    stmt = mock_db.execute.call_args_list[8][0][0]
+    compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "email_verified_at IS NULL" in compiled
+    assert "organizers.verified = false" in compiled
+    for table in ("organizer_identities", "claims", "venues"):
+        assert table in compiled
+    # No used-link evidence any more (that evidence is pruned in the same job).
+    assert "used_at IS NOT NULL" not in compiled
+
+
+@pytest.mark.asyncio
 async def test_cleanup_unverified_account_retention_constant_is_wired(mock_db):
     mock_db.execute.side_effect = _delete_results([0] * _N)
 

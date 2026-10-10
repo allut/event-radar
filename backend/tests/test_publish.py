@@ -203,6 +203,25 @@ class TestFientaPublisherStampSafetyNet:
         assert "publishers" in compiled
         # Only currently-published events are eligible.
         assert f"events.status = '{EVENT_STATUS_PUBLISHED}'" in compiled
+        # Ended events are never stamped (scan would grow with all-time volume).
+        assert "coalesce(events.ends_at, events.starts_at) >=" in compiled
+
+    @pytest.mark.asyncio
+    async def test_scoped_publish_skips_table_wide_stamp(self, mock_db):
+        """event_ids-scoped calls (organizer submit / admin approve) run in a
+        user request and must not pay for the table-wide stamp."""
+        update_result = MagicMock(rowcount=1)
+        select_result = MagicMock()
+        select_result.one.return_value = REJECT_ROW_ZERO
+        mock_db.execute.side_effect = [update_result, select_result]
+
+        await publish_pending(mock_db, event_ids=[7])
+        assert mock_db.execute.call_count == 2
+
+        mock_db.execute.reset_mock()
+        mock_db.execute.side_effect = [MagicMock(rowcount=1)]
+        await publish_pending(mock_db, event_ids=[7], diagnostics=False)
+        assert mock_db.execute.call_count == 1
 
     @pytest.mark.asyncio
     async def test_stamp_update_still_runs_when_diagnostics_disabled(self, mock_db):

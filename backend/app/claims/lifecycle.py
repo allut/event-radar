@@ -15,7 +15,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.claims.fienta_token import generate_claim_token
-from app.claims.target_resolution import ClaimTarget, ClaimTargetError, resolve_claim_target_live
+from app.claims.target_resolution import (
+    ClaimTarget,
+    ClaimTargetError,
+    bulk_resolve_publisher_events,
+    resolve_claim_target_live,
+)
 from app.claims.verification import (
     VerificationResult,
     series_claim_result,
@@ -69,7 +74,7 @@ from app.email.claim_resolution import (
 )
 from app.ingestion.http_client import http_get_stored_url
 from app.models.models import Claim, Event, EventSource, Organizer
-from app.routers.utils import bulk_resolve_publisher_events, resolve_title
+from app.events.localize import resolve_title
 from app.events.venue import resolve_venue_name
 from app.events.queries import event_series_key, serialize_event_series_key
 
@@ -577,7 +582,7 @@ async def create_claim(
         or not (event.dedup_group_id is None or event.dedup_group_id == event.id)
     ):
         # Same published+canonical (+ not explicit/non-event) bar as
-        # public_event_filter()/canonical_event_filter() (utils.py) — a
+        # public_event_filter()/canonical_event_filter() (events/queries.py) — a
         # draft, cancelled, or non-canonical-duplicate event is rejected the
         # same way a nonexistent one is, so id probing can't distinguish them.
         raise ClaimError(HTTPStatus.NOT_FOUND, ERROR_EVENT_NOT_FOUND)
@@ -740,6 +745,30 @@ async def cancel_claim(db: AsyncSession, organizer: Organizer, claim_id: int) ->
     return claim
 
 
+async def transition_pending_claim(
+    db: AsyncSession, claim: Claim, new_status: str, resolved_at: datetime
+) -> bool:
+    """Atomically move ``claim`` out of 'pending'. The ``WHERE status =
+    'pending'`` guard makes the transition race-free: of two concurrent
+    resolvers (admin double-submit, grant vs decline, admin vs organizer
+    recheck) exactly one wins and gets True; the loser gets False and must
+    not send its email or run auto-decline (OWASP audit L-11). May raise
+    IntegrityError for an approve that loses the one-approved-per-target
+    unique index — callers already map that to a conflict."""
+    won = await db.execute(
+        update(Claim)
+        .where(Claim.id == claim.id, Claim.status == CLAIM_STATUS_PENDING)
+        .values(status=new_status, resolved_at=resolved_at)
+        .returning(Claim.id)
+        .execution_options(synchronize_session=False)
+    )
+    if won.scalar_one_or_none() is None:
+        return False
+    claim.status = new_status
+    claim.resolved_at = resolved_at
+    return True
+
+
 async def recheck_claim(
     db: AsyncSession, client: httpx.AsyncClient, organizer: Organizer, claim_id: int
 ) -> Claim:
@@ -776,10 +805,13 @@ async def recheck_claim(
     claim.verification_contact = result.contact
     claim.last_checked_at = datetime.now(TALLINN_TZ)
     auto_granted = result.outcome == CLAIM_VERIFICATION_OUTCOME_AUTO_GRANT
-    if auto_granted:
-        claim.status = CLAIM_STATUS_APPROVED
-        claim.resolved_at = claim.last_checked_at
     try:
+        if auto_granted and not await transition_pending_claim(
+            db, claim, CLAIM_STATUS_APPROVED, claim.last_checked_at
+        ):
+            # Resolved (declined/cancelled/expired) while verification ran.
+            await db.rollback()
+            raise ClaimError(HTTPStatus.CONFLICT, ERROR_CLAIM_NOT_PENDING)
         await db.commit()
     except IntegrityError:
         # (#431) Another claim on the same Publisher was approved since this

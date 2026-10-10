@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboa
 import {
   cx, monthGridDays, weekdayHeaders, splitDateTimeValue, joinDateTimeValue,
   formatPickerValue, formatMonthYearLabel, parseTypedDate, toDisplayDateTime, fromDisplayDateTime,
-  clamp, startOfDay, isSameDay, addDays, addMonths, padIndex, weekdayOffset,
+  clamp, tallinnToday, isSameDay, addDays, addMonths, padIndex, weekdayOffset,
 } from '../../utils';
 import { useDropdown } from '../../hooks/useDropdown';
 import {
@@ -61,7 +61,7 @@ interface PopoverBodyProps {
 }
 
 function PopoverBody({ id, value, onChange, min, locale, required, disabled, popRef, flip }: PopoverBodyProps) {
-  const today = startOfDay(new Date());
+  const today = tallinnToday();
   const parsed = splitDateTimeValue(value);
   const minParsed = min ? splitDateTimeValue(min) : null;
   const minDay = minParsed ? new Date(minParsed.year, minParsed.month, minParsed.day) : null;

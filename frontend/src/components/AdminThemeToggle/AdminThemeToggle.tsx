@@ -11,10 +11,8 @@ function handleAdminThemeChange(next: string): void {
 }
 
 // Admin console's own theme control (#255) — localStorage-only, no account
-// sync (the console has no accounts), unlike ThemeSelector (TopBar/
-// OrganizerTopBar), which also PATCHes a signed-in account. Reuses the same
-// SelectMenu + lib/theme.ts resolution engine, just without ThemeSelector's
-// auth-track PATCH branches.
+// sync (the console has no accounts). Independent of the bars' PrefsMenu:
+// reuses SelectMenu + the lib/theme.ts resolution engine.
 // openUpward — the trigger sits at the bottom of AdminShell's foot area, so
 // a default downward popover would spill past the viewport and get clipped.
 export default function AdminThemeToggle() {

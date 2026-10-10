@@ -459,9 +459,8 @@ class TestClassifyEventPrice:
     async def test_price_hint_net_applies_for_lowercase_eur_currency(
         self, mock_db, make_event
     ):
-        """normalize_currency() does not uppercase the LLM's raw string, so the
-        currency gate must compare case-insensitively — a lowercase 'eur' must
-        still trigger the widening net, not silently disable it."""
+        """A lowercase 'eur' from the LLM must still trigger the widening net;
+        normalize_currency() now canonicalizes it to 'EUR' (OWASP audit M-6)."""
         event = make_event()
         event.price_hint = "Adult: Kumu Art Museum €16, Family: Kumu Art Museum €32"
         raw = {**_BASE_RAW, "price_min": 16, "price_max": 16, "currency": "eur"}
@@ -476,7 +475,7 @@ class TestClassifyEventPrice:
         assert ok is True
         assert event.price_min == 16.0
         assert event.price_max == 32.0
-        assert event.currency == "eur"
+        assert event.currency == "EUR"
 
 
 class TestParseClassificationExplicit:
@@ -902,3 +901,99 @@ class TestClassifyPromptVenueResolution:
         event = make_event(venue_name=None)
 
         assert LLM_CLASSIFY_VENUE_FALLBACK in _build_classify_prompt(event, price_context="")
+
+
+class TestClassifyEventOrganizerCategoriesKept:
+    """An organizer's own-submission categories are authoritative: a classify
+    retry (classify_pending) must refresh vibes/quality but not the categories."""
+
+    @pytest.mark.asyncio
+    async def test_organizer_submission_keeps_categories_on_reclassify(
+        self, mock_db, make_event
+    ):
+        event = make_event(submitted_by_organizer_id=5)
+        event.classification.categories = ["family", "workshops"]
+        raw = {**_BASE_RAW, "categories": ["music"], "vibes": ["casual"]}
+        with patch(
+            "app.llm.classifier.llm_json_or_none",
+            AsyncMock(return_value=(raw, "groq/openai/gpt-oss-120b")),
+        ):
+            ok = await classify_event(
+                event, mock_db, existing_classification=event.classification, prefetched=True
+            )
+
+        assert ok is True
+        assert event.classification.categories == ["family", "workshops"]
+        assert event.classification.vibes == ["casual"]
+
+    @pytest.mark.asyncio
+    async def test_ingested_event_categories_still_overwritten(self, mock_db, make_event):
+        event = make_event()
+        raw = {**_BASE_RAW, "categories": ["theater"]}
+        with patch(
+            "app.llm.classifier.llm_json_or_none",
+            AsyncMock(return_value=(raw, "groq/openai/gpt-oss-120b")),
+        ):
+            await classify_event(
+                event, mock_db, existing_classification=event.classification, prefetched=True
+            )
+
+        assert event.classification.categories == ["theater"]
+
+
+class TestParseClassificationNumericGuards:
+    def test_non_finite_quality_becomes_none(self):
+        from app.llm.classifier import _parse_classification
+
+        for bad in (float("nan"), float("inf")):
+            parsed = _parse_classification({**_BASE_RAW, "quality": bad})
+            assert parsed["quality_score"] is None
+
+    def test_infinite_price_dropped(self):
+        from app.llm.classifier import _parse_classification
+
+        parsed = _parse_classification(
+            {**_BASE_RAW, "price_min": float("inf"), "price_max": 1e12}
+        )
+        assert parsed["price_min"] is None and parsed["price_max"] is None
+
+
+class TestStrictBoolParsing:
+    def test_stringified_false_is_not_truthy(self):
+        from app.llm.classifier import _parse_classification
+
+        parsed = _parse_classification(
+            {**_BASE_RAW, "explicit": "false", "non_event": "true", "has_free_tier": "false"}
+        )
+        assert parsed["explicit"] is False
+        assert parsed["non_event"] is True
+        assert parsed["has_free_tier"] is False
+
+    def test_malformed_values_take_fail_safe_side(self):
+        from app.llm.classifier import _parse_classification
+
+        parsed = _parse_classification(
+            {**_BASE_RAW, "explicit": "maybe", "in_target_city": "perhaps"}
+        )
+        assert parsed["explicit"] is True
+        assert parsed["in_target_city"] is False
+
+
+class TestWhyGoBulletScrub:
+    def test_urls_emails_stripped_explicit_dropped_and_capped(self):
+        from app.llm.classifier import _parse_classification
+
+        parsed = _parse_classification(
+            {
+                **_BASE_RAW,
+                "why_go": [
+                    "Great show https://evil.example/x and mail me@evil.example",
+                    "xxx porn night",
+                    "A" * 500,
+                ],
+            }
+        )
+        bullets = parsed["why_go_bullets"]
+        assert bullets[0] == "Great show  and mail"
+        assert all("evil" not in b and "xxx" not in b for b in bullets)
+        assert len(bullets) == 2 and len(bullets[1]) == 200

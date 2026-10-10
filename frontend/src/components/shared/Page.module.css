@@ -33,13 +33,26 @@
   line-height: var(--leading-display);
   letter-spacing: var(--tracking-tighter);
   color: var(--text);
+  /* A single long RU/ET word ("конфиденциальности") outgrows a phone column
+     once rem follows a larger browser default font size (#465). */
+  overflow-wrap: break-word;
 }
 
-/* Body copy shared by LegalPage and StaticPage. */
+/* Body copy shared by the legal, static, FAQ and contact pages.
+   overflow-wrap: long compounds ("Tehnilised/auditikirjed") outgrow a
+   320px column at a 24px default font (#498). */
 .proseBody {
   font-size: var(--fs-base);
   color: var(--text-soft);
   line-height: var(--leading-body);
+  overflow-wrap: break-word;
+}
+
+/* A one-line pointer link under a page intro (Contact's FAQ and organizer
+   hints, OrganizerContact's FAQ hint). */
+.pageHint {
+  font-size: var(--fs-sm);
+  margin-top: var(--space-2);
 }
 
 /* Admin console route-header chrome (AdminDashboard, AdminDedup,
@@ -90,8 +103,15 @@
 
 .cardGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(var(--card-grid-min), 1fr));
+  grid-template-columns: repeat(var(--card-grid-cols), minmax(var(--card-grid-col-min), 1fr));
   gap: var(--space-4);
+}
+
+/* Wide band (--bp-wide): side padding matches the TopBar's wrap alignment. */
+@media (min-width: 2000px) {
+  .gridMain {
+    padding-inline: var(--space-6);
+  }
 }
 
 @media (max-width: 640px) {

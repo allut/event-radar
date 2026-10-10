@@ -282,7 +282,7 @@ class TestVerifyMagicLink:
         mock_db.commit = AsyncMock()
 
         with patch(
-            "app.routers.auth.send_identity_linked_notice", new_callable=AsyncMock
+            "app.auth.email.send_identity_linked_notice", new_callable=AsyncMock
         ) as mock_notice:
             await verify_magic_link(
                 make_request(),
@@ -329,7 +329,7 @@ class TestVerifyMagicLink:
         response = Response()
 
         with patch(
-            "app.routers.auth.send_identity_linked_notice", new_callable=AsyncMock
+            "app.auth.email.send_identity_linked_notice", new_callable=AsyncMock
         ) as mock_notice:
             result = await verify_magic_link(
                 make_request(),
@@ -371,7 +371,7 @@ class TestVerifyMagicLink:
         mock_db.rollback = AsyncMock()
 
         with patch(
-            "app.routers.auth.send_identity_linked_notice", new_callable=AsyncMock
+            "app.auth.email.send_identity_linked_notice", new_callable=AsyncMock
         ) as mock_notice:
             result = await verify_magic_link(
                 make_request(),

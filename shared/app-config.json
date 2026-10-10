@@ -15,6 +15,7 @@
   ],
   "locale_code_map": { "et": "et-EE", "ru": "ru-RU" },
   "default_locale_code": "en-GB",
+  "timezone": "Europe/Tallinn",
   "signals": ["like", "dislike", "bookmark", "view", "click_external"],
   "categories": [
     "music", "theater", "exhibitions", "workshops", "sports",
@@ -27,8 +28,10 @@
   ],
   "themes": ["light", "dark"],
   "browse_page_size": 24,
+  "organizer_max_categories": 3,
   "claim_expiry_days": 7,
   "claim_admin_review_expiry_days": 30,
+  "email_brand_mark_path": "/email-mark.png",
   "safe_url_schemes": ["http", "https"],
   "image_upload_allowed_mime": ["image/jpeg", "image/png", "image/webp"],
   "html_sanitize": {

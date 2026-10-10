@@ -14,7 +14,7 @@ from pathlib import Path
 # backend/ must be on sys.path so `from app.*` resolves regardless of CWD.
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from app.routers.utils import mask_db_url
+from app.db import mask_db_url
 
 
 async def main(confirm: bool) -> None:

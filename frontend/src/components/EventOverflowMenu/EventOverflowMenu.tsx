@@ -38,17 +38,22 @@ interface EventOverflowMenuProps {
   /** Extra class on the trigger button — lets EventDetail (inline action bar)
    * and EventCard (absolute corner) each apply their own positioning. */
   triggerClassName?: string;
+  /** Edge the popover anchors to on desktop. `'right'` (default) suits
+   * EventCard's corner-pinned trigger; EventDetail passes `'left'` since its
+   * trigger sits mid-row and a right-anchored menu would cover the feedback
+   * buttons. */
+  anchor?: 'left' | 'right';
 }
 
 /** Kebab trigger + popover holding Share and Report event — the first Modal-
  * adjacent menu pattern shared by EventDetail and EventCard (issue #128). */
-export default function EventOverflowMenu({ locale, reported, onShare, onReport, triggerClassName }: EventOverflowMenuProps) {
+export default function EventOverflowMenu({ locale, reported, onShare, onReport, triggerClassName, anchor = 'right' }: EventOverflowMenuProps) {
   // The mobile fixed-position popover escapes the card's `overflow: hidden`
   // (see .pop's mobile override).
   const { open, setOpen, flip, rootRef, popRef, triggerRef, close } = useDropdown(
     DROPDOWN_DEFAULT_FOCUS_SELECTOR,
     '--overflow-pop-top',
-    'right',
+    anchor,
   );
 
   return (
@@ -65,7 +70,7 @@ export default function EventOverflowMenu({ locale, reported, onShare, onReport,
         <KebabIcon />
       </button>
       {open && (
-        <div className={styles.pop} ref={popRef} data-flip={flip || undefined} role="menu">
+        <div className={cx(styles.pop, anchor === 'right' && styles.popRight)} ref={popRef} data-flip={flip || undefined} role="menu">
           <button
             type="button"
             role="menuitem"

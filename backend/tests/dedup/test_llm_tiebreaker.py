@@ -810,3 +810,11 @@ class TestRunDedupPassLlm:
         assert result["fresh_calls"] == 1
         assert result["llm_confirmed"] == 1
         confirm.assert_awaited_once()
+
+
+def test_verdict_confirms_stringified_false_does_not_merge():
+    from app.dedup.llm_tiebreaker import _verdict_confirms
+
+    assert _verdict_confirms({"same": "false", "confidence": 0.99}) is False
+    assert _verdict_confirms({"same": "true", "confidence": 0.99}) is True
+    assert _verdict_confirms({"same": "yes please", "confidence": 0.99}) is False

@@ -105,7 +105,6 @@
   --fs-icon: 0.5rem;     /* decorative icon markers */
   --fs-lg: 1.1rem;      /* above fs-base: logos, status icons */
   --fs-xl: 1.4rem;      /* brand marks, circle icon labels */
-  --fs-brand-md: 1.25rem; /* Feed brand wordmark */
   --fs-status: 1.2rem;  /* check/error icons in bordered circles */
   --fs-btn-detail: 1.05rem; /* detail-view feedback button labels */
 
@@ -193,6 +192,12 @@
 
   /* Grid/flex geometry */
   --card-grid-min: 280px;
+  /* Page.module.css .cardGrid track count + track minimum. Auto-fill below
+     the wide band; a fixed count (6) inside it — see the wide-band
+     :root block at the end of this file. cardGridColumns.test.ts asserts
+     every fixed count divides the browse/saved page sizes. */
+  --card-grid-cols: auto-fill;
+  --card-grid-col-min: var(--card-grid-min);
   --underline-offset: 3px;
   --underline-offset-tight: 2px; /* sanitized-HTML <u> in event descriptions */
   --measure-prose: 46ch;
@@ -201,11 +206,19 @@
   --measure-snug: 36ch;    /* Landing stat/aside copy */
   --measure-notice: 44ch;  /* locked/dormant notice body */
   --measure-intro: 56ch;   /* form intro paragraphs */
+  --measure-lede: 60ch;    /* FAQ page lede */
+  --measure-answer: 64ch;  /* FAQ answer paragraphs/lists */
   --search-icon-size: 18px; /* Explore search-field magnifier */
   --rte-btn-size: 28px;    /* RichTextEditor toolbar button */
   --rte-icon-size: 16px;   /* RichTextEditor toolbar glyph */
   --landing-capture-min: 280px;
   --landing-capture-max: 520px;
+  /* ≤640px only (#498), rem so both follow the browser default font size.
+     Capture input flex-basis: below it the submit wraps under the input. */
+  --landing-capture-input-min: 9rem;
+  /* Stat-figure track floor: the 45% caps it at two tracks; the rem floor
+     drops it to one on a 320px phone with a 24px default font. */
+  --landing-fig-min: max(8rem, 45%);
   --landing-aside-min: 260px;
   --landing-poster-bleed: -4%;
   --opacity-ghost: 0.34;   /* Landing ghost layer */
@@ -282,16 +295,25 @@
      so the 640px mobile breakpoint stays a literal in every @media rule
      (wayfinder #196/#200). */
   --bp-narrow: 640px;
-  /* Same documentation-only role as --bp-narrow, for the three @media
+  /* Same documentation-only role as --bp-narrow, for the max-width @media
      breakpoints that don't reuse it: DesktopGate.module.css's tablet
      cutoff, Landing.module.css's stat-row wrap, Onboarding.module.css's
-     persona-grid collapse. */
+     persona-grid collapse — plus the min-width wide-band pair below. */
   --bp-desktop-gate: 1024px;      /* shared/DesktopGate.module.css */
   --bp-landing-stats: 900px;      /* Landing.module.css */
   --bp-onboarding-narrow: 560px;  /* Onboarding.module.css */
+  /* Wide band (design-system §10): floor where page widths jump to the
+     1760px wrap and the card grid locks to 6 columns. Above a 1920px
+     laptop viewport (2880×1620 @150%), below a 2560px monitor. */
+  --bp-wide: 2000px;
+  /* Side inset that aligns full-bleed chrome content (TopBar, Landing ticker)
+     to the --page-max-wide wrap. `100%` is substituted at the use site, so it
+     resolves against each consumer's own containing block. Wide band only. */
+  --wrap-inset: max(var(--space-6), calc((100% - var(--page-max-wide)) / 2 + var(--space-6)));
 
   /* Component max/min-widths */
   --card-max-narrow: 400px;       /* shared/Card.module.css .cardPage */
+  --explore-search-max: 480px;    /* Explore search field cap in the wide-band toolbar */
   --modal-max-width: 480px;       /* Modal panel */
   --card-max-auth: 360px;         /* AuthCard */
   --card-max-auth-inner: 280px;   /* AuthCard inner content */
@@ -300,7 +322,6 @@
   --empty-state-max-sm: 340px;
   --onboarding-submit-max: 320px;
   --onboarding-submit-min: 160px; /* Onboarding .submit min-width */
-  --mobile-menu-min: 200px;       /* MobileMenu .pop min-width */
 
   /* Form controls */
   --control-height-lg: 48px;
@@ -361,7 +382,6 @@
   --anim-rise-xs: 0.35s;
   --anim-rise-sm: 0.4s;
   --anim-rise-md: 0.5s;
-  --anim-breathe-fast: 2.4s;
   --anim-breathe: 3s; /* Animations.module.css .breathe fallback duration */
   --anim-hero-rise: 1.15s;     /* Animations.module.css .heroRise > span */
   --anim-hairline-draw: 1.4s;  /* Animations.module.css .hairlineDraw */
@@ -413,23 +433,52 @@
      --text/--text-soft are verified against --bg, a lighter ground than this. */
   --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
   --scrim-vertical: linear-gradient(0deg, rgba(15, 17, 25, 0.94) 6%, rgba(15, 17, 25, 0.55) 42%, rgba(15, 17, 25, 0.72));
-  --font-size-display-hero: clamp(40px, 7.2vw, 96px);
-  --font-size-display-plate: clamp(32px, 5vw, 64px); /* .figValue, the stat numerals */
-  --font-size-display-section: clamp(30px, 4.4vw, 56px);
-  --font-size-display-card: clamp(26px, 3.2vw, 38px); /* B3 split-panel showcase card title */
-  --font-size-display-mark: clamp(20px, 2.2vw, 27px); /* Landing .mark, brand wordmark */
+  /* Display scale (#465): rem bounds, max ÷ min ≤ 1.5 so every token reaches
+     2x by 300% browser zoom — see design-system.md §4 "Display scale". */
+  --font-size-display-hero: clamp(4rem, 7.2vw, 6rem);
+  --font-size-display-plate: clamp(2.75rem, 5vw, 4rem); /* .figValue, the stat numerals */
+  --font-size-display-section: clamp(2.375rem, 4.4vw, 3.5rem);
+  --font-size-display-card: clamp(1.625rem, 3.2vw, 2.375rem); /* B3 split-panel showcase card title */
+  --font-size-display-mark: clamp(1.25rem, 2.2vw, 1.6875rem); /* Landing .mark, brand wordmark */
   --font-size-display-legal: clamp(1.15rem, 1.8vw, 1.5rem); /* LegalPage .h2, sized down from --font-size-display-section */
   --hair-width: 64%; /* plate hairline width, c1.html's .hair */
   --plate-media-min-height: 300px;          /* B3 .plate min-height */
   --plate-media-min-height-compact: 210px;  /* B3 mobile */
+  --plate-media-aspect: 16 / 9;             /* wide-band plate media width = height × this */
+  --plate-media-width: calc(var(--plate-media-min-height) * var(--plate-media-aspect)); /* wide-band plate media column */
+  --plates-max-width: 1240px;               /* wide-band plate row cap (rows stagger to alternate wrap edges) */
   --plate-text-min: 260px;                  /* B3 text-column grid minimum */
   --plate-image-filter: saturate(0.85) contrast(1.04);
-  --topbar-height-mobile: 68px; /* TopBar's rendered height at <=640px (nav hidden,
-    logo + locale/auth actions row) -- no existing height token on .bar (intrinsic,
-    padding-driven); tune-by-eye like --space-7 above, confirm in live QA. */
-  --topbar-height: 72px; /* TopBar's rendered height above 640px (nav row present) --
-    same intrinsic/padding-driven situation as --topbar-height-mobile; tune-by-eye,
-    confirm in live QA. */
+  /* Top bar (direction A · Programme) -- docs/design-system.md §3. */
+  --accent-ink: #e8a838;              /* gold used as text; light value darkened for AA */
+  --bar-h: 72px;                      /* desktop bar, unscrolled */
+  --bar-h-condensed: 54px;            /* desktop bar, scrolled */
+  --bar-h-phone: 60px;
+  --bar-h-phone-condensed: 52px;
+  --bar-mark: 24px;                   /* Dial mark */
+  --bar-mark-condensed: 20px;
+  --bar-control-h: 36px;              /* square outline controls */
+  --bar-search-w: 212px;
+  --bar-nav-gap: 30px;
+  --bar-rule-w: 2px;                  /* active-item gold rule */
+  --fs-bar-word: 1.5rem;              /* Cormorant wordmark */
+  --fs-bar-word-condensed: 1.3rem;
+  --fs-bar-kicker: 0.656rem;          /* pulse chip spaced caps */
+  --bar-pulse-h: 22px;                /* pulse chip height */
+  --bar-pulse-dot: 5px;               /* pulse chip dot */
+  --bar-glyph: 14px;                  /* control glyph */
+  --bar-chev: 8px;                    /* menu-trigger chevron */
+  --bar-pop-min: 230px;               /* menu popover min / max width */
+  --bar-pop-max: 340px;
+  --bar-prefs-pop-min: 250px;
+  --bar-search-pop-w: 300px;
+  --bar-drawer-search-h: 44px;        /* search field in popover + mobile drawer */
+  --bar-pop-rise: 4px;                /* popover slide-in distance */
+  --tracking-bar-word: 0.005em;       /* Cormorant wordmark */
+  --tracking-bar-label: 0.16em;       /* popover section labels */
+  --leading-drawer-nav: 1.1;          /* mobile drawer links */
+  --fs-drawer-nav: 2.1rem;            /* phone drawer Cormorant nav */
+  --bar-transition: 280ms var(--easing-landing);
 }
 
 /* Light theme (wayfinder #247/#248) — literal inversion of the dark :root
@@ -440,6 +489,7 @@
    else (spacing, type scale, geometry, unlisted overlay/alpha tokens) is
    theme-neutral and inherited from :root. */
 :root[data-theme="light"] {
+  --accent-ink: #8f6316; /* gold as text: --accent-light fails AA on the light background */
   --bg: #fdfcfa;
   --bg-raised: #f5f6f9;
   --bg-card: #eef0f4;
@@ -509,11 +559,26 @@
   --poster-glow-warm: var(--poster-glow-warm-light);
 }
 
+/* Wide band (design-system §10, map #459) — pure reflow, no fluid tokens.
+   Literal mirrors --bp-wide (custom properties can't drive @media).
+   Theme-neutral, so the light block above needs no counterpart. */
+@media (min-width: 2000px) {
+  :root {
+    --page-max-wide: 1760px;
+    --page-max-medium: var(--page-max-wide);
+    --page-max-grid: var(--page-max-wide);
+    --plate-media-min-height: 400px;
+    --card-grid-cols: 6;
+    --card-grid-col-min: 0px;
+  }
+}
+
 html {
   font-family: var(--font-body);
   background-color: var(--bg);
   color: var(--text);
-  font-size: 16px;
+  /* 100%, not 16px: rem follows the user's browser default font size (#465). */
+  font-size: 100%;
   line-height: var(--leading-body);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;

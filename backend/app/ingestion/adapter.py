@@ -17,6 +17,7 @@ from sqlalchemy.exc import DataError, IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.constants import (
+    SLUG_DATE_FORMAT,
     ESTONIA_BBOX,
     EVENT_STATUS_DRAFT,
     INGEST_REJECT_RECHECK_DAYS,
@@ -31,7 +32,7 @@ from app.constants import (
     TALLINN_REGION_BBOX,
     TALLINN_TZ,
 )
-from app.ingestion.content_filters import content_flags
+from app.ingestion.content_filters import content_flags, localized_text_values
 from app.ingestion.http_client import safe_external_url, safe_fetchable_url
 from app.ingestion.pricing import normalize_currency
 from app.models.models import Event, EventSource, IngestionRun, Publisher, RawEvent, Source
@@ -99,7 +100,7 @@ class NormalizedEvent:
 
 def _make_slug(title: str, starts_at: datetime, external_id: str) -> str:
     safe = _SLUG_SANITIZE_PATTERN.sub("-", title.lower()).strip("-")
-    date_part = starts_at.strftime("%Y%m%d")
+    date_part = starts_at.strftime(SLUG_DATE_FORMAT)
     # short hex keeps collision probability <0.1% up to ~10k events/run
     h = hashlib.md5(external_id.encode(), usedforsecurity=False).hexdigest()[
         :SLUG_HASH_HEX_LEN
@@ -220,6 +221,11 @@ async def insert_normalized_event(
         normalized.description,
         normalized.venue_name,
         normalized.important_info,
+        localized_text_values(
+            normalized.title_localized,
+            normalized.description_localized,
+            normalized.important_info_localized,
+        ),
     )
     try:
         async with db.begin_nested():

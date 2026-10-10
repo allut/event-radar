@@ -1,7 +1,7 @@
 import { memo, useMemo, useState } from 'react';
 import {
   cx, monthGridDays, weekdayHeaders, formatMonthYearLabel, formatDateRangeShort, formatDateShort,
-  parseISODateLocal, toDateStr, startOfDay, isSameDay, addMonths,
+  parseISODateLocal, toDateStr, tallinnToday, isSameDay, addMonths,
 } from '../../utils';
 import { useDropdown } from '../../hooks/useDropdown';
 import { CALENDAR_WEEK_START, DATE_PRESETS, type DatePreset } from '../../constants';
@@ -32,7 +32,7 @@ interface CalendarBodyProps {
  * footer. Fresh state per mount — only rendered while calendar mode is
  * active, so re-entering it re-derives from the current customFrom/customTo. */
 function CalendarBody({ customFrom, customTo, locale, onBack, onCommit }: CalendarBodyProps) {
-  const today = startOfDay(new Date());
+  const today = tallinnToday();
   const committedFrom = customFrom ? parseISODateLocal(customFrom) : null;
   const committedTo = customTo ? parseISODateLocal(customTo) : null;
   const initialDay = committedFrom ?? today;

@@ -364,8 +364,11 @@ async def test_dedup_groups_prefers_joined_venue_when_linked(
 async def test_stats_returns_counts(admin_app, make_db_ctx, mock_db):
     app = admin_app
     db = mock_db
-    # total, canonical, sources_total, sources_enabled
-    db.scalar = AsyncMock(side_effect=[100, 60, 8, 5])
+    # one execute() for (total, canonical); scalar() for sources_total, sources_enabled
+    counts = MagicMock()
+    counts.one.return_value = (100, 60)
+    db.execute = AsyncMock(return_value=counts)
+    db.scalar = AsyncMock(side_effect=[8, 5])
 
     with (
         patch_admin_settings() as mock_settings,

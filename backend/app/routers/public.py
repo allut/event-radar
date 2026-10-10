@@ -25,23 +25,22 @@ from app.constants import (
     SHOWCASE_FALLBACK_WINDOW_DAYS,
     SHOWCASE_WINDOW_DAYS,
     TALLINN_TZ,
+    VALID_LOCALES,
 )
 from app.db import get_db
 from app.models.models import Event, EventClassification, Venue
 from app.rate_limit import limiter
-from app.routers.utils import (
-    collapse_series_duplicates,
-    resolve_locale_param,
-    resolve_title,
-    select_events_with_classification,
-    serialize_event,
-)
-from app.events.venue import resolve_venue_name
+from app.routers.utils import resolve_locale_param, serialize_event
 from app.events.queries import (
     canonical_event_filter,
+    collapse_series_duplicates,
+    event_date_range_filter,
     event_not_ended_filter,
     public_event_filter,
+    select_events_with_classification,
 )
+from app.events.localize import resolve_title
+from app.events.venue import resolve_venue_name
 
 router = APIRouter(prefix="/public", tags=["public"])
 
@@ -98,7 +97,10 @@ def _showcase_stmt(now: datetime) -> Select[tuple[Event]]:
 _showcase_cache: dict[str, tuple[float, dict]] = {}
 
 
-async def _load_showcase(db: AsyncSession, locale: str, now: datetime) -> dict:
+async def _load_showcase(db: AsyncSession, now: datetime) -> dict[str, dict]:
+    """One window query + collapse + sort, serialized for every locale — the
+    ranking is locale-independent, so loading per locale would repeat the
+    same 60-day hydrate once per cold cache entry."""
     events = list((await db.scalars(_showcase_stmt(now))).all())
     collapsed, _ = collapse_series_duplicates(events)
 
@@ -119,7 +121,10 @@ async def _load_showcase(db: AsyncSession, locale: str, now: datetime) -> dict:
 
     collapsed.sort(key=_sort_key)
     events = collapsed[:SHOWCASE_EVENT_COUNT]
-    return {"events": [serialize_event(e, locale=locale) for e in events]}
+    return {
+        loc: {"events": [serialize_event(e, locale=loc) for e in events]}
+        for loc in VALID_LOCALES
+    }
 
 
 @router.get("/showcase")
@@ -161,9 +166,10 @@ async def showcase(
         return cached[1]
 
     now = datetime.now(TALLINN_TZ)
-    payload = await _load_showcase(db, locale, now)
-    _showcase_cache[locale] = (now_monotonic, payload)
-    return payload
+    payloads = await _load_showcase(db, now)
+    for loc, loc_payload in payloads.items():
+        _showcase_cache[loc] = (now_monotonic, loc_payload)
+    return payloads[locale]
 
 
 # Process-local TTL cache — single dict entry, keyed by locale, since the payload
@@ -210,6 +216,22 @@ def _tonight_fallback_stmt(now: datetime) -> Select[tuple[Event]]:
     )
 
 
+def _today_count_stmt(now: datetime) -> Select[tuple[int]]:
+    """Exact count of what ``/explore?date=today`` lists: the Explore base
+    filters plus the shared overlap predicate, so ongoing exhibitions count.
+    A separate scalar rather than a FILTER on ``_aggregates_stmt`` — that
+    statement's ``starts_at >= now`` WHERE would drop exactly those runs."""
+    today = now.astimezone(TALLINN_TZ).date()
+    overlaps_today = event_date_range_filter(today, today)
+    assert overlaps_today is not None  # both bounds given
+    return select(func.count(Event.id)).where(
+        public_event_filter(),
+        canonical_event_filter(),
+        event_not_ended_filter(now),
+        overlaps_today,
+    )
+
+
 def _aggregates_stmt(
     now: datetime,
 ) -> Select[tuple[int, int, datetime, float | None]]:
@@ -239,6 +261,8 @@ def _aggregates_stmt(
 async def _load_counts(db: AsyncSession, locale: str, now: datetime) -> dict:
     agg_row = (await db.execute(_aggregates_stmt(now))).one()
 
+    today_count = await db.scalar(_today_count_stmt(now))
+
     tonight = list((await db.scalars(_tonight_stmt(now))).all())
     tonight_is_fallback = False
     if not tonight:
@@ -250,6 +274,7 @@ async def _load_counts(db: AsyncSession, locale: str, now: datetime) -> dict:
         "venue_count": agg_row.venue_count,
         "furthest_date": agg_row.furthest_date.date().isoformat() if agg_row.furthest_date else None,
         "cheapest_price": float(agg_row.cheapest_price) if agg_row.cheapest_price is not None else None,
+        "today_count": today_count or 0,
         "tonight_is_fallback": tonight_is_fallback,
         "tonight_events": [
             {
@@ -271,7 +296,9 @@ async def counts(
 ) -> dict:
     """Live numbers for the public landing page: upcoming/venue/category counts,
     the furthest-booked date, the cheapest paid ticket, and tonight's events (for
-    the hero counter, the tonight ticker, and the flat proof section's stat row).
+    the hero counter, the tonight ticker, and the flat proof section's stat row),
+    plus ``today_count`` — the top bar pulse chip's exact count of what
+    ``/explore?date=today`` lists (ongoing exhibitions included).
 
     Cached in-process for PUBLIC_COUNTS_CACHE_TTL_SECONDS — Landing client-fetches
     this live via React Query on every real visit (not just at prerender-build

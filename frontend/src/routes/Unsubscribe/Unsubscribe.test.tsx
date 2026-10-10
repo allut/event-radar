@@ -1,3 +1,4 @@
+import { t } from '../../i18n';
 import { describe, it, expect, vi } from 'vitest';
 import { StatusCodes } from 'http-status-codes';
 import { screen, waitFor } from '@testing-library/react';
@@ -29,6 +30,14 @@ describe('Unsubscribe', () => {
     mockPost.mockReturnValue(new Promise(() => undefined));
     renderWithProviders(<Unsubscribe />, { route: '/unsubscribe?token=abc' });
     expect(screen.getByRole('status')).toBeInTheDocument();
+  });
+
+  it('strips the reusable token from the address bar (L-9)', () => {
+    const replaceStateSpy = vi.spyOn(window.history, 'replaceState');
+    mockPost.mockReturnValue(new Promise(() => undefined));
+    renderWithProviders(<Unsubscribe />, { route: '/unsubscribe?token=abc123' });
+    expect(replaceStateSpy).toHaveBeenCalledWith({}, '', '/unsubscribe');
+    replaceStateSpy.mockRestore();
   });
 
   it('fires the unsubscribe POST on mount', () => {
@@ -68,5 +77,19 @@ describe('Unsubscribe', () => {
     renderWithProviders(<Unsubscribe />, { route: '/unsubscribe?token=expired' });
 
     await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
+  });
+});
+
+describe('Unsubscribe locale', () => {
+  // The page speaks the URL's language (like the Footer under it, #497) —
+  // never the saved preference, mocked to 'en' above.
+  it('renders in the URL prefix\'s language', () => {
+    renderWithProviders(<Unsubscribe />, { route: '/ru/unsubscribe' });
+    expect(screen.getAllByText(t('unsubscribe.error', 'ru')).length).toBeGreaterThan(0);
+  });
+
+  it('renders Estonian on a bare path', () => {
+    renderWithProviders(<Unsubscribe />, { route: '/unsubscribe' });
+    expect(screen.getAllByText(t('unsubscribe.error', 'et')).length).toBeGreaterThan(0);
   });
 });

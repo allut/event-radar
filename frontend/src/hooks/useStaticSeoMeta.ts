@@ -9,14 +9,12 @@ import { useSeoMeta, type SeoMetaResult } from './useSeoMeta';
  * noindex — this covers that in one call.
  *
  * `locale` is the caller's own already-resolved display locale (from
- * useLocaleMutation/getLocale/useState — whatever the page already uses to
- * render its body), not re-derived from useRouteLocale() here: several
- * routes (Login, AuthVerify, Onboarding, Unsubscribe, the organizer login/
- * verify pages, NotFound) resolve their locale via getLocale(), which
- * defaults to LOCALE_EN ('en') when nothing is stored — diverging from
- * useRouteLocale()'s bare-path default of Estonian. Deriving the SEO
- * <title>/<html lang> independently would silently mismatch the page's own
- * rendered language for a first-time visitor. */
+ * useLocaleMutation/useLocalLocale/usePathLocale — whatever the page already
+ * uses to render its body), not re-derived from the URL here: the organizer
+ * portal and Onboarding (useLocalLocale) and the non-public useLocaleMutation
+ * pages fall back to the *stored* preference on a bare path, not Estonian.
+ * Deriving the SEO <title>/<html lang> independently would silently mismatch
+ * the page's own rendered language. */
 export function useStaticSeoMeta(titleKey: string, locale: string): SeoMetaResult {
   const { pathname } = useLocation();
   const title = titleWithBrand(t(titleKey, locale), locale);

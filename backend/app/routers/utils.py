@@ -4,7 +4,7 @@ import asyncio
 import base64
 import json
 import logging
-import re
+from urllib.parse import unquote, urlsplit
 from collections.abc import AsyncIterator, Awaitable, Callable
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -13,13 +13,16 @@ import httpx
 from fastapi import HTTPException, Response, status
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, EmailStr
-from sqlalchemy import ColumnElement, Select, select, update
+from sqlalchemy import ColumnElement, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import InstrumentedAttribute, selectinload
+from sqlalchemy.orm import InstrumentedAttribute
 
 from app.auth.tokens import oauth_state_ttl_seconds
 from app.config import settings
 from app.constants import (
+    ALLOWED_IMAGE_HOSTS,
+    CLOUDINARY_DELIVERY_PATH_TEMPLATE,
+    ERROR_IMAGE_HOST_NOT_ALLOWED,
     CLAIM_DNS_TXT_RECORD_LABEL,
     CLAIM_DNS_VERIFICATION_MECHANISMS,
     DEFAULT_USER_LOCALE,
@@ -40,13 +43,14 @@ from app.constants import (
     LOG_EVENT_EMAIL_SEND_FAILED,
     LOG_EVENT_UNVERIFIED_ACCOUNT_BUDGET_EXCEEDED,
     MAGIC_LINK_RESEND_COOLDOWN_SECONDS,
-    MASK_DB_URL_PASSWORD_RE,
     OAUTH_ERROR_QUERY_PARAM,
     OAUTH_STATE_COOKIE_SAMESITE,
     ORGANIZER_HTML_SANITIZE_ALLOWED_ATTRS,
     ORGANIZER_HTML_SANITIZE_ALLOWED_TAGS,
     PREFERENCE_SIGNALS,
     PREFERRED_TASTE_MIN_WEIGHT,
+    ERROR_CLAIM_EDIT_CATEGORIES_CAP,
+    ORGANIZER_MAX_CATEGORIES,
     REPORT_EMAIL_SEND_CONCURRENCY,
     REPORT_STATUS_OPEN,
     REPORT_STATUS_RESOLVED,
@@ -60,7 +64,13 @@ from app.constants import (
     VALID_REPORT_REASONS,
 )
 from app.auth.utils import mask_email
-from app.events.queries import event_series_key
+from app.events.queries import event_not_ended_filter
+from app.events.localize import (
+    resolve_description,
+    resolve_important_info,
+    resolve_title,
+    resolve_why_go,
+)
 from app.events.venue import (
     resolve_venue_address,
     resolve_venue_coords,
@@ -68,7 +78,8 @@ from app.events.venue import (
 )
 from app.email.report_reporter import send_report_outcome_email
 from app.email.resend import resend_http_client
-from app.ingestion.content_filters import is_explicit_text, is_non_event_text
+from app.ingestion.content_filters import content_flags, localized_text_values
+from app.ingestion.http_client import safe_render_url
 from app.ingestion.pricing import normalize_currency
 from app.ingestion.sanitize import sanitize_html
 from app.models.models import (
@@ -76,14 +87,11 @@ from app.models.models import (
     Event,
     EventClassification,
     EventReport,
-    EventSource,
     Organizer,
     OrganizerIdentity,
-    Persona,
     User,
     UserEventFeedback,
     UserIdentity,
-    UserPersona,
     Venue,
 )
 
@@ -380,65 +388,10 @@ def log_admin_action(
     return _emit
 
 
-def mask_db_url(url: str) -> str:
-    """Redact the password in a DB URL for safe logging (``user:pass@host`` ->
-    ``user:***@host``). Shared by the maintenance scripts in ``backend/scripts``."""
-    return re.sub(MASK_DB_URL_PASSWORD_RE, ":***@", url)
 
 
-def collapse_series_duplicates(
-    event_rows: list[Event],
-) -> tuple[list[Event], dict[int, tuple[str, str]]]:
-    """One representative per event_series_key — nearest (earliest) starts_at
-    wins; ties broken by event id, so the surviving instance is deterministic
-    across builds even when the underlying query has no ORDER BY.
-
-    A multi-date listing (e.g. a workshop running Tue/Thu/Sat) ingests as
-    several Event rows sharing a series key but distinct dedup_group_ids
-    (recurring series are intentionally not dedup-grouped at ingestion), so
-    without this more than one date-instance of the same series could score
-    well and both land in a single user's Daily 5 on the same day, or both
-    appear in the public showcase grid. Shared by the Daily 5 candidate loader
-    (``_load_candidate_events``) and the public showcase (``showcase``), each
-    running this once per build/request, upstream of any downstream ordering.
-
-    Returns the collapsed events plus their series keys (each key computed
-    exactly once here) so callers building `candidate_series_key` don't
-    recompute `event_series_key()` a second time over the same rows.
-    """
-    earliest_by_key: dict[tuple[str, str], Event] = {}
-    for event in event_rows:
-        key = event_series_key(event.title_orig, resolve_venue_name(event))
-        current = earliest_by_key.get(key)
-        if current is None or (event.starts_at, event.id) < (
-            current.starts_at,
-            current.id,
-        ):
-            earliest_by_key[key] = event
-    collapsed = list(earliest_by_key.values())
-    series_key_by_event_id = {
-        event.id: key for key, event in earliest_by_key.items()
-    }
-    return collapsed, series_key_by_event_id
 
 
-def persona_weight_tuple(
-    user_persona: UserPersona, persona: Persona | None = None
-) -> tuple[float, dict]:
-    """(weight, affinity_vector) shape consumed by ``ranking/score.py::persona_affinity``.
-
-    Shared by the single-user load in browse.py and the bulk multi-user load in
-    ranking/score.py::build_daily_feeds, which query ``UserPersona`` differently
-    (single vs. ``user_id.in_(...)``) but must agree on this row->tuple mapping.
-    ``persona`` covers routers/settings.py's ``(UserPersona, Persona)``-tuple
-    join query, which loads the row directly rather than via the
-    ``UserPersona.persona`` relationship; omit it when that relationship is
-    already eager-loaded (browse.py/score.py both ``selectinload`` it).
-    """
-    return (
-        user_persona.weight,
-        (persona if persona is not None else user_persona.persona).affinity_vector,
-    )
 
 
 def encode_page_cursor(ts: datetime, row_id: int) -> str:
@@ -530,20 +483,8 @@ def serialize_user(user: User, **extras) -> dict:
     }
 
 
-def select_events_with_classification() -> Select[tuple[Event]]:
-    """Base SELECT for Event with classification + linked Venue eager-loaded
-    (#177 — venue read-path resolution must not N+1). Callers add their own .where()."""
-    return select(Event).options(
-        selectinload(Event.classification), selectinload(Event.venue)
-    )
 
 
-def publisher_claim_event_ids(publisher_id: int | None) -> Select[tuple[int]]:
-    """Event ids a Publisher claim covers (#436) — one EventSource.publisher_id
-    match, shared by organizer_claims.py::list_claim_events (the bulk list)
-    and claims/pinning.py::claim_event_for_id (the #437 per-event membership
-    check), so the two never drift on what "covered" means."""
-    return select(EventSource.event_id).where(EventSource.publisher_id == publisher_id)
 
 
 def resolve_locale_param(locale: str | None, fallback: str) -> str:
@@ -551,69 +492,65 @@ def resolve_locale_param(locale: str | None, fallback: str) -> str:
     return locale if locale in VALID_LOCALES else fallback
 
 
-def resolve_title(event: Event, locale: str) -> str:
-    """Return localized title with locale → en → title_orig fallback."""
-    loc = event.title_localized
-    if loc:
-        result = loc.get(locale) or loc.get(DEFAULT_USER_LOCALE)
-        if result:
-            return result
-    return event.title_orig
 
 
-def resolve_description(event: Event, locale: str) -> str | None:
-    """Return localized description with locale → en → description_orig fallback."""
-    loc = event.description_localized
-    if loc:
-        result = loc.get(locale) or loc.get(DEFAULT_USER_LOCALE)
-        if result:
-            return result
-    return event.description_orig
 
 
-def resolve_important_info(event: Event, locale: str) -> str | None:
-    """Return localized important_info with locale → en → plain fallback."""
-    loc = event.important_info_localized
-    if loc:
-        result = loc.get(locale) or loc.get(DEFAULT_USER_LOCALE)
-        if result:
-            return result
-    return event.important_info
 
 
-async def apply_organizer_category(db: AsyncSession, event_id: int, category: str) -> None:
-    """Prepend an organizer-chosen category onto an event's classification.
+async def replace_organizer_categories(
+    db: AsyncSession, event_id: int, categories: list[str]
+) -> None:
+    """Set an event's classification categories to exactly the organizer's picks.
 
-    Categories are LLM-derived (Event.classification.categories, an array) —
-    there is no dedicated organizer-facing column. An explicit organizer pick
-    leads the list (any LLM-derived categories, if present, follow); if no
-    classification row exists yet (e.g. classify_event's LLM call failed), a
-    bare one is created so the pick isn't silently dropped. Shared by
-    organizer_events.py (own-submission edits) and organizer_claim_edits.py
-    (#416's prepend-only claim-edit categories rule) — identical prepend
-    semantics, so it lives here rather than being duplicated."""
+    Used for an organizer's own submissions (create + edit): their set is
+    authoritative, so LLM-derived categories are dropped rather than merged —
+    keeping them would inflate persona affinity, which sums weights over every
+    category (`_affinity_for_vector`). If no classification row exists yet
+    (e.g. classify_event's LLM call failed), a bare one is created so the pick
+    isn't silently dropped."""
     classification = await db.scalar(
         select(EventClassification).where(EventClassification.event_id == event_id)
     )
     if classification is None:
-        db.add(EventClassification(event_id=event_id, categories=[category]))
+        db.add(EventClassification(event_id=event_id, categories=categories))
         return
-    if category not in classification.categories:
-        classification.categories = [category, *classification.categories]
+    classification.categories = categories
 
 
-def resolve_why_go(cl: EventClassification | None, locale: str) -> list[str]:
-    """Return localized why_go bullets for a classification, with locale → en → raw fallback."""
-    if cl is None:
-        return []
-    if cl.why_go_localized:
-        return (
-            cl.why_go_localized.get(locale)
-            or cl.why_go_localized.get(DEFAULT_USER_LOCALE)
-            or cl.why_go_bullets
-            or []
+async def prepend_organizer_categories(
+    db: AsyncSession,
+    event_id: int,
+    categories: list[str],
+    max_total: int | None = None,
+) -> None:
+    """Prepend organizer-chosen categories onto an event's classification.
+
+    Used by claim edits (#416's prepend-only rule): the claimed event's
+    existing categories are never removed. The picks lead the list in the
+    order given (those already present are skipped), existing categories
+    follow; a bare classification row is created if none exists yet.
+
+    `max_total` caps the resulting list: if adding the genuinely new picks
+    would exceed it, 422 and nothing is changed. Existing categories are
+    never trimmed, so an event already over the cap simply can't gain more."""
+    classification = await db.scalar(
+        select(EventClassification).where(EventClassification.event_id == event_id)
+    )
+    existing = classification.categories if classification is not None else []
+    new = [c for c in categories if c not in existing]
+    if max_total is not None and new and len(existing) + len(new) > max_total:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=ERROR_CLAIM_EDIT_CATEGORIES_CAP,
         )
-    return cl.why_go_bullets or []
+    if classification is None:
+        db.add(EventClassification(event_id=event_id, categories=categories))
+        return
+    if new:
+        classification.categories = [*new, *existing]
+
+
 
 
 def serialize_event(
@@ -711,44 +648,6 @@ async def load_user_reported_events(
     return {row.event_id for row in rows}
 
 
-async def bulk_resolve_publisher_events(
-    db: AsyncSession, publisher_ids: set[int]
-) -> dict[int, Event]:
-    """One representative Event per Publisher id in ``publisher_ids``,
-    bulk-loaded in two fixed queries regardless of how many ids are passed —
-    shared by admin.py::admin_list_claims and
-    app.claims.lifecycle._send_claim_expiry_emails (#421). "Freshest listing
-    wins" (highest EventSource.id per publisher_id) mirrors
-    app.claims.lifecycle.representative_event_source's own single-row
-    ordering — keep the two in sync if that tie-break ever changes."""
-    if not publisher_ids:
-        return {}
-    # DISTINCT ON walks ix_event_sources_publisher_id and keeps only the
-    # highest-id row per publisher — one row per id, not one per listing.
-    es_rows = (
-        await db.execute(
-            select(EventSource.publisher_id, EventSource.event_id)
-            .where(EventSource.publisher_id.in_(publisher_ids))
-            .distinct(EventSource.publisher_id)
-            .order_by(EventSource.publisher_id, EventSource.id.desc())
-        )
-    ).all()
-    event_id_by_publisher: dict[int, int] = {
-        pid: eid for pid, eid in es_rows if pid is not None
-    }
-    if not event_id_by_publisher:
-        return {}
-    events = (
-        await db.scalars(
-            select(Event).where(Event.id.in_(set(event_id_by_publisher.values())))
-        )
-    ).all()
-    events_by_id = {e.id: e for e in events}
-    return {
-        publisher_id: events_by_id[event_id]
-        for publisher_id, event_id in event_id_by_publisher.items()
-        if event_id in events_by_id
-    }
 
 
 async def resolve_open_reports(
@@ -870,12 +769,33 @@ def validate_tz_aware(v: datetime | None) -> datetime | None:
     return v
 
 
-def validate_category(v: str | None) -> str | None:
-    """Shared by organizer_events.py's SubmitEventBody/PatchEventBody
-    category validators."""
-    if v is not None and v not in VALID_CATEGORIES:
-        raise ValueError(f"invalid category: {v!r}")
-    return v
+def validate_categories(v: list[str] | None) -> list[str] | None:
+    """Shared by organizer_events.py's SubmitEventBody/PatchEventBody and
+    organizer_claim_edits.py's ClaimEditBody `categories` validators. Dedupes
+    (order kept) before applying the ORGANIZER_MAX_CATEGORIES cap."""
+    if v is None:
+        return None
+    for c in v:
+        if c not in VALID_CATEGORIES:
+            raise ValueError(f"invalid category: {c!r}")
+    deduped = list(dict.fromkeys(v))
+    if len(deduped) > ORGANIZER_MAX_CATEGORIES:
+        raise ValueError(f"at most {ORGANIZER_MAX_CATEGORIES} categories")
+    return deduped
+
+
+def fold_legacy_category(data: Any) -> Any:
+    """`mode="before"` model-validator body: fold the deprecated single
+    `category` key into `categories`. Frontend (Cloudflare) and backend
+    (Render) deploy separately, so an old frontend may still send `category`;
+    without this it would be silently dropped as an unknown field. An explicit
+    `categories` wins. Remove in a follow-up once no old frontend is live."""
+    if isinstance(data, dict) and "category" in data:
+        data = dict(data)
+        legacy = data.pop("category")
+        if "categories" not in data and legacy is not None:
+            data["categories"] = [legacy]
+    return data
 
 
 def validate_price_ordering(
@@ -970,13 +890,25 @@ def apply_moderation_flags(
     texts (e.g. ``important_info``) join the explicit scan. Returns True when
     either flag was newly set, so the caller can pull a published event back
     to classified."""
+    # Every user-visible text, not just the Estonian originals: EN/RU readers
+    # and the digest are served the *_localized values (OWASP audit M-5).
+    extras = [
+        *(t for t in extra_explicit_texts if t),
+        event.important_info,
+        *localized_text_values(
+            event.title_localized,
+            event.description_localized,
+            event.important_info_localized,
+        ),
+    ]
+    is_explicit, is_non_event = content_flags(
+        event.title_orig, event.description_orig, venue_name, None, extras
+    )
     flagged = False
-    if not event.is_explicit and is_explicit_text(
-        event.title_orig, event.description_orig, venue_name, *extra_explicit_texts
-    ):
+    if is_explicit and not event.is_explicit:
         event.is_explicit = True
         flagged = True
-    if not event.is_non_event and is_non_event_text(event.title_orig, venue_name):
+    if is_non_event and not event.is_non_event:
         event.is_non_event = True
         flagged = True
     return flagged
@@ -994,7 +926,9 @@ async def remoderate_venue_linked_events(db: AsyncSession, venue: Venue) -> None
     events = (
         await db.scalars(
             select(Event).where(
-                Event.venue_id == venue.id, Event.status != EVENT_STATUS_CANCELLED
+                Event.venue_id == venue.id,
+                Event.status != EVENT_STATUS_CANCELLED,
+                event_not_ended_filter(datetime.now(TALLINN_TZ)),
             )
         )
     ).all()
@@ -1108,3 +1042,35 @@ def claim_dns_record_name(mechanism: str | None, domain: str | None) -> str | No
     if mechanism in CLAIM_DNS_VERIFICATION_MECHANISMS and domain:
         return f"{CLAIM_DNS_TXT_RECORD_LABEL}.{domain}"
     return None
+
+
+def check_image_host(image_url: str | None) -> str | None:
+    """Reject an organizer-submission image_url that isn't one of OUR signed
+    Cloudinary uploads and return its re-serialized form (None for empty).
+
+    The host must be the delivery domain (see ALLOWED_IMAGE_HOSTS) AND the
+    path must sit under this account's ``/{cloud_name}/image/upload/`` —
+    res.cloudinary.com serves every Cloudinary account (and remote-fetches
+    other sites), so the host alone would still let an arbitrary third-party
+    image become a tracking pixel once the digest embeds it as an <img> (see
+    app/email/digest.py). Parser-differential spellings (``\\``, userinfo,
+    ports) are refused up front by ``safe_render_url`` and the stored value is
+    its re-serialized form (OWASP audit M-1)."""
+    if not image_url:
+        return None
+    safe = safe_render_url(image_url)
+    cloud_name = settings.CLOUDINARY_CLOUD_NAME
+    if safe is not None:
+        parts = urlsplit(safe)
+        path = unquote(parts.path)
+        if (
+            parts.hostname in ALLOWED_IMAGE_HOSTS
+            and cloud_name
+            and path.startswith(CLOUDINARY_DELIVERY_PATH_TEMPLATE.format(cloud_name=cloud_name))
+            and ".." not in path.split("/")
+        ):
+            return safe
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail=ERROR_IMAGE_HOST_NOT_ALLOWED,
+    )

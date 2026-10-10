@@ -22,6 +22,21 @@ const mockGet = vi.mocked(api.get);
 const mockPost = vi.mocked(api.post);
 
 describe('Contact', () => {
+  it('links to the FAQ between the intro and the organizer hint', () => {
+    renderWithProviders(<Contact />);
+    const faq = screen.getByRole('link', { name: 'Quick question? Check the FAQ first →' });
+    expect(faq).toHaveAttribute('href', '/faq');
+    const intro = screen.getByText(/We'd love to hear from you/);
+    const organizerHint = screen.getByRole('link', { name: /list it/i });
+    expect(intro.compareDocumentPosition(faq) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(faq.compareDocumentPosition(organizerHint) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('keeps the locale prefix on the FAQ link', () => {
+    renderWithProviders(<Contact />, { route: '/ru/contact' });
+    expect(screen.getByRole('link', { name: 'Quick question? Check the FAQ first →' })).toHaveAttribute('href', '/ru/faq');
+  });
+
   it('renders name, email, and message fields with submit button', () => {
     renderWithProviders(<Contact />);
     expect(screen.getByLabelText(/name/i)).toBeInTheDocument();
@@ -83,7 +98,8 @@ describe('Contact', () => {
 
   it('does not fetch /users/me when signed out', () => {
     renderWithProviders(<Contact />);
-    expect(mockGet).not.toHaveBeenCalled();
+    // The bar's pulse chip may fetch public counts; the user endpoint must stay untouched.
+    expect(mockGet).not.toHaveBeenCalledWith(expect.stringContaining('/users/me'));
   });
 
   it('renders an organizer entry link pointing to /organizer/login', () => {

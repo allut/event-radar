@@ -32,6 +32,12 @@
   color: var(--text);
 }
 
+.emptyTitleAdmin {
+  composes: emptyTitle;
+  font-family: var(--font-system);
+  font-size: var(--heading-sm);
+}
+
 .emptyMsg {
   font-size: var(--fs-base);
   color: var(--text-muted);

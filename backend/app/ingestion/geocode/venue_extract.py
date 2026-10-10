@@ -3,19 +3,21 @@
 import asyncio
 import logging
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import httpx
 from sqlalchemy import ColumnElement, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.constants import (
+    SQL_REGEX_DIGIT,
     GEOCODE_MAX_PER_RUN,
     TALLINN_TZ,
     LLM_BATCH_FANOUT_CONCURRENCY,
     LLM_DEDUP_HASH_QUERY_CHUNK_SIZE,
     LLM_TASK_VENUE_EXTRACT,
     VENUE_EXTRACT_MAX_FRESH_LLM_CALLS_PER_RUN,
+    VENUE_EXTRACT_RETRY_INTERVAL_DAYS,
     VENUE_NAME_DIRECTION_KEYWORDS,
     VENUE_NAME_MAX_LEN,
     VENUE_NAME_PROMPT_MAX_CHARS,
@@ -30,7 +32,7 @@ from app.llm.router import (
     llm_json,
 )
 from app.models.models import Event, LlmCall
-from app.ingestion.patterns import alternation_pattern
+from app.ingestion.patterns import alternation_pattern, sql_alternation_pattern
 
 log = logging.getLogger(__name__)
 
@@ -55,9 +57,7 @@ def is_suspect_venue_name(name: str) -> bool:
     return False
 
 
-_SQL_DIRECTION_KEYWORD_RE = (
-    r"\y(?:" + "|".join(re.escape(kw) for kw in VENUE_NAME_DIRECTION_KEYWORDS) + r")\y"
-)
+_SQL_DIRECTION_KEYWORD_RE = sql_alternation_pattern(VENUE_NAME_DIRECTION_KEYWORDS)
 
 
 def suspect_venue_name_sql() -> ColumnElement[bool]:
@@ -67,11 +67,18 @@ def suspect_venue_name_sql() -> ColumnElement[bool]:
     ``LIMIT`` starved the pass once clean-named rows outnumbered the window
     (Big-O audit H3). The Python check still runs afterwards as the authority."""
     return or_(
-        Event.venue_name.op("~")(r"[0-9]"),
+        Event.venue_name.op("~")(SQL_REGEX_DIGIT),
         Event.venue_name.contains(","),
         Event.venue_name.op("~*")(_SQL_DIRECTION_KEYWORD_RE),
         func.length(Event.venue_name) > VENUE_NAME_SUSPECT_MAX_LEN,
     )
+
+
+def _words_within(output: str, source: str) -> bool:
+    """True when every alphanumeric word of ``output`` occurs in ``source``
+    (case-insensitive)."""
+    source_words = set(re.findall(r"\w+", source.casefold()))
+    return all(w in source_words for w in re.findall(r"\w+", output.casefold()))
 
 
 async def _prefetch_venue_extract_cache(
@@ -123,13 +130,19 @@ async def extract_address_from_venue_name(db: AsyncSession) -> int:
     if not llm_available():
         return 0
 
+    now = datetime.now(TALLINN_TZ)
+    due_before = now - timedelta(days=VENUE_EXTRACT_RETRY_INTERVAL_DAYS)
     candidates = (
         await db.scalars(
             select(Event)
             .where(
                 Event.venue_name.is_not(None),
                 Event.venue_address.is_(None),
-                Event.starts_at >= datetime.now(TALLINN_TZ),
+                Event.starts_at >= now,
+                or_(
+                    Event.venue_extract_attempted_at.is_(None),
+                    Event.venue_extract_attempted_at <= due_before,
+                ),
                 suspect_venue_name_sql(),
             )
             .order_by(Event.starts_at, Event.id)
@@ -239,8 +252,20 @@ async def extract_address_from_venue_name(db: AsyncSession) -> int:
         # Only rewrite venue_name when an address was actually mined. Shortening or
         # NULLing the name with no address payoff buys nothing and can break canonical
         # sibling matching (it stranded event 482: "Katharienthal Kohviku" no longer
-        # matched its full-named EN sibling). No address → leave the event untouched.
+        # matched its full-named EN sibling). No address → leave the event
+        # untouched, but start the retry cooldown so it stops requalifying
+        # every run and starving newer candidates.
+        # The LLM may only re-cut the text it was given: every word of what it
+        # returns must already be in the input name, so a prompt-injected
+        # venue_name can never smuggle new, unmoderated content onto a
+        # published event (OWASP audit L-5).
+        if new_address is not None and not _words_within(new_address, name):
+            new_address = None
+        if new_name is not None and not _words_within(new_name, name):
+            new_name = None
         if new_address is None:
+            for event in events:
+                event.venue_extract_attempted_at = now
             continue
 
         for event in events:

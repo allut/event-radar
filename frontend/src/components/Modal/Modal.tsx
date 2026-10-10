@@ -8,11 +8,13 @@ interface ModalProps {
   title: string;
   locale: string;
   children: ReactNode;
+  /** Admin-console register: system font title, never the display serif. */
+  admin?: boolean;
 }
 
 /** First Modal in this codebase (issue #128) — overlay + centered panel,
  * Escape-to-close, backdrop-click-to-close, focus moved to the panel on open. */
-export default function Modal({ open, onClose, title, locale, children }: ModalProps) {
+export default function Modal({ open, onClose, title, locale, children, admin }: ModalProps) {
   const titleId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
 
@@ -40,7 +42,7 @@ export default function Modal({ open, onClose, title, locale, children }: ModalP
         tabIndex={-1}
       >
         <div className={styles.header}>
-          <h2 id={titleId} className={styles.title}>{title}</h2>
+          <h2 id={titleId} className={admin ? styles.titleAdmin : styles.title}>{title}</h2>
           <button type="button" className={styles.closeBtn} onClick={onClose} aria-label={t('close', locale)}>
             ✕
           </button>

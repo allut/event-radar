@@ -17,7 +17,9 @@ from app.config import settings
 from app.constants import (
     EVENTS_PATH,
 )
+from app.email.links import frontend_url
 from app.email.resend import send_resend_email
+from app.email.brand import brand_mark_html
 from app.email.styles import get_email_styles
 from app.email.templates import (
     EMAIL_DOCUMENT,
@@ -36,11 +38,12 @@ def build_report_outcome_html(
 ) -> str:
     s = get_email_styles()
     safe_event_url = html_lib.escape(
-        f"{settings.FRONTEND_URL}{EVENTS_PATH}/{event.id}", quote=True
+        frontend_url(f"{EVENTS_PATH}/{event.id}", locale), quote=True
     )
     note = resolution_note.strip() or t("email.report_outcome.fallback_note", locale)
 
     header_html = REPORT_OUTCOME_HEADER.format(
+        brand_mark_html=brand_mark_html(s),
         s_eyebrow=s.s_eyebrow,
         s_h1=s.s_h1,
         heading=t("email.report_outcome.heading", locale),
@@ -74,7 +77,7 @@ def build_report_outcome_html(
 def build_report_outcome_text(event: Event, resolution_note: str, locale: str) -> str:
     note = resolution_note.strip() or t("email.report_outcome.fallback_note", locale)
     intro = ti("email.report_outcome.intro", locale, event_title=event.title_orig)
-    event_url = f"{settings.FRONTEND_URL}{EVENTS_PATH}/{event.id}"
+    event_url = frontend_url(f"{EVENTS_PATH}/{event.id}", locale)
     return f"{intro}\n\n{note}\n\n{event_url}"
 
 

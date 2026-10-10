@@ -2,10 +2,11 @@ import { type ReactNode } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { t, ti } from '../../i18n';
 import { isOrganizerPortalPath, safeUrl } from '../../utils';
-import { BRAND_GLYPH, COPYRIGHT_YEAR, ROUTES, SOCIAL_LINKS, type SocialIcon } from '../../constants';
-import { useLocale } from '../../hooks/useLocale';
+import { COPYRIGHT_YEAR, ROUTES, SOCIAL_LINKS, type SocialIcon } from '../../constants';
 import { useLocalePath } from '../../hooks/useLocalePath';
+import { usePathLocale } from '../../hooks/usePathLocale';
 import { useOrganizerAuth } from '../../hooks/useOrganizerAuth';
+import DialMark from '../DialMark';
 import styles from './Footer.module.css';
 
 // Self-contained brand glyphs — no external assets, so the footer works under
@@ -38,7 +39,10 @@ const SOCIAL_LINK_HREFS = SOCIAL_LINKS.map((s) => ({ icon: s.icon, href: safeUrl
 );
 
 export default function Footer() {
-  const locale = useLocale();
+  // The page's language, not the saved preference — the two disagree on a
+  // first visit to /ru/… or a bare path, and in every prerendered page
+  // (issue #497).
+  const locale = usePathLocale();
   const localePath = useLocalePath();
   const isOrganizer = useOrganizerAuth();
   const { pathname } = useLocation();
@@ -54,7 +58,7 @@ export default function Footer() {
       <div className={styles.inner}>
         <div className={styles.brandRow}>
           <Link to={localePath(ROUTES.home)} className={styles.brandLink}>
-            <span className={styles.radarMark} aria-hidden>{BRAND_GLYPH}</span>
+            <span className={styles.radarMark}><DialMark /></span>
             <span>{t('brand', locale)}</span>
           </Link>
           <span>{t('footer_location', locale)}</span>
@@ -63,6 +67,7 @@ export default function Footer() {
         <nav className={styles.links} aria-label={t('footer_nav', locale)}>
           <Link to={localePath(ROUTES.privacy)} className={styles.link}>{t('footer_privacy', locale)}</Link>
           <Link to={localePath(ROUTES.terms)} className={styles.link}>{t('footer_terms', locale)}</Link>
+          <Link to={localePath(ROUTES.faq)} className={styles.link}>{t('nav_faq', locale)}</Link>
           <Link to={localePath(contactRoute)} className={styles.link}>{t(contactLabelKey, locale)}</Link>
           <Link to={localePath(isOrganizer ? ROUTES.organizerDashboard : ROUTES.organizerLogin)} className={styles.link}>
             {t(isOrganizer ? 'footer_organizer_dashboard' : 'footer_organizers', locale)}

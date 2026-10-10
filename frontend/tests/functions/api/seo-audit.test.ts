@@ -4,7 +4,7 @@
 // import drags in `node:sqlite` via undici, which the Workers bundler can't
 // resolve.
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
-import { onRequestPost } from '../../../functions/api/seo-audit';
+import { onRequest } from '../../../functions/api/seo-audit';
 import { PRODUCTION_ORIGIN, SEO_AUDIT_TOKEN_HEADER, CRAWLABLE_ICON_PATHS } from '../../../src/constants';
 import { buildEventJsonLd, buildWebsiteJsonLd } from '../../../src/lib/structuredData';
 import { buildSeoMeta } from '../../../src/hooks/useSeoMeta';
@@ -124,6 +124,17 @@ describe('seo-audit handler — event snapshot asset content-type check (issue #
     vi.restoreAllMocks();
   });
 
+  it('answers a GET with 405 itself instead of falling through to the proxy (L-8)', async () => {
+    const res = await onRequest({
+      request: new Request('https://eventradar.ee/api/seo-audit', {
+        method: 'GET',
+        headers: { [SEO_AUDIT_TOKEN_HEADER]: 'shared-secret' },
+      }),
+      env: { SEO_AUDIT_TOKEN: 'shared-secret', GH_ISSUE_TOKEN: 'gh-token' },
+    } as never);
+    expect(res.status).toBe(405);
+  });
+
   it('passes when the event snapshot\'s assets serve their expected content-types', async () => {
     const jsUrl = `${PRODUCTION_ORIGIN}/assets/index-CURRENT111.js`;
     const cssUrl = `${PRODUCTION_ORIGIN}/assets/index-CURRENT222.css`;
@@ -133,7 +144,7 @@ describe('seo-audit handler — event snapshot asset content-type check (issue #
       assetContentTypes: { [jsUrl]: 'application/javascript', [cssUrl]: 'text/css' },
     });
 
-    const res = await onRequestPost(makeContext());
+    const res = await onRequest(makeContext());
 
     expect(res.status).toBe(200);
     const body = (await res.json()) as { ok: boolean };
@@ -148,7 +159,7 @@ describe('seo-audit handler — event snapshot asset content-type check (issue #
       assetContentTypes: { [jsUrl]: 'text/html; charset=utf-8' },
     });
 
-    const res = await onRequestPost(makeContext());
+    const res = await onRequest(makeContext());
 
     expect(res.status).toBe(200);
     const body = (await res.json()) as { ok: boolean; issues: string[] };

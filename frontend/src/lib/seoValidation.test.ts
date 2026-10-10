@@ -19,7 +19,7 @@ import { PRODUCTION_ORIGIN } from '../constants';
  * this test file. */
 function renderSnapshotHtml(
   meta: ReturnType<typeof buildSeoMeta>,
-  jsonLd: object,
+  jsonLd: object | null,
   extraBodyHtml = '',
 ): string {
   const metaTags = meta.metaTags
@@ -28,7 +28,7 @@ function renderSnapshotHtml(
   const links = meta.links
     .map((link) => `<link rel="${link.rel}" href="${link.href}"${link.hrefLang ? ` hreflang="${link.hrefLang}"` : ''}>`)
     .join('\n');
-  return `<!doctype html><html lang="${meta.htmlLang}"><head><title>${meta.title}</title>${metaTags}${links}<link rel="icon" href="/favicon.svg"><script type="application/ld+json">${serializeJsonLd(jsonLd)}</script></head><body>${extraBodyHtml}</body></html>`;
+  return `<!doctype html><html lang="${meta.htmlLang}"><head><title>${meta.title}</title>${metaTags}${links}<link rel="icon" href="/favicon.svg">${jsonLd === null ? '' : `<script type="application/ld+json">${serializeJsonLd(jsonLd)}</script>`}</head><body>${extraBodyHtml}</body></html>`;
 }
 
 describe('parseSnapshotHtml', () => {
@@ -290,6 +290,42 @@ describe('validateSnapshotStructure', () => {
     parsed.jsonLdRaw = ['{"name":"a\\u003c/script"}'];
     const issues = validateSnapshotStructure(parsed, { kind: 'event', locale: 'et', originPrefix: PRODUCTION_ORIGIN });
     expect(issues.some((i) => i.includes('unescaped "<"'))).toBe(false);
+  });
+});
+
+describe("validateSnapshotStructure kind 'page'", () => {
+  function faqHtml(jsonLd: object | null): string {
+    const meta = buildSeoMeta({
+      title: 'KKK | Event Radar',
+      locale: 'et',
+      path: '/faq',
+      indexable: true,
+    });
+    return renderSnapshotHtml(meta, jsonLd);
+  }
+
+  it('passes a well-formed snapshot with zero JSON-LD scripts', () => {
+    const parsed = parseSnapshotHtml(faqHtml(null));
+    const issues = validateSnapshotStructure(parsed, {
+      kind: 'page',
+      locale: 'et',
+      originPrefix: PRODUCTION_ORIGIN,
+      expectedCanonical: `${PRODUCTION_ORIGIN}/faq`,
+    });
+    expect(issues).toEqual([]);
+  });
+
+  it('fails when the page carries a JSON-LD script', () => {
+    const parsed = parseSnapshotHtml(faqHtml(buildWebsiteJsonLd('et')));
+    const issues = validateSnapshotStructure(parsed, { kind: 'page', locale: 'et', originPrefix: PRODUCTION_ORIGIN });
+    expect(issues).toEqual(['expected no JSON-LD script, found 1']);
+  });
+
+  it('still runs the other structural checks', () => {
+    const parsed = parseSnapshotHtml(faqHtml(null));
+    parsed.robots = 'noindex';
+    const issues = validateSnapshotStructure(parsed, { kind: 'page', locale: 'et', originPrefix: PRODUCTION_ORIGIN });
+    expect(issues).toEqual(['robots meta is "noindex", expected "index, follow"']);
   });
 });
 

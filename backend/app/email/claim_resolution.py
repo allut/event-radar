@@ -18,7 +18,9 @@ from app.constants import (
     CLAIM_EXPIRY_DAYS,
     ORGANIZER_DASHBOARD_PATH,
 )
+from app.email.links import frontend_url
 from app.email.resend import send_resend_email
+from app.email.brand import brand_mark_html
 from app.email.styles import get_email_styles
 from app.email.templates import (
     CLAIM_RESOLUTION_BODY,
@@ -61,9 +63,10 @@ def _prepare_self_cancelled(event_title: str | None, locale: str) -> tuple[str, 
 def _build_html(*, subject_key: str, intro: str, note: str, locale: str) -> str:
     s = get_email_styles()
     dashboard_url = html_lib.escape(
-        f"{settings.FRONTEND_URL}{ORGANIZER_DASHBOARD_PATH}", quote=True
+        frontend_url(ORGANIZER_DASHBOARD_PATH, locale), quote=True
     )
     header_html = CLAIM_RESOLUTION_HEADER.format(
+        brand_mark_html=brand_mark_html(s),
         s_eyebrow=s.s_eyebrow,
         s_h1=s.s_h1,
         heading=t(f"{subject_key}.heading", locale),

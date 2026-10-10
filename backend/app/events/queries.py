@@ -1,12 +1,14 @@
 """Event query predicates and series identity shared by the feed, publish gate,
 claims and dedup — the one home for "which events count" definitions."""
 
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import and_, ColumnElement, false, func, or_
+from sqlalchemy import Select, and_, ColumnElement, false, func, or_, select
+from sqlalchemy.orm import selectinload
 
-from app.constants import EVENT_STATUS_PUBLISHED
+from app.constants import EVENT_STATUS_PUBLISHED, TALLINN_TZ
+from app.events.venue import resolve_venue_name
 from app.models.models import Event
 
 
@@ -35,6 +37,31 @@ def public_event_filter() -> ColumnElement[bool]:
         Event.is_explicit == false(),
         Event.is_non_event == false(),
     )
+
+
+def event_date_range_filter(
+    date_from: date | None, date_to: date | None
+) -> ColumnElement[bool] | None:
+    """Overlap check, not starts_at-only: an ongoing exhibition that started
+    last month must still match a "Today" filter. Bounds are Tallinn-midnight
+    datetimes; date_to is exclusive (next-day midnight).
+
+    Shared by /explore's date facet and /public/counts' ``today_count`` so the
+    pulse chip's number always agrees with the page its link lands on."""
+    if date_from is None and date_to is None:
+        return None
+    conditions: list[ColumnElement[bool]] = []
+    if date_to is not None:
+        date_to_end = datetime.combine(
+            date_to + timedelta(days=1), datetime.min.time(), tzinfo=TALLINN_TZ
+        )
+        conditions.append(Event.starts_at < date_to_end)
+    if date_from is not None:
+        date_from_start = datetime.combine(
+            date_from, datetime.min.time(), tzinfo=TALLINN_TZ
+        )
+        conditions.append(func.coalesce(Event.ends_at, Event.starts_at) >= date_from_start)
+    return and_(*conditions)
 
 
 def event_not_ended_filter(now: datetime, entity: Any = Event) -> ColumnElement[bool]:
@@ -105,3 +132,47 @@ def serialize_event_series_key(key: tuple[str, str]) -> str:
     ever produces lowercase text and single spaces)."""
     title_key, venue_key = key
     return f"{title_key}\x1f{venue_key}"
+
+
+def collapse_series_duplicates(
+    event_rows: list[Event],
+) -> tuple[list[Event], dict[int, tuple[str, str]]]:
+    """One representative per event_series_key — nearest (earliest) starts_at
+    wins; ties broken by event id, so the surviving instance is deterministic
+    across builds even when the underlying query has no ORDER BY.
+
+    A multi-date listing (e.g. a workshop running Tue/Thu/Sat) ingests as
+    several Event rows sharing a series key but distinct dedup_group_ids
+    (recurring series are intentionally not dedup-grouped at ingestion), so
+    without this more than one date-instance of the same series could score
+    well and both land in a single user's Daily 5 on the same day, or both
+    appear in the public showcase grid. Shared by the Daily 5 candidate loader
+    (``_load_candidate_events``) and the public showcase (``showcase``), each
+    running this once per build/request, upstream of any downstream ordering.
+
+    Returns the collapsed events plus their series keys (each key computed
+    exactly once here) so callers building `candidate_series_key` don't
+    recompute `event_series_key()` a second time over the same rows.
+    """
+    earliest_by_key: dict[tuple[str, str], Event] = {}
+    for event in event_rows:
+        key = event_series_key(event.title_orig, resolve_venue_name(event))
+        current = earliest_by_key.get(key)
+        if current is None or (event.starts_at, event.id) < (
+            current.starts_at,
+            current.id,
+        ):
+            earliest_by_key[key] = event
+    collapsed = list(earliest_by_key.values())
+    series_key_by_event_id = {
+        event.id: key for key, event in earliest_by_key.items()
+    }
+    return collapsed, series_key_by_event_id
+
+
+def select_events_with_classification() -> Select[tuple[Event]]:
+    """Base SELECT for Event with classification + linked Venue eager-loaded
+    (#177 — venue read-path resolution must not N+1). Callers add their own .where()."""
+    return select(Event).options(
+        selectinload(Event.classification), selectinload(Event.venue)
+    )

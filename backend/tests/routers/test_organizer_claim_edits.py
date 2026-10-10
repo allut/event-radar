@@ -3,7 +3,7 @@ surface's GET (load) and PATCH (save) endpoints. Exercised the same way as
 test_organizer_claims.py: calling the endpoint functions directly against a
 mocked db, with the heavier collaborators (own_claim_or_404,
 claim_event_for_id, fetch_fresh_price, publish_pending,
-apply_organizer_category) patched at the module namespace."""
+prepend_organizer_categories) patched at the module namespace."""
 
 import http
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -54,7 +54,7 @@ def _patched(**kwargs):
         "claim_event_for_id": AsyncMock(),
         "fetch_fresh_price": AsyncMock(return_value=None),
         "publish_pending": AsyncMock(return_value={"published": 1}),
-        "apply_organizer_category": AsyncMock(),
+        "prepend_organizer_categories": AsyncMock(),
         # A single covered event scales to exactly the flat baseline (#438),
         # so every pre-existing test that doesn't care about cap scaling
         # keeps seeing the unchanged ORGANIZER_DAILY_CLAIM_EDIT_CAP value.
@@ -536,6 +536,7 @@ class TestUpdateClaimEvent:
     async def test_categories_prepend_only_delegates_to_shared_helper(
         self, mock_db, make_request, make_organizer, make_event
     ):
+        from app.constants import ORGANIZER_MAX_CATEGORIES
         from app.routers.organizer_claim_edits import PatchClaimEventBody, update_claim_event
 
         organizer = make_organizer(organizer_id=5)
@@ -546,12 +547,14 @@ class TestUpdateClaimEvent:
         with stack:
             await update_claim_event(
                 1,
-                PatchClaimEventBody(category="music"),
+                PatchClaimEventBody(categories=["music", "family"]),
                 make_request(method="PATCH", path="/organizer/claims/1/event"),
                 current_organizer=organizer,
                 db=mock_db,
             )
-        mocks["apply_organizer_category"].assert_awaited_once_with(mock_db, 77, "music")
+        mocks["prepend_organizer_categories"].assert_awaited_once_with(
+            mock_db, 77, ["music", "family"], max_total=ORGANIZER_MAX_CATEGORIES
+        )
         # Categories never pin.
         assert event.pinned_fields == []
 
@@ -581,6 +584,42 @@ class TestUpdateClaimEvent:
                 )
         assert exc.value.status_code == http.HTTPStatus.BAD_REQUEST
         assert exc.value.detail == ERROR_CLAIM_EDIT_URL_DOMAIN
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "field,value",
+        [
+            ("url", "https://evil.example.com\\@fienta.ee/e/x"),
+            ("url", "https://u:p@fienta.ee/e/x"),
+            ("image_url", "https://evil.example.com\\@cdn.example/x.png"),
+        ],
+    )
+    async def test_parser_differential_url_rejected(
+        self, mock_db, make_request, make_organizer, make_event, field, value
+    ):
+        """OWASP audit M-1: urlparse reads the host after the backslash/userinfo,
+        a browser reads the host before it — such spellings are refused."""
+        from app.routers.organizer_claim_edits import PatchClaimEventBody, update_claim_event
+
+        organizer = make_organizer(organizer_id=5)
+        event = make_event()
+        event.pinned_fields = []
+        claim = _fake_claim(verification_domain="fienta.ee")
+        stack, _ = _patched(
+            own_claim_or_404=AsyncMock(return_value=claim),
+            claim_event_for_id=AsyncMock(return_value=event),
+        )
+        mock_db.scalar.side_effect = [0]
+        with stack:
+            with pytest.raises(HTTPException) as exc:
+                await update_claim_event(
+                    1,
+                    PatchClaimEventBody(**{field: value}),
+                    make_request(method="PATCH", path="/organizer/claims/1/event"),
+                    current_organizer=organizer,
+                    db=mock_db,
+                )
+        assert exc.value.status_code == http.HTTPStatus.BAD_REQUEST
 
     @pytest.mark.asyncio
     async def test_url_on_verified_domain_accepted_and_pinned(

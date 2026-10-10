@@ -6,6 +6,7 @@ from fastapi import APIRouter, Request, status
 from pydantic import BaseModel, EmailStr, Field
 
 from app.constants import (
+    CONTACT_HONEYPOT_MAX_LEN,
     CONTACT_FIELD_MIN_LEN,
     CONTACT_MESSAGE_MAX_LEN,
     CONTACT_NAME_MAX_LEN,
@@ -25,7 +26,7 @@ class ContactBody(BaseModel):
     name: str = Field(min_length=CONTACT_FIELD_MIN_LEN, max_length=CONTACT_NAME_MAX_LEN)
     email: EmailStr
     message: str = Field(min_length=CONTACT_FIELD_MIN_LEN, max_length=CONTACT_MESSAGE_MAX_LEN)
-    website: str = ""  # honeypot — real users leave this blank
+    website: str = Field("", max_length=CONTACT_HONEYPOT_MAX_LEN)  # honeypot — real users leave this blank
 
 
 @router.post("", status_code=status.HTTP_200_OK)

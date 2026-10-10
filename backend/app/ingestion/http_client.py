@@ -16,7 +16,8 @@ from collections.abc import Callable, Coroutine
 from datetime import UTC
 from email.utils import parsedate_to_datetime
 from typing import Any
-from urllib.parse import urlsplit
+import re
+from urllib.parse import urlsplit, urlunsplit
 
 import httpx
 from tenacity import (
@@ -42,6 +43,8 @@ from app.constants import (
     HTTP_RETRY_WAIT_MIN,
     HTTP_RETRY_WAIT_MULTIPLIER,
     SAFE_URL_SCHEMES,
+    SITE_LOCAL_IPV6_CIDR,
+    URL_RENDER_FORBIDDEN_RE,
     URL_SCHEME_HTTPS,
 )
 
@@ -276,6 +279,41 @@ def safe_external_url(url: str | None, source: str | None = None) -> str | None:
     return url
 
 
+_URL_RENDER_FORBIDDEN = re.compile(URL_RENDER_FORBIDDEN_RE)
+
+
+def safe_render_url(url: str | None) -> str | None:
+    """Validate a user-supplied URL that is only ever *rendered* (href/src/
+    email <img>) and return its re-serialized form, or None when unsafe.
+
+    Python's ``urlsplit``/httpx read ``https://evil.com\\@fienta.com/x`` as host
+    ``fienta.com`` while a browser (WHATWG) reads host ``evil.com`` — so any
+    host pin checked server-side can be bypassed for the *rendered* link
+    (OWASP audit M-1). Reject the ambiguity outright: backslashes, controls,
+    whitespace anywhere (and non-ASCII in the authority); http(s) only; a host; no userinfo; no
+    ``%`` in the authority; no explicit port. Storing the re-serialized URL
+    (not the raw input) keeps what we validated identical to what we render.
+    """
+    if not url or _URL_RENDER_FORBIDDEN.search(url):
+        return None
+    try:
+        parts = urlsplit(url)
+        port = parts.port
+        hostname = parts.hostname
+    except ValueError:
+        return None
+    if (
+        parts.scheme.lower() not in SAFE_URL_SCHEMES
+        or not hostname
+        or port is not None
+        or "@" in parts.netloc
+        or "%" in parts.netloc
+        or not parts.netloc.isascii()
+    ):
+        return None
+    return urlunsplit(parts)
+
+
 def normalized_hostname(url: str | None) -> str:
     """URL hostname, lowercased with any leading "www." stripped, or "" if none.
 
@@ -309,11 +347,12 @@ def host_is_allowed(hostname: str | None) -> bool:
 # event-loop asyncio (each caller reaches this via asyncio.to_thread from the
 # same loop), so a stale-by-one-TTL read is the only realistic race — no worse
 # than the TOCTOU window already documented below.
+_SITE_LOCAL_IPV6 = ipaddress.ip_network(SITE_LOCAL_IPV6_CIDR)
 _dns_verdict_cache: dict[str | None, tuple[bool, float]] = {}
 
 
 def resolves_to_private_ip(hostname: str | None) -> bool:
-    """True when hostname has no public-routable address (or fails to resolve).
+    """True when hostname has ANY non-public-routable address (or fails to resolve).
 
     Guards against DNS rebinding on an otherwise-allowlisted host (e.g. a
     misconfigured or compromised DNS record for an ALLOWED_SOURCE_HOSTS
@@ -344,19 +383,20 @@ def resolves_to_private_ip(hostname: str | None) -> bool:
     except socket.gaierror:
         verdict = True
     else:
-        verdict = True  # every resolved address was non-public, unless proven otherwise below
-        for family, _type, _proto, _canonname, sockaddr in infos:
+        # EVERY resolved address must be globally routable: httpx may connect
+        # to any answer, so a mixed public + 127.0.0.1 reply is a rebinding
+        # vector. is_global also rejects CGNAT 100.64/10 and fec0::/10, which
+        # the is_private/is_reserved family misses (OWASP audit L-2).
+        verdict = False
+        for _family, _type, _proto, _canonname, sockaddr in infos:
             ip = ipaddress.ip_address(sockaddr[0])
-            if not (
-                ip.is_private
-                or ip.is_loopback
-                or ip.is_link_local
-                or ip.is_reserved
-                or ip.is_multicast
-                or ip.is_unspecified
-            ):
-                verdict = False  # at least one public address — good enough to allow
+            if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped is not None:
+                ip = ip.ipv4_mapped
+            if not ip.is_global or ip.is_multicast or ip in _SITE_LOCAL_IPV6:
+                verdict = True
                 break
+        if not infos:
+            verdict = True
 
     _dns_verdict_cache[hostname] = (verdict, now + DNS_RESOLVE_CACHE_TTL_SECONDS)
     return verdict

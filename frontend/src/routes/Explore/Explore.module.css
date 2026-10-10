@@ -14,6 +14,15 @@
   composes: gridHeading from '../../components/shared/Page.module.css';
 }
 
+/* Filter chrome wrapper: a column below the wide band (its gap mirrors
+   Page.module.css .gridMain's, so the stack reads as before), one
+   hairline-ruled toolbar row inside it. */
+.toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
 .search {
   position: relative;
 }
@@ -30,22 +39,21 @@
 }
 
 .searchInput {
+  composes: fieldInput from '../../components/shared/Field.module.css';
   width: 100%;
+}
+
+/* Raised specificity (.search .searchInput): composed Field.module.css rules
+   can land after this file's in the bundle, so equal-specificity overrides
+   aren't safe. Only the icon padding, translucent ground and placeholder
+   tone differ from the shared field base. */
+.search .searchInput {
   padding: var(--space-0-875) var(--space-1-1) var(--space-0-875) var(--space-2-75);
-  border: var(--border-w-hair) solid var(--border);
   background: var(--bg-overlay-soft);
-  color: var(--text);
-  font-size: var(--fs-base);
-  transition: border-color var(--transition);
 }
 
-.searchInput::placeholder {
+.search .searchInput::placeholder {
   color: var(--text-soft);
-}
-
-.searchInput:focus {
-  outline: none;
-  border-color: var(--accent-border);
 }
 
 .menuRowTop {
@@ -115,6 +123,31 @@
   align-self: center;
   padding: var(--space-0-45) var(--space-4);
   font-size: var(--fs-sm);
+}
+
+/* Wide band (--bp-wide): search + switch + clusters on one row; flex-wrap
+   is the fallback when ET/RU labels outgrow it. */
+@media (min-width: 2000px) {
+  .toolbar {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-3);
+    padding-bottom: var(--space-4);
+    border-bottom: var(--rule);
+  }
+
+  .search {
+    flex: 0 1 var(--explore-search-max);
+  }
+
+  .menuRowTop {
+    justify-content: flex-start;
+  }
+
+  .menuRowBottom {
+    margin-left: auto;
+  }
 }
 
 @media (max-width: 640px) {

@@ -6,6 +6,7 @@ import { renderWithProviders } from '../../test/utils';
 
 vi.mock('../../lib/auth', () => ({
   getLocale: vi.fn(() => 'en'),
+  getStoredLocale: vi.fn(() => 'en'),
   setLocale: vi.fn(),
 }));
 
@@ -63,22 +64,42 @@ describe('EventSubmit (create)', () => {
     expect(body).toMatchObject({ title: 'Jazz Night' });
   });
 
-  it('picks a category from SelectField and submits it', async () => {
+  it('picks categories as chips and submits them as a list', async () => {
     mockPost.mockResolvedValueOnce({ id: 7, slug: 'new-event-3', status: 'published' });
     renderWithProviders(<EventSubmit />, { route: '/organizer/submit', pathPattern: '/organizer/submit' });
 
     await userEvent.type(screen.getByLabelText(/^title \(et\)$/i), 'Jazz Night');
     await userEvent.type(screen.getByLabelText(/starts/i), '2026-08-01 18:00');
 
-    await userEvent.click(screen.getByRole('button', { name: 'Category' }));
-    await userEvent.click(screen.getByRole('option', { name: 'Music' }));
+    const group = screen.getByRole('group', { name: 'Categories' });
+    await userEvent.click(within(group).getByRole('button', { name: 'Music' }));
+    await userEvent.click(within(group).getByRole('button', { name: 'Nightlife' }));
 
     await waitFor(() => expect(screen.getByRole('button', { name: /submit event/i })).not.toBeDisabled());
     await userEvent.click(screen.getByRole('button', { name: /submit event/i }));
 
     await waitFor(() => expect(mockPost).toHaveBeenCalledTimes(1));
     const [, body] = mockPost.mock.calls[0];
-    expect(body).toMatchObject({ category: 'music' });
+    expect(body).toMatchObject({ categories: ['music', 'nightlife'] });
+  });
+
+  it('ignores a fourth category once the cap is reached and allows removing one', async () => {
+    renderWithProviders(<EventSubmit />, { route: '/organizer/submit', pathPattern: '/organizer/submit' });
+    const group = screen.getByRole('group', { name: 'Categories' });
+
+    for (const name of ['Music', 'Nightlife', 'Comedy']) {
+      await userEvent.click(within(group).getByRole('button', { name }));
+    }
+    expect(screen.getByText(/3 of 3 picked/)).toBeInTheDocument();
+
+    await userEvent.click(within(group).getByRole('button', { name: 'Family' }));
+    expect(screen.getByText(/3 of 3 picked/)).toBeInTheDocument();
+    expect(within(group).getByRole('button', { name: 'Family' })).toHaveAttribute('aria-disabled', 'true');
+
+    await userEvent.click(within(group).getByRole('button', { name: 'Remove Comedy' }));
+    expect(screen.getByText(/2 of 3 picked/)).toBeInTheDocument();
+    await userEvent.click(within(group).getByRole('button', { name: 'Family' }));
+    expect(screen.getByText(/3 of 3 picked/)).toBeInTheDocument();
   });
 
   it('shows the empty marker state on a lang tab with no content', () => {
@@ -194,10 +215,8 @@ describe('EventSubmit (create)', () => {
 });
 
 describe('EventSubmit (edit)', () => {
-  it('prefills from the organizer\'s event list and submits a PATCH', async () => {
+  it('prefills from the organizer\'s single event and submits a PATCH', async () => {
     const eventsResponse = {
-      events: [
-        {
           id: 9,
           title: 'Existing Event',
           description: null,
@@ -212,11 +231,7 @@ describe('EventSubmit (edit)', () => {
           price_min: null,
           price_max: null,
           categories: [],
-        },
-      ],
-      limit: 24,
-      offset: 0,
-    };
+        };
     mockGet.mockImplementation((path: string) => {
       if (path.includes('/organizer/profile')) return Promise.resolve({ name: 'Test Organizer' });
       if (path.includes('/organizer/venues')) return Promise.resolve([]);
@@ -236,10 +251,71 @@ describe('EventSubmit (edit)', () => {
     await waitFor(() => expect(mockPatch).toHaveBeenCalledWith('/organizer/events/9', expect.objectContaining({ title: 'Existing Event' })));
   });
 
+  function editEventsResponse(categories: string[]) {
+    return {
+          id: 9, title: 'Existing Event', description: null, important_info: null,
+          starts_at: '2026-08-01T18:00:00Z', ends_at: null,
+          venue_name: null, venue_address: null, venue_id: null,
+          url: null, image_url: null, price_min: null, price_max: null,
+          categories,
+        };
+  }
+
+  function mountEdit(categories: string[]) {
+    mockGet.mockImplementation((path: string) => {
+      if (path.includes('/organizer/profile')) return Promise.resolve({ name: 'Test Organizer' });
+      if (path.includes('/organizer/venues')) return Promise.resolve([]);
+      return Promise.resolve(editEventsResponse(categories));
+    });
+    mockPatch.mockResolvedValueOnce({ id: 9, slug: 'existing-event', status: 'published' });
+    renderWithProviders(<EventSubmit />, {
+      route: '/organizer/events/9/edit',
+      pathPattern: '/organizer/events/:id/edit',
+    });
+  }
+
+  it('prefills every existing category (up to the cap) and omits them from an untouched PATCH', async () => {
+    mountEdit(['music', 'family', 'comedy', 'cinema']);
+    await screen.findByDisplayValue('Existing Event');
+
+    const group = screen.getByRole('group', { name: 'Categories' });
+    expect(within(group).getByRole('button', { name: 'Remove Music' })).toBeInTheDocument();
+    expect(within(group).getByRole('button', { name: 'Remove Family' })).toBeInTheDocument();
+    expect(within(group).getByRole('button', { name: 'Remove Comedy' })).toBeInTheDocument();
+    expect(within(group).queryByRole('button', { name: 'Remove Cinema' })).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: /save changes/i }));
+    await waitFor(() => expect(mockPatch).toHaveBeenCalledTimes(1));
+    expect(mockPatch.mock.calls[0][1]).not.toHaveProperty('categories');
+  });
+
+  it('sends the changed category set in a PATCH', async () => {
+    mountEdit(['music', 'family']);
+    await screen.findByDisplayValue('Existing Event');
+
+    const group = screen.getByRole('group', { name: 'Categories' });
+    await userEvent.click(within(group).getByRole('button', { name: 'Remove Family' }));
+    await userEvent.click(within(group).getByRole('button', { name: 'Theatre' }));
+    await userEvent.click(screen.getByRole('button', { name: /save changes/i }));
+
+    await waitFor(() => expect(mockPatch).toHaveBeenCalledTimes(1));
+    expect(mockPatch.mock.calls[0][1]).toMatchObject({ categories: ['music', 'theater'] });
+  });
+
+  it('does not send categories when the organizer clears them all', async () => {
+    mountEdit(['music']);
+    await screen.findByDisplayValue('Existing Event');
+
+    const group = screen.getByRole('group', { name: 'Categories' });
+    await userEvent.click(within(group).getByRole('button', { name: 'Remove Music' }));
+    await userEvent.click(screen.getByRole('button', { name: /save changes/i }));
+
+    await waitFor(() => expect(mockPatch).toHaveBeenCalledTimes(1));
+    expect(mockPatch.mock.calls[0][1]).not.toHaveProperty('categories');
+  });
+
   it('round-trips a formatted description into the editor and back out on save', async () => {
     const eventsResponse = {
-      events: [
-        {
           id: 10,
           title: 'Existing Event',
           description: '<p><strong>Bold</strong> description</p>',
@@ -254,11 +330,7 @@ describe('EventSubmit (edit)', () => {
           price_min: null,
           price_max: null,
           categories: [],
-        },
-      ],
-      limit: 24,
-      offset: 0,
-    };
+        };
     mockGet.mockImplementation((path: string) => {
       if (path.includes('/organizer/profile')) return Promise.resolve({ name: 'Test Organizer' });
       if (path.includes('/organizer/venues')) return Promise.resolve([]);

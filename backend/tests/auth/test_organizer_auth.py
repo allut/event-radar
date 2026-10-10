@@ -861,7 +861,7 @@ class TestGoogleLinkHardening:
         mock_db.commit = AsyncMock()
 
         with patch(
-            "app.routers.organizer_auth.send_identity_linked_notice",
+            "app.auth.email.send_identity_linked_notice",
             new_callable=AsyncMock,
         ) as mock_notice:
             await verify_organizer_magic_link(
@@ -904,7 +904,7 @@ class TestGoogleLinkHardening:
         response = Response()
 
         with patch(
-            "app.routers.organizer_auth.send_identity_linked_notice",
+            "app.auth.email.send_identity_linked_notice",
             new_callable=AsyncMock,
         ) as mock_notice:
             result = await verify_organizer_magic_link(
@@ -1014,7 +1014,7 @@ class TestGoogleLinkHardening:
             "app.routers.organizer_auth._apply_google_linking_gate",
             new=AsyncMock(return_value=("auto_linked", _organizer_row())),
         ), patch(
-            "app.routers.organizer_auth.send_identity_linked_notice",
+            "app.auth.email.send_identity_linked_notice",
             new_callable=AsyncMock,
         ) as mock_notice:
             await organizer_google_callback(

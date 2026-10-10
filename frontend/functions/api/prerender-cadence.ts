@@ -20,7 +20,10 @@
  * `/api/prerender-cadence`. Cloudflare Pages matches an exact-path function
  * ahead of any catch-all sibling — so the catch-all `/api/[[path]]`
  * backend-proxy function (#345) never claims this path, no
- * negative-lookahead exclusion needed.
+ * negative-lookahead exclusion needed. The handler is exported as `onRequest`
+ * (not `onRequestPost`) on purpose: a method-specific export lets a GET fall
+ * through to the catch-all proxy, which would forward this endpoint's secret
+ * header to the backend (OWASP audit L-8); non-POST is answered 405 here.
  */
 import { StatusCodes } from 'http-status-codes';
 import {
@@ -68,7 +71,7 @@ async function fetchTipCommitMessage(token: string | undefined): Promise<string 
   }
 }
 
-export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
+export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
   if (request.method !== 'POST') {
     return new Response(null, { status: StatusCodes.METHOD_NOT_ALLOWED });
   }

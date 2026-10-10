@@ -16,6 +16,12 @@ class TestGetEmailStyles:
         assert "#a3701e" in EMAIL_STYLES.css
 
 
+class TestBrandMark:
+    def test_brand_mark_style_is_32px_block(self):
+        assert "width:32px" in EMAIL_STYLES.s_brand_mark
+        assert "display:block" in EMAIL_STYLES.s_brand_mark
+
+
 class TestColorScheme:
     def test_declares_light_dark(self):
         assert EMAIL_STYLES.color_scheme == "light dark"

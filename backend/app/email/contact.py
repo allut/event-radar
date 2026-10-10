@@ -9,17 +9,22 @@ import html
 
 from app.config import settings
 from app.email.resend import send_resend_email
-from app.email.templates import CONTACT_HTML_BODY, CONTACT_TEXT_BODY
+from app.email.templates import (
+    CONTACT_HTML_BODY,
+    CONTACT_SUBJECT,
+    CONTACT_TEXT_BODY,
+    EMAIL_LINE_BREAK,
+)
 from app.auth.utils import mask_email
 
 
 async def send_contact_message(name: str, email: str, message: str) -> None:
     # Collapse embedded newlines so a multi-line name can't split the subject.
-    subject = f"Contact form — {' '.join(name.split())}"
+    subject = CONTACT_SUBJECT.format(name=" ".join(name.split()))
     html_body = CONTACT_HTML_BODY.format(
         name=html.escape(name),
         email=html.escape(email),
-        message=html.escape(message).replace("\n", "<br>"),
+        message=html.escape(message).replace("\n", EMAIL_LINE_BREAK),
     )
     text_body = CONTACT_TEXT_BODY.format(name=name, email=email, message=message)
 

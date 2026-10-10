@@ -14,6 +14,8 @@ import {
   CLAIM_KIND_SERIES,
   CLAIM_STATUS_APPROVED,
   CLAIM_STATUS_PENDING,
+  CLAIM_VERIFICATION_MECHANISM_FIENTA_TOKEN,
+  CLAIM_VERIFICATION_MECHANISM_PILETILEVI_MAILBOX,
   PAGE_PARAM,
   QUERY_KEYS,
   ROUTES,
@@ -263,7 +265,7 @@ export default function AdminClaims() {
                   )}
 
                   <div className={styles.evidence}>
-                    {item.verification_mechanism === 'fienta_token' ? (
+                    {item.verification_mechanism === CLAIM_VERIFICATION_MECHANISM_FIENTA_TOKEN ? (
                       <>
                         <p className={styles.evidenceLabel}>Fienta token round-trip</p>
                         <div className={styles.evidenceRow}>
@@ -287,7 +289,7 @@ export default function AdminClaims() {
                           <span className={styles.evidenceValue}>{item.proof_token}</span>
                         </div>
                       </>
-                    ) : item.verification_mechanism === 'piletilevi_mailbox' ? (
+                    ) : item.verification_mechanism === CLAIM_VERIFICATION_MECHANISM_PILETILEVI_MAILBOX ? (
                       <>
                         <p className={styles.evidenceLabel}>Contact-mailbox check</p>
                         <div className={styles.evidenceRow}>

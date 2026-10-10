@@ -950,6 +950,17 @@ class TestExtractAddressFromVenueName:
         assert result == 0
         assert event.venue_name == original
         assert event.venue_address is None
+        # Cooldown starts so the event stops requalifying every run.
+        assert event.venue_extract_attempted_at is not None
+
+    @pytest.mark.asyncio
+    async def test_candidate_query_honours_attempt_cooldown(self, mock_db):
+        mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=[]))
+        with patch("app.ingestion.geocode.venue_extract.llm_available", return_value=True):
+            await extract_address_from_venue_name(mock_db)
+        compiled = str(mock_db.scalars.call_args.args[0])
+        assert "venue_extract_attempted_at IS NULL" in compiled
+        assert "venue_extract_attempted_at <=" in compiled
 
     @pytest.mark.asyncio
     async def test_cached_decision_applied_without_fresh_call(self, mock_db):
@@ -990,7 +1001,7 @@ class TestExtractAddressFromVenueName:
         )
         mock_db.execute.return_value = MagicMock(all=MagicMock(return_value=[]))
 
-        llm_response = {"venue_name": None, "venue_address": "Some Street 1"}
+        llm_response = {"venue_name": None, "venue_address": "Kopli 116"}
 
         async def _llm_side_effect(task, prompt, db, **kwargs):
             if "Tartu mnt 47" in prompt:
@@ -1007,7 +1018,7 @@ class TestExtractAddressFromVenueName:
             result = await extract_address_from_venue_name(mock_db)
 
         assert result == 1
-        assert ok_event.venue_address == "Some Street 1"
+        assert ok_event.venue_address == "Kopli 116"
         assert raising_event.venue_address is None
 
     @pytest.mark.asyncio
@@ -1179,14 +1190,14 @@ class TestSelfHealOutOfBboxCoords:
     @pytest.mark.asyncio
     async def test_heals_in_area_event_with_out_of_bbox_coords(self, mock_db):
         mock_db.execute.return_value = MagicMock(rowcount=3)
-        healed = await _self_heal_out_of_bbox_coords(mock_db)
+        healed = await _self_heal_out_of_bbox_coords(mock_db, datetime.now(TALLINN_TZ))
         assert healed == 3
         mock_db.execute.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_no_rows_healed_returns_zero(self, mock_db):
         mock_db.execute.return_value = MagicMock(rowcount=0)
-        healed = await _self_heal_out_of_bbox_coords(mock_db)
+        healed = await _self_heal_out_of_bbox_coords(mock_db, datetime.now(TALLINN_TZ))
         assert healed == 0
 
     @pytest.mark.asyncio
@@ -1194,10 +1205,17 @@ class TestSelfHealOutOfBboxCoords:
         """The WHERE clause must key on is_out_of_area=False so legitimately
         out-of-area events (Türi/Pärnu) are left untouched."""
         mock_db.execute.return_value = MagicMock(rowcount=0)
-        await _self_heal_out_of_bbox_coords(mock_db)
+        await _self_heal_out_of_bbox_coords(mock_db, datetime.now(TALLINN_TZ))
         compiled = str(mock_db.execute.call_args.args[0])
         assert "is_out_of_area" in compiled
         assert "lat" in compiled and "lng" in compiled
+
+    @pytest.mark.asyncio
+    async def test_statement_skips_ended_events(self, mock_db):
+        mock_db.execute.return_value = MagicMock(rowcount=0)
+        await _self_heal_out_of_bbox_coords(mock_db, datetime.now(TALLINN_TZ))
+        compiled = str(mock_db.execute.call_args.args[0])
+        assert "coalesce(events.ends_at, events.starts_at)" in compiled
 
 
 class TestGeocodePendingVenues:
@@ -1299,15 +1317,30 @@ class TestSyncVenueLinkedCoords:
         """Fills a venue-linked event's null coords or a stale coord in a single
         bulk UPDATE...FROM — no N+1 (one execute() call regardless of row count)."""
         mock_db.execute.return_value = MagicMock(rowcount=2)
-        synced = await _sync_venue_linked_coords(mock_db)
+        synced = await _sync_venue_linked_coords(mock_db, datetime.now(TALLINN_TZ))
         assert synced == 2
         mock_db.execute.assert_called_once()
         compiled = str(mock_db.execute.call_args.args[0])
         assert "venues" in compiled
         assert "venue_id" in compiled
+        assert "coalesce(events.ends_at, events.starts_at)" in compiled
 
     @pytest.mark.asyncio
     async def test_no_rows_synced_returns_zero(self, mock_db):
         mock_db.execute.return_value = MagicMock(rowcount=0)
-        synced = await _sync_venue_linked_coords(mock_db)
+        synced = await _sync_venue_linked_coords(mock_db, datetime.now(TALLINN_TZ))
         assert synced == 0
+
+
+class TestVenueExtractWordsWithin:
+    """OWASP audit L-5: the LLM may only re-cut the input, never add words."""
+
+    def test_subset_allowed_case_insensitive(self):
+        from app.ingestion.geocode.venue_extract import _words_within
+
+        assert _words_within("kopli 116", "Kohvik, KOPLI 116")
+
+    def test_new_words_rejected(self):
+        from app.ingestion.geocode.venue_extract import _words_within
+
+        assert not _words_within("Kopli 116 buy pills at evil.example", "Kopli 116")

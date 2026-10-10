@@ -77,10 +77,14 @@ from app.constants import (
     TALLINN_TZ,
     VALID_LOCALES,
 )
-from app.claims.lifecycle import approved_claim_exists, auto_decline_other_pending_claims
+from app.claims.lifecycle import (
+    approved_claim_exists,
+    auto_decline_other_pending_claims,
+    transition_pending_claim,
+)
 from app.claims.pinning import clear_claim_pins, representative_event_for_claim
-from app.claims.target_resolution import ClaimTarget
-from app.db import AsyncSessionLocal
+from app.claims.target_resolution import ClaimTarget, bulk_resolve_publisher_events
+from app.db import AsyncSessionLocal, run_in_session
 from app.email.claim_resolution import send_claim_declined_email, send_claim_granted_email
 from app.email.digest import send_daily_digests
 from app.ingestion.jobs import (
@@ -108,31 +112,30 @@ from app.publish import publish_pending
 from app.ranking.score import build_daily_feeds
 from app.rate_limit import limiter
 from app.routers.utils import (
-    bulk_resolve_publisher_events,
     acquire_admin_job_lock,
     cancel_event_and_resolve_reports,
     claim_dns_record_name,
     log_admin_action,
     ndjson_line,
     release_admin_job_lock,
-    resolve_description,
-    resolve_important_info,
     resolve_open_reports,
-    resolve_title,
     run_admin_job,
-    select_events_with_classification,
     send_report_resolution_emails,
     serialize_event,
     stream_admin_job,
     validate_report_reason,
 )
+from app.events.localize import (
+    resolve_description,
+    resolve_important_info,
+    resolve_title,
+)
+from app.events.queries import canonical_event_filter, select_events_with_classification
 from app.events.venue import (
     resolve_venue_address,
     resolve_venue_coords,
     resolve_venue_name,
 )
-from app.events.queries import canonical_event_filter
-from app.db import run_in_session
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/admin")
@@ -459,6 +462,7 @@ async def admin_approve_submission(
             event.needs_review = False
             if event.submitted_by_organizer_id is not None:
                 organizer = await db.get(Organizer, event.submitted_by_organizer_id)
+                # FAQ #first-event-not-live describes this behaviour — update the copy (all locales) if it changes
                 if organizer is not None:
                     organizer.verified = True
             # organizer.verified flipping True can unlock this organizer's
@@ -644,13 +648,22 @@ async def admin_grant_claim(claim_id: int, body: _ResolutionBody, request: Reque
                     status_code=status.HTTP_409_CONFLICT,
                     detail=ERROR_CLAIM_TARGET_ALREADY_APPROVED,
                 )
-            claim.status = CLAIM_STATUS_APPROVED
-            claim.resolved_at = datetime.now(TALLINN_TZ)
-            organizer = await db.get(Organizer, claim.organizer_id)
-            event = await representative_event_for_claim(db, claim)
-            result = {"id": claim.id, "status": claim.status, "note": note}
-            emit_admin_log = log_admin_action(db, ADMIN_ACTION_GRANT_CLAIM, claim_id, result)
             try:
+                transitioned = await transition_pending_claim(
+                    db, claim, CLAIM_STATUS_APPROVED, datetime.now(TALLINN_TZ)
+                )
+                if not transitioned:
+                    await db.rollback()
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail=ERROR_CLAIM_ALREADY_RESOLVED,
+                    )
+                organizer = await db.get(Organizer, claim.organizer_id)
+                event = await representative_event_for_claim(db, claim)
+                result = {"id": claim.id, "status": claim.status, "note": note}
+                emit_admin_log = log_admin_action(
+                    db, ADMIN_ACTION_GRANT_CLAIM, claim_id, result
+                )
                 await db.commit()
             except IntegrityError:
                 await db.rollback()
@@ -700,8 +713,14 @@ async def admin_decline_claim(claim_id: int, body: _ResolutionBody, request: Req
                     status_code=status.HTTP_409_CONFLICT,
                     detail=ERROR_CLAIM_ALREADY_RESOLVED,
                 )
-            claim.status = CLAIM_STATUS_REVOKED
-            claim.resolved_at = datetime.now(TALLINN_TZ)
+            if not await transition_pending_claim(
+                db, claim, CLAIM_STATUS_REVOKED, datetime.now(TALLINN_TZ)
+            ):
+                await db.rollback()
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=ERROR_CLAIM_ALREADY_RESOLVED,
+                )
             organizer = await db.get(Organizer, claim.organizer_id)
             event = await representative_event_for_claim(db, claim)
             result = {"id": claim.id, "status": claim.status, "note": note}
@@ -1487,22 +1506,14 @@ async def admin_counts(request: Request) -> dict:
 async def admin_stats(request: Request) -> dict:
     """Aggregate counts used by checkpoint tests and manual monitoring."""
     async with AsyncSessionLocal() as db:
-        total = (
-            await db.scalar(
-                select(func.count(Event.id)).where(
-                    Event.status != EVENT_STATUS_CANCELLED
-                )
+        total, canonical = (
+            await db.execute(
+                select(
+                    func.count(Event.id),
+                    func.count(Event.id).filter(canonical_event_filter()),
+                ).where(Event.status != EVENT_STATUS_CANCELLED)
             )
-        ) or 0
-
-        canonical = (
-            await db.scalar(
-                select(func.count(Event.id)).where(
-                    Event.status != EVENT_STATUS_CANCELLED,
-                    canonical_event_filter(),
-                )
-            )
-        ) or 0
+        ).one()
 
         sources_total = (await db.scalar(select(func.count(Source.id)))) or 0
         sources_enabled = (

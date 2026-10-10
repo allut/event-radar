@@ -12,7 +12,7 @@ import hashlib
 import logging
 import time
 from datetime import datetime
-from urllib.parse import unquote, urlsplit
+from typing import Any
 from uuid import uuid4
 
 import httpx
@@ -23,8 +23,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.constants import (
-    ALLOWED_IMAGE_HOSTS,
-    CLOUDINARY_DELIVERY_PATH_TEMPLATE,
     BROWSE_MAX_PAGE_SIZE,
     BROWSE_PAGE_SIZE,
     CLOUDINARY_UPLOAD_URL_TEMPLATE,
@@ -34,7 +32,6 @@ from app.constants import (
     ERROR_EVENT_CREATE_FAILED,
     ERROR_EVENT_NOT_FOUND,
     ERROR_EVENT_URL_SCHEME,
-    ERROR_IMAGE_HOST_NOT_ALLOWED,
     ERROR_IMAGE_TOO_LARGE,
     ERROR_IMAGE_UPLOAD_FAILED,
     ERROR_IMAGE_UPLOAD_NOT_CONFIGURED,
@@ -58,6 +55,7 @@ from app.constants import (
     ORGANIZER_IMPORTANT_INFO_MAX_LEN,
     ORGANIZER_SUBMISSION_EXTERNAL_ID_PREFIX,
     ORGANIZER_TITLE_MAX_LEN,
+    URL_MAX_LEN,
     ORGANIZER_VENUE_ADDRESS_MAX_LEN,
     ORGANIZER_VENUE_NAME_MAX_LEN,
     PAGINATION_MAX_OFFSET,
@@ -73,8 +71,8 @@ from app.constants import (
 )
 from app.db import get_db
 from app.ingestion.adapter import NormalizedEvent, insert_normalized_event
-from app.ingestion.content_filters import is_explicit_text, is_non_event_text
-from app.ingestion.http_client import http_post, safe_external_url
+from app.ingestion.content_filters import content_flags
+from app.ingestion.http_client import http_post, safe_render_url
 from app.ingestion.pricing import normalize_currency
 from app.llm.classifier import classify_event
 from app.models.models import (
@@ -89,22 +87,24 @@ from app.rate_limit import limiter
 from app.auth.dependencies import get_current_organizer
 from app.routers.utils import (
     apply_moderation_flags,
-    apply_organizer_category,
     apply_price_edit,
     cancel_event_and_resolve_reports,
+    check_image_host,
+    fold_legacy_category,
     localized_dict,
     merged_localized,
     organizer_sanitize,
     own_venue_or_404,
+    replace_organizer_categories,
     resolve_locale_param,
-    select_events_with_classification,
     send_report_resolution_emails,
     serialize_event,
-    validate_category,
+    validate_categories,
     validate_price_ordering,
     validate_time_ordering,
     validate_tz_aware,
 )
+from app.events.queries import select_events_with_classification
 
 log = logging.getLogger(__name__)
 # Stays under /organizer/* deliberately: ORGANIZER_SESSION_COOKIE_PATH (app/
@@ -135,22 +135,27 @@ class SubmitEventBody(BaseModel):
     venue_name: str | None = Field(None, max_length=ORGANIZER_VENUE_NAME_MAX_LEN)
     venue_address: str | None = Field(None, max_length=ORGANIZER_VENUE_ADDRESS_MAX_LEN)
     venue_id: int | None = None
-    url: str | None = None
-    image_url: str | None = None
+    url: str | None = Field(default=None, max_length=URL_MAX_LEN)
+    image_url: str | None = Field(default=None, max_length=URL_MAX_LEN)
     price_min: float | None = Field(None, ge=0)
     price_max: float | None = Field(None, ge=0)
     currency: str | None = Field(None, max_length=ORGANIZER_CURRENCY_MAX_LEN)
-    category: str | None = None
+    categories: list[str] | None = None
 
     @field_validator("starts_at", "ends_at")
     @classmethod
     def _tz_aware(cls, v: datetime | None) -> datetime | None:
         return validate_tz_aware(v)
 
-    @field_validator("category")
+    @model_validator(mode="before")
     @classmethod
-    def _valid_category(cls, v: str | None) -> str | None:
-        return validate_category(v)
+    def _fold_legacy_category(cls, data: Any) -> Any:
+        return fold_legacy_category(data)
+
+    @field_validator("categories")
+    @classmethod
+    def _valid_categories(cls, v: list[str] | None) -> list[str] | None:
+        return validate_categories(v)
 
     @model_validator(mode="after")
     def _ordering(self) -> "SubmitEventBody":
@@ -180,22 +185,27 @@ class PatchEventBody(BaseModel):
     venue_name: str | None = Field(None, max_length=ORGANIZER_VENUE_NAME_MAX_LEN)
     venue_address: str | None = Field(None, max_length=ORGANIZER_VENUE_ADDRESS_MAX_LEN)
     venue_id: int | None = None
-    url: str | None = None
-    image_url: str | None = None
+    url: str | None = Field(default=None, max_length=URL_MAX_LEN)
+    image_url: str | None = Field(default=None, max_length=URL_MAX_LEN)
     price_min: float | None = Field(None, ge=0)
     price_max: float | None = Field(None, ge=0)
     currency: str | None = Field(None, max_length=ORGANIZER_CURRENCY_MAX_LEN)
-    category: str | None = None
+    categories: list[str] | None = None
 
     @field_validator("starts_at", "ends_at")
     @classmethod
     def _tz_aware(cls, v: datetime | None) -> datetime | None:
         return validate_tz_aware(v)
 
-    @field_validator("category")
+    @model_validator(mode="before")
     @classmethod
-    def _valid_category(cls, v: str | None) -> str | None:
-        return validate_category(v)
+    def _fold_legacy_category(cls, data: Any) -> Any:
+        return fold_legacy_category(data)
+
+    @field_validator("categories")
+    @classmethod
+    def _valid_categories(cls, v: list[str] | None) -> list[str] | None:
+        return validate_categories(v)
 
     @model_validator(mode="after")
     def _ordering(self) -> "PatchEventBody":
@@ -220,31 +230,6 @@ async def _get_user_submission_source(db: AsyncSession) -> Source:
             detail=ERROR_SUBMISSION_SOURCE_NOT_CONFIGURED,
         )
     return source
-
-
-def _check_image_host(image_url: str | None) -> None:
-    """Reject an organizer-submission image_url that isn't one of OUR signed
-    Cloudinary uploads: the host must be the delivery domain (see
-    ALLOWED_IMAGE_HOSTS) AND the path must sit under this account's
-    ``/{cloud_name}/image/upload/`` — res.cloudinary.com serves every
-    Cloudinary account (and remote-fetches other sites), so the host alone
-    would still let an arbitrary third-party image become a tracking pixel
-    once the digest embeds it as an <img> (see app/email/digest.py)."""
-    if not image_url:
-        return
-    parts = urlsplit(image_url)
-    path = unquote(parts.path)
-    cloud_name = settings.CLOUDINARY_CLOUD_NAME
-    if (
-        parts.hostname not in ALLOWED_IMAGE_HOSTS
-        or not cloud_name
-        or not path.startswith(CLOUDINARY_DELIVERY_PATH_TEMPLATE.format(cloud_name=cloud_name))
-        or ".." in path.split("/")
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=ERROR_IMAGE_HOST_NOT_ALLOWED,
-        )
 
 
 async def _own_event_or_404(
@@ -297,7 +282,13 @@ async def submit_event(
         )
 
     source = await _get_user_submission_source(db)
-    _check_image_host(body.image_url)
+    image_url = check_image_host(body.image_url)
+    url = safe_render_url(body.url)
+    if body.url and not url:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=ERROR_EVENT_URL_SCHEME,
+        )
 
     venue: Venue | None = None
     if body.venue_id is not None:
@@ -324,8 +315,8 @@ async def submit_event(
         # a user_submission source, not the host-pinned safe_fetchable_url —
         # this event.url is never fetched server-side (refetch.py excludes
         # organizer submissions), so it's render-only like image_url.
-        url=body.url,
-        image_url=body.image_url,
+        url=url,
+        image_url=image_url,
         price_min=body.price_min,
         price_max=body.price_max,
         currency=normalize_currency(body.currency, has_price),
@@ -386,9 +377,12 @@ async def submit_event(
         # prefilter therefore never scanned the venue's real text. Recheck it
         # here so a saved venue's name can't carry unmoderated explicit/
         # non-event content past the flags insert_normalized_event set.
-        if not event.is_explicit and is_explicit_text(venue.name):
+        venue_explicit, venue_non_event = content_flags(
+            None, None, venue.name, None, [venue.name_en, venue.name_ru]
+        )
+        if venue_explicit:
             event.is_explicit = True
-        if not event.is_non_event and is_non_event_text(None, venue.name):
+        if venue_non_event:
             event.is_non_event = True
     classify_ok = await classify_event(event, db)
     if not classify_ok:
@@ -396,8 +390,8 @@ async def submit_event(
         # from the normal "not yet reviewed" case; classify_pending's 6h
         # backlog drain will retry it, but this is worth surfacing in ops.
         log.warning("organizer submission event_id=%d classify failed", event.id)
-    if body.category:
-        await apply_organizer_category(db, event_id, body.category)
+    if body.categories:
+        await replace_organizer_categories(db, event_id, body.categories)
     # Single known event, verified status unchanged by this call — scope the
     # UPDATE to it and skip the reject-breakdown diagnostic (unused here, and
     # its cost grows with all-time reject history — see publish_pending()).
@@ -462,7 +456,7 @@ async def update_own_event(
         # Same scheme-only guard insert_normalized_event applies at submit
         # time — this event.url is never fetched server-side (refetch.py
         # excludes organizer submissions), so it needs no host pin.
-        safe_url = safe_external_url(body.url, SOURCE_SLUG_USER_SUBMISSION)
+        safe_url = safe_render_url(body.url)
         if body.url and not safe_url:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -470,18 +464,13 @@ async def update_own_event(
             )
         event.url = safe_url
     if "image_url" in fields_set:
-        _check_image_host(body.image_url)
-        safe_image_url = safe_external_url(body.image_url, SOURCE_SLUG_USER_SUBMISSION)
-        if body.image_url and not safe_image_url:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=ERROR_IMAGE_URL_SCHEME,
-            )
-        event.image_url = safe_image_url
+        event.image_url = check_image_host(body.image_url)
     if fields_set & {"price_min", "price_max", "currency"}:
         apply_price_edit(event, body, fields_set)
-    if "category" in fields_set and body.category is not None:
-        await apply_organizer_category(db, event.id, body.category)
+    # Empty list is a no-op: the LLM set a replace overwrote can't be restored,
+    # so an edit must never leave an event uncategorized.
+    if "categories" in fields_set and body.categories:
+        await replace_organizer_categories(db, event.id, body.categories)
     if "description" in fields_set:
         event.description_orig = organizer_sanitize(body.description)
     if "important_info" in fields_set:
@@ -522,7 +511,10 @@ async def update_own_event(
     moderated_venue_name = linked_venue.name if linked_venue else event.venue_name
 
     if apply_moderation_flags(
-        event, moderated_venue_name, event.important_info
+        event,
+        moderated_venue_name,
+        linked_venue.name_en if linked_venue else None,
+        linked_venue.name_ru if linked_venue else None,
     ) and event.status == EVENT_STATUS_PUBLISHED:
         event.status = EVENT_STATUS_CLASSIFIED
 
@@ -574,25 +566,54 @@ async def list_own_events(
         .offset(offset)
     )
     events = (await db.scalars(stmt)).all()
-    # serialize_event() is built for public read paths (published-only) and
-    # never includes status — an organizer's own dashboard needs to tell
-    # draft/classified/published/cancelled apart, so layer it on here.
     return {
-        "events": [
-            {
-                **serialize_event(e, locale=effective_locale),
-                "status": e.status,
-                "needs_review": e.needs_review,
-                "venue_id": e.venue_id,
-                "title_localized": e.title_localized,
-                "description_localized": e.description_localized,
-                "important_info_localized": e.important_info_localized,
-            }
-            for e in events
-        ],
+        "events": [_serialize_own_event(e, effective_locale) for e in events],
         "limit": limit,
         "offset": offset,
     }
+
+
+def _serialize_own_event(event: Event, locale: str) -> dict:
+    """serialize_event() is built for public read paths (published-only) and
+    never includes status — an organizer's own dashboard/edit form needs to
+    tell draft/classified/published/cancelled apart, so layer it on here.
+    Shared by the list and single-event reads so their shapes cannot drift."""
+    return {
+        **serialize_event(event, locale=locale),
+        "status": event.status,
+        "needs_review": event.needs_review,
+        "venue_id": event.venue_id,
+        "title_localized": event.title_localized,
+        "description_localized": event.description_localized,
+        "important_info_localized": event.important_info_localized,
+    }
+
+
+@router.get("/{event_id}")
+@limiter.limit(RATE_LIMIT_SUBMIT)
+async def get_own_event(
+    event_id: int,
+    request: Request,
+    locale: str | None = Query(None),
+    current_organizer: Organizer = Depends(get_current_organizer),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """One of the organizer's own submitted events, same shape as a
+    ``GET /organizer/events`` row. Feeds the edit form's prefill so any event —
+    not just the dashboard list's first page — can be edited. 404 (not 403) on
+    another organizer's event, matching PATCH/DELETE."""
+    effective_locale = resolve_locale_param(locale, current_organizer.locale)
+    event = await db.scalar(
+        select_events_with_classification().where(
+            Event.id == event_id,
+            Event.submitted_by_organizer_id == current_organizer.id,
+        )
+    )
+    if event is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=ERROR_EVENT_NOT_FOUND
+        )
+    return _serialize_own_event(event, effective_locale)
 
 
 def _cloudinary_signature(params: dict[str, str | int], api_secret: str) -> str:

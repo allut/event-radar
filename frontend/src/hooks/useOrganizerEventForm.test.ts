@@ -126,14 +126,11 @@ describe('useOrganizerEventForm — venue picker submit resolution (#178)', () =
     // present in the request at all — omitting it (as an empty body would)
     // leaves the event silently still linked to its old saved venue.
     mockGet.mockResolvedValueOnce({
-      events: [{
         id: 9, title: 'Existing Event', description: null, important_info: null,
         starts_at: '2026-08-01T18:00:00Z', ends_at: null,
         venue_name: null, venue_address: null, venue_id: 7,
         url: null, image_url: null, price_min: null, price_max: null, categories: [],
-      }],
-      limit: 24, offset: 0,
-    });
+      });
     mockPatch.mockResolvedValueOnce({ id: 9, slug: 'existing-event', status: 'published' });
     const { result } = renderHook(() => useOrganizerEventForm('en', 9), { wrapper: makeWrapper() });
     await waitFor(() => expect(result.current.venue).toEqual({ mode: 'saved', venueId: 7 }));
@@ -153,20 +150,17 @@ describe('useOrganizerEventForm — venue picker submit resolution (#178)', () =
     expect(body).toMatchObject({ venue_id: null });
   });
 
-  it('sends locale= on the edit-mode prefill list request (#454)', async () => {
+  it('sends locale= on the edit-mode single-event prefill request (#454)', async () => {
     mockGet.mockResolvedValueOnce({
-      events: [{
         id: 9, title: 'Existing Event', description: null, important_info: null,
         starts_at: '2026-08-01T18:00:00Z', ends_at: null,
         venue_name: null, venue_address: null, venue_id: 7,
         url: null, image_url: null, price_min: null, price_max: null, categories: [],
-      }],
-      limit: 24, offset: 0,
-    });
+      });
     renderHook(() => useOrganizerEventForm('ru', 9), { wrapper: makeWrapper() });
 
     await waitFor(() => expect(mockGet).toHaveBeenCalled());
-    expect(mockGet).toHaveBeenCalledWith(expect.stringMatching(/\/organizer\/events\?.*[?&]locale=ru/));
+    expect(mockGet).toHaveBeenCalledWith('/organizer/events/9?locale=ru');
   });
 });
 
@@ -176,8 +170,6 @@ describe('useOrganizerEventForm — edit-mode prefill', () => {
     // in the list response are English-resolved — but the ET form slot must
     // still show the Estonian base text from title_localized.et.
     mockGet.mockResolvedValueOnce({
-      events: [
-        {
           id: 9,
           title: 'English Display Title',
           description: 'English Display Description',
@@ -194,11 +186,7 @@ describe('useOrganizerEventForm — edit-mode prefill', () => {
           title_localized: { et: 'Eesti Pealkiri', en: 'English Title' },
           description_localized: { et: 'Eesti Kirjeldus', en: 'English Desc' },
           important_info_localized: { et: 'Eesti Info' },
-        },
-      ],
-      limit: 24,
-      offset: 0,
-    });
+        });
 
     const { result } = renderHook(() => useOrganizerEventForm('en', 9), { wrapper: makeWrapper() });
 
@@ -213,8 +201,6 @@ describe('useOrganizerEventForm — edit-mode prefill', () => {
 
   it('prefills the picker in saved mode when the event has a venue_id', async () => {
     mockGet.mockResolvedValueOnce({
-      events: [
-        {
           id: 9,
           title: 'Existing Event',
           description: null,
@@ -229,11 +215,7 @@ describe('useOrganizerEventForm — edit-mode prefill', () => {
           price_min: null,
           price_max: null,
           categories: [],
-        },
-      ],
-      limit: 24,
-      offset: 0,
-    });
+        });
 
     const { result } = renderHook(() => useOrganizerEventForm('en', 9), { wrapper: makeWrapper() });
 

@@ -1,3 +1,4 @@
+import { storageGet, storageSet, storageRemove } from './storage';
 import { ORGANIZER_SIGNED_IN_HINT_KEY, LOGOUT_FLAG_TTL_MS } from '../constants';
 
 // Parallel session store to lib/auth.ts's consumer track — separate listener
@@ -22,14 +23,14 @@ export function subscribeOrganizerAuth(cb: () => void): () => void {
 // so isAuthenticatedOrganizer() can answer synchronously at first paint.
 export function setOrganizerSignedInHint(): void {
   organizerLoggingOut = false;
-  localStorage.setItem(ORGANIZER_SIGNED_IN_HINT_KEY, '1');
+  storageSet(ORGANIZER_SIGNED_IN_HINT_KEY, '1');
   emitOrganizerAuthChange();
 }
 export function clearOrganizerSignedInHint(): void {
-  localStorage.removeItem(ORGANIZER_SIGNED_IN_HINT_KEY);
+  storageRemove(ORGANIZER_SIGNED_IN_HINT_KEY);
   emitOrganizerAuthChange();
 }
-export function isAuthenticatedOrganizer(): boolean { return localStorage.getItem(ORGANIZER_SIGNED_IN_HINT_KEY) !== null; }
+export function isAuthenticatedOrganizer(): boolean { return storageGet(ORGANIZER_SIGNED_IN_HINT_KEY) !== null; }
 
 // Mirrors lib/auth.ts's loggingOut flag — see that file for the full
 // rationale (cache-clear race on a same-path logout must not trigger a

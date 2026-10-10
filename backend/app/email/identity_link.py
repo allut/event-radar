@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import html as html_lib
 
+from app.email.brand import brand_mark_html
 from app.email.styles import get_email_styles
 from app.email.templates import (
     ACCOUNT_NOTICE_BODY,
@@ -42,7 +43,10 @@ def _document(header_html: str, content_html: str) -> str:
 def _header(heading: str) -> str:
     s = get_email_styles()
     return MAGIC_LINK_HEADER.format(
-        s_eyebrow=s.s_eyebrow, s_h1=s.s_h1, heading=html_lib.escape(heading)
+        brand_mark_html=brand_mark_html(s),
+        s_eyebrow=s.s_eyebrow,
+        s_h1=s.s_h1,
+        heading=html_lib.escape(heading),
     )
 
 

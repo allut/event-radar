@@ -74,7 +74,7 @@ export default function AdminDedup() {
         ) : isError ? (
           <PageState kind={UI_STATE.error} message="Couldn't load dedup groups." inline />
         ) : groups.length === 0 ? (
-          <EmptyState title="No dedup groups" message="Nothing flagged as a duplicate right now." />
+          <EmptyState admin title="No dedup groups" message="Nothing flagged as a duplicate right now." />
         ) : (
           <>
             <p className={styles.subtitle}>

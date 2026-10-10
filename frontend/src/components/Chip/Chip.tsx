@@ -14,7 +14,7 @@ interface ChipProps {
   ariaLabel: string;
 }
 
-/** Generic multi-select pill group — modeled on LocaleSelector's pill pattern.
+/** Generic multi-select pill group — joined-pill pattern.
  * Used for category/vibe facets on /explore. */
 export default function Chip({ options, selected, onToggle, ariaLabel }: ChipProps) {
   // Explore's category facet renders 14x14 options.includes(selected) per

@@ -2,11 +2,12 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { organizerApi, ApiError } from '../../api/client';
 import { setOrganizerSignedInHint } from '../../lib/organizerAuth';
-import { getLocale } from '../../lib/auth';
 import { API, AUTH_REDIRECT_DELAY_MS, AUTH_TOKEN_PARAM, ROUTES, UI_STATE, VERIFY_STATE_TO_KIND, type VerifyState } from '../../constants';
 import { t } from '../../i18n';
+import { useDelayedAction } from '../../hooks/useDelayedAction';
 import { useLocaleNavigate } from '../../hooks/useLocaleNavigate';
 import { useLocalePath } from '../../hooks/useLocalePath';
+import { usePathLocale } from '../../hooks/usePathLocale';
 import { useStaticSeoMeta } from '../../hooks/useStaticSeoMeta';
 import AuthCard from '../../components/AuthCard';
 import SeoTags from '../../components/SeoTags';
@@ -25,7 +26,7 @@ interface ClaimLinkVerifyResponse {
  * device-mismatch requirement). Signs the organizer in AND creates the claim
  * in the same request, then lands pre-selected on #415's pending screen. */
 export default function OrganizerClaimVerify() {
-  const locale = getLocale();
+  const locale = usePathLocale();
   const seoMeta = useStaticSeoMeta('organizer_claim_pending_title', locale);
   const [searchParams] = useSearchParams();
   const navigate = useLocaleNavigate();
@@ -40,6 +41,7 @@ export default function OrganizerClaimVerify() {
   // dashboard, now signed in, to claim it again with a reason.
   const [needsJustification, setNeedsJustification] = useState(false);
   const called = useRef(false);
+  const scheduleRedirect = useDelayedAction();
 
   useEffect(() => {
     if (!token) return;
@@ -64,9 +66,9 @@ export default function OrganizerClaimVerify() {
           return;
         }
         // `claim` (not `result.claim`) below — TS doesn't carry a property
-        // access's narrowing into a closure created later (the setTimeout
+        // access's narrowing into a closure created later (the scheduleRedirect
         // callback), only a plain local binding's.
-        setTimeout(
+        scheduleRedirect(
           () => navigate(ROUTES.organizerClaimPending(claim.id), { replace: true }),
           AUTH_REDIRECT_DELAY_MS,
         );
@@ -80,7 +82,7 @@ export default function OrganizerClaimVerify() {
       }
     }
     void verify(token);
-  }, [navigate, token, locale, localePath]);
+  }, [navigate, token, locale, localePath, scheduleRedirect]);
 
   const message =
     state === UI_STATE.verifying ? t('verifying', locale)

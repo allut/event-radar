@@ -14,7 +14,7 @@ from datetime import date, datetime, timedelta
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from sqlalchemy import and_, ColumnElement, func, literal, or_, select, true, tuple_
+from sqlalchemy import ColumnElement, func, literal, or_, select, true, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import load_only, selectinload
 
@@ -51,9 +51,11 @@ from app.constants import (
 from app.db import get_db
 from app.models.models import Event, EventClassification, User, UserEventFeedback, UserPersona
 from app.ranking.score import (
+    AffinityCache,
     FeedbackContext,
     anonymous_score_event,
     persona_affinity,
+    persona_weight_tuple,
     score_event,
 )
 from app.rate_limit import limiter
@@ -64,15 +66,15 @@ from app.routers.utils import (
     escape_ilike_pattern,
     load_user_reported_events,
     load_user_signals,
-    persona_weight_tuple,
     resolve_locale_param,
-    select_events_with_classification,
     serialize_event,
 )
 from app.events.queries import (
     canonical_event_filter,
+    event_date_range_filter,
     event_not_ended_filter,
     public_event_filter,
+    select_events_with_classification,
 )
 
 router = APIRouter(tags=["browse"])
@@ -103,28 +105,6 @@ def _keyword_filter(q: str) -> ColumnElement[bool]:
     )
 
 
-def _date_range_filter(
-    date_from: date | None, date_to: date | None
-) -> ColumnElement[bool] | None:
-    """Overlap check, not starts_at-only: an ongoing exhibition that started
-    last month must still match a "Today" filter. Bounds are Tallinn-midnight
-    datetimes; date_to is exclusive (next-day midnight)."""
-    if date_from is None and date_to is None:
-        return None
-    conditions: list[ColumnElement[bool]] = []
-    if date_to is not None:
-        date_to_end = datetime.combine(
-            date_to + timedelta(days=1), datetime.min.time(), tzinfo=TALLINN_TZ
-        )
-        conditions.append(Event.starts_at < date_to_end)
-    if date_from is not None:
-        date_from_start = datetime.combine(
-            date_from, datetime.min.time(), tzinfo=TALLINN_TZ
-        )
-        conditions.append(func.coalesce(Event.ends_at, Event.starts_at) >= date_from_start)
-    return and_(*conditions)
-
-
 def _facet_conditions(
     categories: list[str],
     vibes: list[str],
@@ -147,7 +127,7 @@ def _facet_conditions(
         conds.append(_free_filter())
     if q:
         conds.append(_keyword_filter(q))
-    date_cond = _date_range_filter(date_from, date_to)
+    date_cond = event_date_range_filter(date_from, date_to)
     if date_cond is not None:
         conds.append(date_cond)
     return conds
@@ -288,9 +268,9 @@ async def _load_feedback_context(
                 UserEventFeedback.created_at >= cutoff,
             )
             .options(
-                selectinload(UserEventFeedback.event).selectinload(
-                    Event.classification
-                )
+                selectinload(UserEventFeedback.event)
+                .load_only(Event.id, Event.dedup_group_id)
+                .selectinload(Event.classification)
             )
         )
     ).all()
@@ -418,13 +398,22 @@ async def _score_and_rank_candidates(
         fb_ctx = None
         disliked_categories = frozenset()
 
+    # Request-scoped memo shared by score_event() and the for-you affinity
+    # filter below — the persona vectors outlive the loop, so id()-keying is safe.
+    affinity_cache: AffinityCache = {}
     survivors: list[tuple[float | None, Event]] = []
     for event in candidates:
         cl = event.classification
         categories = cl.categories if cl else []
         vibes = cl.vibes if cl else []
         if fb_ctx is not None:
-            s = score_event(user_persona_weights, fb_ctx, event, now)
+            s = score_event(
+                user_persona_weights,
+                fb_ctx,
+                event,
+                now,
+                affinity_cache=affinity_cache,
+            )
         else:
             s = anonymous_score_event(event, now)
 
@@ -440,7 +429,9 @@ async def _score_and_rank_candidates(
             # event isn't hidden from For-you just because it falls outside the
             # user's usual time-of-day/day-of-week pattern — score_event() still
             # weighs that signal for *ranking* the survivors.
-            affinity = persona_affinity(user_persona_weights, categories, vibes)
+            affinity = persona_affinity(
+                user_persona_weights, categories, vibes, cache=affinity_cache
+            )
             if affinity < BROWSE_FORYOU_MIN_AFFINITY:
                 continue
             survivors.append((s, event))

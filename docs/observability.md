@@ -30,10 +30,10 @@ Every shipped line is one JSON object (`JsonLogFormatter`):
 | `job_run` | scheduled job completed/failed (carries `job`, `status`, `duration_ms`) | `app/main.py::_scheduled` |
 | `rate_limit_block` | own per-IP 429 rejection (carries `path`) | `app/rate_limit.py` |
 | `llm_degraded` | LLM provider chain exhausted, or classify/dedup backlog deferred | `app/llm/router.py`, `app/ingestion/jobs.py` |
-| `auth_failed` | magic-link / admin-basic / claim-intent-link auth rejected | `app/routers/auth.py`, `organizer_auth.py`, `organizer_claims.py`, `admin.py` |
+| `auth_failed` | magic-link / admin-console login / claim-intent-link auth rejected | `app/routers/auth.py`, `organizer_auth.py`, `organizer_claims.py`, `app/auth/admin_lockout.py` |
 | `webhook_rejected` | inbound-mail bad signature / bad body | `app/routers/webhooks.py` |
 | `report_submitted` | `POST /reports` succeeded | `app/routers/reports.py` |
-| `email_send_failed` | a Resend send failed (magic link, digest, contact, report notify/reporter, claim resolution) | `app/auth/email.py`, `app/email/{digest,contact,report_notify,report_reporter,claim_resolution}.py`, `app/claims/lifecycle.py`, `app/routers/admin.py`, `app/routers/utils.py` |
+| `email_send_failed` | a Resend send failed (magic link, digest, contact, report notify/reporter, claim resolution) | `app/email/resend.py::send_resend_email` (every request-path send), `app/email/digest.py`, `app/claims/lifecycle.py`, `app/routers/admin.py`, `app/routers/utils.py` |
 | `admin_action` | console-initiated admin action — audit trail; carries `action`, one of 19 `ADMIN_ACTION_*` values (`app/constants.py`) | `app/routers/admin_auth.py`, `app/routers/utils.py` |
 | `contact_honeypot_block` | contact-form honeypot field tripped (bot signal) | `app/routers/contact.py` |
 | `host_rejected` | `HostCheckMiddleware` rejected a request's Host header — signals cache-poisoning/host-spoofing probes | `app/main.py` |
@@ -106,8 +106,11 @@ going quiet (app down **or** shipping broken).
 
 - **Field emission (local):** run the backend with `APP_ENV=production` and
   `LOG_SHIP_URL` pointed at a [webhook.site](https://webhook.site) bin (+ any
-  `LOG_SHIP_TOKEN`), then `POST /admin/build-feeds`. Confirm the shipped JSON
-  carries `event`, `job`, `status`, `duration_ms`. Hammer a rate-limited route
+  `LOG_SHIP_TOKEN`) and `ENABLE_SCHEDULER` on, then let a scheduled job fire
+  (hourly ingest is the shortest wait). Confirm the shipped JSON carries
+  `event`, `job`, `status`, `duration_ms`. Only `_scheduled` jobs emit
+  `job_run` — an admin-console trigger (`POST /admin/build-feeds`) emits
+  `admin_action` instead. Hammer a rate-limited route
   and confirm an `event="rate_limit_block"` line ships.
 - **Axiom:** confirm the new fields appear as columns on the dataset; run each
   monitor's APL as a query and check it returns the expected rows.
