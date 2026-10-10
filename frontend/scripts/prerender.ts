@@ -22,7 +22,7 @@
  * Fails loudly (non-zero exit) if the published-events fetch fails, if
  * Playwright can't reach/render any target route, or if the validation gate
  * finds a structural/staleness issue — see
- * docs/frontend.md "SEO: meta tags, structured data, prerendering".
+ * docs/seo.md "Build-Time Prerender".
  * `npm run build` copies dist/index.html to dist/app-shell.html *before*
  * invoking this script (not inside it) so the SPA-fallback rewrite
  * target exists even if this script never runs to completion.

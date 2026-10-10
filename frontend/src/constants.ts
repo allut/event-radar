@@ -492,7 +492,7 @@ export const CHAIN_STALENESS_TIMEOUT_MINUTES = 30;
 // manifest lives — one burst's index + content objects sit at
 // `${CHAIN_STATE_PREFIX}${sanitizedBurstId}/...`. Parallel optimization
 // layer to the CHAIN_MARKER_PREFIX git-commit flow above, not a replacement
-// — see docs/frontend.md "SEO: meta tags, structured data, prerendering".
+// — see docs/seo.md "Chain-State Manifest (R2)".
 export const CHAIN_STATE_PREFIX = 'prerender-chain-state/';
 // R2 bucket lifecycle rule expiring everything under CHAIN_STATE_PREFIX
 // after this many days — a crash backstop, comfortably past

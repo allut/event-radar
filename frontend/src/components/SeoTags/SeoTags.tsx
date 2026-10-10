@@ -8,7 +8,7 @@ import { serializeJsonLd } from '../../lib/jsonLd';
  * built by src/lib/structuredData.ts's builder functions — issue #49) via
  * react-helmet-async. Kept as a thin, untested render shell — the tag/link/
  * JSON-LD data it renders is what useSeoMeta/buildSeoMeta's and the
- * structured-data builders' own unit tests cover (see docs/frontend.md).
+ * structured-data builders' own unit tests cover (see docs/seo.md "Meta Tags").
  *
  * memo'd + the JSON-LD serialization is useMemo'd: callers like Explore
  * already memoize `jsonLd` itself, but without memo here every keystroke in
