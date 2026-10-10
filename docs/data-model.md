@@ -34,3 +34,16 @@ What's in here: every key database table and what its columns mean. Read this be
 - `llm_calls` — per-call LLM log + content-hash cache (`task`, `event_id`, `content_hash`, `provider`, `model`, token counts, `response_json`); the dedup/classification/venue-extract cache lookups key off `content_hash`. Pruned after `LLM_CALLS_RETENTION_DAYS` (see `docs/backend-ops.md`'s retention table).
 - `ingestion_runs` — one row per adapter run (`source_id`, `started_at`/`finished_at`, `raw_count`/`new_count`, `error` — set from the propagated adapter exception, see `docs/conventions.md`'s Error visibility).
 - `raw_inbound_emails` — stored newsletter-inbound webhook payloads (`from_addr`/`to_addr`/`subject`/`raw_payload`, `received_at`/`processed_at`); dormant path, see `docs/pipeline.md`'s Newsletter inbound.
+
+## Migrations
+
+- **Chain `down_revision` to the previous revision**, and keep each migration small and reversible. CI round-trips the whole chain and runs `alembic check` (see `docs/backend-ops.md`'s CI section).
+- **Before creating a unique index, add a defensive `DELETE`** that keeps the smallest `id` per key. Historical duplicates exist even where the application now prevents them; `event_sources(source_id, external_id)` in `0007` was the first case.
+
+## Connection Pooling
+
+- **`app/db.py` sets `pool_pre_ping=True` and `pool_recycle=DB_POOL_RECYCLE_SECONDS`** (280s, under Neon's 5-minute idle suspend). The pool then never hands out a connection the server has already dropped.
+
+## Serializer Rules
+
+- **Resolve venue fields through `app/events/venue.py`:** `resolve_venue_name()`, `resolve_venue_address()` and `resolve_venue_coords()`. A venue-linked event leaves `venue_name`/`venue_address` NULL, so a serializer that reads the columns directly shows a blank venue.

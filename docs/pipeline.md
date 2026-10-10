@@ -65,3 +65,17 @@ Mirrors the NSFW three-layer pattern for listings that are not real attendable e
 1. **Ingest-time keyword prefilter** — `app/ingestion/content_filters.py::is_non_event_text()` matches `NON_EVENT_TITLE_KEYWORDS` against the **title only** (descriptions mention "gift cards available" as a payment option — false positive) and `NON_EVENT_VENUE_KEYWORDS` (online/онлайн/veebis/mamaonline) against `venue_name`, setting `Event.is_non_event`. Flagged events skip the LLM classification call (like `is_explicit`) but still advance to `classified`.
 2. **LLM classification flag** — `app/llm/classifier.py` asks the model for a `non_event` boolean, OR-merged into `Event.is_non_event` (never un-sets a layer-1 flag). In-person workshops/trainings with a set time are explicitly NOT non-events.
 3. **Publish gate + read paths** — blocked at the publish gate (§6 above), `fail_non_event`; the Daily 5 candidate query (`ranking/score.py`), feed hydration (`routers/feed.py`), event detail (`routers/events.py`), and the email digest event query (`email/digest.py`) all filter it as defense-in-depth. The detail-refetch sync (`ingestion/refetch.py`) re-runs `is_non_event_text()` after a `venue_name` change (mirroring its `is_explicit` re-check) and demotes a newly-flagged published event.
+
+## Feedback Decay
+
+- **Feedback decays as `FEEDBACK_DECAY_BASE ** days_since_feedback`** (0.9 per day, `app/ranking/score.py`). Recent signals weigh more than old ones.
+- **A dislike is a hard exclude, not a negative weight.** The Daily 5 builder skips a disliked event and every event in its dedup group (`SCORE_HARD_EXCLUDE`).
+
+## Pipeline Code Rules
+
+- **New HTML-scraped sources subclass `HtmlListingAdapter`** (`app/ingestion/sources/html_base.py`). It owns pagination, parsing, dedup and detail fetches, so an adapter supplies only its selectors and field mapping.
+- **Locale discovery lives in `app/ingestion/locale_urls.py`.** Per-locale page discovery and `fetch_locale_variants` are shared by `html_base.py`, `fienta.py` and `refetch.py`. Reuse them instead of writing hreflang logic in an adapter.
+- **`app/ingestion/html_utils.py` holds the low-level BeautifulSoup helpers** such as `attr_str`. They sit apart from `html_base.py` to avoid a circular import with `locale_urls.py`.
+- **`fetch_raw()` lets HTTP failures propagate to `SourceAdapter.run()`.** That is how `IngestionRun.error` and `source.last_status` get set. A swallowed exception makes a failed scrape look like a clean, empty run.
+- **Filter LLM classification output against `VALID_CATEGORIES`/`VALID_VIBES` before persisting.** Unknown values are dropped silently (`app/llm/classifier.py::_parse_classification()`).
+- **Dedup's time-window check stays in SQL; the fuzzy check stays in Python.** `app/dedup/rules.py::candidate_pair_ids_in_window()` pre-filters pairs with a sargable `BETWEEN` self-join. `run_dedup_pass` and `run_dedup_pass_llm` both consume it, and `is_candidate_pair` runs only on the pairs it returns.

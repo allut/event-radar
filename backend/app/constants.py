@@ -702,7 +702,7 @@ DEDUP_CANDIDATE_PAIR_MAX = 50_000
 RESEND_SEND_URL = "https://api.resend.com/emails"
 RESEND_TIMEOUT_SECONDS: float = 10.0
 RESEND_ERROR_SNIPPET_LEN = 200
-# Scheduler cadence (see CLAUDE.md "Architecture" for the full cron schedule)
+# Scheduler cadence (see docs/backend-ops.md "Scheduled Jobs" for the full cron schedule)
 ORGANIZER_SYNC_HOUR = 3  # weekly Sunday 03:00 Europe/Tallinn
 ORGANIZER_SYNC_MINUTE = 0
 CLEANUP_HOUR = 3  # weekly Sunday 03:30 Europe/Tallinn, after organizer sync

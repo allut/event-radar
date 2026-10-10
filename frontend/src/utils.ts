@@ -908,7 +908,7 @@ export function activeFacetCount(filters: ExploreFilters): number {
 }
 
 /** English-only ("just now" / "3h ago" / "2d ago") — admin console is
- * deliberately exempt from the shared/i18n workflow (see CLAUDE.md). */
+ * deliberately exempt from the shared/i18n workflow (see docs/frontend.md "Frontend Structure"). */
 export function relativeTimeFromNow(iso: string): string {
   const hours = Math.round((Date.now() - new Date(iso).getTime()) / MS_PER_HOUR);
   if (hours < 1) return 'just now';

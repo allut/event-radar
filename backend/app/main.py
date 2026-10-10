@@ -211,7 +211,7 @@ _run_expire_stale_claims = _scheduled(
 
 
 def _register_scheduled_jobs(scheduler: AsyncIOScheduler) -> None:
-    """Wire the full cron schedule (see CLAUDE.md "Architecture" for the cadence)."""
+    """Wire the full cron schedule (see docs/backend-ops.md "Scheduled Jobs" for the cadence)."""
     # Organizer discovery — weekly Sunday 03:00 EET
     scheduler.add_job(
         _run_organizer_sync,

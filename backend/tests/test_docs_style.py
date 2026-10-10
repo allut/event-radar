@@ -19,7 +19,6 @@ REPO = Path(__file__).parent.parent.parent
 # (never from the pointer test). Each rewrite removes its doc in the same commit;
 # the list only shrinks.
 NOT_YET_REWRITTEN = {
-    "CLAUDE.md",
     "README.md",
     "docs/backend-ops.md",
     "docs/conventions.md",
@@ -199,7 +198,11 @@ def _code_files() -> list[str]:
     return [
         f
         for f in result.stdout.splitlines()
-        if not f.endswith(".md") and not f.startswith("docs/") and "/_generated/" not in f
+        if not f.endswith(".md")
+        and not f.startswith("docs/")
+        and "/_generated/" not in f
+        # This guard names the docs as string literals, which read as pointers.
+        and f != "backend/tests/test_docs_style.py"
     ]
 
 
