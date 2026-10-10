@@ -897,9 +897,9 @@ async def _load_feed_build_context(
                 ),
             )
             .options(
-                selectinload(UserEventFeedback.event).selectinload(
-                    Event.classification
-                )
+                selectinload(UserEventFeedback.event)
+                .load_only(Event.id, Event.dedup_group_id)
+                .selectinload(Event.classification)
             )
         )
     ).all()

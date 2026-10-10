@@ -1179,14 +1179,14 @@ class TestSelfHealOutOfBboxCoords:
     @pytest.mark.asyncio
     async def test_heals_in_area_event_with_out_of_bbox_coords(self, mock_db):
         mock_db.execute.return_value = MagicMock(rowcount=3)
-        healed = await _self_heal_out_of_bbox_coords(mock_db)
+        healed = await _self_heal_out_of_bbox_coords(mock_db, datetime.now(TALLINN_TZ))
         assert healed == 3
         mock_db.execute.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_no_rows_healed_returns_zero(self, mock_db):
         mock_db.execute.return_value = MagicMock(rowcount=0)
-        healed = await _self_heal_out_of_bbox_coords(mock_db)
+        healed = await _self_heal_out_of_bbox_coords(mock_db, datetime.now(TALLINN_TZ))
         assert healed == 0
 
     @pytest.mark.asyncio
@@ -1194,10 +1194,17 @@ class TestSelfHealOutOfBboxCoords:
         """The WHERE clause must key on is_out_of_area=False so legitimately
         out-of-area events (Türi/Pärnu) are left untouched."""
         mock_db.execute.return_value = MagicMock(rowcount=0)
-        await _self_heal_out_of_bbox_coords(mock_db)
+        await _self_heal_out_of_bbox_coords(mock_db, datetime.now(TALLINN_TZ))
         compiled = str(mock_db.execute.call_args.args[0])
         assert "is_out_of_area" in compiled
         assert "lat" in compiled and "lng" in compiled
+
+    @pytest.mark.asyncio
+    async def test_statement_skips_ended_events(self, mock_db):
+        mock_db.execute.return_value = MagicMock(rowcount=0)
+        await _self_heal_out_of_bbox_coords(mock_db, datetime.now(TALLINN_TZ))
+        compiled = str(mock_db.execute.call_args.args[0])
+        assert "coalesce(events.ends_at, events.starts_at)" in compiled
 
 
 class TestGeocodePendingVenues:
@@ -1299,15 +1306,16 @@ class TestSyncVenueLinkedCoords:
         """Fills a venue-linked event's null coords or a stale coord in a single
         bulk UPDATE...FROM — no N+1 (one execute() call regardless of row count)."""
         mock_db.execute.return_value = MagicMock(rowcount=2)
-        synced = await _sync_venue_linked_coords(mock_db)
+        synced = await _sync_venue_linked_coords(mock_db, datetime.now(TALLINN_TZ))
         assert synced == 2
         mock_db.execute.assert_called_once()
         compiled = str(mock_db.execute.call_args.args[0])
         assert "venues" in compiled
         assert "venue_id" in compiled
+        assert "coalesce(events.ends_at, events.starts_at)" in compiled
 
     @pytest.mark.asyncio
     async def test_no_rows_synced_returns_zero(self, mock_db):
         mock_db.execute.return_value = MagicMock(rowcount=0)
-        synced = await _sync_venue_linked_coords(mock_db)
+        synced = await _sync_venue_linked_coords(mock_db, datetime.now(TALLINN_TZ))
         assert synced == 0

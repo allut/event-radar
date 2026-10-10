@@ -852,9 +852,7 @@ class TestOrganizerSharedHelpers:
         event = make_event(title="Nice concert")
         event.is_explicit = False
         event.is_non_event = False
-        with patch("app.routers.utils.is_explicit_text", return_value=True), patch(
-            "app.routers.utils.is_non_event_text", return_value=False
-        ):
+        with patch("app.routers.utils.content_flags", return_value=(True, False)):
             assert apply_moderation_flags(event, "Hall", "extra") is True
 
         assert event.is_explicit is True

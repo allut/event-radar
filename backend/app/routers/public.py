@@ -25,6 +25,7 @@ from app.constants import (
     SHOWCASE_FALLBACK_WINDOW_DAYS,
     SHOWCASE_WINDOW_DAYS,
     TALLINN_TZ,
+    VALID_LOCALES,
 )
 from app.db import get_db
 from app.models.models import Event, EventClassification, Venue
@@ -96,7 +97,10 @@ def _showcase_stmt(now: datetime) -> Select[tuple[Event]]:
 _showcase_cache: dict[str, tuple[float, dict]] = {}
 
 
-async def _load_showcase(db: AsyncSession, locale: str, now: datetime) -> dict:
+async def _load_showcase(db: AsyncSession, now: datetime) -> dict[str, dict]:
+    """One window query + collapse + sort, serialized for every locale — the
+    ranking is locale-independent, so loading per locale would repeat the
+    same 60-day hydrate once per cold cache entry."""
     events = list((await db.scalars(_showcase_stmt(now))).all())
     collapsed, _ = collapse_series_duplicates(events)
 
@@ -117,7 +121,10 @@ async def _load_showcase(db: AsyncSession, locale: str, now: datetime) -> dict:
 
     collapsed.sort(key=_sort_key)
     events = collapsed[:SHOWCASE_EVENT_COUNT]
-    return {"events": [serialize_event(e, locale=locale) for e in events]}
+    return {
+        loc: {"events": [serialize_event(e, locale=loc) for e in events]}
+        for loc in VALID_LOCALES
+    }
 
 
 @router.get("/showcase")
@@ -159,9 +166,10 @@ async def showcase(
         return cached[1]
 
     now = datetime.now(TALLINN_TZ)
-    payload = await _load_showcase(db, locale, now)
-    _showcase_cache[locale] = (now_monotonic, payload)
-    return payload
+    payloads = await _load_showcase(db, now)
+    for loc, loc_payload in payloads.items():
+        _showcase_cache[loc] = (now_monotonic, loc_payload)
+    return payloads[locale]
 
 
 # Process-local TTL cache — single dict entry, keyed by locale, since the payload

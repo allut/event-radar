@@ -60,6 +60,7 @@ from app.constants import (
     VALID_REPORT_REASONS,
 )
 from app.auth.utils import mask_email
+from app.events.queries import event_not_ended_filter
 from app.events.localize import (
     resolve_description,
     resolve_important_info,
@@ -73,7 +74,7 @@ from app.events.venue import (
 )
 from app.email.report_reporter import send_report_outcome_email
 from app.email.resend import resend_http_client
-from app.ingestion.content_filters import is_explicit_text, is_non_event_text
+from app.ingestion.content_filters import content_flags
 from app.ingestion.pricing import normalize_currency
 from app.ingestion.sanitize import sanitize_html
 from app.models.models import (
@@ -884,13 +885,15 @@ def apply_moderation_flags(
     texts (e.g. ``important_info``) join the explicit scan. Returns True when
     either flag was newly set, so the caller can pull a published event back
     to classified."""
+    extras = " ".join(t for t in extra_explicit_texts if t) or None
+    is_explicit, is_non_event = content_flags(
+        event.title_orig, event.description_orig, venue_name, extras
+    )
     flagged = False
-    if not event.is_explicit and is_explicit_text(
-        event.title_orig, event.description_orig, venue_name, *extra_explicit_texts
-    ):
+    if is_explicit and not event.is_explicit:
         event.is_explicit = True
         flagged = True
-    if not event.is_non_event and is_non_event_text(event.title_orig, venue_name):
+    if is_non_event and not event.is_non_event:
         event.is_non_event = True
         flagged = True
     return flagged
@@ -908,7 +911,9 @@ async def remoderate_venue_linked_events(db: AsyncSession, venue: Venue) -> None
     events = (
         await db.scalars(
             select(Event).where(
-                Event.venue_id == venue.id, Event.status != EVENT_STATUS_CANCELLED
+                Event.venue_id == venue.id,
+                Event.status != EVENT_STATUS_CANCELLED,
+                event_not_ended_filter(datetime.now(TALLINN_TZ)),
             )
         )
     ).all()

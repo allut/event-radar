@@ -171,7 +171,10 @@ async def organizer_covered_event_count(db: AsyncSession, organizer_id: int) -> 
     only a normalized title/venue key, per the Claim model docstring), so it
     counts as the one representative event the claim-editing surface
     actually exposes for it. A dormant claim's pins don't apply (#422), so it
-    contributes nothing here either."""
+    contributes nothing here either. Ended events are not counted: they can
+    no longer be edited meaningfully, and counting them would inflate the cap
+    forever as a publisher's history grows."""
+    now = datetime.now(TALLINN_TZ)
     rows = (
         await db.execute(
             select(Claim.kind, Claim.publisher_id).where(
@@ -187,8 +190,11 @@ async def organizer_covered_event_count(db: AsyncSession, organizer_id: int) -> 
     if publisher_ids:
         publisher_event_count = (
             await db.execute(
-                select(func.count(func.distinct(EventSource.event_id))).where(
-                    EventSource.publisher_id.in_(publisher_ids)
+                select(func.count(func.distinct(EventSource.event_id)))
+                .join(Event, Event.id == EventSource.event_id)
+                .where(
+                    EventSource.publisher_id.in_(publisher_ids),
+                    event_not_ended_filter(now),
                 )
             )
         ).scalar() or 0

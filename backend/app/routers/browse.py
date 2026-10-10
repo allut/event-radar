@@ -51,6 +51,7 @@ from app.constants import (
 from app.db import get_db
 from app.models.models import Event, EventClassification, User, UserEventFeedback, UserPersona
 from app.ranking.score import (
+    AffinityCache,
     FeedbackContext,
     anonymous_score_event,
     persona_affinity,
@@ -267,9 +268,9 @@ async def _load_feedback_context(
                 UserEventFeedback.created_at >= cutoff,
             )
             .options(
-                selectinload(UserEventFeedback.event).selectinload(
-                    Event.classification
-                )
+                selectinload(UserEventFeedback.event)
+                .load_only(Event.id, Event.dedup_group_id)
+                .selectinload(Event.classification)
             )
         )
     ).all()
@@ -397,13 +398,22 @@ async def _score_and_rank_candidates(
         fb_ctx = None
         disliked_categories = frozenset()
 
+    # Request-scoped memo shared by score_event() and the for-you affinity
+    # filter below — the persona vectors outlive the loop, so id()-keying is safe.
+    affinity_cache: AffinityCache = {}
     survivors: list[tuple[float | None, Event]] = []
     for event in candidates:
         cl = event.classification
         categories = cl.categories if cl else []
         vibes = cl.vibes if cl else []
         if fb_ctx is not None:
-            s = score_event(user_persona_weights, fb_ctx, event, now)
+            s = score_event(
+                user_persona_weights,
+                fb_ctx,
+                event,
+                now,
+                affinity_cache=affinity_cache,
+            )
         else:
             s = anonymous_score_event(event, now)
 
@@ -419,7 +429,9 @@ async def _score_and_rank_candidates(
             # event isn't hidden from For-you just because it falls outside the
             # user's usual time-of-day/day-of-week pattern — score_event() still
             # weighs that signal for *ranking* the survivors.
-            affinity = persona_affinity(user_persona_weights, categories, vibes)
+            affinity = persona_affinity(
+                user_persona_weights, categories, vibes, cache=affinity_cache
+            )
             if affinity < BROWSE_FORYOU_MIN_AFFINITY:
                 continue
             survivors.append((s, event))

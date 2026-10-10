@@ -28,12 +28,14 @@ from app.models.models import (
 from app.events.queries import event_ended_filter, event_not_ended_filter
 
 
-async def _stamp_missing_fienta_publishers(db: AsyncSession) -> int:
+async def _stamp_missing_fienta_publishers(db: AsyncSession, now: datetime) -> int:
     """Safety net for #433's stamping race: stamp EventSource.publisher_id
     for any published Fienta row still NULL, resolving it the same way
     ingestion does — the organizer id stamped on the matching RawEvent
     payload (see sources/fienta.py's fetch_organizer) mapped through
-    Publisher.external_id. Catches events that were draft/classified while
+    Publisher.external_id. Only rows that have not ended are stamped (past
+    events never re-enter the feed, and the scan would otherwise grow with
+    all-time volume). Catches events that were draft/classified while
     the publisher lookup was still empty (see adapter.py's
     ``_presync_publishers`` hook, which closes the race for new events going
     forward). Single bulk UPDATE, no N+1; a no-op once nothing is missing.
@@ -66,7 +68,10 @@ async def _stamp_missing_fienta_publishers(db: AsyncSession) -> int:
             EventSource.publisher_id.is_(None),
             EventSource.source_id == fienta_source_id,
             EventSource.event_id.in_(
-                select(Event.id).where(Event.status == EVENT_STATUS_PUBLISHED)
+                select(Event.id).where(
+                    Event.status == EVENT_STATUS_PUBLISHED,
+                    event_not_ended_filter(now),
+                )
             ),
         )
         .values(publisher_id=publisher_id)
@@ -93,7 +98,9 @@ async def publish_pending(
     don't need (or want to pay for) a full-table scan. Leave it ``None`` when
     other now-eligible rows might also need to flip (e.g. approving an
     organizer's first submission makes their whole backlog eligible, not just
-    the approved row).
+    the approved row). A scoped call also skips the table-wide Fienta publisher
+    stamp, which is a safety net for the unscoped 6-hourly run, not something to
+    pay for inside a user request.
 
     ``diagnostics=False`` skips the reject-breakdown SELECT below and returns
     only ``published``. That SELECT aggregates over every event still stuck in
@@ -167,7 +174,8 @@ async def publish_pending(
     summary: dict = {"published": cast(CursorResult, result).rowcount}
 
     if not diagnostics:
-        await _stamp_missing_fienta_publishers(db)
+        if event_ids is None:
+            await _stamp_missing_fienta_publishers(db, now)
         return summary
 
     reject_stmt = (
@@ -237,5 +245,6 @@ async def publish_pending(
             "fail_coords_bbox": reject_row.fail_coords_bbox or 0,
         }
     )
-    await _stamp_missing_fienta_publishers(db)
+    if event_ids is None:
+        await _stamp_missing_fienta_publishers(db, now)
     return summary

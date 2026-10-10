@@ -23,6 +23,18 @@ def _agg_row(
 
 class TestShowcase:
     @pytest.mark.asyncio
+    async def test_one_query_warms_every_locale(self, mock_db, make_event, make_request):
+        from app.routers.public import showcase
+
+        mock_db.scalars.return_value = _scalars_result([make_event(1, title="One")])
+
+        await showcase(request=make_request(), locale="en", db=mock_db)
+        await showcase(request=make_request(), locale="ru", db=mock_db)
+        await showcase(request=make_request(), locale="et", db=mock_db)
+
+        assert mock_db.scalars.call_count == 1
+
+    @pytest.mark.asyncio
     async def test_returns_serialized_events(self, mock_db, make_event, make_request):
         from app.routers.public import showcase
 

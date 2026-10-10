@@ -28,6 +28,7 @@ from app.constants import (
     TALLINN_REGION_BBOX,
     TALLINN_TZ,
 )
+from app.events.queries import event_not_ended_filter
 from app.ingestion.adapter import coords_in_tallinn
 from app.ingestion.geocode.nominatim import (
     geocode_address,
@@ -58,14 +59,16 @@ __all__ = [
 log = logging.getLogger(__name__)
 
 
-async def _self_heal_out_of_bbox_coords(db: AsyncSession) -> int:
+async def _self_heal_out_of_bbox_coords(db: AsyncSession, now: datetime) -> int:
     """NULL lat/lng (and reset the cooldown) for events mis-geocoded outside Tallinn.
 
     Targets only rows where ``is_out_of_area`` is False — the event genuinely
     belongs in the target city, so a stored coord outside ``TALLINN_REGION_BBOX``
     is a wrong match (e.g. a same-named place elsewhere in Estonia), not a
     legitimately out-of-area event (those have ``is_out_of_area`` True and never
-    publish anyway, so are left untouched). One bulk UPDATE, no N+1. NULLing
+    publish anyway, so are left untouched). Ended events are skipped too — they
+    never publish, and ``events`` rows are never deleted, so the scan would
+    otherwise grow forever (``ix_events_live_until``). One bulk UPDATE, no N+1. NULLing
     re-enters the row into the pending query below within the same run, where
     ``geocode_address``'s bbox gate now prevents re-storing the same wrong coord.
     """
@@ -73,6 +76,7 @@ async def _self_heal_out_of_bbox_coords(db: AsyncSession) -> int:
         update(Event)
         .where(
             Event.is_out_of_area == false(),
+            event_not_ended_filter(now),
             Event.lat.is_not(None),
             Event.lng.is_not(None),
             or_(
@@ -89,7 +93,7 @@ async def _self_heal_out_of_bbox_coords(db: AsyncSession) -> int:
     return healed
 
 
-async def _sync_venue_linked_coords(db: AsyncSession) -> int:
+async def _sync_venue_linked_coords(db: AsyncSession, now: datetime) -> int:
     """Copy a linked Venue's resolved coords onto its Events (#179).
 
     Covers two cases with one bulk UPDATE...FROM (fixed query count, no N+1):
@@ -107,6 +111,7 @@ async def _sync_venue_linked_coords(db: AsyncSession) -> int:
         update(Event)
         .where(
             Event.venue_id == Venue.id,
+            event_not_ended_filter(now),
             Venue.lat.is_not(None),
             Venue.lng.is_not(None),
             or_(
@@ -249,9 +254,9 @@ async def geocode_pending(db: AsyncSession) -> dict:
     un-resolvable address isn't re-sent to Nominatim every run.
     """
     now = datetime.now(TALLINN_TZ)
-    healed = await _self_heal_out_of_bbox_coords(db)
+    healed = await _self_heal_out_of_bbox_coords(db, now)
     venues_geocoded, venues_failed = await geocode_pending_venues(db, now)
-    synced = await _sync_venue_linked_coords(db)
+    synced = await _sync_venue_linked_coords(db, now)
     extracted = await extract_address_from_venue_name(db)
     copied = await copy_venue_from_siblings(db, now)
 

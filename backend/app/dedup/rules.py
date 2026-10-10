@@ -655,6 +655,11 @@ async def candidate_pair_ids_in_window(
     a = aliased(Event)
     b = aliased(Event)
     window = timedelta(seconds=TIME_WINDOW_HOURS * SECONDS_PER_HOUR)
+    # Same upper bound as load_dedup_candidate_events: pairs past it would be
+    # fetched here and then discarded for lack of loaded events.
+    lookahead_cutoff = datetime.now(tz=TALLINN_TZ) + timedelta(
+        days=DEDUP_LOOKAHEAD_DAYS
+    )
     pair_rows = (
         await db.execute(
             select(a.id, b.id)
@@ -669,6 +674,8 @@ async def candidate_pair_ids_in_window(
                 b.status != EVENT_STATUS_CANCELLED,
                 a.starts_at >= cutoff,
                 b.starts_at >= cutoff,
+                a.starts_at <= lookahead_cutoff,
+                b.starts_at <= lookahead_cutoff,
                 or_(
                     a.title_orig.op("%")(b.title_orig),
                     a.starts_at == b.starts_at,

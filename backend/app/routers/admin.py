@@ -1487,22 +1487,14 @@ async def admin_counts(request: Request) -> dict:
 async def admin_stats(request: Request) -> dict:
     """Aggregate counts used by checkpoint tests and manual monitoring."""
     async with AsyncSessionLocal() as db:
-        total = (
-            await db.scalar(
-                select(func.count(Event.id)).where(
-                    Event.status != EVENT_STATUS_CANCELLED
-                )
+        total, canonical = (
+            await db.execute(
+                select(
+                    func.count(Event.id),
+                    func.count(Event.id).filter(canonical_event_filter()),
+                ).where(Event.status != EVENT_STATUS_CANCELLED)
             )
-        ) or 0
-
-        canonical = (
-            await db.scalar(
-                select(func.count(Event.id)).where(
-                    Event.status != EVENT_STATUS_CANCELLED,
-                    canonical_event_filter(),
-                )
-            )
-        ) or 0
+        ).one()
 
         sources_total = (await db.scalar(select(func.count(Source.id)))) or 0
         sources_enabled = (
