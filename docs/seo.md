@@ -1,6 +1,6 @@
 # SEO and Prerender
 
-What's in here: meta tags and hreflang, JSON-LD structured data, the build-time prerender and its R2 chain-state, sitemap and robots, and the in-build and live checks.
+What's in here: meta tags and hreflang, JSON-LD structured data, the build-time prerender, its round chaining and R2 chain-state, sitemap and robots, and the in-build and live checks.
 
 ## Meta Tags
 
@@ -36,7 +36,7 @@ What's in here: meta tags and hreflang, JSON-LD structured data, the build-time 
 - **The worker pool is `PRERENDER_CONCURRENCY` (`frontend/src/constants.ts`).** `NAV_TIMEOUT_MS` and `CONTENT_READY_TIMEOUT_MS` are 3× the local values. A local repro showed the build machine's software-rendered Chromium is simply slower, whatever the concurrency.
 - **Each snapshot lands at `dist/<locale-prefix>/.../index.html`.** That's the directory-index shape `frontend/functions/[[path]].ts` resolves through `env.ASSETS.fetch()`, so a prerendered path is served as-is.
 - **The build fails (non-zero exit)** if the published-events fetch fails or any target can't render within its timeout.
-- **Rounds chain across builds through a git-committed `RoundMarker`.** See [backend-ops.md](backend-ops.md)'s Deployment section for the cadence, the chain and the resume check.
+- **Rounds chain across builds through a git-committed `RoundMarker`.** See Round Chaining below. The cron job and Deploy Hook are in [backend-ops.md](backend-ops.md)'s Prerender Cadence section.
 
 ### Targets
 
@@ -56,7 +56,7 @@ What's in here: meta tags and hreflang, JSON-LD structured data, the build-time 
 ### SPA Fallback Shell
 
 - **`npm run build` copies `dist/index.html` to `dist/app-shell.html` before the prerender runs.** The Estonian Landing snapshot later overwrites `dist/index.html`, and the copy exists even if the script dies midway.
-- **`frontend/functions/[[path]].ts` serves `app-shell.html` for every route that isn't prerendered.** `/saved`, `/settings` and the rest get the untouched CSR shell, never a mismatched snapshot. Its fetch-first order is in [backend-ops.md](backend-ops.md)'s Deployment section.
+- **`frontend/functions/[[path]].ts` serves `app-shell.html` for every route that isn't prerendered.** `/saved`, `/settings` and the rest get the untouched CSR shell, never a mismatched snapshot. Its fetch-first order is in [backend-ops.md](backend-ops.md)'s SPA Fallback section.
 
 ### Change Detection and Copy-Forward
 
@@ -80,6 +80,22 @@ What's in here: meta tags and hreflang, JSON-LD structured data, the build-time 
 - **Resumed rounds spend 5–6 minutes in copy-forward and about 3 validating.** Round 1's copy-forward took 84 s. Each round logs `prerender: peak RSS`, which covers the node process only, not Chromium.
 - **The other cost trims stay in place.** `extractChangeMarker` regex-scans the first JSON-LD script instead of re-parsing the DOM, `classification[].liveHtml` is nulled once consumed, and the live-API staleness check runs for the default locale only.
 
+## Round Chaining
+
+One build can't always render every route within `PRERENDER_RENDER_BUDGET_MINUTES`. A round that runs out of budget hands the rest to a continuation round, and the rounds of one burst share state through a `RoundMarker` commit (`frontend/src/lib/prerenderChain.ts`).
+
+- **A burst stops at `CHAIN_MAX_ROUNDS` (10) rounds**, and earlier on a round that makes zero progress.
+- **The marker carries round state in its commit message.** `prerender.ts::commitRoundMarker` advances `heads/{branch}` through the GitHub Git Data API.
+- **That push is the only continuation trigger.** The production branch is git-connected, so the push alone starts the next build. A separate chain Deploy Hook once fired a redundant second build of the same commit.
+- **`shouldCommitRoundMarker` pushes only a `continuing` marker.** A pushed `done` marker still starts a build, and that build begins a fresh burst at round 1 instead of stopping.
+
+### Resume Check
+
+- **Every build reads the tip commit's marker before any work** (`resolveRoundStart`). Cloudflare exposes only `CF_PAGES_COMMIT_SHA`, not the message, so the build fetches the message through the authenticated GitHub API.
+- **A fresh `continuing` marker resumes the burst at `round + 1`.** Fresh means younger than `CHAIN_STALENESS_TIMEOUT_MINUTES` (30).
+- **A stale, missing or `done` marker starts a new burst at round 1.** A stale `continuing` marker means a crashed build, not an active one.
+- **Freshness is the only way to tell the intended continuation from a racing build.** An earlier guard skipped both, so the chain never got past round 1.
+
 ## Chain-State Manifest (R2)
 
 An optimization layer over the `RoundMarker` chain. It gives resumed rounds per-target identity, so rounds 2+ read a resolved target's HTML from Cloudflare R2 instead of re-fetching production.
@@ -87,7 +103,7 @@ An optimization layer over the `RoundMarker` chain. It gives resumed rounds per-
 - **Why: `RoundMarker` carries only aggregate counters.** Without per-target identity, every resumed round still called `classifyTarget`, a production fetch, for every target. Change-detection traffic stayed at `targets.length` instead of shrinking.
 - **Storage is R2 over its S3 API (`@aws-sdk/client-s3`), not a Pages R2 binding.** `prerender.ts` runs as a Node build script, not a Worker.
 - **`frontend/src/lib/r2ChainState.ts` is the whole client boundary**: `getR2Object`, `putR2Object` and `deleteR2ObjectsByPrefix`. It knows nothing of the key format or schema, which keeps it testable on its own. It memoizes its `S3Client` on the credential tuple.
-- **The bucket, credentials and lifecycle rule are operator setup.** See [backend-ops.md](backend-ops.md)'s Deployment section.
+- **The bucket, credentials and lifecycle rule are operator setup.** See [backend-ops.md](backend-ops.md)'s R2 Chain-State Bucket section.
 
 ### Layout
 
@@ -158,7 +174,7 @@ An optimization layer over the `RoundMarker` chain. It gives resumed rounds per-
 
 ## Live Audit
 
-`frontend/functions/api/seo-audit.ts` checks production every 6 hours, independent of any build. It's the one check that catches a dead Deploy Hook or cron. Its schedule and secrets are in [backend-ops.md](backend-ops.md)'s Deployment section.
+`frontend/functions/api/seo-audit.ts` checks production every 6 hours, independent of any build. It's the one check that catches a dead Deploy Hook or cron. Its schedule and secrets are in [backend-ops.md](backend-ops.md)'s External Cron Jobs section.
 
 - **`frontend/src/lib/seoAudit.ts::evaluateLiveAudit` is network-free and unit-tested.** It runs the robots, freshness and structure checks below.
 - **Robots: `isPathAllowedByRules` flags a blocked `sitemap.xml`, OG fallback image, `/assets/` or `CRAWLABLE_ICON_PATHS` entry.** It follows Google's matching semantics. A stray `Disallow: /` once blocked the sitemap and nothing else in the pipeline noticed.
@@ -173,4 +189,6 @@ An optimization layer over the `RoundMarker` chain. It gives resumed rounds per-
 ## Prerender Cadence Gate
 
 - **`frontend/functions/api/prerender-cadence.ts` sits between cron-job.org and the rebuild Deploy Hook.** It skips a tick when `frontend/src/lib/prerenderChain.ts::shouldSkipCadenceTick` says a chain round is in flight, so two builds never resume the same marker.
-- **It has the same shape as `seo-audit.ts`**: a thin handler, `isValidAuditToken` auth with its own header, and the shared `_shared/cloudflare.ts` types. Its secrets and failure modes are in [backend-ops.md](backend-ops.md)'s Deployment section.
+- **Without the gate, a tick during a round would race the real continuation.** Both builds would resume the same fresh marker. The gate removes the race at its source instead of leaving the two pushes to sort it out.
+- **It reads the production branch's tip commit through the authenticated GitHub API.** A missing token or a GitHub error fails open and fires the hook, so the collision check can't silently kill the cadence.
+- **It has the same shape as `seo-audit.ts`**: a thin handler, `isValidAuditToken` auth with its own header, and the shared `_shared/cloudflare.ts` types. Its secrets are in [backend-ops.md](backend-ops.md)'s External Cron Jobs section.

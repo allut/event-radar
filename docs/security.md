@@ -142,7 +142,7 @@ Scraped pages and LLM output are both untrusted input. These guards stop one bad
 
 ## Frontend CSP
 
-`frontend/public/_headers` holds the SPA document's headers. [backend-ops.md](backend-ops.md)'s Deployment section describes the file's layout and the full policy. This section covers the parts that fail silently.
+`frontend/public/_headers` holds the SPA document's headers. [backend-ops.md](backend-ops.md)'s SPA Security Headers section describes the file's layout and the full policy. This section covers the parts that fail silently.
 
 - **The inline pre-paint theme script in `index.html` runs under a `sha256-…` hash in `script-src`.** A static build can't mint per-request nonces, so a hash of the exact bytes is the only option without `'unsafe-inline'`.
 - **Any edit to an inline `<script>` needs a new hash, or the browser silently refuses to run it.** Users see no console error.
@@ -156,6 +156,7 @@ Scraped pages and LLM output are both untrusted input. These guards stop one bad
 - **The GA4 entries are exact for `script-src` and wildcarded for `connect-src`.** `script-src` adds only `https://www.googletagmanager.com`. `connect-src` adds `*.google-analytics.com` and `*.analytics.google.com`, per Google's CSP guidance for regional collection hosts. Don't narrow them without confirming beacons still land.
 - **`frontend/src/lib/gtag.ts` sets `client_storage: 'none'`, so GA4 sets no cookie.** That keeps the privacy page's "cookieless and aggregated" claim true and avoids a consent banner.
 - **Pageviews are sent manually through `maskAnalyticsUrl()`**, never automatically. That keeps the magic-link token and `/explore` search text out of GA4's `page_path`.
+- **A new dynamic route needs its own collapse in `maskAnalyticsUrl()`** (`frontend/src/utils.ts`), the way `/events/:id` becomes `/events/[id]`. Otherwise its ids reach GA4.
 - **GA4 no-ops when `isPrerenderRender()` is true**, so prerender snapshots send no fake pageviews.
 - **`VITE_GA_MEASUREMENT_ID` is the only switch.** It's a Cloudflare Pages build variable, never committed. Unset, `initGtag()` loads nothing.
 
@@ -274,6 +275,8 @@ The confirmation link must not attach an attacker's Google account to a victim w
 
 - **`app/routers/admin_auth.py` is a third track: password plus a required TOTP code (RFC 6238)** against `ADMIN_USERNAME`/`ADMIN_PASSWORD`. It's the only admin credential surface. HTTP Basic was removed because it never checked TOTP, so the password alone bypassed the second factor.
 - **Every `/admin/*` route requires the session cookie (`get_current_admin`)**, including counts and stats. A password-only route would be an oracle that the per-IP lockout can't slow across many IPs.
+- **The default `ADMIN_USERNAME` (`"admin"`) is refused outside development** (`admin_lockout.py::admin_username_disabled`). A well-known username halves the pair an attacker has to guess.
+- **`app/auth/totp.py::verify_totp_code` rejects any time step at or before the last accepted one.** An observed code can't mint a second session inside its `ADMIN_TOTP_VALID_WINDOW` drift window.
 - **The cookie is httpOnly, Secure, `SameSite=Strict`** (`ADMIN_SESSION_COOKIE_NAME`, `Path=/api/admin`), minted by `tokens.py::generate_admin_session_token` with its own salt `AUTH_ADMIN_SESSION_SALT`.
 - **It carries no id or version claim, because there's no admins table.** So there's no per-session revocation, and `ADMIN_SESSION_TTL_SECONDS` (12h) is shorter than the consumer TTL to compensate.
 - **The token's `e` (epoch) claim is a SHA-256 of `ADMIN_SESSION_EPOCH`, `ADMIN_PASSWORD` and `ADMIN_TOTP_SECRET`** (`tokens.py::_admin_session_epoch`). Rotating any of them invalidates every admin session, with no separate step.

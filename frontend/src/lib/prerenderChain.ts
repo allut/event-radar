@@ -211,7 +211,7 @@ export function resolveRoundContext(
  * hook-firing is wired up. */
 /** Gate for whether `main()` should push the round marker at all (issue
  * #101 — the overnight self-triggering incident). The marker commit's git
- * push is the chain's *only* continuation trigger (docs/backend-ops.md), so
+ * push is the chain's *only* continuation trigger (docs/seo.md "Round Chaining"), so
  * it must fire exactly when there is a next round to trigger — i.e. only for
  * a `continuing` marker. A `done` marker has nothing left to resume; pushing
  * it anyway still triggers a new build (any push to the git-connected

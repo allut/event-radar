@@ -451,7 +451,7 @@ export const GITHUB_API_BASE_URL = 'https://api.github.com';
 // GitHub default-version bump can't silently change response shapes.
 export const GITHUB_API_VERSION = '2022-11-28';
 // Shared-secret header cron-job.org sends on its seo-audit ping, mirroring
-// the backend's /internal/tick pattern (docs/backend-ops.md). Distinct from
+// the backend's /internal/tick pattern (docs/backend-ops.md "External Cron Jobs"). Distinct from
 // PRERENDER_CADENCE_TOKEN_HEADER and the backend's own X-Internal-Token: if
 // both Cloudflare Pages Functions ever shared one header name, a future
 // refactor that merged their handlers could forward this header's value to

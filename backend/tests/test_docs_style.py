@@ -19,7 +19,6 @@ REPO = Path(__file__).parent.parent.parent
 # (never from the pointer test). Each rewrite removes its doc in the same commit;
 # the list only shrinks.
 NOT_YET_REWRITTEN = {
-    "docs/backend-ops.md",
     "docs/conventions.md",
     "docs/data-model.md",
     "docs/frontend.md",
