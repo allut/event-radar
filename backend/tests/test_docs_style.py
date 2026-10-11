@@ -18,9 +18,7 @@ REPO = Path(__file__).parent.parent.parent
 # Ratchet: docs not yet rewritten to the house style, exempt from the style test
 # (never from the pointer test). Each rewrite removes its doc in the same commit;
 # the list only shrinks.
-NOT_YET_REWRITTEN = {
-    "docs/conventions.md",
-}
+NOT_YET_REWRITTEN: set[str] = set()
 
 MAX_UNIT_WORDS = 60
 MAX_BANNER_WORDS = 30

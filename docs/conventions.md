@@ -1,23 +1,113 @@
-# Code Quality & Best Practices — Rationale
+# Code Quality Rationale
 
-What's in here: the full "why" behind each code-quality rule condensed in CLAUDE.md's Code Quality Rules section. Read this when you need the reasoning behind a rule, not just the rule itself — CLAUDE.md has the imperative one-liner; this has the full explanation and examples.
+What's in here: the reasons behind CLAUDE.md's inline Code Quality Rules, the HTTP retry bypasses, and the `fetch`-stub exceptions in frontend tests.
 
-This project follows production best practices throughout:
+CLAUDE.md states each rule. This doc says why it holds and where its edges are. Area mechanics live in the area doc that owns the code.
 
-- **Backend constants** — all literals (numbers, strings, thresholds, weights, sentinel values) live in `app/constants.py`, except LLM prompt templates, which live in `app/llm/prompts.py` (kept apart so prompt-engineering diffs stay clean) and CSS-selector/scraping constants in `app/ingestion/selectors.py`. Cross-stack scalars (TTLs, locale set, weights, signals, category/vibe taxonomies) are sourced from `shared/app-config.json` and imported via `app._generated.shared_constants`. Never define a constant near business logic — always add it to `app/constants.py` (or `shared/` + regenerate) first, then import it. Never duplicate constants across files.
-- **Backend utilities** — router-shared helper functions live in `backend/app/routers/utils.py`; domain packages (`app/auth/`, `app/email/`, `app/claims/`, `app/ingestion/`, `app/events/`) own their domain helpers — non-router modules never import from `routers/utils.py` (`mask_email`/`normalize_email`/`require_configured_secret` live in `app/auth/utils.py`, `alternation_pattern` in `app/ingestion/patterns.py`, the event visibility/series predicates in `app/events/queries.py`, the venue resolvers in `app/events/venue.py`, the localized-text resolvers (`resolve_title`/`resolve_description`/`resolve_important_info`/`resolve_why_go`) in `app/events/localize.py`, `select_events_with_classification`/`collapse_series_duplicates` in `app/events/queries.py`, `publisher_claim_event_ids`/`bulk_resolve_publisher_events` in `app/claims/target_resolution.py`, `persona_weight_tuple` in `app/ranking/score.py`, `mask_db_url`/`run_in_session` in `app/db.py`, `notify_identity_linked` in `app/auth/email.py`). Before writing a new utility function anywhere in the backend, check both. If the function is reusable, add it to the right home and import it — never duplicate helpers across routers or modules. FastAPI `Depends` auth entry-points used by more than one router (`get_current_user`, `get_optional_user`, `get_current_organizer`, `get_current_admin`) live in `app/auth/dependencies.py`, so routers never import from each other's modules; The admin-lockout helpers (`check_admin_lockout`, `record_admin_auth_failure`, `clear_admin_auth_failure`, `admin_username_disabled`, `admin_credentials_ok`) live in `app/auth/admin_lockout.py` together with the module-level `_admin_auth_failures` LRU and its evictor — one invariant (the lockout counter and its eviction policy) stays in one file, and `admin_auth.py` (the only credential surface) imports from it. Documented in `docs/backend-ops.md`.
-- **Frontend constants** — all magic values (numbers, strings, breakpoints, timeouts, limits) live in `frontend/src/constants.ts`. Cross-stack values (`LOCALES`, `PERSONAS`, `MAGIC_LINK_EXPIRY_MINUTES`, `PERSONA_PRIMARY_WEIGHT_THRESHOLD`) are sourced from `shared/` and imported via `frontend/src/_generated/sharedConstants.ts`. Apply the same discipline: never inline a literal near component logic — add it to `constants.ts` (or `shared/` + regenerate) first. Never duplicate constants across components.
-- **Frontend utilities** — all shared helper functions live in `frontend/src/utils.ts`. Before writing a new utility function anywhere in the frontend, check this file first. If the function is reusable, add it here and import it — never duplicate helpers across components or pages.
-- **CSS design tokens** — the following categories are fully tokenized in `:root` (`frontend/src/index.css`) and **must never be hardcoded** in component stylesheets: colors (semantic names, no common prefix — `--accent*`, `--bg*`, `--text*`, `--border*`, `--danger*`, `--success*`, `--on-accent`, `--overlay-scrim`, …), border-radius (`--radius`, `--radius-sm`/`-lg`/`-pill`/`-full`), shadows (`--shadow-*`), z-indices (`--z-*`), transitions (`--transition`, `--transition-transform`), animation easing + durations (`--easing`, `--easing-breathe`, `--anim-*`), blur (`--blur-*`), spacing (`--space-0-1`…`--space-9`, including fractional steps like `--space-1-25`), typography (`--fs-2xs`…`--fs-xl` plus role-specific `--fs-*`, `--heading-display`/`--heading-3xl`…`--heading-xs`, `--numeral-*`, `--leading-*`, `--tracking-*`, `--font-display`), and component-geometry vars (e.g. `--calendar-cell-size`, `--picker-pop-width`, `--toggle-*`, `--spinner-*`). When any of these are needed, define the token in `:root` first, then reference it via `var(--token-name)`. The token groups themselves, the light-theme (`:root[data-theme="light"]`) inversion rules, and the visual language they encode are documented in `docs/design-system.md`.
-- **CSS shared base classes** — structural CSS patterns (card chrome, button styles, menu/popover chrome) live in `frontend/src/components/shared/` (19 `.module.css` files — `Card`, `Button`, `Menu`, `Field`, `Page`, `Bar`, … — plus the `GoogleSignInButton/` component folder). Use CSS Modules `composes: baseClass from '...'` to inherit shared rules — **never duplicate card, button, or menu CSS** across route or component stylesheets. Add new shared patterns to the shared files and compose from them, as a base-class + modifier pair — never restyle an existing base class in place to suit one consumer. Module-by-module map in `docs/design-system.md`.
-- **Retry logic** — all HTTP calls use `http_get()` / `http_post()` from `app/ingestion/http_client.py`, which wrap `httpx` with tenacity exponential-backoff retry (`HTTP_RETRY_MAX_ATTEMPTS` 5, `HTTP_RETRY_WAIT_MIN`–`MAX` 2–30s, plus up to `HTTP_RETRY_JITTER_MAX` 1s of jitter). A 429's `Retry-After` header is honored verbatim instead of the backoff curve, capped at `HTTP_RETRY_AFTER_MAX_SECONDS` (60s). Retryable: `HTTP_RETRYABLE_STATUS_CODES` (429/502/503/504) and `RequestError`. Non-retryable: 4xx except 429. **Exceptions** (four groups bypass `http_get`/`http_post`, each for a documented reason — do not add another without one): every request-path Resend send — `app/auth/email.py` (magic link, awaited inline in `POST /auth/request-link`), `app/email/contact.py` (`POST /contact`), `app/email/report_notify.py` (`POST /reports`), `app/email/report_reporter.py` (fires from `routers/utils.py::resolve_open_reports`, the shared helper every admin resolve/takedown path funnels through) and `app/email/claim_resolution.py` (granted/declined/self-cancelled sends awaited inline in the admin grant/decline and organizer claim-cancel/auto-grant paths) — funnels through the one `send_resend_email()` helper (`app/email/resend.py`), which makes a single attempt because a 5-attempt tenacity backoff would stall the user-facing response by up to ~150s; fan-out callers (the report-outcome and claim-expiry sweeps) pass one shared `httpx.AsyncClient` in via `resend_http_client()` rather than retrying per send; `app/llm/router.py` calls each `LLM_PROVIDERS` entry directly because the Groq→Cloudflare Workers AI→Mistral fallback chain *is* the retry strategy, and stacking tenacity backoff underneath it would fight the chain's own fast-fail-and-advance behavior; `app/logging_config.py` calls `httpx.Client` (sync) directly because it runs on the `QueueListener` background thread, which can't await the async `http_post`; `app/auth/google_oauth.py`'s `PyJWKClient` (docs/adr/0002) does its own sync urllib fetch of Google's JWKS internally, with its own `cache_jwk_set` caching — the same trade-off the ADR already makes in choosing `PyJWKClient` over `google-auth` (no new sync dependency, cached by default), so re-routing it through `http_post` would mean hand-rolling the caching PyJWKClient already provides. Contrast `app/email/digest.py`, which sends inside a scheduled batch job (not a request path) and correctly routes through `http_post`; contrast the same module's `exchange_code_for_id_token`, which *does* route the code-for-token exchange through `http_post`.
-- **Encapsulation** — a leading underscore signals module-private; never import a `_name` from another production module *of ours*. If a helper is imported cross-module, drop the underscore to make the API surface honest. The rule is intra-project — a third-party library's own documented public export that happens to be spelled with a leading underscore (e.g. `slowapi`'s `_rate_limit_exceeded_handler`, imported by `app/rate_limit.py`) isn't ours to rename. Tests may import private names for white-box testing — that is an accepted pattern.
-- **Batch jobs — bulk-load, no N+1** — periodic jobs (`build_daily_feeds`, `classify_pending`, `run_dedup_pass`, `send_daily_digests`) must use a fixed number of queries independent of row count. Bulk-fetch all per-user / per-event data with one `WHERE col IN (...)` query and group in Python; never `SELECT` inside a `for user in users:` loop. When extending these jobs, group fetches before the inner loop, mirroring the pattern already in `ranking/score.py::build_daily_feeds` and `llm/classifier.py::classify_pending`.
-- **External-API fan-out — bounded concurrency** — when sending many independent outbound calls (e.g. Resend digest emails), use `asyncio.gather(..., return_exceptions=True)` wrapped with an `asyncio.Semaphore` whose limit lives in `app/constants.py` (see `DIGEST_SEND_CONCURRENCY`). Pick the cap from the upstream provider's documented rate limit, leaving headroom for retries. Never serial-await one call at a time, and never unbounded-gather without a semaphore. Carve-out: the Nominatim geocoding passes (`app/ingestion/geocode/__init__.py`, `app/ingestion/geocode/venue_pass.py`) deliberately serial-await with a `GEOCODE_REQUEST_DELAY_SECONDS` sleep between calls — Nominatim's usage policy mandates ≤1 request/second, which a semaphore-bounded fan-out can't express.
-- **Quote style** — Backend Python uses **double quotes** (enforced by Ruff `Q` rules in `backend/ruff.toml`: `inline-quotes`, `multiline-quotes`, `docstring-quotes` all set to `double`). Frontend TypeScript uses **single quotes** for JS/TS string literals and **double quotes** for JSX attributes (enforced by ESLint `quotes: ['error', 'single', { avoidEscape: true, allowTemplateLiterals: true }]` + `'jsx-quotes': ['error', 'prefer-double']` in `frontend/eslint.config.js`). Template literals and strings containing the preferred quote character may use the alternate form (`avoidEscape`). Run `ruff check --fix` and `eslint --fix` before committing.
-- **Python lint rules** — Ruff is configured in `backend/ruff.toml` with `select = ["E", "F", "W", "Q"]` (pycodestyle errors/warnings, Pyflakes, quotes), `line-length = 88`, `ignore = ["E501"]` (long lines allowed when wrapping would hurt readability), and `extend-exclude = ["app/_generated"]` (generated modules are not hand-formatted). `python -m ruff check backend` must pass clean before commit. (`ruff` is not on PATH — always invoke via `python -m ruff`.)
-- **Type checking** — `mypy` (`==2.1.0`, pinned in `backend/requirements-dev.txt`) must pass clean: `python -m mypy app` from `backend/`. No mypy config file exists — defaults are sufficient. A loop/result variable reused across blocks with structurally incompatible types (e.g. different ORM models) will fail under mypy's inference even though each block is independently correct; give each block its own variable name. Third-party imports with no type stubs (e.g. `apscheduler`) get a targeted `# type: ignore[import-untyped]` on the import line rather than a blanket per-module ignore.
-- **Type annotations** — Use modern PEP 604 / PEP 585 syntax: `X | None` not `Optional[X]`, `list[T]` / `dict[K, V]` / `tuple[T, ...]` not `List` / `Dict` / `Tuple`. Annotate return types on all public functions (including FastAPI route handlers — `-> dict`, `-> list[Schema]`, `-> None`). Import from `typing` only for things still required there (e.g. `Any`, `TypeVar`, `Protocol`). **Exemption:** default-exported React components (`frontend/src/routes/*`, `frontend/src/components/*`) are not required to annotate their return type — ESLint does not enforce `@typescript-eslint/explicit-function-return-type` here and `tsc` infers the JSX return type exactly, so annotating every one of them would be pure churn with no type-safety gain. This exemption is React-component-specific; non-component public functions still annotate their return types.
-- **Shared test fixtures** — Common pytest fixtures (`mock_db`, `make_user`, `make_organizer`, `make_event`, `make_venue`, `make_report`, `make_request`, `patch_client`) live in `backend/tests/conftest.py`, alongside the plain importable helpers `session_factory` and `assert_hardened_cookie`. Package-level conftests add router-/auth-/ingestion-specific ones (`tests/routers/conftest.py`: `admin_app`/`make_db_ctx` fixtures, `ndjson_lines`/`scalars_returning`/`execute_rows` helpers, autouse admin-lockout/public-cache/rate-limiter resets; `tests/auth/conftest.py`: `mock_execute_returning`; `tests/ingestion/conftest.py`: `soup`; `tests/claims/conftest.py`: `fake_event_source`). The root conftest also exports the plain builders `build_event`/`build_venue` (what `make_event`/`make_venue` wrap) and `tests/routers/conftest.py` the `patch_admin_settings` context manager. Use them instead of inlining `AsyncMock()` DB scaffolding or constructing user/event objects by hand in each test. When a new fixture would be reused across two or more test files, add it to the narrowest conftest that covers them.
-- **Frontend test fixtures** — `renderWithProviders` (wraps in `QueryClient` + `MemoryRouter`), `makeQueryWrapper`/`makeRouterQueryWrapper` (hook-test wrappers), `makeEvent`, and `LocationProbe` live in `frontend/src/test/utils.tsx`. Never inline `QueryClient`/`Router` scaffolding in a test — import from there. Mock the `api` module (`vi.mock('../../api/client')`) for component and route tests rather than mocking `fetch`. **Exception:** `frontend/src/routes/Feed/Feed.logoutRedirect.test.tsx` stubs global `fetch` instead — the test's actual subject is `api/client.ts`'s own 401 hard-redirect interceptor (`handleSessionExpiry401`) surviving a logout race, so mocking the `api` module out from under it would remove the exact code path the test exists to exercise. Same rationale as the other fetch-stubbing sites, each of which tests code that calls `fetch` itself rather than through `api`: `api/client.test.ts`, `lib/githubRequest.test.ts`, `lib/seoAuditIssue.test.ts`, `scripts/prerender.test.ts`, and the Pages Functions tests under `frontend/tests/functions/` — do not add another `stubGlobal('fetch', …)` site without one.
-- **Numeric truthiness** — never gate a numeric field on truthiness; `0` is falsy, so `price_raw.get("min") or fallback` and `raw.get("price") or {}` silently drop legitimate zero prices (free events). Use explicit `is not None` checks and `isinstance(x, dict)` guards. Currency normalization goes through `normalize_currency(raw, has_price)` in `app/ingestion/pricing.py`.
+## Where Things Live
+
+### Constants
+
+- **One constants module per stack keeps every tunable in one place.** A literal inlined near business logic drifts from its twin elsewhere, and nobody finds it when the value changes.
+- **LLM prompts sit apart in `app/llm/prompts.py`** so prompt-engineering diffs stay clean. Scrape selectors sit apart in `app/ingestion/selectors.py` for the same reason.
+- **Cross-stack values live once in `shared/` and are generated into both stacks.** The backend imports `app._generated.shared_constants` and the frontend `frontend/src/_generated/sharedConstants.ts`, so the two can't disagree. `backend/tests/test_generated_sync.py` fails when the generated files drift.
+
+### Helpers
+
+- **Routers depend on domain packages, never the reverse.** A domain module that imports `app/routers/utils.py` pulls the HTTP layer into jobs and other domains, and invites import cycles.
+- **One invariant stays in one file.** For example, `app/auth/admin_lockout.py` owns both the lockout counter and its eviction policy, and `admin_auth.py` imports from it. See [security.md](security.md)'s Admin Console Auth section.
+- **Cross-router auth dependencies live in `app/auth/dependencies.py`** so no router imports another router's module. Router modules stay leaves of the import graph.
+- **Every frontend request goes through `frontend/src/api/client.ts`.** It owns the per-track 401 handling, so a raw `fetch` misses the session-expiry redirect. See [frontend.md](frontend.md)'s API Client section.
+
+### Underscore Names
+
+- **A leading underscore means module-private, so an imported `_name` is a dishonest API.** Drop the underscore once a second module needs the name.
+- **The rule covers our own modules only.** A third-party library's documented export that starts with an underscore isn't ours to rename, such as `slowapi`'s `_rate_limit_exceeded_handler` in `app/rate_limit.py`.
+- **Tests may import private names.** White-box testing is an accepted pattern here.
+
+## CSS
+
+- **Tokens make theming a token swap.** The light theme redefines `:root` tokens under `:root[data-theme="light"]`, so a hardcoded value in a module stays dark. See [design-system.md](design-system.md) §3.
+- **Add a modifier class instead of restyling a shared base class.** Every consumer composes the base, so an in-place change for one page restyles all of them. See [design-system.md](design-system.md) §7 for the composing rules.
+
+## Backend Behaviour
+
+### Batch Jobs
+
+- **A query inside a per-row loop makes a job's cost grow with its row count.** The scheduled jobs touch every user or every pending event, so an N+1 loop turns a seconds-long job into minutes.
+- **Copy the existing shape when extending a job.** `app/ranking/score.py::build_daily_feeds()` and `app/llm/classifier.py::classify_pending()` fetch everything up front with `WHERE col IN (...)` and group in Python before the inner loop.
+
+### External Fan-Out
+
+- **A serial await is too slow, and an unbounded gather trips the provider's rate limit.** A semaphore-bounded `asyncio.gather` sits between the two.
+- **Pick the cap from the provider's documented rate limit, with headroom for retries.** `DIGEST_SEND_CONCURRENCY` in `app/constants.py` is the model.
+- **`return_exceptions=True` keeps one failed call from discarding the other results.** Each result is then checked on its own.
+- **The Nominatim geocoding passes serial-await on purpose.** Nominatim's usage policy allows one request per second, which a concurrency cap can't express. See [pipeline.md](pipeline.md)'s Geocoding Backfill section.
+
+### HTTP Retry
+
+- **`app/ingestion/http_client.py::http_get()`/`http_post()` wrap `httpx` with tenacity exponential backoff plus jitter.** The `HTTP_RETRY_*` constants set the attempts and waits.
+- **A 429's `Retry-After` is honoured instead of the backoff curve,** capped at `HTTP_RETRY_AFTER_MAX_SECONDS`. A source that rate-limits us is telling us exactly when to come back.
+- **Only transient failures retry:** `HTTP_RETRYABLE_STATUS_CODES` and `httpx.RequestError`. Any other 4xx is our bug, and retrying it only adds load.
+
+### HTTP Retry Bypasses
+
+Four groups skip `http_get()`/`http_post()`. Add another only with a reason recorded here.
+
+- **Request-path Resend sends use `app/email/resend.py::send_resend_email()`, a single attempt.** A five-attempt backoff would stall the user's response for up to about 150 seconds. This covers the magic link, contact form, report notify, reporter outcome and claim resolution sends.
+- **Fan-out Resend callers share one client instead of retrying per send.** The report-outcome and claim-expiry sweeps pass `resend_http_client()` into each `send_resend_email()` call.
+- **`app/llm/router.py` calls each `LLM_PROVIDERS` entry directly.** The Groq → Cloudflare Workers AI → Mistral fallback chain is the retry strategy. A tenacity backoff underneath would fight its fast-fail-and-advance behaviour.
+- **`app/logging_config.py` ships logs with a sync `httpx.Client`.** It runs on the `QueueListener` background thread, which can't await the async `http_post()`.
+- **`app/auth/google_oauth.py`'s `PyJWKClient` fetches Google's JWKS itself, with its own caching.** Routing it through `http_get()` would mean hand-rolling that cache. ADR 0002 records the same trade-off.
+
+These are not bypasses, and they show where the line falls:
+
+- **`app/email/digest.py` sends inside a scheduled batch job, not a request path,** so it routes through `http_post()`.
+- **`google_oauth.py::exchange_code_for_id_token()` also routes through `http_post()`.** Only the JWKS fetch bypasses it.
+
+### Numeric Fields
+
+- **`0` is falsy, so a truthiness gate drops free events.** `price_raw.get("min") or fallback` and `raw.get("price") or {}` both lose a legitimate zero price. Use `is not None`, and `isinstance(x, dict)` for nested objects.
+- **Currency goes through `app/ingestion/pricing.py::normalize_currency()`.** It falls back to `DEFAULT_CURRENCY` only when `has_price` is true, and drops a malformed code instead of guessing EUR.
+
+## Style and Checks
+
+### Quotes
+
+- **The linters enforce quote style, so a fix-on-save settles it.** Ruff's `Q` rules in `backend/ruff.toml` require double quotes. ESLint's `quotes` and `jsx-quotes` rules in `frontend/eslint.config.js` require single quotes in TS and double in JSX.
+- **A string that contains the preferred quote may use the other one.** ESLint's `avoidEscape` allows it, and template literals are always fine.
+
+### Ruff
+
+- **`E501` is ignored.** Long lines are allowed where wrapping would hurt readability.
+- **`app/_generated` is excluded.** The generator owns those files, so they aren't hand-formatted.
+
+### Mypy
+
+- **There is no mypy config file; the defaults are enough.**
+- **Give a reused loop or result variable of an incompatible type its own name.** Mypy infers a variable's type from its first assignment, so reusing it for a different ORM model fails even when each block is correct.
+- **A third-party import without stubs gets a targeted `# type: ignore[import-untyped]` on that line,** such as `apscheduler`. A blanket per-module ignore would hide real errors.
+
+### Annotations
+
+- **PEP 604/585 syntax (`X | None`, `list[T]`) is the modern form.** Import from `typing` only what still lives there, such as `Any`, `TypeVar` or `Protocol`.
+- **Public functions annotate their return type, FastAPI handlers included.** The return type is the contract a caller reads.
+- **Default-exported React components are exempt.** `tsc` infers the JSX return type exactly, so annotating each one is churn with no type-safety gain. Other public TS functions still annotate.
+
+### Backend Test Fixtures
+
+- **Shared fixtures keep DB scaffolding in one place.** Inlined `AsyncMock()` sessions and hand-built users or events drift apart as the models change. Check `backend/tests/conftest.py` and the package conftests before writing one.
+- **A fixture used by two or more test files goes in the narrowest conftest that covers them.**
+
+### Frontend Test Fixtures
+
+- **Use `frontend/src/test/utils.tsx` for render and query wrappers.** Inlined `QueryClient` or router scaffolding drifts from the providers the app really uses.
+- **Mock the `api` module, not `fetch`.** A module mock keeps a component test about the component, not the request plumbing underneath it.
+
+### Fetch-Stub Exceptions
+
+A test may stub global `fetch` only when its subject calls `fetch` itself. Add another site only with that reason.
+
+- **`frontend/src/routes/Feed/Feed.logoutRedirect.test.tsx`** tests `api/client.ts`'s own 401 redirect surviving a logout race. Mocking `api` would remove the code path under test.
+- **`api/client.test.ts`, `lib/githubRequest.test.ts`, `lib/seoAuditIssue.test.ts` and `scripts/prerender.test.ts`** each test code that calls `fetch` directly.
+- **The Pages Functions tests under `frontend/tests/functions/`** test handlers that call `fetch` directly. See [frontend.md](frontend.md)'s Tests section for why they live outside `functions/`.
